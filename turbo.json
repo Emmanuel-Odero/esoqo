@@ -1,0 +1,20 @@
+{
+  "$schema": "https://turbo.build/schema.json",
+  "globalDependencies": [".env"],
+  "globalEnv": [
+    "NODE_ENV", "DATABASE_URL", "DIRECT_DATABASE_URL", "REDIS_URL",
+    "SESSION_SECRET", "OTP_PEPPER", "AUDIT_CHAIN_SEED",
+    "SMS_PROVIDER", "SMS_API_KEY", "SMS_SENDER_ID",
+    "NEXT_PUBLIC_APP_URL", "NEXT_PUBLIC_WEB_URL", "CORE_API_URL",
+    "SEED_ADMIN_PIN", "SEED_ADMIN_HASH"
+  ],
+  "tasks": {
+    "build": { "dependsOn": ["^build"], "outputs": [".next/**", "!.next/cache/**", "dist/**"] },
+    "dev": { "cache": false, "persistent": true },
+    "lint": { "dependsOn": ["^build"] },
+    "typecheck": { "dependsOn": ["^build"] },
+    "test": { "dependsOn": ["^build"], "outputs": ["coverage/**"] },
+    "test:a11y": { "dependsOn": ["^build"], "cache": false },
+    "generate": { "cache": false }
+  }
+}
