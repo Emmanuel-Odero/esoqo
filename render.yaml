@@ -51,8 +51,6 @@ services:
         sync: false
       - key: SEED_ADMIN_HASH
         sync: false
-    postDeploy:
-      command: pnpm --filter @esoko/db exec prisma migrate deploy
 
   # ── Web — public-facing site ───────────────────────────────
   - type: web
@@ -182,4 +180,3 @@ databases:
   - name: esoko-redis
     plan: starter
     region: frankfurt
-    maxmemoryPolicy: noeviction
