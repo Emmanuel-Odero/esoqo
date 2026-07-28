@@ -53,7 +53,8 @@ export default async function DocumentsPage({
           sizeBytes: d.sizeBytes, status: d.status,
           uploadedAt: d.uploadedAt.toISOString(),
           owner: d.registration?.knownAs || d.registration?.officialName
-            || d.party?.person?.knownAs || d.party?.person?.officialName || 'Unattached',
+            || d.party?.person?.knownAs || d.party?.person?.officialName
+            || d.party?.organisation?.knownAs || d.party?.organisation?.officialName || 'Unattached',
           originalName: d.originalName,
         }))}
         kinds={DOCUMENT_KINDS as never}

@@ -139,7 +139,12 @@ export async function listDocuments(ctx: Ctx, f: DocumentFilter = {}) {
       where,
       include: {
         registration: { select: { id: true, officialName: true, knownAs: true, county: true } },
-        party: { include: { person: { select: { officialName: true, knownAs: true } } } },
+        party: {
+          include: {
+            person: { select: { officialName: true, knownAs: true } },
+            organisation: { select: { officialName: true, knownAs: true } },
+          },
+        },
       },
       orderBy: [{ status: 'asc' }, { uploadedAt: 'desc' }],
       take: f.take ?? 24, skip: f.skip ?? 0,
