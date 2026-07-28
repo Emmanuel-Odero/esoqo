@@ -11,7 +11,7 @@ export async function getParty(ctx: Ctx, partyId: string) {
       organisation: true,
       enterprises: true,
       attestations: { where: { revokedAt: null }, orderBy: { issuedAt: 'desc' } },
-      memberships: { include: { org: { include: { organisation: true } } } },
+      memberships: { include: { org: { include: { party: true } } } },
     },
   });
 }

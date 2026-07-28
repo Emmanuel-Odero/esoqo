@@ -135,7 +135,7 @@ function GroupDetail({ group, canEdit }: { group: Group; canEdit: boolean }) {
         {missingOffices.length > 0 && (
           <p className="pill p-warn" style={{ padding: '10px 13px', marginBottom: 16 }}>
             <Icon name="alert-circle" size={14} />
-            No {missingOffices.map((o) => ROLE_LABEL[o].toLowerCase()).join(' or ')} recorded.
+            No {missingOffices.map((o) => (ROLE_LABEL[o] ?? o).toLowerCase()).join(' or ')} recorded.
             A group needs office-bearers before it can vote on a loan.
           </p>
         )}

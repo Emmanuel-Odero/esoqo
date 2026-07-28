@@ -4,3 +4,4 @@ export { recordAudit, verifyChain } from './audit';
 export * from './capabilities';
 export type { VerifyResult } from './dal/reference';
 export * from './storage';
+export type { MemberRole } from '@prisma/client';

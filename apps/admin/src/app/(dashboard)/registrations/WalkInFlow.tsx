@@ -1,11 +1,14 @@
 'use client';
 
-import { useState, useTransition } from 'react';
-import { Icon } from '@esoko/ui';
+import { useEffect, useRef, useState, useTransition } from 'react';
+import { Icon, type IconName } from '@esoko/ui';
 import { useAnnounce } from '@esoko/a11y';
-import { actionCreateWalkIn } from './actions';
+import {
+  actionCreateWalkIn, actionUploadWalkInDocument,
+  actionListWalkInDocuments, actionRemoveWalkInDocument,
+} from './actions';
 
-type Step = 'joining' | 'personal' | 'contact' | 'work' | 'standing' | 'preferences' | 'review';
+type Step = 'joining' | 'personal' | 'contact' | 'work' | 'standing' | 'preferences' | 'review' | 'documents';
 
 interface FormData {
   joiningAs: 'me' | 'group' | 'biz';
@@ -69,12 +72,14 @@ export default function WalkInFlow({
 
   function next() {
     setError(null);
-    if (idx < STEPS.length - 1) setStep(STEPS[idx + 1].key as Step);
+    const n = STEPS[idx + 1];
+    if (n) setStep(n.key as Step);
   }
 
   function prev() {
     setError(null);
-    if (idx > 0) setStep(STEPS[idx - 1].key as Step);
+    const p = STEPS[idx - 1];
+    if (p) setStep(p.key as Step);
   }
 
   function submit() {
@@ -121,7 +126,7 @@ export default function WalkInFlow({
             )}
             <div>
               <h2 id="wi-title" style={{ margin: 0 }}>Add walk-in</h2>
-              <p className="sub" style={{ margin: '2px 0 0' }}>Step {idx + 1} of {STEPS.length} — {STEPS[idx].label}</p>
+              <p className="sub" style={{ margin: '2px 0 0' }}>Step {idx + 1} of {STEPS.length} — {STEPS[idx]?.label}</p>
             </div>
           </div>
           <button className="x" onClick={onClose} aria-label="Close"><Icon name="close" size={18} /></button>

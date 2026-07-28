@@ -2,7 +2,7 @@ import { createHmac, timingSafeEqual } from 'node:crypto';
 import { prisma } from '../client';
 import { requireCapability, PAYMENT_APPROVAL_THRESHOLD, type Ctx } from '../capabilities';
 import { recordAudit } from '../audit';
-import type { PaymentMethod, ApprovalDecision } from '@prisma/client';
+import type { PaymentMethod, ApprovalDecision, PaymentStatus } from '@prisma/client';
 
 /**
  * Registration payments and the signature chain.
@@ -201,7 +201,7 @@ export async function signPaymentApproval(ctx: Ctx, input: SignInput) {
     const rejects = approvals.filter((a) => a.decision === 'REJECT').length;
 
     // One rejection halts the chain. Money disputes go to a human.
-    let status = payment.status;
+    let status: PaymentStatus = payment.status;
     let confirmedAt: Date | null = null;
     if (rejects > 0) status = 'REJECTED';
     else if (approves >= PAYMENT_APPROVAL_THRESHOLD) { status = 'CONFIRMED'; confirmedAt = signedAt; }

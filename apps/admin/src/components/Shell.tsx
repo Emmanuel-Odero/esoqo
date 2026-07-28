@@ -1,5 +1,6 @@
 'use client';
 import Link from 'next/link';
+import type { Route } from 'next';
 import { usePathname } from 'next/navigation';
 import { Icon, type IconName } from '@esoko/ui';
 
@@ -47,7 +48,7 @@ export function Sidebar({ capabilities }: { capabilities: string[] }) {
             <div key={g.group}>
               <p className="navgroup">{g.group}</p>
               {items.map(([href, icon, label]) => (
-                <Link key={href} href={href} className={path === href ? 'on' : ''}
+                <Link key={href} href={href as Route} className={path === href ? 'on' : ''}
                   aria-current={path === href ? 'page' : undefined}>
                   <Icon name={icon} size={17} />{label}
                 </Link>

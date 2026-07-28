@@ -27,12 +27,12 @@ export default async function MyGroup() {
     );
   }
 
-  const org = m.org.organisation;
+  const org = m.org;
   return (
     <>
       <div className="mehead">
-        <h1>{org?.officialName}</h1>
-        <p>{org?.knownAs && `Known as ${org.knownAs} · `}{m.org.county}</p>
+        <h1>{org.officialName}</h1>
+        <p>{org.knownAs && `Known as ${org.knownAs} · `}{org.party.county}</p>
       </div>
       <div className="mcard">
         <h2><Icon name="users" size={18} />Your membership</h2>

@@ -126,7 +126,7 @@ export async function verifyChain(batchSize = 1000): Promise<ChainResult> {
       expectedPrev = r.hash;
       checked++;
     }
-    cursor = rows[rows.length - 1].id;
+    cursor = rows[rows.length - 1]!.id;
   }
 
   return { ok: true, checked };
