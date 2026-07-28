@@ -1,6 +1,10 @@
 import { createHash, randomBytes } from 'node:crypto';
-import { mkdir, writeFile, readFile, unlink } from 'node:fs/promises';
-import { join } from 'node:path';
+import {
+  S3Client,
+  PutObjectCommand,
+  GetObjectCommand,
+  DeleteObjectCommand,
+} from '@aws-sdk/client-s3';
 
 /**
  * File storage.
@@ -17,12 +21,23 @@ import { join } from 'node:path';
  *      Content-Disposition and X-Content-Type-Options: nosniff, never
  *      as static assets from the app origin.
  *
- * Local disk in development; swap the four functions at the bottom for
- * Cloudflare R2 in production (ADR pending — R2 has no egress fees,
- * which is the one that bites elsewhere).
+ * Backed by Cloudflare R2 (S3-compatible) — chosen for its lack of
+ * egress fees, which is the one that bites elsewhere. Render's own
+ * filesystem is ephemeral and wiped on every restart/deploy, so local
+ * disk was never viable beyond local development.
  */
 
-const ROOT = process.env.UPLOAD_DIR ?? '/tmp/esoko-uploads';
+const BUCKET = process.env.R2_BUCKET ?? 'esoko';
+
+const s3 = new S3Client({
+  region: 'auto',
+  endpoint: `https://${process.env.R2_ACCOUNT_ID}.r2.cloudflarestorage.com`,
+  credentials: {
+    accessKeyId: process.env.R2_ACCESS_KEY_ID ?? '',
+    secretAccessKey: process.env.R2_SECRET_ACCESS_KEY ?? '',
+  },
+});
+
 export const MAX_BYTES = 10 * 1024 * 1024;
 
 /** Magic-byte signatures. A .png that starts with MZ is an executable. */
@@ -105,24 +120,30 @@ export function sha256(buf: Buffer): string {
   return createHash('sha256').update(buf).digest('hex');
 }
 
-/* ── storage adapter · local disk. Swap for R2 in production. ── */
+/* ── storage adapter · Cloudflare R2 ─────────────────────────── */
 
-export async function putObject(key: string, buf: Buffer): Promise<void> {
-  const full = join(ROOT, key);
-  await mkdir(join(full, '..'), { recursive: true });
-  await writeFile(full, buf, { mode: 0o600 });
-}
-
-export async function getObject(key: string): Promise<Buffer> {
+function assertSafeKey(key: string): void {
   // Defence in depth: the key comes from our own database, but a stored
   // value could still have been poisoned by a bug elsewhere.
   if (key.includes('..') || key.startsWith('/')) throw new Error('Invalid storage key');
-  return readFile(join(ROOT, key));
+}
+
+export async function putObject(key: string, buf: Buffer): Promise<void> {
+  assertSafeKey(key);
+  await s3.send(new PutObjectCommand({ Bucket: BUCKET, Key: key, Body: buf }));
+}
+
+export async function getObject(key: string): Promise<Buffer> {
+  assertSafeKey(key);
+  const res = await s3.send(new GetObjectCommand({ Bucket: BUCKET, Key: key }));
+  const chunks: Buffer[] = [];
+  for await (const chunk of res.Body as AsyncIterable<Buffer>) chunks.push(chunk);
+  return Buffer.concat(chunks);
 }
 
 export async function deleteObject(key: string): Promise<void> {
-  if (key.includes('..') || key.startsWith('/')) throw new Error('Invalid storage key');
-  await unlink(join(ROOT, key)).catch(() => undefined);
+  assertSafeKey(key);
+  await s3.send(new DeleteObjectCommand({ Bucket: BUCKET, Key: key })).catch(() => undefined);
 }
 
 export function isPreviewable(mime: string): boolean {

@@ -120,6 +120,14 @@ services:
         sync: false
       - key: AUDIT_CHAIN_SEED
         sync: false
+      - key: R2_ACCOUNT_ID
+        sync: false
+      - key: R2_ACCESS_KEY_ID
+        sync: false
+      - key: R2_SECRET_ACCESS_KEY
+        sync: false
+      - key: R2_BUCKET
+        value: esoko
       - key: NEXT_PUBLIC_WEB_URL
         value: https://esoko-web.onrender.com
       - key: NEXT_PUBLIC_APP_URL
@@ -155,6 +163,14 @@ services:
         sync: false
       - key: AUDIT_CHAIN_SEED
         sync: false
+      - key: R2_ACCOUNT_ID
+        sync: false
+      - key: R2_ACCESS_KEY_ID
+        sync: false
+      - key: R2_SECRET_ACCESS_KEY
+        sync: false
+      - key: R2_BUCKET
+        value: esoko
       - key: NEXT_PUBLIC_WEB_URL
         value: https://esoko-web.onrender.com
       - key: NEXT_PUBLIC_APP_URL
