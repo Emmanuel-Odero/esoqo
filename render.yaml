@@ -1,0 +1,187 @@
+# ════════════════════════════════════════════════════════════════
+#  Esoko — Render Blueprint (Infrastructure as Code)
+#
+#  Deploy: connect this repo in Render Dashboard → Blueprint
+#         or run: render blueprint apply --repo <url>
+# ════════════════════════════════════════════════════════════════
+
+services:
+  # ── Core API — Fastify domain service ──────────────────────
+  - type: web
+    name: esoko-core
+    runtime: node
+    repo: https://github.com/Emmanuel-Odero/esoko-254.git
+    branch: render
+    rootDir: services/core
+    buildCommand: corepack enable && corepack prepare pnpm@9.12.0 --activate && pnpm install && pnpm build
+    startCommand: pnpm start
+    healthCheckPath: /health
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: LOG_LEVEL
+        value: info
+      - key: PORT
+        value: "4000"
+      - key: DATABASE_URL
+        fromDatabase:
+          name: esoko-db
+          property: connectionString
+      - key: DIRECT_DATABASE_URL
+        fromDatabase:
+          name: esoko-db
+          property: connectionString
+      - key: REDIS_URL
+        fromDatabase:
+          name: esoko-redis
+          property: connectionString
+      - key: SESSION_SECRET
+        sync: false
+      - key: OTP_PEPPER
+        sync: false
+      - key: AUDIT_CHAIN_SEED
+        sync: false
+      - key: SMS_PROVIDER
+        value: console
+      - key: SMS_API_KEY
+        sync: false
+      - key: SMS_USERNAME
+        sync: false
+      - key: SMS_SENDER_ID
+        value: ESOKO
+      - key: SEED_ADMIN_PIN
+        sync: false
+      - key: SEED_ADMIN_HASH
+        sync: false
+    postDeploy:
+      command: pnpm --filter @esoko/db exec prisma migrate deploy
+
+  # ── Web — public-facing site ───────────────────────────────
+  - type: web
+    name: esoko-web
+    runtime: node
+    repo: https://github.com/Emmanuel-Odero/esoko-254.git
+    branch: render
+    rootDir: apps/web
+    buildCommand: corepack enable && corepack prepare pnpm@9.12.0 --activate && pnpm install && pnpm build
+    startCommand: pnpm start
+    healthCheckPath: /help
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: DATABASE_URL
+        fromDatabase:
+          name: esoko-db
+          property: connectionString
+      - key: DIRECT_DATABASE_URL
+        fromDatabase:
+          name: esoko-db
+          property: connectionString
+      - key: REDIS_URL
+        fromDatabase:
+          name: esoko-redis
+          property: connectionString
+      - key: SESSION_SECRET
+        sync: false
+      - key: OTP_PEPPER
+        sync: false
+      - key: AUDIT_CHAIN_SEED
+        sync: false
+      - key: NEXT_PUBLIC_WEB_URL
+        value: https://esoko-web.onrender.com
+      - key: NEXT_PUBLIC_APP_URL
+        value: https://esoko-app.onrender.com
+      - key: CORE_API_URL
+        value: https://esoko-core.onrender.com
+
+  # ── App — authenticated PWA surface ────────────────────────
+  - type: web
+    name: esoko-app
+    runtime: node
+    repo: https://github.com/Emmanuel-Odero/esoko-254.git
+    branch: render
+    rootDir: apps/app
+    buildCommand: corepack enable && corepack prepare pnpm@9.12.0 --activate && pnpm install && pnpm build
+    startCommand: pnpm start
+    healthCheckPath: /api/health
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: DATABASE_URL
+        fromDatabase:
+          name: esoko-db
+          property: connectionString
+      - key: DIRECT_DATABASE_URL
+        fromDatabase:
+          name: esoko-db
+          property: connectionString
+      - key: REDIS_URL
+        fromDatabase:
+          name: esoko-redis
+          property: connectionString
+      - key: SESSION_SECRET
+        sync: false
+      - key: OTP_PEPPER
+        sync: false
+      - key: AUDIT_CHAIN_SEED
+        sync: false
+      - key: NEXT_PUBLIC_WEB_URL
+        value: https://esoko-web.onrender.com
+      - key: NEXT_PUBLIC_APP_URL
+        value: https://esoko-app.onrender.com
+      - key: CORE_API_URL
+        value: https://esoko-core.onrender.com
+
+  # ── Admin — operations dashboard ──────────────────────────
+  - type: web
+    name: esoko-admin
+    runtime: node
+    repo: https://github.com/Emmanuel-Odero/esoko-254.git
+    branch: render
+    rootDir: apps/admin
+    buildCommand: corepack enable && corepack prepare pnpm@9.12.0 --activate && pnpm install && pnpm build
+    startCommand: pnpm start
+    healthCheckPath: /signin
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: DATABASE_URL
+        fromDatabase:
+          name: esoko-db
+          property: connectionString
+      - key: DIRECT_DATABASE_URL
+        fromDatabase:
+          name: esoko-db
+          property: connectionString
+      - key: REDIS_URL
+        fromDatabase:
+          name: esoko-redis
+          property: connectionString
+      - key: SESSION_SECRET
+        sync: false
+      - key: OTP_PEPPER
+        sync: false
+      - key: AUDIT_CHAIN_SEED
+        sync: false
+      - key: NEXT_PUBLIC_WEB_URL
+        value: https://esoko-web.onrender.com
+      - key: NEXT_PUBLIC_APP_URL
+        value: https://esoko-app.onrender.com
+      - key: CORE_API_URL
+        value: https://esoko-core.onrender.com
+
+# ─────────────────────────────────────────────────────────────
+# Databases
+# ─────────────────────────────────────────────────────────────
+databases:
+  - name: esoko-db
+    databaseName: esoko
+    user: esoko
+    plan: starter
+    region: frankfurt
+    postgresMajorVersion: 16
+
+  - name: esoko-redis
+    plan: starter
+    region: frankfurt
+    maxmemoryPolicy: noeviction
