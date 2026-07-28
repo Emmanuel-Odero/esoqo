@@ -173,10 +173,10 @@ databases:
   - name: esoko-db
     databaseName: esoko
     user: esoko
-    plan: starter
+    plan: essential-0.1
     region: frankfurt
     postgresMajorVersion: 16
 
   - name: esoko-redis
-    plan: starter
+    plan: essential-0.1
     region: frankfurt
