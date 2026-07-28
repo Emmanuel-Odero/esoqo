@@ -30,9 +30,7 @@ services:
           name: esoko-db
           property: connectionString
       - key: REDIS_URL
-        fromDatabase:
-          name: esoko-redis
-          property: connectionString
+        sync: false
       - key: SESSION_SECRET
         sync: false
       - key: OTP_PEPPER
@@ -74,9 +72,7 @@ services:
           name: esoko-db
           property: connectionString
       - key: REDIS_URL
-        fromDatabase:
-          name: esoko-redis
-          property: connectionString
+        sync: false
       - key: SESSION_SECRET
         sync: false
       - key: OTP_PEPPER
@@ -112,9 +108,7 @@ services:
           name: esoko-db
           property: connectionString
       - key: REDIS_URL
-        fromDatabase:
-          name: esoko-redis
-          property: connectionString
+        sync: false
       - key: SESSION_SECRET
         sync: false
       - key: OTP_PEPPER
@@ -150,9 +144,7 @@ services:
           name: esoko-db
           property: connectionString
       - key: REDIS_URL
-        fromDatabase:
-          name: esoko-redis
-          property: connectionString
+        sync: false
       - key: SESSION_SECRET
         sync: false
       - key: OTP_PEPPER
@@ -173,10 +165,6 @@ databases:
   - name: esoko-db
     databaseName: esoko
     user: esoko
-    plan: essential-0.1
+    plan: basic-256mb
     region: frankfurt
     postgresMajorVersion: 16
-
-  - name: esoko-redis
-    plan: essential-0.1
-    region: frankfurt
