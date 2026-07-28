@@ -1,0 +1,163 @@
+name: esoko
+
+services:
+  # ─────────────────────────────────────────────────────────────
+  # Postgres — source of truth. Nothing connects here directly
+  # except migrations; the apps go through PgBouncer.
+  # ─────────────────────────────────────────────────────────────
+  postgres:
+    image: postgres:16-alpine
+    container_name: esoko-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: esoko
+      POSTGRES_PASSWORD: esoko_dev_only
+      POSTGRES_DB: esoko
+      POSTGRES_INITDB_ARGS: "--data-checksums"
+    command: postgres -c max_connections=100 -c shared_buffers=256MB -c work_mem=8MB -c log_min_duration_statement=500
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+      - ./docker/postgres/init:/docker-entrypoint-initdb.d:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U esoko -d esoko"]
+      interval: 5s
+      timeout: 3s
+      retries: 12
+
+  # ─────────────────────────────────────────────────────────────
+  # PgBouncer — the mandatory gatekeeper (ADR-0002).
+  # Transaction mode. This is what stops connection fan-out
+  # from flooding Postgres under elastic compute.
+  # ─────────────────────────────────────────────────────────────
+  pgbouncer:
+    image: edoburu/pgbouncer:latest
+    container_name: esoko-pgbouncer
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      DB_HOST: postgres
+      DB_PORT: "5432"
+      DB_USER: esoko
+      DB_PASSWORD: esoko_dev_only
+      DB_NAME: esoko
+      POOL_MODE: transaction
+      MAX_CLIENT_CONN: "1000"
+      DEFAULT_POOL_SIZE: "20"
+      MIN_POOL_SIZE: "5"
+      RESERVE_POOL_SIZE: "5"
+      SERVER_RESET_QUERY: DISCARD ALL
+      AUTH_TYPE: scram-sha-256
+      IGNORE_STARTUP_PARAMETERS: extra_float_digits,options
+    ports:
+      - "6432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "nc -z 127.0.0.1 5432 || exit 1"]
+      interval: 10s
+      timeout: 3s
+      retries: 6
+
+  # ─────────────────────────────────────────────────────────────
+  # Redis — sessions, OTP state, USSD session state, rate limits
+  # ─────────────────────────────────────────────────────────────
+  redis:
+    image: redis:7-alpine
+    container_name: esoko-redis
+    restart: unless-stopped
+    command: redis-server --appendonly yes --maxmemory 384mb --maxmemory-policy noeviction
+    ports:
+      - "6379:6379"
+    volumes:
+      - redisdata:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  # ─────────────────────────────────────────────────────────────
+  # MailHog — catches verification emails in development.
+  # UI on http://localhost:8025
+  # ─────────────────────────────────────────────────────────────
+  mailhog:
+    image: mailhog/mailhog:v1.0.1
+    container_name: esoko-mailhog
+    restart: unless-stopped
+    ports:
+      - "1025:1025"
+      - "8025:8025"
+    logging:
+      driver: none
+
+  # ─────────────────────────────────────────────────────────────
+  # Adminer — database inspection. http://localhost:8080
+  # Dev only. Never exposed in any deployed environment.
+  # ─────────────────────────────────────────────────────────────
+  adminer:
+    image: adminer:4.8.1-standalone
+    container_name: esoko-adminer
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      ADMINER_DEFAULT_SERVER: postgres
+      ADMINER_DESIGN: dracula
+    ports:
+      - "8080:8080"
+
+  # ─────────────────────────────────────────────────────────────
+  # Nginx — reverse proxy. http://localhost:80 → dev apps
+  # ─────────────────────────────────────────────────────────────
+  nginx:
+    image: nginx:alpine
+    container_name: esoko-nginx
+    restart: unless-stopped
+    ports:
+      - "80:80"
+    volumes:
+      - ./docker/nginx/default.conf:/etc/nginx/conf.d/default.conf:ro
+    depends_on:
+      esoko-dev:
+        condition: service_started
+
+  # ─────────────────────────────────────────────────────────────
+  # Dev — runs all Next.js apps + core service via turbo.
+  # Hot-reload with poll-based file watching for Docker compat.
+  # ─────────────────────────────────────────────────────────────
+  esoko-dev:
+    build:
+      context: .
+      dockerfile: Dockerfile.dev
+    container_name: esoko-dev
+    restart: unless-stopped
+    ports:
+      - "3000:3000"
+      - "3001:3001"
+      - "3002:3002"
+      - "4000:4000"
+    environment:
+      DATABASE_URL: postgresql://esoko:esoko_dev_only@pgbouncer:5432/esoko?pgbouncer=true&connection_limit=10
+      DIRECT_DATABASE_URL: postgresql://esoko:esoko_dev_only@postgres:5432/esoko
+      REDIS_URL: redis://redis:6379
+      CORE_API_URL: http://localhost:4000
+      NODE_ENV: development
+      CHOKIDAR_USEPOLLING: "1"
+      WATCHPACK_POLLING: "true"
+    volumes:
+      - .:/app
+      - /app/node_modules
+    depends_on:
+      postgres:
+        condition: service_healthy
+      pgbouncer:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
+volumes:
+  pgdata:
+  redisdata:

@@ -1,0 +1,82 @@
+name: CI
+
+on:
+  push: { branches: [main] }
+  pull_request:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: esoko
+          POSTGRES_PASSWORD: esoko_ci
+          POSTGRES_DB: esoko_test
+        options: >-
+          --health-cmd "pg_isready -U esoko"
+          --health-interval 5s --health-timeout 3s --health-retries 12
+        ports: ["5432:5432"]
+      redis:
+        image: redis:7-alpine
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 5s --health-timeout 3s --health-retries 10
+        ports: ["6379:6379"]
+
+    env:
+      DATABASE_URL: postgresql://esoko:esoko_ci@localhost:5432/esoko_test
+      DIRECT_DATABASE_URL: postgresql://esoko:esoko_ci@localhost:5432/esoko_test
+      REDIS_URL: redis://localhost:6379
+      SESSION_SECRET: ci_only_0000000000000000000000000000000000000000000000000000
+      OTP_PEPPER: ci_only_1111111111111111111111111111111111111111111111111111
+      AUDIT_CHAIN_SEED: ci_only_2222222222222222222222222222222222222222222222222222
+      SMS_PROVIDER: console
+
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with: { version: 9 }
+      - uses: actions/setup-node@v4
+        with: { node-version: 22, cache: pnpm }
+
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm db:generate
+      - run: pnpm --filter @esoko/db migrate:deploy
+
+      # Architectural rules are lint rules — this step is where
+      # "authorisation lives in the DAL" stops being a document.
+      - name: Lint (includes DAL and a11y rules)
+        run: pnpm lint
+
+      - name: Typecheck
+        run: pnpm typecheck
+
+      - name: Unit and integration tests
+        run: pnpm test
+
+      - name: Audit chain integrity
+        run: pnpm --filter @esoko/db audit:verify
+
+      - name: Accessibility (axe on every route)
+        run: |
+          pnpm build
+          pnpm test:a11y
+
+  security:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with: { version: 9 }
+      - uses: actions/setup-node@v4
+        with: { node-version: 22, cache: pnpm }
+      - run: pnpm install --frozen-lockfile
+      # 72-hour patch SLA on any Next.js advisory — see ADR-0003.
+      - name: Dependency audit
+        run: pnpm audit --audit-level=moderate

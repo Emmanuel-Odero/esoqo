@@ -1,0 +1,170 @@
+import 'server-only';
+import { createHmac, randomInt, timingSafeEqual } from 'node:crypto';
+import { redis } from './redis';
+import { checkRateLimit, RateLimitError } from './ratelimit';
+
+/**
+ * One-time codes.
+ *
+ * The threat that actually costs money here is SMS pumping — an attacker
+ * cycling premium-rate numbers to farm carrier revenue. It can burn a real
+ * budget overnight and it is the single most expensive attack available
+ * against this product. Hence: per-MSISDN limits, per-IP limits,
+ * exponential cooldown, prefix allow-listing, and a hard daily spend cap
+ * that stops sending and pages a human.
+ *
+ * Codes are never stored. Only HMAC(code, OTP_PEPPER).
+ */
+
+const PEPPER = process.env.OTP_PEPPER ?? 'dev-pepper-change-me';
+const TTL_SECONDS = 10 * 60;
+const MAX_ATTEMPTS = 5;
+const DAILY_CAP_KES = Number(process.env.OTP_DAILY_SPEND_CAP_KES ?? 5000);
+const SMS_COST_KES = 0.8; // per segment — replace with the real aggregator rate
+
+export type OtpPurpose = 'REGISTRATION' | 'SIGN_IN' | 'PIN_RESET' | 'STEP_UP' | 'CONSENT_GRANT';
+
+function hashCode(code: string, msisdn: string): string {
+  return createHmac('sha256', PEPPER).update(`${msisdn}:${code}`).digest('hex');
+}
+
+function key(msisdn: string, purpose: OtpPurpose) {
+  return `otp:${purpose}:${msisdn}`;
+}
+
+/** Only Safaricom, Airtel and Telkom mobile prefixes. Blocks premium-rate ranges. */
+export function isAllowedPrefix(e164: string): boolean {
+  if (!e164.startsWith('+254')) return false;
+  const local = e164.slice(4);
+  return /^(7\d{8}|1[01]\d{7})$/.test(local);
+}
+
+export class OtpError extends Error {
+  constructor(message: string, public readonly code:
+    'RATE_LIMITED' | 'BAD_PREFIX' | 'SPEND_CAP' | 'EXPIRED' | 'TOO_MANY_ATTEMPTS' | 'WRONG_CODE') {
+    super(message);
+    this.name = 'OtpError';
+  }
+}
+
+export interface SendResult {
+  /** Present only when SMS_PROVIDER=console. Never in production. */
+  devCode?: string;
+  expiresAt: Date;
+  cooldownSeconds: number;
+}
+
+export async function issueOtp(
+  msisdn: string,
+  purpose: OtpPurpose,
+  ip?: string | null,
+): Promise<SendResult> {
+  if (!isAllowedPrefix(msisdn)) {
+    throw new OtpError('That is not a Kenyan mobile number we can send to', 'BAD_PREFIX');
+  }
+
+  // Per-number: 5 per hour. Per-IP: 20 per hour.
+  try {
+    await checkRateLimit(`otp:msisdn:${msisdn}`, Number(process.env.OTP_RATE_LIMIT_PER_HOUR ?? 5), 3600);
+    if (ip) await checkRateLimit(`otp:ip:${ip}`, 20, 3600);
+  } catch (e) {
+    if (e instanceof RateLimitError) {
+      throw new OtpError('Too many codes requested. Try again in a little while.', 'RATE_LIMITED');
+    }
+    throw e;
+  }
+
+  // Hard daily spend cap. If this trips, sending stops and ops is paged.
+  const spendKey = `otp:spend:${new Date().toISOString().slice(0, 10)}`;
+  const spent = Number((await redis.get(spendKey)) ?? 0);
+  if (spent + SMS_COST_KES > DAILY_CAP_KES) {
+    console.error('[OTP] DAILY SPEND CAP REACHED — sending halted', { spent, cap: DAILY_CAP_KES });
+    throw new OtpError('Verification is temporarily unavailable. Please try later.', 'SPEND_CAP');
+  }
+
+  // Exponential cooldown between sends to the same number.
+  const sendCountKey = `otp:sends:${msisdn}`;
+  const sends = Number((await redis.get(sendCountKey)) ?? 0);
+  const cooldown = Math.min(30 * 2 ** sends, 900);
+
+  const code = String(randomInt(0, 1_000_000)).padStart(6, '0');
+  const expiresAt = new Date(Date.now() + TTL_SECONDS * 1000);
+
+  await redis
+    .multi()
+    .hset(key(msisdn, purpose), { hash: hashCode(code, msisdn), attempts: 0 })
+    .expire(key(msisdn, purpose), TTL_SECONDS)
+    .incr(sendCountKey)
+    .expire(sendCountKey, 3600)
+    .incrbyfloat(spendKey, SMS_COST_KES)
+    .expire(spendKey, 172_800)
+    .exec();
+
+  const provider = process.env.SMS_PROVIDER ?? 'console';
+  if (provider === 'console') {
+    console.log(`\n  ┌─ OTP ─────────────────────────────\n  │  ${msisdn}\n  │  code: ${code}\n  │  purpose: ${purpose}\n  └───────────────────────────────────\n`);
+    return { devCode: code, expiresAt, cooldownSeconds: cooldown };
+  }
+
+  await sendSms(msisdn, `${code} is your Esoko code. It expires in 10 minutes. Esoko will never ask you for it.`);
+  return { expiresAt, cooldownSeconds: cooldown };
+}
+
+export async function verifyOtp(
+  msisdn: string,
+  purpose: OtpPurpose,
+  code: string,
+): Promise<boolean> {
+  const k = key(msisdn, purpose);
+  const rec = await redis.hgetall(k);
+  if (!rec?.hash) throw new OtpError('That code has expired. Ask for a new one.', 'EXPIRED');
+
+  const attempts = Number(rec.attempts ?? 0);
+  if (attempts >= MAX_ATTEMPTS) {
+    await redis.del(k);
+    throw new OtpError('Too many wrong attempts. Ask for a new code.', 'TOO_MANY_ATTEMPTS');
+  }
+
+  const expected = Buffer.from(rec.hash, 'hex');
+  const actual = Buffer.from(hashCode(code, msisdn), 'hex');
+  const ok = expected.length === actual.length && timingSafeEqual(expected, actual);
+
+  if (!ok) {
+    await redis.hincrby(k, 'attempts', 1);
+    throw new OtpError(
+      `That code is not right. ${MAX_ATTEMPTS - attempts - 1} tries left.`,
+      'WRONG_CODE',
+    );
+  }
+
+  await redis.del(k);
+  await redis.del(`otp:sends:${msisdn}`);
+  return true;
+}
+
+/** Aggregator adapter. Africa's Talking shape; swap per ADR-0005. */
+async function sendSms(to: string, message: string): Promise<void> {
+  const username = process.env.SMS_USERNAME;
+  const apiKey = process.env.SMS_API_KEY;
+  if (!username || !apiKey) throw new Error('SMS credentials not configured');
+
+  const res = await fetch('https://api.africastalking.com/version1/messaging', {
+    method: 'POST',
+    headers: {
+      apiKey,
+      'Content-Type': 'application/x-www-form-urlencoded',
+      Accept: 'application/json',
+    },
+    body: new URLSearchParams({
+      username,
+      to,
+      message,
+      from: process.env.SMS_SENDER_ID ?? 'ESOKO',
+    }),
+  });
+
+  if (!res.ok) {
+    console.error('[SMS] send failed', res.status, await res.text().catch(() => ''));
+    throw new Error('Could not send the code');
+  }
+}

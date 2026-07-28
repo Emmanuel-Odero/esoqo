@@ -1,0 +1,44 @@
+'use server';
+import { revalidatePath } from 'next/cache';
+import { reviewDocument, updateDocument, deleteDocument } from '@esoko/db';
+import { requireStaff } from '@/lib/session';
+
+export type Result = { ok: true } | { ok: false; error: string };
+
+export async function actionReview(
+  id: string, status: 'ACCEPTED' | 'REJECTED', note?: string,
+): Promise<Result> {
+  try {
+    const ctx = await requireStaff();
+    await reviewDocument(ctx, id, status, note);
+    revalidatePath('/documents');
+    return { ok: true };
+  } catch (e) {
+    return { ok: false, error: e instanceof Error ? e.message : 'Could not review that document' };
+  }
+}
+
+export async function actionUpdate(
+  id: string, input: { title?: string; kind?: string },
+): Promise<Result> {
+  try {
+    const ctx = await requireStaff();
+    await updateDocument(ctx, id, input);
+    revalidatePath('/documents');
+    return { ok: true };
+  } catch (e) {
+    return { ok: false, error: e instanceof Error ? e.message : 'Could not update that document' };
+  }
+}
+
+export async function actionDelete(id: string, reason: string): Promise<Result> {
+  try {
+    const ctx = await requireStaff();
+    if (!reason.trim()) return { ok: false, error: 'A reason is required' };
+    await deleteDocument(ctx, id, reason);
+    revalidatePath('/documents');
+    return { ok: true };
+  } catch (e) {
+    return { ok: false, error: e instanceof Error ? e.message : 'Could not delete that document' };
+  }
+}

@@ -1,0 +1,16 @@
+'use server';
+import { revalidatePath } from 'next/cache';
+import { revokeConsent } from '@esoko/db';
+import { requireSubject } from '@/lib/session';
+
+/** Never blocked, never questioned. The DPA makes this a right. */
+export async function actionRevoke(grantId: string) {
+  try {
+    const ctx = await requireSubject();
+    await revokeConsent(ctx, grantId, 'WEB');
+    revalidatePath('/me/consents');
+    return { ok: true as const };
+  } catch (e) {
+    return { ok: false as const, error: e instanceof Error ? e.message : 'Could not end that permission' };
+  }
+}

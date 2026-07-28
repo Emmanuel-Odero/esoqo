@@ -1,0 +1,753 @@
+// ════════════════════════════════════════════════════════════════════
+//  Esoko — domain schema
+//
+//  Design notes that are load-bearing, not decoration:
+//
+//  · Party is abstract. A Person or an Organisation IS a Party.
+//    The CECF platform's single polymorphic `Group` table is the
+//    mistake this replaces.
+//  · Attestation is the universal trust primitive. Every credential —
+//    government registration, county licence, delivery confirmation,
+//    field visit — is one row here. New issuers need no schema change.
+//  · Balances are DERIVED from Posting. There is no balance column
+//    anywhere, and there must never be one.
+//  · ConsentGrant is not a boolean. It is a dated, purposed, revocable
+//    record, because the Data Protection Act 2019 requires one.
+//  · AuditEvent is hash-chained. Tampering breaks the chain.
+// ════════════════════════════════════════════════════════════════════
+
+generator client {
+  provider        = "prisma-client-js"
+  previewFeatures = ["relationJoins"]
+}
+
+datasource db {
+  provider          = "postgresql"
+  url               = env("DATABASE_URL")
+  directUrl         = env("DIRECT_DATABASE_URL")
+  shadowDatabaseUrl = env("SHADOW_DATABASE_URL")
+}
+
+// ─────────────────────────── PARTIES ───────────────────────────
+
+enum PartyKind {
+  PERSON
+  ORGANISATION
+}
+
+enum OrgKind {
+  CHAMA
+  SELF_HELP_GROUP
+  TABLE_BANKING
+  WELFARE_GROUP
+  CBO
+  FBO
+  COOPERATIVE
+  SACCO
+  NGO
+  BUSINESS
+  SCHOOL
+  CLINIC
+  MARKET_ASSOCIATION
+  OTHER
+}
+
+model Party {
+  id        String    @id @default(uuid()) @db.Uuid
+  kind      PartyKind
+  county    String
+  ward      String?
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  deletedAt DateTime? // soft delete — DPA erasure keeps the audit trail
+
+  person       Person?
+  organisation Organisation?
+  enterprises  Enterprise[]
+  memberships  Membership[]  @relation("MemberParty")
+  accounts     Account[]
+  attestations Attestation[] @relation("AttestationSubject")
+  consentsGiven ConsentGrant[] @relation("ConsentSubject")
+  documents    Document[]
+  registration Registration?
+
+  @@index([county, kind])
+  @@index([createdAt])
+  @@map("party")
+}
+
+model Person {
+  partyId String @id @db.Uuid
+  party   Party  @relation(fields: [partyId], references: [id], onDelete: Cascade)
+
+  /// Name as written on the national ID. Used only when a credential is issued.
+  officialName String
+  /// What people actually call them. This is what the product uses day to day.
+  knownAs      String?
+  /// MSISDN in E.164. THE identifier. Unique across the system.
+  msisdn       String  @unique
+  /// SHA-256 of the national ID number. The raw number is never stored.
+  nationalIdHash String? @unique
+  email        String? @db.Citext
+  gender       String?
+  yearOfBirth  Int?
+
+  msisdnVerifiedAt DateTime?
+  emailVerifiedAt  DateTime?
+
+  /// Display preferences. Persisted server-side deliberately, so they
+  /// follow the person across devices and channels rather than living
+  /// in one browser's localStorage.
+  displayPrefs Json @default("{}")
+
+  credential UserCredential?
+
+  @@index([msisdn])
+  @@map("person")
+}
+
+model Organisation {
+  partyId String  @id @db.Uuid
+  party   Party   @relation(fields: [partyId], references: [id], onDelete: Cascade)
+
+  kind         OrgKind
+  officialName String
+  knownAs      String?
+  /// Registration number, if held. Verified via Attestation, never trusted raw.
+  registrationNo String?
+  memberCount    Int?
+  formedOn       DateTime?
+
+  members Membership[] @relation("MemberOrg")
+
+  @@index([kind])
+  @@map("organisation")
+}
+
+enum MemberRole {
+  CHAIRPERSON
+  TREASURER
+  SECRETARY
+  MEMBER
+}
+
+model Membership {
+  id       String     @id @default(uuid()) @db.Uuid
+  personId String     @db.Uuid
+  orgId    String     @db.Uuid
+  role     MemberRole @default(MEMBER)
+  joinedAt DateTime   @default(now())
+  exitedAt DateTime?
+
+  person Party @relation("MemberParty", fields: [personId], references: [id], onDelete: Cascade)
+  org    Organisation @relation("MemberOrg", fields: [orgId], references: [partyId], onDelete: Cascade)
+
+  @@unique([personId, orgId])
+  @@index([orgId, role])
+  @@map("membership")
+}
+
+/// The economic unit. A party may run more than one.
+model Enterprise {
+  id       String  @id @default(uuid()) @db.Uuid
+  partyId  String  @db.Uuid
+  party    Party   @relation(fields: [partyId], references: [id], onDelete: Cascade)
+  /// Free text as the user typed it — "carpentry", "seremala", "mama mboga".
+  workRaw  String
+  /// Resolved segment key from the shared dictionary.
+  segment  String?
+  sector   String?
+  isRegistered Boolean @default(false)
+  hasKraPin    Boolean @default(false)
+  createdAt DateTime @default(now())
+
+  @@index([segment])
+  @@index([sector])
+  @@map("enterprise")
+}
+
+// ─────────────────────── AUTH & CREDENTIALS ─────────────────────
+
+model UserCredential {
+  personId  String   @id @db.Uuid
+  person    Person   @relation(fields: [personId], references: [partyId], onDelete: Cascade)
+  /// Argon2id. Never anything else, never hand-rolled.
+  pinHash   String?
+  pinSetAt  DateTime?
+  failedAttempts Int      @default(0)
+  lockedUntil    DateTime?
+  frozenAt       DateTime?   // SIMAMA — instant freeze from any handset
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@map("user_credential")
+}
+
+enum OtpPurpose {
+  REGISTRATION
+  SIGN_IN
+  PIN_RESET
+  STEP_UP
+  CONSENT_GRANT
+}
+
+model OtpChallenge {
+  id        String     @id @default(uuid()) @db.Uuid
+  msisdn    String
+  purpose   OtpPurpose
+  /// HMAC-SHA256(code, OTP_PEPPER). The code itself is never stored.
+  codeHash  String
+  attempts  Int        @default(0)
+  maxAttempts Int      @default(5)
+  expiresAt DateTime
+  consumedAt DateTime?
+  createdAt DateTime   @default(now())
+  ip        String?
+
+  @@index([msisdn, purpose, createdAt])
+  @@index([expiresAt])
+  @@map("otp_challenge")
+}
+
+model EmailVerification {
+  id        String    @id @default(uuid()) @db.Uuid
+  email     String    @db.Citext
+  tokenHash String    @unique
+  partyId   String?   @db.Uuid
+  expiresAt DateTime
+  usedAt    DateTime?
+  createdAt DateTime  @default(now())
+
+  @@index([email])
+  @@map("email_verification")
+}
+
+// ───────────────────────── ATTESTATIONS ─────────────────────────
+
+enum ClaimType {
+  MSISDN_VERIFIED
+  EMAIL_VERIFIED
+  NATIONAL_ID_CONFIRMED
+  GROUP_REGISTERED
+  BUSINESS_REGISTERED
+  KRA_PIN
+  ETIMS_ACTIVE
+  MEDIATION_TRAINED
+  SINGLE_BUSINESS_PERMIT
+  FOOD_HANDLER
+  HEALTH_CLEARANCE
+  SECTOR_LICENCE
+  FIELD_VISIT
+  DELIVERY_CONFIRMED
+  TRADING_RECORD
+}
+
+enum AttestationMethod {
+  MANUAL
+  API
+  DOCUMENT
+  FIELD_VISIT
+  SELF_DECLARED
+}
+
+/// The universal trust primitive. Adding an issuer must never require
+/// a migration — that is the whole point of this table.
+model Attestation {
+  id        String    @id @default(uuid()) @db.Uuid
+  subjectId String    @db.Uuid
+  subject   Party     @relation("AttestationSubject", fields: [subjectId], references: [id], onDelete: Cascade)
+
+  claimType  ClaimType
+  claimValue Json      @default("{}")
+
+  issuerOrgId  String?  @db.Uuid
+  issuer       Issuer?  @relation(fields: [issuerOrgId], references: [id])
+  issuerUserId String?  @db.Uuid
+  method       AttestationMethod @default(MANUAL)
+
+  evidenceRefs String[] @default([])
+  confidence   Int      @default(100)
+
+  issuedAt  DateTime  @default(now())
+  expiresAt DateTime?
+  revokedAt DateTime?
+  revocationReason String?
+
+  /// Signature over the canonical claim. Populated by services/credential.
+  signature String?
+  /// Hash chain within a subject's attestation history.
+  prevHash  String?
+  hash      String?
+
+  @@index([subjectId, claimType])
+  @@index([expiresAt])
+  @@index([claimType, revokedAt])
+  @@map("attestation")
+}
+
+/// A body with authority to issue claims. Ministry, county, bank, CECF.
+model Issuer {
+  id        String   @id @default(uuid()) @db.Uuid
+  name      String   @unique
+  shortName String?
+  kind      String   // MINISTRY | COUNTY | AGENCY | JUDICIARY | BANK | INSURER | BUYER | NGO
+  /// Which claim types this issuer is permitted to assert.
+  allowedClaims ClaimType[] @default([])
+  active    Boolean  @default(true)
+  createdAt DateTime @default(now())
+
+  attestations Attestation[]
+  consentGrants ConsentGrant[] @relation("ConsentGrantee")
+
+  @@map("issuer")
+}
+
+// ──────────────────────────── CONSENT ───────────────────────────
+
+enum ConsentPurpose {
+  CREDIT_ASSESSMENT
+  INSURANCE_QUOTE
+  SUPPLY_CONTRACT
+  COUNTY_LICENSING
+  PROGRAMME_ENROLMENT
+}
+
+/// Not a boolean. A dated, purposed, revocable record — because the
+/// Data Protection Act 2019 requires one and an auditor will ask for it.
+model ConsentGrant {
+  id        String         @id @default(uuid()) @db.Uuid
+  subjectId String         @db.Uuid
+  subject   Party          @relation("ConsentSubject", fields: [subjectId], references: [id], onDelete: Cascade)
+  granteeId String         @db.Uuid
+  grantee   Issuer         @relation("ConsentGrantee", fields: [granteeId], references: [id])
+
+  purpose   ConsentPurpose
+  /// Field-level scope. Never "everything".
+  scope     String[]       @default([])
+  /// The exact wording shown to the subject when they agreed.
+  wordingShown String
+  channel   String         // USSD | WEB | AGENT | IVR
+
+  grantedAt DateTime  @default(now())
+  expiresAt DateTime
+  revokedAt DateTime?
+  revocationChannel String?
+
+  accesses ConsentAccess[]
+
+  @@index([subjectId, revokedAt])
+  @@index([granteeId, expiresAt])
+  @@map("consent_grant")
+}
+
+/// Every look, logged. Producible for the ODPC on request.
+model ConsentAccess {
+  id        String       @id @default(uuid()) @db.Uuid
+  grantId   String       @db.Uuid
+  grant     ConsentGrant @relation(fields: [grantId], references: [id], onDelete: Cascade)
+  accessedAt DateTime    @default(now())
+  actorId   String?      @db.Uuid
+  fields    String[]     @default([])
+  ip        String?
+
+  @@index([grantId, accessedAt])
+  @@map("consent_access")
+}
+
+// ───────────────────────── LEDGER (money) ───────────────────────
+
+enum AccountKind {
+  WALLET
+  ESCROW
+  GROUP_SAVINGS
+  FEE_INCOME
+  SETTLEMENT
+  SUSPENSE
+}
+
+model Account {
+  id       String      @id @default(uuid()) @db.Uuid
+  partyId  String?     @db.Uuid
+  party    Party?      @relation(fields: [partyId], references: [id])
+  kind     AccountKind
+  currency String      @default("KES")
+  openedAt DateTime    @default(now())
+  closedAt DateTime?
+
+  postings Posting[]
+
+  @@unique([partyId, kind, currency])
+  @@index([kind])
+  @@map("account")
+}
+
+/// Immutable. Balanced. Never updated, never deleted.
+model JournalEntry {
+  id          String   @id @default(uuid()) @db.Uuid
+  reference   String   @unique
+  description String
+  occurredAt  DateTime @default(now())
+  recordedAt  DateTime @default(now())
+  /// Idempotency key. M-Pesa callbacks arrive late, twice, or never.
+  idempotencyKey String? @unique
+
+  postings Posting[]
+
+  @@index([occurredAt])
+  @@map("journal_entry")
+}
+
+model Posting {
+  id        String       @id @default(uuid()) @db.Uuid
+  entryId   String       @db.Uuid
+  entry     JournalEntry @relation(fields: [entryId], references: [id], onDelete: Cascade)
+  accountId String       @db.Uuid
+  account   Account      @relation(fields: [accountId], references: [id])
+  /// Positive = debit, negative = credit. Sum per entry MUST be zero.
+  amount    Decimal      @db.Decimal(18, 2)
+  currency  String       @default("KES")
+
+  @@index([accountId, entryId])
+  @@map("posting")
+}
+
+enum PaymentMethod {
+  MPESA
+  BANK_TRANSFER
+  CASH_TO_AGENT
+}
+
+enum ApprovalDecision {
+  APPROVE
+  REJECT
+}
+
+enum PaymentStatus {
+  NOT_DECLARED
+  DECLARED
+  UNDER_REVIEW
+  CONFIRMED
+  REJECTED
+  WAIVED
+}
+
+// ─────────────────────── REGISTRATION FUNNEL ────────────────────
+
+enum RegistrationStatus {
+  STARTED
+  AWAITING_OTP
+  VERIFIED
+  COMPLETE
+  ABANDONED
+}
+
+enum JoinPath {
+  SELF_WEB
+  SELF_USSD
+  AGENT_ASSISTED
+  COHORT
+  INSTITUTION
+}
+
+/// Funnel record. Deliberately separate from Party so an abandoned
+/// registration never becomes a counted user — the failure that made
+/// CECF's numbers meaningless.
+model Registration {
+  id       String             @id @default(uuid()) @db.Uuid
+  partyId  String?            @unique @db.Uuid
+  party    Party?             @relation(fields: [partyId], references: [id])
+  status   RegistrationStatus @default(STARTED)
+  path     JoinPath           @default(SELF_WEB)
+
+  joiningAs      String   // me | group | biz
+  officialName   String?
+  knownAs        String?
+  msisdn         String?
+  email          String?  @db.Citext
+  county         String?
+  ward           String?
+  workRaw        String?
+  segment        String?
+  orgName        String?
+  orgKnownAs     String?
+  orgRole        String?
+  memberCount    Int?
+  hasRegisteredBusiness String?
+  registrationNo String?
+  belongsToGroup String?
+  groupName      String?
+  hasKraPin      String?
+
+  /// Explicit opt-ins. Nothing is sent that was not asked for.
+  wantsPriceSms   Boolean @default(false)
+  wantsReceiptSms Boolean @default(true)
+  wantsExpirySms  Boolean @default(true)
+
+  ussdSetupChoice String?  // now | later
+  msisdnVerifiedAt DateTime?
+  emailSentAt      DateTime?
+
+  agentId   String?  @db.Uuid
+  language  String   @default("en")
+  ip        String?
+  userAgent String?
+
+  startedAt   DateTime  @default(now())
+  completedAt DateTime?
+  updatedAt   DateTime  @updatedAt
+  /// Soft void. A deleted registration keeps its audit trail.
+  voidedAt    DateTime?
+  voidedById  String?   @db.Uuid
+  voidReason  String?
+
+  payment   RegistrationPayment?
+  documents Document[]
+
+  @@index([status, startedAt])
+  @@index([county])
+  @@index([msisdn])
+  @@map("registration")
+}
+
+/// A payment declared for a registration. Not money — just what the
+/// joiner or an officer says. Only the signature chain moves it to
+/// CONFIRMED.
+model RegistrationPayment {
+  id             String         @id @default(uuid()) @db.Uuid
+  registrationId String         @unique @db.Uuid
+  registration   Registration   @relation(fields: [registrationId], references: [id], onDelete: Cascade)
+
+  method       PaymentMethod?
+  reference    String?        @db.Citext
+  amountKes    Decimal?       @db.Decimal(12, 2)
+  declaredNote String?
+  declaredAt   DateTime?
+  status       PaymentStatus  @default(NOT_DECLARED)
+  confirmedAt  DateTime?
+  createdAt    DateTime     @default(now())
+  updatedAt    DateTime     @updatedAt
+
+  approvals PaymentApproval[]
+
+  @@index([status])
+  @@map("registration_payment")
+}
+
+/// A single signature in the dual-control chain. One REJECT halts.
+model PaymentApproval {
+  id         String           @id @default(uuid()) @db.Uuid
+  paymentId  String           @db.Uuid
+  payment    RegistrationPayment @relation(fields: [paymentId], references: [id], onDelete: Cascade)
+  approverId String           @db.Uuid
+  approver   StaffUser        @relation(fields: [approverId], references: [id])
+  decision   ApprovalDecision
+  note       String?
+  /// HMAC-SHA256(paymentId|approverId|decision|signedAt, SESSION_SECRET)
+  signature  String
+  signedAt   DateTime
+  ip         String?
+
+  @@unique([paymentId, approverId])
+  @@index([paymentId])
+  @@map("payment_approval")
+}
+
+// ───────────────────────────── DOCUMENTS ────────────────────────
+
+enum DocumentStatus {
+  PENDING_REVIEW
+  ACCEPTED
+  REJECTED
+  SUPERSEDED
+}
+
+model Document {
+  id       String   @id @default(uuid()) @db.Uuid
+  partyId  String?  @db.Uuid
+  party    Party?   @relation(fields: [partyId], references: [id], onDelete: Cascade)
+  /// Attached during registration, before a Party exists.
+  registrationId String? @db.Uuid
+  registration   Registration? @relation(fields: [registrationId], references: [id], onDelete: Cascade)
+
+  /// What the person called it. Their words, not a dropdown.
+  title    String
+  kind     String   @default("OTHER")
+  /// Opaque storage key. NEVER the user's filename — that is a path
+  /// traversal and content-sniffing vector.
+  storageKey String  @unique
+  /// Kept only for display and download naming. Sanitised on the way in.
+  originalName String
+  mimeType String
+  sizeBytes Int
+  /// SHA-256 of the bytes. Detects duplicates and tampering.
+  sha256   String
+
+  status   DocumentStatus @default(PENDING_REVIEW)
+  reviewNote String?
+  reviewedById String? @db.Uuid
+  reviewedAt DateTime?
+
+  uploadedAt DateTime @default(now())
+  uploadedByType String @default("SUBJECT")
+  uploadedById String?
+  deletedAt DateTime?
+
+  extracted Json?
+  ocrConfidence Int?
+
+  @@index([partyId, kind])
+  @@index([registrationId])
+  @@index([status, uploadedAt])
+  @@map("document")
+}
+
+// ─────────────────────── AUTH SESSIONS (audit) ──────────────────
+
+/// Redis holds live sessions. This is the durable record for audit
+/// and for "sign me out everywhere".
+model SessionRecord {
+  id        String    @id @default(uuid()) @db.Uuid
+  partyId   String?   @db.Uuid
+  tokenHash String    @unique
+  issuedAt  DateTime  @default(now())
+  expiresAt DateTime
+  revokedAt DateTime?
+  ip        String?
+  userAgent String?
+  deviceId  String?
+
+  @@index([partyId, revokedAt])
+  @@map("session_record")
+}
+
+// ─────────────────────────── STAFF & RBAC ───────────────────────
+
+model StaffUser {
+  id        String   @id @default(uuid()) @db.Uuid
+  email     String   @unique @db.Citext
+  name      String
+  pinHash   String
+  orgId     String?  @db.Uuid
+  /// Preset the capabilities were derived from. Display only — the
+  /// capability list is the model, not this.
+  rolePreset String? @default("VIEWER")
+  /// Optional scope. Empty means national.
+  countyScope String[] @default([])
+  invitedById String? @db.Uuid
+  mustChangePin Boolean @default(true)
+  failedAttempts Int   @default(0)
+  lockedUntil DateTime?
+  suspendedAt DateTime?
+  /// Capability strings, e.g. "registration.read", "audit.read",
+  /// "attestation.issue:GROUP_REGISTERED". Never a role enum —
+  /// roles are presets of these, not the model itself.
+  capabilities String[] @default([])
+  active    Boolean  @default(true)
+  lastSeenAt DateTime?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  approvals PaymentApproval[]
+
+  @@index([active, rolePreset])
+  @@map("staff_user")
+}
+
+// ──────────────────────────── AUDIT LOG ─────────────────────────
+
+/// Append-only, hash-chained. If a row is altered or removed the chain
+/// breaks and `pnpm audit:verify` will say so.
+model AuditEvent {
+  id        BigInt   @id @default(autoincrement())
+  occurredAt DateTime @default(now())
+  actorType String   // SUBJECT | STAFF | AGENT | SYSTEM | ISSUER
+  actorId   String?
+  action    String   // registration.created, consent.granted, otp.sent …
+  targetType String?
+  targetId  String?
+  payload   Json     @default("{}")
+  ip        String?
+  /// SHA-256 over (prevHash + canonical(row)). Chain root uses AUDIT_CHAIN_SEED.
+  prevHash  String
+  hash      String   @unique
+
+  @@index([occurredAt])
+  @@index([action, occurredAt])
+  @@index([actorId])
+  @@map("audit_event")
+}
+
+// ──────────────────────── REFERENCE DATA ────────────────────────
+
+model County {
+  code      String  @id
+  name      String  @unique
+  hasFieldOfficer Boolean @default(false)
+  pricesLive      Boolean @default(false)
+  population      String?
+  financeActRef   String?
+  verifiedOn      DateTime?
+
+  markets Market[]
+  permits Permit[]
+
+  @@map("county")
+}
+
+model Market {
+  id        String  @id @default(uuid()) @db.Uuid
+  name      String
+  countyCode String
+  county    County  @relation(fields: [countyCode], references: [code])
+  marketDays String?
+  reporting Boolean @default(false)
+
+  prices PriceQuote[]
+
+  @@unique([name, countyCode])
+  @@map("market")
+}
+
+model Permit {
+  id         String  @id @default(uuid()) @db.Uuid
+  countyCode String
+  county     County  @relation(fields: [countyCode], references: [code])
+  name       String
+  issuedBy   String
+  feeText    String
+  note       String?
+  claimType  ClaimType?
+
+  @@index([countyCode])
+  @@map("permit")
+}
+
+model Commodity {
+  id       String @id @default(uuid()) @db.Uuid
+  name     String @unique
+  unit     String
+  category String // veg | cereal | fruit | live | goods
+
+  prices PriceQuote[]
+
+  @@map("commodity")
+}
+
+/// One quote, one market, one day. Absence is meaningful — the UI must
+/// say "not submitted today" rather than repeat yesterday's figure.
+model PriceQuote {
+  id          String   @id @default(uuid()) @db.Uuid
+  commodityId String   @db.Uuid
+  commodity   Commodity @relation(fields: [commodityId], references: [id])
+  marketId    String   @db.Uuid
+  market      Market   @relation(fields: [marketId], references: [id])
+  priceKes    Decimal  @db.Decimal(12, 2)
+  quotedFor   DateTime @db.Date
+  collectedAt DateTime @default(now())
+  source      String
+  collectedBy String?
+
+  @@unique([commodityId, marketId, quotedFor])
+  @@index([quotedFor])
+  @@map("price_quote")
+}

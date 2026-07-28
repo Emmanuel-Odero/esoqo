@@ -1,0 +1,25 @@
+import type { Metadata } from 'next';
+import { RouteAnnouncer, SkipLinks, LiveRegion } from '@esoko/a11y';
+import { IconSprite } from '@esoko/ui';
+import '@esoko/ui/tokens.css';
+import './admin.css';
+
+export const metadata: Metadata = {
+  title: { default: 'Operations', template: '%s · Esoko Ops' },
+  robots: { index: false },
+};
+
+export default function RootLayout({ children }: { children: React.ReactNode }) {
+  return (
+    <html lang="en" suppressHydrationWarning>
+      <body className="admin">
+        <IconSprite />
+        <SkipLinks />
+        <LiveRegion>
+          {children}
+        </LiveRegion>
+        <RouteAnnouncer />
+      </body>
+    </html>
+  );
+}

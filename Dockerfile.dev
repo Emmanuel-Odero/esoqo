@@ -1,0 +1,27 @@
+FROM node:22-alpine
+
+RUN corepack enable && corepack prepare pnpm@9.12.0 --activate
+
+WORKDIR /app
+
+COPY package.json pnpm-workspace.yaml pnpm-lock.yaml turbo.json ./
+COPY apps/web/package.json apps/web/package.json
+COPY apps/app/package.json apps/app/package.json
+COPY apps/admin/package.json apps/admin/package.json
+COPY packages/db/package.json packages/db/package.json
+COPY packages/ui/package.json packages/ui/package.json
+COPY packages/domain/package.json packages/domain/package.json
+COPY packages/auth/package.json packages/auth/package.json
+COPY packages/a11y/package.json packages/a11y/package.json
+COPY services/core/package.json services/core/package.json
+
+RUN pnpm install --frozen-lockfile
+
+COPY . .
+
+ENV CHOKIDAR_USEPOLLING=1
+ENV WATCHPACK_POLLING=true
+
+EXPOSE 3000 3001 3002 4000
+
+CMD ["pnpm", "dev"]

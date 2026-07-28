@@ -1,0 +1,87 @@
+/* ══════════════════════════════════════════════════════════════
+   Esoko design tokens — the single source of truth.
+
+   Colour SEMANTICS, which are a rule and not a preference:
+     navy  = authority      · headers, footers, institutional bands
+     green = you and yours  · your record, verified, primary action
+     blue  = institutions   · issuers, data, information
+     red   = attention only · the mark, safety notices, errors
+   ══════════════════════════════════════════════════════════════ */
+:root {
+  --navy:#0A2E4D; --navy-2:#123F65; --navy-3:#1B527E;
+  --blue:#0F5C9E; --blue-2:#3F8AC4; --blue-t:#E9F2F9;
+  --green:#12794A; --green-2:#1FA163; --green-t:#E7F4ED;
+  --red:#CE2B2B; --red-t:#FCEDEC;
+  --amber:#B8760B; --amber-t:#FDF4E3;
+  --paper:#F4F7FA; --line:#DCE5EC;
+  --tx:#12283A; --tx-2:#57718A; --tx-3:#8AA0B4;
+
+  --w:1160px;
+  --sh-s:0 1px 2px rgba(10,46,77,.05),0 4px 14px rgba(10,46,77,.05);
+  --sh-m:0 8px 28px rgba(10,46,77,.10);
+  --sh-l:0 24px 60px rgba(10,46,77,.18);
+
+  /* User-adjustable. Persisted server-side so preferences follow the
+     person across devices and channels. */
+  --font-scale:1;
+  --line-height:1.62;
+  --letter-spacing:0;
+  --font-body:"IBM Plex Sans",system-ui,-apple-system,sans-serif;
+  --font-display:"Outfit",system-ui,sans-serif;
+  --font-mono:"IBM Plex Mono",ui-monospace,monospace;
+}
+
+/* Display preferences — set on <html> by the preferences panel */
+html[data-text-size="125"] { --font-scale:1.25 }
+html[data-text-size="150"] { --font-scale:1.5 }
+html[data-text-size="200"] { --font-scale:2 }
+html[data-spacing="relaxed"] { --line-height:1.8 }
+html[data-spacing="loose"]   { --line-height:2.2; --letter-spacing:.02em }
+html[data-font="legible"]    { --font-body:"Atkinson Hyperlegible",system-ui,sans-serif }
+html[data-contrast="high"] {
+  --tx:#000; --tx-2:#1a1a1a; --line:#000; --paper:#fff;
+  --green:#0A5A36; --blue:#0A4478; --red:#A81E1E;
+}
+
+*,*::before,*::after { box-sizing:border-box }
+html { scroll-behavior:smooth; scroll-padding-top:126px; -webkit-text-size-adjust:100% }
+body {
+  margin:0; background:#fff; color:var(--tx);
+  font-family:var(--font-body);
+  font-size:calc(16.5px * var(--font-scale));
+  line-height:var(--line-height);
+  letter-spacing:var(--letter-spacing);
+  -webkit-font-smoothing:antialiased;
+}
+h1,h2,h3 { font-family:var(--font-display); letter-spacing:-.028em; margin:0; font-weight:800; line-height:1.1 }
+h1 { font-size:clamp(1.9rem,4vw,2.7rem) }
+h2 { font-size:clamp(1.35rem,2.5vw,1.85rem) }
+h3 { font-size:1.04rem; font-weight:700 }
+a { color:inherit; text-decoration:none }
+img { display:block; max-width:100% }
+
+/* WCAG 2.2 · 2.4.11 Focus Not Obscured — the sticky header is 64px */
+:focus-visible { outline:3px solid var(--blue-2); outline-offset:3px; border-radius:3px }
+
+.sr-only {
+  position:absolute; width:1px; height:1px; padding:0; margin:-1px;
+  overflow:hidden; clip:rect(0 0 0 0); white-space:nowrap; border:0;
+}
+.skip-links a {
+  position:absolute; left:-9999px; z-index:999;
+  padding:12px 20px; background:var(--navy); color:#fff; border-radius:0 0 6px 0;
+}
+.skip-links a:focus { left:0; top:0 }
+
+/* WCAG 2.2 · 2.5.8 Target Size. Floor is 24px; ours is 44px because the
+   real user is standing in a market with cold hands. */
+button, a[role="button"], input[type="checkbox"], input[type="radio"] { min-height:44px }
+input[type="checkbox"], input[type="radio"] { min-width:24px; width:24px; height:24px }
+
+html[data-motion="reduced"] *, html[data-motion="reduced"] *::before, html[data-motion="reduced"] *::after {
+  animation-duration:.001ms !important; transition-duration:.001ms !important;
+}
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { animation-duration:.001ms !important; transition-duration:.001ms !important }
+  html { scroll-behavior:auto }
+}
