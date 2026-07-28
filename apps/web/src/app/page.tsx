@@ -6,7 +6,7 @@ import { Board, type Quote } from '@/components/Board';
 import { SectionNav } from '@/components/Chrome';
 import { ScrollSpy } from '@/components/ScrollSpy';
 
-export const revalidate = 300; // the board moves once a morning
+export const dynamic = 'force-dynamic'; // the board moves once a morning
 
 const SECTIONS = [
   ['for-me', 'Is Esoko for me?'], ['does', 'What Esoko does'], ['daily', 'Every day'],
