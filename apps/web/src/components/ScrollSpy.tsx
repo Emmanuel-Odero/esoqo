@@ -17,11 +17,12 @@ export function ScrollSpy() {
       let cur = -1;
       secs.forEach((s, i) => { if (s && s.offsetTop <= y) cur = i; });
       links.forEach((l) => l.classList.remove('on'));
-      if (cur > -1 && links[cur]) {
-        links[cur].classList.add('on');
+      if (cur > -1) {
+        const link = links[cur];
+        if (!link) return;
+        link.classList.add('on');
         if (!reduced && nav.scrollWidth > nav.clientWidth) {
-          const l = links[cur];
-          nav.scrollTo({ left: Math.max(0, l.offsetLeft - nav.clientWidth / 2 + l.offsetWidth / 2), behavior: 'smooth' });
+          nav.scrollTo({ left: Math.max(0, link.offsetLeft - nav.clientWidth / 2 + link.offsetWidth / 2), behavior: 'smooth' });
         }
       }
       const d = document.documentElement;
