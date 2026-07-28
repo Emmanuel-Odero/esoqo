@@ -1,0 +1,61 @@
+# ─── dependencies ─────────────────────────────────────────
+node_modules/
+.pnpm-store/
+.pnpm-debug.log*
+
+# ─── build output ─────────────────────────────────────────
+.next/
+dist/
+build/
+out/
+.turbo/
+target/          # Rust (services/ledger, services/channels)
+
+# ─── Python ────────────────────────────────────────────────
+__pycache__/
+*.py[cod]
+*$py.class
+*.egg-info/
+.venv/
+venv/
+
+# ─── secrets ──────────────────────────────────────────────
+.env
+.env.local
+.env.*.local
+.env.production
+.env.development
+
+# ─── IDE / editor ─────────────────────────────────────────
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+*.sublime-*
+
+# ─── OS ───────────────────────────────────────────────────
+.DS_Store
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+
+# ─── logs ─────────────────────────────────────────────────
+*.log
+npm-debug.log*
+pnpm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# ─── testing ─────────────────────────────────────────────
+coverage/
+playwright-report/
+test-results/
+
+# ─── docker ──────────────────────────────────────────────
+docker-data/
+
+# ─── misc ────────────────────────────────────────────────
+*.tsbuildinfo
+next-env.d.ts
+.eslintcache
