@@ -3,6 +3,14 @@
 #
 #  Deploy: connect this repo in Render Dashboard → Blueprint
 #         or run: render blueprint apply --repo <url>
+#
+#  Important:
+#  · Build/start commands run from the REPO ROOT (no rootDir).
+#    pnpm workspaces require the project root to resolve correctly.
+#  · Create a Redis KV store manually in the Render Dashboard
+#    after provisioning, then set REDIS_URL on all services.
+#  · Run migrations manually after first deploy:
+#      DATABASE_URL="<url>" pnpm --filter @esoko/db exec prisma migrate deploy
 # ════════════════════════════════════════════════════════════════
 
 services:
@@ -12,9 +20,8 @@ services:
     runtime: node
     repo: https://github.com/Emmanuel-Odero/esoko-254.git
     branch: render
-    rootDir: services/core
-    buildCommand: corepack enable && corepack prepare pnpm@9.12.0 --activate && pnpm install && pnpm build
-    startCommand: pnpm start
+    buildCommand: npm install -g pnpm@9.12.0 && pnpm install && pnpm --filter @esoko/core-service build
+    startCommand: pnpm --filter @esoko/core-service start
     healthCheckPath: /health
     envVars:
       - key: NODE_ENV
@@ -56,9 +63,8 @@ services:
     runtime: node
     repo: https://github.com/Emmanuel-Odero/esoko-254.git
     branch: render
-    rootDir: apps/web
-    buildCommand: corepack enable && corepack prepare pnpm@9.12.0 --activate && pnpm install && pnpm build
-    startCommand: pnpm start
+    buildCommand: npm install -g pnpm@9.12.0 && pnpm install && pnpm --filter @esoko/web build
+    startCommand: pnpm --filter @esoko/web start
     healthCheckPath: /help
     envVars:
       - key: NODE_ENV
@@ -92,9 +98,8 @@ services:
     runtime: node
     repo: https://github.com/Emmanuel-Odero/esoko-254.git
     branch: render
-    rootDir: apps/app
-    buildCommand: corepack enable && corepack prepare pnpm@9.12.0 --activate && pnpm install && pnpm build
-    startCommand: pnpm start
+    buildCommand: npm install -g pnpm@9.12.0 && pnpm install && pnpm --filter @esoko/app build
+    startCommand: pnpm --filter @esoko/app start
     healthCheckPath: /api/health
     envVars:
       - key: NODE_ENV
@@ -128,9 +133,8 @@ services:
     runtime: node
     repo: https://github.com/Emmanuel-Odero/esoko-254.git
     branch: render
-    rootDir: apps/admin
-    buildCommand: corepack enable && corepack prepare pnpm@9.12.0 --activate && pnpm install && pnpm build
-    startCommand: pnpm start
+    buildCommand: npm install -g pnpm@9.12.0 && pnpm install && pnpm --filter @esoko/admin build
+    startCommand: pnpm --filter @esoko/admin start
     healthCheckPath: /signin
     envVars:
       - key: NODE_ENV
