@@ -524,8 +524,8 @@ model RegistrationPayment {
   declaredAt   DateTime?
   status       PaymentStatus  @default(NOT_DECLARED)
   confirmedAt  DateTime?
-  createdAt    DateTime     @default(now())
-  updatedAt    DateTime     @updatedAt
+  createdAt    DateTime     @default(now()) @map("created_at")
+  updatedAt    DateTime     @updatedAt @map("updated_at")
 
   approvals PaymentApproval[]
 
