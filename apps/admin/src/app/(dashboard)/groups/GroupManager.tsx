@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useRef, useState, useTransition } from 'react';
-import { Icon } from '@esoko/ui';
+import { Icon, type IconName } from '@esoko/ui';
 import { useAnnounce } from '@esoko/a11y';
 import {
   actionSearchPeople, actionAddMember, actionSetRole, actionRemoveMember,
@@ -31,6 +31,13 @@ function humanSize(bytes: number) {
   if (bytes < 1024) return `${bytes} B`;
   if (bytes < 1048576) return `${Math.round(bytes / 1024)} KB`;
   return `${(bytes / 1048576).toFixed(1)} MB`;
+}
+
+function typeIcon(mime: string): IconName {
+  if (mime.startsWith('image/')) return 'certificate';
+  if (mime === 'application/pdf') return 'document';
+  if (mime.includes('spreadsheet') || mime.includes('excel')) return 'grid';
+  return 'document';
 }
 
 export function GroupManager({
@@ -112,6 +119,7 @@ function GroupDetail({
   const [docs, setDocs] = useState<GroupDoc[]>([]);
   const [docsLoading, setDocsLoading] = useState(true);
   const [uploading, setUploading] = useState(false);
+  const [previewing, setPreviewing] = useState<GroupDoc | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -267,10 +275,9 @@ function GroupDetail({
                   <td className="mono sub" style={{ fontSize: '.79rem' }}>{humanSize(d.sizeBytes)}</td>
                   <td className="mono sub" style={{ fontSize: '.79rem' }}>{d.uploadedAt.slice(0, 10)}</td>
                   <td style={{ textAlign: 'right' }}>
-                    <a className="btn btn-o btn-sm" href={`/api/documents/${d.id}?inline=1`}
-                      target="_blank" rel="noopener noreferrer">
+                    <button className="btn btn-o btn-sm" onClick={() => setPreviewing(d)}>
                       <Icon name="eye" size={13} />View
-                    </a>
+                    </button>
                   </td>
                 </tr>
               ))}
@@ -280,6 +287,11 @@ function GroupDetail({
       </div>
 
       {adding && <AddMember group={group} onClose={() => setAdding(false)} />}
+
+      {previewing && (
+        <DocPreview doc={previewing} kindLabel={documentKinds.find(([k]) => k === previewing.kind)?.[1] ?? previewing.kind}
+          onClose={() => setPreviewing(null)} />
+      )}
 
       {uploading && (
         <UploadDocument
@@ -507,6 +519,66 @@ function UploadDocument({
           <button className="btn btn-p" onClick={upload} disabled={pending || !file || !title.trim()}>
             <Icon name="plus" size={15} />{pending ? 'Uploading…' : 'Upload and save'}
           </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function DocPreview({
+  doc, kindLabel, onClose,
+}: { doc: GroupDoc; kindLabel: string; onClose: () => void }) {
+  const isImage = doc.mimeType.startsWith('image/');
+  const isPdf = doc.mimeType === 'application/pdf';
+  const previewable = isImage || isPdf;
+
+  return (
+    <div className="scrim" role="dialog" aria-modal="true" aria-labelledby="dp-title"
+      onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}>
+      <div className="modal">
+        <div className="modal-hd">
+          <span style={{ width: 38, height: 38, borderRadius: 10, background: 'var(--blue-t)', color: 'var(--blue)', display: 'grid', placeItems: 'center', flex: 'none' }}>
+            <Icon name={typeIcon(doc.mimeType)} size={19} />
+          </span>
+          <div>
+            <h2 id="dp-title">{doc.title}</h2>
+            <p className="sub" style={{ margin: '2px 0 0' }}>
+              {kindLabel} · {humanSize(doc.sizeBytes)} · uploaded{' '}
+              {new Date(doc.uploadedAt).toLocaleDateString('en-KE')}
+            </p>
+          </div>
+          <button className="x" onClick={onClose} aria-label="Close"><Icon name="close" size={18} /></button>
+        </div>
+
+        <div className="modal-bd">
+          <div className="preview" style={{ marginBottom: 20 }}>
+            {isImage && <img src={`/api/documents/${doc.id}?inline=1`} alt={doc.title} />}
+            {isPdf && (
+              <iframe src={`/api/documents/${doc.id}?inline=1`} title={`Preview of ${doc.title}`} />
+            )}
+            {!previewable && (
+              <div style={{ textAlign: 'center', padding: 30 }}>
+                <span style={{ display: 'grid', placeItems: 'center', width: 52, height: 52, borderRadius: 13, background: '#fff', margin: '0 auto 14px', color: 'var(--tx-3)' }}>
+                  <Icon name={typeIcon(doc.mimeType)} size={24} />
+                </span>
+                <p style={{ margin: '0 0 4px', fontWeight: 600 }}>{doc.title}</p>
+                <p className="sub" style={{ margin: '0 0 16px' }}>
+                  Word and Excel files cannot be previewed in the browser.
+                </p>
+                <a className="btn btn-o btn-sm" href={`/api/documents/${doc.id}`} download>
+                  <Icon name="download" size={14} />Download to view
+                </a>
+              </div>
+            )}
+          </div>
+        </div>
+
+        <div className="modal-ft">
+          <a className="btn btn-o btn-sm" style={{ marginRight: 'auto' }}
+            href={`/api/documents/${doc.id}`} download>
+            <Icon name="download" size={14} />Download
+          </a>
+          <button className="btn btn-o" onClick={onClose}>Close</button>
         </div>
       </div>
     </div>

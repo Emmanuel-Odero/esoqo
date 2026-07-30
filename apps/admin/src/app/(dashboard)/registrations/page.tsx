@@ -76,6 +76,7 @@ export default async function RegistrationsPage({
         canVoid={can('registration.void')}
         canCreate={can('registration.create')}
         canSeePii={can('party.pii')}
+        canRecordPayment={can('payment.record')}
       />
     </>
   );
