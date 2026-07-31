@@ -512,7 +512,7 @@ model Registration {
 
   @@index([status, startedAt])
   @@index([county])
-  @@index([msisdn])
+  @@index([msisdn, status])
   @@map("registration")
 }
 

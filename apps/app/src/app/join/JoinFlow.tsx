@@ -134,28 +134,39 @@ export function JoinFlow() {
   function pickJoiningAs(v: JoiningAs) {
     set('joiningAs', v);
     if (v === 'inst') { setStep(0); return; }
-    start(async () => {
-      const r = await actionStart({ joiningAs: v, language: 'en' });
-      if (r.ok) { setRegId(r.data.id); setStep(2); announce('Question 2 of 5. Your name.'); }
-      else handle(r);
-    });
+    setStep(2);
+    announce('Question 2 of 5. Your name.');
   }
 
   /* ── advance ── */
   function next() {
-    if (!regId) return;
     setError(null);
 
     if (step === 2) {
       start(async () => {
-        const r = await actionSaveNames(regId, {
+        const names = {
           joiningAs: f.joiningAs, officialName: f.officialName, knownAs: f.knownAs,
           orgName: f.orgName, orgKnownAs: f.orgKnownAs,
           orgRole: f.orgRole as 'Treasurer',
-        });
-        handle(r, () => setStep(3));
+        };
+        // No regId yet the first time through — this is where the
+        // registration actually gets created, now that there's a real
+        // name attached. Once regId exists (e.g. editing after going
+        // back), it's just an update to the same row.
+        if (regId) {
+          const r = await actionSaveNames(regId, names);
+          handle(r, () => setStep(3));
+        } else {
+          const r = await actionStart(names);
+          handle(r, () => { if (r.ok) setRegId(r.data.id); setStep(3); });
+        }
       });
-    } else if (step === 3) {
+      return;
+    }
+
+    if (!regId) return;
+
+    if (step === 3) {
       start(async () => {
         const r = await actionSaveContact(regId, {
           msisdn: f.msisdn, email: f.email, county: f.county, ward: f.ward,

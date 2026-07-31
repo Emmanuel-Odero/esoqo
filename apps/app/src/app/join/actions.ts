@@ -13,7 +13,7 @@ import {
 } from '@esoko/db';
 import { issueOtp, verifyOtp, OtpError } from '@esoko/auth';
 import {
-  step1Schema, step2Schema, step3Schema, step4Schema, step5Schema,
+  step2Schema, step3Schema, step4Schema, step5Schema,
   requestOtpSchema, verifyOtpSchema, completeRegistrationSchema,
   resolveSegment, normaliseMsisdn,
 } from '@esoko/domain';
@@ -61,16 +61,29 @@ function fail(e: unknown): ActionResult<never> {
   return { ok: false, error: 'Something went wrong. Please try again.' };
 }
 
-/* ── step 1 ─────────────────────────────────────────────────── */
+/* ── step 1+2 ───────────────────────────────────────────────── */
 
+/**
+ * Creates the registration for the first time — deliberately not until
+ * the joiner has typed a real name (step 2), not the instant they pick
+ * "Myself"/"A group"/"A business" on step 1. Row creation used to happen
+ * on that first click, before a single character was typed, which left
+ * behind an empty shell whenever someone closed the tab immediately —
+ * see the July 2026 data cleanup.
+ */
 export async function actionStart(raw: unknown): Promise<ActionResult<{ id: string }>> {
   try {
-    const input = step1Schema.parse(raw);
+    const v = step2Schema.parse(raw);
     const ctx = await requestCtx();
     const h = await headers();
     const reg = await startRegistration(ctx, {
-      joiningAs: input.joiningAs === 'inst' ? 'me' : input.joiningAs,
-      language: input.language,
+      joiningAs: v.joiningAs === 'inst' ? 'me' : v.joiningAs,
+      officialName: v.officialName,
+      knownAs: v.knownAs || undefined,
+      orgName: v.orgName || undefined,
+      orgKnownAs: v.orgKnownAs || undefined,
+      orgRole: v.orgRole,
+      language: 'en',
       path: 'SELF_WEB',
       ip: ctx.ip,
       userAgent: h.get('user-agent'),

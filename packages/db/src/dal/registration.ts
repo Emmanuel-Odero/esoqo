@@ -1,6 +1,6 @@
 
 import { prisma } from '../client';
-import { requireCapability, type Ctx } from '../capabilities';
+import { requireCapability, systemCtx, type Ctx } from '../capabilities';
 import { recordAudit } from '../audit';
 import type {
   JoinPath,
@@ -14,6 +14,14 @@ import type {
 
 export interface StartRegistrationInput {
   joiningAs: 'me' | 'group' | 'biz';
+  /// Required so a registration is never persisted before there is a real
+  /// person behind it — an empty shell row that nobody ever finishes is
+  /// not a draft, it's noise (see the July 2026 data cleanup).
+  officialName: string;
+  knownAs?: string;
+  orgName?: string;
+  orgKnownAs?: string;
+  orgRole?: string;
   language?: string;
   path?: JoinPath;
   agentId?: string;
@@ -63,10 +71,18 @@ function toMemberRole(orgRole: string | null | undefined): MemberRole {
 
 export async function startRegistration(ctx: Ctx, input: StartRegistrationInput) {
   requireCapability(ctx, 'registration.create');
+  if (!input.officialName?.trim()) {
+    throw new Error('A name is required to start a registration');
+  }
 
   const reg = await prisma.registration.create({
     data: {
       joiningAs: input.joiningAs,
+      officialName: input.officialName.trim(),
+      knownAs: input.knownAs || undefined,
+      orgName: input.orgName || undefined,
+      orgKnownAs: input.orgKnownAs || undefined,
+      orgRole: input.orgRole || undefined,
       language: input.language ?? 'en',
       path: input.path ?? 'SELF_WEB',
       agentId: input.agentId,
@@ -109,6 +125,26 @@ export async function updateRegistration(
     targetId: id,
     payload: { fields: Object.keys(input) },
   });
+
+  // The number just attached is the earliest point we can tell this is
+  // the same person as an existing open attempt (localStorage lost, tab
+  // reopened, "start over" clicked) — auto-void the older one rather than
+  // let duplicates accumulate silently, per the July 2026 data cleanup.
+  if (input.msisdn) {
+    const dupes = await prisma.registration.findMany({
+      where: { msisdn: input.msisdn, status: { not: 'COMPLETE' }, id: { not: id } },
+    });
+    for (const dup of dupes) {
+      await prisma.registration.update({
+        where: { id: dup.id },
+        data: { status: 'ABANDONED', voidedAt: new Date(), voidReason: 'Superseded by a newer attempt with the same phone number' },
+      });
+      await recordAudit(systemCtx('duplicate-supersede'), {
+        action: 'registration.voided', targetType: 'registration', targetId: dup.id,
+        payload: { reason: 'duplicate_msisdn', supersededBy: id },
+      });
+    }
+  }
 
   return reg;
 }
@@ -384,6 +420,9 @@ export async function createRegistrationForPerson(
   input: UpdateRegistrationInput & { joiningAs: 'me' | 'group' | 'biz' },
 ) {
   requireCapability(ctx, 'registration.create');
+  if (!input.officialName?.trim()) {
+    throw new Error('A name is required to start a registration');
+  }
   const reg = await prisma.registration.create({
     data: { ...input, path: 'AGENT_ASSISTED', agentId: ctx.actorId ?? undefined, status: 'STARTED' },
   });
