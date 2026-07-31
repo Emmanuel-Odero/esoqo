@@ -488,6 +488,20 @@ export async function getRegistrationDetail(ctx: Ctx, id: string) {
     payment: reg.payment
       ? { ...reg.payment, amountKes: reg.payment.amountKes ? Number(reg.payment.amountKes) : null }
       : null,
+    // The raw Argon2id hash never needs to leave the server — a 4-6
+    // digit PIN behind it is cheaply offline-crackable if it ever does.
+    // Everything the admin UI actually renders is this boolean plus
+    // pinSetAt, so that's all this returns.
+    party: reg.party && {
+      ...reg.party,
+      person: reg.party.person && {
+        ...reg.party.person,
+        credential: {
+          hasPinSet: Boolean(reg.party.person.credential?.pinHash),
+          pinSetAt: reg.party.person.credential?.pinSetAt ?? null,
+        },
+      },
+    },
   };
 }
 

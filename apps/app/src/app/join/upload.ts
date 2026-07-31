@@ -7,6 +7,7 @@ import {
   sniff, makeStorageKey, safeName, sha256, putObject, MAX_BYTES,
   type Ctx,
 } from '@esoko/db';
+import { ownsRegistration } from './ownership';
 
 /**
  * Upload and payment declaration.
@@ -41,6 +42,7 @@ export async function actionUpload(form: FormData): Promise<UploadResult> {
     const file = form.get('file');
 
     if (!registrationId) return { ok: false, error: 'Registration not found' };
+    if (!(await ownsRegistration(registrationId))) return { ok: false, error: 'Registration not found' };
     if (!title) return { ok: false, error: 'Give the document a title' };
     if (!(file instanceof File)) return { ok: false, error: 'No file was attached' };
     if (file.size > MAX_BYTES) return { ok: false, error: 'That file is larger than 10 MB' };
@@ -71,6 +73,7 @@ export async function actionUpload(form: FormData): Promise<UploadResult> {
 }
 
 export async function actionListDocuments(registrationId: string) {
+  if (!(await ownsRegistration(registrationId))) return [];
   const ctx = await joinCtx();
   const docs = await listDocumentsForRegistration(ctx, registrationId);
   return docs.map((d) => ({
@@ -99,6 +102,7 @@ export async function actionDeclarePayment(
   input: { method: 'MPESA' | 'BANK_TRANSFER' | 'CASH_TO_AGENT'; reference: string; amountKes?: number; note?: string },
 ): Promise<PayResult> {
   try {
+    if (!(await ownsRegistration(registrationId))) return { ok: false, error: 'Registration not found' };
     if (!input.reference?.trim()) {
       return { ok: false, error: 'Enter the transaction code from your message' };
     }
@@ -121,6 +125,7 @@ export async function actionDeclarePayment(
 
 export async function actionDeferPayment(registrationId: string): Promise<PayResult> {
   try {
+    if (!(await ownsRegistration(registrationId))) return { ok: false, error: 'Registration not found' };
     const ctx = await joinCtx();
     await deferPayment(ctx, registrationId);
     return { ok: true };

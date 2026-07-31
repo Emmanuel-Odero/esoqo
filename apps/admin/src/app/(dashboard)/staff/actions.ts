@@ -1,7 +1,7 @@
 'use server';
 import { revalidatePath } from 'next/cache';
 import { setCapabilities, applyRolePreset, setStaffActive, createStaff, type RoleName } from '@esoko/db';
-import { hashPin } from '@esoko/auth';
+import { hashPin, generateTempPin } from '@esoko/auth';
 import { requireStaff } from '@/lib/session';
 
 export type Result = { ok: true; data?: unknown } | { ok: false; error: string };
@@ -45,7 +45,7 @@ export async function actionCreateStaff(input: {
 }): Promise<Result> {
   try {
     const ctx = await requireStaff();
-    const tempPin = String(Math.floor(100000 + Math.random() * 900000));
+    const tempPin = generateTempPin();
     await createStaff(ctx, {
       email: input.email, name: input.name,
       rolePreset: input.rolePreset as RoleName,

@@ -17,6 +17,7 @@ import {
   requestOtpSchema, verifyOtpSchema, completeRegistrationSchema,
   resolveSegment, normaliseMsisdn,
 } from '@esoko/domain';
+import { grantRegistrationOwnership, ownsRegistration } from './ownership';
 
 /**
  * Server Actions.
@@ -49,6 +50,12 @@ async function requestCtx(): Promise<Ctx> {
     __verified: true,
   };
 }
+
+// Same message whether the id is truly unknown or just not this
+// browser's — telling the two apart would confirm someone else's
+// registration id exists, which is itself information a stranger
+// shouldn't get from a bare guess.
+const NOT_OWNER: ActionResult<never> = { ok: false, error: 'Registration not found' };
 
 function fail(e: unknown): ActionResult<never> {
   if (e instanceof OtpError) return { ok: false, error: e.message };
@@ -101,6 +108,7 @@ export async function actionStart(raw: unknown): Promise<ActionResult<{ id: stri
       ip: ctx.ip,
       userAgent: h.get('user-agent'),
     });
+    await grantRegistrationOwnership(reg.id);
     return { ok: true, data: { id: reg.id } };
   } catch (e) { return fail(e); }
 }
@@ -111,6 +119,7 @@ export async function actionSaveNames(
   registrationId: string, raw: unknown,
 ): Promise<ActionResult> {
   try {
+    if (!(await ownsRegistration(registrationId))) return NOT_OWNER;
     const v = step2Schema.parse(raw);
     const group = groupSchema.parse(raw);
     const ctx = await requestCtx();
@@ -134,6 +143,7 @@ export async function actionSaveContact(
   registrationId: string, raw: unknown,
 ): Promise<ActionResult> {
   try {
+    if (!(await ownsRegistration(registrationId))) return NOT_OWNER;
     const v = step3Schema.parse(raw);
     const ctx = await requestCtx();
     await updateRegistration(ctx, registrationId, {
@@ -151,6 +161,7 @@ export async function actionSaveWork(
   registrationId: string, raw: unknown,
 ): Promise<ActionResult<{ papers: string[] }>> {
   try {
+    if (!(await ownsRegistration(registrationId))) return NOT_OWNER;
     const v = step4Schema.parse(raw);
     const ctx = await requestCtx();
     // Resolve on the server so the stored segment matches the shared
@@ -170,6 +181,7 @@ export async function actionSaveStanding(
   registrationId: string, raw: unknown,
 ): Promise<ActionResult> {
   try {
+    if (!(await ownsRegistration(registrationId))) return NOT_OWNER;
     const v = step5Schema.parse(raw);
     const ctx = await requestCtx();
     await updateRegistration(ctx, registrationId, {
@@ -187,6 +199,7 @@ export async function actionSaveStanding(
  *  this just keeps the drop-off funnel accurate for those two steps. */
 export async function actionMarkStep(registrationId: string, step: number): Promise<ActionResult> {
   try {
+    if (!(await ownsRegistration(registrationId))) return NOT_OWNER;
     const ctx = await requestCtx();
     await updateRegistration(ctx, registrationId, { lastStep: step });
     return { ok: true, data: undefined };
@@ -200,6 +213,7 @@ export async function actionRequestOtp(
 ): Promise<ActionResult<{ devCode?: string; cooldownSeconds: number }>> {
   try {
     const v = requestOtpSchema.parse(raw);
+    if (!(await ownsRegistration(v.registrationId))) return NOT_OWNER;
     const ctx = await requestCtx();
     const reg = await getRegistration(ctx, v.registrationId);
     if (!reg) return { ok: false, error: 'Registration not found' };
@@ -216,6 +230,7 @@ export async function actionRequestOtp(
 export async function actionVerifyOtp(raw: unknown): Promise<ActionResult> {
   try {
     const v = verifyOtpSchema.parse(raw);
+    if (!(await ownsRegistration(v.registrationId))) return NOT_OWNER;
     const ctx = await requestCtx();
     const reg = await getRegistration(ctx, v.registrationId);
     if (!reg?.msisdn) return { ok: false, error: 'No phone number on this registration' };
@@ -233,6 +248,7 @@ export async function actionComplete(
 ): Promise<ActionResult<{ partyId: string }>> {
   try {
     const v = completeRegistrationSchema.parse(raw);
+    if (!(await ownsRegistration(v.registrationId))) return NOT_OWNER;
     const ctx = await requestCtx();
 
     await updateRegistration(ctx, v.registrationId, {

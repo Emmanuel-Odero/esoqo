@@ -590,8 +590,8 @@ function DetailDrawer({
                   <tbody>
                     <tr><td className="sub" style={{ width: 190 }}>Login PIN</td>
                       <td>
-                        <span className={`pill ${d.party.person.credential?.pinHash ? 'p-ok' : 'p-mute'}`}>
-                          {d.party.person.credential?.pinHash ? 'Assigned' : 'Not assigned'}
+                        <span className={`pill ${d.party.person.credential?.hasPinSet ? 'p-ok' : 'p-mute'}`}>
+                          {d.party.person.credential?.hasPinSet ? 'Assigned' : 'Not assigned'}
                         </span>
                       </td></tr>
                     {d.party.person.credential?.pinSetAt && (
@@ -604,7 +604,7 @@ function DetailDrawer({
                   <button className="btn btn-p btn-sm" disabled={pending}
                     onClick={() => assignPin(d.party!.person!.partyId)}>
                     <Icon name="key" size={13} />
-                    {d.party.person.credential?.pinHash ? 'Reset login PIN' : 'Assign login PIN'}
+                    {d.party.person.credential?.hasPinSet ? 'Reset login PIN' : 'Assign login PIN'}
                   </button>
                 )}
               </>

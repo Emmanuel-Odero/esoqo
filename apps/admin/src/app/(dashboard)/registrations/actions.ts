@@ -8,7 +8,7 @@ import {
   assignPersonToGroup, searchGroupsForStaff,
   sniff, makeStorageKey, safeName, sha256, putObject, MAX_BYTES,
 } from '@esoko/db';
-import { hashPin } from '@esoko/auth';
+import { hashPin, generateTempPin } from '@esoko/auth';
 
 type PayMethod = 'MPESA' | 'BANK_TRANSFER' | 'CASH_TO_AGENT';
 export interface PaymentInput {
@@ -122,7 +122,7 @@ export async function actionAmendPayment(paymentId: string, input: PaymentInput 
 export async function actionAssignUserPin(personId: string): Promise<Result<{ tempPin: string }>> {
   try {
     const ctx = await requireStaff();
-    const tempPin = String(Math.floor(100000 + Math.random() * 900000));
+    const tempPin = generateTempPin();
     await assignUserPin(ctx, personId, await hashPin(tempPin));
     revalidatePath('/registrations');
     return { ok: true, data: { tempPin } };
