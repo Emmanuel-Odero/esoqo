@@ -71,9 +71,17 @@ function fail(e: unknown): ActionResult<never> {
  * behind an empty shell whenever someone closed the tab immediately —
  * see the July 2026 data cleanup.
  */
+const groupSchema = step5Schema.pick({
+  belongsToGroup: true, groupName: true, groupPartyId: true, feeCoverage: true,
+});
+
 export async function actionStart(raw: unknown): Promise<ActionResult<{ id: string }>> {
   try {
     const v = step2Schema.parse(raw);
+    // The group question (step 2 in the UI) is answered before the name
+    // is ever saved, so whatever was picked there rides along on this
+    // same first write.
+    const group = groupSchema.parse(raw);
     const ctx = await requestCtx();
     const h = await headers();
     const reg = await startRegistration(ctx, {
@@ -83,6 +91,11 @@ export async function actionStart(raw: unknown): Promise<ActionResult<{ id: stri
       orgName: v.orgName || undefined,
       orgKnownAs: v.orgKnownAs || undefined,
       orgRole: v.orgRole,
+      belongsToGroup: group.belongsToGroup,
+      groupName: group.groupName || undefined,
+      groupPartyId: group.groupPartyId,
+      feeCoverage: group.feeCoverage,
+      lastStep: 3,
       language: 'en',
       path: 'SELF_WEB',
       ip: ctx.ip,
@@ -92,13 +105,14 @@ export async function actionStart(raw: unknown): Promise<ActionResult<{ id: stri
   } catch (e) { return fail(e); }
 }
 
-/* ── steps 2–5 ──────────────────────────────────────────────── */
+/* ── steps 3–6 ──────────────────────────────────────────────── */
 
 export async function actionSaveNames(
   registrationId: string, raw: unknown,
 ): Promise<ActionResult> {
   try {
     const v = step2Schema.parse(raw);
+    const group = groupSchema.parse(raw);
     const ctx = await requestCtx();
     await updateRegistration(ctx, registrationId, {
       officialName: v.officialName,
@@ -106,6 +120,11 @@ export async function actionSaveNames(
       orgName: v.orgName || undefined,
       orgKnownAs: v.orgKnownAs || undefined,
       orgRole: v.orgRole,
+      belongsToGroup: group.belongsToGroup,
+      groupName: group.groupName || undefined,
+      groupPartyId: group.groupPartyId,
+      feeCoverage: group.feeCoverage,
+      lastStep: 3,
     });
     return { ok: true, data: undefined };
   } catch (e) { return fail(e); }
@@ -122,6 +141,7 @@ export async function actionSaveContact(
       email: v.email || undefined,
       county: v.county,
       ward: v.ward || undefined,
+      lastStep: 4,
     });
     return { ok: true, data: undefined };
   } catch (e) { return fail(e); }
@@ -139,6 +159,7 @@ export async function actionSaveWork(
     await updateRegistration(ctx, registrationId, {
       workRaw: v.workRaw,
       segment: match.segment?.key,
+      lastStep: 5,
     });
     const papers = match.segment?.papers ?? ['P', 'B', 'C'];
     return { ok: true, data: { papers } };
@@ -154,13 +175,20 @@ export async function actionSaveStanding(
     await updateRegistration(ctx, registrationId, {
       hasRegisteredBusiness: v.hasRegisteredBusiness,
       registrationNo: v.registrationNo || undefined,
-      belongsToGroup: v.belongsToGroup,
-      groupName: v.groupName || undefined,
-      groupPartyId: v.groupPartyId,
-      feeCoverage: v.feeCoverage,
       memberCount: v.memberCount,
       hasKraPin: v.hasKraPin,
+      lastStep: 6,
     });
+    return { ok: true, data: undefined };
+  } catch (e) { return fail(e); }
+}
+
+/** Documents and payment don't otherwise call the server on "Continue" —
+ *  this just keeps the drop-off funnel accurate for those two steps. */
+export async function actionMarkStep(registrationId: string, step: number): Promise<ActionResult> {
+  try {
+    const ctx = await requestCtx();
+    await updateRegistration(ctx, registrationId, { lastStep: step });
     return { ok: true, data: undefined };
   } catch (e) { return fail(e); }
 }
@@ -212,6 +240,7 @@ export async function actionComplete(
       wantsPriceSms: v.wantsPriceSms,
       wantsReceiptSms: v.wantsReceiptSms,
       wantsExpirySms: v.wantsExpirySms,
+      lastStep: 9,
     });
 
     const reg = await getRegistration(ctx, v.registrationId);

@@ -22,6 +22,13 @@ export interface StartRegistrationInput {
   orgName?: string;
   orgKnownAs?: string;
   orgRole?: string;
+  /// The join flow now asks group membership before the name is even
+  /// saved, so these can already be known at creation time.
+  belongsToGroup?: string;
+  groupName?: string;
+  groupPartyId?: string;
+  feeCoverage?: string;
+  lastStep?: number;
   language?: string;
   path?: JoinPath;
   agentId?: string;
@@ -53,6 +60,7 @@ export interface UpdateRegistrationInput {
   wantsReceiptSms?: boolean;
   wantsExpirySms?: boolean;
   ussdSetupChoice?: 'now' | 'later';
+  lastStep?: number;
 }
 
 /** Maps the free-typed "role in the group" onto the fixed Membership
@@ -83,6 +91,11 @@ export async function startRegistration(ctx: Ctx, input: StartRegistrationInput)
       orgName: input.orgName || undefined,
       orgKnownAs: input.orgKnownAs || undefined,
       orgRole: input.orgRole || undefined,
+      belongsToGroup: input.belongsToGroup || undefined,
+      groupName: input.groupName || undefined,
+      groupPartyId: input.groupPartyId || undefined,
+      feeCoverage: input.feeCoverage || undefined,
+      lastStep: input.lastStep ?? 1,
       language: input.language ?? 'en',
       path: input.path ?? 'SELF_WEB',
       agentId: input.agentId,
@@ -115,7 +128,16 @@ export async function updateRegistration(
     throw new Error('Registration already complete and cannot be edited');
   }
 
-  const reg = await prisma.registration.update({ where: { id }, data: input });
+  // Never move backwards — going "Back" in the flow to edit an earlier
+  // answer must not make a further-along drop-off look like an earlier one.
+  const { lastStep, ...rest } = input;
+  const reg = await prisma.registration.update({
+    where: { id },
+    data: {
+      ...rest,
+      ...(lastStep && lastStep > existing.lastStep ? { lastStep } : {}),
+    },
+  });
 
   // Audit the SHAPE of what changed, never the values. A phone number in
   // an audit payload is a data-protection problem waiting to be found.

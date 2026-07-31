@@ -499,6 +499,13 @@ model Registration {
   ip        String?
   userAgent String?
 
+  /// Highest join-flow step this registration has reached (1 = picked
+  /// who's joining, up through the final verify-and-finish step). The
+  /// only granular drop-off signal — `status` alone only distinguishes
+  /// STARTED/AWAITING_OTP/VERIFIED/COMPLETE/ABANDONED, not which of the
+  /// in-progress steps someone actually got stuck on.
+  lastStep Int @default(1)
+
   startedAt   DateTime  @default(now())
   completedAt DateTime?
   updatedAt   DateTime  @updatedAt
