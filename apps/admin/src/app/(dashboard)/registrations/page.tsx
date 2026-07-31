@@ -1,5 +1,5 @@
 import { Icon } from '@esoko/ui';
-import { listRegistrations, getOverview } from '@esoko/db';
+import { listRegistrations, getOverview, DOCUMENT_KINDS } from '@esoko/db';
 import { COUNTIES } from '@esoko/domain';
 import { requireStaff } from '@/lib/session';
 import { RegistrationTable } from './RegistrationTable';
@@ -83,6 +83,9 @@ export default async function RegistrationsPage({
         canSeePii={can('party.pii')}
         canRecordPayment={can('payment.record')}
         canAssignUser={can('party.credential')}
+        canManageMembership={can('membership.write')}
+        canUploadDocs={can('registration.write')}
+        documentKinds={DOCUMENT_KINDS as unknown as [string, string][]}
       />
     </>
   );

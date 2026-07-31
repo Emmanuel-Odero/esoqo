@@ -5,6 +5,7 @@ import {
   createRegistrationForPerson, getRegistrationDetail,
   createDocument, listDocumentsForRegistration,
   declarePayment, recordPayment, assignUserPin,
+  assignPersonToGroup, searchGroupsForStaff,
   sniff, makeStorageKey, safeName, sha256, putObject, MAX_BYTES,
 } from '@esoko/db';
 import { hashPin } from '@esoko/auth';
@@ -125,6 +126,23 @@ export async function actionAssignUserPin(personId: string): Promise<Result<{ te
     await assignUserPin(ctx, personId, await hashPin(tempPin));
     revalidatePath('/registrations');
     return { ok: true, data: { tempPin } };
+  } catch (e) { return fail(e); }
+}
+
+/** Lean group search for staff, used by the "assign to group" picker. */
+export async function actionSearchGroupsForStaff(q: string) {
+  const ctx = await requireStaff();
+  return searchGroupsForStaff(ctx, q);
+}
+
+/** Assigns (or moves, exiting any other active membership) a completed
+ *  registration's person into a group. */
+export async function actionAssignToGroup(personId: string, orgPartyId: string): Promise<Result> {
+  try {
+    const ctx = await requireStaff();
+    await assignPersonToGroup(ctx, personId, orgPartyId);
+    revalidatePath('/registrations');
+    return { ok: true, data: undefined };
   } catch (e) { return fail(e); }
 }
 

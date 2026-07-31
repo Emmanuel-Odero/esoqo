@@ -413,6 +413,10 @@ export async function getRegistrationDetail(ctx: Ctx, id: string) {
         include: {
           person: { include: { credential: { select: { pinHash: true, pinSetAt: true } } } },
           enterprises: true, attestations: true,
+          memberships: {
+            where: { exitedAt: null },
+            include: { org: { select: { officialName: true, knownAs: true } } },
+          },
         },
       },
     },

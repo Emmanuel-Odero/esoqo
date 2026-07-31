@@ -113,6 +113,70 @@ export async function searchGroupsPublic(ctx: Ctx, q: string) {
   }));
 }
 
+/** Staff-facing group search — same lean shape as searchGroupsPublic, but
+ *  gated by the ordinary staff `party.read` capability rather than the
+ *  anonymous join flow's `party.read:public`. */
+export async function searchGroupsForStaff(ctx: Ctx, q: string) {
+  requireCapability(ctx, 'party.read');
+  if (q.trim().length < 2) return [];
+  const rows = await prisma.organisation.findMany({
+    where: {
+      party: { deletedAt: null },
+      OR: [
+        { officialName: { contains: q, mode: 'insensitive' as const } },
+        { knownAs: { contains: q, mode: 'insensitive' as const } },
+      ],
+    },
+    include: { party: { select: { county: true } } },
+    take: 8,
+  });
+  return rows.map((r) => ({
+    id: r.partyId,
+    name: r.knownAs || r.officialName,
+    county: r.party.county,
+  }));
+}
+
+/**
+ * Assigns or moves a person into a group. The product rule is "one group
+ * at a time" even though the schema itself allows more, so any other
+ * active membership is soft-exited first — same audit trail as a normal
+ * removal, just bundled with the add in one transaction.
+ */
+export async function assignPersonToGroup(
+  ctx: Ctx, personPartyId: string, orgPartyId: string, role: MemberRole = 'MEMBER',
+) {
+  requireCapability(ctx, 'membership.write', { partyId: orgPartyId });
+
+  return prisma.$transaction(async (tx) => {
+    const others = await tx.membership.findMany({
+      where: { personId: personPartyId, exitedAt: null, orgId: { not: orgPartyId } },
+    });
+    for (const m of others) {
+      await tx.membership.update({ where: { id: m.id }, data: { exitedAt: new Date() } });
+      await recordAudit(ctx, {
+        action: 'membership.removed', targetType: 'membership', targetId: m.id,
+        payload: { reason: 'Moved to another group' },
+      }, tx as never);
+    }
+
+    const existing = await tx.membership.findUnique({
+      where: { personId_orgId: { personId: personPartyId, orgId: orgPartyId } },
+    });
+    const m = existing
+      ? await tx.membership.update({ where: { id: existing.id }, data: { exitedAt: null, role } })
+      : await tx.membership.create({ data: { personId: personPartyId, orgId: orgPartyId, role } });
+
+    await recordAudit(ctx, {
+      action: existing ? 'membership.reinstated' : 'membership.added',
+      targetType: 'membership', targetId: m.id,
+      payload: { orgPartyId, personPartyId, role },
+    }, tx as never);
+
+    return m;
+  });
+}
+
 /** People not yet in this group, for the add-member picker. */
 export async function searchAddablePeople(ctx: Ctx, orgPartyId: string, q: string) {
   requireCapability(ctx, 'party.read');
