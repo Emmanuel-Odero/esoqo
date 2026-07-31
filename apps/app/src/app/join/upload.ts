@@ -7,6 +7,7 @@ import {
   sniff, makeStorageKey, safeName, sha256, putObject, MAX_BYTES,
   type Ctx,
 } from '@esoko/db';
+import { toSafeErrorMessage } from '@esoko/domain';
 import { ownsRegistration } from './ownership';
 
 /**
@@ -68,7 +69,8 @@ export async function actionUpload(form: FormData): Promise<UploadResult> {
       doc: { id: doc.id, title: doc.title, kind: doc.kind, mimeType: doc.mimeType, sizeBytes: doc.sizeBytes },
     };
   } catch (e) {
-    return { ok: false, error: e instanceof Error ? e.message : 'That upload did not work' };
+    console.error(e);
+    return { ok: false, error: toSafeErrorMessage(e, 'That upload did not work') };
   }
 }
 
@@ -89,7 +91,8 @@ export async function actionRemoveDocument(id: string): Promise<{ ok: boolean; e
       id, 'Removed by the joiner before submitting');
     return { ok: true };
   } catch (e) {
-    return { ok: false, error: e instanceof Error ? e.message : 'Could not remove that file' };
+    console.error(e);
+    return { ok: false, error: toSafeErrorMessage(e, 'Could not remove that file') };
   }
 }
 
@@ -119,7 +122,8 @@ export async function actionDeclarePayment(
     });
     return { ok: true };
   } catch (e) {
-    return { ok: false, error: e instanceof Error ? e.message : 'Could not record that' };
+    console.error(e);
+    return { ok: false, error: toSafeErrorMessage(e, 'Could not record that') };
   }
 }
 

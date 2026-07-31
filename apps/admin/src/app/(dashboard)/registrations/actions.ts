@@ -9,6 +9,7 @@ import {
   sniff, makeStorageKey, safeName, sha256, putObject, MAX_BYTES,
 } from '@esoko/db';
 import { hashPin, generateTempPin } from '@esoko/auth';
+import { toSafeErrorMessage } from '@esoko/domain';
 
 type PayMethod = 'MPESA' | 'BANK_TRANSFER' | 'CASH_TO_AGENT';
 export interface PaymentInput {
@@ -19,7 +20,8 @@ import { requireStaff } from '@/lib/session';
 export type Result<T = void> = { ok: true; data: T } | { ok: false; error: string };
 
 function fail(e: unknown): Result<never> {
-  return { ok: false, error: e instanceof Error ? e.message : 'That did not work' };
+  console.error(e);
+  return { ok: false, error: toSafeErrorMessage(e, 'That did not work') };
 }
 
 export async function actionGetDetail(id: string) {
@@ -206,7 +208,8 @@ export async function actionUploadWalkInDocument(form: FormData): Promise<Upload
       doc: { id: doc.id, title: doc.title, kind: doc.kind, mimeType: doc.mimeType, sizeBytes: doc.sizeBytes },
     };
   } catch (e) {
-    return { ok: false, error: e instanceof Error ? e.message : 'That upload did not work' };
+    console.error(e);
+    return { ok: false, error: toSafeErrorMessage(e, 'That upload did not work') };
   }
 }
 
@@ -226,6 +229,7 @@ export async function actionRemoveWalkInDocument(id: string): Promise<{ ok: bool
     revalidatePath('/registrations');
     return { ok: true };
   } catch (e) {
-    return { ok: false, error: e instanceof Error ? e.message : 'Could not remove that file' };
+    console.error(e);
+    return { ok: false, error: toSafeErrorMessage(e, 'Could not remove that file') };
   }
 }

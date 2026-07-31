@@ -2,6 +2,7 @@
 import { revalidatePath } from 'next/cache';
 import { setCapabilities, applyRolePreset, setStaffActive, createStaff, type RoleName } from '@esoko/db';
 import { hashPin, generateTempPin } from '@esoko/auth';
+import { toSafeErrorMessage } from '@esoko/domain';
 import { requireStaff } from '@/lib/session';
 
 export type Result = { ok: true; data?: unknown } | { ok: false; error: string };
@@ -13,7 +14,8 @@ export async function actionSetCapabilities(staffId: string, capabilities: strin
     revalidatePath('/staff');
     return { ok: true };
   } catch (e) {
-    return { ok: false, error: e instanceof Error ? e.message : 'Could not update permissions' };
+    console.error(e);
+    return { ok: false, error: toSafeErrorMessage(e, 'Could not update permissions') };
   }
 }
 
@@ -24,7 +26,8 @@ export async function actionApplyPreset(staffId: string, preset: string): Promis
     revalidatePath('/staff');
     return { ok: true };
   } catch (e) {
-    return { ok: false, error: e instanceof Error ? e.message : 'Could not apply that role' };
+    console.error(e);
+    return { ok: false, error: toSafeErrorMessage(e, 'Could not apply that role') };
   }
 }
 
@@ -35,7 +38,8 @@ export async function actionSetActive(staffId: string, active: boolean, reason?:
     revalidatePath('/staff');
     return { ok: true };
   } catch (e) {
-    return { ok: false, error: e instanceof Error ? e.message : 'Could not change that account' };
+    console.error(e);
+    return { ok: false, error: toSafeErrorMessage(e, 'Could not change that account') };
   }
 }
 
@@ -55,6 +59,7 @@ export async function actionCreateStaff(input: {
     // Returned once, shown once. Never stored in plaintext.
     return { ok: true, data: { tempPin } };
   } catch (e) {
-    return { ok: false, error: e instanceof Error ? e.message : 'Could not create that account' };
+    console.error(e);
+    return { ok: false, error: toSafeErrorMessage(e, 'Could not create that account') };
   }
 }

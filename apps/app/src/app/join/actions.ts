@@ -15,7 +15,7 @@ import { issueOtp, verifyOtp, OtpError } from '@esoko/auth';
 import {
   step2Schema, step3Schema, step4Schema, step5Schema,
   requestOtpSchema, verifyOtpSchema, completeRegistrationSchema,
-  resolveSegment, normaliseMsisdn,
+  resolveSegment, normaliseMsisdn, toSafeErrorMessage,
 } from '@esoko/domain';
 import { grantRegistrationOwnership, ownsRegistration } from './ownership';
 
@@ -59,13 +59,13 @@ const NOT_OWNER: ActionResult<never> = { ok: false, error: 'Registration not fou
 
 function fail(e: unknown): ActionResult<never> {
   if (e instanceof OtpError) return { ok: false, error: e.message };
-  if (e instanceof Error) {
-    if ((e as { code?: string }).code === 'MSISDN_TAKEN') {
-      return { ok: false, error: 'That number is already registered. Sign in instead.', field: 'msisdn' };
-    }
-    return { ok: false, error: e.message };
+  if (e instanceof Error && (e as { code?: string }).code === 'MSISDN_TAKEN') {
+    return { ok: false, error: 'That number is already registered. Sign in instead.', field: 'msisdn' };
   }
-  return { ok: false, error: 'Something went wrong. Please try again.' };
+  // The real error still needs to reach someone — it just should never
+  // be the person who hit it. Server-side logs are the right place.
+  console.error(e);
+  return { ok: false, error: toSafeErrorMessage(e) };
 }
 
 /* ── step 1+2 ───────────────────────────────────────────────── */
