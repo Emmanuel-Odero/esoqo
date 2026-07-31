@@ -20,7 +20,7 @@ services:
     runtime: node
     repo: https://github.com/Emmanuel-Odero/esoko-254.git
     branch: render
-    buildCommand: npm install -g pnpm@9.12.0 && NODE_ENV=development pnpm install && pnpm --filter @esoko/core-service build
+    buildCommand: npm install -g pnpm@9.12.0 && NODE_ENV=development pnpm install && pnpm --filter @esoko/db generate && pnpm --filter @esoko/core-service build
     startCommand: pnpm --filter @esoko/core-service start
     healthCheckPath: /health
     envVars:
@@ -63,7 +63,7 @@ services:
     runtime: node
     repo: https://github.com/Emmanuel-Odero/esoko-254.git
     branch: render
-    buildCommand: npm install -g pnpm@9.12.0 && NODE_ENV=development pnpm install && pnpm --filter @esoko/web build
+    buildCommand: npm install -g pnpm@9.12.0 && NODE_ENV=development pnpm install && pnpm --filter @esoko/db generate && pnpm --filter @esoko/web build
     startCommand: pnpm --filter @esoko/web start
     healthCheckPath: /help
     envVars:
@@ -98,7 +98,7 @@ services:
     runtime: node
     repo: https://github.com/Emmanuel-Odero/esoko-254.git
     branch: render
-    buildCommand: npm install -g pnpm@9.12.0 && NODE_ENV=development pnpm install && pnpm --filter @esoko/app build
+    buildCommand: npm install -g pnpm@9.12.0 && NODE_ENV=development pnpm install && pnpm --filter @esoko/db generate && pnpm --filter @esoko/app build
     startCommand: pnpm --filter @esoko/app start
     healthCheckPath: /api/health
     envVars:
@@ -141,7 +141,7 @@ services:
     runtime: node
     repo: https://github.com/Emmanuel-Odero/esoko-254.git
     branch: render
-    buildCommand: npm install -g pnpm@9.12.0 && NODE_ENV=development pnpm install && pnpm --filter @esoko/admin build
+    buildCommand: npm install -g pnpm@9.12.0 && NODE_ENV=development pnpm install && pnpm --filter @esoko/db generate && pnpm --filter @esoko/admin build
     startCommand: pnpm --filter @esoko/admin start
     healthCheckPath: /signin
     envVars:
