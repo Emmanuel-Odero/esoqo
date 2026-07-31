@@ -44,7 +44,7 @@ async function requestCtx(): Promise<Ctx> {
   return {
     actorType: 'SYSTEM',
     actorId: null,
-    capabilities: ['registration.create', 'registration.write', 'registration.read'],
+    capabilities: ['registration.create', 'registration.write', 'registration.read', 'party.read:public'],
     ip,
     __verified: true,
   };
@@ -143,6 +143,8 @@ export async function actionSaveStanding(
       registrationNo: v.registrationNo || undefined,
       belongsToGroup: v.belongsToGroup,
       groupName: v.groupName || undefined,
+      groupPartyId: v.groupPartyId,
+      feeCoverage: v.feeCoverage,
       memberCount: v.memberCount,
       hasKraPin: v.hasKraPin,
     });
@@ -218,4 +220,12 @@ export async function actionComplete(
 export async function actionSearchWork(query: string) {
   const { searchSegments } = await import('@esoko/domain');
   return searchSegments(query, 4).map((s) => ({ key: s.key, name: s.name, papers: s.papers }));
+}
+
+/* ── group search (public, name/county only) ───────────────────── */
+
+export async function actionSearchGroups(query: string) {
+  const { searchGroupsPublic } = await import('@esoko/db');
+  const ctx = await requestCtx();
+  return searchGroupsPublic(ctx, query);
 }

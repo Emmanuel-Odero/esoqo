@@ -5,6 +5,14 @@ const nextConfig = {
   transpilePackages: ['@esoko/ui', '@esoko/a11y', '@esoko/domain'],
   typedRoutes: true,
 
+  // Documents up to 10MB (packages/db/src/storage.ts MAX_BYTES) are posted
+  // through Server Actions, not an API route. Next's default 1MB action
+  // body limit rejects them before actionUpload's try/catch ever runs,
+  // crashing the whole page instead of returning a handled error.
+  experimental: {
+    serverActions: { bodySizeLimit: '11mb' },
+  },
+
   /**
    * Security headers are set HERE and again at the CDN.
    *

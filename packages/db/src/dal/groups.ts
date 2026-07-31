@@ -89,6 +89,30 @@ export async function removeMember(ctx: Ctx, membershipId: string, reason: strin
   return m;
 }
 
+/** Public group search for the anonymous join flow — name and county only,
+ *  no members, no PII. Lets a joiner link to a real group instead of just
+ *  typing a name that goes nowhere. */
+export async function searchGroupsPublic(ctx: Ctx, q: string) {
+  requireCapability(ctx, 'party.read:public');
+  if (q.trim().length < 2) return [];
+  const rows = await prisma.organisation.findMany({
+    where: {
+      party: { deletedAt: null },
+      OR: [
+        { officialName: { contains: q, mode: 'insensitive' as const } },
+        { knownAs: { contains: q, mode: 'insensitive' as const } },
+      ],
+    },
+    include: { party: { select: { county: true } } },
+    take: 8,
+  });
+  return rows.map((r) => ({
+    id: r.partyId,
+    name: r.knownAs || r.officialName,
+    county: r.party.county,
+  }));
+}
+
 /** People not yet in this group, for the add-member picker. */
 export async function searchAddablePeople(ctx: Ctx, orgPartyId: string, q: string) {
   requireCapability(ctx, 'party.read');

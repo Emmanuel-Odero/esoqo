@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useState, useTransition } from 'react';
 import Link from 'next/link';
+import type { Route } from 'next';
 import { Icon } from '@esoko/ui';
 import { useAnnounce } from '@esoko/a11y';
 import { maskMsisdn } from '@esoko/domain';
@@ -30,28 +31,50 @@ const JOINING = { me: 'Individual', group: 'Group', biz: 'Business' } as const;
 
 export function RegistrationTable({
   rows, total, page, pages, counties, canEdit, canVoid, canCreate, canSeePii, canRecordPayment,
+  type, q, county, status,
 }: {
   rows: Row[]; total: number; page: number; pages: number; counties: string[];
   canEdit: boolean; canVoid: boolean; canCreate: boolean; canSeePii: boolean;
   canRecordPayment: boolean;
+  type?: 'individuals' | 'organisations'; q: string; county: string; status: string;
 }) {
   const [openId, setOpenId] = useState<string | null>(null);
   const [creating, setCreating] = useState(false);
 
+  const tabHref = (t?: 'individuals' | 'organisations') => {
+    const p = new URLSearchParams();
+    if (t) p.set('type', t);
+    if (q) p.set('q', q);
+    if (county) p.set('county', county);
+    if (status) p.set('status', status);
+    return `/registrations${p.toString() ? `?${p}` : ''}`;
+  };
+
   return (
     <>
+      <div className="ctl" role="tablist" aria-label="Registration type" style={{ marginBottom: 10 }}>
+        {([[undefined, 'All'], ['individuals', 'Individuals'], ['organisations', 'Organisations']] as const)
+          .map(([t, label]) => (
+          <Link key={label} href={tabHref(t) as Route} role="tab" aria-selected={type === t}
+            className={`btn ${type === t ? 'btn-p' : 'btn-o'} btn-sm`}>
+            {label}
+          </Link>
+        ))}
+      </div>
+
       <div className="ctl">
         <form className="srch" style={{ display: 'contents' }}>
+          {type && <input type="hidden" name="type" value={type} />}
           <div className="srch">
             <span className="mg"><Icon name="search" size={16} /></span>
-            <input className="inp" name="q" defaultValue="" aria-label="Search registrations"
+            <input className="inp" name="q" defaultValue={q} aria-label="Search registrations"
               placeholder="Name, group, work or phone…" />
           </div>
-          <select className="inp" name="county" aria-label="Filter by county" defaultValue="">
+          <select className="inp" name="county" aria-label="Filter by county" defaultValue={county}>
             <option value="">All counties</option>
             {counties.map((c) => <option key={c}>{c}</option>)}
           </select>
-          <select className="inp" name="status" aria-label="Filter by status" defaultValue="">
+          <select className="inp" name="status" aria-label="Filter by status" defaultValue={status}>
             <option value="">All statuses</option>
             {Object.entries(STATUS).map(([k, [, l]]) => <option key={k} value={k}>{l}</option>)}
           </select>
@@ -88,8 +111,16 @@ export function RegistrationTable({
                 return (
                   <tr key={r.id} style={r.voidedAt ? { opacity: 0.55 } : undefined}>
                     <td>
-                      <strong>{r.knownAs || r.officialName || '—'}</strong>
-                      {r.orgName && <span className="sub" style={{ display: 'block' }}>{r.orgName}</span>}
+                      {r.orgName ? (
+                        <>
+                          <strong>{r.orgName}</strong>
+                          <span className="sub" style={{ display: 'block' }}>
+                            Founded by {r.knownAs || r.officialName || '—'}
+                          </span>
+                        </>
+                      ) : (
+                        <strong>{r.knownAs || r.officialName || '—'}</strong>
+                      )}
                     </td>
                     <td className="sub">{JOINING[r.joiningAs as keyof typeof JOINING] ?? r.joiningAs}</td>
                     <td className="mono">
@@ -314,6 +345,8 @@ function DetailDrawer({
                     ['Work', d.workRaw], ['Segment', d.segment],
                     ['Registered business', d.hasRegisteredBusiness],
                     ['In a group', d.belongsToGroup === 'yes' ? (d.groupName ?? 'Yes') : d.belongsToGroup],
+                    ['Group linked', d.groupPartyId ? 'Yes — matched to an existing group' : null],
+                    ['Fee coverage', d.feeCoverage === 'group' ? 'Group covers it' : d.feeCoverage === 'self' ? 'Paying themselves' : null],
                     ['Members', d.memberCount], ['KRA PIN', d.hasKraPin],
                     ['Dialling access', d.ussdSetupChoice],
                     ['Wants price SMS', d.wantsPriceSms ? 'Yes' : 'No'],

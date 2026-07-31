@@ -221,6 +221,9 @@ function JoiningStep({ f, update }: { f: FormData; update: (k: keyof FormData, v
 /* ─────────────────── step 2: personal ─────────────────── */
 
 function PersonalStep({ f, update }: { f: FormData; update: (k: keyof FormData, v: string | boolean) => void }) {
+  const [orgRoleOther, setOrgRoleOther] = useState(
+    Boolean(f.orgRole) && !['CHAIRPERSON', 'TREASURER', 'SECRETARY', 'MEMBER'].includes(f.orgRole),
+  );
   return (
     <div>
       <p className="sub" style={{ marginBottom: 16 }}>Full name as it appears on their national ID.</p>
@@ -256,14 +259,24 @@ function PersonalStep({ f, update }: { f: FormData; update: (k: keyof FormData, 
           </div>
           <div style={{ marginBottom: 14 }}>
             <label className="sub" htmlFor="wi-orgRole" style={{ display: 'block', marginBottom: 6 }}>Their role in the group</label>
-            <select id="wi-orgRole" className="inp" style={{ width: '100%' }} value={f.orgRole}
-              onChange={(e) => update('orgRole', e.target.value)}>
+            <select id="wi-orgRole" className="inp" style={{ width: '100%' }}
+              value={orgRoleOther ? 'OTHER' : f.orgRole}
+              onChange={(e) => {
+                if (e.target.value === 'OTHER') { setOrgRoleOther(true); update('orgRole', ''); }
+                else { setOrgRoleOther(false); update('orgRole', e.target.value); }
+              }}>
               <option value="">Select role…</option>
               <option value="CHAIRPERSON">Chairperson</option>
               <option value="TREASURER">Treasurer</option>
               <option value="SECRETARY">Secretary</option>
               <option value="MEMBER">Member</option>
+              <option value="OTHER">Other</option>
             </select>
+            {orgRoleOther && (
+              <input className="inp" style={{ width: '100%', marginTop: 8 }} value={f.orgRole} maxLength={40}
+                onChange={(e) => update('orgRole', e.target.value)}
+                placeholder="What the group calls this role" />
+            )}
           </div>
           <div style={{ marginBottom: 14 }}>
             <label className="sub" htmlFor="wi-memberCount" style={{ display: 'block', marginBottom: 6 }}>How many members in the group?</label>

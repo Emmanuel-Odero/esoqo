@@ -40,6 +40,13 @@ function typeIcon(mime: string): IconName {
   return 'document';
 }
 
+/** Buckets documents into folders by kind, preserving first-seen order. */
+function byKind<T extends { kind: string }>(docs: T[]): [string, T[]][] {
+  const m = new Map<string, T[]>();
+  for (const d of docs) m.set(d.kind, [...(m.get(d.kind) ?? []), d]);
+  return [...m.entries()];
+}
+
 export function GroupManager({
   groups, canEdit, canUploadDocs, documentKinds,
 }: {
@@ -263,26 +270,34 @@ function GroupDetail({
             <p style={{ margin: 0 }}>Constitution, member list, registration certificate — whatever this group has on file.</p>
           </div>
         ) : (
-          <table className="tbl">
-            <thead>
-              <tr><th>Title</th><th>Kind</th><th>Size</th><th>Uploaded</th><th /></tr>
-            </thead>
-            <tbody>
-              {docs.map((d) => (
-                <tr key={d.id}>
-                  <td><strong>{d.title}</strong></td>
-                  <td className="sub">{documentKinds.find(([k]) => k === d.kind)?.[1] ?? d.kind}</td>
-                  <td className="mono sub" style={{ fontSize: '.79rem' }}>{humanSize(d.sizeBytes)}</td>
-                  <td className="mono sub" style={{ fontSize: '.79rem' }}>{d.uploadedAt.slice(0, 10)}</td>
-                  <td style={{ textAlign: 'right' }}>
-                    <button className="btn btn-o btn-sm" onClick={() => setPreviewing(d)}>
-                      <Icon name="eye" size={13} />View
-                    </button>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+          byKind(docs).map(([kind, kindDocs]) => (
+            <details key={kind} open={byKind(docs).length === 1} style={{ marginBottom: 8 }}>
+              <summary style={{ cursor: 'pointer', padding: '8px 0', fontWeight: 600 }}>
+                <Icon name="box" size={14} />{' '}
+                {documentKinds.find(([k]) => k === kind)?.[1] ?? kind}{' '}
+                <span className="sub">({kindDocs.length})</span>
+              </summary>
+              <table className="tbl">
+                <thead>
+                  <tr><th>Title</th><th>Size</th><th>Uploaded</th><th /></tr>
+                </thead>
+                <tbody>
+                  {kindDocs.map((d) => (
+                    <tr key={d.id}>
+                      <td><strong>{d.title}</strong></td>
+                      <td className="mono sub" style={{ fontSize: '.79rem' }}>{humanSize(d.sizeBytes)}</td>
+                      <td className="mono sub" style={{ fontSize: '.79rem' }}>{d.uploadedAt.slice(0, 10)}</td>
+                      <td style={{ textAlign: 'right' }}>
+                        <button className="btn btn-o btn-sm" onClick={() => setPreviewing(d)}>
+                          <Icon name="eye" size={13} />View
+                        </button>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </details>
+          ))
         )}
       </div>
 

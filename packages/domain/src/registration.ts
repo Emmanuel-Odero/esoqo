@@ -36,7 +36,7 @@ export const step2Schema = z
     knownAs: z.string().trim().max(80).optional().or(z.literal('')),
     orgName: z.string().trim().max(160).optional().or(z.literal('')),
     orgKnownAs: z.string().trim().max(80).optional().or(z.literal('')),
-    orgRole: z.enum(['Chairperson', 'Treasurer', 'Secretary', 'Member']).optional(),
+    orgRole: z.string().trim().max(40).optional().or(z.literal('')),
     joiningAs: joiningAsSchema,
   })
   .superRefine((v, ctx) => {
@@ -73,6 +73,8 @@ export const step5Schema = z.object({
   registrationNo: z.string().trim().max(40).optional().or(z.literal('')),
   belongsToGroup: z.enum(['yes', 'no']).optional(),
   groupName: z.string().trim().max(160).optional().or(z.literal('')),
+  groupPartyId: z.string().uuid().optional(),
+  feeCoverage: z.enum(['group', 'self']).optional(),
   memberCount: z.coerce.number().int().min(1).max(10_000).optional(),
   hasKraPin: z.enum(['yes', 'no']).optional(),
 });

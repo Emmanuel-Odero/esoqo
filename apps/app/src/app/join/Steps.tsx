@@ -201,10 +201,11 @@ export function DocumentStep({ registrationId }: { registrationId: string }) {
 /* ═══════════════════════════ payment ═══════════════════════════ */
 
 export function PaymentStep({
-  registrationId, choice, onChoice,
+  registrationId, choice, feeCoveredByGroup, onChoice,
 }: {
   registrationId: string;
   choice: 'paid' | 'later' | '';
+  feeCoveredByGroup?: boolean;
   onChoice: (c: 'paid' | 'later', declared: boolean) => void;
 }) {
   const [method, setMethod] = useState<'MPESA' | 'BANK_TRANSFER' | 'CASH_TO_AGENT'>('MPESA');
@@ -213,8 +214,44 @@ export function PaymentStep({
   const [note, setNote] = useState('');
   const [saved, setSaved] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [covered, setCovered] = useState(false);
   const [pending, start] = useTransition();
   const announce = useAnnounce();
+
+  useEffect(() => {
+    if (!feeCoveredByGroup || covered) return;
+    start(async () => {
+      await actionDeferPayment(registrationId);
+      setCovered(true);
+      onChoice('later', true);
+      announce('Noted — your group covers this fee.', 'assertive');
+    });
+    // Runs once when this step is reached with the fee already covered.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [feeCoveredByGroup]);
+
+  if (feeCoveredByGroup) {
+    return (
+      <>
+        <h2 className="qh">Your group covers this fee</h2>
+        <p className="qs">
+          Nothing more to do here. Esoko checks the group&rsquo;s account for your registration
+          and lets you know either way.
+        </p>
+        <div className="paidbox">
+          <span className="icbox" style={{ background: 'var(--green-t)', color: 'var(--green)' }}>
+            <Icon name="check-circle" size={19} />
+          </span>
+          <div>
+            <strong style={{ display: 'block', marginBottom: 3 }}>Covered by your group</strong>
+            <span className="hint" style={{ margin: 0 }}>
+              You said this earlier — change it from the previous step if that is wrong.
+            </span>
+          </div>
+        </div>
+      </>
+    );
+  }
 
   function declare() {
     setError(null);

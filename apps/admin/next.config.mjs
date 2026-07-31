@@ -5,6 +5,12 @@ const nextConfig = {
   transpilePackages: ['@esoko/ui', '@esoko/a11y', '@esoko/domain'],
   typedRoutes: true,
 
+  // Same 10MB document uploads (group docs, walk-in registration docs) go
+  // through Server Actions here too — see apps/app/next.config.mjs.
+  experimental: {
+    serverActions: { bodySizeLimit: '11mb' },
+  },
+
   /**
    * Security headers are set HERE and again at the CDN.
    *
