@@ -16,7 +16,7 @@ export async function actionReview(
     return { ok: true };
   } catch (e) {
     console.error(e);
-    return { ok: false, error: toSafeErrorMessage(e, 'Could not review that document') };
+    return { ok: false, error: toSafeErrorMessage(e, "That review didn't save. Please try again.") };
   }
 }
 
@@ -30,7 +30,7 @@ export async function actionUpdate(
     return { ok: true };
   } catch (e) {
     console.error(e);
-    return { ok: false, error: toSafeErrorMessage(e, 'Could not update that document') };
+    return { ok: false, error: toSafeErrorMessage(e, "Those changes didn't save. Please try again.") };
   }
 }
 
@@ -43,6 +43,6 @@ export async function actionDelete(id: string, reason: string): Promise<Result> 
     return { ok: true };
   } catch (e) {
     console.error(e);
-    return { ok: false, error: toSafeErrorMessage(e, 'Could not delete that document') };
+    return { ok: false, error: toSafeErrorMessage(e, "That document couldn't be deleted. Please try again.") };
   }
 }

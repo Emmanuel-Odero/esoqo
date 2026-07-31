@@ -13,6 +13,6 @@ export async function actionRevoke(grantId: string) {
     return { ok: true as const };
   } catch (e) {
     console.error(e);
-    return { ok: false as const, error: toSafeErrorMessage(e, 'Could not end that permission') };
+    return { ok: false as const, error: toSafeErrorMessage(e, "That permission couldn't be ended. Please try again — if it keeps happening, dial *483*77# and choose 7.") };
   }
 }

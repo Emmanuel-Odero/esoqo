@@ -11,7 +11,7 @@ import { requireStaff } from '@/lib/session';
 export type Result = { ok: true } | { ok: false; error: string };
 const fail = (e: unknown): Result => {
   console.error(e);
-  return { ok: false, error: toSafeErrorMessage(e, 'That did not work') };
+  return { ok: false, error: toSafeErrorMessage(e, "That didn't save. Please try again.") };
 };
 
 export async function actionSearchPeople(orgPartyId: string, q: string) {
@@ -94,7 +94,7 @@ export async function actionUploadGroupDocument(form: FormData): Promise<UploadR
     };
   } catch (e) {
     console.error(e);
-    return { ok: false, error: toSafeErrorMessage(e, 'That upload did not work') };
+    return { ok: false, error: toSafeErrorMessage(e, "That upload didn't go through. Check the file and try again.") };
   }
 }
 

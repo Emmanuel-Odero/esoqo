@@ -15,7 +15,7 @@ export async function actionSetCapabilities(staffId: string, capabilities: strin
     return { ok: true };
   } catch (e) {
     console.error(e);
-    return { ok: false, error: toSafeErrorMessage(e, 'Could not update permissions') };
+    return { ok: false, error: toSafeErrorMessage(e, "Those permissions didn't save. Try again — if it keeps failing, check whether you still hold the capability you're trying to grant.") };
   }
 }
 
@@ -27,7 +27,7 @@ export async function actionApplyPreset(staffId: string, preset: string): Promis
     return { ok: true };
   } catch (e) {
     console.error(e);
-    return { ok: false, error: toSafeErrorMessage(e, 'Could not apply that role') };
+    return { ok: false, error: toSafeErrorMessage(e, "That role didn't apply. Please try again.") };
   }
 }
 
@@ -39,7 +39,7 @@ export async function actionSetActive(staffId: string, active: boolean, reason?:
     return { ok: true };
   } catch (e) {
     console.error(e);
-    return { ok: false, error: toSafeErrorMessage(e, 'Could not change that account') };
+    return { ok: false, error: toSafeErrorMessage(e, "That account status didn't change. Please try again.") };
   }
 }
 
@@ -60,6 +60,6 @@ export async function actionCreateStaff(input: {
     return { ok: true, data: { tempPin } };
   } catch (e) {
     console.error(e);
-    return { ok: false, error: toSafeErrorMessage(e, 'Could not create that account') };
+    return { ok: false, error: toSafeErrorMessage(e, "That account wasn't created — check the email isn't already in use, then try again.") };
   }
 }

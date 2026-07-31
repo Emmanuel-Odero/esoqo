@@ -70,7 +70,7 @@ export async function actionUpload(form: FormData): Promise<UploadResult> {
     };
   } catch (e) {
     console.error(e);
-    return { ok: false, error: toSafeErrorMessage(e, 'That upload did not work') };
+    return { ok: false, error: toSafeErrorMessage(e, "That upload didn't go through. Check your connection and try again — or skip this for now and add it later.") };
   }
 }
 
@@ -92,7 +92,7 @@ export async function actionRemoveDocument(id: string): Promise<{ ok: boolean; e
     return { ok: true };
   } catch (e) {
     console.error(e);
-    return { ok: false, error: toSafeErrorMessage(e, 'Could not remove that file') };
+    return { ok: false, error: toSafeErrorMessage(e, "That file couldn't be removed. Please try again.") };
   }
 }
 
@@ -123,7 +123,7 @@ export async function actionDeclarePayment(
     return { ok: true };
   } catch (e) {
     console.error(e);
-    return { ok: false, error: toSafeErrorMessage(e, 'Could not record that') };
+    return { ok: false, error: toSafeErrorMessage(e, 'We could not save that payment. Check the details and try again.') };
   }
 }
 

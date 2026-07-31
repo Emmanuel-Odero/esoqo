@@ -65,7 +65,15 @@ function fail(e: unknown): ActionResult<never> {
   // The real error still needs to reach someone — it just should never
   // be the person who hit it. Server-side logs are the right place.
   console.error(e);
-  return { ok: false, error: toSafeErrorMessage(e) };
+  return {
+    ok: false,
+    error: toSafeErrorMessage(
+      e,
+      "We couldn't save that just now — nothing else you've entered was lost. "
+        + 'Try again in a moment. If it keeps happening, dial *483*77# and choose 7, '
+        + 'or write to malalamiko@esoko.co.ke.',
+    ),
+  };
 }
 
 /* ── step 1+2 ───────────────────────────────────────────────── */

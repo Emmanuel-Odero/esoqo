@@ -21,7 +21,7 @@ export type Result<T = void> = { ok: true; data: T } | { ok: false; error: strin
 
 function fail(e: unknown): Result<never> {
   console.error(e);
-  return { ok: false, error: toSafeErrorMessage(e, 'That did not work') };
+  return { ok: false, error: toSafeErrorMessage(e, "That didn't save. Please try again — if it keeps happening, check the record hasn't been voided or completed in the meantime.") };
 }
 
 export async function actionGetDetail(id: string) {
@@ -209,7 +209,7 @@ export async function actionUploadWalkInDocument(form: FormData): Promise<Upload
     };
   } catch (e) {
     console.error(e);
-    return { ok: false, error: toSafeErrorMessage(e, 'That upload did not work') };
+    return { ok: false, error: toSafeErrorMessage(e, "That upload didn't go through. Check the file and try again.") };
   }
 }
 
@@ -230,6 +230,6 @@ export async function actionRemoveWalkInDocument(id: string): Promise<{ ok: bool
     return { ok: true };
   } catch (e) {
     console.error(e);
-    return { ok: false, error: toSafeErrorMessage(e, 'Could not remove that file') };
+    return { ok: false, error: toSafeErrorMessage(e, "That file couldn't be removed. Please try again.") };
   }
 }
