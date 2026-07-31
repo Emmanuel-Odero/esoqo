@@ -23,7 +23,7 @@ export async function getMyRecord(ctx: Ctx) {
       attestations: { where: { revokedAt: null }, include: { issuer: true }, orderBy: { issuedAt: 'desc' } },
       memberships: {
         where: { exitedAt: null },
-        include: { org: { include: { organisation: true, _count: { select: { members: true } } } } },
+        include: { org: { include: { party: true, _count: { select: { members: true } } } } },
       },
       documents: { where: { deletedAt: null }, orderBy: { uploadedAt: 'desc' } },
       registration: { include: { payment: { include: { approvals: true } } } },

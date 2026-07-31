@@ -30,6 +30,13 @@ function human(bytes: number) {
   return `${(bytes / 1048576).toFixed(1)} MB`;
 }
 
+/** Buckets documents into folders by kind, preserving first-seen order. */
+function byKind<T extends { kind: string }>(docs: T[]): [string, T[]][] {
+  const m = new Map<string, T[]>();
+  for (const d of docs) m.set(d.kind, [...(m.get(d.kind) ?? []), d]);
+  return [...m.entries()];
+}
+
 export function DocumentGrid({
   docs, kinds, canReview, canDelete,
 }: {
@@ -63,29 +70,38 @@ export function DocumentGrid({
           </div>
         </div>
       ) : (
-        <div className="dgrid">
-          {view.map((d) => {
-            const [cls, label] = STATUS[d.status] ?? ['p-mute', d.status];
-            const isImage = d.mimeType.startsWith('image/');
-            return (
-              <button className="dcard" key={d.id} onClick={() => setOpen(d)}
-                aria-label={`Open ${d.title}`}>
-                <div className="thumb">
-                  {isImage
-                    ? <img src={`/api/documents/${d.id}?inline=1`} alt="" loading="lazy" />
-                    : <Icon name={typeIcon(d.mimeType)} size={30} />}
-                </div>
-                <div className="meta">
-                  <span className="t">{d.title}</span>
-                  <span className="sub" style={{ display: 'block', fontSize: '.79rem', margin: '2px 0 8px' }}>
-                    {d.owner} · {human(d.sizeBytes)}
-                  </span>
-                  <span className={`pill ${cls}`}>{label}</span>
-                </div>
-              </button>
-            );
-          })}
-        </div>
+        byKind(view).map(([kind, kindDocs]) => (
+          <details key={kind} open style={{ marginBottom: 18 }}>
+            <summary style={{ cursor: 'pointer', padding: '8px 0', fontWeight: 600 }}>
+              <Icon name="box" size={14} />{' '}
+              {kinds.find(([k]) => k === kind)?.[1] ?? kind}{' '}
+              <span className="sub">({kindDocs.length})</span>
+            </summary>
+            <div className="dgrid">
+              {kindDocs.map((d) => {
+                const [cls, label] = STATUS[d.status] ?? ['p-mute', d.status];
+                const isImage = d.mimeType.startsWith('image/');
+                return (
+                  <button className="dcard" key={d.id} onClick={() => setOpen(d)}
+                    aria-label={`Open ${d.title}`}>
+                    <div className="thumb">
+                      {isImage
+                        ? <img src={`/api/documents/${d.id}?inline=1`} alt="" loading="lazy" />
+                        : <Icon name={typeIcon(d.mimeType)} size={30} />}
+                    </div>
+                    <div className="meta">
+                      <span className="t">{d.title}</span>
+                      <span className="sub" style={{ display: 'block', fontSize: '.79rem', margin: '2px 0 8px' }}>
+                        {d.owner} · {human(d.sizeBytes)}
+                      </span>
+                      <span className={`pill ${cls}`}>{label}</span>
+                    </div>
+                  </button>
+                );
+              })}
+            </div>
+          </details>
+        ))
       )}
 
       {open && (

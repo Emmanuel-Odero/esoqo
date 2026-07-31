@@ -2,10 +2,14 @@
 
 import { useCallback, useEffect, useState, useTransition } from 'react';
 import Link from 'next/link';
+import type { Route } from 'next';
 import { Icon } from '@esoko/ui';
 import { useAnnounce } from '@esoko/a11y';
 import { maskMsisdn } from '@esoko/domain';
-import { actionGetDetail, actionEdit, actionVoid, actionRestore } from './actions';
+import {
+  actionGetDetail, actionEdit, actionVoid, actionRestore,
+  actionRecordPayment, actionAmendPayment,
+} from './actions';
 import WalkInFlow from './WalkInFlow';
 
 interface Row {
@@ -26,28 +30,51 @@ const STATUS: Record<string, [string, string]> = {
 const JOINING = { me: 'Individual', group: 'Group', biz: 'Business' } as const;
 
 export function RegistrationTable({
-  rows, total, page, pages, counties, canEdit, canVoid, canCreate, canSeePii,
+  rows, total, page, pages, counties, canEdit, canVoid, canCreate, canSeePii, canRecordPayment,
+  type, q, county, status,
 }: {
   rows: Row[]; total: number; page: number; pages: number; counties: string[];
   canEdit: boolean; canVoid: boolean; canCreate: boolean; canSeePii: boolean;
+  canRecordPayment: boolean;
+  type?: 'individuals' | 'organisations'; q: string; county: string; status: string;
 }) {
   const [openId, setOpenId] = useState<string | null>(null);
   const [creating, setCreating] = useState(false);
 
+  const tabHref = (t?: 'individuals' | 'organisations') => {
+    const p = new URLSearchParams();
+    if (t) p.set('type', t);
+    if (q) p.set('q', q);
+    if (county) p.set('county', county);
+    if (status) p.set('status', status);
+    return `/registrations${p.toString() ? `?${p}` : ''}`;
+  };
+
   return (
     <>
+      <div className="ctl" role="tablist" aria-label="Registration type" style={{ marginBottom: 10 }}>
+        {([[undefined, 'All'], ['individuals', 'Individuals'], ['organisations', 'Organisations']] as const)
+          .map(([t, label]) => (
+          <Link key={label} href={tabHref(t) as Route} role="tab" aria-selected={type === t}
+            className={`btn ${type === t ? 'btn-p' : 'btn-o'} btn-sm`}>
+            {label}
+          </Link>
+        ))}
+      </div>
+
       <div className="ctl">
         <form className="srch" style={{ display: 'contents' }}>
+          {type && <input type="hidden" name="type" value={type} />}
           <div className="srch">
             <span className="mg"><Icon name="search" size={16} /></span>
-            <input className="inp" name="q" defaultValue="" aria-label="Search registrations"
+            <input className="inp" name="q" defaultValue={q} aria-label="Search registrations"
               placeholder="Name, group, work or phone…" />
           </div>
-          <select className="inp" name="county" aria-label="Filter by county" defaultValue="">
+          <select className="inp" name="county" aria-label="Filter by county" defaultValue={county}>
             <option value="">All counties</option>
             {counties.map((c) => <option key={c}>{c}</option>)}
           </select>
-          <select className="inp" name="status" aria-label="Filter by status" defaultValue="">
+          <select className="inp" name="status" aria-label="Filter by status" defaultValue={status}>
             <option value="">All statuses</option>
             {Object.entries(STATUS).map(([k, [, l]]) => <option key={k} value={k}>{l}</option>)}
           </select>
@@ -84,8 +111,16 @@ export function RegistrationTable({
                 return (
                   <tr key={r.id} style={r.voidedAt ? { opacity: 0.55 } : undefined}>
                     <td>
-                      <strong>{r.knownAs || r.officialName || '—'}</strong>
-                      {r.orgName && <span className="sub" style={{ display: 'block' }}>{r.orgName}</span>}
+                      {r.orgName ? (
+                        <>
+                          <strong>{r.orgName}</strong>
+                          <span className="sub" style={{ display: 'block' }}>
+                            Founded by {r.knownAs || r.officialName || '—'}
+                          </span>
+                        </>
+                      ) : (
+                        <strong>{r.knownAs || r.officialName || '—'}</strong>
+                      )}
                     </td>
                     <td className="sub">{JOINING[r.joiningAs as keyof typeof JOINING] ?? r.joiningAs}</td>
                     <td className="mono">
@@ -125,7 +160,7 @@ export function RegistrationTable({
 
       {openId && (
         <DetailDrawer id={openId} canEdit={canEdit} canVoid={canVoid} canSeePii={canSeePii}
-          onClose={() => setOpenId(null)} />
+          canRecordPayment={canRecordPayment} onClose={() => setOpenId(null)} />
       )}
       {creating && <WalkInFlow counties={counties} onClose={() => setCreating(false)} />}
     </>
@@ -137,8 +172,11 @@ export function RegistrationTable({
 type Detail = Awaited<ReturnType<typeof actionGetDetail>>;
 
 function DetailDrawer({
-  id, canEdit, canVoid, canSeePii, onClose,
-}: { id: string; canEdit: boolean; canVoid: boolean; canSeePii: boolean; onClose: () => void }) {
+  id, canEdit, canVoid, canSeePii, canRecordPayment, onClose,
+}: {
+  id: string; canEdit: boolean; canVoid: boolean; canSeePii: boolean;
+  canRecordPayment: boolean; onClose: () => void;
+}) {
   const [d, setD] = useState<Detail>(null);
   const [tab, setTab] = useState<'record' | 'payment' | 'documents'>('record');
   const [editing, setEditing] = useState(false);
@@ -148,6 +186,12 @@ function DetailDrawer({
   const [error, setError] = useState<string | null>(null);
   const [pending, start] = useTransition();
   const announce = useAnnounce();
+
+  const [payingForm, setPayingForm] = useState(false);
+  const [payMethod, setPayMethod] = useState<'MPESA' | 'BANK_TRANSFER' | 'CASH_TO_AGENT'>('MPESA');
+  const [payRef, setPayRef] = useState('');
+  const [payAmount, setPayAmount] = useState('');
+  const [payNote, setPayNote] = useState('');
 
   const load = useCallback(async () => {
     const res = await actionGetDetail(id);
@@ -191,6 +235,34 @@ function DetailDrawer({
       const r = await actionRestore(id);
       if (r.ok) { announce('Registration restored', 'assertive'); void load(); }
       else setError(r.error);
+    });
+  }
+
+  function openPaymentForm(existing?: NonNullable<Detail>['payment']) {
+    setPayMethod((existing?.method as typeof payMethod) ?? 'MPESA');
+    setPayRef(existing?.reference ?? '');
+    setPayAmount(existing?.amountKes != null ? String(existing.amountKes) : '');
+    setPayNote('');
+    setError(null);
+    setPayingForm(true);
+  }
+
+  function savePayment(existingPaymentId?: string) {
+    if (!payRef.trim()) { setError('Enter a reference'); return; }
+    start(async () => {
+      const input = {
+        method: payMethod, reference: payRef,
+        amountKes: payAmount ? Number(payAmount) : undefined,
+        note: payNote || undefined,
+      };
+      const r = existingPaymentId
+        ? await actionAmendPayment(existingPaymentId, { ...input, amountKes: Number(payAmount) || 0 })
+        : await actionRecordPayment(id, input);
+      if (r.ok) {
+        announce(existingPaymentId ? 'Payment amended' : 'Payment recorded', 'assertive');
+        setPayingForm(false);
+        void load();
+      } else setError(r.error);
     });
   }
 
@@ -273,6 +345,8 @@ function DetailDrawer({
                     ['Work', d.workRaw], ['Segment', d.segment],
                     ['Registered business', d.hasRegisteredBusiness],
                     ['In a group', d.belongsToGroup === 'yes' ? (d.groupName ?? 'Yes') : d.belongsToGroup],
+                    ['Group linked', d.groupPartyId ? 'Yes — matched to an existing group' : null],
+                    ['Fee coverage', d.feeCoverage === 'group' ? 'Group covers it' : d.feeCoverage === 'self' ? 'Paying themselves' : null],
                     ['Members', d.memberCount], ['KRA PIN', d.hasKraPin],
                     ['Dialling access', d.ussdSetupChoice],
                     ['Wants price SMS', d.wantsPriceSms ? 'Yes' : 'No'],
@@ -290,11 +364,40 @@ function DetailDrawer({
 
           {tab === 'payment' && (
             !pay ? (
-              <div className="empty">
-                <span className="ico"><Icon name="coins" size={22} /></span>
-                <h3>No payment declared</h3>
-                <p style={{ margin: 0 }}>This person has not said anything about paying yet.</p>
-              </div>
+              payingForm ? (
+                <PaymentForm
+                  method={payMethod} setMethod={setPayMethod}
+                  reference={payRef} setReference={setPayRef}
+                  amount={payAmount} setAmount={setPayAmount}
+                  note={payNote} setNote={setPayNote}
+                  onCancel={() => setPayingForm(false)}
+                  onSave={() => savePayment()}
+                  pending={pending}
+                  saveLabel="Record payment"
+                />
+              ) : (
+                <div className="empty">
+                  <span className="ico"><Icon name="coins" size={22} /></span>
+                  <h3>No payment declared</h3>
+                  <p style={{ margin: 0 }}>This person has not said anything about paying yet.</p>
+                  {canRecordPayment && (
+                    <button className="btn btn-p" style={{ marginTop: 14 }} onClick={() => openPaymentForm()}>
+                      <Icon name="coins" size={14} />Record a payment
+                    </button>
+                  )}
+                </div>
+              )
+            ) : payingForm ? (
+              <PaymentForm
+                method={payMethod} setMethod={setPayMethod}
+                reference={payRef} setReference={setPayRef}
+                amount={payAmount} setAmount={setPayAmount}
+                note={payNote} setNote={setPayNote}
+                onCancel={() => setPayingForm(false)}
+                onSave={() => savePayment(pay.id)}
+                pending={pending}
+                saveLabel="Save changes"
+              />
             ) : (
               <>
                 <table className="tbl" style={{ marginBottom: 18 }}>
@@ -312,6 +415,13 @@ function DetailDrawer({
                     )}
                   </tbody>
                 </table>
+
+                {canRecordPayment && (pay.status === 'DECLARED' || pay.status === 'UNDER_REVIEW') && (
+                  <button className="btn btn-o btn-sm" style={{ marginBottom: 18 }}
+                    onClick={() => openPaymentForm(pay)}>
+                    <Icon name="document" size={13} />Amend this payment
+                  </button>
+                )}
 
                 <h3 style={{ marginBottom: 10 }}>Signatures</h3>
                 {pay.approvals.length === 0 ? (
@@ -423,6 +533,55 @@ function DetailDrawer({
             </>
           )}
         </div>
+      </div>
+    </div>
+  );
+}
+
+function PaymentForm({
+  method, setMethod, reference, setReference, amount, setAmount, note, setNote,
+  onCancel, onSave, pending, saveLabel,
+}: {
+  method: 'MPESA' | 'BANK_TRANSFER' | 'CASH_TO_AGENT';
+  setMethod: (m: 'MPESA' | 'BANK_TRANSFER' | 'CASH_TO_AGENT') => void;
+  reference: string; setReference: (v: string) => void;
+  amount: string; setAmount: (v: string) => void;
+  note: string; setNote: (v: string) => void;
+  onCancel: () => void; onSave: () => void; pending: boolean; saveLabel: string;
+}) {
+  return (
+    <div className="grid2" style={{ gap: 14 }}>
+      <div>
+        <label className="sub" htmlFor="pf-method" style={{ display: 'block', marginBottom: 6 }}>Method</label>
+        <select id="pf-method" className="inp" style={{ width: '100%' }} value={method}
+          onChange={(e) => setMethod(e.target.value as typeof method)}>
+          <option value="MPESA">M-Pesa</option>
+          <option value="BANK_TRANSFER">Bank transfer</option>
+          <option value="CASH_TO_AGENT">Cash to agent</option>
+        </select>
+      </div>
+      <div>
+        <label className="sub" htmlFor="pf-ref" style={{ display: 'block', marginBottom: 6 }}>
+          Reference {method === 'MPESA' && '(the M-Pesa code)'}
+        </label>
+        <input id="pf-ref" className="inp" style={{ width: '100%' }} value={reference}
+          onChange={(e) => setReference(e.target.value)} placeholder="SFH4K2L9QW" />
+      </div>
+      <div>
+        <label className="sub" htmlFor="pf-amount" style={{ display: 'block', marginBottom: 6 }}>Amount (KES)</label>
+        <input id="pf-amount" className="inp" type="number" style={{ width: '100%' }} value={amount}
+          onChange={(e) => setAmount(e.target.value)} placeholder="500" />
+      </div>
+      <div>
+        <label className="sub" htmlFor="pf-note" style={{ display: 'block', marginBottom: 6 }}>Note (optional)</label>
+        <input id="pf-note" className="inp" style={{ width: '100%' }} value={note}
+          onChange={(e) => setNote(e.target.value)} placeholder="Paid to Agent #14 at the market" />
+      </div>
+      <div style={{ gridColumn: '1 / -1', display: 'flex', gap: 10, justifyContent: 'flex-end' }}>
+        <button className="btn btn-o" onClick={onCancel}>Cancel</button>
+        <button className="btn btn-p" onClick={onSave} disabled={pending || !reference.trim()}>
+          <Icon name="check" size={15} />{pending ? 'Saving…' : saveLabel}
+        </button>
       </div>
     </div>
   );

@@ -3,7 +3,7 @@ const nextConfig = {
   reactStrictMode: true,
   poweredByHeader: false,
   transpilePackages: ['@esoko/ui', '@esoko/a11y', '@esoko/domain'],
-  experimental: { typedRoutes: true },
+  typedRoutes: true,
 
   /**
    * Security headers are set HERE and again at the CDN.

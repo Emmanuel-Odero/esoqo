@@ -7,7 +7,7 @@ import { COUNTIES, LIVE_COUNTIES, formatMsisdn } from '@esoko/domain';
 import {
   actionStart, actionSaveNames, actionSaveContact, actionSaveWork,
   actionSaveStanding, actionRequestOtp, actionVerifyOtp, actionComplete,
-  actionSearchWork, type ActionResult,
+  actionSearchWork, actionSearchGroups, type ActionResult,
 } from './actions';
 import { DocumentStep, PaymentStep } from './Steps';
 
@@ -21,7 +21,8 @@ interface Form {
   msisdn: string; email: string; county: string; ward: string;
   workRaw: string; segment: string;
   hasRegisteredBusiness: YesNoSoon | ''; registrationNo: string;
-  belongsToGroup: 'yes' | 'no' | ''; groupName: string;
+  belongsToGroup: 'yes' | 'no' | ''; groupName: string; groupPartyId: string;
+  feeCoverage: 'group' | 'self' | '';
   memberCount: string; hasKraPin: 'yes' | 'no' | '';
   ussdSetupChoice: 'now' | 'later' | '';
   paymentChoice: 'paid' | 'later' | '';
@@ -31,12 +32,16 @@ interface Form {
 const EMPTY: Form = {
   joiningAs: '', officialName: '', knownAs: '', orgName: '', orgKnownAs: '', orgRole: 'Treasurer',
   msisdn: '+254 7', email: '', county: 'Nairobi', ward: '', workRaw: '', segment: '',
-  hasRegisteredBusiness: '', registrationNo: '', belongsToGroup: '', groupName: '',
+  hasRegisteredBusiness: '', registrationNo: '', belongsToGroup: '', groupName: '', groupPartyId: '',
+  feeCoverage: '',
   memberCount: '', hasKraPin: '', ussdSetupChoice: '', paymentChoice: '',
   wantsPriceSms: false, wantsReceiptSms: true, wantsExpirySms: true,
 };
 
+const KNOWN_ROLES = ['Chairperson', 'Treasurer', 'Secretary', 'Member'] as const;
+
 const TOTAL_QUESTIONS = 7;
+const STORAGE_KEY = 'esoko:join:v1';
 
 export function JoinFlow() {
   const announce = useAnnounce();
@@ -49,17 +54,62 @@ export function JoinFlow() {
   const [errField, setErrField] = useState<string | undefined>();
 
   const [hits, setHits] = useState<{ key: string; name: string }[]>([]);
+  const [groupHits, setGroupHits] = useState<{ id: string; name: string; county: string }[]>([]);
+  const [orgRoleOther, setOrgRoleOther] = useState(false);
   const [otpSent, setOtpSent] = useState(false);
   const [otpVerified, setOtpVerified] = useState(false);
   const [otp, setOtp] = useState('');
   const [devCode, setDevCode] = useState<string | undefined>();
   const [emailSent, setEmailSent] = useState(false);
   const [done, setDone] = useState(false);
+  const [resumable, setResumable] = useState<{ f: Form; step: number; regId: string } | null>(null);
 
   const headingRef = useRef<HTMLHeadingElement>(null);
 
   const set = <K extends keyof Form>(k: K, v: Form[K]) =>
     setF((p) => ({ ...p, [k]: v }));
+
+  // Offer to resume an in-progress registration saved in this browser —
+  // a crash, reload or lost connection should not cost the joiner their
+  // answers. Only offered, never silently applied: the device may be
+  // shared, or the saved attempt may be stale.
+  useEffect(() => {
+    try {
+      const raw = window.localStorage.getItem(STORAGE_KEY);
+      if (!raw) return;
+      const saved = JSON.parse(raw) as { f: Form; step: number; regId: string };
+      if (saved?.regId && saved.step > 1) setResumable(saved);
+    } catch { /* corrupt or inaccessible storage — ignore */ }
+  }, []);
+
+  function resume() {
+    if (!resumable) return;
+    setF(resumable.f);
+    setStep(resumable.step);
+    setRegId(resumable.regId);
+    setOrgRoleOther(Boolean(resumable.f.orgRole) &&
+      !KNOWN_ROLES.includes(resumable.f.orgRole as typeof KNOWN_ROLES[number]));
+    setResumable(null);
+  }
+
+  function startFresh() {
+    window.localStorage.removeItem(STORAGE_KEY);
+    setResumable(null);
+  }
+
+  // Persist progress after every change so a reload or crash can resume.
+  useEffect(() => {
+    if (!regId || done) return;
+    try {
+      window.localStorage.setItem(STORAGE_KEY, JSON.stringify({ f, step, regId }));
+    } catch { /* storage full or blocked — resuming just won't be offered */ }
+  }, [f, step, regId, done]);
+
+  useEffect(() => {
+    if (done) {
+      try { window.localStorage.removeItem(STORAGE_KEY); } catch { /* ignore */ }
+    }
+  }, [done]);
 
   // Focus the question heading on every step change so keyboard and
   // screen-reader users land in the right place.
@@ -125,6 +175,8 @@ export function JoinFlow() {
           registrationNo: f.registrationNo,
           belongsToGroup: f.belongsToGroup || undefined,
           groupName: f.groupName,
+          groupPartyId: f.groupPartyId || undefined,
+          feeCoverage: f.feeCoverage || undefined,
           memberCount: f.memberCount ? Number(f.memberCount) : undefined,
           hasKraPin: f.hasKraPin || undefined,
         });
@@ -157,6 +209,20 @@ export function JoinFlow() {
       const res = await actionSearchWork(v);
       setHits(res);
       announce(res.length ? `${res.length} matches` : 'No listed match — Esoko is still for you');
+    }, 200);
+  }
+
+  /* ── group search ── */
+  const groupSearchTimer = useRef<ReturnType<typeof setTimeout>>(undefined);
+  function onGroupInput(v: string) {
+    set('groupName', v);
+    set('groupPartyId', '');
+    clearTimeout(groupSearchTimer.current);
+    if (v.trim().length < 2) { setGroupHits([]); return; }
+    groupSearchTimer.current = setTimeout(async () => {
+      const res = await actionSearchGroups(v);
+      setGroupHits(res);
+      announce(res.length ? `${res.length} matching groups` : 'No match — you can still enter the name');
     }, 200);
   }
 
@@ -238,6 +304,19 @@ export function JoinFlow() {
 
   return (
     <>
+      {resumable && step === 1 && (
+        <div className="qcard" role="status" style={{ marginBottom: 14 }}>
+          <p className="qs" style={{ margin: 0 }}>
+            You have a registration in progress from this device
+            {resumable.f.officialName ? `, started as ${resumable.f.officialName}` : ''}.
+          </p>
+          <div className="nav" style={{ marginTop: 12 }}>
+            <button type="button" className="btn btn-o" onClick={startFresh}>Start over</button>
+            <button type="button" className="btn btn-p" onClick={resume}>Continue where I left off</button>
+          </div>
+        </div>
+      )}
+
       <div className="pbar" role="presentation">
         {Array.from({ length: TOTAL_QUESTIONS + 1 }, (_, i) => (
           <span key={i} className={i < Math.min(step, TOTAL_QUESTIONS + 1) ? 'on' : ''} />
@@ -303,11 +382,20 @@ export function JoinFlow() {
                 </div>
                 <div className="fld">
                   <label className="lab" htmlFor="orgRole">Your role in the group</label>
-                  <select className="inp" id="orgRole" value={f.orgRole}
-                    onChange={(e) => set('orgRole', e.target.value)}>
+                  <select className="inp" id="orgRole" value={orgRoleOther ? 'Other' : f.orgRole}
+                    onChange={(e) => {
+                      if (e.target.value === 'Other') { setOrgRoleOther(true); set('orgRole', ''); }
+                      else { setOrgRoleOther(false); set('orgRole', e.target.value); }
+                    }}>
                     <option>Chairperson</option><option>Treasurer</option>
                     <option>Secretary</option><option>Member</option>
+                    <option>Other</option>
                   </select>
+                  {orgRoleOther && (
+                    <input className="inp" style={{ marginTop: 8 }} value={f.orgRole} maxLength={40}
+                      onChange={(e) => set('orgRole', e.target.value)}
+                      placeholder="What the group calls this role" autoFocus />
+                  )}
                 </div>
                 <div className="sub2" />
               </>
@@ -482,12 +570,45 @@ export function JoinFlow() {
                   ))}
                 </div>
                 {f.belongsToGroup === 'yes' && (
-                  <div className="fld" style={{ marginTop: 15 }}>
-                    <label className="lab" htmlFor="groupName">Name of the group</label>
-                    <input className="inp" id="groupName" value={f.groupName}
-                      onChange={(e) => set('groupName', e.target.value)} placeholder="As people know it" />
-                    <p className="hint">If the group is already on Esoko, its treasurer can link you to it.</p>
-                  </div>
+                  <>
+                    <div className="fld" style={{ marginTop: 15 }}>
+                      <label className="lab" htmlFor="groupName">Name of the group</label>
+                      <input className="inp" id="groupName" value={f.groupName} autoComplete="off"
+                        role="combobox" aria-expanded={groupHits.length > 0} aria-controls="group-hits"
+                        onChange={(e) => onGroupInput(e.target.value)} placeholder="Search or type the name" />
+                      <div className="hits" id="group-hits" role="listbox" aria-label="Matching groups">
+                        {groupHits.map((g) => (
+                          <button key={g.id} type="button" className="hit" role="option"
+                            aria-selected={f.groupPartyId === g.id}
+                            onClick={() => {
+                              set('groupName', g.name); set('groupPartyId', g.id); setGroupHits([]);
+                            }}>
+                            <span>{g.name} <span className="op">— {g.county}</span></span>
+                            <span className="yes">SELECT</span>
+                          </button>
+                        ))}
+                      </div>
+                      <p className="hint">
+                        {f.groupPartyId
+                          ? 'Linked — Esoko will connect your record to this group.'
+                          : 'Pick it from the list if it shows up, or just type the name. Its treasurer can link you later either way.'}
+                      </p>
+                    </div>
+
+                    <fieldset style={{ border: 0, padding: 0, margin: '15px 0 0' }}>
+                      <legend className="lab">Has your group already paid your registration fee?</legend>
+                      <div className="opts">
+                        {([['group', 'Yes, the group covers it', 'Nothing more to do here'],
+                           ['self', 'No, I paid it myself', 'You will enter the payment details next']] as const)
+                          .map(([v, t, d]) => (
+                          <button key={v} type="button" className="opt" aria-pressed={f.feeCoverage === v}
+                            onClick={() => set('feeCoverage', v)}>
+                            <span><span className="t">{t}</span><span className="d">{d}</span></span>
+                          </button>
+                        ))}
+                      </div>
+                    </fieldset>
+                  </>
                 )}
               </fieldset>
             )}
@@ -502,6 +623,7 @@ export function JoinFlow() {
           <PaymentStep
             registrationId={regId}
             choice={f.paymentChoice}
+            feeCoveredByGroup={f.feeCoverage === 'group'}
             onChoice={(c) => set('paymentChoice', c)}
           />
         )}

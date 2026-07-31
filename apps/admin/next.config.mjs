@@ -3,7 +3,13 @@ const nextConfig = {
   reactStrictMode: true,
   poweredByHeader: false,
   transpilePackages: ['@esoko/ui', '@esoko/a11y', '@esoko/domain'],
-  experimental: { typedRoutes: true },
+  typedRoutes: true,
+
+  // Same 10MB document uploads (group docs, walk-in registration docs) go
+  // through Server Actions here too — see apps/app/next.config.mjs.
+  experimental: {
+    serverActions: { bodySizeLimit: '11mb' },
+  },
 
   /**
    * Security headers are set HERE and again at the CDN.
@@ -16,7 +22,7 @@ const nextConfig = {
     return [{
       source: '/:path*',
       headers: [
-        { key: 'X-Frame-Options', value: 'DENY' },
+        { key: 'X-Frame-Options', value: 'SAMEORIGIN' },
         { key: 'X-Content-Type-Options', value: 'nosniff' },
         { key: 'Referrer-Policy', value: 'strict-origin-when-cross-origin' },
         { key: 'Permissions-Policy', value: 'camera=(), microphone=(), geolocation=(self)' },

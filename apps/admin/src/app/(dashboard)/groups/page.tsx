@@ -1,5 +1,5 @@
 import { Icon } from '@esoko/ui';
-import { listGroups } from '@esoko/db';
+import { listGroups, DOCUMENT_KINDS } from '@esoko/db';
 import { requireStaff } from '@/lib/session';
 import { GroupManager } from './GroupManager';
 
@@ -12,6 +12,7 @@ export default async function GroupsPage({
   const sp = await searchParams;
   const groups = await listGroups(ctx, { search: sp.q });
   const canEdit = ctx.capabilities.includes('*') || ctx.capabilities.includes('membership.write');
+  const canUploadDocs = ctx.capabilities.includes('*') || ctx.capabilities.includes('document.write');
 
   return (
     <>
@@ -61,6 +62,8 @@ export default async function GroupsPage({
           })),
         }))}
         canEdit={canEdit}
+        canUploadDocs={canUploadDocs}
+        documentKinds={DOCUMENT_KINDS as unknown as [string, string][]}
       />
     </>
   );

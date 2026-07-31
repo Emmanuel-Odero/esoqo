@@ -70,6 +70,7 @@ model Party {
   consentsGiven ConsentGrant[] @relation("ConsentSubject")
   documents    Document[]
   registration Registration?
+  groupJoinRegistrations Registration[] @relation("RegistrationGroupParty")
 
   @@index([county, kind])
   @@index([createdAt])
@@ -476,6 +477,12 @@ model Registration {
   registrationNo String?
   belongsToGroup String?
   groupName      String?
+  /// Set when the joiner picked an existing group from the search, not
+  /// just typed a name — this is what actually links them via Membership.
+  groupPartyId   String?  @db.Uuid
+  groupParty     Party?   @relation("RegistrationGroupParty", fields: [groupPartyId], references: [id])
+  /// "group" | "self" — only asked when belongsToGroup is "yes".
+  feeCoverage    String?
   hasKraPin      String?
 
   /// Explicit opt-ins. Nothing is sent that was not asked for.
@@ -524,8 +531,8 @@ model RegistrationPayment {
   declaredAt   DateTime?
   status       PaymentStatus  @default(NOT_DECLARED)
   confirmedAt  DateTime?
-  createdAt    DateTime     @default(now())
-  updatedAt    DateTime     @updatedAt
+  createdAt    DateTime     @default(now()) @map("created_at")
+  updatedAt    DateTime     @updatedAt @map("updated_at")
 
   approvals PaymentApproval[]
 

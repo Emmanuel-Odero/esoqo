@@ -64,8 +64,15 @@ export async function verifyCertificate(_ctx: Ctx, code: string): Promise<Verify
 
   // The printed code is the attestation id's short form. Matching on a
   // prefix keeps the printed code short enough to type on a bad day.
-  const att = await prisma.attestation.findFirst({
-    where: { id: { startsWith: clean.replace(/-/g, '').toLowerCase() } },
+  const prefix = clean.replace(/-/g, '').toLowerCase();
+  const matches = await prisma.$queryRaw<{ id: string }[]>`
+    SELECT id FROM attestation WHERE replace(id::text, '-', '') ILIKE ${prefix + '%'} LIMIT 1
+  `;
+  const match = matches[0];
+  if (!match) return EMPTY;
+
+  const att = await prisma.attestation.findUnique({
+    where: { id: match.id },
     include: {
       issuer: true,
       subject: { include: { person: true, organisation: true } },

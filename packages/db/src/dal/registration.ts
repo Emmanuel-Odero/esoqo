@@ -38,11 +38,25 @@ export interface UpdateRegistrationInput {
   registrationNo?: string;
   belongsToGroup?: string;
   groupName?: string;
+  groupPartyId?: string;
+  feeCoverage?: string;
   hasKraPin?: string;
   wantsPriceSms?: boolean;
   wantsReceiptSms?: boolean;
   wantsExpirySms?: boolean;
   ussdSetupChoice?: 'now' | 'later';
+}
+
+/** Maps the free-typed "role in the group" onto the fixed Membership
+ *  enum. A custom role (e.g. "Auditor") has nowhere to live on the strict
+ *  enum, so it defaults to MEMBER — the typed text itself stays visible
+ *  on Registration.orgRole for admin/history. */
+function toMemberRole(orgRole: string | null | undefined): MemberRole {
+  const known: Record<string, MemberRole> = {
+    chairperson: 'CHAIRPERSON', treasurer: 'TREASURER',
+    secretary: 'SECRETARY', member: 'MEMBER',
+  };
+  return known[orgRole?.trim().toLowerCase() ?? ''] ?? 'MEMBER';
 }
 
 /* ── writes ─────────────────────────────────────────────────── */
@@ -198,8 +212,15 @@ export async function completeRegistration(ctx: Ctx, id: string) {
         data: {
           personId: personParty.id,
           orgId: orgParty.id,
-          role: (reg.orgRole?.toUpperCase() ?? 'MEMBER') as MemberRole,
+          role: toMemberRole(reg.orgRole),
         },
+      });
+    }
+
+    // 2b · linking to an existing group, for someone joining on their own
+    if (reg.joiningAs !== 'group' && reg.belongsToGroup === 'yes' && reg.groupPartyId) {
+      await tx.membership.create({
+        data: { personId: personParty.id, orgId: reg.groupPartyId, role: 'MEMBER' },
       });
     }
 
@@ -268,6 +289,8 @@ export interface ListRegistrationsFilter {
   from?: Date;
   to?: Date;
   search?: string;
+  /** 'organisations' → joiningAs === 'group'; 'individuals' → anything else. */
+  type?: 'individuals' | 'organisations';
   take?: number;
   skip?: number;
 }
@@ -278,6 +301,8 @@ export async function listRegistrations(ctx: Ctx, f: ListRegistrationsFilter = {
   const where = {
     ...(f.status ? { status: f.status } : {}),
     ...(f.county ? { county: f.county } : {}),
+    ...(f.type === 'organisations' ? { joiningAs: 'group' } : {}),
+    ...(f.type === 'individuals' ? { joiningAs: { not: 'group' } } : {}),
     ...(f.from || f.to
       ? { startedAt: { ...(f.from ? { gte: f.from } : {}), ...(f.to ? { lte: f.to } : {}) } }
       : {}),

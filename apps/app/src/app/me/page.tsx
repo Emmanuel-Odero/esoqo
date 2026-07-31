@@ -21,7 +21,8 @@ export default async function MePage() {
   const p = me.person!;
   const held = me.attestations;
   const has = (t: string) => held.find((a) => a.claimType === t);
-  const group = me.memberships[0]?.org;
+  const membership = me.memberships[0];
+  const group = membership?.org;
 
   const CREDENTIALS = [
     ['MSISDN_VERIFIED', 'Phone number confirmed', 'Esoko', null],
@@ -106,16 +107,16 @@ export default async function MePage() {
         </Link>
       </div>
 
-      {group && (
+      {membership && group && (
         <div className="mcard">
           <h2><Icon name="users" size={18} />Your group</h2>
           <div className="mrow">
             <span className="k">Group</span>
-            <span className="v">{group.organisation?.officialName}</span>
+            <span className="v">{group.officialName}</span>
           </div>
           <div className="mrow">
             <span className="k">Your role</span>
-            <span className="v">{me.memberships[0].role.toLowerCase()}</span>
+            <span className="v">{membership.role.toLowerCase()}</span>
           </div>
           <div className="mrow">
             <span className="k">Members</span>

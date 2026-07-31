@@ -6,7 +6,7 @@ export const metadata: Metadata = {
   title: 'Institutions',
   description: 'Bodies and institutions connected to Esoko, and what each requires.',
 };
-export const revalidate = 3600;
+export const dynamic = 'force-dynamic';
 
 const ICON: Record<string, IconName> = {
   MINISTRY: 'gov', AGENCY: 'building', JUDICIARY: 'scales',

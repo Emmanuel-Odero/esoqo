@@ -14,6 +14,9 @@ export async function getCtx(): Promise<Ctx> {
 /** Page guard for logged-in users on the public site. */
 export async function requireSubject(): Promise<Ctx> {
   const ctx = await getCtx();
-  if (ctx.actorType !== 'SUBJECT' || !ctx.partyId) redirect(`${process.env.NEXT_PUBLIC_APP_URL ?? 'http://localhost:3001'}/signin`);
+  if (ctx.actorType !== 'SUBJECT' || !ctx.partyId) {
+    const target = `${process.env.NEXT_PUBLIC_APP_URL ?? 'http://localhost:3001'}/signin`;
+    redirect(target as Parameters<typeof redirect>[0]);
+  }
   return ctx;
 }

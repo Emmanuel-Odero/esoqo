@@ -8,15 +8,16 @@ export const dynamic = 'force-dynamic';
 
 export default async function RegistrationsPage({
   searchParams,
-}: { searchParams: Promise<{ q?: string; county?: string; status?: string; page?: string }> }) {
+}: { searchParams: Promise<{ q?: string; county?: string; status?: string; page?: string; type?: string }> }) {
   const ctx = await requireStaff();
   const sp = await searchParams;
   const page = Math.max(1, Number(sp.page ?? 1));
   const take = 25;
+  const type = sp.type === 'organisations' || sp.type === 'individuals' ? sp.type : undefined;
 
   const [{ rows, total }, overview] = await Promise.all([
     listRegistrations(ctx, {
-      search: sp.q, county: sp.county, status: sp.status as never,
+      search: sp.q, county: sp.county, status: sp.status as never, type,
       take, skip: (page - 1) * take,
     }),
     getOverview(ctx),
@@ -72,10 +73,15 @@ export default async function RegistrationsPage({
         page={page}
         pages={Math.max(1, Math.ceil(total / take))}
         counties={[...COUNTIES]}
+        type={type}
+        q={sp.q ?? ''}
+        county={sp.county ?? ''}
+        status={sp.status ?? ''}
         canEdit={can('registration.write')}
         canVoid={can('registration.void')}
         canCreate={can('registration.create')}
         canSeePii={can('party.pii')}
+        canRecordPayment={can('payment.record')}
       />
     </>
   );

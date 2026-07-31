@@ -85,6 +85,7 @@ function matches(held: Capability, wanted: Capability, ctx: Ctx, opts?: Record<s
 
   if (hQual.includes('=')) {
     const [k, v] = hQual.split('=');
+    if (!k) return false;
     return String(opts?.[k]) === v;
   }
 

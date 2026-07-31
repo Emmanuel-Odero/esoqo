@@ -15,7 +15,7 @@ export function SignInForm() {
         </label>
         <input className="si-inp" id="email" name="email" type="email"
           autoComplete="email" placeholder="you@example.com" required
-          aria-invalid={state?.field === 'email' ? true : undefined} />
+          aria-invalid={state && !state.ok && state.field === 'email' ? true : undefined} />
       </div>
 
       <div className="si-fld">
@@ -25,11 +25,11 @@ export function SignInForm() {
         <input className="si-inp si-mono" id="pin" name="pin" type="password"
           maxLength={6} inputMode="numeric" autoComplete="current-password"
           placeholder="000000" required
-          aria-invalid={state?.field === 'pin' ? true : undefined} />
+          aria-invalid={state && !state.ok && state.field === 'pin' ? true : undefined} />
         <p className="si-hint">Six-digit PIN provided by your administrator</p>
       </div>
 
-      {state?.error && (
+      {state && !state.ok && (
         <div className="si-err" role="alert">
           <Icon name="alert-circle" size={16} />{state.error}
         </div>

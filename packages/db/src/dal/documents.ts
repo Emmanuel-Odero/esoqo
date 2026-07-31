@@ -1,6 +1,7 @@
 import { prisma } from '../client';
 import { requireCapability, type Ctx } from '../capabilities';
 import { recordAudit } from '../audit';
+import { MAX_BYTES } from '../storage';
 import type { DocumentStatus } from '@prisma/client';
 
 /**
@@ -28,7 +29,6 @@ export const ALLOWED_TYPES = {
 } as const;
 
 export type AllowedMime = keyof typeof ALLOWED_TYPES;
-export const MAX_BYTES = 10 * 1024 * 1024;
 
 export const DOCUMENT_KINDS = [
   ['NATIONAL_ID', 'National ID'],
@@ -139,7 +139,12 @@ export async function listDocuments(ctx: Ctx, f: DocumentFilter = {}) {
       where,
       include: {
         registration: { select: { id: true, officialName: true, knownAs: true, county: true } },
-        party: { include: { person: { select: { officialName: true, knownAs: true } } } },
+        party: {
+          include: {
+            person: { select: { officialName: true, knownAs: true } },
+            organisation: { select: { officialName: true, knownAs: true } },
+          },
+        },
       },
       orderBy: [{ status: 'asc' }, { uploadedAt: 'desc' }],
       take: f.take ?? 24, skip: f.skip ?? 0,

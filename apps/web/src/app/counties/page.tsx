@@ -7,7 +7,7 @@ export const metadata: Metadata = {
   title: 'County requirements',
   description: 'Permits, licences, fees and offices for Kenyan counties where Esoko works.',
 };
-export const revalidate = 3600;
+export const dynamic = 'force-dynamic';
 
 export default async function CountiesPage() {
   const counties = await listCounties(anonCtx());

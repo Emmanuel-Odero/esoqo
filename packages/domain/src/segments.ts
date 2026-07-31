@@ -163,14 +163,14 @@ export function searchSegments(query: string, limit = 4): Segment[] {
 }
 
 export function resolveSegment(query: string): SegmentMatch {
-  const hits = searchSegments(query, 1);
-  return hits.length
-    ? { segment: hits[0], affirmed: true }
+  const [hit] = searchSegments(query, 1);
+  return hit
+    ? { segment: hit, affirmed: true }
     : { segment: null, affirmed: true, freeText: query.trim() };
 }
 
 export function papersFor(query: string): string[] {
   const m = resolveSegment(query);
   const keys = m.segment?.papers ?? ['P', 'B', 'C'];
-  return keys.map((k) => PAPER_LABELS[k]).filter(Boolean);
+  return keys.map((k) => PAPER_LABELS[k]).filter((v): v is string => Boolean(v));
 }
