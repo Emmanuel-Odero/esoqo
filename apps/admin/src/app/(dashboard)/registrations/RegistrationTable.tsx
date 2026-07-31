@@ -8,7 +8,7 @@ import { useAnnounce } from '@esoko/a11y';
 import { maskMsisdn } from '@esoko/domain';
 import {
   actionGetDetail, actionEdit, actionVoid, actionRestore,
-  actionRecordPayment, actionAmendPayment,
+  actionRecordPayment, actionAmendPayment, actionAssignUserPin,
 } from './actions';
 import WalkInFlow from './WalkInFlow';
 
@@ -31,11 +31,11 @@ const JOINING = { me: 'Individual', group: 'Group', biz: 'Business' } as const;
 
 export function RegistrationTable({
   rows, total, page, pages, counties, canEdit, canVoid, canCreate, canSeePii, canRecordPayment,
-  type, q, county, status,
+  canAssignUser, type, q, county, status,
 }: {
   rows: Row[]; total: number; page: number; pages: number; counties: string[];
   canEdit: boolean; canVoid: boolean; canCreate: boolean; canSeePii: boolean;
-  canRecordPayment: boolean;
+  canRecordPayment: boolean; canAssignUser: boolean;
   type?: 'individuals' | 'organisations'; q: string; county: string; status: string;
 }) {
   const [openId, setOpenId] = useState<string | null>(null);
@@ -160,7 +160,7 @@ export function RegistrationTable({
 
       {openId && (
         <DetailDrawer id={openId} canEdit={canEdit} canVoid={canVoid} canSeePii={canSeePii}
-          canRecordPayment={canRecordPayment} onClose={() => setOpenId(null)} />
+          canRecordPayment={canRecordPayment} canAssignUser={canAssignUser} onClose={() => setOpenId(null)} />
       )}
       {creating && <WalkInFlow counties={counties} onClose={() => setCreating(false)} />}
     </>
@@ -172,19 +172,20 @@ export function RegistrationTable({
 type Detail = Awaited<ReturnType<typeof actionGetDetail>>;
 
 function DetailDrawer({
-  id, canEdit, canVoid, canSeePii, canRecordPayment, onClose,
+  id, canEdit, canVoid, canSeePii, canRecordPayment, canAssignUser, onClose,
 }: {
   id: string; canEdit: boolean; canVoid: boolean; canSeePii: boolean;
-  canRecordPayment: boolean; onClose: () => void;
+  canRecordPayment: boolean; canAssignUser: boolean; onClose: () => void;
 }) {
   const [d, setD] = useState<Detail>(null);
-  const [tab, setTab] = useState<'record' | 'payment' | 'documents'>('record');
+  const [tab, setTab] = useState<'record' | 'payment' | 'documents' | 'account'>('record');
   const [editing, setEditing] = useState(false);
   const [voiding, setVoiding] = useState(false);
   const [reason, setReason] = useState('');
   const [form, setForm] = useState<Record<string, string>>({});
   const [error, setError] = useState<string | null>(null);
   const [pending, start] = useTransition();
+  const [tempPin, setTempPin] = useState<string | null>(null);
   const announce = useAnnounce();
 
   const [payingForm, setPayingForm] = useState(false);
@@ -235,6 +236,15 @@ function DetailDrawer({
       const r = await actionRestore(id);
       if (r.ok) { announce('Registration restored', 'assertive'); void load(); }
       else setError(r.error);
+    });
+  }
+
+  function assignPin(personId: string) {
+    setError(null);
+    start(async () => {
+      const r = await actionAssignUserPin(personId);
+      if (r.ok) { setTempPin(r.data.tempPin); announce('Login PIN assigned', 'assertive'); }
+      else { setError(r.error); announce(r.error, 'assertive'); }
     });
   }
 
@@ -297,7 +307,8 @@ function DetailDrawer({
 
         <div style={{ display: 'flex', gap: 2, padding: '0 24px', borderBottom: '1px solid var(--line)' }}
           role="tablist" aria-label="Sections">
-          {([['record', 'Record'], ['payment', 'Payment'], ['documents', `Documents (${d.documents.length})`]] as const)
+          {([['record', 'Record'], ['payment', 'Payment'], ['documents', `Documents (${d.documents.length})`],
+             ['account', 'Account']] as const)
             .map(([k, label]) => (
             <button key={k} role="tab" aria-selected={tab === k} onClick={() => setTab(k)}
               style={{
@@ -476,6 +487,57 @@ function DetailDrawer({
                   </a>
                 ))}
               </div>
+            )
+          )}
+
+          {tab === 'account' && (
+            !d.party?.person ? (
+              <div className="empty">
+                <span className="ico"><Icon name="user" size={22} /></span>
+                <h3>No system account yet</h3>
+                <p style={{ margin: 0 }}>
+                  This registration has not completed, so there is no person record to assign a
+                  login PIN to.
+                </p>
+              </div>
+            ) : tempPin ? (
+              <>
+                <p className="pill p-ok" style={{ padding: '10px 13px', marginBottom: 16 }}>
+                  <Icon name="check-circle" size={14} />PIN assigned
+                </p>
+                <p>
+                  Give <strong>{name}</strong> this PIN. It is shown once and never stored in
+                  readable form.
+                </p>
+                <p className="mono" style={{ fontSize: '2rem', letterSpacing: '.4em', textAlign: 'center', padding: '18px 0', background: 'var(--paper)', borderRadius: 10, margin: '14px 0' }}>
+                  {tempPin}
+                </p>
+                <p className="sub">Do not send this by SMS or email. Hand it over in person or by phone.</p>
+              </>
+            ) : (
+              <>
+                <table className="tbl" style={{ marginBottom: 18 }}>
+                  <tbody>
+                    <tr><td className="sub" style={{ width: 190 }}>Login PIN</td>
+                      <td>
+                        <span className={`pill ${d.party.person.credential?.pinHash ? 'p-ok' : 'p-mute'}`}>
+                          {d.party.person.credential?.pinHash ? 'Assigned' : 'Not assigned'}
+                        </span>
+                      </td></tr>
+                    {d.party.person.credential?.pinSetAt && (
+                      <tr><td className="sub">Set</td>
+                        <td>{new Date(d.party.person.credential.pinSetAt).toLocaleString('en-KE')}</td></tr>
+                    )}
+                  </tbody>
+                </table>
+                {canAssignUser && (
+                  <button className="btn btn-p btn-sm" disabled={pending}
+                    onClick={() => assignPin(d.party!.person!.partyId)}>
+                    <Icon name="key" size={13} />
+                    {d.party.person.credential?.pinHash ? 'Reset login PIN' : 'Assign login PIN'}
+                  </button>
+                )}
+              </>
             )
           )}
 

@@ -4,9 +4,10 @@ import {
   updateRegistration, voidRegistration, restoreRegistration,
   createRegistrationForPerson, getRegistrationDetail,
   createDocument, listDocumentsForRegistration,
-  declarePayment, recordPayment,
+  declarePayment, recordPayment, assignUserPin,
   sniff, makeStorageKey, safeName, sha256, putObject, MAX_BYTES,
 } from '@esoko/db';
+import { hashPin } from '@esoko/auth';
 
 type PayMethod = 'MPESA' | 'BANK_TRANSFER' | 'CASH_TO_AGENT';
 export interface PaymentInput {
@@ -112,6 +113,18 @@ export async function actionAmendPayment(paymentId: string, input: PaymentInput 
     revalidatePath('/registrations');
     revalidatePath('/payments');
     return { ok: true, data: undefined };
+  } catch (e) { return fail(e); }
+}
+
+/** Assigns (or resets) a login PIN for the person this registration became.
+ *  The temp PIN is returned once, shown once, never stored in plaintext. */
+export async function actionAssignUserPin(personId: string): Promise<Result<{ tempPin: string }>> {
+  try {
+    const ctx = await requireStaff();
+    const tempPin = String(Math.floor(100000 + Math.random() * 900000));
+    await assignUserPin(ctx, personId, await hashPin(tempPin));
+    revalidatePath('/registrations');
+    return { ok: true, data: { tempPin } };
   } catch (e) { return fail(e); }
 }
 

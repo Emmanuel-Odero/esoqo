@@ -67,6 +67,31 @@ export async function listParties(ctx: Ctx, f: ListPartiesFilter = {}) {
 }
 
 /**
+ * Assigns (or resets) the login PIN for a person who already exists as a
+ * Party — walk-in and agent-assisted registrants complete without ever
+ * setting one themselves. Upserts UserCredential since the row may not
+ * exist yet; either way it overwrites pinHash and clears any lockout,
+ * so this doubles as the "reset" action once one already exists.
+ */
+export async function assignUserPin(ctx: Ctx, personId: string, pinHash: string) {
+  requireCapability(ctx, 'party.credential', { partyId: personId });
+
+  const person = await prisma.person.findUnique({ where: { partyId: personId } });
+  if (!person) throw new Error('No person record to assign a PIN to');
+
+  const credential = await prisma.userCredential.upsert({
+    where: { personId },
+    create: { personId, pinHash, pinSetAt: new Date() },
+    update: { pinHash, pinSetAt: new Date(), failedAttempts: 0, lockedUntil: null },
+  });
+
+  await recordAudit(ctx, {
+    action: 'party.pin_assigned', targetType: 'party', targetId: personId,
+  });
+  return credential;
+}
+
+/**
  * DPA erasure. Soft-deletes the party and scrubs direct identifiers,
  * keeping the audit chain intact — the chain is a legal record and
  * breaking it to satisfy an erasure request would be a worse failure.

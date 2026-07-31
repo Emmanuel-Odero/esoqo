@@ -82,6 +82,7 @@ export default async function RegistrationsPage({
         canCreate={can('registration.create')}
         canSeePii={can('party.pii')}
         canRecordPayment={can('payment.record')}
+        canAssignUser={can('party.credential')}
       />
     </>
   );

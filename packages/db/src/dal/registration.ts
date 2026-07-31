@@ -409,7 +409,12 @@ export async function getRegistrationDetail(ctx: Ctx, id: string) {
         },
       },
       documents: { where: { deletedAt: null }, orderBy: { uploadedAt: 'desc' } },
-      party: { include: { person: true, enterprises: true, attestations: true } },
+      party: {
+        include: {
+          person: { include: { credential: { select: { pinHash: true, pinSetAt: true } } } },
+          enterprises: true, attestations: true,
+        },
+      },
     },
   });
   if (!reg) return null;
