@@ -51,7 +51,7 @@ export default async function MePage() {
         <div className="mrow">
           <span className="k">Phone</span>
           <span className="v mono">
-            {formatMsisdn(p.msisdn)}{' '}
+            {p.msisdn ? formatMsisdn(p.msisdn) : 'Not on file'}{' '}
             {p.msisdnVerifiedAt
               ? <span className="badge b-ok"><Icon name="check" size={11} />Confirmed</span>
               : <span className="badge b-warn">Not confirmed</span>}

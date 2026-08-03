@@ -85,8 +85,10 @@ model Person {
   officialName String
   /// What people actually call them. This is what the product uses day to day.
   knownAs      String?
-  /// MSISDN in E.164. THE identifier. Unique across the system.
-  msisdn       String  @unique
+  /// MSISDN in E.164. THE identifier for anyone who can log in, dial USSD
+  /// or receive SMS. Null means a staff-added member with no phone on
+  /// file yet — pending until someone fills it in.
+  msisdn       String? @unique
   /// SHA-256 of the national ID number. The raw number is never stored.
   nationalIdHash String? @unique
   email        String? @db.Citext

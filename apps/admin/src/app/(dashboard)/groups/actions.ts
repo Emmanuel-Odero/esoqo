@@ -1,7 +1,7 @@
 'use server';
 import { revalidatePath } from 'next/cache';
 import {
-  addMember, setMemberRole, removeMember, searchAddablePeople, type MemberRole,
+  addMember, addNewMember, setMemberRole, removeMember, searchAddablePeople, type MemberRole,
   createDocument, listDocumentsForParty,
   sniff, makeStorageKey, safeName, sha256, putObject, MAX_BYTES,
 } from '@esoko/db';
@@ -31,6 +31,18 @@ export async function actionAddMember(
   try {
     const ctx = await requireStaff();
     await addMember(ctx, orgPartyId, personPartyId, role);
+    revalidatePath('/groups');
+    return { ok: true };
+  } catch (e) { return fail(e); }
+}
+
+export async function actionAddNewMember(
+  orgPartyId: string, officialName: string, msisdn: string, role: MemberRole,
+): Promise<Result> {
+  try {
+    const ctx = await requireStaff();
+    if (!officialName.trim()) return { ok: false, error: 'Enter a name' };
+    await addNewMember(ctx, orgPartyId, { officialName, msisdn: msisdn || undefined }, role);
     revalidatePath('/groups');
     return { ok: true };
   } catch (e) { return fail(e); }

@@ -6,7 +6,7 @@ import type { Route } from 'next';
 import { Icon, type IconName } from '@esoko/ui';
 import { useAnnounce } from '@esoko/a11y';
 import {
-  actionSearchPeople, actionAddMember, actionSetRole, actionRemoveMember,
+  actionSearchPeople, actionAddMember, actionAddNewMember, actionSetRole, actionRemoveMember,
   actionUploadGroupDocument, actionListGroupDocuments,
 } from './actions';
 
@@ -165,11 +165,11 @@ function GroupDetail({
   return (
     <>
       <div className="card">
-        <div style={{ display: 'flex', gap: 14, alignItems: 'flex-start', marginBottom: 18 }}>
+        <div style={{ display: 'flex', gap: 14, alignItems: 'flex-start', marginBottom: 18, flexWrap: 'wrap' }}>
           <span style={{ width: 42, height: 42, borderRadius: 11, background: 'var(--blue-t)', color: 'var(--blue)', display: 'grid', placeItems: 'center', flex: 'none' }}>
             <Icon name="handshake" size={21} />
           </span>
-          <div style={{ flex: 1 }}>
+          <div style={{ flex: '1 1 200px', minWidth: 0 }}>
             <h2 style={{ marginBottom: 3 }}>{group.name}</h2>
             <p className="sub" style={{ margin: 0 }}>
               {group.knownAs && <>Known as {group.knownAs} · </>}
@@ -189,7 +189,7 @@ function GroupDetail({
         </div>
 
         {missingOffices.length > 0 && (
-          <p className="pill p-warn" style={{ padding: '10px 13px', marginBottom: 16 }}>
+          <p className="pill p-warn" style={{ padding: '10px 13px', marginBottom: 16, whiteSpace: 'normal' }}>
             <Icon name="alert-circle" size={14} />
             No {missingOffices.map((o) => (ROLE_LABEL[o] ?? o).toLowerCase()).join(' or ')} recorded.
             A group needs office-bearers before it can vote on a loan.
@@ -250,7 +250,7 @@ function GroupDetail({
         )}
 
         {error && (
-          <p className="pill p-bad" style={{ marginTop: 14, padding: '10px 13px' }} role="alert">
+          <p className="pill p-bad" style={{ marginTop: 14, padding: '10px 13px', whiteSpace: 'normal' }} role="alert">
             <Icon name="alert-circle" size={14} />{error}
           </p>
         )}
@@ -361,9 +361,12 @@ function GroupDetail({
 }
 
 function AddMember({ group, onClose }: { group: Group; onClose: () => void }) {
+  const [mode, setMode] = useState<'search' | 'new'>('search');
   const [q, setQ] = useState('');
   const [hits, setHits] = useState<{ id: string; name: string; official: string; county: string }[]>([]);
   const [picked, setPicked] = useState<{ id: string; name: string } | null>(null);
+  const [newName, setNewName] = useState('');
+  const [newPhone, setNewPhone] = useState('');
   const [role, setRole] = useState<Role>('MEMBER');
   const [error, setError] = useState<string | null>(null);
   const [pending, start] = useTransition();
@@ -390,6 +393,17 @@ function AddMember({ group, onClose }: { group: Group; onClose: () => void }) {
     });
   }
 
+  function addNew() {
+    if (!newName.trim()) return;
+    start(async () => {
+      const r = await actionAddNewMember(group.id, newName, newPhone, role);
+      if (r.ok) { announce(`${newName} added to ${group.name}`, 'assertive'); onClose(); }
+      else setError(r.error);
+    });
+  }
+
+  const canSubmit = mode === 'search' ? Boolean(picked) : Boolean(newName.trim());
+
   return (
     <div className="scrim" role="dialog" aria-modal="true" aria-labelledby="am-title"
       onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}>
@@ -399,64 +413,100 @@ function AddMember({ group, onClose }: { group: Group; onClose: () => void }) {
           <button className="x" onClick={onClose} aria-label="Close"><Icon name="close" size={18} /></button>
         </div>
         <div className="modal-bd">
-          <p className="sub" style={{ marginBottom: 14 }}>
-            Search people already on Esoko. Someone who has not joined yet needs a registration
-            first.
-          </p>
-
-          <div className="srch" style={{ marginBottom: 12 }}>
-            <span className="mg"><Icon name="search" size={16} /></span>
-            <input className="inp" value={q} onChange={(e) => search(e.target.value)}
-              aria-label="Search people" aria-expanded={hits.length > 0}
-              placeholder="Name or phone number…" />
+          <div role="tablist" aria-label="How to add them" className="ctl" style={{ marginBottom: 14 }}>
+            <button type="button" role="tab" aria-selected={mode === 'search'}
+              className={`btn btn-sm ${mode === 'search' ? 'btn-p' : 'btn-o'}`}
+              onClick={() => { setMode('search'); setError(null); }}>
+              <Icon name="search" size={13} />Search existing
+            </button>
+            <button type="button" role="tab" aria-selected={mode === 'new'}
+              className={`btn btn-sm ${mode === 'new' ? 'btn-p' : 'btn-o'}`}
+              onClick={() => { setMode('new'); setError(null); }}>
+              <Icon name="plus" size={13} />Type a new member
+            </button>
           </div>
 
-          {hits.length > 0 && (
-            <div role="listbox" aria-label="Search results" style={{ marginBottom: 14 }}>
-              {hits.map((h) => (
-                <button key={h.id} role="option" aria-selected={picked?.id === h.id}
-                  onClick={() => { setPicked({ id: h.id, name: h.name }); setQ(h.name); setHits([]); }}
-                  style={{
-                    display: 'flex', width: '100%', textAlign: 'left', gap: 10,
-                    padding: '11px 13px', border: '1px solid var(--line)', borderRadius: 8,
-                    marginBottom: 6, background: '#fff', cursor: 'pointer', fontFamily: 'inherit',
-                  }}>
-                  <span style={{ flex: 1 }}>
-                    <strong style={{ fontSize: '.9rem' }}>{h.name}</strong>
-                    <span className="sub" style={{ display: 'block', fontSize: '.79rem' }}>
-                      {h.official} · {h.county}
-                    </span>
-                  </span>
-                  <span className="pill p-ok">Select</span>
-                </button>
-              ))}
-            </div>
-          )}
-
-          {picked && (
+          {mode === 'search' ? (
             <>
-              <p className="pill p-ok" style={{ padding: '10px 13px', marginBottom: 14 }}>
-                <Icon name="check-circle" size={14} />Adding {picked.name}
+              <p className="sub" style={{ marginBottom: 14 }}>
+                Search people already on Esoko.
               </p>
-              <label className="sub" htmlFor="am-role" style={{ display: 'block', marginBottom: 6 }}>
-                Role in the group
+
+              <div className="srch" style={{ marginBottom: 12 }}>
+                <span className="mg"><Icon name="search" size={16} /></span>
+                <input className="inp" value={q} onChange={(e) => search(e.target.value)}
+                  aria-label="Search people" aria-expanded={hits.length > 0}
+                  placeholder="Name or phone number…" />
+              </div>
+
+              {hits.length > 0 && (
+                <div role="listbox" aria-label="Search results" style={{ marginBottom: 14 }}>
+                  {hits.map((h) => (
+                    <button key={h.id} role="option" aria-selected={picked?.id === h.id}
+                      onClick={() => { setPicked({ id: h.id, name: h.name }); setQ(h.name); setHits([]); }}
+                      style={{
+                        display: 'flex', width: '100%', textAlign: 'left', gap: 10,
+                        padding: '11px 13px', border: '1px solid var(--line)', borderRadius: 8,
+                        marginBottom: 6, background: '#fff', cursor: 'pointer', fontFamily: 'inherit',
+                      }}>
+                      <span style={{ flex: 1 }}>
+                        <strong style={{ fontSize: '.9rem' }}>{h.name}</strong>
+                        <span className="sub" style={{ display: 'block', fontSize: '.79rem' }}>
+                          {h.official} · {h.county}
+                        </span>
+                      </span>
+                      <span className="pill p-ok">Select</span>
+                    </button>
+                  ))}
+                </div>
+              )}
+
+              {picked && (
+                <p className="pill p-ok" style={{ padding: '10px 13px', marginBottom: 14 }}>
+                  <Icon name="check-circle" size={14} />Adding {picked.name}
+                </p>
+              )}
+            </>
+          ) : (
+            <>
+              <p className="sub" style={{ marginBottom: 14 }}>
+                For someone not on Esoko yet — a name is enough to add them as a member. Phone is
+                optional; without one they can't log in, dial in or get SMS until it's added later.
+              </p>
+
+              <label className="sub" htmlFor="am-new-name" style={{ display: 'block', marginBottom: 6 }}>
+                Name
               </label>
-              <select id="am-role" className="inp" style={{ width: '100%' }} value={role}
-                onChange={(e) => setRole(e.target.value as Role)}>
-                {ROLES.map((r) => <option key={r} value={r}>{ROLE_LABEL[r]}</option>)}
-              </select>
+              <input id="am-new-name" className="inp" style={{ width: '100%', marginBottom: 12 }}
+                value={newName} onChange={(e) => setNewName(e.target.value)}
+                placeholder="As they're known in the group" />
+
+              <label className="sub" htmlFor="am-new-phone" style={{ display: 'block', marginBottom: 6 }}>
+                Phone number — optional
+              </label>
+              <input id="am-new-phone" className="inp" style={{ width: '100%', marginBottom: 12 }}
+                value={newPhone} onChange={(e) => setNewPhone(e.target.value)}
+                placeholder="+254 7…" />
             </>
           )}
 
+          <label className="sub" htmlFor="am-role" style={{ display: 'block', marginBottom: 6 }}>
+            Role in the group
+          </label>
+          <select id="am-role" className="inp" style={{ width: '100%' }} value={role}
+            onChange={(e) => setRole(e.target.value as Role)}>
+            {ROLES.map((r) => <option key={r} value={r}>{ROLE_LABEL[r]}</option>)}
+          </select>
+
           {error && (
-            <p className="pill p-bad" style={{ marginTop: 14, padding: '10px 13px' }} role="alert">
+            <p className="pill p-bad" style={{ marginTop: 14, padding: '10px 13px', whiteSpace: 'normal' }} role="alert">
               <Icon name="alert-circle" size={14} />{error}
             </p>
           )}
         </div>
         <div className="modal-ft">
           <button className="btn btn-o" onClick={onClose}>Cancel</button>
-          <button className="btn btn-p" onClick={add} disabled={pending || !picked}>
+          <button className="btn btn-p" onClick={mode === 'search' ? add : addNew} disabled={pending || !canSubmit}>
             <Icon name="plus" size={15} />Add to group
           </button>
         </div>
@@ -529,7 +579,7 @@ function UploadDocument({
             onChange={(e) => setFile(e.target.files?.[0] ?? null)} />
 
           {error && (
-            <p className="pill p-bad" style={{ marginTop: 14, padding: '10px 13px' }} role="alert">
+            <p className="pill p-bad" style={{ marginTop: 14, padding: '10px 13px', whiteSpace: 'normal' }} role="alert">
               <Icon name="alert-circle" size={14} />{error}
             </p>
           )}

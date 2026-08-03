@@ -50,7 +50,7 @@ main { padding:28px 30px 60px; min-width:0 }
 .kpi .sub { font-size:.79rem; color:var(--tx-2); margin-top:5px; display:block }
 
 /* cards & tables */
-.card { background:#fff; border:1px solid var(--line); border-radius:11px; padding:22px }
+.card { background:#fff; border:1px solid var(--line); border-radius:11px; padding:22px; min-width:0 }
 .card > h2 { font-size:1.03rem; margin-bottom:14px; display:flex; align-items:center; gap:8px }
 .grid2 { display:grid; grid-template-columns:1fr 1fr; gap:18px }
 .grid3 { display:grid; grid-template-columns:repeat(3,1fr); gap:18px }
