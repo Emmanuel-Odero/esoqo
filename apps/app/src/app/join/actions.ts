@@ -1,6 +1,7 @@
 'use server';
 
 import { headers } from 'next/headers';
+import { ZodError } from 'zod';
 import {
   startRegistration,
   updateRegistration,
@@ -52,6 +53,10 @@ async function requestCtx(): Promise<Ctx> {
 
 function fail(e: unknown): ActionResult<never> {
   if (e instanceof OtpError) return { ok: false, error: e.message };
+  if (e instanceof ZodError) {
+    const issue = e.issues[0];
+    return { ok: false, error: issue?.message ?? 'Check what you entered and try again.', field: issue?.path[0] as string | undefined };
+  }
   if (e instanceof Error) {
     if ((e as { code?: string }).code === 'MSISDN_TAKEN') {
       return { ok: false, error: 'That number is already registered. Sign in instead.', field: 'msisdn' };
