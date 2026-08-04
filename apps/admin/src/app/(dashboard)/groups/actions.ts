@@ -5,11 +5,14 @@ import {
   createDocument, listDocumentsForParty,
   sniff, makeStorageKey, safeName, sha256, putObject, MAX_BYTES,
 } from '@esoko/db';
+import { toSafeErrorMessage } from '@esoko/domain';
 import { requireStaff } from '@/lib/session';
 
 export type Result = { ok: true } | { ok: false; error: string };
-const fail = (e: unknown): Result =>
-  ({ ok: false, error: e instanceof Error ? e.message : 'That did not work' });
+const fail = (e: unknown): Result => {
+  console.error(e);
+  return { ok: false, error: toSafeErrorMessage(e, "That didn't save. Please try again.") };
+};
 
 export async function actionSearchPeople(orgPartyId: string, q: string) {
   const ctx = await requireStaff();
@@ -90,7 +93,8 @@ export async function actionUploadGroupDocument(form: FormData): Promise<UploadR
       doc: { id: doc.id, title: doc.title, kind: doc.kind, mimeType: doc.mimeType, sizeBytes: doc.sizeBytes },
     };
   } catch (e) {
-    return { ok: false, error: e instanceof Error ? e.message : 'That upload did not work' };
+    console.error(e);
+    return { ok: false, error: toSafeErrorMessage(e, "That upload didn't go through. Check the file and try again.") };
   }
 }
 

@@ -1,6 +1,6 @@
 
 import { prisma } from '../client';
-import { requireCapability, type Ctx } from '../capabilities';
+import { requireCapability, systemCtx, type Ctx } from '../capabilities';
 import { recordAudit } from '../audit';
 import type {
   JoinPath,
@@ -14,6 +14,21 @@ import type {
 
 export interface StartRegistrationInput {
   joiningAs: 'me' | 'group' | 'biz';
+  /// Required so a registration is never persisted before there is a real
+  /// person behind it — an empty shell row that nobody ever finishes is
+  /// not a draft, it's noise (see the July 2026 data cleanup).
+  officialName: string;
+  knownAs?: string;
+  orgName?: string;
+  orgKnownAs?: string;
+  orgRole?: string;
+  /// The join flow now asks group membership before the name is even
+  /// saved, so these can already be known at creation time.
+  belongsToGroup?: string;
+  groupName?: string;
+  groupPartyId?: string;
+  feeCoverage?: string;
+  lastStep?: number;
   language?: string;
   path?: JoinPath;
   agentId?: string;
@@ -45,6 +60,7 @@ export interface UpdateRegistrationInput {
   wantsReceiptSms?: boolean;
   wantsExpirySms?: boolean;
   ussdSetupChoice?: 'now' | 'later';
+  lastStep?: number;
 }
 
 /** Maps the free-typed "role in the group" onto the fixed Membership
@@ -63,10 +79,23 @@ function toMemberRole(orgRole: string | null | undefined): MemberRole {
 
 export async function startRegistration(ctx: Ctx, input: StartRegistrationInput) {
   requireCapability(ctx, 'registration.create');
+  if (!input.officialName?.trim()) {
+    throw new Error('A name is required to start a registration');
+  }
 
   const reg = await prisma.registration.create({
     data: {
       joiningAs: input.joiningAs,
+      officialName: input.officialName.trim(),
+      knownAs: input.knownAs || undefined,
+      orgName: input.orgName || undefined,
+      orgKnownAs: input.orgKnownAs || undefined,
+      orgRole: input.orgRole || undefined,
+      belongsToGroup: input.belongsToGroup || undefined,
+      groupName: input.groupName || undefined,
+      groupPartyId: input.groupPartyId || undefined,
+      feeCoverage: input.feeCoverage || undefined,
+      lastStep: input.lastStep ?? 1,
       language: input.language ?? 'en',
       path: input.path ?? 'SELF_WEB',
       agentId: input.agentId,
@@ -99,7 +128,16 @@ export async function updateRegistration(
     throw new Error('Registration already complete and cannot be edited');
   }
 
-  const reg = await prisma.registration.update({ where: { id }, data: input });
+  // Never move backwards — going "Back" in the flow to edit an earlier
+  // answer must not make a further-along drop-off look like an earlier one.
+  const { lastStep, ...rest } = input;
+  const reg = await prisma.registration.update({
+    where: { id },
+    data: {
+      ...rest,
+      ...(lastStep && lastStep > existing.lastStep ? { lastStep } : {}),
+    },
+  });
 
   // Audit the SHAPE of what changed, never the values. A phone number in
   // an audit payload is a data-protection problem waiting to be found.
@@ -109,6 +147,26 @@ export async function updateRegistration(
     targetId: id,
     payload: { fields: Object.keys(input) },
   });
+
+  // The number just attached is the earliest point we can tell this is
+  // the same person as an existing open attempt (localStorage lost, tab
+  // reopened, "start over" clicked) — auto-void the older one rather than
+  // let duplicates accumulate silently, per the July 2026 data cleanup.
+  if (input.msisdn) {
+    const dupes = await prisma.registration.findMany({
+      where: { msisdn: input.msisdn, status: { not: 'COMPLETE' }, id: { not: id } },
+    });
+    for (const dup of dupes) {
+      await prisma.registration.update({
+        where: { id: dup.id },
+        data: { status: 'ABANDONED', voidedAt: new Date(), voidReason: 'Superseded by a newer attempt with the same phone number' },
+      });
+      await recordAudit(systemCtx('duplicate-supersede'), {
+        action: 'registration.voided', targetType: 'registration', targetId: dup.id,
+        payload: { reason: 'duplicate_msisdn', supersededBy: id },
+      });
+    }
+  }
 
   return reg;
 }
@@ -384,6 +442,9 @@ export async function createRegistrationForPerson(
   input: UpdateRegistrationInput & { joiningAs: 'me' | 'group' | 'biz' },
 ) {
   requireCapability(ctx, 'registration.create');
+  if (!input.officialName?.trim()) {
+    throw new Error('A name is required to start a registration');
+  }
   const reg = await prisma.registration.create({
     data: { ...input, path: 'AGENT_ASSISTED', agentId: ctx.actorId ?? undefined, status: 'STARTED' },
   });
@@ -409,7 +470,16 @@ export async function getRegistrationDetail(ctx: Ctx, id: string) {
         },
       },
       documents: { where: { deletedAt: null }, orderBy: { uploadedAt: 'desc' } },
-      party: { include: { person: true, enterprises: true, attestations: true } },
+      party: {
+        include: {
+          person: { include: { credential: { select: { pinHash: true, pinSetAt: true } } } },
+          enterprises: true, attestations: true,
+          memberships: {
+            where: { exitedAt: null },
+            include: { org: { select: { officialName: true, knownAs: true } } },
+          },
+        },
+      },
     },
   });
   if (!reg) return null;
@@ -418,6 +488,20 @@ export async function getRegistrationDetail(ctx: Ctx, id: string) {
     payment: reg.payment
       ? { ...reg.payment, amountKes: reg.payment.amountKes ? Number(reg.payment.amountKes) : null }
       : null,
+    // The raw Argon2id hash never needs to leave the server — a 4-6
+    // digit PIN behind it is cheaply offline-crackable if it ever does.
+    // Everything the admin UI actually renders is this boolean plus
+    // pinSetAt, so that's all this returns.
+    party: reg.party && {
+      ...reg.party,
+      person: reg.party.person && {
+        ...reg.party.person,
+        credential: {
+          hasPinSet: Boolean(reg.party.person.credential?.pinHash),
+          pinSetAt: reg.party.person.credential?.pinSetAt ?? null,
+        },
+      },
+    },
   };
 }
 

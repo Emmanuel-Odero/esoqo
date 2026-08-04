@@ -1,6 +1,7 @@
 'use server';
 import { revalidatePath } from 'next/cache';
 import { reviewDocument, updateDocument, deleteDocument } from '@esoko/db';
+import { toSafeErrorMessage } from '@esoko/domain';
 import { requireStaff } from '@/lib/session';
 
 export type Result = { ok: true } | { ok: false; error: string };
@@ -14,7 +15,8 @@ export async function actionReview(
     revalidatePath('/documents');
     return { ok: true };
   } catch (e) {
-    return { ok: false, error: e instanceof Error ? e.message : 'Could not review that document' };
+    console.error(e);
+    return { ok: false, error: toSafeErrorMessage(e, "That review didn't save. Please try again.") };
   }
 }
 
@@ -27,7 +29,8 @@ export async function actionUpdate(
     revalidatePath('/documents');
     return { ok: true };
   } catch (e) {
-    return { ok: false, error: e instanceof Error ? e.message : 'Could not update that document' };
+    console.error(e);
+    return { ok: false, error: toSafeErrorMessage(e, "Those changes didn't save. Please try again.") };
   }
 }
 
@@ -39,6 +42,7 @@ export async function actionDelete(id: string, reason: string): Promise<Result> 
     revalidatePath('/documents');
     return { ok: true };
   } catch (e) {
-    return { ok: false, error: e instanceof Error ? e.message : 'Could not delete that document' };
+    console.error(e);
+    return { ok: false, error: toSafeErrorMessage(e, "That document couldn't be deleted. Please try again.") };
   }
 }

@@ -1,6 +1,6 @@
 import { Icon } from '@esoko/ui';
 import {
-  getOverview, getFunnel, getByCounty, getBySegment,
+  getOverview, getFunnel, getStepFunnel, getByCounty, getBySegment,
   getOptInRates, getUssdChoiceSplit, verifyChain,
 } from '@esoko/db';
 import { requireStaff } from '@/lib/session';
@@ -19,10 +19,11 @@ export const dynamic = 'force-dynamic';
 export default async function OverviewPage() {
   const ctx = await requireStaff();
 
-  const [o, funnel, counties, segments, optIn, ussd, chain] = await Promise.all([
-    getOverview(ctx), getFunnel(ctx), getByCounty(ctx), getBySegment(ctx),
+  const [o, funnel, stepFunnel, counties, segments, optIn, ussd, chain] = await Promise.all([
+    getOverview(ctx), getFunnel(ctx), getStepFunnel(ctx), getByCounty(ctx), getBySegment(ctx),
     getOptInRates(ctx), getUssdChoiceSplit(ctx), verifyChain(),
   ]);
+  const maxReached = Math.max(1, ...stepFunnel.map((s) => s.reached));
 
   const maxCounty = Math.max(1, ...counties.map((c) => c.count));
   const maxSeg = Math.max(1, ...segments.map((s) => s.count));
@@ -66,9 +67,37 @@ export default async function OverviewPage() {
         </div>
       </div>
 
+      <div className="card" style={{ marginBottom: 22 }}>
+        <h2>Where people actually drop off</h2>
+        <p className="sub" style={{ marginTop: -6, marginBottom: 14 }}>
+          Furthest step reached in the join flow — a bar shorter than the one above it is where
+          people are leaving. &ldquo;Stuck here&rdquo; is how many are sitting at that step right
+          now, not yet complete.
+        </p>
+        <table className="tbl">
+          <thead><tr><th>Step</th><th>Reached</th><th style={{ width: '35%' }} /><th>Stuck here</th></tr></thead>
+          <tbody>
+            {stepFunnel.map((s) => (
+              <tr key={s.step}>
+                <td>{s.step}. {s.label}</td>
+                <td className="mono">{s.reached}</td>
+                <td>
+                  <div className="bar">
+                    <span style={{ width: `${(s.reached / maxReached) * 100}%` }} />
+                  </div>
+                </td>
+                <td className="mono" style={{ color: s.stuckHere > 0 ? 'var(--amber)' : undefined }}>
+                  {s.stuckHere || '—'}
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+
       <div className="grid2" style={{ marginBottom: 22 }}>
         <div className="card">
-          <h2>Where the funnel leaks</h2>
+          <h2>By status</h2>
           <table className="tbl">
             <thead><tr><th>Stage</th><th>Count</th><th style={{ width: '40%' }} /></tr></thead>
             <tbody>

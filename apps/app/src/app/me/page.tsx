@@ -51,10 +51,10 @@ export default async function MePage() {
         <div className="mrow">
           <span className="k">Phone</span>
           <span className="v mono">
-            {formatMsisdn(p.msisdn)}{' '}
-            {p.msisdnVerifiedAt
+            {p.msisdn ? formatMsisdn(p.msisdn) : 'No phone on file'}{' '}
+            {p.msisdn && (p.msisdnVerifiedAt
               ? <span className="badge b-ok"><Icon name="check" size={11} />Confirmed</span>
-              : <span className="badge b-warn">Not confirmed</span>}
+              : <span className="badge b-warn">Not confirmed</span>)}
           </span>
         </div>
         {p.email && <div className="mrow"><span className="k">Email</span><span className="v">{p.email}</span></div>}

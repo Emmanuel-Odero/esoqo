@@ -1,7 +1,8 @@
 'use server';
 import { revalidatePath } from 'next/cache';
 import { setCapabilities, applyRolePreset, setStaffActive, createStaff, type RoleName } from '@esoko/db';
-import { hashPin } from '@esoko/auth';
+import { hashPin, generateTempPin } from '@esoko/auth';
+import { toSafeErrorMessage } from '@esoko/domain';
 import { requireStaff } from '@/lib/session';
 
 export type Result = { ok: true; data?: unknown } | { ok: false; error: string };
@@ -13,7 +14,8 @@ export async function actionSetCapabilities(staffId: string, capabilities: strin
     revalidatePath('/staff');
     return { ok: true };
   } catch (e) {
-    return { ok: false, error: e instanceof Error ? e.message : 'Could not update permissions' };
+    console.error(e);
+    return { ok: false, error: toSafeErrorMessage(e, "Those permissions didn't save. Try again — if it keeps failing, check whether you still hold the capability you're trying to grant.") };
   }
 }
 
@@ -24,7 +26,8 @@ export async function actionApplyPreset(staffId: string, preset: string): Promis
     revalidatePath('/staff');
     return { ok: true };
   } catch (e) {
-    return { ok: false, error: e instanceof Error ? e.message : 'Could not apply that role' };
+    console.error(e);
+    return { ok: false, error: toSafeErrorMessage(e, "That role didn't apply. Please try again.") };
   }
 }
 
@@ -35,7 +38,8 @@ export async function actionSetActive(staffId: string, active: boolean, reason?:
     revalidatePath('/staff');
     return { ok: true };
   } catch (e) {
-    return { ok: false, error: e instanceof Error ? e.message : 'Could not change that account' };
+    console.error(e);
+    return { ok: false, error: toSafeErrorMessage(e, "That account status didn't change. Please try again.") };
   }
 }
 
@@ -45,7 +49,7 @@ export async function actionCreateStaff(input: {
 }): Promise<Result> {
   try {
     const ctx = await requireStaff();
-    const tempPin = String(Math.floor(100000 + Math.random() * 900000));
+    const tempPin = generateTempPin();
     await createStaff(ctx, {
       email: input.email, name: input.name,
       rolePreset: input.rolePreset as RoleName,
@@ -55,6 +59,7 @@ export async function actionCreateStaff(input: {
     // Returned once, shown once. Never stored in plaintext.
     return { ok: true, data: { tempPin } };
   } catch (e) {
-    return { ok: false, error: e instanceof Error ? e.message : 'Could not create that account' };
+    console.error(e);
+    return { ok: false, error: toSafeErrorMessage(e, "That account wasn't created — check the email isn't already in use, then try again.") };
   }
 }

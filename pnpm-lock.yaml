@@ -122,6 +122,58 @@ importers:
         specifier: ^5.7.2
         version: 5.9.3
 
+  apps/store:
+    dependencies:
+      '@esoko/a11y':
+        specifier: workspace:*
+        version: link:../../packages/a11y
+      '@esoko/auth':
+        specifier: workspace:*
+        version: link:../../packages/auth
+      '@esoko/db':
+        specifier: workspace:*
+        version: link:../../packages/db
+      '@esoko/domain':
+        specifier: workspace:*
+        version: link:../../packages/domain
+      '@esoko/payments':
+        specifier: workspace:*
+        version: link:../../packages/payments
+      '@esoko/ui':
+        specifier: workspace:*
+        version: link:../../packages/ui
+      next:
+        specifier: ^16.2.7
+        version: 16.2.12(@playwright/test@1.62.0)(react-dom@19.2.8(react@19.2.8))(react@19.2.8)
+      react:
+        specifier: ^19.2.0
+        version: 19.2.8
+      react-dom:
+        specifier: ^19.2.0
+        version: 19.2.8(react@19.2.8)
+      server-only:
+        specifier: ^0.0.1
+        version: 0.0.1
+      zod:
+        specifier: ^3.24.1
+        version: 3.25.76
+    devDependencies:
+      '@esoko/config':
+        specifier: workspace:*
+        version: link:../../packages/config
+      '@types/node':
+        specifier: ^22.10.2
+        version: 22.20.1
+      '@types/react':
+        specifier: ^19.0.2
+        version: 19.2.17
+      eslint:
+        specifier: ^9.17.0
+        version: 9.39.5(jiti@2.7.0)
+      typescript:
+        specifier: ^5.7.2
+        version: 5.9.3
+
   apps/web:
     dependencies:
       '@esoko/a11y':
@@ -253,6 +305,12 @@ importers:
         specifier: ^5.7.2
         version: 5.9.3
 
+  packages/payments:
+    devDependencies:
+      typescript:
+        specifier: ^5.7.2
+        version: 5.9.3
+
   packages/ui:
     dependencies:
       react:
@@ -277,6 +335,9 @@ importers:
       '@esoko/domain':
         specifier: workspace:*
         version: link:../../packages/domain
+      '@esoko/payments':
+        specifier: workspace:*
+        version: link:../../packages/payments
       '@fastify/cors':
         specifier: ^10.0.1
         version: 10.1.0

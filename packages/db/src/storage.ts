@@ -36,6 +36,13 @@ const s3 = new S3Client({
     accessKeyId: process.env.R2_ACCESS_KEY_ID ?? '',
     secretAccessKey: process.env.R2_SECRET_ACCESS_KEY ?? '',
   },
+  // AWS SDK v3 defaults to sending a CRC32 trailer checksum on every
+  // request since ~3.729 — R2's S3-compatible API doesn't support that,
+  // and the resulting broken stream surfaces as an opaque SSL handshake
+  // failure (alert 40) rather than a clean HTTP error. Only compute a
+  // checksum when a command explicitly asks for one.
+  requestChecksumCalculation: 'WHEN_REQUIRED',
+  responseChecksumValidation: 'WHEN_REQUIRED',
 });
 
 export const MAX_BYTES = 10 * 1024 * 1024;

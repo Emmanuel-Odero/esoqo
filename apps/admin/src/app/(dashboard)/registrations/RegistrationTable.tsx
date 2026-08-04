@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect, useState, useTransition } from 'react';
+import { useCallback, useEffect, useRef, useState, useTransition } from 'react';
 import Link from 'next/link';
 import type { Route } from 'next';
 import { Icon } from '@esoko/ui';
@@ -8,7 +8,9 @@ import { useAnnounce } from '@esoko/a11y';
 import { maskMsisdn } from '@esoko/domain';
 import {
   actionGetDetail, actionEdit, actionVoid, actionRestore,
-  actionRecordPayment, actionAmendPayment,
+  actionRecordPayment, actionAmendPayment, actionAssignUserPin,
+  actionSearchGroupsForStaff, actionAssignToGroup,
+  actionUploadWalkInDocument, actionRemoveWalkInDocument,
 } from './actions';
 import WalkInFlow from './WalkInFlow';
 
@@ -31,11 +33,12 @@ const JOINING = { me: 'Individual', group: 'Group', biz: 'Business' } as const;
 
 export function RegistrationTable({
   rows, total, page, pages, counties, canEdit, canVoid, canCreate, canSeePii, canRecordPayment,
-  type, q, county, status,
+  canAssignUser, canManageMembership, canUploadDocs, documentKinds, type, q, county, status,
 }: {
   rows: Row[]; total: number; page: number; pages: number; counties: string[];
   canEdit: boolean; canVoid: boolean; canCreate: boolean; canSeePii: boolean;
-  canRecordPayment: boolean;
+  canRecordPayment: boolean; canAssignUser: boolean; canManageMembership: boolean;
+  canUploadDocs: boolean; documentKinds: [string, string][];
   type?: 'individuals' | 'organisations'; q: string; county: string; status: string;
 }) {
   const [openId, setOpenId] = useState<string | null>(null);
@@ -160,7 +163,9 @@ export function RegistrationTable({
 
       {openId && (
         <DetailDrawer id={openId} canEdit={canEdit} canVoid={canVoid} canSeePii={canSeePii}
-          canRecordPayment={canRecordPayment} onClose={() => setOpenId(null)} />
+          canRecordPayment={canRecordPayment} canAssignUser={canAssignUser}
+          canManageMembership={canManageMembership} canUploadDocs={canUploadDocs}
+          documentKinds={documentKinds} onClose={() => setOpenId(null)} />
       )}
       {creating && <WalkInFlow counties={counties} onClose={() => setCreating(false)} />}
     </>
@@ -172,19 +177,24 @@ export function RegistrationTable({
 type Detail = Awaited<ReturnType<typeof actionGetDetail>>;
 
 function DetailDrawer({
-  id, canEdit, canVoid, canSeePii, canRecordPayment, onClose,
+  id, canEdit, canVoid, canSeePii, canRecordPayment, canAssignUser,
+  canManageMembership, canUploadDocs, documentKinds, onClose,
 }: {
   id: string; canEdit: boolean; canVoid: boolean; canSeePii: boolean;
-  canRecordPayment: boolean; onClose: () => void;
+  canRecordPayment: boolean; canAssignUser: boolean; canManageMembership: boolean;
+  canUploadDocs: boolean; documentKinds: [string, string][]; onClose: () => void;
 }) {
   const [d, setD] = useState<Detail>(null);
-  const [tab, setTab] = useState<'record' | 'payment' | 'documents'>('record');
+  const [tab, setTab] = useState<'record' | 'payment' | 'documents' | 'account'>('record');
   const [editing, setEditing] = useState(false);
   const [voiding, setVoiding] = useState(false);
   const [reason, setReason] = useState('');
   const [form, setForm] = useState<Record<string, string>>({});
   const [error, setError] = useState<string | null>(null);
   const [pending, start] = useTransition();
+  const [tempPin, setTempPin] = useState<string | null>(null);
+  const [assigningGroup, setAssigningGroup] = useState(false);
+  const [uploading, setUploading] = useState(false);
   const announce = useAnnounce();
 
   const [payingForm, setPayingForm] = useState(false);
@@ -235,6 +245,40 @@ function DetailDrawer({
       const r = await actionRestore(id);
       if (r.ok) { announce('Registration restored', 'assertive'); void load(); }
       else setError(r.error);
+    });
+  }
+
+  function assignPin(personId: string) {
+    setError(null);
+    start(async () => {
+      const r = await actionAssignUserPin(personId);
+      if (r.ok) { setTempPin(r.data.tempPin); announce('Login PIN assigned', 'assertive'); }
+      else { setError(r.error); announce(r.error, 'assertive'); }
+    });
+  }
+
+  function assignGroup(group: { id: string; name: string }) {
+    setError(null);
+    start(async () => {
+      // Once a registration has become a real person, group membership
+      // lives on Membership, not the Registration row — updateRegistration
+      // refuses to touch a COMPLETE registration anyway.
+      const r = d?.party?.person
+        ? await actionAssignToGroup(d.party.person.partyId, group.id)
+        : await actionEdit(id, { groupPartyId: group.id, groupName: group.name, belongsToGroup: 'yes' });
+      if (r.ok) {
+        announce(`Assigned to ${group.name}`, 'assertive');
+        setAssigningGroup(false);
+        void load();
+      } else { setError(r.error); announce(r.error, 'assertive'); }
+    });
+  }
+
+  function removeDocument(docId: string) {
+    start(async () => {
+      const r = await actionRemoveWalkInDocument(docId);
+      if (r.ok) { announce('Document removed', 'assertive'); void load(); }
+      else { setError(r.error ?? 'Could not remove that file'); }
     });
   }
 
@@ -297,7 +341,8 @@ function DetailDrawer({
 
         <div style={{ display: 'flex', gap: 2, padding: '0 24px', borderBottom: '1px solid var(--line)' }}
           role="tablist" aria-label="Sections">
-          {([['record', 'Record'], ['payment', 'Payment'], ['documents', `Documents (${d.documents.length})`]] as const)
+          {([['record', 'Record'], ['payment', 'Payment'], ['documents', `Documents (${d.documents.length})`],
+             ['account', 'Account']] as const)
             .map(([k, label]) => (
             <button key={k} role="tab" aria-selected={tab === k} onClick={() => setTab(k)}
               style={{
@@ -360,6 +405,28 @@ function DetailDrawer({
                 </tbody>
               </table>
             )
+          )}
+
+          {tab === 'record' && !editing && (canManageMembership || canEdit) && (
+            <div style={{ marginTop: 18, paddingTop: 18, borderTop: '1px solid var(--line)' }}>
+              <h3 style={{ marginBottom: 10 }}>Group membership</h3>
+              {d.party?.memberships && d.party.memberships.length > 0 ? (
+                d.party.memberships.map((m) => (
+                  <p key={m.orgId} className="pill p-info" style={{ padding: '10px 13px', marginBottom: 10 }}>
+                    <Icon name="users" size={14} />
+                    {m.org.knownAs || m.org.officialName} · {m.role}
+                  </p>
+                ))
+              ) : (
+                <p className="sub" style={{ marginBottom: 10 }}>Not currently a member of any group.</p>
+              )}
+              {(canManageMembership && d.party?.person || (!d.party && canEdit)) && (
+                <button className="btn btn-o btn-sm" onClick={() => setAssigningGroup(true)}>
+                  <Icon name="users" size={13} />
+                  {d.party?.memberships?.length ? 'Move to another group' : 'Assign to a group'}
+                </button>
+              )}
+            </div>
           )}
 
           {tab === 'payment' && (
@@ -448,34 +515,99 @@ function DetailDrawer({
           )}
 
           {tab === 'documents' && (
-            d.documents.length === 0 ? (
+            <>
+              {canUploadDocs && (
+                <button className="btn btn-o btn-sm" style={{ marginBottom: 16 }} onClick={() => setUploading(true)}>
+                  <Icon name="plus" size={13} />Upload document
+                </button>
+              )}
+              {d.documents.length === 0 ? (
+                <div className="empty">
+                  <span className="ico"><Icon name="document" size={22} /></span>
+                  <h3>No documents</h3>
+                  <p style={{ margin: 0 }}>Nothing was uploaded with this registration.</p>
+                </div>
+              ) : (
+                <div className="dgrid">
+                  {d.documents.map((doc) => (
+                    <a className="dcard" key={doc.id} href={`/api/documents/${doc.id}?inline=1`}
+                      target="_blank" rel="noreferrer" style={{ position: 'relative' }}>
+                      {canUploadDocs && (
+                        <button type="button" className="x" aria-label={`Remove ${doc.title}`}
+                          style={{ position: 'absolute', top: 6, right: 6, background: 'var(--paper)', borderRadius: 6 }}
+                          onClick={(e) => { e.preventDefault(); e.stopPropagation(); removeDocument(doc.id); }}>
+                          <Icon name="close" size={13} />
+                        </button>
+                      )}
+                      <div className="thumb">
+                        {doc.mimeType.startsWith('image/')
+                          ? <img src={`/api/documents/${doc.id}?inline=1`} alt="" loading="lazy" />
+                          : <Icon name="document" size={28} />}
+                      </div>
+                      <div className="meta">
+                        <span className="t">{doc.title}</span>
+                        <span className="sub" style={{ display: 'block', fontSize: '.78rem', margin: '2px 0 8px' }}>
+                          {Math.round(doc.sizeBytes / 1024)} KB
+                        </span>
+                        <span className={`pill ${doc.status === 'ACCEPTED' ? 'p-ok' : doc.status === 'REJECTED' ? 'p-bad' : 'p-warn'}`}>
+                          {doc.status.replace(/_/g, ' ').toLowerCase()}
+                        </span>
+                      </div>
+                    </a>
+                  ))}
+                </div>
+              )}
+            </>
+          )}
+
+          {tab === 'account' && (
+            !d.party?.person ? (
               <div className="empty">
-                <span className="ico"><Icon name="document" size={22} /></span>
-                <h3>No documents</h3>
-                <p style={{ margin: 0 }}>Nothing was uploaded with this registration.</p>
+                <span className="ico"><Icon name="user" size={22} /></span>
+                <h3>No system account yet</h3>
+                <p style={{ margin: 0 }}>
+                  This registration has not completed, so there is no person record to assign a
+                  login PIN to.
+                </p>
               </div>
+            ) : tempPin ? (
+              <>
+                <p className="pill p-ok" style={{ padding: '10px 13px', marginBottom: 16 }}>
+                  <Icon name="check-circle" size={14} />PIN assigned
+                </p>
+                <p>
+                  Give <strong>{name}</strong> this PIN. It is shown once and never stored in
+                  readable form.
+                </p>
+                <p className="mono" style={{ fontSize: '2rem', letterSpacing: '.4em', textAlign: 'center', padding: '18px 0', background: 'var(--paper)', borderRadius: 10, margin: '14px 0' }}>
+                  {tempPin}
+                </p>
+                <p className="sub">Do not send this by SMS or email. Hand it over in person or by phone.</p>
+              </>
             ) : (
-              <div className="dgrid">
-                {d.documents.map((doc) => (
-                  <a className="dcard" key={doc.id} href={`/api/documents/${doc.id}?inline=1`}
-                    target="_blank" rel="noreferrer">
-                    <div className="thumb">
-                      {doc.mimeType.startsWith('image/')
-                        ? <img src={`/api/documents/${doc.id}?inline=1`} alt="" loading="lazy" />
-                        : <Icon name="document" size={28} />}
-                    </div>
-                    <div className="meta">
-                      <span className="t">{doc.title}</span>
-                      <span className="sub" style={{ display: 'block', fontSize: '.78rem', margin: '2px 0 8px' }}>
-                        {Math.round(doc.sizeBytes / 1024)} KB
-                      </span>
-                      <span className={`pill ${doc.status === 'ACCEPTED' ? 'p-ok' : doc.status === 'REJECTED' ? 'p-bad' : 'p-warn'}`}>
-                        {doc.status.replace(/_/g, ' ').toLowerCase()}
-                      </span>
-                    </div>
-                  </a>
-                ))}
-              </div>
+              <>
+                <table className="tbl" style={{ marginBottom: 18 }}>
+                  <tbody>
+                    <tr><td className="sub" style={{ width: 190 }}>Login PIN</td>
+                      <td>
+                        <span className={`pill ${d.party.person.credential?.hasPinSet ? 'p-ok' : 'p-mute'}`}>
+                          {d.party.person.credential?.hasPinSet ? 'Assigned' : 'Not assigned'}
+                        </span>
+                      </td></tr>
+                    {d.party.person.credential?.pinSetAt && (
+                      <tr><td className="sub">Set</td>
+                        <td>{new Date(d.party.person.credential.pinSetAt).toLocaleString('en-KE')}</td></tr>
+                    )}
+                  </tbody>
+                </table>
+                {canAssignUser && (
+                  <button className="btn btn-p btn-sm" disabled={pending}
+                    onClick={() => assignPin(d.party!.person!.partyId)}>
+                    <Icon name="key" size={13} />
+                    {d.party.person.credential?.hasPinSet ? 'Reset login PIN' : 'Assign login PIN'}
+                  </button>
+                )}
+              </>
             )
           )}
 
@@ -532,6 +664,138 @@ function DetailDrawer({
               )}
             </>
           )}
+        </div>
+      </div>
+
+      {assigningGroup && (
+        <AssignGroup name={name} onClose={() => setAssigningGroup(false)} onPick={assignGroup} />
+      )}
+      {uploading && (
+        <UploadRegistrationDocument
+          registrationId={id} documentKinds={documentKinds}
+          onClose={() => setUploading(false)}
+          onUploaded={() => { setUploading(false); void load(); }}
+        />
+      )}
+    </div>
+  );
+}
+
+function AssignGroup({
+  name, onClose, onPick,
+}: { name: string; onClose: () => void; onPick: (g: { id: string; name: string }) => void }) {
+  const [q, setQ] = useState('');
+  const [hits, setHits] = useState<{ id: string; name: string; county: string }[]>([]);
+  const timer = useRef<ReturnType<typeof setTimeout>>(undefined);
+
+  function onInput(v: string) {
+    setQ(v);
+    clearTimeout(timer.current);
+    if (v.trim().length < 2) { setHits([]); return; }
+    timer.current = setTimeout(async () => {
+      setHits(await actionSearchGroupsForStaff(v));
+    }, 200);
+  }
+
+  return (
+    <div className="scrim" role="dialog" aria-modal="true" aria-labelledby="ag-title"
+      onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}>
+      <div className="modal narrow">
+        <div className="modal-hd">
+          <h2 id="ag-title">Assign {name} to a group</h2>
+          <button className="x" onClick={onClose} aria-label="Close"><Icon name="close" size={18} /></button>
+        </div>
+        <div className="modal-bd">
+          <label className="sub" htmlFor="ag-q" style={{ display: 'block', marginBottom: 6 }}>Group name</label>
+          <input id="ag-q" className="inp" style={{ width: '100%' }} value={q} autoComplete="off"
+            onChange={(e) => onInput(e.target.value)} placeholder="Search groups…" />
+          <div style={{ marginTop: 10 }}>
+            {hits.map((g) => (
+              <button key={g.id} type="button" className="btn btn-o btn-sm" style={{ display: 'block', width: '100%', textAlign: 'left', marginBottom: 6 }}
+                onClick={() => onPick(g)}>
+                {g.name} <span className="sub">— {g.county}</span>
+              </button>
+            ))}
+            {q.trim().length >= 2 && hits.length === 0 && (
+              <p className="sub">No matching groups.</p>
+            )}
+          </div>
+        </div>
+        <div className="modal-ft">
+          <button className="btn btn-o" onClick={onClose}>Cancel</button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function UploadRegistrationDocument({
+  registrationId, documentKinds, onClose, onUploaded,
+}: {
+  registrationId: string;
+  documentKinds: [string, string][];
+  onClose: () => void;
+  onUploaded: () => void;
+}) {
+  const [title, setTitle] = useState('');
+  const [kind, setKind] = useState(documentKinds[0]?.[0] ?? 'OTHER');
+  const [file, setFile] = useState<File | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [pending, start] = useTransition();
+  const announce = useAnnounce();
+
+  function upload() {
+    if (!file || !title.trim()) return;
+    setError(null);
+    start(async () => {
+      const form = new FormData();
+      form.set('registrationId', registrationId);
+      form.set('title', title);
+      form.set('kind', kind);
+      form.set('file', file);
+      const r = await actionUploadWalkInDocument(form);
+      if (r.ok) { announce(`${r.doc.title} uploaded`, 'assertive'); onUploaded(); }
+      else setError(r.error);
+    });
+  }
+
+  return (
+    <div className="scrim" role="dialog" aria-modal="true" aria-labelledby="urd-title"
+      onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}>
+      <div className="modal narrow">
+        <div className="modal-hd">
+          <h2 id="urd-title">Upload document</h2>
+          <button className="x" onClick={onClose} aria-label="Close"><Icon name="close" size={18} /></button>
+        </div>
+        <div className="modal-bd">
+          <label className="sub" htmlFor="urd-title-input" style={{ display: 'block', marginBottom: 6 }}>Title</label>
+          <input id="urd-title-input" className="inp" style={{ width: '100%', marginBottom: 12 }}
+            value={title} onChange={(e) => setTitle(e.target.value)} placeholder="National ID, front" />
+
+          <label className="sub" htmlFor="urd-kind" style={{ display: 'block', marginBottom: 6 }}>Kind</label>
+          <select id="urd-kind" className="inp" style={{ width: '100%', marginBottom: 12 }}
+            value={kind} onChange={(e) => setKind(e.target.value)}>
+            {documentKinds.map(([k, label]) => <option key={k} value={k}>{label}</option>)}
+          </select>
+
+          <label className="sub" htmlFor="urd-file" style={{ display: 'block', marginBottom: 6 }}>
+            File (PDF, Word, Excel or image — up to 10 MB)
+          </label>
+          <input id="urd-file" className="inp" type="file" style={{ width: '100%' }}
+            accept=".pdf,.doc,.docx,.xls,.xlsx,.png,.jpg,.jpeg"
+            onChange={(e) => setFile(e.target.files?.[0] ?? null)} />
+
+          {error && (
+            <p className="pill p-bad" style={{ marginTop: 14, padding: '10px 13px' }} role="alert">
+              <Icon name="alert-circle" size={14} />{error}
+            </p>
+          )}
+        </div>
+        <div className="modal-ft">
+          <button className="btn btn-o" onClick={onClose}>Cancel</button>
+          <button className="btn btn-p" onClick={upload} disabled={pending || !file || !title.trim()}>
+            <Icon name="plus" size={15} />{pending ? 'Uploading…' : 'Upload and save'}
+          </button>
         </div>
       </div>
     </div>

@@ -44,6 +44,13 @@ const MARKETS = [
   ['Nakuru Wakulima','032','Daily',true],['Kitale','026','Mon, Wed & Sat',true],
 ] as const;
 
+const PRICING_RULES = [
+  ['SUBDOMAIN_SETUP_FEE', 'Custom subdomain — setup', 1500, null, 'ONE_TIME'],
+  ['SUBDOMAIN_MONTHLY_FEE', 'Custom subdomain — hosting', 300, null, 'MONTHLY'],
+  ['POS_MONTHLY_FEE', 'PoS terminal add-on', 400, null, 'MONTHLY'],
+  ['PLATFORM_FEE_PCT', 'Platform fee on checkout sales', null, 1.5, 'PER_ORDER'],
+] as const;
+
 const COMMODITIES = [
   ['Sukuma wiki','bunch','veg'],['Cabbage','head','veg'],['Tomatoes','crate','veg'],
   ['Onions, red','net 13kg','veg'],['Irish potatoes','bag 50kg','veg'],['Carrots','bag 90kg','veg'],
@@ -88,6 +95,15 @@ async function main() {
     await prisma.commodity.upsert({ where: { name }, update: {}, create: { name, unit, category } });
   }
   console.log(`  commodities: ${COMMODITIES.length}`);
+
+  for (const [key, label, amountKes, amountPct, billingPeriod] of PRICING_RULES) {
+    await prisma.pricingRule.upsert({
+      where: { key },
+      update: {},
+      create: { key, label, amountKes, amountPct, billingPeriod },
+    });
+  }
+  console.log(`  pricing rules: ${PRICING_RULES.length} (edit these from the admin app, not by re-seeding)`);
 
   // One operations account so the admin app is reachable on first run.
   const pin = process.env.SEED_ADMIN_PIN ?? '482915';

@@ -68,6 +68,81 @@ export async function getFunnel(ctx: Ctx) {
   }));
 }
 
+/** The join-flow steps, in order, for the drop-off funnel below. Keep in
+ *  sync with apps/app/src/app/join/JoinFlow.tsx's step numbering. */
+export const JOIN_FLOW_STEPS = [
+  { step: 1, label: 'Who is joining' },
+  { step: 2, label: 'Group membership' },
+  { step: 3, label: 'Name' },
+  { step: 4, label: 'Contact details' },
+  { step: 5, label: 'Work or trade' },
+  { step: 6, label: 'Business standing' },
+  { step: 7, label: 'Documents' },
+  { step: 8, label: 'Payment' },
+  { step: 9, label: 'Verify and finish' },
+] as const;
+
+/** Per-step drop-off — where people are actually getting stuck, not just
+ *  the five coarse statuses `getFunnel` groups by. `reached` is
+ *  cumulative (reached this step or later, or already completed);
+ *  `stuckHere` is registrations whose furthest step IS this one and that
+ *  never became COMPLETE. */
+export async function getStepFunnel(ctx: Ctx) {
+  requireCapability(ctx, 'report.read');
+  const steps = await Promise.all(
+    JOIN_FLOW_STEPS.map(async ({ step, label }) => {
+      const [reached, stuckHere] = await Promise.all([
+        prisma.registration.count({
+          where: { OR: [{ lastStep: { gte: step } }, { status: 'COMPLETE' }] },
+        }),
+        prisma.registration.count({
+          where: { lastStep: step, status: { not: 'COMPLETE' } },
+        }),
+      ]);
+      return { step, label, reached, stuckHere };
+    }),
+  );
+  return steps;
+}
+
+/** Individuals by declared trade/segment — the "which sector has the most
+ *  registered members" view, based on what each person typed for
+ *  themselves (Registration.segment), not the group-level Enterprise
+ *  record `getBySegment` uses. */
+export async function getRegistrationSegments(ctx: Ctx, take = 20) {
+  requireCapability(ctx, 'report.read');
+  const rows = await prisma.registration.groupBy({
+    by: ['segment'],
+    where: { segment: { not: null }, status: 'COMPLETE' },
+    _count: { _all: true },
+    orderBy: { _count: { segment: 'desc' } },
+    take,
+  });
+  return rows.map((r) => ({ segment: r.segment as string, count: r._count._all }));
+}
+
+/** Per-group detail for the dedicated group analytics page — member
+ *  growth over time and how many linked registrations have their fee
+ *  covered by the group vs paid independently vs not yet answered. */
+export async function getGroupAnalytics(ctx: Ctx, orgPartyId: string) {
+  requireCapability(ctx, 'report.read');
+  const [feeCoverage, joinedByMonth] = await Promise.all([
+    prisma.registration.groupBy({
+      by: ['feeCoverage'],
+      where: { groupPartyId: orgPartyId },
+      _count: { _all: true },
+    }),
+    prisma.$queryRaw<{ month: Date; n: bigint }[]>`
+      SELECT date_trunc('month', "joinedAt") AS month, COUNT(*)::bigint AS n
+      FROM membership WHERE "orgId" = ${orgPartyId}::uuid AND "exitedAt" IS NULL
+      GROUP BY 1 ORDER BY 1 ASC`,
+  ]);
+  return {
+    feeCoverage: feeCoverage.map((f) => ({ coverage: f.feeCoverage ?? 'unknown', count: f._count._all })),
+    joinedByMonth: joinedByMonth.map((r) => ({ month: r.month, count: Number(r.n) })),
+  };
+}
+
 export async function getByCounty(ctx: Ctx) {
   requireCapability(ctx, 'report.read');
   const rows = await prisma.registration.groupBy({

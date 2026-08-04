@@ -1,7 +1,8 @@
 import Fastify from 'fastify';
 import helmet from '@fastify/helmet';
 import rateLimit from '@fastify/rate-limit';
-import { verifyChain } from '@esoko/db';
+import { verifyChain, confirmStoreOrderPayment } from '@esoko/db';
+import { parseStkCallback } from '@esoko/payments';
 
 /**
  * services/core — the domain API for the core plane.
@@ -35,6 +36,35 @@ app.get('/ready', async (_req, reply) => {
     app.log.error(e, 'readiness check failed');
     return reply.code(503).send({ ok: false });
   }
+});
+
+/**
+ * Safaricom's confirmation for an STK push, arriving asynchronously —
+ * sometimes twice, sometimes not at all. This is the "real HTTP
+ * endpoint" the store checkout flow needs, and the first genuine
+ * consumer of this service beyond /health and /ready.
+ */
+app.post('/webhooks/mpesa/stk-callback', async (req, reply) => {
+  const parsed = parseStkCallback(req.body);
+  if (!parsed) {
+    app.log.warn({ body: req.body }, 'unrecognised M-Pesa callback shape');
+    return reply.code(400).send({ ok: false });
+  }
+
+  if (!parsed.succeeded) {
+    app.log.info({ checkoutRequestId: parsed.checkoutRequestId, reason: parsed.resultDescription },
+      'STK push not completed');
+    return reply.send({ ok: true }); // acknowledged — nothing to post
+  }
+
+  try {
+    await confirmStoreOrderPayment(parsed.checkoutRequestId, parsed.mpesaReceiptCode ?? '');
+  } catch (e) {
+    // Still 200 — Safaricom retries on non-2xx, and a retry storm on an
+    // already-broken match helps no one. The error is logged for a human.
+    app.log.error({ err: e, checkoutRequestId: parsed.checkoutRequestId }, 'failed to confirm store order payment');
+  }
+  return reply.send({ ok: true });
 });
 
 const port = Number(process.env.PORT ?? 4000);
