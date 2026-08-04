@@ -138,6 +138,7 @@ services:
       - "3000:3000"
       - "3001:3001"
       - "3002:3002"
+      - "3003:3003"
       - "4000:4000"
     environment:
       DATABASE_URL: postgresql://esoko:esoko_dev_only@pgbouncer:5432/esoko?pgbouncer=true&connection_limit=10

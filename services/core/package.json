@@ -17,6 +17,7 @@
     "@esoko/db": "workspace:*",
     "@esoko/domain": "workspace:*",
     "@esoko/auth": "workspace:*",
+    "@esoko/payments": "workspace:*",
     "zod": "^3.24.1"
   },
   "devDependencies": { "tsx": "^4.19.2", "typescript": "^5.7.2" }

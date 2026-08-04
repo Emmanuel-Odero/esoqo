@@ -1,0 +1,23 @@
+import type { Metadata } from 'next';
+import { listMyStores } from '@esoko/db';
+import { requireSubject } from '@/lib/session';
+import { SettingsForm } from './SettingsForm';
+
+export const metadata: Metadata = { title: 'Store settings' };
+export const dynamic = 'force-dynamic';
+
+export default async function SettingsPage() {
+  const ctx = await requireSubject();
+  const [store] = await listMyStores(ctx);
+  if (!store) return null;
+
+  return (
+    <>
+      <div className="dash-top"><h1 style={{ fontSize: '1.3rem' }}>Store settings</h1></div>
+      <SettingsForm
+        storeId={store.id}
+        initial={{ name: store.name, themeKey: store.themeKey, posEnabled: store.posEnabled, slug: store.slug, routingMode: store.routingMode }}
+      />
+    </>
+  );
+}

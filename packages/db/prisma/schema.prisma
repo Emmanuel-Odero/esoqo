@@ -71,6 +71,7 @@ model Party {
   documents    Document[]
   registration Registration?
   groupJoinRegistrations Registration[] @relation("RegistrationGroupParty")
+  storeOrdersAsBuyer StoreOrder[]
 
   @@index([county, kind])
   @@index([createdAt])
@@ -85,8 +86,10 @@ model Person {
   officialName String
   /// What people actually call them. This is what the product uses day to day.
   knownAs      String?
-  /// MSISDN in E.164. THE identifier. Unique across the system.
-  msisdn       String  @unique
+  /// MSISDN in E.164. THE identifier for anyone who can log in, dial
+  /// USSD or receive SMS. Null means a staff-added member with no phone
+  /// on file yet — pending until someone fills it in.
+  msisdn       String? @unique
   /// SHA-256 of the national ID number. The raw number is never stored.
   nationalIdHash String? @unique
   email        String? @db.Citext
@@ -161,6 +164,8 @@ model Enterprise {
   isRegistered Boolean @default(false)
   hasKraPin    Boolean @default(false)
   createdAt DateTime @default(now())
+
+  stores Store[]
 
   @@index([segment])
   @@index([sector])
@@ -364,6 +369,9 @@ enum AccountKind {
   FEE_INCOME
   SETTLEMENT
   SUSPENSE
+  /// One per Store. Where checkout and PoS sales post; FEE_INCOME
+  /// picks up the platform's cut on the same JournalEntry.
+  STORE_REVENUE
 }
 
 model Account {
@@ -392,7 +400,9 @@ model JournalEntry {
   /// Idempotency key. M-Pesa callbacks arrive late, twice, or never.
   idempotencyKey String? @unique
 
-  postings Posting[]
+  postings   Posting[]
+  storeOrder StoreOrder?
+  posSale    PosSale?
 
   @@index([occurredAt])
   @@map("journal_entry")
@@ -575,6 +585,211 @@ enum DocumentStatus {
   SUPERSEDED
 }
 
+// ─────────────────────── STORES & COMMERCE ──────────────────────
+//
+// A Store belongs to an Enterprise, not a new signup silo — the owner
+// is already a registered, credentialed Party before a store can exist.
+// Money still moves through Account/JournalEntry/Posting; this is the
+// interim TypeScript-DAL implementation of that posting, not a second
+// ledger. See docs/adr and services/ledger/README.md.
+
+enum StoreStatus {
+  DRAFT
+  ACTIVE
+  SUSPENDED
+}
+
+enum StoreRoutingMode {
+  PATH // esoko.global/@slug — free, always available
+  SUBDOMAIN // slug.esoko.global — priced via PricingRule
+}
+
+model Store {
+  id           String           @id @default(uuid()) @db.Uuid
+  enterpriseId String           @db.Uuid
+  enterprise   Enterprise       @relation(fields: [enterpriseId], references: [id], onDelete: Cascade)
+
+  name         String
+  /// URL-safe, unique across the platform regardless of routing mode —
+  /// a store keeps the same slug if it later adds a subdomain.
+  slug         String           @unique
+  status       StoreStatus      @default(DRAFT)
+  themeKey     String           @default("market")
+  routingMode  StoreRoutingMode @default(PATH)
+  /// Reserved for a future custom-domain phase. Not resolved anywhere yet.
+  customDomain String?          @unique
+  posEnabled   Boolean          @default(false)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  products Product[]
+  orders   StoreOrder[]
+  posSales PosSale[]
+
+  @@index([enterpriseId])
+  @@index([status])
+  @@map("store")
+}
+
+model Product {
+  id          String   @id @default(uuid()) @db.Uuid
+  storeId     String   @db.Uuid
+  store       Store    @relation(fields: [storeId], references: [id], onDelete: Cascade)
+
+  name        String
+  description String?
+  priceKes    Decimal  @db.Decimal(12, 2)
+  /// Null = untracked (a service, or stock the merchant doesn't count).
+  stockQty    Int?
+  /// ACTIVE | HIDDEN. A plain string, not an enum — a merchant hiding a
+  /// product is a listing decision, not a state the platform enforces.
+  status      String   @default("ACTIVE")
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  images       ProductImage[]
+  orderItems   StoreOrderItem[]
+  posSaleItems PosSaleItem[]
+
+  @@index([storeId, status])
+  @@map("product")
+}
+
+model ProductImage {
+  id        String  @id @default(uuid()) @db.Uuid
+  productId String  @db.Uuid
+  product   Product @relation(fields: [productId], references: [id], onDelete: Cascade)
+  url       String
+  position  Int     @default(0)
+
+  @@index([productId])
+  @@map("product_image")
+}
+
+enum StoreOrderStatus {
+  PENDING_PAYMENT
+  PAID
+  FULFILLED
+  CANCELLED
+}
+
+enum StoreOrderPaymentMethod {
+  MPESA_STK
+  CASH_ON_DELIVERY
+}
+
+/// A checkout on the public storefront. The buyer need not be a
+/// registered Esoko subject — buyerParty is set only when they are.
+model StoreOrder {
+  id            String                   @id @default(uuid()) @db.Uuid
+  storeId       String                   @db.Uuid
+  store         Store                    @relation(fields: [storeId], references: [id], onDelete: Cascade)
+  buyerPartyId  String?                  @db.Uuid
+  buyerParty    Party?                   @relation(fields: [buyerPartyId], references: [id])
+  buyerName     String
+  buyerMsisdn   String
+
+  status        StoreOrderStatus         @default(PENDING_PAYMENT)
+  paymentMethod StoreOrderPaymentMethod  @default(MPESA_STK)
+  totalKes      Decimal                  @db.Decimal(12, 2)
+
+  /// Daraja's CheckoutRequestID. Doubles as the idempotency guard for
+  /// a callback that arrives twice — see JournalEntry.idempotencyKey.
+  mpesaCheckoutRequestId String? @unique
+  journalEntryId         String? @unique @db.Uuid
+  journalEntry           JournalEntry? @relation(fields: [journalEntryId], references: [id])
+
+  createdAt DateTime  @default(now())
+  paidAt    DateTime?
+
+  items StoreOrderItem[]
+
+  @@index([storeId, status])
+  @@map("store_order")
+}
+
+model StoreOrderItem {
+  id           String     @id @default(uuid()) @db.Uuid
+  orderId      String     @db.Uuid
+  order        StoreOrder @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  productId    String     @db.Uuid
+  product      Product    @relation(fields: [productId], references: [id])
+  quantity     Int
+  unitPriceKes Decimal    @db.Decimal(12, 2)
+
+  @@index([orderId])
+  @@map("store_order_item")
+}
+
+enum PosSyncStatus {
+  PENDING // queued on-device, not yet reconciled
+  SYNCED
+  CONFLICT
+}
+
+enum PosPaymentMethod {
+  CASH
+  MPESA_TILL
+}
+
+/// A terminal sale. clientSaleId is generated on-device at the moment
+/// of sale, offline or not — it is what makes a queued sale replayed
+/// twice by the outbox harmless instead of double-counted.
+model PosSale {
+  id            String           @id @default(uuid()) @db.Uuid
+  storeId       String           @db.Uuid
+  store         Store            @relation(fields: [storeId], references: [id], onDelete: Cascade)
+  clientSaleId  String           @unique
+  paymentMethod PosPaymentMethod
+  totalKes      Decimal          @db.Decimal(12, 2)
+  syncStatus    PosSyncStatus    @default(SYNCED)
+  /// When it happened on the device — may be well before syncedAt.
+  soldAt        DateTime
+  syncedAt      DateTime         @default(now())
+
+  journalEntryId String?       @unique @db.Uuid
+  journalEntry   JournalEntry? @relation(fields: [journalEntryId], references: [id])
+
+  items PosSaleItem[]
+
+  @@index([storeId, soldAt])
+  @@map("pos_sale")
+}
+
+model PosSaleItem {
+  id           String  @id @default(uuid()) @db.Uuid
+  saleId       String  @db.Uuid
+  sale         PosSale @relation(fields: [saleId], references: [id], onDelete: Cascade)
+  productId    String  @db.Uuid
+  product      Product @relation(fields: [productId], references: [id])
+  quantity     Int
+  unitPriceKes Decimal @db.Decimal(12, 2)
+
+  @@index([saleId])
+  @@map("pos_sale_item")
+}
+
+/// Pricing is data, not code — every fee shown anywhere in the store
+/// wizard reads one of these rows. No process.env price constants.
+model PricingRule {
+  id            String    @id @default(uuid()) @db.Uuid
+  /// SUBDOMAIN_SETUP_FEE | SUBDOMAIN_MONTHLY_FEE | POS_MONTHLY_FEE |
+  /// PLATFORM_FEE_PCT, etc. — read by key, never hardcoded elsewhere.
+  key           String    @unique
+  label         String
+  amountKes     Decimal?  @db.Decimal(12, 2)
+  amountPct     Decimal?  @db.Decimal(5, 2)
+  /// ONE_TIME | MONTHLY | PER_ORDER
+  billingPeriod String
+  updatedAt     DateTime  @updatedAt
+  updatedById   String?   @db.Uuid
+  updatedBy     StaffUser? @relation(fields: [updatedById], references: [id])
+
+  @@map("pricing_rule")
+}
+
 model Document {
   id       String   @id @default(uuid()) @db.Uuid
   partyId  String?  @db.Uuid
@@ -662,6 +877,7 @@ model StaffUser {
   updatedAt DateTime @updatedAt
 
   approvals PaymentApproval[]
+  pricingRulesUpdated PricingRule[]
 
   @@index([active, rolePreset])
   @@map("staff_user")
