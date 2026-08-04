@@ -1,8 +1,9 @@
 import Link from 'next/link';
 import { Icon } from '@esoko/ui';
 
-/** Nav is five tools, not five arguments — per the page-architecture work. */
+/** Nav is tools, not arguments — per the page-architecture work. */
 export const NAV = [
+  ['/discover', 'Shops'],
   ['/prices', 'Prices'],
   ['/counties', 'Counties'],
   ['/institutions', 'Institutions'],

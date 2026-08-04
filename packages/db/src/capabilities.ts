@@ -160,6 +160,17 @@ export const CAPABILITY_CATALOGUE = [
     ['staff.write', 'Create and edit staff accounts'],
     ['staff.capabilities', 'Grant or revoke capabilities'],
   ]},
+  { group: 'Stores & commerce', items: [
+    ['store.read', 'View a store'],
+    ['store.write', 'Create or edit a store'],
+    ['store.moderate', 'Suspend or reinstate any store'],
+    ['product.write', 'Add or edit products in a store'],
+    ['order.read', 'View orders placed on a store'],
+    ['order.fulfil', 'Mark an order fulfilled'],
+    ['pos.sell', 'Ring up a PoS sale'],
+    ['pricing.read', 'View pricing rules'],
+    ['pricing.write', 'Change pricing rules'],
+  ]},
 ] as const;
 
 export const ALL_CAPABILITIES: Capability[] =
@@ -185,7 +196,9 @@ export const PAYMENT_APPROVAL_THRESHOLD =
 /** Preset bundles. Convenience only — the model is the capability list. */
 export const ROLE_PRESETS = {
   SUBJECT: ['entity.read:own', 'entity.write:own', 'consent.read:own', 'consent.write:own',
-            'document.read:own', 'document.write:own', 'wallet.read:own'],
+            'document.read:own', 'document.write:own', 'wallet.read:own',
+            'store.read', 'store.write:own', 'product.write:own',
+            'order.read:own', 'order.fulfil:own', 'pos.sell:own'],
 
   FIELD_AGENT: ['registration.create', 'registration.read:agent=self',
                 'attestation.issue:FIELD_VISIT', 'party.read:county'],
@@ -207,7 +220,8 @@ export const ROLE_PRESETS = {
               'registration.export', 'party.read', 'party.write', 'party.pii',
               'membership.write', 'document.read', 'document.review', 'document.delete',
               'payment.read', 'payment.record', 'audit.read', 'report.read',
-              'duplicate.review', 'consent.read', 'staff.read'],
+              'duplicate.review', 'consent.read', 'staff.read',
+              'store.read', 'store.moderate', 'pricing.read', 'pricing.write'],
 
   SUPER_ADMIN: ['*'],
 

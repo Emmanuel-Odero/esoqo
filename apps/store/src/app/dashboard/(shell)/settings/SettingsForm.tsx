@@ -1,0 +1,73 @@
+'use client';
+
+import { useState, useTransition } from 'react';
+import { Icon } from '@esoko/ui';
+import { saveStoreSettings } from './actions';
+
+const THEMES = [
+  { key: 'market', name: 'Market Green', colors: ['#0A2E4D', '#12794A', '#E7F4ED'] },
+  { key: 'nairobi', name: 'Nairobi Blue', colors: ['#0A2E4D', '#0F5C9E', '#E9F2F9'] },
+  { key: 'sundown', name: 'Sundown Amber', colors: ['#0A2E4D', '#B8760B', '#FDF4E3'] },
+  { key: 'slate', name: 'Mono Slate', colors: ['#0A2E4D', '#57718A', '#DCE5EC'] },
+] as const;
+
+export function SettingsForm({ storeId, initial }: {
+  storeId: string;
+  initial: { name: string; themeKey: string; posEnabled: boolean; slug: string; routingMode: string };
+}) {
+  const [name, setName] = useState(initial.name);
+  const [themeKey, setThemeKey] = useState(initial.themeKey);
+  const [posEnabled, setPosEnabled] = useState(initial.posEnabled);
+  const [saved, setSaved] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [pending, startTransition] = useTransition();
+
+  function submit() {
+    setError(null); setSaved(false);
+    startTransition(async () => {
+      const result = await saveStoreSettings(storeId, { name, themeKey, posEnabled });
+      if (!result.ok) { setError(result.error); return; }
+      setSaved(true);
+    });
+  }
+
+  return (
+    <div className="card" style={{ maxWidth: 480 }}>
+      <div className="fld">
+        <label className="lab" htmlFor="sname">Store name</label>
+        <input className="inp" id="sname" value={name} onChange={(e) => setName(e.target.value)} />
+      </div>
+
+      <div className="fld">
+        <p className="lab">Web address</p>
+        <p className="mono" style={{ fontSize: '.86rem', color: 'var(--tx-2)' }}>
+          {initial.routingMode === 'SUBDOMAIN' ? `${initial.slug}.esoko.global` : `esoko.global/@${initial.slug}`}
+        </p>
+      </div>
+
+      <div className="fld">
+        <p className="lab">Theme</p>
+        <div className="theme-grid">
+          {THEMES.map((t) => (
+            <button type="button" key={t.key} className="theme-opt" aria-pressed={themeKey === t.key} onClick={() => setThemeKey(t.key)}>
+              <div className="theme-swatch">{t.colors.map((c) => <i key={c} style={{ background: c }} />)}</div>
+              <span style={{ fontSize: '.8rem', fontWeight: 700 }}>{t.name}</span>
+            </button>
+          ))}
+        </div>
+      </div>
+
+      <div className="opt" style={{ cursor: 'default', alignItems: 'flex-start' }}>
+        <button type="button" className="toggle" aria-pressed={posEnabled} aria-label="PoS terminal" onClick={() => setPosEnabled((v) => !v)} />
+        <div><span className="t">PoS terminal</span><span className="d">Ring up in-person sales, even offline.</span></div>
+      </div>
+
+      {error && <p className="err" role="alert" style={{ marginTop: 4 }}><Icon name="alert-circle" size={14} />{error}</p>}
+      {saved && <p style={{ color: 'var(--green)', fontSize: '.85rem', marginTop: 4 }}><Icon name="check" size={14} /> Saved</p>}
+
+      <button type="button" className="btn btn-p" style={{ marginTop: 16 }} onClick={submit} disabled={pending}>
+        {pending ? 'Saving…' : 'Save changes'}
+      </button>
+    </div>
+  );
+}

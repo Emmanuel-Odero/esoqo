@@ -1,0 +1,797 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Esoko Mini-Store — design review</title>
+<style>
+/* ══════════════════════════════════════════════════════════════
+   Esoko design tokens — carried over unmodified from
+   packages/ui/src/tokens.css. Store-specific additions are in the
+   second block below, namespaced so they never fight the core app. */
+:root {
+  --navy:#0A2E4D; --navy-2:#123F65; --navy-3:#1B527E;
+  --blue:#0F5C9E; --blue-2:#3F8AC4; --blue-t:#E9F2F9;
+  --green:#12794A; --green-2:#1FA163; --green-t:#E7F4ED;
+  --red:#CE2B2B; --red-t:#FCEDEC;
+  --amber:#B8760B; --amber-t:#FDF4E3;
+  --paper:#F4F7FA; --line:#DCE5EC;
+  --tx:#12283A; --tx-2:#57718A; --tx-3:#8AA0B4;
+  --sh-s:0 1px 2px rgba(10,46,77,.05),0 4px 14px rgba(10,46,77,.05);
+  --sh-m:0 8px 28px rgba(10,46,77,.10);
+  --sh-l:0 24px 60px rgba(10,46,77,.18);
+  --font-body:"IBM Plex Sans",system-ui,-apple-system,sans-serif;
+  --font-display:"Outfit",system-ui,sans-serif;
+  --font-mono:"IBM Plex Mono",ui-monospace,monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --paper:#0B1723; --line:#1E3247; --tx:#EAF1F7; --tx-2:#9BB2C6; --tx-3:#5E7A92;
+    --green-t:#0E2A1D; --blue-t:#0D2438; --amber-t:#2A1F0C; --red-t:#2A1414;
+  }
+}
+:root[data-theme="dark"] {
+  --paper:#0B1723; --line:#1E3247; --tx:#EAF1F7; --tx-2:#9BB2C6; --tx-3:#5E7A92;
+  --green-t:#0E2A1D; --blue-t:#0D2438; --amber-t:#2A1F0C; --red-t:#2A1414;
+}
+:root[data-theme="light"] {
+  --paper:#F4F7FA; --line:#DCE5EC; --tx:#12283A; --tx-2:#57718A; --tx-3:#8AA0B4;
+  --green-t:#E7F4ED; --blue-t:#E9F2F9; --amber-t:#FDF4E3; --red-t:#FCEDEC;
+}
+*,*::before,*::after{box-sizing:border-box}
+html{scroll-behavior:smooth}
+body{margin:0;background:var(--paper);color:var(--tx);font-family:var(--font-body);
+  font-size:15.5px;line-height:1.55;-webkit-font-smoothing:antialiased}
+h1,h2,h3{font-family:var(--font-display);letter-spacing:-.02em;margin:0;font-weight:800}
+button,input,select{font-family:inherit}
+:focus-visible{outline:3px solid var(--blue-2);outline-offset:2px;border-radius:3px}
+a{color:inherit}
+.sr-only{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0)}
+
+/* ── review shell ─────────────────────────────────────────── */
+.shell{display:grid;grid-template-columns:248px 1fr;min-height:100vh}
+.rail{background:var(--navy);color:#fff;padding:22px 16px;display:flex;flex-direction:column;
+  gap:22px;position:sticky;top:0;height:100vh}
+.rail-brand{display:flex;align-items:center;gap:10px;padding:0 6px}
+.rail-brand .mark{width:32px;height:32px;border-radius:8px;background:var(--green-2);
+  display:grid;place-items:center;flex:none}
+.rail-brand strong{display:block;font-family:var(--font-display);font-size:1.02rem}
+.rail-brand span{display:block;font-size:.72rem;color:#AFC6DC;letter-spacing:.02em}
+.rail-nav{display:flex;flex-direction:column;gap:2px}
+.rail-cap{font-size:.68rem;text-transform:uppercase;letter-spacing:.1em;color:#7DA0C0;
+  margin:14px 6px 4px;font-weight:700}
+.rail-nav button{display:flex;align-items:center;gap:10px;width:100%;text-align:left;
+  padding:10px 10px;border-radius:8px;border:0;background:none;color:#CBDCEC;
+  font-size:.87rem;cursor:pointer;transition:background .12s,color .12s}
+.rail-nav button:hover{background:rgba(255,255,255,.06);color:#fff}
+.rail-nav button[aria-current="true"]{background:var(--green);color:#fff;font-weight:600}
+.rail-nav button .ic{flex:none;opacity:.85}
+.rail-foot{margin-top:auto;font-size:.72rem;color:#7DA0C0;padding:0 6px;line-height:1.5}
+.rail-foot b{color:#CBDCEC;display:block;font-weight:600;margin-bottom:3px}
+
+.stage{padding:26px 34px 60px;overflow-x:auto}
+.stage-head{max-width:1180px;margin:0 auto 22px}
+.stage-head .eyebrow{font-family:var(--font-mono);font-size:.72rem;letter-spacing:.1em;
+  text-transform:uppercase;color:var(--green-2);font-weight:700;margin:0 0 6px}
+.stage-head h1{font-size:1.6rem}
+.stage-head p{color:var(--tx-2);margin:6px 0 0;max-width:64ch;font-size:.94rem}
+.view{display:none;max-width:1180px;margin:0 auto}
+.view.on{display:block}
+
+/* device frames used to stage each screen at its real-world width */
+.frame-mobile{width:390px;margin:0 auto;background:#fff;border-radius:26px;box-shadow:var(--sh-l);
+  border:8px solid var(--navy);overflow:hidden}
+.frame-tablet{width:760px;margin:0 auto;background:#fff;border-radius:16px;box-shadow:var(--sh-l);
+  border:8px solid var(--navy);overflow:hidden}
+.frame-desktop{background:#fff;border-radius:12px;box-shadow:var(--sh-m);border:1px solid var(--line);overflow:hidden}
+:root[data-theme="dark"] .frame-mobile,:root[data-theme="dark"] .frame-tablet,:root[data-theme="dark"] .frame-desktop{background:#0F1D2B}
+@media (prefers-color-scheme: dark){.frame-mobile,.frame-tablet,.frame-desktop{background:#0F1D2B}}
+:root[data-theme="light"] .frame-mobile,:root[data-theme="light"] .frame-tablet,:root[data-theme="light"] .frame-desktop{background:#fff}
+
+.ic{width:1em;height:1em}
+
+/* ── shared bits ──────────────────────────────────────────── */
+.pill{display:inline-flex;align-items:center;gap:5px;padding:3px 10px;border-radius:99px;
+  font-size:.74rem;font-weight:700;letter-spacing:.01em}
+.pill.live{background:var(--green-t);color:var(--green)}
+.pill.draft{background:var(--amber-t);color:var(--amber)}
+.pill.paused{background:var(--red-t);color:var(--red)}
+.pill.info{background:var(--blue-t);color:var(--blue)}
+.btn{display:inline-flex;align-items:center;justify-content:center;gap:8px;min-height:44px;
+  padding:0 18px;border-radius:8px;font-weight:700;font-size:.9rem;border:1.5px solid transparent;
+  cursor:pointer;font-family:inherit;transition:filter .12s,background .12s,border-color .12s}
+.btn-p{background:var(--green);color:#fff}
+.btn-p:hover{background:var(--green-2)}
+.btn-o{background:transparent;border-color:var(--line);color:var(--tx)}
+.btn-o:hover{border-color:var(--tx-3)}
+.btn-nav{background:var(--navy);color:#fff}
+.btn-sm{min-height:36px;padding:0 13px;font-size:.82rem}
+.btn:disabled{opacity:.45;cursor:not-allowed}
+.card{background:var(--paper);border:1px solid var(--line);border-radius:12px;padding:18px}
+:root[data-theme="light"] .card, .card{background:#fff}
+
+/* ═══════════════════════════ WIZARD ═══════════════════════════ */
+.wiz{padding:22px 22px 26px;font-size:.92rem}
+.wiz-step{display:none}
+.wiz-step.on{display:block}
+.wiz-steps{display:flex;gap:5px;margin-bottom:20px}
+.wiz-steps span{flex:1;height:4px;border-radius:2px;background:var(--line)}
+.wiz-steps span.on{background:var(--green)}
+.wiz-eyebrow{font-family:var(--font-mono);font-size:.68rem;text-transform:uppercase;
+  letter-spacing:.08em;color:var(--tx-3);margin:0 0 4px}
+.wiz h2{font-size:1.22rem;margin-bottom:5px}
+.wiz .sub{color:var(--tx-2);font-size:.86rem;margin:0 0 18px}
+.wiz label.fl{display:block;font-weight:600;font-size:.83rem;margin-bottom:6px}
+.wiz input[type=text]{width:100%;padding:12px 13px;border:1.5px solid var(--line);border-radius:8px;
+  font-size:.95rem;background:#fff;color:var(--tx);min-height:44px}
+.wiz input:focus{outline:none;border-color:var(--green);box-shadow:0 0 0 3px rgba(31,161,99,.15)}
+.domain-opts{display:grid;gap:9px;margin-top:4px}
+.domain-opt{border:1.5px solid var(--line);border-radius:10px;padding:13px 14px;cursor:pointer;
+  display:flex;justify-content:space-between;align-items:center;gap:10px;background:#fff}
+.domain-opt[aria-pressed="true"]{border-color:var(--green);background:var(--green-t);
+  box-shadow:0 0 0 3px rgba(31,161,99,.12)}
+.domain-opt .url{font-family:var(--font-mono);font-size:.83rem;font-weight:600}
+.domain-opt .d{font-size:.78rem;color:var(--tx-2);margin-top:2px}
+.domain-opt .price{font-weight:800;font-size:.9rem;white-space:nowrap}
+.domain-opt .price small{display:block;font-weight:500;font-size:.68rem;color:var(--tx-3)}
+.theme-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:10px;margin-top:4px}
+.theme-opt{border:1.5px solid var(--line);border-radius:10px;padding:10px;cursor:pointer;background:#fff}
+.theme-opt[aria-pressed="true"]{border-color:var(--green);box-shadow:0 0 0 3px rgba(31,161,99,.12)}
+.theme-swatch{height:44px;border-radius:6px;margin-bottom:8px;display:flex;overflow:hidden}
+.theme-swatch i{flex:1}
+.theme-opt .name{font-size:.8rem;font-weight:700}
+.addon-row{border:1.5px solid var(--line);border-radius:10px;padding:14px;display:flex;
+  gap:12px;align-items:flex-start;background:#fff}
+.toggle{position:relative;width:42px;height:24px;border-radius:99px;background:var(--line);
+  border:0;flex:none;cursor:pointer}
+.toggle[aria-pressed="true"]{background:var(--green)}
+.toggle::after{content:"";position:absolute;top:3px;left:3px;width:18px;height:18px;border-radius:50%;
+  background:#fff;transition:transform .15s}
+.toggle[aria-pressed="true"]::after{transform:translateX(18px)}
+.review-line{display:flex;justify-content:space-between;padding:9px 0;border-bottom:1px solid var(--line);font-size:.87rem}
+.review-line:last-of-type{border-bottom:0}
+.review-line b{font-weight:700}
+.review-total{display:flex;justify-content:space-between;padding-top:12px;font-weight:800;font-size:1.05rem}
+.wiz-nav{display:flex;justify-content:space-between;margin-top:22px;gap:10px}
+
+/* ═══════════════════════════ MERCHANT DASHBOARD ═══════════════════════════ */
+.dash{display:grid;grid-template-columns:200px 1fr}
+.dash-side{background:var(--paper);border-right:1px solid var(--line);padding:18px 12px}
+.dash-store{display:flex;align-items:center;gap:9px;padding:6px 8px 16px}
+.dash-store .mk{width:30px;height:30px;border-radius:8px;background:var(--green);color:#fff;
+  display:grid;place-items:center;font-weight:800;font-size:.8rem;flex:none}
+.dash-store strong{display:block;font-size:.85rem}
+.dash-store span{display:block;font-size:.7rem;color:var(--tx-2)}
+.dash-nav a{display:flex;align-items:center;gap:9px;padding:9px 10px;border-radius:7px;
+  font-size:.83rem;color:var(--tx-2);text-decoration:none;margin-bottom:1px}
+.dash-nav a.on{background:#fff;color:var(--tx);font-weight:700;box-shadow:var(--sh-s)}
+.dash-main{padding:20px 24px}
+.dash-top{display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:18px;gap:12px}
+.dash-top h3{font-size:1.15rem}
+.kpis{display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin-bottom:20px}
+.kpi{border:1px solid var(--line);border-radius:10px;padding:14px}
+.kpi .n{display:block;font-family:var(--font-display);font-weight:800;font-size:1.5rem}
+.kpi .l{font-size:.76rem;color:var(--tx-2)}
+.dtbl{width:100%;border-collapse:collapse;font-size:.83rem}
+.dtbl th{text-align:left;font-size:.68rem;text-transform:uppercase;letter-spacing:.06em;
+  color:var(--tx-3);padding:8px 10px;border-bottom:1px solid var(--line)}
+.dtbl td{padding:10px 10px;border-bottom:1px solid var(--line)}
+.dtbl tr:last-child td{border-bottom:0}
+.sect-h{display:flex;justify-content:space-between;align-items:center;margin:22px 0 10px}
+.sect-h h4{font-size:.92rem}
+
+/* ═══════════════════════════ STOREFRONT ═══════════════════════════ */
+.sf{--sf-accent:#12794A;--sf-accent-t:#E7F4ED;--sf-dark:#0A2E4D;font-size:.9rem;position:relative}
+.sf-head{background:var(--sf-dark);color:#fff;padding:16px 16px 40px;position:relative}
+.sf-head .row{display:flex;justify-content:space-between;align-items:center}
+.sf-head h3{font-size:1.05rem}
+.sf-head p{margin:2px 0 0;font-size:.74rem;color:#B9CBDC}
+.sf-cart-btn{position:relative;background:rgba(255,255,255,.12);border:0;width:38px;height:38px;
+  border-radius:9px;color:#fff;cursor:pointer;display:grid;place-items:center}
+.sf-cart-btn .n{position:absolute;top:-4px;right:-4px;background:var(--sf-accent);color:#fff;
+  font-size:.62rem;font-weight:800;border-radius:99px;min-width:16px;height:16px;display:grid;
+  place-items:center;padding:0 3px}
+.sf-search{margin-top:14px;background:#fff;border-radius:9px;display:flex;align-items:center;
+  gap:8px;padding:0 12px;min-height:40px;color:var(--tx-3)}
+.sf-search input{border:0;flex:1;font-size:.83rem;min-height:38px;color:var(--tx)}
+.sf-cats{display:flex;gap:7px;padding:12px 16px 4px;overflow-x:auto}
+.sf-cats span{flex:none;padding:6px 13px;border-radius:99px;font-size:.76rem;font-weight:600;
+  background:var(--sf-accent-t);color:var(--sf-accent);border:1px solid transparent}
+.sf-cats span.off{background:transparent;color:var(--tx-2);border-color:var(--line)}
+.sf-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px;padding:14px 16px 24px;margin-top:-16px}
+.sf-card{background:#fff;border:1px solid var(--line);border-radius:12px;overflow:hidden;
+  box-shadow:var(--sh-s)}
+.sf-card .ph{height:92px;background:var(--sf-accent-t);display:grid;place-items:center;color:var(--sf-accent)}
+.sf-card .body{padding:9px 10px 11px}
+.sf-card .nm{font-weight:700;font-size:.82rem;display:block}
+.sf-card .pr{font-weight:800;font-size:.87rem;margin-top:2px;font-family:var(--font-mono)}
+.sf-card button{margin-top:7px;width:100%;background:var(--sf-accent);color:#fff;border:0;
+  border-radius:7px;min-height:34px;font-size:.76rem;font-weight:700;cursor:pointer}
+.sf-drawer{position:absolute;inset:0;background:rgba(10,20,30,.4);display:none}
+.sf-drawer.open{display:block}
+.sf-panel{position:absolute;right:0;top:0;bottom:0;width:82%;background:#fff;padding:16px;
+  display:flex;flex-direction:column;box-shadow:-8px 0 24px rgba(0,0,0,.15)}
+.sf-panel h4{font-size:.98rem;margin-bottom:10px}
+.sf-item{display:flex;justify-content:space-between;align-items:center;padding:9px 0;
+  border-bottom:1px solid var(--line);font-size:.82rem}
+.sf-item .q{color:var(--tx-2)}
+.sf-total{display:flex;justify-content:space-between;font-weight:800;padding:12px 0;font-size:.95rem}
+.sf-panel .btn{margin-top:auto}
+
+/* ═══════════════════════════ CHECKOUT ═══════════════════════════ */
+.co{padding:20px}
+.co-summary{border:1px solid var(--line);border-radius:10px;padding:12px 14px;margin-bottom:16px}
+.co-summary .row{display:flex;justify-content:space-between;font-size:.83rem;padding:5px 0}
+.co-summary .row.tot{font-weight:800;border-top:1px solid var(--line);margin-top:5px;padding-top:9px}
+.co-methods{display:grid;gap:8px;margin-bottom:16px}
+.co-method{border:1.5px solid var(--line);border-radius:9px;padding:12px 13px;display:flex;
+  align-items:center;gap:10px;cursor:pointer;background:#fff}
+.co-method[aria-pressed="true"]{border-color:var(--green);background:var(--green-t)}
+.co-method .ic-wrap{width:32px;height:32px;border-radius:8px;background:var(--green-t);
+  color:var(--green);display:grid;place-items:center;flex:none}
+.co-method b{display:block;font-size:.85rem}
+.co-method span{font-size:.74rem;color:var(--tx-2)}
+.co-stage{display:none;text-align:center;padding:30px 14px}
+.co-stage.on{display:block}
+.co-phone{position:relative;width:64px;height:64px;margin:0 auto 16px;border-radius:16px;
+  background:var(--green-t);display:grid;place-items:center;color:var(--green)}
+.co-pulse{position:absolute;inset:-8px;border-radius:22px;border:2px solid var(--green);opacity:0;
+  animation:pulse 1.6s infinite}
+@keyframes pulse{0%{opacity:.55;transform:scale(.9)}100%{opacity:0;transform:scale(1.25)}}
+.co-code{font-family:var(--font-mono);background:var(--paper);border-radius:8px;padding:10px;
+  font-size:.85rem;margin:14px 0;color:var(--tx-2)}
+.co-success{width:64px;height:64px;margin:0 auto 14px;border-radius:50%;background:var(--green);
+  color:#fff;display:grid;place-items:center}
+
+/* ═══════════════════════════ PoS ═══════════════════════════ */
+.pos{display:grid;grid-template-columns:1fr 300px;height:560px}
+.pos-off{background:var(--amber-t);color:var(--amber);font-size:.76rem;font-weight:700;
+  padding:8px 14px;display:none;align-items:center;gap:7px;grid-column:1/-1}
+.pos-off.on{display:flex}
+.pos-top{display:flex;justify-content:space-between;align-items:center;padding:12px 16px;
+  border-bottom:1px solid var(--line);grid-column:1/-1}
+.pos-cats{display:flex;gap:6px}
+.pos-cats span{padding:5px 11px;border-radius:99px;font-size:.74rem;font-weight:600;
+  border:1px solid var(--line);color:var(--tx-2)}
+.pos-cats span.on{background:var(--navy);color:#fff;border-color:var(--navy)}
+.pos-items{padding:12px 16px;overflow-y:auto;display:grid;grid-template-columns:repeat(3,1fr);gap:9px;align-content:start}
+.pos-item{border:1px solid var(--line);border-radius:9px;padding:10px 9px;cursor:pointer;background:#fff;text-align:left}
+.pos-item:hover{border-color:var(--navy-3)}
+.pos-item b{display:block;font-size:.78rem}
+.pos-item span{font-size:.74rem;color:var(--tx-2);font-family:var(--font-mono)}
+.pos-cart{border-left:1px solid var(--line);display:flex;flex-direction:column;padding:14px}
+.pos-cart h4{font-size:.85rem;margin-bottom:8px}
+.pos-cline{display:flex;justify-content:space-between;font-size:.78rem;padding:6px 0;border-bottom:1px solid var(--line)}
+.pos-tot{display:flex;justify-content:space-between;font-weight:800;padding:10px 0;font-size:.92rem;margin-top:auto}
+.pos-pay{display:flex;gap:6px;margin-bottom:10px}
+.pos-pay button{flex:1;padding:8px 4px;border-radius:7px;border:1.5px solid var(--line);
+  background:#fff;font-size:.72rem;font-weight:700;cursor:pointer}
+.pos-pay button[aria-pressed="true"]{border-color:var(--navy);background:var(--navy);color:#fff}
+.pos-queue{font-size:.68rem;color:var(--tx-2);margin-top:8px;display:flex;align-items:center;gap:5px}
+
+/* ═══════════════════════════ ADMIN ═══════════════════════════ */
+.adm{display:grid;grid-template-columns:190px 1fr;min-height:520px}
+.adm-side{background:var(--navy);color:#CBDCEC;padding:16px 10px}
+.adm-side a{display:flex;align-items:center;gap:8px;padding:9px 10px;border-radius:7px;
+  font-size:.8rem;text-decoration:none;color:#CBDCEC;margin-bottom:1px}
+.adm-side a.on{background:var(--green);color:#fff;font-weight:700}
+.adm-main{padding:20px 22px}
+.adm-main h3{font-size:1.1rem;margin-bottom:3px}
+.adm-main .sub{color:var(--tx-2);font-size:.82rem;margin-bottom:16px}
+.rules{border:1px solid var(--line);border-radius:10px;overflow:hidden}
+.rule-row{display:grid;grid-template-columns:1fr 140px 100px 90px;gap:10px;align-items:center;
+  padding:12px 14px;border-bottom:1px solid var(--line)}
+.rule-row:last-child{border-bottom:0}
+.rule-row.hd{background:var(--paper);font-size:.68rem;text-transform:uppercase;letter-spacing:.06em;color:var(--tx-3);font-weight:700}
+.rule-row .nm{font-size:.85rem;font-weight:700}
+.rule-row .ky{font-size:.72rem;color:var(--tx-3);font-family:var(--font-mono);display:block}
+.rule-row input{width:100%;padding:8px 10px;border:1.5px solid var(--line);border-radius:6px;
+  font-family:var(--font-mono);font-size:.85rem;text-align:right}
+.rule-row input:focus{outline:none;border-color:var(--blue-2)}
+.adm-atbl{width:100%;border-collapse:collapse;font-size:.83rem;margin-top:6px}
+.adm-atbl th{text-align:left;font-size:.68rem;text-transform:uppercase;letter-spacing:.06em;
+  color:var(--tx-3);padding:9px 10px;border-bottom:1px solid var(--line)}
+.adm-atbl td{padding:11px 10px;border-bottom:1px solid var(--line)}
+.savebar{display:flex;justify-content:flex-end;gap:8px;margin-top:16px}
+</style>
+</head>
+<body>
+
+<svg width="0" height="0" style="position:absolute" aria-hidden="true">
+<defs>
+<symbol id="i-shop" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d='M3.5 9.5V20h17V9.5'/><path d='M2.5 9.5L4.5 4h15l2 5.5a3 3 0 01-5.5 1.7 3 3 0 01-5 0 3 3 0 01-5.5-1.7z'/><path d='M9.5 20v-5.5h5V20'/></symbol>
+<symbol id="i-chart" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d='M3.5 20.5h17'/><path d='M6 17V11M11 17V6M16 17v-8'/></symbol>
+<symbol id="i-basket" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d='M4 9h16l-1.6 10.5a2 2 0 01-2 1.5H7.6a2 2 0 01-2-1.5z'/><path d='M8.5 9L11 3M15.5 9L13 3M9 13v4M15 13v4'/></symbol>
+<symbol id="i-coins" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><ellipse cx='9' cy='6.5' rx='6' ry='3'/><path d='M3 6.5v4c0 1.7 2.7 3 6 3s6-1.3 6-3v-4'/><path d='M15 11c3 .3 6 1.5 6 3v4c0 1.7-2.7 3-6 3s-6-1.3-6-3v-1.2'/></symbol>
+<symbol id="i-keypad" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><rect x='4' y='3' width='16' height='18' rx='2'/><path d='M8.5 8h.01M12 8h.01M15.5 8h.01M8.5 12h.01M12 12h.01M15.5 12h.01M8.5 16h.01M12 16h.01M15.5 16h.01'/></symbol>
+<symbol id="i-shield" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d='M12 2.5l8 3v6c0 5-3.4 8.8-8 10-4.6-1.2-8-5-8-10v-6z'/></symbol>
+<symbol id="i-check" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d='M4 12.5l5 5L20 6.5'/></symbol>
+<symbol id="i-check-circle" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><circle cx='12' cy='12' r='9'/><path d='M8 12.5l2.5 2.5L16 9.5'/></symbol>
+<symbol id="i-chevron-right" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d='M9 6l6 6-6 6'/></symbol>
+<symbol id="i-chevron-down" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d='M6 9l6 6 6-6'/></symbol>
+<symbol id="i-arrow-left" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d='M20 12H4M10 18l-6-6 6-6'/></symbol>
+<symbol id="i-arrow-right" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d='M4 12h16M14 6l6 6-6 6'/></symbol>
+<symbol id="i-close" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d='M6 6l12 12M18 6L6 18'/></symbol>
+<symbol id="i-plus" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d='M12 5v14M5 12h14'/></symbol>
+<symbol id="i-search" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><circle cx='11' cy='11' r='7'/><path d='M20 20l-3.5-3.5'/></symbol>
+<symbol id="i-wifi-off" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d='M3 8a15 15 0 0118 0M6.5 11.5a10 10 0 0111 0M9.5 15a5 5 0 015 0M12 19v.01'/></symbol>
+<symbol id="i-refresh" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d='M20 11a8 8 0 10-1.6 5.5'/><path d='M20 5v6h-6'/></symbol>
+<symbol id="i-truck" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d='M2.5 6.5h11v10h-11z'/><path d='M13.5 10h4l3 3.2v3.3h-7z'/><circle cx='7' cy='18.5' r='2'/><circle cx='17' cy='18.5' r='2'/></symbol>
+<symbol id="i-tag" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d='M20.5 12.8l-7.7 7.7a2 2 0 01-2.8 0l-7-7a2 2 0 01-.6-1.6l.5-6.4a2 2 0 011.9-1.9l6.4-.5a2 2 0 011.6.6l7 7a2 2 0 01.7 2.1z'/><circle cx='8.5' cy='8.5' r='1.6'/></symbol>
+<symbol id="i-box" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d='M21 8.5v7a2 2 0 01-1 1.7l-7 4a2 2 0 01-2 0l-7-4a2 2 0 01-1-1.7v-7a2 2 0 011-1.7l7-4a2 2 0 012 0l7 4a2 2 0 011 1.7z'/><path d='M3.3 7.5L12 12.5l8.7-5M12 12.5V21'/></symbol>
+<symbol id="i-users" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><circle cx='9' cy='8' r='3.2'/><path d='M2.5 19.5a6.5 6.5 0 0113 0'/><path d='M16 5.2a3.2 3.2 0 010 5.6M17.5 19.5a6.6 6.6 0 00-2-4.7'/></symbol>
+<symbol id="i-alert-triangle" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d='M12 4L2.5 20h19z'/><path d='M12 10v4M12 17.5v.01'/></symbol>
+<symbol id="i-info" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><circle cx='12' cy='12' r='9'/><path d='M12 11v5M12 8v.01'/></symbol>
+<symbol id="i-print" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d='M7 9V3.5h10V9'/><rect x='3.5' y='9' width='17' height='7' rx='1.5'/><path d='M7 14h10v6.5H7z'/></symbol>
+<symbol id="i-user" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><circle cx='12' cy='8' r='3.5'/><path d='M4.5 20a7.5 7.5 0 0115 0'/></symbol>
+<symbol id="i-map" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d='M2.5 6.5l6-3 7 3 6-3v14l-6 3-7-3-6 3z'/><path d='M8.5 3.5v14M15.5 6.5v14'/></symbol>
+<symbol id="i-phone-call" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d='M4.5 4.5h4l2 5-2.5 1.5a11 11 0 005 5L14.5 13.5l5 2v4a1.5 1.5 0 01-1.7 1.5A16 16 0 013 6.2 1.5 1.5 0 014.5 4.5z'/></symbol>
+</defs>
+</svg>
+
+<div class="shell">
+  <aside class="rail">
+    <div class="rail-brand">
+      <span class="mark"><svg class="ic" width="17" height="17" aria-hidden="true"><use href="#i-shop"/></svg></span>
+      <div><strong>Esoko Mini-Store</strong><span>Design review · Foundation phase</span></div>
+    </div>
+    <nav class="rail-nav" id="railnav">
+      <p class="rail-cap">Merchant</p>
+      <button data-view="wizard" aria-current="true"><svg class="ic" width="16" height="16"><use href="#i-shop"/></svg>Open a store — wizard</button>
+      <button data-view="dashboard"><svg class="ic" width="16" height="16"><use href="#i-chart"/></svg>Merchant dashboard</button>
+      <button data-view="pos"><svg class="ic" width="16" height="16"><use href="#i-keypad"/></svg>PoS terminal</button>
+      <p class="rail-cap">Customer</p>
+      <button data-view="storefront"><svg class="ic" width="16" height="16"><use href="#i-basket"/></svg>Public storefront</button>
+      <button data-view="checkout"><svg class="ic" width="16" height="16"><use href="#i-coins"/></svg>M-Pesa checkout</button>
+      <p class="rail-cap">Esoko Operations</p>
+      <button data-view="admin"><svg class="ic" width="16" height="16"><use href="#i-shield"/></svg>Stores &amp; pricing</button>
+    </nav>
+    <p class="rail-foot"><b>Not final code</b>Static HTML/CSS/JS on Esoko's real design tokens, for direction sign-off before schema and React work begins.</p>
+  </aside>
+
+  <main class="stage" id="stage"><!-- views injected below --></main>
+</div>
+
+<script>
+/* ═══════════════════════════ view registry ═══════════════════════════ */
+const views = {};
+const stage = document.getElementById('stage');
+const nav = document.getElementById('railnav');
+
+function render(id) {
+  const v = views[id];
+  if (!v) return;
+  stage.innerHTML = `
+    <div class="stage-head">
+      <p class="eyebrow">${v.eyebrow}</p>
+      <h1>${v.title}</h1>
+      <p>${v.blurb}</p>
+    </div>
+    <div class="view on">${v.html}</div>`;
+  nav.querySelectorAll('button').forEach(b => b.setAttribute('aria-current', String(b.dataset.view === id)));
+  if (v.init) v.init();
+  window.scrollTo(0, 0);
+}
+nav.addEventListener('click', (e) => {
+  const btn = e.target.closest('button[data-view]');
+  if (!btn) return;
+  render(btn.dataset.view);
+});
+
+const kes = (n) => 'KES ' + n.toLocaleString('en-KE');
+
+/* ═══════════════════════════ WIZARD ═══════════════════════════ */
+views.wizard = {
+  eyebrow: 'Merchant · open a store',
+  title: 'Store setup wizard',
+  blurb: 'Every price shown here is read live from the admin-editable Pricing rules screen — nothing is hardcoded. A merchant must already be a registered Esoko subject with a verified Enterprise before this wizard is reachable.',
+  html: `
+  <div class="frame-mobile">
+    <div class="wiz">
+      <div class="wiz-steps">
+        <span class="on" data-seg="1"></span><span data-seg="2"></span><span data-seg="3"></span><span data-seg="4"></span><span data-seg="5"></span>
+      </div>
+
+      <div class="wiz-step on" data-step="1">
+        <p class="wiz-eyebrow">Step 1 of 5</p>
+        <h2>What's your store called?</h2>
+        <p class="sub">This is what customers see. You can change it later.</p>
+        <label class="fl" for="wq-name">Store name</label>
+        <input type="text" id="wq-name" value="Kanini Fresh Produce" />
+        <label class="fl" style="margin-top:14px" for="wq-cat">What do you mainly sell?</label>
+        <input type="text" id="wq-cat" value="Fruits, vegetables &amp; groceries" />
+      </div>
+
+      <div class="wiz-step" data-step="2">
+        <p class="wiz-eyebrow">Step 2 of 5</p>
+        <h2>Choose your web address</h2>
+        <p class="sub">Both are yours to keep — pick what fits your budget.</p>
+        <div class="domain-opts">
+          <button type="button" class="domain-opt" data-domain="path" aria-pressed="true">
+            <div><span class="url">esoko.global/@kanini-fresh</span><span class="d">Included with every store</span></div>
+            <div class="price">Free</div>
+          </button>
+          <button type="button" class="domain-opt" data-domain="subdomain" aria-pressed="false">
+            <div><span class="url">kanini-fresh.esoko.global</span><span class="d">Your own address, easier to say on air/print</span></div>
+            <div class="price">KES 1,500<small>one-time + 300/mo</small></div>
+          </button>
+        </div>
+      </div>
+
+      <div class="wiz-step" data-step="3">
+        <p class="wiz-eyebrow">Step 3 of 5</p>
+        <h2>Pick a look for your store</h2>
+        <p class="sub">You can switch themes any time from your dashboard.</p>
+        <div class="theme-grid">
+          <button type="button" class="theme-opt" data-theme-pick="market" aria-pressed="true">
+            <div class="theme-swatch"><i style="background:#0A2E4D"></i><i style="background:#12794A"></i><i style="background:#E7F4ED"></i></div>
+            <span class="name">Market Green</span>
+          </button>
+          <button type="button" class="theme-opt" data-theme-pick="nairobi" aria-pressed="false">
+            <div class="theme-swatch"><i style="background:#0F5C9E"></i><i style="background:#123F65"></i><i style="background:#E9F2F9"></i></div>
+            <span class="name">Nairobi Blue</span>
+          </button>
+          <button type="button" class="theme-opt" data-theme-pick="sundown" aria-pressed="false">
+            <div class="theme-swatch"><i style="background:#B8760B"></i><i style="background:#7A4E06"></i><i style="background:#FDF4E3"></i></div>
+            <span class="name">Sundown Amber</span>
+          </button>
+          <button type="button" class="theme-opt" data-theme-pick="slate" aria-pressed="false">
+            <div class="theme-swatch"><i style="background:#12283A"></i><i style="background:#57718A"></i><i style="background:#DCE5EC"></i></div>
+            <span class="name">Mono Slate</span>
+          </button>
+        </div>
+      </div>
+
+      <div class="wiz-step" data-step="4">
+        <p class="wiz-eyebrow">Step 4 of 5</p>
+        <h2>Add the PoS terminal?</h2>
+        <p class="sub">Ring up in-person sales — cash or M-Pesa — from your phone or tablet, even offline.</p>
+        <div class="addon-row">
+          <button type="button" class="toggle" id="wq-pos" aria-pressed="true" aria-label="Add PoS terminal"></button>
+          <div>
+            <b style="font-size:.87rem">PoS terminal add-on</b>
+            <p style="margin:3px 0 0;font-size:.8rem;color:var(--tx-2)">KES 400/month · works with no signal, syncs sales when you're back online</p>
+          </div>
+        </div>
+      </div>
+
+      <div class="wiz-step" data-step="5">
+        <p class="wiz-eyebrow">Step 5 of 5</p>
+        <h2>Review &amp; open your store</h2>
+        <p class="sub">Charged the way you already pay — M-Pesa STK push, right after this.</p>
+        <div id="wq-review"></div>
+      </div>
+
+      <div class="wiz-nav">
+        <button type="button" class="btn btn-o" id="wq-back">Back</button>
+        <button type="button" class="btn btn-p" id="wq-next">Continue <svg class="ic" width="16" height="16"><use href="#i-arrow-right"/></svg></button>
+      </div>
+    </div>
+  </div>`,
+  init() {
+    let step = 1;
+    const root = stage;
+    const domainPrice = { path: 0, subdomain: 1500 };
+    const domainLabel = { path: 'esoko.global/@kanini-fresh — Free', subdomain: 'kanini-fresh.esoko.global — KES 1,500 + 300/mo' };
+    let domain = 'path', posOn = true;
+
+    function showStep(n) {
+      step = n;
+      root.querySelectorAll('.wiz-step').forEach(el => el.classList.toggle('on', +el.dataset.step === n));
+      root.querySelectorAll('[data-seg]').forEach(el => el.classList.toggle('on', +el.dataset.seg <= n));
+      root.querySelector('#wq-back').disabled = n === 1;
+      root.querySelector('#wq-next').innerHTML = n === 5
+        ? `Pay ${kes(total())} &amp; open store <svg class="ic" width="16" height="16"><use href="#i-check"/></svg>`
+        : `Continue <svg class="ic" width="16" height="16"><use href="#i-arrow-right"/></svg>`;
+      if (n === 5) renderReview();
+    }
+    function total() { return domainPrice[domain] + (posOn ? 400 : 0); }
+    function renderReview() {
+      root.querySelector('#wq-review').innerHTML = `
+        <div class="card">
+          <div class="review-line"><span>Store name</span><b>${root.querySelector('#wq-name').value}</b></div>
+          <div class="review-line"><span>Address</span><b>${domainLabel[domain]}</b></div>
+          <div class="review-line"><span>Theme</span><b>${root.querySelector('[data-theme-pick][aria-pressed="true"] .name').textContent}</b></div>
+          <div class="review-line"><span>PoS terminal</span><b>${posOn ? 'Added — KES 400/mo' : 'Not added'}</b></div>
+          <div class="review-total"><span>Due today</span><span>${kes(domainPrice[domain] + (posOn ? 400 : 0))}</span></div>
+        </div>
+        <p style="font-size:.76rem;color:var(--tx-2);margin-top:10px">Recurring fees (address hosting, PoS) bill monthly via the same M-Pesa number, with a reminder SMS before each charge.</p>`;
+    }
+    root.querySelectorAll('.domain-opt').forEach(b => b.addEventListener('click', () => {
+      domain = b.dataset.domain;
+      root.querySelectorAll('.domain-opt').forEach(x => x.setAttribute('aria-pressed', String(x === b)));
+    }));
+    root.querySelectorAll('[data-theme-pick]').forEach(b => b.addEventListener('click', () => {
+      root.querySelectorAll('[data-theme-pick]').forEach(x => x.setAttribute('aria-pressed', String(x === b)));
+    }));
+    root.querySelector('#wq-pos').addEventListener('click', (e) => {
+      posOn = !posOn;
+      e.currentTarget.setAttribute('aria-pressed', String(posOn));
+    });
+    root.querySelector('#wq-next').addEventListener('click', () => { if (step < 5) showStep(step + 1); });
+    root.querySelector('#wq-back').addEventListener('click', () => { if (step > 1) showStep(step - 1); });
+    showStep(1);
+  },
+};
+
+/* ═══════════════════════════ MERCHANT DASHBOARD ═══════════════════════════ */
+views.dashboard = {
+  eyebrow: 'Merchant · dashboard',
+  title: 'Store dashboard',
+  blurb: 'Same Server-Action-over-DAL pattern as apps/app/me — reads the merchant’s own store via `store.read:own`, no data crosses to another merchant.',
+  html: `
+  <div class="frame-desktop">
+    <div class="dash">
+      <aside class="dash-side">
+        <div class="dash-store"><span class="mk">KF</span><div><strong>Kanini Fresh</strong><span>esoko.global/@kanini-fresh</span></div></div>
+        <nav class="dash-nav">
+          <a href="#" class="on"><svg class="ic" width="15" height="15"><use href="#i-chart"/></svg>Overview</a>
+          <a href="#"><svg class="ic" width="15" height="15"><use href="#i-box"/></svg>Products</a>
+          <a href="#"><svg class="ic" width="15" height="15"><use href="#i-basket"/></svg>Orders</a>
+          <a href="#"><svg class="ic" width="15" height="15"><use href="#i-keypad"/></svg>PoS terminal</a>
+          <a href="#"><svg class="ic" width="15" height="15"><use href="#i-truck"/></svg>Delivery</a>
+          <a href="#"><svg class="ic" width="15" height="15"><use href="#i-shop"/></svg>Store settings</a>
+        </nav>
+      </aside>
+      <div class="dash-main">
+        <div class="dash-top">
+          <div><h3>Good morning, Kanini</h3><p style="margin:2px 0 0;font-size:.82rem;color:var(--tx-2)">Tuesday, 4 August</p></div>
+          <span class="pill live"><svg class="ic" width="12" height="12"><use href="#i-check-circle"/></svg>Store live</span>
+        </div>
+        <div class="kpis">
+          <div class="kpi"><span class="n">${kes(8450)}</span><span class="l">Sales today · 6 orders</span></div>
+          <div class="kpi"><span class="n">3</span><span class="l">Orders awaiting fulfilment</span></div>
+          <div class="kpi"><span class="n">14</span><span class="l">Products live</span></div>
+        </div>
+
+        <div class="sect-h"><h4>Recent orders</h4><a href="#" style="font-size:.78rem;color:var(--blue);font-weight:600">View all</a></div>
+        <table class="dtbl">
+          <thead><tr><th>Order</th><th>Customer</th><th>Items</th><th>Total</th><th>Payment</th><th>Status</th></tr></thead>
+          <tbody>
+            <tr><td>#EK-1042</td><td>Wanjiru M.</td><td>Tomatoes ×3, Sukuma ×2</td><td>${kes(540)}</td><td>M-Pesa</td><td><span class="pill live">Paid</span></td></tr>
+            <tr><td>#EK-1041</td><td>Otieno K.</td><td>Onions ×5kg</td><td>${kes(900)}</td><td>M-Pesa</td><td><span class="pill draft">Awaiting pickup</span></td></tr>
+            <tr><td>#EK-1040</td><td>Achieng B.</td><td>Mixed veg box</td><td>${kes(1200)}</td><td>M-Pesa</td><td><span class="pill live">Fulfilled</span></td></tr>
+          </tbody>
+        </table>
+
+        <div class="sect-h"><h4>Low stock</h4></div>
+        <table class="dtbl">
+          <thead><tr><th>Product</th><th>Left</th><th></th></tr></thead>
+          <tbody>
+            <tr><td>Sukuma wiki (bunch)</td><td>4</td><td><span class="pill draft">Restock soon</span></td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>`,
+};
+
+/* ═══════════════════════════ STOREFRONT ═══════════════════════════ */
+views.storefront = {
+  eyebrow: 'Customer · public storefront',
+  title: 'Public storefront',
+  blurb: 'Reachable at either address the merchant chose in the wizard. Try the theme picker below — storefront styling is entirely CSS custom properties, same mechanism as packages/ui/tokens.css.',
+  html: `
+  <div style="display:flex;gap:8px;justify-content:center;margin-bottom:16px" id="sf-theme-picker">
+    <button type="button" class="btn btn-sm btn-o" data-sf-theme="market" style="border-color:#12794A">Market Green</button>
+    <button type="button" class="btn btn-sm btn-o" data-sf-theme="nairobi" style="border-color:#0F5C9E">Nairobi Blue</button>
+    <button type="button" class="btn btn-sm btn-o" data-sf-theme="sundown" style="border-color:#B8760B">Sundown Amber</button>
+  </div>
+  <div class="frame-mobile">
+    <div class="sf" id="sf-root">
+      <div class="sf-head">
+        <div class="row">
+          <div><h3>Kanini Fresh Produce</h3><p>Roysambu · Usually replies within an hour</p></div>
+          <button type="button" class="sf-cart-btn" id="sf-cart-open"><svg class="ic" width="18" height="18"><use href="#i-basket"/></svg><span class="n">2</span></button>
+        </div>
+        <div class="sf-search"><svg class="ic" width="15" height="15"><use href="#i-search"/></svg><input placeholder="Search tomatoes, onions, greens…" /></div>
+      </div>
+      <div class="sf-cats">
+        <span>All</span><span class="off">Vegetables</span><span class="off">Fruits</span><span class="off">Grains</span><span class="off">Herbs</span>
+      </div>
+      <div class="sf-grid">
+        <div class="sf-card"><div class="ph"><svg class="ic" width="26" height="26"><use href="#i-tag"/></svg></div><div class="body"><span class="nm">Tomatoes (1kg)</span><span class="pr">${kes(120)}</span><button type="button">Add to basket</button></div></div>
+        <div class="sf-card"><div class="ph"><svg class="ic" width="26" height="26"><use href="#i-tag"/></svg></div><div class="body"><span class="nm">Sukuma wiki (bunch)</span><span class="pr">${kes(30)}</span><button type="button">Add to basket</button></div></div>
+        <div class="sf-card"><div class="ph"><svg class="ic" width="26" height="26"><use href="#i-tag"/></svg></div><div class="body"><span class="nm">Red onions (2kg)</span><span class="pr">${kes(180)}</span><button type="button">Add to basket</button></div></div>
+        <div class="sf-card"><div class="ph"><svg class="ic" width="26" height="26"><use href="#i-tag"/></svg></div><div class="body"><span class="nm">Mixed veg box</span><span class="pr">${kes(1200)}</span><button type="button">Add to basket</button></div></div>
+      </div>
+      <div class="sf-drawer" id="sf-drawer">
+        <div class="sf-panel">
+          <h4>Your basket</h4>
+          <div class="sf-item"><span>Tomatoes (1kg) ×1</span><b>${kes(120)}</b></div>
+          <div class="sf-item"><span>Mixed veg box ×1</span><b>${kes(1200)}</b></div>
+          <div class="sf-total"><span>Total</span><span>${kes(1320)}</span></div>
+          <button type="button" class="btn btn-p" id="sf-checkout">Checkout with M-Pesa <svg class="ic" width="16" height="16"><use href="#i-arrow-right"/></svg></button>
+          <button type="button" class="btn btn-o" id="sf-cart-close" style="margin-top:8px">Keep shopping</button>
+        </div>
+      </div>
+    </div>
+  </div>`,
+  init() {
+    const root = stage;
+    const sf = root.querySelector('#sf-root');
+    const themes = {
+      market: { dark: '#0A2E4D', accent: '#12794A', tint: '#E7F4ED' },
+      nairobi: { dark: '#123F65', accent: '#0F5C9E', tint: '#E9F2F9' },
+      sundown: { dark: '#3A2A0F', accent: '#B8760B', tint: '#FDF4E3' },
+    };
+    root.querySelectorAll('[data-sf-theme]').forEach(b => b.addEventListener('click', () => {
+      const t = themes[b.dataset.sfTheme];
+      sf.style.setProperty('--sf-dark', t.dark);
+      sf.style.setProperty('--sf-accent', t.accent);
+      sf.style.setProperty('--sf-accent-t', t.tint);
+    }));
+    root.querySelector('#sf-cart-open').addEventListener('click', () => root.querySelector('#sf-drawer').classList.add('open'));
+    root.querySelector('#sf-cart-close').addEventListener('click', () => root.querySelector('#sf-drawer').classList.remove('open'));
+    root.querySelector('#sf-checkout').addEventListener('click', () => render('checkout'));
+  },
+};
+
+/* ═══════════════════════════ CHECKOUT ═══════════════════════════ */
+views.checkout = {
+  eyebrow: 'Customer · payment',
+  title: 'M-Pesa STK checkout',
+  blurb: 'No new habit for the buyer — this is the standard Safaricom STK push, same prompt they get from every other till. The callback writes a JournalEntry keyed on Daraja’s CheckoutRequestID, so a retried or duplicate callback can never double-credit an order.',
+  html: `
+  <div class="frame-mobile">
+    <div class="co">
+      <div class="co-stage on" data-costage="1">
+        <h2 style="font-size:1.1rem;margin-bottom:12px">Confirm &amp; pay</h2>
+        <div class="co-summary">
+          <div class="row"><span>Tomatoes (1kg) ×1</span><span>${kes(120)}</span></div>
+          <div class="row"><span>Mixed veg box ×1</span><span>${kes(1200)}</span></div>
+          <div class="row"><span>Delivery — Roysambu</span><span>${kes(0)}</span></div>
+          <div class="row tot"><span>Total</span><span>${kes(1320)}</span></div>
+        </div>
+        <label class="fl" style="font-weight:600;font-size:.83rem;display:block;margin-bottom:6px">M-Pesa number</label>
+        <input type="text" class="wiz-like" value="07•• ••• 342" style="width:100%;padding:12px 13px;border:1.5px solid var(--line);border-radius:8px;font-size:.95rem;margin-bottom:16px" />
+        <div class="co-methods">
+          <div class="co-method" aria-pressed="true">
+            <span class="ic-wrap"><svg class="ic" width="17" height="17"><use href="#i-coins"/></svg></span>
+            <div><b>M-Pesa STK push</b><span>Approve on your phone — instant</span></div>
+          </div>
+        </div>
+        <button type="button" class="btn btn-p" id="co-pay" style="width:100%">Pay ${kes(1320)}</button>
+      </div>
+
+      <div class="co-stage" data-costage="2">
+        <div class="co-phone"><span class="co-pulse"></span><svg class="ic" width="26" height="26"><use href="#i-phone-call" fill="none"/></svg></div>
+        <h2 style="font-size:1.05rem">Check your phone</h2>
+        <p style="color:var(--tx-2);font-size:.86rem;margin-top:6px">We've sent a payment prompt to 07•• ••• 342.<br>Enter your M-Pesa PIN to complete.</p>
+        <div class="co-code">Reference: EK-1043 · KES 1,320</div>
+      </div>
+
+      <div class="co-stage" data-costage="3">
+        <div class="co-success"><svg class="ic" width="30" height="30"><use href="#i-check"/></svg></div>
+        <h2 style="font-size:1.05rem">Payment received</h2>
+        <p style="color:var(--tx-2);font-size:.86rem;margin-top:6px">Kanini Fresh has been notified. You'll get an SMS when your order is ready.</p>
+        <p style="font-family:var(--font-mono);font-size:.78rem;color:var(--tx-3);margin-top:14px">M-Pesa code QK7X9P2T4M</p>
+      </div>
+    </div>
+  </div>`,
+  init() {
+    const root = stage;
+    root.querySelector('#co-pay').addEventListener('click', () => {
+      root.querySelectorAll('.co-stage').forEach(s => s.classList.toggle('on', s.dataset.costage === '2'));
+      setTimeout(() => root.querySelectorAll('.co-stage').forEach(s => s.classList.toggle('on', s.dataset.costage === '3')), 2200);
+    });
+  },
+};
+
+/* ═══════════════════════════ PoS ═══════════════════════════ */
+views.pos = {
+  eyebrow: 'Merchant · PoS terminal',
+  title: 'PoS terminal',
+  blurb: 'A browser PWA, not a native install — runs on the same Android phone or tablet a trader already has. Toggle "Simulate offline" below: sales still ring up and queue locally (IndexedDB outbox), then sync once connectivity returns.',
+  html: `
+  <div style="text-align:center;margin-bottom:14px">
+    <button type="button" class="btn btn-sm btn-o" id="pos-offline-toggle"><svg class="ic" width="14" height="14"><use href="#i-wifi-off"/></svg>Simulate offline</button>
+  </div>
+  <div class="frame-tablet">
+    <div class="pos">
+      <div class="pos-off" id="pos-off-banner"><svg class="ic" width="14" height="14"><use href="#i-wifi-off"/></svg>No connection — sales are queuing on this device and will sync automatically</div>
+      <div class="pos-top">
+        <div class="pos-cats"><span class="on">All</span><span>Vegetables</span><span>Fruits</span><span>Grains</span></div>
+        <strong style="font-size:.85rem">Kanini Fresh — Till</strong>
+      </div>
+      <div class="pos-items">
+        <button type="button" class="pos-item"><b>Tomatoes 1kg</b><span>${kes(120)}</span></button>
+        <button type="button" class="pos-item"><b>Sukuma bunch</b><span>${kes(30)}</span></button>
+        <button type="button" class="pos-item"><b>Onions 2kg</b><span>${kes(180)}</span></button>
+        <button type="button" class="pos-item"><b>Cabbage</b><span>${kes(70)}</span></button>
+        <button type="button" class="pos-item"><b>Carrots 1kg</b><span>${kes(90)}</span></button>
+        <button type="button" class="pos-item"><b>Spinach bunch</b><span>${kes(40)}</span></button>
+        <button type="button" class="pos-item"><b>Mixed veg box</b><span>${kes(1200)}</span></button>
+        <button type="button" class="pos-item"><b>Green pepper</b><span>${kes(50)}</span></button>
+        <button type="button" class="pos-item"><b>Bananas (dozen)</b><span>${kes(150)}</span></button>
+      </div>
+      <div class="pos-cart">
+        <h4>Current sale</h4>
+        <div class="pos-cline"><span>Tomatoes 1kg ×2</span><span>${kes(240)}</span></div>
+        <div class="pos-cline"><span>Onions 2kg ×1</span><span>${kes(180)}</span></div>
+        <div class="pos-tot"><span>Total</span><span>${kes(420)}</span></div>
+        <div class="pos-pay">
+          <button type="button" aria-pressed="true">Cash</button>
+          <button type="button" aria-pressed="false">M-Pesa till</button>
+        </div>
+        <button type="button" class="btn btn-nav" style="width:100%">Complete sale</button>
+        <p class="pos-queue" id="pos-queue-note" style="display:none"><svg class="ic" width="12" height="12"><use href="#i-refresh"/></svg>3 sales queued — will sync when back online</p>
+      </div>
+    </div>
+  </div>`,
+  init() {
+    const root = stage;
+    const banner = root.querySelector('#pos-off-banner');
+    const note = root.querySelector('#pos-queue-note');
+    root.querySelector('#pos-offline-toggle').addEventListener('click', (e) => {
+      const on = banner.classList.toggle('on');
+      note.style.display = on ? 'flex' : 'none';
+      e.currentTarget.innerHTML = on
+        ? '<svg class="ic" width="14" height="14"><use href="#i-refresh"/></svg>Back online'
+        : '<svg class="ic" width="14" height="14"><use href="#i-wifi-off"/></svg>Simulate offline';
+    });
+  },
+};
+
+/* ═══════════════════════════ ADMIN ═══════════════════════════ */
+views.admin = {
+  eyebrow: 'Esoko Operations · apps/admin',
+  title: 'Stores & pricing',
+  blurb: 'Mirrors the existing (dashboard)/payments layout in apps/admin. Every price a merchant sees anywhere in the wizard reads from this table — changing a row here changes it everywhere, with a full audit trail via the existing recordAudit().',
+  html: `
+  <div class="frame-desktop">
+    <div class="adm">
+      <aside class="adm-side">
+        <a href="#"><svg class="ic" width="14" height="14"><use href="#i-chart"/></svg>Overview</a>
+        <a href="#"><svg class="ic" width="14" height="14"><use href="#i-basket"/></svg>Registrations</a>
+        <a href="#"><svg class="ic" width="14" height="14"><use href="#i-coins"/></svg>Payments</a>
+        <a href="#" class="on"><svg class="ic" width="14" height="14"><use href="#i-shop"/></svg>Stores &amp; pricing</a>
+        <a href="#"><svg class="ic" width="14" height="14"><use href="#i-users"/></svg>Groups</a>
+        <a href="#"><svg class="ic" width="14" height="14"><use href="#i-shield"/></svg>Staff &amp; permissions</a>
+      </aside>
+      <div class="adm-main">
+        <h3>Pricing rules</h3>
+        <p class="sub">Changes apply immediately to every merchant not yet at that step of the wizard. Requires <code>pricing.write</code>.</p>
+        <div class="rules">
+          <div class="rule-row hd"><span>Rule</span><span>Amount</span><span>Billing</span><span>Updated</span></div>
+          <div class="rule-row">
+            <div><span class="nm">Custom subdomain — setup</span><span class="ky">SUBDOMAIN_SETUP_FEE</span></div>
+            <input value="1,500" /><span style="font-size:.8rem;color:var(--tx-2)">One-time</span><span style="font-size:.76rem;color:var(--tx-3)">2026-07-12</span>
+          </div>
+          <div class="rule-row">
+            <div><span class="nm">Custom subdomain — hosting</span><span class="ky">SUBDOMAIN_MONTHLY_FEE</span></div>
+            <input value="300" /><span style="font-size:.8rem;color:var(--tx-2)">Monthly</span><span style="font-size:.76rem;color:var(--tx-3)">2026-07-12</span>
+          </div>
+          <div class="rule-row">
+            <div><span class="nm">PoS terminal add-on</span><span class="ky">POS_MONTHLY_FEE</span></div>
+            <input value="400" /><span style="font-size:.8rem;color:var(--tx-2)">Monthly</span><span style="font-size:.76rem;color:var(--tx-3)">2026-06-30</span>
+          </div>
+          <div class="rule-row">
+            <div><span class="nm">Platform fee on checkout sales</span><span class="ky">PLATFORM_FEE_PCT</span></div>
+            <input value="1.5" /><span style="font-size:.8rem;color:var(--tx-2)">% per order</span><span style="font-size:.76rem;color:var(--tx-3)">2026-06-30</span>
+          </div>
+        </div>
+        <div class="savebar">
+          <button type="button" class="btn btn-o btn-sm">Discard</button>
+          <button type="button" class="btn btn-p btn-sm">Save changes</button>
+        </div>
+
+        <div class="sect-h"><h4>Store directory</h4><span style="font-size:.78rem;color:var(--tx-2)">312 stores · 289 live</span></div>
+        <table class="adm-atbl">
+          <thead><tr><th>Store</th><th>Owner</th><th>Address</th><th>PoS</th><th>Status</th><th></th></tr></thead>
+          <tbody>
+            <tr><td>Kanini Fresh Produce</td><td>Kanini W. · Roysambu</td><td>esoko.global/@kanini-fresh</td><td>Yes</td><td><span class="pill live">Live</span></td><td><a href="#" style="font-size:.78rem;color:var(--blue)">Review</a></td></tr>
+            <tr><td>Mwangi Hardware</td><td>Mwangi P. · Kayole</td><td>mwangi-hw.esoko.global</td><td>Yes</td><td><span class="pill live">Live</span></td><td><a href="#" style="font-size:.78rem;color:var(--blue)">Review</a></td></tr>
+            <tr><td>Amina's Fabrics</td><td>Amina H. · Eastleigh</td><td>esoko.global/@aminas-fabrics</td><td>No</td><td><span class="pill draft">Setup incomplete</span></td><td><a href="#" style="font-size:.78rem;color:var(--blue)">Review</a></td></tr>
+            <tr><td>Otieno Electronics</td><td>Otieno S. · CBD</td><td>otieno-electronics.esoko.global</td><td>No</td><td><span class="pill paused">Suspended</span></td><td><a href="#" style="font-size:.78rem;color:var(--blue)">Review</a></td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>`,
+};
+
+render('wizard');
+</script>
+</body>
+</html>
