@@ -4,9 +4,12 @@ import {
   updateRegistration, voidRegistration, restoreRegistration,
   createRegistrationForPerson, getRegistrationDetail,
   createDocument, listDocumentsForRegistration,
-  declarePayment, recordPayment,
+  declarePayment, recordPayment, assignUserPin,
+  assignPersonToGroup, searchGroupsForStaff,
   sniff, makeStorageKey, safeName, sha256, putObject, MAX_BYTES,
 } from '@esoko/db';
+import { hashPin, generateTempPin } from '@esoko/auth';
+import { toSafeErrorMessage } from '@esoko/domain';
 
 type PayMethod = 'MPESA' | 'BANK_TRANSFER' | 'CASH_TO_AGENT';
 export interface PaymentInput {
@@ -17,7 +20,8 @@ import { requireStaff } from '@/lib/session';
 export type Result<T = void> = { ok: true; data: T } | { ok: false; error: string };
 
 function fail(e: unknown): Result<never> {
-  return { ok: false, error: e instanceof Error ? e.message : 'That did not work' };
+  console.error(e);
+  return { ok: false, error: toSafeErrorMessage(e, "That didn't save. Please try again — if it keeps happening, check the record hasn't been voided or completed in the meantime.") };
 }
 
 export async function actionGetDetail(id: string) {
@@ -115,6 +119,35 @@ export async function actionAmendPayment(paymentId: string, input: PaymentInput 
   } catch (e) { return fail(e); }
 }
 
+/** Assigns (or resets) a login PIN for the person this registration became.
+ *  The temp PIN is returned once, shown once, never stored in plaintext. */
+export async function actionAssignUserPin(personId: string): Promise<Result<{ tempPin: string }>> {
+  try {
+    const ctx = await requireStaff();
+    const tempPin = generateTempPin();
+    await assignUserPin(ctx, personId, await hashPin(tempPin));
+    revalidatePath('/registrations');
+    return { ok: true, data: { tempPin } };
+  } catch (e) { return fail(e); }
+}
+
+/** Lean group search for staff, used by the "assign to group" picker. */
+export async function actionSearchGroupsForStaff(q: string) {
+  const ctx = await requireStaff();
+  return searchGroupsForStaff(ctx, q);
+}
+
+/** Assigns (or moves, exiting any other active membership) a completed
+ *  registration's person into a group. */
+export async function actionAssignToGroup(personId: string, orgPartyId: string): Promise<Result> {
+  try {
+    const ctx = await requireStaff();
+    await assignPersonToGroup(ctx, personId, orgPartyId);
+    revalidatePath('/registrations');
+    return { ok: true, data: undefined };
+  } catch (e) { return fail(e); }
+}
+
 /** Walk-ins, phone calls, agent capture. */
 export async function actionCreateWalkIn(input: {
   joiningAs: 'me' | 'group' | 'biz';
@@ -175,7 +208,8 @@ export async function actionUploadWalkInDocument(form: FormData): Promise<Upload
       doc: { id: doc.id, title: doc.title, kind: doc.kind, mimeType: doc.mimeType, sizeBytes: doc.sizeBytes },
     };
   } catch (e) {
-    return { ok: false, error: e instanceof Error ? e.message : 'That upload did not work' };
+    console.error(e);
+    return { ok: false, error: toSafeErrorMessage(e, "That upload didn't go through. Check the file and try again.") };
   }
 }
 
@@ -195,6 +229,7 @@ export async function actionRemoveWalkInDocument(id: string): Promise<{ ok: bool
     revalidatePath('/registrations');
     return { ok: true };
   } catch (e) {
-    return { ok: false, error: e instanceof Error ? e.message : 'Could not remove that file' };
+    console.error(e);
+    return { ok: false, error: toSafeErrorMessage(e, "That file couldn't be removed. Please try again.") };
   }
 }

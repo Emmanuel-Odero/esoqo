@@ -7,7 +7,7 @@ import { COUNTIES, LIVE_COUNTIES, formatMsisdn } from '@esoko/domain';
 import {
   actionStart, actionSaveNames, actionSaveContact, actionSaveWork,
   actionSaveStanding, actionRequestOtp, actionVerifyOtp, actionComplete,
-  actionSearchWork, actionSearchGroups, type ActionResult,
+  actionSearchWork, actionSearchGroups, actionMarkStep, type ActionResult,
 } from './actions';
 import { DocumentStep, PaymentStep } from './Steps';
 
@@ -23,7 +23,7 @@ interface Form {
   hasRegisteredBusiness: YesNoSoon | ''; registrationNo: string;
   belongsToGroup: 'yes' | 'no' | ''; groupName: string; groupPartyId: string;
   feeCoverage: 'group' | 'self' | '';
-  memberCount: string; hasKraPin: 'yes' | 'no' | '';
+  memberCount: string;
   ussdSetupChoice: 'now' | 'later' | '';
   paymentChoice: 'paid' | 'later' | '';
   wantsPriceSms: boolean; wantsReceiptSms: boolean; wantsExpirySms: boolean;
@@ -34,14 +34,16 @@ const EMPTY: Form = {
   msisdn: '+254 7', email: '', county: 'Nairobi', ward: '', workRaw: '', segment: '',
   hasRegisteredBusiness: '', registrationNo: '', belongsToGroup: '', groupName: '', groupPartyId: '',
   feeCoverage: '',
-  memberCount: '', hasKraPin: '', ussdSetupChoice: '', paymentChoice: '',
+  memberCount: '', ussdSetupChoice: '', paymentChoice: '',
   wantsPriceSms: false, wantsReceiptSms: true, wantsExpirySms: true,
 };
 
 const KNOWN_ROLES = ['Chairperson', 'Treasurer', 'Secretary', 'Member'] as const;
 
-const TOTAL_QUESTIONS = 7;
-const STORAGE_KEY = 'esoko:join:v1';
+const TOTAL_QUESTIONS = 8;
+// Bumped alongside the step reorder below — an old saved session from
+// before this shape would otherwise hydrate into the wrong step.
+const STORAGE_KEY = 'esoko:join:v2';
 
 export function JoinFlow() {
   const announce = useAnnounce();
@@ -130,61 +132,115 @@ export function JoinFlow() {
     [announce],
   );
 
-  /* ── step 1 ── */
-  function pickJoiningAs(v: JoiningAs) {
-    set('joiningAs', v);
-    if (v === 'inst') { setStep(0); return; }
-    start(async () => {
-      const r = await actionStart({ joiningAs: v, language: 'en' });
-      if (r.ok) { setRegId(r.data.id); setStep(2); announce('Question 2 of 5. Your name.'); }
-      else handle(r);
-    });
+  /* ── step 1 — the actual fork in the journey ──────────────────
+   * "Already in a group" is its own front door, not something
+   * discovered two questions into the "Myself" path — that's what
+   * makes it a genuinely different, shorter journey rather than the
+   * same corridor with one extra reordered question. */
+  type Entry = 'group-member' | 'group-new' | 'solo' | 'biz' | 'inst';
+  function pickEntry(v: Entry) {
+    if (v === 'inst') { set('joiningAs', 'inst'); setStep(0); return; }
+    if (v === 'group-member') {
+      setF((p) => ({ ...p, joiningAs: 'me', belongsToGroup: 'yes' }));
+      setStep(2);
+      announce('Question 2 of 8. Find your group.');
+    } else if (v === 'solo') {
+      setF((p) => ({ ...p, joiningAs: 'me', belongsToGroup: 'no' }));
+      setStep(3);
+      announce('Question 2 of 8. Your name.');
+    } else if (v === 'group-new') {
+      set('joiningAs', 'group');
+      setStep(3);
+      announce('Question 2 of 8. The group, and you.');
+    } else {
+      set('joiningAs', 'biz');
+      setStep(3);
+      announce('Question 2 of 8. Your name.');
+    }
+  }
+
+  // Someone who came in through "already in a group" doesn't need the
+  // business-registration-status question at all — that question is
+  // about an individual's own standing, and the group membership
+  // already speaks to that, whether or not the exact org they typed
+  // matched a real record. This is the actual "shorter" promise, beyond
+  // just skipping payment/receipt entry (already conditional on
+  // feeCoverage) or the yes/no toggle (now decided at the front door).
+  const skipStanding = f.joiningAs === 'me' && f.belongsToGroup === 'yes';
+
+  function goBack() {
+    if (step === 7 && skipStanding) { setStep(5); return; }
+    // Step 2 only ever existed for the "already in a group" journey —
+    // everyone else skipped straight from 1 to 3, so that's where "Back"
+    // from step 3 must return them, not to a step they never saw.
+    if (step === 3 && !(f.joiningAs === 'me' && f.belongsToGroup === 'yes')) { setStep(1); return; }
+    setStep(step - 1);
   }
 
   /* ── advance ── */
   function next() {
-    if (!regId) return;
     setError(null);
 
     if (step === 2) {
+      // Nothing to save yet — no row exists until step 3 (name). Just
+      // move on; whatever was picked here rides along on that first write.
+      setStep(3);
+      return;
+    }
+
+    if (step === 3) {
       start(async () => {
-        const r = await actionSaveNames(regId, {
+        const names = {
           joiningAs: f.joiningAs, officialName: f.officialName, knownAs: f.knownAs,
-          orgName: f.orgName, orgKnownAs: f.orgKnownAs,
-          orgRole: f.orgRole as 'Treasurer',
-        });
-        handle(r, () => setStep(3));
+          orgName: f.orgName, orgKnownAs: f.orgKnownAs, orgRole: f.orgRole as 'Treasurer',
+          belongsToGroup: f.belongsToGroup || undefined, groupName: f.groupName || undefined,
+          groupPartyId: f.groupPartyId || undefined, feeCoverage: f.feeCoverage || undefined,
+        };
+        // No regId yet the first time through — this is where the
+        // registration actually gets created, now that there's a real
+        // name attached. Once regId exists (e.g. editing after going
+        // back), it's just an update to the same row.
+        if (regId) {
+          const r = await actionSaveNames(regId, names);
+          handle(r, () => setStep(4));
+        } else {
+          const r = await actionStart(names);
+          handle(r, () => { if (r.ok) setRegId(r.data.id); setStep(4); });
+        }
       });
-    } else if (step === 3) {
+      return;
+    }
+
+    if (!regId) return;
+
+    if (step === 4) {
       start(async () => {
         const r = await actionSaveContact(regId, {
           msisdn: f.msisdn, email: f.email, county: f.county, ward: f.ward,
         });
-        handle(r, () => setStep(4));
-      });
-    } else if (step === 4) {
-      start(async () => {
-        const r = await actionSaveWork(regId, { workRaw: f.workRaw, segment: f.segment });
         handle(r, () => setStep(5));
       });
     } else if (step === 5) {
+      start(async () => {
+        const r = await actionSaveWork(regId, { workRaw: f.workRaw, segment: f.segment });
+        handle(r, () => setStep(skipStanding ? 7 : 6));
+      });
+    } else if (step === 6) {
       start(async () => {
         const r = await actionSaveStanding(regId, {
           joiningAs: f.joiningAs,
           hasRegisteredBusiness: f.hasRegisteredBusiness || undefined,
           registrationNo: f.registrationNo,
-          belongsToGroup: f.belongsToGroup || undefined,
-          groupName: f.groupName,
-          groupPartyId: f.groupPartyId || undefined,
-          feeCoverage: f.feeCoverage || undefined,
           memberCount: f.memberCount ? Number(f.memberCount) : undefined,
-          hasKraPin: f.hasKraPin || undefined,
         });
-        handle(r, () => setStep(6));
+        handle(r, () => setStep(7));
       });
-    } else if (step === 6 || step === 7) {
-      setStep(step + 1);
-    } else if (step === 8) {
+    } else if (step === 7 || step === 8) {
+      start(async () => {
+        await actionMarkStep(regId, step + 1);
+        setStep(step + 1);
+      });
+    } else if (step === 9) {
       start(async () => {
         const r = await actionComplete({
           registrationId: regId,
@@ -323,7 +379,7 @@ export function JoinFlow() {
         ))}
       </div>
       <p className="pcount">
-        {step === 8 ? 'Last step · verify and finish' : `Step ${step} of ${TOTAL_QUESTIONS}`}
+        {step === 9 ? 'Last step · verify and finish' : `Step ${step} of ${TOTAL_QUESTIONS}`}
       </p>
 
       <div className="qcard">
@@ -336,18 +392,25 @@ export function JoinFlow() {
         {/* ─── 1 ─── */}
         {step === 1 && (
           <>
-            <h2 className="qh" ref={headingRef} tabIndex={-1}>Who is joining?</h2>
-            <p className="qs">This decides what Esoko asks next. Nothing else changes.</p>
+            <h2 className="qh" ref={headingRef} tabIndex={-1}>How are you joining?</h2>
+            <p className="qs">This changes what Esoko asks you next — pick the one that's actually true.</p>
             <div className="opts">
               {([
-                ['me', 'user', 'Myself', 'A trader, farmer, rider, fundi or anyone working on their own'],
-                ['group', 'users', 'A group', 'Chama, self-help group, CBO, faith-based group, cooperative or SACCO'],
-                ['biz', 'shop', 'A business', 'Registered or not — either is fine'],
+                ['group-member', 'handshake', 'I’m already part of a group', 'Your chama, SHG, CBO or SACCO is already on Esoko — this is the fastest way in'],
+                ['group-new', 'users', 'I’m registering my group', 'For the first time — chama, self-help group, CBO, faith-based group, cooperative or SACCO'],
+                ['solo', 'user', 'I’m on my own', 'A trader, farmer, rider, fundi or anyone working on their own, not part of any group'],
+                ['biz', 'shop', 'I’m registering a business', 'Registered or not — either is fine'],
                 ['inst', 'gov', 'A bank, county, buyer or agency', 'Institutions are set up by agreement, not through this form'],
               ] as const).map(([v, icon, t, d]) => (
                 <button key={v} type="button" className="opt"
-                  aria-pressed={f.joiningAs === v}
-                  onClick={() => pickJoiningAs(v)} disabled={pending}>
+                  aria-pressed={
+                    (v === 'group-member' && f.joiningAs === 'me' && f.belongsToGroup === 'yes')
+                    || (v === 'solo' && f.joiningAs === 'me' && f.belongsToGroup === 'no')
+                    || (v === 'group-new' && f.joiningAs === 'group')
+                    || (v === 'biz' && f.joiningAs === 'biz')
+                    || (v === 'inst' && f.joiningAs === 'inst')
+                  }
+                  onClick={() => pickEntry(v)} disabled={pending}>
                   <span className="icbox"><Icon name={icon} size={18} /></span>
                   <span><span className="t">{t}</span><span className="d">{d}</span></span>
                 </button>
@@ -356,8 +419,67 @@ export function JoinFlow() {
           </>
         )}
 
-        {/* ─── 2 ─── */}
+        {/* ─── 2 · find your group (already decided you're a member) ─── */}
         {step === 2 && (
+          <>
+            <h2 className="qh" ref={headingRef} tabIndex={-1}>Find your group</h2>
+            <p className="qs">
+              Search for it below. Linking you to the real record means less for you to answer
+              next, and your fee can be covered by the group instead of paid separately.
+            </p>
+            <div className="fld">
+              <label className="lab" htmlFor="groupName">Name of the group</label>
+              <input className="inp" id="groupName" value={f.groupName} autoComplete="off" autoFocus
+                role="combobox" aria-expanded={groupHits.length > 0} aria-controls="group-hits"
+                onChange={(e) => onGroupInput(e.target.value)} placeholder="Search or type the name" />
+              <div className="hits" id="group-hits" role="listbox" aria-label="Matching groups">
+                {groupHits.map((g) => (
+                  <button key={g.id} type="button" className="hit" role="option"
+                    aria-selected={f.groupPartyId === g.id}
+                    onClick={() => {
+                      set('groupName', g.name); set('groupPartyId', g.id); setGroupHits([]);
+                    }}>
+                    <span>{g.name} <span className="op">— {g.county}</span></span>
+                    <span className="yes">SELECT</span>
+                  </button>
+                ))}
+              </div>
+              <p className="hint">
+                {f.groupPartyId
+                  ? 'Linked — Esoko will connect your record to this group.'
+                  : 'Pick it from the list if it shows up, or just type the name. Its treasurer can link you later either way.'}
+              </p>
+            </div>
+
+            <fieldset style={{ border: 0, padding: 0, margin: '15px 0 0' }}>
+              <legend className="lab">Has your group already paid your registration fee?</legend>
+              <div className="opts">
+                {([['group', 'Yes, the group covers it', 'Nothing more to do here'],
+                   ['self', 'No, I’ll cover it myself', 'You’ll confirm whether it’s paid or still pending, coming up']] as const)
+                  .map(([v, t, d]) => (
+                  <button key={v} type="button" className="opt" aria-pressed={f.feeCoverage === v}
+                    onClick={() => set('feeCoverage', v)}>
+                    <span><span className="t">{t}</span><span className="d">{d}</span></span>
+                  </button>
+                ))}
+              </div>
+            </fieldset>
+
+            <p className="hint" style={{ marginTop: 14 }}>
+              Don&rsquo;t see your group?{' '}
+              <button type="button" className="ed" style={{ display: 'inline' }}
+                onClick={() => {
+                  setF((p) => ({ ...p, belongsToGroup: 'no', groupName: '', groupPartyId: '', feeCoverage: '' }));
+                  setStep(3);
+                }}>
+                Continue as an individual instead
+              </button>, or register it properly from the menu afterwards.
+            </p>
+          </>
+        )}
+
+        {/* ─── 3 ─── */}
+        {step === 3 && (
           <>
             <h2 className="qh" ref={headingRef} tabIndex={-1}>
               {f.joiningAs === 'group' ? 'The group, and you' : 'Your name'}
@@ -424,8 +546,8 @@ export function JoinFlow() {
           </>
         )}
 
-        {/* ─── 3 ─── */}
-        {step === 3 && (
+        {/* ─── 4 ─── */}
+        {step === 4 && (
           <>
             <h2 className="qh" ref={headingRef} tabIndex={-1}>The number you will dial from</h2>
             <p className="qs">
@@ -476,8 +598,8 @@ export function JoinFlow() {
           </>
         )}
 
-        {/* ─── 4 ─── */}
-        {step === 4 && (
+        {/* ─── 5 ─── */}
+        {step === 5 && (
           <>
             <h2 className="qh" ref={headingRef} tabIndex={-1}>
               {f.joiningAs === 'group' ? 'What does the group do?' : 'What do you do?'}
@@ -514,8 +636,8 @@ export function JoinFlow() {
           </>
         )}
 
-        {/* ─── 5 ─── */}
-        {step === 5 && (
+        {/* ─── 6 ─── */}
+        {step === 6 && (
           <>
             <h2 className="qh" ref={headingRef} tabIndex={-1}>Where you stand today</h2>
             <p className="qs">
@@ -524,7 +646,9 @@ export function JoinFlow() {
 
             {f.joiningAs !== 'group' && (
               <fieldset style={{ border: 0, padding: 0, margin: '0 0 15px' }}>
-                <legend className="lab">Do you have a registered business?</legend>
+                <legend className="lab">
+                  {f.joiningAs === 'biz' ? 'Is it formally registered yet?' : 'Do you have a registered business?'}
+                </legend>
                 <div className="opts">
                   {([
                     ['yes', 'Yes, it is registered', 'You have a business name or BRS certificate'],
@@ -550,76 +674,22 @@ export function JoinFlow() {
               </div>
             )}
 
-            {f.joiningAs === 'group' ? (
+            {f.joiningAs === 'group' && (
               <div className="fld sub2">
                 <label className="lab" htmlFor="members">How many members?</label>
                 <input className="inp mono" id="members" inputMode="numeric" value={f.memberCount}
                   onChange={(e) => set('memberCount', e.target.value)} placeholder="18" />
                 <p className="hint">A rough number is fine. Members join later with their own phone numbers.</p>
               </div>
-            ) : (
-              <fieldset className="sub2" style={{ border: 0, padding: 0 }}>
-                <legend className="lab">Do you belong to a group, sacco or cooperative?</legend>
-                <div className="opts">
-                  {([['yes', 'Yes', 'A chama, sacco, cooperative, welfare group or association'],
-                     ['no', 'No', 'You can join or start one later from the menu']] as const).map(([v, t, d]) => (
-                    <button key={v} type="button" className="opt" aria-pressed={f.belongsToGroup === v}
-                      onClick={() => set('belongsToGroup', v)}>
-                      <span><span className="t">{t}</span><span className="d">{d}</span></span>
-                    </button>
-                  ))}
-                </div>
-                {f.belongsToGroup === 'yes' && (
-                  <>
-                    <div className="fld" style={{ marginTop: 15 }}>
-                      <label className="lab" htmlFor="groupName">Name of the group</label>
-                      <input className="inp" id="groupName" value={f.groupName} autoComplete="off"
-                        role="combobox" aria-expanded={groupHits.length > 0} aria-controls="group-hits"
-                        onChange={(e) => onGroupInput(e.target.value)} placeholder="Search or type the name" />
-                      <div className="hits" id="group-hits" role="listbox" aria-label="Matching groups">
-                        {groupHits.map((g) => (
-                          <button key={g.id} type="button" className="hit" role="option"
-                            aria-selected={f.groupPartyId === g.id}
-                            onClick={() => {
-                              set('groupName', g.name); set('groupPartyId', g.id); setGroupHits([]);
-                            }}>
-                            <span>{g.name} <span className="op">— {g.county}</span></span>
-                            <span className="yes">SELECT</span>
-                          </button>
-                        ))}
-                      </div>
-                      <p className="hint">
-                        {f.groupPartyId
-                          ? 'Linked — Esoko will connect your record to this group.'
-                          : 'Pick it from the list if it shows up, or just type the name. Its treasurer can link you later either way.'}
-                      </p>
-                    </div>
-
-                    <fieldset style={{ border: 0, padding: 0, margin: '15px 0 0' }}>
-                      <legend className="lab">Has your group already paid your registration fee?</legend>
-                      <div className="opts">
-                        {([['group', 'Yes, the group covers it', 'Nothing more to do here'],
-                           ['self', 'No, I paid it myself', 'You will enter the payment details next']] as const)
-                          .map(([v, t, d]) => (
-                          <button key={v} type="button" className="opt" aria-pressed={f.feeCoverage === v}
-                            onClick={() => set('feeCoverage', v)}>
-                            <span><span className="t">{t}</span><span className="d">{d}</span></span>
-                          </button>
-                        ))}
-                      </div>
-                    </fieldset>
-                  </>
-                )}
-              </fieldset>
             )}
           </>
         )}
 
-        {/* ─── 6 · documents ─── */}
-        {step === 6 && regId && <DocumentStep registrationId={regId} />}
+        {/* ─── 7 · documents ─── */}
+        {step === 7 && regId && <DocumentStep registrationId={regId} />}
 
-        {/* ─── 7 · payment ─── */}
-        {step === 7 && regId && (
+        {/* ─── 8 · payment ─── */}
+        {step === 8 && regId && (
           <PaymentStep
             registrationId={regId}
             choice={f.paymentChoice}
@@ -628,8 +698,8 @@ export function JoinFlow() {
           />
         )}
 
-        {/* ─── 8 · verify and finish ─── */}
-        {step === 8 && (
+        {/* ─── 9 · verify and finish ─── */}
+        {step === 9 && (
           <>
             <h2 className="qh" ref={headingRef} tabIndex={-1}>Verify and finish</h2>
             <p className="qs">Two quick things, then Esoko sends this. You can leave either for later.</p>
@@ -727,15 +797,20 @@ export function JoinFlow() {
 
             <div className="sum">
               {[
-                ['Joining as', { me: 'Myself', group: 'A group', biz: 'A business', inst: '' }[f.joiningAs || 'me'], 1],
-                ...(f.joiningAs === 'group' ? [['Group', f.orgName || '—', 2] as const] : []),
-                ['Official name', f.officialName || '—', 2],
-                ...(f.knownAs ? [['Known as', f.knownAs, 2] as const] : []),
-                ['USSD number', f.msisdn, 3],
-                ...(f.email ? [['Email', f.email, 3] as const] : []),
-                ['County', f.county + (f.ward ? ` · ${f.ward}` : ''), 3],
-                ['Work', f.workRaw || '—', 4],
-                ['Fee', f.paymentChoice === 'paid' ? 'Declared as paid' : f.paymentChoice === 'later' ? 'Paying later' : '—', 7],
+                ['Joining as', f.joiningAs === 'me'
+                  ? (f.belongsToGroup === 'yes' ? 'A member of an existing group' : 'An individual')
+                  : f.joiningAs === 'group' ? 'A new group'
+                  : f.joiningAs === 'biz' ? 'A business' : '—', 1],
+                ...(f.joiningAs === 'me' && f.belongsToGroup === 'yes'
+                  ? [['Group', f.groupName || '—', 2] as const] : []),
+                ...(f.joiningAs === 'group' ? [['Group', f.orgName || '—', 3] as const] : []),
+                ['Official name', f.officialName || '—', 3],
+                ...(f.knownAs ? [['Known as', f.knownAs, 3] as const] : []),
+                ['USSD number', f.msisdn, 4],
+                ...(f.email ? [['Email', f.email, 4] as const] : []),
+                ['County', f.county + (f.ward ? ` · ${f.ward}` : ''), 4],
+                ['Work', f.workRaw || '—', 5],
+                ['Fee', f.paymentChoice === 'paid' ? 'Declared as paid' : f.paymentChoice === 'later' ? 'Paying later' : '—', 8],
               ].map(([k, v, go]) => (
                 <div className="r" key={String(k)}>
                   <span className="k">{k}</span>
@@ -780,19 +855,19 @@ export function JoinFlow() {
         {/* ─── navigation ─── */}
         <div className="nav">
           {step > 1 && (
-            <button className="btn btn-o back" onClick={() => setStep(step - 1)} disabled={pending}>
+            <button className="btn btn-o back" onClick={goBack} disabled={pending}>
               <Icon name="arrow-left" size={16} /> Back
             </button>
           )}
           {step > 1 && (
             <button className="btn btn-p" onClick={next}
-              disabled={pending || (step === 8 && !canSubmit)}
-              aria-describedby={step === 8 && !canSubmit ? 'submit-gate' : undefined}>
-              {step === 8 ? <><Icon name="send" size={17} /> Send my registration</> : 'Continue'}
+              disabled={pending || (step === 9 && !canSubmit)}
+              aria-describedby={step === 9 && !canSubmit ? 'submit-gate' : undefined}>
+              {step === 9 ? <><Icon name="send" size={17} /> Send my registration</> : 'Continue'}
               {pending && <VisuallyHidden>Working…</VisuallyHidden>}
             </button>
           )}
-          {step === 8 && !canSubmit && (
+          {step === 9 && !canSubmit && (
             <VisuallyHidden>
               <span id="submit-gate">
                 Answer the payment question and choose whether to set up dialling access

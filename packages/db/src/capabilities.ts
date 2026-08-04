@@ -132,6 +132,7 @@ export const CAPABILITY_CATALOGUE = [
     ['party.write', 'Edit people and organisations'],
     ['party.pii', 'See unmasked phone numbers and IDs'],
     ['party.erase', 'Erase a record (DPA request)'],
+    ['party.credential', 'Assign or reset a login PIN'],
     ['membership.write', 'Add or remove group members'],
   ]},
   { group: 'Documents', items: [
@@ -209,7 +210,7 @@ export const ROLE_PRESETS = {
   VIEWER: ['registration.read', 'party.read', 'report.read', 'document.read', 'payment.read'],
 
   REGISTRAR: ['registration.read', 'registration.create', 'registration.write',
-              'party.read', 'party.write', 'membership.write',
+              'party.read', 'party.write', 'party.credential', 'membership.write',
               'document.read', 'document.review',
               'payment.read', 'payment.record', 'report.read'],
 
@@ -218,7 +219,7 @@ export const ROLE_PRESETS = {
 
   ESOKO_OPS: ['registration.read', 'registration.write', 'registration.void',
               'registration.export', 'party.read', 'party.write', 'party.pii',
-              'membership.write', 'document.read', 'document.review', 'document.delete',
+              'party.credential', 'membership.write', 'document.read', 'document.review', 'document.delete',
               'payment.read', 'payment.record', 'audit.read', 'report.read',
               'duplicate.review', 'consent.read', 'staff.read',
               'store.read', 'store.moderate', 'pricing.read', 'pricing.write'],

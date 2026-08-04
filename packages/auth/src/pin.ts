@@ -1,4 +1,5 @@
 import 'server-only';
+import { randomInt } from 'node:crypto';
 import { hash, verify } from '@node-rs/argon2';
 
 /**
@@ -11,6 +12,14 @@ import { hash, verify } from '@node-rs/argon2';
  * Parameters follow OWASP guidance: 19 MiB, 2 iterations, parallelism 1.
  */
 const OPTS = { memoryCost: 19_456, timeCost: 2, parallelism: 1 } as const;
+
+/** A one-time PIN handed to someone to sign in with — this becomes a
+ *  real authentication credential the moment it's hashed and stored, so
+ *  it's generated with a CSPRNG rather than `Math.random()` (which is
+ *  not designed to resist state-recovery attacks). */
+export function generateTempPin(): string {
+  return String(randomInt(100_000, 1_000_000));
+}
 
 export async function hashPin(pin: string): Promise<string> {
   if (!/^\d{4,6}$/.test(pin)) throw new Error('PIN must be 4 to 6 digits');

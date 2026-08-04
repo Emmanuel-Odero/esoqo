@@ -1,6 +1,8 @@
 'use client';
 
 import { useEffect, useRef, useState, useTransition } from 'react';
+import Link from 'next/link';
+import type { Route } from 'next';
 import { Icon, type IconName } from '@esoko/ui';
 import { useAnnounce } from '@esoko/a11y';
 import {
@@ -181,6 +183,9 @@ function GroupDetail({
           ) : (
             <span className="pill p-warn">Not registered</span>
           )}
+          <Link className="btn btn-o btn-sm" href={`/groups/${group.id}` as Route}>
+            <Icon name="chart" size={13} />Full analytics
+          </Link>
         </div>
 
         {missingOffices.length > 0 && (
