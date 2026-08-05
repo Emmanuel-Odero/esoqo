@@ -1,9 +1,9 @@
 import { prisma } from '../client';
-import { systemCtx, type Ctx } from '../capabilities';
+import { requireCapability, systemCtx, type Ctx } from '../capabilities';
 import { recordAudit } from '../audit';
 import { assertOwnsStore } from './store';
 import { postStoreSale } from './_commerce-ledger';
-import type { StoreOrderPaymentMethod } from '@prisma/client';
+import type { StoreOrderPaymentMethod, StoreOrderStatus } from '@prisma/client';
 
 export class StoreOrderError extends Error {
   constructor(msg: string, public readonly code: 'STORE_UNAVAILABLE' | 'ITEM_UNAVAILABLE' | 'NOT_FOUND') {
@@ -129,4 +129,164 @@ export async function fulfilStoreOrder(ctx: Ctx, orderId: string) {
   const updated = await prisma.storeOrder.update({ where: { id: orderId }, data: { status: 'FULFILLED' } });
   await recordAudit(ctx, { action: 'store_order.fulfilled', targetType: 'store_order', targetId: orderId });
   return updated;
+}
+
+/* ── staff-wide order desk ───────────────────────────────────── */
+
+export interface OrderDirectoryFilter {
+  status?: StoreOrderStatus;
+  needsReroute?: boolean;
+  search?: string;
+  take?: number;
+  skip?: number;
+}
+
+/** Every order on the platform, not scoped to one store — the desk a
+ *  support call works from: who ordered, from which shop, what state
+ *  it's in, whether it's already flagged as stuck. */
+export async function listAllOrdersForStaff(ctx: Ctx, f: OrderDirectoryFilter = {}) {
+  requireCapability(ctx, 'order.read');
+  const where = {
+    ...(f.status ? { status: f.status } : {}),
+    ...(f.needsReroute !== undefined ? { needsReroute: f.needsReroute } : {}),
+    ...(f.search
+      ? {
+          OR: [
+            { buyerName: { contains: f.search, mode: 'insensitive' as const } },
+            { buyerMsisdn: { contains: f.search } },
+            { store: { name: { contains: f.search, mode: 'insensitive' as const } } },
+          ],
+        }
+      : {}),
+  };
+  const [rows, total] = await Promise.all([
+    prisma.storeOrder.findMany({
+      where,
+      include: {
+        store: { select: { id: true, name: true, slug: true, status: true } },
+        items: { include: { product: { select: { id: true, name: true, category: true } } } },
+      },
+      orderBy: { createdAt: 'desc' },
+      take: f.take ?? 50,
+      skip: f.skip ?? 0,
+    }),
+    prisma.storeOrder.count({ where }),
+  ]);
+  return { rows, total };
+}
+
+/** Marks an order as needing a different vendor — the flag a support
+ *  call raises when the original store can't deliver. Doesn't move
+ *  anything by itself; see reassignOrder for the actual handoff. */
+export async function flagOrderForReroute(ctx: Ctx, orderId: string, reason: string) {
+  requireCapability(ctx, 'order.reroute');
+  if (!reason.trim()) throw new Error('A reason is required to flag an order for reroute');
+  if (!ctx.actorId) throw new Error('Flagging an order requires a named staff account');
+
+  const order = await prisma.storeOrder.update({
+    where: { id: orderId },
+    data: { needsReroute: true, rerouteReason: reason, rerouteFlaggedById: ctx.actorId, rerouteFlaggedAt: new Date() },
+  });
+  await recordAudit(ctx, { action: 'store_order.flagged_for_reroute', targetType: 'store_order', targetId: orderId, payload: { reason } });
+  return order;
+}
+
+export async function clearRerouteFlag(ctx: Ctx, orderId: string) {
+  requireCapability(ctx, 'order.reroute');
+  const order = await prisma.storeOrder.update({
+    where: { id: orderId },
+    data: { needsReroute: false, rerouteReason: null, rerouteFlaggedById: null, rerouteFlaggedAt: null },
+  });
+  await recordAudit(ctx, { action: 'store_order.reroute_cleared', targetType: 'store_order', targetId: orderId });
+  return order;
+}
+
+/** Other active stores carrying a product with the same name as
+ *  something in this order — the candidate list staff pick a new
+ *  vendor from. Name-matched rather than a formal SKU link, since
+ *  there is no shared-catalog concept between independent merchants. */
+export async function findRerouteCandidates(ctx: Ctx, orderId: string) {
+  requireCapability(ctx, 'order.reroute');
+  const order = await prisma.storeOrder.findUnique({
+    where: { id: orderId }, include: { items: { include: { product: true } } },
+  });
+  if (!order) throw new StoreOrderError('Order not found', 'NOT_FOUND');
+
+  const names = [...new Set(order.items.map((i) => i.product.name))];
+  const candidates = await prisma.store.findMany({
+    where: {
+      id: { not: order.storeId },
+      status: 'ACTIVE',
+      products: { some: { name: { in: names }, status: 'ACTIVE' } },
+    },
+    include: {
+      products: { where: { name: { in: names }, status: 'ACTIVE' }, select: { id: true, name: true, priceKes: true, stockQty: true } },
+      enterprise: { select: { party: { select: { person: true, organisation: true } } } },
+    },
+    take: 10,
+  });
+  return candidates.map((s) => ({
+    id: s.id, name: s.name,
+    owner: s.enterprise.party.person?.knownAs || s.enterprise.party.person?.officialName
+      || s.enterprise.party.organisation?.knownAs || s.enterprise.party.organisation?.officialName || '—',
+    matchingProducts: s.products,
+  }));
+}
+
+/**
+ * Hands an order to a different store. Only ever allowed before money
+ * moves — PENDING_PAYMENT — because a PAID order already has a
+ * JournalEntry crediting the original merchant's STORE_REVENUE account;
+ * silently re-pointing it after that would corrupt the ledger's history
+ * rather than correct it. A paid order that can't be fulfilled is a
+ * refund/settlement conversation, not a reroute.
+ *
+ * Requires an exact-name product match in the destination store for
+ * every item — the same reasoning as findRerouteCandidates: there's no
+ * shared SKU between independent merchants to remap to automatically.
+ */
+export async function reassignOrder(ctx: Ctx, orderId: string, newStoreId: string) {
+  requireCapability(ctx, 'order.reroute');
+
+  return prisma.$transaction(async (tx) => {
+    const order = await tx.storeOrder.findUnique({
+      where: { id: orderId }, include: { items: { include: { product: true } } },
+    });
+    if (!order) throw new StoreOrderError('Order not found', 'NOT_FOUND');
+    if (order.status !== 'PENDING_PAYMENT') {
+      throw new Error('Only an order still awaiting payment can be reassigned to another vendor');
+    }
+
+    const newStore = await tx.store.findUnique({ where: { id: newStoreId } });
+    if (!newStore || newStore.status !== 'ACTIVE') throw new StoreOrderError('That store is not available', 'STORE_UNAVAILABLE');
+
+    const replacements = await tx.product.findMany({
+      where: { storeId: newStoreId, status: 'ACTIVE', name: { in: order.items.map((i) => i.product.name) } },
+    });
+
+    let totalKes = 0;
+    for (const item of order.items) {
+      const match = replacements.find((p) => p.name === item.product.name);
+      if (!match) {
+        throw new Error(`"${item.product.name}" isn't listed in that store — add it there first, or pick a different vendor`);
+      }
+      await tx.storeOrderItem.update({ where: { id: item.id }, data: { productId: match.id, unitPriceKes: match.priceKes } });
+      totalKes += Number(match.priceKes) * item.quantity;
+    }
+
+    const updated = await tx.storeOrder.update({
+      where: { id: orderId },
+      data: {
+        storeId: newStoreId, totalKes,
+        needsReroute: false, rerouteReason: null, rerouteFlaggedById: null, rerouteFlaggedAt: null,
+      },
+    });
+
+    await recordAudit(ctx, {
+      action: 'store_order.reassigned', targetType: 'store_order', targetId: orderId,
+      payload: { fromStoreId: order.storeId, toStoreId: newStoreId, totalKes },
+    }, tx as never);
+
+    return updated;
+  });
 }

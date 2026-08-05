@@ -173,6 +173,19 @@ export async function listStoresForStaff(ctx: Ctx, f: StoreDirectoryFilter = {})
   return { rows, total };
 }
 
+/** Platform-wide counts, unaffected by whatever filter the directory
+ *  page is currently showing — a KPI row has to mean "all stores",
+ *  not "all stores matching what you happen to be looking at". */
+export async function getStoreCounts(ctx: Ctx) {
+  requireCapability(ctx, 'store.read');
+  const [total, live, posEnabled] = await Promise.all([
+    prisma.store.count(),
+    prisma.store.count({ where: { status: 'ACTIVE' } }),
+    prisma.store.count({ where: { posEnabled: true } }),
+  ]);
+  return { total, live, posEnabled };
+}
+
 export async function moderateStore(ctx: Ctx, storeId: string, status: 'ACTIVE' | 'SUSPENDED', reason: string) {
   requireCapability(ctx, 'store.moderate');
   const store = await prisma.store.update({ where: { id: storeId }, data: { status } });
@@ -183,4 +196,312 @@ export async function moderateStore(ctx: Ctx, storeId: string, status: 'ACTIVE' 
     payload: { reason },
   });
   return store;
+}
+
+/**
+ * One store's full picture for staff — the "help this owner
+ * troubleshoot" view. Everything a support conversation needs in one
+ * query: who owns it, what they're selling, how it's performing.
+ */
+export async function getStoreDetailForStaff(ctx: Ctx, storeId: string) {
+  requireCapability(ctx, 'store.read');
+  const store = await prisma.store.findUnique({
+    where: { id: storeId },
+    include: {
+      enterprise: { include: { party: { include: { person: true, organisation: true } } } },
+      products: { orderBy: { createdAt: 'desc' } },
+      _count: { select: { products: true, orders: true, posSales: true } },
+    },
+  });
+  if (!store) return null;
+
+  const [orders, posSales, orderAgg, posAgg] = await Promise.all([
+    prisma.storeOrder.findMany({
+      where: { storeId }, orderBy: { createdAt: 'desc' }, take: 20,
+      include: { items: { include: { product: true } } },
+    }),
+    prisma.posSale.findMany({
+      where: { storeId }, orderBy: { soldAt: 'desc' }, take: 20,
+      include: { items: { include: { product: true } } },
+    }),
+    // PAID and FULFILLED both mean "money changed hands" — fulfilment is
+    // what happens after payment, not instead of it.
+    prisma.storeOrder.aggregate({
+      where: { storeId, status: { in: ['PAID', 'FULFILLED'] } }, _sum: { totalKes: true },
+    }),
+    prisma.posSale.aggregate({ where: { storeId }, _sum: { totalKes: true } }),
+  ]);
+
+  return {
+    store,
+    orders, posSales,
+    revenueKes: Number(orderAgg._sum.totalKes ?? 0) + Number(posAgg._sum.totalKes ?? 0),
+  };
+}
+
+function dayKey(d: Date) {
+  return d.toISOString().slice(0, 10);
+}
+
+/**
+ * The performance picture for one store — what a marketplace super-admin
+ * actually looks at to judge health or help someone troubleshoot: a
+ * revenue trend, where orders are getting stuck, how people are paying,
+ * what's actually selling, and the two things that are silently costing
+ * this merchant money if nobody looks — stock about to run out, and PoS
+ * sales stuck unreconciled.
+ */
+export async function getStoreAnalyticsForStaff(ctx: Ctx, storeId: string, days = 30) {
+  requireCapability(ctx, 'store.read');
+
+  // "days" full buckets ending TODAY, not yesterday — days-1 back, not
+  // days back, or the day-bucket loop below silently drops anything
+  // that happened today from the trend (and everything summed from it).
+  const since = new Date();
+  since.setDate(since.getDate() - (days - 1));
+  since.setHours(0, 0, 0, 0);
+
+  const [orders, posSales, products, conflictSales] = await Promise.all([
+    prisma.storeOrder.findMany({
+      where: { storeId, createdAt: { gte: since } },
+      select: {
+        status: true, paymentMethod: true, totalKes: true, buyerMsisdn: true,
+        createdAt: true, paidAt: true,
+        items: { select: { quantity: true, unitPriceKes: true, product: { select: { id: true, name: true } } } },
+      },
+    }),
+    prisma.posSale.findMany({
+      where: { storeId, soldAt: { gte: since } },
+      select: {
+        paymentMethod: true, totalKes: true, soldAt: true, syncStatus: true,
+        items: { select: { quantity: true, unitPriceKes: true, product: { select: { id: true, name: true } } } },
+      },
+    }),
+    prisma.product.findMany({
+      where: { storeId, status: 'ACTIVE', stockQty: { not: null, lte: 5 } },
+      select: { id: true, name: true, stockQty: true },
+      orderBy: { stockQty: 'asc' },
+    }),
+    prisma.posSale.findMany({
+      where: { storeId, syncStatus: 'CONFLICT' },
+      select: { id: true, clientSaleId: true, totalKes: true, soldAt: true },
+      orderBy: { soldAt: 'desc' },
+      take: 10,
+    }),
+  ]);
+
+  const paidOrders = orders.filter((o) => o.status === 'PAID' || o.status === 'FULFILLED');
+
+  // Revenue trend — a day bucket for every day in the window, even ones
+  // with nothing in them, so the chart's x-axis is continuous.
+  const byDay = new Map<string, number>();
+  for (let i = 0; i < days; i++) {
+    const d = new Date(since);
+    d.setDate(d.getDate() + i);
+    byDay.set(dayKey(d), 0);
+  }
+  for (const o of paidOrders) {
+    const key = dayKey(o.paidAt ?? o.createdAt);
+    if (byDay.has(key)) byDay.set(key, (byDay.get(key) ?? 0) + Number(o.totalKes));
+  }
+  for (const s of posSales) {
+    const key = dayKey(s.soldAt);
+    if (byDay.has(key)) byDay.set(key, (byDay.get(key) ?? 0) + Number(s.totalKes));
+  }
+  const dailyRevenue = [...byDay.entries()].map(([date, revenueKes]) => ({ date, revenueKes }));
+
+  // Week-over-week — the last 7 complete days against the 7 before that.
+  const last7 = dailyRevenue.slice(-7).reduce((n, d) => n + d.revenueKes, 0);
+  const prior7 = dailyRevenue.slice(-14, -7).reduce((n, d) => n + d.revenueKes, 0);
+  const wowChangePct = prior7 > 0 ? Math.round(((last7 - prior7) / prior7) * 100) : null;
+
+  // Order status — the funnel a support call needs: how many are stuck
+  // before payment, how many paid but never got marked fulfilled.
+  const statusBreakdown = (['PENDING_PAYMENT', 'PAID', 'FULFILLED', 'CANCELLED'] as const).map((status) => ({
+    status, count: orders.filter((o) => o.status === status).length,
+  }));
+
+  const fulfillable = orders.filter((o) => o.status === 'PAID' || o.status === 'FULFILLED').length;
+  const fulfilled = orders.filter((o) => o.status === 'FULFILLED').length;
+  const fulfillmentRatePct = fulfillable > 0 ? Math.round((fulfilled / fulfillable) * 100) : null;
+
+  // Payment split — online and till are different rails with different
+  // failure modes, worth seeing separately, not folded into one count.
+  const paymentSplit = [
+    { label: 'M-Pesa (online)', count: orders.filter((o) => o.paymentMethod === 'MPESA_STK').length },
+    { label: 'Cash on delivery', count: orders.filter((o) => o.paymentMethod === 'CASH_ON_DELIVERY').length },
+    { label: 'Cash (till)', count: posSales.filter((s) => s.paymentMethod === 'CASH').length },
+    { label: 'M-Pesa (till)', count: posSales.filter((s) => s.paymentMethod === 'MPESA_TILL').length },
+  ].filter((p) => p.count > 0);
+
+  // Top products — online and PoS sales of the same item are the same
+  // product performing, not two separate signals.
+  const productAgg = new Map<string, { name: string; unitsSold: number; revenueKes: number }>();
+  for (const src of [...orders.flatMap((o) => o.items), ...posSales.flatMap((s) => s.items)]) {
+    const cur = productAgg.get(src.product.id) ?? { name: src.product.name, unitsSold: 0, revenueKes: 0 };
+    cur.unitsSold += src.quantity;
+    cur.revenueKes += src.quantity * Number(src.unitPriceKes);
+    productAgg.set(src.product.id, cur);
+  }
+  const topProducts = [...productAgg.values()].sort((a, b) => b.revenueKes - a.revenueKes).slice(0, 5);
+
+  // Buyers — repeat custom is the strongest health signal a young store
+  // has, well before "total revenue" means anything on its own.
+  const buyerCounts = new Map<string, number>();
+  for (const o of orders) buyerCounts.set(o.buyerMsisdn, (buyerCounts.get(o.buyerMsisdn) ?? 0) + 1);
+  const uniqueBuyers = buyerCounts.size;
+  const repeatBuyers = [...buyerCounts.values()].filter((n) => n > 1).length;
+
+  return {
+    dailyRevenue, wowChangePct,
+    statusBreakdown, fulfillmentRatePct,
+    paymentSplit, topProducts,
+    uniqueBuyers, repeatBuyers,
+    lowStock: products,
+    posConflicts: conflictSales,
+    windowDays: days,
+  };
+}
+
+/**
+ * Every enterprise actually selling on the platform — the "users /
+ * traders" list. An Enterprise only shows up here once it has opened
+ * at least one Store; having a business on file isn't the same as
+ * having gone live.
+ */
+export interface TraderFilter { search?: string; take?: number; skip?: number }
+
+export async function listStoreOwnersForStaff(ctx: Ctx, f: TraderFilter = {}) {
+  requireCapability(ctx, 'store.read');
+  const where = {
+    stores: { some: {} },
+    ...(f.search
+      ? {
+          OR: [
+            { workRaw: { contains: f.search, mode: 'insensitive' as const } },
+            { party: { person: { officialName: { contains: f.search, mode: 'insensitive' as const } } } },
+            { party: { person: { knownAs: { contains: f.search, mode: 'insensitive' as const } } } },
+            { party: { organisation: { officialName: { contains: f.search, mode: 'insensitive' as const } } } },
+          ],
+        }
+      : {}),
+  };
+  const [rows, total] = await Promise.all([
+    prisma.enterprise.findMany({
+      where,
+      include: {
+        party: { include: { person: true, organisation: true } },
+        stores: { select: { id: true, name: true, slug: true, status: true, posEnabled: true } },
+      },
+      orderBy: { createdAt: 'desc' },
+      take: f.take ?? 50,
+      skip: f.skip ?? 0,
+    }),
+    prisma.enterprise.count({ where }),
+  ]);
+  return { rows, total };
+}
+
+/**
+ * The marketplace-wide picture — what a super-admin lands on first,
+ * before drilling into any one store: how much is actually moving
+ * through the platform, what the platform is earning from it, which
+ * stores are driving that, and the shape of the seller base itself.
+ */
+export async function getEstoreOverview(ctx: Ctx, days = 30) {
+  requireCapability(ctx, 'store.read');
+
+  // "days" full buckets ending TODAY, not yesterday — days-1 back, not
+  // days back, or the day-bucket loop below silently drops anything
+  // that happened today from the trend (and everything summed from it).
+  const since = new Date();
+  since.setDate(since.getDate() - (days - 1));
+  since.setHours(0, 0, 0, 0);
+
+  const [stores, orders, posSales, feeRule] = await Promise.all([
+    prisma.store.findMany({
+      select: {
+        id: true, name: true, slug: true, status: true, posEnabled: true, createdAt: true,
+        enterprise: { select: { sector: true, party: { include: { person: true, organisation: true } } } },
+      },
+    }),
+    prisma.storeOrder.findMany({
+      where: { createdAt: { gte: since } },
+      select: { storeId: true, status: true, totalKes: true, createdAt: true, paidAt: true },
+    }),
+    prisma.posSale.findMany({
+      where: { soldAt: { gte: since } },
+      select: { storeId: true, totalKes: true, soldAt: true },
+    }),
+    prisma.pricingRule.findUnique({ where: { key: 'PLATFORM_FEE_PCT' } }),
+  ]);
+
+  const paidOrders = orders.filter((o) => o.status === 'PAID' || o.status === 'FULFILLED');
+  const platformFeePct = feeRule?.amountPct ? Number(feeRule.amountPct) : 0;
+
+  // Revenue trend — platform-wide, same day-bucketing shape as a single
+  // store's chart so the UI component is shared unchanged.
+  const byDay = new Map<string, number>();
+  for (let i = 0; i < days; i++) {
+    const d = new Date(since);
+    d.setDate(d.getDate() + i);
+    byDay.set(d.toISOString().slice(0, 10), 0);
+  }
+  for (const o of paidOrders) {
+    const key = (o.paidAt ?? o.createdAt).toISOString().slice(0, 10);
+    if (byDay.has(key)) byDay.set(key, (byDay.get(key) ?? 0) + Number(o.totalKes));
+  }
+  for (const s of posSales) {
+    const key = s.soldAt.toISOString().slice(0, 10);
+    if (byDay.has(key)) byDay.set(key, (byDay.get(key) ?? 0) + Number(s.totalKes));
+  }
+  const dailyRevenue = [...byDay.entries()].map(([date, revenueKes]) => ({ date, revenueKes }));
+  const gmvKes = dailyRevenue.reduce((n, d) => n + d.revenueKes, 0);
+  const commissionEarnedKes = Math.round(gmvKes * (platformFeePct / 100));
+
+  const last7 = dailyRevenue.slice(-7).reduce((n, d) => n + d.revenueKes, 0);
+  const prior7 = dailyRevenue.slice(-14, -7).reduce((n, d) => n + d.revenueKes, 0);
+  const wowChangePct = prior7 > 0 ? Math.round(((last7 - prior7) / prior7) * 100) : null;
+
+  // Per-store revenue — the leaderboard. Online and PoS sales of the
+  // same store are the same store performing, folded into one number.
+  const revenueByStore = new Map<string, number>();
+  for (const o of paidOrders) revenueByStore.set(o.storeId, (revenueByStore.get(o.storeId) ?? 0) + Number(o.totalKes));
+  for (const s of posSales) revenueByStore.set(s.storeId, (revenueByStore.get(s.storeId) ?? 0) + Number(s.totalKes));
+
+  const topStores = [...revenueByStore.entries()]
+    .sort((a, b) => b[1] - a[1])
+    .slice(0, 8)
+    .map(([storeId, revenueKes]) => {
+      const store = stores.find((s) => s.id === storeId)!;
+      const owner = store.enterprise.party.person?.knownAs || store.enterprise.party.person?.officialName
+        || store.enterprise.party.organisation?.knownAs || store.enterprise.party.organisation?.officialName || '—';
+      return { id: store.id, name: store.name, status: store.status, owner, revenueKes };
+    });
+
+  const statusBreakdown = (['ACTIVE', 'DRAFT', 'SUSPENDED'] as const).map((status) => ({
+    status, count: stores.filter((s) => s.status === status).length,
+  }));
+
+  const sectorCounts = new Map<string, number>();
+  for (const s of stores) {
+    const key = s.enterprise.sector?.trim() || 'Unclassified';
+    sectorCounts.set(key, (sectorCounts.get(key) ?? 0) + 1);
+  }
+  const sectorBreakdown = [...sectorCounts.entries()]
+    .sort((a, b) => b[1] - a[1]).slice(0, 6)
+    .map(([sector, count]) => ({ sector, count }));
+
+  const ordersThisWindow = orders.length;
+  const newStores = stores.filter((s) => s.createdAt >= since).length;
+  const posEnabledCount = stores.filter((s) => s.posEnabled).length;
+
+  return {
+    windowDays: days,
+    gmvKes, commissionEarnedKes, platformFeePct, wowChangePct,
+    dailyRevenue,
+    totalStores: stores.length, statusBreakdown, newStores,
+    posEnabledCount, posAdoptionPct: stores.length > 0 ? Math.round((posEnabledCount / stores.length) * 100) : 0,
+    ordersThisWindow, topStores, sectorBreakdown,
+  };
 }

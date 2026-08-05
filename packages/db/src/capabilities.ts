@@ -166,8 +166,10 @@ export const CAPABILITY_CATALOGUE = [
     ['store.write', 'Create or edit a store'],
     ['store.moderate', 'Suspend or reinstate any store'],
     ['product.write', 'Add or edit products in a store'],
+    ['product.moderate', 'Suspend a product, or comment on it as staff'],
     ['order.read', 'View orders placed on a store'],
     ['order.fulfil', 'Mark an order fulfilled'],
+    ['order.reroute', 'Flag or reassign an order to another vendor'],
     ['pos.sell', 'Ring up a PoS sale'],
     ['pricing.read', 'View pricing rules'],
     ['pricing.write', 'Change pricing rules'],
@@ -222,7 +224,8 @@ export const ROLE_PRESETS = {
               'party.credential', 'membership.write', 'document.read', 'document.review', 'document.delete',
               'payment.read', 'payment.record', 'audit.read', 'report.read',
               'duplicate.review', 'consent.read', 'staff.read',
-              'store.read', 'store.moderate', 'pricing.read', 'pricing.write'],
+              'store.read', 'store.write', 'store.moderate', 'order.read', 'order.reroute',
+              'product.moderate', 'pricing.read', 'pricing.write'],
 
   SUPER_ADMIN: ['*'],
 
