@@ -2,6 +2,13 @@
 .shell { display:grid; grid-template-columns:246px 1fr; min-height:100vh; min-height:100dvh }
 .col { min-width:0; display:flex; flex-direction:column }
 
+/* route-transition loading state — see (dashboard)/loading.tsx */
+.page-loading { display:grid; place-items:center; min-height:40vh }
+.spinner { width:30px; height:30px; border-radius:50%; border:3px solid var(--line);
+  border-top-color:var(--green); animation:spin .7s linear infinite }
+@media(prefers-reduced-motion:reduce){ .spinner{ animation-duration:2.4s } }
+@keyframes spin { to { transform:rotate(360deg) } }
+
 /* sidebar */
 aside { background:var(--navy); color:#9FC0D6; padding:18px 0 14px; position:sticky; top:0;
   height:100vh; height:100dvh; display:flex; flex-direction:column; overflow-y:auto }
