@@ -2,7 +2,7 @@
 
 import { useState, useTransition } from 'react';
 import { Icon } from '@esoko/ui';
-import { actionUpdatePricing } from './actions';
+import { actionUpdatePricing } from '../actions';
 
 interface Rule {
   key: string; label: string; amountKes: number | null; amountPct: number | null;
