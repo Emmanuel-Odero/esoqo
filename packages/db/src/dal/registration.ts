@@ -308,6 +308,16 @@ export async function completeRegistration(ctx: Ctx, id: string) {
       });
     }
 
+    // 4b · hand the documents uploaded during registration over to the
+    // real party they belong to. They live on the registration until
+    // now — completing it is exactly the point they need to be findable
+    // wherever staff actually look for a party's paperwork (the group's
+    // own page, not just the registration record it started from).
+    await tx.document.updateMany({
+      where: { registrationId: id, partyId: null },
+      data: { partyId: orgPartyId ?? personParty.id },
+    });
+
     // 5 · close the funnel record
     const done = await tx.registration.update({
       where: { id },
@@ -332,6 +342,56 @@ export async function completeRegistration(ctx: Ctx, id: string) {
 
     return { registration: done, partyId: personParty.id, orgPartyId };
   });
+}
+
+/**
+ * One-off repair for registrations completed before completeRegistration
+ * started re-parenting documents to the real party (see 4b above) — their
+ * documents are still stranded on registrationId alone, invisible to
+ * `listDocumentsForParty` and therefore to the group's own page. Safe to
+ * re-run: only touches documents with no partyId yet.
+ *
+ * For a group registration, the founder's earliest active membership is
+ * used to find the org — a reliable stand-in for "which org did this
+ * registration create" since a person has at most one active group at a
+ * time by product rule (see assignPersonToGroup).
+ */
+export async function backfillRegistrationDocuments(ctx: Ctx) {
+  requireCapability(ctx, 'registration.write');
+
+  const orphaned = await prisma.document.findMany({
+    where: { partyId: null, registrationId: { not: null } },
+    select: { id: true, registrationId: true },
+  });
+
+  let updated = 0;
+  for (const doc of orphaned) {
+    const reg = await prisma.registration.findUnique({
+      where: { id: doc.registrationId! },
+      select: { partyId: true, joiningAs: true },
+    });
+    if (!reg?.partyId) continue; // never completed — nothing to attach to yet
+
+    let targetPartyId = reg.partyId;
+    if (reg.joiningAs === 'group') {
+      const founding = await prisma.membership.findFirst({
+        where: { personId: reg.partyId, exitedAt: null },
+        orderBy: { joinedAt: 'asc' },
+        select: { orgId: true },
+      });
+      if (founding) targetPartyId = founding.orgId;
+    }
+
+    await prisma.document.update({ where: { id: doc.id }, data: { partyId: targetPartyId } });
+    updated += 1;
+  }
+
+  await recordAudit(ctx, {
+    action: 'documents.backfilled_party', targetType: 'document', targetId: 'bulk',
+    payload: { candidates: orphaned.length, updated },
+  });
+
+  return { candidates: orphaned.length, updated };
 }
 
 /* ── reads ──────────────────────────────────────────────────── */

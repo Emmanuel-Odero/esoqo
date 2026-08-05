@@ -118,11 +118,16 @@ export function RegistrationTable({
                         <>
                           <strong>{r.orgName}</strong>
                           <span className="sub" style={{ display: 'block' }}>
-                            Founded by {r.knownAs || r.officialName || '—'}
+                            Founded by {r.officialName || r.knownAs || '—'}
                           </span>
                         </>
                       ) : (
-                        <strong>{r.knownAs || r.officialName || '—'}</strong>
+                        <>
+                          <strong>{r.officialName || r.knownAs || '—'}</strong>
+                          {r.officialName && r.knownAs && (
+                            <span className="sub" style={{ display: 'block' }}>Known as {r.knownAs}</span>
+                          )}
+                        </>
                       )}
                     </td>
                     <td className="sub">{JOINING[r.joiningAs as keyof typeof JOINING] ?? r.joiningAs}</td>
@@ -209,8 +214,11 @@ function DetailDrawer({
     if (res) {
       setForm({
         officialName: res.officialName ?? '', knownAs: res.knownAs ?? '',
+        msisdn: res.msisdn ?? '', email: res.email ?? '',
         county: res.county ?? '', ward: res.ward ?? '', workRaw: res.workRaw ?? '',
-        orgName: res.orgName ?? '',
+        orgName: res.orgName ?? '', orgKnownAs: res.orgKnownAs ?? '',
+        registrationNo: res.registrationNo ?? '',
+        memberCount: res.memberCount != null ? String(res.memberCount) : '',
       });
     }
   }, [id]);
@@ -225,7 +233,10 @@ function DetailDrawer({
 
   function save() {
     start(async () => {
-      const r = await actionEdit(id, form);
+      const { memberCount, ...rest } = form;
+      const payload: Record<string, unknown> = { ...rest };
+      if (memberCount !== undefined) payload.memberCount = memberCount.trim() ? Number(memberCount) : null;
+      const r = await actionEdit(id, payload);
       if (r.ok) { announce('Registration updated', 'assertive'); setEditing(false); void load(); }
       else { setError(r.error); announce(r.error, 'assertive'); }
     });
@@ -318,7 +329,7 @@ function DetailDrawer({
     );
   }
 
-  const name = d.knownAs || d.officialName || 'Unnamed';
+  const name = d.officialName || d.knownAs || 'Unnamed';
   const pay = d.payment;
 
   return (
@@ -368,15 +379,25 @@ function DetailDrawer({
               <div className="grid2" style={{ gap: 14 }}>
                 {([
                   ['officialName', 'Official name'], ['knownAs', 'Known as'],
-                  ['orgName', 'Group name'], ['county', 'County'],
-                  ['ward', 'Ward or market'], ['workRaw', 'Work'],
+                  ...(canSeePii ? [['msisdn', 'Phone number'], ['email', 'Email']] as const : []),
+                  ['county', 'County'], ['ward', 'Ward or market'],
+                  ['workRaw', 'Work'],
+                  ['orgName', 'Group name'], ['orgKnownAs', 'Group known as'],
+                  ['registrationNo', 'Group registration number'], ['memberCount', 'Group member count'],
                 ] as const).map(([k, label]) => (
                   <div key={k}>
                     <label className="sub" htmlFor={`f-${k}`} style={{ display: 'block', marginBottom: 6 }}>{label}</label>
                     <input id={`f-${k}`} className="inp" style={{ width: '100%' }} value={form[k] ?? ''}
+                      type={k === 'memberCount' ? 'number' : 'text'} min={k === 'memberCount' ? 0 : undefined}
                       onChange={(e) => setForm((p) => ({ ...p, [k]: e.target.value }))} />
                   </div>
                 ))}
+                {!canSeePii && (
+                  <p className="sub" style={{ gridColumn: '1 / -1', margin: 0 }}>
+                    Phone and email are hidden without <code className="mono">party.pii</code> — ask someone who
+                    holds it to correct those.
+                  </p>
+                )}
               </div>
             ) : (
               <table className="tbl">
@@ -418,7 +439,7 @@ function DetailDrawer({
                 d.party.memberships.map((m) => (
                   <p key={m.orgId} className="pill p-info" style={{ padding: '10px 13px', marginBottom: 10 }}>
                     <Icon name="users" size={14} />
-                    {m.org.knownAs || m.org.officialName} · {m.role}
+                    {m.org.knownAs || m.org.officialName} · {m.role === 'OTHER' ? (m.customRole || 'Other') : m.role}
                   </p>
                 ))
               ) : (
