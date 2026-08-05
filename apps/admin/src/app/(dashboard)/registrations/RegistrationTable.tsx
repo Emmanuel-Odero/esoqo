@@ -389,7 +389,11 @@ function DetailDrawer({
                     ['Email', d.email], ['County', d.county], ['Ward', d.ward],
                     ['Work', d.workRaw], ['Segment', d.segment],
                     ['Registered business', d.hasRegisteredBusiness],
-                    ['In a group', d.belongsToGroup === 'yes' ? (d.groupName ?? 'Yes') : d.belongsToGroup],
+                    ['In a group', d.party
+                      ? (d.party.memberships?.length
+                        ? d.party.memberships.map((m) => m.org.knownAs || m.org.officialName).join(', ')
+                        : 'No')
+                      : (d.belongsToGroup === 'yes' ? (d.groupName ?? 'Yes') : d.belongsToGroup)],
                     ['Group linked', d.groupPartyId ? 'Yes — matched to an existing group' : null],
                     ['Fee coverage', d.feeCoverage === 'group' ? 'Group covers it' : d.feeCoverage === 'self' ? 'Paying themselves' : null],
                     ['Members', d.memberCount], ['KRA PIN', d.hasKraPin],

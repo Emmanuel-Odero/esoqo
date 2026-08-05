@@ -66,6 +66,52 @@ export async function addMember(
   return m;
 }
 
+/**
+ * Creates a brand-new person and adds them to a group in one step, for
+ * staff filling in a member list from a paper roster where not everyone
+ * has a phone number to hand. Phone is optional: a person added without
+ * one is "pending" — they show up as a member immediately, but can't log
+ * in, dial USSD or receive SMS until a real number is added later.
+ */
+export async function addNewMember(
+  ctx: Ctx, orgPartyId: string,
+  input: { officialName: string; msisdn?: string },
+  role: MemberRole = 'MEMBER',
+) {
+  requireCapability(ctx, 'party.write', { partyId: orgPartyId });
+  requireCapability(ctx, 'membership.write', { partyId: orgPartyId });
+
+  const officialName = input.officialName.trim();
+  if (!officialName) throw new Error('A name is required');
+  const msisdn = input.msisdn?.trim() || null;
+
+  if (msisdn) {
+    const clash = await prisma.person.findUnique({ where: { msisdn } });
+    if (clash) throw new Error('Someone is already on Esoko with that phone number — search for them instead');
+  }
+
+  const org = await prisma.organisation.findUniqueOrThrow({
+    where: { partyId: orgPartyId }, select: { party: { select: { county: true } } },
+  });
+
+  return prisma.$transaction(async (tx) => {
+    const party = await tx.party.create({
+      data: {
+        kind: 'PERSON', county: org.party.county,
+        person: { create: { officialName, msisdn } },
+      },
+    });
+    const m = await tx.membership.create({
+      data: { personId: party.id, orgId: orgPartyId, role },
+    });
+    await recordAudit(ctx, {
+      action: 'membership.added_new_person', targetType: 'membership', targetId: m.id,
+      payload: { orgPartyId, personId: party.id, role, hasPhone: Boolean(msisdn) },
+    }, tx as never);
+    return m;
+  });
+}
+
 export async function setMemberRole(ctx: Ctx, membershipId: string, role: MemberRole) {
   requireCapability(ctx, 'membership.write');
   const m = await prisma.membership.update({ where: { id: membershipId }, data: { role } });
