@@ -10,7 +10,7 @@ export { confirmStoreOrderPayment } from './dal/store-order';
 export * from './capabilities';
 export type { VerifyResult } from './dal/reference';
 export * from './storage';
-export type { MemberRole } from '@prisma/client';
+export type { MemberRole, OrgKind } from '@prisma/client';
 export type {
   StoreStatus, StoreRoutingMode, StoreOrderStatus, StoreOrderPaymentMethod,
   PosSyncStatus, PosPaymentMethod,

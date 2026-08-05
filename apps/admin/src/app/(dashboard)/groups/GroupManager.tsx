@@ -2,12 +2,13 @@
 
 import { useEffect, useRef, useState, useTransition } from 'react';
 import Link from 'next/link';
+import { useRouter } from 'next/navigation';
 import type { Route } from 'next';
 import { Icon, type IconName } from '@esoko/ui';
 import { useAnnounce } from '@esoko/a11y';
 import {
   actionSearchPeople, actionAddMember, actionAddNewMember, actionSetRole, actionRemoveMember,
-  actionUploadGroupDocument, actionListGroupDocuments,
+  actionUploadGroupDocument, actionListGroupDocuments, actionCreateGroup,
 } from './actions';
 
 type Role = 'CHAIRPERSON' | 'TREASURER' | 'SECRETARY' | 'MEMBER';
@@ -50,26 +51,42 @@ function byKind<T extends { kind: string }>(docs: T[]): [string, T[]][] {
 }
 
 export function GroupManager({
-  groups, canEdit, canUploadDocs, documentKinds,
+  groups, canEdit, canUploadDocs, canCreate, documentKinds, groupKinds, counties,
 }: {
-  groups: Group[]; canEdit: boolean; canUploadDocs: boolean; documentKinds: [string, string][];
+  groups: Group[]; canEdit: boolean; canUploadDocs: boolean; canCreate: boolean;
+  documentKinds: [string, string][]; groupKinds: [string, string][]; counties: string[];
 }) {
+  const router = useRouter();
   const [sel, setSel] = useState<string | null>(groups[0]?.id ?? null);
   const [q, setQ] = useState('');
+  const [creating, setCreating] = useState(false);
+  const pendingSelectRef = useRef<string | null>(null);
+
+  useEffect(() => {
+    if (pendingSelectRef.current && groups.some((g) => g.id === pendingSelectRef.current)) {
+      setSel(pendingSelectRef.current);
+      pendingSelectRef.current = null;
+    }
+  }, [groups]);
 
   const view = groups.filter((g) =>
     !q || `${g.name} ${g.knownAs ?? ''} ${g.county}`.toLowerCase().includes(q.toLowerCase()));
   const current = groups.find((g) => g.id === sel);
 
   return (
-    <div className="grid2" style={{ gridTemplateColumns: '320px 1fr', alignItems: 'start' }}>
-      <div className="card" style={{ padding: 0 }}>
-        <div style={{ padding: 14, borderBottom: '1px solid var(--line)' }}>
-          <div className="srch">
+    <div className="groups-layout">
+      <div className="card group-list-card" style={{ padding: 0 }}>
+        <div style={{ padding: 14, borderBottom: '1px solid var(--line)', display: 'flex', gap: 8 }}>
+          <div className="srch" style={{ flex: 1 }}>
             <span className="mg"><Icon name="search" size={16} /></span>
             <input className="inp" value={q} onChange={(e) => setQ(e.target.value)}
               aria-label="Search groups" placeholder="Search groups…" />
           </div>
+          {canCreate && (
+            <button className="btn btn-p btn-sm" onClick={() => setCreating(true)} aria-label="Register a new group">
+              <Icon name="plus" size={14} />New
+            </button>
+          )}
         </div>
 
         {view.length === 0 ? (
@@ -77,7 +94,9 @@ export function GroupManager({
             <span className="ico"><Icon name="handshake" size={20} /></span>
             <h3>No groups yet</h3>
             <p style={{ margin: 0, fontSize: '.88rem' }}>
-              A group appears here when someone registers one during joining.
+              {canCreate
+                ? 'Register one, or a group appears here when someone joins as one.'
+                : 'A group appears here when someone registers one during joining.'}
             </p>
           </div>
         ) : (
@@ -109,6 +128,122 @@ export function GroupManager({
       ) : (
         <div className="card"><div className="empty"><p>Select a group.</p></div></div>
       )}
+
+      {creating && (
+        <CreateGroup
+          groupKinds={groupKinds}
+          counties={counties}
+          onClose={() => setCreating(false)}
+          onCreated={(partyId) => {
+            pendingSelectRef.current = partyId;
+            setCreating(false);
+            router.refresh();
+          }}
+        />
+      )}
+    </div>
+  );
+}
+
+function CreateGroup({
+  groupKinds, counties, onClose, onCreated,
+}: {
+  groupKinds: [string, string][]; counties: string[];
+  onClose: () => void; onCreated: (partyId: string) => void;
+}) {
+  const [kind, setKind] = useState(groupKinds[0]?.[0] ?? 'CHAMA');
+  const [officialName, setOfficialName] = useState('');
+  const [knownAs, setKnownAs] = useState('');
+  const [county, setCounty] = useState(counties[0] ?? '');
+  const [registrationNo, setRegistrationNo] = useState('');
+  const [memberCount, setMemberCount] = useState('');
+  const [error, setError] = useState<string | null>(null);
+  const [pending, start] = useTransition();
+  const announce = useAnnounce();
+
+  function create() {
+    if (!officialName.trim() || !county) return;
+    setError(null);
+    start(async () => {
+      const r = await actionCreateGroup({
+        kind: kind as never,
+        officialName,
+        knownAs: knownAs || undefined,
+        county,
+        registrationNo: registrationNo || undefined,
+        memberCount: memberCount ? Number(memberCount) : undefined,
+      });
+      if (r.ok) { announce(`${officialName} registered`, 'assertive'); onCreated(r.partyId); }
+      else setError(r.error);
+    });
+  }
+
+  return (
+    <div className="scrim" role="dialog" aria-modal="true" aria-labelledby="cg-title"
+      onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}>
+      <div className="modal narrow">
+        <div className="modal-hd">
+          <h2 id="cg-title">Register a new group</h2>
+          <button className="x" onClick={onClose} aria-label="Close"><Icon name="close" size={18} /></button>
+        </div>
+        <div className="modal-bd">
+          <label className="sub" htmlFor="cg-name" style={{ display: 'block', marginBottom: 6 }}>
+            Official name
+          </label>
+          <input id="cg-name" className="inp" style={{ width: '100%', marginBottom: 12 }}
+            value={officialName} onChange={(e) => setOfficialName(e.target.value)}
+            placeholder="As it appears on the constitution or registration" />
+
+          <label className="sub" htmlFor="cg-known" style={{ display: 'block', marginBottom: 6 }}>
+            Known as — optional
+          </label>
+          <input id="cg-known" className="inp" style={{ width: '100%', marginBottom: 12 }}
+            value={knownAs} onChange={(e) => setKnownAs(e.target.value)}
+            placeholder="What members actually call it" />
+
+          <label className="sub" htmlFor="cg-kind" style={{ display: 'block', marginBottom: 6 }}>
+            Kind
+          </label>
+          <select id="cg-kind" className="inp" style={{ width: '100%', marginBottom: 12 }}
+            value={kind} onChange={(e) => setKind(e.target.value)}>
+            {groupKinds.map(([k, label]) => <option key={k} value={k}>{label}</option>)}
+          </select>
+
+          <label className="sub" htmlFor="cg-county" style={{ display: 'block', marginBottom: 6 }}>
+            County
+          </label>
+          <select id="cg-county" className="inp" style={{ width: '100%', marginBottom: 12 }}
+            value={county} onChange={(e) => setCounty(e.target.value)}>
+            {counties.map((c) => <option key={c} value={c}>{c}</option>)}
+          </select>
+
+          <label className="sub" htmlFor="cg-regno" style={{ display: 'block', marginBottom: 6 }}>
+            Registration number — optional
+          </label>
+          <input id="cg-regno" className="inp" style={{ width: '100%', marginBottom: 12 }}
+            value={registrationNo} onChange={(e) => setRegistrationNo(e.target.value)}
+            placeholder="If already registered with the Ministry" />
+
+          <label className="sub" htmlFor="cg-members" style={{ display: 'block', marginBottom: 6 }}>
+            Member count — optional, as declared
+          </label>
+          <input id="cg-members" className="inp" type="number" min={0} style={{ width: '100%' }}
+            value={memberCount} onChange={(e) => setMemberCount(e.target.value)}
+            placeholder="Add real members individually after — this is just a headline figure" />
+
+          {error && (
+            <p className="pill p-bad" style={{ marginTop: 14, padding: '10px 13px', whiteSpace: 'normal' }} role="alert">
+              <Icon name="alert-circle" size={14} />{error}
+            </p>
+          )}
+        </div>
+        <div className="modal-ft">
+          <button className="btn btn-o" onClick={onClose}>Cancel</button>
+          <button className="btn btn-p" onClick={create} disabled={pending || !officialName.trim() || !county}>
+            <Icon name="plus" size={15} />{pending ? 'Registering…' : 'Register group'}
+          </button>
+        </div>
+      </div>
     </div>
   );
 }

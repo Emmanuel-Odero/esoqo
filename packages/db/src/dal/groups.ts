@@ -1,9 +1,74 @@
 import { prisma } from '../client';
 import { requireCapability, type Ctx } from '../capabilities';
 import { recordAudit } from '../audit';
-import type { MemberRole } from '@prisma/client';
+import type { MemberRole, OrgKind } from '@prisma/client';
 
 /** Group membership management from the admin side. */
+
+export const GROUP_KINDS = [
+  ['CHAMA', 'Chama'],
+  ['SELF_HELP_GROUP', 'Self-help group'],
+  ['TABLE_BANKING', 'Table banking'],
+  ['WELFARE_GROUP', 'Welfare group'],
+  ['CBO', 'Community-based organisation'],
+  ['FBO', 'Faith-based organisation'],
+  ['COOPERATIVE', 'Cooperative'],
+  ['SACCO', 'SACCO'],
+  ['NGO', 'NGO'],
+  ['BUSINESS', 'Business'],
+  ['SCHOOL', 'School'],
+  ['CLINIC', 'Clinic'],
+  ['MARKET_ASSOCIATION', 'Market association'],
+  ['OTHER', 'Other'],
+] as const;
+
+/**
+ * Registers a group from the admin side — for staff working off a paper
+ * roster or onboarding a group that never went through the self-serve
+ * join flow. Creates the Party + Organisation and, unlike the join flow,
+ * has no founding member attached yet; staff add members afterwards the
+ * same way as for any other group.
+ */
+export async function createGroup(
+  ctx: Ctx,
+  input: {
+    kind: OrgKind; officialName: string; knownAs?: string; county: string;
+    ward?: string; registrationNo?: string; memberCount?: number; formedOn?: Date;
+  },
+) {
+  requireCapability(ctx, 'party.write');
+
+  const officialName = input.officialName.trim();
+  if (!officialName) throw new Error('A group name is required');
+  if (!input.county) throw new Error('A county is required');
+
+  const party = await prisma.party.create({
+    data: {
+      kind: 'ORGANISATION',
+      county: input.county,
+      ward: input.ward || null,
+      organisation: {
+        create: {
+          kind: input.kind,
+          officialName,
+          knownAs: input.knownAs?.trim() || null,
+          registrationNo: input.registrationNo?.trim() || null,
+          memberCount: input.memberCount ?? null,
+          formedOn: input.formedOn ?? null,
+        },
+      },
+      accounts: { create: [{ kind: 'GROUP_SAVINGS', currency: 'KES' }] },
+    },
+    include: { organisation: true },
+  });
+
+  await recordAudit(ctx, {
+    action: 'group.created', targetType: 'organisation', targetId: party.id,
+    payload: { kind: input.kind, officialName, county: input.county },
+  });
+
+  return party;
+}
 
 export async function listGroups(ctx: Ctx, f: { search?: string; county?: string } = {}) {
   requireCapability(ctx, 'party.read', { county: f.county });

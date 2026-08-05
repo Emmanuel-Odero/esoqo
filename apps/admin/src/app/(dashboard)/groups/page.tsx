@@ -1,5 +1,6 @@
 import { Icon } from '@esoko/ui';
-import { listGroups, DOCUMENT_KINDS } from '@esoko/db';
+import { listGroups, DOCUMENT_KINDS, GROUP_KINDS } from '@esoko/db';
+import { COUNTIES } from '@esoko/domain';
 import { requireStaff } from '@/lib/session';
 import { GroupManager } from './GroupManager';
 
@@ -13,6 +14,7 @@ export default async function GroupsPage({
   const groups = await listGroups(ctx, { search: sp.q });
   const canEdit = ctx.capabilities.includes('*') || ctx.capabilities.includes('membership.write');
   const canUploadDocs = ctx.capabilities.includes('*') || ctx.capabilities.includes('document.write');
+  const canCreate = ctx.capabilities.includes('*') || ctx.capabilities.includes('party.write');
 
   return (
     <>
@@ -63,7 +65,10 @@ export default async function GroupsPage({
         }))}
         canEdit={canEdit}
         canUploadDocs={canUploadDocs}
+        canCreate={canCreate}
         documentKinds={DOCUMENT_KINDS as unknown as [string, string][]}
+        groupKinds={GROUP_KINDS as unknown as [string, string][]}
+        counties={[...COUNTIES]}
       />
     </>
   );

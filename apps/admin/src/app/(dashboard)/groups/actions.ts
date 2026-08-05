@@ -2,6 +2,7 @@
 import { revalidatePath } from 'next/cache';
 import {
   addMember, addNewMember, setMemberRole, removeMember, searchAddablePeople, type MemberRole,
+  createGroup, type OrgKind,
   createDocument, listDocumentsForParty,
   sniff, makeStorageKey, safeName, sha256, putObject, MAX_BYTES,
 } from '@esoko/db';
@@ -46,6 +47,22 @@ export async function actionAddNewMember(
     revalidatePath('/groups');
     return { ok: true };
   } catch (e) { return fail(e); }
+}
+
+export type CreateGroupResult = { ok: true; partyId: string } | { ok: false; error: string };
+
+export async function actionCreateGroup(input: {
+  kind: OrgKind; officialName: string; knownAs?: string; county: string;
+  ward?: string; registrationNo?: string; memberCount?: number;
+}): Promise<CreateGroupResult> {
+  try {
+    const ctx = await requireStaff();
+    if (!input.officialName.trim()) return { ok: false, error: 'Enter a group name' };
+    if (!input.county) return { ok: false, error: 'Choose a county' };
+    const party = await createGroup(ctx, input);
+    revalidatePath('/groups');
+    return { ok: true, partyId: party.id };
+  } catch (e) { return fail(e) as CreateGroupResult; }
 }
 
 export async function actionSetRole(membershipId: string, role: MemberRole): Promise<Result> {
