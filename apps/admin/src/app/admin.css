@@ -1,10 +1,10 @@
 .admin { background:var(--paper) }
-.shell { display:grid; grid-template-columns:246px 1fr; min-height:100vh }
+.shell { display:grid; grid-template-columns:246px 1fr; min-height:100vh; min-height:100dvh }
 .col { min-width:0; display:flex; flex-direction:column }
 
 /* sidebar */
 aside { background:var(--navy); color:#9FC0D6; padding:18px 0 14px; position:sticky; top:0;
-  height:100vh; display:flex; flex-direction:column; overflow-y:auto }
+  height:100vh; height:100dvh; display:flex; flex-direction:column; overflow-y:auto }
 .brand { display:flex; align-items:center; gap:11px; padding:0 18px 20px; color:#fff }
 .brand-mark { width:34px; height:34px; border-radius:9px; background:var(--green);
   display:grid; place-items:center; flex:none }
@@ -18,6 +18,10 @@ aside nav a:hover { background:rgba(255,255,255,.06); color:#fff }
 aside nav a.on { background:rgba(31,161,99,.16); border-left-color:var(--green-2); color:#fff; font-weight:600 }
 .env { margin-top:auto; padding:14px 18px 0; font-family:var(--font-mono); font-size:.62rem;
   letter-spacing:.14em; text-transform:uppercase; color:#4E6578 }
+
+/* mobile nav — hidden above the breakpoint where the sidebar is
+   always visible; see the 900px block below for the off-canvas rules */
+.nav-close, .nav-backdrop, .nav-toggle-btn { display:none }
 
 /* topbar */
 .topbar { display:flex; align-items:center; gap:14px; padding:12px 30px; background:#fff;
@@ -54,6 +58,16 @@ main { padding:28px 30px 60px; min-width:0 }
 .card > h2 { font-size:1.03rem; margin-bottom:14px; display:flex; align-items:center; gap:8px }
 .grid2 { display:grid; grid-template-columns:1fr 1fr; gap:18px }
 .grid3 { display:grid; grid-template-columns:repeat(3,1fr); gap:18px }
+
+/* Groups: a fixed list rail beside the detail pane on desktop, one
+   column — list on top, capped and scrollable — on anything narrower. */
+.groups-layout { display:grid; grid-template-columns:320px 1fr; gap:18px; align-items:start }
+
+/* A table wider than its card scrolls sideways inside the card instead
+   of pushing the page itself out to the right — the one thing that
+   must never happen on a small screen. */
+.card:has(table.tbl), .modal-bd:has(table.tbl) { overflow-x:auto }
+
 .tbl { width:100%; border-collapse:collapse; font-size:.9rem }
 .tbl th { text-align:left; font-family:var(--font-mono); font-size:.63rem; letter-spacing:.11em;
   text-transform:uppercase; color:var(--tx-3); font-weight:500; padding:9px 10px;
@@ -158,9 +172,67 @@ main { padding:28px 30px 60px; min-width:0 }
 .capgroup input { margin-top:2px; accent-color:var(--green) }
 .capgroup code { font-family:var(--font-mono); font-size:.75rem; color:var(--tx-3); display:block }
 
-@media(max-width:1100px){ .kpis{grid-template-columns:repeat(2,1fr)} .grid3{grid-template-columns:1fr} }
+/* ── tablet: sidebar becomes an off-canvas drawer, grids narrow ── */
+@media(max-width:1100px){
+  .kpis{grid-template-columns:repeat(2,1fr)}
+  .grid3{grid-template-columns:1fr}
+}
+
 @media(max-width:900px){
-  .shell{grid-template-columns:1fr} aside{position:static;height:auto}
-  .grid2{grid-template-columns:1fr} main{padding:20px 18px 60px}
-  .tbl{font-size:.85rem} .tbl th:nth-child(n+5),.tbl td:nth-child(n+5){display:none}
+  .shell{grid-template-columns:1fr}
+  .groups-layout{grid-template-columns:1fr}
+  .group-list-card [role="tablist"]{max-height:280px;overflow-y:auto}
+
+  /* sidebar leaves the document flow and becomes a slide-in drawer,
+     off-screen by default so it never claims layout space on a
+     screen too narrow to show it and the page at once */
+  aside{
+    position:fixed; inset:0 auto 0 0; z-index:210; width:280px; max-width:85vw;
+    transform:translateX(-100%); transition:transform .22s ease;
+  }
+  aside.nav-open{ transform:translateX(0) }
+  .nav-close{
+    display:inline-flex; align-items:center; justify-content:center; margin-left:auto;
+    background:none; border:0; color:#9FC0D6; cursor:pointer; padding:6px; border-radius:7px;
+    min-height:38px; min-width:38px; flex:none;
+  }
+  .nav-close:hover{ background:rgba(255,255,255,.08); color:#fff }
+  .nav-backdrop{
+    position:fixed; inset:0; z-index:200; background:rgba(10,46,77,.5);
+    border:0; padding:0; cursor:pointer; -webkit-tap-highlight-color:transparent;
+  }
+  .nav-toggle-btn{
+    display:inline-flex; align-items:center; justify-content:center; flex:none;
+    background:none; border:0; color:var(--navy); cursor:pointer; padding:8px; border-radius:8px;
+    min-height:40px; min-width:40px;
+  }
+  .nav-toggle-btn:hover{ background:var(--paper) }
+
+  .topbar{ padding:10px 16px; gap:10px }
+  .grid2{grid-template-columns:1fr}
+  main{padding:18px 16px 48px}
+  .tbl{font-size:.85rem}
+  .tbl th:nth-child(n+5),.tbl td:nth-child(n+5){display:none}
+}
+
+/* ── phone: iPhone SE and similar (≤ ~390px logical width) ── */
+@media(max-width:480px){
+  .kpis{grid-template-columns:1fr; gap:10px}
+  .kpi{padding:15px 16px}
+  .kpi .n{font-size:1.55rem}
+  .head h1{font-size:1.35rem}
+  main{padding:14px 12px 40px}
+  .card{padding:16px}
+  .card > h2{font-size:.97rem}
+  .brand{padding:0 14px 16px}
+  .topbar{padding:9px 12px}
+  .tb-caps span, .tb-caps{ font-size:.62rem; padding:5px 9px }
+  .scrim{padding:0}
+  .modal{max-height:100dvh; height:100dvh; border-radius:0}
+  .modal-hd{padding:16px 16px}
+  .modal-bd{padding:16px}
+  .modal-ft{padding:12px 16px; flex-wrap:wrap}
+  .modal-ft > *{flex:1 1 auto}
+  .btn{padding:9px 14px; font-size:.85rem}
+  .dgrid{grid-template-columns:repeat(auto-fill,minmax(150px,1fr))}
 }
