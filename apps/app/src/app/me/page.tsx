@@ -116,7 +116,9 @@ export default async function MePage() {
           </div>
           <div className="mrow">
             <span className="k">Your role</span>
-            <span className="v">{membership.role.toLowerCase()}</span>
+            <span className="v">
+              {membership.role === 'OTHER' ? (membership.customRole || 'Other') : membership.role.toLowerCase()}
+            </span>
           </div>
           <div className="mrow">
             <span className="k">Members</span>

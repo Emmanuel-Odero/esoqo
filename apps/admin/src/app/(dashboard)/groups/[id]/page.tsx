@@ -139,8 +139,15 @@ export default async function GroupDetailPage({
             <tbody>
               {group.members.map((m) => (
                 <tr key={m.id}>
-                  <td><strong>{m.person.person?.knownAs || m.person.person?.officialName || 'Unnamed'}</strong></td>
-                  <td className="sub">{m.role}</td>
+                  <td>
+                    <strong>{m.person.person?.officialName || m.person.person?.knownAs || 'Unnamed'}</strong>
+                    {m.person.person?.officialName && m.person.person?.knownAs && (
+                      <span className="sub" style={{ display: 'block', fontSize: '.79rem' }}>
+                        Known as {m.person.person.knownAs}
+                      </span>
+                    )}
+                  </td>
+                  <td className="sub">{m.role === 'OTHER' ? (m.customRole || 'Other') : m.role}</td>
                   <td className="mono sub" style={{ fontSize: '.79rem' }}>{m.joinedAt.toISOString().slice(0, 10)}</td>
                 </tr>
               ))}

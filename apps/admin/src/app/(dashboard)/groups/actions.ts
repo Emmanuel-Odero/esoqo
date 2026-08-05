@@ -27,23 +27,23 @@ export async function actionSearchPeople(orgPartyId: string, q: string) {
 }
 
 export async function actionAddMember(
-  orgPartyId: string, personPartyId: string, role: MemberRole,
+  orgPartyId: string, personPartyId: string, role: MemberRole, customRole?: string,
 ): Promise<Result> {
   try {
     const ctx = await requireStaff();
-    await addMember(ctx, orgPartyId, personPartyId, role);
+    await addMember(ctx, orgPartyId, personPartyId, role, customRole);
     revalidatePath('/groups');
     return { ok: true };
   } catch (e) { return fail(e); }
 }
 
 export async function actionAddNewMember(
-  orgPartyId: string, officialName: string, msisdn: string, role: MemberRole,
+  orgPartyId: string, officialName: string, msisdn: string, role: MemberRole, customRole?: string,
 ): Promise<Result> {
   try {
     const ctx = await requireStaff();
     if (!officialName.trim()) return { ok: false, error: 'Enter a name' };
-    await addNewMember(ctx, orgPartyId, { officialName, msisdn: msisdn || undefined }, role);
+    await addNewMember(ctx, orgPartyId, { officialName, msisdn: msisdn || undefined }, role, customRole);
     revalidatePath('/groups');
     return { ok: true };
   } catch (e) { return fail(e); }
@@ -65,10 +65,12 @@ export async function actionCreateGroup(input: {
   } catch (e) { return fail(e) as CreateGroupResult; }
 }
 
-export async function actionSetRole(membershipId: string, role: MemberRole): Promise<Result> {
+export async function actionSetRole(
+  membershipId: string, role: MemberRole, customRole?: string,
+): Promise<Result> {
   try {
     const ctx = await requireStaff();
-    await setMemberRole(ctx, membershipId, role);
+    await setMemberRole(ctx, membershipId, role, customRole);
     revalidatePath('/groups');
     return { ok: true };
   } catch (e) { return fail(e); }

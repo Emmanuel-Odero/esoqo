@@ -133,6 +133,7 @@ enum MemberRole {
   TREASURER
   SECRETARY
   MEMBER
+  OTHER
 }
 
 model Membership {
@@ -140,6 +141,9 @@ model Membership {
   personId String     @db.Uuid
   orgId    String     @db.Uuid
   role     MemberRole @default(MEMBER)
+  /// Free text position, set only when role is OTHER — "Youth rep",
+  /// "Auditor", whatever the group actually calls it. Ignored otherwise.
+  customRole String?
   joinedAt DateTime   @default(now())
   exitedAt DateTime?
 

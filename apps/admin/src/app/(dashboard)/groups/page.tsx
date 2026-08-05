@@ -58,8 +58,10 @@ export default async function GroupsPage({
           members: g.members.map((m) => ({
             membershipId: m.id,
             partyId: m.personId,
-            name: m.person.person?.knownAs || m.person.person?.officialName || 'Unnamed',
+            name: m.person.person?.officialName || m.person.person?.knownAs || 'Unnamed',
+            knownAs: m.person.person?.officialName ? (m.person.person?.knownAs ?? null) : null,
             role: m.role,
+            customRole: m.customRole,
             joinedAt: m.joinedAt.toISOString(),
           })),
         }))}

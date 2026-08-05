@@ -104,12 +104,23 @@ export async function getGroup(ctx: Ctx, orgPartyId: string) {
   });
 }
 
+/** OTHER carries whatever the group actually calls the role; any other
+ *  value means customRole is stale and must not linger in the row. */
+function resolveCustomRole(role: MemberRole, customRole?: string): string | null {
+  if (role !== 'OTHER') return null;
+  const trimmed = customRole?.trim();
+  if (!trimmed) throw new Error('Enter what this role is called');
+  return trimmed;
+}
+
 /** Add an existing person to a group. Idempotent — re-adding someone who
  *  left reinstates them rather than creating a second membership. */
 export async function addMember(
-  ctx: Ctx, orgPartyId: string, personPartyId: string, role: MemberRole = 'MEMBER',
+  ctx: Ctx, orgPartyId: string, personPartyId: string,
+  role: MemberRole = 'MEMBER', customRole?: string,
 ) {
   requireCapability(ctx, 'membership.write', { partyId: orgPartyId });
+  const resolvedCustomRole = resolveCustomRole(role, customRole);
 
   const existing = await prisma.membership.findUnique({
     where: { personId_orgId: { personId: personPartyId, orgId: orgPartyId } },
@@ -117,16 +128,16 @@ export async function addMember(
 
   const m = existing
     ? await prisma.membership.update({
-        where: { id: existing.id }, data: { exitedAt: null, role },
+        where: { id: existing.id }, data: { exitedAt: null, role, customRole: resolvedCustomRole },
       })
     : await prisma.membership.create({
-        data: { personId: personPartyId, orgId: orgPartyId, role },
+        data: { personId: personPartyId, orgId: orgPartyId, role, customRole: resolvedCustomRole },
       });
 
   await recordAudit(ctx, {
     action: existing ? 'membership.reinstated' : 'membership.added',
     targetType: 'membership', targetId: m.id,
-    payload: { orgPartyId, personPartyId, role },
+    payload: { orgPartyId, personPartyId, role, customRole: resolvedCustomRole },
   });
   return m;
 }
@@ -141,10 +152,11 @@ export async function addMember(
 export async function addNewMember(
   ctx: Ctx, orgPartyId: string,
   input: { officialName: string; msisdn?: string },
-  role: MemberRole = 'MEMBER',
+  role: MemberRole = 'MEMBER', customRole?: string,
 ) {
   requireCapability(ctx, 'party.write', { partyId: orgPartyId });
   requireCapability(ctx, 'membership.write', { partyId: orgPartyId });
+  const resolvedCustomRole = resolveCustomRole(role, customRole);
 
   const officialName = input.officialName.trim();
   if (!officialName) throw new Error('A name is required');
@@ -167,22 +179,27 @@ export async function addNewMember(
       },
     });
     const m = await tx.membership.create({
-      data: { personId: party.id, orgId: orgPartyId, role },
+      data: { personId: party.id, orgId: orgPartyId, role, customRole: resolvedCustomRole },
     });
     await recordAudit(ctx, {
       action: 'membership.added_new_person', targetType: 'membership', targetId: m.id,
-      payload: { orgPartyId, personId: party.id, role, hasPhone: Boolean(msisdn) },
+      payload: { orgPartyId, personId: party.id, role, customRole: resolvedCustomRole, hasPhone: Boolean(msisdn) },
     }, tx as never);
     return m;
   });
 }
 
-export async function setMemberRole(ctx: Ctx, membershipId: string, role: MemberRole) {
+export async function setMemberRole(
+  ctx: Ctx, membershipId: string, role: MemberRole, customRole?: string,
+) {
   requireCapability(ctx, 'membership.write');
-  const m = await prisma.membership.update({ where: { id: membershipId }, data: { role } });
+  const resolvedCustomRole = resolveCustomRole(role, customRole);
+  const m = await prisma.membership.update({
+    where: { id: membershipId }, data: { role, customRole: resolvedCustomRole },
+  });
   await recordAudit(ctx, {
     action: 'membership.role_changed', targetType: 'membership', targetId: membershipId,
-    payload: { role },
+    payload: { role, customRole: resolvedCustomRole },
   });
   return m;
 }

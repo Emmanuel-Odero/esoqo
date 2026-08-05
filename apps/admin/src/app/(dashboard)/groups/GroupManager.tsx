@@ -11,10 +11,11 @@ import {
   actionUploadGroupDocument, actionListGroupDocuments, actionCreateGroup,
 } from './actions';
 
-type Role = 'CHAIRPERSON' | 'TREASURER' | 'SECRETARY' | 'MEMBER';
+type Role = 'CHAIRPERSON' | 'TREASURER' | 'SECRETARY' | 'MEMBER' | 'OTHER';
 
 interface Member {
-  membershipId: string; partyId: string; name: string; role: Role | string; joinedAt: string;
+  membershipId: string; partyId: string; name: string; knownAs?: string | null;
+  role: Role | string; customRole?: string | null; joinedAt: string;
 }
 interface Group {
   id: string; name: string; knownAs: string | null; kind: string;
@@ -24,11 +25,19 @@ interface GroupDoc {
   id: string; title: string; kind: string; mimeType: string; sizeBytes: number; uploadedAt: string;
 }
 
-const ROLES: Role[] = ['CHAIRPERSON', 'TREASURER', 'SECRETARY', 'MEMBER'];
+const ROLES: Role[] = ['CHAIRPERSON', 'TREASURER', 'SECRETARY', 'MEMBER', 'OTHER'];
 const ROLE_LABEL: Record<string, string> = {
   CHAIRPERSON: 'Chairperson', TREASURER: 'Treasurer', SECRETARY: 'Secretary', MEMBER: 'Member',
+  OTHER: 'Other…',
 };
 const OFFICE = new Set(['CHAIRPERSON', 'TREASURER', 'SECRETARY']);
+
+/** What to actually show for a member's role — their own wording when
+ *  it's a custom one, the fixed label otherwise. */
+function roleText(role: string, customRole?: string | null) {
+  if (role === 'OTHER') return customRole?.trim() || 'Other';
+  return ROLE_LABEL[role] ?? role;
+}
 
 function humanSize(bytes: number) {
   if (bytes < 1024) return `${bytes} B`;
@@ -278,10 +287,10 @@ function GroupDetail({
   const missingOffices = ROLES.slice(0, 3).filter(
     (r) => !group.members.some((m) => m.role === r));
 
-  function changeRole(m: Member, role: Role) {
+  function changeRole(m: Member, role: Role, customRole?: string) {
     start(async () => {
-      const r = await actionSetRole(m.membershipId, role);
-      if (r.ok) announce(`${m.name} is now ${ROLE_LABEL[role]}`, 'assertive');
+      const r = await actionSetRole(m.membershipId, role, customRole);
+      if (r.ok) announce(`${m.name} is now ${roleText(role, customRole)}`, 'assertive');
       else setError(r.error);
     });
   }
@@ -356,17 +365,16 @@ function GroupDetail({
             <tbody>
               {group.members.map((m) => (
                 <tr key={m.membershipId}>
-                  <td><strong>{m.name}</strong></td>
+                  <td>
+                    <strong>{m.name}</strong>
+                    {m.knownAs && <span className="sub" style={{ display: 'block', fontSize: '.79rem' }}>Known as {m.knownAs}</span>}
+                  </td>
                   <td>
                     {canEdit ? (
-                      <select className="inp" style={{ minHeight: 34, padding: '5px 9px', fontSize: '.84rem' }}
-                        value={m.role} aria-label={`Role for ${m.name}`}
-                        onChange={(e) => changeRole(m, e.target.value as Role)} disabled={pending}>
-                        {ROLES.map((r) => <option key={r} value={r}>{ROLE_LABEL[r]}</option>)}
-                      </select>
+                      <MemberRoleCell member={m} pending={pending} onChange={changeRole} />
                     ) : (
                       <span className={`pill ${OFFICE.has(m.role) ? 'p-info' : 'p-mute'}`}>
-                        {ROLE_LABEL[m.role] ?? m.role}
+                        {roleText(m.role, m.customRole)}
                       </span>
                     )}
                   </td>
@@ -495,6 +503,55 @@ function GroupDetail({
   );
 }
 
+/**
+ * The role dropdown for one member. A fixed role saves the moment it's
+ * picked, same as before — "Other" needs a word first, so it holds off
+ * and shows a text box + explicit Save instead of firing on every
+ * keystroke.
+ */
+function MemberRoleCell({
+  member, pending, onChange,
+}: { member: Member; pending: boolean; onChange: (m: Member, role: Role, customRole?: string) => void }) {
+  const [role, setRole] = useState<Role>((member.role as Role) ?? 'MEMBER');
+  const [customRole, setCustomRole] = useState(member.role === 'OTHER' ? (member.customRole ?? '') : '');
+  const showCustomField = role === 'OTHER';
+  const dirty = role === 'OTHER' && customRole.trim() !== (member.customRole ?? '').trim();
+
+  function pick(next: Role) {
+    setRole(next);
+    if (next !== 'OTHER') onChange(member, next);
+  }
+
+  function saveCustom() {
+    if (!customRole.trim()) return;
+    onChange(member, 'OTHER', customRole);
+  }
+
+  return (
+    <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', alignItems: 'center' }}>
+      <select className="inp" style={{ minHeight: 34, padding: '5px 9px', fontSize: '.84rem' }}
+        value={role} aria-label={`Role for ${member.name}`}
+        onChange={(e) => pick(e.target.value as Role)} disabled={pending}>
+        {ROLES.map((r) => <option key={r} value={r}>{ROLE_LABEL[r]}</option>)}
+      </select>
+      {showCustomField && (
+        <>
+          <input className="inp" style={{ minHeight: 34, padding: '5px 9px', fontSize: '.84rem', width: 130 }}
+            value={customRole} onChange={(e) => setCustomRole(e.target.value)}
+            onKeyDown={(e) => { if (e.key === 'Enter') saveCustom(); }}
+            placeholder="e.g. Youth rep" aria-label={`Custom role for ${member.name}`} disabled={pending} />
+          {dirty && (
+            <button className="btn btn-p btn-sm" style={{ minHeight: 34, padding: '5px 10px' }}
+              onClick={saveCustom} disabled={pending || !customRole.trim()}>
+              Save
+            </button>
+          )}
+        </>
+      )}
+    </div>
+  );
+}
+
 function AddMember({ group, onClose }: { group: Group; onClose: () => void }) {
   const [mode, setMode] = useState<'search' | 'new'>('search');
   const [q, setQ] = useState('');
@@ -503,26 +560,34 @@ function AddMember({ group, onClose }: { group: Group; onClose: () => void }) {
   const [newName, setNewName] = useState('');
   const [newPhone, setNewPhone] = useState('');
   const [role, setRole] = useState<Role>('MEMBER');
+  const [customRole, setCustomRole] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [pending, start] = useTransition();
+  const [searching, setSearching] = useState(false);
+  const [searched, setSearched] = useState(false);
   const timer = useRef<ReturnType<typeof setTimeout>>(undefined);
   const announce = useAnnounce();
 
   function search(v: string) {
     setQ(v);
+    setPicked(null);
     clearTimeout(timer.current);
-    if (v.trim().length < 2) { setHits([]); return; }
+    if (v.trim().length < 2) { setHits([]); setSearching(false); setSearched(false); return; }
+    setSearching(true);
     timer.current = setTimeout(async () => {
       const res = await actionSearchPeople(group.id, v);
       setHits(res);
+      setSearching(false);
+      setSearched(true);
       announce(res.length ? `${res.length} people found` : 'Nobody found');
     }, 200);
   }
 
   function add() {
     if (!picked) return;
+    if (role === 'OTHER' && !customRole.trim()) return;
     start(async () => {
-      const r = await actionAddMember(group.id, picked.id, role);
+      const r = await actionAddMember(group.id, picked.id, role, role === 'OTHER' ? customRole : undefined);
       if (r.ok) { announce(`${picked.name} added to ${group.name}`, 'assertive'); onClose(); }
       else setError(r.error);
     });
@@ -530,14 +595,17 @@ function AddMember({ group, onClose }: { group: Group; onClose: () => void }) {
 
   function addNew() {
     if (!newName.trim()) return;
+    if (role === 'OTHER' && !customRole.trim()) return;
     start(async () => {
-      const r = await actionAddNewMember(group.id, newName, newPhone, role);
+      const r = await actionAddNewMember(
+        group.id, newName, newPhone, role, role === 'OTHER' ? customRole : undefined);
       if (r.ok) { announce(`${newName} added to ${group.name}`, 'assertive'); onClose(); }
       else setError(r.error);
     });
   }
 
-  const canSubmit = mode === 'search' ? Boolean(picked) : Boolean(newName.trim());
+  const roleReady = role !== 'OTHER' || Boolean(customRole.trim());
+  const canSubmit = (mode === 'search' ? Boolean(picked) : Boolean(newName.trim())) && roleReady;
 
   return (
     <div className="scrim" role="dialog" aria-modal="true" aria-labelledby="am-title"
@@ -574,7 +642,14 @@ function AddMember({ group, onClose }: { group: Group; onClose: () => void }) {
                   placeholder="Name or phone number…" />
               </div>
 
-              {hits.length > 0 && (
+              {searching && (
+                <p className="sub" style={{ marginBottom: 14, display: 'flex', alignItems: 'center', gap: 8 }}>
+                  <span className="spinner" aria-hidden="true" style={{ width: 14, height: 14, borderWidth: 2 }} />
+                  Searching…
+                </p>
+              )}
+
+              {!searching && hits.length > 0 && (
                 <div role="listbox" aria-label="Search results" style={{ marginBottom: 14 }}>
                   {hits.map((h) => (
                     <button key={h.id} role="option" aria-selected={picked?.id === h.id}
@@ -594,6 +669,21 @@ function AddMember({ group, onClose }: { group: Group; onClose: () => void }) {
                     </button>
                   ))}
                 </div>
+              )}
+
+              {!searching && searched && hits.length === 0 && q.trim().length >= 2 && !picked && (
+                <p className="pill p-warn" style={{ padding: '10px 13px', marginBottom: 14, whiteSpace: 'normal' }}>
+                  <Icon name="alert-circle" size={14} />
+                  No one matches &ldquo;{q}&rdquo; — they may already be in this group, or try{' '}
+                  <button type="button" onClick={() => { setMode('new'); setError(null); }}
+                    style={{ background: 'none', border: 0, padding: 0, textDecoration: 'underline', cursor: 'pointer', font: 'inherit', color: 'inherit' }}>
+                    typing them as a new member
+                  </button>.
+                </p>
+              )}
+
+              {q.trim().length === 1 && (
+                <p className="sub" style={{ marginBottom: 14 }}>Keep typing — at least 2 characters.</p>
               )}
 
               {picked && (
@@ -628,10 +718,21 @@ function AddMember({ group, onClose }: { group: Group; onClose: () => void }) {
           <label className="sub" htmlFor="am-role" style={{ display: 'block', marginBottom: 6 }}>
             Role in the group
           </label>
-          <select id="am-role" className="inp" style={{ width: '100%' }} value={role}
-            onChange={(e) => setRole(e.target.value as Role)}>
+          <select id="am-role" className="inp" style={{ width: '100%', marginBottom: role === 'OTHER' ? 12 : 0 }}
+            value={role} onChange={(e) => setRole(e.target.value as Role)}>
             {ROLES.map((r) => <option key={r} value={r}>{ROLE_LABEL[r]}</option>)}
           </select>
+
+          {role === 'OTHER' && (
+            <>
+              <label className="sub" htmlFor="am-custom-role" style={{ display: 'block', marginBottom: 6 }}>
+                What's this role called?
+              </label>
+              <input id="am-custom-role" className="inp" style={{ width: '100%' }}
+                value={customRole} onChange={(e) => setCustomRole(e.target.value)}
+                placeholder="e.g. Youth rep, Auditor" />
+            </>
+          )}
 
           {error && (
             <p className="pill p-bad" style={{ marginTop: 14, padding: '10px 13px', whiteSpace: 'normal' }} role="alert">

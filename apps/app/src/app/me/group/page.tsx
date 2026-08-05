@@ -37,7 +37,7 @@ export default async function MyGroup() {
       <div className="mcard">
         <h2><Icon name="users" size={18} />Your membership</h2>
         <div className="mrow"><span className="k">Your role</span>
-          <span className="v">{m.role.toLowerCase()}</span></div>
+          <span className="v">{m.role === 'OTHER' ? (m.customRole || 'Other') : m.role.toLowerCase()}</span></div>
         <div className="mrow"><span className="k">Members</span>
           <span className="v mono">{m.org._count.members}</span></div>
         <div className="mrow"><span className="k">You joined</span>
