@@ -227,6 +227,11 @@ export function PaymentStep({
       announce('Noted — your group covers this fee.', 'assertive');
     });
     // Runs once when this step is reached with the fee already covered.
+    // onChoice/announce/registrationId are deliberately excluded: onChoice
+    // is an inline callback recreated every parent render, and including it
+    // would refire this effect (and re-post actionDeferPayment) on every
+    // render that happens before `covered` flips true.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [feeCoveredByGroup]);
 
   if (feeCoveredByGroup) {

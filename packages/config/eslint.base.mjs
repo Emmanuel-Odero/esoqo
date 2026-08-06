@@ -1,6 +1,7 @@
 import js from '@eslint/js';
 import ts from 'typescript-eslint';
 import a11y from 'eslint-plugin-jsx-a11y';
+import reactHooks from 'eslint-plugin-react-hooks';
 
 /**
  * Architectural rules are lint rules.
@@ -14,7 +15,7 @@ export default ts.config(
   js.configs.recommended,
   ...ts.configs.recommended,
   {
-    plugins: { 'jsx-a11y': a11y },
+    plugins: { 'jsx-a11y': a11y, 'react-hooks': reactHooks },
     rules: {
       /* ── ARCHITECTURE ────────────────────────────────────────
          The Data Access Layer cannot be bypassed. Only @esoko/db
@@ -48,6 +49,10 @@ export default ts.config(
       'jsx-a11y/anchor-is-valid': 'error',
       'jsx-a11y/label-has-associated-control': 'error',
       'jsx-a11y/media-has-caption': 'error',
+
+      /* ── REACT HOOKS ──────────────────────────────────────── */
+      'react-hooks/rules-of-hooks': 'error',
+      'react-hooks/exhaustive-deps': 'error',
 
       /* ── TYPE SAFETY ──────────────────────────────────────── */
       '@typescript-eslint/no-explicit-any': 'error',
