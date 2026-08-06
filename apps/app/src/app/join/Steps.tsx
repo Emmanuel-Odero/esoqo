@@ -227,7 +227,6 @@ export function PaymentStep({
       announce('Noted — your group covers this fee.', 'assertive');
     });
     // Runs once when this step is reached with the fee already covered.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [feeCoveredByGroup]);
 
   if (feeCoveredByGroup) {

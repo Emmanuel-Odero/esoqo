@@ -1,4 +1,3 @@
-import { Icon } from '@esoko/ui';
 import { listMyConsents } from '@esoko/db';
 import { requireSubject } from '@/lib/session';
 import { ConsentList } from './ConsentList';
