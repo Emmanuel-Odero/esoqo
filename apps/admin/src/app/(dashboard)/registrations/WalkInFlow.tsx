@@ -1,14 +1,11 @@
 'use client';
 
-import { useEffect, useRef, useState, useTransition } from 'react';
-import { Icon, type IconName } from '@esoko/ui';
+import { useState, useTransition } from 'react';
+import { Icon } from '@esoko/ui';
 import { useAnnounce } from '@esoko/a11y';
-import {
-  actionCreateWalkIn, actionUploadWalkInDocument,
-  actionListWalkInDocuments, actionRemoveWalkInDocument,
-} from './actions';
+import { actionCreateWalkIn } from './actions';
 
-type Step = 'joining' | 'personal' | 'contact' | 'work' | 'standing' | 'preferences' | 'review' | 'documents';
+type Step = 'joining' | 'personal' | 'contact' | 'work' | 'standing' | 'preferences' | 'review';
 
 interface FormData {
   joiningAs: 'me' | 'group' | 'biz';
@@ -114,9 +111,9 @@ export default function WalkInFlow({
   }
 
   return (
-    <div className="scrim" role="dialog" aria-modal="true" aria-labelledby="wi-title"
+    <div className="scrim" role="presentation"
       onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}>
-      <div className="modal" style={{ maxWidth: 580 }}>
+      <div className="modal" style={{ maxWidth: 580 }} role="dialog" aria-modal="true" aria-labelledby="wi-title">
         <div className="modal-hd">
           <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
             {step !== 'joining' && (
@@ -200,7 +197,7 @@ function JoiningStep({ f, update }: { f: FormData; update: (k: keyof FormData, v
           ['group', 'A group', 'A chama, self-help group, SACCO, or cooperative'],
           ['biz', 'A business', 'A sole trader, company, or other business entity'],
         ] as const).map(([val, title, desc]) => (
-          <label key={val} style={{
+          <label key={val} aria-label={title} style={{
             display: 'flex', alignItems: 'center', gap: 14, padding: 14, borderRadius: 10,
             border: `2px solid ${f.joiningAs === val ? 'var(--green)' : 'var(--line)'}`,
             cursor: 'pointer', transition: 'border .15s',
@@ -356,8 +353,8 @@ function StandingStep({ f, update }: { f: FormData; update: (k: keyof FormData, 
       </p>
 
       <div style={{ marginBottom: 14 }}>
-        <label className="sub" style={{ display: 'block', marginBottom: 6 }}>Do they have a registered business?</label>
-        <select className="inp" style={{ width: '100%' }} value={f.hasRegisteredBusiness}
+        <label className="sub" htmlFor="wi-hasRegisteredBusiness" style={{ display: 'block', marginBottom: 6 }}>Do they have a registered business?</label>
+        <select id="wi-hasRegisteredBusiness" className="inp" style={{ width: '100%' }} value={f.hasRegisteredBusiness}
           onChange={(e) => update('hasRegisteredBusiness', e.target.value)}>
           <option value="">Select…</option>
           <option value="yes">Yes</option>
@@ -376,8 +373,8 @@ function StandingStep({ f, update }: { f: FormData; update: (k: keyof FormData, 
       )}
 
       <div style={{ marginBottom: 14 }}>
-        <label className="sub" style={{ display: 'block', marginBottom: 6 }}>Do they have a KRA PIN?</label>
-        <select className="inp" style={{ width: '100%' }} value={f.hasKraPin}
+        <label className="sub" htmlFor="wi-hasKraPin" style={{ display: 'block', marginBottom: 6 }}>Do they have a KRA PIN?</label>
+        <select id="wi-hasKraPin" className="inp" style={{ width: '100%' }} value={f.hasKraPin}
           onChange={(e) => update('hasKraPin', e.target.value)}>
           <option value="">Select…</option>
           <option value="yes">Yes</option>
@@ -425,7 +422,7 @@ function PreferencesStep({ f, update }: { f: FormData; update: (k: keyof FormDat
           ['wantsReceiptSms', 'Payment receipts', 'SMS confirmation when a payment is recorded'],
           ['wantsExpirySms', 'Certificate expiry warnings', 'Reminder before their permits or licences expire'],
         ] as const).map(([k, title, desc]) => (
-          <label key={k} style={{
+          <label key={k} aria-label={title} style={{
             display: 'flex', alignItems: 'center', gap: 12, padding: 12, borderRadius: 8,
             border: `1.5px solid ${f[k as keyof FormData] ? 'var(--green)' : 'var(--line)'}`,
             cursor: 'pointer',
@@ -442,13 +439,13 @@ function PreferencesStep({ f, update }: { f: FormData; update: (k: keyof FormDat
       </div>
 
       <div>
-        <label className="sub" style={{ display: 'block', marginBottom: 6 }}>
+        <label className="sub" htmlFor="wi-ussdSetupChoice" style={{ display: 'block', marginBottom: 6 }}>
           Would they like to set up USSD dialling access now?
         </label>
         <p className="sub" style={{ fontSize: '.8rem', marginBottom: 10 }}>
           USSD lets them check prices, balances, and certificates from any phone without internet.
         </p>
-        <select className="inp" style={{ width: '100%' }} value={f.ussdSetupChoice}
+        <select id="wi-ussdSetupChoice" className="inp" style={{ width: '100%' }} value={f.ussdSetupChoice}
           onChange={(e) => update('ussdSetupChoice', e.target.value as 'now' | 'later' | '')}>
           <option value="">Select…</option>
           <option value="now">Set up now — we will send instructions</option>

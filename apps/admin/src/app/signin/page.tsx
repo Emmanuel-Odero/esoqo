@@ -1,5 +1,4 @@
 import type { Metadata } from 'next';
-import { Logo } from '@esoko/ui';
 import { SignInForm } from './SignInForm';
 import './signin.css';
 

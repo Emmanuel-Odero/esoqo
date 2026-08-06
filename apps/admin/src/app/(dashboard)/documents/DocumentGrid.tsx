@@ -137,9 +137,9 @@ function DocModal({
     });
 
   return (
-    <div className="scrim" role="dialog" aria-modal="true" aria-labelledby="dm-title"
+    <div className="scrim" role="presentation"
       onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}>
-      <div className="modal">
+      <div className="modal" role="dialog" aria-modal="true" aria-labelledby="dm-title">
         <div className="modal-hd">
           <span style={{ width: 38, height: 38, borderRadius: 10, background: 'var(--blue-t)', color: 'var(--blue)', display: 'grid', placeItems: 'center', flex: 'none' }}>
             <Icon name={typeIcon(doc.mimeType)} size={19} />

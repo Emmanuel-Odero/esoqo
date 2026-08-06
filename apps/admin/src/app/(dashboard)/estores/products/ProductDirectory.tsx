@@ -128,9 +128,9 @@ function ProductModerationModal({
   }
 
   return (
-    <div className="scrim" role="dialog" aria-modal="true" aria-labelledby="pm-title"
+    <div className="scrim" role="presentation"
       onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}>
-      <div className="modal">
+      <div className="modal" role="dialog" aria-modal="true" aria-labelledby="pm-title">
         <div className="modal-hd">
           <div>
             <h2 id="pm-title">{product.name}</h2>

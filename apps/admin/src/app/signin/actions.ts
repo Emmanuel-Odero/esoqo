@@ -1,8 +1,8 @@
 'use server';
 
-import { cookies, headers } from 'next/headers';
+import { cookies } from 'next/headers';
 import { redirect } from 'next/navigation';
-import { prisma } from '@esoko/db';
+import { findStaffCredential, recordStaffSignInSuccess, recordStaffSignInFailure } from '@esoko/db';
 import { verifyPin, createSession, SESSION_COOKIE } from '@esoko/auth';
 
 export type SignInResult =
@@ -15,7 +15,7 @@ export async function signIn(_prev: unknown, data: FormData): Promise<SignInResu
 
   if (!email || !pin) return { ok: false, error: 'Email and PIN are required.' };
 
-  const staff = await prisma.staffUser.findUnique({ where: { email } });
+  const staff = await findStaffCredential(email);
   if (!staff) return { ok: false, error: 'No account found with that email.', field: 'email' };
   if (!staff.active) return { ok: false, error: 'This account has been deactivated.' };
   if (staff.suspendedAt) return { ok: false, error: 'This account is suspended.' };
@@ -25,22 +25,16 @@ export async function signIn(_prev: unknown, data: FormData): Promise<SignInResu
 
   const valid = await verifyPin(pin, staff.pinHash);
   if (!valid) {
-    await prisma.staffUser.update({
-      where: { id: staff.id },
-      data: { failedAttempts: { increment: 1 } },
-    });
+    await recordStaffSignInFailure(staff.id);
     return { ok: false, error: 'Incorrect PIN.', field: 'pin' };
   }
 
-  await prisma.staffUser.update({
-    where: { id: staff.id },
-    data: { failedAttempts: 0, lastSeenAt: new Date() },
-  });
+  await recordStaffSignInSuccess(staff.id);
 
   const token = await createSession({
     actorType: 'STAFF',
     actorId: staff.id,
-    capabilities: staff.capabilities as string[],
+    capabilities: staff.capabilities,
   });
 
   const jar = await cookies();

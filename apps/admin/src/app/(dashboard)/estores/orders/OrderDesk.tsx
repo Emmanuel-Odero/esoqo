@@ -128,9 +128,9 @@ function OrderRerouteModal({
   }
 
   return (
-    <div className="scrim" role="dialog" aria-modal="true" aria-labelledby="or-title"
+    <div className="scrim" role="presentation"
       onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}>
-      <div className="modal">
+      <div className="modal" role="dialog" aria-modal="true" aria-labelledby="or-title">
         <div className="modal-hd">
           <div>
             <h2 id="or-title">{order.buyerName}'s order</h2>

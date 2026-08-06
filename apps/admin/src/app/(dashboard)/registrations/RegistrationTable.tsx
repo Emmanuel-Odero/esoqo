@@ -333,9 +333,9 @@ function DetailDrawer({
   const pay = d.payment;
 
   return (
-    <div className="scrim" role="dialog" aria-modal="true" aria-labelledby="rd-title"
+    <div className="scrim" role="presentation"
       onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}>
-      <div className="modal">
+      <div className="modal" role="dialog" aria-modal="true" aria-labelledby="rd-title">
         <div className="modal-hd">
           <span style={{ width: 38, height: 38, borderRadius: 10, background: 'var(--green-t)', color: 'var(--green)', display: 'grid', placeItems: 'center', flex: 'none' }}>
             <Icon name="user" size={19} />
@@ -723,9 +723,9 @@ function AssignGroup({
   }
 
   return (
-    <div className="scrim" role="dialog" aria-modal="true" aria-labelledby="ag-title"
+    <div className="scrim" role="presentation"
       onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}>
-      <div className="modal narrow">
+      <div className="modal narrow" role="dialog" aria-modal="true" aria-labelledby="ag-title">
         <div className="modal-hd">
           <h2 id="ag-title">Assign {name} to a group</h2>
           <button className="x" onClick={onClose} aria-label="Close"><Icon name="close" size={18} /></button>
@@ -785,9 +785,9 @@ function UploadRegistrationDocument({
   }
 
   return (
-    <div className="scrim" role="dialog" aria-modal="true" aria-labelledby="urd-title"
+    <div className="scrim" role="presentation"
       onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}>
-      <div className="modal narrow">
+      <div className="modal narrow" role="dialog" aria-modal="true" aria-labelledby="urd-title">
         <div className="modal-hd">
           <h2 id="urd-title">Upload document</h2>
           <button className="x" onClick={onClose} aria-label="Close"><Icon name="close" size={18} /></button>
