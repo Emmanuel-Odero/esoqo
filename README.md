@@ -32,6 +32,18 @@ pnpm dev
 | Mail catcher | http://localhost:8025 |
 | Database UI | `docker compose --profile tools up -d adminer` → :8080 |
 
+`pnpm db:seed` creates exactly one login — a staff account so the admin
+app is reachable on first run. Nothing else is seeded (no subjects, no
+groups, no registrations):
+
+| App | Login | Credential |
+|---|---|---|
+| Operations (`:3002`) | `ops@esoko.co.ke` | PIN `482915` — or whatever `SEED_ADMIN_PIN` was set to at seed time |
+
+Change this PIN (`SEED_ADMIN_PIN` env var before seeding, or
+`SEED_ADMIN_HASH` for a precomputed Argon2id hash) before any deployment —
+see the checklist at the bottom of this file.
+
 `SMS_PROVIDER=console` prints OTPs to the terminal. It also returns the code
 to the browser so you can test without a live SMS account — that path is
 gated on the env var and must never be enabled in a deployed environment.
