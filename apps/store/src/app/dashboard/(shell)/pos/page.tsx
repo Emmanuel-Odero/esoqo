@@ -18,7 +18,6 @@ export default async function PosPage() {
   return (
     <PosClient
       storeId={store.id}
-      storeName={store.name}
       products={products.map((p) => ({ id: p.id, name: p.name, priceKes: Number(p.priceKes) }))}
     />
   );

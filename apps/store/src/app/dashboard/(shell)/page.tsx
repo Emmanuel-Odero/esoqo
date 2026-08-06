@@ -11,7 +11,7 @@ const kes = (n: number) => 'KES ' + n.toLocaleString('en-KE');
 export default async function DashboardOverview() {
   const ctx = await requireSubject();
   const [store] = await listMyStores(ctx);
-  if (!store) return null; // layout already redirects — satisfies the type checker
+  if (!store) return null;
 
   const [orders, posSales, products] = await Promise.all([
     listStoreOrders(ctx, store.id),
@@ -24,48 +24,63 @@ export default async function DashboardOverview() {
   const todayPos = posSales.filter((s) => s.soldAt >= startOfDay);
   const salesToday = [...todayOrders, ...todayPos].reduce((sum, r) => sum + Number(r.totalKes), 0);
   const pendingCount = orders.filter((o) => o.status === 'PAID').length;
+  const activeProducts = products.filter((p) => p.status === 'ACTIVE').length;
+  const totalProducts = products.length;
 
   return (
     <>
-      <div className="dash-top">
+      <div className="dash-top anim-in">
         <div>
-          <h1 style={{ fontSize: '1.3rem' }}>Overview</h1>
-          <p style={{ margin: '2px 0 0', fontSize: '.82rem', color: 'var(--tx-2)' }}>{store.name}</p>
+          <h1>Overview</h1>
+          <p className="sub">{store.name} · <span className="pill ${store.status === 'ACTIVE' ? 'live' : store.status === 'SUSPENDED' ? 'paused' : 'draft'}">
+            <Icon name={store.status === 'ACTIVE' ? 'check-circle' : 'alert-triangle'} size={12} />
+            {store.status === 'ACTIVE' ? 'Store live' : store.status === 'SUSPENDED' ? 'Suspended' : 'Draft'}
+          </span></p>
         </div>
-        <span className={`pill ${store.status === 'ACTIVE' ? 'live' : store.status === 'SUSPENDED' ? 'paused' : 'draft'}`}>
-          <Icon name={store.status === 'ACTIVE' ? 'check-circle' : 'alert-triangle'} size={12} />
-          {store.status === 'ACTIVE' ? 'Store live' : store.status === 'SUSPENDED' ? 'Suspended' : 'Draft'}
-        </span>
       </div>
 
       <div className="kpis">
-        <div className="kpi"><span className="n">{kes(salesToday)}</span><span className="l">Sales today · {todayOrders.length + todayPos.length} orders</span></div>
-        <div className="kpi"><span className="n">{pendingCount}</span><span className="l">Orders awaiting fulfilment</span></div>
-        <div className="kpi"><span className="n">{products.filter((p) => p.status === 'ACTIVE').length}</span><span className="l">Products live</span></div>
+        <div className="kpi anim-in anim-in-d1">
+          <span className="icon g"><Icon name="coins" size={18} /></span>
+          <div><span className="n">{kes(salesToday)}</span><span className="l">Sales today</span><span className="l">{todayOrders.length + todayPos.length} orders</span></div>
+        </div>
+        <div className="kpi anim-in anim-in-d2">
+          <span className="icon b"><Icon name="basket" size={18} /></span>
+          <div><span className="n">{pendingCount}</span><span className="l">Awaiting fulfilment</span></div>
+        </div>
+        <div className="kpi anim-in anim-in-d3">
+          <span className="icon a"><Icon name="box" size={18} /></span>
+          <div><span className="n">{activeProducts}</span><span className="l">Products live</span><span className="l">{totalProducts} total</span></div>
+        </div>
       </div>
 
-      <div className="sect-h"><h2>Recent orders</h2></div>
+      <div className="sect-h anim-in anim-in-d2"><h2>Recent orders</h2></div>
       {orders.length === 0 ? (
-        <p style={{ color: 'var(--tx-2)', fontSize: '.88rem' }}>No orders yet — share your storefront link to get your first one.</p>
+        <div className="card" style={{ textAlign: 'center', padding: '40px 20px' }}>
+          <Icon name="basket" size={28} style={{ color: 'var(--tx-3)', marginBottom: 12 }} />
+          <p style={{ color: 'var(--tx-2)', fontSize: '.88rem', margin: 0 }}>No orders yet — share your storefront link to get your first one.</p>
+        </div>
       ) : (
-        <table className="dtbl">
-          <thead><tr><th>Order</th><th>Buyer</th><th>Items</th><th>Total</th><th>Status</th></tr></thead>
-          <tbody>
-            {orders.slice(0, 8).map((o) => (
-              <tr key={o.id}>
-                <td className="mono">#{o.id.slice(0, 8)}</td>
-                <td>{o.buyerName}</td>
-                <td>{o.items.map((i) => `${i.product.name} ×${i.quantity}`).join(', ')}</td>
-                <td className="mono">{kes(Number(o.totalKes))}</td>
-                <td>
-                  <span className={`pill ${o.status === 'FULFILLED' ? 'live' : o.status === 'PAID' ? 'draft' : o.status === 'CANCELLED' ? 'paused' : 'draft'}`}>
-                    {o.status === 'PENDING_PAYMENT' ? 'Awaiting payment' : o.status === 'PAID' ? 'Paid' : o.status === 'FULFILLED' ? 'Fulfilled' : 'Cancelled'}
-                  </span>
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
+        <div className="card" style={{ padding: 0, overflow: 'hidden' }}>
+          <table className="dtbl">
+            <thead><tr><th>Order</th><th>Buyer</th><th>Items</th><th>Total</th><th>Status</th></tr></thead>
+            <tbody>
+              {orders.slice(0, 8).map((o) => (
+                <tr key={o.id}>
+                  <td className="mono">#{o.id.slice(0, 8)}</td>
+                  <td>{o.buyerName}</td>
+                  <td>{o.items.map((i) => `${i.product.name} ×${i.quantity}`).join(', ')}</td>
+                  <td className="mono">{kes(Number(o.totalKes))}</td>
+                  <td>
+                    <span className={`pill ${o.status === 'FULFILLED' ? 'live' : o.status === 'PAID' ? 'draft' : o.status === 'CANCELLED' ? 'paused' : 'draft'}`}>
+                      {o.status === 'PENDING_PAYMENT' ? 'Awaiting payment' : o.status === 'PAID' ? 'Paid' : o.status === 'FULFILLED' ? 'Fulfilled' : 'Cancelled'}
+                    </span>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
       )}
     </>
   );

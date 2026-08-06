@@ -7,11 +7,6 @@ import { checkout } from './actions';
 interface Product { id: string; name: string; priceKes: number; stockQty: number | null }
 interface StoreInfo { slug: string; name: string; themeKey: string }
 
-/**
- * The header is always navy — "authority · headers, footers,
- * institutional bands" per @esoko/ui/tokens.css. A theme only changes
- * the accent (price, buttons, the cart badge), never the whole page.
- */
 const THEME_ACCENTS: Record<string, { accent: string; tint: string }> = {
   market: { accent: '#12794A', tint: '#E7F4ED' },
   nairobi: { accent: '#0F5C9E', tint: '#E9F2F9' },
@@ -153,7 +148,7 @@ export function StorefrontClient({ store, products }: { store: StoreInfo; produc
             style={{ position: 'absolute', inset: 0, background: 'rgba(10,20,30,.45)', border: 0, cursor: 'default' }}
           />
           <div
-            style={{ position: 'absolute', right: 0, top: 0, bottom: 0, width: 'min(420px, 92vw)', background: '#fff', padding: 24, display: 'flex', flexDirection: 'column', overflowY: 'auto' }}
+            style={{ position: 'absolute', right: 0, top: 0, bottom: 0, width: 'min(420px, 92vw)', background: '#fff', padding: 24, display: 'flex', flexDirection: 'column', overflowY: 'auto', boxShadow: 'var(--sh-l)' }}
           >
             {stage === 'browsing' && (
               <>
@@ -165,7 +160,7 @@ export function StorefrontClient({ store, products }: { store: StoreInfo; produc
                   </div>
                 ))}
                 <div className="cart-total"><span>Total</span><span className="mono">{kes(total)}</span></div>
-                <button type="button" className="btn btn-p" disabled={items.length === 0} onClick={() => setStage('form')}>
+                <button type="button" className="btn btn-g" disabled={items.length === 0} onClick={() => setStage('form')}>
                   Checkout with M-Pesa <Icon name="arrow-right" size={16} />
                 </button>
                 <button type="button" className="btn btn-o" style={{ marginTop: 8 }} onClick={() => setCartOpen(false)}>Keep shopping</button>
@@ -187,7 +182,7 @@ export function StorefrontClient({ store, products }: { store: StoreInfo; produc
                   <label className="lab" htmlFor="bmsisdn">M-Pesa number</label>
                   <input className="inp mono" id="bmsisdn" value={buyerMsisdn} onChange={(e) => setBuyerMsisdn(e.target.value)} inputMode="tel" />
                 </div>
-                <button type="button" className="btn btn-p" style={{ width: '100%' }} disabled={pending || !buyerName.trim() || !buyerMsisdn.trim()} onClick={submitCheckout}>
+                <button type="button" className="btn btn-g" style={{ width: '100%' }} disabled={pending || !buyerName.trim() || !buyerMsisdn.trim()} onClick={submitCheckout}>
                   {pending ? 'Sending prompt…' : `Pay ${kes(total)}`}
                 </button>
                 <button type="button" className="btn btn-o" style={{ marginTop: 8 }} onClick={() => setStage('browsing')}>Back to basket</button>

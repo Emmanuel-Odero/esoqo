@@ -32,20 +32,23 @@ export function SettingsForm({ storeId, initial }: {
   }
 
   return (
-    <div className="card" style={{ maxWidth: 480 }}>
-      <div className="fld">
-        <label className="lab" htmlFor="sname">Store name</label>
-        <input className="inp" id="sname" value={name} onChange={(e) => setName(e.target.value)} />
+    <div className="settings-card anim-in">
+      <div className="field-group">
+        <h3>Store details</h3>
+        <div className="fld">
+          <label className="lab" htmlFor="sname">Store name</label>
+          <input className="inp" id="sname" value={name} onChange={(e) => setName(e.target.value)} />
+        </div>
+        <div className="fld">
+          <p className="lab">Web address</p>
+          <p className="mono" style={{ fontSize: '.86rem', color: 'var(--tx-2)' }}>
+            {initial.routingMode === 'SUBDOMAIN' ? `${initial.slug}.esoko.global` : `esoko.global/@${initial.slug}`}
+          </p>
+        </div>
       </div>
 
-      <div className="fld">
-        <p className="lab">Web address</p>
-        <p className="mono" style={{ fontSize: '.86rem', color: 'var(--tx-2)' }}>
-          {initial.routingMode === 'SUBDOMAIN' ? `${initial.slug}.esoko.global` : `esoko.global/@${initial.slug}`}
-        </p>
-      </div>
-
-      <div className="fld">
+      <div className="field-group">
+        <h3>Appearance</h3>
         <p className="lab">Theme</p>
         <div className="theme-grid">
           {THEMES.map((t) => (
@@ -57,15 +60,18 @@ export function SettingsForm({ storeId, initial }: {
         </div>
       </div>
 
-      <div className="opt" style={{ cursor: 'default', alignItems: 'flex-start' }}>
-        <button type="button" className="toggle" aria-pressed={posEnabled} aria-label="PoS terminal" onClick={() => setPosEnabled((v) => !v)} />
-        <div><span className="t">PoS terminal</span><span className="d">Ring up in-person sales, even offline.</span></div>
+      <div className="field-group">
+        <h3>Add-ons</h3>
+        <div className="opt" style={{ cursor: 'default', alignItems: 'flex-start' }}>
+          <button type="button" className="toggle" aria-pressed={posEnabled} aria-label="PoS terminal" onClick={() => setPosEnabled((v) => !v)} />
+          <div><span className="t">PoS terminal</span><span className="d">Ring up in-person sales, even offline.</span></div>
+        </div>
       </div>
 
       {error && <p className="err" role="alert" style={{ marginTop: 4 }}><Icon name="alert-circle" size={14} />{error}</p>}
-      {saved && <p style={{ color: 'var(--green)', fontSize: '.85rem', marginTop: 4 }}><Icon name="check" size={14} /> Saved</p>}
+      {saved && <p style={{ color: 'var(--green)', fontSize: '.85rem', marginTop: 4, fontWeight: 600 }}><Icon name="check" size={14} /> Saved</p>}
 
-      <button type="button" className="btn btn-p" style={{ marginTop: 16 }} onClick={submit} disabled={pending}>
+      <button type="button" className="btn btn-g" style={{ marginTop: 20 }} onClick={submit} disabled={pending}>
         {pending ? 'Saving…' : 'Save changes'}
       </button>
     </div>

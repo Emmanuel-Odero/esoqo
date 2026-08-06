@@ -9,15 +9,14 @@ interface Product { id: string; name: string; priceKes: number }
 
 const kes = (n: number) => 'KES ' + n.toLocaleString('en-KE');
 
-export function PosClient({ storeId, storeName, products }: { storeId: string; storeName: string; products: Product[] }) {
+export function PosClient({ storeId, products }: { storeId: string; products: Product[] }) {
   const [cart, setCart] = useState<Record<string, number>>({});
   const [method, setMethod] = useState<'CASH' | 'MPESA_TILL'>('CASH');
   const [browserOnline, setBrowserOnline] = useState(true);
-  const [simulateOffline, setSimulateOffline] = useState(false);
   const [queuedCount, setQueuedCount] = useState(0);
   const [flash, setFlash] = useState<string | null>(null);
 
-  const effectiveOnline = browserOnline && !simulateOffline;
+  const effectiveOnline = browserOnline;
 
   const refreshQueueCount = useCallback(async () => {
     const q = await listQueuedSales();
@@ -31,7 +30,7 @@ export function PosClient({ storeId, storeName, products }: { storeId: string; s
         await syncPosSale(storeId, sale);
         await removeQueuedSale(sale.clientSaleId);
       } catch {
-        break; // stop on first failure — retry on the next trigger
+        break;
       }
     }
     await refreshQueueCount();
@@ -92,37 +91,45 @@ export function PosClient({ storeId, storeName, products }: { storeId: string; s
       )}
       <div className="pos">
         <div>
-          <div className="pos-top">
-            <strong>{storeName} — Till</strong>
-            <button type="button" className="btn btn-o btn-sm" onClick={() => setSimulateOffline((v) => !v)}>
-              <Icon name="wifi-off" size={13} />{simulateOffline ? 'Back online' : 'Simulate offline'}
-            </button>
-          </div>
-          <div className="pos-items">
-            {products.map((p) => (
-              <button type="button" key={p.id} className="pos-item" onClick={() => add(p.id)}>
-                <b>{p.name}</b><span>{kes(p.priceKes)}</span>
-              </button>
-            ))}
-          </div>
+          {products.length === 0 ? (
+            <div className="pos-empty">
+              <Icon name="box" size={28} style={{ marginBottom: 10, display: 'block', color: 'var(--tx-3)' }} />
+              <p style={{ color: 'var(--tx-2)', fontSize: '.85rem', margin: 0 }}>No products yet — add them from the dashboard.</p>
+            </div>
+          ) : (
+            <div className="pos-items">
+              {products.map((p) => (
+                <button type="button" key={p.id} className="pos-item" onClick={() => add(p.id)}>
+                  <b>{p.name}</b>
+                  <span>{kes(p.priceKes)}</span>
+                  <span className="pos-add"><Icon name="plus" size={12} /> Add</span>
+                </button>
+              ))}
+            </div>
+          )}
         </div>
         <div className="pos-cart">
-          <h4>Current sale</h4>
-          {items.length === 0 && <p style={{ color: 'var(--tx-2)', fontSize: '.82rem' }}>Tap a product to add it.</p>}
+          <h4 style={{ margin: '0 0 14px', fontSize: '.95rem' }}>Current sale</h4>
+          {items.length === 0 && <div className="pos-empty"><Icon name="basket" size={22} style={{ marginBottom: 8, color: 'var(--tx-3)' }} /><p style={{ margin: 0 }}>Tap a product to add it.</p></div>}
           {items.map((i) => (
             <div className="pos-cline" key={i.product.id}>
-              <span>{i.product.name} ×{i.qty}</span><span>{kes(i.product.priceKes * i.qty)}</span>
+              <span>{i.product.name} ×{i.qty}</span>
+              <span style={{ fontWeight: 600 }}>{kes(i.product.priceKes * i.qty)}</span>
             </div>
           ))}
-          <div className="pos-tot"><span>Total</span><span>{kes(total)}</span></div>
-          <div className="pos-pay">
-            <button type="button" aria-pressed={method === 'CASH'} onClick={() => setMethod('CASH')}>Cash</button>
-            <button type="button" aria-pressed={method === 'MPESA_TILL'} onClick={() => setMethod('MPESA_TILL')}>M-Pesa till</button>
-          </div>
-          <button type="button" className="btn btn-p" style={{ width: '100%' }} disabled={items.length === 0} onClick={completeSale}>
-            Complete sale
-          </button>
-          {flash && <p className="pos-queue"><Icon name="check" size={12} />{flash}</p>}
+          {items.length > 0 && (
+            <>
+              <div className="pos-tot"><span>Total</span><span>{kes(total)}</span></div>
+              <div className="pos-pay">
+                <button type="button" aria-pressed={method === 'CASH'} onClick={() => setMethod('CASH')}>Cash</button>
+                <button type="button" aria-pressed={method === 'MPESA_TILL'} onClick={() => setMethod('MPESA_TILL')}>M-Pesa till</button>
+              </div>
+              <button type="button" className="btn btn-g" style={{ width: '100%' }} disabled={items.length === 0} onClick={completeSale}>
+                Complete sale <Icon name="check" size={14} />
+              </button>
+            </>
+          )}
+          {flash && <p className="pos-queue" style={{ color: 'var(--green)', fontWeight: 600 }}><Icon name="check" size={12} />{flash}</p>}
           {queuedCount > 0 && (
             <p className="pos-queue"><Icon name="refresh" size={12} />{queuedCount} sale{queuedCount === 1 ? '' : 's'} queued — will sync when back online</p>
           )}

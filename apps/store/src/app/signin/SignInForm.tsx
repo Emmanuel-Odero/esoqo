@@ -53,12 +53,12 @@ export function SignInForm() {
         </div>
       )}
 
-      <button type="button" className="btn btn-p" style={{ width: '100%' }} disabled={pending || !identifier.trim() || !pin.trim()} onClick={submit}>
+      <button type="button" className="btn btn-g" style={{ width: '100%' }} disabled={pending || !identifier.trim() || !pin.trim()} onClick={submit}>
         {pending ? 'Signing in…' : 'Sign in'} <Icon name="arrow-right" size={16} />
       </button>
 
-      <p style={{ textAlign: 'center', marginTop: 16, fontSize: '.86rem' }}>
-        <Link href="/signin/set-pin" style={{ color: 'var(--blue)' }}>No PIN yet, or forgotten it? Set your PIN</Link>
+      <p style={{ textAlign: 'center', marginTop: 18, fontSize: '.86rem' }}>
+        <Link href="/signin/set-pin" style={{ color: 'var(--green)', fontWeight: 600 }}>No PIN yet, or forgotten it? Set your PIN</Link>
       </p>
     </>
   );

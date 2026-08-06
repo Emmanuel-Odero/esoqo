@@ -7,16 +7,22 @@ export default async function ShellLayout({ children }: { children: React.ReactN
   const ctx = await requireSubject();
   const stores = await listMyStores(ctx);
 
-  // Foundation phase: the dashboard shell is scoped to one store per
-  // merchant. listMyStores supports many — a store switcher is a later
-  // addition, not a schema change.
   if (stores.length === 0) redirect('/dashboard/new');
   const store = stores[0]!;
 
   return (
     <div className="dash">
       <DashSidebar store={{ name: store.name, slug: store.slug }} />
-      <div className="dash-main">{children}</div>
+      <div>
+        <header className="dash-topbar">
+          <span className="brand"><span className="dot" />{store.name}</span>
+          <span className="user">
+            <span className="avatar">{(store.name ?? 'ES').slice(0, 2).toUpperCase()}</span>
+            <span className="mono" style={{ fontSize: '.72rem' }}>esoko.global/@{store.slug}</span>
+          </span>
+        </header>
+        <main className="dash-main">{children}</main>
+      </div>
     </div>
   );
 }

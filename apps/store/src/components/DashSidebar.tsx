@@ -9,7 +9,7 @@ const NAV: [string, IconName, string][] = [
   ['/dashboard', 'chart', 'Overview'],
   ['/dashboard/products', 'box', 'Products'],
   ['/dashboard/orders', 'basket', 'Orders'],
-  ['/pos', 'keypad', 'PoS terminal'],
+  ['/dashboard/pos', 'keypad', 'PoS terminal'],
   ['/dashboard/settings', 'shop', 'Store settings'],
 ];
 
@@ -24,10 +24,10 @@ export function DashSidebar({ store }: { store: { name: string; slug: string } |
           <span>{store ? `esoko.global/@${store.slug}` : 'Not opened yet'}</span>
         </div>
       </div>
-      <nav className="dash-nav">
+      <nav className="dash-nav" aria-label="Dashboard navigation">
         {NAV.map(([href, icon, label]) => (
           <Link key={href} href={href as Route} aria-current={path === href ? 'page' : undefined}>
-            <Icon name={icon} size={15} />{label}
+            <span className="nav-icon"><Icon name={icon} size={15} /></span>{label}
           </Link>
         ))}
       </nav>

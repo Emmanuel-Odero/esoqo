@@ -45,15 +45,15 @@ export function StoreWizard({ enterprises, pricing }: { enterprises: Enterprise[
   }
 
   return (
-    <div className="qcard">
+    <div className="qcard anim-in">
       <div className="wiz-steps">
-        {[1, 2, 3, 4, 5].map((n) => <span key={n} className={n <= step ? 'on' : ''} />)}
+        {[1, 2, 3, 4, 5].map((n) => <span key={n} className={n < step ? 'done' : n <= step ? 'on' : ''} />)}
       </div>
 
       {step === 1 && (
         <>
           <p className="mono" style={{ fontSize: '.68rem', color: 'var(--tx-3)', textTransform: 'uppercase', letterSpacing: '.08em' }}>Step 1 of 5</p>
-          <h2 className="qh">Which business, and what's it called?</h2>
+          <h2 className="qh">Which business, and what&apos;s it called?</h2>
           <p className="qs">This is what customers see. You can change it later.</p>
           {enterprises.length > 1 && (
             <div className="fld">
@@ -113,7 +113,7 @@ export function StoreWizard({ enterprises, pricing }: { enterprises: Enterprise[
             <button type="button" className="toggle" aria-pressed={posEnabled} aria-label="Add PoS terminal" onClick={() => setPosEnabled((v) => !v)} />
             <div>
               <span className="t">PoS terminal add-on</span>
-              <span className="d">{kes(posMonthly)}/month · works with no signal, syncs sales when you're back online</span>
+              <span className="d">{kes(posMonthly)}/month · works with no signal, syncs sales when you&apos;re back online</span>
             </div>
           </div>
         </>
@@ -142,7 +142,7 @@ export function StoreWizard({ enterprises, pricing }: { enterprises: Enterprise[
             Continue <Icon name="arrow-right" size={16} />
           </button>
         ) : (
-          <button type="button" className="btn btn-p" onClick={submit} disabled={pending}>
+          <button type="button" className="btn btn-g" onClick={submit} disabled={pending}>
             {pending ? 'Opening your store…' : dueToday > 0 ? `Pay ${kes(dueToday)} & open store` : 'Open store'}
             <Icon name="check" size={16} />
           </button>
