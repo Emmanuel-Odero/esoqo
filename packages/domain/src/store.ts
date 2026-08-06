@@ -11,9 +11,32 @@ export const createStoreSchema = z.object({
 });
 export type CreateStoreInput = z.infer<typeof createStoreSchema>;
 
+/**
+ * A product's catalog category — deliberately separate from the 92-entry
+ * SEGMENTS dictionary in segments.ts. Segments classify a *person's
+ * trade* ("carpenter", "mama mboga"); this classifies *one item in a
+ * store's catalog*, which needs a much shorter, retail-shaped list a
+ * merchant can pick from in one glance.
+ */
+export const PRODUCT_CATEGORIES = [
+  ['HARDWARE_TOOLS', 'Hardware & tools'],
+  ['BUILDING_MATERIALS', 'Building materials'],
+  ['ELECTRONICS', 'Electronics'],
+  ['FASHION_APPAREL', 'Fashion & apparel'],
+  ['FOOD_GROCERIES', 'Food & groceries'],
+  ['HEALTH_BEAUTY', 'Health & beauty'],
+  ['HOME_FURNITURE', 'Home & furniture'],
+  ['AGRICULTURE', 'Agriculture'],
+  ['AUTOMOTIVE', 'Automotive'],
+  ['SERVICES', 'Services'],
+  ['OTHER', 'Other'],
+] as const;
+export type ProductCategory = (typeof PRODUCT_CATEGORIES)[number][0];
+
 export const createProductSchema = z.object({
   name: z.string().trim().min(2, 'Name this product').max(120),
   description: z.string().trim().max(500).optional().or(z.literal('')),
+  category: z.enum(PRODUCT_CATEGORIES.map(([k]) => k) as [string, ...string[]]).optional(),
   priceKes: z.number().positive('Enter a price above zero').max(10_000_000),
   stockQty: z.number().int().nonnegative().nullable().optional(),
 });

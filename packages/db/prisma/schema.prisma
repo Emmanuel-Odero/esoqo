@@ -643,12 +643,26 @@ model Product {
 
   name        String
   description String?
+  /// One of PRODUCT_CATEGORIES in @esoko/domain. Not a DB enum — that
+  /// list is edited in application code, same reasoning as `status`
+  /// below: a new category should never need a migration.
+  category    String?
   priceKes    Decimal  @db.Decimal(12, 2)
   /// Null = untracked (a service, or stock the merchant doesn't count).
   stockQty    Int?
-  /// ACTIVE | HIDDEN. A plain string, not an enum — a merchant hiding a
-  /// product is a listing decision, not a state the platform enforces.
+  /// ACTIVE | HIDDEN | SUSPENDED. A plain string, not an enum — a
+  /// merchant hiding their own product is a listing decision the
+  /// platform doesn't need to model as a state machine. SUSPENDED is
+  /// the one value a merchant cannot set themselves — see reviewedById
+  /// below; setProductVisibility refuses to touch a suspended product.
   status      String   @default("ACTIVE")
+  /// Staff moderation — mirrors Document's reviewNote/reviewedById/
+  /// reviewedAt shape below, same reasoning: who suspended it, why,
+  /// and when, so a merchant asking "why is my product down" gets a
+  /// real answer instead of "the system did it".
+  reviewNote   String?
+  reviewedById String?   @db.Uuid
+  reviewedAt   DateTime?
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -656,9 +670,27 @@ model Product {
   images       ProductImage[]
   orderItems   StoreOrderItem[]
   posSaleItems PosSaleItem[]
+  staffNotes   ProductStaffNote[]
 
   @@index([storeId, status])
+  @@index([category])
   @@map("product")
+}
+
+/// A running conversation between staff and a merchant about one
+/// product — separate from a suspension's single reviewNote because a
+/// product can get more than one comment over time ("fix the price" now,
+/// "thanks, reinstating" later), and both sides of that history matter.
+model ProductStaffNote {
+  id        String   @id @default(uuid()) @db.Uuid
+  productId String   @db.Uuid
+  product   Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
+  staffId   String   @db.Uuid
+  note      String
+  createdAt DateTime @default(now())
+
+  @@index([productId, createdAt])
+  @@map("product_staff_note")
 }
 
 model ProductImage {
@@ -708,9 +740,20 @@ model StoreOrder {
   createdAt DateTime  @default(now())
   paidAt    DateTime?
 
+  /// Staff-mediated reroute — set when this store can't fulfil the
+  /// order and staff need to hand-pick another vendor selling the same
+  /// thing. Deliberately not an automated reassignment: money and a
+  /// merchant's reputation are on the line, so a human stays in the
+  /// loop. Only meaningful before payment moves — see reassignOrder.
+  needsReroute       Boolean   @default(false)
+  rerouteReason      String?
+  rerouteFlaggedById String?   @db.Uuid
+  rerouteFlaggedAt   DateTime?
+
   items StoreOrderItem[]
 
   @@index([storeId, status])
+  @@index([needsReroute])
   @@map("store_order")
 }
 

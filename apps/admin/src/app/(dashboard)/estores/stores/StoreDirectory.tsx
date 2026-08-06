@@ -1,8 +1,10 @@
 'use client';
 
 import { useState, useTransition } from 'react';
+import Link from 'next/link';
+import type { Route } from 'next';
 import { Icon } from '@esoko/ui';
-import { actionModerateStore } from './actions';
+import { actionModerateStore } from '../actions';
 
 interface StoreRow {
   id: string; name: string; slug: string; status: string;
@@ -33,7 +35,7 @@ export function StoreDirectory({ rows, total, canModerate }: { rows: StoreRow[];
       <div className="card" style={{ padding: 0 }}>
         <table className="tbl">
           <thead>
-            <tr><th>Store</th><th>Owner</th><th>Address</th><th>PoS</th><th>Status</th>{canModerate && <th />}</tr>
+            <tr><th>Store</th><th>Owner</th><th>Address</th><th>PoS</th><th>Status</th><th /></tr>
           </thead>
           <tbody>
             {rows.map((s) => (
@@ -46,15 +48,20 @@ export function StoreDirectory({ rows, total, canModerate }: { rows: StoreRow[];
                 <td className="mono">{s.routingMode === 'SUBDOMAIN' ? `${s.slug}.esoko.global` : `esoko.global/@${s.slug}`}</td>
                 <td>{s.posEnabled ? 'Yes' : 'No'}</td>
                 <td><span className={`pill ${STATUS_PILL[s.status]}`}>{STATUS_LABEL[s.status]}</span></td>
-                {canModerate && (
-                  <td>
-                    {s.status === 'SUSPENDED' ? (
-                      <button className="btn btn-o btn-sm" disabled={pending} onClick={() => moderate(s.id, 'ACTIVE')}>Reinstate</button>
+                <td style={{ textAlign: 'right', whiteSpace: 'nowrap' }}>
+                  {canModerate && (
+                    s.status === 'SUSPENDED' ? (
+                      <button className="btn btn-o btn-sm" disabled={pending} style={{ marginRight: 8 }}
+                        onClick={() => moderate(s.id, 'ACTIVE')}>Reinstate</button>
                     ) : (
-                      <button className="btn btn-o btn-sm" onClick={() => setReasonFor(s.id)}>Suspend</button>
-                    )}
-                  </td>
-                )}
+                      <button className="btn btn-o btn-sm" style={{ marginRight: 8 }}
+                        onClick={() => setReasonFor(s.id)}>Suspend</button>
+                    )
+                  )}
+                  <Link className="btn btn-p btn-sm" href={`/estores/stores/${s.id}` as Route}>
+                    <Icon name="eye" size={13} />View
+                  </Link>
+                </td>
               </tr>
             ))}
           </tbody>
