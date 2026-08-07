@@ -13,15 +13,15 @@ export function CecfTopNav() {
 
   return (
     <nav className="cecf-topnav" aria-label="Cross-site">
-      <span className="cecf-topnav-brand">
-        <Logo />
-        <span className="x">&times;</span>
-        <span>Child Elder Care Foundation</span>
-      </span>
-      <span className="cecf-topnav-links">
+      <span className="cecf-topnav-center">
         <a className="cecf-nav-btn esoko" href={esokoUrl}>
           Visit Esoko
         </a>
+        <span className="cecf-topnav-brand">
+          <Logo />
+          <span className="x">&times;</span>
+          <span>Child Elder Care Foundation</span>
+        </span>
         <a className="cecf-nav-btn cecf" href={cecfUrl} target="_blank" rel="noopener noreferrer">
           Visit CECF
         </a>

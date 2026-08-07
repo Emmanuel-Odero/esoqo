@@ -27,11 +27,15 @@
 
 /* ── cross-promotion nav ── */
 .cecf-topnav {
-  display: flex; align-items: center; justify-content: space-between;
-  gap: 12px; flex-wrap: wrap;
+  display: flex; align-items: center; justify-content: center;
   padding: 14px 22px; margin-bottom: 8px;
   border-bottom: 1px solid var(--cecf-line);
   background: var(--cecf-sand);
+}
+/* Visit Esoko — brand — Visit CECF, as one centred group. */
+.cecf-topnav-center {
+  display: flex; align-items: center; justify-content: center;
+  gap: 20px; flex-wrap: wrap;
 }
 .cecf-topnav-brand {
   display: flex; align-items: center; gap: 10px;
@@ -44,7 +48,6 @@
 .cecf-topnav-brand .lock { display: flex; align-items: center; gap: .05em; font-size: 22px; line-height: 1; color: var(--navy); }
 .cecf-topnav-brand .lock .w { font-family: var(--font-display); font-weight: 800; letter-spacing: -.045em; color: var(--green); position: relative; top: .05em; }
 .cecf-topnav-brand .x { color: var(--cecf-ink-2); font-weight: 400; }
-.cecf-topnav-links { display: flex; gap: 10px; flex-wrap: wrap; }
 .cecf-nav-btn {
   display: inline-flex; align-items: center; gap: 7px;
   padding: 9px 16px; border-radius: 7px; font-size: 0.86rem; font-weight: 600;
@@ -55,6 +58,24 @@
 .cecf-nav-btn.esoko:hover { background: var(--navy); color: #fff; }
 .cecf-nav-btn.cecf { background: var(--cecf-teal); color: #fff; }
 .cecf-nav-btn.cecf:hover { background: var(--cecf-teal-2); }
+
+/* ── form + "why esoko" hero: side by side on wide screens, hero
+   drops below the form on narrow ones. Source order is form-then-hero
+   so the narrow-screen (no grid) case needs no reordering — it's
+   already the fallback stacking order. ── */
+.cecf-layout {
+  max-width: 1040px; margin: 0 auto; padding: 36px 22px 0;
+  display: grid; gap: 40px;
+}
+@media (min-width: 900px) {
+  .cecf-layout {
+    grid-template-columns: minmax(0, 660px) 1fr;
+    align-items: start;
+    padding-top: 48px;
+  }
+}
+.cecf-layout .wrap { margin: 0; padding: 0; max-width: none; }
+.cecf-layout .cecf-hero { margin: 0; padding: 0; max-width: none; }
 
 /* ── "why esoko" hero ── */
 .cecf-hero { max-width: 660px; margin: 0 auto; padding: 36px 22px 8px; }

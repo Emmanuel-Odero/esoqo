@@ -14,16 +14,22 @@ export default function JoinPage() {
   return (
     <div className="cecf-scope">
       <CecfTopNav />
-      <WhyEsoko />
 
-      <div className="wrap">
-        <div className="jtop">
-          <div>
-            <h1 style={{ fontSize: 'clamp(1.6rem,3vw,2.05rem)' }}>Join Esoko</h1>
-            <p style={{ color: 'var(--tx-2)', margin: '4px 0 0' }}>Free, and it stays free.</p>
+      {/* Form first in source order, hero second — on narrow screens
+          (no grid) that's already "hero under the form"; on wide
+          screens the grid places the hero beside the form instead. */}
+      <div className="cecf-layout">
+        <div className="wrap">
+          <div className="jtop">
+            <div>
+              <h1 style={{ fontSize: 'clamp(1.6rem,3vw,2.05rem)' }}>Join Esoko</h1>
+              <p style={{ color: 'var(--tx-2)', margin: '4px 0 0' }}>Free, and it stays free.</p>
+            </div>
           </div>
+          <JoinFlow />
         </div>
-        <JoinFlow />
+
+        <WhyEsoko />
       </div>
 
       <CecfPartnershipBand />
