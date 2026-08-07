@@ -154,6 +154,19 @@ class PageSeeder
             ];
         }
 
+        // update_post_meta()/rwmb_set_meta() both call wp_unslash() on the
+        // way in — correct for their normal caller, $_POST data that
+        // arrived pre-slashed by PHP's magic-quotes-emulation layer, but
+        // we're calling them directly with a clean PHP string. wp_slash()
+        // here cancels that out. Skipping it silently corrupts any JSON
+        // value containing a real backslash: form.json's phone-number
+        // regex ("...\\d{8}..."), the one place in the seeded content
+        // this actually bit — stripslashes() turned "\\d" into "\d", not
+        // a valid JSON escape, and every downstream json_decode() of that
+        // one section failed with a syntax error while the other 20
+        // pages (no backslashes anywhere in their content) looked fine.
+        $rows = wp_slash($rows);
+
         if (function_exists('rwmb_set_meta')) {
             rwmb_set_meta($postId, 'cecf_sections', $rows);
 
