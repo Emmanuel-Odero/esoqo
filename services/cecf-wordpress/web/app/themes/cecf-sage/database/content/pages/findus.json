@@ -1,0 +1,27 @@
+{
+  "sections": [
+    {
+      "type": "phead",
+      "kicker": "For Communities",
+      "heading": "Find a field officer",
+      "lead": "Somebody who will come and sit with your group."
+    },
+    {
+      "type": "twoColumn",
+      "prose": ["Field officers work across Nairobi’s sub-counties and, through partner networks, in several counties beyond. They visit groups where they meet — evenings and weekends included, because that is when most chamas actually gather."],
+      "subheading": "Three ways to reach one",
+      "requirementList": [
+        { "status": "done", "title": "Call the office", "highlight": "0709 000 000", "body": "Monday to Saturday, 8am–6pm. Ask for the officer covering your sub-county." },
+        { "status": "done", "title": "Send the form", "body": "Fill the registration form and an officer contacts you within five working days." },
+        { "status": "done", "title": "Ask another group", "body": "Most groups reach us because a neighbouring group did first. Ask who helped them." }
+      ],
+      "media": { "type": "illustration", "ref": "nairobi-subcounties.svg", "alt": "Schematic of all seventeen Nairobi sub-counties" }
+    },
+    {
+      "type": "prose",
+      "heading": "If you are outside our field coverage",
+      "body": ["You can still register. The process runs by phone and post, the certificate is identical, and the government fees are the same. What you will not get is somebody sitting in the room — which matters, but is not a reason to wait."]
+    },
+    { "type": "linkOut", "label": "Start the form", "page": "form", "style": "primary", "icon": "compass" }
+  ]
+}

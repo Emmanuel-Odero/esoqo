@@ -1,0 +1,42 @@
+{
+  "sections": [
+    {
+      "type": "phead",
+      "kicker": "Partner with us",
+      "heading": "Banks and insurers",
+      "lead": "The market you cannot underwrite is not the market you think it is."
+    },
+    {
+      "type": "twoColumn",
+      "reverse": true,
+      "media": { "type": "illustration", "ref": "institutions-network.svg", "alt": "Institutions connected around a community group" },
+      "prose": [
+        "Group lending is hard for a reason: most groups are unregistered, keep no usable records, and dissolve over disputes rather than over money. Any of those three will sink a facility.",
+        "Our work removes all three before the group reaches you."
+      ],
+      "subheading": "What a CECF referral has already done",
+      "ticks": [
+        "**Registered** under the Community Groups Registration Act, with a constitution on file",
+        "**Governed** — elected office-bearers and a written dispute process",
+        "**Trained** in bookkeeping and in what a loan actually costs",
+        "**Recorded** — contribution history you can read",
+        "**Pre-vetted** against your own stated requirements, so the file arrives complete"
+      ]
+    },
+    {
+      "type": "cardGrid",
+      "columns": 3,
+      "heading": "Where we already work",
+      "items": [
+        { "icon": "chart-bars", "color": "ochre", "title": "I&M Bank", "body": "Group account structures, group lending, LPO financing, asset financing, pre-vetting pipelines and joint financial literacy delivery." },
+        { "icon": "chart-bars", "color": "ochre", "title": "Kingdom Bank", "body": "Group savings products and credit pipelines built around chama and table-banking behaviour." },
+        { "icon": "shield", "color": "teal", "title": "Britam Insurance", "body": "Micro-insurance and group cover, so a single hospital admission does not empty a group fund." }
+      ]
+    },
+    {
+      "type": "callout",
+      "body": "**What we ask in return.** Products designed for group realities rather than individual products with a group label, published requirements so we can prepare against them, and outcome data back — approvals, defaults and reasons. Without that last one, we cannot improve what we send you."
+    },
+    { "type": "linkOut", "label": "Talk to us", "page": "contact", "style": "primary", "icon": "mail" }
+  ]
+}

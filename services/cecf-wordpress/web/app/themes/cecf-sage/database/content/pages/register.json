@@ -1,0 +1,38 @@
+{
+  "sections": [
+    {
+      "type": "phead",
+      "kicker": "For Communities",
+      "heading": "Register your group or MSME",
+      "lead": "Free, and we walk it with you. Most groups are registered within six to ten weeks."
+    },
+    {
+      "type": "twoColumn",
+      "prose": ["If your group meets regularly, keeps money together and has members who agree on who is in it, you have almost everything needed to register. The rest is paperwork we prepare with you."],
+      "media": { "type": "illustration", "ref": "community-gathering.svg", "alt": "A community group meeting under a tree" }
+    },
+    {
+      "type": "stepList",
+      "heading": "How it goes",
+      "layout": "column",
+      "items": [
+        { "n": 1, "title": "Tell us about the group", "body": "Fill the form, call us, or ask a field officer. We need about ten minutes." },
+        { "n": 2, "title": "We visit or call back", "body": "Within five working days. We go through what you have and what is missing, plainly." },
+        { "n": 3, "title": "We prepare the papers together", "body": "Constitution, member register, minutes and forms. Your group approves all of it before anything is filed." },
+        { "n": 4, "title": "We file and follow up", "body": "We lodge it with the relevant office and chase it. You get the certificate, and we help you open the account it makes possible." }
+      ]
+    },
+    {
+      "type": "note",
+      "variant": "warn",
+      "body": "**CECF never charges for assistance and never asks for money by phone.** Government fees are paid directly to the issuing office at its published rate. If somebody asks you to pay CECF to register, it is not us. Call **0709 000 000**."
+    },
+    {
+      "type": "linkRow",
+      "items": [
+        { "label": "Start the form", "page": "form", "style": "primary", "icon": "compass" },
+        { "label": "What you will need", "page": "requirements", "style": "outline", "icon": "document" }
+      ]
+    }
+  ]
+}

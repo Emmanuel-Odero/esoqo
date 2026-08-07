@@ -1,0 +1,36 @@
+{
+  "sections": [
+    {
+      "type": "phead",
+      "kicker": "Contact",
+      "heading": "Get in touch",
+      "lead": "Different questions go to different people. Here is who."
+    },
+    {
+      "type": "cardGrid",
+      "columns": 2,
+      "items": [
+        { "icon": "people", "color": "teal", "title": "Groups and individuals", "mono": ["0709 000 000", "groups@cecf.or.ke"], "body": "Registration, training, a field officer visit, or anything about your own group. Monday to Saturday, 8am–6pm." },
+        { "icon": "puzzle", "color": "ochre", "title": "Partnerships", "mono": ["partnerships@cecf.or.ke"], "body": "Government, financial institutions, donors and corporate sponsors. We will ask what you need and what you require before proposing anything." },
+        { "icon": "calendar", "color": "clay", "title": "Events and media", "mono": ["events@cecf.or.ke"], "body": "Convenings, conferences, invitations and press enquiries." },
+        { "icon": "scales", "color": "green", "title": "Complaints", "mono": ["malalamiko@cecf.or.ke"], "body": "In Kiswahili or English. Acknowledged within two working days, answered within fourteen. You may escalate beyond us without our permission." }
+      ]
+    },
+    {
+      "type": "twoColumn",
+      "heading": "Where we are",
+      "requirementList": [
+        { "status": "done", "title": "Head office", "body": "Nairobi, Kenya. Visitors are welcome; call ahead so the right person is in." },
+        { "status": "done", "title": "Opening hours", "body": "Monday to Friday 8am–5pm, Saturday 9am–1pm." },
+        { "status": "done", "title": "Field officers", "body": "Across Nairobi and partner counties, including evenings and weekends." }
+      ],
+      "fineprint": "Add the full postal address, physical address and map before publication.",
+      "media": { "type": "illustration", "ref": "community-gathering.svg", "alt": "A community group meeting under a tree" }
+    },
+    {
+      "type": "note",
+      "variant": "warn",
+      "body": "**CECF never asks for money by phone.** Our assistance is free, and government fees are paid directly to the issuing office. If anybody asks you to pay CECF, it is not us. Call **0709 000 000** and tell us."
+    }
+  ]
+}

@@ -1,0 +1,37 @@
+{
+  "sections": [
+    {
+      "type": "phead",
+      "kicker": "Partner with us",
+      "heading": "Donors and development partners",
+      "lead": "Fund the unglamorous middle, where most programmes stop."
+    },
+    {
+      "type": "twoColumn",
+      "prose": [
+        "There is generous funding for training grassroots groups, and generous funding for financial inclusion. There is very little for the administrative work in between — the filing, the follow-up, the second visit to an office that lost the paperwork.",
+        "That middle is where formalisation actually succeeds or fails, and it is what we do."
+      ],
+      "subheading": "Current funding priorities",
+      "ticks": [
+        "**Regulatory and administrative access** a three-year programme to reach 30,000 groups and MSMEs annually",
+        "**Market entry and expansion** financial literacy, negotiated products and aggregation infrastructure",
+        "**Digital platform rollout** — expanding self-registration and market-linkage coverage into priority counties",
+        "**Internal dispute resolution** — accredited mediation training at scale",
+        "**Phased county replication** — starting with Turkana, West Pokot and Elgeyo Marakwet"
+      ],
+      "media": { "type": "illustration", "ref": "published-reports.svg", "alt": "Reports and published accounts" }
+    },
+    {
+      "type": "cardGrid",
+      "columns": 3,
+      "heading": "How we report",
+      "items": [
+        { "icon": "bar-chart-line", "color": "teal", "title": "Outcomes, not activities", "body": "Certificates in hand rather than applications filed. Accounts opened rather than referrals made. Groups alive at twelve months." },
+        { "icon": "document", "color": "ochre", "title": "Audited annually", "body": "Independent audit, published, available to anybody who asks." },
+        { "icon": "fish", "color": "clay", "title": "Including failures", "body": "Every report names what did not work and what it cost. A report without that section is not a report." }
+      ]
+    },
+    { "type": "linkOut", "label": "Request the funding pack", "page": "contact", "style": "primary", "icon": "mail" }
+  ]
+}

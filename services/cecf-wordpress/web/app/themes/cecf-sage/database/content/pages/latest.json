@@ -1,0 +1,33 @@
+{
+  "sections": [
+    {
+      "type": "phead",
+      "kicker": "News & events",
+      "heading": "Latest news",
+      "lead": "What we have been doing, and what is coming."
+    },
+    {
+      "type": "newsList",
+      "items": [
+        { "date": "10 July 2026", "tag": "Convening", "title": "Stakeholder workshop at Nyayo House brings ministries, banks and counties together", "body": [
+          "Presenters from the Ministry of Labour & Social Protection, the Business Registration Service, the Kenya Revenue Authority, the National Judiciary Mediation Department, Nairobi City County and partner financial institutions set out what each requires from grassroots groups — and where the process currently breaks.",
+          "The session produced agreed referral routes and a commitment to publish requirements in a form groups can act on."
+        ]},
+        { "date": "June 2026", "tag": "Platform", "title": "Digital platform pilot opens self-registration to the first cohort of groups", "body": [
+          "Groups in Nairobi began self-registering and tracking applications through the CECF digital platform, linking directly to the Ministry of Labour & Social Protection and the Kenya Revenue Authority."
+        ]},
+        { "date": "May 2026", "tag": "Partnership", "title": "Financial inclusion agreement covering group accounts and enterprise financing", "body": [
+          "A partnership framework covering group account structures, group lending, LPO financing, asset financing, pre-vetting pipelines and joint financial literacy delivery."
+        ]},
+        { "date": "April 2026", "tag": "Advocacy", "title": "Leadership forum convenes representatives from 500 socioeconomic groups", "body": [
+          "Group leaders set the agenda themselves. The three issues raised most often were the cost of registration, the distance to the nearest office, and disputes that had gone unresolved for years."
+        ]}
+      ]
+    },
+    {
+      "type": "note",
+      "variant": "fineprint",
+      "body": "Replace with live news entries and add author, images and full articles before publication."
+    }
+  ]
+}

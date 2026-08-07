@@ -1,0 +1,97 @@
+{
+  "sections": [
+    {
+      "type": "phead",
+      "kicker": "The problem",
+      "heading": "Trapped in informality, not by choice",
+      "lead": "Structural friction in the systems meant to formalise Kenya’s grassroots groups and MSMEs, and the single, sequenced pathway we run with government and financial partners to fix it."
+    },
+    {
+      "type": "prose",
+      "body": [
+        "Kenya’s socioeconomic groups — self-help groups, community-based organisations, welfare associations, faith-based networks — and its micro, small and medium enterprises form the backbone of grassroots economic activity. Yet the majority remain trapped in informality not by choice, but by structural friction in the systems meant to formalise them.",
+        "This friction shows up as two interlocking problems: the absence of accessible, predictable regulatory pathways, and the resulting failure to translate registration, where it happens, into genuine socioeconomic empowerment."
+      ]
+    },
+    {
+      "type": "twoColumn",
+      "heading": "Problem one: regulatory fragmentation",
+      "prose": [
+        "Until recently, community groups operated under an unclear legal identity, treated largely as an administrative creation of the Department of Gender and Social Services rather than as legal entities with defined rights and obligations. The Community Groups Registration Act 2022 was meant to resolve this — yet awareness remains critically low.",
+        "For MSMEs, the picture is similarly fragmented. Business registration, licensing, tax registration and compliance sit across multiple disconnected institutions — the Business Registration Service, county licensing offices and the Kenya Revenue Authority — each with its own procedures, timelines and documentation requirements.",
+        "New compliance obligations are also arriving faster than small operators can absorb them: eTIMS invoicing requirements from 2026 and stricter Finance Act 2025 reporting standards add real cost and complexity for volunteer-run groups and micro-enterprises with minimal administrative capacity."
+      ],
+      "media": {
+        "type": "statGrid",
+        "columns": 3,
+        "items": [
+          { "value": "<10%", "label": "Community groups aware the 2022 Act exists" },
+          { "value": "<5%", "label": "County social services directorates aware of it" },
+          { "value": "3+", "label": "Disconnected institutions an MSME must navigate to formalise" }
+        ]
+      }
+    },
+    {
+      "type": "prose",
+      "heading": "Problem two: weak conversion from formal status to market participation",
+      "body": [
+        "Registration, even where it occurs, rarely converts into real market access or growth. Most micro and small enterprises operate with no separation between personal and business finances, inconsistent or absent record-keeping, and no transaction history that a bank, buyer or government procurement system can use to assess reliability. This leaves formalised groups and MSMEs isolated from the value chains, structured buyers and financial products that would allow them to grow beyond subsistence activity — a gap especially acute for rural, youth-led and women-led enterprises already facing the steepest exclusion barriers nationally."
+      ]
+    },
+    {
+      "type": "cardGrid",
+      "columns": 3,
+      "heading": "Why both problems must be solved together",
+      "items": [
+        { "icon": "document", "color": "teal", "title": "Registration without market access", "body": "Risks producing groups that are formalised but stagnant — legally compliant, economically unchanged." },
+        { "icon": "chart-bars", "color": "ochre", "title": "Market access without registration reform", "body": "Risks building growth pathways that only the already-formalised minority can use." },
+        { "icon": "target", "color": "clay", "title": "Solved together", "body": "A single, digitised, government-partnered pathway is what allows regulatory reform to actually translate into inclusive economic growth." }
+      ]
+    },
+    {
+      "type": "prose",
+      "kicker": "From problem to intervention",
+      "heading": "A single, sequenced pathway — not two separate fixes",
+      "body": [
+        "Regulatory fragmentation that keeps groups and MSMEs trapped in informality, and the weak conversion of formal status into real market participation, cannot be solved through parallel, disconnected fixes. Our intervention addresses both simultaneously, sequencing government partnerships, financial institutions and a unifying digital platform into one coherent journey."
+      ],
+      "callout": "**Our logic rests on a simple premise:** formalisation only becomes empowerment when it is fast, affordable, and immediately followed by usable market and financial access. Each stage is designed to reduce friction at the specific point where groups and MSMEs currently stall or drop out."
+    },
+    {
+      "type": "cardGrid",
+      "columns": 2,
+      "linked": true,
+      "items": [
+        { "icon": "document", "color": "teal", "title": "Results — regulatory & administrative constraints", "body": "Simplified registration, consolidated business registration, accessible tax compliance, internal dispute resolution and a single digital front door.", "page": "results" },
+        { "icon": "chart-bars", "color": "ochre", "title": "Results — market entry & expansion", "body": "Financial literacy paired with negotiated products, social safety-net protection, licensing replication, and aggregation into structured markets.", "page": "results" }
+      ]
+    },
+    {
+      "type": "prose",
+      "heading": "Why this works",
+      "body": [
+        "Regulatory simplification produces a steady pipeline of legally compliant, dispute-resilient groups that market-entry work then converts into economically active participants. This sequencing also de-risks the intervention for private-sector partners — banks and insurers are far more willing to extend affordable products to a population that is already registered, tax-compliant and equipped with internal conflict-resolution capacity."
+      ]
+    },
+    {
+      "type": "cardGrid",
+      "columns": 3,
+      "heading": "Who benefits most",
+      "items": [
+        { "icon": "people", "color": "teal", "title": "Rural youth", "body": "Nearly half of all financially excluded adults nationally, with lack of a phone or national ID the two most significant barriers. Our identification work targets these counties and demographics directly." },
+        { "icon": "shield", "color": "ochre", "title": "Women", "body": "Rely more heavily on informal group savings (chamas) than formal banking. We meet them where they already engage financially, then open a structured route into savings, credit and insurance." },
+        { "icon": "map-pin", "color": "clay", "title": "Rural & marginalised communities", "body": "Counties such as Turkana, West Pokot and Elgeyo Marakwet benefit from phased replication of licensing simplification, combined with the platform’s remote-access capability." }
+      ]
+    },
+    { "type": "linkOut", "label": "See the results this delivers", "page": "results", "style": "primary" },
+    {
+      "type": "ctaBand",
+      "heading": "Bring your group or MSME in",
+      "body": "Assistance is free. Bring what you have — we will tell you plainly what is missing and what it will cost, before you spend anything.",
+      "ctas": [
+        { "label": "Start registration", "page": "form", "style": "primary", "icon": "compass" },
+        { "label": "Find a field officer", "page": "findus", "style": "outline-white", "icon": "map-pin" }
+      ]
+    }
+  ]
+}

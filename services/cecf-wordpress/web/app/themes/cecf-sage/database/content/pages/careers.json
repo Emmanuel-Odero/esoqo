@@ -1,0 +1,34 @@
+{
+  "sections": [
+    {
+      "type": "phead",
+      "kicker": "Contact",
+      "heading": "Work with us",
+      "lead": "Field officers, programme staff and volunteers."
+    },
+    {
+      "type": "twoColumn",
+      "prose": ["Most of our work happens in community halls, market sheds and under trees. If you want a desk job, this is the wrong organisation. If you want to sit with a group treasurer or MSME owner on a Saturday evening and work out why their registration stalled, keep reading."],
+      "subheading": "What we look for",
+      "ticks": [
+        "Fluent Kiswahili, and comfort with the languages of the communities you would serve",
+        "Patience with institutions — much of this work is following up on a file",
+        "Willingness to work when groups meet, which is evenings and weekends",
+        "Absolute clarity about safeguarding, which is non-negotiable and screened for"
+      ],
+      "secondTicksHeading": "Roles we recruit for",
+      "secondTicks": [
+        "**Field officers** — sub-county based, group-facing",
+        "**Programme officers** — education, formalisation, mediation",
+        "**Monitoring and reporting** — the person who insists the numbers are real",
+        "**Volunteers and interns** — particularly from the communities we serve"
+      ],
+      "media": { "type": "photo", "ref": "PLACEHOLDER-sugarcane-farmer", "alt": "A farmer cutting sugarcane for milling", "caption": "The work is not office work" }
+    },
+    {
+      "type": "note",
+      "variant": "info",
+      "body": "Send a CV and a short note about why to **careers@cecf.or.ke**. We reply to everybody, including when the answer is no."
+    }
+  ]
+}

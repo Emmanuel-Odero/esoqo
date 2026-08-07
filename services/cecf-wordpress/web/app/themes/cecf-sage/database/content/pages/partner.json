@@ -1,0 +1,25 @@
+{
+  "sections": [
+    {
+      "type": "phead",
+      "kicker": "Partner with us",
+      "heading": "Work with CECF",
+      "lead": "Four kinds of partnership, each with a different ask."
+    },
+    {
+      "type": "cardGrid",
+      "columns": 2,
+      "linked": true,
+      "items": [
+        { "icon": "government-building", "color": "teal", "title": "Government & agencies", "body": "Ministries, authorities, counties and the Judiciary. Reach groups you already serve, through a delivery partner already in the field.", "page": "government" },
+        { "icon": "chart-bars", "color": "ochre", "title": "Banks & insurers", "body": "A pipeline of registered, trained, pre-vetted groups — and products designed for how groups actually behave.", "page": "finance" },
+        { "icon": "globe", "color": "clay", "title": "Donors & development partners", "body": "Fund formalisation, adult education or learning centres, with reporting that includes what did not work.", "page": "donors" },
+        { "icon": "puzzle", "color": "green", "title": "Corporate sponsorship", "body": "Sponsor a training cycle, a convening or a learning centre, with visibility that is honest about your role.", "page": "corporate" }
+      ]
+    },
+    {
+      "type": "callout",
+      "body": "**What we will always tell you.** What the money bought, what it did not achieve, and where our figures are estimates. A partner who finds that out later is a partner we have lost."
+    }
+  ]
+}

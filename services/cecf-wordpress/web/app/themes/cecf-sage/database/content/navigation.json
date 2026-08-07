@@ -1,0 +1,91 @@
+{
+  "primary": [
+    { "label": "Home", "page": "home" },
+    { "label": "About us", "page": "about" },
+    {
+      "label": "Our approach",
+      "page": "problem",
+      "children": [
+        { "label": "The problem", "page": "problem" },
+        { "label": "Results", "page": "results" }
+      ]
+    },
+    {
+      "label": "Impact",
+      "page": "impact",
+      "children": [
+        { "label": "Impact & sustainability", "page": "impact" },
+        { "label": "Stories from the ground", "page": "stories" },
+        { "label": "Reports & publications", "page": "reports" }
+      ]
+    },
+    {
+      "label": "For Communities",
+      "page": "register",
+      "children": [
+        { "label": "Register your group", "page": "register" },
+        { "label": "What you will need", "page": "requirements" },
+        { "label": "Find a field officer", "page": "findus" },
+        { "label": "Registration form", "page": "form" },
+        { "label": "Training calendar", "page": "calendar" }
+      ]
+    },
+    {
+      "label": "Partner with us",
+      "page": "government",
+      "children": [
+        { "label": "Government & agencies", "page": "government" },
+        { "label": "Banks & insurers", "page": "finance" },
+        { "label": "Donors & development partners", "page": "donors" },
+        { "label": "Corporate sponsorship", "page": "corporate" }
+      ]
+    },
+    { "label": "News & events", "page": "latest" },
+    { "label": "Contact", "page": "contact" }
+  ],
+  "primaryCta": { "label": "Register a group", "page": "form" },
+  "footerColumns": [
+    {
+      "heading": "Our approach",
+      "links": [
+        { "label": "The problem", "page": "problem" },
+        { "label": "Results", "page": "results" }
+      ]
+    },
+    {
+      "heading": "Impact",
+      "links": [
+        { "label": "Impact & sustainability", "page": "impact" },
+        { "label": "Stories from the ground", "page": "stories" },
+        { "label": "Reports", "page": "reports" }
+      ]
+    },
+    {
+      "heading": "For Communities",
+      "links": [
+        { "label": "Register your group", "page": "register" },
+        { "label": "What you will need", "page": "requirements" },
+        { "label": "Find a field officer", "page": "findus" },
+        { "label": "Training calendar", "page": "calendar" }
+      ]
+    },
+    {
+      "heading": "About",
+      "links": [
+        { "label": "Home", "page": "home" },
+        { "label": "Who we are", "page": "about" },
+        { "label": "Partner with us", "page": "partner" }
+      ]
+    },
+    {
+      "heading": "Contact",
+      "links": [
+        { "label": "Get in touch", "page": "contact" },
+        { "label": "Latest news", "page": "latest" },
+        { "label": "Events calendar", "page": "events" },
+        { "label": "Work with us", "page": "careers" }
+      ]
+    }
+  ],
+  "note": "The template's client-side router used '#/<page>' hash routes for all of the 'page' values above. content-seeding-plan.md recommends converting these to real WordPress page slugs/URLs; the mapping from page-key to final slug lives in pages/_index.json's 'slug' field, not here — this file only encodes the *structure* of the menus."
+}

@@ -1,0 +1,29 @@
+{
+  "sections": [
+    {
+      "type": "phead",
+      "kicker": "For Communities",
+      "heading": "Training calendar",
+      "lead": "Free training, open to any registered or registering group."
+    },
+    {
+      "type": "prose",
+      "body": ["All training is free. Bring two people from your group where possible — knowledge that sits with one person leaves when that person does."]
+    },
+    {
+      "type": "eventList",
+      "items": [
+        { "month": "Aug", "day": "12", "tag": "Bookkeeping", "title": "Group books a treasurer can actually keep", "body": "A practical day on contribution records, cash books and the monthly statement a bank will ask for. Bring your existing notebook, however untidy.", "location": "Kamukunji Social Hall", "time": "9:00am–3:00pm" },
+        { "month": "Aug", "day": "26", "tag": "Governance", "title": "Running a meeting, and settling a disagreement", "body": "Chairing, minute-taking, elections and the dispute process every constitution should have before it is needed.", "location": "Dagoretti Community Centre", "time": "9:00am–2:00pm" },
+        { "month": "Sep", "day": "09", "tag": "Finance", "title": "Before you borrow: what a group loan really costs", "body": "Interest, fees, guarantees, what happens when a member defaults, and how to decide as a group whether to borrow at all.", "location": "Embakasi", "time": "10:00am–3:00pm" },
+        { "month": "Sep", "day": "23", "tag": "Enterprise", "title": "Selling to institutions: tenders and LPOs", "body": "What a purchase order is, what compliance a buyer will require, and how a group finances fulfilment.", "location": "Westlands", "time": "9:00am–1:00pm" },
+        { "month": "Oct", "day": "07", "tag": "Mediation", "title": "Internal dispute resolution — intake", "body": "First session of the dispute-resolution training run with the National Judiciary Mediation Department, part of our regulatory & administrative Results work. Places limited; apply early.", "location": "Nairobi CBD", "time": "Four sessions over two weeks" }
+      ]
+    },
+    {
+      "type": "note",
+      "variant": "info",
+      "body": "Dates are indicative and confirmed by SMS a week before. To book, call **0709 000 000** or ask your field officer. If travel is the obstacle, tell us — we run sessions in sub-counties on request when enough groups ask."
+    }
+  ]
+}

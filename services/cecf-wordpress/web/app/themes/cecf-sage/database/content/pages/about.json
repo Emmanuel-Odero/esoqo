@@ -1,0 +1,140 @@
+{
+  "sections": [
+    {
+      "type": "phead",
+      "kicker": "About us",
+      "heading": "Who we are",
+      "lead": "A Kenyan foundation with an established track record of formalising grassroots groups and MSMEs, working through the institutions that hold legal authority over registration, tax, licensing and finance."
+    },
+    {
+      "type": "twoColumn",
+      "prose": [
+        "Child & Elder Care Foundation (CECF) works directly with registered and unregistered socioeconomic groups across Kenya — faith-based organisations, community-based organisations, micro and small enterprises, table banking groups and welfare associations.",
+        "Our core work centres on helping these groups formalise, regularise their legal status, and link into both government services and negotiated markets for their goods and services."
+      ],
+      "callout": "**We are not a new entrant testing an unproven model.** CECF has already facilitated formal registration, negotiated market access, and brokered relationships between grassroots groups and formal institutions. What we are scaling and digitising now is a model already demonstrated on the ground.",
+      "media": { "type": "illustration", "ref": "hands-of-care.svg", "alt": "A child's hand and an elder's hand" }
+    },
+    {
+      "type": "cardGrid",
+      "columns": 3,
+      "heading": "Who we serve",
+      "lead": "Our beneficiary base spans a genuinely diverse cross-section of Kenya’s informal and semi-formal private sector — reflecting deep, trusted community relationships built through our faith-based and grassroots networks, relationships that are difficult for external or purely commercial actors to replicate.",
+      "items": [
+        { "icon": "people", "color": "teal", "title": "Groups and associations", "body": "Furniture makers, market traders, transport operators, table banking groups and welfare associations." },
+        { "icon": "chart-bars", "color": "ochre", "title": "Micro and small enterprises", "body": "Agribusinesses, carwash operators, retail and wholesale traders, electronics and hardware businesses." },
+        { "icon": "target", "color": "clay", "title": "Rural, youth and women-led enterprise", "body": "The segments facing the steepest exclusion barriers nationally, and where our identification work is targeted first." }
+      ]
+    },
+    {
+      "type": "cardGrid",
+      "columns": 2,
+      "variant": "missionVision",
+      "items": [
+        { "icon": "target", "color": "teal", "title": "Our mission", "body": "To bring Kenya’s grassroots economic groups and MSMEs into formal recognition, and to connect them — through a single digitally integrated pathway — with the financial, legal and government services that recognition makes available." },
+        { "icon": "globe", "color": "ochre", "title": "Our vision", "body": "A Kenya where regulatory reform actually translates into inclusive economic growth for the most underserved socioeconomic groups and MSMEs." }
+      ]
+    },
+    {
+      "type": "cardGrid",
+      "columns": 3,
+      "heading": "What makes our work different",
+      "items": [
+        { "icon": "map-pin", "color": "teal", "title": "We go to them", "body": "Field officers meet groups where they meet — a church hall, a market shed, under a tree — rather than asking a treasurer to travel into town to be told what she is missing." },
+        { "icon": "puzzle", "color": "ochre", "title": "We work through institutions", "body": "Every partnership is a signed agreement with the body that holds the authority. Slower than working around them, and the only version that lasts." },
+        { "icon": "fish", "color": "clay", "title": "We publish what happened", "body": "Including the parts that did not work. A foundation that only reports successes is telling you it is not measuring properly." }
+      ]
+    },
+    {
+      "type": "ctaBand",
+      "heading": "Bring your group or MSME in",
+      "body": "Assistance is free. Bring what you have — we will tell you plainly what is missing and what it will cost, before you spend anything.",
+      "ctas": [
+        { "label": "Start registration", "page": "form", "style": "primary", "icon": "compass" },
+        { "label": "Find a field officer", "page": "findus", "style": "outline-white", "icon": "map-pin" }
+      ]
+    },
+    {
+      "type": "twoColumn",
+      "anchor": "governance",
+      "kicker": "About us",
+      "heading": "Leadership and governance",
+      "prose": [
+        "CECF is governed by a board that meets quarterly and is responsible for strategy, financial oversight and safeguarding. Day-to-day delivery sits with the executive team and county-level programme officers."
+      ],
+      "subheading": "Governance structure",
+      "ticks": [
+        "**Board of Trustees** — strategy, risk, and appointment of the executive. Meets quarterly.",
+        "**Finance & Audit Committee** — reviews accounts, approves the annual audit and oversees donor reporting.",
+        "**Safeguarding Committee** — child and vulnerable adult protection across every programme and partner.",
+        "**Programme Advisory Group** — includes representatives elected from the groups we serve. They review what we plan before we do it."
+      ],
+      "callout": "**That last one matters most.** Programme design that has never been shown to a group treasurer before launch is design that will be wrong in ways nobody predicted.",
+      "media": { "type": "illustration", "ref": "published-reports.svg", "alt": "Reports and published accounts" }
+    },
+    {
+      "type": "cardGrid",
+      "columns": 3,
+      "heading": "Accountability",
+      "items": [
+        { "icon": "document", "color": "teal", "title": "Audited accounts", "body": "Published annually, prepared by an independent registered auditor, and available to anybody who asks — not only to funders." },
+        { "icon": "shield", "color": "ochre", "title": "Safeguarding policy", "body": "Every officer, volunteer and partner working with children or vulnerable adults is screened, trained and bound by a written code." },
+        { "icon": "scales", "color": "clay", "title": "Complaints", "body": "Any group or individual can raise a complaint, in Kiswahili or English, and escalate it beyond us if our answer does not satisfy them." }
+      ]
+    },
+    {
+      "type": "note",
+      "variant": "info",
+      "body": "**Trustee names, executive team and the current annual report** are published here. Replace this note with the live list and the signed accounts before publication."
+    },
+    {
+      "type": "twoColumn",
+      "anchor": "consortium",
+      "kicker": "About us",
+      "heading": "Our consortium",
+      "prose": [
+        "CECF issues nothing. Every certificate, PIN, licence or account a group ends up holding is issued by the institution with the legal mandate to issue it.",
+        "What we bring is sequencing and integration — turning separate bilateral partnerships into a single staged pathway, tested through CECF’s existing relationships and now being consolidated into one integrated delivery model."
+      ],
+      "media": { "type": "illustration", "ref": "institutions-network.svg", "alt": "Institutions connected around a community group" }
+    },
+    {
+      "type": "partnerList",
+      "heading": "Government partners",
+      "items": [
+        { "icon": "government-building", "name": "Ministry of Labour & Social Protection", "role": "Group registration under the Community Groups Registration Act 2022" },
+        { "icon": "document", "name": "Business Registration Service", "role": "Business names, companies and cooperative filings" },
+        { "icon": "receipt", "name": "Kenya Revenue Authority", "role": "KRA PIN issuance and eTIMS onboarding" },
+        { "icon": "scales", "name": "National Judiciary Mediation Department", "role": "Accredited mediation training and referral" },
+        { "icon": "map-pin", "name": "Nairobi City County Government", "role": "Licensing simplification, replicated county by county" }
+      ]
+    },
+    {
+      "type": "partnerList",
+      "heading": "Private sector partners",
+      "items": [
+        { "icon": "chart-bars", "name": "I&M Bank", "role": "Group accounts, lending, LPO and asset financing" },
+        { "icon": "chart-bars", "name": "Kingdom Bank", "role": "Group savings products and credit pipelines" },
+        { "icon": "shield", "name": "Britam Insurance", "role": "Micro-insurance and group cover" }
+      ]
+    },
+    {
+      "type": "table",
+      "heading": "Register → License → Train → Access credit → Resolve disputes internally → Secure cover",
+      "lead": "Individually, each partnership addresses one piece of the puzzle. Our distinct contribution is turning separate bilateral partnerships into that single staged pathway, where each step compounds the value of the last.",
+      "columns": ["Partner", "Current role", "How CECF connects it into the pathway"],
+      "rows": [
+        ["National Judiciary Mediation Department", "Trains groups in internal dispute resolution", "Repositioned as a required module ahead of group loan access, improving repayment and cohesion"],
+        ["Nairobi County Government", "Simplifies business licensing", "Proof of concept for replication in high-exclusion counties, feeding into the financial literacy pipeline"],
+        ["Ministry of Labour & Social Protection", "General mandate for formalisation support", "Translated into an operational registration and compliance desk"],
+        ["Kingdom Bank & I&M Bank", "Bilateral financial literacy and product access", "Aggregated group membership used as collective bargaining leverage for better pricing"],
+        ["Britam Insurance", "Retail insurance products", "Co-designed group policies, sequenced after registration and literacy training to reduce lapse rates"]
+      ]
+    },
+    {
+      "type": "callout",
+      "body": "**What a partnership means here.** Not a logo exchange. Each of these is a working arrangement with named contacts, agreed referral routes and, in most cases, a signed memorandum. Where a partnership is at proposal stage rather than signed, we say so."
+    },
+    { "type": "linkOut", "label": "Become a partner", "page": "partner", "style": "primary" }
+  ]
+}

@@ -1,0 +1,61 @@
+{
+  "sections": [
+    {
+      "type": "phead",
+      "kicker": "Impact",
+      "heading": "Impact & sustainability",
+      "lead": "What we set out to do, how we report against it, and why our sustainability case does not depend on a single funding source."
+    },
+    {
+      "type": "note",
+      "variant": "warn",
+      "body": "**Read this first.** The figures below are programme targets and design scope, not delivery results. Verified delivery figures are published in the annual report and audited accounts."
+    },
+    {
+      "type": "statGrid",
+      "columns": 4,
+      "heading": "Programme targets",
+      "items": [
+        { "value": "30,000", "label": "Groups and MSMEs to reach annually" },
+        { "value": "8", "label": "Government and financial partners in the consortium" },
+        { "value": "2", "label": "Results Areas, one integrated pathway" },
+        { "value": "3", "label": "Priority counties for phased replication" }
+      ]
+    },
+    {
+      "type": "cardGrid",
+      "columns": 3,
+      "heading": "A systemic approach",
+      "lead": "Our potential for systemic change lies not in any single partnership, but in the shift from fragmented, bilateral service delivery to a single, integrated system that other actors can plug into and scale.",
+      "items": [
+        { "icon": "chart-bars", "color": "teal", "title": "Changes the risk calculus", "body": "A pipeline of registered, tax-compliant, dispute-resilient groups turns an unknowable segment into a measurable, de-risked market for banks and insurers." },
+        { "icon": "bar-chart-line", "color": "ochre", "title": "Feeds policy from practice", "body": "Real-time platform data on registration, exclusion and compliance gives government partners an evidence base to refine regulation — moving policy from reactive to informed." },
+        { "icon": "people", "color": "clay", "title": "Builds local capability", "body": "Training community leaders as literacy and mediation champions embeds capacity within communities rather than concentrating it in CECF." }
+      ]
+    },
+    {
+      "type": "table",
+      "heading": "What we measure, and why",
+      "columns": ["Measure", "Why this one", "Reported"],
+      "rows": [
+        ["Certificates in hand", "Not applications filed. Only the certificate counts.", "Quarterly"],
+        ["Accounts actually opened", "A referral is not an outcome. An open account is.", "Quarterly"],
+        ["Groups still active at 12 months", "The number most programmes avoid publishing.", "Annually"],
+        ["Disputes mediated and settled", "Including those that failed and went to court.", "Annually"],
+        ["Cost per group formalised", "So a funder can compare us honestly with alternatives.", "Annually"]
+      ]
+    },
+    {
+      "type": "twoColumn",
+      "heading": "Built to last",
+      "prose": ["Our sustainability case is stronger than a typical time-bound programme because it is built on diversified, self-generating revenue streams rather than dependence on a single funding source."],
+      "ticks": [
+        "**The platform already generates its own revenue.** A modest user fee to access and use the application gives the core service a built-in commercial base independent of grant cycles.",
+        "**Funding scales reach, not day-to-day operations.** External funding expands the platform’s beneficiary base nationally, strengthening its commercial value as it grows.",
+        "**Diversified income reduces single-point-of-failure risk.** User fees, private-sector sponsorships, advertising and potential referral fees or data products give CECF multiple independent revenue legs."
+      ],
+      "media": { "type": "illustration", "ref": "published-reports.svg", "alt": "Reports and published accounts" }
+    },
+    { "type": "callout", "body": "**In short:** our model shifts from impact that must be re-funded to impact that funds itself." }
+  ]
+}

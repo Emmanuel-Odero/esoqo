@@ -1,0 +1,28 @@
+{
+  "sections": [
+    {
+      "type": "phead",
+      "kicker": "Partner with us",
+      "heading": "Corporate sponsorship",
+      "lead": "Specific, visible, and honestly described."
+    },
+    {
+      "type": "prose",
+      "body": ["We do not offer general association. Every sponsorship is attached to something that happens on a date, in a place, for a named group of people — so both of us can say exactly what your support did."]
+    },
+    {
+      "type": "sponsorshipGrid",
+      "items": [
+        { "icon": "document", "color": "teal", "title": "A training cycle", "body": "Five sessions across a sub-county, materials, venue and facilitation, for roughly forty groups.", "measure": "Reported by: groups trained, completion rate, follow-up at six months" },
+        { "icon": "people", "color": "ochre", "title": "A convening", "body": "A stakeholder workshop bringing ministries, counties, financial institutions and group representatives into one room.", "measure": "Reported by: attendance, institutions represented, commitments made" },
+        { "icon": "grid", "color": "clay", "title": "A county rollout", "body": "Extending the digital platform and field-officer coverage into one new priority county — onboarding, training materials and first-year field presence.", "measure": "Reported by: groups onboarded, certificates issued, platform activity at 12 months" },
+        { "icon": "scales", "color": "green", "title": "A mediation cohort", "body": "Accredited mediation training for a cohort of community mediators, run with the Judiciary.", "measure": "Reported by: mediators accredited, disputes handled, outcomes" }
+      ]
+    },
+    {
+      "type": "callout",
+      "body": "**What we will not do.** Photograph beneficiaries in ways that trade their dignity for your visibility, imply your funding achieved more than it did, or present a target as a result. If those are the terms, we are the wrong partner."
+    },
+    { "type": "linkOut", "label": "Discuss sponsorship", "page": "contact", "style": "primary", "icon": "mail" }
+  ]
+}
