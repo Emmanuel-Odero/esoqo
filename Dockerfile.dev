@@ -9,11 +9,13 @@ COPY apps/web/package.json apps/web/package.json
 COPY apps/app/package.json apps/app/package.json
 COPY apps/admin/package.json apps/admin/package.json
 COPY packages/db/package.json packages/db/package.json
+COPY packages/db/prisma packages/db/prisma
 COPY packages/ui/package.json packages/ui/package.json
 COPY packages/domain/package.json packages/domain/package.json
 COPY packages/auth/package.json packages/auth/package.json
 COPY packages/a11y/package.json packages/a11y/package.json
 COPY services/core/package.json services/core/package.json
+COPY services/cecf-wordpress/web/app/themes/cecf-sage/package.json services/cecf-wordpress/web/app/themes/cecf-sage/package.json
 
 RUN pnpm install --frozen-lockfile
 
