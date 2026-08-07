@@ -54,12 +54,22 @@ RUN composer install --no-dev --optimize-autoloader --no-interaction --no-script
 #  served from here; separation between sites is at the DB table level.)
 FROM php:8.4-fpm-alpine AS runtime
 
-RUN apk add --no-cache nginx supervisor mysql-client bash curl $PHPIZE_DEPS \
-    && docker-php-ext-install pdo_mysql mysqli opcache \
+# gd is required for WordPress's built-in image editor (WP_Image_Editor_GD)
+# — without it OR Imagick, every crop/resize/thumbnail-regeneration call
+# fails ("There has been an error cropping your image."). Runtime libs are
+# installed as their own layer, before the -dev/build-only virtual group,
+# so `apk del .build-deps` can't accidentally take them out as orphaned
+# transitive dependencies.
+RUN apk add --no-cache nginx supervisor mysql-client bash curl \
+        libpng libjpeg-turbo freetype libwebp \
+    && apk add --no-cache --virtual .build-deps \
+        $PHPIZE_DEPS libpng-dev libjpeg-turbo-dev freetype-dev libwebp-dev \
+    && docker-php-ext-configure gd --with-jpeg --with-freetype --with-webp \
+    && docker-php-ext-install pdo_mysql mysqli opcache gd \
     && pecl install redis && docker-php-ext-enable redis \
     && curl -sSL -o /usr/local/bin/wp https://raw.githubusercontent.com/wp-cli/builds/gh-pages/phar/wp-cli.phar \
     && chmod +x /usr/local/bin/wp \
-    && apk del $PHPIZE_DEPS
+    && apk del .build-deps
 
 COPY services/cecf-wordpress/docker/php/opcache.ini /usr/local/etc/php/conf.d/opcache.ini
 COPY services/cecf-wordpress/docker/nginx.conf /etc/nginx/nginx.conf
