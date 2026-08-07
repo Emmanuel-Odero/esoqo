@@ -1,0 +1,25 @@
+<svg viewBox="0 0 560 300" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="The path from an informal group to a bankable enterprise">
+<rect width="560" height="300" rx="16" fill="#FAF5EC"/>
+<rect x="52" y="190" width="94" height="60" rx="10" fill="#C08325" opacity=".9"/>
+<circle cx="99" cy="216" r="15" fill="#FAF5EC" opacity=".9"/>
+<text x="99" y="222" font-family="IBM Plex Mono,monospace" font-size="14" font-weight="600" fill="#C08325" text-anchor="middle">1</text>
+<text x="99" y="272" font-family="IBM Plex Sans,sans-serif" font-size="12.5" fill="#241F1B" text-anchor="middle">Group forms</text>
+<path d="M152 220.0h18" stroke="#A8452C" stroke-width="2.4" stroke-linecap="round"/>
+<path d="M164 215.0l6 5-6 5" stroke="#A8452C" stroke-width="2.4" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
+<rect x="178" y="144" width="94" height="106" rx="10" fill="#A8452C" opacity=".9"/>
+<circle cx="225" cy="170" r="15" fill="#FAF5EC" opacity=".9"/>
+<text x="225" y="176" font-family="IBM Plex Mono,monospace" font-size="14" font-weight="600" fill="#A8452C" text-anchor="middle">2</text>
+<text x="225" y="272" font-family="IBM Plex Sans,sans-serif" font-size="12.5" fill="#241F1B" text-anchor="middle">Registered</text>
+<path d="M278 197.0h18" stroke="#A8452C" stroke-width="2.4" stroke-linecap="round"/>
+<path d="M290 192.0l6 5-6 5" stroke="#A8452C" stroke-width="2.4" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
+<rect x="304" y="98" width="94" height="152" rx="10" fill="#0D4A52" opacity=".9"/>
+<circle cx="351" cy="124" r="15" fill="#FAF5EC" opacity=".9"/>
+<text x="351" y="130" font-family="IBM Plex Mono,monospace" font-size="14" font-weight="600" fill="#0D4A52" text-anchor="middle">3</text>
+<text x="351" y="272" font-family="IBM Plex Sans,sans-serif" font-size="12.5" fill="#241F1B" text-anchor="middle">KRA &amp; eTIMS</text>
+<path d="M404 174.0h18" stroke="#A8452C" stroke-width="2.4" stroke-linecap="round"/>
+<path d="M416 169.0l6 5-6 5" stroke="#A8452C" stroke-width="2.4" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
+<rect x="430" y="52" width="94" height="198" rx="10" fill="#3E6B4A" opacity=".9"/>
+<circle cx="477" cy="78" r="15" fill="#FAF5EC" opacity=".9"/>
+<text x="477" y="84" font-family="IBM Plex Mono,monospace" font-size="14" font-weight="600" fill="#3E6B4A" text-anchor="middle">4</text>
+<text x="477" y="272" font-family="IBM Plex Sans,sans-serif" font-size="12.5" fill="#241F1B" text-anchor="middle">Bankable</text>
+</svg>

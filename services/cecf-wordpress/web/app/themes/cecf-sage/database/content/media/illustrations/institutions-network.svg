@@ -1,0 +1,14 @@
+<svg viewBox="0 0 520 310" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Institutions connected around a community group">
+<rect width="520" height="310" rx="16" fill="#FAF5EC"/>
+<circle cx="260" cy="155" r="122" fill="none" stroke="#0D4A52" stroke-width="1.6"
+ stroke-dasharray="6 8" opacity=".35"/>
+<g transform="rotate(0 260 155)"><rect x="238" y="34" width="44" height="44" rx="11" fill="#0D4A52" opacity=".9"/></g>
+<g transform="rotate(60 260 155)"><rect x="238" y="34" width="44" height="44" rx="11" fill="#C08325" opacity=".9"/></g>
+<g transform="rotate(120 260 155)"><rect x="238" y="34" width="44" height="44" rx="11" fill="#A8452C" opacity=".9"/></g>
+<g transform="rotate(180 260 155)"><rect x="238" y="34" width="44" height="44" rx="11" fill="#3E6B4A" opacity=".9"/></g>
+<g transform="rotate(240 260 155)"><rect x="238" y="34" width="44" height="44" rx="11" fill="#0D4A52" opacity=".9"/></g>
+<g transform="rotate(300 260 155)"><rect x="238" y="34" width="44" height="44" rx="11" fill="#C08325" opacity=".9"/></g>
+<circle cx="260" cy="155" r="52" fill="#0D4A52"/>
+<circle cx="260" cy="142" r="14" fill="#FAF5EC" opacity=".95"/>
+<path d="M238 186a22 26 0 0144 0z" fill="#FAF5EC" opacity=".95"/>
+</svg>

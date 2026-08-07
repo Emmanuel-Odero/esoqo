@@ -1,0 +1,15 @@
+<svg viewBox="0 0 520 300" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Two parties in mediation across a table">
+<rect width="520" height="300" rx="16" fill="#FAF5EC"/>
+<rect x="150" y="168" width="220" height="14" rx="7" fill="#6B4A2E" opacity=".5"/>
+<rect x="196" y="182" width="14" height="62" rx="5" fill="#6B4A2E" opacity=".35"/>
+<rect x="310" y="182" width="14" height="62" rx="5" fill="#6B4A2E" opacity=".35"/>
+<circle cx="118" cy="112" r="27" fill="#C08325"/>
+<path d="M82 190a36 42 0 0172 0z" fill="#C08325" opacity=".85"/>
+<circle cx="402" cy="112" r="27" fill="#A8452C"/>
+<path d="M366 190a36 42 0 0172 0z" fill="#A8452C" opacity=".85"/>
+<circle cx="260" cy="96" r="23" fill="#0D4A52"/>
+<path d="M230 166a30 36 0 0060 0z" fill="#0D4A52" opacity=".85"/>
+<g stroke="#3E6B4A" stroke-width="2.2" fill="none" stroke-linecap="round" opacity=".65">
+<path d="M152 120q108-46 216 0" stroke-dasharray="5 7"/></g>
+<ellipse cx="260" cy="266" rx="200" ry="18" fill="#C08325" opacity=".13"/>
+</svg>
