@@ -273,12 +273,74 @@ original plan, discovered by actually running it):**
   `.gitignore` already treats it), and the Dockerfile copies it from the
   `vendor` stage like every other Composer artifact.
 
-**Still open / next implementation pass:**
-- Blade section partials (`resources/views/sections/<type>.blade.php`, one
-  per `SectionTypes` value) consumed by `page.blade.php`, looping over
-  `rwmb_meta('cecf_sections')` and rendering each section's decoded
-  `data` JSON — this pass stops at seeding the data; rendering it into the
-  actual page templates is the next one.
+## 5. Pass 3 — rendering the seeded content (2026-08-07)
+
+Approved scope: global layout (header/nav/footer) + 10 section partials
+(`phead`, `prose`, `twoColumn`, `cardGrid`, `statGrid`, `ctaBand`, `note`,
+`callout`, plus `linkOut`/`linkRow` as a near-zero-cost addition), CSS
+ported wholesale from the design template, the full ~25-icon set extracted,
+a graceful fallback for the 12 deferred section types (`table`,
+`eventList`, `newsList`, `storyList`, `downloadList`, `sponsorshipGrid`,
+`partnerList`, `stepList`, `requirementList`, `registrationForm`, plus
+`hero` — home's only untyped section). Verified end-to-end in the `cecf`
+docker profile: all 21 pages return 200 with zero PHP errors; `results`
+and `careers` (fully covered by the built types) render completely;
+`home`/`about` render partially with the fallback firing exactly on their
+deferred sections (`hero`; `partnerList`×2 + `table`).
+
+**New theme code**, one concern per class (mirroring pass 2's discipline):
+`App\Support\Icon` (+ `<x-icon>` component), `App\Support\Nav\
+CecfMenuWalker` / `CecfMobileMenuWalker` (desktop dropdown / mobile drawer
+markup from the real `wp_nav_menu()` tree), `App\Support\PageUrl` (content
+`key` → real permalink, one query not one per link), `App\Support\Media`
+(illustration filename → seeded attachment URL), `App\Support\Markdown`
+(the `**bold**`/`*italic*`/`### heading` seed content already uses), `App\
+Support\ButtonStyle`, `App\View\Composers\CecfSiteSettings` and
+`PageSections` (the latter the one place that decodes `cecf_sections`,
+same discipline as `ContentRepository`).
+
+**Four real bugs found by actually rendering every page, not by review**
+(all fixed, all now covered by the sweep in §6):
+1. **WP core's `has_children` mechanism.** `Walker::display_element()` in
+   this WP version sets `$this->has_children` (a property on the walker
+   instance), not `$args->has_children` as older-WP-era examples online
+   assume — and even that property is only correct for whichever item
+   `start_el()` is *currently* rendering, stale by the time `end_el()`
+   runs for a parent (every child processed in between overwrites it). Both
+   walkers now capture it per-item-ID in `start_el()` and read that back in
+   `end_el()`, instead of trusting the shared property a second time.
+2. **`Icon::svg()`'s width/height regex also matched `stroke-width="1.8"`**
+   (contains "width=" as a substring), silently corrupting every icon's
+   stroke width to whatever pixel size was requested. Fixed with a
+   negative lookbehind excluding `stroke-` and tightened the replacement
+   limit.
+3. **`home_url()` resolved to `.../wp` on every link, sitewide** — a
+   pre-existing bug in `docker/entrypoint.sh`'s first-boot install: `wp
+   core multisite-install --url=` sets *both* `home` and `siteurl` to that
+   one URL, which is wrong for Bedrock (core lives under `/wp`; `home`
+   should be the bare domain). No `pre_option_home` filter or WP_HOME-
+   constant override exists in WP core to paper over this at runtime —
+   confirmed by reading `wp-includes/option.php` directly, not assumed.
+   Fixed the install script to explicitly set both options correctly after
+   install, and corrected the already-provisioned test database directly.
+4. **Sage's stock `partials/page-header.blade.php`** (a plain `<h1>{title}
+   </h1>`) was rendering above every page's own styled `phead`/`hero`
+   section, which already carries the page's heading — removed the
+   `@include` in `page.blade.php` rather than leave a visible duplicate
+   heading on all 21 pages.
+
+Also caught and fixed one **data-quality inconsistency** in
+`database/content/pages/home.json`: its dark "How it works" `twoColumn`
+nested `reverse` under `media` instead of at the section's top level like
+every other page — normalized rather than special-cased in the partial.
+
+## 6. Still open / next implementation pass
+
+- The 12 deferred section-type partials (`table`, `eventList`, `newsList`,
+  `storyList`, `downloadList`, `sponsorshipGrid`, `partnerList`,
+  `stepList`, `requirementList`, `hero`, `registrationForm` — the last one
+  real interactive work, its own pass wiring the existing 6-step wizard
+  copy to the `cecf_enquiry` REST route built in pass 2).
 - A field-by-field Settings API screen for `cecf_site_settings` (currently
   a placeholder screen — see `CecfContentServiceProvider::
   renderSiteSettingsPage()` — settings are seeded correctly but not yet
@@ -287,3 +349,7 @@ original plan, discovered by actually running it):**
   Meta Box row into dedicated per-type sub-fields (see
   `CecfContentServiceProvider`'s docblock) — deliberately deferred, not
   blocking real content being live and round-trippable now.
+- Real photography to replace the `.ph.fallback` placeholders (`stories`,
+  `government`, `careers` — see `database/content/media/photos/
+  PLACEHOLDERS.md`), and the trustee/annual-report content flagged as
+  TODO in `about.json`'s governance section.
