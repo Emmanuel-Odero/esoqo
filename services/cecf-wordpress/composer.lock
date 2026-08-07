@@ -4,7 +4,7 @@
         "Read more about it at https://getcomposer.org/doc/01-basic-usage.md#installing-dependencies",
         "This file is @generated automatically"
     ],
-    "content-hash": "70f6d257779745b3cdf781c119d57c24",
+    "content-hash": "0e486df8195ca4431ccae01363adbd11",
     "packages": [
         {
             "name": "composer/installers",
@@ -1040,6 +1040,24 @@
                 }
             ],
             "time": "2026-07-06T19:11:50+00:00"
+        },
+        {
+            "name": "wpackagist-plugin/meta-box",
+            "version": "5.6.18",
+            "source": {
+                "type": "svn",
+                "url": "https://plugins.svn.wordpress.org/meta-box/",
+                "reference": "tags/5.6.18"
+            },
+            "dist": {
+                "type": "zip",
+                "url": "https://downloads.wordpress.org/plugin/meta-box.5.6.18.zip"
+            },
+            "require": {
+                "composer/installers": "^1.0 || ^2.0"
+            },
+            "type": "wordpress-plugin",
+            "homepage": "https://wordpress.org/plugins/meta-box/"
         }
     ],
     "packages-dev": [
