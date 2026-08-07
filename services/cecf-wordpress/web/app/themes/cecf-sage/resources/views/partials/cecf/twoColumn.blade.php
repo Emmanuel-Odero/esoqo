@@ -32,37 +32,11 @@
           @if (! empty($data['subheading']))
             <h3 class="mt">{{ $data['subheading'] }}</h3>
           @endif
-          <div class="reqs">
-            @foreach ($data['requirementList'] as $req)
-              <div class="rq {{ $req['status'] === 'optional' ? 'opt' : 'done' }}">
-                <x-icon :name="$req['status'] === 'optional' ? 'info-circle' : 'check-circle'" />
-                <div>
-                  <strong>{{ $req['title'] ?? '' }}</strong>
-                  @if (! empty($req['highlight']))
-                    <span class="mono">{{ $req['highlight'] }}</span>
-                  @endif
-                  <span>{!! \App\Support\Markdown::inline($req['body'] ?? '') !!}</span>
-                </div>
-              </div>
-            @endforeach
-          </div>
+          @include('partials.cecf.items.requirements', ['items' => $data['requirementList']])
         @endif
 
         @if (! empty($data['downloadList']))
-          <div class="dlist">
-            @foreach ($data['downloadList'] as $download)
-              <div class="dl">
-                <x-icon name="document" />
-                <div>
-                  <strong>{{ $download['title'] ?? '' }}</strong>
-                  <span>{{ $download['meta'] ?? '' }}</span>
-                </div>
-                @if (! empty($download['tag']))
-                  <span class="dltag">{{ $download['tag'] }}</span>
-                @endif
-              </div>
-            @endforeach
-          </div>
+          @include('partials.cecf.items.downloads', ['items' => $data['downloadList']])
         @endif
 
         @if (! empty($data['callout']))
