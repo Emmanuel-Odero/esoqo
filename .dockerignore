@@ -17,3 +17,13 @@ services/cecf-wordpress/web/app/plugins/*
 !services/cecf-wordpress/web/app/plugins/.gitkeep
 services/cecf-wordpress/web/app/uploads/*
 !services/cecf-wordpress/web/app/uploads/.gitkeep
+
+# Never trust a host-local `vite dev` run either — public/hot is the file
+# Vite's @vite() Blade directive checks to decide "dev server is running,
+# emit http://[::1]:5173/... asset URLs"; if it leaks in from the host
+# (mirroring web/app/plugins above) the built image silently points every
+# CSS/JS tag at a dev server that doesn't exist in the container, and
+# nothing loads. public/build (the real production assets) still comes
+# from the theme-build stage's COPY --from=, not from here.
+services/cecf-wordpress/web/app/themes/cecf-sage/public/*
+!services/cecf-wordpress/web/app/themes/cecf-sage/public/.gitkeep

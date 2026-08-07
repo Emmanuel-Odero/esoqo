@@ -49,6 +49,19 @@ if ! su -s /bin/bash www-data -c "wp core is-installed" 2>/dev/null; then
         --subdomains \
         --skip-email"
     su -s /bin/bash www-data -c "wp theme activate cecf-sage"
+
+    # `wp core multisite-install --url=` sets both the `home` and
+    # `siteurl` options to that one URL — fine for a non-Bedrock install
+    # where WordPress core lives at the site root, wrong here, where core
+    # lives under /wp (CONTENT_DIR in config/application.php). Confirmed
+    # empirically: WP_HOME/WP_SITEURL being defined as PHP constants does
+    # NOT make WordPress core override the stored `home`/`siteurl`
+    # options at runtime (no such pre_option_home/siteurl filter exists
+    # in core) — every home_url()/get_permalink() call would otherwise
+    # carry a wrong "/wp" prefix on every link on the site. Idempotent,
+    # only runs on first boot alongside the install itself.
+    su -s /bin/bash www-data -c "wp option update home '${WP_HOME}'"
+    su -s /bin/bash www-data -c "wp option update siteurl '${WP_SITEURL}'"
 else
     echo "Existing install detected — skipping install, running migrations only."
     su -s /bin/bash www-data -c "wp core update-db --network"
