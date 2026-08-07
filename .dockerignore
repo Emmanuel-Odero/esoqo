@@ -7,3 +7,11 @@ dist
 *.md
 .env
 .env.local
+
+# PHP (services/cecf-wordpress) — never trust a host-local composer
+# install; every Docker build must produce its own vendor/ from
+# composer.lock so it matches what a clean Render checkout builds.
+**/vendor
+services/cecf-wordpress/web/wp
+services/cecf-wordpress/web/app/uploads/*
+!services/cecf-wordpress/web/app/uploads/.gitkeep
