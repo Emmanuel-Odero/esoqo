@@ -130,7 +130,10 @@ depth-2 items as fake headers.
 | Register a second `footer_navigation` nav menu location, fake headers via unclickable top items | Works, but fragile, awkward in wp-admin's menu screen |
 | **Model footer columns as structured data on a Meta Box Options page** (`site-settings` — heading + links[], matching `database/content/navigation.json`'s `footerColumns` shape already written) | Matches the shape we've already seeded; one edit screen for all footer content |
 
-**Recommendation: Options page**, consistent with 3.1's engine choice.
+**Recommendation: Options page**, consistent with 3.1's engine choice. *(Revised
+during implementation — see §4: Meta Box's free tier doesn't ship a storage
+backend for this, so it's WordPress's native Settings API instead. Still an
+options page; just not a Meta Box one.)*
 
 ### 3.4 Registration-form backend
 
@@ -175,7 +178,8 @@ app/
 database/
 ├── content/                       # (this folder — already populated)
 └── seeders/                       # namespace Database\Seeders — needs a
-    ├── PageSeeder.php             #   composer.json psr-4 addition: "Database\\": "database/"
+    ├── PageSeeder.php             #   composer.json psr-4: "Database\\Seeders\\": "database/seeders/"
+                                    #   (Laravel's own convention — not a blanket "Database\\": "database/")
     │                               #   reads content/pages/*.json → wp_insert_post +
     │                               #   Meta Box field values
     ├── MediaSeeder.php            # sideloads content/media/illustrations/*.svg into the
@@ -196,7 +200,7 @@ content, out of scope here. The seeder should target `get_current_blog_id()`
 
 ## 4. What's been delivered now vs. what's pending approval
 
-**Delivered (this pass, non-destructive, no DB writes):**
+**Delivered, pass 1 (content extraction):**
 - `database/content/` — git-tracked seed source: `site-settings.json`,
   `navigation.json`, `pages/_index.json`, `pages/<21 files>.json`,
   8 deduped illustration SVGs, and documentation of the two deliberate
@@ -205,20 +209,81 @@ content, out of scope here. The seeder should target `get_current_blog_id()`
 **Approved (2026-08-07):**
 1. ✅ Meta Box (free) as the structured-fields engine — §3.1
 2. ✅ Converting hash-routes to real WP page slugs — §3.2
-3. ✅ Options-page model for footer columns — §3.3 (implied by #1)
+3. ✅ Options-page model for footer columns — §3.3 (revised below — native
+   Settings API, not a Meta Box "settings page")
 4. ✅ Custom CPT + REST for the registration form, vs. a forms plugin — §3.4
-5. ✅ Gradient-fallback placeholder for un-sourced photos, not Wikimedia downloads — §3.6 revision below
+5. ✅ Gradient-fallback placeholder for un-sourced photos, not Wikimedia downloads — §3.6
+
+**Delivered, pass 2 (seeder, fields, CPT/REST — built and verified end-to-end
+in the `cecf` docker profile):**
+- `app/Content/ContentRepository.php` + `SectionTypes.php` — the one place
+  that knows the JSON files' shape/location and the canonical section-type
+  list, so seeders and field registration both read from it instead of
+  duplicating either.
+- `App\Providers\CecfContentServiceProvider` — the Meta Box "Page sections"
+  group+clone field group (§3.1), **revised in implementation**: site
+  settings/footer columns use WordPress's native Settings API
+  (`register_setting`), not a Meta Box "settings page" — Meta Box's free
+  core only ships *screen-detection* for that object type (`settings_pages`
+  in `inc/functions.php`); the actual storage backend lives in a separate
+  "MB Settings Page" extension that isn't reliably resolvable through this
+  project's Composer repositories. Native Settings API is free, built into
+  WordPress, and just as real an admin surface.
+- `App\Providers\CecfEnquiryServiceProvider` — the `cecf_enquiry` CPT and
+  the `POST /wp-json/cecf/v1/enquiries` route, with the same required-field
+  set and Kenyan-phone regex the client wizard already validates against.
+  Verified: happy path (201), missing required field (422), invalid phone
+  (422); `rest_url()` correctly resolves through Bedrock's `/wp/` core path.
+- `database/seeders/{MediaSeeder,PageSeeder,NavigationSeeder,
+  SiteSettingsSeeder,CecfSeeder}.php` — see §3.5's shape, built as specified.
+  `MediaSeeder` scopes its `upload_mimes` SVG allowance to the seeder's own
+  call (not a permanent site-wide filter — SVG uploads are a stored-XSS
+  vector core deliberately blocks by default).
+- `App\Console\Commands\CecfSeedCommand` (`wp acorn cecf:seed
+  [--pages] [--nav] [--settings] [--media]`) + `CecfConsoleServiceProvider`
+  registering it.
+- Verified in the `cecf` docker profile: all 21 pages created at their
+  approved slugs, home set as the static front page, 8 illustrations in
+  the media library, the primary nav menu rebuilt with correct parent/child
+  nesting, `cecf_site_settings` populated (footer columns + 47 counties),
+  Meta Box's `cecf_sections` field round-trips each page's JSON exactly
+  (spot-checked `about-us`: 15 sections, correct order/types), and a second
+  `cecf:seed` run left every count unchanged (idempotent — no duplicates).
+
+**Two upstream/infra bugs found and fixed during this pass (not part of the
+original plan, discovered by actually running it):**
+- `wpackagist-plugin/meta-box` ships without its own `vendor/autoload.php`,
+  which `inc/loader.php` needs for its `MetaBox\` PSR-4 classes — version
+  5.14.0's `new \MetaBox\Integrations\WPML()` call has no `class_exists`
+  guard (unlike its sibling `Updater` calls) and fatals on activation.
+  Pinned to `5.6.18` (predates that specific unguarded call) **and** added
+  `bin/fix-meta-box-autoload.php`, wired into both `composer.json`'s
+  `post-install-cmd`/`post-update-cmd` (local/CI installs) and an explicit
+  `RUN` step in the Dockerfile (which uses `--no-scripts` deliberately, so
+  the composer.json hooks alone don't cover Docker builds) — self-healing
+  on every future `composer install`/`update`, not just a version pin that
+  quietly stops working on the next `composer update`.
+- The Dockerfile's runtime stage never explicitly copied
+  `web/app/plugins` from the composer `vendor` build stage, and
+  `.dockerignore` didn't exclude it either — so the image was silently
+  copying whatever was in the *host's* local `web/app/plugins` (composer-
+  installed there during this session's development) instead of a
+  reproducible, composer.lock-derived copy. Fixed both: `.dockerignore`
+  now excludes `web/app/plugins/*` from the build context (mirroring how
+  `.gitignore` already treats it), and the Dockerfile copies it from the
+  `vendor` stage like every other Composer artifact.
 
 **Still open / next implementation pass:**
-- Build `database/seeders/` + `app/Console/Commands/CecfSeedCommand.php`
-  per the shape in §3.5, plus the `composer.json` psr-4 addition it needs.
-- `composer require metabox/meta-box` (or the WPackagist mirror name
-  confirmed at implementation time) + register the "Page Sections"
-  group/clone field group and the `site-settings` options page.
-- Register the `cecf_enquiry` CPT + REST route for the registration form.
-- Add 21 Blade section partials (`resources/views/sections/<type>.blade.php`)
-  matching the 18 `type` values in §2, consumed by `page.blade.php` looping
-  over the Meta Box field data.
-- Update `app/setup.php`'s `register_nav_menus()` to keep `primary_navigation`
-  fed from real WP menu items (seeded from `database/content/navigation.json`) instead
-  of the template's static markup.
+- Blade section partials (`resources/views/sections/<type>.blade.php`, one
+  per `SectionTypes` value) consumed by `page.blade.php`, looping over
+  `rwmb_meta('cecf_sections')` and rendering each section's decoded
+  `data` JSON — this pass stops at seeding the data; rendering it into the
+  actual page templates is the next one.
+- A field-by-field Settings API screen for `cecf_site_settings` (currently
+  a placeholder screen — see `CecfContentServiceProvider::
+  renderSiteSettingsPage()` — settings are seeded correctly but not yet
+  hand-editable in wp-admin without touching the JSON + re-running the seed).
+- Decomposing the 20 section types out of the single `{type, label, data}`
+  Meta Box row into dedicated per-type sub-fields (see
+  `CecfContentServiceProvider`'s docblock) — deliberately deferred, not
+  blocking real content being live and round-trippable now.
