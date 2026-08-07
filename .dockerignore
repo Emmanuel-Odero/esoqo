@@ -13,5 +13,7 @@ dist
 # composer.lock so it matches what a clean Render checkout builds.
 **/vendor
 services/cecf-wordpress/web/wp
+services/cecf-wordpress/web/app/plugins/*
+!services/cecf-wordpress/web/app/plugins/.gitkeep
 services/cecf-wordpress/web/app/uploads/*
 !services/cecf-wordpress/web/app/uploads/.gitkeep

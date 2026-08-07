@@ -35,7 +35,14 @@ RUN pnpm --filter @esoko/cecf-sage-theme build
 FROM composer:2 AS vendor
 WORKDIR /app
 COPY services/cecf-wordpress/composer.json services/cecf-wordpress/composer.lock services/cecf-wordpress/wp-cli.yml ./
-RUN composer install --no-dev --optimize-autoloader --no-interaction --no-scripts
+COPY services/cecf-wordpress/bin ./bin
+# --no-scripts intentionally skips composer.json's post-install-cmd (arbitrary
+# script execution during a Docker build is a footgun we'd rather not have),
+# so bin/fix-meta-box-autoload.php — see its docblock — is run explicitly
+# instead. Needed because wpackagist-plugin/meta-box ships without its own
+# vendor/autoload.php, which its loader.php requires unconditionally.
+RUN composer install --no-dev --optimize-autoloader --no-interaction --no-scripts \
+    && php bin/fix-meta-box-autoload.php
 
 WORKDIR /app/web/app/themes/cecf-sage
 COPY services/cecf-wordpress/web/app/themes/cecf-sage/composer.json \
@@ -62,10 +69,12 @@ RUN chmod +x /entrypoint.sh
 
 WORKDIR /var/www/html
 
-# Source first (web/wp and every vendor/ are .dockerignore'd from the
-# build context, so this can never clobber the composer-built artifacts
-# below with whatever happens to be sitting on the host's working tree —
-# a clean Render checkout has neither, and the build must behave the same).
+# Source first (web/wp, web/app/plugins and every vendor/ are
+# .dockerignore'd from the build context, so this can never clobber the
+# composer-built artifacts below with whatever happens to be sitting on
+# the host's working tree — a clean Render checkout has none of them, and
+# the build must behave the same regardless of what a developer happens
+# to have composer-installed locally).
 COPY services/cecf-wordpress/web ./web
 COPY services/cecf-wordpress/config ./config
 
@@ -74,6 +83,7 @@ COPY services/cecf-wordpress/config ./config
 COPY --from=vendor /app/composer.json /app/composer.lock /app/wp-cli.yml ./
 COPY --from=vendor /app/vendor ./vendor
 COPY --from=vendor /app/web/wp ./web/wp
+COPY --from=vendor /app/web/app/plugins ./web/app/plugins
 COPY --from=vendor /app/web/app/themes/cecf-sage/vendor ./web/app/themes/cecf-sage/vendor
 
 # Compiled theme assets, from the theme-build stage.
