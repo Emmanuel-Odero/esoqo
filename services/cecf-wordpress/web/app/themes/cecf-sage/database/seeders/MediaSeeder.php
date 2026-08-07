@@ -18,6 +18,14 @@ use WP_Query;
  */
 class MediaSeeder
 {
+    /**
+     * Shared with App\Support\Media, which resolves this same meta key
+     * back to a URL at render time — the one place both sides agree on
+     * the key name, same pattern as PageSeeder::KEY_META / App\Support\
+     * PageUrl.
+     */
+    public const FILENAME_META = '_cecf_illustration_filename';
+
     public function __construct(protected ContentRepository $content)
     {
     }
@@ -89,7 +97,7 @@ class MediaSeeder
             throw new RuntimeException("Failed to insert attachment for {$filename}: ".$attachmentId->get_error_message());
         }
 
-        update_post_meta($attachmentId, '_cecf_illustration_filename', $filename);
+        update_post_meta($attachmentId, self::FILENAME_META, $filename);
 
         return $attachmentId;
     }
@@ -99,7 +107,7 @@ class MediaSeeder
         $query = new WP_Query([
             'post_type' => 'attachment',
             'post_status' => 'inherit',
-            'meta_key' => '_cecf_illustration_filename',
+            'meta_key' => self::FILENAME_META,
             'meta_value' => $filename,
             'fields' => 'ids',
             'posts_per_page' => 1,

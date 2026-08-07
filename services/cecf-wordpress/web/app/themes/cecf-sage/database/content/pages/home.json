@@ -49,9 +49,10 @@
     {
       "type": "twoColumn",
       "variant": "dark",
+      "reverse": true,
       "kicker": "How it works",
       "heading": "From an informal circle of trust to a bankable enterprise.",
-      "media": { "type": "illustration", "ref": "formalisation-pathway.svg", "reverse": true, "alt": "The path from an informal group to a bankable enterprise: group forms, registers, gets KRA & eTIMS, becomes bankable" },
+      "media": { "type": "illustration", "ref": "formalisation-pathway.svg", "alt": "The path from an informal group to a bankable enterprise: group forms, registers, gets KRA & eTIMS, becomes bankable" },
       "prose": [
         "Formalisation only becomes empowerment when it is fast, affordable, and immediately followed by usable market and financial access. Each stage reduces friction at the point where groups currently stall."
       ],
