@@ -32,15 +32,29 @@
   border-bottom: 1px solid var(--cecf-line);
   background: var(--cecf-sand);
 }
-/* Visit Esoko — brand — Visit CECF, as one centred group. */
+/* Visit Esoko — brand — Visit CECF, as one centred group, when all
+   three fit on one line (>=880px). Below that — including tablet —
+   the brand goes on its own row on top, both buttons on a row
+   underneath, via `order` rather than a different DOM/component
+   structure: brand gets order:-1 and flex-basis:100% so it always
+   wraps onto its own line first; the two buttons (order:0, unset at
+   this width) keep their relative order and share the row below. At
+   >=880px the buttons get explicit order:-1/1 to flank the brand, and
+   the brand's flex-basis is freed so all three fit on one line. */
 .cecf-topnav-center {
   display: flex; align-items: center; justify-content: center;
-  gap: 20px; flex-wrap: wrap;
+  gap: 12px 20px; flex-wrap: wrap;
 }
 .cecf-topnav-brand {
-  display: flex; align-items: center; gap: 10px;
+  display: flex; align-items: center; justify-content: center; gap: 10px;
   font-family: var(--cecf-font-display); font-weight: 600; font-size: 0.95rem;
   color: var(--cecf-ink);
+  flex: 0 0 100%; order: -1;
+}
+@media (min-width: 880px) {
+  .cecf-topnav-brand { flex: 0 0 auto; order: 0; }
+  .cecf-topnav-center .cecf-nav-btn.esoko { order: -1; }
+  .cecf-topnav-center .cecf-nav-btn.cecf { order: 1; }
 }
 /* <Logo/> (@esoko/ui) ships no layout CSS of its own — apps/web supplies
    it via web.css's .lock rule. apps/app has never used <Logo/> before,
