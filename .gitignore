@@ -11,6 +11,10 @@ out/
 .turbo/
 target/          # Rust (services/ledger, services/channels)
 
+# ─── PHP (services/cecf-wordpress) ────────────────────────
+vendor/
+web/wp/
+
 # ─── Python ────────────────────────────────────────────────
 __pycache__/
 *.py[cod]
