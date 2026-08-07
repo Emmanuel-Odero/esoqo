@@ -17,7 +17,10 @@
     "stack:up": "docker compose up -d",
     "stack:down": "docker compose down",
     "stack:reset": "docker compose down -v && docker compose up -d",
-    "stack:logs": "docker compose logs -f"
+    "stack:logs": "docker compose logs -f",
+    "cecf:up": "docker compose --profile cecf up -d cecf-mariadb cecf-wordpress",
+    "cecf:down": "docker compose --profile cecf down",
+    "cecf:logs": "docker compose --profile cecf logs -f cecf-wordpress"
   },
   "devDependencies": {
     "turbo": "^2.3.3",

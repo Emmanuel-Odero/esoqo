@@ -159,6 +159,76 @@ services:
       redis:
         condition: service_healthy
 
+  # ─────────────────────────────────────────────────────────────
+  # CECF WordPress stack — opt-in only (docker compose --profile cecf up)
+  # Mirrors the two-service Render topology: cecf-mariadb (private,
+  # self-hosted — Render has no managed MySQL) + cecf-wordpress
+  # (nginx+php-fpm, built from the shared pnpm workspace).
+  # ─────────────────────────────────────────────────────────────
+  cecf-mariadb:
+    image: mariadb:11
+    container_name: cecf-mariadb
+    profiles: ["cecf"]
+    restart: unless-stopped
+    environment:
+      MARIADB_ROOT_PASSWORD: cecf_dev_only
+      MARIADB_DATABASE: cecf
+      MARIADB_USER: cecf
+      MARIADB_PASSWORD: cecf_dev_only
+    ports:
+      - "3306:3306"
+    volumes:
+      - cecfmysqldata:/var/lib/mysql
+    healthcheck:
+      test: ["CMD", "healthcheck.sh", "--connect", "--innodb_initialized"]
+      interval: 5s
+      timeout: 5s
+      retries: 12
+
+  cecf-wordpress:
+    build:
+      context: .
+      dockerfile: services/cecf-wordpress/Dockerfile
+      args:
+        APP_URL: http://childeldercare.test
+    container_name: cecf-wordpress
+    profiles: ["cecf"]
+    restart: unless-stopped
+    depends_on:
+      cecf-mariadb:
+        condition: service_healthy
+    environment:
+      PORT: "8080"
+      WP_ENV: development
+      WP_HOME: http://childeldercare.test
+      WP_SITEURL: http://childeldercare.test/wp
+      DB_HOST: cecf-mariadb
+      DB_PORT: "3306"
+      DB_NAME: cecf
+      DB_USER: cecf
+      DB_PASSWORD: cecf_dev_only
+      MULTISITE_ENABLED: "true"
+      MULTISITE_SUBDOMAIN: "true"
+      MULTISITE_DOMAIN: childeldercare.test
+      WP_ADMIN_USER: cecf-admin
+      WP_ADMIN_PASSWORD: cecf_dev_only
+      WP_ADMIN_EMAIL: dev@childeldercare.test
+      REDIS_URL: redis://redis:6379/1
+      AUTH_KEY: dev
+      SECURE_AUTH_KEY: dev
+      LOGGED_IN_KEY: dev
+      NONCE_KEY: dev
+      AUTH_SALT: dev
+      SECURE_AUTH_SALT: dev
+      LOGGED_IN_SALT: dev
+      NONCE_SALT: dev
+    ports:
+      - "8090:8080"
+    volumes:
+      - cecfuploads:/var/www/html/web/app/uploads
+
 volumes:
   pgdata:
   redisdata:
+  cecfmysqldata:
+  cecfuploads:
