@@ -2,3 +2,6 @@
 @source "../../app/**/*.php";
 @source "../**/*.blade.php";
 @source "../**/*.js";
+
+/* CECF's approved design — ported wholesale, see cecf.css's own header comment */
+@import "./cecf.css";
