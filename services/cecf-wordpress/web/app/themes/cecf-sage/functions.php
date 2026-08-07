@@ -1,5 +1,8 @@
 <?php
 
+use App\Providers\CecfConsoleServiceProvider;
+use App\Providers\CecfContentServiceProvider;
+use App\Providers\CecfEnquiryServiceProvider;
 use App\Providers\ThemeServiceProvider;
 use Roots\Acorn\Application;
 
@@ -35,6 +38,9 @@ require $composer;
 Application::configure()
     ->withProviders([
         ThemeServiceProvider::class,
+        CecfContentServiceProvider::class,
+        CecfEnquiryServiceProvider::class,
+        CecfConsoleServiceProvider::class,
     ])
     ->boot();
 
