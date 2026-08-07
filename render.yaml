@@ -146,6 +146,8 @@ services:
         value: https://esoko-app-lvqp.onrender.com
       - key: CORE_API_URL
         value: https://esoko-core.onrender.com
+      - key: NEXT_PUBLIC_CECF_URL
+        value: https://childeldercare.foundation
 
   # ── Admin — operations dashboard ──────────────────────────
   - type: web

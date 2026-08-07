@@ -1,0 +1,104 @@
+/*
+ * Presentation layer added around the /join wizard: a cross-promotion
+ * nav, a "why Esoko" hero, and a CECF partnership band. Scoped under
+ * .cecf-scope so CECF's brand tokens (colours, Fraunces/IBM Plex type)
+ * never leak into shared classes (.wrap, .qcard, .btn, ...) that other
+ * routes in this app — /signin, /me — also depend on. The join wizard
+ * itself (JoinFlow) keeps its existing esoko-token styling untouched.
+ *
+ * Colour values are lifted from services/cecf-wordpress's approved
+ * design (resources/css/cecf.css) rather than re-guessed, so this
+ * actually reads as CECF's palette and not an approximation of it.
+ */
+.cecf-scope {
+  --cecf-teal: #0D4A52;
+  --cecf-teal-2: #146069;
+  --cecf-teal-t: #E6EEEF;
+  --cecf-ochre: #C08325;
+  --cecf-ochre-t: #FBF1E0;
+  --cecf-clay: #A8452C;
+  --cecf-sand: #FAF5EC;
+  --cecf-line: #E4DACA;
+  --cecf-ink: #241F1B;
+  --cecf-ink-2: #5E5348;
+  --cecf-font-display: "Fraunces", Georgia, serif;
+  --cecf-font-body: "IBM Plex Sans", system-ui, sans-serif;
+}
+
+/* ── cross-promotion nav ── */
+.cecf-topnav {
+  display: flex; align-items: center; justify-content: space-between;
+  gap: 12px; flex-wrap: wrap;
+  padding: 14px 22px; margin-bottom: 8px;
+  border-bottom: 1px solid var(--cecf-line);
+  background: var(--cecf-sand);
+}
+.cecf-topnav-brand {
+  display: flex; align-items: center; gap: 10px;
+  font-family: var(--cecf-font-display); font-weight: 600; font-size: 0.95rem;
+  color: var(--cecf-ink);
+}
+/* <Logo/> (@esoko/ui) ships no layout CSS of its own — apps/web supplies
+   it via web.css's .lock rule. apps/app has never used <Logo/> before,
+   so the minimal shape is reproduced here rather than assumed present. */
+.cecf-topnav-brand .lock { display: flex; align-items: center; gap: .05em; font-size: 22px; line-height: 1; color: var(--navy); }
+.cecf-topnav-brand .lock .w { font-family: var(--font-display); font-weight: 800; letter-spacing: -.045em; color: var(--green); position: relative; top: .05em; }
+.cecf-topnav-brand .x { color: var(--cecf-ink-2); font-weight: 400; }
+.cecf-topnav-links { display: flex; gap: 10px; flex-wrap: wrap; }
+.cecf-nav-btn {
+  display: inline-flex; align-items: center; gap: 7px;
+  padding: 9px 16px; border-radius: 7px; font-size: 0.86rem; font-weight: 600;
+  font-family: var(--cecf-font-body);
+  border: 1.5px solid transparent; min-height: 40px; cursor: pointer;
+}
+.cecf-nav-btn.esoko { border-color: var(--navy); color: var(--navy); background: #fff; }
+.cecf-nav-btn.esoko:hover { background: var(--navy); color: #fff; }
+.cecf-nav-btn.cecf { background: var(--cecf-teal); color: #fff; }
+.cecf-nav-btn.cecf:hover { background: var(--cecf-teal-2); }
+
+/* ── "why esoko" hero ── */
+.cecf-hero { max-width: 660px; margin: 0 auto; padding: 36px 22px 8px; }
+.cecf-hero-eyebrow {
+  font-family: var(--font-mono); font-size: 0.72rem; letter-spacing: .12em;
+  text-transform: uppercase; color: var(--green); margin: 0 0 10px;
+}
+.cecf-hero h2 { font-size: clamp(1.5rem, 3.4vw, 2.05rem); margin-bottom: 10px; }
+.cecf-hero p.lede { font-size: 1.02rem; color: var(--tx-2); max-width: 54ch; }
+.cecf-points { list-style: none; margin: 22px 0 0; padding: 0; display: grid; gap: 12px; }
+.cecf-points li {
+  display: flex; gap: 12px; align-items: flex-start;
+  padding: 14px 16px; border: 1px solid var(--line); border-radius: 10px; background: #fff;
+}
+.cecf-points .icbox { background: var(--green-t); color: var(--green); }
+.cecf-points strong { display: block; font-size: 0.93rem; }
+.cecf-points span.d { display: block; font-size: 0.85rem; color: var(--tx-2); margin-top: 2px; }
+
+/* ── CECF partnership band ── */
+.cecf-band {
+  margin-top: 48px;
+  background: var(--cecf-teal);
+  color: #fff;
+  font-family: var(--cecf-font-body);
+}
+.cecf-band-inner {
+  max-width: 660px; margin: 0 auto; padding: 40px 22px;
+  display: flex; gap: 24px; align-items: center; flex-wrap: wrap;
+}
+.cecf-band-logo {
+  flex: none; width: 68px; height: 68px; border-radius: 14px;
+  background: #fff; padding: 8px; display: grid; place-items: center;
+}
+.cecf-band-logo img { width: 100%; height: 100%; object-fit: contain; }
+.cecf-band-copy { flex: 1; min-width: 240px; }
+.cecf-band-copy h3 {
+  font-family: var(--cecf-font-display); color: #fff; font-size: 1.25rem;
+  font-weight: 600; margin-bottom: 6px;
+}
+.cecf-band-copy p { color: var(--cecf-teal-t); margin: 0 0 16px; font-size: 0.92rem; max-width: 56ch; }
+.cecf-band .cecf-nav-btn.cecf { background: var(--cecf-ochre); }
+.cecf-band .cecf-nav-btn.cecf:hover { background: #A66E1D; }
+
+@media (max-width: 560px) {
+  .cecf-topnav { padding: 12px 16px; }
+  .cecf-band-inner { padding: 32px 18px; }
+}
