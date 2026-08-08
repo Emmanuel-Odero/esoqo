@@ -48,18 +48,10 @@ export function WhoAndName({
         <div className="sub2">
           {f.joiningAs === 'group' && (
             <>
-              <div className="fld">
-                <label className="lab" htmlFor="orgName"><Icon name="users" size={15} />Official name of the group</label>
-                <input className="inp" id="orgName" value={f.orgName}
-                  aria-invalid={errField === 'orgName'}
-                  onChange={(e) => set('orgName', e.target.value)}
-                  placeholder="As registered, or as it will be registered" />
-              </div>
-              <div className="fld">
-                <label className="lab" htmlFor="orgKnownAs">What people call it <span className="op">— optional</span></label>
-                <input className="inp" id="orgKnownAs" value={f.orgKnownAs}
-                  onChange={(e) => set('orgKnownAs', e.target.value)} placeholder="e.g. Tumaini Ladies" />
-              </div>
+              <p className="hint" style={{ marginTop: 0 }}>
+                Next you will search for your group — Esoko checks first so nobody registers the
+                same group twice. If it is not listed yet, you can register it there.
+              </p>
               <div className="fld">
                 <label className="lab" htmlFor="orgRole">Your role in the group</label>
                 <select className="inp" id="orgRole" value={orgRoleOther ? 'Other' : f.orgRole}

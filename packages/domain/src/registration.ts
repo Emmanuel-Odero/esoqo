@@ -26,6 +26,10 @@ export const step1Schema = z.object({
 });
 
 /* ── step 2 · names ── */
+// orgName is deliberately NOT required here even when joiningAs is
+// 'group' — the group's identity is resolved later (search-before-create
+// via groupDetailsSchema/groupMembershipCheckSchema below), so step 2
+// only needs the registrant's own name up front.
 export const step2Schema = z
   .object({
     officialName: z
@@ -38,15 +42,6 @@ export const step2Schema = z
     orgKnownAs: z.string().trim().max(80).optional().or(z.literal('')),
     orgRole: z.string().trim().max(40).optional().or(z.literal('')),
     joiningAs: joiningAsSchema,
-  })
-  .superRefine((v, ctx) => {
-    if (v.joiningAs === 'group' && !v.orgName) {
-      ctx.addIssue({
-        code: z.ZodIssueCode.custom,
-        path: ['orgName'],
-        message: 'Enter the official name of the group',
-      });
-    }
   });
 
 /* ── step 3 · contact ── */
@@ -100,12 +95,13 @@ export const joinableGroupKindSchema = z.enum(
 );
 
 /** Only asked once search-before-create came up empty and the joiner
- *  chose to register a brand-new group. */
+ *  chose to register a brand-new group. No separate county field — the
+ *  group is founded in the same county already given in step 3
+ *  (contact), same as completeRegistration has always done. */
 export const groupDetailsSchema = z.object({
   orgName: z.string().trim().min(2, 'Enter the official name of the group').max(160),
   orgKnownAs: z.string().trim().max(80).optional().or(z.literal('')),
   orgKind: joinableGroupKindSchema,
-  county: countySchema,
   orgSubCounty: z.string().trim().max(80).optional().or(z.literal('')),
   orgDistrict: z.string().trim().max(80).optional().or(z.literal('')),
   /** What most members deal in — segment keys from the shared work

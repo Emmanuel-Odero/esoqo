@@ -6,7 +6,7 @@ import { useAnnounce, VisuallyHidden } from '@esoko/a11y';
 import {
   actionStart, actionSaveNames, actionSaveContact, actionSaveWork,
   actionSaveStanding, actionRequestOtp, actionVerifyOtp, actionComplete,
-  actionSearchWork, actionSearchGroups, type ActionResult,
+  actionSearchWork, type ActionResult,
 } from './actions';
 import { actionDeferPayment } from './upload';
 import { EMPTY, type Form } from './form';
@@ -40,7 +40,6 @@ export function JoinFlow() {
   const [errField, setErrField] = useState<string | undefined>();
 
   const [hits, setHits] = useState<{ key: string; name: string }[]>([]);
-  const [groupHits, setGroupHits] = useState<{ id: string; name: string; county: string }[]>([]);
   const [orgRoleOther, setOrgRoleOther] = useState(false);
   const [otpSent, setOtpSent] = useState(false);
   const [otpVerified, setOtpVerified] = useState(false);
@@ -160,6 +159,27 @@ export function JoinFlow() {
           feeCoverage: f.feeCoverage || undefined,
           memberCount: f.memberCount ? Number(f.memberCount) : undefined,
           hasKraPin: f.hasKraPin || undefined,
+          // A brand-new group — only meaningful once search-before-create
+          // came up empty and GroupPicker's "register it" branch ran.
+          orgName: f.orgName || undefined,
+          orgKnownAs: f.orgKnownAs || undefined,
+          orgKind: f.orgKind || undefined,
+          orgSubCounty: f.orgSubCounty || undefined,
+          orgDistrict: f.orgDistrict || undefined,
+          orgTags: f.orgTags,
+          // The business sub-flow.
+          bizIsRegistered: f.bizIsRegistered || undefined,
+          bizIntendsToRegister: f.bizIntendsToRegister || undefined,
+          bizPartyId: f.bizPartyId || undefined,
+          bizName: f.bizName || undefined,
+          bizSector: f.bizSector || undefined,
+          bizType: f.bizType || undefined,
+          bizTypeOther: f.bizTypeOther || undefined,
+          bizEmployeeCount: f.bizEmployeeCount ? Number(f.bizEmployeeCount) : undefined,
+          bizRevenueGoodKes: f.bizRevenueGoodKes ? Number(f.bizRevenueGoodKes) : undefined,
+          bizRevenueBadKes: f.bizRevenueBadKes ? Number(f.bizRevenueBadKes) : undefined,
+          bizBankProvider: f.bizBankProvider || undefined,
+          bizPaymentChannels: f.bizPaymentChannels,
         });
         if (!handle(r)) return;
 
@@ -204,20 +224,6 @@ export function JoinFlow() {
   }
   function onSelectWork(key: string, name: string) {
     set('workRaw', name); set('segment', key); setHits([]);
-  }
-
-  /* ── group search ── */
-  const groupSearchTimer = useRef<ReturnType<typeof setTimeout>>(undefined);
-  function onGroupInput(v: string) {
-    set('groupName', v);
-    set('groupPartyId', '');
-    clearTimeout(groupSearchTimer.current);
-    if (v.trim().length < 2) { setGroupHits([]); return; }
-    groupSearchTimer.current = setTimeout(async () => {
-      const res = await actionSearchGroups(v);
-      setGroupHits(res);
-      announce(res.length ? `${res.length} matching groups` : 'No match — you can still enter the name');
-    }, 200);
   }
 
   /* ── OTP ── */
@@ -343,7 +349,6 @@ export function JoinFlow() {
         {step === 3 && regId && (
           <MoreAboutYou
             f={f} set={set} headingRef={headingRef} registrationId={regId}
-            groupHits={groupHits} onGroupInput={onGroupInput}
           />
         )}
 

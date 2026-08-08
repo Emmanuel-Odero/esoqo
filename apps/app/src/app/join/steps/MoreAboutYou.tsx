@@ -3,10 +3,9 @@
 import { useState, type RefObject } from 'react';
 import { Icon } from '@esoko/ui';
 import { DocumentStep, PaymentStep } from '../Steps';
-import { SearchCombobox } from '../SearchCombobox';
+import { GroupPicker } from '../GroupPicker';
+import { BusinessPicker } from '../BusinessPicker';
 import type { Form } from '../form';
-
-interface GroupHit { id: string; name: string; county: string }
 
 /**
  * Step 3 — everything genuinely optional, on one screen instead of
@@ -15,19 +14,19 @@ interface GroupHit { id: string; name: string; county: string }
  * touched — there is nothing here the data model requires.
  */
 export function MoreAboutYou({
-  f, set, headingRef, registrationId, groupHits, onGroupInput,
+  f, set, headingRef, registrationId,
 }: {
   f: Form;
   set: <K extends keyof Form>(k: K, v: Form[K]) => void;
   headingRef: RefObject<HTMLHeadingElement | null>;
   registrationId: string;
-  groupHits: GroupHit[];
-  onGroupInput: (v: string) => void;
 }) {
   const [open, setOpen] = useState<'standing' | 'documents' | 'payment' | null>(null);
 
   const standingSummary = f.joiningAs === 'group'
-    ? (f.memberCount ? `${f.memberCount} members` : 'Not answered')
+    ? (f.groupPartyId ? `Linked to ${f.groupName}` : f.orgName ? `Registering ${f.orgName}` : 'Not answered')
+    : f.joiningAs === 'biz'
+    ? (f.bizPartyId ? `Already on Esoko as ${f.bizName}` : f.bizName ? `Registering ${f.bizName}` : 'Not answered')
     : [
         f.hasRegisteredBusiness && { yes: 'Registered business', no: 'Not registered', soon: 'Registering soon' }[f.hasRegisteredBusiness],
         f.belongsToGroup === 'yes' && (f.groupName ? `In ${f.groupName}` : 'In a group'),
@@ -44,82 +43,61 @@ export function MoreAboutYou({
         icon="scales" title="Your standing" status={standingSummary}
         open={open === 'standing'} onToggle={() => setOpen(open === 'standing' ? null : 'standing')}
       >
-        {f.joiningAs !== 'group' && (
-          <fieldset style={{ border: 0, padding: 0, margin: '0 0 15px' }}>
-            <legend className="lab">Do you have a registered business?</legend>
-            <div className="opts">
-              {([
-                ['yes', 'Yes, it is registered', 'You have a business name or BRS certificate'],
-                ['no', 'No, not registered', 'Most people start here. Everything still works'],
-                ['soon', 'Not yet, but I want to', 'Esoko can handle the filing when you are ready'],
-              ] as const).map(([v, t, d]) => (
-                <button key={v} type="button" className="opt"
-                  aria-pressed={f.hasRegisteredBusiness === v}
-                  onClick={() => set('hasRegisteredBusiness', v)}>
-                  <span><span className="t">{t}</span><span className="d">{d}</span></span>
-                </button>
-              ))}
-            </div>
-          </fieldset>
-        )}
+        {f.joiningAs === 'me' && (
+          <>
+            <fieldset style={{ border: 0, padding: 0, margin: '0 0 15px' }}>
+              <legend className="lab">Do you run a business?</legend>
+              <div className="opts">
+                {([
+                  ['yes', 'Yes, it is registered', 'You have a business name or BRS certificate'],
+                  ['no', 'No, not registered', 'Most people start here. Everything still works'],
+                  ['soon', 'Not yet, but I want to', 'Esoko can handle the filing when you are ready'],
+                ] as const).map(([v, t, d]) => (
+                  <button key={v} type="button" className="opt"
+                    aria-pressed={f.hasRegisteredBusiness === v}
+                    onClick={() => set('hasRegisteredBusiness', v)}>
+                    <span><span className="t">{t}</span><span className="d">{d}</span></span>
+                  </button>
+                ))}
+              </div>
+            </fieldset>
 
-        {f.hasRegisteredBusiness === 'yes' && (
-          <div className="fld">
-            <label className="lab" htmlFor="regNo">Registration number <span className="op">— optional</span></label>
-            <input className="inp mono" id="regNo" value={f.registrationNo}
-              onChange={(e) => set('registrationNo', e.target.value)} placeholder="BN/2026/0000" />
-          </div>
-        )}
-
-        {f.joiningAs === 'group' ? (
-          <div className="fld">
-            <label className="lab" htmlFor="members">How many members?</label>
-            <input className="inp mono" id="members" inputMode="numeric" value={f.memberCount}
-              onChange={(e) => set('memberCount', e.target.value)} placeholder="18" />
-            <p className="hint">A rough number is fine. Members join later with their own phone numbers.</p>
-          </div>
-        ) : (
-          <fieldset style={{ border: 0, padding: 0 }}>
-            <legend className="lab">Do you belong to a group, sacco or cooperative?</legend>
-            <div className="opts">
-              {([['yes', 'Yes', 'A chama, sacco, cooperative, welfare group or association'],
-                 ['no', 'No', 'You can join or start one later from the menu']] as const).map(([v, t, d]) => (
-                <button key={v} type="button" className="opt" aria-pressed={f.belongsToGroup === v}
-                  onClick={() => set('belongsToGroup', v)}>
-                  <span><span className="t">{t}</span><span className="d">{d}</span></span>
-                </button>
-              ))}
-            </div>
-            {f.belongsToGroup === 'yes' && (
-              <>
-                <div style={{ marginTop: 15 }}>
-                  <SearchCombobox<GroupHit>
-                    id="groupName" label="Name of the group"
-                    value={f.groupName} onInputChange={onGroupInput}
-                    placeholder="Search or type the name"
-                    hits={groupHits} getKey={(g) => g.id} isSelected={(g) => f.groupPartyId === g.id}
-                    onSelect={(g) => { set('groupName', g.name); set('groupPartyId', g.id); }}
-                    renderHit={(g) => <span>{g.name} <span className="op">— {g.county}</span></span>}
-                    hint={f.groupPartyId
-                      ? 'Linked — Esoko will connect your record to this group.'
-                      : 'Pick it from the list, or just type the name.'}
-                  />
-                </div>
-                <fieldset style={{ border: 0, padding: 0, margin: '15px 0 0' }}>
-                  <legend className="lab">Has your group already paid your registration fee?</legend>
-                  <div className="opts">
-                    {([['group', 'Yes, the group covers it', 'Nothing more to do here'],
-                       ['self', 'No, I paid it myself', 'Add it in "Registration fee" below']] as const).map(([v, t, d]) => (
-                      <button key={v} type="button" className="opt" aria-pressed={f.feeCoverage === v}
-                        onClick={() => set('feeCoverage', v)}>
-                        <span><span className="t">{t}</span><span className="d">{d}</span></span>
-                      </button>
-                    ))}
-                  </div>
-                </fieldset>
-              </>
+            {f.hasRegisteredBusiness === 'yes' && (
+              <div className="fld">
+                <label className="lab" htmlFor="regNo">Registration number <span className="op">— optional</span></label>
+                <input className="inp mono" id="regNo" value={f.registrationNo}
+                  onChange={(e) => set('registrationNo', e.target.value)} placeholder="BN/2026/0000" />
+              </div>
             )}
-          </fieldset>
+
+            <fieldset style={{ border: 0, padding: 0 }}>
+              <legend className="lab">Do you belong to a group, sacco or cooperative?</legend>
+              <div className="opts">
+                {([['yes', 'Yes', 'A chama, sacco, cooperative, welfare group or association'],
+                   ['no', 'No', 'You can join or start one later from the menu']] as const).map(([v, t, d]) => (
+                  <button key={v} type="button" className="opt" aria-pressed={f.belongsToGroup === v}
+                    onClick={() => set('belongsToGroup', v)}>
+                    <span><span className="t">{t}</span><span className="d">{d}</span></span>
+                  </button>
+                ))}
+              </div>
+              {f.belongsToGroup === 'yes' && (
+                <div style={{ marginTop: 15 }}>
+                  <GroupPicker f={f} set={set} />
+                  <FeeCoverage f={f} set={set} />
+                </div>
+              )}
+            </fieldset>
+          </>
+        )}
+
+        {f.joiningAs === 'biz' && <BusinessPicker f={f} set={set} />}
+
+        {f.joiningAs === 'group' && (
+          <>
+            <GroupPicker f={f} set={set} />
+            <FeeCoverage f={f} set={set} />
+          </>
         )}
       </Section>
 
@@ -145,6 +123,28 @@ export function MoreAboutYou({
         </Section>
       )}
     </>
+  );
+}
+
+/** Shared between joiningAs === 'group' (asked about the group's own
+ *  fee) and belongsToGroup === 'yes' (asked whether an existing group
+ *  covers this person's fee) — same question, same two answers. */
+function FeeCoverage({
+  f, set,
+}: { f: Form; set: <K extends keyof Form>(k: K, v: Form[K]) => void }) {
+  return (
+    <fieldset style={{ border: 0, padding: 0, margin: '15px 0 0' }}>
+      <legend className="lab">Has the group already paid this registration fee?</legend>
+      <div className="opts">
+        {([['group', 'Yes, the group covers it', 'Nothing more to do here'],
+           ['self', 'No, pay it separately', 'Add it in "Registration fee" below']] as const).map(([v, t, d]) => (
+          <button key={v} type="button" className="opt" aria-pressed={f.feeCoverage === v}
+            onClick={() => set('feeCoverage', v)}>
+            <span><span className="t">{t}</span><span className="d">{d}</span></span>
+          </button>
+        ))}
+      </div>
+    </fieldset>
   );
 }
 
