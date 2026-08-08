@@ -3,6 +3,7 @@
 import type { RefObject } from 'react';
 import { Icon } from '@esoko/ui';
 import { COUNTIES, LIVE_COUNTIES } from '@esoko/domain';
+import { SearchCombobox } from '../SearchCombobox';
 import type { Form } from '../form';
 
 interface WorkHit { key: string; name: string }
@@ -63,30 +64,17 @@ export function ContactWork({
       </div>
 
       <div className="sub2">
-        <div className="fld">
-          <label className="lab" htmlFor="work"><Icon name="search" size={15} />What do you do?</label>
-          <input className="inp" id="work" value={f.workRaw} autoComplete="off"
-            role="combobox" aria-expanded={hits.length > 0} aria-controls="work-hits"
-            aria-describedby="work-hint"
-            onChange={(e) => onWorkInput(e.target.value)}
-            placeholder="carpentry, mama mboga, boda, chama, kanisa, welding…" />
-        </div>
-        <div className="hits" id="work-hits" role="listbox" aria-label="Matching kinds of work">
-          {hits.map((h) => (
-            <button key={h.key} type="button" className="hit" role="option"
-              aria-selected={f.segment === h.key}
-              onClick={() => onSelectWork(h.key, h.name)}>
-              <span>{h.name}</span><span className="yes">SELECT</span>
-            </button>
-          ))}
-          {f.workRaw.trim().length >= 2 && hits.length === 0 && (
-            <button type="button" className="hit" onClick={() => onSelectWork('', f.workRaw)}>
-              <span>Use "{f.workRaw}" — Esoko is for you too</span>
-              <span className="yes">SELECT</span>
-            </button>
-          )}
-        </div>
-        <p className="hint" id="work-hint">In English or Kiswahili, however you say it. You can edit this later.</p>
+        <SearchCombobox<WorkHit>
+          id="work" label="What do you do?" icon="search"
+          value={f.workRaw} onInputChange={onWorkInput}
+          placeholder="carpentry, mama mboga, boda, chama, kanisa, welding…"
+          hits={hits} getKey={(h) => h.key} isSelected={(h) => f.segment === h.key}
+          onSelect={(h) => onSelectWork(h.key, h.name)}
+          renderHit={(h) => <span>{h.name}</span>}
+          hint="In English or Kiswahili, however you say it. You can edit this later."
+          noMatchLabel={(typed) => `Use "${typed}" — Esoko is for you too`}
+          onNoMatchSelect={(typed) => onSelectWork('', typed)}
+        />
       </div>
     </>
   );

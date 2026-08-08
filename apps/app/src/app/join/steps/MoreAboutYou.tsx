@@ -3,6 +3,7 @@
 import { useState, type RefObject } from 'react';
 import { Icon } from '@esoko/ui';
 import { DocumentStep, PaymentStep } from '../Steps';
+import { SearchCombobox } from '../SearchCombobox';
 import type { Form } from '../form';
 
 interface GroupHit { id: string; name: string; county: string }
@@ -91,24 +92,18 @@ export function MoreAboutYou({
             </div>
             {f.belongsToGroup === 'yes' && (
               <>
-                <div className="fld" style={{ marginTop: 15 }}>
-                  <label className="lab" htmlFor="groupName">Name of the group</label>
-                  <input className="inp" id="groupName" value={f.groupName} autoComplete="off"
-                    role="combobox" aria-expanded={groupHits.length > 0} aria-controls="group-hits"
-                    onChange={(e) => onGroupInput(e.target.value)} placeholder="Search or type the name" />
-                  <div className="hits" id="group-hits" role="listbox" aria-label="Matching groups">
-                    {groupHits.map((g) => (
-                      <button key={g.id} type="button" className="hit" role="option"
-                        aria-selected={f.groupPartyId === g.id}
-                        onClick={() => { set('groupName', g.name); set('groupPartyId', g.id); }}>
-                        <span>{g.name} <span className="op">— {g.county}</span></span>
-                        <span className="yes">SELECT</span>
-                      </button>
-                    ))}
-                  </div>
-                  <p className="hint">
-                    {f.groupPartyId ? 'Linked — Esoko will connect your record to this group.' : 'Pick it from the list, or just type the name.'}
-                  </p>
+                <div style={{ marginTop: 15 }}>
+                  <SearchCombobox<GroupHit>
+                    id="groupName" label="Name of the group"
+                    value={f.groupName} onInputChange={onGroupInput}
+                    placeholder="Search or type the name"
+                    hits={groupHits} getKey={(g) => g.id} isSelected={(g) => f.groupPartyId === g.id}
+                    onSelect={(g) => { set('groupName', g.name); set('groupPartyId', g.id); }}
+                    renderHit={(g) => <span>{g.name} <span className="op">— {g.county}</span></span>}
+                    hint={f.groupPartyId
+                      ? 'Linked — Esoko will connect your record to this group.'
+                      : 'Pick it from the list, or just type the name.'}
+                  />
                 </div>
                 <fieldset style={{ border: 0, padding: 0, margin: '15px 0 0' }}>
                   <legend className="lab">Has your group already paid your registration fee?</legend>
