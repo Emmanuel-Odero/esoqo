@@ -57,6 +57,14 @@ model Party {
   kind      PartyKind
   county    String
   ward      String?
+  /// Below county, above ward. Optional — asked mainly of groups and
+  /// businesses, who tend to know these as-registered; individuals
+  /// aren't pushed for it.
+  subCounty String?
+  /// Kenya's pre-2013 administrative unit. Some registration paperwork
+  /// (group constitutions, old business permits) still cites it, so we
+  /// keep it as free text rather than trying to derive it from county.
+  district  String?
   createdAt DateTime  @default(now())
   updatedAt DateTime  @updatedAt
   deletedAt DateTime? // soft delete — DPA erasure keeps the audit trail
@@ -71,6 +79,7 @@ model Party {
   documents    Document[]
   registration Registration?
   groupJoinRegistrations Registration[] @relation("RegistrationGroupParty")
+  bizJoinRegistrations   Registration[] @relation("RegistrationBizParty")
   storeOrdersAsBuyer StoreOrder[]
 
   @@index([county, kind])
@@ -121,6 +130,17 @@ model Organisation {
   registrationNo String?
   memberCount    Int?
   formedOn       DateTime?
+  /// What most members deal in — "juakali", "carpentry", "masonry" —
+  /// keyed against the same segment dictionary individuals pick their
+  /// own work from, so group and personal tags stay comparable.
+  tags String[] @default([])
+  /// Only meaningful when kind is BUSINESS: sole proprietorship,
+  /// partnership, limited company, cooperative, etc. Free text in
+  /// businessTypeOther when the picked value is "OTHER".
+  businessType      String?
+  businessTypeOther String?
+  /// Business-only: not yet registered, but says they plan to be.
+  intendsToRegister Boolean?
 
   members Membership[] @relation("MemberOrg")
 
@@ -167,6 +187,13 @@ model Enterprise {
   sector   String?
   isRegistered Boolean @default(false)
   hasKraPin    Boolean @default(false)
+  /// Operational detail, gathered mainly when the enterprise belongs to
+  /// a business Organisation rather than an individual's side-hustle.
+  employeeCount     Int?
+  revenueGoodDayKes Decimal? @db.Decimal(12, 2)
+  revenueBadDayKes  Decimal? @db.Decimal(12, 2)
+  bankProvider      String?
+  paymentChannels   String[] @default([])
   createdAt DateTime @default(now())
 
   stores Store[]
@@ -499,6 +526,31 @@ model Registration {
   feeCoverage    String?
   hasKraPin      String?
 
+  /// The group's own OrgKind (CBO/SHG/CHAMA/... — see GROUP_KINDS),
+  /// location below county, and member-tags, only asked when creating
+  /// a brand-new group rather than joining one found by search.
+  orgKind      String?
+  orgSubCounty String?
+  orgDistrict  String?
+  orgTags      String[] @default([])
+
+  /// Business sub-flow. bizPartyId mirrors groupPartyId — set when the
+  /// joiner picked an existing business from the live search, which is
+  /// what stops a duplicate Organisation being created on completion.
+  bizName               String?
+  bizIsRegistered       String?  // yes | no
+  bizIntendsToRegister  String?  // only asked when bizIsRegistered = no
+  bizPartyId            String?  @db.Uuid
+  bizParty              Party?   @relation("RegistrationBizParty", fields: [bizPartyId], references: [id])
+  bizSector             String?
+  bizType               String?
+  bizTypeOther          String?
+  bizEmployeeCount      Int?
+  bizRevenueGoodKes     Decimal? @db.Decimal(12, 2)
+  bizRevenueBadKes      Decimal? @db.Decimal(12, 2)
+  bizBankProvider       String?
+  bizPaymentChannels    String[] @default([])
+
   /// Explicit opt-ins. Nothing is sent that was not asked for.
   wantsPriceSms   Boolean @default(false)
   wantsReceiptSms Boolean @default(true)
@@ -552,6 +604,11 @@ model RegistrationPayment {
   declaredAt   DateTime?
   status       PaymentStatus  @default(NOT_DECLARED)
   confirmedAt  DateTime?
+  /// Daraja's CheckoutRequestID for a live STK push, set the moment the
+  /// push is sent. Doubles as the idempotency guard for a callback that
+  /// arrives twice — see StoreOrder.mpesaCheckoutRequestId for the same
+  /// pattern in the storefront.
+  checkoutRequestId String? @unique
   createdAt    DateTime     @default(now()) @map("created_at")
   updatedAt    DateTime     @updatedAt @map("updated_at")
 
