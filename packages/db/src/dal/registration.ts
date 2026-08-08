@@ -61,6 +61,24 @@ export interface UpdateRegistrationInput {
   wantsExpirySms?: boolean;
   ussdSetupChoice?: 'now' | 'later';
   lastStep?: number;
+  /// New-group detail — only set when GroupDetails (not GroupSearch) ran.
+  orgKind?: string;
+  orgSubCounty?: string;
+  orgDistrict?: string;
+  orgTags?: string[];
+  /// Business sub-flow.
+  bizName?: string;
+  bizIsRegistered?: string;
+  bizIntendsToRegister?: string;
+  bizPartyId?: string;
+  bizSector?: string;
+  bizType?: string;
+  bizTypeOther?: string;
+  bizEmployeeCount?: number;
+  bizRevenueGoodKes?: number;
+  bizRevenueBadKes?: number;
+  bizBankProvider?: string;
+  bizPaymentChannels?: string[];
 }
 
 /** Maps the free-typed "role in the group" onto the fixed Membership
@@ -217,48 +235,84 @@ export async function completeRegistration(ctx: Ctx, id: string) {
     if (!reg.county) throw new Error('Cannot complete without a county');
     if (!reg.officialName) throw new Error('Cannot complete without an official name');
 
+    // A phone already on file only blocks completion when this is a
+    // first-time individual signup. When the joiner is attaching to an
+    // org they found via search (an existing group or business), reuse
+    // that Person's Party instead — "one phone, many groups" is the
+    // product rule; retyping details we already have is just friction.
+    // The freshly typed name is deliberately NOT written back onto the
+    // existing Person: an anonymous form is not a trustworthy channel
+    // for amending someone else's legal-name record.
     const existingPerson = await tx.person.findUnique({ where: { msisdn: reg.msisdn } });
-    if (existingPerson) {
+    const joiningExistingOrg = Boolean(reg.groupPartyId) || Boolean(reg.bizPartyId);
+    if (existingPerson && !joiningExistingOrg) {
       throw Object.assign(new Error('This number is already registered'), {
         code: 'MSISDN_TAKEN',
       });
     }
 
-    // 1 · the person
-    const personParty = await tx.party.create({
-      data: {
-        kind: 'PERSON' as PartyKind,
-        county: reg.county,
-        ward: reg.ward,
-        person: {
-          create: {
-            officialName: reg.officialName,
-            knownAs: reg.knownAs,
-            msisdn: reg.msisdn,
-            email: reg.email,
-            msisdnVerifiedAt: reg.msisdnVerifiedAt,
+    // 1 · the person — reuse if we matched one, otherwise create
+    let personPartyId: string;
+    if (existingPerson) {
+      personPartyId = existingPerson.partyId;
+    } else {
+      const personParty = await tx.party.create({
+        data: {
+          kind: 'PERSON' as PartyKind,
+          county: reg.county,
+          ward: reg.ward,
+          person: {
+            create: {
+              officialName: reg.officialName,
+              knownAs: reg.knownAs,
+              msisdn: reg.msisdn,
+              email: reg.email,
+              msisdnVerifiedAt: reg.msisdnVerifiedAt,
+            },
           },
+          accounts: { create: [{ kind: 'WALLET', currency: 'KES' }] },
         },
-        accounts: { create: [{ kind: 'WALLET', currency: 'KES' }] },
-      },
-      include: { person: true },
-    });
+      });
+      personPartyId = personParty.id;
 
-    // 2 · the organisation, if one is being registered
+      // Attestation only makes sense for the number we just verified
+      // ourselves during this flow — an existing Person's verification
+      // (or lack of it) is untouched by someone else's registration.
+      if (reg.msisdnVerifiedAt) {
+        await tx.attestation.create({
+          data: {
+            subjectId: personPartyId,
+            claimType: 'MSISDN_VERIFIED',
+            claimValue: { msisdn: reg.msisdn },
+            method: 'API',
+            issuedAt: reg.msisdnVerifiedAt,
+          },
+        });
+      }
+    }
+
+    // 2 · a brand-new group, only when GroupDetails ran (orgName set and
+    // no groupPartyId — search-before-create came up empty and they chose
+    // to register it). Joining an org already picked via search happens
+    // in 2c below, regardless of which top-level path (group/biz/me) got
+    // them there.
     let orgPartyId: string | null = null;
-    if (reg.joiningAs === 'group' && reg.orgName) {
+    if (reg.orgName && !reg.groupPartyId) {
       const orgParty = await tx.party.create({
         data: {
           kind: 'ORGANISATION' as PartyKind,
           county: reg.county,
           ward: reg.ward,
+          subCounty: reg.orgSubCounty,
+          district: reg.orgDistrict,
           organisation: {
             create: {
-              kind: (reg.hasRegisteredBusiness === 'yes' ? 'COOPERATIVE' : 'CHAMA') as OrgKind,
+              kind: (reg.orgKind ?? 'OTHER') as OrgKind,
               officialName: reg.orgName,
               knownAs: reg.orgKnownAs,
               registrationNo: reg.registrationNo,
               memberCount: reg.memberCount,
+              tags: reg.orgTags,
             },
           },
           accounts: { create: [{ kind: 'GROUP_SAVINGS', currency: 'KES' }] },
@@ -267,26 +321,88 @@ export async function completeRegistration(ctx: Ctx, id: string) {
       orgPartyId = orgParty.id;
 
       await tx.membership.create({
+        data: { personId: personPartyId, orgId: orgParty.id, role: toMemberRole(reg.orgRole) },
+      });
+    }
+
+    // 2b · a brand-new business, mirrors 2 — bizName set and no
+    // bizPartyId (the live search came up empty). Gets its own
+    // Organisation(kind: BUSINESS) + Enterprise (operational detail)
+    // rather than an Enterprise hanging off the individual, so it is a
+    // first-class, searchable, dedupe-checked party like any group.
+    let bizPartyId: string | null = null;
+    if (reg.joiningAs === 'biz' && reg.bizName && !reg.bizPartyId) {
+      const bizParty = await tx.party.create({
         data: {
-          personId: personParty.id,
-          orgId: orgParty.id,
-          role: toMemberRole(reg.orgRole),
+          kind: 'ORGANISATION' as PartyKind,
+          county: reg.county,
+          ward: reg.ward,
+          organisation: {
+            create: {
+              kind: 'BUSINESS' as OrgKind,
+              officialName: reg.bizName,
+              registrationNo: reg.bizIsRegistered === 'yes' ? reg.registrationNo : null,
+              businessType: reg.bizType,
+              businessTypeOther: reg.bizTypeOther,
+              intendsToRegister: reg.bizIsRegistered === 'no' ? reg.bizIntendsToRegister === 'yes' : null,
+            },
+          },
+          accounts: { create: [{ kind: 'WALLET', currency: 'KES' }] },
         },
       });
-    }
+      bizPartyId = bizParty.id;
 
-    // 2b · linking to an existing group, for someone joining on their own
-    if (reg.joiningAs !== 'group' && reg.belongsToGroup === 'yes' && reg.groupPartyId) {
+      await tx.enterprise.create({
+        data: {
+          partyId: bizPartyId,
+          workRaw: reg.bizSector ?? reg.bizName,
+          segment: reg.bizSector,
+          sector: reg.bizSector,
+          isRegistered: reg.bizIsRegistered === 'yes',
+          hasKraPin: reg.hasKraPin === 'yes',
+          employeeCount: reg.bizEmployeeCount,
+          revenueGoodDayKes: reg.bizRevenueGoodKes,
+          revenueBadDayKes: reg.bizRevenueBadKes,
+          bankProvider: reg.bizBankProvider,
+          paymentChannels: reg.bizPaymentChannels,
+        },
+      });
+
       await tx.membership.create({
-        data: { personId: personParty.id, orgId: reg.groupPartyId, role: 'MEMBER' },
+        data: { personId: personPartyId, orgId: bizPartyId, role: 'OTHER', customRole: 'Owner' },
       });
     }
 
-    // 3 · the enterprise
-    if (reg.workRaw) {
+    // 2c · linking to an org already picked via search — a group, a
+    // business, or both. Idempotent: reusing an existing phone (1 above)
+    // can mean this person is already a member, and re-adding them must
+    // reinstate rather than crash on the unique (personId, orgId) index.
+    for (const targetOrgId of [reg.groupPartyId, reg.bizPartyId].filter((x): x is string => Boolean(x))) {
+      const existingMembership = await tx.membership.findUnique({
+        where: { personId_orgId: { personId: personPartyId, orgId: targetOrgId } },
+      });
+      if (existingMembership) {
+        if (existingMembership.exitedAt) {
+          await tx.membership.update({ where: { id: existingMembership.id }, data: { exitedAt: null } });
+        }
+      } else {
+        await tx.membership.create({
+          data: {
+            personId: personPartyId, orgId: targetOrgId,
+            role: targetOrgId === reg.bizPartyId ? 'OTHER' : toMemberRole(reg.orgRole),
+            customRole: targetOrgId === reg.bizPartyId ? 'Contact' : undefined,
+          },
+        });
+      }
+    }
+
+    // 3 · an individual's own side enterprise — unregistered work done
+    // alongside a group/personal registration. The dedicated business
+    // path (2b) owns Enterprise creation for a first-class Business.
+    if (reg.workRaw && reg.joiningAs !== 'biz') {
       await tx.enterprise.create({
         data: {
-          partyId: orgPartyId ?? personParty.id,
+          partyId: orgPartyId ?? personPartyId,
           workRaw: reg.workRaw,
           segment: reg.segment,
           isRegistered: reg.hasRegisteredBusiness === 'yes',
@@ -295,33 +411,20 @@ export async function completeRegistration(ctx: Ctx, id: string) {
       });
     }
 
-    // 4 · attestations for what we actually verified ourselves
-    if (reg.msisdnVerifiedAt) {
-      await tx.attestation.create({
-        data: {
-          subjectId: personParty.id,
-          claimType: 'MSISDN_VERIFIED',
-          claimValue: { msisdn: reg.msisdn },
-          method: 'API',
-          issuedAt: reg.msisdnVerifiedAt,
-        },
-      });
-    }
-
-    // 4b · hand the documents uploaded during registration over to the
+    // 4 · hand the documents uploaded during registration over to the
     // real party they belong to. They live on the registration until
     // now — completing it is exactly the point they need to be findable
     // wherever staff actually look for a party's paperwork (the group's
     // own page, not just the registration record it started from).
     await tx.document.updateMany({
       where: { registrationId: id, partyId: null },
-      data: { partyId: orgPartyId ?? personParty.id },
+      data: { partyId: bizPartyId ?? orgPartyId ?? personPartyId },
     });
 
     // 5 · close the funnel record
     const done = await tx.registration.update({
       where: { id },
-      data: { status: 'COMPLETE' as RegistrationStatus, completedAt: new Date(), partyId: personParty.id },
+      data: { status: 'COMPLETE' as RegistrationStatus, completedAt: new Date(), partyId: personPartyId },
     });
 
     await recordAudit(
@@ -329,18 +432,20 @@ export async function completeRegistration(ctx: Ctx, id: string) {
       {
         action: 'registration.completed',
         targetType: 'party',
-        targetId: personParty.id,
+        targetId: personPartyId,
         payload: {
           registrationId: id,
           joiningAs: reg.joiningAs,
           county: reg.county,
           orgCreated: Boolean(orgPartyId),
+          bizCreated: Boolean(bizPartyId),
+          reusedExistingPerson: Boolean(existingPerson),
         },
       },
       tx as never,
     );
 
-    return { registration: done, partyId: personParty.id, orgPartyId };
+    return { registration: done, partyId: personPartyId, orgPartyId, bizPartyId };
   });
 }
 
