@@ -7,15 +7,18 @@ import {
   actionUpload, actionListDocuments, actionRemoveDocument,
   actionDeclarePayment, actionDeferPayment,
 } from './upload';
+import { actionInitiateStkPush, actionCheckPaymentStatus } from './payment';
 
 /* ═══════════════════════════ documents ═══════════════════════════ */
 
 const KINDS: [string, string][] = [
   ['NATIONAL_ID', 'National ID'],
+  ['PASSPORT', 'Passport photo'],
   ['GROUP_CONSTITUTION', 'Group constitution or rules'],
   ['MEMBER_LIST', 'Member list'],
   ['MINUTES', 'Meeting minutes'],
   ['REGISTRATION_CERT', 'Registration certificate'],
+  ['BUSINESS_CERT', 'Business registration certificate'],
   ['KRA_PIN', 'KRA PIN certificate'],
   ['PERMIT', 'County permit or licence'],
   ['PAYMENT_RECEIPT', 'Payment receipt'],
@@ -201,12 +204,15 @@ export function DocumentStep({ registrationId }: { registrationId: string }) {
 /* ═══════════════════════════ payment ═══════════════════════════ */
 
 export function PaymentStep({
-  registrationId, choice, feeCoveredByGroup, onChoice,
+  registrationId, choice, feeCoveredByGroup, onChoice, defaultMsisdn,
 }: {
   registrationId: string;
-  choice: 'paid' | 'later' | '';
+  choice: 'paid' | 'stk' | 'later' | '';
   feeCoveredByGroup?: boolean;
-  onChoice: (c: 'paid' | 'later', declared: boolean) => void;
+  onChoice: (c: 'paid' | 'stk' | 'later', declared: boolean) => void;
+  /** Pre-fills the STK phone field with the number already on the
+   *  registration — most people pay from the same line they registered. */
+  defaultMsisdn?: string;
 }) {
   const [method, setMethod] = useState<'MPESA' | 'BANK_TRANSFER' | 'CASH_TO_AGENT'>('MPESA');
   const [reference, setReference] = useState('');
@@ -217,6 +223,11 @@ export function PaymentStep({
   const [covered, setCovered] = useState(false);
   const [pending, start] = useTransition();
   const announce = useAnnounce();
+
+  const [stkMsisdn, setStkMsisdn] = useState(defaultMsisdn ?? '');
+  const [stkAmount, setStkAmount] = useState('');
+  const [stkStatus, setStkStatus] = useState<'idle' | 'sending' | 'waiting' | 'confirmed' | 'failed'>('idle');
+  const [stkError, setStkError] = useState<string | null>(null);
 
   useEffect(() => {
     if (!feeCoveredByGroup || covered) return;
@@ -233,6 +244,25 @@ export function PaymentStep({
     // render that happens before `covered` flips true.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [feeCoveredByGroup]);
+
+  // While waiting on a real Daraja callback (sandbox/production — console
+  // mode never reaches this state, since sendStkPush already resolves
+  // CONFIRMED synchronously), poll every 4s until the callback lands.
+  // Declared above the feeCoveredByGroup early return below — hooks must
+  // run in the same order on every render, group-covered or not.
+  useEffect(() => {
+    if (stkStatus !== 'waiting') return;
+    const id = setInterval(async () => {
+      const r = await actionCheckPaymentStatus(registrationId);
+      if (r.status === 'CONFIRMED') {
+        setStkStatus('confirmed'); onChoice('stk', true);
+        announce('Payment received — thank you.', 'assertive');
+      }
+    }, 4000);
+    return () => clearInterval(id);
+    // onChoice/announce excluded — same reasoning as the effect above.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [stkStatus, registrationId]);
 
   if (feeCoveredByGroup) {
     return (
@@ -281,6 +311,27 @@ export function PaymentStep({
     });
   }
 
+  function sendStkPush() {
+    setStkError(null);
+    setStkStatus('sending');
+    start(async () => {
+      const r = await actionInitiateStkPush({
+        registrationId, msisdn: stkMsisdn, amountKes: stkAmount ? Number(stkAmount) : undefined,
+      });
+      if (!r.ok) {
+        setStkStatus('failed'); setStkError(r.error); announce(r.error, 'assertive');
+        return;
+      }
+      if (r.status === 'CONFIRMED') {
+        setStkStatus('confirmed'); onChoice('stk', true);
+        announce('Payment received — thank you.', 'assertive');
+      } else {
+        setStkStatus('waiting');
+        announce('Check your phone and enter your M-Pesa PIN.', 'assertive');
+      }
+    });
+  }
+
   return (
     <>
       <h2 className="qh">Have you paid the registration fee?</h2>
@@ -291,13 +342,23 @@ export function PaymentStep({
       </p>
 
       <div className="opts">
+        <button type="button" className="opt" aria-pressed={choice === 'stk'}
+          onClick={() => onChoice('stk', false)}>
+          <span className="icbox" style={{ background: 'var(--green-t)', color: 'var(--green)' }}>
+            <Icon name="phone-call" size={18} />
+          </span>
+          <span>
+            <span className="t">Pay now with M-Pesa</span>
+            <span className="d">Esoko sends a prompt to your phone — enter your PIN there</span>
+          </span>
+        </button>
         <button type="button" className="opt" aria-pressed={choice === 'paid'}
           onClick={() => onChoice('paid', false)}>
           <span className="icbox" style={{ background: 'var(--green-t)', color: 'var(--green)' }}>
             <Icon name="check-circle" size={18} />
           </span>
           <span>
-            <span className="t">Yes, I have paid</span>
+            <span className="t">I already paid</span>
             <span className="d">You will enter the transaction code from your message</span>
           </span>
         </button>
@@ -310,6 +371,64 @@ export function PaymentStep({
           </span>
         </button>
       </div>
+
+      {choice === 'stk' && stkStatus !== 'confirmed' && (
+        <div className="sub2">
+          <div className="fld">
+            <label className="lab" htmlFor="stk-msisdn">Phone number to prompt</label>
+            <input className="inp mono" id="stk-msisdn" value={stkMsisdn} inputMode="tel"
+              onChange={(e) => setStkMsisdn(e.target.value)} placeholder="+254 7…"
+              disabled={stkStatus === 'sending' || stkStatus === 'waiting'} />
+          </div>
+          <div className="fld">
+            <label className="lab" htmlFor="stk-amount">Amount to pay (KES)</label>
+            <input className="inp mono" id="stk-amount" inputMode="numeric" value={stkAmount}
+              onChange={(e) => setStkAmount(e.target.value.replace(/\D/g, ''))} placeholder="200"
+              disabled={stkStatus === 'sending' || stkStatus === 'waiting'} />
+            <p className="hint">Pay whatever amount applies to you — Esoko does not fix one figure for everyone.</p>
+          </div>
+
+          {stkStatus === 'idle' || stkStatus === 'failed' ? (
+            <button type="button" className="btn btn-p" onClick={sendStkPush}
+              disabled={pending || !stkMsisdn.trim() || !stkAmount.trim()}>
+              <Icon name="send" size={16} />Send the prompt
+            </button>
+          ) : (
+            <div className="paidbox">
+              <span className="icbox" style={{ background: 'var(--green-t)', color: 'var(--green)' }}>
+                <Icon name="clock" size={19} />
+              </span>
+              <div>
+                <strong style={{ display: 'block', marginBottom: 3 }}>Check your phone</strong>
+                <span className="hint" style={{ margin: 0 }}>
+                  A prompt was sent to {stkMsisdn}. Enter your M-Pesa PIN there — this updates on
+                  its own once it's confirmed, no need to reload.
+                </span>
+              </div>
+            </div>
+          )}
+
+          {stkError && (
+            <p className="err" role="alert" style={{ marginTop: 12 }}>
+              <Icon name="alert-circle" size={15} />{stkError}
+            </p>
+          )}
+        </div>
+      )}
+
+      {choice === 'stk' && stkStatus === 'confirmed' && (
+        <div className="paidbox">
+          <span className="icbox" style={{ background: 'var(--green-t)', color: 'var(--green)' }}>
+            <Icon name="check-circle" size={19} />
+          </span>
+          <div>
+            <strong style={{ display: 'block', marginBottom: 3 }}>Payment received</strong>
+            <span className="hint" style={{ margin: 0 }}>
+              Confirmed automatically by M-Pesa — no manual check needed. You will get an SMS too.
+            </span>
+          </div>
+        </div>
+      )}
 
       {choice === 'paid' && !saved && (
         <div className="sub2">

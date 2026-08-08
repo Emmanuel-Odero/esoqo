@@ -12,7 +12,7 @@ export interface Form {
   feeCoverage: 'group' | 'self' | '';
   memberCount: string; hasKraPin: 'yes' | 'no' | '';
   ussdSetupChoice: 'now' | 'later' | '';
-  paymentChoice: 'paid' | 'later' | '';
+  paymentChoice: 'paid' | 'stk' | 'later' | '';
   wantsPriceSms: boolean; wantsReceiptSms: boolean; wantsExpirySms: boolean;
 
   /** Only asked once search-before-create for the group comes up empty

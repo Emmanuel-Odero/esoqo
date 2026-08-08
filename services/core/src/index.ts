@@ -1,7 +1,10 @@
 import Fastify from 'fastify';
 import helmet from '@fastify/helmet';
 import rateLimit from '@fastify/rate-limit';
-import { verifyChain, confirmStoreOrderPayment } from '@esoko/db';
+import {
+  verifyChain, confirmStoreOrderPayment, confirmRegistrationPaymentByCheckoutId,
+  StoreOrderError,
+} from '@esoko/db';
 import { parseStkCallback } from '@esoko/payments';
 
 /**
@@ -41,8 +44,16 @@ app.get('/ready', async (_req, reply) => {
 /**
  * Safaricom's confirmation for an STK push, arriving asynchronously —
  * sometimes twice, sometimes not at all. This is the "real HTTP
- * endpoint" the store checkout flow needs, and the first genuine
- * consumer of this service beyond /health and /ready.
+ * endpoint" both the store checkout flow and /join's "pay now" option
+ * need, and the first genuine consumer of this service beyond /health
+ * and /ready.
+ *
+ * A single checkout can only ever belong to one of the two — store
+ * checkout or registration fee — so this tries the store order first
+ * (the more established of the two) and falls through to a
+ * registration payment only on StoreOrderError('NOT_FOUND'). Any other
+ * failure from the first attempt is a real error, not "try the other
+ * kind next."
  */
 app.post('/webhooks/mpesa/stk-callback', async (req, reply) => {
   const parsed = parseStkCallback(req.body);
@@ -60,8 +71,16 @@ app.post('/webhooks/mpesa/stk-callback', async (req, reply) => {
   try {
     await confirmStoreOrderPayment(parsed.checkoutRequestId, parsed.mpesaReceiptCode ?? '');
   } catch (e) {
-    // Still 200 — Safaricom retries on non-2xx, and a retry storm on an
-    // already-broken match helps no one. The error is logged for a human.
+    if (e instanceof StoreOrderError && e.code === 'NOT_FOUND') {
+      try {
+        await confirmRegistrationPaymentByCheckoutId(parsed.checkoutRequestId, parsed.mpesaReceiptCode ?? '');
+      } catch (e2) {
+        // Still 200 — Safaricom retries on non-2xx, and a retry storm on
+        // an already-broken match helps no one. Logged for a human.
+        app.log.error({ err: e2, checkoutRequestId: parsed.checkoutRequestId }, 'failed to confirm registration payment');
+      }
+      return reply.send({ ok: true });
+    }
     app.log.error({ err: e, checkoutRequestId: parsed.checkoutRequestId }, 'failed to confirm store order payment');
   }
   return reply.send({ ok: true });

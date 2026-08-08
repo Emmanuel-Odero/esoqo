@@ -119,6 +119,7 @@ export function MoreAboutYou({
             choice={f.paymentChoice}
             feeCoveredByGroup={false}
             onChoice={(c) => set('paymentChoice', c)}
+            defaultMsisdn={f.msisdn}
           />
         </Section>
       )}

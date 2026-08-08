@@ -17,6 +17,7 @@
     "@esoko/db": "workspace:*",
     "@esoko/domain": "workspace:*",
     "@esoko/auth": "workspace:*",
+    "@esoko/payments": "workspace:*",
     "@esoko/ui": "workspace:*",
     "@esoko/a11y": "workspace:*",
     "server-only": "^0.0.1",
