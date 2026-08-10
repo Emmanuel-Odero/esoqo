@@ -14,9 +14,16 @@ const STORE = 'queued-sales';
 export interface QueuedSale {
   clientSaleId: string;
   storeId: string;
-  paymentMethod: 'CASH' | 'MPESA_TILL';
+  paymentMethod: 'CASH' | 'MPESA_TILL' | 'ON_ACCOUNT';
   soldAt: string;
-  items: { productId: string; quantity: number; unitPriceKes: number }[];
+  items: { productId: string; variantId?: string | null; quantity: number; unitPriceKes: number; discountKes?: number }[];
+  discountKes?: number;
+  tenderedKes?: number;
+  cashierId?: string | null;
+  shiftId?: string | null;
+  customerId?: string | null;
+  customerMsisdn?: string;
+  customerName?: string;
 }
 
 function openDb(): Promise<IDBDatabase> {
