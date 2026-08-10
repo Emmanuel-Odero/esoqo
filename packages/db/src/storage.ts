@@ -1,4 +1,7 @@
 import { createHash, randomBytes } from 'node:crypto';
+import { mkdir, readFile, unlink, writeFile } from 'node:fs/promises';
+import path from 'node:path';
+import { appEnv } from '@esoko/domain';
 import {
   S3Client,
   PutObjectCommand,
@@ -25,25 +28,52 @@ import {
  * egress fees, which is the one that bites elsewhere. Render's own
  * filesystem is ephemeral and wiped on every restart/deploy, so local
  * disk was never viable beyond local development.
+ *
+ * The provider is gated the same way SMS_PROVIDER and MPESA_PROVIDER
+ * are: STORAGE_PROVIDER=r2 uses R2, STORAGE_PROVIDER=local keeps files
+ * on the dev machine. Unset, the APP_ENV switch decides: development
+ * always keeps local storage — even when R2 credentials are present, so
+ * a dev box can never touch the production bucket — while
+ * LOCAL_TEST_PROD and production use R2. Missing R2 credentials fail
+ * with a clear error rather than dial a half-configured endpoint,
+ * which surfaces as an opaque SSL handshake failure (alert 40).
  */
+
+const PROVIDER =
+  process.env.STORAGE_PROVIDER ?? (appEnv() === 'development' ? 'local' : 'r2');
+if (PROVIDER !== 'r2' && PROVIDER !== 'local') {
+  throw new Error(`STORAGE_PROVIDER="${PROVIDER}" is not implemented — use r2 or local`);
+}
 
 const BUCKET = process.env.R2_BUCKET ?? 'esoko';
 
-const s3 = new S3Client({
-  region: 'auto',
-  endpoint: `https://${process.env.R2_ACCOUNT_ID}.r2.cloudflarestorage.com`,
-  credentials: {
-    accessKeyId: process.env.R2_ACCESS_KEY_ID ?? '',
-    secretAccessKey: process.env.R2_SECRET_ACCESS_KEY ?? '',
-  },
-  // AWS SDK v3 defaults to sending a CRC32 trailer checksum on every
-  // request since ~3.729 — R2's S3-compatible API doesn't support that,
-  // and the resulting broken stream surfaces as an opaque SSL handshake
-  // failure (alert 40) rather than a clean HTTP error. Only compute a
-  // checksum when a command explicitly asks for one.
-  requestChecksumCalculation: 'WHEN_REQUIRED',
-  responseChecksumValidation: 'WHEN_REQUIRED',
-});
+// Local dev store lives on disk under <cwd>/.data/storage (gitignored).
+// The docker-compose bind mount keeps it on the host, so files survive
+// container restarts.
+const LOCAL_STORAGE_DIR = process.env.LOCAL_STORAGE_DIR ?? path.join(process.cwd(), '.data', 'storage');
+
+let r2: S3Client | undefined;
+function r2Client(): S3Client {
+  if (!process.env.R2_ACCOUNT_ID) {
+    throw new Error('R2 is not configured — set R2_ACCOUNT_ID or use STORAGE_PROVIDER=local');
+  }
+  r2 ??= new S3Client({
+    region: 'auto',
+    endpoint: `https://${process.env.R2_ACCOUNT_ID}.r2.cloudflarestorage.com`,
+    credentials: {
+      accessKeyId: process.env.R2_ACCESS_KEY_ID ?? '',
+      secretAccessKey: process.env.R2_SECRET_ACCESS_KEY ?? '',
+    },
+    // AWS SDK v3 defaults to sending a CRC32 trailer checksum on every
+    // request since ~3.729 — R2's S3-compatible API doesn't support that,
+    // and the resulting broken stream surfaces as an opaque SSL handshake
+    // failure (alert 40) rather than a clean HTTP error. Only compute a
+    // checksum when a command explicitly asks for one.
+    requestChecksumCalculation: 'WHEN_REQUIRED',
+    responseChecksumValidation: 'WHEN_REQUIRED',
+  });
+  return r2;
+}
 
 export const MAX_BYTES = 10 * 1024 * 1024;
 
@@ -127,7 +157,7 @@ export function sha256(buf: Buffer): string {
   return createHash('sha256').update(buf).digest('hex');
 }
 
-/* ── storage adapter · Cloudflare R2 ─────────────────────────── */
+/* ── storage adapter · Cloudflare R2 + local dev ─────────────── */
 
 function assertSafeKey(key: string): void {
   // Defence in depth: the key comes from our own database, but a stored
@@ -137,20 +167,33 @@ function assertSafeKey(key: string): void {
 
 export async function putObject(key: string, buf: Buffer): Promise<void> {
   assertSafeKey(key);
-  await s3.send(new PutObjectCommand({ Bucket: BUCKET, Key: key, Body: buf }));
+  if (PROVIDER === 'r2') {
+    await r2Client().send(new PutObjectCommand({ Bucket: BUCKET, Key: key, Body: buf }));
+    return;
+  }
+  const p = path.join(LOCAL_STORAGE_DIR, key);
+  await mkdir(path.dirname(p), { recursive: true });
+  await writeFile(p, buf);
 }
 
 export async function getObject(key: string): Promise<Buffer> {
   assertSafeKey(key);
-  const res = await s3.send(new GetObjectCommand({ Bucket: BUCKET, Key: key }));
-  const chunks: Buffer[] = [];
-  for await (const chunk of res.Body as AsyncIterable<Buffer>) chunks.push(chunk);
-  return Buffer.concat(chunks);
+  if (PROVIDER === 'r2') {
+    const res = await r2Client().send(new GetObjectCommand({ Bucket: BUCKET, Key: key }));
+    const chunks: Buffer[] = [];
+    for await (const chunk of res.Body as AsyncIterable<Buffer>) chunks.push(chunk);
+    return Buffer.concat(chunks);
+  }
+  return readFile(path.join(LOCAL_STORAGE_DIR, key));
 }
 
 export async function deleteObject(key: string): Promise<void> {
   assertSafeKey(key);
-  await s3.send(new DeleteObjectCommand({ Bucket: BUCKET, Key: key })).catch(() => undefined);
+  if (PROVIDER === 'r2') {
+    await r2Client().send(new DeleteObjectCommand({ Bucket: BUCKET, Key: key })).catch(() => undefined);
+    return;
+  }
+  await unlink(path.join(LOCAL_STORAGE_DIR, key)).catch(() => undefined);
 }
 
 export function isPreviewable(mime: string): boolean {

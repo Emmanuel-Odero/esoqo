@@ -1,6 +1,8 @@
 import Link from 'next/link';
 import { Icon } from '@esoko/ui';
 import { CAPABILITY_CATALOGUE, PAYMENT_APPROVAL_THRESHOLD } from '@esoko/db';
+import { mpesaProvider } from '@esoko/payments';
+import { appEnv } from '@esoko/domain';
 import { requireStaff } from '@/lib/session';
 
 export const dynamic = 'force-dynamic';
@@ -18,7 +20,11 @@ export default async function EstoreSettingsPage() {
   await requireStaff();
 
   const commerceCaps = CAPABILITY_CATALOGUE.find((g) => g.group === 'Stores & commerce')?.items ?? [];
-  const mpesaLive = process.env.MPESA_PROVIDER === 'live' || process.env.MPESA_PROVIDER === 'sandbox';
+  // Show what the running code actually uses, not the raw env var — APP_ENV
+  // forces console/storage-local even when live credentials are present.
+  const mpesa = mpesaProvider();
+  const mpesaLive = mpesa !== 'console';
+  const storageProvider = process.env.STORAGE_PROVIDER ?? (appEnv() === 'development' ? 'local' : 'r2');
   const storageConfigured = Boolean(process.env.R2_ACCOUNT_ID && process.env.R2_ACCESS_KEY_ID);
 
   return (
@@ -42,7 +48,7 @@ export default async function EstoreSettingsPage() {
                 <td className="sub" style={{ width: 190 }}>M-Pesa provider</td>
                 <td>
                   <span className={`pill ${mpesaLive ? 'p-ok' : 'p-warn'}`}>
-                    {process.env.MPESA_PROVIDER ?? 'console'}
+                    {mpesa}
                   </span>
                   {!mpesaLive && <span className="sub" style={{ marginLeft: 8 }}>STK pushes are logged, not sent</span>}
                 </td>
@@ -62,6 +68,15 @@ export default async function EstoreSettingsPage() {
               <tr>
                 <td className="sub" style={{ width: 190 }}>R2 bucket</td>
                 <td className="mono">{process.env.R2_BUCKET ?? 'esoko'}</td>
+              </tr>
+              <tr>
+                <td className="sub">Provider</td>
+                <td>
+                  <span className={`pill ${storageProvider === 'r2' ? 'p-ok' : 'p-warn'}`}>
+                    {storageProvider === 'r2' ? 'R2' : 'local disk'}
+                  </span>
+                  {storageProvider === 'local' && <span className="sub" style={{ marginLeft: 8 }}>dev files under .data/storage</span>}
+                </td>
               </tr>
               <tr>
                 <td className="sub">Credentials</td>

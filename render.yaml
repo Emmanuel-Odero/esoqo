@@ -38,6 +38,8 @@ services:
     envVars:
       - key: NODE_ENV
         value: production
+      - key: APP_ENV
+        value: production
       - key: LOG_LEVEL
         value: info
       - key: DATABASE_URL
@@ -81,6 +83,8 @@ services:
     envVars:
       - key: NODE_ENV
         value: production
+      - key: APP_ENV
+        value: production
       - key: DATABASE_URL
         fromDatabase:
           name: esoko-db
@@ -115,6 +119,8 @@ services:
     healthCheckPath: /api/health
     envVars:
       - key: NODE_ENV
+        value: production
+      - key: APP_ENV
         value: production
       - key: DATABASE_URL
         fromDatabase:
@@ -160,6 +166,8 @@ services:
     healthCheckPath: /signin
     envVars:
       - key: NODE_ENV
+        value: production
+      - key: APP_ENV
         value: production
       - key: DATABASE_URL
         fromDatabase:

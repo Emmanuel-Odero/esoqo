@@ -8,14 +8,32 @@
  * live credentials. `production` is intentionally unimplemented here;
  * flipping this on is a deliberate, reviewed change, not a default path.
  *
+ * The run mode (APP_ENV — see packages/domain/src/env.ts) decides the
+ * effective provider: development is always console (whatever
+ * MPESA_PROVIDER says), LOCAL_TEST_PROD defaults to the Daraja sandbox
+ * so a production release can be rehearsed without live money, and
+ * production honours MPESA_PROVIDER (default console).
+ *
  * Deliberately no `server-only` marker — this module is called both
  * from Next.js Server Actions and from services/core's plain-Node
  * webhook handler, and `server-only` throws unconditionally outside a
  * Next.js server-component bundling context.
  */
 
-const PROVIDER = process.env.MPESA_PROVIDER ?? 'console';
+import { appEnv } from '@esoko/domain';
+
 const SANDBOX_BASE = 'https://sandbox.safaricom.co.ke';
+
+export function mpesaProvider(): 'console' | 'sandbox' | 'production' {
+  if (appEnv() === 'development') return 'console';
+  const explicit = process.env.MPESA_PROVIDER;
+  if (explicit === 'sandbox' || explicit === 'production' || explicit === 'live') {
+    return explicit === 'live' ? 'production' : explicit;
+  }
+  return appEnv() === 'LOCAL_TEST_PROD' ? 'sandbox' : 'console';
+}
+
+const PROVIDER = mpesaProvider();
 
 export class MpesaError extends Error {
   constructor(
