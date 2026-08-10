@@ -45,35 +45,103 @@
   display: flex; align-items: center; justify-content: center;
   gap: 12px 20px; flex-wrap: wrap;
 }
+/* Joined wordmark: a CECF leaf-lock + "Child Elder Care Foundation",
+   with a small "+ Esoko" suffix so the partnership is said out loud.
+   On one row (>=880px) the two buttons flank it; below that the brand
+   takes its own row on top (order:-1, flex-basis:100%) and the buttons
+   share the row underneath. */
 .cecf-topnav-brand {
-  display: flex; align-items: center; justify-content: center; gap: 10px;
-  font-family: var(--cecf-font-display); font-weight: 600; font-size: 0.95rem;
+  display: flex; align-items: center; justify-content: center; gap: 9px;
+  font-family: var(--cecf-font-display); font-weight: 700; font-size: 1rem;
   color: var(--cecf-ink);
   flex: 0 0 100%; order: -1;
+  line-height: 1.1; text-align: center;
+}
+.cecf-topnav-brand .cecf-lock {
+  flex: none; width: 26px; height: 26px; border-radius: 8px;
+  background: var(--cecf-teal); color: #fff;
+  display: grid; place-items: center;
+}
+.cecf-topnav-brand .cecf-brand-sub {
+  font-family: var(--cecf-font-body); font-size: 0.72rem; font-weight: 600;
+  letter-spacing: .06em; text-transform: uppercase; color: var(--cecf-ochre);
+  padding: 3px 7px; border: 1px solid var(--cecf-ochre); border-radius: 999px;
 }
 @media (min-width: 880px) {
   .cecf-topnav-brand { flex: 0 0 auto; order: 0; }
   .cecf-topnav-center .cecf-nav-btn.esoko { order: -1; }
   .cecf-topnav-center .cecf-nav-btn.cecf { order: 1; }
 }
-/* <Logo/> (@esoko/ui) ships no layout CSS of its own — apps/web supplies
-   it via web.css's .lock rule. apps/app has never used <Logo/> before,
-   so the minimal shape is reproduced here rather than assumed present. */
-.cecf-topnav-brand .lock { display: flex; align-items: center; gap: .05em; font-size: 22px; line-height: 1; color: var(--navy); }
-.cecf-topnav-brand .lock .w { font-family: var(--font-display); font-weight: 800; letter-spacing: -.045em; color: var(--green); position: relative; top: .05em; }
-.cecf-topnav-brand .x { color: var(--cecf-ink-2); font-weight: 400; }
 .cecf-nav-btn {
   display: inline-flex; align-items: center; gap: 7px;
   padding: 9px 16px; border-radius: 7px; font-size: 0.86rem; font-weight: 600;
   font-family: var(--cecf-font-body);
-  border: 1.5px solid transparent; min-height: 40px; cursor: pointer;
+  border: 1.5px solid transparent; min-height: 44px; cursor: pointer;
+  text-decoration: none;
 }
-.cecf-nav-btn.esoko { border-color: var(--navy); color: var(--navy); background: #fff; }
-.cecf-nav-btn.esoko:hover { background: var(--navy); color: #fff; }
+.cecf-nav-btn.esoko { border-color: var(--cecf-teal); color: var(--cecf-teal); background: #fff; }
+.cecf-nav-btn.esoko:hover { background: var(--cecf-teal); color: #fff; }
 .cecf-nav-btn.cecf { background: var(--cecf-teal); color: #fff; }
 .cecf-nav-btn.cecf:hover { background: var(--cecf-teal-2); }
 
-/* ── form + "why esoko" hero: side by side on wide screens, hero
+/* ── masthead — "this is CECF, Esoko is behind it" ── */
+.cecf-masthead {
+  position: relative; overflow: hidden;
+  padding: 42px 22px 38px;
+  color: #fff;
+  background: linear-gradient(160deg, #0A3B42 0%, var(--cecf-teal) 55%, var(--cecf-teal-2) 100%);
+}
+.cecf-masthead::before {
+  content: ''; position: absolute; right: -90px; top: -110px;
+  width: 360px; height: 360px; border-radius: 50%;
+  background: radial-gradient(circle, rgba(192, 131, 37, .30), transparent 62%);
+}
+.cecf-masthead::after {
+  content: ''; position: absolute; right: 12%; bottom: -80px;
+  width: 240px; height: 240px; border-radius: 50%;
+  border: 1.5px solid rgba(250, 245, 236, .16);
+}
+.cecf-masthead-inner { max-width: 1040px; margin: 0 auto; position: relative; }
+.cecf-masthead-top { display: flex; gap: 18px; align-items: center; margin-bottom: 20px; }
+.cecf-kicker {
+  font-family: var(--font-mono); font-size: 0.72rem; letter-spacing: .14em;
+  text-transform: uppercase; color: #E8B45A; margin: 0;
+}
+.cecf-emblem { position: relative; flex: none; width: 74px; height: 74px; }
+.cecf-emblem-ring {
+  width: 62px; height: 62px; border-radius: 50%;
+  background: var(--cecf-sand); color: var(--cecf-teal);
+  border: 3px solid #fff;
+  display: grid; place-items: center;
+  box-shadow: 0 6px 18px rgba(0, 0, 0, .22);
+}
+.cecf-emblem-leaf { position: absolute; color: var(--cecf-ochre); }
+.cecf-emblem-leaf.leaf-l { left: -3px; top: 6px; }
+.cecf-emblem-leaf.leaf-r { right: 0; bottom: 12px; }
+.cecf-masthead h1 {
+  font-family: var(--cecf-font-display); font-weight: 600;
+  font-size: clamp(1.9rem, 5vw, 2.9rem); line-height: 1.05;
+  margin: 0 0 12px; color: #fff; max-width: 20ch;
+}
+.cecf-masthead .cecf-lede {
+  color: var(--cecf-teal-t); font-size: 1.02rem; max-width: 62ch; margin: 0;
+}
+.cecf-chips {
+  list-style: none; margin: 24px 0 0; padding: 0;
+  display: flex; flex-wrap: wrap; gap: 9px;
+}
+.cecf-chips li {
+  display: inline-flex; align-items: center; gap: 7px;
+  padding: 8px 13px; border-radius: 999px;
+  background: rgba(255, 255, 255, .10);
+  border: 1px solid rgba(255, 255, 255, .22);
+  font-size: 0.8rem; font-weight: 500; color: #F4F7F7;
+}
+.cecf-chips li .ic { color: #BFE3CE; }
+.cecf-chips li.ochre { background: #A66E1D; border-color: rgba(255, 255, 255, .22); color: #fff; }
+.cecf-chips li.ochre .ic { color: #FFE9C0; }
+
+/* ── form + "why join" hero: side by side on wide screens, hero
    drops below the form on narrow ones. Source order is form-then-hero
    so the narrow-screen (no grid) case needs no reordering — it's
    already the fallback stacking order. ── */
@@ -91,24 +159,31 @@
 .cecf-layout .wrap { margin: 0; padding: 0; max-width: none; }
 .cecf-layout .cecf-hero { margin: 0; padding: 0; max-width: none; }
 
-/* ── "why esoko" hero ── */
-.cecf-hero { max-width: 660px; margin: 0 auto; padding: 36px 22px 8px; }
+/* ── "why join" column ── */
+.cecf-hero {
+  max-width: 660px; margin: 0 auto; padding: 6px 0 8px;
+}
 .cecf-hero-eyebrow {
   font-family: var(--font-mono); font-size: 0.72rem; letter-spacing: .12em;
-  text-transform: uppercase; color: var(--green); margin: 0 0 10px;
+  text-transform: uppercase; color: var(--cecf-ochre); margin: 0 0 10px;
 }
-.cecf-hero h2 { font-size: clamp(1.5rem, 3.4vw, 2.05rem); margin-bottom: 10px; }
-.cecf-hero p.lede { font-size: 1.02rem; color: var(--tx-2); max-width: 54ch; }
+.cecf-hero h2 {
+  font-family: var(--cecf-font-display); font-weight: 600;
+  font-size: clamp(1.4rem, 3vw, 1.9rem); margin-bottom: 10px; color: var(--cecf-ink);
+}
+.cecf-hero p.lede { font-size: 1rem; color: var(--cecf-ink-2); max-width: 54ch; }
 .cecf-points { list-style: none; margin: 22px 0 0; padding: 0; display: grid; gap: 12px; }
 .cecf-points li {
-  display: flex; gap: 12px; align-items: flex-start;
-  padding: 14px 16px; border: 1px solid var(--line); border-radius: 10px; background: #fff;
+  display: flex; gap: 13px; align-items: flex-start;
+  padding: 15px 17px; border: 1px solid var(--cecf-line); border-radius: 14px;
+  background: #fff; box-shadow: 0 1px 2px rgba(36, 31, 27, .05);
 }
-.cecf-points .icbox { background: var(--green-t); color: var(--green); }
-.cecf-points strong { display: block; font-size: 0.93rem; }
-.cecf-points span.d { display: block; font-size: 0.85rem; color: var(--tx-2); margin-top: 2px; }
+.cecf-points li:first-child .icbox { background: var(--cecf-teal-t); color: var(--cecf-teal); }
+.cecf-points .icbox { background: var(--cecf-ochre-t); color: var(--cecf-ochre); }
+.cecf-points strong { display: block; font-size: 0.93rem; color: var(--cecf-ink); }
+.cecf-points span.d { display: block; font-size: 0.85rem; color: var(--cecf-ink-2); margin-top: 2px; }
 
-/* ── CECF partnership band ── */
+/* ── "your record, shared to work" band ── */
 .cecf-band {
   margin-top: 48px;
   background: var(--cecf-teal);
@@ -116,24 +191,133 @@
   font-family: var(--cecf-font-body);
 }
 .cecf-band-inner {
-  max-width: 660px; margin: 0 auto; padding: 40px 22px;
-  display: flex; gap: 24px; align-items: center; flex-wrap: wrap;
+  max-width: 760px; margin: 0 auto; padding: 44px 22px;
+  text-align: center;
 }
 .cecf-band-logo {
-  flex: none; width: 68px; height: 68px; border-radius: 14px;
-  background: #fff; padding: 8px; display: grid; place-items: center;
+  width: 72px; height: 72px; margin: 0 auto 20px;
+  border-radius: 16px; background: #fff; padding: 9px;
+  display: grid; place-items: center;
+  box-shadow: 0 6px 18px rgba(0, 0, 0, .18);
 }
 .cecf-band-logo img { width: 100%; height: 100%; object-fit: contain; }
-.cecf-band-copy { flex: 1; min-width: 240px; }
 .cecf-band-copy h3 {
-  font-family: var(--cecf-font-display); color: #fff; font-size: 1.25rem;
-  font-weight: 600; margin-bottom: 6px;
+  font-family: var(--cecf-font-display); color: #fff; font-size: 1.5rem;
+  font-weight: 600; margin: 0 0 10px;
 }
-.cecf-band-copy p { color: var(--cecf-teal-t); margin: 0 0 16px; font-size: 0.92rem; max-width: 56ch; }
-.cecf-band .cecf-nav-btn.cecf { background: var(--cecf-ochre); }
-.cecf-band .cecf-nav-btn.cecf:hover { background: #A66E1D; }
+.cecf-band-copy p { color: var(--cecf-teal-t); margin: 0 auto 18px; font-size: 0.95rem; max-width: 56ch; }
+.cecf-flow {
+  display: flex; align-items: center; justify-content: center;
+  flex-wrap: wrap; gap: 8px; margin: 0 auto 14px;
+}
+.cecf-flow-node {
+  display: inline-flex; align-items: center; gap: 6px;
+  padding: 7px 12px; border-radius: 999px;
+  background: rgba(255, 255, 255, .10); border: 1px solid rgba(255, 255, 255, .24);
+  font-size: 0.82rem; font-weight: 600;
+}
+.cecf-flow-node .ic { color: #BFE3CE; }
+.cecf-flow-node.ochre { background: #A66E1D; border-color: rgba(255, 255, 255, .24); color: #fff; }
+.cecf-flow-node.ochre .ic { color: #FFE9C0; }
+.cecf-flow-arrow { color: var(--cecf-sand); opacity: .7; }
+.cecf-band-note { font-size: 0.85rem; color: var(--cecf-teal-t); margin-top: 0; }
+.cecf-band .cecf-nav-btn.cecf { background: #E8B45A; color: #241F1B; }
+.cecf-band .cecf-nav-btn.cecf:hover { background: #F2C26E; }
 
 @media (max-width: 560px) {
   .cecf-topnav { padding: 12px 16px; }
-  .cecf-band-inner { padding: 32px 18px; }
+  .cecf-band-inner { padding: 36px 18px; }
+  .cecf-masthead { padding: 34px 18px 32px; }
 }
+
+/* ── /join wizard polish ── */
+
+/* Labeled milestones replace the anonymous progress bar. Scoped, and
+   .pcount (kept) still carries the step/ETA line. */
+.cecf-scope .psteps {
+  list-style: none; margin: 0 0 8px; padding: 0;
+  display: flex; gap: 2px;
+}
+.cecf-scope .pstep {
+  flex: 1; min-width: 0;
+  display: flex; flex-direction: column; align-items: center; gap: 6px;
+  position: relative;
+}
+.cecf-scope .pstep:not(:last-child)::after {
+  content: ''; position: absolute; top: 11px; left: calc(50% + 14px);
+  width: calc(100% - 28px); height: 2px; background: var(--line);
+}
+.cecf-scope .pstep.done:not(:last-child)::after { background: var(--green); }
+.cecf-scope .pstep-dot {
+  width: 24px; height: 24px; border-radius: 50%; flex: none; z-index: 1;
+  display: grid; place-items: center;
+  font-family: var(--font-mono); font-size: 0.68rem; font-weight: 600;
+  color: var(--tx-3); border: 1.5px solid var(--line); background: var(--paper);
+}
+.cecf-scope .pstep.done .pstep-dot { background: var(--green); border-color: var(--green); color: #fff; }
+.cecf-scope .pstep.current .pstep-dot {
+  border-color: var(--green); color: var(--green);
+  box-shadow: 0 0 0 3px rgba(31, 161, 99, .12);
+}
+.cecf-scope .pstep-label {
+  font-family: var(--font-mono); font-size: 0.62rem; letter-spacing: .08em;
+  text-transform: uppercase; color: var(--tx-3);
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 100%;
+}
+.cecf-scope .pstep.done .pstep-label { color: var(--green); }
+.cecf-scope .pstep.current .pstep-label { color: var(--cecf-teal); font-weight: 600; }
+
+/* One-line reassurance strip above the wizard card on narrow screens —
+   desktop shows the "why join" column beside the form instead. Rendered
+   as chips to echo the masthead. */
+.cecf-scope .jtrust {
+  display: none; align-items: center; gap: 8px; flex-wrap: wrap;
+  margin: 0 0 16px;
+}
+.cecf-scope .jtrust > span {
+  display: inline-flex; align-items: center;
+  padding: 8px 13px; border-radius: 999px;
+  background: #fff; border: 1px solid var(--cecf-line);
+  font-size: 0.8rem; font-weight: 500; color: var(--cecf-ink-2);
+}
+.cecf-scope .jtrust .jt { border: 0; padding: 0; background: none; color: var(--cecf-ochre); font-weight: 700; }
+@media (max-width: 899px) { .cecf-scope .jtrust { display: flex; } }
+
+/* Phone number field — the identity field gets a touch more presence. */
+.cecf-scope .inp.msisdn { font-size: 1.12rem; letter-spacing: .02em; }
+
+/* Step 1: once "who's joining" is chosen, the four cards collapse to a
+   compact summary row so the name fields stay in the viewport and the
+   user never scrolls to reach Continue. */
+.cecf-scope .opt.chosen { flex-wrap: wrap; padding: 12px 14px; }
+.cecf-scope .opt.chosen .icbox { width: 28px; height: 28px; }
+.cecf-scope .opt.chosen .chosen-change {
+  font-family: var(--font-mono); font-size: 0.66rem; letter-spacing: .08em;
+  text-transform: uppercase; color: var(--green); font-weight: 600;
+}
+
+/* OTP reassurance line (step 4, the trust moment). */
+.cecf-scope .sure {
+  display: flex; align-items: center; gap: 6px;
+  color: var(--cecf-teal); font-weight: 500;
+}
+
+/* Done card: a pop-in that respects reduced motion. */
+.cecf-scope .donecard { animation: esoko-done-pop .45s cubic-bezier(.2, .8, .3, 1.2); }
+.cecf-scope .donecard .icbox { animation: esoko-check-pop .5s .1s cubic-bezier(.2, .8, .3, 1.3) both; }
+@keyframes esoko-done-pop {
+  from { opacity: 0; transform: translateY(6px) scale(.985); }
+  to { opacity: 1; transform: none; }
+}
+@keyframes esoko-check-pop {
+  from { transform: scale(.5); opacity: 0; }
+  to { transform: scale(1); opacity: 1; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .cecf-scope .donecard, .cecf-scope .donecard .icbox { animation: none; }
+}
+
+/* "Next step" block on the done card — teal-tinted so it reads as an
+   instruction, distinct from the green "what you asked us to send". */
+.cecf-scope .done-next { background: var(--cecf-teal-t); border-color: #BCD3D6; }
+.cecf-scope .done-next strong { color: var(--cecf-teal); }
