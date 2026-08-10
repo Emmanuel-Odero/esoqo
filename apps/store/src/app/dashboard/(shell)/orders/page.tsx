@@ -33,7 +33,7 @@ export default async function OrdersPage() {
           <p style={{ color: 'var(--tx-2)', fontSize: '.88rem', margin: 0 }}>No orders yet.</p>
         </div>
       ) : (
-        <div className="card" style={{ padding: 0, overflow: 'hidden' }}>
+        <div className="card tbl-wrap" style={{ padding: 0 }}>
           <table className="dtbl">
             <thead><tr><th>Order</th><th>Buyer</th><th>Phone</th><th>Items</th><th>Total</th><th>Status</th><th /></tr></thead>
             <tbody>
