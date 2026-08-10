@@ -1,5 +1,5 @@
 import { prisma } from '../client';
-import { requireCapability, type Capability, type Ctx } from '../capabilities';
+import { requireCapability, AuthorisationError, type Capability, type Ctx } from '../capabilities';
 import { recordAudit } from '../audit';
 
 /**
@@ -7,7 +7,10 @@ import { recordAudit } from '../audit';
  *
  * A store belongs to an Enterprise, which belongs to a Party — the
  * owner must already be a registered, credentialed subject before a
- * store can exist. There is no separate merchant-identity system.
+ * store can exist. There is no separate merchant-identity system for
+ * the OWNER. There is a lighter one for whoever the owner puts behind
+ * the till — see the AGENT branch in assertOwnsStore below, and
+ * dal/cashier.ts.
  */
 
 export class StoreError extends Error {
@@ -25,13 +28,37 @@ function slugify(name: string): string {
     .slice(0, 48);
 }
 
-/** Loads a store and checks the caller holds `capability` scoped to its owning party. */
+/**
+ * Loads a store and checks the caller may act on it as `capability`.
+ * Two distinct callers land here:
+ *   · a SUBJECT (the owner) — authorised by owning the enterprise's
+ *     Party, via the `partyId` qualifier every SUBJECT capability
+ *     carries (e.g. `pos.sell:own`).
+ *   · an AGENT (a cashier or manager signed in at the till, see
+ *     dal/cashier.ts) — authorised by ctx.storeId matching this store
+ *     and holding the capability outright, no qualifier: a cashier
+ *     session's whole capability list already IS the store-scoped
+ *     grant, there's no separate Party to own anything.
+ * Every DAL function that calls this transparently accepts both —
+ * that's the point of routing both through one gate.
+ */
 export async function assertOwnsStore(ctx: Ctx, storeId: string, capability: Capability) {
   const store = await prisma.store.findUnique({
     where: { id: storeId },
     include: { enterprise: true },
   });
   if (!store) throw new StoreError('Store not found', 'NOT_FOUND');
+
+  if (ctx.actorType === 'AGENT' && ctx.storeId) {
+    // A session scoped to a different store must never fall through to
+    // an unscoped capability check below — that check has no idea what
+    // store it's being asked about, so it would happily authorise a
+    // cashier from shop A to act on shop B.
+    if (ctx.storeId !== storeId) throw new AuthorisationError(capability, ctx);
+    requireCapability(ctx, capability);
+    return store;
+  }
+
   requireCapability(ctx, capability, { partyId: store.enterprise.partyId });
   return store;
 }
@@ -81,14 +108,16 @@ export async function createStore(ctx: Ctx, input: CreateStoreInput) {
   return store;
 }
 
-export async function updateStore(
-  ctx: Ctx,
-  storeId: string,
-  patch: Partial<Pick<CreateStoreInput, 'name' | 'themeKey' | 'posEnabled'>>,
-) {
+export interface StoreSettingsPatch extends Partial<Pick<CreateStoreInput, 'name' | 'themeKey' | 'posEnabled'>> {
+  etimsEnabled?: boolean;
+  loyaltyEnabled?: boolean;
+  loyaltyPerKes?: number;
+}
+
+export async function updateStore(ctx: Ctx, storeId: string, patch: StoreSettingsPatch) {
   await assertOwnsStore(ctx, storeId, 'store.write');
   const store = await prisma.store.update({ where: { id: storeId }, data: patch });
-  await recordAudit(ctx, { action: 'store.updated', targetType: 'store', targetId: storeId, payload: patch });
+  await recordAudit(ctx, { action: 'store.updated', targetType: 'store', targetId: storeId, payload: { ...patch } });
   return store;
 }
 
@@ -111,8 +140,44 @@ export async function getStoreForOwner(ctx: Ctx, storeId: string) {
 export async function getStoreBySlug(_ctx: Ctx, slug: string) {
   return prisma.store.findFirst({
     where: { slug, status: 'ACTIVE' },
-    include: { products: { where: { status: 'ACTIVE' }, orderBy: { createdAt: 'desc' } } },
+    include: {
+      products: {
+        where: { status: 'ACTIVE' },
+        include: { images: { orderBy: { position: 'asc' } }, variants: true },
+        orderBy: { createdAt: 'desc' },
+      },
+      fulfilmentOptions: { where: { active: true }, orderBy: { kind: 'asc' } },
+    },
   });
+}
+
+/* ── delivery / pickup options ───────────────────────────────── */
+
+export interface UpsertFulfilmentOptionInput {
+  kind: 'PICKUP' | 'DELIVERY';
+  label: string;
+  feeKes: number;
+}
+
+export async function listFulfilmentOptions(ctx: Ctx, storeId: string) {
+  await assertOwnsStore(ctx, storeId, 'store.write');
+  return prisma.fulfilmentOption.findMany({ where: { storeId }, orderBy: { kind: 'asc' } });
+}
+
+export async function createFulfilmentOption(ctx: Ctx, storeId: string, input: UpsertFulfilmentOptionInput) {
+  await assertOwnsStore(ctx, storeId, 'store.write');
+  const option = await prisma.fulfilmentOption.create({
+    data: { storeId, kind: input.kind, label: input.label.trim(), feeKes: input.feeKes },
+  });
+  await recordAudit(ctx, { action: 'fulfilment_option.created', targetType: 'store', targetId: storeId, payload: { ...input } });
+  return option;
+}
+
+export async function setFulfilmentOptionActive(ctx: Ctx, optionId: string, active: boolean) {
+  const option = await prisma.fulfilmentOption.findUnique({ where: { id: optionId } });
+  if (!option) throw new StoreError('That delivery option was not found', 'NOT_FOUND');
+  await assertOwnsStore(ctx, option.storeId, 'store.write');
+  return prisma.fulfilmentOption.update({ where: { id: optionId }, data: { active } });
 }
 
 export interface PublicStoreFilter {
