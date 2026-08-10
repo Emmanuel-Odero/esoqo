@@ -2,6 +2,7 @@ import 'server-only';
 import { createHmac, randomInt, timingSafeEqual } from 'node:crypto';
 import { redis } from './redis';
 import { checkRateLimit, RateLimitError } from './ratelimit';
+import { sendSms, smsProvider } from './sms';
 
 /**
  * One-time codes.
@@ -100,7 +101,7 @@ export async function issueOtp(
     .expire(spendKey, 172_800)
     .exec();
 
-  const provider = process.env.SMS_PROVIDER ?? 'console';
+  const provider = smsProvider();
   if (provider === 'console') {
     console.log(`\n  ┌─ OTP ─────────────────────────────\n  │  ${msisdn}\n  │  code: ${code}\n  │  purpose: ${purpose}\n  └───────────────────────────────────\n`);
     return { devCode: code, expiresAt, cooldownSeconds: cooldown };
@@ -140,31 +141,4 @@ export async function verifyOtp(
   await redis.del(k);
   await redis.del(`otp:sends:${msisdn}`);
   return true;
-}
-
-/** Aggregator adapter. Africa's Talking shape; swap per ADR-0005. */
-async function sendSms(to: string, message: string): Promise<void> {
-  const username = process.env.SMS_USERNAME;
-  const apiKey = process.env.SMS_API_KEY;
-  if (!username || !apiKey) throw new Error('SMS credentials not configured');
-
-  const res = await fetch('https://api.africastalking.com/version1/messaging', {
-    method: 'POST',
-    headers: {
-      apiKey,
-      'Content-Type': 'application/x-www-form-urlencoded',
-      Accept: 'application/json',
-    },
-    body: new URLSearchParams({
-      username,
-      to,
-      message,
-      from: process.env.SMS_SENDER_ID ?? 'ESOKO',
-    }),
-  });
-
-  if (!res.ok) {
-    console.error('[SMS] send failed', res.status, await res.text().catch(() => ''));
-    throw new Error('Could not send the code');
-  }
 }
