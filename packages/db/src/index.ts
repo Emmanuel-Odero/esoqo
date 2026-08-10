@@ -6,7 +6,8 @@ export { recordAudit, verifyChain } from './audit';
 // ESM, not a bundler, and a request for a name several `export *` hops deep
 // in the dal barrel doesn't reliably resolve there. Bundled apps (Next.js)
 // are unaffected either way.
-export { confirmStoreOrderPayment } from './dal/store-order';
+export { confirmStoreOrderPayment, StoreOrderError } from './dal/store-order';
+export { confirmRegistrationPaymentByCheckoutId } from './dal/payments';
 export * from './capabilities';
 export type { VerifyResult } from './dal/reference';
 export * from './storage';
