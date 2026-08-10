@@ -134,6 +134,14 @@ services:
       dockerfile: Dockerfile.dev
     container_name: esoko-dev
     restart: unless-stopped
+    # .:/app below bind-mounts the whole repo for hot-reload, which would
+    # also overlay every workspace's node_modules with whatever's on the
+    # HOST (empty, or full of macOS binaries that can't run here). Each
+    # workspace member gets its own named volume so its node_modules is
+    # never touched by the bind mount and survives container restarts —
+    # see docker/esoko-dev/entrypoint.sh for the install-once logic this
+    # enables.
+    entrypoint: ["/app/docker/esoko-dev/entrypoint.sh"]
     ports:
       - "3000:3000"
       - "3001:3001"
@@ -141,6 +149,8 @@ services:
       - "3003:3003"
       - "4000:4000"
     environment:
+      CI: "true"
+      APP_ENV: "${APP_ENV:-development}"
       DATABASE_URL: postgresql://esoko:esoko_dev_only@pgbouncer:5432/esoko?pgbouncer=true&connection_limit=10
       DIRECT_DATABASE_URL: postgresql://esoko:esoko_dev_only@postgres:5432/esoko
       REDIS_URL: redis://redis:6379
@@ -150,7 +160,19 @@ services:
       WATCHPACK_POLLING: "true"
     volumes:
       - .:/app
-      - /app/node_modules
+      - node_modules_root:/app/node_modules
+      - node_modules_web:/app/apps/web/node_modules
+      - node_modules_app:/app/apps/app/node_modules
+      - node_modules_admin:/app/apps/admin/node_modules
+      - node_modules_store:/app/apps/store/node_modules
+      - node_modules_db:/app/packages/db/node_modules
+      - node_modules_ui:/app/packages/ui/node_modules
+      - node_modules_domain:/app/packages/domain/node_modules
+      - node_modules_auth:/app/packages/auth/node_modules
+      - node_modules_a11y:/app/packages/a11y/node_modules
+      - node_modules_config:/app/packages/config/node_modules
+      - node_modules_payments:/app/packages/payments/node_modules
+      - node_modules_core_service:/app/services/core/node_modules
     depends_on:
       postgres:
         condition: service_healthy
@@ -232,3 +254,16 @@ volumes:
   redisdata:
   cecfmysqldata:
   cecfuploads:
+  node_modules_root:
+  node_modules_web:
+  node_modules_app:
+  node_modules_admin:
+  node_modules_store:
+  node_modules_db:
+  node_modules_ui:
+  node_modules_domain:
+  node_modules_auth:
+  node_modules_a11y:
+  node_modules_config:
+  node_modules_payments:
+  node_modules_core_service:
