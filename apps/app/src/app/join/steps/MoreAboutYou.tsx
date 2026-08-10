@@ -62,60 +62,80 @@ export function MoreAboutYou({
           </div>
         </div>
       </>
+    ) : f.joiningAs === 'biz' ? (
+      <>
+        {/* Same shape as the group block above, deliberately not the
+            collapsible/optional Section 'me' gets below — a business
+            registration that never asks about the business is just a
+            personal one wearing a different label. */}
+        <div className="vblock">
+          <div className="vhead">
+            <span className="icbox"><Icon name="shop" size={17} /></span>
+            <div style={{ flex: 1 }}>
+              <strong>Your business</strong>
+              <span style={{ fontSize: '.86rem', color: 'var(--tx-2)', display: 'block' }}>
+                Required — this is the business you are registering
+              </span>
+            </div>
+          </div>
+          <div className="sub2">
+            <p className="hint" style={{ marginTop: 0 }}>
+              Find your business first — we check so nobody registers the same business
+              twice. If it is not listed yet, you can register it. You cannot continue
+              until the business is linked or added.
+            </p>
+            <BusinessPicker f={f} set={set} />
+          </div>
+        </div>
+      </>
     ) : (
       <Section
         icon="scales" title="Your standing" status={standingSummary}
         open={open === 'standing'} onToggle={() => setOpen(open === 'standing' ? null : 'standing')}
       >
-        {f.joiningAs === 'me' && (
-          <>
-            <fieldset style={{ border: 0, padding: 0, margin: '0 0 15px' }}>
-              <legend className="lab">Do you run a business?</legend>
-              <div className="opts">
-                {([
-                  ['yes', 'Yes, it is registered', 'You have a business name or BRS certificate'],
-                  ['no', 'No, not registered', 'Most people start here. Everything still works'],
-                  ['soon', 'Not yet, but I want to', 'We can handle the filing when you are ready'],
-                ] as const).map(([v, t, d]) => (
-                  <button key={v} type="button" className="opt"
-                    aria-pressed={f.hasRegisteredBusiness === v}
-                    onClick={() => set('hasRegisteredBusiness', v)}>
-                    <span><span className="t">{t}</span><span className="d">{d}</span></span>
-                  </button>
-                ))}
-              </div>
-            </fieldset>
+        <fieldset style={{ border: 0, padding: 0, margin: '0 0 15px' }}>
+          <legend className="lab">Do you run a business?</legend>
+          <div className="opts">
+            {([
+              ['yes', 'Yes, it is registered', 'You have a business name or BRS certificate'],
+              ['no', 'No, not registered', 'Most people start here. Everything still works'],
+              ['soon', 'Not yet, but I want to', 'We can handle the filing when you are ready'],
+            ] as const).map(([v, t, d]) => (
+              <button key={v} type="button" className="opt"
+                aria-pressed={f.hasRegisteredBusiness === v}
+                onClick={() => set('hasRegisteredBusiness', v)}>
+                <span><span className="t">{t}</span><span className="d">{d}</span></span>
+              </button>
+            ))}
+          </div>
+        </fieldset>
 
-            {f.hasRegisteredBusiness === 'yes' && (
-              <div className="fld">
-                <label className="lab" htmlFor="regNo">Registration number <span className="op">— optional</span></label>
-                <input className="inp mono" id="regNo" value={f.registrationNo}
-                  onChange={(e) => set('registrationNo', e.target.value)} placeholder="BN/2026/0000" />
-              </div>
-            )}
-
-            <fieldset style={{ border: 0, padding: 0 }}>
-              <legend className="lab">Do you belong to a group, sacco or cooperative?</legend>
-              <div className="opts">
-                {([['yes', 'Yes', 'A chama, sacco, cooperative, welfare group or association'],
-                   ['no', 'No', 'You can join or start one later from the menu']] as const).map(([v, t, d]) => (
-                  <button key={v} type="button" className="opt" aria-pressed={f.belongsToGroup === v}
-                    onClick={() => set('belongsToGroup', v)}>
-                    <span><span className="t">{t}</span><span className="d">{d}</span></span>
-                  </button>
-                ))}
-              </div>
-              {f.belongsToGroup === 'yes' && (
-                <div style={{ marginTop: 15 }}>
-                  <GroupPicker f={f} set={set} />
-                  <FeeCoverage f={f} set={set} />
-                </div>
-              )}
-            </fieldset>
-          </>
+        {f.hasRegisteredBusiness === 'yes' && (
+          <div className="fld">
+            <label className="lab" htmlFor="regNo">Registration number <span className="op">— optional</span></label>
+            <input className="inp mono" id="regNo" value={f.registrationNo}
+              onChange={(e) => set('registrationNo', e.target.value)} placeholder="BN/2026/0000" />
+          </div>
         )}
 
-        {f.joiningAs === 'biz' && <BusinessPicker f={f} set={set} />}
+        <fieldset style={{ border: 0, padding: 0 }}>
+          <legend className="lab">Do you belong to a group, sacco or cooperative?</legend>
+          <div className="opts">
+            {([['yes', 'Yes', 'A chama, sacco, cooperative, welfare group or association'],
+               ['no', 'No', 'You can join or start one later from the menu']] as const).map(([v, t, d]) => (
+              <button key={v} type="button" className="opt" aria-pressed={f.belongsToGroup === v}
+                onClick={() => set('belongsToGroup', v)}>
+                <span><span className="t">{t}</span><span className="d">{d}</span></span>
+              </button>
+            ))}
+          </div>
+          {f.belongsToGroup === 'yes' && (
+            <div style={{ marginTop: 15 }}>
+              <GroupPicker f={f} set={set} />
+              <FeeCoverage f={f} set={set} />
+            </div>
+          )}
+        </fieldset>
       </Section>
     )}
 

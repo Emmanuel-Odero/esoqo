@@ -121,7 +121,11 @@ export function Finish({
       <div className="sum">
         {[
           ['Joining as', { me: 'Myself', group: 'A group', biz: 'A business', inst: '' }[f.joiningAs || 'me'], 1],
-          ...(f.joiningAs === 'group' ? [['Group', f.orgName || '—', 1] as const] : []),
+          // orgName is only set when registering a brand-new group;
+          // linking to an existing one sets groupName instead — show
+          // whichever is actually populated, not just the new-group case.
+          ...(f.joiningAs === 'group' ? [['Group', f.orgName || f.groupName || '—', 1] as const] : []),
+          ...(f.joiningAs === 'biz' ? [['Business', f.bizName || '—', 1] as const] : []),
           ['Official name', f.officialName || '—', 1],
           ...(f.knownAs ? [['Known as', f.knownAs, 1] as const] : []),
           ['USSD number', f.msisdn, 2],

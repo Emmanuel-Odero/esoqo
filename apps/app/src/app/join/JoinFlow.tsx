@@ -17,12 +17,14 @@ import { Finish } from './steps/Finish';
 
 /**
  * Four screens instead of eight. The data model never required most of
- * what the old flow forced a separate screen for — standing, documents
- * and the registration fee are genuinely optional at the schema level
- * (see packages/domain/src/registration.ts), so they're now one
- * collapsed, skippable step instead of three mandatory stops. See
- * ADR discussion: nothing here changes what's stored or how it's
- * validated — only how many screens stand between "start" and "done".
+ * what the old flow forced a separate screen for — documents and the
+ * registration fee are genuinely optional at the schema level (see
+ * packages/domain/src/registration.ts), so they're now collapsed,
+ * skippable sections instead of mandatory stops. "Standing" itself is
+ * the exception for a group or business joiner: which group or
+ * business this registration is actually for is not optional, so that
+ * part of step 3 stays open and gates Continue — see the joiningAs
+ * checks below and in MoreAboutYou.
  */
 
 const KNOWN_ROLES = ['Chairperson', 'Treasurer', 'Secretary', 'Member'] as const;
@@ -412,8 +414,15 @@ export function JoinFlow() {
             disabled={pending
               || (step === 1 && (!f.joiningAs || f.joiningAs === 'inst' || f.officialName.trim().length < 2))
               || (step === 3 && f.joiningAs === 'group' && !f.groupPartyId && !f.orgName)
+              || (step === 3 && f.joiningAs === 'biz' && !f.bizPartyId && !f.bizName)
               || (step === TOTAL_STEPS && !canSubmit)}
-            aria-describedby={step === TOTAL_STEPS && !canSubmit ? 'submit-gate' : step === 3 && f.joiningAs === 'group' && !f.groupPartyId && !f.orgName ? 'group-gate' : undefined}>
+            aria-describedby={step === TOTAL_STEPS && !canSubmit
+              ? 'submit-gate'
+              : step === 3 && f.joiningAs === 'group' && !f.groupPartyId && !f.orgName
+                ? 'group-gate'
+                : step === 3 && f.joiningAs === 'biz' && !f.bizPartyId && !f.bizName
+                  ? 'biz-gate'
+                  : undefined}>
             {step === TOTAL_STEPS ? <><Icon name="send" size={17} /> Send my registration</> : 'Continue'}
             {pending && <VisuallyHidden>Working…</VisuallyHidden>}
           </button>
@@ -425,6 +434,16 @@ export function JoinFlow() {
           {step === 3 && f.joiningAs === 'group' && !f.groupPartyId && !f.orgName && (
             <p className="hint" style={{ flexBasis: '100%', textAlign: 'right', margin: '10px 0 0' }}>
               Find or add the group above, then continue.
+            </p>
+          )}
+          {step === 3 && f.joiningAs === 'biz' && !f.bizPartyId && !f.bizName && (
+            <VisuallyHidden>
+              <span id="biz-gate">Link or register the business before continuing.</span>
+            </VisuallyHidden>
+          )}
+          {step === 3 && f.joiningAs === 'biz' && !f.bizPartyId && !f.bizName && (
+            <p className="hint" style={{ flexBasis: '100%', textAlign: 'right', margin: '10px 0 0' }}>
+              Find or add the business above, then continue.
             </p>
           )}
           {step === TOTAL_STEPS && !canSubmit && (
