@@ -1,8 +1,15 @@
+'use client';
+
 import Link from 'next/link';
+import { usePathname } from 'next/navigation';
 import { Icon } from '@esoko/ui';
 
-/** Nav is tools, not arguments — per the page-architecture work. */
+/** Nav is tools, not arguments — per the page-architecture work. The
+ *  logo already links home, but that's an icon-only affordance; "Home"
+ *  gets its own labelled entry so getting back to the landing page
+ *  doesn't depend on recognising the logo as a link. */
 export const NAV = [
+  ['/', 'Home'],
   ['/discover', 'Shops'],
   ['/prices', 'Prices'],
   ['/counties', 'Counties'],
@@ -30,13 +37,24 @@ export function Logo({ inverse = false }: { inverse?: boolean }) {
 }
 
 export function Header() {
+  const path = usePathname();
+
   return (
     <header>
       <div className="wrap">
         <div className="hd">
           <Link href="/" aria-label="Esoko home"><Logo /></Link>
           <nav className="hdnav" id="nav" aria-label="Main">
-            {NAV.map(([href, label]) => <Link key={href} href={href}>{label}</Link>)}
+            {NAV.map(([href, label]) => {
+              // /counties also covers /counties/[slug] — a nested page is
+              // still "on" that section, not off the map entirely.
+              const active = path === href || path.startsWith(`${href}/`);
+              return (
+                <Link key={href} href={href} aria-current={active ? 'page' : undefined}>
+                  {label}
+                </Link>
+              );
+            })}
           </nav>
           <div className="row">
             <a className="btn btn-o btn-sm" href={`${APP}/signin`}>Sign in</a>

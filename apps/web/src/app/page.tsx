@@ -5,6 +5,14 @@ import { Finder } from '@/components/Finder';
 import { Board, type Quote } from '@/components/Board';
 import { SectionNav } from '@/components/Chrome';
 import { ScrollSpy } from '@/components/ScrollSpy';
+import { RotatingWord } from '@/components/RotatingWord';
+
+/** Who this line speaks to, in rotation — a chama or sacco running
+ *  group money, a duka or biashara running trade. Kept to words already
+ *  used elsewhere in this copy (see MoreAboutYou's group question and
+ *  the "Getting paid"/"Group money" cards below) rather than inventing
+ *  new vocabulary just for the headline. */
+const HERO_WORDS = ['chama', 'sacco', 'duka', 'biashara'] as const;
 
 export const dynamic = 'force-dynamic'; // the board moves once a morning
 
@@ -59,7 +67,7 @@ export default async function Home() {
         <div className="wrap">
           <div className="hero-g">
             <div>
-              <h1>Everything your <span className="rot">chama</span> runs on.</h1>
+              <h1>Everything your <RotatingWord words={HERO_WORDS} /> runs on.</h1>
               <p className="hsub">One number. Any phone. Free to start.</p>
               <p className="fact">
                 Prices, money, savings, records and papers, kept in one place and reached by
