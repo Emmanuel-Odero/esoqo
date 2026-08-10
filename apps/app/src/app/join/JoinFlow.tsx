@@ -27,6 +27,7 @@ import { Finish } from './steps/Finish';
 
 const KNOWN_ROLES = ['Chairperson', 'Treasurer', 'Secretary', 'Member'] as const;
 const TOTAL_STEPS = 4;
+const STEP_LABELS = ['You', 'Contact', 'Optional', 'Verify'] as const;
 const STORAGE_KEY = 'esoko:join:v2';
 
 export function JoinFlow() {
@@ -122,18 +123,26 @@ export function JoinFlow() {
       if (!f.joiningAs || f.joiningAs === 'inst') return;
       start(async () => {
         let id = regId;
+        const step2 = {
+          joiningAs: f.joiningAs,
+          officialName: f.officialName,
+          knownAs: f.knownAs,
+          orgName: f.orgName,
+          orgKnownAs: f.orgKnownAs,
+          orgRole: f.orgRole as 'Treasurer',
+        };
         if (!id) {
-          const started = await actionStart({ joiningAs: f.joiningAs, language: 'en' });
+          // actionStart validates with step2Schema too (officialName is
+          // required), so it must receive the same step-2 payload as
+          // actionSaveNames below — otherwise the first write always
+          // fails with zod's bare "Required" before the name is sent.
+          const started = await actionStart(step2);
           if (!handle(started)) return;
           id = started.ok ? started.data.id : null;
           if (!id) return;
           setRegId(id);
         }
-        const r = await actionSaveNames(id, {
-          joiningAs: f.joiningAs, officialName: f.officialName, knownAs: f.knownAs,
-          orgName: f.orgName, orgKnownAs: f.orgKnownAs,
-          orgRole: f.orgRole as 'Treasurer',
-        });
+        const r = await actionSaveNames(id, step2);
         handle(r, () => { setStep(2); announce('Step 2 of 4. How to reach you.'); });
       });
     } else if (step === 2) {
@@ -205,7 +214,7 @@ export function JoinFlow() {
           wantsExpirySms: f.wantsExpirySms,
           acceptedTerms: true,
         });
-        handle(r, () => { setDone(true); announce('Registration sent. You have joined Esoko.', 'assertive'); });
+        handle(r, () => { setDone(true); announce('Registration sent. Welcome to CECF — your Esoko tools are ready.', 'assertive'); });
       });
     }
   }
@@ -219,7 +228,7 @@ export function JoinFlow() {
     searchTimer.current = setTimeout(async () => {
       const res = await actionSearchWork(v);
       setHits(res);
-      announce(res.length ? `${res.length} matches` : 'No listed match — Esoko is still for you');
+      announce(res.length ? `${res.length} matches` : 'No listed match — you can still use your own term');
     }, 200);
   }
   function onSelectWork(key: string, name: string) {
@@ -253,16 +262,27 @@ export function JoinFlow() {
   /* ────────────────────────────── done ── */
   if (done) {
     return (
-      <div className="qcard" role="status">
+      <div className="qcard donecard" role="status">
         <span className="icbox" style={{ background: 'var(--green-t)', color: 'var(--green)', width: 52, height: 52, borderRadius: 13 }}>
           <Icon name="check-circle" size={28} />
         </span>
-        <h2 className="qh" style={{ marginTop: 18 }}>You have joined Esoko</h2>
+        <h2 className="qh" style={{ marginTop: 18 }}>Welcome to CECF</h2>
         <p className="qs">
+          Your membership is in. Your record has been shared with Esoko so the tools can
+          work — nothing else moves unless you say so.
           {f.ussdSetupChoice === 'now'
-            ? 'Your number is confirmed. Dial *483*77# and choose a PIN when you are ready.'
-            : 'Dial *483*77# whenever you want to use your record. You will confirm your number then.'}
+            ? ' Your number is confirmed. Dial *483*77# and choose a PIN when you are ready.'
+            : ' Dial *483*77# whenever you want to use your record. You will confirm your number then.'}
         </p>
+        <div className="next done-next">
+          <strong style={{ color: 'var(--cecf-teal)' }}>Next step</strong>
+          <p style={{ margin: '8px 0 0' }}>
+            Dial <strong className="mono">*483*77#</strong> from this number
+            {f.ussdSetupChoice === 'now'
+              ? ' — it is already confirmed, so just choose a PIN.'
+              : ' and confirm your number. Your record is ready when you are.'}
+          </p>
+        </div>
         <div className="next">
           <strong style={{ color: 'var(--green)' }}>What you asked us to send</strong>
           <ol>
@@ -302,6 +322,14 @@ export function JoinFlow() {
 
   return (
     <>
+      {/* One-line reassurance above the card on narrow screens — desktop
+          shows the "why Esoko" hero beside the form instead. */}
+      <p className="jtrust">
+        <span>A CECF membership</span><span className="jt" aria-hidden="true">·</span>
+        <span>Free — and it stays free</span><span className="jt" aria-hidden="true">·</span>
+        <span>Shared with Esoko, never by default</span>
+      </p>
+
       {resumable && step === 1 && (
         <div className="qcard" role="status" style={{ marginBottom: 14 }}>
           <p className="qs" style={{ margin: 0 }}>
@@ -315,13 +343,25 @@ export function JoinFlow() {
         </div>
       )}
 
-      <div className="pbar" role="presentation">
-        {Array.from({ length: TOTAL_STEPS }, (_, i) => (
-          <span key={i} className={i < step ? 'on' : ''} />
-        ))}
-      </div>
+      <ol className="psteps" aria-label="Progress">
+        {STEP_LABELS.map((label, i) => {
+          const n = i + 1;
+          const state = n < step ? 'done' : n === step ? 'current' : '';
+          return (
+            <li key={label} className={`pstep${state ? ` ${state}` : ''}`}
+              aria-current={state === 'current' ? 'step' : undefined}>
+              <span className="pstep-dot" aria-hidden="true">
+                {state === 'done' ? <Icon name="check" size={12} /> : n}
+              </span>
+              <span className="pstep-label">{label}</span>
+            </li>
+          );
+        })}
+      </ol>
       <p className="pcount">
-        {step === TOTAL_STEPS ? 'Last step · verify and finish' : `Step ${step} of ${TOTAL_STEPS}`}
+        {step === TOTAL_STEPS
+          ? 'Last step · verify and finish'
+          : `Step ${step} of ${TOTAL_STEPS} · about two minutes`}
       </p>
 
       <div className="qcard">
@@ -369,11 +409,24 @@ export function JoinFlow() {
             </button>
           )}
           <button className="btn btn-p" onClick={next}
-            disabled={pending || (step === 1 && !f.joiningAs) || (step === TOTAL_STEPS && !canSubmit)}
-            aria-describedby={step === TOTAL_STEPS && !canSubmit ? 'submit-gate' : undefined}>
+            disabled={pending
+              || (step === 1 && (!f.joiningAs || f.joiningAs === 'inst' || f.officialName.trim().length < 2))
+              || (step === 3 && f.joiningAs === 'group' && !f.groupPartyId && !f.orgName)
+              || (step === TOTAL_STEPS && !canSubmit)}
+            aria-describedby={step === TOTAL_STEPS && !canSubmit ? 'submit-gate' : step === 3 && f.joiningAs === 'group' && !f.groupPartyId && !f.orgName ? 'group-gate' : undefined}>
             {step === TOTAL_STEPS ? <><Icon name="send" size={17} /> Send my registration</> : 'Continue'}
             {pending && <VisuallyHidden>Working…</VisuallyHidden>}
           </button>
+          {step === 3 && f.joiningAs === 'group' && !f.groupPartyId && !f.orgName && (
+            <VisuallyHidden>
+              <span id="group-gate">Link or register the group before continuing.</span>
+            </VisuallyHidden>
+          )}
+          {step === 3 && f.joiningAs === 'group' && !f.groupPartyId && !f.orgName && (
+            <p className="hint" style={{ flexBasis: '100%', textAlign: 'right', margin: '10px 0 0' }}>
+              Find or add the group above, then continue.
+            </p>
+          )}
           {step === TOTAL_STEPS && !canSubmit && (
             <VisuallyHidden>
               <span id="submit-gate">Choose whether to set up dialling access now or later before sending.</span>
@@ -386,10 +439,10 @@ export function JoinFlow() {
         <span className="icbox" style={{ background: 'var(--green-t)', color: 'var(--green)', marginBottom: 12 }}>
           <Icon name="keypad" size={21} />
         </span>
-        <h3 style={{ marginBottom: 8 }}>Or join without the internet</h3>
+        <h3 style={{ marginBottom: 8 }}>Or join CECF without the internet</h3>
         <p style={{ fontSize: '.93rem', color: 'var(--tx-2)', margin: 0 }}>
           Dial <strong className="mono" style={{ color: 'var(--navy)' }}>*483*77#</strong> from the
-          handset you want to register and answer the same questions. Esoko asks for no identity
+          handset you want to register and answer the same questions. No identity
           card, no fee and no documents either way.
         </p>
       </div>

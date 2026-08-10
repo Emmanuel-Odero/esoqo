@@ -24,10 +24,15 @@ test.describe('/join', () => {
     await expect(continueBtn).toBeEnabled();
   });
 
-  test('picking "A group" reveals group fields instead', async ({ page }) => {
+  test('picking "A group" reveals the group role field, not a group name field', async ({ page }) => {
     await page.goto('/join');
     await page.getByRole('button', { name: /^A group/ }).click();
-    await expect(page.getByLabel('Official name of the group')).toBeVisible();
+    // The group's own name/type/location is resolved later, in step 3's
+    // search-before-create — step 1 only asks the registrant's own name
+    // and their role, so nobody types the group's name twice.
+    await expect(page.getByLabel('Your role in the group')).toBeVisible();
+    await expect(page.getByLabel('Official name of the group')).toHaveCount(0);
+    await expect(page.getByLabel('Official name')).toBeVisible();
   });
 
   test('picking an institution routes to the "not here" screen', async ({ page }) => {

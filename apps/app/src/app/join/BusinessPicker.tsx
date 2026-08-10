@@ -89,7 +89,7 @@ export function BusinessPicker({
           hits={hits} getKey={(b) => b.id} isSelected={(b) => f.bizPartyId === b.id}
           onSelect={pickExisting}
           renderHit={(b) => <span>{b.name} <span className="op">— {b.county}</span></span>}
-          hint="Esoko checks for a match by name so the same business is never registered twice."
+          hint="We check for a match by name so the same business is never registered twice."
         />
       )}
 
@@ -99,7 +99,7 @@ export function BusinessPicker({
             <Icon name="check-circle" size={19} />
           </span>
           <div>
-            <strong style={{ display: 'block', marginBottom: 3 }}>Already on Esoko</strong>
+            <strong style={{ display: 'block', marginBottom: 3 }}>Already registered</strong>
             <span className="hint" style={{ margin: 0 }}>
               {f.bizName} is already registered — no need to register it again. You can still
               finish your own registration below.

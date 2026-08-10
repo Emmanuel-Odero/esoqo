@@ -40,6 +40,7 @@ export function GroupPicker({
   const [checkMsisdn, setCheckMsisdn] = useState('');
   const [checkResult, setCheckResult] = useState<'matched' | 'unmatched' | null>(null);
   const [tagHits, setTagHits] = useState<{ key: string; name: string }[]>([]);
+  const [tagQuery, setTagQuery] = useState('');
   const [groupHits, setGroupHits] = useState<GroupHit[]>([]);
   const searchTimer = useRef<ReturnType<typeof setTimeout>>(undefined);
 
@@ -86,6 +87,7 @@ export function GroupPicker({
   }
 
   function onTagInput(v: string) {
+    setTagQuery(v);
     if (v.trim().length < 2) { setTagHits([]); return; }
     setTagHits(searchSegments(v, 5).map((s) => ({ key: s.key, name: s.name })));
   }
@@ -104,7 +106,7 @@ export function GroupPicker({
           hits={groupHits} getKey={(g) => g.id} isSelected={(g) => f.groupPartyId === g.id}
           onSelect={pickExisting}
           renderHit={(g) => <span>{g.name} <span className="op">— {g.county}</span></span>}
-          hint="Esoko checks for a match by name so the same group is never registered twice."
+          hint="We check for a match by name so the same group is never registered twice."
           noMatchLabel={(typed) => `"${typed}" isn't listed — register it`}
           onNoMatchSelect={startNewGroup}
         />
@@ -146,7 +148,7 @@ export function GroupPicker({
             {checkResult === 'matched' && (
               <p className="hint" style={{ color: 'var(--green)', marginTop: 10 }}>
                 <Icon name="check-circle" size={14} /> You're already on this group's list — finish
-                below and Esoko will connect your record to it.
+                below and we will connect your record to it.
               </p>
             )}
             {checkResult === 'unmatched' && (
@@ -194,12 +196,12 @@ export function GroupPicker({
 
           <SearchCombobox<{ key: string; name: string }>
             id="orgTags" label="What most members deal in" icon="tag"
-            value="" onInputChange={onTagInput}
+            value={tagQuery} onInputChange={onTagInput}
             placeholder="juakali, carpentry, farming, mama mboga…"
             hits={tagHits} getKey={(h) => h.key} isSelected={(h) => f.orgTags.includes(h.key)}
-            onSelect={(h) => { toggleTag(h.key); setTagHits([]); }}
+            onSelect={(h) => { toggleTag(h.key); setTagHits([]); setTagQuery(''); }}
             renderHit={(h) => <span>{h.name}</span>}
-            hint="Pick a few — helps Esoko show the group relevant prices and buyers."
+            hint="Pick a few — helps us show the group relevant prices and buyers."
           />
           {f.orgTags.length > 0 && (
             <div className="opts" style={{ marginTop: 8 }}>

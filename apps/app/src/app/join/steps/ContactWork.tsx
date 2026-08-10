@@ -4,7 +4,7 @@ import type { RefObject } from 'react';
 import { Icon } from '@esoko/ui';
 import { COUNTIES, LIVE_COUNTIES } from '@esoko/domain';
 import { SearchCombobox } from '../SearchCombobox';
-import type { Form } from '../form';
+import { normaliseMsisdnLive, type Form } from '../form';
 
 interface WorkHit { key: string; name: string }
 
@@ -24,14 +24,14 @@ export function ContactWork({
     <>
       <h2 className="qh" ref={headingRef} tabIndex={-1}>How to reach you, and what you do</h2>
       <p className="qs">
-        Esoko is used mainly by dialling <strong className="mono">*483*77#</strong> from this number.
+        Your record is mostly used by dialling <strong className="mono">*483*77#</strong> from this number.
       </p>
 
       <div className="fld">
         <label className="lab" htmlFor="msisdn"><Icon name="phone" size={15} />Phone number</label>
-        <input className="inp mono" id="msisdn" value={f.msisdn} inputMode="tel"
+        <input className="inp mono msisdn" id="msisdn" value={f.msisdn} inputMode="tel"
           autoComplete="tel" aria-invalid={errField === 'msisdn'} aria-describedby="msisdn-hint"
-          onChange={(e) => set('msisdn', e.target.value)} />
+          onChange={(e) => set('msisdn', normaliseMsisdnLive(e.target.value))} />
         <p className="hint" id="msisdn-hint">
           A six-digit code confirms this is your line. Your record stays with this number even if you change handsets.
         </p>
@@ -72,7 +72,7 @@ export function ContactWork({
           onSelect={(h) => onSelectWork(h.key, h.name)}
           renderHit={(h) => <span>{h.name}</span>}
           hint="In English or Kiswahili, however you say it. You can edit this later."
-          noMatchLabel={(typed) => `Use "${typed}" — Esoko is for you too`}
+          noMatchLabel={(typed) => `Use "${typed}" — it does not have to be on the list`}
           onNoMatchSelect={(typed) => onSelectWork('', typed)}
         />
       </div>

@@ -161,7 +161,7 @@ export function DocumentStep({ registrationId }: { registrationId: string }) {
               </button>
             </div>
             <p className="hint" style={{ marginTop: 8 }}>
-              {human(file.size)} · only Esoko staff reviewing your registration will see this.
+              {human(file.size)} · only staff reviewing your CECF registration will see this.
             </p>
           </div>
         </div>
@@ -269,8 +269,8 @@ export function PaymentStep({
       <>
         <h2 className="qh">Your group covers this fee</h2>
         <p className="qs">
-          Nothing more to do here. Esoko checks the group&rsquo;s account for your registration
-          and lets you know either way.
+          Nothing more to do here. We check the group&rsquo;s account for your registration
+          and let you know either way.
         </p>
         <div className="paidbox">
           <span className="icbox" style={{ background: 'var(--green-t)', color: 'var(--green)' }}>
@@ -298,7 +298,7 @@ export function PaymentStep({
       if (r.ok) {
         setSaved(true);
         onChoice('paid', true);
-        announce('Payment details saved. Esoko will check them against the receipt.', 'assertive');
+        announce('Payment details saved. We will check them against the receipt.', 'assertive');
       } else { setError(r.error); announce(r.error, 'assertive'); }
     });
   }
@@ -336,7 +336,7 @@ export function PaymentStep({
     <>
       <h2 className="qh">Have you paid the registration fee?</h2>
       <p className="qs">
-        Either answer is fine. Saying you have paid does not confirm it — Esoko staff check the
+        Either answer is fine. Saying you have paid does not confirm it — staff check the
         receipt against the account, and two of them have to agree before it is marked as
         received.
       </p>
@@ -349,7 +349,7 @@ export function PaymentStep({
           </span>
           <span>
             <span className="t">Pay now with M-Pesa</span>
-            <span className="d">Esoko sends a prompt to your phone — enter your PIN there</span>
+            <span className="d">We send a prompt to your phone — enter your PIN there</span>
           </span>
         </button>
         <button type="button" className="opt" aria-pressed={choice === 'paid'}
@@ -385,7 +385,7 @@ export function PaymentStep({
             <input className="inp mono" id="stk-amount" inputMode="numeric" value={stkAmount}
               onChange={(e) => setStkAmount(e.target.value.replace(/\D/g, ''))} placeholder="200"
               disabled={stkStatus === 'sending' || stkStatus === 'waiting'} />
-            <p className="hint">Pay whatever amount applies to you — Esoko does not fix one figure for everyone.</p>
+            <p className="hint">Pay whatever amount applies to you — we do not fix one figure for everyone.</p>
           </div>
 
           {stkStatus === 'idle' || stkStatus === 'failed' ? (
@@ -496,7 +496,7 @@ export function PaymentStep({
           <div>
             <strong style={{ display: 'block', marginBottom: 3 }}>Details saved</strong>
             <span className="hint" style={{ margin: 0 }}>
-              Reference <span className="mono">{reference}</span>. Esoko checks this against the
+              Reference <span className="mono">{reference}</span>. We check this against the
               account and two people must agree before it is marked as received. You will get an
               SMS either way.
             </span>

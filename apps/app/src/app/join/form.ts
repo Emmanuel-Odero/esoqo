@@ -37,6 +37,23 @@ export interface Form {
   bizPaymentChannels: string[];
 }
 
+/**
+ * Live phone normalisation for the join flow: keep the field in the
+ * canonical E.164 form (+2547XXXXXXXX) as the user types, so what's
+ * shown is exactly what gets stored and what the OTP is verified
+ * against. Strips spaces and non-digits; converts a leading 0 to +254.
+ */
+export function normaliseMsisdnLive(raw: string): string {
+  let digits = '';
+  for (const ch of raw) {
+    if (ch >= '0' && ch <= '9') digits += ch;
+    if (digits.length >= 12) break;
+  }
+  if (digits.startsWith('254')) digits = digits.slice(3);
+  else if (digits.startsWith('0')) digits = digits.slice(1);
+  return `+254${digits.slice(0, 9)}`;
+}
+
 export const EMPTY: Form = {
   joiningAs: '', officialName: '', knownAs: '', orgName: '', orgKnownAs: '', orgRole: 'Treasurer',
   msisdn: '+254 7', email: '', county: 'Nairobi', ward: '', workRaw: '', segment: '',

@@ -22,7 +22,7 @@ export function Finish({
   return (
     <>
       <h2 className="qh" ref={headingRef} tabIndex={-1}>Verify and finish</h2>
-      <p className="qs">One thing left, then Esoko sends this. You can leave it for later.</p>
+      <p className="qs">One thing left, then we send this. You can leave it for later.</p>
 
       <div className="vblock">
         <div className="vhead">
@@ -54,7 +54,10 @@ export function Finish({
 
         {f.ussdSetupChoice === 'now' && (
           <div className="sub2">
-            <div className="otprow">
+            <p className="hint sure" style={{ margin: 0 }}>
+              <Icon name="shield" size={15} /> This proves the number is yours — nobody can register on your behalf.
+            </p>
+            <div className="otprow" style={{ marginTop: 12 }}>
               <div>
                 <span className="lab" style={{ marginBottom: 3 }}>Code to</span>
                 <span className="mono" style={{ fontWeight: 600 }}>{f.msisdn}</span>
@@ -106,7 +109,7 @@ export function Finish({
           </div>
           <div className="otprow" style={{ marginTop: 12 }}>
             <p className="hint" style={{ margin: 0, maxWidth: '34ch' }}>
-              Esoko sends a link to confirm it. Nothing is held up waiting for you to click it.
+              We send a link to confirm it. Nothing is held up waiting for you to click it.
             </p>
             <button type="button" className="btn btn-o" onClick={() => setEmailSent(true)} disabled={emailSent}>
               <Icon name="send" size={15} />{emailSent ? 'Sent' : 'Send link'}
@@ -160,8 +163,9 @@ export function Finish({
       </fieldset>
 
       <p className="hint">
-        By joining you agree to Esoko's terms and privacy notice. Nothing about you goes to a
-        bank, buyer or agency unless you allow it, each time.
+        By joining you agree to CECF&rsquo;s terms of membership, and to Esoko holding your
+        record under its privacy notice — that sharing is what makes these tools work. Nothing
+        about you goes to a bank, buyer or agency unless you allow it, each time.
       </p>
     </>
   );

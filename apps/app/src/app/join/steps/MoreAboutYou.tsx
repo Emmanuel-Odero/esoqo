@@ -26,7 +26,7 @@ export function MoreAboutYou({
   const standingSummary = f.joiningAs === 'group'
     ? (f.groupPartyId ? `Linked to ${f.groupName}` : f.orgName ? `Registering ${f.orgName}` : 'Not answered')
     : f.joiningAs === 'biz'
-    ? (f.bizPartyId ? `Already on Esoko as ${f.bizName}` : f.bizName ? `Registering ${f.bizName}` : 'Not answered')
+    ? (f.bizPartyId ? `Already registered as ${f.bizName}` : f.bizName ? `Registering ${f.bizName}` : 'Not answered')
     : [
         f.hasRegisteredBusiness && { yes: 'Registered business', no: 'Not registered', soon: 'Registering soon' }[f.hasRegisteredBusiness],
         f.belongsToGroup === 'yes' && (f.groupName ? `In ${f.groupName}` : 'In a group'),
@@ -39,6 +39,30 @@ export function MoreAboutYou({
         Your record is created either way. Add these now if they're handy, or from your account any time.
       </p>
 
+      {f.joiningAs === 'group' ? (
+      <>
+        <div className="vblock">
+          <div className="vhead">
+            <span className="icbox"><Icon name="scales" size={17} /></span>
+            <div style={{ flex: 1 }}>
+              <strong>Your group</strong>
+              <span style={{ fontSize: '.86rem', color: 'var(--tx-2)', display: 'block' }}>
+                Required — this is the group you are registering
+              </span>
+            </div>
+          </div>
+          <div className="sub2">
+            <p className="hint" style={{ marginTop: 0 }}>
+              Find your group first — we check so nobody registers the same group twice.
+              If it is not listed yet, you can register it. You cannot continue until the
+              group is linked or added.
+            </p>
+            <GroupPicker f={f} set={set} />
+            <FeeCoverage f={f} set={set} />
+          </div>
+        </div>
+      </>
+    ) : (
       <Section
         icon="scales" title="Your standing" status={standingSummary}
         open={open === 'standing'} onToggle={() => setOpen(open === 'standing' ? null : 'standing')}
@@ -51,7 +75,7 @@ export function MoreAboutYou({
                 {([
                   ['yes', 'Yes, it is registered', 'You have a business name or BRS certificate'],
                   ['no', 'No, not registered', 'Most people start here. Everything still works'],
-                  ['soon', 'Not yet, but I want to', 'Esoko can handle the filing when you are ready'],
+                  ['soon', 'Not yet, but I want to', 'We can handle the filing when you are ready'],
                 ] as const).map(([v, t, d]) => (
                   <button key={v} type="button" className="opt"
                     aria-pressed={f.hasRegisteredBusiness === v}
@@ -92,14 +116,8 @@ export function MoreAboutYou({
         )}
 
         {f.joiningAs === 'biz' && <BusinessPicker f={f} set={set} />}
-
-        {f.joiningAs === 'group' && (
-          <>
-            <GroupPicker f={f} set={set} />
-            <FeeCoverage f={f} set={set} />
-          </>
-        )}
       </Section>
+    )}
 
       <Section
         icon="document" title="Add a document" status="Optional — a national ID, certificate or group rules"

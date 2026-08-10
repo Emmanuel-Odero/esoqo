@@ -1,8 +1,15 @@
 'use client';
 
-import type { RefObject } from 'react';
+import { useState, type RefObject } from 'react';
 import { Icon } from '@esoko/ui';
 import type { Form } from '../form';
+
+const WHO_OPTIONS = [
+  { v: 'me', icon: 'user', t: 'Myself', d: 'A trader, farmer, rider, fundi or anyone working on their own' },
+  { v: 'group', icon: 'users', t: 'A group', d: 'Chama, self-help group, CBO, faith-based group, cooperative or SACCO' },
+  { v: 'biz', icon: 'shop', t: 'A business', d: 'Registered or not — either is fine' },
+  { v: 'inst', icon: 'gov', t: 'A bank, county, buyer or agency', d: 'Institutions are set up by agreement, not through this form' },
+] as const;
 
 /**
  * Step 1 — who's joining, and their name, on one screen.
@@ -11,6 +18,10 @@ import type { Form } from '../form';
  * server call and jumped to a new screen before you'd typed anything),
  * then a second screen for the name. Merged because there's nothing to
  * decide between them — the name fields simply reveal once you've picked.
+ *
+ * The four picker cards collapse to a compact "X · Change" row once a
+ * choice is made, so the name fields stay within the viewport and the
+ * user never has to scroll down to reach Continue.
  */
 export function WhoAndName({
   f, set, headingRef, orgRoleOther, setOrgRoleOther, errField, onPickJoiningAs,
@@ -23,25 +34,55 @@ export function WhoAndName({
   errField?: string;
   onPickJoiningAs: (v: Form['joiningAs']) => void;
 }) {
+  const [browsing, setBrowsing] = useState(f.joiningAs === '');
+  const chosen = WHO_OPTIONS.find((o) => o.v === f.joiningAs);
+  const qs = !f.joiningAs || f.joiningAs === 'inst'
+    ? 'Who is joining? This decides which forms come next.'
+    : f.joiningAs === 'me'
+      ? 'A personal membership — your own record, on your own terms.'
+      : f.joiningAs === 'group'
+        ? 'A group membership, together — one record for the whole group, with one person who signs for it.'
+        : 'A business membership, registered with you as its contact person.';
+
+  function pick(v: (typeof WHO_OPTIONS)[number]['v']) {
+    onPickJoiningAs(v);
+    if (v === 'inst') return;
+    // Collapse the picker and move focus to the first name field so the
+    // revealed fields are both visible and ready.
+    setBrowsing(false);
+    requestAnimationFrame(() => {
+      document.getElementById(v === 'group' ? 'orgRole' : 'officialName')?.focus();
+    });
+  }
+
   return (
     <>
       <h2 className="qh" ref={headingRef} tabIndex={-1}>Who's joining, and what's your name?</h2>
-      <p className="qs">This decides what Esoko asks next.</p>
+      <p className="qs">{qs}</p>
 
-      <div className="opts" style={{ marginBottom: f.joiningAs ? 20 : 0 }}>
-        {([
-          ['me', 'user', 'Myself', 'A trader, farmer, rider, fundi or anyone working on their own'],
-          ['group', 'users', 'A group', 'Chama, self-help group, CBO, faith-based group, cooperative or SACCO'],
-          ['biz', 'shop', 'A business', 'Registered or not — either is fine'],
-          ['inst', 'gov', 'A bank, county, buyer or agency', 'Institutions are set up by agreement, not through this form'],
-        ] as const).map(([v, icon, t, d]) => (
-          <button key={v} type="button" className="opt"
-            aria-pressed={f.joiningAs === v}
-            onClick={() => onPickJoiningAs(v)}>
-            <span className="icbox"><Icon name={icon} size={18} /></span>
-            <span><span className="t">{t}</span><span className="d">{d}</span></span>
-          </button>
-        ))}
+      <div className="opts" style={{ marginBottom: 20 }}>
+        {browsing ? (
+          WHO_OPTIONS.map((o) => (
+            <button key={o.v} type="button" className="opt"
+              aria-pressed={f.joiningAs === o.v}
+              onClick={() => pick(o.v)}>
+              <span className="icbox"><Icon name={o.icon} size={18} /></span>
+              <span><span className="t">{o.t}</span><span className="d">{o.d}</span></span>
+            </button>
+          ))
+        ) : (
+          chosen && (
+            <button type="button" className="opt chosen" onClick={() => setBrowsing(true)}>
+              <span className="icbox"><Icon name={chosen.icon} size={18} /></span>
+              <span style={{ flex: 1 }}>
+                <span className="t">{chosen.t}</span>
+                <span className="d">{chosen.d}</span>
+              </span>
+              <span className="chosen-change">Change</span>
+              <Icon name="chevron-down" size={16} />
+            </button>
+          )
+        )}
       </div>
 
       {f.joiningAs && f.joiningAs !== 'inst' && (
@@ -49,7 +90,7 @@ export function WhoAndName({
           {f.joiningAs === 'group' && (
             <>
               <p className="hint" style={{ marginTop: 0 }}>
-                Next you will search for your group — Esoko checks first so nobody registers the
+                Next you will search for your group — we check first so nobody registers the
                 same group twice. If it is not listed yet, you can register it there.
               </p>
               <div className="fld">
@@ -91,7 +132,7 @@ export function WhoAndName({
             <input className="inp" id="knownAs" value={f.knownAs}
               aria-describedby="knownAs-hint"
               onChange={(e) => set('knownAs', e.target.value)} placeholder="e.g. Mama Njeri" />
-            <p className="hint" id="knownAs-hint">This is what Esoko uses in messages and on your record.</p>
+            <p className="hint" id="knownAs-hint">This is what we use in messages and on your record.</p>
           </div>
         </div>
       )}
