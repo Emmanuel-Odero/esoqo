@@ -1,4 +1,5 @@
 import type { Metadata } from 'next';
+import Link from 'next/link';
 import { Icon } from '@esoko/ui';
 import { listMyStores, listAllProductsForOwner } from '@esoko/db';
 import { requireSubject } from '@/lib/session';
@@ -41,11 +42,15 @@ export default async function ProductsPage() {
                   {p.status === 'ACTIVE' ? 'Live' : 'Hidden'}
                 </span>
               </span>
+              {p.images[0] && (
+                <img src={p.images[0].url} alt="" width={64} height={64} style={{ objectFit: 'cover', borderRadius: 8, marginBottom: 8 }} />
+              )}
               <span className="nm">{p.name}</span>
               <span className="pr">{kes(Number(p.priceKes))}</span>
-              <span className="st">{p.stockQty === null ? 'Stock not tracked' : `${p.stockQty} in stock`}</span>
-              <div style={{ marginTop: 12 }}>
+              <span className="st">{p.stockQty === null ? 'Stock not tracked' : `${p.stockQty}${p.purchaseUnit ? ` ${p.purchaseUnit}` : ''} in stock`}{p.variants.length > 0 ? ` · ${p.variants.length} option${p.variants.length === 1 ? '' : 's'}` : ''}</span>
+              <div className="row" style={{ marginTop: 12 }}>
                 <VisibilityToggle productId={p.id} status={p.status as 'ACTIVE' | 'HIDDEN'} />
+                <Link href={`/dashboard/products/${p.id}`} className="btn btn-o btn-sm">Edit</Link>
               </div>
             </div>
           ))}

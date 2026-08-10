@@ -27,14 +27,23 @@ export async function StorefrontBySlug({ slug }: { slug: string }) {
   const products = store.products.map((p) => ({
     id: p.id,
     name: p.name,
+    category: p.category,
     priceKes: Number(p.priceKes),
     stockQty: p.stockQty,
+    imageUrl: p.images[0]?.url ?? null,
+    variants: p.variants.map((v) => ({
+      id: v.id, label: v.label, priceKes: Number(v.priceKes), stockQty: v.stockQty,
+    })),
+  }));
+  const fulfilmentOptions = store.fulfilmentOptions.map((f) => ({
+    id: f.id, kind: f.kind as 'PICKUP' | 'DELIVERY', label: f.label, feeKes: Number(f.feeKes),
   }));
 
   return (
     <StorefrontClient
       store={{ slug: store.slug, name: store.name, themeKey: store.themeKey }}
       products={products}
+      fulfilmentOptions={fulfilmentOptions}
     />
   );
 }

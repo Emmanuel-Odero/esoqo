@@ -3,6 +3,7 @@ import { requireCapability, systemCtx, type Ctx } from '../capabilities';
 import { recordAudit } from '../audit';
 import { assertOwnsStore } from './store';
 import { postStoreSale } from './_commerce-ledger';
+import { findOrCreateCustomer, earnLoyaltyForSale } from './customer';
 import type { StoreOrderPaymentMethod, StoreOrderStatus } from '@prisma/client';
 
 export class StoreOrderError extends Error {
@@ -17,7 +18,9 @@ export interface CreateOrderInput {
   buyerName: string;
   buyerMsisdn: string;
   paymentMethod: StoreOrderPaymentMethod;
-  items: { productId: string; quantity: number }[];
+  items: { productId: string; variantId?: string | null; quantity: number }[];
+  deliveryOptionId?: string | null;
+  collectionNotes?: string;
 }
 
 /**
@@ -28,18 +31,46 @@ export async function createStoreOrder(ctx: Ctx, input: CreateOrderInput) {
   const store = await prisma.store.findFirst({ where: { slug: input.storeSlug, status: 'ACTIVE' } });
   if (!store) throw new StoreOrderError('This store is not available', 'STORE_UNAVAILABLE');
 
-  const products = await prisma.product.findMany({
-    where: { id: { in: input.items.map((i) => i.productId) }, storeId: store.id, status: 'ACTIVE' },
-  });
+  const [products, variants] = await Promise.all([
+    prisma.product.findMany({
+      where: { id: { in: input.items.map((i) => i.productId) }, storeId: store.id, status: 'ACTIVE' },
+    }),
+    prisma.productVariant.findMany({
+      where: { id: { in: input.items.map((i) => i.variantId).filter((v): v is string => Boolean(v)) } },
+    }),
+  ]);
   if (products.length !== input.items.length) {
     throw new StoreOrderError('One of these items is no longer available', 'ITEM_UNAVAILABLE');
   }
 
+  let deliveryFeeKes = 0;
+  if (input.deliveryOptionId) {
+    const option = await prisma.fulfilmentOption.findUnique({ where: { id: input.deliveryOptionId } });
+    if (!option || option.storeId !== store.id || !option.active) {
+      throw new StoreOrderError('That delivery option is no longer available', 'ITEM_UNAVAILABLE');
+    }
+    deliveryFeeKes = Number(option.feeKes);
+  }
+
   const items = input.items.map((i) => {
     const p = products.find((pr) => pr.id === i.productId)!;
-    return { productId: p.id, quantity: i.quantity, unitPriceKes: p.priceKes };
+    const v = i.variantId ? variants.find((vr) => vr.id === i.variantId && vr.productId === p.id) : undefined;
+    if (i.variantId && !v) throw new StoreOrderError('One of these items is no longer available', 'ITEM_UNAVAILABLE');
+    // Cost snapshot at order time, same reasoning as PosSaleItem.costKes —
+    // a later price/cost edit must never rewrite what this sale actually
+    // cost, or gross profit reporting drifts every time a merchant
+    // updates a listing.
+    return {
+      productId: p.id, variantId: v?.id ?? null, quantity: i.quantity,
+      unitPriceKes: v?.priceKes ?? p.priceKes, costKes: v?.costKes ?? p.costKes,
+    };
   });
-  const totalKes = items.reduce((sum, i) => sum + Number(i.unitPriceKes) * i.quantity, 0);
+  const totalKes = items.reduce((sum, i) => sum + Number(i.unitPriceKes) * i.quantity, 0) + deliveryFeeKes;
+
+  // Auto-capture — same "a phone number is all it takes" rule the PoS
+  // terminal follows, so a shopper's order and loyalty history line up
+  // whether they bought online or walked into the shop.
+  const customer = await findOrCreateCustomer(store.id, input.buyerMsisdn, input.buyerName);
 
   const order = await prisma.storeOrder.create({
     data: {
@@ -49,6 +80,10 @@ export async function createStoreOrder(ctx: Ctx, input: CreateOrderInput) {
       buyerMsisdn: input.buyerMsisdn,
       paymentMethod: input.paymentMethod,
       totalKes,
+      deliveryOptionId: input.deliveryOptionId ?? null,
+      deliveryFeeKes: input.deliveryOptionId ? deliveryFeeKes : null,
+      collectionNotes: input.collectionNotes?.trim() || null,
+      customerId: customer.id,
       items: { create: items },
     },
     include: { items: { include: { product: true } } },
@@ -94,6 +129,10 @@ export async function confirmStoreOrderPayment(checkoutRequestId: string, mpesaR
     where: { id: order.id },
     data: { status: 'PAID', paidAt: new Date(), journalEntryId: entry.id },
   });
+
+  if (order.customerId) {
+    await earnLoyaltyForSale(order.storeId, order.customerId, Number(order.totalKes), { orderId: order.id });
+  }
 
   await recordAudit(systemCtx('mpesa-callback'), {
     action: 'store_order.paid',
