@@ -10,6 +10,7 @@ import { UnitPicker } from '../UnitPicker';
 interface Product {
   id: string; name: string; description: string | null; category: string | null;
   priceKes: number; costKes: number | null; unit: string | null; purchaseUnit: string | null; stockQty: number | null;
+  availableOnOrder: boolean;
 }
 
 export function ProductEditForm({ product }: { product: Product }) {
@@ -21,6 +22,7 @@ export function ProductEditForm({ product }: { product: Product }) {
   const [unit, setUnit] = useState(product.unit ?? '');
   const [purchaseUnit, setPurchaseUnit] = useState(product.purchaseUnit ?? '');
   const [stock, setStock] = useState(product.stockQty !== null ? String(product.stockQty) : '');
+  const [orderFirst, setOrderFirst] = useState(product.availableOnOrder);
   const [saved, setSaved] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [confirmDelete, setConfirmDelete] = useState(false);
@@ -34,6 +36,7 @@ export function ProductEditForm({ product }: { product: Product }) {
         name, description, category: category || undefined,
         priceKes: Number(price), costKes: cost === '' ? null : Number(cost),
         unit, purchaseUnit: purchaseUnit || null, stockQty: stock === '' ? null : Number(stock),
+        availableOnOrder: orderFirst,
       });
       if (!result.ok) { setError(result.error); return; }
       setSaved(true); router.refresh();
@@ -98,6 +101,22 @@ export function ProductEditForm({ product }: { product: Product }) {
       <p className="hint" style={{ marginTop: -6, marginBottom: 10 }}>
         Cost price is what lets your <a href="/dashboard/reports">Reports</a> page show real profit, not just sales. It's never shown to shoppers.
       </p>
+
+      <button
+        type="button"
+        className="opt"
+        aria-pressed={orderFirst}
+        onClick={() => setOrderFirst(!orderFirst)}
+        style={{ width: '100%', marginBottom: 8 }}
+      >
+        <span style={{ display: 'flex', justifyContent: 'space-between', width: '100%', alignItems: 'center', gap: 12 }}>
+          <span>
+            <b className="t" style={{ fontSize: '.92rem' }}>Made to order</b>
+            <span className="d">No stock kept — shoppers order now, you prepare it afterwards. Good when stock ties up money.</span>
+          </span>
+          <span className="mono" style={{ fontWeight: 700, flex: 'none' }}>{orderFirst ? 'On' : 'Off'}</span>
+        </span>
+      </button>
 
       {error && <p className="err" role="alert"><Icon name="alert-circle" size={14} />{error}</p>}
       {saved && <p style={{ color: 'var(--green)', fontSize: '.85rem', fontWeight: 600 }}><Icon name="check" size={14} /> Saved</p>}

@@ -35,6 +35,7 @@ export default async function ProductEditPage({ params }: { params: Promise<{ id
           category: product.category, priceKes: Number(product.priceKes),
           costKes: product.costKes !== null ? Number(product.costKes) : null,
           unit: product.unit, purchaseUnit: product.purchaseUnit, stockQty: product.stockQty,
+          availableOnOrder: product.availableOnOrder,
         }} />
         <ImageManager
           productId={product.id}
