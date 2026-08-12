@@ -2,6 +2,7 @@
 import { useMemo, useState } from 'react';
 import { Icon } from '@esoko/ui';
 import { useAnnounce } from '@esoko/a11y';
+import { PRODUCT_CATEGORIES } from '@esoko/domain';
 
 export interface StoreRow {
   slug: string;
@@ -10,12 +11,22 @@ export interface StoreRow {
   workRaw: string;
   productCount: number;
   posEnabled: boolean;
+  primaryCategory: string | null;
+  verified: boolean;
   handleUrl: string;
 }
+
+// Known category keys, plus one "Other" bucket for a store whose
+// primaryCategory is free text or unset — the profile editor allows a
+// seller to type their own ("Poultry, dairy & eggs"), so directory
+// chips can't assume the field is always a known key.
+const CAT_LABEL: Record<string, string> = Object.fromEntries(PRODUCT_CATEGORIES);
+const KNOWN = new Set<string>(PRODUCT_CATEGORIES.map(([k]) => k));
 
 export function StoreBrowser({ stores }: { stores: StoreRow[] }) {
   const [q, setQ] = useState('');
   const [county, setCounty] = useState('');
+  const [cat, setCat] = useState('');
   const announce = useAnnounce();
 
   const counties = useMemo(
@@ -23,14 +34,24 @@ export function StoreBrowser({ stores }: { stores: StoreRow[] }) {
     [stores],
   );
 
+  const cats = useMemo(() => {
+    const seen = new Set<string>();
+    for (const s of stores) seen.add(s.primaryCategory ? (KNOWN.has(s.primaryCategory) ? s.primaryCategory : 'OTHER') : 'OTHER');
+    return [...seen].sort();
+  }, [stores]);
+
   const filtered = useMemo(() => {
     const t = q.trim().toLowerCase();
     return stores.filter((s) => {
       if (county && s.county !== county) return false;
+      if (cat) {
+        const c = s.primaryCategory ? (KNOWN.has(s.primaryCategory) ? s.primaryCategory : 'OTHER') : 'OTHER';
+        if (c !== cat) return false;
+      }
       if (t && !`${s.name} ${s.workRaw} ${s.county ?? ''}`.toLowerCase().includes(t)) return false;
       return true;
     });
-  }, [stores, q, county]);
+  }, [stores, q, county, cat]);
 
   return (
     <>
@@ -54,6 +75,26 @@ export function StoreBrowser({ stores }: { stores: StoreRow[] }) {
         </select>
       </div>
 
+      {cats.length > 0 && (
+        <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginBottom: 16 }} role="group" aria-label="Filter by what stores sell">
+          <button
+            type="button" className="chip" aria-pressed={cat === ''}
+            onClick={() => { setCat(''); announce('Showing all categories'); }}
+          >
+            All
+          </button>
+          {cats.map((c) => (
+            <button
+              type="button" key={c} className="chip" aria-pressed={cat === c}
+              style={cat === c ? { borderColor: 'var(--green)', background: 'var(--green-t)', color: 'var(--green)' } : undefined}
+              onClick={() => { setCat(c); announce(`Filtered to ${CAT_LABEL[c] ?? c}`); }}
+            >
+              {CAT_LABEL[c] ?? c}
+            </button>
+          ))}
+        </div>
+      )}
+
       <p className="sub" style={{ marginBottom: 16 }} aria-live="polite">
         {filtered.length} store{filtered.length === 1 ? '' : 's'}
       </p>
@@ -74,6 +115,11 @@ export function StoreBrowser({ stores }: { stores: StoreRow[] }) {
               <p className="sub mono" style={{ marginTop: 10, marginBottom: 0, fontSize: '.78rem' }}>
                 {s.county ?? 'Kenya'} · {s.productCount} product{s.productCount === 1 ? '' : 's'}{s.posEnabled ? ' · PoS' : ''}
               </p>
+              {s.verified && (
+                <p className="sub" style={{ margin: '8px 0 0', fontSize: '.78rem', fontWeight: 700, color: 'var(--green)' }}>
+                  <Icon name="shield-check" size={13} style={{ verticalAlign: '-2px', marginRight: 4 }} />Verified Esoko business
+                </p>
+              )}
             </a>
           ))}
         </div>

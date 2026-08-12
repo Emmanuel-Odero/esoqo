@@ -46,6 +46,8 @@ export default async function DiscoverPage() {
                 workRaw: s.enterprise.workRaw,
                 productCount: s._count.products,
                 posEnabled: s.posEnabled,
+                primaryCategory: s.primaryCategory,
+                verified: s.enterprise.isRegistered,
                 handleUrl: `${STORE_URL}/@${s.slug}`,
               }))}
             />
