@@ -1,6 +1,7 @@
 import { prisma } from '../client';
 import { requireCapability, AuthorisationError, type Capability, type Ctx } from '../capabilities';
 import { recordAudit } from '../audit';
+import { deleteObject } from '../storage';
 
 /**
  * Stores.
@@ -69,6 +70,10 @@ export interface CreateStoreInput {
   themeKey: string;
   routingMode: 'PATH' | 'SUBDOMAIN';
   posEnabled: boolean;
+  /** Profile starts collected at creation — the rest happens later in
+   *  Settings → Store profile. */
+  tagline?: string;
+  contactPhone?: string;
 }
 
 export async function createStore(ctx: Ctx, input: CreateStoreInput) {
@@ -95,6 +100,8 @@ export async function createStore(ctx: Ctx, input: CreateStoreInput) {
       routingMode: input.routingMode,
       posEnabled: input.posEnabled,
       status: 'ACTIVE',
+      tagline: input.tagline || null,
+      contactPhone: input.contactPhone || null,
     },
   });
 
@@ -119,6 +126,63 @@ export async function updateStore(ctx: Ctx, storeId: string, patch: StoreSetting
   const store = await prisma.store.update({ where: { id: storeId }, data: patch });
   await recordAudit(ctx, { action: 'store.updated', targetType: 'store', targetId: storeId, payload: { ...patch } });
   return store;
+}
+
+/** One step of the EStore profile — the caller passes exactly the fields
+ *  its step schema validated. Only non-empty writes land so "clear a
+ *  field" and "leave it alone" are distinguishable. */
+export type StoreProfilePatch = Partial<{
+  legalName: string; registrationNumber: string;
+  contactPerson: string; contactEmail: string; contactPhone: string; physicalAddress: string;
+  tagline: string; aboutUs: string;
+  logoStorageKey: string; logoUrl: string;
+  faviconStorageKey: string; faviconUrl: string;
+  brandAccent: string;
+  instagram: string; facebook: string; tiktok: string; whatsapp: string; linkedin: string;
+  primaryCategory: string; skuCount: number | null;
+  deliveryOrigin: string; deliveryZones: string[]; processingDays: number | null;
+  currency: string; taxRatePct: number | null; settlementPhone: string;
+  codEnabled: boolean;
+}>;
+
+export async function updateStoreProfile(ctx: Ctx, storeId: string, patch: StoreProfilePatch) {
+  await assertOwnsStore(ctx, storeId, 'store.write');
+  const store = await prisma.store.update({ where: { id: storeId }, data: patch });
+  await recordAudit(ctx, { action: 'store.profile_updated', targetType: 'store', targetId: storeId, payload: { ...patch } });
+  return store;
+}
+
+/* ── storefront photos ────────────────────────────────────────── */
+
+export async function addStorePhoto(ctx: Ctx, storeId: string, input: { storageKey: string; url: string }) {
+  await assertOwnsStore(ctx, storeId, 'store.write');
+  const count = await prisma.storePhoto.count({ where: { storeId } });
+  const photo = await prisma.storePhoto.create({
+    data: { storeId, storageKey: input.storageKey, url: input.url, position: count },
+  });
+  await recordAudit(ctx, { action: 'store.photo_added', targetType: 'store', targetId: storeId });
+  return photo;
+}
+
+export async function deleteStorePhoto(ctx: Ctx, photoId: string) {
+  const photo = await prisma.storePhoto.findUnique({ where: { id: photoId } });
+  if (!photo) throw new StoreError('That photo was not found', 'NOT_FOUND');
+  await assertOwnsStore(ctx, photo.storeId, 'store.write');
+  await prisma.storePhoto.delete({ where: { id: photoId } });
+  await deleteObject(photo.storageKey).catch(() => undefined);
+  await recordAudit(ctx, { action: 'store.photo_removed', targetType: 'store', targetId: photo.storeId });
+}
+
+export async function reorderStorePhotos(ctx: Ctx, storeId: string, orderedPhotoIds: string[]) {
+  await assertOwnsStore(ctx, storeId, 'store.write');
+  await prisma.$transaction(
+    orderedPhotoIds.map((id, position) => prisma.storePhoto.update({ where: { id, storeId }, data: { position } })),
+  );
+}
+
+export async function listStorePhotos(ctx: Ctx, storeId: string) {
+  await assertOwnsStore(ctx, storeId, 'store.read');
+  return prisma.storePhoto.findMany({ where: { storeId }, orderBy: { position: 'asc' } });
 }
 
 /** The stores a signed-in subject owns, across every Enterprise on their Party. */
@@ -147,6 +211,11 @@ export async function getStoreBySlug(_ctx: Ctx, slug: string) {
         orderBy: { createdAt: 'desc' },
       },
       fulfilmentOptions: { where: { active: true }, orderBy: { kind: 'asc' } },
+      photos: { orderBy: { position: 'asc' } },
+      // Owner trust facts shown on the storefront — the registered
+      // business flag (Enterprise.isRegistered) drives the "Verified
+      // Esoko business" badge; county comes from the owner's Party.
+      enterprise: { select: { isRegistered: true, party: { select: { county: true } } } },
     },
   });
 }
@@ -199,7 +268,7 @@ export async function listPublicStores(_ctx: Ctx, f: PublicStoreFilter = {}) {
       ...(f.search ? { name: { contains: f.search, mode: 'insensitive' as const } } : {}),
     },
     include: {
-      enterprise: { select: { workRaw: true, sector: true, party: { select: { county: true } } } },
+      enterprise: { select: { workRaw: true, sector: true, isRegistered: true, party: { select: { county: true } } } },
       _count: { select: { products: { where: { status: 'ACTIVE' } } } },
     },
     orderBy: { createdAt: 'desc' },

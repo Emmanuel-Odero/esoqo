@@ -690,6 +690,73 @@ model Store {
   /// storefront — one loyalty pool per store.
   loyaltyPerKes  Int     @default(1)
 
+  /// Whether the storefront offers cash on delivery at checkout, in
+  /// addition to M-Pesa STK. Off by default — the seller opts in.
+  codEnabled Boolean @default(false)
+
+  // ── EStore profile ────────────────────────────────────────────
+  // Business identity a customer-facing storefront shows. `name` above
+  // is the trading name; these hold the registered/legal details and
+  // contact info. All optional — a store sells fine without them, the
+  // storefront just shows less.
+
+  /// Registered/legal business name, where it differs from the trading name.
+  legalName String?
+  /// KRA PIN or business registration number, shown in the storefront's
+  /// business identity block.
+  registrationNumber String?
+  /// A named person customers can ask for ("Ask for Mama Njeri").
+  contactPerson String?
+  contactEmail String?
+  /// +254 format, same convention as customer/supplier phones.
+  contactPhone String?
+  physicalAddress String?
+
+  /// One-line pitch under the store name on the storefront hero.
+  tagline String?
+  /// Long-form story — where the goods come from, how the shop started.
+  /// Shown as the storefront's About section. Plain text.
+  aboutUs String?
+  logoStorageKey String?
+  /// Public URL served via /img/{key}, same pattern as ProductImage.
+  logoUrl String?
+  faviconStorageKey String?
+  faviconUrl String?
+
+  /// Brand accent override — a hex colour that beats the theme accent
+  /// when set, so a store with its own colours doesn't need a new theme.
+  brandAccent String?
+
+  instagram String?
+  facebook String?
+  tiktok String?
+  whatsapp String?
+  linkedin String?
+
+  /// The category the store mostly trades in — one of PRODUCT_CATEGORIES.
+  primaryCategory String?
+  /// Rough size of the catalogue ("how many things do you sell?").
+  skuCount Int?
+
+  /// Where orders are packed/picked up from — "Juja Main, Kiambu".
+  deliveryOrigin String?
+  /// Free-text delivery areas served — "Juja, Thika, Ruiru".
+  deliveryZones String[] @default([])
+  /// Typical turnaround in days (informational on the storefront).
+  processingDays Int?
+
+  /// Currency the store prices in — KES for everything today; kept on
+  /// the profile so the storefront can label prices honestly if it ever
+  /// changes.
+  currency String @default("KES")
+  /// VAT rate shown on the storefront when set (16 = 16%). Informational —
+  /// online checkouts price in KES inclusive of nothing; how tax is
+  /// collected is a fiscal-device (eTIMS) concern, not a profile one.
+  taxRatePct Int?
+  /// M-Pesa number settlements should be paid to. Informational on the
+  /// profile today — actual payouts run through the enterprise ledger.
+  settlementPhone String?
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
@@ -704,10 +771,28 @@ model Store {
   fulfilmentOptions FulfilmentOption[]
   suppliers         Supplier[]
   stockPurchases    StockPurchase[]
+  photos            StorePhoto[]
 
   @@index([enterpriseId])
   @@index([status])
   @@map("store")
+}
+
+/// Photo-gallery images a store puts on its storefront — the shopfront
+/// itself, a new delivery bike, whatever makes the store real. Same
+/// storage-key discipline as ProductImage: opaque key, public URL via
+/// /img, never served as a static asset.
+model StorePhoto {
+  id         String @id @default(uuid()) @db.Uuid
+  storeId    String @db.Uuid
+  store      Store  @relation(fields: [storeId], references: [id], onDelete: Cascade)
+  storageKey String
+  url        String
+  position   Int    @default(0)
+  createdAt  DateTime @default(now())
+
+  @@index([storeId])
+  @@map("store_photo")
 }
 
 model Product {
@@ -724,6 +809,10 @@ model Product {
   priceKes     Decimal          @db.Decimal(12, 2)
   /// Null = untracked (a service, or stock the merchant doesn't count).
   stockQty     Int?
+  /// Sell-by-order: the merchant doesn't hold the stock (or holds little),
+  /// and fulfils once the buyer orders — "available on order". Order-first
+  /// keeps working capital out of stock, the model MSMEs can actually run.
+  availableOnOrder Boolean @default(false)
   /// Cost of goods — what the merchant paid, needed to show gross profit.
   /// Optional: a business that doesn't track cost sees revenue only.
   costKes      Decimal?         @db.Decimal(12, 2)
@@ -815,6 +904,9 @@ model ProductVariant {
   priceKes Decimal  @db.Decimal(12, 2)
   /// Null = untracked stock, same meaning as Product.stockQty.
   stockQty Int?
+  /// Order-first, same meaning as Product.availableOnOrder — a variant
+  /// the merchant fulfils once ordered rather than holding stock.
+  availableOnOrder Boolean @default(false)
   costKes  Decimal? @db.Decimal(12, 2)
   /// Optional barcode/EAN for the option.
   sku      String?
@@ -883,6 +975,10 @@ model StoreOrder {
   deliveryFeeKes   Decimal?          @db.Decimal(12, 2)
   /// Free-text note for the shop — "hand to Joshua at gate three".
   collectionNotes  String?
+  /// Where a DELIVERY order goes — street/estate/landmark, plain text
+  /// captured at checkout. Tracked so COD and last-mile delivery have a
+  /// real destination on record.
+  deliveryAddress  String?
 
   /// Cross-channel customer account, when the phone already belongs to a
   /// StoreCustomer (auto-created at checkout or matched by msisdn).

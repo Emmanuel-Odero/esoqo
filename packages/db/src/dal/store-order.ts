@@ -7,7 +7,10 @@ import { findOrCreateCustomer, earnLoyaltyForSale } from './customer';
 import type { StoreOrderPaymentMethod, StoreOrderStatus } from '@prisma/client';
 
 export class StoreOrderError extends Error {
-  constructor(msg: string, public readonly code: 'STORE_UNAVAILABLE' | 'ITEM_UNAVAILABLE' | 'NOT_FOUND') {
+  constructor(
+    msg: string,
+    public readonly code: 'STORE_UNAVAILABLE' | 'ITEM_UNAVAILABLE' | 'PAYMENT_UNAVAILABLE' | 'NOT_FOUND',
+  ) {
     super(msg);
     this.name = 'StoreOrderError';
   }
@@ -21,6 +24,7 @@ export interface CreateOrderInput {
   items: { productId: string; variantId?: string | null; quantity: number }[];
   deliveryOptionId?: string | null;
   collectionNotes?: string;
+  deliveryAddress?: string;
 }
 
 /**
@@ -30,6 +34,13 @@ export interface CreateOrderInput {
 export async function createStoreOrder(ctx: Ctx, input: CreateOrderInput) {
   const store = await prisma.store.findFirst({ where: { slug: input.storeSlug, status: 'ACTIVE' } });
   if (!store) throw new StoreOrderError('This store is not available', 'STORE_UNAVAILABLE');
+
+  // Cash on delivery is opt-in per store — the seller chose whether their
+  // storefront offers it (Store.codEnabled). Never silently accept a COD
+  // the merchant hasn't switched on.
+  if (input.paymentMethod === 'CASH_ON_DELIVERY' && !store.codEnabled) {
+    throw new StoreOrderError('This shop does not offer cash on delivery', 'PAYMENT_UNAVAILABLE');
+  }
 
   const [products, variants] = await Promise.all([
     prisma.product.findMany({
@@ -56,6 +67,15 @@ export async function createStoreOrder(ctx: Ctx, input: CreateOrderInput) {
     const p = products.find((pr) => pr.id === i.productId)!;
     const v = i.variantId ? variants.find((vr) => vr.id === i.variantId && vr.productId === p.id) : undefined;
     if (i.variantId && !v) throw new StoreOrderError('One of these items is no longer available', 'ITEM_UNAVAILABLE');
+    // Order-first stock rule: a tracked item at zero (or below) sells
+    // only when the merchant marked it availableOnOrder — the badge the
+    // storefront shows as "Fulfilled when ordered". Untracked stock
+    // (null) stays sellable as before. No reservation/decrement here;
+    // that's the seller's stock-keeping decision.
+    const eff = v ? v : p;
+    if (eff.stockQty !== null && eff.stockQty <= 0 && !eff.availableOnOrder) {
+      throw new StoreOrderError(`${p.name} is sold out`, 'ITEM_UNAVAILABLE');
+    }
     // Cost snapshot at order time, same reasoning as PosSaleItem.costKes —
     // a later price/cost edit must never rewrite what this sale actually
     // cost, or gross profit reporting drifts every time a merchant
@@ -83,6 +103,7 @@ export async function createStoreOrder(ctx: Ctx, input: CreateOrderInput) {
       deliveryOptionId: input.deliveryOptionId ?? null,
       deliveryFeeKes: input.deliveryOptionId ? deliveryFeeKes : null,
       collectionNotes: input.collectionNotes?.trim() || null,
+      deliveryAddress: input.deliveryAddress?.trim() || null,
       customerId: customer.id,
       items: { create: items },
     },
@@ -139,6 +160,52 @@ export async function confirmStoreOrderPayment(checkoutRequestId: string, mpesaR
     targetType: 'store_order',
     targetId: order.id,
     payload: { mpesaReceiptCode },
+  });
+
+  return updated;
+}
+
+/**
+ * Merchant confirms a cash-on-delivery order is paid — the counterpart to
+ * the M-Pesa callback for a COD checkout. Posts the sale to the ledger
+ * (the cash is now actually in) and flips the order to PAID. Idempotent
+ * per order via the COD-{orderId} ledger key, so double-tapping the
+ * button can't double-post.
+ */
+export async function confirmStoreOrderCod(ctx: Ctx, orderId: string) {
+  const order = await prisma.storeOrder.findUnique({
+    where: { id: orderId },
+    include: { store: { include: { enterprise: true } } },
+  });
+  if (!order) throw new StoreOrderError('Order not found', 'NOT_FOUND');
+  await assertOwnsStore(ctx, order.storeId, 'order.fulfil');
+  if (order.paymentMethod !== 'CASH_ON_DELIVERY') {
+    throw new StoreOrderError('This order was paid with M-Pesa, not cash on delivery', 'PAYMENT_UNAVAILABLE');
+  }
+  if (order.status !== 'PENDING_PAYMENT') return order;
+
+  const entry = await postStoreSale({
+    storeOwnerPartyId: order.store.enterprise.partyId,
+    totalKes: Number(order.totalKes),
+    reference: `STORE-ORDER-${order.id}`,
+    description: `Order ${order.id.slice(0, 8)} — ${order.store.name} (COD)`,
+    idempotencyKey: `COD-${order.id}`,
+  });
+
+  const updated = await prisma.storeOrder.update({
+    where: { id: order.id },
+    data: { status: 'PAID', paidAt: new Date(), journalEntryId: entry.id },
+  });
+
+  if (order.customerId) {
+    await earnLoyaltyForSale(order.storeId, order.customerId, Number(order.totalKes), { orderId: order.id });
+  }
+
+  await recordAudit(ctx, {
+    action: 'store_order.paid',
+    targetType: 'store_order',
+    targetId: order.id,
+    payload: { paymentMethod: 'CASH_ON_DELIVERY' },
   });
 
   return updated;

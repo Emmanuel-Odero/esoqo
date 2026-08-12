@@ -23,6 +23,8 @@ export interface UpsertProductInput {
   /** Unit the stock was bought in — see Product.purchaseUnit. */
   purchaseUnit?: string | null;
   stockQty?: number | null;
+  /** Order-first — sell with no stock held, fulfil when ordered. */
+  availableOnOrder?: boolean;
 }
 
 export async function createProduct(ctx: Ctx, storeId: string, input: UpsertProductInput) {
@@ -32,6 +34,7 @@ export async function createProduct(ctx: Ctx, storeId: string, input: UpsertProd
       storeId, name: input.name, description: input.description, category: input.category,
       priceKes: input.priceKes, costKes: input.costKes ?? null, unit: input.unit ?? null,
       purchaseUnit: input.purchaseUnit ?? null, stockQty: input.stockQty ?? null,
+      availableOnOrder: input.availableOnOrder ?? false,
     },
   });
   await recordAudit(ctx, { action: 'product.created', targetType: 'product', targetId: product.id, payload: { storeId, name: input.name } });
@@ -165,6 +168,7 @@ export interface UpsertVariantInput {
   priceKes: number;
   costKes?: number | null;
   stockQty?: number | null;
+  availableOnOrder?: boolean;
   sku?: string | null;
 }
 
@@ -177,7 +181,8 @@ export async function createVariant(ctx: Ctx, productId: string, input: UpsertVa
   const variant = await prisma.productVariant.create({
     data: {
       productId, label: input.label.trim(), priceKes: input.priceKes,
-      costKes: input.costKes ?? null, stockQty: input.stockQty ?? null, sku: input.sku?.trim() || null,
+      costKes: input.costKes ?? null, stockQty: input.stockQty ?? null,
+      availableOnOrder: input.availableOnOrder ?? false, sku: input.sku?.trim() || null,
     },
   });
   await recordAudit(ctx, { action: 'product.variant_added', targetType: 'product', targetId: productId, payload: { label: variant.label } });
@@ -196,6 +201,7 @@ export async function updateVariant(ctx: Ctx, variantId: string, input: Partial<
       ...(input.priceKes !== undefined ? { priceKes: input.priceKes } : {}),
       ...(input.costKes !== undefined ? { costKes: input.costKes } : {}),
       ...(input.stockQty !== undefined ? { stockQty: input.stockQty } : {}),
+      ...(input.availableOnOrder !== undefined ? { availableOnOrder: input.availableOnOrder } : {}),
       ...(input.sku !== undefined ? { sku: input.sku?.trim() || null } : {}),
     },
   });
