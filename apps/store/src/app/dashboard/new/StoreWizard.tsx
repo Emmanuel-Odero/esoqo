@@ -23,6 +23,8 @@ export function StoreWizard({ enterprises, pricing }: { enterprises: Enterprise[
 
   const [enterpriseId, setEnterpriseId] = useState(enterprises[0]?.id ?? '');
   const [name, setName] = useState('');
+  const [tagline, setTagline] = useState('');
+  const [contactPhone, setContactPhone] = useState('');
   const [routingMode, setRoutingMode] = useState<'PATH' | 'SUBDOMAIN'>('PATH');
   const [themeKey, setThemeKey] = useState<(typeof THEMES)[number]['key']>('market');
   const [posEnabled, setPosEnabled] = useState(true);
@@ -39,7 +41,7 @@ export function StoreWizard({ enterprises, pricing }: { enterprises: Enterprise[
   function submit() {
     setError(null);
     startTransition(async () => {
-      const result = await submitStoreWizard({ enterpriseId, name, themeKey, routingMode, posEnabled });
+      const result = await submitStoreWizard({ enterpriseId, name, tagline, contactPhone, themeKey, routingMode, posEnabled });
       if (result && !result.ok) setError(result.error);
     });
   }
@@ -66,6 +68,14 @@ export function StoreWizard({ enterprises, pricing }: { enterprises: Enterprise[
           <div className="fld">
             <label className="lab" htmlFor="name">Store name</label>
             <input className="inp" id="name" value={name} onChange={(ev) => setName(ev.target.value)} placeholder="Kanini Fresh Produce" />
+          </div>
+          <div className="fld">
+            <label className="lab" htmlFor="tagline">Tagline <em className="dim">optional</em></label>
+            <input className="inp" id="tagline" value={tagline} onChange={(ev) => setTagline(ev.target.value)} placeholder="Fresh from the farm, every morning" maxLength={120} />
+          </div>
+          <div className="fld">
+            <label className="lab" htmlFor="cphone">Contact number <em className="dim">optional</em></label>
+            <input className="inp mono" id="cphone" value={contactPhone} onChange={(ev) => setContactPhone(ev.target.value)} placeholder="+254 712 345 678" inputMode="tel" />
           </div>
         </>
       )}
@@ -126,6 +136,8 @@ export function StoreWizard({ enterprises, pricing }: { enterprises: Enterprise[
           <p className="qs">Charged the way you already pay — M-Pesa, right after this.</p>
           <div className="card">
             <div className="review-line"><span>Store name</span><b>{name || '—'}</b></div>
+            <div className="review-line"><span>Tagline</span><b>{tagline || '—'}</b></div>
+            <div className="review-line"><span>Contact number</span><b className="mono">{contactPhone || '—'}</b></div>
             <div className="review-line"><span>Address</span><b>{routingMode === 'PATH' ? `esoko.global/@${slug} — Free` : `${slug}.esoko.global — ${kes(subdomainSetup)} + ${kes(subdomainMonthly)}/mo`}</b></div>
             <div className="review-line"><span>Theme</span><b>{THEMES.find((t) => t.key === themeKey)?.name}</b></div>
             <div className="review-line"><span>PoS terminal</span><b>{posEnabled ? `Added — ${kes(posMonthly)}/mo` : 'Not added'}</b></div>

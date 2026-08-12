@@ -18,6 +18,7 @@ const NAV: [string, IconName, string][] = [
   ['/dashboard/debts', 'coins', 'Debts'],
   ['/dashboard/reports', 'chart', 'Reports'],
   ['/dashboard/settings', 'shop', 'Store settings'],
+  ['/dashboard/settings/profile', 'star', 'Store profile'],
 ];
 
 export function DashSidebar({ store }: { store: { name: string; slug: string } | null }) {
