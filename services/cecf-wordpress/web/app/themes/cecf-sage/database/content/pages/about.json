@@ -13,7 +13,11 @@
         "Our core work centres on helping these groups formalise, regularise their legal status, and link into both government services and negotiated markets for their goods and services."
       ],
       "callout": "**We are not a new entrant testing an unproven model.** CECF has already facilitated formal registration, negotiated market access, and brokered relationships between grassroots groups and formal institutions. What we are scaling and digitising now is a model already demonstrated on the ground.",
-      "media": { "type": "illustration", "ref": "hands-of-care.svg", "alt": "A child's hand and an elder's hand" }
+      "media": {
+        "type": "illustration",
+        "ref": "hands-of-care.svg",
+        "alt": "A child's hand and an elder's hand"
+      }
     },
     {
       "type": "cardGrid",
@@ -21,9 +25,24 @@
       "heading": "Who we serve",
       "lead": "Our beneficiary base spans a genuinely diverse cross-section of Kenya’s informal and semi-formal private sector — reflecting deep, trusted community relationships built through our faith-based and grassroots networks, relationships that are difficult for external or purely commercial actors to replicate.",
       "items": [
-        { "icon": "people", "color": "teal", "title": "Groups and associations", "body": "Furniture makers, market traders, transport operators, table banking groups and welfare associations." },
-        { "icon": "chart-bars", "color": "ochre", "title": "Micro and small enterprises", "body": "Agribusinesses, carwash operators, retail and wholesale traders, electronics and hardware businesses." },
-        { "icon": "target", "color": "clay", "title": "Rural, youth and women-led enterprise", "body": "The segments facing the steepest exclusion barriers nationally, and where our identification work is targeted first." }
+        {
+          "icon": "people",
+          "color": "teal",
+          "title": "Groups and associations",
+          "body": "Furniture makers, market traders, transport operators, table banking groups and welfare associations."
+        },
+        {
+          "icon": "chart-bars",
+          "color": "ochre",
+          "title": "Micro and small enterprises",
+          "body": "Agribusinesses, carwash operators, retail and wholesale traders, electronics and hardware businesses."
+        },
+        {
+          "icon": "target",
+          "color": "clay",
+          "title": "Rural, youth and women-led enterprise",
+          "body": "The segments facing the steepest exclusion barriers nationally, and where our identification work is targeted first."
+        }
       ]
     },
     {
@@ -31,8 +50,18 @@
       "columns": 2,
       "variant": "missionVision",
       "items": [
-        { "icon": "target", "color": "teal", "title": "Our mission", "body": "To bring Kenya’s grassroots economic groups and MSMEs into formal recognition, and to connect them — through a single digitally integrated pathway — with the financial, legal and government services that recognition makes available." },
-        { "icon": "globe", "color": "ochre", "title": "Our vision", "body": "A Kenya where regulatory reform actually translates into inclusive economic growth for the most underserved socioeconomic groups and MSMEs." }
+        {
+          "icon": "target",
+          "color": "teal",
+          "title": "Our mission",
+          "body": "To bring Kenya’s grassroots economic groups and MSMEs into formal recognition, and to connect them — through a single digitally integrated pathway — with the financial, legal and government services that recognition makes available."
+        },
+        {
+          "icon": "globe",
+          "color": "ochre",
+          "title": "Our vision",
+          "body": "A Kenya where regulatory reform actually translates into inclusive economic growth for the most underserved socioeconomic groups and MSMEs."
+        }
       ]
     },
     {
@@ -40,9 +69,24 @@
       "columns": 3,
       "heading": "What makes our work different",
       "items": [
-        { "icon": "map-pin", "color": "teal", "title": "We go to them", "body": "Field officers meet groups where they meet — a church hall, a market shed, under a tree — rather than asking a treasurer to travel into town to be told what she is missing." },
-        { "icon": "puzzle", "color": "ochre", "title": "We work through institutions", "body": "Every partnership is a signed agreement with the body that holds the authority. Slower than working around them, and the only version that lasts." },
-        { "icon": "fish", "color": "clay", "title": "We publish what happened", "body": "Including the parts that did not work. A foundation that only reports successes is telling you it is not measuring properly." }
+        {
+          "icon": "map-pin",
+          "color": "teal",
+          "title": "We go to them",
+          "body": "Field officers meet groups where they meet — a church hall, a market shed, under a tree — rather than asking a treasurer to travel into town to be told what she is missing."
+        },
+        {
+          "icon": "puzzle",
+          "color": "ochre",
+          "title": "We work through institutions",
+          "body": "Every partnership is a signed agreement with the body that holds the authority. Slower than working around them, and the only version that lasts."
+        },
+        {
+          "icon": "fish",
+          "color": "clay",
+          "title": "We publish what happened",
+          "body": "Including the parts that did not work. A foundation that only reports successes is telling you it is not measuring properly."
+        }
       ]
     },
     {
@@ -50,8 +94,18 @@
       "heading": "Bring your group or MSME in",
       "body": "Assistance is free. Bring what you have — we will tell you plainly what is missing and what it will cost, before you spend anything.",
       "ctas": [
-        { "label": "Start registration", "page": "form", "style": "primary", "icon": "compass" },
-        { "label": "Find a field officer", "page": "findus", "style": "outline-white", "icon": "map-pin" }
+        {
+          "label": "Start registration",
+          "page": "apply",
+          "style": "primary",
+          "icon": "compass"
+        },
+        {
+          "label": "Find a field officer",
+          "page": "programs#find-a-field-officer",
+          "style": "outline-white",
+          "icon": "map-pin"
+        }
       ]
     },
     {
@@ -70,16 +124,35 @@
         "**Programme Advisory Group** — includes representatives elected from the groups we serve. They review what we plan before we do it."
       ],
       "callout": "**That last one matters most.** Programme design that has never been shown to a group treasurer before launch is design that will be wrong in ways nobody predicted.",
-      "media": { "type": "illustration", "ref": "published-reports.svg", "alt": "Reports and published accounts" }
+      "media": {
+        "type": "illustration",
+        "ref": "published-reports.svg",
+        "alt": "Reports and published accounts"
+      }
     },
     {
       "type": "cardGrid",
       "columns": 3,
       "heading": "Accountability",
       "items": [
-        { "icon": "document", "color": "teal", "title": "Audited accounts", "body": "Published annually, prepared by an independent registered auditor, and available to anybody who asks — not only to funders." },
-        { "icon": "shield", "color": "ochre", "title": "Safeguarding policy", "body": "Every officer, volunteer and partner working with children or vulnerable adults is screened, trained and bound by a written code." },
-        { "icon": "scales", "color": "clay", "title": "Complaints", "body": "Any group or individual can raise a complaint, in Kiswahili or English, and escalate it beyond us if our answer does not satisfy them." }
+        {
+          "icon": "document",
+          "color": "teal",
+          "title": "Audited accounts",
+          "body": "Published annually, prepared by an independent registered auditor, and available to anybody who asks — not only to funders."
+        },
+        {
+          "icon": "shield",
+          "color": "ochre",
+          "title": "Safeguarding policy",
+          "body": "Every officer, volunteer and partner working with children or vulnerable adults is screened, trained and bound by a written code."
+        },
+        {
+          "icon": "scales",
+          "color": "clay",
+          "title": "Complaints",
+          "body": "Any group or individual can raise a complaint, in Kiswahili or English, and escalate it beyond us if our answer does not satisfy them."
+        }
       ]
     },
     {
@@ -94,47 +167,186 @@
       "heading": "Our consortium",
       "prose": [
         "CECF issues nothing. Every certificate, PIN, licence or account a group ends up holding is issued by the institution with the legal mandate to issue it.",
-        "What we bring is sequencing and integration — turning separate bilateral partnerships into a single staged pathway, tested through CECF’s existing relationships and now being consolidated into one integrated delivery model."
+        "What we bring is sequencing and integration — turning separate bilateral partnerships into a single staged pathway, tested through CECF’s existing relationships and now being consolidated into one integrated delivery model.",
+        "We work across four kinds of partner: government ministries and agencies, banks and insurers, donors and development partners, and corporate sponsors."
       ],
-      "media": { "type": "illustration", "ref": "institutions-network.svg", "alt": "Institutions connected around a community group" }
+      "media": {
+        "type": "illustration",
+        "ref": "institutions-network.svg",
+        "alt": "Institutions connected around a community group"
+      }
     },
     {
-      "type": "partnerList",
-      "heading": "Government partners",
+      "type": "linkOut",
+      "label": "See our partnerships",
+      "page": "partnerships",
+      "style": "primary"
+    },
+    {
+      "type": "prose",
+      "anchor": "problem",
+      "kicker": "About us",
+      "heading": "The problem we solve",
+      "body": [
+        "Structural friction in the systems meant to formalise Kenya’s grassroots groups and MSMEs, and the single, sequenced pathway we run with government and financial partners to fix it.",
+        "Kenya’s socioeconomic groups — self-help groups, community-based organisations, welfare associations, faith-based networks — and its micro, small and medium enterprises form the backbone of grassroots economic activity. Yet the majority remain trapped in informality not by choice, but by structural friction in the systems meant to formalise them.",
+        "This friction shows up as two interlocking problems: the absence of accessible, predictable regulatory pathways, and the resulting failure to translate registration, where it happens, into genuine socioeconomic empowerment."
+      ]
+    },
+    {
+      "type": "twoColumn",
+      "heading": "Problem one: regulatory fragmentation",
+      "prose": [
+        "Until recently, community groups operated under an unclear legal identity, treated largely as an administrative creation of the Department of Gender and Social Services rather than as legal entities with defined rights and obligations. The Community Groups Registration Act 2022 was meant to resolve this — yet awareness remains critically low.",
+        "For MSMEs, the picture is similarly fragmented. Business registration, licensing, tax registration and compliance sit across multiple disconnected institutions — the Business Registration Service, county licensing offices and the Kenya Revenue Authority — each with its own procedures, timelines and documentation requirements.",
+        "New compliance obligations are also arriving faster than small operators can absorb them: eTIMS invoicing requirements from 2026 and stricter Finance Act 2025 reporting standards add real cost and complexity for volunteer-run groups and micro-enterprises with minimal administrative capacity."
+      ],
+      "media": {
+        "type": "statGrid",
+        "columns": 3,
+        "items": [
+          {
+            "value": "<10%",
+            "label": "Community groups aware the 2022 Act exists"
+          },
+          {
+            "value": "<5%",
+            "label": "County social services directorates aware of it"
+          },
+          {
+            "value": "3+",
+            "label": "Disconnected institutions an MSME must navigate to formalise"
+          }
+        ]
+      }
+    },
+    {
+      "type": "prose",
+      "heading": "Problem two: weak conversion from formal status to market participation",
+      "body": [
+        "Registration, even where it occurs, rarely converts into real market access or growth. Most micro and small enterprises operate with no separation between personal and business finances, inconsistent or absent record-keeping, and no transaction history that a bank, buyer or government procurement system can use to assess reliability. This leaves formalised groups and MSMEs isolated from the value chains, structured buyers and financial products that would allow them to grow beyond subsistence activity — a gap especially acute for rural, youth-led and women-led enterprises already facing the steepest exclusion barriers nationally."
+      ]
+    },
+    {
+      "type": "cardGrid",
+      "columns": 3,
+      "heading": "Why both problems must be solved together",
       "items": [
-        { "icon": "government-building", "name": "Ministry of Labour & Social Protection", "role": "Group registration under the Community Groups Registration Act 2022" },
-        { "icon": "document", "name": "Business Registration Service", "role": "Business names, companies and cooperative filings" },
-        { "icon": "receipt", "name": "Kenya Revenue Authority", "role": "KRA PIN issuance and eTIMS onboarding" },
-        { "icon": "scales", "name": "National Judiciary Mediation Department", "role": "Accredited mediation training and referral" },
-        { "icon": "map-pin", "name": "Nairobi City County Government", "role": "Licensing simplification, replicated county by county" }
+        {
+          "icon": "document",
+          "color": "teal",
+          "title": "Registration without market access",
+          "body": "Risks producing groups that are formalised but stagnant — legally compliant, economically unchanged."
+        },
+        {
+          "icon": "chart-bars",
+          "color": "ochre",
+          "title": "Market access without registration reform",
+          "body": "Risks building growth pathways that only the already-formalised minority can use."
+        },
+        {
+          "icon": "target",
+          "color": "clay",
+          "title": "Solved together",
+          "body": "A single, digitised, government-partnered pathway is what allows regulatory reform to actually translate into inclusive economic growth."
+        }
       ]
     },
     {
-      "type": "partnerList",
-      "heading": "Private sector partners",
+      "type": "prose",
+      "kicker": "From problem to intervention",
+      "heading": "A single, sequenced pathway — not two separate fixes",
+      "body": [
+        "Regulatory fragmentation that keeps groups and MSMEs trapped in informality, and the weak conversion of formal status into real market participation, cannot be solved through parallel, disconnected fixes. Our intervention addresses both simultaneously, sequencing government partnerships, financial institutions and a unifying digital platform into one coherent journey."
+      ],
+      "callout": "**Our logic rests on a simple premise:** formalisation only becomes empowerment when it is fast, affordable, and immediately followed by usable market and financial access. Each stage is designed to reduce friction at the specific point where groups and MSMEs currently stall or drop out."
+    },
+    {
+      "type": "cardGrid",
+      "columns": 2,
+      "linked": true,
       "items": [
-        { "icon": "chart-bars", "name": "I&M Bank", "role": "Group accounts, lending, LPO and asset financing" },
-        { "icon": "chart-bars", "name": "Kingdom Bank", "role": "Group savings products and credit pipelines" },
-        { "icon": "shield", "name": "Britam Insurance", "role": "Micro-insurance and group cover" }
+        {
+          "icon": "document",
+          "color": "teal",
+          "title": "Programs — regulatory & administrative constraints",
+          "body": "Simplified registration, consolidated business registration, accessible tax compliance, internal dispute resolution and a single digital front door.",
+          "page": "programs"
+        },
+        {
+          "icon": "chart-bars",
+          "color": "ochre",
+          "title": "Programs — market entry & expansion",
+          "body": "Financial literacy paired with negotiated products, social safety-net protection, licensing replication, and aggregation into structured markets.",
+          "page": "programs"
+        }
       ]
     },
     {
-      "type": "table",
-      "heading": "Register → License → Train → Access credit → Resolve disputes internally → Secure cover",
-      "lead": "Individually, each partnership addresses one piece of the puzzle. Our distinct contribution is turning separate bilateral partnerships into that single staged pathway, where each step compounds the value of the last.",
-      "columns": ["Partner", "Current role", "How CECF connects it into the pathway"],
-      "rows": [
-        ["National Judiciary Mediation Department", "Trains groups in internal dispute resolution", "Repositioned as a required module ahead of group loan access, improving repayment and cohesion"],
-        ["Nairobi County Government", "Simplifies business licensing", "Proof of concept for replication in high-exclusion counties, feeding into the financial literacy pipeline"],
-        ["Ministry of Labour & Social Protection", "General mandate for formalisation support", "Translated into an operational registration and compliance desk"],
-        ["Kingdom Bank & I&M Bank", "Bilateral financial literacy and product access", "Aggregated group membership used as collective bargaining leverage for better pricing"],
-        ["Britam Insurance", "Retail insurance products", "Co-designed group policies, sequenced after registration and literacy training to reduce lapse rates"]
+      "type": "prose",
+      "heading": "Why this works",
+      "body": [
+        "Regulatory simplification produces a steady pipeline of legally compliant, dispute-resilient groups that market-entry work then converts into economically active participants. This sequencing also de-risks the intervention for private-sector partners — banks and insurers are far more willing to extend affordable products to a population that is already registered, tax-compliant and equipped with internal conflict-resolution capacity."
       ]
     },
     {
-      "type": "callout",
-      "body": "**What a partnership means here.** Not a logo exchange. Each of these is a working arrangement with named contacts, agreed referral routes and, in most cases, a signed memorandum. Where a partnership is at proposal stage rather than signed, we say so."
+      "type": "cardGrid",
+      "columns": 3,
+      "heading": "Who benefits most",
+      "items": [
+        {
+          "icon": "people",
+          "color": "teal",
+          "title": "Rural youth",
+          "body": "Nearly half of all financially excluded adults nationally, with lack of a phone or national ID the two most significant barriers. Our identification work targets these counties and demographics directly."
+        },
+        {
+          "icon": "shield",
+          "color": "ochre",
+          "title": "Women",
+          "body": "Rely more heavily on informal group savings (chamas) than formal banking. We meet them where they already engage financially, then open a structured route into savings, credit and insurance."
+        },
+        {
+          "icon": "map-pin",
+          "color": "clay",
+          "title": "Rural & marginalised communities",
+          "body": "Counties such as Turkana, West Pokot and Elgeyo Marakwet benefit from phased replication of licensing simplification, combined with the platform’s remote-access capability."
+        }
+      ]
     },
-    { "type": "linkOut", "label": "Become a partner", "page": "partner", "style": "primary" }
+    {
+      "type": "twoColumn",
+      "anchor": "work-with-us",
+      "kicker": "About us",
+      "heading": "Work with us",
+      "prose": [
+        "Most of our work happens in community halls, market sheds and under trees. If you want a desk job, this is the wrong organisation. If you want to sit with a group treasurer or MSME owner on a Saturday evening and work out why their registration stalled, keep reading."
+      ],
+      "subheading": "What we look for",
+      "ticks": [
+        "Fluent Kiswahili, and comfort with the languages of the communities you would serve",
+        "Patience with institutions — much of this work is following up on a file",
+        "Willingness to work when groups meet, which is evenings and weekends",
+        "Absolute clarity about safeguarding, which is non-negotiable and screened for"
+      ],
+      "secondTicksHeading": "Roles we recruit for",
+      "secondTicks": [
+        "**Field officers** — sub-county based, group-facing",
+        "**Programme officers** — education, formalisation, mediation",
+        "**Monitoring and reporting** — the person who insists the numbers are real",
+        "**Volunteers and interns** — particularly from the communities we serve"
+      ],
+      "media": {
+        "type": "photo",
+        "ref": "PLACEHOLDER-sugarcane-farmer",
+        "alt": "A farmer cutting sugarcane for milling",
+        "caption": "The work is not office work"
+      }
+    },
+    {
+      "type": "note",
+      "variant": "info",
+      "body": "Send a CV and a short note about why to **careers@cecf.or.ke**. We reply to everybody, including when the answer is no."
+    }
   ]
 }

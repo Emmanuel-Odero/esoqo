@@ -1,4 +1,4 @@
-<section class="sec">
+<section class="sec" @if (! empty($data['anchor'])) id="{{ $data['anchor'] }}" @endif>
   <div class="wrap">
     @if (! empty($data['kicker']))
       <p class="kick">{{ $data['kicker'] }}</p>

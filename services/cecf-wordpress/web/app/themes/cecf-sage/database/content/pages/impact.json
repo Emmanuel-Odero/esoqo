@@ -16,10 +16,22 @@
       "columns": 4,
       "heading": "Programme targets",
       "items": [
-        { "value": "30,000", "label": "Groups and MSMEs to reach annually" },
-        { "value": "8", "label": "Government and financial partners in the consortium" },
-        { "value": "2", "label": "Results Areas, one integrated pathway" },
-        { "value": "3", "label": "Priority counties for phased replication" }
+        {
+          "value": "30,000",
+          "label": "Groups and MSMEs to reach annually"
+        },
+        {
+          "value": "8",
+          "label": "Government and financial partners in the consortium"
+        },
+        {
+          "value": "2",
+          "label": "Results Areas, one integrated pathway"
+        },
+        {
+          "value": "3",
+          "label": "Priority counties for phased replication"
+        }
       ]
     },
     {
@@ -28,34 +40,193 @@
       "heading": "A systemic approach",
       "lead": "Our potential for systemic change lies not in any single partnership, but in the shift from fragmented, bilateral service delivery to a single, integrated system that other actors can plug into and scale.",
       "items": [
-        { "icon": "chart-bars", "color": "teal", "title": "Changes the risk calculus", "body": "A pipeline of registered, tax-compliant, dispute-resilient groups turns an unknowable segment into a measurable, de-risked market for banks and insurers." },
-        { "icon": "bar-chart-line", "color": "ochre", "title": "Feeds policy from practice", "body": "Real-time platform data on registration, exclusion and compliance gives government partners an evidence base to refine regulation — moving policy from reactive to informed." },
-        { "icon": "people", "color": "clay", "title": "Builds local capability", "body": "Training community leaders as literacy and mediation champions embeds capacity within communities rather than concentrating it in CECF." }
+        {
+          "icon": "chart-bars",
+          "color": "teal",
+          "title": "Changes the risk calculus",
+          "body": "A pipeline of registered, tax-compliant, dispute-resilient groups turns an unknowable segment into a measurable, de-risked market for banks and insurers."
+        },
+        {
+          "icon": "bar-chart-line",
+          "color": "ochre",
+          "title": "Feeds policy from practice",
+          "body": "Real-time platform data on registration, exclusion and compliance gives government partners an evidence base to refine regulation — moving policy from reactive to informed."
+        },
+        {
+          "icon": "people",
+          "color": "clay",
+          "title": "Builds local capability",
+          "body": "Training community leaders as literacy and mediation champions embeds capacity within communities rather than concentrating it in CECF."
+        }
       ]
     },
     {
       "type": "table",
       "heading": "What we measure, and why",
-      "columns": ["Measure", "Why this one", "Reported"],
+      "columns": [
+        "Measure",
+        "Why this one",
+        "Reported"
+      ],
       "rows": [
-        ["Certificates in hand", "Not applications filed. Only the certificate counts.", "Quarterly"],
-        ["Accounts actually opened", "A referral is not an outcome. An open account is.", "Quarterly"],
-        ["Groups still active at 12 months", "The number most programmes avoid publishing.", "Annually"],
-        ["Disputes mediated and settled", "Including those that failed and went to court.", "Annually"],
-        ["Cost per group formalised", "So a funder can compare us honestly with alternatives.", "Annually"]
+        [
+          "Certificates in hand",
+          "Not applications filed. Only the certificate counts.",
+          "Quarterly"
+        ],
+        [
+          "Accounts actually opened",
+          "A referral is not an outcome. An open account is.",
+          "Quarterly"
+        ],
+        [
+          "Groups still active at 12 months",
+          "The number most programmes avoid publishing.",
+          "Annually"
+        ],
+        [
+          "Disputes mediated and settled",
+          "Including those that failed and went to court.",
+          "Annually"
+        ],
+        [
+          "Cost per group formalised",
+          "So a funder can compare us honestly with alternatives.",
+          "Annually"
+        ]
       ]
     },
     {
       "type": "twoColumn",
       "heading": "Built to last",
-      "prose": ["Our sustainability case is stronger than a typical time-bound programme because it is built on diversified, self-generating revenue streams rather than dependence on a single funding source."],
+      "prose": [
+        "Our sustainability case is stronger than a typical time-bound programme because it is built on diversified, self-generating revenue streams rather than dependence on a single funding source."
+      ],
       "ticks": [
         "**The platform already generates its own revenue.** A modest user fee to access and use the application gives the core service a built-in commercial base independent of grant cycles.",
         "**Funding scales reach, not day-to-day operations.** External funding expands the platform’s beneficiary base nationally, strengthening its commercial value as it grows.",
         "**Diversified income reduces single-point-of-failure risk.** User fees, private-sector sponsorships, advertising and potential referral fees or data products give CECF multiple independent revenue legs."
       ],
-      "media": { "type": "illustration", "ref": "published-reports.svg", "alt": "Reports and published accounts" }
+      "media": {
+        "type": "illustration",
+        "ref": "published-reports.svg",
+        "alt": "Reports and published accounts"
+      }
     },
-    { "type": "callout", "body": "**In short:** our model shifts from impact that must be re-funded to impact that funds itself." }
+    {
+      "type": "callout",
+      "body": "**In short:** our model shifts from impact that must be re-funded to impact that funds itself."
+    },
+    {
+      "type": "prose",
+      "anchor": "stories",
+      "kicker": "Impact",
+      "heading": "Stories from the ground",
+      "body": [
+        "What the numbers look like when they happen to one group."
+      ]
+    },
+    {
+      "type": "note",
+      "variant": "info",
+      "body": "Stories are published with the written consent of the group and the individuals named. Where consent is limited, names and locations are changed and we say so. **Replace the illustrative examples below with your verified stories before publication.**"
+    },
+    {
+      "type": "storyList",
+      "note": "The three stories below are ILLUSTRATIVE EXAMPLES from the design template, not verified CECF beneficiary accounts — see media/photos/PLACEHOLDERS.md. Do not seed these as real testimonials without written consent per the note above.",
+      "items": [
+        {
+          "tag": "Formalisation",
+          "title": "“The bank had refused us twice. It was the same bank.”",
+          "body": [
+            "A women’s group in Kamukunji had been saving for four years, held KES 240,000 between them, and had been turned away twice — not for lack of money, but because there was no group to lend to. The savings sat in the treasurer’s personal M-Pesa.",
+            "Registration took nine weeks. The account opened three weeks after that. The third application, to the same branch, was approved."
+          ],
+          "quote": "What changed was not our money. It was that we finally existed on their paper.",
+          "photo": {
+            "ref": "PLACEHOLDER-woman-market-trader",
+            "alt": "A woman selling carrots at a Kenyan market"
+          }
+        },
+        {
+          "tag": "Mediation",
+          "title": "A dispute that would have ended a fourteen-year chama",
+          "body": [
+            "Two office-bearers disagreed over a withdrawal. Within a month the group had split into factions and stopped meeting. Fourteen years of savings were sitting untouched because nobody could agree who had authority to move them.",
+            "A community mediator trained through the Judiciary programme — herself a member of a neighbouring group — brought both sides to a settlement in two sessions. The group has since registered and reopened contributions."
+          ],
+          "reverse": true,
+          "photo": {
+            "ref": "PLACEHOLDER-banana-trader",
+            "alt": "A trader selling bananas at a market in Kenya"
+          }
+        },
+        {
+          "tag": "Market access",
+          "title": "“We could finally show a buyer a transaction history.”",
+          "body": [
+            "A hardware traders’ cooperative had supplied the same customers for six years on trust and handwritten receipts. A county tender required a compliant invoice and a bank reference neither existed.",
+            "Registration, a KRA PIN and eTIMS onboarding took under three months. The cooperative’s first tender bid, aggregated with two other groups through the digital platform, was successful."
+          ],
+          "photo": {
+            "ref": "PLACEHOLDER-eastleigh-market",
+            "alt": "A busy market in Eastleigh, Nairobi"
+          }
+        }
+      ]
+    },
+    {
+      "type": "prose",
+      "anchor": "reports",
+      "kicker": "Impact",
+      "heading": "Reports & publications",
+      "body": [
+        "Everything we publish, in one place."
+      ]
+    },
+    {
+      "type": "twoColumn",
+      "prose": [
+        "We publish annual accounts, programme reports and the policy work we submit to government and development partners. Anybody may request any of it, not only funders."
+      ],
+      "downloadList": [
+        {
+          "title": "Annual report and audited accounts",
+          "meta": "Financial year 2025–26 · PDF",
+          "tag": "Request"
+        },
+        {
+          "title": "Group formalisation programme report",
+          "meta": "Delivery, outcomes and what did not work · PDF",
+          "tag": "Request"
+        },
+        {
+          "title": "Results programme report",
+          "meta": "Regulatory access and market entry, outcomes and what did not work · PDF",
+          "tag": "Request"
+        },
+        {
+          "title": "Digital platform: data protection and user-fee policy",
+          "meta": "How platform revenue is generated and how member data is handled · PDF",
+          "tag": "Request"
+        },
+        {
+          "title": "Safeguarding policy",
+          "meta": "Children and vulnerable adults · PDF",
+          "tag": "Request"
+        },
+        {
+          "title": "Complaints and escalation procedure",
+          "meta": "English and Kiswahili · PDF",
+          "tag": "Request"
+        }
+      ],
+      "fineprint": "Attach live PDF links before publication. Requests currently route to info@cecf.or.ke.",
+      "media": {
+        "type": "illustration",
+        "ref": "published-reports.svg",
+        "alt": "Reports and published accounts"
+      }
+    }
   ]
 }

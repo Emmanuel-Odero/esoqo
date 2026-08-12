@@ -2,25 +2,12 @@
   "pages": [
     { "key": "home", "slug": "", "title": "Home", "browserTitleSuffix": "", "kicker": "Child & Elder Care Foundation", "isHome": true },
     { "key": "about", "slug": "about-us", "title": "Who we are", "kicker": "About us" },
-    { "key": "problem", "slug": "the-problem", "title": "The problem", "kicker": "The problem" },
-    { "key": "results", "slug": "results", "title": "Results", "kicker": "Our approach" },
-    { "key": "register", "slug": "register-your-group", "title": "Register your group", "kicker": "For Communities" },
-    { "key": "requirements", "slug": "what-you-will-need", "title": "What you will need", "kicker": "For Communities" },
-    { "key": "calendar", "slug": "training-calendar", "title": "Training calendar", "kicker": "For Communities" },
-    { "key": "findus", "slug": "find-a-field-officer", "title": "Find a field officer", "kicker": "For Communities" },
-    { "key": "form", "slug": "registration-form", "title": "Registration form", "kicker": "For Communities" },
+    { "key": "programs", "slug": "programs", "title": "Programs", "kicker": "Programs" },
+    { "key": "apply", "slug": "apply", "title": "Registration form", "kicker": "Programs" },
+    { "key": "partnerships", "slug": "partner-with-us", "title": "Partner with us", "kicker": "About" },
     { "key": "impact", "slug": "impact-and-sustainability", "title": "Impact & sustainability", "kicker": "Impact" },
-    { "key": "stories", "slug": "stories-from-the-ground", "title": "Stories from the ground", "kicker": "Impact" },
-    { "key": "reports", "slug": "reports-and-publications", "title": "Reports & publications", "kicker": "Impact" },
-    { "key": "partner", "slug": "partner-with-us", "title": "Partner with us", "kicker": "Partner with us" },
-    { "key": "government", "slug": "government-and-agencies", "title": "Government & agencies", "kicker": "Partner with us" },
-    { "key": "finance", "slug": "banks-and-insurers", "title": "Banks & insurers", "kicker": "Partner with us" },
-    { "key": "donors", "slug": "donors-and-development-partners", "title": "Donors & development partners", "kicker": "Partner with us" },
-    { "key": "corporate", "slug": "corporate-sponsorship", "title": "Corporate sponsorship", "kicker": "Partner with us" },
-    { "key": "latest", "slug": "latest-news", "title": "Latest news", "kicker": "News & events" },
-    { "key": "events", "slug": "events-calendar", "title": "Events calendar", "kicker": "News & events" },
-    { "key": "contact", "slug": "contact", "title": "Get in touch", "kicker": "Contact" },
-    { "key": "careers", "slug": "work-with-us", "title": "Work with us", "kicker": "Contact" }
+    { "key": "news-events", "slug": "news-events", "title": "News & events", "kicker": "Impact" },
+    { "key": "contact", "slug": "contact", "title": "Get in touch", "kicker": "Contact" }
   ],
-  "note": "21 pages total (20 content pages + home). 'slug' is this plan's recommended real WordPress permalink slug, replacing the template's '#/<key>' hash route — see content-seeding-plan.md decision #2. 'key' is stable and matches the filename in pages/<key>.json and the template's original route id, so it survives if the slug is renamed later."
+  "note": "8 pages total (7 content pages + home), organised under a 5-item main nav — Home, About, Programs, Impact, Contact — per the client's explicit page list. This is a deliberate IA consolidation from the original 21-page inventory (see docs/content-seeding-plan.md §2 for the historical breakdown), carried out to remove duplicate hero headers, duplicate CTA bands and a 5-group dropdown mega-nav that fragmented closely related content across too many thin pages. 'about' absorbed the former 'problem' and 'careers' pages as in-page subsections; 'programs' absorbed 'results', 'register', 'requirements', 'calendar' and 'findus'; 'partnerships' absorbed 'partner', 'government', 'finance', 'donors' and 'corporate'; 'impact' absorbed 'stories' and 'reports'; 'form' was renamed to 'apply' unchanged in substance. 'news-events' was split back out of 'impact' on a follow-up request — it absorbed the former 'latest' and 'events' pages, which had briefly lived as anchored sections on 'impact' during the first consolidation pass. 'partnerships', 'apply' and 'news-events' are the three pages judged too distinct to fold further into their parent as plain sections — partnerships is a five-audience institutional-relations page, apply is a transactional multi-step form, and news-events is fast-changing/dated content that would otherwise sit awkwardly next to impact's mostly-static annual narrative — each is kept as its own page, reached only via a submenu (see ../navigation.json: About > Partnerships, Programs > Register / Apply, Impact > News & events) and via in-page CTAs, not as flat top-level nav items. 'slug' is this plan's recommended real WordPress permalink slug, replacing the template's '#/<key>' hash route — see content-seeding-plan.md decision #2. 'key' is stable and matches the filename in pages/<key>.json and the template's original route id, so it survives if the slug is renamed later."
 }

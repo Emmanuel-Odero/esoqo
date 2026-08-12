@@ -3,8 +3,8 @@
 <header>
   <div class="hd">
     <a class="logo" href="{{ home_url('/') }}" aria-label="{{ $siteName }}, home">
-      <span class="mark" style="color:#E8B563">
-        <x-icon name="logo-mark" size="21" />
+      <span class="mark">
+        <img src="{{ Vite::asset('resources/images/cecf-logo-transparent-removebg-preview.png') }}" alt="" width="56" height="56" />
       </span>
       <span>
         <b>{{ $cecfSettings['orgShortName'] ?? $siteName }}</b>
@@ -40,8 +40,8 @@
 <nav class="mnav" id="mnav" aria-hidden="true" aria-label="{{ __('Menu', 'cecf-sage') }}">
   <div class="mnav-hd">
     <a class="logo" href="{{ home_url('/') }}">
-      <span class="mark" style="color:#E8B563">
-        <x-icon name="logo-mark" size="21" />
+      <span class="mark">
+        <img src="{{ Vite::asset('resources/images/cecf-logo-transparent-removebg-preview.png') }}" alt="" width="56" height="56" />
       </span>
       <span><b>{{ $cecfSettings['orgShortName'] ?? 'CECF' }}</b><span>Kenya</span></span>
     </a>

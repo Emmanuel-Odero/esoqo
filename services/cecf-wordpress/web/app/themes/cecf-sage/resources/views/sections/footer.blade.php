@@ -5,7 +5,9 @@
     <div class="fg">
       <div>
         <div class="flogo">
-          <span class="mark"><x-icon name="logo-mark" size="21" /></span>
+          <span class="mark">
+            <img src="{{ Vite::asset('resources/images/cecf-logo-transparent-removebg-preview.png') }}" alt="" width="50" height="50" />
+          </span>
           <span>
             <b>{{ $cecfSettings['orgName'] ?? $siteName }}</b>
             <span>{{ $cecfSettings['locationLine'] ?? '' }}</span>

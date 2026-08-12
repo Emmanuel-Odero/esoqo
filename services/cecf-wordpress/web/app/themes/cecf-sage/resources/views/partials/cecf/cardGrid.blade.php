@@ -1,7 +1,7 @@
 @php($columns = $data['columns'] ?? 3)
 @php($isMissionVision = ($data['variant'] ?? null) === 'missionVision')
 
-<section class="sec">
+<section class="sec" @if (! empty($data['anchor'])) id="{{ $data['anchor'] }}" @endif>
   <div class="wrap">
     @if (! empty($data['kicker']))
       <p class="kick">{{ $data['kicker'] }}</p>

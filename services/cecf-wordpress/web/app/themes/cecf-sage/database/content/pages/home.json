@@ -6,20 +6,46 @@
       "heading": "Every group and every enterprise deserves to be counted.",
       "lead": "We take Kenya’s grassroots groups and MSMEs from informality to formal recognition — then connect them to the banks, buyers and services that unlocks.",
       "ctas": [
-        { "label": "Register your group", "page": "form", "style": "primary", "icon": "arrow-right" },
-        { "label": "See our approach", "page": "problem", "style": "outline", "icon": "target" }
+        {
+          "label": "Register your group",
+          "page": "apply",
+          "style": "primary",
+          "icon": "arrow-right"
+        },
+        {
+          "label": "See our approach",
+          "page": "programs",
+          "style": "outline",
+          "icon": "target"
+        }
       ],
-      "facts": ["Government & bank-backed", "Always free to groups", "Nairobi-based, national reach"],
+      "facts": [
+        "Government & bank-backed",
+        "Always free to groups",
+        "Nairobi-based, national reach"
+      ],
       "illustration": "community-gathering.svg"
     },
     {
       "type": "statGrid",
       "columns": 4,
       "items": [
-        { "value": "30,000", "label": "Groups and MSMEs we aim to reach each year" },
-        { "value": "8", "label": "Government and financial institutions in our consortium" },
-        { "value": "2", "label": "Focus areas within our Results pathway — regulatory access, and market entry" },
-        { "value": "2022", "label": "Community Groups Registration Act — the law we help groups meet" }
+        {
+          "value": "30,000",
+          "label": "Groups and MSMEs we aim to reach each year"
+        },
+        {
+          "value": "8",
+          "label": "Government and financial institutions in our consortium"
+        },
+        {
+          "value": "2",
+          "label": "Focus areas within our Results pathway — regulatory access, and market entry"
+        },
+        {
+          "value": "2022",
+          "label": "Community Groups Registration Act — the law we help groups meet"
+        }
       ],
       "fineprint": "Figures reflect current programme design and consortium scope. Verified delivery figures are published in our annual report."
     },
@@ -32,7 +58,12 @@
         "Fewer than 10% of community groups, and fewer than 5% of county social services directorates, are even aware the Community Groups Registration Act 2022 exists. And where registration does happen, it rarely converts into real market access: no separation of personal and business finances, no usable transaction history, no route into structured buyers or financial products.",
         "**Solving one problem without the other fails groups either way.** A group that is formalised but stagnant has gained a certificate and nothing else. A group with market access but no registration cannot use it."
       ],
-      "media": { "type": "photo", "ref": "community-group-meeting", "alt": "Members of a community group gathered at a communal function in Kenya", "caption": "A group meeting is where the books are actually settled" }
+      "media": {
+        "type": "photo",
+        "ref": "community-group-meeting",
+        "alt": "Members of a community group gathered at a communal function in Kenya",
+        "caption": "A group meeting is where the books are actually settled"
+      }
     },
     {
       "type": "cardGrid",
@@ -41,9 +72,27 @@
       "heading": "One digitally integrated pathway, two problems solved together.",
       "lead": "Sequenced government partnerships and financial institutions, unified by a single digital platform, take a group or MSME from first contact through to sustained market participation.",
       "items": [
-        { "icon": "document", "color": "teal", "title": "The problem", "body": "Regulatory fragmentation and weak conversion from formal status to market access — why fixing one half is not enough, and how we address both.", "page": "problem" },
-        { "icon": "chart-bars", "color": "ochre", "title": "Results", "body": "Regulatory and administrative simplification, paired with financial literacy, negotiated banking and insurance products, and aggregation into structured markets.", "page": "results" },
-        { "icon": "puzzle", "color": "clay", "title": "Our consortium", "body": "Five government institutions and three financial partners, each contributing the specific mandate a group needs at each stage.", "page": "about#consortium" }
+        {
+          "icon": "document",
+          "color": "teal",
+          "title": "The problem",
+          "body": "Regulatory fragmentation and weak conversion from formal status to market access — why fixing one half is not enough, and how we address both.",
+          "page": "about#problem"
+        },
+        {
+          "icon": "chart-bars",
+          "color": "ochre",
+          "title": "Results",
+          "body": "Regulatory and administrative simplification, paired with financial literacy, negotiated banking and insurance products, and aggregation into structured markets.",
+          "page": "programs"
+        },
+        {
+          "icon": "puzzle",
+          "color": "clay",
+          "title": "Our consortium",
+          "body": "Five government institutions and three financial partners, each contributing the specific mandate a group needs at each stage.",
+          "page": "about#consortium"
+        }
       ]
     },
     {
@@ -52,7 +101,11 @@
       "reverse": true,
       "kicker": "How it works",
       "heading": "From an informal circle of trust to a bankable enterprise.",
-      "media": { "type": "illustration", "ref": "formalisation-pathway.svg", "alt": "The path from an informal group to a bankable enterprise: group forms, registers, gets KRA & eTIMS, becomes bankable" },
+      "media": {
+        "type": "illustration",
+        "ref": "formalisation-pathway.svg",
+        "alt": "The path from an informal group to a bankable enterprise: group forms, registers, gets KRA & eTIMS, becomes bankable"
+      },
       "prose": [
         "Formalisation only becomes empowerment when it is fast, affordable, and immediately followed by usable market and financial access. Each stage reduces friction at the point where groups currently stall."
       ],
@@ -62,7 +115,11 @@
         "**Internal dispute resolution** keeps a group functioning through the conflict that pooled money inevitably produces.",
         "**Staged financial literacy** unlocks negotiated savings, credit and insurance products designed for group realities."
       ],
-      "cta": { "label": "See the full pathway", "page": "problem", "style": "outline-white" }
+      "cta": {
+        "label": "See the full pathway",
+        "page": "about#problem",
+        "style": "outline-white"
+      }
     },
     {
       "type": "partnerList",
@@ -70,21 +127,55 @@
       "heading": "We do not issue anything ourselves.",
       "lead": "Every certificate, licence or account a group ends up holding comes from the institution with the legal mandate to issue it. CECF is lead applicant and implementing partner — our contribution is grassroots trust, reach and delivery experience, sequenced into a single pathway.",
       "items": [
-        { "icon": "government-building", "name": "Ministry of Labour & Social Protection", "role": "Group registration under the Community Groups Registration Act 2022" },
-        { "icon": "document", "name": "Business Registration Service", "role": "Business names, companies and cooperative filings" },
-        { "icon": "receipt", "name": "Kenya Revenue Authority", "role": "KRA PIN issuance and eTIMS onboarding" },
-        { "icon": "scales", "name": "National Judiciary Mediation Department", "role": "Accredited mediation training and referral" },
-        { "icon": "map-pin", "name": "Nairobi City County Government", "role": "Licensing simplification, replicated county by county" }
+        {
+          "icon": "government-building",
+          "name": "Ministry of Labour & Social Protection",
+          "role": "Group registration under the Community Groups Registration Act 2022"
+        },
+        {
+          "icon": "document",
+          "name": "Business Registration Service",
+          "role": "Business names, companies and cooperative filings"
+        },
+        {
+          "icon": "receipt",
+          "name": "Kenya Revenue Authority",
+          "role": "KRA PIN issuance and eTIMS onboarding"
+        },
+        {
+          "icon": "scales",
+          "name": "National Judiciary Mediation Department",
+          "role": "Accredited mediation training and referral"
+        },
+        {
+          "icon": "map-pin",
+          "name": "Nairobi City County Government",
+          "role": "Licensing simplification, replicated county by county"
+        }
       ],
-      "cta": { "label": "More about our consortium", "page": "about#consortium", "style": "outline" }
+      "cta": {
+        "label": "More about our consortium",
+        "page": "about#consortium",
+        "style": "outline"
+      }
     },
     {
       "type": "ctaBand",
       "heading": "Bring your group or MSME in",
       "body": "Assistance is free. Bring what you have — we will tell you plainly what is missing and what it will cost, before you spend anything.",
       "ctas": [
-        { "label": "Start registration", "page": "form", "style": "primary", "icon": "compass" },
-        { "label": "Find a field officer", "page": "findus", "style": "outline-white", "icon": "map-pin" }
+        {
+          "label": "Start registration",
+          "page": "apply",
+          "style": "primary",
+          "icon": "compass"
+        },
+        {
+          "label": "Find a field officer",
+          "page": "programs#find-a-field-officer",
+          "style": "outline-white",
+          "icon": "map-pin"
+        }
       ]
     }
   ]

@@ -7,6 +7,17 @@ it's cecf-sage-specific, not Bedrock-app-wide) has been populated as
 groundwork; the seeder itself, the Meta Box field registration, and the
 page-routing change described below are **not yet implemented**.
 
+**IA update (2026-08-11):** the 21-page inventory in §2 below was later
+consolidated to **7 pages** — Home, About, Programs, Partnerships, Impact,
+Apply, Contact — by merging each dropdown group's sibling pages into one
+page with in-page anchored subsections, and renaming `form` to `apply`.
+§2's table is kept as-is below as a record of what was extracted from the
+template; it no longer reflects the live page count or nav structure. See
+`database/content/pages/_index.json` and `database/content/navigation.json`
+(their `note` fields) for the current 7-page mapping and rationale. Section
+`type` values, media, and the underlying copy strings are unaffected — this
+was a page-boundary and navigation change only.
+
 All paths below are relative to `web/app/themes/cecf-sage/` unless stated
 otherwise.
 

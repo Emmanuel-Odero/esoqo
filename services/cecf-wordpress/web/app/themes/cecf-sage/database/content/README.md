@@ -8,6 +8,15 @@ see `../docs/content-seeding-plan.md`) will live, mirroring Laravel's own
 `database/seeders` + `database/factories` split, since Sage 11 runs on
 `roots/acorn` (Laravel-in-WordPress) and is invoked via `wp acorn`.
 
+**IA note (2026-08-11):** the original template had 21 pages under a 5-group
+dropdown mega-nav; this was later consolidated down to 7 pages (Home, About,
+Programs, Partnerships, Impact, Apply, Contact), each absorbing its former
+sibling pages as in-page anchored subsections rather than separate URLs. See
+`pages/_index.json`'s `note` field and `../navigation.json`'s `note` field for
+the full mapping. The rest of this doc, and `docs/content-seeding-plan.md`,
+describe the original 21-page inventory the content was extracted from —
+still accurate as extraction history, just no longer the live page count.
+
 This folder is the **source of truth for real CECF copy** — extracted verbatim
 from `cecf-theme-design-template.html` (the approved design template) and
 restructured into data the seeder (not yet built — see
@@ -30,7 +39,7 @@ web/app/themes/cecf-sage/
 │   │   ├── site-settings.json   org name, phone, emails, footer blurb, socials
 │   │   ├── navigation.json      primary nav (with dropdown groups) + footer nav columns
 │   │   ├── pages/
-│   │   │   ├── _index.json      registry of all 21 pages: slug, title, kicker, meta description
+│   │   │   ├── _index.json      registry of all 7 pages (post IA consolidation, see below): slug, title, kicker, meta description
 │   │   │   └── <slug>.json      one file per page — an ordered array of typed "sections"
 │   │   └── media/
 │   │       ├── illustrations/   the ~8 unique bespoke brand-illustration SVGs, deduped
