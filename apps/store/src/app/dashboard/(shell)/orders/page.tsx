@@ -2,6 +2,7 @@ import type { Metadata } from 'next';
 import { listMyStores, listStoreOrders } from '@esoko/db';
 import { requireSubject } from '@/lib/session';
 import { FulfilButton } from './FulfilButton';
+import { CollectCodButton } from './CollectCodButton';
 import { Icon } from '@esoko/ui';
 
 export const metadata: Metadata = { title: 'Orders' };
@@ -40,16 +41,19 @@ export default async function OrdersPage() {
               {orders.map((o) => (
                 <tr key={o.id}>
                   <td className="mono">#{o.id.slice(0, 8)}</td>
-                  <td>{o.buyerName}</td>
+                  <td>{o.buyerName}{o.deliveryAddress && <span className="mono" style={{ display: 'block', fontSize: '.76rem', color: 'var(--tx-3)', marginTop: 2 }}>{o.deliveryAddress}</span>}</td>
                   <td className="mono">{o.buyerMsisdn}</td>
                   <td>{o.items.map((i) => `${i.product.name} ×${i.quantity}`).join(', ')}</td>
-                  <td className="mono">{kes(Number(o.totalKes))}</td>
+                  <td className="mono">{kes(Number(o.totalKes))}<span style={{ display: 'block', fontSize: '.76rem', color: 'var(--tx-3)', marginTop: 2 }}>{o.paymentMethod === 'CASH_ON_DELIVERY' ? 'Cash on delivery' : 'M-Pesa'}</span></td>
                   <td>
                     <span className={`pill ${o.status === 'FULFILLED' ? 'live' : o.status === 'CANCELLED' ? 'paused' : 'draft'}`}>
                       {STATUS_LABEL[o.status]}
                     </span>
                   </td>
-                  <td>{o.status === 'PAID' && <FulfilButton orderId={o.id} />}</td>
+                  <td>
+                    {o.status === 'PENDING_PAYMENT' && o.paymentMethod === 'CASH_ON_DELIVERY' && <CollectCodButton orderId={o.id} />}
+                    {o.status === 'PAID' && <FulfilButton orderId={o.id} />}
+                  </td>
                 </tr>
               ))}
             </tbody>
