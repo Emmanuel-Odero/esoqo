@@ -104,7 +104,18 @@ COPY --from=theme-build /repo/services/cecf-wordpress/web/app/themes/cecf-sage/p
 # and any plugin ever need to write (uploads, Acorn's view/route cache,
 # .maintenance during upgrades). Core (web/wp) and vendor/ stay
 # root-owned and read-only — nothing should be writing there at runtime.
+#
+# Acorn's storage_path() defaults to <theme>/storage (no LARAVEL_STORAGE_PATH
+# override is set anywhere here), and nothing in composer/roots-acorn ships
+# that directory — it has to be created explicitly, or every view render
+# throws (Illuminate\Filesystem::put()'s tempnam() call fails when its
+# target dir doesn't exist, surfacing as a 500 on literally every page).
 RUN mkdir -p web/app/uploads \
+    web/app/themes/cecf-sage/storage/framework/cache/data \
+    web/app/themes/cecf-sage/storage/framework/sessions \
+    web/app/themes/cecf-sage/storage/framework/testing \
+    web/app/themes/cecf-sage/storage/framework/views \
+    web/app/themes/cecf-sage/storage/logs \
     && chown -R www-data:www-data web/app
 
 EXPOSE 8080
