@@ -15,6 +15,7 @@
     "migrate": "prisma migrate dev",
     "migrate:deploy": "prisma migrate deploy",
     "seed": "tsx prisma/seed.ts",
+    "seed:demo": "tsx prisma/seed-demo.ts",
     "studio": "prisma studio",
     "audit:verify": "tsx src/scripts/verify-chain.ts",
     "typecheck": "tsc --noEmit"

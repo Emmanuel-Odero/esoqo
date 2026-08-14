@@ -165,6 +165,7 @@ button, a, input, select, textarea {
 .n-red { background:var(--red-t); border:1px solid #F3D2CF; color:#7A2320 }
 .n-amber { background:var(--amber-t); border:1px solid #F0DDB6; color:#7A4E06 }
 .n-blue { background:var(--blue-t); border:1px solid #C9DFEE; color:var(--blue) }
+.n-green { background:var(--green-t); border:1px solid #BFE3CE; color:var(--green) }
 
 /* Overlay sheet. Components carry their geometry inline; this keeps the
    overlay from scrolling the page behind it. */

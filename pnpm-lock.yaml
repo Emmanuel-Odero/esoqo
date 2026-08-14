@@ -246,6 +246,9 @@ importers:
       '@esoko/domain':
         specifier: workspace:*
         version: link:../../packages/domain
+      '@esoko/payments':
+        specifier: workspace:*
+        version: link:../../packages/payments
       '@esoko/ui':
         specifier: workspace:*
         version: link:../../packages/ui

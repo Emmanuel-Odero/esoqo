@@ -59,7 +59,7 @@ export function WithdrawalRequestForm({ orgId, leadMinutes }: { orgId: string; l
       {opensAt && !error && (
         <p style={{ color: 'var(--green)', fontSize: '.88rem', margin: '0 0 12px' }}>
           <Icon name="check" size={14} /> Sent. Earliest it can execute:{' '}
-          {new Date(opensAt).toLocaleString('en-KE')}.
+          {new Date(opensAt).toLocaleString('en-KE', { timeZone: 'Africa/Nairobi' })}.
         </p>
       )}
       <button type="button" className="btn btn-p"

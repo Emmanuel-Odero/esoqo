@@ -56,7 +56,7 @@ export function ConsentList({ grants }: { grants: Grant[] }) {
               <span style={{ flex: 1 }}>
                 <span className="v" style={{ display: 'block' }}>{g.grantee}</span>
                 <span className="hint" style={{ margin: '3px 0 0', display: 'block' }}>
-                  For {g.purpose} · until {new Date(g.expiresAt).toLocaleDateString('en-KE')}
+                  For {g.purpose} · until {new Date(g.expiresAt).toLocaleDateString('en-KE', { timeZone: 'Africa/Nairobi' })}
                   {g.accesses > 0 && ` · looked at ${g.accesses} ${g.accesses === 1 ? 'time' : 'times'}`}
                 </span>
                 {g.scope.length > 0 && (
@@ -83,8 +83,8 @@ export function ConsentList({ grants }: { grants: Grant[] }) {
                 <span className="v" style={{ display: 'block' }}>{g.grantee}</span>
                 <span className="hint" style={{ margin: 0 }}>
                   {g.revokedAt
-                    ? `You ended this on ${new Date(g.revokedAt).toLocaleDateString('en-KE')}`
-                    : `Expired ${new Date(g.expiresAt).toLocaleDateString('en-KE')}`}
+                    ? `You ended this on ${new Date(g.revokedAt).toLocaleDateString('en-KE', { timeZone: 'Africa/Nairobi' })}`
+                    : `Expired ${new Date(g.expiresAt).toLocaleDateString('en-KE', { timeZone: 'Africa/Nairobi' })}`}
                 </span>
               </span>
               <span className="badge b-mute">Ended</span>

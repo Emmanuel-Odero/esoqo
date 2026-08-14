@@ -7,5 +7,6 @@ export * from './store';
 export * from './jamii';
 export * from './auth';
 export * from './treasury';
+export * from './ticketing';
 export * from './errors';
 export * from './env';

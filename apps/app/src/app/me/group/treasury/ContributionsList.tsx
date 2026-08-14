@@ -46,7 +46,7 @@ export function ContributionsList({ rows, isOfficer }: { rows: ContributionRow[]
               KES {c.amountKes.toLocaleString('en-KE')} — {c.isMine ? 'You' : c.contributorName}
             </span>
             <span className="hint" style={{ margin: '3px 0 0', display: 'block' }}>
-              {new Date(c.declaredAt).toLocaleDateString('en-KE')}
+              {new Date(c.declaredAt).toLocaleDateString('en-KE', { timeZone: 'Africa/Nairobi' })}
               {c.reference && ` · ${c.reference}`}
             </span>
           </span>

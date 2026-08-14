@@ -11,6 +11,7 @@ import { Icon } from '@esoko/ui';
 export const NAV = [
   ['/', 'Home'],
   ['/discover', 'Shops'],
+  ['/tickets', 'Tickets'],
   ['/prices', 'Prices'],
   ['/counties', 'Counties'],
   ['/institutions', 'Institutions'],

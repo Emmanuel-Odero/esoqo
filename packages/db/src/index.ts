@@ -9,6 +9,7 @@ export { recordAudit, verifyChain } from './audit';
 export { confirmStoreOrderPayment, confirmStoreOrderCod, StoreOrderError } from './dal/store-order';
 export { confirmRegistrationPaymentByCheckoutId } from './dal/payments';
 export { confirmDonationPayment, DonationError } from './dal/donation';
+export { confirmBookingPayment, TicketingError } from './dal/ticketing';
 export * from './capabilities';
 export type { VerifyResult } from './dal/reference';
 export * from './storage';
@@ -18,4 +19,6 @@ export type {
   PosSyncStatus, PosPaymentMethod,
   JamiiPageStatus, PublishStatus, JamiiTeamRole, CampaignStatus, DonationStatus,
   JamiiInterestStatus,
+  TicketVertical, TicketOrgStatus, ListingStatus, ScheduleStatus, SeatStatus,
+  BookingStatus, BookingPaymentMethod, TicketStatus,
 } from '@prisma/client';

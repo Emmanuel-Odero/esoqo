@@ -38,3 +38,4 @@ export * from './donation';
 export * from './attestation';
 export * from './treasury';
 export * from './payment-id';
+export * from './ticketing';

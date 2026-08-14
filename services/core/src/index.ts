@@ -3,7 +3,7 @@ import helmet from '@fastify/helmet';
 import rateLimit from '@fastify/rate-limit';
 import {
   verifyChain, confirmStoreOrderPayment, confirmRegistrationPaymentByCheckoutId,
-  confirmDonationPayment, StoreOrderError, DonationError,
+  confirmDonationPayment, confirmBookingPayment, StoreOrderError, DonationError, TicketingError,
 } from '@esoko/db';
 import { parseStkCallback } from '@esoko/payments';
 
@@ -48,12 +48,12 @@ app.get('/ready', async (_req, reply) => {
  * need, and the first genuine consumer of this service beyond /health
  * and /ready.
  *
- * A single checkout can only ever belong to one of three things — store
- * checkout, a registration fee, or an Our Jamii donation — so this tries
- * the store order first (the most established of the three) and falls
- * through to registration, then donation, only on a NOT_FOUND from the
- * attempt before it. Any other failure from an attempt is a real error,
- * not "try the next kind."
+ * A single checkout can only ever belong to one of four things — store
+ * checkout, a registration fee, an Our Jamii donation, or a ticketing
+ * booking — so this tries the store order first (the most established
+ * of the four) and falls through to registration, then donation, then
+ * booking, only on a NOT_FOUND from the attempt before it. Any other
+ * failure from an attempt is a real error, not "try the next kind."
  */
 app.post('/webhooks/mpesa/stk-callback', async (req, reply) => {
   const parsed = parseStkCallback(req.body);
@@ -88,11 +88,21 @@ app.post('/webhooks/mpesa/stk-callback', async (req, reply) => {
 
   try {
     await confirmDonationPayment(parsed.checkoutRequestId, parsed.mpesaReceiptCode ?? '');
+    return reply.send({ ok: true });
   } catch (e) {
     if (!(e instanceof DonationError && e.code === 'NOT_FOUND')) {
       // Still 200 — Safaricom retries on non-2xx, and a retry storm on
       // an already-broken match helps no one. Logged for a human.
       app.log.error({ err: e, checkoutRequestId: parsed.checkoutRequestId }, 'failed to confirm donation payment');
+      return reply.send({ ok: true });
+    }
+  }
+
+  try {
+    await confirmBookingPayment(parsed.checkoutRequestId);
+  } catch (e) {
+    if (!(e instanceof TicketingError && e.code === 'NOT_FOUND')) {
+      app.log.error({ err: e, checkoutRequestId: parsed.checkoutRequestId }, 'failed to confirm booking payment');
     }
   }
   return reply.send({ ok: true });
