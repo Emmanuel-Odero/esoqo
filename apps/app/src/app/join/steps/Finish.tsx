@@ -7,22 +7,28 @@ import type { Form } from '../form';
 /** Step 4 — the only screen with anything genuinely required: confirm the
  *  number (or defer it) and accept the terms. Everything else is a recap. */
 export function Finish({
-  f, set, headingRef, otpSent, otpVerified, otp, setOtp, devCode,
-  sendOtp, submitOtp, emailSent, setEmailSent, pending, onEdit,
+  f, set, headingRef, emailSent, setEmailSent, onEdit,
 }: {
   f: Form;
   set: <K extends keyof Form>(k: K, v: Form[K]) => void;
   headingRef: RefObject<HTMLHeadingElement | null>;
-  otpSent: boolean; otpVerified: boolean; otp: string; setOtp: (v: string) => void; devCode?: string;
-  sendOtp: () => void; submitOtp: (code: string) => void;
+  // otpSent/otpVerified/otp/setOtp/devCode/sendOtp/submitOtp/pending
+  // dropped — only the commented-out dialling-access (USSD) block below
+  // used them.
   emailSent: boolean; setEmailSent: (v: boolean) => void;
-  pending: boolean;
   onEdit: (step: number) => void;
 }) {
   return (
     <>
       <h2 className="qh" ref={headingRef} tabIndex={-1}>Verify and finish</h2>
       <p className="qs">One thing left, then we send this. You can leave it for later.</p>
+
+      {/*
+        Dialling access (USSD *483*77#) is not finalised yet — see
+        JoinFlow's canSubmit/actionComplete, which now always sends
+        `ussdSetupChoice: 'later'` so registration completes without it.
+        Commented out rather than deleted so the OTP-verify UI and copy
+        come back in one piece once USSD is ready.
 
       <div className="vblock">
         <div className="vhead">
@@ -96,6 +102,7 @@ export function Finish({
           </div>
         )}
       </div>
+      */}
 
       {f.email && (
         <div className="vblock">

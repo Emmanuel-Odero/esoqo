@@ -9,7 +9,7 @@ import './join-cecf.css';
 export const metadata: Metadata = {
   title: 'Join CECF',
   description:
-    'Join the Child Elder Care Foundation free — five questions, no documents. Esoko powers the tools behind your membership.',
+    'Bring your group, MSME or yourself into formal recognition with the Child & Elder Care Foundation, free — five questions, no documents. Esoko powers the tools behind your membership.',
 };
 
 export default function JoinPage() {

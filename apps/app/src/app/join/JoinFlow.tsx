@@ -5,7 +5,9 @@ import { Icon } from '@esoko/ui';
 import { useAnnounce, VisuallyHidden } from '@esoko/a11y';
 import {
   actionStart, actionSaveNames, actionSaveContact, actionSaveWork,
-  actionSaveStanding, actionRequestOtp, actionVerifyOtp, actionComplete,
+  actionSaveStanding, actionComplete,
+  // actionRequestOtp, actionVerifyOtp — only used by the commented-out
+  // dialling-access (USSD) OTP flow below.
   actionSearchWork, type ActionResult,
 } from './actions';
 import { actionDeferPayment } from './upload';
@@ -44,10 +46,13 @@ export function JoinFlow() {
 
   const [hits, setHits] = useState<{ key: string; name: string }[]>([]);
   const [orgRoleOther, setOrgRoleOther] = useState(false);
-  const [otpSent, setOtpSent] = useState(false);
-  const [otpVerified, setOtpVerified] = useState(false);
-  const [otp, setOtp] = useState('');
-  const [devCode, setDevCode] = useState<string | undefined>();
+  // OTP/dialling-access (USSD *483*77#) state — unused while that section
+  // is commented out below. Left in place, not deleted, so re-enabling it
+  // is a paste, not a rebuild.
+  // const [otpSent, setOtpSent] = useState(false);
+  // const [otpVerified, setOtpVerified] = useState(false);
+  // const [otp, setOtp] = useState('');
+  // const [devCode, setDevCode] = useState<string | undefined>();
   const [emailSent, setEmailSent] = useState(false);
   const [done, setDone] = useState(false);
   const [resumable, setResumable] = useState<{ f: Form; step: number; regId: string } | null>(null);
@@ -210,7 +215,12 @@ export function JoinFlow() {
       start(async () => {
         const r = await actionComplete({
           registrationId: regId,
-          ussdSetupChoice: f.ussdSetupChoice as 'now' | 'later',
+          // Dialling access (USSD *483*77#) isn't finalised yet — see the
+          // commented-out block in steps/Finish.tsx. Always 'later' so
+          // registration completes with what we have; actionComplete's
+          // "now" branch (which requires an OTP-verified number) is simply
+          // never reached from this UI right now.
+          ussdSetupChoice: 'later',
           wantsPriceSms: f.wantsPriceSms,
           wantsReceiptSms: f.wantsReceiptSms,
           wantsExpirySms: f.wantsExpirySms,
@@ -237,7 +247,11 @@ export function JoinFlow() {
     set('workRaw', name); set('segment', key); setHits([]);
   }
 
-  /* ── OTP ── */
+  /* ── OTP ──
+     Only reachable from the dialling-access (USSD) section, which is
+     commented out in steps/Finish.tsx until that's finalised — so these
+     are dead code for now. Kept, not deleted, for the same reason as the
+     state above.
   function sendOtp() {
     if (!regId) return;
     start(async () => {
@@ -258,8 +272,11 @@ export function JoinFlow() {
       else handle(r);
     });
   }
+  */
 
-  const canSubmit = f.ussdSetupChoice === 'later' || (f.ussdSetupChoice === 'now' && otpVerified);
+  // Dialling access isn't finalised, so nothing here gates on it — see the
+  // ussdSetupChoice: 'later' note in next() above.
+  const canSubmit = true;
 
   /* ────────────────────────────── done ── */
   if (done) {
@@ -272,10 +289,12 @@ export function JoinFlow() {
         <p className="qs">
           Your membership is in. Your record has been shared with Esoko so the tools can
           work — nothing else moves unless you say so.
-          {f.ussdSetupChoice === 'now'
-            ? ' Your number is confirmed. Dial *483*77# and choose a PIN when you are ready.'
-            : ' Dial *483*77# whenever you want to use your record. You will confirm your number then.'}
         </p>
+        {/*
+          Dialling access (USSD *483*77#) isn't finalised yet — see the
+          matching note in steps/Finish.tsx. Restore this "next step" block
+          alongside that section once it is.
+
         <div className="next done-next">
           <strong style={{ color: 'var(--cecf-teal)' }}>Next step</strong>
           <p style={{ margin: '8px 0 0' }}>
@@ -285,6 +304,7 @@ export function JoinFlow() {
               : ' and confirm your number. Your record is ready when you are.'}
           </p>
         </div>
+        */}
         <div className="next">
           <strong style={{ color: 'var(--green)' }}>What you asked us to send</strong>
           <ol>
@@ -397,10 +417,8 @@ export function JoinFlow() {
         {step === 4 && (
           <Finish
             f={f} set={set} headingRef={headingRef}
-            otpSent={otpSent} otpVerified={otpVerified} otp={otp} setOtp={setOtp} devCode={devCode}
-            sendOtp={sendOtp} submitOtp={submitOtp}
             emailSent={emailSent} setEmailSent={setEmailSent}
-            pending={pending} onEdit={setStep}
+            onEdit={setStep}
           />
         )}
 
@@ -454,6 +472,11 @@ export function JoinFlow() {
         </div>
       </div>
 
+      {/*
+        The USSD channel (*483*77#) isn't finalised yet, so this alternate
+        path is commented out rather than advertised — see the matching
+        note in steps/Finish.tsx.
+
       <div className="alt">
         <span className="icbox" style={{ background: 'var(--green-t)', color: 'var(--green)', marginBottom: 12 }}>
           <Icon name="keypad" size={21} />
@@ -465,6 +488,7 @@ export function JoinFlow() {
           card, no fee and no documents either way.
         </p>
       </div>
+      */}
     </>
   );
 }

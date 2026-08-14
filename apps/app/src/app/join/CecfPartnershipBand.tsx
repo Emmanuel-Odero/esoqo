@@ -19,16 +19,16 @@ export function CecfPartnershipBand() {
         <div className="cecf-band-logo">
           <img
             src={`${cecfUrl}/app/uploads/2026/08/cecf-logo-transparent.png`}
-            alt="Child Elder Care Foundation"
+            alt="Child & Elder Care Foundation"
           />
         </div>
         <div className="cecf-band-copy">
           <h3>Your record, shared to work</h3>
           <p>
-            CECF is who you join; Esoko is the same team&rsquo;s toolbox for what your
-            household earns and trades. One registration feeds both — CECF&rsquo;s community,
-            and Esoko&rsquo;s prices, payments and receipts — so the record places you in the
-            community and then works for you.
+            CECF is who you join; Esoko is the same team&rsquo;s toolbox for what your group
+            or business earns and trades. One registration feeds both — CECF&rsquo;s path to
+            formal recognition, and Esoko&rsquo;s prices, payments and receipts — so the
+            record that gets you counted then works for you.
           </p>
 
           <div className="cecf-flow" aria-hidden="true">

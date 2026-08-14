@@ -3,7 +3,7 @@ import { Icon } from '@esoko/ui';
 /**
  * Cross-promotion nav for /join only — not the app's global header
  * (RootLayout has none). The join page is CECF-led: people are joining
- * the Child Elder Care Foundation, and Esoko is the same team's digital
+ * the Child & Elder Care Foundation, and Esoko is the same team's digital
  * toolbox behind that membership (markets, payments, receipts). So the
  * brand centre is CECF, with CECF and "what Esoko does" flanking it —
  * both plain external links, since neither side is this app.
@@ -20,7 +20,7 @@ export function CecfTopNav() {
         </a>
         <span className="cecf-topnav-brand">
           <span className="cecf-lock" aria-hidden="true"><Icon name="leaf" size={15} /></span>
-          <span>Child Elder Care Foundation</span>
+          <span>Child &amp; Elder Care Foundation</span>
           <span className="cecf-brand-sub">+ Esoko</span>
         </span>
         <a className="cecf-nav-btn cecf" href={cecfUrl} target="_blank" rel="noopener noreferrer">
