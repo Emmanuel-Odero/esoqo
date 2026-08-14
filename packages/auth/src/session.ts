@@ -91,7 +91,16 @@ export async function ctxFromToken(
   return {
     actorType: s.actorType,
     actorId: s.actorId,
-    capabilities: s.capabilities,
+    // SUBJECT capabilities are never customised per-user — every
+    // subject holds exactly ROLE_PRESETS.SUBJECT, always. Re-deriving
+    // it here instead of trusting the snapshot stored at sign-in means
+    // a session that predates a capability being added to that preset
+    // (14-day TTL — plenty of time for one to land) self-heals on its
+    // very next request instead of throwing AuthorisationError until
+    // the person happens to sign out and back in. STAFF/AGENT sessions
+    // (cashiers, org staff, ops accounts) DO carry real per-session
+    // grants — those still come from the stored snapshot.
+    capabilities: s.actorType === 'SUBJECT' ? [...ROLE_PRESETS.SUBJECT] : s.capabilities,
     partyId: s.partyId ?? null,
     orgId: s.orgId ?? null,
     storeId: s.storeId ?? null,
