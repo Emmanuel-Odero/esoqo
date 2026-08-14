@@ -8,6 +8,7 @@ export { recordAudit, verifyChain } from './audit';
 // are unaffected either way.
 export { confirmStoreOrderPayment, confirmStoreOrderCod, StoreOrderError } from './dal/store-order';
 export { confirmRegistrationPaymentByCheckoutId } from './dal/payments';
+export { confirmDonationPayment, DonationError } from './dal/donation';
 export * from './capabilities';
 export type { VerifyResult } from './dal/reference';
 export * from './storage';
@@ -15,4 +16,6 @@ export type { MemberRole, OrgKind } from '@prisma/client';
 export type {
   StoreStatus, StoreRoutingMode, StoreOrderStatus, StoreOrderPaymentMethod,
   PosSyncStatus, PosPaymentMethod,
+  JamiiPageStatus, PublishStatus, JamiiTeamRole, CampaignStatus, DonationStatus,
+  JamiiInterestStatus,
 } from '@prisma/client';

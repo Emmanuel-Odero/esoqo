@@ -4,6 +4,7 @@ export * from './segments';
 export * from './counties';
 export * from './businessTypes';
 export * from './store';
+export * from './jamii';
 export * from './auth';
 export * from './errors';
 export * from './env';
