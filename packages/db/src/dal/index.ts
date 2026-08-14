@@ -36,3 +36,5 @@ export * from './jamii-interest';
 export * from './campaign';
 export * from './donation';
 export * from './attestation';
+export * from './treasury';
+export * from './payment-id';

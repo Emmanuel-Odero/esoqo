@@ -174,6 +174,18 @@ export const CAPABILITY_CATALOGUE = [
     ['jamii-campaign.moderate', 'Cancel or reinstate a campaign'],
     ['jamii-donation.read', 'View donations made platform-wide'],
   ]},
+  { group: 'Group treasury', items: [
+    ['treasury.read', "View a group's contributions, meetings and withdrawals"],
+    ['treasury.contribute', 'Declare a contribution'],
+    ['treasury.confirm', "Confirm a member's self-declared contribution"],
+    ['treasury.meeting.write', 'Schedule or close a meeting'],
+    ['attendance.write', 'Mark attendance, for self or (as an officer) another member'],
+    ['treasury.withdraw.request', 'Propose a scheduled withdrawal'],
+    ['treasury.withdraw.sign', 'Sign (approve or reject) a proposed withdrawal'],
+    ['treasury.policy.write', "Set a group's signer list and treasury policy"],
+    ['paymentid.issue', 'Activate an Esoko Payment ID'],
+    ['portfolio.read', "View a member's derived credit-insight snapshot"],
+  ]},
   { group: 'Stores & commerce', items: [
     ['store.read', 'View a store'],
     ['store.write', 'Create or edit a store'],
@@ -222,7 +234,16 @@ export const ROLE_PRESETS = {
             'store.read', 'store.write:own', 'product.write:own',
             'order.read:own', 'order.fulfil:own', 'pos.sell:own',
             'inventory.write:own', 'customer.read:own', 'customer.write:own',
-            'cashier.write:own', 'shift.write:own', 'receipt.write:own'],
+            'cashier.write:own', 'shift.write:own', 'receipt.write:own',
+            // Group treasury — the ':own' qualifier only confirms this is a
+            // legitimate subject acting as themselves; whether they may act
+            // as an officer/signer of the specific group in question is a
+            // membership/role lookup done inside dal/treasury.ts, the same
+            // way signPaymentApproval checks separation of duties.
+            'treasury.read:own', 'treasury.contribute:own', 'treasury.confirm:own',
+            'treasury.meeting.write:own', 'attendance.write:own',
+            'treasury.withdraw.request:own', 'treasury.withdraw.sign:own',
+            'treasury.policy.write:own', 'paymentid.issue:own', 'portfolio.read:own'],
 
   FIELD_AGENT: ['registration.create', 'registration.read:agent=self',
                 'attestation.issue:FIELD_VISIT', 'party.read:county'],
@@ -250,7 +271,8 @@ export const ROLE_PRESETS = {
               'product.moderate', 'pricing.read', 'pricing.write',
               'jamii-interest.read', 'jamii-interest.write',
               'jamii-page.read', 'jamii-page.moderate',
-              'jamii-campaign.read', 'jamii-campaign.moderate', 'jamii-donation.read'],
+              'jamii-campaign.read', 'jamii-campaign.moderate', 'jamii-donation.read',
+              'treasury.read', 'treasury.confirm', 'portfolio.read'],
 
   SUPER_ADMIN: ['*'],
 
