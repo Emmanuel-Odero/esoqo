@@ -30,9 +30,24 @@ class PageUrl
         // A JSON `page` value can carry an in-page anchor, e.g. "about#consortium".
         [$key, $anchor] = array_pad(explode('#', $key, 2), 2, null);
 
+        // "apply" no longer resolves to the local page (its `registrationForm`
+        // section has never had a partial — see missing.blade.php). Every
+        // "Register"/"Apply" CTA site-wide goes through this one key, so
+        // sending it straight to the real Esoko join flow — rather than the
+        // in-theme placeholder — is a single change here, not one per template.
+        // Anchors don't apply off-site, so $anchor is intentionally ignored.
+        if ($key === 'apply') {
+            return self::esokoJoinUrl();
+        }
+
         $url = self::map()[$key] ?? null;
 
         return $url && $anchor ? "{$url}#{$anchor}" : $url;
+    }
+
+    public static function esokoJoinUrl(): string
+    {
+        return env('ESOKO_JOIN_URL', 'http://localhost:3001/join');
     }
 
     /**

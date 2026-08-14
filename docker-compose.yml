@@ -147,6 +147,7 @@ services:
       - "3001:3001"
       - "3002:3002"
       - "3003:3003"
+      - "3004:3004"
       - "4000:4000"
     environment:
       CI: "true"
@@ -165,6 +166,7 @@ services:
       - node_modules_app:/app/apps/app/node_modules
       - node_modules_admin:/app/apps/admin/node_modules
       - node_modules_store:/app/apps/store/node_modules
+      - node_modules_jamii:/app/apps/jamii/node_modules
       - node_modules_db:/app/packages/db/node_modules
       - node_modules_ui:/app/packages/ui/node_modules
       - node_modules_domain:/app/packages/domain/node_modules
@@ -236,6 +238,11 @@ services:
       WP_ADMIN_PASSWORD: cecf_dev_only
       WP_ADMIN_EMAIL: dev@childeldercare.test
       REDIS_URL: redis://redis:6379/1
+      # Where "Register"/"Apply" CTAs — and /apply/ itself — send people;
+      # see App\Support\PageUrl::esokoJoinUrl(). localhost:3001 is the host
+      # port apps/app's dev server binds to, reachable from this container
+      # via the host's loopback (see also docker-compose's esoko-dev service).
+      ESOKO_JOIN_URL: http://localhost:3001/join
       AUTH_KEY: dev
       SECURE_AUTH_KEY: dev
       LOGGED_IN_KEY: dev
@@ -259,6 +266,7 @@ volumes:
   node_modules_app:
   node_modules_admin:
   node_modules_store:
+  node_modules_jamii:
   node_modules_db:
   node_modules_ui:
   node_modules_domain:
