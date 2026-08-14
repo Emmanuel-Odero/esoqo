@@ -1,0 +1,16 @@
+<svg viewBox="0 0 520 320" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="A community group meeting under a tree">
+<rect width="520" height="320" rx="16" fill="#FAF5EC"/>
+<circle cx="262" cy="96" r="86" fill="#3E6B4A" opacity=".22"/>
+<circle cx="196" cy="118" r="60" fill="#3E6B4A" opacity=".28"/>
+<circle cx="330" cy="118" r="62" fill="#3E6B4A" opacity=".26"/>
+<rect x="252" y="150" width="18" height="118" rx="6" fill="#6B4A2E" opacity=".55"/>
+<ellipse cx="260" cy="286" rx="210" ry="20" fill="#C08325" opacity=".14"/>
+<g transform="translate(70,211)"><circle cx="0" cy="0" r="15" fill="#C08325" opacity=".9"/><path d="M-22 40a22 26 0 0144 0z" fill="#C08325" opacity=".75"/></g>
+<g transform="translate(142,218)"><circle cx="0" cy="0" r="15" fill="#A8452C" opacity=".9"/><path d="M-22 40a22 26 0 0144 0z" fill="#A8452C" opacity=".75"/></g>
+<g transform="translate(214,225)"><circle cx="0" cy="0" r="15" fill="#0D4A52" opacity=".9"/><path d="M-22 40a22 26 0 0144 0z" fill="#0D4A52" opacity=".75"/></g>
+<g transform="translate(286,232)"><circle cx="0" cy="0" r="15" fill="#7A9E4B" opacity=".9"/><path d="M-22 40a22 26 0 0144 0z" fill="#7A9E4B" opacity=".75"/></g>
+<g transform="translate(358,225)"><circle cx="0" cy="0" r="15" fill="#C08325" opacity=".9"/><path d="M-22 40a22 26 0 0144 0z" fill="#C08325" opacity=".75"/></g>
+<g transform="translate(430,218)"><circle cx="0" cy="0" r="15" fill="#A8452C" opacity=".9"/><path d="M-22 40a22 26 0 0144 0z" fill="#A8452C" opacity=".75"/></g>
+<g stroke="#0D4A52" stroke-width="2" fill="none" opacity=".3">
+<path d="M60 292h400" stroke-dasharray="5 7"/></g>
+</svg>

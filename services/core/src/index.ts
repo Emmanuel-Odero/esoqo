@@ -1,7 +1,10 @@
 import Fastify from 'fastify';
 import helmet from '@fastify/helmet';
 import rateLimit from '@fastify/rate-limit';
-import { verifyChain, confirmStoreOrderPayment } from '@esoko/db';
+import {
+  verifyChain, confirmStoreOrderPayment, confirmRegistrationPaymentByCheckoutId,
+  confirmDonationPayment, StoreOrderError, DonationError,
+} from '@esoko/db';
 import { parseStkCallback } from '@esoko/payments';
 
 /**
@@ -41,8 +44,16 @@ app.get('/ready', async (_req, reply) => {
 /**
  * Safaricom's confirmation for an STK push, arriving asynchronously —
  * sometimes twice, sometimes not at all. This is the "real HTTP
- * endpoint" the store checkout flow needs, and the first genuine
- * consumer of this service beyond /health and /ready.
+ * endpoint" both the store checkout flow and /join's "pay now" option
+ * need, and the first genuine consumer of this service beyond /health
+ * and /ready.
+ *
+ * A single checkout can only ever belong to one of three things — store
+ * checkout, a registration fee, or an Our Jamii donation — so this tries
+ * the store order first (the most established of the three) and falls
+ * through to registration, then donation, only on a NOT_FOUND from the
+ * attempt before it. Any other failure from an attempt is a real error,
+ * not "try the next kind."
  */
 app.post('/webhooks/mpesa/stk-callback', async (req, reply) => {
   const parsed = parseStkCallback(req.body);
@@ -59,10 +70,30 @@ app.post('/webhooks/mpesa/stk-callback', async (req, reply) => {
 
   try {
     await confirmStoreOrderPayment(parsed.checkoutRequestId, parsed.mpesaReceiptCode ?? '');
+    return reply.send({ ok: true });
   } catch (e) {
-    // Still 200 — Safaricom retries on non-2xx, and a retry storm on an
-    // already-broken match helps no one. The error is logged for a human.
-    app.log.error({ err: e, checkoutRequestId: parsed.checkoutRequestId }, 'failed to confirm store order payment');
+    if (!(e instanceof StoreOrderError && e.code === 'NOT_FOUND')) {
+      app.log.error({ err: e, checkoutRequestId: parsed.checkoutRequestId }, 'failed to confirm store order payment');
+      return reply.send({ ok: true });
+    }
+  }
+
+  try {
+    await confirmRegistrationPaymentByCheckoutId(parsed.checkoutRequestId, parsed.mpesaReceiptCode ?? '');
+    return reply.send({ ok: true });
+  } catch {
+    // Falls through to donation below — a registration-payment miss here
+    // isn't necessarily an error, it may just belong to the third kind.
+  }
+
+  try {
+    await confirmDonationPayment(parsed.checkoutRequestId, parsed.mpesaReceiptCode ?? '');
+  } catch (e) {
+    if (!(e instanceof DonationError && e.code === 'NOT_FOUND')) {
+      // Still 200 — Safaricom retries on non-2xx, and a retry storm on
+      // an already-broken match helps no one. Logged for a human.
+      app.log.error({ err: e, checkoutRequestId: parsed.checkoutRequestId }, 'failed to confirm donation payment');
+    }
   }
   return reply.send({ ok: true });
 });

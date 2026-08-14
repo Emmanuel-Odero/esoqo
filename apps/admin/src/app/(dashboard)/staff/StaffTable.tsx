@@ -138,9 +138,9 @@ function CapabilityEditor({
   }
 
   return (
-    <div className="scrim" role="dialog" aria-modal="true" aria-labelledby="cap-title"
+    <div className="scrim" role="presentation"
       onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}>
-      <div className="modal">
+      <div className="modal" role="dialog" aria-modal="true" aria-labelledby="cap-title">
         <div className="modal-hd">
           <span style={{ width: 38, height: 38, borderRadius: 10, background: 'var(--green-t)', color: 'var(--green)', display: 'grid', placeItems: 'center', flex: 'none' }}>
             <Icon name="key" size={19} />
@@ -229,9 +229,9 @@ function CreateStaff({ presets, onClose }: { presets: string[]; onClose: () => v
   }
 
   return (
-    <div className="scrim" role="dialog" aria-modal="true" aria-labelledby="cs-title"
+    <div className="scrim" role="presentation"
       onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}>
-      <div className="modal narrow">
+      <div className="modal narrow" role="dialog" aria-modal="true" aria-labelledby="cs-title">
         <div className="modal-hd">
           <h2 id="cs-title">Add someone to the team</h2>
           <button className="x" onClick={onClose} aria-label="Close"><Icon name="close" size={18} /></button>

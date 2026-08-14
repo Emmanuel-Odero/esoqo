@@ -21,6 +21,14 @@ export function generateTempPin(): string {
   return String(randomInt(100_000, 1_000_000));
 }
 
+/** A pre-computed, valid Argon2id hash of an unrelated PIN — nobody's
+ *  real credential. Verify against this when a lookup (by name, phone,
+ *  etc.) comes back empty, so "no such account" and "wrong PIN" take the
+ *  same code path and the same wall-clock time. Skipping this and just
+ *  returning early on a failed lookup is what turns a sign-in form into
+ *  a username-enumeration oracle. */
+export const DUMMY_PIN_HASH = '$argon2id$v=19$m=19456,t=2,p=1$dVG7zaa+zCpEHmx40p8mrg$qrCW9sFDblyvsFW58O4LlQ07vfoVltVcJY5cQ0YzrDE';
+
 export async function hashPin(pin: string): Promise<string> {
   if (!/^\d{4,6}$/.test(pin)) throw new Error('PIN must be 4 to 6 digits');
   return hash(pin, OPTS);

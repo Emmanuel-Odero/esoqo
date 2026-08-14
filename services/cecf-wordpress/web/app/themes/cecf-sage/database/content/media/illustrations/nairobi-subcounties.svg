@@ -1,0 +1,11 @@
+<svg viewBox="0 0 500 300" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Schematic of all seventeen Nairobi sub-counties">
+<rect width="500" height="300" rx="16" fill="#FAF5EC"/>
+<path d="M96 78q64-34 158-24t152 66q22 62-38 106t-160 32-136-70q-14-62 24-110z"
+ fill="#0D4A52" opacity=".1" stroke="#0D4A52" stroke-width="1.5" stroke-dasharray="6 7"/>
+<circle cx="316" cy="150" r="5" fill="#0D4A52" opacity=".85"/><circle cx="332" cy="175" r="7" fill="#C08325" opacity=".85"/><circle cx="331" cy="209" r="5" fill="#C08325" opacity=".85"/><circle cx="279" cy="197" r="7" fill="#0D4A52" opacity=".85"/><circle cx="258" cy="220" r="5" fill="#C08325" opacity=".85"/><circle cx="220" cy="235" r="7" fill="#C08325" opacity=".85"/><circle cx="210" cy="191" r="5" fill="#0D4A52" opacity=".85"/><circle cx="175" cy="187" r="7" fill="#C08325" opacity=".85"/><circle cx="142" cy="166" r="5" fill="#C08325" opacity=".85"/><circle cx="185" cy="140" r="7" fill="#0D4A52" opacity=".85"/><circle cx="175" cy="113" r="5" fill="#C08325" opacity=".85"/><circle cx="184" cy="80" r="7" fill="#C08325" opacity=".85"/><circle cx="232" cy="100" r="5" fill="#0D4A52" opacity=".85"/><circle cx="258" cy="80" r="7" fill="#C08325" opacity=".85"/><circle cx="299" cy="71" r="5" fill="#C08325" opacity=".85"/><circle cx="299" cy="115" r="7" fill="#0D4A52" opacity=".85"/><circle cx="332" cy="125" r="5" fill="#C08325" opacity=".85"/>
+<circle cx="250" cy="150" r="26" fill="#0D4A52"/>
+<text x="250" y="156" font-family="IBM Plex Mono,monospace" font-size="15" font-weight="600"
+ fill="#FAF5EC" text-anchor="middle">17</text>
+<text x="484" y="290" font-family="IBM Plex Mono,monospace" font-size="9.5" fill="#8A7C6A"
+ text-anchor="end">Schematic. Not to scale.</text>
+</svg>

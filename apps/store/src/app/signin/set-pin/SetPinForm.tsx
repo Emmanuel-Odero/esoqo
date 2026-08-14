@@ -48,7 +48,7 @@ export function SetPinForm() {
           <p className="hint">The number your Esoko account is registered under.</p>
         </div>
         {error && <div className="note n-red" style={{ marginBottom: 16 }}><div><p>{error}</p></div></div>}
-        <button type="button" className="btn btn-p" style={{ width: '100%' }} disabled={pending || !msisdn.trim()} onClick={requestCode}>
+        <button type="button" className="btn btn-g" style={{ width: '100%' }} disabled={pending || !msisdn.trim()} onClick={requestCode}>
           {pending ? 'Sending…' : 'Send code'} <Icon name="send" size={16} />
         </button>
       </>
@@ -80,7 +80,7 @@ export function SetPinForm() {
       </div>
       {error && <div className="note n-red" style={{ marginBottom: 16 }}><div><p>{error}</p></div></div>}
       <button
-        type="button" className="btn btn-p" style={{ width: '100%' }}
+        type="button" className="btn btn-g" style={{ width: '100%' }}
         disabled={pending || !code.trim() || !pin.trim() || !pinConfirm.trim()}
         onClick={submit}
       >

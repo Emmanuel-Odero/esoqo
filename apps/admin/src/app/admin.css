@@ -18,11 +18,29 @@ aside { background:var(--navy); color:#9FC0D6; padding:18px 0 14px; position:sti
 .brand strong { font-family:var(--font-display); font-weight:800; font-size:1.02rem; display:block; line-height:1.15 }
 .brand span { font-size:.74rem; color:#7FA0B8; letter-spacing:.04em }
 .navgroup { font-family:var(--font-mono); font-size:.62rem; letter-spacing:.16em;
-  text-transform:uppercase; color:#5E7A90; padding:16px 18px 6px; margin:0 }
+  text-transform:uppercase; color:#5E7A90; padding:16px 18px 6px; margin:0;
+  display:flex; align-items:center; justify-content:space-between; gap:8px; width:100%;
+  background:none; border:0; cursor:pointer; font-weight:inherit; min-height:34px }
+.navgroup:hover { color:#8FA8BC }
+.navgroup-chev { display:inline-flex; transition:transform .18s ease; color:#4E6578; flex:none }
+.navgroup-chev.closed { transform:rotate(-90deg) }
+/* collapses via grid-template-rows so height animates without measuring
+   it in JS — .ready gates the transition so the very first paint (before
+   a saved collapsed state loads from localStorage) never animates */
+.navitems { display:grid; grid-template-rows:1fr }
+nav.ready .navitems { transition:grid-template-rows .2s ease }
+.navitems.collapsed { grid-template-rows:0fr }
+.navitems-inner { overflow:hidden; min-height:0 }
 aside nav a { display:flex; align-items:center; gap:11px; padding:10px 18px; font-size:.91rem;
   border-left:3px solid transparent; min-height:42px }
 aside nav a:hover { background:rgba(255,255,255,.06); color:#fff }
 aside nav a.on { background:rgba(31,161,99,.16); border-left-color:var(--green-2); color:#fff; font-weight:600 }
+/* which record a detail page is currently drilled into — see useNavDrillIn */
+.nav-drillin { display:flex; align-items:center; gap:6px; margin:0 18px 6px 42px; padding:5px 10px;
+  border-radius:6px; background:rgba(31,161,99,.1); color:var(--green-2); font-size:.79rem;
+  font-weight:600; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;
+  animation:drillin-in .18s ease }
+@keyframes drillin-in { from{ opacity:0; transform:translateY(-3px) } to{ opacity:1; transform:none } }
 .env { margin-top:auto; padding:14px 18px 0; font-family:var(--font-mono); font-size:.62rem;
   letter-spacing:.14em; text-transform:uppercase; color:#4E6578 }
 

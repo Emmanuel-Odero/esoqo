@@ -17,7 +17,9 @@ export default function SignIn() {
         <span className="icbox" style={{ background: 'var(--green-t)', color: 'var(--green)', marginBottom: 12 }}>
           <Icon name="keypad" size={21} />
         </span>
-        <h3 style={{ marginBottom: 8 }}>No smartphone with you?</h3>
+        {/* h2, not h3 — this page has no h2 above it. Sized to match the
+            h3 it visually replaces (see .alt in ../app.css). */}
+        <h2 style={{ marginBottom: 8, fontSize: '1.04rem', fontWeight: 700 }}>No smartphone with you?</h2>
         <p style={{ fontSize: '.93rem', color: 'var(--tx-2)', margin: 0 }}>
           Dial <strong className="mono" style={{ color: 'var(--navy)' }}>*483*77#</strong>.
           Everything here works from a basic handset and reaches the same record.

@@ -3,3 +3,4 @@ packages:
   - "packages/*"
   - "services/core"
   - "services/credential"
+  - "services/cecf-wordpress/web/app/themes/cecf-sage"

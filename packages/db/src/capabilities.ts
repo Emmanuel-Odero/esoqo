@@ -27,6 +27,10 @@ export interface Ctx {
   /** Set for SUBJECT contexts. Used by `:own` qualifiers. */
   partyId?: string | null;
   orgId?: string | null;
+  /** Set for an AGENT context scoped to one store — a cashier or manager
+   *  signed in at the till, not a Party. See assertOwnsStore in dal/store.ts:
+   *  authorised by this matching the requested store, not by ownership. */
+  storeId?: string | null;
   ip?: string | null;
   /**
    * Marks a Ctx built by @esoko/auth from a verified session.
@@ -161,16 +165,33 @@ export const CAPABILITY_CATALOGUE = [
     ['staff.write', 'Create and edit staff accounts'],
     ['staff.capabilities', 'Grant or revoke capabilities'],
   ]},
+  { group: 'Our Jamii', items: [
+    ['jamii-interest.read', 'View "not yet a CECF member" interest submissions'],
+    ['jamii-interest.write', 'Follow up on and resolve interest submissions'],
+    ['jamii-page.read', 'View every Our Jamii community page'],
+    ['jamii-page.moderate', 'Publish, suspend or reinstate a community page'],
+    ['jamii-campaign.read', 'View every crowdfunding campaign'],
+    ['jamii-campaign.moderate', 'Cancel or reinstate a campaign'],
+    ['jamii-donation.read', 'View donations made platform-wide'],
+  ]},
   { group: 'Stores & commerce', items: [
     ['store.read', 'View a store'],
     ['store.write', 'Create or edit a store'],
     ['store.moderate', 'Suspend or reinstate any store'],
     ['product.write', 'Add or edit products in a store'],
+    ['product.moderate', 'Suspend a product, or comment on it as staff'],
     ['order.read', 'View orders placed on a store'],
     ['order.fulfil', 'Mark an order fulfilled'],
+    ['order.reroute', 'Flag or reassign an order to another vendor'],
     ['pos.sell', 'Ring up a PoS sale'],
     ['pricing.read', 'View pricing rules'],
     ['pricing.write', 'Change pricing rules'],
+    ['inventory.write', 'Record suppliers and stock purchases'],
+    ['customer.read', "View a store's customers and credit book"],
+    ['customer.write', 'Add or adjust a customer, credit or loyalty entry'],
+    ['cashier.write', 'Add or manage cashier accounts'],
+    ['shift.write', 'Open or close a till shift'],
+    ['receipt.write', 'Issue a receipt'],
   ]},
 ] as const;
 
@@ -199,7 +220,9 @@ export const ROLE_PRESETS = {
   SUBJECT: ['entity.read:own', 'entity.write:own', 'consent.read:own', 'consent.write:own',
             'document.read:own', 'document.write:own', 'wallet.read:own',
             'store.read', 'store.write:own', 'product.write:own',
-            'order.read:own', 'order.fulfil:own', 'pos.sell:own'],
+            'order.read:own', 'order.fulfil:own', 'pos.sell:own',
+            'inventory.write:own', 'customer.read:own', 'customer.write:own',
+            'cashier.write:own', 'shift.write:own', 'receipt.write:own'],
 
   FIELD_AGENT: ['registration.create', 'registration.read:agent=self',
                 'attestation.issue:FIELD_VISIT', 'party.read:county'],
@@ -207,7 +230,8 @@ export const ROLE_PRESETS = {
   CECF_OFFICER: ['registration.read', 'party.read', 'attestation.issue:FIELD_VISIT',
                  'attestation.issue:MEDIATION_TRAINED', 'report.read', 'cohort.manage'],
 
-  VIEWER: ['registration.read', 'party.read', 'report.read', 'document.read', 'payment.read'],
+  VIEWER: ['registration.read', 'party.read', 'report.read', 'document.read', 'payment.read',
+           'jamii-interest.read', 'jamii-page.read', 'jamii-campaign.read', 'jamii-donation.read'],
 
   REGISTRAR: ['registration.read', 'registration.create', 'registration.write',
               'party.read', 'party.write', 'party.credential', 'membership.write',
@@ -222,7 +246,11 @@ export const ROLE_PRESETS = {
               'party.credential', 'membership.write', 'document.read', 'document.review', 'document.delete',
               'payment.read', 'payment.record', 'audit.read', 'report.read',
               'duplicate.review', 'consent.read', 'staff.read',
-              'store.read', 'store.moderate', 'pricing.read', 'pricing.write'],
+              'store.read', 'store.write', 'store.moderate', 'order.read', 'order.reroute',
+              'product.moderate', 'pricing.read', 'pricing.write',
+              'jamii-interest.read', 'jamii-interest.write',
+              'jamii-page.read', 'jamii-page.moderate',
+              'jamii-campaign.read', 'jamii-campaign.moderate', 'jamii-donation.read'],
 
   SUPER_ADMIN: ['*'],
 
@@ -236,3 +264,23 @@ export const ROLE_PRESETS = {
 } as const satisfies Record<string, readonly Capability[]>;
 
 export type RoleName = keyof typeof ROLE_PRESETS;
+
+/**
+ * What a cashier session can do — separate from ROLE_PRESETS because a
+ * cashier isn't a Party or a StaffUser, it's a Cashier row scoped to one
+ * store (see Ctx.storeId and assertOwnsStore). Unqualified capabilities:
+ * the scoping is the ctx.storeId match, not a `:own` qualifier.
+ *
+ * CASHIER runs the till and nothing else — no products, no settings, no
+ * seeing what the shop actually makes. MANAGER is the till plus the
+ * operational side a trusted second-in-command needs day to day; still
+ * never store.write (theme, name, POS on/off) or cashier.write (they
+ * can't create their own replacement or grant themselves more).
+ */
+export const CASHIER_CAPABILITIES = {
+  CASHIER: ['pos.sell', 'shift.write', 'customer.read', 'customer.write', 'receipt.write'],
+  MANAGER: ['pos.sell', 'shift.write', 'customer.read', 'customer.write', 'receipt.write',
+            'inventory.write', 'product.write', 'order.read', 'order.fulfil', 'store.read'],
+} as const satisfies Record<string, readonly Capability[]>;
+
+export type CashierRole = keyof typeof CASHIER_CAPABILITIES;

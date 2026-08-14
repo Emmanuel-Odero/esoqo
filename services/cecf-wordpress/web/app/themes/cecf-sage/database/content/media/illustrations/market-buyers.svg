@@ -1,0 +1,13 @@
+<svg viewBox="0 0 520 300" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Market stalls connected to buyers">
+<rect width="520" height="300" rx="16" fill="#FAF5EC"/>
+<g transform="translate(58,170)"><rect x="0" y="26" width="76" height="58" rx="7" fill="#FAF5EC" stroke="#DCD2C0" stroke-width="1.6"/><path d="M-6 26h88l-10-24H4z" fill="#C08325" opacity=".9"/><circle cx="38" cy="56" r="12" fill="#C08325" opacity=".3"/></g>
+<g transform="translate(162,170)"><rect x="0" y="26" width="76" height="58" rx="7" fill="#FAF5EC" stroke="#DCD2C0" stroke-width="1.6"/><path d="M-6 26h88l-10-24H4z" fill="#A8452C" opacity=".9"/><circle cx="38" cy="56" r="12" fill="#A8452C" opacity=".3"/></g>
+<g transform="translate(266,170)"><rect x="0" y="26" width="76" height="58" rx="7" fill="#FAF5EC" stroke="#DCD2C0" stroke-width="1.6"/><path d="M-6 26h88l-10-24H4z" fill="#0D4A52" opacity=".9"/><circle cx="38" cy="56" r="12" fill="#0D4A52" opacity=".3"/></g>
+<g transform="translate(370,170)"><rect x="0" y="26" width="76" height="58" rx="7" fill="#FAF5EC" stroke="#DCD2C0" stroke-width="1.6"/><path d="M-6 26h88l-10-24H4z" fill="#3E6B4A" opacity=".9"/><circle cx="38" cy="56" r="12" fill="#3E6B4A" opacity=".3"/></g>
+<g stroke="#0D4A52" stroke-width="2" fill="none" opacity=".4" stroke-dasharray="5 6">
+<path d="M96 158V96h330v62"/></g>
+<rect x="196" y="52" width="128" height="46" rx="10" fill="#0D4A52"/>
+<text x="260" y="80" font-family="IBM Plex Sans,sans-serif" font-size="14" font-weight="600"
+ fill="#FAF5EC" text-anchor="middle">Buyers</text>
+<ellipse cx="260" cy="278" rx="210" ry="16" fill="#C08325" opacity=".13"/>
+</svg>

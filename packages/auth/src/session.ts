@@ -22,16 +22,21 @@ export interface SessionData {
   actorId: string;
   partyId?: string;
   orgId?: string;
+  /** Set for an AGENT session scoped to one store — a cashier or
+   *  manager signed in at the till. See @esoko/db's Ctx.storeId. */
+  storeId?: string;
   capabilities: Capability[];
   issuedAt: number;
 }
 
 const hashToken = (t: string) => createHash('sha256').update(t).digest('hex');
 
-export async function createSession(data: Omit<SessionData, 'issuedAt'>): Promise<string> {
+/** ttlSeconds defaults to 14 days — pass a shorter one for anything that
+ *  shouldn't linger on a shared device (a till's cashier session, say). */
+export async function createSession(data: Omit<SessionData, 'issuedAt'>, ttlSeconds = TTL): Promise<string> {
   const token = randomBytes(32).toString('base64url');
   const payload: SessionData = { ...data, issuedAt: Date.now() };
-  await redis.setex(`sess:${hashToken(token)}`, TTL, JSON.stringify(payload));
+  await redis.setex(`sess:${hashToken(token)}`, ttlSeconds, JSON.stringify(payload));
   if (data.actorId) await redis.sadd(`sess:actor:${data.actorId}`, hashToken(token));
   return token;
 }
@@ -86,6 +91,7 @@ export async function ctxFromToken(
     capabilities: s.capabilities,
     partyId: s.partyId ?? null,
     orgId: s.orgId ?? null,
+    storeId: s.storeId ?? null,
     ip: ip ?? null,
     __verified: true,
   };

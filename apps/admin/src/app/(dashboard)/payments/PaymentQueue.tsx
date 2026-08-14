@@ -154,9 +154,9 @@ function PaymentModal({
   }
 
   return (
-    <div className="scrim" role="dialog" aria-modal="true" aria-labelledby="pm-title"
+    <div className="scrim" role="presentation"
       onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}>
-      <div className="modal narrow">
+      <div className="modal narrow" role="dialog" aria-modal="true" aria-labelledby="pm-title">
         <div className="modal-hd">
           <span style={{ width: 38, height: 38, borderRadius: 10, background: 'var(--blue-t)', color: 'var(--blue)', display: 'grid', placeItems: 'center', flex: 'none' }}>
             <Icon name="coins" size={19} />

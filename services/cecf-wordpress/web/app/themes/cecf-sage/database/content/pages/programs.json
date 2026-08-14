@@ -1,0 +1,379 @@
+{
+  "sections": [
+    {
+      "type": "phead",
+      "kicker": "Programs",
+      "heading": "Programs",
+      "lead": "Reducing regulatory and administrative constraints, and enhancing market entry and expansion — the two strands of one intervention that turns formal recognition into genuine economic participation."
+    },
+    {
+      "type": "prose",
+      "body": [
+        "This area targets the registration-to-compliance journey directly, delivered in collaboration with the government partners who hold each mandate."
+      ]
+    },
+    {
+      "type": "twoColumn",
+      "heading": "Regulatory & administrative constraints",
+      "prose": [
+        "### Simplified, digitised identification and registration",
+        "Through our MOU with the Ministry of Labour and Social Protection, CECF identifies unregistered self-help groups, CBOs, welfare associations and faith-based networks, and supports their registration under the Community Groups Registration Act 2022 — directly closing the awareness gap keeping most grassroots groups outside legal protection.",
+        "### Consolidated business registration",
+        "Partnering with the Business Registration Service, group businesses and MSMEs move from informal to legally recognised entities able to open accounts, sign contracts and bid for tenders.",
+        "### Accessible tax compliance",
+        "With the Kenya Revenue Authority, groups receive tax registration support and simplified education on new eTIMS invoicing and Finance Act 2025 reporting requirements."
+      ],
+      "secondColumnProse": [
+        "### Internal dispute-resolution capacity",
+        "Through the National Judiciary’s Mediation Department, groups gain continuous training in resolving business-related conflicts internally — addressing a key driver of group collapse once shared financial resources are introduced."
+      ],
+      "media": {
+        "type": "illustration",
+        "ref": "mediation-table.svg",
+        "alt": "Two parties in mediation across a table"
+      }
+    },
+    {
+      "type": "callout",
+      "heading": "Digital consolidation of services",
+      "body": "CECF’s digital platform unifies the above, allowing individuals, groups and MSMEs to self-register, track applications and link directly to negotiated government services — collapsing a fragmented, multi-counter process into a single digital journey."
+    },
+    {
+      "type": "note",
+      "variant": "info",
+      "body": "**Government fees are paid to the issuing body at its published rate.** CECF does not add to them, and our assistance is free."
+    },
+    {
+      "type": "twoColumn",
+      "reverse": true,
+      "heading": "Market entry & expansion",
+      "media": {
+        "type": "illustration",
+        "ref": "market-buyers.svg",
+        "alt": "Market stalls connected to buyers"
+      },
+      "prose": [
+        "### Financial literacy paired with negotiated products",
+        "With Kingdom Bank and I&M Bank, staged financial literacy training — savings, budgeting, digital safety, bookkeeping — unlocks matched, negotiated financial products such as low-minimum savings accounts and alternative-underwriting group loans.",
+        "### Social safety-net protection",
+        "Through Britam Insurance, groups access affordable, group-based micro-insurance tailored to informal-sector income patterns, protecting formalisation and market gains against shocks such as illness, death or business loss."
+      ]
+    },
+    {
+      "type": "prose",
+      "heading": "Simplified, replicable licensing",
+      "body": [
+        "Building on CECF’s Nairobi County licensing partnership, the model is documented and replicated into additional counties, prioritising those with the highest exclusion rates."
+      ]
+    },
+    {
+      "type": "prose",
+      "heading": "Aggregation and market-linkage infrastructure",
+      "body": [
+        "Our digital platform aggregates dispersed, formalised groups into a pool that larger buyers, financial institutions and procurement systems can engage directly, while a small grants fund channels capital toward groups demonstrating genuine growth potential."
+      ]
+    },
+    {
+      "type": "callout",
+      "heading": "Financial literacy comes first",
+      "body": "Credit offered to a group that cannot read its own books is not opportunity — it is a debt trap with a ceremony attached. Every group referred to a financial partner has been through practical training first: what a loan actually costs, how to read a statement, what happens if a member defaults, and how to decide as a group whether to borrow at all. **Some groups finish that training and decide not to borrow. We count that as a success.**"
+    },
+    {
+      "type": "twoColumn",
+      "anchor": "register",
+      "kicker": "Programs",
+      "heading": "Register your group or MSME",
+      "prose": [
+        "If your group meets regularly, keeps money together and has members who agree on who is in it, you have almost everything needed to register. The rest is paperwork we prepare with you. Free, and we walk it with you — most groups are registered within six to ten weeks."
+      ],
+      "media": {
+        "type": "illustration",
+        "ref": "community-gathering.svg",
+        "alt": "A community group meeting under a tree"
+      }
+    },
+    {
+      "type": "stepList",
+      "heading": "How it goes",
+      "layout": "column",
+      "items": [
+        {
+          "n": 1,
+          "title": "Tell us about the group",
+          "body": "Fill the form, call us, or ask a field officer. We need about ten minutes."
+        },
+        {
+          "n": 2,
+          "title": "We visit or call back",
+          "body": "Within five working days. We go through what you have and what is missing, plainly."
+        },
+        {
+          "n": 3,
+          "title": "We prepare the papers together",
+          "body": "Constitution, member register, minutes and forms. Your group approves all of it before anything is filed."
+        },
+        {
+          "n": 4,
+          "title": "We file and follow up",
+          "body": "We lodge it with the relevant office and chase it. You get the certificate, and we help you open the account it makes possible."
+        }
+      ]
+    },
+    {
+      "type": "note",
+      "variant": "warn",
+      "body": "**CECF never charges for assistance and never asks for money by phone.** Government fees are paid directly to the issuing office at its published rate. If somebody asks you to pay CECF to register, it is not us. Call **0709 000 000**."
+    },
+    {
+      "type": "linkRow",
+      "items": [
+        {
+          "label": "Start the form",
+          "page": "apply",
+          "style": "primary",
+          "icon": "compass"
+        },
+        {
+          "label": "What you will need",
+          "page": "programs#what-you-will-need",
+          "style": "outline",
+          "icon": "document"
+        }
+      ]
+    },
+    {
+      "type": "prose",
+      "anchor": "what-you-will-need",
+      "kicker": "Programs",
+      "heading": "What you will need",
+      "body": [
+        "Less than most people expect. Bring what you have. You do not need any of this to *start*. Come with nothing and we will work out the rest together. This list is so you know what the destination looks like."
+      ]
+    },
+    {
+      "type": "requirementList",
+      "heading": "To register a community group",
+      "items": [
+        {
+          "status": "done",
+          "title": "At least ten members",
+          "body": "With names, national ID numbers and phone numbers. Members must consent to being listed."
+        },
+        {
+          "status": "done",
+          "title": "Office-bearers chosen",
+          "body": "Chairperson, treasurer and secretary at minimum, elected by the members."
+        },
+        {
+          "status": "done",
+          "title": "Minutes of the meeting that agreed to register",
+          "body": "We can help you write these if the meeting has already happened."
+        },
+        {
+          "status": "done",
+          "title": "A constitution or set of rules",
+          "body": "We draft this with you. Most groups already operate by rules they have never written down."
+        },
+        {
+          "status": "done",
+          "title": "A physical meeting location",
+          "body": "Where the group actually meets. It does not have to be owned by the group."
+        },
+        {
+          "status": "optional",
+          "title": "Contribution records — helpful, not required",
+          "body": "Even a notebook. It shortens the bank conversation later considerably."
+        }
+      ]
+    },
+    {
+      "type": "table",
+      "heading": "Costs",
+      "columns": [
+        "What",
+        "Paid to",
+        "Amount"
+      ],
+      "rows": [
+        [
+          "CECF assistance",
+          "—",
+          "Free"
+        ],
+        [
+          "Group registration",
+          "Ministry of Labour & Social Protection",
+          "KES 1,000"
+        ],
+        [
+          "Business name registration",
+          "Business Registration Service",
+          "KES 1,050"
+        ],
+        [
+          "KRA PIN",
+          "Kenya Revenue Authority",
+          "Free"
+        ],
+        [
+          "eTIMS onboarding",
+          "Kenya Revenue Authority",
+          "Free"
+        ]
+      ],
+      "fineprint": "Government fees are set by the issuing bodies and change from time to time. Confirm the current rate at the office before paying. Tell us if you find a difference."
+    },
+    {
+      "type": "statGrid",
+      "columns": 3,
+      "heading": "How long it takes",
+      "items": [
+        {
+          "value": "5 days",
+          "label": "Until we contact you after the form"
+        },
+        {
+          "value": "2–3 weeks",
+          "label": "Preparing papers with your group"
+        },
+        {
+          "value": "6–10 weeks",
+          "label": "Typical total to certificate in hand"
+        }
+      ]
+    },
+    {
+      "type": "linkOut",
+      "label": "Start the form",
+      "page": "apply",
+      "style": "primary",
+      "icon": "compass"
+    },
+    {
+      "type": "prose",
+      "anchor": "training-calendar",
+      "kicker": "Programs",
+      "heading": "Training calendar",
+      "body": [
+        "Free training, open to any registered or registering group. All training is free. Bring two people from your group where possible — knowledge that sits with one person leaves when that person does."
+      ]
+    },
+    {
+      "type": "eventList",
+      "items": [
+        {
+          "month": "Aug",
+          "day": "12",
+          "tag": "Bookkeeping",
+          "title": "Group books a treasurer can actually keep",
+          "body": "A practical day on contribution records, cash books and the monthly statement a bank will ask for. Bring your existing notebook, however untidy.",
+          "location": "Kamukunji Social Hall",
+          "time": "9:00am–3:00pm"
+        },
+        {
+          "month": "Aug",
+          "day": "26",
+          "tag": "Governance",
+          "title": "Running a meeting, and settling a disagreement",
+          "body": "Chairing, minute-taking, elections and the dispute process every constitution should have before it is needed.",
+          "location": "Dagoretti Community Centre",
+          "time": "9:00am–2:00pm"
+        },
+        {
+          "month": "Sep",
+          "day": "09",
+          "tag": "Finance",
+          "title": "Before you borrow: what a group loan really costs",
+          "body": "Interest, fees, guarantees, what happens when a member defaults, and how to decide as a group whether to borrow at all.",
+          "location": "Embakasi",
+          "time": "10:00am–3:00pm"
+        },
+        {
+          "month": "Sep",
+          "day": "23",
+          "tag": "Enterprise",
+          "title": "Selling to institutions: tenders and LPOs",
+          "body": "What a purchase order is, what compliance a buyer will require, and how a group finances fulfilment.",
+          "location": "Westlands",
+          "time": "9:00am–1:00pm"
+        },
+        {
+          "month": "Oct",
+          "day": "07",
+          "tag": "Mediation",
+          "title": "Internal dispute resolution — intake",
+          "body": "First session of the dispute-resolution training run with the National Judiciary Mediation Department, part of our regulatory & administrative programs work. Places limited; apply early.",
+          "location": "Nairobi CBD",
+          "time": "Four sessions over two weeks"
+        }
+      ]
+    },
+    {
+      "type": "note",
+      "variant": "info",
+      "body": "Dates are indicative and confirmed by SMS a week before. To book, call **0709 000 000** or ask your field officer. If travel is the obstacle, tell us — we run sessions in sub-counties on request when enough groups ask."
+    },
+    {
+      "type": "prose",
+      "anchor": "find-a-field-officer",
+      "kicker": "Programs",
+      "heading": "Find a field officer",
+      "body": [
+        "Somebody who will come and sit with your group. Field officers work across Nairobi’s sub-counties and, through partner networks, in several counties beyond. They visit groups where they meet — evenings and weekends included, because that is when most chamas actually gather."
+      ]
+    },
+    {
+      "type": "twoColumn",
+      "subheading": "Three ways to reach one",
+      "requirementList": [
+        {
+          "status": "done",
+          "title": "Call the office",
+          "highlight": "0709 000 000",
+          "body": "Monday to Saturday, 8am–6pm. Ask for the officer covering your sub-county."
+        },
+        {
+          "status": "done",
+          "title": "Send the form",
+          "body": "Fill the registration form and an officer contacts you within five working days."
+        },
+        {
+          "status": "done",
+          "title": "Ask another group",
+          "body": "Most groups reach us because a neighbouring group did first. Ask who helped them."
+        }
+      ],
+      "media": {
+        "type": "illustration",
+        "ref": "nairobi-subcounties.svg",
+        "alt": "Schematic of all seventeen Nairobi sub-counties"
+      }
+    },
+    {
+      "type": "prose",
+      "heading": "If you are outside our field coverage",
+      "body": [
+        "You can still register. The process runs by phone and post, the certificate is identical, and the government fees are the same. What you will not get is somebody sitting in the room — which matters, but is not a reason to wait."
+      ]
+    },
+    {
+      "type": "ctaBand",
+      "heading": "Ready to register your group or MSME?",
+      "body": "Six short steps. Nothing is a commitment — a field officer will confirm everything with you, and assistance is always free.",
+      "ctas": [
+        {
+          "label": "Start the form",
+          "page": "apply",
+          "style": "primary",
+          "icon": "compass"
+        },
+        {
+          "label": "Find a field officer",
+          "page": "programs#find-a-field-officer",
+          "style": "outline-white",
+          "icon": "map-pin"
+        }
+      ]
+    }
+  ]
+}

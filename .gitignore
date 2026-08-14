@@ -11,6 +11,10 @@ out/
 .turbo/
 target/          # Rust (services/ledger, services/channels)
 
+# ─── PHP (services/cecf-wordpress) ────────────────────────
+vendor/
+web/wp/
+
 # ─── Python ────────────────────────────────────────────────
 __pycache__/
 *.py[cod]
@@ -59,3 +63,8 @@ docker-data/
 *.tsbuildinfo
 next-env.d.ts
 .eslintcache
+
+# ─── local dev file storage ────────────────────────────
+# Unanchored — every app/service gets its own <LOCAL_STORAGE_DIR>/.data
+# (see packages/db/src/storage.ts), not just one at the repo root.
+.data/

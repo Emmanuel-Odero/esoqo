@@ -217,28 +217,106 @@ export async function removeMember(ctx: Ctx, membershipId: string, reason: strin
   return m;
 }
 
-/** Public group search for the anonymous join flow — name and county only,
- *  no members, no PII. Lets a joiner link to a real group instead of just
- *  typing a name that goes nowhere. */
-export async function searchGroupsPublic(ctx: Ctx, q: string) {
+/** The OrgKind values that stand for the "a group" path on /join — every
+ *  kind except BUSINESS, which gets its own dedicated search/onboarding
+ *  path even though it is, mechanically, just another OrgKind. */
+export const JOINABLE_GROUP_KINDS = GROUP_KINDS
+  .map(([k]) => k)
+  .filter((k) => k !== 'BUSINESS') as OrgKind[];
+
+/**
+ * Shared implementation behind both searchGroupsPublic and
+ * searchBusinessesPublic — anonymous, name-only, no members, no PII.
+ * Lets a joiner link to a real Organisation instead of typing a name
+ * that goes nowhere, whichever OrgKind subset they're searching.
+ */
+async function searchOrganisationsPublic(
+  ctx: Ctx, q: string, opts: { kinds: readonly OrgKind[]; county?: string },
+) {
   requireCapability(ctx, 'party.read:public');
   if (q.trim().length < 2) return [];
   const rows = await prisma.organisation.findMany({
     where: {
-      party: { deletedAt: null },
+      kind: { in: opts.kinds as OrgKind[] },
+      party: { deletedAt: null, ...(opts.county ? { county: opts.county } : {}) },
       OR: [
         { officialName: { contains: q, mode: 'insensitive' as const } },
         { knownAs: { contains: q, mode: 'insensitive' as const } },
       ],
     },
-    include: { party: { select: { county: true } } },
+    include: { party: { select: { county: true, subCounty: true, district: true } } },
     take: 8,
   });
   return rows.map((r) => ({
     id: r.partyId,
     name: r.knownAs || r.officialName,
     county: r.party.county,
+    subCounty: r.party.subCounty,
+    district: r.party.district,
   }));
+}
+
+/** Public group search for the anonymous join flow. */
+export async function searchGroupsPublic(ctx: Ctx, q: string, county?: string) {
+  return searchOrganisationsPublic(ctx, q, { kinds: JOINABLE_GROUP_KINDS, county });
+}
+
+/** Public business search for the anonymous join flow's business path —
+ *  the same search-before-create mechanism as groups, scoped to
+ *  OrgKind.BUSINESS, so a joiner can't accidentally register a business
+ *  that's already on Esoko under a slightly different spelling. */
+export async function searchBusinessesPublic(ctx: Ctx, q: string, county?: string) {
+  return searchOrganisationsPublic(ctx, q, { kinds: ['BUSINESS'], county });
+}
+
+/**
+ * Private "am I already listed?" check for the join flow. Never returns
+ * another member's name or phone — only whether *this* searcher's own
+ * phone or name matches someone already on the roster, so a stranger
+ * can't scrape a group's membership through the public join form.
+ *
+ * - A phone number is checked for an exact match against any active
+ *   member (the searcher already knows their own number, so confirming
+ *   it back is not a leak).
+ * - A name is only matched against *pending* members (added by staff
+ *   from a paper roster, no phone on file yet — see addNewMember) and
+ *   only counts as a match when it resolves to exactly one person;
+ *   an ambiguous match returns unmatched rather than guess. This lets
+ *   someone "claim" a pending slot by supplying their phone during
+ *   the OTP-verified rest of the join flow, without ever exposing who
+ *   else is on the list.
+ */
+export async function checkGroupMembership(
+  ctx: Ctx, orgPartyId: string, input: { name?: string; msisdn?: string },
+): Promise<{ matched: boolean; personId?: string }> {
+  requireCapability(ctx, 'party.read:public');
+
+  const msisdn = input.msisdn?.trim();
+  if (msisdn) {
+    const hit = await prisma.membership.findFirst({
+      where: {
+        orgId: orgPartyId, exitedAt: null,
+        person: { person: { msisdn } },
+      },
+      select: { personId: true },
+    });
+    if (hit) return { matched: true, personId: hit.personId };
+  }
+
+  const name = input.name?.trim();
+  if (name && name.length >= 2) {
+    const hits = await prisma.membership.findMany({
+      where: {
+        orgId: orgPartyId, exitedAt: null,
+        person: { person: { msisdn: null, officialName: { contains: name, mode: 'insensitive' as const } } },
+      },
+      select: { personId: true },
+      take: 2,
+    });
+    if (hits.length === 1 && hits[0]) return { matched: true, personId: hits[0].personId };
+  }
+
+  return { matched: false };
 }
 
 /** Staff-facing group search — same lean shape as searchGroupsPublic, but

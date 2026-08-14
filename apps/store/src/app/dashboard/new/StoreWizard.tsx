@@ -23,6 +23,8 @@ export function StoreWizard({ enterprises, pricing }: { enterprises: Enterprise[
 
   const [enterpriseId, setEnterpriseId] = useState(enterprises[0]?.id ?? '');
   const [name, setName] = useState('');
+  const [tagline, setTagline] = useState('');
+  const [contactPhone, setContactPhone] = useState('');
   const [routingMode, setRoutingMode] = useState<'PATH' | 'SUBDOMAIN'>('PATH');
   const [themeKey, setThemeKey] = useState<(typeof THEMES)[number]['key']>('market');
   const [posEnabled, setPosEnabled] = useState(true);
@@ -39,21 +41,21 @@ export function StoreWizard({ enterprises, pricing }: { enterprises: Enterprise[
   function submit() {
     setError(null);
     startTransition(async () => {
-      const result = await submitStoreWizard({ enterpriseId, name, themeKey, routingMode, posEnabled });
+      const result = await submitStoreWizard({ enterpriseId, name, tagline, contactPhone, themeKey, routingMode, posEnabled });
       if (result && !result.ok) setError(result.error);
     });
   }
 
   return (
-    <div className="qcard">
+    <div className="qcard anim-in">
       <div className="wiz-steps">
-        {[1, 2, 3, 4, 5].map((n) => <span key={n} className={n <= step ? 'on' : ''} />)}
+        {[1, 2, 3, 4, 5].map((n) => <span key={n} className={n < step ? 'done' : n <= step ? 'on' : ''} />)}
       </div>
 
       {step === 1 && (
         <>
           <p className="mono" style={{ fontSize: '.68rem', color: 'var(--tx-3)', textTransform: 'uppercase', letterSpacing: '.08em' }}>Step 1 of 5</p>
-          <h2 className="qh">Which business, and what's it called?</h2>
+          <h2 className="qh">Which business, and what&apos;s it called?</h2>
           <p className="qs">This is what customers see. You can change it later.</p>
           {enterprises.length > 1 && (
             <div className="fld">
@@ -66,6 +68,14 @@ export function StoreWizard({ enterprises, pricing }: { enterprises: Enterprise[
           <div className="fld">
             <label className="lab" htmlFor="name">Store name</label>
             <input className="inp" id="name" value={name} onChange={(ev) => setName(ev.target.value)} placeholder="Kanini Fresh Produce" />
+          </div>
+          <div className="fld">
+            <label className="lab" htmlFor="tagline">Tagline <em className="dim">optional</em></label>
+            <input className="inp" id="tagline" value={tagline} onChange={(ev) => setTagline(ev.target.value)} placeholder="Fresh from the farm, every morning" maxLength={120} />
+          </div>
+          <div className="fld">
+            <label className="lab" htmlFor="cphone">Contact number <em className="dim">optional</em></label>
+            <input className="inp mono" id="cphone" value={contactPhone} onChange={(ev) => setContactPhone(ev.target.value)} placeholder="+254 712 345 678" inputMode="tel" />
           </div>
         </>
       )}
@@ -113,7 +123,7 @@ export function StoreWizard({ enterprises, pricing }: { enterprises: Enterprise[
             <button type="button" className="toggle" aria-pressed={posEnabled} aria-label="Add PoS terminal" onClick={() => setPosEnabled((v) => !v)} />
             <div>
               <span className="t">PoS terminal add-on</span>
-              <span className="d">{kes(posMonthly)}/month · works with no signal, syncs sales when you're back online</span>
+              <span className="d">{kes(posMonthly)}/month · works with no signal, syncs sales when you&apos;re back online</span>
             </div>
           </div>
         </>
@@ -126,6 +136,8 @@ export function StoreWizard({ enterprises, pricing }: { enterprises: Enterprise[
           <p className="qs">Charged the way you already pay — M-Pesa, right after this.</p>
           <div className="card">
             <div className="review-line"><span>Store name</span><b>{name || '—'}</b></div>
+            <div className="review-line"><span>Tagline</span><b>{tagline || '—'}</b></div>
+            <div className="review-line"><span>Contact number</span><b className="mono">{contactPhone || '—'}</b></div>
             <div className="review-line"><span>Address</span><b>{routingMode === 'PATH' ? `esoko.global/@${slug} — Free` : `${slug}.esoko.global — ${kes(subdomainSetup)} + ${kes(subdomainMonthly)}/mo`}</b></div>
             <div className="review-line"><span>Theme</span><b>{THEMES.find((t) => t.key === themeKey)?.name}</b></div>
             <div className="review-line"><span>PoS terminal</span><b>{posEnabled ? `Added — ${kes(posMonthly)}/mo` : 'Not added'}</b></div>
@@ -142,7 +154,7 @@ export function StoreWizard({ enterprises, pricing }: { enterprises: Enterprise[
             Continue <Icon name="arrow-right" size={16} />
           </button>
         ) : (
-          <button type="button" className="btn btn-p" onClick={submit} disabled={pending}>
+          <button type="button" className="btn btn-g" onClick={submit} disabled={pending}>
             {pending ? 'Opening your store…' : dueToday > 0 ? `Pay ${kes(dueToday)} & open store` : 'Open store'}
             <Icon name="check" size={16} />
           </button>

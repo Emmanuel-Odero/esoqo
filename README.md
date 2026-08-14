@@ -1,10 +1,13 @@
 # Esoko
 
-A consented credential-and-cashflow registry for Kenya's informal economy.
+A consented credential-and-cashflow registry for Kenya's informal economy —
+and, growing out of the same Party/Enterprise records, a small merchant
+marketplace with its own storefronts, checkout and PoS terminal.
 
 Traders, chamas and small businesses hold their registrations, permits and
 trading record in one place, reachable from a KES 1,000 handset — and decide,
-each time, who is allowed to see any of it.
+each time, who is allowed to see any of it. A registered trader can also open
+a store on the same account, with no separate signup.
 
 ---
 
@@ -29,11 +32,62 @@ pnpm dev
 | Mail catcher | http://localhost:8025 |
 | Database UI | `docker compose --profile tools up -d adminer` → :8080 |
 
+`pnpm db:seed` creates exactly one login — a staff account so the admin
+app is reachable on first run. Nothing else is seeded (no subjects, no
+groups, no registrations):
+
+| App | Login | Credential |
+|---|---|---|
+| Operations (`:3002`) | `ops@esoko.co.ke` | PIN `482915` — or whatever `SEED_ADMIN_PIN` was set to at seed time |
+
+Change this PIN (`SEED_ADMIN_PIN` env var before seeding, or
+`SEED_ADMIN_HASH` for a precomputed Argon2id hash) before any deployment —
+see the checklist at the bottom of this file.
+
 `SMS_PROVIDER=console` prints OTPs to the terminal. It also returns the code
 to the browser so you can test without a live SMS account — that path is
 gated on the env var and must never be enabled in a deployed environment.
 `MPESA_PROVIDER=console` does the same for the store's STK push checkout:
 it logs the prompt and auto-confirms locally instead of calling Safaricom.
+
+---
+
+## Deployed
+
+Live on Render — `esoko-web`, `esoko-app`, `esoko-admin` and `esoko-core`
+each deploy from the **`render`** branch against one shared `esoko-db`
+Postgres instance. `render.yaml` is the infra-as-code definition.
+**`apps/store` has no Render service yet** — the merchant storefront and
+PoS terminal run locally (`:3003`) but aren't reachable in production
+until one is added.
+
+`render` does not track `main` automatically — merging to `main` does not
+deploy anything by itself. Fast-forward `render` to `main` and push it to
+trigger a real deploy:
+
+```bash
+git checkout render && git merge --ff-only main && git push origin render
+```
+
+**Migrations do not run automatically either.** Render's build command only
+runs `prisma generate` (regenerates the client's types) — never
+`prisma migrate deploy`. A schema change that reaches `render` without a
+manually-run `migrate deploy` against production first will build and deploy
+fine, then throw on the very first query that touches the new column or
+table — this has actually happened, more than once. After any migration
+lands on `render`, before trusting the deploy:
+
+```bash
+DATABASE_URL="<production DATABASE_URL, from Render → esoko-db → Connect>" \
+  pnpm --filter @esoko/db exec prisma migrate deploy
+```
+
+Always take a backup first for anything beyond a trivial additive migration —
+`pg_dump` against the same URL, or a snapshot from the Render dashboard.
+
+Active feature branches merge to `main` first; commerce/marketplace work
+specifically lands on **`estore`** before either — see that branch for
+eStores admin work not yet in `main`.
 
 ---
 
@@ -50,22 +104,60 @@ Honesty here matters more than a tidy checklist. Nothing below is padded.
 - **OTP** with per-number and per-IP limits, exponential cooldown, prefix allow-listing and a hard daily spend cap
 - **Public site** — all seven pages as React Server Components: landing, prices, counties, institutions, verify, help, trust
 - **Six-step join flow** — real Server Actions, real database writes, USSD-now-or-later, inline OTP verification
-- **Operations dashboard** — funnel, county and segment breakdowns, opt-in rates, live audit log with chain status
+- **Groups** — chamas, self-help groups, SACCOs. Staff can register a group
+  directly (not only via someone joining as one), add members by searching
+  existing subjects or typing a new one in, assign a custom role beyond the
+  fixed office-bearer set (`OTHER` + free text, e.g. "Youth rep"), and
+  upload/view group documents (constitution, minutes, registration
+  certificate) with in-browser preview.
+- **Registrations** — every field `updateRegistration` accepts is now
+  actually editable from the admin record (phone and email included, gated
+  behind `party.pii`), not just a subset. Documents uploaded during the
+  join flow are re-parented to the real Party the moment a registration
+  completes, so they show up on that person's or group's own record, not
+  only on the registration that created it.
+- **Operations dashboard** — funnel, county and segment breakdowns, opt-in
+  rates, live audit log with chain status. Responsive down to an iPhone
+  SE — collapsible sidebar sections, an off-canvas nav drawer below
+  900px, and a hamburger toggle; nothing in `apps/admin` assumes a desktop
+  window anymore.
 - **Accessibility primitives** — route announcement, focus management, live regions, money spelled for screen readers
 - **Certificate verification** at `/verify` — public, no account, reads real attestations
 - **Segment finder** on the landing page — 92 segments, 595 aliases, and it can never say no
 - **63-icon system.** No emoji anywhere
-- **Mini-store (foundation phase)** — a Store belongs to an Enterprise a
-  Party already holds, not a separate signup. Merchant wizard, dashboard,
-  themed public storefront, M-Pesa STK checkout, and an offline-capable PoS
-  terminal (IndexedDB outbox) are real, wired to the DAL. Money posts
-  through the existing `Account`/`JournalEntry`/`Posting` tables, not a new
-  ledger. `pricing_rule` rows (admin-editable, `apps/admin` → Stores &
-  pricing) drive every price shown — nothing is hardcoded.
-  `MPESA_PROVIDER=console` (default) auto-confirms locally, same rule as
-  `SMS_PROVIDER=console`; `sandbox` makes real Daraja sandbox calls.
-  Wildcard-subdomain DNS is not cut over — only the free
+- **Mini-store** — a Store belongs to an Enterprise a Party already holds,
+  not a separate signup. Merchant wizard, dashboard, themed public
+  storefront, M-Pesa STK checkout, and an offline-capable PoS terminal
+  (IndexedDB outbox) are real, wired to the DAL. Money posts through the
+  existing `Account`/`JournalEntry`/`Posting` tables, not a new ledger.
+  `pricing_rule` rows (admin-editable) drive every price shown — nothing
+  is hardcoded. `MPESA_PROVIDER=console` (default) auto-confirms locally,
+  same rule as `SMS_PROVIDER=console`; `sandbox` makes real Daraja sandbox
+  calls. Wildcard-subdomain DNS is not cut over — only the free
   `esoko.global/@slug` path is reachable until that's pointed at a deployment.
+  **`apps/store` itself has no Render service** — everything above is real
+  and working locally, but no real buyer can reach a storefront or a
+  merchant's PoS terminal until one is provisioned. See *Deployed*.
+
+### Built, not yet in `main` — branch `estore`
+An admin-side commerce console, on top of the mini-store data above.
+Real, exercised against seeded data end to end, not a mock — just not
+merged past `main`'s review yet:
+- **Platform overview** — gross sales with week-over-week change, platform
+  commission earned (at the live `PLATFORM_FEE_PCT` rate), store
+  status/sector breakdowns, a revenue trend chart, a top-stores leaderboard
+- **Per-store performance dashboard** — the same revenue chart scoped to
+  one store, order-status funnel, payment-method split, top products,
+  buyer/repeat-buyer counts, fulfilment rate, and alerts for low stock and
+  unreconciled PoS sales (`syncStatus: CONFLICT`)
+- **Product moderation** — a retail category taxonomy separate from the
+  92-segment trade dictionary, a staff-only suspend a merchant can't lift
+  themselves, and a running comment thread visible to the seller
+- **Order rerouting** — staff can flag an order the original store can't
+  fulfil and hand it to another vendor carrying the same item, but only
+  before payment moves; a paid order already has a `JournalEntry` crediting
+  the original merchant, so reassigning it after that would corrupt ledger
+  history rather than correct it — the UI says so instead of allowing it
 
 ### Scaffolded, not built
 `services/ledger`, `services/channels`, `services/credential`, `services/workers`
@@ -105,7 +197,7 @@ likely to be harmed by exclusion.
 apps/
   web/        Public site
   app/        Subject PWA — join flow, record, wallet
-  admin/      Operations + CECF programme management
+  admin/      Operations, CECF programme management, eStores commerce oversight
   store/      Merchant storefronts, checkout, PoS terminal
 services/
   core/       Domain API, authorisation, DAL          · TypeScript

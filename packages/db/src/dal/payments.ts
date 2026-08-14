@@ -1,6 +1,6 @@
 import { createHmac, timingSafeEqual } from 'node:crypto';
 import { prisma } from '../client';
-import { requireCapability, PAYMENT_APPROVAL_THRESHOLD, type Ctx } from '../capabilities';
+import { requireCapability, systemCtx, PAYMENT_APPROVAL_THRESHOLD, type Ctx } from '../capabilities';
 import { recordAudit } from '../audit';
 import type { PaymentMethod, ApprovalDecision, PaymentStatus } from '@prisma/client';
 
@@ -100,6 +100,56 @@ export async function deferPayment(ctx: Ctx, registrationId: string) {
     action: 'payment.deferred', targetType: 'payment', targetId: payment.id,
   });
   return payment;
+}
+
+/**
+ * A live M-Pesa STK push was just sent — record Daraja's CheckoutRequestID
+ * so the later callback (or, in MPESA_PROVIDER=console, the immediate
+ * auto-confirm) can find the right registration. Mirrors
+ * attachCheckoutRequestId on the storefront's StoreOrder.
+ */
+export async function attachRegistrationCheckoutRequestId(
+  ctx: Ctx, registrationId: string, checkoutRequestId: string, amountKes: number, msisdn: string,
+) {
+  requireCapability(ctx, 'registration.write', { registrationId });
+  const payment = await prisma.registrationPayment.upsert({
+    where: { registrationId },
+    create: {
+      registrationId, method: 'MPESA', amountKes, checkoutRequestId,
+      reference: msisdn, status: 'DECLARED', declaredAt: new Date(),
+    },
+    update: { method: 'MPESA', amountKes, checkoutRequestId, reference: msisdn, status: 'DECLARED' },
+  });
+  await recordAudit(ctx, {
+    action: 'payment.stk_initiated', targetType: 'payment', targetId: payment.id,
+    payload: { amountKes },
+  });
+  return payment;
+}
+
+/**
+ * Called once Daraja confirms the push actually succeeded — either from
+ * the real callback (services/core, SYSTEM ctx) or, in console/sandbox
+ * dev mode, immediately after initiateStkPush auto-confirms. A real STK
+ * receipt is Safaricom's own confirmation, not a self-reported claim, so
+ * this goes straight to CONFIRMED and skips the dual-control approval
+ * chain that self-declared payments require. Idempotent: a callback
+ * delivered twice for an already-confirmed payment is a no-op.
+ */
+export async function confirmRegistrationPaymentByCheckoutId(checkoutRequestId: string, mpesaReceiptCode: string) {
+  const payment = await prisma.registrationPayment.findUnique({ where: { checkoutRequestId } });
+  if (!payment) throw new PaymentError('No registration payment matches this checkout request', 'NOT_FOUND');
+  if (payment.status === 'CONFIRMED') return payment;
+
+  const updated = await prisma.registrationPayment.update({
+    where: { id: payment.id },
+    data: { status: 'CONFIRMED', confirmedAt: new Date(), reference: mpesaReceiptCode },
+  });
+  await recordAudit(systemCtx('mpesa-callback'), {
+    action: 'payment.confirmed', targetType: 'payment', targetId: payment.id,
+    payload: { via: 'mpesa_stk', mpesaReceiptCode },
+  });
+  return updated;
 }
 
 /* ── staff record or amend ───────────────────────────────── */

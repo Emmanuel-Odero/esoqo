@@ -1,6 +1,7 @@
 'use server';
 
 import { headers } from 'next/headers';
+import { z, ZodError } from 'zod';
 import {
   startRegistration,
   updateRegistration,
@@ -8,14 +9,16 @@ import {
   markMsisdnVerified,
   completeRegistration,
   getRegistration,
-  systemCtx,
   type Ctx,
+  type UpdateRegistrationInput,
 } from '@esoko/db';
 import { issueOtp, verifyOtp, OtpError } from '@esoko/auth';
 import {
   step2Schema, step3Schema, step4Schema, step5Schema,
+  groupDetailsSchema, groupMembershipCheckSchema,
+  bizStandingSchema, bizDetailsSchema, bizFinancialsSchema,
   requestOtpSchema, verifyOtpSchema, completeRegistrationSchema,
-  resolveSegment, normaliseMsisdn, toSafeErrorMessage,
+  resolveSegment, toSafeErrorMessage,
 } from '@esoko/domain';
 import { grantRegistrationOwnership, ownsRegistration } from './ownership';
 
@@ -59,8 +62,15 @@ const NOT_OWNER: ActionResult<never> = { ok: false, error: 'Registration not fou
 
 function fail(e: unknown): ActionResult<never> {
   if (e instanceof OtpError) return { ok: false, error: e.message };
-  if (e instanceof Error && (e as { code?: string }).code === 'MSISDN_TAKEN') {
-    return { ok: false, error: 'That number is already registered. Sign in instead.', field: 'msisdn' };
+  if (e instanceof ZodError) {
+    const issue = e.issues[0];
+    return { ok: false, error: issue?.message ?? 'Check what you entered and try again.', field: issue?.path[0] as string | undefined };
+  }
+  if (e instanceof Error) {
+    if ((e as { code?: string }).code === 'MSISDN_TAKEN') {
+      return { ok: false, error: 'That number is already registered. Sign in instead.', field: 'msisdn' };
+    }
+    return { ok: false, error: e.message };
   }
   // The real error still needs to reach someone — it just should never
   // be the person who hit it. Server-side logs are the right place.
@@ -185,20 +195,77 @@ export async function actionSaveWork(
   } catch (e) { return fail(e); }
 }
 
+/** The bit of step5Schema that's always present, whatever the joiner is
+ *  registering — group-link fields, standing, and which of the two
+ *  "creating something new" sub-forms (group / business) are in play,
+ *  signalled by orgName/bizName being set with no matching *PartyId. */
+const standingBaseSchema = step5Schema.extend({
+  orgName: z.string().trim().max(160).optional().or(z.literal('')),
+  bizPartyId: z.string().uuid().optional().or(z.literal('')),
+  bizName: z.string().trim().max(160).optional().or(z.literal('')),
+});
+
 export async function actionSaveStanding(
   registrationId: string, raw: unknown,
 ): Promise<ActionResult> {
   try {
     if (!(await ownsRegistration(registrationId))) return NOT_OWNER;
-    const v = step5Schema.parse(raw);
+    const v = standingBaseSchema.parse(raw);
     const ctx = await requestCtx();
-    await updateRegistration(ctx, registrationId, {
+
+    // Previously belongsToGroup/groupName/groupPartyId/feeCoverage were
+    // validated here but never actually written — MoreAboutYou's "do you
+    // belong to a group" answer silently never reached the database.
+    const update: UpdateRegistrationInput = {
       hasRegisteredBusiness: v.hasRegisteredBusiness,
       registrationNo: v.registrationNo || undefined,
       memberCount: v.memberCount,
       hasKraPin: v.hasKraPin,
+      belongsToGroup: v.belongsToGroup,
+      groupName: v.groupName || undefined,
+      groupPartyId: v.groupPartyId || undefined,
+      feeCoverage: v.feeCoverage,
       lastStep: 6,
-    });
+    };
+
+    // A brand-new group — only when search-before-create came up empty
+    // (no groupPartyId) and the joiner filled in GroupDetails.
+    if (v.joiningAs === 'group' && !v.groupPartyId && v.orgName) {
+      const g = groupDetailsSchema.parse(raw);
+      update.orgName = g.orgName;
+      update.orgKnownAs = g.orgKnownAs || undefined;
+      update.orgKind = g.orgKind;
+      update.orgSubCounty = g.orgSubCounty || undefined;
+      update.orgDistrict = g.orgDistrict || undefined;
+      update.orgTags = g.orgTags;
+      update.registrationNo = g.registrationNo || undefined;
+      update.memberCount = g.memberCount;
+    }
+
+    // The business sub-flow.
+    if (v.joiningAs === 'biz') {
+      if (v.bizPartyId) {
+        update.bizPartyId = v.bizPartyId;
+      } else if (v.bizName) {
+        const standing = bizStandingSchema.parse(raw);
+        const details = bizDetailsSchema.parse(raw);
+        const fin = bizFinancialsSchema.parse(raw);
+        update.bizIsRegistered = standing.bizIsRegistered;
+        update.bizIntendsToRegister = standing.bizIntendsToRegister;
+        update.registrationNo = standing.registrationNo || undefined;
+        update.bizName = details.bizName;
+        update.bizSector = details.bizSector || undefined;
+        update.bizType = details.bizType;
+        update.bizTypeOther = details.bizTypeOther || undefined;
+        update.bizEmployeeCount = fin.bizEmployeeCount;
+        update.bizRevenueGoodKes = fin.bizRevenueGoodKes;
+        update.bizRevenueBadKes = fin.bizRevenueBadKes;
+        update.bizBankProvider = fin.bizBankProvider || undefined;
+        update.bizPaymentChannels = fin.bizPaymentChannels;
+      }
+    }
+
+    await updateRegistration(ctx, registrationId, update);
     return { ok: true, data: undefined };
   } catch (e) { return fail(e); }
 }
@@ -294,4 +361,29 @@ export async function actionSearchGroups(query: string) {
   const { searchGroupsPublic } = await import('@esoko/db');
   const ctx = await requestCtx();
   return searchGroupsPublic(ctx, query);
+}
+
+/* ── business search (public, name/county only) ──────────────────── */
+
+export async function actionSearchBusinesses(query: string) {
+  const { searchBusinessesPublic } = await import('@esoko/db');
+  const ctx = await requestCtx();
+  return searchBusinessesPublic(ctx, query);
+}
+
+/* ── the private "am I already listed?" check ────────────────────── */
+
+export async function actionCheckGroupMembership(
+  raw: unknown,
+): Promise<ActionResult<{ matched: boolean }>> {
+  try {
+    const v = groupMembershipCheckSchema.parse(raw);
+    const { checkGroupMembership } = await import('@esoko/db');
+    const ctx = await requestCtx();
+    const result = await checkGroupMembership(ctx, v.groupPartyId, {
+      name: v.name || undefined,
+      msisdn: v.msisdn || undefined,
+    });
+    return { ok: true, data: { matched: result.matched } };
+  } catch (e) { return fail(e); }
 }

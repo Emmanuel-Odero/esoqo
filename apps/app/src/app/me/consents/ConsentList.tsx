@@ -96,10 +96,11 @@ export function ConsentList({ grants }: { grants: Grant[] }) {
       {error && <p className="err" role="alert"><Icon name="alert-circle" size={15} />{error}</p>}
 
       {confirming && (
-        <div className="scrim" role="dialog" aria-modal="true" aria-labelledby="rv-title"
+        <div className="scrim" role="presentation"
           style={{ position: 'fixed', inset: 0, background: 'rgba(10,46,77,.55)', display: 'grid', placeItems: 'center', padding: 24, zIndex: 200 }}
           onClick={(e) => { if (e.target === e.currentTarget) setConfirming(null); }}>
-          <div style={{ background: '#fff', borderRadius: 14, maxWidth: 480, width: '100%', padding: 26 }}>
+          <div role="dialog" aria-modal="true" aria-labelledby="rv-title"
+            style={{ background: '#fff', borderRadius: 14, maxWidth: 480, width: '100%', padding: 26 }}>
             <h2 id="rv-title" style={{ marginBottom: 10 }}>
               End {confirming.grantee}’s access?
             </h2>

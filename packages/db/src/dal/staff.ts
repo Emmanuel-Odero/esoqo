@@ -11,6 +11,57 @@ import { recordAudit } from '../audit';
  * reason the CECF platform's nine hardcoded roles were replaced.
  */
 
+export interface StaffCredentialLookup {
+  id: string;
+  pinHash: string;
+  active: boolean;
+  suspendedAt: Date | null;
+  failedAttempts: number;
+  lockedUntil: Date | null;
+  capabilities: string[];
+}
+
+const LOCKOUT_THRESHOLD = 5;
+const LOCKOUT_MINUTES = 15;
+
+/**
+ * Pre-auth lookup for the staff sign-in form. Deliberately does NOT call
+ * requireCapability — this is the mechanism that produces a Ctx in the
+ * first place, so gating it on a capability would be circular. Same
+ * precedent as findSubjectCredential in auth-credential.ts.
+ */
+export async function findStaffCredential(email: string): Promise<StaffCredentialLookup | null> {
+  const staff = await prisma.staffUser.findUnique({
+    where: { email: email.trim().toLowerCase() },
+    select: {
+      id: true, pinHash: true, active: true, suspendedAt: true,
+      failedAttempts: true, lockedUntil: true, capabilities: true,
+    },
+  });
+  return staff;
+}
+
+export async function recordStaffSignInSuccess(staffId: string): Promise<void> {
+  await prisma.staffUser.update({
+    where: { id: staffId },
+    data: { failedAttempts: 0, lockedUntil: null, lastSeenAt: new Date() },
+  });
+}
+
+/** Locks the account after LOCKOUT_THRESHOLD wrong PINs — same discipline as subject sign-in. */
+export async function recordStaffSignInFailure(staffId: string): Promise<void> {
+  const staff = await prisma.staffUser.update({
+    where: { id: staffId },
+    data: { failedAttempts: { increment: 1 } },
+  });
+  if (staff.failedAttempts >= LOCKOUT_THRESHOLD) {
+    await prisma.staffUser.update({
+      where: { id: staffId },
+      data: { lockedUntil: new Date(Date.now() + LOCKOUT_MINUTES * 60 * 1000) },
+    });
+  }
+}
+
 export async function listStaff(ctx: Ctx) {
   requireCapability(ctx, 'staff.read');
   return prisma.staffUser.findMany({

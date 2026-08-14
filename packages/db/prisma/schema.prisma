@@ -57,21 +57,32 @@ model Party {
   kind      PartyKind
   county    String
   ward      String?
+  /// Below county, above ward. Optional — asked mainly of groups and
+  /// businesses, who tend to know these as-registered; individuals
+  /// aren't pushed for it.
+  subCounty String?
+  /// Kenya's pre-2013 administrative unit. Some registration paperwork
+  /// (group constitutions, old business permits) still cites it, so we
+  /// keep it as free text rather than trying to derive it from county.
+  district  String?
   createdAt DateTime  @default(now())
   updatedAt DateTime  @updatedAt
   deletedAt DateTime? // soft delete — DPA erasure keeps the audit trail
 
-  person       Person?
-  organisation Organisation?
-  enterprises  Enterprise[]
-  memberships  Membership[]  @relation("MemberParty")
-  accounts     Account[]
-  attestations Attestation[] @relation("AttestationSubject")
-  consentsGiven ConsentGrant[] @relation("ConsentSubject")
-  documents    Document[]
-  registration Registration?
-  groupJoinRegistrations Registration[] @relation("RegistrationGroupParty")
-  storeOrdersAsBuyer StoreOrder[]
+  person                 Person?
+  organisation           Organisation?
+  enterprises            Enterprise[]
+  memberships            Membership[]      @relation("MemberParty")
+  accounts               Account[]
+  attestations           Attestation[]     @relation("AttestationSubject")
+  consentsGiven          ConsentGrant[]    @relation("ConsentSubject")
+  documents              Document[]
+  registration           Registration?
+  groupJoinRegistrations Registration[]    @relation("RegistrationGroupParty")
+  bizJoinRegistrations   Registration[]    @relation("RegistrationBizParty")
+  storeOrdersAsBuyer     StoreOrder[]
+  donationsAsDonor       Donation[]
+  jamiiTeamMemberships   JamiiTeamMember[]
 
   @@index([county, kind])
   @@index([createdAt])
@@ -83,18 +94,18 @@ model Person {
   party   Party  @relation(fields: [partyId], references: [id], onDelete: Cascade)
 
   /// Name as written on the national ID. Used only when a credential is issued.
-  officialName String
+  officialName   String
   /// What people actually call them. This is what the product uses day to day.
-  knownAs      String?
+  knownAs        String?
   /// MSISDN in E.164. THE identifier for anyone who can log in, dial
   /// USSD or receive SMS. Null means a staff-added member with no phone
   /// on file yet — pending until someone fills it in.
-  msisdn       String? @unique
+  msisdn         String? @unique
   /// SHA-256 of the national ID number. The raw number is never stored.
   nationalIdHash String? @unique
-  email        String? @db.Citext
-  gender       String?
-  yearOfBirth  Int?
+  email          String? @db.Citext
+  gender         String?
+  yearOfBirth    Int?
 
   msisdnVerifiedAt DateTime?
   emailVerifiedAt  DateTime?
@@ -111,18 +122,30 @@ model Person {
 }
 
 model Organisation {
-  partyId String  @id @db.Uuid
-  party   Party   @relation(fields: [partyId], references: [id], onDelete: Cascade)
+  partyId String @id @db.Uuid
+  party   Party  @relation(fields: [partyId], references: [id], onDelete: Cascade)
 
-  kind         OrgKind
-  officialName String
-  knownAs      String?
+  kind              OrgKind
+  officialName      String
+  knownAs           String?
   /// Registration number, if held. Verified via Attestation, never trusted raw.
-  registrationNo String?
-  memberCount    Int?
-  formedOn       DateTime?
+  registrationNo    String?
+  memberCount       Int?
+  formedOn          DateTime?
+  /// What most members deal in — "juakali", "carpentry", "masonry" —
+  /// keyed against the same segment dictionary individuals pick their
+  /// own work from, so group and personal tags stay comparable.
+  tags              String[]  @default([])
+  /// Only meaningful when kind is BUSINESS: sole proprietorship,
+  /// partnership, limited company, cooperative, etc. Free text in
+  /// businessTypeOther when the picked value is "OTHER".
+  businessType      String?
+  businessTypeOther String?
+  /// Business-only: not yet registered, but says they plan to be.
+  intendsToRegister Boolean?
 
-  members Membership[] @relation("MemberOrg")
+  members   Membership[] @relation("MemberOrg")
+  jamiiPage JamiiPage?
 
   @@index([kind])
   @@map("organisation")
@@ -137,17 +160,17 @@ enum MemberRole {
 }
 
 model Membership {
-  id       String     @id @default(uuid()) @db.Uuid
-  personId String     @db.Uuid
-  orgId    String     @db.Uuid
-  role     MemberRole @default(MEMBER)
+  id         String     @id @default(uuid()) @db.Uuid
+  personId   String     @db.Uuid
+  orgId      String     @db.Uuid
+  role       MemberRole @default(MEMBER)
   /// Free text position, set only when role is OTHER — "Youth rep",
   /// "Auditor", whatever the group actually calls it. Ignored otherwise.
   customRole String?
-  joinedAt DateTime   @default(now())
-  exitedAt DateTime?
+  joinedAt   DateTime   @default(now())
+  exitedAt   DateTime?
 
-  person Party @relation("MemberParty", fields: [personId], references: [id], onDelete: Cascade)
+  person Party        @relation("MemberParty", fields: [personId], references: [id], onDelete: Cascade)
   org    Organisation @relation("MemberOrg", fields: [orgId], references: [partyId], onDelete: Cascade)
 
   @@unique([personId, orgId])
@@ -157,17 +180,24 @@ model Membership {
 
 /// The economic unit. A party may run more than one.
 model Enterprise {
-  id       String  @id @default(uuid()) @db.Uuid
-  partyId  String  @db.Uuid
-  party    Party   @relation(fields: [partyId], references: [id], onDelete: Cascade)
+  id                String   @id @default(uuid()) @db.Uuid
+  partyId           String   @db.Uuid
+  party             Party    @relation(fields: [partyId], references: [id], onDelete: Cascade)
   /// Free text as the user typed it — "carpentry", "seremala", "mama mboga".
-  workRaw  String
+  workRaw           String
   /// Resolved segment key from the shared dictionary.
-  segment  String?
-  sector   String?
-  isRegistered Boolean @default(false)
-  hasKraPin    Boolean @default(false)
-  createdAt DateTime @default(now())
+  segment           String?
+  sector            String?
+  isRegistered      Boolean  @default(false)
+  hasKraPin         Boolean  @default(false)
+  /// Operational detail, gathered mainly when the enterprise belongs to
+  /// a business Organisation rather than an individual's side-hustle.
+  employeeCount     Int?
+  revenueGoodDayKes Decimal? @db.Decimal(12, 2)
+  revenueBadDayKes  Decimal? @db.Decimal(12, 2)
+  bankProvider      String?
+  paymentChannels   String[] @default([])
+  createdAt         DateTime @default(now())
 
   stores Store[]
 
@@ -179,16 +209,16 @@ model Enterprise {
 // ─────────────────────── AUTH & CREDENTIALS ─────────────────────
 
 model UserCredential {
-  personId  String   @id @db.Uuid
-  person    Person   @relation(fields: [personId], references: [partyId], onDelete: Cascade)
+  personId       String    @id @db.Uuid
+  person         Person    @relation(fields: [personId], references: [partyId], onDelete: Cascade)
   /// Argon2id. Never anything else, never hand-rolled.
-  pinHash   String?
-  pinSetAt  DateTime?
-  failedAttempts Int      @default(0)
+  pinHash        String?
+  pinSetAt       DateTime?
+  failedAttempts Int       @default(0)
   lockedUntil    DateTime?
-  frozenAt       DateTime?   // SIMAMA — instant freeze from any handset
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  frozenAt       DateTime? // SIMAMA — instant freeze from any handset
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
 
   @@map("user_credential")
 }
@@ -202,17 +232,17 @@ enum OtpPurpose {
 }
 
 model OtpChallenge {
-  id        String     @id @default(uuid()) @db.Uuid
-  msisdn    String
-  purpose   OtpPurpose
+  id          String     @id @default(uuid()) @db.Uuid
+  msisdn      String
+  purpose     OtpPurpose
   /// HMAC-SHA256(code, OTP_PEPPER). The code itself is never stored.
-  codeHash  String
-  attempts  Int        @default(0)
-  maxAttempts Int      @default(5)
-  expiresAt DateTime
-  consumedAt DateTime?
-  createdAt DateTime   @default(now())
-  ip        String?
+  codeHash    String
+  attempts    Int        @default(0)
+  maxAttempts Int        @default(5)
+  expiresAt   DateTime
+  consumedAt  DateTime?
+  createdAt   DateTime   @default(now())
+  ip          String?
 
   @@index([msisdn, purpose, createdAt])
   @@index([expiresAt])
@@ -250,6 +280,9 @@ enum ClaimType {
   FIELD_VISIT
   DELIVERY_CONFIRMED
   TRADING_RECORD
+  /// CECF staff reviewed a Jamii page's registration + treasurer-ID
+  /// documents and are satisfied the org is who its page says it is.
+  ORG_PAGE_VERIFIED
 }
 
 enum AttestationMethod {
@@ -263,24 +296,24 @@ enum AttestationMethod {
 /// The universal trust primitive. Adding an issuer must never require
 /// a migration — that is the whole point of this table.
 model Attestation {
-  id        String    @id @default(uuid()) @db.Uuid
-  subjectId String    @db.Uuid
-  subject   Party     @relation("AttestationSubject", fields: [subjectId], references: [id], onDelete: Cascade)
+  id        String @id @default(uuid()) @db.Uuid
+  subjectId String @db.Uuid
+  subject   Party  @relation("AttestationSubject", fields: [subjectId], references: [id], onDelete: Cascade)
 
   claimType  ClaimType
   claimValue Json      @default("{}")
 
-  issuerOrgId  String?  @db.Uuid
-  issuer       Issuer?  @relation(fields: [issuerOrgId], references: [id])
-  issuerUserId String?  @db.Uuid
+  issuerOrgId  String?           @db.Uuid
+  issuer       Issuer?           @relation(fields: [issuerOrgId], references: [id])
+  issuerUserId String?           @db.Uuid
   method       AttestationMethod @default(MANUAL)
 
   evidenceRefs String[] @default([])
   confidence   Int      @default(100)
 
-  issuedAt  DateTime  @default(now())
-  expiresAt DateTime?
-  revokedAt DateTime?
+  issuedAt         DateTime  @default(now())
+  expiresAt        DateTime?
+  revokedAt        DateTime?
   revocationReason String?
 
   /// Signature over the canonical claim. Populated by services/credential.
@@ -297,16 +330,16 @@ model Attestation {
 
 /// A body with authority to issue claims. Ministry, county, bank, CECF.
 model Issuer {
-  id        String   @id @default(uuid()) @db.Uuid
-  name      String   @unique
-  shortName String?
-  kind      String   // MINISTRY | COUNTY | AGENCY | JUDICIARY | BANK | INSURER | BUYER | NGO
+  id            String      @id @default(uuid()) @db.Uuid
+  name          String      @unique
+  shortName     String?
+  kind          String // MINISTRY | COUNTY | AGENCY | JUDICIARY | BANK | INSURER | BUYER | NGO
   /// Which claim types this issuer is permitted to assert.
   allowedClaims ClaimType[] @default([])
-  active    Boolean  @default(true)
-  createdAt DateTime @default(now())
+  active        Boolean     @default(true)
+  createdAt     DateTime    @default(now())
 
-  attestations Attestation[]
+  attestations  Attestation[]
   consentGrants ConsentGrant[] @relation("ConsentGrantee")
 
   @@map("issuer")
@@ -325,22 +358,22 @@ enum ConsentPurpose {
 /// Not a boolean. A dated, purposed, revocable record — because the
 /// Data Protection Act 2019 requires one and an auditor will ask for it.
 model ConsentGrant {
-  id        String         @id @default(uuid()) @db.Uuid
-  subjectId String         @db.Uuid
-  subject   Party          @relation("ConsentSubject", fields: [subjectId], references: [id], onDelete: Cascade)
-  granteeId String         @db.Uuid
-  grantee   Issuer         @relation("ConsentGrantee", fields: [granteeId], references: [id])
+  id        String @id @default(uuid()) @db.Uuid
+  subjectId String @db.Uuid
+  subject   Party  @relation("ConsentSubject", fields: [subjectId], references: [id], onDelete: Cascade)
+  granteeId String @db.Uuid
+  grantee   Issuer @relation("ConsentGrantee", fields: [granteeId], references: [id])
 
-  purpose   ConsentPurpose
+  purpose      ConsentPurpose
   /// Field-level scope. Never "everything".
-  scope     String[]       @default([])
+  scope        String[]       @default([])
   /// The exact wording shown to the subject when they agreed.
   wordingShown String
-  channel   String         // USSD | WEB | AGENT | IVR
+  channel      String // USSD | WEB | AGENT | IVR
 
-  grantedAt DateTime  @default(now())
-  expiresAt DateTime
-  revokedAt DateTime?
+  grantedAt         DateTime  @default(now())
+  expiresAt         DateTime
+  revokedAt         DateTime?
   revocationChannel String?
 
   accesses ConsentAccess[]
@@ -352,13 +385,13 @@ model ConsentGrant {
 
 /// Every look, logged. Producible for the ODPC on request.
 model ConsentAccess {
-  id        String       @id @default(uuid()) @db.Uuid
-  grantId   String       @db.Uuid
-  grant     ConsentGrant @relation(fields: [grantId], references: [id], onDelete: Cascade)
-  accessedAt DateTime    @default(now())
-  actorId   String?      @db.Uuid
-  fields    String[]     @default([])
-  ip        String?
+  id         String       @id @default(uuid()) @db.Uuid
+  grantId    String       @db.Uuid
+  grant      ConsentGrant @relation(fields: [grantId], references: [id], onDelete: Cascade)
+  accessedAt DateTime     @default(now())
+  actorId    String?      @db.Uuid
+  fields     String[]     @default([])
+  ip         String?
 
   @@index([grantId, accessedAt])
   @@map("consent_access")
@@ -376,6 +409,10 @@ enum AccountKind {
   /// One per Store. Where checkout and PoS sales post; FEE_INCOME
   /// picks up the platform's cut on the same JournalEntry.
   STORE_REVENUE
+  /// One per Campaign. Deliberately separate from GROUP_SAVINGS — a
+  /// donor's gift to a named campaign never gets lent out table-banking
+  /// style, and the org's own savings never look like donor money.
+  CAMPAIGN_RECEIVED
 }
 
 model Account {
@@ -388,6 +425,7 @@ model Account {
   closedAt DateTime?
 
   postings Posting[]
+  campaign Campaign?
 
   @@unique([partyId, kind, currency])
   @@index([kind])
@@ -396,17 +434,18 @@ model Account {
 
 /// Immutable. Balanced. Never updated, never deleted.
 model JournalEntry {
-  id          String   @id @default(uuid()) @db.Uuid
-  reference   String   @unique
-  description String
-  occurredAt  DateTime @default(now())
-  recordedAt  DateTime @default(now())
+  id             String   @id @default(uuid()) @db.Uuid
+  reference      String   @unique
+  description    String
+  occurredAt     DateTime @default(now())
+  recordedAt     DateTime @default(now())
   /// Idempotency key. M-Pesa callbacks arrive late, twice, or never.
-  idempotencyKey String? @unique
+  idempotencyKey String?  @unique
 
   postings   Posting[]
   storeOrder StoreOrder?
   posSale    PosSale?
+  donation   Donation?
 
   @@index([occurredAt])
   @@map("journal_entry")
@@ -468,48 +507,73 @@ enum JoinPath {
 /// registration never becomes a counted user — the failure that made
 /// CECF's numbers meaningless.
 model Registration {
-  id       String             @id @default(uuid()) @db.Uuid
-  partyId  String?            @unique @db.Uuid
-  party    Party?             @relation(fields: [partyId], references: [id])
-  status   RegistrationStatus @default(STARTED)
-  path     JoinPath           @default(SELF_WEB)
+  id      String             @id @default(uuid()) @db.Uuid
+  partyId String?            @unique @db.Uuid
+  party   Party?             @relation(fields: [partyId], references: [id])
+  status  RegistrationStatus @default(STARTED)
+  path    JoinPath           @default(SELF_WEB)
 
-  joiningAs      String   // me | group | biz
-  officialName   String?
-  knownAs        String?
-  msisdn         String?
-  email          String?  @db.Citext
-  county         String?
-  ward           String?
-  workRaw        String?
-  segment        String?
-  orgName        String?
-  orgKnownAs     String?
-  orgRole        String?
-  memberCount    Int?
+  joiningAs             String // me | group | biz
+  officialName          String?
+  knownAs               String?
+  msisdn                String?
+  email                 String? @db.Citext
+  county                String?
+  ward                  String?
+  workRaw               String?
+  segment               String?
+  orgName               String?
+  orgKnownAs            String?
+  orgRole               String?
+  memberCount           Int?
   hasRegisteredBusiness String?
-  registrationNo String?
-  belongsToGroup String?
-  groupName      String?
+  registrationNo        String?
+  belongsToGroup        String?
+  groupName             String?
   /// Set when the joiner picked an existing group from the search, not
   /// just typed a name — this is what actually links them via Membership.
-  groupPartyId   String?  @db.Uuid
-  groupParty     Party?   @relation("RegistrationGroupParty", fields: [groupPartyId], references: [id])
+  groupPartyId          String? @db.Uuid
+  groupParty            Party?  @relation("RegistrationGroupParty", fields: [groupPartyId], references: [id])
   /// "group" | "self" — only asked when belongsToGroup is "yes".
-  feeCoverage    String?
-  hasKraPin      String?
+  feeCoverage           String?
+  hasKraPin             String?
+
+  /// The group's own OrgKind (CBO/SHG/CHAMA/... — see GROUP_KINDS),
+  /// location below county, and member-tags, only asked when creating
+  /// a brand-new group rather than joining one found by search.
+  orgKind      String?
+  orgSubCounty String?
+  orgDistrict  String?
+  orgTags      String[] @default([])
+
+  /// Business sub-flow. bizPartyId mirrors groupPartyId — set when the
+  /// joiner picked an existing business from the live search, which is
+  /// what stops a duplicate Organisation being created on completion.
+  bizName              String?
+  bizIsRegistered      String? // yes | no
+  bizIntendsToRegister String? // only asked when bizIsRegistered = no
+  bizPartyId           String?  @db.Uuid
+  bizParty             Party?   @relation("RegistrationBizParty", fields: [bizPartyId], references: [id])
+  bizSector            String?
+  bizType              String?
+  bizTypeOther         String?
+  bizEmployeeCount     Int?
+  bizRevenueGoodKes    Decimal? @db.Decimal(12, 2)
+  bizRevenueBadKes     Decimal? @db.Decimal(12, 2)
+  bizBankProvider      String?
+  bizPaymentChannels   String[] @default([])
 
   /// Explicit opt-ins. Nothing is sent that was not asked for.
   wantsPriceSms   Boolean @default(false)
   wantsReceiptSms Boolean @default(true)
   wantsExpirySms  Boolean @default(true)
 
-  ussdSetupChoice String?  // now | later
+  ussdSetupChoice  String? // now | later
   msisdnVerifiedAt DateTime?
   emailSentAt      DateTime?
 
-  agentId   String?  @db.Uuid
-  language  String   @default("en")
+  agentId   String? @db.Uuid
+  language  String  @default("en")
   ip        String?
   userAgent String?
 
@@ -541,19 +605,24 @@ model Registration {
 /// joiner or an officer says. Only the signature chain moves it to
 /// CONFIRMED.
 model RegistrationPayment {
-  id             String         @id @default(uuid()) @db.Uuid
-  registrationId String         @unique @db.Uuid
-  registration   Registration   @relation(fields: [registrationId], references: [id], onDelete: Cascade)
+  id             String       @id @default(uuid()) @db.Uuid
+  registrationId String       @unique @db.Uuid
+  registration   Registration @relation(fields: [registrationId], references: [id], onDelete: Cascade)
 
-  method       PaymentMethod?
-  reference    String?        @db.Citext
-  amountKes    Decimal?       @db.Decimal(12, 2)
-  declaredNote String?
-  declaredAt   DateTime?
-  status       PaymentStatus  @default(NOT_DECLARED)
-  confirmedAt  DateTime?
-  createdAt    DateTime     @default(now()) @map("created_at")
-  updatedAt    DateTime     @updatedAt @map("updated_at")
+  method            PaymentMethod?
+  reference         String?        @db.Citext
+  amountKes         Decimal?       @db.Decimal(12, 2)
+  declaredNote      String?
+  declaredAt        DateTime?
+  status            PaymentStatus  @default(NOT_DECLARED)
+  confirmedAt       DateTime?
+  /// Daraja's CheckoutRequestID for a live STK push, set the moment the
+  /// push is sent. Doubles as the idempotency guard for a callback that
+  /// arrives twice — see StoreOrder.mpesaCheckoutRequestId for the same
+  /// pattern in the storefront.
+  checkoutRequestId String?        @unique
+  createdAt         DateTime       @default(now()) @map("created_at")
+  updatedAt         DateTime       @updatedAt @map("updated_at")
 
   approvals PaymentApproval[]
 
@@ -563,11 +632,11 @@ model RegistrationPayment {
 
 /// A single signature in the dual-control chain. One REJECT halts.
 model PaymentApproval {
-  id         String           @id @default(uuid()) @db.Uuid
-  paymentId  String           @db.Uuid
+  id         String              @id @default(uuid()) @db.Uuid
+  paymentId  String              @db.Uuid
   payment    RegistrationPayment @relation(fields: [paymentId], references: [id], onDelete: Cascade)
-  approverId String           @db.Uuid
-  approver   StaffUser        @relation(fields: [approverId], references: [id])
+  approverId String              @db.Uuid
+  approver   StaffUser           @relation(fields: [approverId], references: [id])
   decision   ApprovalDecision
   note       String?
   /// HMAC-SHA256(paymentId|approverId|decision|signedAt, SESSION_SECRET)
@@ -609,9 +678,9 @@ enum StoreRoutingMode {
 }
 
 model Store {
-  id           String           @id @default(uuid()) @db.Uuid
-  enterpriseId String           @db.Uuid
-  enterprise   Enterprise       @relation(fields: [enterpriseId], references: [id], onDelete: Cascade)
+  id           String     @id @default(uuid()) @db.Uuid
+  enterpriseId String     @db.Uuid
+  enterprise   Enterprise @relation(fields: [enterpriseId], references: [id], onDelete: Cascade)
 
   name         String
   /// URL-safe, unique across the platform regardless of routing mode —
@@ -623,53 +692,265 @@ model Store {
   /// Reserved for a future custom-domain phase. Not resolved anywhere yet.
   customDomain String?          @unique
   posEnabled   Boolean          @default(false)
+  /// Toggle the KRA eTIMS fiscal-device flow for receipts issued at
+  /// this store. When on, every receipt gets a serial unique to the push.
+  etimsEnabled Boolean          @default(false)
+
+  /// Loyalty points worth? A gift card in Kenya is `ongea points`.
+  loyaltyEnabled Boolean @default(false)
+  /// Points granted per whole KES of sale, at the terminal AND on the
+  /// storefront — one loyalty pool per store.
+  loyaltyPerKes  Int     @default(1)
+
+  /// Whether the storefront offers cash on delivery at checkout, in
+  /// addition to M-Pesa STK. Off by default — the seller opts in.
+  codEnabled Boolean @default(false)
+
+  // ── EStore profile ────────────────────────────────────────────
+  // Business identity a customer-facing storefront shows. `name` above
+  // is the trading name; these hold the registered/legal details and
+  // contact info. All optional — a store sells fine without them, the
+  // storefront just shows less.
+
+  /// Registered/legal business name, where it differs from the trading name.
+  legalName          String?
+  /// KRA PIN or business registration number, shown in the storefront's
+  /// business identity block.
+  registrationNumber String?
+  /// A named person customers can ask for ("Ask for Mama Njeri").
+  contactPerson      String?
+  contactEmail       String?
+  /// +254 format, same convention as customer/supplier phones.
+  contactPhone       String?
+  physicalAddress    String?
+
+  /// One-line pitch under the store name on the storefront hero.
+  tagline           String?
+  /// Long-form story — where the goods come from, how the shop started.
+  /// Shown as the storefront's About section. Plain text.
+  aboutUs           String?
+  logoStorageKey    String?
+  /// Public URL served via /img/{key}, same pattern as ProductImage.
+  logoUrl           String?
+  faviconStorageKey String?
+  faviconUrl        String?
+
+  /// Brand accent override — a hex colour that beats the theme accent
+  /// when set, so a store with its own colours doesn't need a new theme.
+  brandAccent String?
+
+  instagram String?
+  facebook  String?
+  tiktok    String?
+  whatsapp  String?
+  linkedin  String?
+
+  /// The category the store mostly trades in — one of PRODUCT_CATEGORIES.
+  primaryCategory String?
+  /// Rough size of the catalogue ("how many things do you sell?").
+  skuCount        Int?
+
+  /// Where orders are packed/picked up from — "Juja Main, Kiambu".
+  deliveryOrigin String?
+  /// Free-text delivery areas served — "Juja, Thika, Ruiru".
+  deliveryZones  String[] @default([])
+  /// Typical turnaround in days (informational on the storefront).
+  processingDays Int?
+
+  /// Currency the store prices in — KES for everything today; kept on
+  /// the profile so the storefront can label prices honestly if it ever
+  /// changes.
+  currency        String  @default("KES")
+  /// VAT rate shown on the storefront when set (16 = 16%). Informational —
+  /// online checkouts price in KES inclusive of nothing; how tax is
+  /// collected is a fiscal-device (eTIMS) concern, not a profile one.
+  taxRatePct      Int?
+  /// M-Pesa number settlements should be paid to. Informational on the
+  /// profile today — actual payouts run through the enterprise ledger.
+  settlementPhone String?
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  products Product[]
-  orders   StoreOrder[]
-  posSales PosSale[]
+  products          Product[]
+  orders            StoreOrder[]
+  posSales          PosSale[]
+  customers         StoreCustomer[]
+  cashiers          Cashier[]
+  shifts            Shift[]
+  refunds           PosRefund[]
+  receipts          Receipt[]
+  fulfilmentOptions FulfilmentOption[]
+  suppliers         Supplier[]
+  stockPurchases    StockPurchase[]
+  photos            StorePhoto[]
 
   @@index([enterpriseId])
   @@index([status])
   @@map("store")
 }
 
-model Product {
-  id          String   @id @default(uuid()) @db.Uuid
-  storeId     String   @db.Uuid
-  store       Store    @relation(fields: [storeId], references: [id], onDelete: Cascade)
+/// Photo-gallery images a store puts on its storefront — the shopfront
+/// itself, a new delivery bike, whatever makes the store real. Same
+/// storage-key discipline as ProductImage: opaque key, public URL via
+/// /img, never served as a static asset.
+model StorePhoto {
+  id         String   @id @default(uuid()) @db.Uuid
+  storeId    String   @db.Uuid
+  store      Store    @relation(fields: [storeId], references: [id], onDelete: Cascade)
+  storageKey String
+  url        String
+  position   Int      @default(0)
+  createdAt  DateTime @default(now())
 
-  name        String
-  description String?
-  priceKes    Decimal  @db.Decimal(12, 2)
+  @@index([storeId])
+  @@map("store_photo")
+}
+
+model Product {
+  id      String @id @default(uuid()) @db.Uuid
+  storeId String @db.Uuid
+  store   Store  @relation(fields: [storeId], references: [id], onDelete: Cascade)
+
+  name             String
+  description      String?
+  /// One of PRODUCT_CATEGORIES in @esoko/domain. Not a DB enum — that
+  /// list is edited in application code, same reasoning as `status`
+  /// below: a new category should never need a migration.
+  category         String?
+  priceKes         Decimal          @db.Decimal(12, 2)
   /// Null = untracked (a service, or stock the merchant doesn't count).
-  stockQty    Int?
-  /// ACTIVE | HIDDEN. A plain string, not an enum — a merchant hiding a
-  /// product is a listing decision, not a state the platform enforces.
-  status      String   @default("ACTIVE")
+  stockQty         Int?
+  /// Sell-by-order: the merchant doesn't hold the stock (or holds little),
+  /// and fulfils once the buyer orders — "available on order". Order-first
+  /// keeps working capital out of stock, the model MSMEs can actually run.
+  availableOnOrder Boolean          @default(false)
+  /// Cost of goods — what the merchant paid, needed to show gross profit.
+  /// Optional: a business that doesn't track cost sees revenue only.
+  costKes          Decimal?         @db.Decimal(12, 2)
+  /// Retail unit the price refers to — "kg", "pc", "dozen", "litre"…
+  /// Plain text so a mango seller can write "bunch" without a migration.
+  unit             String?
+  /// Unit the merchant bought the stock in — often differs from `unit`
+  /// above: a tomato trader buys a crate by the kilo and sells by the
+  /// piece. costKes/stockQty above describe this purchase quantity, so
+  /// knowing it turns "paid KES 3,000 for 100" into "KES 30 per kilo"
+  /// instead of silently assuming the buy and sell units are the same.
+  purchaseUnit     String?
+  /// When set, the product sells by variant instead of by itself: the
+  /// storefront shows the label ("500g", "Blue", "1kg") with the variant's
+  /// own price and stock. base priceKes acts as the default variant price.
+  variants         ProductVariant[]
+  /// ACTIVE | HIDDEN | SUSPENDED. A plain string, not an enum — a
+  /// merchant hiding their own product is a listing decision the
+  /// platform doesn't need to model as a state machine. SUSPENDED is
+  /// the one value a merchant cannot set themselves — see reviewedById
+  /// below; setProductVisibility refuses to touch a suspended product.
+  status           String           @default("ACTIVE")
+  /// Staff moderation — mirrors Document's reviewNote/reviewedById/
+  /// reviewedAt shape below, same reasoning: who suspended it, why,
+  /// and when, so a merchant asking "why is my product down" gets a
+  /// real answer instead of "the system did it".
+  reviewNote       String?
+  reviewedById     String?          @db.Uuid
+  reviewedAt       DateTime?
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  images       ProductImage[]
-  orderItems   StoreOrderItem[]
-  posSaleItems PosSaleItem[]
+  images         ProductImage[]
+  orderItems     StoreOrderItem[]
+  posSaleItems   PosSaleItem[]
+  staffNotes     ProductStaffNote[]
+  stockPurchases StockPurchase[]
 
   @@index([storeId, status])
+  @@index([category])
   @@map("product")
 }
 
+/// A running conversation between staff and a merchant about one
+/// product — separate from a suspension's single reviewNote because a
+/// product can get more than one comment over time ("fix the price" now,
+/// "thanks, reinstating" later), and both sides of that history matter.
+model ProductStaffNote {
+  id        String   @id @default(uuid()) @db.Uuid
+  productId String   @db.Uuid
+  product   Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
+  staffId   String   @db.Uuid
+  note      String
+  createdAt DateTime @default(now())
+
+  @@index([productId, createdAt])
+  @@map("product_staff_note")
+}
+
 model ProductImage {
-  id        String  @id @default(uuid()) @db.Uuid
-  productId String  @db.Uuid
-  product   Product @relation(fields: [productId], references: [id], onDelete: Cascade)
-  url       String
-  position  Int     @default(0)
+  id         String  @id @default(uuid()) @db.Uuid
+  productId  String  @db.Uuid
+  product    Product @relation(fields: [productId], references: [id], onDelete: Cascade)
+  /// Opaque R2 object key — never the client's filename (see storage.ts).
+  /// Needed to actually delete the object when the image or product is
+  /// removed; `url` alone (the public-facing address) isn't reliably
+  /// reversible back to a key.
+  storageKey String
+  url        String
+  position   Int     @default(0)
 
   @@index([productId])
   @@map("product_image")
+}
+
+/// A sellable option of a Product — "500g"/"Blue"/"1kg". Has its own
+/// price and stock, so a duka can price a soda by size without editing
+/// the parent on every price change. A product with variants sells via
+/// these; see Product.variants.
+model ProductVariant {
+  id        String  @id @default(uuid()) @db.Uuid
+  productId String  @db.Uuid
+  product   Product @relation(fields: [productId], references: [id], onDelete: Cascade)
+
+  /// What the customer sees — "500g", "Red", "1kg bolle".
+  label            String
+  /// Its own price — the base product price is the default.
+  priceKes         Decimal  @db.Decimal(12, 2)
+  /// Null = untracked stock, same meaning as Product.stockQty.
+  stockQty         Int?
+  /// Order-first, same meaning as Product.availableOnOrder — a variant
+  /// the merchant fulfils once ordered rather than holding stock.
+  availableOnOrder Boolean  @default(false)
+  costKes          Decimal? @db.Decimal(12, 2)
+  /// Optional barcode/EAN for the option.
+  sku              String?
+
+  posItems       PosSaleItem[]
+  orderItems     StoreOrderItem[]
+  stockPurchases StockPurchase[]
+
+  @@index([productId])
+  @@map("product_variant")
+}
+
+/// How a storefront order is fulfilled — "Pick up at the kiosk" or
+/// "Boda delivery". The buyer picks one at checkout; the fee is added
+/// to the order. Managed by the merchant from settings.
+model FulfilmentOption {
+  id      String @id @default(uuid()) @db.Uuid
+  storeId String @db.Uuid
+  store   Store  @relation(fields: [storeId], references: [id], onDelete: Cascade)
+
+  /// PICKUP | DELIVERY
+  kind   String
+  /// "Pickup at Kawangware", "Boda — same day"
+  label  String
+  /// Fee on top of the basket, KES. 0 for free collection.
+  feeKes Decimal @default(0) @db.Decimal(12, 2)
+  active Boolean @default(true)
+
+  orders StoreOrder[]
+
+  @@index([storeId, active])
+  @@map("fulfilment_option")
 }
 
 enum StoreOrderStatus {
@@ -687,41 +968,77 @@ enum StoreOrderPaymentMethod {
 /// A checkout on the public storefront. The buyer need not be a
 /// registered Esoko subject — buyerParty is set only when they are.
 model StoreOrder {
-  id            String                   @id @default(uuid()) @db.Uuid
-  storeId       String                   @db.Uuid
-  store         Store                    @relation(fields: [storeId], references: [id], onDelete: Cascade)
-  buyerPartyId  String?                  @db.Uuid
-  buyerParty    Party?                   @relation(fields: [buyerPartyId], references: [id])
-  buyerName     String
-  buyerMsisdn   String
+  id           String  @id @default(uuid()) @db.Uuid
+  storeId      String  @db.Uuid
+  store        Store   @relation(fields: [storeId], references: [id], onDelete: Cascade)
+  buyerPartyId String? @db.Uuid
+  buyerParty   Party?  @relation(fields: [buyerPartyId], references: [id])
+  buyerName    String
+  buyerMsisdn  String
 
-  status        StoreOrderStatus         @default(PENDING_PAYMENT)
-  paymentMethod StoreOrderPaymentMethod  @default(MPESA_STK)
-  totalKes      Decimal                  @db.Decimal(12, 2)
+  status        StoreOrderStatus        @default(PENDING_PAYMENT)
+  paymentMethod StoreOrderPaymentMethod @default(MPESA_STK)
+  totalKes      Decimal                 @db.Decimal(12, 2)
+
+  /// Checkout fulfilment — which option the buyer chose and what the
+  /// delivery/pickup fee added. Empty until a FulfilmentOption exists.
+  deliveryOptionId String?           @db.Uuid
+  deliveryOption   FulfilmentOption? @relation(fields: [deliveryOptionId], references: [id])
+  deliveryFeeKes   Decimal?          @db.Decimal(12, 2)
+  /// Free-text note for the shop — "hand to Joshua at gate three".
+  collectionNotes  String?
+  /// Where a DELIVERY order goes — street/estate/landmark, plain text
+  /// captured at checkout. Tracked so COD and last-mile delivery have a
+  /// real destination on record.
+  deliveryAddress  String?
+
+  /// Cross-channel customer account, when the phone already belongs to a
+  /// StoreCustomer (auto-created at checkout or matched by msisdn).
+  customerId String?        @db.Uuid
+  customer   StoreCustomer? @relation(fields: [customerId], references: [id])
 
   /// Daraja's CheckoutRequestID. Doubles as the idempotency guard for
   /// a callback that arrives twice — see JournalEntry.idempotencyKey.
-  mpesaCheckoutRequestId String? @unique
-  journalEntryId         String? @unique @db.Uuid
+  mpesaCheckoutRequestId String?       @unique
+  journalEntryId         String?       @unique @db.Uuid
   journalEntry           JournalEntry? @relation(fields: [journalEntryId], references: [id])
 
   createdAt DateTime  @default(now())
   paidAt    DateTime?
 
-  items StoreOrderItem[]
+  /// Staff-mediated reroute — set when this store can't fulfil the
+  /// order and staff need to hand-pick another vendor selling the same
+  /// thing. Deliberately not an automated reassignment: money and a
+  /// merchant's reputation are on the line, so a human stays in the
+  /// loop. Only meaningful before payment moves — see reassignOrder.
+  needsReroute       Boolean   @default(false)
+  rerouteReason      String?
+  rerouteFlaggedById String?   @db.Uuid
+  rerouteFlaggedAt   DateTime?
+
+  items                 StoreOrderItem[]
+  receipts              Receipt[]
+  customerLedgerEntries CustomerLedgerEntry[]
+  loyaltyEntries        LoyaltyEntry[]
 
   @@index([storeId, status])
+  @@index([needsReroute])
   @@map("store_order")
 }
 
 model StoreOrderItem {
-  id           String     @id @default(uuid()) @db.Uuid
-  orderId      String     @db.Uuid
-  order        StoreOrder @relation(fields: [orderId], references: [id], onDelete: Cascade)
-  productId    String     @db.Uuid
-  product      Product    @relation(fields: [productId], references: [id])
+  id           String          @id @default(uuid()) @db.Uuid
+  orderId      String          @db.Uuid
+  order        StoreOrder      @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  productId    String          @db.Uuid
+  product      Product         @relation(fields: [productId], references: [id])
+  /// Set when the order picked a variant of the product.
+  variantId    String?         @db.Uuid
+  variant      ProductVariant? @relation(fields: [variantId], references: [id])
   quantity     Int
-  unitPriceKes Decimal    @db.Decimal(12, 2)
+  unitPriceKes Decimal         @db.Decimal(12, 2)
+  /// Cost snapshot at sale time so gross profit survives later price edits.
+  costKes      Decimal?        @db.Decimal(12, 2)
 
   @@index([orderId])
   @@map("store_order_item")
@@ -736,6 +1053,19 @@ enum PosSyncStatus {
 enum PosPaymentMethod {
   CASH
   MPESA_TILL
+  /// An STK push initiated from the terminal on the buyer's phone.
+  MPESA_STK
+  /// Goods leave the shop now, cash later — the credit book. Requires a
+  /// customer (someone has to owe it). No money has moved yet, so this
+  /// posts a CustomerLedgerEntry, not a commerce-ledger entry — see
+  /// recordPosSale and recordCustomerPayment.
+  ON_ACCOUNT
+}
+
+enum PosSaleStatus {
+  COMPLETED
+  REFUNDED
+  VOID
 }
 
 /// A terminal sale. clientSaleId is generated on-device at the moment
@@ -748,84 +1078,371 @@ model PosSale {
   clientSaleId  String           @unique
   paymentMethod PosPaymentMethod
   totalKes      Decimal          @db.Decimal(12, 2)
+  /// Whole-receipt discount, subtracted from the basket before total.
+  discountKes   Decimal          @default(0) @db.Decimal(12, 2)
   syncStatus    PosSyncStatus    @default(SYNCED)
+  status        PosSaleStatus    @default(COMPLETED)
   /// When it happened on the device — may be well before syncedAt.
   soldAt        DateTime
   syncedAt      DateTime         @default(now())
 
+  /// Cash drawer: what the customer handed over and the change returned.
+  tenderedKes Decimal? @db.Decimal(12, 2)
+  changeKes   Decimal? @db.Decimal(12, 2)
+
+  /// The cashier behind the terminal (null for the owner selling directly).
+  cashierId  String?        @db.Uuid
+  cashier    Cashier?       @relation(fields: [cashierId], references: [id])
+  /// The shift this sale belongs to — null when the store doesn't open shifts.
+  shiftId    String?        @db.Uuid
+  shift      Shift?         @relation(fields: [shiftId], references: [id])
+  /// A cross-channel customer account, when the sale is charged or checked
+  /// against one. Optional — a walk-in paid-cash sale needn't create one.
+  customerId String?        @db.Uuid
+  customer   StoreCustomer? @relation(fields: [customerId], references: [id])
+
   journalEntryId String?       @unique @db.Uuid
   journalEntry   JournalEntry? @relation(fields: [journalEntryId], references: [id])
 
-  items PosSaleItem[]
+  items                 PosSaleItem[]
+  refunds               PosRefund[]
+  receipts              Receipt[]
+  customerLedgerEntries CustomerLedgerEntry[]
+  loyaltyEntries        LoyaltyEntry[]
 
   @@index([storeId, soldAt])
+  @@index([storeId, status])
+  @@index([shiftId])
   @@map("pos_sale")
 }
 
 model PosSaleItem {
-  id           String  @id @default(uuid()) @db.Uuid
-  saleId       String  @db.Uuid
-  sale         PosSale @relation(fields: [saleId], references: [id], onDelete: Cascade)
-  productId    String  @db.Uuid
-  product      Product @relation(fields: [productId], references: [id])
+  id           String          @id @default(uuid()) @db.Uuid
+  saleId       String          @db.Uuid
+  sale         PosSale         @relation(fields: [saleId], references: [id], onDelete: Cascade)
+  productId    String          @db.Uuid
+  product      Product         @relation(fields: [productId], references: [id])
+  variantId    String?         @db.Uuid
+  variant      ProductVariant? @relation(fields: [variantId], references: [id])
   quantity     Int
-  unitPriceKes Decimal @db.Decimal(12, 2)
+  unitPriceKes Decimal         @db.Decimal(12, 2)
+  /// Per-line discount (negotiation, "regular" price).
+  discountKes  Decimal         @default(0) @db.Decimal(12, 2)
+  /// Cost snapshot at sale time — gross profit.
+  costKes      Decimal?        @db.Decimal(12, 2)
 
   @@index([saleId])
   @@map("pos_sale_item")
 }
 
+// ──────────────────── SUPPLIERS & STOCK PURCHASES ────────────────
+
+/// Who a merchant buys from — the milk vendor, the tomato wholesaler,
+/// the guy who brings bread at 6am. Kept as its own record (not just
+/// free text on a purchase) so contact details are entered once and
+/// "everything I've bought from this supplier" is a real query, not a
+/// grep through notes.
+model Supplier {
+  id      String @id @default(uuid()) @db.Uuid
+  storeId String @db.Uuid
+  store   Store  @relation(fields: [storeId], references: [id], onDelete: Cascade)
+
+  name  String
+  phone String?
+  notes String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  purchases StockPurchase[]
+
+  @@index([storeId, name])
+  @@map("supplier")
+}
+
+/// One delivery of stock into the shop — what came in, from whom, at
+/// what price, on what date. This is the other half of the profit
+/// picture a sale alone can't give: an MSME here rarely sells at a
+/// fixed price (milk goes for KES 10 one day, KES 100 the next,
+/// tomatoes are haggled every time — see PosSaleItem.discountKes), so
+/// knowing what a batch actually cost is what turns "I sold stuff
+/// today" into "I made a profit today". Recording a purchase bumps the
+/// product's stockQty and folds the cost into its running average —
+/// see recordStockPurchase.
+model StockPurchase {
+  id      String @id @default(uuid()) @db.Uuid
+  storeId String @db.Uuid
+  store   Store  @relation(fields: [storeId], references: [id], onDelete: Cascade)
+
+  productId String          @db.Uuid
+  product   Product         @relation(fields: [productId], references: [id], onDelete: Cascade)
+  variantId String?         @db.Uuid
+  variant   ProductVariant? @relation(fields: [variantId], references: [id])
+
+  /// Null when the merchant doesn't want to name one — a bargained buy
+  /// from someone passing through is still worth recording.
+  supplierId String?   @db.Uuid
+  supplier   Supplier? @relation(fields: [supplierId], references: [id])
+
+  quantity     Int
+  unitCostKes  Decimal  @db.Decimal(12, 2)
+  /// Denormalised (quantity × unitCostKes) so a purchase list never
+  /// needs to recompute it, and it survives if unitCostKes rounding
+  /// changes later.
+  totalCostKes Decimal  @db.Decimal(12, 2)
+  /// When the stock actually arrived — may be entered after the fact,
+  /// so this is independent of createdAt.
+  purchasedAt  DateTime @default(now())
+  notes        String?
+
+  createdAt DateTime @default(now())
+
+  @@index([storeId, purchasedAt])
+  @@index([productId])
+  @@index([supplierId])
+  @@map("stock_purchase")
+}
+
+// ─────────────────── CUSTOMERS, CREDIT & LOYALTY ─────────────────
+
+/// A store's own customer account, keyed by phone. The same shopper may
+/// exist across stores — they are per-store records, deliberately not a
+/// second global Party, because credit books and points are a store's
+/// private ledger. Created automatically at the first touchpoint
+/// (checkout or an attended sale) and editable from the merchant's app.
+model StoreCustomer {
+  id      String @id @default(uuid()) @db.Uuid
+  storeId String @db.Uuid
+  store   Store  @relation(fields: [storeId], references: [id], onDelete: Cascade)
+
+  msisdn    String
+  name      String?
+  notes     String?
+  /// How much the customer currently owes the shop. Derive from the
+  /// ledger (sum of entries), never stored on the row — see the "balances
+  /// are derived" rule in this schema's header.
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  ledger   CustomerLedgerEntry[]
+  loyalty  LoyaltyEntry[]
+  posSales PosSale[]
+  orders   StoreOrder[]
+
+  @@unique([storeId, msisdn])
+  @@index([storeId, name])
+  @@map("store_customer")
+}
+
+/// One move in a customer's money ledger — a sale on credit, a payment,
+/// an adjustment. Amount is signed: a SALE on credit appears as a
+/// positive (they owe that much more), a PAYMENT as a negative. Balance
+/// = sum of all entries. Never mutate an entry once written.
+model CustomerLedgerEntry {
+  id         String        @id @default(uuid()) @db.Uuid
+  customerId String        @db.Uuid
+  customer   StoreCustomer @relation(fields: [customerId], references: [id], onDelete: Cascade)
+
+  /// SALE | PAYMENT | REFUND | ADJUSTMENT
+  kind      String
+  /// Signed — see the model comment above.
+  amountKes Decimal     @db.Decimal(12, 2)
+  note      String?
+  saleId    String?     @db.Uuid
+  sale      PosSale?    @relation(fields: [saleId], references: [id])
+  orderId   String?     @db.Uuid
+  order     StoreOrder? @relation(fields: [orderId], references: [id])
+  createdAt DateTime    @default(now())
+
+  @@index([customerId, createdAt])
+  @@map("customer_ledger_entry")
+}
+
+/// Loyalty points granted and redeemed against a customer. Balance is
+/// derived the same way money is — never stored.
+model LoyaltyEntry {
+  id         String        @id @default(uuid()) @db.Uuid
+  customerId String        @db.Uuid
+  customer   StoreCustomer @relation(fields: [customerId], references: [id], onDelete: Cascade)
+
+  /// Signed. Positive = earned on a sale; negative = redeemed.
+  points    Int
+  /// EARN | REDEEM | ADJUSTMENT
+  kind      String
+  note      String?
+  saleId    String?     @db.Uuid
+  sale      PosSale?    @relation(fields: [saleId], references: [id])
+  orderId   String?     @db.Uuid
+  order     StoreOrder? @relation(fields: [orderId], references: [id])
+  createdAt DateTime    @default(now())
+
+  @@index([customerId, createdAt])
+  @@map("loyalty_entry")
+}
+
+// ─────────────────────── CASHIERS & SHIFTS ──────────────────────
+
+/// A counter operator with their own PIN, distinct from the owner's
+/// sign-in. PIN is Argon2id-hashed (see seed.ts for the parameters).
+/// Cashiers act as themselves on the terminal and are attached to the
+/// sales they ring up; a manager/owner can draw the cash drawer, a plain
+/// cashier cannot open the drawer without one.
+model Cashier {
+  id      String @id @default(uuid()) @db.Uuid
+  storeId String @db.Uuid
+  store   Store  @relation(fields: [storeId], references: [id], onDelete: Cascade)
+
+  name      String
+  pinHash   String
+  /// CASHIER | MANAGER
+  role      String   @default("CASHIER")
+  active    Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  shifts   Shift[]
+  posSales PosSale[]
+  refunds  PosRefund[]
+
+  @@index([storeId])
+  @@map("cashier")
+}
+
+/// One open/close of the register. A merchant watches the drawer by
+/// opening a shift with the float in it, selling, then closing and
+/// counting: the system already knows the expected cash from that
+/// shift's sales (cash method minus cash refunds plus the still-open
+/// float) and the variance is counted − expected.
+model Shift {
+  id        String  @id @default(uuid()) @db.Uuid
+  storeId   String  @db.Uuid
+  store     Store   @relation(fields: [storeId], references: [id], onDelete: Cascade)
+  cashierId String  @db.Uuid
+  cashier   Cashier @relation(fields: [cashierId], references: [id])
+
+  openedAt        DateTime  @default(now())
+  closedAt        DateTime?
+  openingFloatKes Decimal   @default(0) @db.Decimal(12, 2)
+  /// Set when the shift closes: cash sales − cash refunds + opening float.
+  expectedCashKes Decimal?  @db.Decimal(12, 2)
+  /// What the drawer actually had, counted by the closing cashier.
+  countedCashKes  Decimal?  @db.Decimal(12, 2)
+  /// counted − expected. Positive = over, negative = short.
+  varianceKes     Decimal?  @db.Decimal(12, 2)
+  /// OPEN | CLOSED
+  status          String    @default("OPEN")
+
+  posSales PosSale[]
+
+  @@index([storeId, openedAt])
+  @@index([status])
+  @@map("shift")
+}
+
+/// A refunded (or voided) PoS sale. Kept as a separate row so a sale's
+/// history is never rewritten — the sale is marked REFUNDED and this
+/// record carries who did it, why, and the amount returned.
+model PosRefund {
+  id        String   @id @default(uuid()) @db.Uuid
+  saleId    String   @db.Uuid
+  sale      PosSale  @relation(fields: [saleId], references: [id], onDelete: Cascade)
+  storeId   String   @db.Uuid
+  store     Store    @relation(fields: [storeId], references: [id], onDelete: Cascade)
+  cashierId String?  @db.Uuid
+  cashier   Cashier? @relation(fields: [cashierId], references: [id])
+
+  reason       String
+  refundMethod PosPaymentMethod
+  amountKes    Decimal          @db.Decimal(12, 2)
+  createdAt    DateTime         @default(now())
+
+  @@index([saleId])
+  @@index([storeId, createdAt])
+  @@map("pos_refund")
+}
+
+/// One receipt issued for a sale or an order — a fulfilment channel's
+/// copy (print/SMS/WhatsApp). The same sale may have several receipts;
+/// the merchant keeps a printable copy on file, and an SMS/WhatsApp copy
+/// goes to the shopper. A KRA eTIMS serial, where the store has eTIMS
+/// enabled, makes the receipt compliant with Kenya's VAT Act 2013 (as
+/// amended) and the count published under the eTIMS regime.
+model Receipt {
+  id      String @id @default(uuid()) @db.Uuid
+  storeId String @db.Uuid
+  store   Store  @relation(fields: [storeId], references: [id], onDelete: Cascade)
+
+  /// Human-facing, sequential per store: e.g. 000147.
+  receiptNo   String      @unique
+  saleId      String?     @db.Uuid
+  sale        PosSale?    @relation(fields: [saleId], references: [id])
+  orderId     String?     @db.Uuid
+  order       StoreOrder? @relation(fields: [orderId], references: [id])
+  totalKes    Decimal     @db.Decimal(12, 2)
+  /// KRA eTIMS serial for fiscal receipts — null when eTIMS is off.
+  etimsSerial String?
+  /// PRINT | SMS | WHATSAPP
+  channel     String
+  /// SMS/WhatsApp target (the customer's msisdn); null for a printed copy.
+  sentTo      String?
+  issuedAt    DateTime    @default(now())
+
+  @@index([storeId, issuedAt])
+  @@index([saleId])
+  @@map("receipt")
+}
+
 /// Pricing is data, not code — every fee shown anywhere in the store
 /// wizard reads one of these rows. No process.env price constants.
 model PricingRule {
-  id            String    @id @default(uuid()) @db.Uuid
+  id            String     @id @default(uuid()) @db.Uuid
   /// SUBDOMAIN_SETUP_FEE | SUBDOMAIN_MONTHLY_FEE | POS_MONTHLY_FEE |
   /// PLATFORM_FEE_PCT, etc. — read by key, never hardcoded elsewhere.
-  key           String    @unique
+  key           String     @unique
   label         String
-  amountKes     Decimal?  @db.Decimal(12, 2)
-  amountPct     Decimal?  @db.Decimal(5, 2)
+  amountKes     Decimal?   @db.Decimal(12, 2)
+  amountPct     Decimal?   @db.Decimal(5, 2)
   /// ONE_TIME | MONTHLY | PER_ORDER
   billingPeriod String
-  updatedAt     DateTime  @updatedAt
-  updatedById   String?   @db.Uuid
+  updatedAt     DateTime   @updatedAt
+  updatedById   String?    @db.Uuid
   updatedBy     StaffUser? @relation(fields: [updatedById], references: [id])
 
   @@map("pricing_rule")
 }
 
 model Document {
-  id       String   @id @default(uuid()) @db.Uuid
-  partyId  String?  @db.Uuid
-  party    Party?   @relation(fields: [partyId], references: [id], onDelete: Cascade)
+  id             String        @id @default(uuid()) @db.Uuid
+  partyId        String?       @db.Uuid
+  party          Party?        @relation(fields: [partyId], references: [id], onDelete: Cascade)
   /// Attached during registration, before a Party exists.
-  registrationId String? @db.Uuid
+  registrationId String?       @db.Uuid
   registration   Registration? @relation(fields: [registrationId], references: [id], onDelete: Cascade)
 
   /// What the person called it. Their words, not a dropdown.
-  title    String
-  kind     String   @default("OTHER")
+  title        String
+  kind         String @default("OTHER")
   /// Opaque storage key. NEVER the user's filename — that is a path
   /// traversal and content-sniffing vector.
-  storageKey String  @unique
+  storageKey   String @unique
   /// Kept only for display and download naming. Sanitised on the way in.
   originalName String
-  mimeType String
-  sizeBytes Int
+  mimeType     String
+  sizeBytes    Int
   /// SHA-256 of the bytes. Detects duplicates and tampering.
-  sha256   String
+  sha256       String
 
-  status   DocumentStatus @default(PENDING_REVIEW)
-  reviewNote String?
-  reviewedById String? @db.Uuid
-  reviewedAt DateTime?
+  status       DocumentStatus @default(PENDING_REVIEW)
+  reviewNote   String?
+  reviewedById String?        @db.Uuid
+  reviewedAt   DateTime?
 
-  uploadedAt DateTime @default(now())
-  uploadedByType String @default("SUBJECT")
-  uploadedById String?
-  deletedAt DateTime?
+  uploadedAt     DateTime  @default(now())
+  uploadedByType String    @default("SUBJECT")
+  uploadedById   String?
+  deletedAt      DateTime?
 
-  extracted Json?
+  extracted     Json?
   ocrConfidence Int?
 
   @@index([partyId, kind])
@@ -856,31 +1473,31 @@ model SessionRecord {
 // ─────────────────────────── STAFF & RBAC ───────────────────────
 
 model StaffUser {
-  id        String   @id @default(uuid()) @db.Uuid
-  email     String   @unique @db.Citext
-  name      String
-  pinHash   String
-  orgId     String?  @db.Uuid
+  id             String    @id @default(uuid()) @db.Uuid
+  email          String    @unique @db.Citext
+  name           String
+  pinHash        String
+  orgId          String?   @db.Uuid
   /// Preset the capabilities were derived from. Display only — the
   /// capability list is the model, not this.
-  rolePreset String? @default("VIEWER")
+  rolePreset     String?   @default("VIEWER")
   /// Optional scope. Empty means national.
-  countyScope String[] @default([])
-  invitedById String? @db.Uuid
-  mustChangePin Boolean @default(true)
-  failedAttempts Int   @default(0)
-  lockedUntil DateTime?
-  suspendedAt DateTime?
+  countyScope    String[]  @default([])
+  invitedById    String?   @db.Uuid
+  mustChangePin  Boolean   @default(true)
+  failedAttempts Int       @default(0)
+  lockedUntil    DateTime?
+  suspendedAt    DateTime?
   /// Capability strings, e.g. "registration.read", "audit.read",
   /// "attestation.issue:GROUP_REGISTERED". Never a role enum —
   /// roles are presets of these, not the model itself.
-  capabilities String[] @default([])
-  active    Boolean  @default(true)
-  lastSeenAt DateTime?
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  capabilities   String[]  @default([])
+  active         Boolean   @default(true)
+  lastSeenAt     DateTime?
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
 
-  approvals PaymentApproval[]
+  approvals           PaymentApproval[]
   pricingRulesUpdated PricingRule[]
 
   @@index([active, rolePreset])
@@ -892,18 +1509,18 @@ model StaffUser {
 /// Append-only, hash-chained. If a row is altered or removed the chain
 /// breaks and `pnpm audit:verify` will say so.
 model AuditEvent {
-  id        BigInt   @id @default(autoincrement())
+  id         BigInt   @id @default(autoincrement())
   occurredAt DateTime @default(now())
-  actorType String   // SUBJECT | STAFF | AGENT | SYSTEM | ISSUER
-  actorId   String?
-  action    String   // registration.created, consent.granted, otp.sent …
+  actorType  String // SUBJECT | STAFF | AGENT | SYSTEM | ISSUER
+  actorId    String?
+  action     String // registration.created, consent.granted, otp.sent …
   targetType String?
-  targetId  String?
-  payload   Json     @default("{}")
-  ip        String?
+  targetId   String?
+  payload    Json     @default("{}")
+  ip         String?
   /// SHA-256 over (prevHash + canonical(row)). Chain root uses AUDIT_CHAIN_SEED.
-  prevHash  String
-  hash      String   @unique
+  prevHash   String
+  hash       String   @unique
 
   @@index([occurredAt])
   @@index([action, occurredAt])
@@ -914,10 +1531,10 @@ model AuditEvent {
 // ──────────────────────── REFERENCE DATA ────────────────────────
 
 model County {
-  code      String  @id
-  name      String  @unique
-  hasFieldOfficer Boolean @default(false)
-  pricesLive      Boolean @default(false)
+  code            String    @id
+  name            String    @unique
+  hasFieldOfficer Boolean   @default(false)
+  pricesLive      Boolean   @default(false)
   population      String?
   financeActRef   String?
   verifiedOn      DateTime?
@@ -929,12 +1546,12 @@ model County {
 }
 
 model Market {
-  id        String  @id @default(uuid()) @db.Uuid
-  name      String
+  id         String  @id @default(uuid()) @db.Uuid
+  name       String
   countyCode String
-  county    County  @relation(fields: [countyCode], references: [code])
+  county     County  @relation(fields: [countyCode], references: [code])
   marketDays String?
-  reporting Boolean @default(false)
+  reporting  Boolean @default(false)
 
   prices PriceQuote[]
 
@@ -943,9 +1560,9 @@ model Market {
 }
 
 model Permit {
-  id         String  @id @default(uuid()) @db.Uuid
+  id         String     @id @default(uuid()) @db.Uuid
   countyCode String
-  county     County  @relation(fields: [countyCode], references: [code])
+  county     County     @relation(fields: [countyCode], references: [code])
   name       String
   issuedBy   String
   feeText    String
@@ -970,18 +1587,298 @@ model Commodity {
 /// One quote, one market, one day. Absence is meaningful — the UI must
 /// say "not submitted today" rather than repeat yesterday's figure.
 model PriceQuote {
-  id          String   @id @default(uuid()) @db.Uuid
-  commodityId String   @db.Uuid
+  id          String    @id @default(uuid()) @db.Uuid
+  commodityId String    @db.Uuid
   commodity   Commodity @relation(fields: [commodityId], references: [id])
-  marketId    String   @db.Uuid
-  market      Market   @relation(fields: [marketId], references: [id])
-  priceKes    Decimal  @db.Decimal(12, 2)
-  quotedFor   DateTime @db.Date
-  collectedAt DateTime @default(now())
+  marketId    String    @db.Uuid
+  market      Market    @relation(fields: [marketId], references: [id])
+  priceKes    Decimal   @db.Decimal(12, 2)
+  quotedFor   DateTime  @db.Date
+  collectedAt DateTime  @default(now())
   source      String
   collectedBy String?
 
   @@unique([commodityId, marketId, quotedFor])
   @@index([quotedFor])
   @@map("price_quote")
+}
+
+// ═══════════════════════ OUR JAMII (CECF community pages) ═══════════
+//
+// A public mini-site + crowdfunding layer on top of the Party/
+// Organisation an org already has everywhere else on the platform.
+// Deliberately NOT a parallel "community org" identity system — see
+// the file header. JamiiPage is 1:1 with Organisation the same way
+// Person/Organisation are 1:1 with Party.
+
+enum JamiiPageStatus {
+  DRAFT
+  PUBLISHED
+  SUSPENDED
+}
+
+enum PublishStatus {
+  DRAFT
+  PUBLISHED
+}
+
+enum JamiiTeamRole {
+  ADMIN
+  EDITOR
+  CONTRIBUTOR
+}
+
+enum CampaignStatus {
+  DRAFT
+  ACTIVE
+  COMPLETED
+  CANCELLED
+}
+
+enum DonationStatus {
+  PENDING
+  CONFIRMED
+  FAILED
+}
+
+enum JamiiInterestStatus {
+  NEW
+  CONTACTED
+  CONVERTED
+  DISMISSED
+}
+
+model JamiiPage {
+  organisationId String       @id @db.Uuid
+  organisation   Organisation @relation(fields: [organisationId], references: [partyId], onDelete: Cascade)
+
+  /// Public URL segment — ourjamii.esoko.../o/{slug}. Unique platform-wide.
+  slug   String          @unique
+  status JamiiPageStatus @default(DRAFT)
+
+  /// One-line pitch, shown on Discover cards and the hero carousel.
+  tagline      String?
+  /// Short mission used in cards/carousel where space is tight.
+  missionShort String?
+  /// Long-form "About" body shown on the public page's About section.
+  aboutUs      String?
+
+  logoStorageKey  String?
+  logoUrl         String?
+  coverStorageKey String?
+  coverUrl        String?
+  brandAccent     String?
+
+  /// Free text, e.g. "Wednesdays, 4pm · Nyalenda B Social Hall".
+  meetingSchedule String?
+  contactEmail    String?
+  contactPhone    String?
+  website         String?
+  facebook        String?
+  instagram       String?
+  twitter         String?
+  whatsapp        String?
+
+  /// [{ q, a }] — small and static enough that a table would be
+  /// overkill, same precedent as Person.displayPrefs.
+  faq Json @default("[]")
+
+  publishedAt DateTime?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  photos    JamiiPhoto[]
+  posts     JamiiPost[]
+  programs  JamiiProgram[]
+  campaigns Campaign[]
+  team      JamiiTeamMember[]
+
+  @@index([status])
+  @@map("jamii_page")
+}
+
+/// Gallery images a page puts on its public profile. Same storage-key
+/// discipline as StorePhoto: opaque key, public URL via /img.
+model JamiiPhoto {
+  id         String    @id @default(uuid()) @db.Uuid
+  pageId     String    @db.Uuid
+  page       JamiiPage @relation(fields: [pageId], references: [organisationId], onDelete: Cascade)
+  storageKey String
+  url        String
+  caption    String?
+  position   Int       @default(0)
+  createdAt  DateTime  @default(now())
+
+  @@index([pageId])
+  @@map("jamii_photo")
+}
+
+/// The "Updates" carousel on the public page.
+model JamiiPost {
+  id              String        @id @default(uuid()) @db.Uuid
+  pageId          String        @db.Uuid
+  page            JamiiPage     @relation(fields: [pageId], references: [organisationId], onDelete: Cascade)
+  title           String
+  excerpt         String?
+  body            String
+  imageStorageKey String?
+  imageUrl        String?
+  status          PublishStatus @default(DRAFT)
+  authorPartyId   String?       @db.Uuid
+  publishedAt     DateTime?
+  createdAt       DateTime      @default(now())
+  updatedAt       DateTime      @updatedAt
+
+  @@index([pageId, status])
+  @@map("jamii_post")
+}
+
+/// The "Programs" accordion on the public page.
+model JamiiProgram {
+  id           String    @id @default(uuid()) @db.Uuid
+  pageId       String    @db.Uuid
+  page         JamiiPage @relation(fields: [pageId], references: [organisationId], onDelete: Cascade)
+  title        String
+  body         String
+  icon         String?
+  position     Int       @default(0)
+  linkedPostId String?   @db.Uuid
+  createdAt    DateTime  @default(now())
+
+  @@index([pageId])
+  @@map("jamii_program")
+}
+
+/// Who may manage a page, and at what level — deliberately separate
+/// from Membership (a person's real role in the group: chairperson,
+/// treasurer, ...). A treasurer isn't necessarily who edits the page,
+/// and a page editor need not be an office-holder.
+model JamiiTeamMember {
+  id          String        @id @default(uuid()) @db.Uuid
+  pageId      String        @db.Uuid
+  page        JamiiPage     @relation(fields: [pageId], references: [organisationId], onDelete: Cascade)
+  /// Null while an invite is pending and no Party/Person exists yet
+  /// for that email/phone.
+  personId    String?       @db.Uuid
+  person      Party?        @relation(fields: [personId], references: [id])
+  inviteName  String
+  inviteEmail String
+  role        JamiiTeamRole @default(EDITOR)
+  invitedAt   DateTime      @default(now())
+  acceptedAt  DateTime?
+  removedAt   DateTime?
+
+  @@unique([pageId, inviteEmail])
+  @@index([personId])
+  @@map("jamii_team_member")
+}
+
+model Campaign {
+  id      String         @id @default(uuid()) @db.Uuid
+  pageId  String         @db.Uuid
+  page    JamiiPage      @relation(fields: [pageId], references: [organisationId], onDelete: Cascade)
+  title   String
+  /// Unique per page, not platform-wide — routed as /o/{pageSlug}/c/{slug}.
+  slug    String
+  summary String
+  body    String?
+  goalKes Decimal        @db.Decimal(12, 2)
+  status  CampaignStatus @default(DRAFT)
+
+  coverStorageKey String?
+  coverUrl        String?
+  startsAt        DateTime?
+  endsAt          DateTime?
+
+  /// One dedicated ledger account per campaign, opened alongside it.
+  /// Kept apart from the org's GROUP_SAVINGS account on purpose.
+  accountId String?  @unique @db.Uuid
+  account   Account? @relation(fields: [accountId], references: [id])
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  updates   CampaignUpdate[]
+  donations Donation[]
+
+  @@unique([pageId, slug])
+  @@index([status])
+  @@map("campaign")
+}
+
+model CampaignUpdate {
+  id         String   @id @default(uuid()) @db.Uuid
+  campaignId String   @db.Uuid
+  campaign   Campaign @relation(fields: [campaignId], references: [id], onDelete: Cascade)
+  title      String
+  body       String
+  postedAt   DateTime @default(now())
+
+  @@index([campaignId, postedAt])
+  @@map("campaign_update")
+}
+
+/// A gift to a campaign. Mirrors StoreOrder: donor is an optional
+/// Party (giving never requires an account — "Anonymous" just means
+/// donorPartyId is null), paid via the same M-Pesa STK flow as
+/// checkout, settled as a balanced JournalEntry.
+model Donation {
+  id           String         @id @default(uuid()) @db.Uuid
+  campaignId   String         @db.Uuid
+  campaign     Campaign       @relation(fields: [campaignId], references: [id])
+  donorPartyId String?        @db.Uuid
+  donorParty   Party?         @relation(fields: [donorPartyId], references: [id])
+  donorName    String         @default("Anonymous")
+  donorMsisdn  String
+  anonymous    Boolean        @default(false)
+  amountKes    Decimal        @db.Decimal(12, 2)
+  status       DonationStatus @default(PENDING)
+
+  mpesaCheckoutRequestId String?       @unique
+  mpesaReceiptCode       String?
+  /// The ESK-##### code shown to the donor — our own reference,
+  /// independent of the M-Pesa receipt.
+  receiptCode            String?       @unique
+  journalEntryId         String?       @unique @db.Uuid
+  journalEntry           JournalEntry? @relation(fields: [journalEntryId], references: [id])
+
+  createdAt   DateTime  @default(now())
+  confirmedAt DateTime?
+
+  @@index([campaignId, status])
+  @@map("donation")
+}
+
+/// A lead, not a Party. Someone tried to register on Our Jamii
+/// (apps/jamii) with a phone/email that isn't an existing CECF member's
+/// Person record — access is gated to CECF members, so instead of a
+/// dead end they can leave their details here. Deliberately its own
+/// table rather than a Registration: a Registration implies "this is
+/// someone going through the join funnel"; this is "someone was turned
+/// away and asked to be followed up with," reviewed by Esoko staff in
+/// the admin app (see App\Support in cecf-wordpress for the analogous
+/// non-CECF-member redirect on the WordPress side, and this record's
+/// counterpart CTA on /join).
+model JamiiInterest {
+  id     String              @id @default(uuid()) @db.Uuid
+  status JamiiInterestStatus @default(NEW)
+
+  fullName String
+  msisdn   String
+  email    String? @db.Citext
+  county   String?
+  /// The group/organisation they named, if any — free text, since by
+  /// definition nothing here is linked to a real Party yet.
+  organisationName String?
+  message          String?
+
+  reviewedByStaffId String?   @db.Uuid
+  reviewNote        String?
+  reviewedAt        DateTime?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([status, createdAt])
+  @@map("jamii_interest")
 }

@@ -3,46 +3,35 @@
 import { useCallback, useEffect, useRef, useState, useTransition } from 'react';
 import { Icon } from '@esoko/ui';
 import { useAnnounce, VisuallyHidden } from '@esoko/a11y';
-import { COUNTIES, LIVE_COUNTIES, formatMsisdn } from '@esoko/domain';
 import {
   actionStart, actionSaveNames, actionSaveContact, actionSaveWork,
-  actionSaveStanding, actionRequestOtp, actionVerifyOtp, actionComplete,
-  actionSearchWork, actionSearchGroups, actionMarkStep, type ActionResult,
+  actionSaveStanding, actionComplete,
+  // actionRequestOtp, actionVerifyOtp — only used by the commented-out
+  // dialling-access (USSD) OTP flow below.
+  actionSearchWork, type ActionResult,
 } from './actions';
-import { DocumentStep, PaymentStep } from './Steps';
+import { actionDeferPayment } from './upload';
+import { EMPTY, type Form } from './form';
+import { WhoAndName } from './steps/WhoAndName';
+import { ContactWork } from './steps/ContactWork';
+import { MoreAboutYou } from './steps/MoreAboutYou';
+import { Finish } from './steps/Finish';
 
-type JoiningAs = 'me' | 'group' | 'biz' | 'inst';
-type YesNoSoon = 'yes' | 'no' | 'soon';
-
-interface Form {
-  joiningAs: JoiningAs | '';
-  officialName: string; knownAs: string;
-  orgName: string; orgKnownAs: string; orgRole: string;
-  msisdn: string; email: string; county: string; ward: string;
-  workRaw: string; segment: string;
-  hasRegisteredBusiness: YesNoSoon | ''; registrationNo: string;
-  belongsToGroup: 'yes' | 'no' | ''; groupName: string; groupPartyId: string;
-  feeCoverage: 'group' | 'self' | '';
-  memberCount: string;
-  ussdSetupChoice: 'now' | 'later' | '';
-  paymentChoice: 'paid' | 'later' | '';
-  wantsPriceSms: boolean; wantsReceiptSms: boolean; wantsExpirySms: boolean;
-}
-
-const EMPTY: Form = {
-  joiningAs: '', officialName: '', knownAs: '', orgName: '', orgKnownAs: '', orgRole: 'Treasurer',
-  msisdn: '+254 7', email: '', county: 'Nairobi', ward: '', workRaw: '', segment: '',
-  hasRegisteredBusiness: '', registrationNo: '', belongsToGroup: '', groupName: '', groupPartyId: '',
-  feeCoverage: '',
-  memberCount: '', ussdSetupChoice: '', paymentChoice: '',
-  wantsPriceSms: false, wantsReceiptSms: true, wantsExpirySms: true,
-};
+/**
+ * Four screens instead of eight. The data model never required most of
+ * what the old flow forced a separate screen for — documents and the
+ * registration fee are genuinely optional at the schema level (see
+ * packages/domain/src/registration.ts), so they're now collapsed,
+ * skippable sections instead of mandatory stops. "Standing" itself is
+ * the exception for a group or business joiner: which group or
+ * business this registration is actually for is not optional, so that
+ * part of step 3 stays open and gates Continue — see the joiningAs
+ * checks below and in MoreAboutYou.
+ */
 
 const KNOWN_ROLES = ['Chairperson', 'Treasurer', 'Secretary', 'Member'] as const;
-
-const TOTAL_QUESTIONS = 8;
-// Bumped alongside the step reorder below — an old saved session from
-// before this shape would otherwise hydrate into the wrong step.
+const TOTAL_STEPS = 4;
+const STEP_LABELS = ['You', 'Contact', 'Optional', 'Verify'] as const;
 const STORAGE_KEY = 'esoko:join:v2';
 
 export function JoinFlow() {
@@ -56,12 +45,14 @@ export function JoinFlow() {
   const [errField, setErrField] = useState<string | undefined>();
 
   const [hits, setHits] = useState<{ key: string; name: string }[]>([]);
-  const [groupHits, setGroupHits] = useState<{ id: string; name: string; county: string }[]>([]);
   const [orgRoleOther, setOrgRoleOther] = useState(false);
-  const [otpSent, setOtpSent] = useState(false);
-  const [otpVerified, setOtpVerified] = useState(false);
-  const [otp, setOtp] = useState('');
-  const [devCode, setDevCode] = useState<string | undefined>();
+  // OTP/dialling-access (USSD *483*77#) state — unused while that section
+  // is commented out below. Left in place, not deleted, so re-enabling it
+  // is a paste, not a rebuild.
+  // const [otpSent, setOtpSent] = useState(false);
+  // const [otpVerified, setOtpVerified] = useState(false);
+  // const [otp, setOtp] = useState('');
+  // const [devCode, setDevCode] = useState<string | undefined>();
   const [emailSent, setEmailSent] = useState(false);
   const [done, setDone] = useState(false);
   const [resumable, setResumable] = useState<{ f: Form; step: number; regId: string } | null>(null);
@@ -71,10 +62,7 @@ export function JoinFlow() {
   const set = <K extends keyof Form>(k: K, v: Form[K]) =>
     setF((p) => ({ ...p, [k]: v }));
 
-  // Offer to resume an in-progress registration saved in this browser —
-  // a crash, reload or lost connection should not cost the joiner their
-  // answers. Only offered, never silently applied: the device may be
-  // shared, or the saved attempt may be stale.
+  // Offer to resume an in-progress registration saved in this browser.
   useEffect(() => {
     try {
       const raw = window.localStorage.getItem(STORAGE_KEY);
@@ -99,7 +87,6 @@ export function JoinFlow() {
     setResumable(null);
   }
 
-  // Persist progress after every change so a reload or crash can resume.
   useEffect(() => {
     if (!regId || done) return;
     try {
@@ -113,8 +100,6 @@ export function JoinFlow() {
     }
   }, [done]);
 
-  // Focus the question heading on every step change so keyboard and
-  // screen-reader users land in the right place.
   useEffect(() => {
     headingRef.current?.focus();
     setError(null);
@@ -132,125 +117,116 @@ export function JoinFlow() {
     [announce],
   );
 
-  /* ── step 1 — the actual fork in the journey ──────────────────
-   * "Already in a group" is its own front door, not something
-   * discovered two questions into the "Myself" path — that's what
-   * makes it a genuinely different, shorter journey rather than the
-   * same corridor with one extra reordered question. */
-  type Entry = 'group-member' | 'group-new' | 'solo' | 'biz' | 'inst';
-  function pickEntry(v: Entry) {
-    if (v === 'inst') { set('joiningAs', 'inst'); setStep(0); return; }
-    if (v === 'group-member') {
-      setF((p) => ({ ...p, joiningAs: 'me', belongsToGroup: 'yes' }));
-      setStep(2);
-      announce('Question 2 of 8. Find your group.');
-    } else if (v === 'solo') {
-      setF((p) => ({ ...p, joiningAs: 'me', belongsToGroup: 'no' }));
-      setStep(3);
-      announce('Question 2 of 8. Your name.');
-    } else if (v === 'group-new') {
-      set('joiningAs', 'group');
-      setStep(3);
-      announce('Question 2 of 8. The group, and you.');
-    } else {
-      set('joiningAs', 'biz');
-      setStep(3);
-      announce('Question 2 of 8. Your name.');
-    }
-  }
-
-  // Someone who came in through "already in a group" doesn't need the
-  // business-registration-status question at all — that question is
-  // about an individual's own standing, and the group membership
-  // already speaks to that, whether or not the exact org they typed
-  // matched a real record. This is the actual "shorter" promise, beyond
-  // just skipping payment/receipt entry (already conditional on
-  // feeCoverage) or the yes/no toggle (now decided at the front door).
-  const skipStanding = f.joiningAs === 'me' && f.belongsToGroup === 'yes';
-
-  function goBack() {
-    if (step === 7 && skipStanding) { setStep(5); return; }
-    // Step 2 only ever existed for the "already in a group" journey —
-    // everyone else skipped straight from 1 to 3, so that's where "Back"
-    // from step 3 must return them, not to a step they never saw.
-    if (step === 3 && !(f.joiningAs === 'me' && f.belongsToGroup === 'yes')) { setStep(1); return; }
-    setStep(step - 1);
+  function pickJoiningAs(v: Form['joiningAs']) {
+    if (v === 'inst') { set('joiningAs', v); setStep(0); return; }
+    set('joiningAs', v);
   }
 
   /* ── advance ── */
   function next() {
     setError(null);
 
-    if (step === 2) {
-      // Nothing to save yet — no row exists until step 3 (name). Just
-      // move on; whatever was picked here rides along on that first write.
-      setStep(3);
-      return;
-    }
-
-    if (step === 3) {
+    if (step === 1) {
+      if (!f.joiningAs || f.joiningAs === 'inst') return;
       start(async () => {
-        const names = {
-          joiningAs: f.joiningAs, officialName: f.officialName, knownAs: f.knownAs,
-          orgName: f.orgName, orgKnownAs: f.orgKnownAs, orgRole: f.orgRole as 'Treasurer',
-          belongsToGroup: f.belongsToGroup || undefined, groupName: f.groupName || undefined,
-          groupPartyId: f.groupPartyId || undefined, feeCoverage: f.feeCoverage || undefined,
+        let id = regId;
+        const step2 = {
+          joiningAs: f.joiningAs,
+          officialName: f.officialName,
+          knownAs: f.knownAs,
+          orgName: f.orgName,
+          orgKnownAs: f.orgKnownAs,
+          orgRole: f.orgRole as 'Treasurer',
         };
-        // No regId yet the first time through — this is where the
-        // registration actually gets created, now that there's a real
-        // name attached. Once regId exists (e.g. editing after going
-        // back), it's just an update to the same row.
-        if (regId) {
-          const r = await actionSaveNames(regId, names);
-          handle(r, () => setStep(4));
-        } else {
-          const r = await actionStart(names);
-          handle(r, () => { if (r.ok) setRegId(r.data.id); setStep(4); });
+        if (!id) {
+          // actionStart validates with step2Schema too (officialName is
+          // required), so it must receive the same step-2 payload as
+          // actionSaveNames below — otherwise the first write always
+          // fails with zod's bare "Required" before the name is sent.
+          const started = await actionStart(step2);
+          if (!handle(started)) return;
+          id = started.ok ? started.data.id : null;
+          if (!id) return;
+          setRegId(id);
         }
+        const r = await actionSaveNames(id, step2);
+        handle(r, () => { setStep(2); announce('Step 2 of 4. How to reach you.'); });
       });
-      return;
-    }
-
-    if (!regId) return;
-
-    if (step === 4) {
+    } else if (step === 2) {
+      if (!regId) return;
       start(async () => {
-        const r = await actionSaveContact(regId, {
+        const c = await actionSaveContact(regId, {
           msisdn: f.msisdn, email: f.email, county: f.county, ward: f.ward,
         });
-        handle(r, () => setStep(5));
+        if (!handle(c)) return;
+        const w = await actionSaveWork(regId, { workRaw: f.workRaw, segment: f.segment });
+        handle(w, () => { setStep(3); announce('Step 3 of 4. Anything else — all optional.'); });
       });
-    } else if (step === 5) {
-      start(async () => {
-        const r = await actionSaveWork(regId, { workRaw: f.workRaw, segment: f.segment });
-        handle(r, () => setStep(skipStanding ? 7 : 6));
-      });
-    } else if (step === 6) {
+    } else if (step === 3) {
+      if (!regId) return;
       start(async () => {
         const r = await actionSaveStanding(regId, {
           joiningAs: f.joiningAs,
           hasRegisteredBusiness: f.hasRegisteredBusiness || undefined,
           registrationNo: f.registrationNo,
+          belongsToGroup: f.belongsToGroup || undefined,
+          groupName: f.groupName,
+          groupPartyId: f.groupPartyId || undefined,
+          feeCoverage: f.feeCoverage || undefined,
           memberCount: f.memberCount ? Number(f.memberCount) : undefined,
+          hasKraPin: f.hasKraPin || undefined,
+          // A brand-new group — only meaningful once search-before-create
+          // came up empty and GroupPicker's "register it" branch ran.
+          orgName: f.orgName || undefined,
+          orgKnownAs: f.orgKnownAs || undefined,
+          orgKind: f.orgKind || undefined,
+          orgSubCounty: f.orgSubCounty || undefined,
+          orgDistrict: f.orgDistrict || undefined,
+          orgTags: f.orgTags,
+          // The business sub-flow.
+          bizIsRegistered: f.bizIsRegistered || undefined,
+          bizIntendsToRegister: f.bizIntendsToRegister || undefined,
+          bizPartyId: f.bizPartyId || undefined,
+          bizName: f.bizName || undefined,
+          bizSector: f.bizSector || undefined,
+          bizType: f.bizType || undefined,
+          bizTypeOther: f.bizTypeOther || undefined,
+          bizEmployeeCount: f.bizEmployeeCount ? Number(f.bizEmployeeCount) : undefined,
+          bizRevenueGoodKes: f.bizRevenueGoodKes ? Number(f.bizRevenueGoodKes) : undefined,
+          bizRevenueBadKes: f.bizRevenueBadKes ? Number(f.bizRevenueBadKes) : undefined,
+          bizBankProvider: f.bizBankProvider || undefined,
+          bizPaymentChannels: f.bizPaymentChannels,
         });
-        handle(r, () => setStep(7));
+        if (!handle(r)) return;
+
+        // Nobody opened the payment section — that's a legitimate choice,
+        // equivalent to picking "later". Don't make silence an error.
+        if (f.paymentChoice === '' && f.feeCoverage !== 'group') {
+          await actionDeferPayment(regId);
+          set('paymentChoice', 'later');
+        } else if (f.feeCoverage === 'group') {
+          set('paymentChoice', 'later');
+        }
+        setStep(4);
+        announce('Step 4 of 4. Verify and finish.');
       });
-    } else if (step === 7 || step === 8) {
-      start(async () => {
-        await actionMarkStep(regId, step + 1);
-        setStep(step + 1);
-      });
-    } else if (step === 9) {
+    } else if (step === 4) {
+      if (!regId) return;
       start(async () => {
         const r = await actionComplete({
           registrationId: regId,
-          ussdSetupChoice: f.ussdSetupChoice as 'now' | 'later',
+          // Dialling access (USSD *483*77#) isn't finalised yet — see the
+          // commented-out block in steps/Finish.tsx. Always 'later' so
+          // registration completes with what we have; actionComplete's
+          // "now" branch (which requires an OTP-verified number) is simply
+          // never reached from this UI right now.
+          ussdSetupChoice: 'later',
           wantsPriceSms: f.wantsPriceSms,
           wantsReceiptSms: f.wantsReceiptSms,
           wantsExpirySms: f.wantsExpirySms,
           acceptedTerms: true,
         });
-        handle(r, () => { setDone(true); announce('Registration sent. You have joined Esoko.', 'assertive'); });
+        handle(r, () => { setDone(true); announce('Registration sent. Welcome to CECF — your Esoko tools are ready.', 'assertive'); });
       });
     }
   }
@@ -264,25 +240,18 @@ export function JoinFlow() {
     searchTimer.current = setTimeout(async () => {
       const res = await actionSearchWork(v);
       setHits(res);
-      announce(res.length ? `${res.length} matches` : 'No listed match — Esoko is still for you');
+      announce(res.length ? `${res.length} matches` : 'No listed match — you can still use your own term');
     }, 200);
   }
-
-  /* ── group search ── */
-  const groupSearchTimer = useRef<ReturnType<typeof setTimeout>>(undefined);
-  function onGroupInput(v: string) {
-    set('groupName', v);
-    set('groupPartyId', '');
-    clearTimeout(groupSearchTimer.current);
-    if (v.trim().length < 2) { setGroupHits([]); return; }
-    groupSearchTimer.current = setTimeout(async () => {
-      const res = await actionSearchGroups(v);
-      setGroupHits(res);
-      announce(res.length ? `${res.length} matching groups` : 'No match — you can still enter the name');
-    }, 200);
+  function onSelectWork(key: string, name: string) {
+    set('workRaw', name); set('segment', key); setHits([]);
   }
 
-  /* ── OTP ── */
+  /* ── OTP ──
+     Only reachable from the dialling-access (USSD) section, which is
+     commented out in steps/Finish.tsx until that's finalised — so these
+     are dead code for now. Kept, not deleted, for the same reason as the
+     state above.
   function sendOtp() {
     if (!regId) return;
     start(async () => {
@@ -303,24 +272,39 @@ export function JoinFlow() {
       else handle(r);
     });
   }
+  */
 
-  const canSubmit =
-    (f.ussdSetupChoice === 'later' || (f.ussdSetupChoice === 'now' && otpVerified))
-    && f.paymentChoice !== '';
+  // Dialling access isn't finalised, so nothing here gates on it — see the
+  // ussdSetupChoice: 'later' note in next() above.
+  const canSubmit = true;
 
   /* ────────────────────────────── done ── */
   if (done) {
     return (
-      <div className="qcard" role="status">
+      <div className="qcard donecard" role="status">
         <span className="icbox" style={{ background: 'var(--green-t)', color: 'var(--green)', width: 52, height: 52, borderRadius: 13 }}>
           <Icon name="check-circle" size={28} />
         </span>
-        <h2 className="qh" style={{ marginTop: 18 }}>You have joined Esoko</h2>
+        <h2 className="qh" style={{ marginTop: 18 }}>Welcome to CECF</h2>
         <p className="qs">
-          {f.ussdSetupChoice === 'now'
-            ? 'Your number is confirmed. Dial *483*77# and choose a PIN when you are ready.'
-            : 'Dial *483*77# whenever you want to use your record. You will confirm your number then.'}
+          Your membership is in. Your record has been shared with Esoko so the tools can
+          work — nothing else moves unless you say so.
         </p>
+        {/*
+          Dialling access (USSD *483*77#) isn't finalised yet — see the
+          matching note in steps/Finish.tsx. Restore this "next step" block
+          alongside that section once it is.
+
+        <div className="next done-next">
+          <strong style={{ color: 'var(--cecf-teal)' }}>Next step</strong>
+          <p style={{ margin: '8px 0 0' }}>
+            Dial <strong className="mono">*483*77#</strong> from this number
+            {f.ussdSetupChoice === 'now'
+              ? ' — it is already confirmed, so just choose a PIN.'
+              : ' and confirm your number. Your record is ready when you are.'}
+          </p>
+        </div>
+        */}
         <div className="next">
           <strong style={{ color: 'var(--green)' }}>What you asked us to send</strong>
           <ol>
@@ -360,6 +344,14 @@ export function JoinFlow() {
 
   return (
     <>
+      {/* One-line reassurance above the card on narrow screens — desktop
+          shows the "why Esoko" hero beside the form instead. */}
+      <p className="jtrust">
+        <span>A CECF membership</span><span className="jt" aria-hidden="true">·</span>
+        <span>Free — and it stays free</span><span className="jt" aria-hidden="true">·</span>
+        <span>Shared with Esoko, never by default</span>
+      </p>
+
       {resumable && step === 1 && (
         <div className="qcard" role="status" style={{ marginBottom: 14 }}>
           <p className="qs" style={{ margin: 0 }}>
@@ -373,13 +365,25 @@ export function JoinFlow() {
         </div>
       )}
 
-      <div className="pbar" role="presentation">
-        {Array.from({ length: TOTAL_QUESTIONS + 1 }, (_, i) => (
-          <span key={i} className={i < Math.min(step, TOTAL_QUESTIONS + 1) ? 'on' : ''} />
-        ))}
-      </div>
+      <ol className="psteps" aria-label="Progress">
+        {STEP_LABELS.map((label, i) => {
+          const n = i + 1;
+          const state = n < step ? 'done' : n === step ? 'current' : '';
+          return (
+            <li key={label} className={`pstep${state ? ` ${state}` : ''}`}
+              aria-current={state === 'current' ? 'step' : undefined}>
+              <span className="pstep-dot" aria-hidden="true">
+                {state === 'done' ? <Icon name="check" size={12} /> : n}
+              </span>
+              <span className="pstep-label">{label}</span>
+            </li>
+          );
+        })}
+      </ol>
       <p className="pcount">
-        {step === 9 ? 'Last step · verify and finish' : `Step ${step} of ${TOTAL_QUESTIONS}`}
+        {step === TOTAL_STEPS
+          ? 'Last step · verify and finish'
+          : `Step ${step} of ${TOTAL_STEPS} · about two minutes`}
       </p>
 
       <div className="qcard">
@@ -389,506 +393,102 @@ export function JoinFlow() {
           </p>
         )}
 
-        {/* ─── 1 ─── */}
         {step === 1 && (
-          <>
-            <h2 className="qh" ref={headingRef} tabIndex={-1}>How are you joining?</h2>
-            <p className="qs">This changes what Esoko asks you next — pick the one that's actually true.</p>
-            <div className="opts">
-              {([
-                ['group-member', 'handshake', 'I’m already part of a group', 'Your chama, SHG, CBO or SACCO is already on Esoko — this is the fastest way in'],
-                ['group-new', 'users', 'I’m registering my group', 'For the first time — chama, self-help group, CBO, faith-based group, cooperative or SACCO'],
-                ['solo', 'user', 'I’m on my own', 'A trader, farmer, rider, fundi or anyone working on their own, not part of any group'],
-                ['biz', 'shop', 'I’m registering a business', 'Registered or not — either is fine'],
-                ['inst', 'gov', 'A bank, county, buyer or agency', 'Institutions are set up by agreement, not through this form'],
-              ] as const).map(([v, icon, t, d]) => (
-                <button key={v} type="button" className="opt"
-                  aria-pressed={
-                    (v === 'group-member' && f.joiningAs === 'me' && f.belongsToGroup === 'yes')
-                    || (v === 'solo' && f.joiningAs === 'me' && f.belongsToGroup === 'no')
-                    || (v === 'group-new' && f.joiningAs === 'group')
-                    || (v === 'biz' && f.joiningAs === 'biz')
-                    || (v === 'inst' && f.joiningAs === 'inst')
-                  }
-                  onClick={() => pickEntry(v)} disabled={pending}>
-                  <span className="icbox"><Icon name={icon} size={18} /></span>
-                  <span><span className="t">{t}</span><span className="d">{d}</span></span>
-                </button>
-              ))}
-            </div>
-          </>
-        )}
-
-        {/* ─── 2 · find your group (already decided you're a member) ─── */}
-        {step === 2 && (
-          <>
-            <h2 className="qh" ref={headingRef} tabIndex={-1}>Find your group</h2>
-            <p className="qs">
-              Search for it below. Linking you to the real record means less for you to answer
-              next, and your fee can be covered by the group instead of paid separately.
-            </p>
-            <div className="fld">
-              <label className="lab" htmlFor="groupName">Name of the group</label>
-              <input className="inp" id="groupName" value={f.groupName} autoComplete="off" autoFocus
-                role="combobox" aria-expanded={groupHits.length > 0} aria-controls="group-hits"
-                onChange={(e) => onGroupInput(e.target.value)} placeholder="Search or type the name" />
-              <div className="hits" id="group-hits" role="listbox" aria-label="Matching groups">
-                {groupHits.map((g) => (
-                  <button key={g.id} type="button" className="hit" role="option"
-                    aria-selected={f.groupPartyId === g.id}
-                    onClick={() => {
-                      set('groupName', g.name); set('groupPartyId', g.id); setGroupHits([]);
-                    }}>
-                    <span>{g.name} <span className="op">— {g.county}</span></span>
-                    <span className="yes">SELECT</span>
-                  </button>
-                ))}
-              </div>
-              <p className="hint">
-                {f.groupPartyId
-                  ? 'Linked — Esoko will connect your record to this group.'
-                  : 'Pick it from the list if it shows up, or just type the name. Its treasurer can link you later either way.'}
-              </p>
-            </div>
-
-            <fieldset style={{ border: 0, padding: 0, margin: '15px 0 0' }}>
-              <legend className="lab">Has your group already paid your registration fee?</legend>
-              <div className="opts">
-                {([['group', 'Yes, the group covers it', 'Nothing more to do here'],
-                   ['self', 'No, I’ll cover it myself', 'You’ll confirm whether it’s paid or still pending, coming up']] as const)
-                  .map(([v, t, d]) => (
-                  <button key={v} type="button" className="opt" aria-pressed={f.feeCoverage === v}
-                    onClick={() => set('feeCoverage', v)}>
-                    <span><span className="t">{t}</span><span className="d">{d}</span></span>
-                  </button>
-                ))}
-              </div>
-            </fieldset>
-
-            <p className="hint" style={{ marginTop: 14 }}>
-              Don&rsquo;t see your group?{' '}
-              <button type="button" className="ed" style={{ display: 'inline' }}
-                onClick={() => {
-                  setF((p) => ({ ...p, belongsToGroup: 'no', groupName: '', groupPartyId: '', feeCoverage: '' }));
-                  setStep(3);
-                }}>
-                Continue as an individual instead
-              </button>, or register it properly from the menu afterwards.
-            </p>
-          </>
-        )}
-
-        {/* ─── 3 ─── */}
-        {step === 3 && (
-          <>
-            <h2 className="qh" ref={headingRef} tabIndex={-1}>
-              {f.joiningAs === 'group' ? 'The group, and you' : 'Your name'}
-            </h2>
-            <p className="qs">
-              Your official name has to match your papers later. The other is simply what Esoko
-              calls you day to day.
-            </p>
-
-            {f.joiningAs === 'group' && (
-              <>
-                <div className="fld">
-                  <label className="lab" htmlFor="orgName"><Icon name="users" size={15} />Official name of the group</label>
-                  <input className="inp" id="orgName" value={f.orgName}
-                    onChange={(e) => set('orgName', e.target.value)}
-                    placeholder="As registered, or as it will be registered" />
-                </div>
-                <div className="fld">
-                  <label className="lab" htmlFor="orgKnownAs">What people call it <span className="op">— optional</span></label>
-                  <input className="inp" id="orgKnownAs" value={f.orgKnownAs}
-                    onChange={(e) => set('orgKnownAs', e.target.value)} placeholder="e.g. Tumaini Ladies" />
-                </div>
-                <div className="fld">
-                  <label className="lab" htmlFor="orgRole">Your role in the group</label>
-                  <select className="inp" id="orgRole" value={orgRoleOther ? 'Other' : f.orgRole}
-                    onChange={(e) => {
-                      if (e.target.value === 'Other') { setOrgRoleOther(true); set('orgRole', ''); }
-                      else { setOrgRoleOther(false); set('orgRole', e.target.value); }
-                    }}>
-                    <option>Chairperson</option><option>Treasurer</option>
-                    <option>Secretary</option><option>Member</option>
-                    <option>Other</option>
-                  </select>
-                  {orgRoleOther && (
-                    <input className="inp" style={{ marginTop: 8 }} value={f.orgRole} maxLength={40}
-                      onChange={(e) => set('orgRole', e.target.value)}
-                      placeholder="What the group calls this role" autoFocus />
-                  )}
-                </div>
-                <div className="sub2" />
-              </>
-            )}
-
-            <div className="fld">
-              <label className="lab" htmlFor="officialName"><Icon name="user" size={15} />Official name</label>
-              <input className="inp" id="officialName" value={f.officialName}
-                aria-invalid={errField === 'officialName'}
-                aria-describedby="officialName-hint"
-                onChange={(e) => set('officialName', e.target.value)}
-                placeholder="As written on your ID" autoComplete="name" />
-              <p className="hint" id="officialName-hint">
-                Used only when a certificate or registration is issued in your name.
-              </p>
-            </div>
-            <div className="fld">
-              <label className="lab" htmlFor="knownAs">
-                Name people know you by <span className="op">— optional</span>
-              </label>
-              <input className="inp" id="knownAs" value={f.knownAs}
-                aria-describedby="knownAs-hint"
-                onChange={(e) => set('knownAs', e.target.value)} placeholder="e.g. Mama Njeri" />
-              <p className="hint" id="knownAs-hint">This is what Esoko uses in messages and on your record.</p>
-            </div>
-          </>
-        )}
-
-        {/* ─── 4 ─── */}
-        {step === 4 && (
-          <>
-            <h2 className="qh" ref={headingRef} tabIndex={-1}>The number you will dial from</h2>
-            <p className="qs">
-              Esoko is used mainly by dialling <strong className="mono">*483*77#</strong>. Give the
-              number on the handset you will dial from — your account is tied to that number.
-            </p>
-            <div className="fld">
-              <label className="lab" htmlFor="msisdn"><Icon name="phone" size={15} />Phone number</label>
-              <input className="inp mono" id="msisdn" value={f.msisdn} inputMode="tel"
-                autoComplete="tel" aria-invalid={errField === 'msisdn'} aria-describedby="msisdn-hint"
-                onChange={(e) => set('msisdn', e.target.value)} />
-              <p className="hint" id="msisdn-hint">
-                A six-digit code is sent there to confirm the line is yours. If you change handsets
-                later the number stays the same, and so does your record.
-              </p>
-            </div>
-            <div className="fld">
-              <label className="lab" htmlFor="email">
-                <Icon name="mail" size={15} />Email address <span className="op">— optional</span>
-              </label>
-              <input className="inp" id="email" type="email" value={f.email} inputMode="email"
-                autoComplete="email" aria-describedby="email-hint"
-                onChange={(e) => set('email', e.target.value)} placeholder="you@example.com" />
-              <p className="hint" id="email-hint">
-                Used only if you ask for certificates or receipts by email. Esoko does not need one,
-                and everything works without it.
-              </p>
-            </div>
-            <div className="sub2">
-              <div className="fld">
-                <label className="lab" htmlFor="county"><Icon name="pin" size={15} />County</label>
-                <select className="inp" id="county" value={f.county}
-                  aria-describedby="county-hint" onChange={(e) => set('county', e.target.value)}>
-                  {LIVE_COUNTIES.map((c) => <option key={c}>{c}</option>)}
-                  <option disabled>──────────</option>
-                  {COUNTIES.slice(8).map((c) => <option key={c}>{c}</option>)}
-                </select>
-                <p className="hint" id="county-hint">
-                  Esoko works in all 47. The first eight have field officers and daily market prices today.
-                </p>
-              </div>
-              <div className="fld">
-                <label className="lab" htmlFor="ward">Ward or market <span className="op">— optional</span></label>
-                <input className="inp" id="ward" value={f.ward}
-                  onChange={(e) => set('ward', e.target.value)} placeholder="e.g. Gikomba, Kamukunji" />
-              </div>
-            </div>
-          </>
-        )}
-
-        {/* ─── 5 ─── */}
-        {step === 5 && (
-          <>
-            <h2 className="qh" ref={headingRef} tabIndex={-1}>
-              {f.joiningAs === 'group' ? 'What does the group do?' : 'What do you do?'}
-            </h2>
-            <p className="qs">In English or Kiswahili, however you say it. Every kind of work is included.</p>
-            <div className="fld">
-              <label className="lab" htmlFor="work"><Icon name="search" size={15} />Search your work</label>
-              <input className="inp" id="work" value={f.workRaw} autoComplete="off"
-                role="combobox" aria-expanded={hits.length > 0} aria-controls="work-hits"
-                aria-describedby="work-hint"
-                onChange={(e) => onWorkInput(e.target.value)}
-                placeholder="carpentry, mama mboga, boda, chama, kanisa, welding…" />
-            </div>
-            <div className="hits" id="work-hits" role="listbox" aria-label="Matching kinds of work">
-              {hits.map((h) => (
-                <button key={h.key} type="button" className="hit" role="option"
-                  aria-selected={f.segment === h.key}
-                  onClick={() => { set('workRaw', h.name); set('segment', h.key); setHits([]); }}>
-                  <span>{h.name}</span><span className="yes">SELECT</span>
-                </button>
-              ))}
-              {f.workRaw.trim().length >= 2 && hits.length === 0 && (
-                <button type="button" className="hit"
-                  onClick={() => { set('segment', ''); setHits([]); }}>
-                  <span>Use “{f.workRaw}” — Esoko is for you too</span>
-                  <span className="yes">SELECT</span>
-                </button>
-              )}
-            </div>
-            <p className="hint" id="work-hint">
-              This decides which papers apply to you and which market prices you can ask for.
-              It changes nothing else, and you can edit it later.
-            </p>
-          </>
-        )}
-
-        {/* ─── 6 ─── */}
-        {step === 6 && (
-          <>
-            <h2 className="qh" ref={headingRef} tabIndex={-1}>Where you stand today</h2>
-            <p className="qs">
-              So Esoko shows you only what applies. There is no wrong answer here and nothing is required.
-            </p>
-
-            {f.joiningAs !== 'group' && (
-              <fieldset style={{ border: 0, padding: 0, margin: '0 0 15px' }}>
-                <legend className="lab">
-                  {f.joiningAs === 'biz' ? 'Is it formally registered yet?' : 'Do you have a registered business?'}
-                </legend>
-                <div className="opts">
-                  {([
-                    ['yes', 'Yes, it is registered', 'You have a business name or BRS certificate'],
-                    ['no', 'No, not registered', 'Most people start here. Everything still works'],
-                    ['soon', 'Not yet, but I want to', 'Esoko can handle the filing when you are ready'],
-                  ] as const).map(([v, t, d]) => (
-                    <button key={v} type="button" className="opt"
-                      aria-pressed={f.hasRegisteredBusiness === v}
-                      onClick={() => set('hasRegisteredBusiness', v)}>
-                      <span><span className="t">{t}</span><span className="d">{d}</span></span>
-                    </button>
-                  ))}
-                </div>
-              </fieldset>
-            )}
-
-            {f.hasRegisteredBusiness === 'yes' && (
-              <div className="fld">
-                <label className="lab" htmlFor="regNo">Registration number <span className="op">— optional</span></label>
-                <input className="inp mono" id="regNo" value={f.registrationNo}
-                  onChange={(e) => set('registrationNo', e.target.value)} placeholder="BN/2026/0000" />
-                <p className="hint">Add it now or later. Esoko confirms it with the Business Registration Service.</p>
-              </div>
-            )}
-
-            {f.joiningAs === 'group' && (
-              <div className="fld sub2">
-                <label className="lab" htmlFor="members">How many members?</label>
-                <input className="inp mono" id="members" inputMode="numeric" value={f.memberCount}
-                  onChange={(e) => set('memberCount', e.target.value)} placeholder="18" />
-                <p className="hint">A rough number is fine. Members join later with their own phone numbers.</p>
-              </div>
-            )}
-          </>
-        )}
-
-        {/* ─── 7 · documents ─── */}
-        {step === 7 && regId && <DocumentStep registrationId={regId} />}
-
-        {/* ─── 8 · payment ─── */}
-        {step === 8 && regId && (
-          <PaymentStep
-            registrationId={regId}
-            choice={f.paymentChoice}
-            feeCoveredByGroup={f.feeCoverage === 'group'}
-            onChoice={(c) => set('paymentChoice', c)}
+          <WhoAndName
+            f={f} set={set} headingRef={headingRef}
+            orgRoleOther={orgRoleOther} setOrgRoleOther={setOrgRoleOther}
+            errField={errField} onPickJoiningAs={pickJoiningAs}
           />
         )}
 
-        {/* ─── 9 · verify and finish ─── */}
-        {step === 9 && (
-          <>
-            <h2 className="qh" ref={headingRef} tabIndex={-1}>Verify and finish</h2>
-            <p className="qs">Two quick things, then Esoko sends this. You can leave either for later.</p>
-
-            <div className="vblock">
-              <div className="vhead">
-                <span className="icbox" style={{ background: 'var(--green-t)', color: 'var(--green)' }}>
-                  <Icon name="keypad" size={17} />
-                </span>
-                <div>
-                  <strong>Dialling access</strong>
-                  <span style={{ fontSize: '.86rem', color: 'var(--tx-2)', display: 'block' }}>
-                    Do you want to set up <span className="mono">*483*77#</span> now?
-                  </span>
-                </div>
-                <span className={`vstate${otpVerified ? ' ok' : otpSent ? ' pend' : ''}`}>
-                  {otpVerified ? 'Verified' : otpSent ? 'Code sent' :
-                   f.ussdSetupChoice === 'later' ? 'Doing it later' : 'Not chosen'}
-                </span>
-              </div>
-
-              <div className="opts" style={{ marginTop: 14 }}>
-                {([['now', 'Set it up now', 'Confirm your number with a code and you can dial straight away'],
-                   ['later', 'Later', 'Your account is created either way. Confirm the first time you dial']] as const)
-                  .map(([v, t, d]) => (
-                  <button key={v} type="button" className="opt" aria-pressed={f.ussdSetupChoice === v}
-                    onClick={() => set('ussdSetupChoice', v)}>
-                    <span><span className="t">{t}</span><span className="d">{d}</span></span>
-                  </button>
-                ))}
-              </div>
-
-              {f.ussdSetupChoice === 'now' && (
-                <div className="sub2">
-                  <div className="otprow">
-                    <div>
-                      <span className="lab" style={{ marginBottom: 3 }}>Code to</span>
-                      <span className="mono" style={{ fontWeight: 600 }}>{f.msisdn}</span>
-                    </div>
-                    <button type="button" className="btn btn-o" onClick={sendOtp}
-                      disabled={pending || otpVerified}>
-                      <Icon name="send" size={15} />{otpSent ? 'Resend' : 'Send code'}
-                    </button>
-                  </div>
-
-                  {otpSent && !otpVerified && (
-                    <div style={{ marginTop: 14 }}>
-                      <label className="lab" htmlFor="otp">Enter the six digits</label>
-                      <input className="inp mono otpfield" id="otp" inputMode="numeric" maxLength={6}
-                        autoComplete="one-time-code" value={otp}
-                        onChange={(e) => {
-                          const v = e.target.value.replace(/\D/g, '');
-                          setOtp(v);
-                          if (v.length === 6) submitOtp(v);
-                        }} placeholder="000000" />
-                      <p className="hint">Sent by SMS. It arrives within a minute.</p>
-                      {devCode && (
-                        <p className="hint" style={{ color: 'var(--amber)' }}>
-                          Development mode — code is <strong className="mono">{devCode}</strong>
-                        </p>
-                      )}
-                    </div>
-                  )}
-
-                  {otpVerified && (
-                    <p className="hint" style={{ marginTop: 12 }}>
-                      <strong style={{ color: 'var(--green)' }}>Number confirmed.</strong>{' '}
-                      You will choose a PIN after this.
-                    </p>
-                  )}
-                </div>
-              )}
-            </div>
-
-            {f.email && (
-              <div className="vblock">
-                <div className="vhead">
-                  <span className="icbox"><Icon name="mail" size={17} /></span>
-                  <div>
-                    <strong>Email address</strong>
-                    <span style={{ fontSize: '.86rem', color: 'var(--tx-2)', display: 'block' }}>{f.email}</span>
-                  </div>
-                  <span className={`vstate${emailSent ? ' pend' : ''}`}>{emailSent ? 'Link sent' : 'Not sent'}</span>
-                </div>
-                <div className="otprow" style={{ marginTop: 12 }}>
-                  <p className="hint" style={{ margin: 0, maxWidth: '34ch' }}>
-                    Esoko sends a link to confirm it. Nothing is held up waiting for you to click it.
-                  </p>
-                  <button type="button" className="btn btn-o" onClick={() => setEmailSent(true)} disabled={emailSent}>
-                    <Icon name="send" size={15} />{emailSent ? 'Sent' : 'Send link'}
-                  </button>
-                </div>
-              </div>
-            )}
-
-            <div className="sum">
-              {[
-                ['Joining as', f.joiningAs === 'me'
-                  ? (f.belongsToGroup === 'yes' ? 'A member of an existing group' : 'An individual')
-                  : f.joiningAs === 'group' ? 'A new group'
-                  : f.joiningAs === 'biz' ? 'A business' : '—', 1],
-                ...(f.joiningAs === 'me' && f.belongsToGroup === 'yes'
-                  ? [['Group', f.groupName || '—', 2] as const] : []),
-                ...(f.joiningAs === 'group' ? [['Group', f.orgName || '—', 3] as const] : []),
-                ['Official name', f.officialName || '—', 3],
-                ...(f.knownAs ? [['Known as', f.knownAs, 3] as const] : []),
-                ['USSD number', f.msisdn, 4],
-                ...(f.email ? [['Email', f.email, 4] as const] : []),
-                ['County', f.county + (f.ward ? ` · ${f.ward}` : ''), 4],
-                ['Work', f.workRaw || '—', 5],
-                ['Fee', f.paymentChoice === 'paid' ? 'Declared as paid' : f.paymentChoice === 'later' ? 'Paying later' : '—', 8],
-              ].map(([k, v, go]) => (
-                <div className="r" key={String(k)}>
-                  <span className="k">{k}</span>
-                  <span className="v">{v}</span>
-                  <button className="ed" onClick={() => setStep(Number(go))}>Change</button>
-                </div>
-              ))}
-            </div>
-
-            <fieldset className="optin" style={{ border: '1px solid var(--line)' }}>
-              <legend className="h4"><Icon name="message" size={13} /> What should Esoko send you?</legend>
-              <label>
-                <input type="checkbox" checked={f.wantsPriceSms}
-                  onChange={(e) => set('wantsPriceSms', e.target.checked)} />
-                <span>Market prices for my county each morning.{' '}
-                  <span style={{ color: 'var(--tx-3)' }}>You pick the commodities after joining.</span></span>
-              </label>
-              <label>
-                <input type="checkbox" checked={f.wantsReceiptSms}
-                  onChange={(e) => set('wantsReceiptSms', e.target.checked)} />
-                <span>Receipts when money moves.{' '}
-                  <span style={{ color: 'var(--tx-3)' }}>Recommended — this is how you know a payment went through.</span></span>
-              </label>
-              <label>
-                <input type="checkbox" checked={f.wantsExpirySms}
-                  onChange={(e) => set('wantsExpirySms', e.target.checked)} />
-                <span>A warning before any of my certificates expires.</span>
-              </label>
-              <p className="hint" style={{ margin: '8px 0 0' }}>
-                Nothing else is sent. Change any of these at any time from the menu, or reply STOP
-                to any message.
-              </p>
-            </fieldset>
-
-            <p className="hint">
-              By joining you agree to Esoko’s terms and privacy notice. Nothing about you goes to a
-              bank, buyer or agency unless you allow it, each time.
-            </p>
-          </>
+        {step === 2 && (
+          <ContactWork
+            f={f} set={set} headingRef={headingRef} errField={errField}
+            hits={hits} onWorkInput={onWorkInput} onSelectWork={onSelectWork}
+          />
         )}
 
-        {/* ─── navigation ─── */}
+        {step === 3 && regId && (
+          <MoreAboutYou
+            f={f} set={set} headingRef={headingRef} registrationId={regId}
+          />
+        )}
+
+        {step === 4 && (
+          <Finish
+            f={f} set={set} headingRef={headingRef}
+            emailSent={emailSent} setEmailSent={setEmailSent}
+            onEdit={setStep}
+          />
+        )}
+
         <div className="nav">
           {step > 1 && (
-            <button className="btn btn-o back" onClick={goBack} disabled={pending}>
+            <button className="btn btn-o back" onClick={() => setStep(step - 1)} disabled={pending}>
               <Icon name="arrow-left" size={16} /> Back
             </button>
           )}
-          {step > 1 && (
-            <button className="btn btn-p" onClick={next}
-              disabled={pending || (step === 9 && !canSubmit)}
-              aria-describedby={step === 9 && !canSubmit ? 'submit-gate' : undefined}>
-              {step === 9 ? <><Icon name="send" size={17} /> Send my registration</> : 'Continue'}
-              {pending && <VisuallyHidden>Working…</VisuallyHidden>}
-            </button>
-          )}
-          {step === 9 && !canSubmit && (
+          <button className="btn btn-p" onClick={next}
+            disabled={pending
+              || (step === 1 && (!f.joiningAs || f.joiningAs === 'inst' || f.officialName.trim().length < 2))
+              || (step === 3 && f.joiningAs === 'group' && !f.groupPartyId && !f.orgName)
+              || (step === 3 && f.joiningAs === 'biz' && !f.bizPartyId && !f.bizName)
+              || (step === TOTAL_STEPS && !canSubmit)}
+            aria-describedby={step === TOTAL_STEPS && !canSubmit
+              ? 'submit-gate'
+              : step === 3 && f.joiningAs === 'group' && !f.groupPartyId && !f.orgName
+                ? 'group-gate'
+                : step === 3 && f.joiningAs === 'biz' && !f.bizPartyId && !f.bizName
+                  ? 'biz-gate'
+                  : undefined}>
+            {step === TOTAL_STEPS ? <><Icon name="send" size={17} /> Send my registration</> : 'Continue'}
+            {pending && <VisuallyHidden>Working…</VisuallyHidden>}
+          </button>
+          {step === 3 && f.joiningAs === 'group' && !f.groupPartyId && !f.orgName && (
             <VisuallyHidden>
-              <span id="submit-gate">
-                Answer the payment question and choose whether to set up dialling access
-                now or later before sending.
-              </span>
+              <span id="group-gate">Link or register the group before continuing.</span>
+            </VisuallyHidden>
+          )}
+          {step === 3 && f.joiningAs === 'group' && !f.groupPartyId && !f.orgName && (
+            <p className="hint" style={{ flexBasis: '100%', textAlign: 'right', margin: '10px 0 0' }}>
+              Find or add the group above, then continue.
+            </p>
+          )}
+          {step === 3 && f.joiningAs === 'biz' && !f.bizPartyId && !f.bizName && (
+            <VisuallyHidden>
+              <span id="biz-gate">Link or register the business before continuing.</span>
+            </VisuallyHidden>
+          )}
+          {step === 3 && f.joiningAs === 'biz' && !f.bizPartyId && !f.bizName && (
+            <p className="hint" style={{ flexBasis: '100%', textAlign: 'right', margin: '10px 0 0' }}>
+              Find or add the business above, then continue.
+            </p>
+          )}
+          {step === TOTAL_STEPS && !canSubmit && (
+            <VisuallyHidden>
+              <span id="submit-gate">Choose whether to set up dialling access now or later before sending.</span>
             </VisuallyHidden>
           )}
         </div>
       </div>
 
+      {/*
+        The USSD channel (*483*77#) isn't finalised yet, so this alternate
+        path is commented out rather than advertised — see the matching
+        note in steps/Finish.tsx.
+
       <div className="alt">
         <span className="icbox" style={{ background: 'var(--green-t)', color: 'var(--green)', marginBottom: 12 }}>
           <Icon name="keypad" size={21} />
         </span>
-        <h3 style={{ marginBottom: 8 }}>Or join without the internet</h3>
+        <h3 style={{ marginBottom: 8 }}>Or join CECF without the internet</h3>
         <p style={{ fontSize: '.93rem', color: 'var(--tx-2)', margin: 0 }}>
           Dial <strong className="mono" style={{ color: 'var(--navy)' }}>*483*77#</strong> from the
-          handset you want to register and answer the same questions. Esoko asks for no identity
+          handset you want to register and answer the same questions. No identity
           card, no fee and no documents either way.
         </p>
       </div>
+      */}
     </>
   );
 }

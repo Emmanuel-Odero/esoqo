@@ -188,9 +188,9 @@ function CreateGroup({
   }
 
   return (
-    <div className="scrim" role="dialog" aria-modal="true" aria-labelledby="cg-title"
+    <div className="scrim" role="presentation"
       onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}>
-      <div className="modal narrow">
+      <div className="modal narrow" role="dialog" aria-modal="true" aria-labelledby="cg-title">
         <div className="modal-hd">
           <h2 id="cg-title">Register a new group</h2>
           <button className="x" onClick={onClose} aria-label="Close"><Icon name="close" size={18} /></button>
@@ -469,9 +469,9 @@ function GroupDetail({
       )}
 
       {removing && (
-        <div className="scrim" role="dialog" aria-modal="true" aria-labelledby="rm-title"
+        <div className="scrim" role="presentation"
           onClick={(e) => { if (e.target === e.currentTarget) setRemoving(null); }}>
-          <div className="modal narrow">
+          <div className="modal narrow" role="dialog" aria-modal="true" aria-labelledby="rm-title">
             <div className="modal-hd">
               <h2 id="rm-title">Remove {removing.name}?</h2>
               <button className="x" onClick={() => setRemoving(null)} aria-label="Close">
@@ -608,9 +608,9 @@ function AddMember({ group, onClose }: { group: Group; onClose: () => void }) {
   const canSubmit = (mode === 'search' ? Boolean(picked) : Boolean(newName.trim())) && roleReady;
 
   return (
-    <div className="scrim" role="dialog" aria-modal="true" aria-labelledby="am-title"
+    <div className="scrim" role="presentation"
       onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}>
-      <div className="modal narrow">
+      <div className="modal narrow" role="dialog" aria-modal="true" aria-labelledby="am-title">
         <div className="modal-hd">
           <h2 id="am-title">Add someone to {group.name}</h2>
           <button className="x" onClick={onClose} aria-label="Close"><Icon name="close" size={18} /></button>
@@ -638,7 +638,8 @@ function AddMember({ group, onClose }: { group: Group; onClose: () => void }) {
               <div className="srch" style={{ marginBottom: 12 }}>
                 <span className="mg"><Icon name="search" size={16} /></span>
                 <input className="inp" value={q} onChange={(e) => search(e.target.value)}
-                  aria-label="Search people" aria-expanded={hits.length > 0}
+                  role="combobox" aria-label="Search people" aria-expanded={hits.length > 0}
+                  aria-controls="member-hits"
                   placeholder="Name or phone number…" />
               </div>
 
@@ -650,7 +651,7 @@ function AddMember({ group, onClose }: { group: Group; onClose: () => void }) {
               )}
 
               {!searching && hits.length > 0 && (
-                <div role="listbox" aria-label="Search results" style={{ marginBottom: 14 }}>
+                <div id="member-hits" role="listbox" aria-label="Search results" style={{ marginBottom: 14 }}>
                   {hits.map((h) => (
                     <button key={h.id} role="option" aria-selected={picked?.id === h.id}
                       onClick={() => { setPicked({ id: h.id, name: h.name }); setQ(h.name); setHits([]); }}
@@ -784,9 +785,9 @@ function UploadDocument({
   }
 
   return (
-    <div className="scrim" role="dialog" aria-modal="true" aria-labelledby="ud-title"
+    <div className="scrim" role="presentation"
       onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}>
-      <div className="modal narrow">
+      <div className="modal narrow" role="dialog" aria-modal="true" aria-labelledby="ud-title">
         <div className="modal-hd">
           <h2 id="ud-title">Upload document for {group.name}</h2>
           <button className="x" onClick={onClose} aria-label="Close"><Icon name="close" size={18} /></button>
@@ -839,9 +840,9 @@ function DocPreview({
   const previewable = isImage || isPdf;
 
   return (
-    <div className="scrim" role="dialog" aria-modal="true" aria-labelledby="dp-title"
+    <div className="scrim" role="presentation"
       onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}>
-      <div className="modal">
+      <div className="modal" role="dialog" aria-modal="true" aria-labelledby="dp-title">
         <div className="modal-hd">
           <span style={{ width: 38, height: 38, borderRadius: 10, background: 'var(--blue-t)', color: 'var(--blue)', display: 'grid', placeItems: 'center', flex: 'none' }}>
             <Icon name={typeIcon(doc.mimeType)} size={19} />
