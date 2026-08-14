@@ -1,37 +1,290 @@
-.me { padding-bottom:60px }
-.metabs { display:flex; gap:2px; overflow-x:auto; border-bottom:1px solid var(--line);
-  background:#fff; position:sticky; top:0; z-index:40; padding:0 22px; scrollbar-width:none }
-.metabs::-webkit-scrollbar { display:none }
-.metabs a { display:flex; align-items:center; gap:8px; padding:14px 15px; font-size:.9rem;
-  color:var(--tx-2); white-space:nowrap; border-bottom:3px solid transparent; min-height:50px }
-.metabs a:hover { color:var(--navy); background:var(--paper) }
-.wrap { max-width:820px; margin:0 auto; padding:28px 22px 0 }
-.mehead { margin-bottom:24px }
-.mehead h1 { font-size:1.6rem }
-.mehead p { color:var(--tx-2); margin:6px 0 0 }
-.mcard { border:1px solid var(--line); border-radius:11px; background:#fff; padding:22px; margin-bottom:16px }
-.mcard h2 { font-size:1.02rem; margin-bottom:14px; display:flex; align-items:center; gap:9px }
+/* ══════════════════════════════════════════════════════════════
+   Esoko dashboard — /me and every page beneath it.
+
+   The record behaves like a document, but the shell behaves like a
+   dashboard: a muted paper canvas so every card reads as an object
+   with real depth, one integrated header (brand + primary tabs, no
+   stacked bars), a KPI row on the home screen, and restrained type —
+   700-weight, document-sized headlines, not display-scale clamour.
+
+   All colour/spacing/radius/motion values come from @esoko/ui tokens.
+   ══════════════════════════════════════════════════════════════ */
+
+.me { min-height:100dvh; background:var(--paper); padding-bottom:calc(76px + var(--safe-b)) }
+
+/* ── header (one bar: brand, tabs on desktop, More on the right) ── */
+.appbar {
+  position:sticky; top:0; z-index:60;
+  background:#fff;
+  border-bottom:1px solid var(--line);
+}
+.appbar-in {
+  max-width:1120px; margin:0 auto; min-height:62px;
+  padding:calc(6px + var(--safe-t)) max(20px,var(--safe-r)) 6px max(20px,var(--safe-l));
+  display:flex; align-items:center; gap:12px;
+}
+.appbar .appbrand {
+  display:inline-flex; align-items:center; gap:10px; margin-right:auto;
+  min-height:44px;
+}
+.appbar .appbrand .lock { font-size:21px }
+.appbar-name {
+  font-family:var(--font-display); font-weight:700; font-size:1.02rem;
+  letter-spacing:-.01em; color:var(--navy); line-height:1.1;
+}
+.appbar-name small { display:block; font-family:var(--font-mono); font-weight:600;
+  font-size:.58rem; letter-spacing:.14em; text-transform:uppercase; color:var(--tx-2); margin-top:1px }
+
+/* Desktop primary tabs — plain links with an understated active state. */
+.headnav { display:none }
+@media (min-width:820px) {
+  .headnav { display:flex; align-items:center; gap:2px; margin-right:auto }
+  .headnav a {
+    display:inline-flex; align-items:center; gap:7px; padding:0 13px;
+    font-size:.9rem; font-weight:600; color:var(--tx-2); border-radius:8px;
+    white-space:nowrap; min-height:44px; border-bottom:2px solid transparent;
+    margin-bottom:-2px;
+  }
+  .headnav a:hover { background:var(--paper); color:var(--navy) }
+  .headnav a[aria-current="page"] { color:var(--navy); border-bottom-color:var(--green) }
+}
+
+/* More button (all sizes) — opens the sheet with trust/display + sign out. */
+.morebtn {
+  display:inline-flex; align-items:center; gap:6px; padding:0 13px;
+  min-height:44px; border:1.5px solid var(--line); border-radius:9px;
+  background:#fff; cursor:pointer; font-family:inherit; font-weight:600;
+  font-size:.88rem; color:var(--tx-2);
+}
+.morebtn:hover { border-color:var(--navy); color:var(--navy) }
+.morebtn[aria-expanded="true"] { border-color:var(--green); color:var(--green) }
+
+/* ── mobile bottom tab bar ──────────────────────────────────── */
+.tabbar {
+  position:fixed; left:0; right:0; bottom:0; z-index:70;
+  display:flex;
+  background:rgba(255,255,255,.97); backdrop-filter:blur(14px);
+  -webkit-backdrop-filter:blur(14px);
+  border-top:1px solid var(--line); padding-bottom:var(--safe-b);
+}
+.tabbar a, .tabbar .more {
+  flex:1 1 0; min-width:0; position:relative;
+  display:flex; flex-direction:column; align-items:center; justify-content:center; gap:2px;
+  padding:8px 2px 7px; min-height:56px;
+  border:0; background:none; cursor:pointer; font-family:inherit;
+  font-size:.64rem; font-weight:600; color:var(--tx-2);
+}
+.tabbar a[aria-current="page"], .tabbar .more[aria-expanded="true"] { color:var(--green) }
+.tabbar a[aria-current="page"]::before {
+  content:''; position:absolute; top:0; left:50%; transform:translateX(-50%);
+  width:34px; height:3px; border-radius:0 0 4px 4px; background:var(--green);
+}
+@media (min-width:820px) { .tabbar { display:none } }
+
+/* ── More sheet ─────────────────────────────────────────────── */
+.sheet-scrim {
+  position:fixed; inset:0; z-index:120; background:rgba(10,46,77,.45);
+  animation:fade-in var(--dur) var(--ease-out);
+}
+.sheet {
+  position:fixed; left:0; right:0; bottom:0; z-index:130; background:#fff;
+  border-radius:var(--r-2xl) var(--r-2xl) 0 0; box-shadow:var(--e-3);
+  padding:8px 16px calc(16px + var(--safe-b)); max-height:82dvh; overflow:auto;
+  animation:sheet-up var(--dur-slow) var(--ease-out);
+}
+.sheet-handle { width:36px; height:5px; border-radius:3px; background:var(--line); margin:2px auto 10px }
+.sheet-row {
+  display:flex; align-items:center; gap:12px; padding:13px 8px; border-radius:var(--r-sm);
+  font-weight:600; font-size:.94rem; min-height:48px; width:100%; text-align:left;
+}
+.sheet-row:hover { background:var(--paper) }
+.sheet-row .chev { margin-left:auto; color:var(--tx-3) }
+.sheet-row.danger { color:var(--red) }
+.sheet-row.danger .icbox { background:var(--red-t); color:var(--red) }
+.sheet-sep { border-top:1px solid var(--line); margin:10px 0 6px }
+
+/* On desktop the primary nav is already inline tabs, not a bottom bar —
+   "More" following it as a full-width mobile bottom sheet (complete with
+   a drag handle nobody can drag with a mouse) reads as an unstyled
+   mobile component bolted onto a desktop page. Same trigger, same
+   content, same DOM; only the presentation changes, the same way
+   .headnav/.tabbar already swap for one one primary nav. */
+@media (min-width:820px) {
+  .sheet-scrim { background:transparent }
+  .sheet {
+    left:auto; bottom:auto; top:74px; right:max(20px,var(--safe-r));
+    width:300px; max-height:calc(100dvh - 94px);
+    border-radius:var(--r-lg); padding:10px;
+    animation:pop-in var(--dur) var(--ease-out);
+  }
+  .sheet-handle { display:none }
+}
+
+@keyframes fade-in { from{opacity:0} to{opacity:1} }
+@keyframes pop-in {
+  from { opacity:0; transform:translateY(-6px) scale(.98) }
+  to { opacity:1; transform:translateY(0) scale(1) }
+}
+@keyframes sheet-up { from{transform:translateY(16px);opacity:0} to{transform:none;opacity:1} }
+
+/* ── content column ─────────────────────────────────────────── */
+.me .wrap {
+  max-width:1120px; margin:0 auto;
+  padding:20px max(20px,var(--safe-r)) 0 max(20px,var(--safe-l));
+}
+.mehead { margin-bottom:20px }
+.mehead h1 { font-size:1.5rem; font-weight:700; margin:0 0 6px; letter-spacing:-.02em }
+.mehead p { color:var(--tx-2); margin:0; max-width:56ch }
+
+/* Page header used by the group/treasury pages. */
+.hero { padding:4px 0 4px; margin-bottom:4px }
+.hero h1 { font-size:clamp(1.4rem,4vw,1.8rem); font-weight:700; margin:8px 0 6px; letter-spacing:-.02em }
+.hero .lead { margin:0; color:var(--tx-2) }
+
+/* ── home: KPI tiles ────────────────────────────────────────── */
+.stat-grid { display:grid; grid-template-columns:repeat(2,1fr); gap:12px; margin:16px 0 20px }
+.tile {
+  display:flex; flex-direction:column; gap:2px; min-width:0;
+  padding:16px 16px 14px; border:1px solid var(--line); border-radius:var(--r-lg);
+  background:#fff; box-shadow:var(--sh-s);
+  transition:border-color var(--dur-fast), box-shadow var(--dur-fast);
+}
+.tile:hover { border-color:var(--navy); box-shadow:var(--sh-m) }
+.tile .icbox { width:30px; height:30px; border-radius:8px; margin-bottom:10px }
+.tile .tile-k {
+  font-family:var(--font-mono); font-size:.62rem; letter-spacing:.09em;
+  text-transform:uppercase; color:var(--tx-2); font-weight:600; white-space:nowrap;
+  overflow:hidden; text-overflow:ellipsis;
+}
+.tile .tile-v { font-weight:700; font-size:1.15rem; line-height:1.2; color:var(--navy) }
+.tile .tile-h { font-size:.78rem; color:var(--tx-2); margin-top:3px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap }
+@media (min-width:820px) { .stat-grid { grid-template-columns:repeat(4,1fr); margin-top:20px } }
+
+/* Content cards — white objects on the paper canvas. */
+.dash-cols { display:grid; gap:14px; margin-bottom:14px }
+@media (min-width:980px) { .dash-cols { grid-template-columns:1fr 1fr } }
+.dash-cols .mcard { margin-bottom:0 }
+
+/* ── "your standing" completion card ────────────────────────── */
+.standing {
+  display:flex; align-items:center; gap:16px; flex-wrap:wrap;
+  padding:18px; border:1px solid var(--line); border-radius:var(--r-lg);
+  background:#fff; box-shadow:var(--sh-s);
+  margin:16px 0 0;
+}
+.standing .ring { margin-right:2px }
+.ring { width:58px; height:58px; flex:none; position:relative }
+.ring svg { transform:rotate(-90deg); display:block }
+.ring-label {
+  position:absolute; inset:0; display:grid; place-items:center;
+  font-family:var(--font-mono); font-weight:600; font-size:.84rem; color:var(--navy);
+}
+.standing-copy { flex:1; min-width:0 }
+.standing-copy h2 { font-size:1rem; font-weight:700; margin:0 0 3px }
+.standing-copy p { color:var(--tx-2); font-size:.88rem; margin:0; max-width:44ch }
+.standing .btn { white-space:nowrap }
+
+/* ── cards ──────────────────────────────────────────────────── */
+.mcard { border:1px solid var(--line); border-radius:var(--r-lg); background:#fff;
+  padding:20px; margin-bottom:14px; box-shadow:var(--sh-s) }
+.mcard h2 { font-size:.98rem; font-weight:700; margin:0 0 12px; display:flex; align-items:center; gap:9px }
+.mcard h2 .ic { color:var(--blue) }
+.mcard > p { max-width:62ch }
 .mrow { display:flex; gap:14px; align-items:flex-start; padding:13px 0; border-bottom:1px solid var(--line) }
 .mrow:last-child { border-bottom:0 }
 .mrow .k { color:var(--tx-2); font-size:.88rem; width:150px; flex:none }
 .mrow .v { font-weight:600; font-size:.92rem }
+.mcard .btn { margin-top:4px }
+
+/* ── badges ─────────────────────────────────────────────────── */
 .badge { font-family:var(--font-mono); font-size:.66rem; padding:4px 9px; border-radius:5px;
-  display:inline-flex; align-items:center; gap:5px; white-space:nowrap }
+  display:inline-flex; align-items:center; gap:5px; white-space:nowrap; letter-spacing:.04em }
 .b-ok { background:var(--green-t); color:var(--green) }
 .b-warn { background:var(--amber-t); color:var(--amber) }
 .b-bad { background:var(--red-t); color:var(--red) }
-.b-mute { background:var(--paper); color:var(--tx-3); border:1px solid var(--line) }
-.mempty { text-align:center; padding:38px 20px; color:var(--tx-2) }
+.b-mute { background:var(--paper); color:var(--tx-2); border:1px solid var(--line) }
+
+/* ── "your papers" checklist ────────────────────────────────── */
+.papers { list-style:none; margin:0; padding:0 }
+.paper { display:flex; align-items:flex-start; gap:12px; padding:12px 0; border-bottom:1px solid var(--line) }
+.paper:last-child { border-bottom:0 }
+.paper .ps { flex:none; width:30px; height:30px; border-radius:8px; display:grid;
+  place-items:center; margin-top:2px }
+.paper .ps.ok { background:var(--green-t); color:var(--green) }
+.paper .ps.soon { background:var(--amber-t); color:var(--amber) }
+.paper .ps.gap { background:#fff; color:var(--tx-3); border:1px solid var(--line) }
+.paper .pt { flex:1; min-width:0 }
+.paper .pt .t { font-weight:600; font-size:.93rem; display:block }
+.paper .pt .s { font-size:.8rem; color:var(--tx-2); display:block; margin-top:1px }
+.paper .badge { flex:none; margin-top:2px }
+
+/* ── empty states ───────────────────────────────────────────── */
+.mempty { text-align:center; padding:34px 16px; color:var(--tx-2) }
 .mempty .ico { width:46px; height:46px; border-radius:12px; background:var(--paper);
   display:grid; place-items:center; margin:0 auto 14px; color:var(--tx-3) }
+
+/* ── settings / display preferences ─────────────────────────── */
 .prefrow { display:flex; gap:16px; align-items:center; padding:16px 0; border-bottom:1px solid var(--line);
   flex-wrap:wrap }
 .prefrow:last-child { border-bottom:0 }
 .prefrow .lbl { flex:1; min-width:180px }
 .prefrow .lbl strong { display:block; font-size:.94rem }
 .prefopts { display:flex; gap:6px; flex-wrap:wrap }
-.prefopts button { border:1.5px solid var(--line); background:#fff; border-radius:7px;
-  padding:9px 15px; font-family:inherit; font-size:.87rem; cursor:pointer; min-height:44px }
+.prefopts button { border:1.5px solid var(--line); background:#fff; border-radius:var(--r-sm);
+  padding:9px 15px; font-family:inherit; font-size:.87rem; cursor:pointer; min-height:44px;
+  transition:border-color var(--dur-fast),background var(--dur-fast) }
 .prefopts button[aria-pressed="true"] { border-color:var(--green); background:var(--green-t);
   color:var(--green); font-weight:600 }
-@media(max-width:560px){ .mrow{flex-direction:column;gap:3px} .mrow .k{width:auto} }
+
+/* ── treasury ───────────────────────────────────────────────── */
+.balance-hero {
+  padding:18px; border:1px solid #BFE0CE; background:linear-gradient(160deg,#F3FBF6,#E7F4ED);
+  border-radius:var(--r-lg); margin-bottom:16px;
+}
+.balance-hero .k { font-family:var(--font-mono); font-size:.68rem; text-transform:uppercase;
+  letter-spacing:.12em; color:var(--green); font-weight:600 }
+.balance-hero .v { font-family:var(--font-mono); font-size:clamp(1.6rem,7vw,2.1rem);
+  font-weight:600; color:var(--navy); letter-spacing:-.01em; line-height:1.1; margin-top:2px }
+.balance-hero .h { color:var(--tx-2); font-size:.86rem; margin-top:2px }
+
+.sig-note { display:flex; align-items:center; gap:10px; font-size:.9rem; margin-top:12px;
+  padding:12px 14px; background:#fff; border:1px solid var(--line); border-radius:var(--r-sm) }
+
+/* ── responsive density ─────────────────────────────────────── */
+@media (max-width:560px) {
+  .mrow { flex-direction:column; gap:3px }
+  .mrow .k { width:auto }
+  .mcard { padding:18px }
+  .mcard .btn { width:100%; justify-content:center }
+  .standing .btn { flex:1 1 auto; margin-top:4px }
+  .tile .tile-v { font-size:1.05rem }
+}
+
+/* ── navigation skeleton ────────────────────────────────────── */
+.skel { padding:6px 0 24px }
+.skel-line {
+  height:12px; border-radius:99px;
+  background:linear-gradient(100deg, var(--paper) 40%, #EAF1F6 50%, var(--paper) 60%);
+  background-size:220% 100%;
+  animation:skel-shimmer 1.3s ease-in-out infinite;
+}
+.skel-kicker { width:92px; height:9px; border-radius:99px; background:var(--line) }
+.skel-title { width:56%; height:28px; border-radius:10px; margin:14px 0 10px;
+  background:linear-gradient(100deg, var(--paper) 40%, #EAF1F6 50%, var(--paper) 60%);
+  background-size:220% 100%; animation:skel-shimmer 1.3s ease-in-out infinite }
+.skel-line + .skel-line, .skel-title + .skel-line { margin-top:10px }
+.skel-standing {
+  display:flex; align-items:center; gap:16px; margin:22px 0 16px; padding:16px;
+  border:1px solid var(--line); border-radius:var(--r-lg);
+}
+.skel-ring { width:62px; height:62px; border-radius:50%; flex:none;
+  background:conic-gradient(var(--line) 0deg 290deg, #E4EEF5 290deg 360deg) }
+.skel-grid { display:grid; grid-template-columns:repeat(2,1fr); gap:12px; margin-bottom:16px }
+.skel-tile { border:1px solid var(--line); border-radius:var(--r-lg); padding:14px; display:flex;
+  flex-direction:column; gap:9px }
+.skel-box { border-radius:8px; background:var(--paper) }
+.skel-card { border:1px solid var(--line); border-radius:var(--r-lg); padding:20px; margin-bottom:14px }
+.skel-row { display:flex; gap:14px; align-items:center; padding:13px 0; border-bottom:1px solid var(--line) }
+.skel-row:last-child { border-bottom:0 }
+@media (min-width:560px) { .skel-grid { grid-template-columns:repeat(4,1fr) } }
+@keyframes skel-shimmer { from{background-position:160% 0} to{background-position:-60% 0} }

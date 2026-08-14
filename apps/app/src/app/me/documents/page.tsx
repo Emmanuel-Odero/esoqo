@@ -42,25 +42,27 @@ export default async function MyDocuments() {
         </div>
       ) : (
         <div className="mcard">
-          {docs.map((d) => {
-            const [cls, label] = STATUS[d.status] ?? ['b-mute', d.status];
-            return (
-              <div className="mrow" key={d.id}>
-                <span className="k" style={{ width: 40 }}>
-                  <Icon name={icon(d.mimeType)} size={20} style={{ color: 'var(--blue)' }} />
-                </span>
-                <span style={{ flex: 1 }}>
-                  <span className="v" style={{ display: 'block' }}>{d.title}</span>
-                  <span className="hint" style={{ margin: 0 }}>
-                    Added {d.uploadedAt.toLocaleDateString('en-KE')} ·{' '}
-                    {Math.round(d.sizeBytes / 1024)} KB
-                    {d.reviewNote && d.status === 'REJECTED' && ` · ${d.reviewNote}`}
+          <ul className="papers">
+            {docs.map((d) => {
+              const [cls, label] = STATUS[d.status] ?? ['b-mute', d.status];
+              return (
+                <li className="paper" key={d.id}>
+                  <span className="ps" style={{ background: 'var(--blue-t)', color: 'var(--blue)' }}>
+                    <Icon name={icon(d.mimeType)} size={16} />
                   </span>
-                </span>
-                <span className={`badge ${cls}`}>{label}</span>
-              </div>
-            );
-          })}
+                  <span className="pt">
+                    <span className="t">{d.title}</span>
+                    <span className="s">
+                      Added {d.uploadedAt.toLocaleDateString('en-KE')} ·{' '}
+                      {Math.round(d.sizeBytes / 1024)} KB
+                      {d.reviewNote && d.status === 'REJECTED' && ` · ${d.reviewNote}`}
+                    </span>
+                  </span>
+                  <span className={`badge ${cls}`}>{label}</span>
+                </li>
+              );
+            })}
+          </ul>
         </div>
       )}
     </>

@@ -12,14 +12,46 @@
   --blue:#0F5C9E; --blue-2:#3F8AC4; --blue-t:#E9F2F9;
   --green:#12794A; --green-2:#1FA163; --green-t:#E7F4ED;
   --red:#CE2B2B; --red-t:#FCEDEC;
-  --amber:#B8760B; --amber-t:#FDF4E3;
+  --amber:#9A6105; --amber-t:#FDF4E3;
   --paper:#F4F7FA; --line:#DCE5EC;
   --tx:#12283A; --tx-2:#57718A; --tx-3:#5A7695;
 
   --w:1160px;
+
   --sh-s:0 1px 2px rgba(10,46,77,.05),0 4px 14px rgba(10,46,77,.05);
   --sh-m:0 8px 28px rgba(10,46,77,.10);
   --sh-l:0 24px 60px rgba(10,46,77,.18);
+
+  /* Elevation — one step stronger than the equivalent shadow, used only
+     where elements genuinely float above the page (sheets, bars). */
+  --e-1:0 1px 0 rgba(10,46,77,.04);
+  --e-2:0 2px 8px rgba(10,46,77,.08);
+  --e-3:0 12px 32px rgba(10,46,77,.16);
+
+  /* Spacing scale — 4px grid, stepped for rhythm rather than absolute
+     values, so density can be tuned in one place. */
+  --sp-1:4px; --sp-2:8px; --sp-3:12px; --sp-4:16px;
+  --sp-5:20px; --sp-6:24px; --sp-7:32px; --sp-8:40px; --sp-9:56px;
+
+  /* Radius scale */
+  --r-xs:6px; --r-sm:8px; --r-md:10px; --r-lg:14px; --r-xl:20px; --r-2xl:28px;
+  --r-pill:999px;
+
+  /* Motion tokens — every transition in the product should be one of
+     these, so reduced-motion and speed stay consistent. */
+  --dur-fast:120ms; --dur:200ms; --dur-slow:320ms;
+  --ease-out:cubic-bezier(.2,.8,.3,1);
+
+  /* Breakpoints — match the media queries used across apps. */
+  --bp-md:820px;
+  --bp-lg:1040px;
+
+  /* Apple safe-area insets; fall back to 0 on non-notch platforms. Used
+     via max() so padding never collapses when the env is absent. */
+  --safe-t:env(safe-area-inset-top,0px);
+  --safe-r:env(safe-area-inset-right,0px);
+  --safe-b:env(safe-area-inset-bottom,0px);
+  --safe-l:env(safe-area-inset-left,0px);
 
   /* User-adjustable. Persisted server-side so preferences follow the
      person across devices and channels. */
