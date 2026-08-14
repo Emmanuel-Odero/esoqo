@@ -1,6 +1,7 @@
 'use client';
 
 import Link from 'next/link';
+import type { Route } from 'next';
 import { usePathname } from 'next/navigation';
 
 const SECTIONS = [
@@ -24,7 +25,7 @@ export function OrgSubnav({ slug }: { slug: string }) {
           const href = `/o/${slug}/${key}`;
           const on = pathname === href || pathname.startsWith(`${href}/`);
           return (
-            <Link key={key} href={href} aria-current={on ? 'page' : undefined}>{label}</Link>
+            <Link key={key} href={href as Route} aria-current={on ? 'page' : undefined}>{label}</Link>
           );
         })}
       </div>
