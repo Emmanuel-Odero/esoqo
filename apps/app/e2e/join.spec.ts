@@ -10,7 +10,7 @@ test.describe('/join', () => {
   test('renders step 1 and lets you pick how you are joining', async ({ page }) => {
     await page.goto('/join');
 
-    await expect(page.getByRole('heading', { name: 'Join Esoko' })).toBeVisible();
+    await expect(page.getByRole('heading', { name: 'Join CECF' })).toBeVisible();
     await expect(page.getByText('Step 1 of 4')).toBeVisible();
     await expect(page.getByRole('heading', { name: "Who's joining, and what's your name?" })).toBeVisible();
 
@@ -18,9 +18,14 @@ test.describe('/join', () => {
     const continueBtn = page.getByRole('button', { name: 'Continue' });
     await expect(continueBtn).toBeDisabled();
 
-    // Picking "Myself" reveals the name fields and unlocks Continue.
+    // Picking "Myself" reveals the name fields.
     await page.getByRole('button', { name: /^Myself/ }).click();
     await expect(page.getByLabel('Official name')).toBeVisible();
+
+    // Continue stays disabled until the registrant's own name is given —
+    // nothing can move forward without knowing who's joining.
+    await expect(continueBtn).toBeDisabled();
+    await page.getByLabel('Official name').fill('Achieng Odero');
     await expect(continueBtn).toBeEnabled();
   });
 
