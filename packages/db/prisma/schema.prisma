@@ -72,15 +72,17 @@ model Party {
   person                 Person?
   organisation           Organisation?
   enterprises            Enterprise[]
-  memberships            Membership[]   @relation("MemberParty")
+  memberships            Membership[]      @relation("MemberParty")
   accounts               Account[]
-  attestations           Attestation[]  @relation("AttestationSubject")
-  consentsGiven          ConsentGrant[] @relation("ConsentSubject")
+  attestations           Attestation[]     @relation("AttestationSubject")
+  consentsGiven          ConsentGrant[]    @relation("ConsentSubject")
   documents              Document[]
   registration           Registration?
-  groupJoinRegistrations Registration[] @relation("RegistrationGroupParty")
-  bizJoinRegistrations   Registration[] @relation("RegistrationBizParty")
+  groupJoinRegistrations Registration[]    @relation("RegistrationGroupParty")
+  bizJoinRegistrations   Registration[]    @relation("RegistrationBizParty")
   storeOrdersAsBuyer     StoreOrder[]
+  donationsAsDonor       Donation[]
+  jamiiTeamMemberships   JamiiTeamMember[]
 
   @@index([county, kind])
   @@index([createdAt])
@@ -142,7 +144,8 @@ model Organisation {
   /// Business-only: not yet registered, but says they plan to be.
   intendsToRegister Boolean?
 
-  members Membership[] @relation("MemberOrg")
+  members   Membership[] @relation("MemberOrg")
+  jamiiPage JamiiPage?
 
   @@index([kind])
   @@map("organisation")
@@ -277,6 +280,9 @@ enum ClaimType {
   FIELD_VISIT
   DELIVERY_CONFIRMED
   TRADING_RECORD
+  /// CECF staff reviewed a Jamii page's registration + treasurer-ID
+  /// documents and are satisfied the org is who its page says it is.
+  ORG_PAGE_VERIFIED
 }
 
 enum AttestationMethod {
@@ -403,6 +409,10 @@ enum AccountKind {
   /// One per Store. Where checkout and PoS sales post; FEE_INCOME
   /// picks up the platform's cut on the same JournalEntry.
   STORE_REVENUE
+  /// One per Campaign. Deliberately separate from GROUP_SAVINGS — a
+  /// donor's gift to a named campaign never gets lent out table-banking
+  /// style, and the org's own savings never look like donor money.
+  CAMPAIGN_RECEIVED
 }
 
 model Account {
@@ -415,6 +425,7 @@ model Account {
   closedAt DateTime?
 
   postings Posting[]
+  campaign Campaign?
 
   @@unique([partyId, kind, currency])
   @@index([kind])
@@ -434,6 +445,7 @@ model JournalEntry {
   postings   Posting[]
   storeOrder StoreOrder?
   posSale    PosSale?
+  donation   Donation?
 
   @@index([occurredAt])
   @@map("journal_entry")
@@ -701,58 +713,58 @@ model Store {
   // storefront just shows less.
 
   /// Registered/legal business name, where it differs from the trading name.
-  legalName String?
+  legalName          String?
   /// KRA PIN or business registration number, shown in the storefront's
   /// business identity block.
   registrationNumber String?
   /// A named person customers can ask for ("Ask for Mama Njeri").
-  contactPerson String?
-  contactEmail String?
+  contactPerson      String?
+  contactEmail       String?
   /// +254 format, same convention as customer/supplier phones.
-  contactPhone String?
-  physicalAddress String?
+  contactPhone       String?
+  physicalAddress    String?
 
   /// One-line pitch under the store name on the storefront hero.
-  tagline String?
+  tagline           String?
   /// Long-form story — where the goods come from, how the shop started.
   /// Shown as the storefront's About section. Plain text.
-  aboutUs String?
-  logoStorageKey String?
+  aboutUs           String?
+  logoStorageKey    String?
   /// Public URL served via /img/{key}, same pattern as ProductImage.
-  logoUrl String?
+  logoUrl           String?
   faviconStorageKey String?
-  faviconUrl String?
+  faviconUrl        String?
 
   /// Brand accent override — a hex colour that beats the theme accent
   /// when set, so a store with its own colours doesn't need a new theme.
   brandAccent String?
 
   instagram String?
-  facebook String?
-  tiktok String?
-  whatsapp String?
-  linkedin String?
+  facebook  String?
+  tiktok    String?
+  whatsapp  String?
+  linkedin  String?
 
   /// The category the store mostly trades in — one of PRODUCT_CATEGORIES.
   primaryCategory String?
   /// Rough size of the catalogue ("how many things do you sell?").
-  skuCount Int?
+  skuCount        Int?
 
   /// Where orders are packed/picked up from — "Juja Main, Kiambu".
   deliveryOrigin String?
   /// Free-text delivery areas served — "Juja, Thika, Ruiru".
-  deliveryZones String[] @default([])
+  deliveryZones  String[] @default([])
   /// Typical turnaround in days (informational on the storefront).
   processingDays Int?
 
   /// Currency the store prices in — KES for everything today; kept on
   /// the profile so the storefront can label prices honestly if it ever
   /// changes.
-  currency String @default("KES")
+  currency        String  @default("KES")
   /// VAT rate shown on the storefront when set (16 = 16%). Informational —
   /// online checkouts price in KES inclusive of nothing; how tax is
   /// collected is a fiscal-device (eTIMS) concern, not a profile one.
-  taxRatePct Int?
+  taxRatePct      Int?
   /// M-Pesa number settlements should be paid to. Informational on the
   /// profile today — actual payouts run through the enterprise ledger.
   settlementPhone String?
@@ -783,12 +795,12 @@ model Store {
 /// storage-key discipline as ProductImage: opaque key, public URL via
 /// /img, never served as a static asset.
 model StorePhoto {
-  id         String @id @default(uuid()) @db.Uuid
-  storeId    String @db.Uuid
-  store      Store  @relation(fields: [storeId], references: [id], onDelete: Cascade)
+  id         String   @id @default(uuid()) @db.Uuid
+  storeId    String   @db.Uuid
+  store      Store    @relation(fields: [storeId], references: [id], onDelete: Cascade)
   storageKey String
   url        String
-  position   Int    @default(0)
+  position   Int      @default(0)
   createdAt  DateTime @default(now())
 
   @@index([storeId])
@@ -800,48 +812,48 @@ model Product {
   storeId String @db.Uuid
   store   Store  @relation(fields: [storeId], references: [id], onDelete: Cascade)
 
-  name         String
-  description  String?
+  name             String
+  description      String?
   /// One of PRODUCT_CATEGORIES in @esoko/domain. Not a DB enum — that
   /// list is edited in application code, same reasoning as `status`
   /// below: a new category should never need a migration.
-  category     String?
-  priceKes     Decimal          @db.Decimal(12, 2)
+  category         String?
+  priceKes         Decimal          @db.Decimal(12, 2)
   /// Null = untracked (a service, or stock the merchant doesn't count).
-  stockQty     Int?
+  stockQty         Int?
   /// Sell-by-order: the merchant doesn't hold the stock (or holds little),
   /// and fulfils once the buyer orders — "available on order". Order-first
   /// keeps working capital out of stock, the model MSMEs can actually run.
-  availableOnOrder Boolean @default(false)
+  availableOnOrder Boolean          @default(false)
   /// Cost of goods — what the merchant paid, needed to show gross profit.
   /// Optional: a business that doesn't track cost sees revenue only.
-  costKes      Decimal?         @db.Decimal(12, 2)
+  costKes          Decimal?         @db.Decimal(12, 2)
   /// Retail unit the price refers to — "kg", "pc", "dozen", "litre"…
   /// Plain text so a mango seller can write "bunch" without a migration.
-  unit         String?
+  unit             String?
   /// Unit the merchant bought the stock in — often differs from `unit`
   /// above: a tomato trader buys a crate by the kilo and sells by the
   /// piece. costKes/stockQty above describe this purchase quantity, so
   /// knowing it turns "paid KES 3,000 for 100" into "KES 30 per kilo"
   /// instead of silently assuming the buy and sell units are the same.
-  purchaseUnit String?
+  purchaseUnit     String?
   /// When set, the product sells by variant instead of by itself: the
   /// storefront shows the label ("500g", "Blue", "1kg") with the variant's
   /// own price and stock. base priceKes acts as the default variant price.
-  variants     ProductVariant[]
+  variants         ProductVariant[]
   /// ACTIVE | HIDDEN | SUSPENDED. A plain string, not an enum — a
   /// merchant hiding their own product is a listing decision the
   /// platform doesn't need to model as a state machine. SUSPENDED is
   /// the one value a merchant cannot set themselves — see reviewedById
   /// below; setProductVisibility refuses to touch a suspended product.
-  status       String           @default("ACTIVE")
+  status           String           @default("ACTIVE")
   /// Staff moderation — mirrors Document's reviewNote/reviewedById/
   /// reviewedAt shape below, same reasoning: who suspended it, why,
   /// and when, so a merchant asking "why is my product down" gets a
   /// real answer instead of "the system did it".
-  reviewNote   String?
-  reviewedById String?          @db.Uuid
-  reviewedAt   DateTime?
+  reviewNote       String?
+  reviewedById     String?          @db.Uuid
+  reviewedAt       DateTime?
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -874,16 +886,16 @@ model ProductStaffNote {
 }
 
 model ProductImage {
-  id        String  @id @default(uuid()) @db.Uuid
-  productId String  @db.Uuid
-  product   Product @relation(fields: [productId], references: [id], onDelete: Cascade)
+  id         String  @id @default(uuid()) @db.Uuid
+  productId  String  @db.Uuid
+  product    Product @relation(fields: [productId], references: [id], onDelete: Cascade)
   /// Opaque R2 object key — never the client's filename (see storage.ts).
   /// Needed to actually delete the object when the image or product is
   /// removed; `url` alone (the public-facing address) isn't reliably
   /// reversible back to a key.
   storageKey String
-  url       String
-  position  Int     @default(0)
+  url        String
+  position   Int     @default(0)
 
   @@index([productId])
   @@map("product_image")
@@ -899,17 +911,17 @@ model ProductVariant {
   product   Product @relation(fields: [productId], references: [id], onDelete: Cascade)
 
   /// What the customer sees — "500g", "Red", "1kg bolle".
-  label    String
+  label            String
   /// Its own price — the base product price is the default.
-  priceKes Decimal  @db.Decimal(12, 2)
+  priceKes         Decimal  @db.Decimal(12, 2)
   /// Null = untracked stock, same meaning as Product.stockQty.
-  stockQty Int?
+  stockQty         Int?
   /// Order-first, same meaning as Product.availableOnOrder — a variant
   /// the merchant fulfils once ordered rather than holding stock.
-  availableOnOrder Boolean @default(false)
-  costKes  Decimal? @db.Decimal(12, 2)
+  availableOnOrder Boolean  @default(false)
+  costKes          Decimal? @db.Decimal(12, 2)
   /// Optional barcode/EAN for the option.
-  sku      String?
+  sku              String?
 
   posItems       PosSaleItem[]
   orderItems     StoreOrderItem[]
@@ -1589,4 +1601,284 @@ model PriceQuote {
   @@unique([commodityId, marketId, quotedFor])
   @@index([quotedFor])
   @@map("price_quote")
+}
+
+// ═══════════════════════ OUR JAMII (CECF community pages) ═══════════
+//
+// A public mini-site + crowdfunding layer on top of the Party/
+// Organisation an org already has everywhere else on the platform.
+// Deliberately NOT a parallel "community org" identity system — see
+// the file header. JamiiPage is 1:1 with Organisation the same way
+// Person/Organisation are 1:1 with Party.
+
+enum JamiiPageStatus {
+  DRAFT
+  PUBLISHED
+  SUSPENDED
+}
+
+enum PublishStatus {
+  DRAFT
+  PUBLISHED
+}
+
+enum JamiiTeamRole {
+  ADMIN
+  EDITOR
+  CONTRIBUTOR
+}
+
+enum CampaignStatus {
+  DRAFT
+  ACTIVE
+  COMPLETED
+  CANCELLED
+}
+
+enum DonationStatus {
+  PENDING
+  CONFIRMED
+  FAILED
+}
+
+enum JamiiInterestStatus {
+  NEW
+  CONTACTED
+  CONVERTED
+  DISMISSED
+}
+
+model JamiiPage {
+  organisationId String       @id @db.Uuid
+  organisation   Organisation @relation(fields: [organisationId], references: [partyId], onDelete: Cascade)
+
+  /// Public URL segment — ourjamii.esoko.../o/{slug}. Unique platform-wide.
+  slug   String          @unique
+  status JamiiPageStatus @default(DRAFT)
+
+  /// One-line pitch, shown on Discover cards and the hero carousel.
+  tagline      String?
+  /// Short mission used in cards/carousel where space is tight.
+  missionShort String?
+  /// Long-form "About" body shown on the public page's About section.
+  aboutUs      String?
+
+  logoStorageKey  String?
+  logoUrl         String?
+  coverStorageKey String?
+  coverUrl        String?
+  brandAccent     String?
+
+  /// Free text, e.g. "Wednesdays, 4pm · Nyalenda B Social Hall".
+  meetingSchedule String?
+  contactEmail    String?
+  contactPhone    String?
+  website         String?
+  facebook        String?
+  instagram       String?
+  twitter         String?
+  whatsapp        String?
+
+  /// [{ q, a }] — small and static enough that a table would be
+  /// overkill, same precedent as Person.displayPrefs.
+  faq Json @default("[]")
+
+  publishedAt DateTime?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  photos    JamiiPhoto[]
+  posts     JamiiPost[]
+  programs  JamiiProgram[]
+  campaigns Campaign[]
+  team      JamiiTeamMember[]
+
+  @@index([status])
+  @@map("jamii_page")
+}
+
+/// Gallery images a page puts on its public profile. Same storage-key
+/// discipline as StorePhoto: opaque key, public URL via /img.
+model JamiiPhoto {
+  id         String    @id @default(uuid()) @db.Uuid
+  pageId     String    @db.Uuid
+  page       JamiiPage @relation(fields: [pageId], references: [organisationId], onDelete: Cascade)
+  storageKey String
+  url        String
+  caption    String?
+  position   Int       @default(0)
+  createdAt  DateTime  @default(now())
+
+  @@index([pageId])
+  @@map("jamii_photo")
+}
+
+/// The "Updates" carousel on the public page.
+model JamiiPost {
+  id              String        @id @default(uuid()) @db.Uuid
+  pageId          String        @db.Uuid
+  page            JamiiPage     @relation(fields: [pageId], references: [organisationId], onDelete: Cascade)
+  title           String
+  excerpt         String?
+  body            String
+  imageStorageKey String?
+  imageUrl        String?
+  status          PublishStatus @default(DRAFT)
+  authorPartyId   String?       @db.Uuid
+  publishedAt     DateTime?
+  createdAt       DateTime      @default(now())
+  updatedAt       DateTime      @updatedAt
+
+  @@index([pageId, status])
+  @@map("jamii_post")
+}
+
+/// The "Programs" accordion on the public page.
+model JamiiProgram {
+  id           String    @id @default(uuid()) @db.Uuid
+  pageId       String    @db.Uuid
+  page         JamiiPage @relation(fields: [pageId], references: [organisationId], onDelete: Cascade)
+  title        String
+  body         String
+  icon         String?
+  position     Int       @default(0)
+  linkedPostId String?   @db.Uuid
+  createdAt    DateTime  @default(now())
+
+  @@index([pageId])
+  @@map("jamii_program")
+}
+
+/// Who may manage a page, and at what level — deliberately separate
+/// from Membership (a person's real role in the group: chairperson,
+/// treasurer, ...). A treasurer isn't necessarily who edits the page,
+/// and a page editor need not be an office-holder.
+model JamiiTeamMember {
+  id          String        @id @default(uuid()) @db.Uuid
+  pageId      String        @db.Uuid
+  page        JamiiPage     @relation(fields: [pageId], references: [organisationId], onDelete: Cascade)
+  /// Null while an invite is pending and no Party/Person exists yet
+  /// for that email/phone.
+  personId    String?       @db.Uuid
+  person      Party?        @relation(fields: [personId], references: [id])
+  inviteName  String
+  inviteEmail String
+  role        JamiiTeamRole @default(EDITOR)
+  invitedAt   DateTime      @default(now())
+  acceptedAt  DateTime?
+  removedAt   DateTime?
+
+  @@unique([pageId, inviteEmail])
+  @@index([personId])
+  @@map("jamii_team_member")
+}
+
+model Campaign {
+  id      String         @id @default(uuid()) @db.Uuid
+  pageId  String         @db.Uuid
+  page    JamiiPage      @relation(fields: [pageId], references: [organisationId], onDelete: Cascade)
+  title   String
+  /// Unique per page, not platform-wide — routed as /o/{pageSlug}/c/{slug}.
+  slug    String
+  summary String
+  body    String?
+  goalKes Decimal        @db.Decimal(12, 2)
+  status  CampaignStatus @default(DRAFT)
+
+  coverStorageKey String?
+  coverUrl        String?
+  startsAt        DateTime?
+  endsAt          DateTime?
+
+  /// One dedicated ledger account per campaign, opened alongside it.
+  /// Kept apart from the org's GROUP_SAVINGS account on purpose.
+  accountId String?  @unique @db.Uuid
+  account   Account? @relation(fields: [accountId], references: [id])
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  updates   CampaignUpdate[]
+  donations Donation[]
+
+  @@unique([pageId, slug])
+  @@index([status])
+  @@map("campaign")
+}
+
+model CampaignUpdate {
+  id         String   @id @default(uuid()) @db.Uuid
+  campaignId String   @db.Uuid
+  campaign   Campaign @relation(fields: [campaignId], references: [id], onDelete: Cascade)
+  title      String
+  body       String
+  postedAt   DateTime @default(now())
+
+  @@index([campaignId, postedAt])
+  @@map("campaign_update")
+}
+
+/// A gift to a campaign. Mirrors StoreOrder: donor is an optional
+/// Party (giving never requires an account — "Anonymous" just means
+/// donorPartyId is null), paid via the same M-Pesa STK flow as
+/// checkout, settled as a balanced JournalEntry.
+model Donation {
+  id           String         @id @default(uuid()) @db.Uuid
+  campaignId   String         @db.Uuid
+  campaign     Campaign       @relation(fields: [campaignId], references: [id])
+  donorPartyId String?        @db.Uuid
+  donorParty   Party?         @relation(fields: [donorPartyId], references: [id])
+  donorName    String         @default("Anonymous")
+  donorMsisdn  String
+  anonymous    Boolean        @default(false)
+  amountKes    Decimal        @db.Decimal(12, 2)
+  status       DonationStatus @default(PENDING)
+
+  mpesaCheckoutRequestId String?       @unique
+  mpesaReceiptCode       String?
+  /// The ESK-##### code shown to the donor — our own reference,
+  /// independent of the M-Pesa receipt.
+  receiptCode            String?       @unique
+  journalEntryId         String?       @unique @db.Uuid
+  journalEntry           JournalEntry? @relation(fields: [journalEntryId], references: [id])
+
+  createdAt   DateTime  @default(now())
+  confirmedAt DateTime?
+
+  @@index([campaignId, status])
+  @@map("donation")
+}
+
+/// A lead, not a Party. Someone tried to register on Our Jamii
+/// (apps/jamii) with a phone/email that isn't an existing CECF member's
+/// Person record — access is gated to CECF members, so instead of a
+/// dead end they can leave their details here. Deliberately its own
+/// table rather than a Registration: a Registration implies "this is
+/// someone going through the join funnel"; this is "someone was turned
+/// away and asked to be followed up with," reviewed by Esoko staff in
+/// the admin app (see App\Support in cecf-wordpress for the analogous
+/// non-CECF-member redirect on the WordPress side, and this record's
+/// counterpart CTA on /join).
+model JamiiInterest {
+  id     String              @id @default(uuid()) @db.Uuid
+  status JamiiInterestStatus @default(NEW)
+
+  fullName String
+  msisdn   String
+  email    String? @db.Citext
+  county   String?
+  /// The group/organisation they named, if any — free text, since by
+  /// definition nothing here is linked to a real Party yet.
+  organisationName String?
+  message          String?
+
+  reviewedByStaffId String?   @db.Uuid
+  reviewNote        String?
+  reviewedAt        DateTime?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([status, createdAt])
+  @@map("jamii_interest")
 }
