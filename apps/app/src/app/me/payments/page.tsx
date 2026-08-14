@@ -69,24 +69,26 @@ export default async function MyPayments() {
           <span className="v">{pay.declaredAt?.toLocaleDateString('en-KE') ?? '—'}</span></div>
 
         {!confirmed && !rejected && (
-          <div style={{ marginTop: 16, padding: '14px 16px', background: 'var(--amber-t)',
-            border: '1px solid #F0DDB6', borderRadius: 9 }}>
-            <p style={{ margin: 0, fontSize: '.9rem', color: '#7A4E06' }}>
-              <strong>{approvals} of {PAYMENT_APPROVAL_THRESHOLD} checks done.</strong>{' '}
-              Two different members of staff have to find your receipt and agree before this is
-              marked as received. You will get an SMS when it is.
-            </p>
+          <div className="note n-amber" style={{ marginTop: 14 }}>
+            <div>
+              <p>
+                <strong>{approvals} of {PAYMENT_APPROVAL_THRESHOLD} checks done.</strong>{' '}
+                Two different members of staff have to find your receipt and agree before this is
+                marked as received. You will get an SMS when it is.
+              </p>
+            </div>
           </div>
         )}
 
         {rejected && (
-          <div style={{ marginTop: 16, padding: '14px 16px', background: 'var(--red-t)',
-            border: '1px solid #F3D2CF', borderRadius: 9 }}>
-            <p style={{ margin: 0, fontSize: '.9rem', color: '#7A2320' }}>
-              Esoko could not match this reference to a payment. That is often a mistyped code
-              rather than anything wrong. Call <strong className="mono">0709 000 000</strong> and
-              someone will check it with you.
-            </p>
+          <div className="note n-red" style={{ marginTop: 14 }}>
+            <div>
+              <p>
+                Esoko could not match this reference to a payment. That is often a mistyped code
+                rather than anything wrong. Call <strong className="mono">0709 000 000</strong> and
+                someone will check it with you.
+              </p>
+            </div>
           </div>
         )}
       </div>

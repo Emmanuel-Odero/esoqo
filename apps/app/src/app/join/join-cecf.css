@@ -15,14 +15,16 @@
   --cecf-teal-2: #146069;
   --cecf-teal-t: #E6EEEF;
   --cecf-ochre: #C08325;
+  --cecf-ochre-ink: #8F5A0B;
+  --cecf-ochre-deep: #855110;
   --cecf-ochre-t: #FBF1E0;
   --cecf-clay: #A8452C;
   --cecf-sand: #FAF5EC;
   --cecf-line: #E4DACA;
   --cecf-ink: #241F1B;
   --cecf-ink-2: #5E5348;
-  --cecf-font-display: "Fraunces", Georgia, serif;
-  --cecf-font-body: "IBM Plex Sans", system-ui, sans-serif;
+  --cecf-font-display: var(--font-fraunces), "Fraunces", Georgia, serif;
+  --cecf-font-body: var(--font-plex-sans), "IBM Plex Sans", system-ui, sans-serif;
 }
 
 /* ── cross-promotion nav ── */
@@ -64,8 +66,8 @@
 }
 .cecf-topnav-brand .cecf-brand-sub {
   font-family: var(--cecf-font-body); font-size: 0.72rem; font-weight: 600;
-  letter-spacing: .06em; text-transform: uppercase; color: var(--cecf-ochre);
-  padding: 3px 7px; border: 1px solid var(--cecf-ochre); border-radius: 999px;
+  letter-spacing: .06em; text-transform: uppercase; color: var(--cecf-ochre-ink);
+  padding: 3px 7px; border: 1px solid var(--cecf-ochre-ink); border-radius: 999px;
 }
 @media (min-width: 880px) {
   .cecf-topnav-brand { flex: 0 0 auto; order: 0; }
@@ -138,7 +140,7 @@
   font-size: 0.8rem; font-weight: 500; color: #F4F7F7;
 }
 .cecf-chips li .ic { color: #BFE3CE; }
-.cecf-chips li.ochre { background: #A66E1D; border-color: rgba(255, 255, 255, .22); color: #fff; }
+.cecf-chips li.ochre { background: var(--cecf-ochre-deep); border-color: rgba(255, 255, 255, .22); color: #fff; }
 .cecf-chips li.ochre .ic { color: #FFE9C0; }
 
 /* ── form + "why join" hero: side by side on wide screens, hero
@@ -165,7 +167,7 @@
 }
 .cecf-hero-eyebrow {
   font-family: var(--font-mono); font-size: 0.72rem; letter-spacing: .12em;
-  text-transform: uppercase; color: var(--cecf-ochre); margin: 0 0 10px;
+  text-transform: uppercase; color: var(--cecf-ochre-ink); margin: 0 0 10px;
 }
 .cecf-hero h2 {
   font-family: var(--cecf-font-display); font-weight: 600;
@@ -217,7 +219,7 @@
   font-size: 0.82rem; font-weight: 600;
 }
 .cecf-flow-node .ic { color: #BFE3CE; }
-.cecf-flow-node.ochre { background: #A66E1D; border-color: rgba(255, 255, 255, .24); color: #fff; }
+.cecf-flow-node.ochre { background: var(--cecf-ochre-deep); border-color: rgba(255, 255, 255, .24); color: #fff; }
 .cecf-flow-node.ochre .ic { color: #FFE9C0; }
 .cecf-flow-arrow { color: var(--cecf-sand); opacity: .7; }
 .cecf-band-note { font-size: 0.85rem; color: var(--cecf-teal-t); margin-top: 0; }
@@ -280,7 +282,7 @@
   background: #fff; border: 1px solid var(--cecf-line);
   font-size: 0.8rem; font-weight: 500; color: var(--cecf-ink-2);
 }
-.cecf-scope .jtrust .jt { border: 0; padding: 0; background: none; color: var(--cecf-ochre); font-weight: 700; }
+.cecf-scope .jtrust .jt { border: 0; padding: 0; background: none; color: var(--cecf-ochre-ink); font-weight: 700; }
 @media (max-width: 899px) { .cecf-scope .jtrust { display: flex; } }
 
 /* Phone number field — the identity field gets a touch more presence. */

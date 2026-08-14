@@ -83,6 +83,19 @@ model Party {
   storeOrdersAsBuyer     StoreOrder[]
   donationsAsDonor       Donation[]
   jamiiTeamMemberships   JamiiTeamMember[]
+  bookingsAsBuyer        Booking[]
+
+  // ── Group treasury ──
+  meetingsCalled          Meeting[]                    @relation("MeetingCalledBy")
+  attendanceRecords       AttendanceRecord[]           @relation("AttendanceParty")
+  attendanceMarkedByMe    AttendanceRecord[]           @relation("AttendanceMarkedBy")
+  groupSignerships        GroupSigner[]                @relation("GroupSignerParty")
+  contributionsMade       GroupContribution[]          @relation("ContributionParty")
+  contributionsIConfirmed GroupContribution[]          @relation("ContributionConfirmedBy")
+  withdrawalsRequested    WithdrawalRequest[]          @relation("WithdrawalRequestedBy")
+  withdrawalSignatures    WithdrawalSignature[]        @relation("WithdrawalSignerParty")
+  esokoPaymentId          EsokoPaymentId?
+  creditInsightSnapshots  GroupCreditInsightSnapshot[]
 
   @@index([county, kind])
   @@index([createdAt])
@@ -147,6 +160,13 @@ model Organisation {
   members   Membership[] @relation("MemberOrg")
   jamiiPage JamiiPage?
 
+  // ── Group treasury ──
+  meetings           Meeting[]
+  treasuryPolicy     GroupTreasuryPolicy?
+  signers            GroupSigner[]
+  contributions      GroupContribution[]
+  withdrawalRequests WithdrawalRequest[]
+
   @@index([kind])
   @@map("organisation")
 }
@@ -199,7 +219,8 @@ model Enterprise {
   paymentChannels   String[] @default([])
   createdAt         DateTime @default(now())
 
-  stores Store[]
+  stores     Store[]
+  ticketOrgs TicketOrg[]
 
   @@index([segment])
   @@index([sector])
@@ -353,6 +374,9 @@ enum ConsentPurpose {
   SUPPLY_CONTRACT
   COUNTY_LICENSING
   PROGRAMME_ENROLMENT
+  /// A member sharing their GroupCreditInsightSnapshot (never the raw
+  /// ledger) with a specific lender for a specific loan application.
+  LOAN_UNDERWRITING
 }
 
 /// Not a boolean. A dated, purposed, revocable record — because the
@@ -427,6 +451,9 @@ model Account {
   postings Posting[]
   campaign Campaign?
 
+  contributions      GroupContribution[]
+  withdrawalRequests WithdrawalRequest[]
+
   @@unique([partyId, kind, currency])
   @@index([kind])
   @@map("account")
@@ -442,10 +469,13 @@ model JournalEntry {
   /// Idempotency key. M-Pesa callbacks arrive late, twice, or never.
   idempotencyKey String?  @unique
 
-  postings   Posting[]
-  storeOrder StoreOrder?
-  posSale    PosSale?
-  donation   Donation?
+  postings          Posting[]
+  storeOrder        StoreOrder?
+  groupContribution GroupContribution?
+  withdrawalRequest WithdrawalRequest?
+  posSale           PosSale?
+  donation          Donation?
+  booking           Booking?
 
   @@index([occurredAt])
   @@map("journal_entry")
@@ -1863,10 +1893,10 @@ model JamiiInterest {
   id     String              @id @default(uuid()) @db.Uuid
   status JamiiInterestStatus @default(NEW)
 
-  fullName String
-  msisdn   String
-  email    String? @db.Citext
-  county   String?
+  fullName         String
+  msisdn           String
+  email            String? @db.Citext
+  county           String?
   /// The group/organisation they named, if any — free text, since by
   /// definition nothing here is linked to a real Party yet.
   organisationName String?
@@ -1881,4 +1911,585 @@ model JamiiInterest {
 
   @@index([status, createdAt])
   @@map("jamii_interest")
+}
+
+// ═══════════════════════ GROUP TREASURY ═══════════════════════
+//
+//  See docs/proposals/esoko-group-treasury-and-payment-id.md for the
+//  reasoning behind every shape here. Load-bearing decisions:
+//
+//  · GroupContribution supports BOTH capture paths — self-declared
+//    (officer-confirmed, like RegistrationPayment) and a live M-Pesa
+//    STK push (auto-confirmed by the Daraja callback, like StoreOrder)
+//    — a group picks per-contribution, not platform-wide.
+//  · WithdrawalSignature mirrors PaymentApproval's shape (HMAC
+//    signature, one REJECT halts) but signs against a Party, not a
+//    StaffUser — a withdrawal signer is a group member, not staff.
+//  · GroupTreasuryPolicy.activeHoursStart/End matter: the standby
+//    window pauses outside them, so a request raised Saturday night
+//    does not quietly expire while every signer is asleep.
+//  · The signer set is group-configurable (GroupSigner), not hardcoded
+//    to the three officer roles — a group may want an auditor or a
+//    fourth signer beyond CHAIRPERSON/TREASURER/SECRETARY.
+
+enum AttendanceMethod {
+  SELF_APP
+  SELF_USSD
+  /// An officer marked on a member's behalf — same trust model as
+  /// Registration's AGENT_ASSISTED join path, never anonymous:
+  /// AttendanceRecord.markedById always names who did it.
+  AGENT_MARKED
+}
+
+model Meeting {
+  id          String       @id @default(uuid()) @db.Uuid
+  orgId       String       @db.Uuid
+  org         Organisation @relation(fields: [orgId], references: [partyId], onDelete: Cascade)
+  scheduledAt DateTime
+  /// Physical venue, "virtual", or a WhatsApp/call-in description.
+  location    String?
+  agenda      String?
+  /// % of active members needed for this meeting to count as quorate.
+  quorumPct   Int          @default(50)
+  calledById  String       @db.Uuid
+  calledBy    Party        @relation("MeetingCalledBy", fields: [calledById], references: [id])
+  createdAt   DateTime     @default(now())
+  closedAt    DateTime?
+
+  attendance  AttendanceRecord[]
+  withdrawals WithdrawalRequest[]
+
+  @@index([orgId, scheduledAt])
+  @@map("meeting")
+}
+
+model AttendanceRecord {
+  id         String           @id @default(uuid()) @db.Uuid
+  meetingId  String           @db.Uuid
+  meeting    Meeting          @relation(fields: [meetingId], references: [id], onDelete: Cascade)
+  personId   String           @db.Uuid
+  person     Party            @relation("AttendanceParty", fields: [personId], references: [id])
+  present    Boolean
+  method     AttendanceMethod
+  /// Set only when an officer marked on someone's behalf.
+  markedById String?          @db.Uuid
+  markedBy   Party?           @relation("AttendanceMarkedBy", fields: [markedById], references: [id])
+  markedAt   DateTime         @default(now())
+
+  @@unique([meetingId, personId])
+  @@index([personId])
+  @@map("attendance_record")
+}
+
+/// One row per group. Created lazily on first configuration — a group
+/// with none yet runs on the hardcoded defaults below.
+model GroupTreasuryPolicy {
+  orgId String       @id @db.Uuid
+  org   Organisation @relation(fields: [orgId], references: [partyId], onDelete: Cascade)
+
+  requiredSigners       Int     @default(2)
+  /// Minutes of active-hours time a withdrawal must broadcast for
+  /// before it can execute. 70 is the product default, not a constant.
+  withdrawalLeadMinutes Int     @default(70)
+  /// The standby window only counts minutes inside this local-hour
+  /// range — it pauses overnight and resumes at activeHoursStart.
+  activeHoursStart      Int     @default(7)
+  activeHoursEnd        Int     @default(20)
+  requireQuorateMeeting Boolean @default(false)
+
+  contributionAmountKes Decimal? @db.Decimal(12, 2)
+  /// "weekly" | "monthly" | "custom" | null (no fixed cycle).
+  contributionCycle     String?
+
+  updatedAt   DateTime @updatedAt
+  updatedById String?  @db.Uuid
+
+  @@map("group_treasury_policy")
+}
+
+/// Who may sign a withdrawal for this group — group-configurable, not
+/// hardcoded to the three officer roles.
+model GroupSigner {
+  id        String       @id @default(uuid()) @db.Uuid
+  orgId     String       @db.Uuid
+  org       Organisation @relation(fields: [orgId], references: [partyId], onDelete: Cascade)
+  personId  String       @db.Uuid
+  person    Party        @relation("GroupSignerParty", fields: [personId], references: [id])
+  addedAt   DateTime     @default(now())
+  addedById String       @db.Uuid
+  /// Soft removal — a past signer's historical signatures stay valid
+  /// and attributed; they just stop counting toward new thresholds.
+  removedAt DateTime?
+
+  @@unique([orgId, personId])
+  @@index([orgId, removedAt])
+  @@map("group_signer")
+}
+
+/// A declaration is not money — same rule as RegistrationPayment. Only
+/// an officer's confirmation (self-declared path) or Safaricom's own
+/// STK callback (direct path) moves this to CONFIRMED and posts it.
+model GroupContribution {
+  id            String       @id @default(uuid()) @db.Uuid
+  orgId         String       @db.Uuid
+  org           Organisation @relation(fields: [orgId], references: [partyId], onDelete: Cascade)
+  accountId     String       @db.Uuid
+  account       Account      @relation(fields: [accountId], references: [id])
+  contributorId String       @db.Uuid
+  contributor   Party        @relation("ContributionParty", fields: [contributorId], references: [id])
+
+  amountKes         Decimal        @db.Decimal(12, 2)
+  method            PaymentMethod?
+  reference         String?
+  declaredNote      String?
+  status            PaymentStatus  @default(DECLARED)
+  declaredAt        DateTime       @default(now())
+  confirmedAt       DateTime?
+  confirmedById     String?        @db.Uuid
+  confirmedBy       Party?         @relation("ContributionConfirmedBy", fields: [confirmedById], references: [id])
+  /// Daraja's CheckoutRequestID for the direct-STK path — same
+  /// idempotency guard as RegistrationPayment.checkoutRequestId.
+  checkoutRequestId String?        @unique
+  journalEntryId    String?        @unique @db.Uuid
+  journalEntry      JournalEntry?  @relation(fields: [journalEntryId], references: [id])
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([orgId, status])
+  @@index([contributorId])
+  @@map("group_contribution")
+}
+
+enum WithdrawalStatus {
+  /// Broadcast sent, standby window open, signatures still being collected.
+  PENDING_SIGNATURES
+  /// Threshold reached once the window closed — waiting on execution.
+  APPROVED
+  EXECUTED
+  /// Any one signer rejected. Halts immediately, does not wait for the window.
+  REJECTED
+  /// Window closed without reaching threshold. Must be re-raised, no silent retry.
+  EXPIRED
+}
+
+model WithdrawalRequest {
+  id        String       @id @default(uuid()) @db.Uuid
+  orgId     String       @db.Uuid
+  org       Organisation @relation(fields: [orgId], references: [partyId], onDelete: Cascade)
+  accountId String       @db.Uuid
+  account   Account      @relation(fields: [accountId], references: [id])
+  meetingId String?      @db.Uuid
+  meeting   Meeting?     @relation(fields: [meetingId], references: [id])
+
+  requestedById String @db.Uuid
+  requestedBy   Party  @relation("WithdrawalRequestedBy", fields: [requestedById], references: [id])
+
+  amountKes   Decimal @db.Decimal(12, 2)
+  purpose     String
+  payeeName   String
+  payeeMsisdn String?
+
+  /// Snapshotted from GroupTreasuryPolicy at request time — a later
+  /// policy change never reaches back into an in-flight request.
+  requiredSigners Int
+  broadcastAt     DateTime         @default(now())
+  /// Computed from policy.withdrawalLeadMinutes, walked forward through
+  /// activeHours — see computeStandbyOpensAt in dal/treasury.ts.
+  standbyOpensAt  DateTime
+  status          WithdrawalStatus @default(PENDING_SIGNATURES)
+  decidedAt       DateTime?
+
+  journalEntryId String?       @unique @db.Uuid
+  journalEntry   JournalEntry? @relation(fields: [journalEntryId], references: [id])
+
+  signatures WithdrawalSignature[]
+
+  @@index([orgId, status])
+  @@index([standbyOpensAt])
+  @@map("withdrawal_request")
+}
+
+/// One signer's decision. Deliberately mirrors PaymentApproval rather
+/// than reusing it — PaymentApproval.approverId is FK'd to StaffUser
+/// (an internal reviewer); this signs against a Party (a group member).
+model WithdrawalSignature {
+  id            String            @id @default(uuid()) @db.Uuid
+  withdrawalId  String            @db.Uuid
+  withdrawal    WithdrawalRequest @relation(fields: [withdrawalId], references: [id], onDelete: Cascade)
+  signerId      String            @db.Uuid
+  signer        Party             @relation("WithdrawalSignerParty", fields: [signerId], references: [id])
+  decision      ApprovalDecision
+  /// The signer's PIN was freshly verified at this instant — never
+  /// queued or replayed, see ADR note in the treasury proposal doc.
+  pinVerifiedAt DateTime
+  /// HMAC-SHA256(withdrawalId|signerId|decision|signedAt, SESSION_SECRET)
+  signature     String
+  signedAt      DateTime
+  ip            String?
+
+  @@unique([withdrawalId, signerId])
+  @@index([withdrawalId])
+  @@map("withdrawal_signature")
+}
+
+// ─────────────────────── ESOKO PAYMENT ID ────────────────────────
+
+/// A short, verified, portable payment handle — issued once a Party
+/// holds at least MSISDN_VERIFIED (see Attestation), reusing the
+/// existing trust primitive rather than inventing a new one.
+model EsokoPaymentId {
+  partyId     String    @id @db.Uuid
+  party       Party     @relation(fields: [partyId], references: [id], onDelete: Cascade)
+  /// e.g. "ESK-4471-KE" — human-typeable, verified-unique.
+  code        String    @unique
+  activatedAt DateTime  @default(now())
+  suspendedAt DateTime?
+
+  @@index([code])
+  @@map("esoko_payment_id")
+}
+
+/// A SNAPSHOT, not a live score — same reasoning as balances being
+/// derived, not stored: recomputing fresh each time it's needed is
+/// what keeps it honest. This row records "what was disclosed, when,
+/// under what formula version," not a cache.
+///
+/// v1 inputs are strictly limited to events this schema already
+/// produces — GroupContribution (consistency), AttendanceRecord
+/// (reliability), WithdrawalSignature (responsiveness/reject-rate).
+/// Loan-repayment behaviour is a deliberate v2 addition, once an
+/// internal-lending feature actually produces a repayment/default
+/// event to score against.
+model GroupCreditInsightSnapshot {
+  id                          String   @id @default(uuid()) @db.Uuid
+  partyId                     String   @db.Uuid
+  party                       Party    @relation(fields: [partyId], references: [id], onDelete: Cascade)
+  formulaVersion              String
+  contributionScore           Int
+  attendanceScore             Int
+  signatureScore              Int
+  computedAt                  DateTime @default(now())
+  /// Set only when this snapshot was generated to satisfy a specific
+  /// ConsentAccess — most snapshots are member-facing only.
+  disclosedViaConsentAccessId String?  @db.Uuid
+
+  @@index([partyId, computedAt])
+  @@map("group_credit_insight_snapshot")
+}
+
+// ─────────────────────────── TICKETING ──────────────────────────
+// Event companies, tour/travel operators and transport (bus/matatu
+// SACCO) companies onboard the same way a shop does: a Party runs an
+// Enterprise, an Enterprise opens a TicketOrg — no parallel merchant
+// identity system, same reasoning as Store. See docs/proposals/
+// esoko-ticketing-platform.md for the full design brief.
+
+enum TicketVertical {
+  EVENTS
+  TRANSPORT
+}
+
+enum TicketOrgStatus {
+  DRAFT
+  ACTIVE
+  SUSPENDED
+}
+
+model TicketOrg {
+  id           String     @id @default(uuid()) @db.Uuid
+  enterpriseId String     @db.Uuid
+  enterprise   Enterprise @relation(fields: [enterpriseId], references: [id], onDelete: Cascade)
+
+  name     String
+  slug     String          @unique
+  vertical TicketVertical
+  status   TicketOrgStatus @default(DRAFT)
+
+  description     String?
+  logoUrl         String?
+  contactPerson   String?
+  contactEmail    String?
+  contactPhone    String?
+  physicalAddress String?
+  /// M-Pesa number settlements should be paid to. Informational, same
+  /// as Store.settlementPhone — actual payouts run through the ledger.
+  settlementPhone String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  staff    TicketOrgStaff[]
+  venues   Venue[]
+  routes   Route[]
+  listings Listing[]
+
+  @@index([enterpriseId])
+  @@index([status])
+  @@map("ticket_org")
+}
+
+/// Org-scoped staff login — same shape as Cashier, not a Party. A
+/// gate scanner on event night doesn't need (and shouldn't get) a
+/// full Esoko identity, just a PIN scoped to this one org.
+///
+/// ADMIN   — everything: listings, schedules, pricing, staff, payouts.
+/// MANAGER — day-to-day ops: listings, schedules, bookings, check-in.
+///           Never staff.write or org settings.
+/// SCANNER — check-in only, nothing else. See dal/ticketing.ts
+///           TICKETING_STAFF_CAPABILITIES.
+model TicketOrgStaff {
+  id    String    @id @default(uuid()) @db.Uuid
+  orgId String    @db.Uuid
+  org   TicketOrg @relation(fields: [orgId], references: [id], onDelete: Cascade)
+
+  name      String
+  pinHash   String
+  role      String   @default("SCANNER")
+  active    Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  checkIns Ticket[]
+
+  @@index([orgId])
+  @@map("ticket_org_staff")
+}
+
+/// Events vertical: where. Optional on Listing — a purely virtual
+/// event has none.
+model Venue {
+  id    String    @id @default(uuid()) @db.Uuid
+  orgId String    @db.Uuid
+  org   TicketOrg @relation(fields: [orgId], references: [id], onDelete: Cascade)
+
+  name      String
+  address   String?
+  county    String?
+  capacity  Int?
+  createdAt DateTime @default(now())
+
+  listings Listing[]
+
+  @@index([orgId])
+  @@map("venue")
+}
+
+/// Transport vertical: origin → destination. One Route can back many
+/// Listings (a SACCO runs "Nairobi–Mombasa" every day as one route,
+/// many scheduled departures).
+model Route {
+  id    String    @id @default(uuid()) @db.Uuid
+  orgId String    @db.Uuid
+  org   TicketOrg @relation(fields: [orgId], references: [id], onDelete: Cascade)
+
+  originName      String
+  destinationName String
+  distanceKm      Int?
+  createdAt       DateTime @default(now())
+
+  listings Listing[]
+
+  @@index([orgId])
+  @@map("route")
+}
+
+enum ListingStatus {
+  DRAFT
+  PUBLISHED
+  SUSPENDED
+  CANCELLED
+}
+
+/// The sellable thing: an event ("Sauti Sol Live") or a service
+/// ("Nairobi–Kisumu coach"). One Listing has many ticket classes
+/// (price tiers) and many schedules (occurrences/departures) — the
+/// classes are reused across every schedule of the same listing.
+model Listing {
+  id    String    @id @default(uuid()) @db.Uuid
+  orgId String    @db.Uuid
+  org   TicketOrg @relation(fields: [orgId], references: [id], onDelete: Cascade)
+
+  title         String
+  slug          String        @unique
+  description   String?
+  coverImageUrl String?
+  status        ListingStatus @default(DRAFT)
+
+  venueId String? @db.Uuid
+  venue   Venue?  @relation(fields: [venueId], references: [id])
+  routeId String? @db.Uuid
+  route   Route?  @relation(fields: [routeId], references: [id])
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  ticketClasses TicketClass[]
+  schedules     ListingSchedule[]
+
+  @@index([orgId, status])
+  @@map("listing")
+}
+
+enum ScheduleStatus {
+  SCHEDULED
+  CANCELLED
+  COMPLETED
+}
+
+/// One occurrence: a specific showtime, or a specific departure. Seats
+/// (when a TicketClass is seated) are generated per schedule, not per
+/// listing — the same coach's seat 12A is a fresh, independently
+/// sellable slot on every departure.
+model ListingSchedule {
+  id        String  @id @default(uuid()) @db.Uuid
+  listingId String  @db.Uuid
+  listing   Listing @relation(fields: [listingId], references: [id], onDelete: Cascade)
+
+  departAt           DateTime
+  /// Trip arrival estimate, or an event's advertised end time. Optional.
+  arriveAt           DateTime?
+  /// "Gate B", "Platform 3", "Boarding from 6pm" — free text shown to
+  /// ticket holders.
+  gateInfo           String?
+  /// Vehicle plate / hall name for this specific run, when it varies
+  /// occurrence to occurrence.
+  vehicleOrHallLabel String?
+  status             ScheduleStatus @default(SCHEDULED)
+  createdAt          DateTime       @default(now())
+
+  seats    Seat[]
+  bookings Booking[]
+
+  @@index([listingId, departAt])
+  @@map("listing_schedule")
+}
+
+/// A price tier — "VIP", "Regular", "Economy seat", "Business class".
+/// `seated: true` means every schedule of this listing gets numbered
+/// Seat rows for this class (generated at schedule-creation time);
+/// `seated: false` means general admission, sold against `capacity`
+/// (remaining = capacity − COUNT(valid tickets) for that schedule).
+model TicketClass {
+  id        String  @id @default(uuid()) @db.Uuid
+  listingId String  @db.Uuid
+  listing   Listing @relation(fields: [listingId], references: [id], onDelete: Cascade)
+
+  name      String
+  priceKes  Decimal  @db.Decimal(12, 2)
+  seated    Boolean  @default(false)
+  /// Per-schedule capacity. For seated classes this is also how many
+  /// Seat rows get generated per schedule.
+  capacity  Int
+  createdAt DateTime @default(now())
+
+  seats   Seat[]
+  tickets Ticket[]
+
+  @@index([listingId])
+  @@map("ticket_class")
+}
+
+enum SeatStatus {
+  AVAILABLE
+  BOOKED
+}
+
+/// A numbered seat for one schedule of one seated ticket class —
+/// "12A" on the 6am Nairobi–Mombasa coach. Claimed atomically inside
+/// createBooking's transaction (status AVAILABLE → BOOKED), which is
+/// the whole double-booking guard; there is no separate hold/TTL step
+/// in v1.
+model Seat {
+  id            String          @id @default(uuid()) @db.Uuid
+  scheduleId    String          @db.Uuid
+  schedule      ListingSchedule @relation(fields: [scheduleId], references: [id], onDelete: Cascade)
+  ticketClassId String          @db.Uuid
+  ticketClass   TicketClass     @relation(fields: [ticketClassId], references: [id], onDelete: Cascade)
+
+  label  String
+  status SeatStatus @default(AVAILABLE)
+
+  ticket Ticket?
+
+  @@unique([scheduleId, label])
+  @@index([ticketClassId, status])
+  @@map("seat")
+}
+
+enum BookingStatus {
+  PENDING_PAYMENT
+  PAID
+  CANCELLED
+  REFUNDED
+}
+
+enum BookingPaymentMethod {
+  MPESA_STK
+  CASH
+}
+
+/// A checkout — mirrors StoreOrder. The buyer need not be a
+/// registered Esoko subject; buyerParty is set only when they are.
+model Booking {
+  id         String          @id @default(uuid()) @db.Uuid
+  scheduleId String          @db.Uuid
+  schedule   ListingSchedule @relation(fields: [scheduleId], references: [id])
+
+  buyerPartyId String? @db.Uuid
+  buyerParty   Party?  @relation(fields: [buyerPartyId], references: [id])
+  buyerName    String
+  buyerMsisdn  String
+
+  status        BookingStatus        @default(PENDING_PAYMENT)
+  paymentMethod BookingPaymentMethod @default(MPESA_STK)
+  totalKes      Decimal              @db.Decimal(12, 2)
+
+  mpesaCheckoutRequestId String?       @unique
+  journalEntryId         String?       @unique @db.Uuid
+  journalEntry           JournalEntry? @relation(fields: [journalEntryId], references: [id])
+
+  createdAt DateTime  @default(now())
+  paidAt    DateTime?
+
+  tickets Ticket[]
+
+  @@index([scheduleId, status])
+  @@map("booking")
+}
+
+enum TicketStatus {
+  VALID
+  USED
+  CANCELLED
+  REFUNDED
+}
+
+/// One issued seat/slot. `code` is the QR/barcode token scanned at
+/// the gate. `priceKes` is snapshotted at booking time so a later
+/// TicketClass price change never rewrites history.
+model Ticket {
+  id            String      @id @default(uuid()) @db.Uuid
+  bookingId     String      @db.Uuid
+  booking       Booking     @relation(fields: [bookingId], references: [id], onDelete: Cascade)
+  ticketClassId String      @db.Uuid
+  ticketClass   TicketClass @relation(fields: [ticketClassId], references: [id])
+  seatId        String?     @unique @db.Uuid
+  seat          Seat?       @relation(fields: [seatId], references: [id])
+
+  code         String       @unique
+  holderName   String?
+  holderMsisdn String?
+  priceKes     Decimal      @db.Decimal(12, 2)
+  status       TicketStatus @default(VALID)
+
+  checkedInAt   DateTime?
+  checkedInById String?         @db.Uuid
+  checkedInBy   TicketOrgStaff? @relation(fields: [checkedInById], references: [id])
+
+  createdAt DateTime @default(now())
+
+  @@index([bookingId])
+  @@index([status])
+  @@map("ticket")
 }

@@ -1,6 +1,7 @@
 import { prisma } from '../client';
 import { requireCapability, type Ctx } from '../capabilities';
 import { recordAudit } from '../audit';
+import { normaliseMsisdn } from '@esoko/domain';
 import type { MemberRole, OrgKind } from '@prisma/client';
 
 /** Group membership management from the admin side. */
@@ -148,6 +149,12 @@ export async function addMember(
  * has a phone number to hand. Phone is optional: a person added without
  * one is "pending" — they show up as a member immediately, but can't log
  * in, dial USSD or receive SMS until a real number is added later.
+ *
+ * The phone is normalised to E.164 and validated with the same rules as
+ * every other number in the product, so a typo can never strand a member
+ * on a number they can't verify or sign in with. If the number already
+ * belongs to someone on Esoko, staff are told to search for them instead
+ * of duplicating a person.
  */
 export async function addNewMember(
   ctx: Ctx, orgPartyId: string,
@@ -160,9 +167,13 @@ export async function addNewMember(
 
   const officialName = input.officialName.trim();
   if (!officialName) throw new Error('A name is required');
-  const msisdn = input.msisdn?.trim() || null;
 
-  if (msisdn) {
+  let msisdn: string | null = null;
+  if (input.msisdn?.trim()) {
+    msisdn = normaliseMsisdn(input.msisdn);
+    if (!msisdn) {
+      throw new Error('That does not look like a Kenyan mobile number — try the format 07XX XXX XXX');
+    }
     const clash = await prisma.person.findUnique({ where: { msisdn } });
     if (clash) throw new Error('Someone is already on Esoko with that phone number — search for them instead');
   }
@@ -187,6 +198,53 @@ export async function addNewMember(
     }, tx as never);
     return m;
   });
+}
+
+/**
+ * Corrects a member's phone number on file — the remediation path for a
+ * member whose number was added wrong (typo, placeholder, missing), which
+ * otherwise strands them: a number that fails the E.164 rules can never
+ * be verified, so they can never set a PIN or sign in, and any real
+ * number they later register under lands on a brand-new party with no
+ * membership. Staff fix the number here; the member then sets a PIN with
+ * their own handset and their membership shows up.
+ *
+ * Guarded like addNewMember (party.write), and the new number must be a
+ * valid Kenyan mobile that no other person on Esoko already has. Clearing
+ * msisdnVerifiedAt is deliberate: a staff-typed number has not been
+ * verified by the member through an OTP flow.
+ */
+export async function updateMemberPhone(ctx: Ctx, membershipId: string, raw: string) {
+  requireCapability(ctx, 'party.write');
+
+  const membership = await prisma.membership.findUnique({
+    where: { id: membershipId },
+    select: { personId: true },
+  });
+  if (!membership) throw new Error('Member not found');
+
+  const msisdn = normaliseMsisdn(raw);
+  if (!msisdn) {
+    throw new Error('That does not look like a Kenyan mobile number — try the format 07XX XXX XXX');
+  }
+
+  const clash = await prisma.person.findFirst({
+    where: { msisdn, partyId: { not: membership.personId } },
+  });
+  if (clash) throw new Error('Someone else is already on Esoko with that number');
+
+  const person = await prisma.person.update({
+    where: { partyId: membership.personId },
+    data: { msisdn, msisdnVerifiedAt: null },
+  });
+
+  await recordAudit(ctx, {
+    action: 'membership.phone_corrected',
+    targetType: 'membership', targetId: membershipId,
+    payload: { personId: membership.personId, msisdn },
+  });
+
+  return person;
 }
 
 export async function setMemberRole(

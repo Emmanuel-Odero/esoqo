@@ -1,21 +1,27 @@
 import type { Metadata } from 'next';
 import Link from 'next/link';
-import { Icon } from '@esoko/ui';
+import { Logo } from '@esoko/ui';
 import { getDisplayPrefs } from '@esoko/db';
 import { requireSubject } from '@/lib/session';
 import { PrefsApplier } from './PrefsApplier';
+import { ShellNav, type NavItem } from './ShellNav';
 import './me.css';
 
 export const metadata: Metadata = { title: { default: 'Your record', template: '%s · Esoko' } };
 
-const NAV = [
-  ['/me', 'user', 'Your record'],
-  ['/me/documents', 'document', 'Documents'],
-  ['/me/payments', 'coins', 'Payments'],
-  ['/me/consents', 'eye', 'Who can see it'],
-  ['/me/group', 'users', 'Your group'],
-  ['/me/settings', 'grid', 'How this looks'],
-] as const;
+const PRIMARY: NavItem[] = [
+  { href: '/me', icon: 'user', label: 'Record' },
+  { href: '/me/group', icon: 'users', label: 'Group' },
+  { href: '/me/payments', icon: 'coins', label: 'Payments' },
+  { href: '/me/tickets', icon: 'qr', label: 'Tickets' },
+  { href: '/me/documents', icon: 'document', label: 'Papers' },
+];
+
+const MORE: NavItem[] = [
+  { href: '/me/organiser', icon: 'calendar', label: 'Sell tickets (events & transport)' },
+  { href: '/me/consents', icon: 'eye', label: 'Who can see your info' },
+  { href: '/me/settings', icon: 'grid', label: 'How this looks' },
+];
 
 export default async function MeLayout({ children }: { children: React.ReactNode }) {
   const ctx = await requireSubject();
@@ -24,13 +30,18 @@ export default async function MeLayout({ children }: { children: React.ReactNode
   return (
     <div className="me">
       <PrefsApplier prefs={prefs} />
-      <nav className="metabs" aria-label="Your record">
-        {NAV.map(([href, icon, label]) => (
-          <Link key={href} href={href}>
-            <Icon name={icon} size={17} />{label}
+      <header className="appbar">
+        <div className="appbar-in">
+          <Link href="/me" className="appbrand" aria-label="Esoko home">
+            <Logo />
+            <span className="appbar-name">
+              Esoko
+              <small>Your record</small>
+            </span>
           </Link>
-        ))}
-      </nav>
+          <ShellNav items={PRIMARY} more={MORE} />
+        </div>
+      </header>
       <div className="wrap">{children}</div>
     </div>
   );

@@ -5,9 +5,11 @@ import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import type { Route } from 'next';
 import { Icon, type IconName } from '@esoko/ui';
+import { formatMsisdn } from '@esoko/domain';
 import { useAnnounce } from '@esoko/a11y';
 import {
-  actionSearchPeople, actionAddMember, actionAddNewMember, actionSetRole, actionRemoveMember,
+  actionSearchPeople, actionAddMember, actionAddNewMember, actionUpdateMemberPhone,
+  actionSetRole, actionRemoveMember,
   actionUploadGroupDocument, actionListGroupDocuments, actionCreateGroup,
 } from './actions';
 
@@ -15,7 +17,7 @@ type Role = 'CHAIRPERSON' | 'TREASURER' | 'SECRETARY' | 'MEMBER' | 'OTHER';
 
 interface Member {
   membershipId: string; partyId: string; name: string; knownAs?: string | null;
-  role: Role | string; customRole?: string | null; joinedAt: string;
+  phone?: string | null; role: Role | string; customRole?: string | null; joinedAt: string;
 }
 interface Group {
   id: string; name: string; knownAs: string | null; kind: string;
@@ -368,6 +370,9 @@ function GroupDetail({
                   <td>
                     <strong>{m.name}</strong>
                     {m.knownAs && <span className="sub" style={{ display: 'block', fontSize: '.79rem' }}>Known as {m.knownAs}</span>}
+                    <span style={{ display: 'block', marginTop: 3 }}>
+                      <PhoneCell member={m} canEdit={canEdit} pending={pending} />
+                    </span>
                   </td>
                   <td>
                     {canEdit ? (
@@ -549,6 +554,77 @@ function MemberRoleCell({
         </>
       )}
     </div>
+  );
+}
+
+function showPhone(p: string): string {
+  return /^\+254\d{9}$/.test(p) ? formatMsisdn(p) : p;
+}
+
+/** A member's phone with an inline "fix" affordance. A wrong or missing
+ *  number strands the member (they can't verify it, set a PIN or sign in),
+ *  so staff can correct it here — the number is normalised on the server. */
+function PhoneCell({
+  member, canEdit, pending,
+}: {
+  member: Member; canEdit: boolean; pending: boolean;
+}) {
+  const [editing, setEditing] = useState(false);
+  const [value, setValue] = useState(member.phone ?? '');
+  const [error, setError] = useState<string | null>(null);
+  const [saving, start] = useTransition();
+  const announce = useAnnounce();
+
+  useEffect(() => { setValue(member.phone ?? ''); }, [member.phone]);
+  const canSave = /^0?7\d{8}$|^\+?2547\d{8}$|^17\d{8}$|^2547\d{8}$/.test(value.trim());
+
+  function save() {
+    if (!value.trim() || saving) return;
+    setError(null);
+    start(async () => {
+      const r = await actionUpdateMemberPhone(member.membershipId, value);
+      if (r.ok) { announce(`Phone updated for ${member.name}`, 'assertive'); setEditing(false); }
+      else setError(r.error);
+    });
+  }
+
+  if (editing) {
+    return (
+      <span style={{ display: 'flex', flexWrap: 'wrap', gap: 6, alignItems: 'center' }}>
+        <label className="visually-hidden" htmlFor={`phone-${member.membershipId}`}>
+          Phone number for {member.name}
+        </label>
+        <input id={`phone-${member.membershipId}`} className="inp mono"
+          style={{ minHeight: 34, padding: '5px 9px', fontSize: '.82rem', width: 150 }}
+          value={value} onChange={(e) => { setValue(e.target.value); setError(null); }}
+          onKeyDown={(e) => { if (e.key === 'Enter') save(); }}
+          placeholder="07XX XXX XXX" autoComplete="off" disabled={saving} />
+        <button className="btn btn-p btn-sm" style={{ minHeight: 34, padding: '5px 10px' }}
+          onClick={save} disabled={saving || !canSave}>Save</button>
+        <button className="btn btn-o btn-sm" style={{ minHeight: 34, padding: '5px 10px' }}
+          onClick={() => { setEditing(false); setError(null); setValue(member.phone ?? ''); }} disabled={saving}>
+          Cancel
+        </button>
+        {error && <span className="sub" role="alert" style={{ flexBasis: '100%', fontSize: '.79rem' }}>{error}</span>}
+      </span>
+    );
+  }
+
+  return (
+    <span style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+      <span className="mono sub" style={{ fontSize: '.8rem' }}>
+        {member.phone ? showPhone(member.phone) : 'No phone on file'}
+        {member.phone && !/^\+254\d{9}$/.test(member.phone) && (
+          <span className="pill p-warn" style={{ marginLeft: 5 }}>invalid</span>
+        )}
+      </span>
+      {canEdit && (
+        <button className="btn btn-o btn-sm" style={{ minHeight: 34, padding: '4px 9px' }}
+          onClick={() => setEditing(true)} disabled={pending} aria-label={`Fix phone for ${member.name}`}>
+          Fix phone
+        </button>
+      )}
+    </span>
   );
 }
 

@@ -141,6 +141,16 @@ services:
     # never touched by the bind mount and survives container restarts —
     # see docker/esoko-dev/entrypoint.sh for the install-once logic this
     # enables.
+    #
+    # Each Next.js app's .next also gets its own named volume, same
+    # reasoning plus one more: Turbopack's persistent dev cache is an
+    # embedded LSM-tree database (.sst/.meta files), and virtiofs/gRPC-FUSE
+    # bind mounts (Docker Desktop, OrbStack) do not give it the write
+    # semantics it assumes. Left on the bind mount it intermittently
+    # corrupts ("Unable to open static sorted file ... No such file or
+    # directory") and the dev server 500s on every request until the cache
+    # is wiped. Off the bind mount, onto the container's own filesystem,
+    # it doesn't corrupt.
     entrypoint: ["/app/docker/esoko-dev/entrypoint.sh"]
     ports:
       - "3000:3000"
@@ -175,6 +185,11 @@ services:
       - node_modules_config:/app/packages/config/node_modules
       - node_modules_payments:/app/packages/payments/node_modules
       - node_modules_core_service:/app/services/core/node_modules
+      - next_cache_web:/app/apps/web/.next
+      - next_cache_app:/app/apps/app/.next
+      - next_cache_admin:/app/apps/admin/.next
+      - next_cache_store:/app/apps/store/.next
+      - next_cache_jamii:/app/apps/jamii/.next
     depends_on:
       postgres:
         condition: service_healthy
@@ -275,3 +290,8 @@ volumes:
   node_modules_config:
   node_modules_payments:
   node_modules_core_service:
+  next_cache_web:
+  next_cache_app:
+  next_cache_admin:
+  next_cache_store:
+  next_cache_jamii:

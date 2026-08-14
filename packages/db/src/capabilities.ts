@@ -31,6 +31,10 @@ export interface Ctx {
    *  signed in at the till, not a Party. See assertOwnsStore in dal/store.ts:
    *  authorised by this matching the requested store, not by ownership. */
   storeId?: string | null;
+  /** Set for an AGENT context scoped to one ticketing org — a
+   *  TicketOrgStaff session (admin/manager/scanner), not a Party. See
+   *  assertOwnsOrg in dal/ticketing.ts: same reasoning as storeId. */
+  ticketOrgId?: string | null;
   ip?: string | null;
   /**
    * Marks a Ctx built by @esoko/auth from a verified session.
@@ -174,6 +178,18 @@ export const CAPABILITY_CATALOGUE = [
     ['jamii-campaign.moderate', 'Cancel or reinstate a campaign'],
     ['jamii-donation.read', 'View donations made platform-wide'],
   ]},
+  { group: 'Group treasury', items: [
+    ['treasury.read', "View a group's contributions, meetings and withdrawals"],
+    ['treasury.contribute', 'Declare a contribution'],
+    ['treasury.confirm', "Confirm a member's self-declared contribution"],
+    ['treasury.meeting.write', 'Schedule or close a meeting'],
+    ['attendance.write', 'Mark attendance, for self or (as an officer) another member'],
+    ['treasury.withdraw.request', 'Propose a scheduled withdrawal'],
+    ['treasury.withdraw.sign', 'Sign (approve or reject) a proposed withdrawal'],
+    ['treasury.policy.write', "Set a group's signer list and treasury policy"],
+    ['paymentid.issue', 'Activate an Esoko Payment ID'],
+    ['portfolio.read', "View a member's derived credit-insight snapshot"],
+  ]},
   { group: 'Stores & commerce', items: [
     ['store.read', 'View a store'],
     ['store.write', 'Create or edit a store'],
@@ -192,6 +208,23 @@ export const CAPABILITY_CATALOGUE = [
     ['cashier.write', 'Add or manage cashier accounts'],
     ['shift.write', 'Open or close a till shift'],
     ['receipt.write', 'Issue a receipt'],
+  ]},
+  { group: 'Ticketing', items: [
+    ['ticketorg.read', 'View a ticketing organiser (event/tour/transport company)'],
+    ['ticketorg.write', 'Create or edit a ticketing organiser'],
+    ['ticketorg.moderate', 'Suspend or reinstate any ticketing organiser'],
+    ['ticketorgstaff.write', 'Add or manage a ticketing organiser’s staff'],
+    ['venue.write', 'Add or edit a venue'],
+    ['route.write', 'Add or edit a transport route'],
+    ['listing.write', 'Create or edit an event or trip listing'],
+    ['listing.publish', 'Publish, suspend or cancel a listing'],
+    ['ticketclass.write', 'Add or edit a listing’s ticket classes and prices'],
+    ['schedule.write', 'Schedule or cancel an occurrence (showtime/departure)'],
+    ['booking.read', 'View bookings'],
+    ['booking.create', 'Book a ticket'],
+    ['booking.cancel', 'Cancel a booking'],
+    ['booking.refund', 'Refund a booking'],
+    ['ticket.checkin', 'Scan and check in a ticket at the gate'],
   ]},
 ] as const;
 
@@ -222,7 +255,23 @@ export const ROLE_PRESETS = {
             'store.read', 'store.write:own', 'product.write:own',
             'order.read:own', 'order.fulfil:own', 'pos.sell:own',
             'inventory.write:own', 'customer.read:own', 'customer.write:own',
-            'cashier.write:own', 'shift.write:own', 'receipt.write:own'],
+            'cashier.write:own', 'shift.write:own', 'receipt.write:own',
+            // Group treasury — the ':own' qualifier only confirms this is a
+            // legitimate subject acting as themselves; whether they may act
+            // as an officer/signer of the specific group in question is a
+            // membership/role lookup done inside dal/treasury.ts, the same
+            // way signPaymentApproval checks separation of duties.
+            'treasury.read:own', 'treasury.contribute:own', 'treasury.confirm:own',
+            'treasury.meeting.write:own', 'attendance.write:own',
+            'treasury.withdraw.request:own', 'treasury.withdraw.sign:own',
+            'treasury.policy.write:own', 'paymentid.issue:own', 'portfolio.read:own',
+            // Ticketing — a subject may open a ticketing org the same way
+            // they open a store (own:enterprise), and always books tickets
+            // as themselves.
+            'ticketorg.write:own', 'ticketorgstaff.write:own', 'venue.write:own',
+            'route.write:own', 'listing.write:own', 'listing.publish:own',
+            'ticketclass.write:own', 'schedule.write:own',
+            'booking.read:own', 'booking.create:own', 'booking.cancel:own'],
 
   FIELD_AGENT: ['registration.create', 'registration.read:agent=self',
                 'attestation.issue:FIELD_VISIT', 'party.read:county'],
@@ -250,7 +299,9 @@ export const ROLE_PRESETS = {
               'product.moderate', 'pricing.read', 'pricing.write',
               'jamii-interest.read', 'jamii-interest.write',
               'jamii-page.read', 'jamii-page.moderate',
-              'jamii-campaign.read', 'jamii-campaign.moderate', 'jamii-donation.read'],
+              'jamii-campaign.read', 'jamii-campaign.moderate', 'jamii-donation.read',
+              'treasury.read', 'treasury.confirm', 'portfolio.read',
+              'ticketorg.read', 'ticketorg.moderate', 'booking.read', 'booking.refund'],
 
   SUPER_ADMIN: ['*'],
 
@@ -284,3 +335,32 @@ export const CASHIER_CAPABILITIES = {
 } as const satisfies Record<string, readonly Capability[]>;
 
 export type CashierRole = keyof typeof CASHIER_CAPABILITIES;
+
+/**
+ * What a TicketOrgStaff session can do — the ticketing-org equivalent
+ * of CASHIER_CAPABILITIES. Not a Party, scoped to one org via
+ * ctx.ticketOrgId (see assertOwnsOrg in dal/ticketing.ts), same
+ * reasoning as ctx.storeId for cashiers.
+ *
+ * SCANNER — the gate. Nothing but check-in and reading which org
+ *           they're signed into (the console shell needs the org's
+ *           name — no more sensitive than a cashier already knowing
+ *           which store ctx.storeId points at); can't see prices,
+ *           names, or bookings beyond "does this code exist".
+ * MANAGER — day-to-day running of listings and schedules, sees and
+ *           can cancel/refund bookings. Never staff.write or org
+ *           settings — can't create their own replacement.
+ * ADMIN    — everything, including org.write and staff.write.
+ */
+export const TICKETING_STAFF_CAPABILITIES = {
+  SCANNER: ['ticket.checkin', 'ticketorg.read'],
+  MANAGER: ['ticket.checkin', 'listing.write', 'listing.publish', 'ticketclass.write',
+            'schedule.write', 'venue.write', 'route.write',
+            'booking.read', 'booking.cancel', 'booking.refund', 'ticketorg.read'],
+  ADMIN:   ['ticket.checkin', 'listing.write', 'listing.publish', 'ticketclass.write',
+            'schedule.write', 'venue.write', 'route.write',
+            'booking.read', 'booking.cancel', 'booking.refund',
+            'ticketorg.read', 'ticketorg.write', 'ticketorgstaff.write'],
+} as const satisfies Record<string, readonly Capability[]>;
+
+export type TicketingStaffRole = keyof typeof TICKETING_STAFF_CAPABILITIES;

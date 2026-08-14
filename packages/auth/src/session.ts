@@ -25,6 +25,9 @@ export interface SessionData {
   /** Set for an AGENT session scoped to one store — a cashier or
    *  manager signed in at the till. See @esoko/db's Ctx.storeId. */
   storeId?: string;
+  /** Set for an AGENT session scoped to one ticketing org — an admin,
+   *  manager or gate scanner. See @esoko/db's Ctx.ticketOrgId. */
+  ticketOrgId?: string;
   capabilities: Capability[];
   issuedAt: number;
 }
@@ -92,6 +95,7 @@ export async function ctxFromToken(
     partyId: s.partyId ?? null,
     orgId: s.orgId ?? null,
     storeId: s.storeId ?? null,
+    ticketOrgId: s.ticketOrgId ?? null,
     ip: ip ?? null,
     __verified: true,
   };
