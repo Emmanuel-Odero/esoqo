@@ -165,6 +165,15 @@ export const CAPABILITY_CATALOGUE = [
     ['staff.write', 'Create and edit staff accounts'],
     ['staff.capabilities', 'Grant or revoke capabilities'],
   ]},
+  { group: 'Our Jamii', items: [
+    ['jamii-interest.read', 'View "not yet a CECF member" interest submissions'],
+    ['jamii-interest.write', 'Follow up on and resolve interest submissions'],
+    ['jamii-page.read', 'View every Our Jamii community page'],
+    ['jamii-page.moderate', 'Publish, suspend or reinstate a community page'],
+    ['jamii-campaign.read', 'View every crowdfunding campaign'],
+    ['jamii-campaign.moderate', 'Cancel or reinstate a campaign'],
+    ['jamii-donation.read', 'View donations made platform-wide'],
+  ]},
   { group: 'Stores & commerce', items: [
     ['store.read', 'View a store'],
     ['store.write', 'Create or edit a store'],
@@ -221,7 +230,8 @@ export const ROLE_PRESETS = {
   CECF_OFFICER: ['registration.read', 'party.read', 'attestation.issue:FIELD_VISIT',
                  'attestation.issue:MEDIATION_TRAINED', 'report.read', 'cohort.manage'],
 
-  VIEWER: ['registration.read', 'party.read', 'report.read', 'document.read', 'payment.read'],
+  VIEWER: ['registration.read', 'party.read', 'report.read', 'document.read', 'payment.read',
+           'jamii-interest.read', 'jamii-page.read', 'jamii-campaign.read', 'jamii-donation.read'],
 
   REGISTRAR: ['registration.read', 'registration.create', 'registration.write',
               'party.read', 'party.write', 'party.credential', 'membership.write',
@@ -237,7 +247,10 @@ export const ROLE_PRESETS = {
               'payment.read', 'payment.record', 'audit.read', 'report.read',
               'duplicate.review', 'consent.read', 'staff.read',
               'store.read', 'store.write', 'store.moderate', 'order.read', 'order.reroute',
-              'product.moderate', 'pricing.read', 'pricing.write'],
+              'product.moderate', 'pricing.read', 'pricing.write',
+              'jamii-interest.read', 'jamii-interest.write',
+              'jamii-page.read', 'jamii-page.moderate',
+              'jamii-campaign.read', 'jamii-campaign.moderate', 'jamii-donation.read'],
 
   SUPER_ADMIN: ['*'],
 

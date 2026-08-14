@@ -32,7 +32,7 @@ const ISSUERS = [
   ['Kenya Revenue Authority','KRA','AGENCY',['KRA_PIN','ETIMS_ACTIVE']],
   ['Judiciary Mediation Directorate','Judiciary','JUDICIARY',['MEDIATION_TRAINED']],
   ['Nairobi City County','Nairobi County','COUNTY',['SINGLE_BUSINESS_PERMIT','FOOD_HANDLER','HEALTH_CLEARANCE']],
-  ['Child & Elder Care Foundation','CECF','NGO',['FIELD_VISIT','MEDIATION_TRAINED']],
+  ['Child & Elder Care Foundation','CECF','NGO',['FIELD_VISIT','MEDIATION_TRAINED','ORG_PAGE_VERIFIED']],
 ] as const;
 
 const MARKETS = [
