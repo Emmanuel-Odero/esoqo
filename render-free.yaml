@@ -1,0 +1,287 @@
+# ════════════════════════════════════════════════════════════════
+#  Esoko — Render Blueprint, FREE TIER
+#
+#  A separate blueprint from render.yaml (the paid one), not a flag
+#  on it — free and paid differ in more than `plan:`. This one:
+#    · has no `databases:` block. Render's own Postgres/Redis are not
+#      free beyond a 30-day trial; DATABASE_URL/DIRECT_DATABASE_URL/
+#      REDIS_URL point at Neon and Upstash instead (their free tiers
+#      don't expire). Set those four as dashboard secrets after the
+#      first blueprint apply — see Deploy_Free.md.
+#    · drops cecf-wordpress and cecf-mariadb entirely. Self-hosted
+#      MySQL with a persistent disk has no free option on any of
+#      these platforms; CECF WordPress stays on its existing paid
+#      setup. See Deploy_Free.md for the reasoning.
+#    · every service is `plan: free`, which means each one spins down
+#      after ~15 minutes idle and cold-starts (10-60s) on the next
+#      request — including services/core, whose whole reason for
+#      existing (ADR-0001) is to NOT do that. This blueprint is for a
+#      pilot/demo/review deployment, not the always-on core plane the
+#      architecture is designed around. Said plainly in Deploy_Free.md,
+#      not left for someone to discover in an incident.
+#
+#  Deploy: render blueprint apply --repo <url> -f render-free.yaml
+#          or Render Dashboard → Blueprint → point at this file.
+#
+#  Run migrations manually after first deploy (same as render.yaml):
+#      DATABASE_URL="<neon-direct-url>" DIRECT_DATABASE_URL="<neon-direct-url>" \
+#      pnpm --filter @esoko/db exec prisma migrate deploy
+# ════════════════════════════════════════════════════════════════
+
+services:
+  # ── Core API — Fastify domain service ──────────────────────
+  - type: web
+    name: esoko-core
+    runtime: node
+    plan: free
+    repo: https://github.com/Emmanuel-Odero/esoko-254.git
+    branch: render
+    buildCommand: npm install -g pnpm@9.12.0 && NODE_ENV=development pnpm install && pnpm --filter @esoko/db generate && pnpm --filter @esoko/core-service build
+    startCommand: pnpm --filter @esoko/core-service start
+    healthCheckPath: /health
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: APP_ENV
+        value: production
+      - key: LOG_LEVEL
+        value: info
+      - key: DATABASE_URL
+        sync: false   # Neon pooled connection string — see Deploy_Free.md
+      - key: DIRECT_DATABASE_URL
+        sync: false   # Neon direct (non-pooled) connection string
+      - key: SHADOW_DATABASE_URL
+        sync: false   # a second Neon branch, or reuse DIRECT_DATABASE_URL
+      - key: REDIS_URL
+        sync: false   # Upstash rediss:// URL
+      - key: SESSION_SECRET
+        sync: false
+      - key: OTP_PEPPER
+        sync: false
+      - key: AUDIT_CHAIN_SEED
+        sync: false
+      - key: SMS_PROVIDER
+        value: console
+      - key: SMS_API_KEY
+        sync: false
+      - key: SMS_USERNAME
+        sync: false
+      - key: SMS_SENDER_ID
+        value: ESOKO
+      - key: SEED_ADMIN_PIN
+        sync: false
+      - key: SEED_ADMIN_HASH
+        sync: false
+
+  # ── Web — public-facing site ───────────────────────────────
+  - type: web
+    name: esoko-web
+    runtime: node
+    plan: free
+    repo: https://github.com/Emmanuel-Odero/esoko-254.git
+    branch: render
+    buildCommand: npm install -g pnpm@9.12.0 && NODE_ENV=development pnpm install && pnpm --filter @esoko/db generate && pnpm --filter @esoko/web build
+    startCommand: pnpm --filter @esoko/web start
+    healthCheckPath: /help
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: APP_ENV
+        value: production
+      - key: DATABASE_URL
+        sync: false
+      - key: DIRECT_DATABASE_URL
+        sync: false
+      - key: SHADOW_DATABASE_URL
+        sync: false
+      - key: REDIS_URL
+        sync: false
+      - key: SESSION_SECRET
+        sync: false
+      - key: OTP_PEPPER
+        sync: false
+      - key: AUDIT_CHAIN_SEED
+        sync: false
+      - key: NEXT_PUBLIC_WEB_URL
+        value: https://esoko-web.onrender.com
+      - key: NEXT_PUBLIC_APP_URL
+        value: https://esoko-app.onrender.com
+      - key: NEXT_PUBLIC_STORE_URL
+        value: https://esoko-store.onrender.com
+      - key: CORE_API_URL
+        value: https://esoko-core.onrender.com
+
+  # ── App — authenticated PWA surface (subjects, org consoles) ─
+  - type: web
+    name: esoko-app
+    runtime: node
+    plan: free
+    repo: https://github.com/Emmanuel-Odero/esoko-254.git
+    branch: render
+    buildCommand: npm install -g pnpm@9.12.0 && NODE_ENV=development pnpm install && pnpm --filter @esoko/db generate && pnpm --filter @esoko/app build
+    startCommand: pnpm --filter @esoko/app start
+    healthCheckPath: /api/health
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: APP_ENV
+        value: production
+      - key: DATABASE_URL
+        sync: false
+      - key: DIRECT_DATABASE_URL
+        sync: false
+      - key: SHADOW_DATABASE_URL
+        sync: false
+      - key: REDIS_URL
+        sync: false
+      - key: SESSION_SECRET
+        sync: false
+      - key: OTP_PEPPER
+        sync: false
+      - key: AUDIT_CHAIN_SEED
+        sync: false
+      - key: R2_ACCOUNT_ID
+        sync: false
+      - key: R2_ACCESS_KEY_ID
+        sync: false
+      - key: R2_SECRET_ACCESS_KEY
+        sync: false
+      - key: R2_BUCKET
+        value: esoko
+      - key: NEXT_PUBLIC_WEB_URL
+        value: https://esoko-web.onrender.com
+      - key: NEXT_PUBLIC_APP_URL
+        value: https://esoko-app.onrender.com
+      - key: CORE_API_URL
+        value: https://esoko-core.onrender.com
+
+  # ── Admin — operations dashboard ──────────────────────────
+  - type: web
+    name: esoko-admin
+    runtime: node
+    plan: free
+    repo: https://github.com/Emmanuel-Odero/esoko-254.git
+    branch: render
+    buildCommand: npm install -g pnpm@9.12.0 && NODE_ENV=development pnpm install && pnpm --filter @esoko/db generate && pnpm --filter @esoko/admin build
+    startCommand: pnpm --filter @esoko/admin start
+    healthCheckPath: /signin
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: APP_ENV
+        value: production
+      - key: DATABASE_URL
+        sync: false
+      - key: DIRECT_DATABASE_URL
+        sync: false
+      - key: SHADOW_DATABASE_URL
+        sync: false
+      - key: REDIS_URL
+        sync: false
+      - key: SESSION_SECRET
+        sync: false
+      - key: OTP_PEPPER
+        sync: false
+      - key: AUDIT_CHAIN_SEED
+        sync: false
+      - key: R2_ACCOUNT_ID
+        sync: false
+      - key: R2_ACCESS_KEY_ID
+        sync: false
+      - key: R2_SECRET_ACCESS_KEY
+        sync: false
+      - key: R2_BUCKET
+        value: esoko
+      - key: NEXT_PUBLIC_WEB_URL
+        value: https://esoko-web.onrender.com
+      - key: NEXT_PUBLIC_APP_URL
+        value: https://esoko-app.onrender.com
+      - key: CORE_API_URL
+        value: https://esoko-core.onrender.com
+
+  # ── Store — merchant PoS + eStore dashboard, public storefronts ─
+  - type: web
+    name: esoko-store
+    runtime: node
+    plan: free
+    repo: https://github.com/Emmanuel-Odero/esoko-254.git
+    branch: render
+    buildCommand: npm install -g pnpm@9.12.0 && NODE_ENV=development pnpm install && pnpm --filter @esoko/db generate && pnpm --filter @esoko/store build
+    startCommand: pnpm --filter @esoko/store start
+    healthCheckPath: /signin
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: APP_ENV
+        value: production
+      - key: DATABASE_URL
+        sync: false
+      - key: DIRECT_DATABASE_URL
+        sync: false
+      - key: SHADOW_DATABASE_URL
+        sync: false
+      - key: REDIS_URL
+        sync: false
+      - key: SESSION_SECRET
+        sync: false
+      - key: OTP_PEPPER
+        sync: false
+      - key: AUDIT_CHAIN_SEED
+        sync: false
+      - key: R2_ACCOUNT_ID
+        sync: false
+      - key: R2_ACCESS_KEY_ID
+        sync: false
+      - key: R2_SECRET_ACCESS_KEY
+        sync: false
+      - key: R2_BUCKET
+        value: esoko
+      - key: NEXT_PUBLIC_WEB_URL
+        value: https://esoko-web.onrender.com
+      - key: NEXT_PUBLIC_APP_URL
+        value: https://esoko-app.onrender.com
+      - key: CORE_API_URL
+        value: https://esoko-core.onrender.com
+
+  # ── Jamii — Our Jamii community pages + crowdfunding ────────
+  - type: web
+    name: esoko-jamii
+    runtime: node
+    plan: free
+    repo: https://github.com/Emmanuel-Odero/esoko-254.git
+    branch: render
+    buildCommand: npm install -g pnpm@9.12.0 && NODE_ENV=development pnpm install && pnpm --filter @esoko/db generate && pnpm --filter @esoko/jamii build
+    startCommand: pnpm --filter @esoko/jamii start
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: APP_ENV
+        value: production
+      - key: DATABASE_URL
+        sync: false
+      - key: DIRECT_DATABASE_URL
+        sync: false
+      - key: SHADOW_DATABASE_URL
+        sync: false
+      - key: REDIS_URL
+        sync: false
+      - key: SESSION_SECRET
+        sync: false
+      - key: OTP_PEPPER
+        sync: false
+      - key: AUDIT_CHAIN_SEED
+        sync: false
+      - key: R2_ACCOUNT_ID
+        sync: false
+      - key: R2_ACCESS_KEY_ID
+        sync: false
+      - key: R2_SECRET_ACCESS_KEY
+        sync: false
+      - key: R2_BUCKET
+        value: esoko
+      - key: NEXT_PUBLIC_WEB_URL
+        value: https://esoko-web.onrender.com
+      - key: NEXT_PUBLIC_APP_URL
+        value: https://esoko-app.onrender.com
+      - key: CORE_API_URL
+        value: https://esoko-core.onrender.com

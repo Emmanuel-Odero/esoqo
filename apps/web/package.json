@@ -13,7 +13,7 @@
   "dependencies": {
     "next": "^16.2.7", "react": "^19.2.0", "react-dom": "^19.2.0",
     "@esoko/auth": "workspace:*", "@esoko/db": "workspace:*", "@esoko/domain": "workspace:*",
-    "@esoko/ui": "workspace:*", "@esoko/a11y": "workspace:*",
+    "@esoko/ui": "workspace:*", "@esoko/a11y": "workspace:*", "@esoko/payments": "workspace:*",
     "server-only": "^0.0.1"
   },
   "devDependencies": {
