@@ -1,7 +1,7 @@
 'use server';
 import { revalidatePath } from 'next/cache';
 import {
-  addMember, addNewMember, setMemberRole, removeMember, searchAddablePeople, type MemberRole,
+  addMember, addNewMember, updateMemberPhone, setMemberRole, removeMember, searchAddablePeople, type MemberRole,
   createGroup, type OrgKind,
   createDocument, listDocumentsForParty,
   sniff, makeStorageKey, safeName, sha256, putObject, MAX_BYTES,
@@ -44,6 +44,19 @@ export async function actionAddNewMember(
     const ctx = await requireStaff();
     if (!officialName.trim()) return { ok: false, error: 'Enter a name' };
     await addNewMember(ctx, orgPartyId, { officialName, msisdn: msisdn || undefined }, role, customRole);
+    revalidatePath('/groups');
+    return { ok: true };
+  } catch (e) { return fail(e); }
+}
+
+/** Fix a member's phone on file — e.g. a typo'd roster number that can't
+ *  be verified, which would otherwise leave the member unable to sign in
+ *  and their membership invisible to them. */
+export async function actionUpdateMemberPhone(membershipId: string, phone: string): Promise<Result> {
+  try {
+    const ctx = await requireStaff();
+    if (!phone.trim()) return { ok: false, error: 'Enter a phone number' };
+    await updateMemberPhone(ctx, membershipId, phone);
     revalidatePath('/groups');
     return { ok: true };
   } catch (e) { return fail(e); }

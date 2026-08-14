@@ -60,6 +60,7 @@ export default async function GroupsPage({
             partyId: m.personId,
             name: m.person.person?.officialName || m.person.person?.knownAs || 'Unnamed',
             knownAs: m.person.person?.officialName ? (m.person.person?.knownAs ?? null) : null,
+            phone: m.person.person?.msisdn ?? null,
             role: m.role,
             customRole: m.customRole,
             joinedAt: m.joinedAt.toISOString(),
