@@ -1,0 +1,41 @@
+/*
+ * Styles the generic cecf/* block Inspector controls (resources/js/blocks/
+ * fields.jsx) render in the sidebar — regular wp-admin chrome, not the
+ * iframed post-editor canvas, so it can't reuse editor.css (which is
+ * injected *inside* that iframe via block_editor_settings_all, alongside
+ * the site's own Tailwind/cecf.css, to make <ServerSideRender> previews
+ * look right). Loaded by app/setup.php's admin_head hook, only on the
+ * block editor screen, same as editor.js/editor.css.
+ */
+
+.cecf-field {
+    margin-bottom: 16px;
+}
+
+.cecf-field-list__row {
+    display: flex;
+    align-items: flex-end;
+    gap: 8px;
+    margin-bottom: 8px;
+}
+
+.cecf-field-list__row > .components-base-control {
+    flex: 1;
+}
+
+.cecf-field-group {
+    margin-bottom: 12px;
+}
+
+.cecf-field-group .components-card__header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+}
+
+.cecf-block-empty {
+    padding: 24px;
+    text-align: center;
+    color: #757575;
+    font-style: italic;
+}

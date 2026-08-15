@@ -55,4 +55,31 @@ class SectionTypes
     {
         return array_key_exists($type, self::options());
     }
+
+    /**
+     * Section `type` (camelCase, e.g. "twoColumn") <-> Gutenberg block
+     * name (kebab-case under the `cecf/` namespace, e.g. "cecf/two-column").
+     * Both App\Providers\CecfBlocksServiceProvider (registering the
+     * blocks) and App\View\Composers\PageSections (reading them back off
+     * a rendered page) go through these two methods, so the mapping only
+     * lives in one place.
+     */
+    public static function blockName(string $type): string
+    {
+        $kebab = strtolower((string) preg_replace('/(?<!^)[A-Z]/', '-$0', $type));
+
+        return "cecf/{$kebab}";
+    }
+
+    public static function typeFromBlockName(string $blockName): ?string
+    {
+        if (! str_starts_with($blockName, 'cecf/')) {
+            return null;
+        }
+
+        $kebab = substr($blockName, strlen('cecf/'));
+        $camel = lcfirst(str_replace(' ', '', ucwords(str_replace('-', ' ', $kebab))));
+
+        return self::isValid($camel) ? $camel : null;
+    }
 }

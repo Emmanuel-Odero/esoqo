@@ -2,38 +2,23 @@
 
 namespace App\Providers;
 
-use App\Content\SectionTypes;
 use Illuminate\Support\ServiceProvider;
 
 /**
- * Registers the two structured-content surfaces CECF staff edit content
- * through, once Meta Box (wpackagist-plugin/meta-box, required in the
- * Bedrock-root composer.json) is active:
+ * A native WordPress Settings API screen for site-wide settings (org
+ * info, footer columns) — free, built into WordPress core, no plugin.
  *
- *  1. A "Page sections" field group on the `page` post type — a
- *     repeatable (clone) group of {type, label, data} rows, one per
- *     section, matching database/content/pages/<slug>.json's shape.
- *
- *  2. A native WordPress Settings API screen for site-wide settings
- *     (org info, footer columns) — NOT a Meta Box "settings page".
- *     Meta Box core only ships object-type detection for settings
- *     screens (see RWMB_Object_Type::normalize() in the plugin source);
- *     the actual storage backend for that object type lives in the
- *     separate "MB Settings Page" extension, which is not reliably
- *     resolvable through this project's Composer repositories. Rather
- *     than add an unverifiable plugin dependency, site settings use
- *     `register_setting()`/the Settings API directly — free, built into
- *     WordPress core, and just as real an admin GUI for CECF staff.
- *
- * Why one field per {type, label, data-as-JSON} instead of a fully
- * decomposed field per section type (e.g. a dedicated repeater UI for
- * `cardGrid` vs `table` vs `storyList`, …): the 20 section types in
- * SectionTypes::options() have genuinely different, sometimes
- * variable-depth shapes (table.rows is an array of arrays; storyList
- * items carry multi-paragraph bodies; cardGrid items are flat). Building
- * 20 bespoke field-group UIs is real scope, deliberately deferred — see
- * docs/content-seeding-plan.md. This gets working, round-trippable,
- * editable content live now without blocking on that follow-up.
+ * Page content itself no longer goes through this provider. Every
+ * section is now a real Gutenberg block, registered by
+ * App\Providers\CecfBlocksServiceProvider and edited on the normal
+ * `page` block-editor screen instead of a Meta Box panel below it. This
+ * class used to also register that "Page sections" field — a repeatable
+ * clone group whose every row was a hand-written JSON textarea — via
+ * `rwmb_meta_boxes`; removed once the block-based editor replaced it,
+ * along with the wpackagist-plugin/meta-box Composer dependency it
+ * needed (nothing else in the theme used Meta Box — see the root
+ * composer.json diff in the same commit that added
+ * CecfBlocksServiceProvider).
  */
 class CecfContentServiceProvider extends ServiceProvider
 {
@@ -48,59 +33,8 @@ class CecfContentServiceProvider extends ServiceProvider
 
     public function boot(): void
     {
-        add_filter('rwmb_meta_boxes', [$this, 'registerPageSectionsField']);
-
         add_action('admin_menu', [$this, 'registerSiteSettingsPage']);
         add_action('admin_init', [$this, 'registerSiteSettingsFields']);
-    }
-
-    /**
-     * @param  array<int, array<string, mixed>>  $metaBoxes
-     * @return array<int, array<string, mixed>>
-     */
-    public function registerPageSectionsField(array $metaBoxes): array
-    {
-        $metaBoxes[] = [
-            'id' => 'cecf_page_sections',
-            'title' => __('Page sections', 'cecf-sage'),
-            'post_types' => ['page'],
-            'context' => 'normal',
-            'priority' => 'high',
-            'fields' => [
-                [
-                    'id' => 'cecf_sections',
-                    'type' => 'group',
-                    'clone' => true,
-                    'sort_clone' => true,
-                    'collapsible' => true,
-                    'add_button' => __('+ Add section', 'cecf-sage'),
-                    'fields' => [
-                        [
-                            'id' => 'type',
-                            'name' => __('Section type', 'cecf-sage'),
-                            'type' => 'select',
-                            'options' => SectionTypes::options(),
-                            'required' => true,
-                        ],
-                        [
-                            'id' => 'label',
-                            'name' => __('Editor label', 'cecf-sage'),
-                            'type' => 'text',
-                            'desc' => __('For your own reference in this list only — never shown on the site.', 'cecf-sage'),
-                        ],
-                        [
-                            'id' => 'data',
-                            'name' => __('Section data (JSON)', 'cecf-sage'),
-                            'type' => 'textarea',
-                            'rows' => 12,
-                            'desc' => __('Structured content for this one section. See database/content/README.md for the field shape each "Section type" expects.', 'cecf-sage'),
-                        ],
-                    ],
-                ],
-            ],
-        ];
-
-        return $metaBoxes;
     }
 
     public function registerSiteSettingsPage(): void
@@ -110,7 +44,7 @@ class CecfContentServiceProvider extends ServiceProvider
             __('CECF Settings', 'cecf-sage'),
             'manage_options',
             self::SETTINGS_PAGE_SLUG,
-            [$this, 'renderSiteSettingsPage']
+            [$this, 'renderSiteSettingsPage'],
         );
     }
 
@@ -144,8 +78,8 @@ class CecfContentServiceProvider extends ServiceProvider
             return;
         }
 
-        echo '<div class="wrap"><h1>'.esc_html__('CECF Settings', 'cecf-sage').'</h1>';
-        echo '<p>'.esc_html__('This screen is a placeholder for a follow-up pass — site settings are currently seeded from database/content/site-settings.json via `wp acorn cecf:seed --settings` and stored under the option key "'.self::SETTINGS_OPTION.'". A field-by-field editing UI (org info, footer columns) is deferred alongside the per-section-type Meta Box fields noted above.', 'cecf-sage').'</p>';
+        echo '<div class="wrap"><h1>' . esc_html__('CECF Settings', 'cecf-sage') . '</h1>';
+        echo '<p>' . esc_html__('This screen is a placeholder for a follow-up pass — site settings are currently seeded from database/content/site-settings.json via `wp acorn cecf:seed --settings` and stored under the option key "' . self::SETTINGS_OPTION . '". A field-by-field editing UI (org info, footer columns) is the next piece of this work, tracked in docs/content-seeding-plan.md.', 'cecf-sage') . '</p>';
         echo '</div>';
     }
 }

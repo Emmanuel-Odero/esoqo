@@ -347,20 +347,98 @@ every other page — normalized rather than special-cased in the partial.
 
 ## 6. Still open / next implementation pass
 
-- The 12 deferred section-type partials (`table`, `eventList`, `newsList`,
-  `storyList`, `downloadList`, `sponsorshipGrid`, `partnerList`,
-  `stepList`, `requirementList`, `hero`, `registrationForm` — the last one
-  real interactive work, its own pass wiring the existing 6-step wizard
-  copy to the `cecf_enquiry` REST route built in pass 2).
-- A field-by-field Settings API screen for `cecf_site_settings` (currently
-  a placeholder screen — see `CecfContentServiceProvider::
-  renderSiteSettingsPage()` — settings are seeded correctly but not yet
-  hand-editable in wp-admin without touching the JSON + re-running the seed).
-- Decomposing the 20 section types out of the single `{type, label, data}`
-  Meta Box row into dedicated per-type sub-fields (see
-  `CecfContentServiceProvider`'s docblock) — deliberately deferred, not
-  blocking real content being live and round-trippable now.
 - Real photography to replace the `.ph.fallback` placeholders (`stories`,
   `government`, `careers` — see `database/content/media/photos/
   PLACEHOLDERS.md`), and the trustee/annual-report content flagged as
   TODO in `about.json`'s governance section.
+- The `registrationForm` block/partial pair is copy-only (the 6-step
+  wizard's markup/behaviour is still hand-built JS wired to the
+  `cecf_enquiry` REST route from pass 2) — unchanged by pass 4 below.
+
+## 7. Pass 4 — from a JSON-textarea Meta Box field to real Gutenberg blocks (2026-08-15)
+
+**Problem this pass fixes:** every page section was one row in a Meta Box
+"Page sections" clone group, and the row's entire content — heading, body
+copy, every list item — lived in one `textarea` field the admin UI labelled
+"Section data (JSON)". A Content Manager had to open a page's edit screen,
+scroll past the normal (empty, unused) block editor, find the Meta Box panel
+below it, and hand-edit a pretty-printed JSON blob to change a single word.
+That's what §6's now-removed "Decomposing the 20 section types..." item was
+tracking, and what this pass actually did, going further than a decompose-
+in-place fix: instead of building 20 bespoke Meta Box field-group UIs (still
+a panel below the real editor, still not what "content" means to a WP admin
+user), every section type became a real Gutenberg block, so the block
+editor itself — the screen every WordPress user already expects to build a
+page in — is now the *only* editing surface, wp-admin's Custom Fields panel
+is never involved, and the "Page sections" Meta Box field/panel is gone.
+
+**Approach:**
+- `App\Content\SectionFields` — one field schema per `SectionTypes` value
+  (~20), read from both PHP (block registration) and JS (the editor UI),
+  so a field only needs to be added/changed in one place. Field `type`
+  values (`text`, `textarea`, `select`, `boolean`, `page`, `icon`,
+  `illustration`, `stringList`, `rowList`, `repeater`, `group`) cover every
+  shape the 20 partials already read from `$data` — see that class's
+  docblock.
+- `App\Providers\CecfBlocksServiceProvider` registers one `cecf/<type>`
+  block per section type (`register_block_type()`, no `block.json` files —
+  one PHP array per type, generated from `SectionTypes`/`SectionFields`
+  rather than hand-duplicated 20 times). Every block has exactly one
+  attribute, `data` (an object) — the same shape a JSON section already
+  had, minus `type`. `render_callback` hands that straight to the
+  **unchanged** `resources/views/partials/cecf/<type>.blade.php` partial;
+  none of the 20 partials, nor `App\Support\{Markdown,PageUrl,Icon,Media,
+  ButtonStyle}`, needed to change — only where `$data` comes from changed.
+  Also registers a "CECF sections" block category and two starter block
+  patterns (`cecf/basic-page`, `cecf/highlights-page`) so a Content
+  Manager building a new page has a normal "insert a pattern" starting
+  point instead of needing to know which of ~20 blocks to reach for first.
+- `App\View\Composers\PageSections` now parses the page's real
+  `post_content` (`parse_blocks()`), filtering for `cecf/*` blocks, instead
+  of decoding the old `cecf_sections` Meta Box meta field — same
+  `{type, label, data}` shape handed to `partials.content-page`, so that
+  Blade file didn't need to change either.
+- `database/seeders/PageSeeder.php` now writes each section as real block
+  markup (`serialize_block()`) into `post_content`, instead of a Meta Box
+  meta row — this is also the migration path: re-running
+  `wp acorn cecf:seed --pages` rewrites the 8 live-seeded pages'
+  `post_content` from `database/content/pages/*.json` straight into block
+  markup. (Still not run automatically on deploy — see
+  `App\Console\Commands\CecfSeedCommand`'s docblock, unchanged reasoning.)
+- `App\Content\SectionTypes::blockName()`/`typeFromBlockName()` — the one
+  place the `type` (camelCase) <-> block name (`cecf/kebab-case`) mapping
+  lives, since both the PHP registration/seeder side and the JS side
+  (`resources/js/blocks/register.jsx`, which reimplements the same
+  camelCase-to-kebab-case rule to build the same block names client-side)
+  need it independently and must agree byte-for-byte.
+- `resources/js/blocks/register.jsx` + `fields.jsx` — no hand-written
+  `edit.js` per block type. One generic field-renderer (recursive over
+  `App\Content\SectionFields`'s schema, handed to the editor as
+  `window.cecfSectionSchema`) builds every block's Inspector controls;
+  the block's canvas area shows the real, live-styled front end via
+  `<ServerSideRender>` (the same `render_callback`/Blade partial the
+  public site uses), so a Content Manager sees what they're building
+  while they edit fields in the sidebar — not a raw textarea, not a
+  guess. Confirmed `@roots/vite-plugin`'s `wordpressPlugin()` (already in
+  `vite.config.js`) externalizes every `@wordpress/*` import to the
+  matching `wp.*` global and sets esbuild's JSX pragma to
+  `wp.element.createElement`/`Fragment` automatically — no new npm
+  dependencies were needed, `npm run build` picks up
+  `@wordpress/{blocks,block-editor,components,server-side-render,i18n,
+  dom-ready}` as externals and emits the right WP script-handle list to
+  `editor.deps.json` (verified: a clean `npm run build` after this pass
+  produced `wp-blocks`, `wp-block-editor`, `wp-components`,
+  `wp-server-side-render`, `wp-i18n`, `wp-dom-ready`).
+- `wpackagist-plugin/meta-box` removed from the root `composer.json` (with
+  it, `bin/fix-meta-box-autoload.php` and its Dockerfile/composer.json
+  script wiring, added in pass 2 to work around that plugin's packaging
+  bug) — nothing else in the theme used Meta Box. Verified: `composer
+  update wpackagist-plugin/meta-box` cleanly removed it from
+  `composer.lock` and `web/app/plugins/meta-box/`.
+
+**Still a placeholder, unchanged by this pass:** `cecf_site_settings`
+(org info, footer columns) is still a native Settings API screen with no
+field-by-field UI yet (`CecfContentServiceProvider::
+renderSiteSettingsPage()`) — smaller in scope than the 20-section-type
+problem this pass solved, and a reasonable next follow-up, but out of
+scope here.
