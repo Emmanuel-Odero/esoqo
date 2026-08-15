@@ -1,5 +1,4 @@
 import type { Metadata } from 'next';
-import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import { Icon } from '@esoko/ui';
 import { getPublicListing, getMyRecord } from '@esoko/db';
@@ -68,16 +67,16 @@ export default async function TicketDetail({ params }: { params: Promise<{ slug:
               <span className="icbox icbox-b" style={{ margin: '0 auto 14px' }}><Icon name="lock" size={20} /></span>
               <h3 style={{ marginBottom: 6 }}>Sign in to book</h3>
               <p className="sub" style={{ margin: '0 0 16px' }}>Tickets are tied to your Esoko account so they're always in "My tickets".</p>
-              <Link href={`${APP_URL}/signin?next=${encodeURIComponent(`${process.env.NEXT_PUBLIC_WEB_URL ?? 'http://localhost:3000'}/tickets/${slug}`)}`} className="btn btn-p">
+              <a href={`${APP_URL}/signin?next=${encodeURIComponent(`${process.env.NEXT_PUBLIC_WEB_URL ?? 'http://localhost:3000'}/tickets/${slug}`)}`} className="btn btn-p">
                 Sign in
-              </Link>
+              </a>
             </div>
           ) : !buyerMsisdn ? (
             <div className="card" style={{ textAlign: 'center' }}>
               <span className="icbox icbox-b" style={{ margin: '0 auto 14px' }}><Icon name="phone" size={20} /></span>
               <h3 style={{ marginBottom: 6 }}>Add a phone number first</h3>
               <p className="sub" style={{ margin: '0 0 16px' }}>Your tickets and payment prompt go to it.</p>
-              <Link href={`${APP_URL}/me`} className="btn btn-p">Go to your Record</Link>
+              <a href={`${APP_URL}/me`} className="btn btn-p">Go to your Record</a>
             </div>
           ) : (
             <BookingForm
