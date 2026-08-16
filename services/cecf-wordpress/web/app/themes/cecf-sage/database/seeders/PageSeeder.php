@@ -89,6 +89,19 @@ class PageSeeder
             ],
         ];
 
+        // wp_insert_post()/wp_update_post() both call wp_unslash() on the
+        // way in — correct for their normal caller, $_POST data PHP's
+        // magic-quotes-emulation layer already pre-slashed, but wrong for
+        // a clean PHP string built directly, as post_content is here.
+        // wp_slash() cancels that out. Skipping it silently corrupts any
+        // real backslash the JSON in post_content carries — confirmed by
+        // seeding into the `cecf` docker profile: every `&` from
+        // wp_json_encode()'s escaping of "&" (in section headings like
+        // "News & events") came back as literal "u0026" without this.
+        // Same footgun this seeder already had to work around once before,
+        // for update_post_meta()/rwmb_set_meta(), pre-blocks.
+        $postArr = wp_slash($postArr);
+
         if ($existingId) {
             $postArr['ID'] = $existingId;
             $postId = wp_update_post($postArr, true);
