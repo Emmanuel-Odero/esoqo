@@ -1,8 +1,9 @@
 import Link from 'next/link';
 import { Icon } from '@esoko/ui';
-import { getStoreDetailForStaff, getStoreAnalyticsForStaff } from '@esoko/db';
+import { getStoreDetailForStaff, getStoreAnalyticsForStaff, listCashiers } from '@esoko/db';
 import { requireStaff } from '@/lib/session';
 import { StoreDetailPanel } from './StoreDetailPanel';
+import { CashiersPanel } from './CashiersPanel';
 import { RevenueTrendChart } from '../../RevenueTrendChart';
 
 export const dynamic = 'force-dynamic';
@@ -21,10 +22,12 @@ export default async function StoreDetailPage({
   const { id } = await params;
   const canModerate = ctx.capabilities.includes('*') || ctx.capabilities.includes('store.moderate');
   const canEdit = ctx.capabilities.includes('*') || ctx.capabilities.includes('store.write');
+  const canManageCashiers = ctx.capabilities.includes('*') || ctx.capabilities.includes('cashier.write');
 
-  const [detail, analytics] = await Promise.all([
+  const [detail, analytics, cashiers] = await Promise.all([
     getStoreDetailForStaff(ctx, id),
     getStoreAnalyticsForStaff(ctx, id),
+    canManageCashiers ? listCashiers(ctx, id) : Promise.resolve([]),
   ]);
   if (!detail) {
     return (
@@ -211,6 +214,13 @@ export default async function StoreDetailPage({
         canEdit={canEdit}
         canModerate={canModerate}
       />
+
+      {canManageCashiers && (
+        <CashiersPanel
+          storeId={store.id}
+          cashiers={cashiers.map((c) => ({ id: c.id, name: c.name, role: c.role, active: c.active }))}
+        />
+      )}
 
       <div className="grid2" style={{ marginTop: 22 }}>
         <div className="card">

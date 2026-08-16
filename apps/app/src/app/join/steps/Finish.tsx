@@ -7,15 +7,15 @@ import type { Form } from '../form';
 /** Step 4 — the only screen with anything genuinely required: confirm the
  *  number (or defer it) and accept the terms. Everything else is a recap. */
 export function Finish({
-  f, set, headingRef, emailSent, setEmailSent, onEdit,
+  f, set, headingRef, onEdit,
 }: {
   f: Form;
   set: <K extends keyof Form>(k: K, v: Form[K]) => void;
   headingRef: RefObject<HTMLHeadingElement | null>;
   // otpSent/otpVerified/otp/setOtp/devCode/sendOtp/submitOtp/pending
   // dropped — only the commented-out dialling-access (USSD) block below
-  // used them.
-  emailSent: boolean; setEmailSent: (v: boolean) => void;
+  // used them. emailSent/setEmailSent dropped the same way — only the
+  // commented-out "Send link" block above used them.
   onEdit: (step: number) => void;
 }) {
   return (
@@ -104,6 +104,16 @@ export function Finish({
       </div>
       */}
 
+      {/*
+        Email verification isn't built yet — same reasoning as the USSD
+        block above. The "Send link" button never sent anything (it just
+        flipped local state), which is worse than not offering it: it
+        implied a real confirmation step that would block nothing anyway,
+        since neither JoinFlow's canSubmit nor actionComplete ever checked
+        emailSent. Commented out rather than deleted so it comes back in
+        one piece once real email delivery exists. The address is still
+        captured and shown in the recap below either way.
+
       {f.email && (
         <div className="vblock">
           <div className="vhead">
@@ -124,6 +134,7 @@ export function Finish({
           </div>
         </div>
       )}
+      */}
 
       <div className="sum">
         {[

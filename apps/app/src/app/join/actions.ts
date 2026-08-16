@@ -67,9 +67,10 @@ function fail(e: unknown): ActionResult<never> {
     return { ok: false, error: issue?.message ?? 'Check what you entered and try again.', field: issue?.path[0] as string | undefined };
   }
   if (e instanceof Error) {
-    if ((e as { code?: string }).code === 'MSISDN_TAKEN') {
-      return { ok: false, error: 'That number is already registered. Sign in instead.', field: 'msisdn' };
-    }
+    // MSISDN_TAKEN used to block completion here — completeRegistration
+    // now reuses the existing Person instead of erroring, since sharing a
+    // phone (a family line, a group's contact number) is normal. See the
+    // comment on that reuse in dal/registration.ts.
     return { ok: false, error: e.message };
   }
   // The real error still needs to reach someone — it just should never

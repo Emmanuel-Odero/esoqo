@@ -5,7 +5,9 @@ import {
   updatePricingRule, moderateStore, updateStore,
   suspendProduct, reinstateProduct, addProductStaffNote, getProductForStaff,
   flagOrderForReroute, clearRerouteFlag, findRerouteCandidates, reassignOrder,
+  createCashier, setCashierActive,
 } from '@esoko/db';
+import { hashPin } from '@esoko/auth';
 import { requireStaff } from '@/lib/session';
 
 export type Result = { ok: true } | { ok: false; error: string };
@@ -44,6 +46,36 @@ export async function actionUpdateStoreDetails(
     return { ok: true };
   } catch (e) {
     return { ok: false, error: e instanceof Error ? e.message : "That store's details didn't save" };
+  }
+}
+
+/* ── till staff ───────────────────────────────────────────────── */
+
+/** Adds a cashier on the store owner's behalf — for onboarding when
+ *  they aren't ready to self-serve in apps/store. The PIN is set here
+ *  and should be handed over in person or by phone, never SMS/email. */
+export async function actionAddCashier(
+  storeId: string, input: { name: string; pin: string; role: 'CASHIER' | 'MANAGER' },
+): Promise<Result> {
+  try {
+    const ctx = await requireStaff();
+    const pinHash = await hashPin(input.pin);
+    await createCashier(ctx, storeId, { name: input.name, pinHash, role: input.role });
+    revalidatePath(`/estores/stores/${storeId}`);
+    return { ok: true };
+  } catch (e) {
+    return { ok: false, error: e instanceof Error ? e.message : "That cashier wasn't added" };
+  }
+}
+
+export async function actionSetCashierActive(storeId: string, cashierId: string, active: boolean): Promise<Result> {
+  try {
+    const ctx = await requireStaff();
+    await setCashierActive(ctx, cashierId, active);
+    revalidatePath(`/estores/stores/${storeId}`);
+    return { ok: true };
+  } catch (e) {
+    return { ok: false, error: e instanceof Error ? e.message : "That didn't save" };
   }
 }
 

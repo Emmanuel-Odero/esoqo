@@ -235,21 +235,22 @@ export async function completeRegistration(ctx: Ctx, id: string) {
     if (!reg.county) throw new Error('Cannot complete without a county');
     if (!reg.officialName) throw new Error('Cannot complete without an official name');
 
-    // A phone already on file only blocks completion when this is a
-    // first-time individual signup. When the joiner is attaching to an
-    // org they found via search (an existing group or business), reuse
-    // that Person's Party instead — "one phone, many groups" is the
-    // product rule; retyping details we already have is just friction.
+    // A phone already on file never blocks completion — it's common for
+    // one handset to be shared (a family line, a group's contact number),
+    // so a second registration on the same msisdn reuses that Person's
+    // Party rather than erroring "already registered, sign in instead."
+    // Correct when it really is the same person returning; if it's a
+    // different family member on the shared phone, this attaches their
+    // new registration (new group, new business, whatever they just
+    // filled in) onto the existing account rather than creating a second
+    // one — msisdn is the sign-in identifier (UserCredential and OTP are
+    // both keyed on it) and is @unique in the schema, so two genuinely
+    // separate accounts on one number isn't something this can support
+    // without a much bigger change to how sign-in identifies an account.
     // The freshly typed name is deliberately NOT written back onto the
     // existing Person: an anonymous form is not a trustworthy channel
     // for amending someone else's legal-name record.
     const existingPerson = await tx.person.findUnique({ where: { msisdn: reg.msisdn } });
-    const joiningExistingOrg = Boolean(reg.groupPartyId) || Boolean(reg.bizPartyId);
-    if (existingPerson && !joiningExistingOrg) {
-      throw Object.assign(new Error('This number is already registered'), {
-        code: 'MSISDN_TAKEN',
-      });
-    }
 
     // 1 · the person — reuse if we matched one, otherwise create
     let personPartyId: string;

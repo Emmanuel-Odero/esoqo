@@ -1,6 +1,9 @@
 'use server';
 import { revalidatePath } from 'next/cache';
-import { moderateJamiiPage, issueOrgPageVerification, revokeOrgPageVerification, type JamiiPageStatus } from '@esoko/db';
+import {
+  moderateJamiiPage, issueOrgPageVerification, revokeOrgPageVerification, type JamiiPageStatus,
+  inviteTeamMember, removeTeamMember, listTeamMembers, type JamiiTeamRole,
+} from '@esoko/db';
 import { toSafeErrorMessage } from '@esoko/domain';
 import { requireStaff } from '@/lib/session';
 
@@ -37,6 +40,47 @@ export async function actionUnverifyPage(organisationPartyId: string, reason: st
     const ctx = await requireStaff();
     if (!reason.trim()) return { ok: false, error: 'A reason is required' };
     await revokeOrgPageVerification(ctx, organisationPartyId, reason);
+    revalidatePath('/jamii-pages');
+    return { ok: true };
+  } catch (e) {
+    console.error(e);
+    return { ok: false, error: toSafeErrorMessage(e, "That didn't save. Please try again.") };
+  }
+}
+
+/* ── page team ────────────────────────────────────────────────── */
+
+/** Every chama/organisation's own team manages its page day to day —
+ *  this is only for onboarding: inviting a group's first admin (or
+ *  standing in for them) while you're helping them get set up. Staff
+ *  reach this via requirePageAccess's party.write bypass. */
+export async function actionListTeam(pageId: string) {
+  const ctx = await requireStaff();
+  const members = await listTeamMembers(ctx, pageId);
+  return members.map((m) => ({
+    id: m.id, name: m.inviteName, email: m.inviteEmail, role: m.role,
+    accepted: Boolean(m.acceptedAt),
+  }));
+}
+
+export async function actionInviteTeamMember(
+  pageId: string, input: { name: string; email: string; role: JamiiTeamRole },
+): Promise<Result> {
+  try {
+    const ctx = await requireStaff();
+    await inviteTeamMember(ctx, pageId, input);
+    revalidatePath('/jamii-pages');
+    return { ok: true };
+  } catch (e) {
+    console.error(e);
+    return { ok: false, error: toSafeErrorMessage(e, "That invite didn't send. Please try again.") };
+  }
+}
+
+export async function actionRemoveTeamMember(pageId: string, memberId: string): Promise<Result> {
+  try {
+    const ctx = await requireStaff();
+    await removeTeamMember(ctx, pageId, memberId);
     revalidatePath('/jamii-pages');
     return { ok: true };
   } catch (e) {

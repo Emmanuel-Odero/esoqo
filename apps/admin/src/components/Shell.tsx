@@ -30,6 +30,9 @@ const NAV: { group: string; items: [string, IconName, string, string][] }[] = [
     ['/estores/pricing', 'coins', 'Resource pricing', 'pricing.read'],
     ['/estores/settings', 'key', 'Settings', 'store.read'],
   ]},
+  { group: 'Ticketing', items: [
+    ['/ticketing', 'tag', 'Organisers', 'ticketorg.read'],
+  ]},
   { group: 'Our Jamii', items: [
     ['/jamii-pages', 'handshake', 'Pages', 'jamii-page.read'],
     ['/jamii-campaigns', 'trend-up', 'Campaigns', 'jamii-campaign.read'],
