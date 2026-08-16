@@ -4,7 +4,6 @@ import { useState, useTransition } from 'react';
 import { useRouter } from 'next/navigation';
 import type { Route } from 'next';
 import { actionRequestPinCode, actionSetPin } from '../actions';
-import { JamiiInterestForm } from './JamiiInterestForm';
 
 export function SetPinForm() {
   const [step, setStep] = useState<'phone' | 'code' | 'not-member'>('phone');
@@ -13,6 +12,7 @@ export function SetPinForm() {
   const [pin, setPin] = useState('');
   const [pinConfirm, setPinConfirm] = useState('');
   const [devCode, setDevCode] = useState<string | null>(null);
+  const [notMemberError, setNotMemberError] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [pending, startTransition] = useTransition();
   const router = useRouter();
@@ -22,7 +22,7 @@ export function SetPinForm() {
     startTransition(async () => {
       const result = await actionRequestPinCode({ msisdn: msisdn.replace(/\s+/g, '') });
       if (!result.ok) {
-        if (result.notMember) { setStep('not-member'); return; }
+        if (result.notMember) { setNotMemberError(result.error); setStep('not-member'); return; }
         setError(result.error);
         return;
       }
@@ -60,7 +60,14 @@ export function SetPinForm() {
   if (step === 'not-member') {
     return (
       <>
-        <JamiiInterestForm msisdn={msisdn.replace(/\s+/g, '')} />
+        <div className="card" style={{ padding: 14, marginBottom: 16, background: 'var(--ledger-lt)' }}>
+          <strong style={{ display: 'block', marginBottom: 4, fontSize: '.9rem' }}>No Our Jamii access yet</strong>
+          <p style={{ margin: 0, fontSize: '.85rem' }}>{notMemberError}</p>
+        </div>
+        <a href={`/apply?identifier=${encodeURIComponent(msisdn.replace(/\s+/g, ''))}`}
+          className="btn btn-stamp btn-block">
+          Apply for access
+        </a>
         <button type="button" className="btn btn-outline btn-block" style={{ marginTop: 8 }}
           onClick={() => { setStep('phone'); setError(null); }}>
           Use a different number
