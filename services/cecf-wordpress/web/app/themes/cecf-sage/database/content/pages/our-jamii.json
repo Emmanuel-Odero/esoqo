@@ -1,20 +1,17 @@
 {
   "sections": [
     {
-      "type": "hero",
+      "type": "phead",
       "kicker": "Our Jamii",
       "heading": "Our Jamii — the communities we serve",
-      "lead": "\"Jamii\" is Swahili for community, or family. It is who CECF works for: the grassroots groups and the people behind them, across every county we reach.",
-      "illustration": "community-gathering.svg",
-      "ctas": [
-        { "label": "Browse community sites", "page": "jamii", "style": "primary", "icon": "arrow-right" },
-        { "label": "Register your group", "page": "apply", "style": "outline" }
-      ],
-      "facts": [
-        "Every group gets a public page",
-        "Receipts sent straight to the donor's phone",
-        "Free to join"
-      ]
+      "lead": "\"Jamii\" is Swahili for community, or family. It is who CECF works for: the grassroots groups and the people behind them, across every county we reach."
+    },
+    {
+      "type": "linkOut",
+      "label": "Browse community sites",
+      "page": "jamii",
+      "style": "primary",
+      "icon": "arrow-right"
     },
     {
       "type": "twoColumn",
@@ -90,7 +87,6 @@
     },
     {
       "type": "twoColumn",
-      "variant": "dark",
       "reverse": true,
       "kicker": "Why it matters",
       "heading": "Care doesn't stop at registration",
@@ -107,6 +103,11 @@
         "ref": "hands-of-care.svg",
         "alt": "A child's hand and an elder's hand"
       }
+    },
+    {
+      "type": "callout",
+      "heading": "One idea, many communities",
+      "body": "Whether it's a chama in Kajiado or a youth collective in Kisumu, a Jamii page looks the same everywhere: a name, a purpose, and a direct line to whoever wants to help."
     },
     {
       "type": "ctaBand",
