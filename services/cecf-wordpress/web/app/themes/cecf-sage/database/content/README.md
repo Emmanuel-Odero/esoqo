@@ -39,7 +39,7 @@ web/app/themes/cecf-sage/
 │   │   ├── site-settings.json   org name, phone, emails, footer blurb, socials
 │   │   ├── navigation.json      primary nav (with dropdown groups) + footer nav columns
 │   │   ├── pages/
-│   │   │   ├── _index.json      registry of all 7 pages (post IA consolidation, see below): slug, title, kicker, meta description
+│   │   │   ├── _index.json      registry of all pages (10, as of 2026-08-16) (post IA consolidation, see below): slug, title, kicker, meta description
 │   │   │   └── <slug>.json      one file per page — an ordered array of typed "sections"
 │   │   └── media/
 │   │       ├── illustrations/   the ~8 unique bespoke brand-illustration SVGs, deduped
@@ -61,7 +61,7 @@ blocks, not a plugin — each `type` below is now a `cecf/<type>` block
 block editor screen with real per-field controls
 (`App\Content\SectionFields`), not the Meta Box JSON-textarea field this
 section used to describe. This JSON tree is still what `wp acorn cecf:seed`
-reads to seed the 8 real pages (`database/seeders/PageSeeder.php` now
+reads to seed the (now 10) real pages (`database/seeders/PageSeeder.php` now
 converts each section straight to block markup), and it's still handy as a
 readable copy source — but it's not the live editing surface CECF staff use.
 

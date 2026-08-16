@@ -1,0 +1,86 @@
+{
+  "sections": [
+    {
+      "type": "phead",
+      "kicker": "Our Jamii",
+      "heading": "Our Jamii — the communities we serve",
+      "lead": "\"Jamii\" is Swahili for community, or family. It is who CECF works for: the grassroots groups and the people behind them, across every county we reach."
+    },
+    {
+      "type": "prose",
+      "kicker": "The Jamii platform",
+      "heading": "A page for every community we work with",
+      "body": [
+        "Every group we register gets a public Jamii page — who they are, what they are raising for, and a receipt for every shilling given, sent straight to the donor's phone. It is how the communities in our network tell their own story, and how supporters find and back them directly.",
+        "Jamii is not only for the groups already inside our formal registration programme. Any community group — a chama, a youth collective, a self-help group — can start a page and be discovered."
+      ]
+    },
+    {
+      "type": "cardGrid",
+      "kicker": "Who we work with",
+      "heading": "The communities in our Jamii",
+      "lead": "CECF's registration and referral work reaches a wide range of groups. These are the communities we most often support.",
+      "columns": "4",
+      "items": [
+        {
+          "icon": "cooperative",
+          "color": "teal",
+          "title": "MSMEs & grassroots groups",
+          "body": "Chamas, table-banking groups, cooperatives and small enterprises moving from informal to formally recognised."
+        },
+        {
+          "icon": "people",
+          "color": "ochre",
+          "title": "Women's groups",
+          "body": "Women-led savings, trading and enterprise groups building financial independence together."
+        },
+        {
+          "icon": "target",
+          "color": "clay",
+          "title": "Youth groups & enterprises",
+          "body": "Young people organising around skills, enterprise and community projects."
+        },
+        {
+          "icon": "shield",
+          "color": "green",
+          "title": "Gender & GBV support groups",
+          "body": "Groups providing peer support, referral and advocacy around gender-based violence and gender equity."
+        },
+        {
+          "icon": "home",
+          "color": "teal",
+          "title": "Vulnerable & marginalised communities",
+          "body": "Groups supporting members facing poverty, displacement or social exclusion, connected to the services they need."
+        },
+        {
+          "icon": "globe",
+          "color": "ochre",
+          "title": "Refugees & displaced persons",
+          "body": "Refugee-led and host-community groups working toward recognition, livelihoods and belonging."
+        },
+        {
+          "icon": "puzzle",
+          "color": "clay",
+          "title": "Persons with disabilities",
+          "body": "Groups led by and for persons with disabilities, formalising to access services and opportunity on equal terms."
+        },
+        {
+          "icon": "clock",
+          "color": "green",
+          "title": "Older persons & elders",
+          "body": "Elder-support and intergenerational groups — core to CECF's own mission alongside child welfare."
+        }
+      ]
+    },
+    {
+      "type": "ctaBand",
+      "heading": "See the impact. Support a community.",
+      "body": "Every community we work with has a Jamii page of their own. Browse them to see the impact they are having, start a page for your own group, or register with CECF to begin the formalisation journey.",
+      "ctas": [
+        { "label": "Browse community sites", "page": "jamii", "style": "primary", "icon": "arrow-right" },
+        { "label": "Start your organisation's page", "page": "jamii-start", "style": "outline" },
+        { "label": "Register your group with CECF", "page": "apply", "style": "outline" }
+      ]
+    }
+  ]
+}

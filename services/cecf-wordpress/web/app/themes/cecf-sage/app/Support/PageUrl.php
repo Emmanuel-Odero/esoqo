@@ -40,6 +40,18 @@ class PageUrl
             return self::esokoJoinUrl();
         }
 
+        // "jamii"/"jamii-start" are the community-pages platform
+        // (apps/jamii in this monorepo, not a WordPress page) — its
+        // discover/browse screen and its "start your organisation's page"
+        // wizard respectively. Used by pages/our-jamii.json's CTAs.
+        if ($key === 'jamii') {
+            return self::jamiiUrl();
+        }
+
+        if ($key === 'jamii-start') {
+            return self::jamiiUrl() . '/start';
+        }
+
         $url = self::map()[$key] ?? null;
 
         return $url && $anchor ? "{$url}#{$anchor}" : $url;
@@ -48,6 +60,18 @@ class PageUrl
     public static function esokoJoinUrl(): string
     {
         return env('ESOKO_JOIN_URL', 'http://localhost:3001/join');
+    }
+
+    /**
+     * apps/jamii's dev server runs on :3004 (see the monorepo's root
+     * docker-compose.yml) — this is a link rendered into an `<a href>`
+     * for the *visitor's own browser* to follow, not fetched server-side
+     * by this PHP process, so "localhost" resolving to the host machine
+     * (not this container) is correct, same reasoning as esokoJoinUrl().
+     */
+    public static function jamiiUrl(): string
+    {
+        return rtrim(env('JAMII_URL', 'http://localhost:3004'), '/');
     }
 
     /**

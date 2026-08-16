@@ -258,6 +258,9 @@ services:
       # port apps/app's dev server binds to, reachable from this container
       # via the host's loopback (see also docker-compose's esoko-dev service).
       ESOKO_JOIN_URL: http://localhost:3001/join
+      # Where "Our Jamii" page's CTAs send people (App\Support\PageUrl::
+      # jamiiUrl()) — apps/jamii's dev server, port 3004 above.
+      JAMII_URL: http://localhost:3004
       AUTH_KEY: dev
       SECURE_AUTH_KEY: dev
       LOGGED_IN_KEY: dev

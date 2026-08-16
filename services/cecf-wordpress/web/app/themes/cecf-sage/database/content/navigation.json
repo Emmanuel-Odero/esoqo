@@ -26,6 +26,7 @@
         { "label": "News & events", "page": "news-events" }
       ]
     },
+    { "label": "Our Jamii", "page": "our-jamii" },
     { "label": "Contact", "page": "contact" }
   ],
   "primaryCta": { "label": "Register a group", "page": "apply" },
