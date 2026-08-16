@@ -253,6 +253,7 @@ a.mgrp-link.cur { color: var(--teal); background: var(--tealT) }
 .btn:disabled { opacity: .45; cursor: not-allowed }
 
 /* cards */
+.cards4 { display: grid; grid-template-columns: repeat(4, 1fr); gap: 20px }
 .cards3 { display: grid; grid-template-columns: repeat(3, 1fr); gap: 20px }
 .cards2 { display: grid; grid-template-columns: repeat(2, 1fr); gap: 20px }
 .card, .pcard { border: 1px solid var(--line); border-radius: 14px; padding: 24px; background: #fff }
@@ -271,16 +272,24 @@ a.mgrp-link.cur { color: var(--teal); background: var(--tealT) }
 .cb.sm { background: var(--tealT); color: var(--teal) }
 
 /* team */
-.member { text-align: center }
+.member {
+    text-align: center; border-top: 4px solid var(--line); transition: .18s;
+    position: relative; overflow: hidden
+}
+.member:hover { transform: translateY(-3px); box-shadow: var(--sh); border-color: var(--teal) }
+.member.teal { border-top-color: var(--teal) }
+.member.ochre { border-top-color: var(--ochre) }
+.member.clay { border-top-color: var(--clay) }
+.member.green { border-top-color: var(--green) }
 .avatar {
     width: 84px; height: 84px; border-radius: 50%; display: grid; place-items: center;
-    margin: 0 auto 16px; font-family: var(--fm); font-size: 1.15rem; font-weight: 700;
-    letter-spacing: .02em
+    margin: 0 auto 18px; font-family: var(--fm); font-size: 1.2rem; font-weight: 700;
+    letter-spacing: .02em; color: #fff
 }
-.avatar.teal { background: var(--tealT); color: var(--teal) }
-.avatar.ochre { background: var(--ochreT); color: var(--ochre) }
-.avatar.clay { background: var(--clayT); color: var(--clay) }
-.avatar.green { background: var(--greenT); color: var(--green) }
+.avatar.teal { background: var(--teal); box-shadow: 0 0 0 6px var(--tealT) }
+.avatar.ochre { background: var(--ochre); box-shadow: 0 0 0 6px var(--ochreT) }
+.avatar.clay { background: var(--clay); box-shadow: 0 0 0 6px var(--clayT) }
+.avatar.green { background: var(--green); box-shadow: 0 0 0 6px var(--greenT) }
 .role {
     font-family: var(--fm); font-size: .74rem; letter-spacing: .04em; color: var(--clay);
     font-weight: 600; margin: -6px 0 10px
