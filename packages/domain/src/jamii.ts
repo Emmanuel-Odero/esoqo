@@ -127,15 +127,29 @@ export const jamiiContactSchema = z.object({
 export type JamiiContactInput = z.infer<typeof jamiiContactSchema>;
 
 /**
- * Someone tried to sign in or set a PIN on Our Jamii with a phone/email
- * that isn't an existing CECF member — access is gated to members, so
- * this is the "leave your details, we'll follow up" fallback rather
- * than a dead end. See @esoko/db's createJamiiInterest and the admin
- * app's /jamii-interest screen.
+ * First step of applying for Our Jamii access: just an identifier, so
+ * the form can tell someone "we already have your details" before
+ * asking them to fill in anything. See @esoko/db's findJamiiApplicant.
+ */
+export const jamiiApplicantCheckSchema = z.object({
+  identifier: z.string().trim().min(3, 'Enter your phone number or email'),
+});
+export type JamiiApplicantCheckInput = z.infer<typeof jamiiApplicantCheckSchema>;
+
+/**
+ * An application for Our Jamii access — the account may not exist yet
+ * (a brand-new applicant) or may already (an existing CECF member whose
+ * phone/email matched one on file), so `msisdn`/`county` are validated
+ * as required only when the Server Action determines it's the
+ * brand-new case; see apps/jamii's actionSubmitApplication. Sign-in is
+ * granted once a staff member approves this, never automatically — see
+ * @esoko/db's approveJamiiInterest and the admin app's /jamii-interest
+ * screen.
  */
 export const jamiiInterestSchema = z.object({
-  fullName: z.string().trim().min(2, 'Enter your name').max(120),
-  msisdn: z.string().trim().regex(/^\+254(7|1)\d{8}$/, 'Enter a valid Kenyan mobile number'),
+  identifier: z.string().trim().min(3, 'Enter your phone number or email'),
+  fullName: z.string().trim().min(2, 'Enter your name').max(120).optional().or(z.literal('')),
+  msisdn: z.string().trim().regex(/^\+254(7|1)\d{8}$/, 'Enter a valid Kenyan mobile number').optional().or(z.literal('')),
   email: z.string().trim().toLowerCase().email('Enter a valid email address').optional().or(z.literal('')),
   county: z.string().trim().max(80).optional().or(z.literal('')),
   organisationName: z.string().trim().max(160).optional().or(z.literal('')),
