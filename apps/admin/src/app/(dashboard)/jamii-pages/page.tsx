@@ -21,6 +21,7 @@ export default async function JamiiPagesPage({
   ]);
   const canModerate = ctx.capabilities.includes('*') || ctx.capabilities.includes('jamii-page.moderate');
   const canVerify = ctx.capabilities.includes('*') || ctx.capabilities.includes('attestation.issue');
+  const canManageTeam = ctx.capabilities.includes('*') || ctx.capabilities.includes('party.write');
 
   return (
     <>
@@ -67,6 +68,7 @@ export default async function JamiiPagesPage({
         }))}
         canModerate={canModerate}
         canVerify={canVerify}
+        canManageTeam={canManageTeam}
         q={sp.q ?? ''}
         status={sp.status ?? ''}
       />

@@ -1,9 +1,12 @@
 'use client';
 
-import { useState, useTransition } from 'react';
+import { useEffect, useState, useTransition } from 'react';
 import { Icon } from '@esoko/ui';
 import { useAnnounce } from '@esoko/a11y';
-import { actionModeratePage, actionVerifyPage, actionUnverifyPage } from './actions';
+import {
+  actionModeratePage, actionVerifyPage, actionUnverifyPage,
+  actionListTeam, actionInviteTeamMember, actionRemoveTeamMember,
+} from './actions';
 
 interface Row {
   id: string; slug: string; status: string; officialName: string; county: string;
@@ -17,8 +20,8 @@ const STATUS: Record<string, [string, string]> = {
 };
 
 export function PageTable({
-  rows, canModerate, canVerify, q, status,
-}: { rows: Row[]; canModerate: boolean; canVerify: boolean; q: string; status: string }) {
+  rows, canModerate, canVerify, canManageTeam, q, status,
+}: { rows: Row[]; canModerate: boolean; canVerify: boolean; canManageTeam: boolean; q: string; status: string }) {
   const [openId, setOpenId] = useState<string | null>(null);
 
   return (
@@ -90,6 +93,7 @@ export function PageTable({
           row={rows.find((r) => r.id === openId)!}
           canModerate={canModerate}
           canVerify={canVerify}
+          canManageTeam={canManageTeam}
           onClose={() => setOpenId(null)}
         />
       )}
@@ -97,14 +101,50 @@ export function PageTable({
   );
 }
 
+const TEAM_ROLE_LABEL: Record<string, string> = { ADMIN: 'Admin', EDITOR: 'Editor', CONTRIBUTOR: 'Contributor' };
+
+interface TeamMember { id: string; name: string; email: string; role: string; accepted: boolean }
+
 function PageModal({
-  row, canModerate, canVerify, onClose,
-}: { row: Row; canModerate: boolean; canVerify: boolean; onClose: () => void }) {
+  row, canModerate, canVerify, canManageTeam, onClose,
+}: { row: Row; canModerate: boolean; canVerify: boolean; canManageTeam: boolean; onClose: () => void }) {
   const [reason, setReason] = useState('');
   const [confirming, setConfirming] = useState<'SUSPENDED' | 'unverify' | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [pending, start] = useTransition();
   const announce = useAnnounce();
+
+  const [team, setTeam] = useState<TeamMember[] | null>(null);
+  const [inviteName, setInviteName] = useState('');
+  const [inviteEmail, setInviteEmail] = useState('');
+  const [inviteRole, setInviteRole] = useState<'ADMIN' | 'EDITOR' | 'CONTRIBUTOR'>('ADMIN');
+
+  useEffect(() => {
+    if (!canManageTeam) return;
+    let cancelled = false;
+    actionListTeam(row.id).then((m) => { if (!cancelled) setTeam(m); });
+    return () => { cancelled = true; };
+  }, [canManageTeam, row.id]);
+
+  function invite() {
+    setError(null);
+    start(async () => {
+      const r = await actionInviteTeamMember(row.id, { name: inviteName, email: inviteEmail, role: inviteRole });
+      if (r.ok) {
+        setInviteName(''); setInviteEmail('');
+        announce(`${inviteName} invited to manage this page`, 'polite');
+        setTeam(await actionListTeam(row.id));
+      } else { setError(r.error); announce(r.error, 'assertive'); }
+    });
+  }
+
+  function removeMember(memberId: string) {
+    start(async () => {
+      const r = await actionRemoveTeamMember(row.id, memberId);
+      if (r.ok) setTeam(await actionListTeam(row.id));
+      else { setError(r.error); announce(r.error, 'assertive'); }
+    });
+  }
 
   const run = (fn: () => Promise<{ ok: boolean; error?: string }>, msg: string) =>
     start(async () => {
@@ -135,6 +175,51 @@ function PageModal({
               <Icon name="arrow-right" size={14} />View public page
             </a>
           </p>
+
+          {canManageTeam && (
+            <div style={{ marginBottom: 20, paddingBottom: 20, borderBottom: '1px solid var(--line)' }}>
+              <p className="sub" style={{ marginBottom: 8 }}>
+                Team ({team?.length ?? row.teamCount}) — day-to-day editing stays with them; use this
+                only to invite a chama&rsquo;s first admin while onboarding.
+              </p>
+
+              {team === null ? (
+                <p className="sub">Loading…</p>
+              ) : team.length === 0 ? (
+                <p className="sub">No one invited yet.</p>
+              ) : (
+                <ul style={{ listStyle: 'none', padding: 0, margin: '0 0 12px' }}>
+                  {team.map((m) => (
+                    <li key={m.id} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '6px 0' }}>
+                      <span style={{ flex: 1 }}>
+                        <strong>{m.name}</strong> <span className="sub">{m.email}</span>
+                      </span>
+                      <span className="pill p-info">{TEAM_ROLE_LABEL[m.role] ?? m.role}</span>
+                      {!m.accepted && <span className="pill p-warn">Pending</span>}
+                      <button className="btn btn-o btn-sm" disabled={pending} onClick={() => removeMember(m.id)}>
+                        <Icon name="close" size={12} />Remove
+                      </button>
+                    </li>
+                  ))}
+                </ul>
+              )}
+
+              <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                <input className="inp" style={{ flex: '1 1 140px' }} placeholder="Name" value={inviteName}
+                  onChange={(e) => setInviteName(e.target.value)} aria-label="Invite name" />
+                <input className="inp" style={{ flex: '1 1 180px' }} type="email" placeholder="Email" value={inviteEmail}
+                  onChange={(e) => setInviteEmail(e.target.value)} aria-label="Invite email" />
+                <select className="inp" value={inviteRole} onChange={(e) => setInviteRole(e.target.value as typeof inviteRole)}
+                  aria-label="Invite role">
+                  {Object.entries(TEAM_ROLE_LABEL).map(([k, l]) => <option key={k} value={k}>{l}</option>)}
+                </select>
+                <button className="btn btn-o btn-sm" disabled={pending || !inviteName.trim() || !inviteEmail.trim()}
+                  onClick={invite}>
+                  <Icon name="plus" size={14} />Invite
+                </button>
+              </div>
+            </div>
+          )}
 
           {(confirming === 'SUSPENDED' || confirming === 'unverify') && (
             <div style={{ marginBottom: 16 }}>

@@ -53,7 +53,9 @@ export function JoinFlow() {
   // const [otpVerified, setOtpVerified] = useState(false);
   // const [otp, setOtp] = useState('');
   // const [devCode, setDevCode] = useState<string | undefined>();
-  const [emailSent, setEmailSent] = useState(false);
+  // Same reasoning — email verification isn't built yet, see the
+  // commented-out "Send link" block in steps/Finish.tsx.
+  // const [emailSent, setEmailSent] = useState(false);
   const [done, setDone] = useState(false);
   const [resumable, setResumable] = useState<{ f: Form; step: number; regId: string } | null>(null);
 
@@ -417,7 +419,6 @@ export function JoinFlow() {
         {step === 4 && (
           <Finish
             f={f} set={set} headingRef={headingRef}
-            emailSent={emailSent} setEmailSent={setEmailSent}
             onEdit={setStep}
           />
         )}

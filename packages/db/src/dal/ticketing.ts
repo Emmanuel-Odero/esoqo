@@ -142,6 +142,52 @@ export async function setTicketOrgStatus(ctx: Ctx, orgId: string, status: 'ACTIV
   return org;
 }
 
+export interface TicketOrgDirectoryFilter {
+  status?: 'DRAFT' | 'ACTIVE' | 'SUSPENDED';
+  vertical?: 'EVENTS' | 'TRANSPORT';
+  search?: string;
+  take?: number;
+  skip?: number;
+}
+
+/** The staff-facing directory of every organiser platform-wide — the
+ *  ticketing counterpart to listStoresForStaff in dal/store.ts. Unlike
+ *  listMyTicketOrgs (scoped to ctx.partyId), this is deliberately
+ *  unscoped: staff.read/ticketorg.read is a global grant. */
+export async function listTicketOrgsForStaff(ctx: Ctx, f: TicketOrgDirectoryFilter = {}) {
+  requireCapability(ctx, 'ticketorg.read');
+  const where = {
+    ...(f.status ? { status: f.status } : {}),
+    ...(f.vertical ? { vertical: f.vertical } : {}),
+    ...(f.search ? { name: { contains: f.search, mode: 'insensitive' as const } } : {}),
+  };
+  const [rows, total] = await Promise.all([
+    prisma.ticketOrg.findMany({
+      where,
+      include: {
+        enterprise: { include: { party: { include: { person: true, organisation: true } } } },
+        _count: { select: { staff: true, listings: true } },
+      },
+      orderBy: { createdAt: 'desc' },
+      take: f.take ?? 25,
+      skip: f.skip ?? 0,
+    }),
+    prisma.ticketOrg.count({ where }),
+  ]);
+  return { rows, total };
+}
+
+/** Platform-wide counts, unaffected by the directory's current filter. */
+export async function getTicketOrgCounts(ctx: Ctx) {
+  requireCapability(ctx, 'ticketorg.read');
+  const [total, active, transport] = await Promise.all([
+    prisma.ticketOrg.count(),
+    prisma.ticketOrg.count({ where: { status: 'ACTIVE' } }),
+    prisma.ticketOrg.count({ where: { vertical: 'TRANSPORT' } }),
+  ]);
+  return { total, active, transport, events: total - transport };
+}
+
 // ───────────────────────────── Staff ─────────────────────────────
 
 export interface CreateTicketOrgStaffInput {

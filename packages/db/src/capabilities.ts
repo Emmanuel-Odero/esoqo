@@ -296,12 +296,13 @@ export const ROLE_PRESETS = {
               'payment.read', 'payment.record', 'audit.read', 'report.read',
               'duplicate.review', 'consent.read', 'staff.read',
               'store.read', 'store.write', 'store.moderate', 'order.read', 'order.reroute',
-              'product.moderate', 'pricing.read', 'pricing.write',
+              'product.moderate', 'pricing.read', 'pricing.write', 'cashier.write',
               'jamii-interest.read', 'jamii-interest.write',
               'jamii-page.read', 'jamii-page.moderate',
               'jamii-campaign.read', 'jamii-campaign.moderate', 'jamii-donation.read',
               'treasury.read', 'treasury.confirm', 'portfolio.read',
-              'ticketorg.read', 'ticketorg.moderate', 'booking.read', 'booking.refund'],
+              'ticketorg.read', 'ticketorg.moderate', 'ticketorgstaff.write',
+              'booking.read', 'booking.refund'],
 
   SUPER_ADMIN: ['*'],
 
