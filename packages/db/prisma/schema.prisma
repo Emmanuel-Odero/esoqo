@@ -83,6 +83,7 @@ model Party {
   storeOrdersAsBuyer     StoreOrder[]
   donationsAsDonor       Donation[]
   jamiiTeamMemberships   JamiiTeamMember[]
+  jamiiApplications      JamiiInterest[]
   bookingsAsBuyer        Booking[]
 
   // ── Group treasury ──
@@ -1889,9 +1890,21 @@ model Donation {
 /// the admin app (see App\Support in cecf-wordpress for the analogous
 /// non-CECF-member redirect on the WordPress side, and this record's
 /// counterpart CTA on /join).
+/// An application for Our Jamii access — CONVERTED is what actually
+/// grants sign-in (see hasJamiiAccess in dal/jamii-interest.ts), so
+/// every first-time Our Jamii sign-in traces back to one of these being
+/// approved, whether the applicant was a brand-new person or someone
+/// who already had a CECF/Esoko account.
 model JamiiInterest {
   id     String              @id @default(uuid()) @db.Uuid
   status JamiiInterestStatus @default(NEW)
+
+  /// Set at submission time when the identifier they applied with
+  /// matched an existing Person, or at approval time when staff approve
+  /// a brand-new applicant and a Person gets created for them. Null in
+  /// between — a pending brand-new application has no Party yet.
+  personId String? @db.Uuid
+  person   Party?  @relation(fields: [personId], references: [id])
 
   fullName         String
   msisdn           String
@@ -1910,6 +1923,7 @@ model JamiiInterest {
   updatedAt DateTime @updatedAt
 
   @@index([status, createdAt])
+  @@index([personId])
   @@map("jamii_interest")
 }
 
