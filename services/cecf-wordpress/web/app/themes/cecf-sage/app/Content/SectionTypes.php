@@ -5,11 +5,10 @@ namespace App\Content;
 /**
  * The single canonical list of section `type` values a page can be built
  * from — see database/content/README.md's schema table, which this mirrors
- * exactly. Both the Meta Box field registration (App\Providers\
- * CecfContentServiceProvider, for the admin-editable "type" dropdown) and
- * PageSeeder (database/seeders/PageSeeder.php, for validating what's in the
- * JSON before it's written to the database) read from here, so the list
- * only ever needs to change in one place.
+ * exactly. App\Providers\CecfBlocksServiceProvider (registering one
+ * Gutenberg block per type) and PageSeeder (database/seeders/PageSeeder.php,
+ * for validating what's in the JSON before it's written to the database)
+ * both read from here, so the list only ever needs to change in one place.
  */
 class SectionTypes
 {
@@ -34,6 +33,7 @@ class SectionTypes
             'downloadList' => 'Download list',
             'sponsorshipGrid' => 'Sponsorship grid',
             'partnerList' => 'Partner / institution list',
+            'teamGrid' => 'Team grid (staff / board / advisors)',
             'ctaBand' => 'CTA band',
             'callout' => 'Callout',
             'note' => 'Note',

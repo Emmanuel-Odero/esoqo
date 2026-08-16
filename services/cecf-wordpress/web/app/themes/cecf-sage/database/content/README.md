@@ -94,6 +94,7 @@ reshaping pass. Types in use:
 | `callout` | `.callout` | Highlighted aside |
 | `note` | `.note`, `.note.warn` | Info / warning notice |
 | `registrationForm` | `.fcard` (page `form` only) | Copy for the existing 6-step JS wizard; the wizard's *behaviour* stays code, not content |
+| `teamGrid` | `.cards3`/`.cards4`, `.member`, `.avatar` | Staff/board/advisor cards — name, role, bio, initials avatar (added 2026-08-16 for `pages/team.json`, not part of the original template extraction) |
 
 Icons are referenced by a short semantic **name** (`"icon": "bank"`,
 `"icon": "handshake"`), not by inlining SVG markup or a template CSS class.

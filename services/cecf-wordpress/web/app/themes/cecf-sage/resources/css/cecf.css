@@ -270,6 +270,23 @@ a.mgrp-link.cur { color: var(--teal); background: var(--tealT) }
 .cb.green { background: var(--greenT); color: var(--green) }
 .cb.sm { background: var(--tealT); color: var(--teal) }
 
+/* team */
+.member { text-align: center }
+.avatar {
+    width: 84px; height: 84px; border-radius: 50%; display: grid; place-items: center;
+    margin: 0 auto 16px; font-family: var(--fm); font-size: 1.15rem; font-weight: 700;
+    letter-spacing: .02em
+}
+.avatar.teal { background: var(--tealT); color: var(--teal) }
+.avatar.ochre { background: var(--ochreT); color: var(--ochre) }
+.avatar.clay { background: var(--clayT); color: var(--clay) }
+.avatar.green { background: var(--greenT); color: var(--green) }
+.role {
+    font-family: var(--fm); font-size: .74rem; letter-spacing: .04em; color: var(--clay);
+    font-weight: 600; margin: -6px 0 10px
+}
+.member .mono { font-size: .8rem; color: var(--ink3) }
+
 /* stats */
 .stat4 {
     display: grid; grid-template-columns: repeat(4, 1fr); gap: 1px; background: var(--line);

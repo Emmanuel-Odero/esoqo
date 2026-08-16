@@ -234,6 +234,19 @@ class SectionFields
                 ]),
                 self::cta('cta', 'Button'),
             ],
+            'teamGrid' => [
+                self::text('kicker', 'Kicker'),
+                self::text('heading', 'Heading'),
+                self::textarea('lead', 'Lead paragraph'),
+                self::select('columns', 'Columns', ['2' => '2', '3' => '3', '4' => '4']),
+                self::repeater('items', 'People', [
+                    self::text('name', 'Name'),
+                    self::text('role', 'Role / title'),
+                    self::textarea('bio', 'Short bio'),
+                    self::color('color', 'Avatar colour'),
+                    self::text('email', 'Email (optional, shown as a mailto link)'),
+                ]),
+            ],
             'ctaBand' => [
                 self::text('heading', 'Heading'),
                 self::textarea('body', 'Body'),

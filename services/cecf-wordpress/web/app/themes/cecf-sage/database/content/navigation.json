@@ -6,6 +6,7 @@
       "page": "about",
       "children": [
         { "label": "Who we are", "page": "about" },
+        { "label": "Our team", "page": "team" },
         { "label": "Partnerships", "page": "partnerships" }
       ]
     },
