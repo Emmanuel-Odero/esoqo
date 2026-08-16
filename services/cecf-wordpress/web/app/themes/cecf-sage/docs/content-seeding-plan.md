@@ -436,9 +436,43 @@ is never involved, and the "Page sections" Meta Box field/panel is gone.
   update wpackagist-plugin/meta-box` cleanly removed it from
   `composer.lock` and `web/app/plugins/meta-box/`.
 
-**Still a placeholder, unchanged by this pass:** `cecf_site_settings`
-(org info, footer columns) is still a native Settings API screen with no
+**Was a placeholder, resolved in pass 5 below:** `cecf_site_settings`
+(org info, footer columns) was still a native Settings API screen with no
 field-by-field UI yet (`CecfContentServiceProvider::
 renderSiteSettingsPage()`) — smaller in scope than the 20-section-type
-problem this pass solved, and a reasonable next follow-up, but out of
-scope here.
+problem this pass solved, and a reasonable next follow-up.
+
+## 8. Pass 5 — site-wide settings in the native Customizer (2026-08-16)
+
+Replaced the pass-4 Settings API placeholder screen with real controls in
+Appearance → Customize. `App\Providers\CecfContentServiceProvider` now
+registers a "CECF Settings" panel (organisation info, contact
+emails/hours, footer text, one section per footer column, the header
+button) with `type => 'option'` settings whose IDs are bracketed paths
+into the *same* `cecf_site_settings` option
+`database/seeders/SiteSettingsSeeder.php` already wrote and
+`sections/{header,footer}.blade.php` already read — WordPress's own
+Customizer core resolves `cecf_site_settings[footerColumns][0][links][2]
+[label]`-style IDs via `_wp_array_set()` on save, so no custom
+`WP_Customize_Setting` subclass and no reshaping of the option was
+needed.
+
+Footer columns/links are the one variable-cardinality part of this
+option; the Customizer has no native repeater control, so this exposes a
+fixed, generous number of slots (`FOOTER_COLUMN_SLOTS = 4`,
+`FOOTER_LINK_SLOTS = 8`, one above `navigation.json`'s current widest
+column) rather than hand-rolling dynamic-section JS — a blank link label
+or column heading just doesn't render (`sections/footer.blade.php` and
+`sections/header.blade.php` both updated to skip empty slots, the latter
+also fixed to hide the header CTA entirely rather than render an
+empty-label button when only `page` is set).
+
+Verified in the `cecf` docker profile via a real `WP_Customize_Manager`
+instance (`do_action('customize_register', $manager)`): all 8 sections
+and 88 settings register; every setting's `->value()` correctly reads
+back the already-seeded option data (spot-checked `orgName`, a footer
+column heading, and a nested link label three levels deep); a real
+`set_post_value()` + `->save()` write (as a logged-in user — capability
+checks fail silently otherwise) round-trips correctly and leaves every
+sibling key in the option untouched. Front end still renders clean
+afterward.
