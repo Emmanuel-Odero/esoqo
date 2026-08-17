@@ -16,7 +16,7 @@ a store on the same account, with no separate signup.
 ```bash
 cp .env.example .env
 pnpm install
-pnpm stack:up            # postgres · pgbouncer · redis · mailhog
+pnpm stack:up            # postgres · pgbouncer · redis · mailhog · mock-sms
 pnpm db:generate
 pnpm db:migrate
 pnpm db:seed             # reference data only — no fake users
@@ -30,6 +30,7 @@ pnpm dev
 | Operations | http://localhost:3002 |
 | Store — merchant, storefront, PoS | http://localhost:3003 |
 | Mail catcher | http://localhost:8025 |
+| SMS catcher (`SMS_PROVIDER=mock`) | http://localhost:8026 |
 | Database UI | `docker compose --profile tools up -d adminer` → :8080 |
 
 `pnpm db:seed` creates exactly one login — a staff account so the admin
@@ -44,9 +45,15 @@ Change this PIN (`SEED_ADMIN_PIN` env var before seeding, or
 `SEED_ADMIN_HASH` for a precomputed Argon2id hash) before any deployment —
 see the checklist at the bottom of this file.
 
-`SMS_PROVIDER=console` prints OTPs to the terminal. It also returns the code
-to the browser so you can test without a live SMS account — that path is
-gated on the env var and must never be enabled in a deployed environment.
+`SMS_PROVIDER=console` (the default) prints OTPs to the terminal — read the
+code there rather than the browser; it is never returned in the response,
+in any run mode.
+
+`SMS_PROVIDER=mock` sends SMS to a local catcher instead (`mosip/mock-smtp-sms`,
+started with the rest of the stack) — the SMS equivalent of the mail catcher.
+Read the actual message text, including the OTP code, at
+http://localhost:8026 rather than the terminal. Still never dials a real
+gateway; development ignores any other `SMS_PROVIDER` value.
 `MPESA_PROVIDER=console` does the same for the store's STK push checkout:
 it logs the prompt and auto-confirms locally instead of calling Safaricom.
 
@@ -96,7 +103,7 @@ eStores admin work not yet in `main`.
 Honesty here matters more than a tidy checklist. Nothing below is padded.
 
 ### Working
-- **Docker stack** — Postgres 16, PgBouncer (transaction mode), Redis, MailHog
+- **Docker stack** — Postgres 16, PgBouncer (transaction mode), Redis, MailHog, mock-sms
 - **Full domain schema** — Party, Attestation, ConsentGrant, JournalEntry/Posting, AuditEvent and the rest, migrated and seeded
 - **Data Access Layer** with `requireCapability()` deny-by-default, enforced by a lint rule that fails CI
 - **Hash-chained audit log**, with a verifier that names the first broken link
