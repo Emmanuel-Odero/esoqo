@@ -1,8 +1,17 @@
 'use client';
 
 import { useState, type RefObject } from 'react';
-import { Icon } from '@esoko/ui';
+import { Icon, SelectWithOther } from '@esoko/ui';
 import type { Form } from '../form';
+
+// Plain words as both value and label — that's what Form['orgRole']
+// stores directly (no separate enum code), and the sentinel here is
+// 'Other', not the 'OTHER' convention used elsewhere in the product
+// (see WalkInFlow.tsx's admin-side equivalent of this same field).
+const ORG_ROLE_OPTIONS = [
+  ['Chairperson', 'Chairperson'], ['Treasurer', 'Treasurer'], ['Secretary', 'Secretary'],
+  ['Member', 'Member'], ['Other', 'Other'],
+] as const;
 
 const WHO_OPTIONS = [
   { v: 'me', icon: 'user', t: 'Myself', d: 'A trader, farmer, rider, fundi or anyone working on their own' },
@@ -93,23 +102,17 @@ export function WhoAndName({
                 Next you will search for your group — we check first so nobody registers the
                 same group twice. If it is not listed yet, you can register it there.
               </p>
-              <div className="fld">
-                <label className="lab" htmlFor="orgRole">Your role in the group</label>
-                <select className="inp" id="orgRole" value={orgRoleOther ? 'Other' : f.orgRole}
-                  onChange={(e) => {
-                    if (e.target.value === 'Other') { setOrgRoleOther(true); set('orgRole', ''); }
-                    else { setOrgRoleOther(false); set('orgRole', e.target.value); }
-                  }}>
-                  <option>Chairperson</option><option>Treasurer</option>
-                  <option>Secretary</option><option>Member</option>
-                  <option>Other</option>
-                </select>
-                {orgRoleOther && (
-                  <input className="inp" style={{ marginTop: 8 }} value={f.orgRole} maxLength={40}
-                    onChange={(e) => set('orgRole', e.target.value)}
-                    placeholder="What the group calls this role" />
-                )}
-              </div>
+              <SelectWithOther
+                id="orgRole" label="Your role in the group" otherValue="Other"
+                options={ORG_ROLE_OPTIONS}
+                value={orgRoleOther ? 'Other' : f.orgRole}
+                onChange={(v) => {
+                  if (v === 'Other') { setOrgRoleOther(true); set('orgRole', ''); }
+                  else { setOrgRoleOther(false); set('orgRole', v); }
+                }}
+                customValue={f.orgRole} onCustomChange={(v) => set('orgRole', v)}
+                customLabel="Your role in the group" customPlaceholder="What the group calls this role"
+              />
               <div className="sub2" />
             </>
           )}

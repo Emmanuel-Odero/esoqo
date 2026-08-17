@@ -4,7 +4,7 @@ import { useEffect, useRef, useState, useTransition } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import type { Route } from 'next';
-import { Icon, type IconName } from '@esoko/ui';
+import { Icon, type IconName, SelectWithOther } from '@esoko/ui';
 import { formatMsisdn } from '@esoko/domain';
 import { useAnnounce } from '@esoko/a11y';
 import {
@@ -33,6 +33,7 @@ const ROLE_LABEL: Record<string, string> = {
   OTHER: 'Other…',
 };
 const OFFICE = new Set(['CHAIRPERSON', 'TREASURER', 'SECRETARY']);
+const ROLE_OPTIONS = ROLES.map((r) => [r, ROLE_LABEL[r] ?? r] as const);
 
 /** What to actually show for a member's role — their own wording when
  *  it's a custom one, the fixed label otherwise. */
@@ -534,24 +535,23 @@ function MemberRoleCell({
 
   return (
     <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', alignItems: 'center' }}>
-      <select className="inp" style={{ minHeight: 34, padding: '5px 9px', fontSize: '.84rem' }}
-        value={role} aria-label={`Role for ${member.name}`}
-        onChange={(e) => pick(e.target.value as Role)} disabled={pending}>
-        {ROLES.map((r) => <option key={r} value={r}>{ROLE_LABEL[r]}</option>)}
-      </select>
-      {showCustomField && (
-        <>
-          <input className="inp" style={{ minHeight: 34, padding: '5px 9px', fontSize: '.84rem', width: 130 }}
-            value={customRole} onChange={(e) => setCustomRole(e.target.value)}
-            onKeyDown={(e) => { if (e.key === 'Enter') saveCustom(); }}
-            placeholder="e.g. Youth rep" aria-label={`Custom role for ${member.name}`} disabled={pending} />
-          {dirty && (
-            <button className="btn btn-p btn-sm" style={{ minHeight: 34, padding: '5px 10px' }}
-              onClick={saveCustom} disabled={pending || !customRole.trim()}>
-              Save
-            </button>
-          )}
-        </>
+      <SelectWithOther
+        id={`role-${member.membershipId}`} bare options={ROLE_OPTIONS}
+        value={role} onChange={(v) => pick(v as Role)}
+        customValue={customRole} onCustomChange={setCustomRole}
+        customPlaceholder="e.g. Youth rep" disabled={pending}
+        selectProps={{ style: { minHeight: 34, padding: '5px 9px', fontSize: '.84rem' }, 'aria-label': `Role for ${member.name}` }}
+        inputProps={{
+          style: { minHeight: 34, padding: '5px 9px', fontSize: '.84rem', width: 130 },
+          'aria-label': `Custom role for ${member.name}`,
+          onKeyDown: (e) => { if (e.key === 'Enter') saveCustom(); },
+        }}
+      />
+      {showCustomField && dirty && (
+        <button className="btn btn-p btn-sm" style={{ minHeight: 34, padding: '5px 10px' }}
+          onClick={saveCustom} disabled={pending || !customRole.trim()}>
+          Save
+        </button>
       )}
     </div>
   );
