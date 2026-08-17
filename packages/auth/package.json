@@ -8,8 +8,9 @@
   "dependencies": {
     "@node-rs/argon2": "^2.0.2",
     "ioredis": "^5.4.2",
+    "nodemailer": "^6.9.16",
     "@esoko/db": "workspace:*",
     "@esoko/domain": "workspace:*"
   },
-  "devDependencies": { "typescript": "^5.7.2" }
+  "devDependencies": { "@types/nodemailer": "^6.4.17", "typescript": "^5.7.2" }
 }

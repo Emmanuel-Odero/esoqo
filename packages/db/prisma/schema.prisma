@@ -140,6 +140,10 @@ model Organisation {
   party   Party  @relation(fields: [partyId], references: [id], onDelete: Cascade)
 
   kind              OrgKind
+  /// Free text when kind is OTHER — same shape as businessTypeOther below,
+  /// just for the group-kind picker (join flow, admin's Groups screen,
+  /// self-serve /me/group) rather than the business-type one.
+  kindOther         String?
   officialName      String
   knownAs           String?
   /// Registration number, if held. Verified via Attestation, never trusted raw.
@@ -180,22 +184,37 @@ enum MemberRole {
   OTHER
 }
 
+/// PENDING is only reachable via a group with a joinFeeKes set on its
+/// GroupTreasuryPolicy — see createJoinFeePayment/confirmContribution in
+/// dal/treasury.ts, which flips PENDING -> ACTIVE once the fee's
+/// GroupContribution is confirmed. Every other join path (self-founding,
+/// staff addMember/addNewMember, an invite to a group with no fee) skips
+/// straight to ACTIVE, same as before this status existed.
+enum MembershipStatus {
+  PENDING
+  ACTIVE
+}
+
 model Membership {
-  id         String     @id @default(uuid()) @db.Uuid
-  personId   String     @db.Uuid
-  orgId      String     @db.Uuid
-  role       MemberRole @default(MEMBER)
+  id         String           @id @default(uuid()) @db.Uuid
+  personId   String           @db.Uuid
+  orgId      String           @db.Uuid
+  role       MemberRole       @default(MEMBER)
   /// Free text position, set only when role is OTHER — "Youth rep",
   /// "Auditor", whatever the group actually calls it. Ignored otherwise.
   customRole String?
-  joinedAt   DateTime   @default(now())
+  status     MembershipStatus @default(ACTIVE)
+  joinedAt   DateTime         @default(now())
   exitedAt   DateTime?
 
   person Party        @relation("MemberParty", fields: [personId], references: [id], onDelete: Cascade)
   org    Organisation @relation("MemberOrg", fields: [orgId], references: [partyId], onDelete: Cascade)
 
+  joinFeePayments GroupContribution[] @relation("JoinFeeMembership")
+
   @@unique([personId, orgId])
   @@index([orgId, role])
+  @@index([orgId, status])
   @@map("membership")
 }
 
@@ -2011,9 +2030,18 @@ model GroupTreasuryPolicy {
   activeHoursEnd        Int     @default(20)
   requireQuorateMeeting Boolean @default(false)
 
+  /// Whether this group runs contributions at all — officers can switch
+  /// it off for a group that only ever does one-off collections, without
+  /// losing the amount/cycle they'd already set.
+  contributionsEnabled  Boolean  @default(true)
   contributionAmountKes Decimal? @db.Decimal(12, 2)
   /// "weekly" | "monthly" | "custom" | null (no fixed cycle).
   contributionCycle     String?
+
+  /// Null or zero = free to join. Otherwise a new member's Membership is
+  /// created PENDING and only activates once this amount is paid and
+  /// confirmed — see createJoinFeePayment in dal/treasury.ts.
+  joinFeeKes Decimal? @db.Decimal(12, 2)
 
   updatedAt   DateTime @updatedAt
   updatedById String?  @db.Uuid
@@ -2066,6 +2094,11 @@ model GroupContribution {
   checkoutRequestId String?        @unique
   journalEntryId    String?        @unique @db.Uuid
   journalEntry      JournalEntry?  @relation(fields: [journalEntryId], references: [id])
+  /// Set only for a join-fee payment (createJoinFeePayment in
+  /// dal/treasury.ts) — confirming this contribution also activates the
+  /// PENDING membership it belongs to. Null for an ordinary contribution.
+  membershipId      String?        @db.Uuid
+  membership        Membership?    @relation("JoinFeeMembership", fields: [membershipId], references: [id])
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt

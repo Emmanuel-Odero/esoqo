@@ -1,10 +1,46 @@
 import { prisma } from '../client';
-import { requireCapability, type Ctx } from '../capabilities';
+import { requireCapability, AuthorisationError, type Ctx } from '../capabilities';
 import { recordAudit } from '../audit';
 import { normaliseMsisdn } from '@esoko/domain';
 import type { MemberRole, OrgKind } from '@prisma/client';
 
-/** Group membership management from the admin side. */
+/** Group membership management — both the admin side (staff, unqualified
+ *  membership.write) and the self-serve side (a group's own officers,
+ *  membership.write:own on SUBJECT). requireGroupOfficer below is what
+ *  lets addMember/addNewMember/setMemberRole/removeMember/inviteMember
+ *  serve both without duplicating each one. */
+
+const OFFICER_ROLES: MemberRole[] = ['CHAIRPERSON', 'TREASURER', 'SECRETARY'];
+
+/**
+ * Staff holding the plain membership.write capability (no qualifier)
+ * may act on any group, same as every other admin tool here. A subject
+ * only holds membership.write:own — which, like group.create:own, only
+ * confirms they're acting as themselves — so for them this additionally
+ * requires being one of orgId's own officers, the same check
+ * dal/treasury.ts's isOfficer makes before letting someone change
+ * treasury policy or signers.
+ */
+async function requireGroupOfficer(ctx: Ctx, orgId: string) {
+  requireCapability(ctx, 'membership.write', { partyId: ctx.partyId });
+  if (ctx.actorType === 'STAFF') return;
+  if (!ctx.partyId) throw new AuthorisationError('membership.write', ctx);
+  const m = await prisma.membership.findFirst({
+    where: { orgId, personId: ctx.partyId, exitedAt: null, status: 'ACTIVE', role: { in: OFFICER_ROLES } },
+  });
+  if (!m) throw new AuthorisationError('membership.write', ctx);
+}
+
+/** PENDING when the group charges a join fee — see joinFeeKes on
+ *  GroupTreasuryPolicy and createJoinFeePayment in dal/treasury.ts,
+ *  which activates the membership once that fee is confirmed. ACTIVE
+ *  immediately for a free group, same as before joinFeeKes existed. */
+async function resolveJoinStatus(orgId: string): Promise<'PENDING' | 'ACTIVE'> {
+  const policy = await prisma.groupTreasuryPolicy.findUnique({
+    where: { orgId }, select: { joinFeeKes: true },
+  });
+  return policy?.joinFeeKes && Number(policy.joinFeeKes) > 0 ? 'PENDING' : 'ACTIVE';
+}
 
 export const GROUP_KINDS = [
   ['CHAMA', 'Chama'],
@@ -71,6 +107,88 @@ export async function createGroup(
   return party;
 }
 
+/**
+ * Self-serve group founding — the /me/group counterpart to createGroup
+ * above (which is staff-only, off a paper roster) and the same shape as
+ * createJamiiPage (packages/db/src/dal/jamii-page.ts) and createTicketOrg
+ * (dal/ticketing.ts): a signed-in person founds their own org with no
+ * staff capability, gated only by ctx.partyId plus group.create:own.
+ *
+ * The founder is seeded in as CHAIRPERSON, not a bare MEMBER — that's
+ * what makes multisig "auto enabled": getEffectiveSignerIds in
+ * dal/treasury.ts already falls back to the group's officers
+ * (CHAIRPERSON/TREASURER/SECRETARY) whenever no GroupSigner rows have
+ * been configured, so the founder can request and sign withdrawals from
+ * the moment the group exists — no separate signer setup step. A real
+ * chama with several officers can add more signers later via
+ * addGroupSigner; a one-person group is not left signer-less waiting on
+ * a step nobody has a reason to take on day one.
+ *
+ * A person may found or belong to more than one group — Membership's
+ * uniqueness is (personId, orgId), so nothing at the schema level ever
+ * stopped this; only this function's own check used to. /me/group and
+ * dal/subject.ts's getMyRecord already return every active membership,
+ * not just one, so the UI already had to support a list.
+ */
+export async function createOwnGroup(
+  ctx: Ctx,
+  input: {
+    orgKind: OrgKind; orgKindOther?: string; officialName: string; knownAs?: string; county: string;
+    ward?: string; registrationNo?: string; memberCount?: number;
+  },
+) {
+  requireCapability(ctx, 'group.create', { partyId: ctx.partyId });
+  if (!ctx.partyId) throw new Error('Sign in to start a group');
+
+  const officialName = input.officialName.trim();
+  if (!officialName) throw new Error('A group name is required');
+  if (!input.county) throw new Error('A county is required');
+  const kindOther = input.orgKind === 'OTHER' ? input.orgKindOther?.trim() : undefined;
+  if (input.orgKind === 'OTHER' && !kindOther) throw new Error('Say what kind of group this is');
+
+  const founder = await prisma.person.findUnique({ where: { partyId: ctx.partyId } });
+  if (!founder) throw new Error('Only a registered person may start a group');
+
+  const party = await prisma.$transaction(async (tx) => {
+    const p = await tx.party.create({
+      data: {
+        kind: 'ORGANISATION',
+        county: input.county,
+        ward: input.ward || null,
+        organisation: {
+          create: {
+            kind: input.orgKind,
+            kindOther: kindOther || null,
+            officialName,
+            knownAs: input.knownAs?.trim() || null,
+            registrationNo: input.registrationNo?.trim() || null,
+            memberCount: input.memberCount ?? null,
+          },
+        },
+        accounts: { create: [{ kind: 'GROUP_SAVINGS', currency: 'KES' }] },
+      },
+      include: { organisation: true },
+    });
+
+    const m = await tx.membership.create({
+      data: { personId: ctx.partyId!, orgId: p.id, role: 'CHAIRPERSON' },
+    });
+
+    await recordAudit(ctx, {
+      action: 'group.created', targetType: 'organisation', targetId: p.id,
+      payload: { kind: input.orgKind, officialName, county: input.county, self_serve: true },
+    }, tx as never);
+    await recordAudit(ctx, {
+      action: 'membership.added', targetType: 'membership', targetId: m.id,
+      payload: { orgPartyId: p.id, personPartyId: ctx.partyId, role: 'CHAIRPERSON' },
+    }, tx as never);
+
+    return p;
+  });
+
+  return party;
+}
+
 export async function listGroups(ctx: Ctx, f: { search?: string; county?: string } = {}) {
   requireCapability(ctx, 'party.read', { county: f.county });
   return prisma.organisation.findMany({
@@ -105,6 +223,27 @@ export async function getGroup(ctx: Ctx, orgPartyId: string) {
   });
 }
 
+/**
+ * Self-serve member list for /me/group's manage-members panel — visible
+ * to any active member of the group (not just its officers; seeing your
+ * fellow members is not privileged, only changing them is). Includes
+ * PENDING members so officers can see who still owes a join fee.
+ */
+export async function listMyGroupMembers(ctx: Ctx, orgId: string) {
+  requireCapability(ctx, 'membership.write', { partyId: ctx.partyId });
+  if (!ctx.partyId) throw new AuthorisationError('membership.write', ctx);
+  const isMember = await prisma.membership.findFirst({
+    where: { orgId, personId: ctx.partyId, exitedAt: null },
+  });
+  if (!isMember) throw new AuthorisationError('membership.write', ctx);
+
+  return prisma.membership.findMany({
+    where: { orgId, exitedAt: null },
+    include: { person: { include: { person: true } } },
+    orderBy: { joinedAt: 'asc' },
+  });
+}
+
 /** OTHER carries whatever the group actually calls the role; any other
  *  value means customRole is stale and must not linger in the row. */
 function resolveCustomRole(role: MemberRole, customRole?: string): string | null {
@@ -120,7 +259,7 @@ export async function addMember(
   ctx: Ctx, orgPartyId: string, personPartyId: string,
   role: MemberRole = 'MEMBER', customRole?: string,
 ) {
-  requireCapability(ctx, 'membership.write', { partyId: orgPartyId });
+  await requireGroupOfficer(ctx, orgPartyId);
   const resolvedCustomRole = resolveCustomRole(role, customRole);
 
   const existing = await prisma.membership.findUnique({
@@ -132,7 +271,10 @@ export async function addMember(
         where: { id: existing.id }, data: { exitedAt: null, role, customRole: resolvedCustomRole },
       })
     : await prisma.membership.create({
-        data: { personId: personPartyId, orgId: orgPartyId, role, customRole: resolvedCustomRole },
+        data: {
+          personId: personPartyId, orgId: orgPartyId, role, customRole: resolvedCustomRole,
+          status: await resolveJoinStatus(orgPartyId),
+        },
       });
 
   await recordAudit(ctx, {
@@ -161,6 +303,12 @@ export async function addNewMember(
   input: { officialName: string; msisdn?: string },
   role: MemberRole = 'MEMBER', customRole?: string,
 ) {
+  // Staff-only, deliberately — this creates a full member immediately
+  // with no accept step, which is right for a paper roster staff can
+  // vouch for but too much trust to hand a group's own officers. Their
+  // self-serve equivalent is inviteMember below, which always goes
+  // through pending-until-accepted (and pending-until-paid, if this
+  // group charges a join fee).
   requireCapability(ctx, 'party.write', { partyId: orgPartyId });
   requireCapability(ctx, 'membership.write', { partyId: orgPartyId });
   const resolvedCustomRole = resolveCustomRole(role, customRole);
@@ -181,6 +329,7 @@ export async function addNewMember(
   const org = await prisma.organisation.findUniqueOrThrow({
     where: { partyId: orgPartyId }, select: { party: { select: { county: true } } },
   });
+  const status = await resolveJoinStatus(orgPartyId);
 
   return prisma.$transaction(async (tx) => {
     const party = await tx.party.create({
@@ -190,7 +339,7 @@ export async function addNewMember(
       },
     });
     const m = await tx.membership.create({
-      data: { personId: party.id, orgId: orgPartyId, role, customRole: resolvedCustomRole },
+      data: { personId: party.id, orgId: orgPartyId, role, customRole: resolvedCustomRole, status },
     });
     await recordAudit(ctx, {
       action: 'membership.added_new_person', targetType: 'membership', targetId: m.id,
@@ -198,6 +347,137 @@ export async function addNewMember(
     }, tx as never);
     return m;
   });
+}
+
+export interface InviteMemberResult {
+  membership: Awaited<ReturnType<typeof prisma.membership.create>>;
+  /** What to actually notify the invitee with — @esoko/db can't import
+   *  @esoko/auth's sendSms/sendEmail (it's the other way around:
+   *  auth depends on db), so the Server Action calling inviteMember is
+   *  the one that sends this. See actionInviteMember in
+   *  apps/app/src/app/me/group/actions.ts. */
+  notify: { channel: 'sms'; to: string } | { channel: 'email'; to: string };
+  orgName: string;
+}
+
+/**
+ * Self-serve invite — a group's own officer inviting someone by phone
+ * or email, the /me/group counterpart to addMember/addNewMember above.
+ * Unlike addNewMember it never errors when the contact already belongs
+ * to someone on Esoko — it just adds that existing person, the way an
+ * officer inviting a friend expects. A brand-new contact gets a new
+ * Person the same way addNewMember does — with only whichever of
+ * msisdn/email was actually given, same "pending until someone fills
+ * the rest in" shape Person.msisdn already documents. An email-only
+ * person can't sign in yet (the whole product is msisdn+OTP — see
+ * packages/auth/src/otp.ts) until a phone number is added to their
+ * record; the invite email says as much.
+ *
+ * The membership itself starts PENDING whenever the group charges a
+ * join fee (see resolveJoinStatus) regardless of which branch runs —
+ * an invite is not a payment, so it never skips the gate the way a
+ * staff-added paper-roster member (addNewMember, still ACTIVE-by-
+ * default there too via the same resolveJoinStatus call) does not
+ * skip it either. Same one-invite-per-contact idempotency as addMember:
+ * re-inviting someone who left reinstates them.
+ */
+export async function inviteMember(
+  ctx: Ctx, orgPartyId: string,
+  input: { msisdn?: string; email?: string; officialName?: string },
+  role: MemberRole = 'MEMBER', customRole?: string,
+): Promise<InviteMemberResult> {
+  await requireGroupOfficer(ctx, orgPartyId);
+  const resolvedCustomRole = resolveCustomRole(role, customRole);
+
+  let msisdn: string | null = null;
+  if (input.msisdn?.trim()) {
+    msisdn = normaliseMsisdn(input.msisdn);
+    if (!msisdn) {
+      throw new Error('That does not look like a Kenyan mobile number — try the format 07XX XXX XXX');
+    }
+  }
+  const email = input.email?.trim().toLowerCase() || null;
+  if (!msisdn && !email) throw new Error('Enter a phone number or an email address to invite them');
+
+  const org = await prisma.organisation.findUniqueOrThrow({
+    where: { partyId: orgPartyId }, select: { officialName: true, knownAs: true, party: { select: { county: true } } },
+  });
+  const orgName = org.knownAs || org.officialName;
+  const notify: InviteMemberResult['notify'] = msisdn ? { channel: 'sms', to: msisdn } : { channel: 'email', to: email! };
+
+  const status = await resolveJoinStatus(orgPartyId);
+  const existingPerson = await prisma.person.findFirst({
+    where: msisdn ? { msisdn } : { email: email! },
+  });
+
+  if (existingPerson) {
+    const existing = await prisma.membership.findUnique({
+      where: { personId_orgId: { personId: existingPerson.partyId, orgId: orgPartyId } },
+    });
+    const m = existing
+      ? await prisma.membership.update({
+          where: { id: existing.id }, data: { exitedAt: null, role, customRole: resolvedCustomRole, status },
+        })
+      : await prisma.membership.create({
+          data: { personId: existingPerson.partyId, orgId: orgPartyId, role, customRole: resolvedCustomRole, status },
+        });
+    await recordAudit(ctx, {
+      action: existing ? 'membership.reinstated' : 'membership.invited',
+      targetType: 'membership', targetId: m.id,
+      payload: { orgPartyId, personId: existingPerson.partyId, role, status },
+    });
+    return { membership: m, notify, orgName };
+  }
+
+  const officialName = input.officialName?.trim();
+  if (!officialName) throw new Error('Enter their name — that contact is not on Esoko yet');
+
+  const membership = await prisma.$transaction(async (tx) => {
+    const party = await tx.party.create({
+      data: { kind: 'PERSON', county: org.party.county, person: { create: { officialName, msisdn, email } } },
+    });
+    const m = await tx.membership.create({
+      data: { personId: party.id, orgId: orgPartyId, role, customRole: resolvedCustomRole, status },
+    });
+    await recordAudit(ctx, {
+      action: 'membership.invited_new_person', targetType: 'membership', targetId: m.id,
+      payload: { orgPartyId, personId: party.id, role, status },
+    }, tx as never);
+    return m;
+  });
+  return { membership, notify, orgName };
+}
+
+export async function setMemberRole(
+  ctx: Ctx, membershipId: string, role: MemberRole, customRole?: string,
+) {
+  const existing = await prisma.membership.findUnique({ where: { id: membershipId } });
+  if (!existing) throw new Error('Member not found');
+  await requireGroupOfficer(ctx, existing.orgId);
+  const resolvedCustomRole = resolveCustomRole(role, customRole);
+  const m = await prisma.membership.update({
+    where: { id: membershipId }, data: { role, customRole: resolvedCustomRole },
+  });
+  await recordAudit(ctx, {
+    action: 'membership.role_changed', targetType: 'membership', targetId: membershipId,
+    payload: { role, customRole: resolvedCustomRole },
+  });
+  return m;
+}
+
+/** Soft exit. A member who leaves keeps their contribution history. */
+export async function removeMember(ctx: Ctx, membershipId: string, reason: string) {
+  const existing = await prisma.membership.findUnique({ where: { id: membershipId } });
+  if (!existing) throw new Error('Member not found');
+  await requireGroupOfficer(ctx, existing.orgId);
+  const m = await prisma.membership.update({
+    where: { id: membershipId }, data: { exitedAt: new Date() },
+  });
+  await recordAudit(ctx, {
+    action: 'membership.removed', targetType: 'membership', targetId: membershipId,
+    payload: { reason },
+  });
+  return m;
 }
 
 /**
@@ -245,34 +525,6 @@ export async function updateMemberPhone(ctx: Ctx, membershipId: string, raw: str
   });
 
   return person;
-}
-
-export async function setMemberRole(
-  ctx: Ctx, membershipId: string, role: MemberRole, customRole?: string,
-) {
-  requireCapability(ctx, 'membership.write');
-  const resolvedCustomRole = resolveCustomRole(role, customRole);
-  const m = await prisma.membership.update({
-    where: { id: membershipId }, data: { role, customRole: resolvedCustomRole },
-  });
-  await recordAudit(ctx, {
-    action: 'membership.role_changed', targetType: 'membership', targetId: membershipId,
-    payload: { role, customRole: resolvedCustomRole },
-  });
-  return m;
-}
-
-/** Soft exit. A member who leaves keeps their contribution history. */
-export async function removeMember(ctx: Ctx, membershipId: string, reason: string) {
-  requireCapability(ctx, 'membership.write');
-  const m = await prisma.membership.update({
-    where: { id: membershipId }, data: { exitedAt: new Date() },
-  });
-  await recordAudit(ctx, {
-    action: 'membership.removed', targetType: 'membership', targetId: membershipId,
-    payload: { reason },
-  });
-  return m;
 }
 
 /** The OrgKind values that stand for the "a group" path on /join — every

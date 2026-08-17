@@ -261,6 +261,17 @@ export const ROLE_PRESETS = {
             // as an officer/signer of the specific group in question is a
             // membership/role lookup done inside dal/treasury.ts, the same
             // way signPaymentApproval checks separation of duties.
+            // group.create:own is the one exception — there is no group
+            // yet to check membership of, so it just confirms a signed-in
+            // person is founding a group as themselves (see createOwnGroup
+            // in dal/groups.ts, same self-referential shape as
+            // ticketorg.write:own founding a TicketOrg).
+            'group.create:own',
+            // Self-serve member management — see requireGroupOfficer in
+            // dal/groups.ts, which additionally requires the caller to
+            // actually be one of orgId's own officers before this
+            // ':own' capability does anything.
+            'membership.write:own',
             'treasury.read:own', 'treasury.contribute:own', 'treasury.confirm:own',
             'treasury.meeting.write:own', 'attendance.write:own',
             'treasury.withdraw.request:own', 'treasury.withdraw.sign:own',

@@ -1,4 +1,5 @@
 import Link from 'next/link';
+import type { Route } from 'next';
 import { Icon } from '@esoko/ui';
 import { getMyRecord, getGroupBalance, listMyConsents, PAYMENT_APPROVAL_THRESHOLD } from '@esoko/db';
 import { formatMsisdn } from '@esoko/domain';
@@ -61,7 +62,7 @@ export default async function MePage() {
   else payTile = { v: 'Being checked', h: `${payApproved} of ${PAYMENT_APPROVAL_THRESHOLD} checks done` };
 
   const primaryCta = membership
-    ? { label: 'Open your group treasury', href: '/me/group/treasury' as const }
+    ? { label: 'Open your group treasury', href: `/me/group/${orgId}/treasury` as Route }
     : confirmed < total
       ? { label: 'See your papers', href: '/me/documents' as const }
       : { label: 'Manage sharing', href: '/me/consents' as const };
@@ -108,7 +109,7 @@ export default async function MePage() {
       {/* ── tap-throughs: every box is a door ── */}
       <section className="stat-grid" aria-label="At a glance">
         {membership && (
-          <Link className="tile" href="/me/group/treasury">
+          <Link className="tile" href={`/me/group/${membership.orgId}/treasury` as Route}>
             <span className="icbox" style={{ background: 'var(--green-t)', color: 'var(--green)' }}>
               <Icon name="bank" size={17} />
             </span>
@@ -249,7 +250,7 @@ export default async function MePage() {
             <span className="k">Members</span>
             <span className="v mono">{membership.org._count.members}</span>
           </div>
-          <Link className="btn btn-p" href="/me/group/treasury">
+          <Link className="btn btn-p" href={`/me/group/${membership.orgId}/treasury` as Route}>
             <Icon name="bank" size={16} />Open treasury
           </Link>
         </section>
