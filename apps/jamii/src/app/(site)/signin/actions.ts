@@ -96,7 +96,7 @@ export async function actionSignIn(raw: unknown): Promise<ActionResult<{ next: s
  * `notMember: true` tells the UI to send them to /apply instead of
  * "try again"; `matched` tells /apply whether to skip the full form.
  */
-export async function actionRequestPinCode(raw: unknown): Promise<ActionResult<{ devCode?: string }>> {
+export async function actionRequestPinCode(raw: unknown): Promise<ActionResult> {
   const parsed = requestPinCodeSchema.safeParse(raw);
   if (!parsed.success) return { ok: false, error: parsed.error.issues[0]?.message ?? 'Enter a valid number' };
 
@@ -121,8 +121,8 @@ export async function actionRequestPinCode(raw: unknown): Promise<ActionResult<{
   }
 
   try {
-    const result = await issueOtp(parsed.data.msisdn, 'PIN_RESET', await clientIp());
-    return { ok: true, data: { devCode: result.devCode } };
+    await issueOtp(parsed.data.msisdn, 'PIN_RESET', await clientIp());
+    return { ok: true, data: undefined };
   } catch (e) {
     if (e instanceof OtpError) return { ok: false, error: e.message };
     throw e;

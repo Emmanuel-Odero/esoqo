@@ -49,8 +49,6 @@ export class OtpError extends Error {
 }
 
 export interface SendResult {
-  /** Present only when SMS_PROVIDER=console. Never in production. */
-  devCode?: string;
   expiresAt: Date;
   cooldownSeconds: number;
 }
@@ -103,8 +101,11 @@ export async function issueOtp(
 
   const provider = smsProvider();
   if (provider === 'console') {
+    // Never returned to the caller/browser — terminal only. Use
+    // SMS_PROVIDER=mock (packages/auth/src/sms.ts) to read the code from
+    // the mock-sms catcher UI instead if you'd rather not watch logs.
     console.log(`\n  ┌─ OTP ─────────────────────────────\n  │  ${msisdn}\n  │  code: ${code}\n  │  purpose: ${purpose}\n  └───────────────────────────────────\n`);
-    return { devCode: code, expiresAt, cooldownSeconds: cooldown };
+    return { expiresAt, cooldownSeconds: cooldown };
   }
 
   await sendSms(msisdn, `${code} is your Esoko code. It expires in 10 minutes. Esoko will never ask you for it.`);

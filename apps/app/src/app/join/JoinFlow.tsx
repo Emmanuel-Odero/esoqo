@@ -260,7 +260,6 @@ export function JoinFlow() {
       const r = await actionRequestOtp({ registrationId: regId, msisdn: f.msisdn });
       if (r.ok) {
         setOtpSent(true);
-        setDevCode(r.data.devCode);
         announce('Code sent. Enter the six digits.', 'assertive');
       } else handle(r);
     });

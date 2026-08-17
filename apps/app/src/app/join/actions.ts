@@ -286,7 +286,7 @@ export async function actionMarkStep(registrationId: string, step: number): Prom
 
 export async function actionRequestOtp(
   raw: unknown,
-): Promise<ActionResult<{ devCode?: string; cooldownSeconds: number }>> {
+): Promise<ActionResult<{ cooldownSeconds: number }>> {
   try {
     const v = requestOtpSchema.parse(raw);
     if (!(await ownsRegistration(v.registrationId))) return NOT_OWNER;
@@ -298,7 +298,7 @@ export async function actionRequestOtp(
     await markOtpSent(ctx, v.registrationId);
     return {
       ok: true,
-      data: { devCode: res.devCode, cooldownSeconds: res.cooldownSeconds },
+      data: { cooldownSeconds: res.cooldownSeconds },
     };
   } catch (e) { return fail(e); }
 }

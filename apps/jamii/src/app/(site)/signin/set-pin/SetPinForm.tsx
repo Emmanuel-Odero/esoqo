@@ -11,7 +11,6 @@ export function SetPinForm() {
   const [code, setCode] = useState('');
   const [pin, setPin] = useState('');
   const [pinConfirm, setPinConfirm] = useState('');
-  const [devCode, setDevCode] = useState<string | null>(null);
   const [notMemberError, setNotMemberError] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [pending, startTransition] = useTransition();
@@ -26,7 +25,6 @@ export function SetPinForm() {
         setError(result.error);
         return;
       }
-      setDevCode(result.data.devCode ?? null);
       setStep('code');
     });
   }
@@ -78,12 +76,6 @@ export function SetPinForm() {
 
   return (
     <>
-      {devCode && (
-        <div className="card" style={{ padding: 14, marginBottom: 16, background: 'var(--ledger-lt)' }}>
-          <strong style={{ display: 'block', marginBottom: 4, fontSize: '.8rem' }}>Dev mode — code shown here</strong>
-          <p className="mono" style={{ fontSize: '1.1rem', margin: 0 }}>{devCode}</p>
-        </div>
-      )}
       <div className="field">
         <label htmlFor="code">Code</label>
         <input id="code" className="mono" value={code} onChange={(e) => setCode(e.target.value)} inputMode="numeric" maxLength={6} />
