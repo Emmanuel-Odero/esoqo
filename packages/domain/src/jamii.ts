@@ -76,10 +76,25 @@ export const jamiiPostSchema = z.object({
 });
 export type JamiiPostInput = z.infer<typeof jamiiPostSchema>;
 
+/**
+ * A programme's `icon` is an @esoko/ui IconName, never free text — see
+ * that package's Icon.tsx header: "No emoji anywhere in this product."
+ * Duplicated here as a plain string list (not imported from @esoko/ui,
+ * which is a React component package with no business being a
+ * dependency of pure validation) rather than the full IconName union;
+ * this is the deliberately-curated subset that reads sensibly next to
+ * a community programme, not every icon in the 63-glyph set.
+ */
+export const JAMII_PROGRAM_ICONS = [
+  'scales', 'key', 'chart', 'certificate', 'users', 'handshake', 'shield',
+  'umbrella', 'leaf', 'wheat', 'building', 'gov', 'bank', 'phone-call',
+  'message', 'star',
+] as const;
+
 export const jamiiProgramSchema = z.object({
   title: z.string().trim().min(2, 'Name the programme').max(120),
   body: z.string().trim().min(2, 'Describe the programme').max(1000),
-  icon: z.string().trim().max(8).optional().or(z.literal('')),
+  icon: z.enum(JAMII_PROGRAM_ICONS).optional(),
 });
 export type JamiiProgramInput = z.infer<typeof jamiiProgramSchema>;
 
