@@ -25,6 +25,9 @@ export {
   listDomainsNeedingReconciliation, markDomainVerifying, markDomainActive,
   markDomainFailed, touchDomainCheck, finaliseRemovedDomain,
 } from './dal/jamii-domain';
+export {
+  listActiveMediaAssets, listMediaAssetsForStaff, setMediaAssetActive, updateMediaAssetLabel,
+} from './dal/jamii-media';
 export * from './capabilities';
 export type { VerifyResult } from './dal/reference';
 export * from './storage';
@@ -33,7 +36,7 @@ export type {
   StoreStatus, StoreRoutingMode, StoreOrderStatus, StoreOrderPaymentMethod,
   PosSyncStatus, PosPaymentMethod,
   JamiiPageStatus, PublishStatus, JamiiTeamRole, CampaignStatus, DonationStatus,
-  JamiiInterestStatus,
+  JamiiInterestStatus, JamiiMediaCategory,
   TicketVertical, TicketOrgStatus, ListingStatus, ScheduleStatus, SeatStatus,
   BookingStatus, BookingPaymentMethod, TicketStatus,
 } from '@prisma/client';

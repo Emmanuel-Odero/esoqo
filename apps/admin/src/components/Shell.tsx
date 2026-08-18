@@ -38,6 +38,7 @@ const NAV: { group: string; items: [string, IconName, string, string][] }[] = [
     ['/jamii-campaigns', 'trend-up', 'Campaigns', 'jamii-campaign.read'],
     ['/jamii-donations', 'coins', 'Donations', 'jamii-donation.read'],
     ['/jamii-interest', 'users', 'Interest', 'jamii-interest.read'],
+    ['/jamii-media', 'grid', 'Media library', 'jamii-media.manage'],
   ]},
   { group: 'Governance', items: [
     ['/staff', 'shield', 'Staff & permissions', 'staff.read'],

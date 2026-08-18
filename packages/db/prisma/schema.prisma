@@ -1819,6 +1819,35 @@ model JamiiProgram {
   @@map("jamii_program")
 }
 
+/// Platform-wide "no photo yet" placeholders for a JamiiPage's media
+/// slots (hero cover, gallery, post cover) — never per-org. `patternKey`
+/// is a code-authored, trusted abstract SVG pattern (see apps/jamii's
+/// illustration registry), not stored SVG markup: an org's own page
+/// content is never rendered as raw HTML/SVG, so there's no
+/// stored-XSS surface here even though this table is staff-editable.
+/// Staff (jamii-media.manage) curate which patterns are on offer and
+/// in what order; apps/jamii picks one per empty slot by category.
+model JamiiMediaAsset {
+  id         String              @id @default(uuid()) @db.Uuid
+  key        String              @unique
+  label      String
+  category   JamiiMediaCategory
+  patternKey String
+  active     Boolean             @default(true)
+  position   Int                 @default(0)
+  createdAt  DateTime            @default(now())
+  updatedAt  DateTime            @updatedAt
+
+  @@index([category, active])
+  @@map("jamii_media_asset")
+}
+
+enum JamiiMediaCategory {
+  HERO
+  GALLERY
+  POST
+}
+
 /// Who may manage a page, and at what level — deliberately separate
 /// from Membership (a person's real role in the group: chairperson,
 /// treasurer, ...). A treasurer isn't necessarily who edits the page,

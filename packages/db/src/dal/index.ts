@@ -30,6 +30,7 @@ export * from './pricing';
 export * from './auth-credential';
 export * from './jamii-page';
 export * from './jamii-domain';
+export * from './jamii-media';
 export * from './jamii-post';
 export * from './jamii-program';
 export * from './jamii-team';
