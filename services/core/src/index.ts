@@ -3,9 +3,11 @@ import helmet from '@fastify/helmet';
 import rateLimit from '@fastify/rate-limit';
 import {
   verifyChain, confirmStoreOrderPayment, confirmRegistrationPaymentByCheckoutId,
+  confirmRegistrationPaymentByPesapalOrderId,
   confirmDonationPayment, confirmBookingPayment, StoreOrderError, DonationError, TicketingError,
 } from '@esoko/db';
-import { parseStkCallback } from '@esoko/payments';
+import { parseStkCallback, parsePesapalIpn, confirmPesapalOrder } from '@esoko/payments';
+import { cecfRoutes } from './routes/cecf';
 
 /**
  * services/core — the domain API for the core plane.
@@ -24,6 +26,7 @@ const app = Fastify({
 
 await app.register(helmet, { contentSecurityPolicy: false });
 await app.register(rateLimit, { max: 120, timeWindow: '1 minute' });
+await app.register(cecfRoutes);
 
 app.get('/health', async () => ({ ok: true, service: 'core', ts: new Date().toISOString() }));
 
@@ -104,6 +107,37 @@ app.post('/webhooks/mpesa/stk-callback', async (req, reply) => {
     if (!(e instanceof TicketingError && e.code === 'NOT_FOUND')) {
       app.log.error({ err: e, checkoutRequestId: parsed.checkoutRequestId }, 'failed to confirm booking payment');
     }
+  }
+  return reply.send({ ok: true });
+});
+
+/**
+ * Pesapal's IPN — unlike the M-Pesa callback above, an IPN carries only
+ * the OrderTrackingId, never the payment result itself, so this always
+ * calls confirmPesapalOrder (a real GetTransactionStatus round trip)
+ * before trusting anything. Pesapal is currently only wired to
+ * registration payments (CECF card checkout); if it's ever used for the
+ * storefront/donations/ticketing too, this gains the same fall-through
+ * the M-Pesa handler above uses.
+ */
+app.post('/webhooks/pesapal/ipn', async (req, reply) => {
+  const parsed = parsePesapalIpn({ ...(req.query as object), ...(req.body as object) });
+  if (!parsed) {
+    app.log.warn({ query: req.query, body: req.body }, 'unrecognised Pesapal IPN shape');
+    return reply.code(400).send({ ok: false });
+  }
+
+  try {
+    const status = await confirmPesapalOrder(parsed.orderTrackingId);
+    if (!status.succeeded) {
+      app.log.info({ orderTrackingId: parsed.orderTrackingId, status: status.statusDescription }, 'Pesapal order not completed');
+      return reply.send({ ok: true }); // acknowledged — nothing to post
+    }
+    await confirmRegistrationPaymentByPesapalOrderId(parsed.orderTrackingId);
+  } catch (e) {
+    // Still 200 — Pesapal retries on non-2xx, and a retry storm on an
+    // already-broken match helps no one. Logged for a human.
+    app.log.error({ err: e, orderTrackingId: parsed.orderTrackingId }, 'failed to confirm Pesapal registration payment');
   }
   return reply.send({ ok: true });
 });
