@@ -17,7 +17,7 @@ import WalkInFlow from './WalkInFlow';
 interface Row {
   id: string; officialName: string | null; knownAs: string | null; orgName: string | null;
   msisdn: string | null; county: string | null; workRaw: string | null;
-  status: string; joiningAs: string; startedAt: string;
+  status: string; joiningAs: string; path: string; startedAt: string;
   voidedAt: string | null; voidReason: string | null;
 }
 
@@ -33,13 +33,13 @@ const JOINING = { me: 'Individual', group: 'Group', biz: 'Business' } as const;
 
 export function RegistrationTable({
   rows, total, page, pages, counties, canEdit, canVoid, canCreate, canSeePii, canRecordPayment,
-  canAssignUser, canManageMembership, canUploadDocs, documentKinds, type, q, county, status,
+  canAssignUser, canManageMembership, canUploadDocs, documentKinds, type, source, q, county, status,
 }: {
   rows: Row[]; total: number; page: number; pages: number; counties: string[];
   canEdit: boolean; canVoid: boolean; canCreate: boolean; canSeePii: boolean;
   canRecordPayment: boolean; canAssignUser: boolean; canManageMembership: boolean;
   canUploadDocs: boolean; documentKinds: [string, string][];
-  type?: 'individuals' | 'organisations'; q: string; county: string; status: string;
+  type?: 'individuals' | 'organisations'; source?: 'CECF' | 'ESOKO'; q: string; county: string; status: string;
 }) {
   const [openId, setOpenId] = useState<string | null>(null);
   const [creating, setCreating] = useState(false);
@@ -47,6 +47,7 @@ export function RegistrationTable({
   const tabHref = (t?: 'individuals' | 'organisations') => {
     const p = new URLSearchParams();
     if (t) p.set('type', t);
+    if (source) p.set('source', source);
     if (q) p.set('q', q);
     if (county) p.set('county', county);
     if (status) p.set('status', status);
@@ -80,6 +81,11 @@ export function RegistrationTable({
           <select className="inp" name="status" aria-label="Filter by status" defaultValue={status}>
             <option value="">All statuses</option>
             {Object.entries(STATUS).map(([k, [, l]]) => <option key={k} value={k}>{l}</option>)}
+          </select>
+          <select className="inp" name="source" aria-label="Filter by source" defaultValue={source ?? ''}>
+            <option value="">Any source</option>
+            <option value="CECF">CECF registrations</option>
+            <option value="ESOKO">Esoko app registrations</option>
           </select>
           <button className="btn btn-o" type="submit"><Icon name="filter" size={15} />Filter</button>
         </form>
@@ -130,7 +136,14 @@ export function RegistrationTable({
                         </>
                       )}
                     </td>
-                    <td className="sub">{JOINING[r.joiningAs as keyof typeof JOINING] ?? r.joiningAs}</td>
+                    <td className="sub">
+                      {JOINING[r.joiningAs as keyof typeof JOINING] ?? r.joiningAs}
+                      {r.path === 'CECF_WEB' && (
+                        <span className="pill p-info" style={{ marginLeft: 6 }} title="Registered via the CECF WordPress site">
+                          CECF
+                        </span>
+                      )}
+                    </td>
                     <td className="mono">
                       {r.msisdn ? (canSeePii ? r.msisdn : maskMsisdn(r.msisdn)) : '—'}
                     </td>

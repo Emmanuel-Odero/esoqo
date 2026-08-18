@@ -21,7 +21,7 @@ interface Member {
 }
 interface Group {
   id: string; name: string; knownAs: string | null; kind: string;
-  county: string; registrationNo: string | null; members: Member[];
+  county: string; sourceSystem: string; registrationNo: string | null; members: Member[];
 }
 interface GroupDoc {
   id: string; title: string; kind: string; mimeType: string; sizeBytes: number; uploadedAt: string;
@@ -122,7 +122,15 @@ export function GroupManager({
                   fontFamily: 'inherit', background: sel === g.id ? 'var(--green-t)' : '#fff',
                   borderLeft: `3px solid ${sel === g.id ? 'var(--green)' : 'transparent'}`,
                 }}>
-                <strong style={{ fontSize: '.92rem', display: 'block' }}>{g.name}</strong>
+                <strong style={{ fontSize: '.92rem', display: 'block' }}>
+                  {g.name}
+                  {g.sourceSystem === 'CECF' && (
+                    <span className="pill p-info" style={{ marginLeft: 6, fontSize: '.68rem' }}
+                      title="Registered via the CECF WordPress site">
+                      CECF
+                    </span>
+                  )}
+                </strong>
                 <span className="sub" style={{ fontSize: '.79rem' }}>
                   {g.county} · {g.members.length} {g.members.length === 1 ? 'member' : 'members'}
                 </span>
@@ -317,7 +325,15 @@ function GroupDetail({
             <Icon name="handshake" size={21} />
           </span>
           <div style={{ flex: '1 1 200px', minWidth: 0 }}>
-            <h2 style={{ marginBottom: 3 }}>{group.name}</h2>
+            <h2 style={{ marginBottom: 3 }}>
+              {group.name}
+              {group.sourceSystem === 'CECF' && (
+                <span className="pill p-info" style={{ marginLeft: 8, fontSize: '.7rem', verticalAlign: 'middle' }}
+                  title="Registered via the CECF WordPress site">
+                  CECF
+                </span>
+              )}
+            </h2>
             <p className="sub" style={{ margin: 0 }}>
               {group.knownAs && <>Known as {group.knownAs} · </>}
               {group.kind.replace(/_/g, ' ').toLowerCase()} · {group.county}

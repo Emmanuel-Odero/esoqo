@@ -8,16 +8,17 @@ export const dynamic = 'force-dynamic';
 
 export default async function RegistrationsPage({
   searchParams,
-}: { searchParams: Promise<{ q?: string; county?: string; status?: string; page?: string; type?: string }> }) {
+}: { searchParams: Promise<{ q?: string; county?: string; status?: string; page?: string; type?: string; source?: string }> }) {
   const ctx = await requireStaff();
   const sp = await searchParams;
   const page = Math.max(1, Number(sp.page ?? 1));
   const take = 25;
   const type = sp.type === 'organisations' || sp.type === 'individuals' ? sp.type : undefined;
+  const source = sp.source === 'CECF' || sp.source === 'ESOKO' ? sp.source : undefined;
 
   const [{ rows, total }, overview] = await Promise.all([
     listRegistrations(ctx, {
-      search: sp.q, county: sp.county, status: sp.status as never, type,
+      search: sp.q, county: sp.county, status: sp.status as never, type, source,
       take, skip: (page - 1) * take,
     }),
     getOverview(ctx),
@@ -65,6 +66,7 @@ export default async function RegistrationsPage({
           id: r.id, officialName: r.officialName, knownAs: r.knownAs,
           orgName: r.orgName, msisdn: r.msisdn, county: r.county,
           workRaw: r.workRaw, status: r.status, joiningAs: r.joiningAs,
+          path: r.path,
           startedAt: r.startedAt.toISOString(),
           voidedAt: r.voidedAt?.toISOString() ?? null,
           voidReason: r.voidReason,
@@ -74,6 +76,7 @@ export default async function RegistrationsPage({
         pages={Math.max(1, Math.ceil(total / take))}
         counties={[...COUNTIES]}
         type={type}
+        source={source}
         q={sp.q ?? ''}
         county={sp.county ?? ''}
         status={sp.status ?? ''}
