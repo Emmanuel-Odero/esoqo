@@ -209,6 +209,27 @@ export const requestJamiiDomainSchema = z.object({
 });
 export type RequestJamiiDomainInput = z.infer<typeof requestJamiiDomainSchema>;
 
+/**
+ * A visitor writing to one org through its own public Contact page —
+ * see @esoko/db's submitJamiiContactMessage and apps/jamii's
+ * (site)/o/[slug]/contact/actions.ts. Deliberately separate from
+ * jamiiInterestSchema below (that's "wants Our Jamii access", reviewed
+ * platform-wide by Esoko staff); this is page-scoped and only ever
+ * read by that page's own team.
+ */
+export const jamiiContactMessageSchema = z.object({
+  name: z.string().trim().min(2, 'Enter your name').max(120),
+  email: z.string().trim().toLowerCase().email('Enter a valid email address'),
+  phone: z.string().trim().max(32).optional().or(z.literal('')),
+  subject: z.string().trim().max(160).optional().or(z.literal('')),
+  message: z.string().trim().min(10, 'Say a little more — at least 10 characters').max(4000),
+  // Honeypot — real visitors never see or fill this field (hidden via
+  // CSS in the form); a bot filling it in is the signal to silently
+  // drop the submission rather than tell the bot it was rejected.
+  website2: z.string().max(0).optional().or(z.literal('')),
+});
+export type JamiiContactMessageInput = z.infer<typeof jamiiContactMessageSchema>;
+
 export const jamiiInterestSchema = z.object({
   identifier: z.string().trim().min(3, 'Enter your phone number or email'),
   fullName: z.string().trim().min(2, 'Enter your name').max(120).optional().or(z.literal('')),

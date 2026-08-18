@@ -35,6 +35,7 @@ export * from './jamii-post';
 export * from './jamii-program';
 export * from './jamii-team';
 export * from './jamii-interest';
+export * from './jamii-contact';
 export * from './campaign';
 export * from './donation';
 export * from './attestation';

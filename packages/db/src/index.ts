@@ -36,7 +36,7 @@ export type {
   StoreStatus, StoreRoutingMode, StoreOrderStatus, StoreOrderPaymentMethod,
   PosSyncStatus, PosPaymentMethod,
   JamiiPageStatus, PublishStatus, JamiiTeamRole, CampaignStatus, DonationStatus,
-  JamiiInterestStatus, JamiiMediaCategory,
+  JamiiInterestStatus, JamiiMediaCategory, JamiiContactMessageStatus,
   TicketVertical, TicketOrgStatus, ListingStatus, ScheduleStatus, SeatStatus,
   BookingStatus, BookingPaymentMethod, TicketStatus,
 } from '@prisma/client';

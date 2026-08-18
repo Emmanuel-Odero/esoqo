@@ -5,6 +5,7 @@ import {
   publishJamiiPage, updateJamiiPage, createJamiiPost, publishJamiiPost,
   createCampaign, inviteTeamMember, removeTeamMember,
   requestJamiiDomain, removeJamiiDomain,
+  markJamiiContactMessageRead, archiveJamiiContactMessage,
 } from '@esoko/db';
 import {
   jamiiPageProfileSchema, jamiiFaqSchema, jamiiPostSchema, createCampaignSchema, inviteTeamMemberSchema,
@@ -115,6 +116,28 @@ export async function actionRemoveDomain(pageId: string): Promise<ActionResult> 
     return { ok: true, data: undefined };
   } catch (e) {
     return { ok: false, error: e instanceof Error ? e.message : 'Could not remove that domain' };
+  }
+}
+
+export async function actionMarkMessageRead(pageId: string, messageId: string): Promise<ActionResult> {
+  const ctx = await requireSubject();
+  try {
+    await markJamiiContactMessageRead(ctx, pageId, messageId);
+    revalidatePath('/dashboard/messages');
+    return { ok: true, data: undefined };
+  } catch (e) {
+    return { ok: false, error: e instanceof Error ? e.message : 'Could not update that message' };
+  }
+}
+
+export async function actionArchiveMessage(pageId: string, messageId: string): Promise<ActionResult> {
+  const ctx = await requireSubject();
+  try {
+    await archiveJamiiContactMessage(ctx, pageId, messageId);
+    revalidatePath('/dashboard/messages');
+    return { ok: true, data: undefined };
+  } catch (e) {
+    return { ok: false, error: e instanceof Error ? e.message : 'Could not archive that message' };
   }
 }
 

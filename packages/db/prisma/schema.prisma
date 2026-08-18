@@ -1722,6 +1722,12 @@ enum JamiiInterestStatus {
   DISMISSED
 }
 
+enum JamiiContactMessageStatus {
+  NEW
+  READ
+  ARCHIVED
+}
+
 model JamiiPage {
   organisationId String       @id @db.Uuid
   organisation   Organisation @relation(fields: [organisationId], references: [partyId], onDelete: Cascade)
@@ -1782,6 +1788,7 @@ model JamiiPage {
   campaigns Campaign[]
   team      JamiiTeamMember[]
   domain    JamiiDomain?
+  messages  JamiiContactMessage[]
 
   @@index([status])
   @@map("jamii_page")
@@ -1801,6 +1808,32 @@ model JamiiPhoto {
 
   @@index([pageId])
   @@map("jamii_photo")
+}
+
+/// A message submitted through the public Contact page's form —
+/// visible only to this page's own team (dashboard "Messages" screen),
+/// never a platform-wide inbox. Deliberately not a JamiiInterest: that
+/// is "wants Our Jamii access" and is reviewed by Esoko staff; this is
+/// a visitor writing to one specific org, reviewed only by that org's
+/// own team via requirePageAccess, the same as every other page-scoped
+/// write in jamii-page.ts.
+model JamiiContactMessage {
+  id     String                    @id @default(uuid()) @db.Uuid
+  pageId String                    @db.Uuid
+  page   JamiiPage                 @relation(fields: [pageId], references: [organisationId], onDelete: Cascade)
+  status JamiiContactMessageStatus @default(NEW)
+
+  name    String
+  email   String  @db.Citext
+  phone   String?
+  subject String?
+  message String
+
+  readAt    DateTime?
+  createdAt DateTime  @default(now())
+
+  @@index([pageId, status, createdAt])
+  @@map("jamii_contact_message")
 }
 
 /// The "Updates" carousel on the public page.
