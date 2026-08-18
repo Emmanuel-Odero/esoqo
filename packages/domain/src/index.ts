@@ -19,3 +19,4 @@ export * from './treasury';
 export * from './ticketing';
 export * from './errors';
 export * from './env';
+export { appEnv, isProduction, isTestingProduction } from './env';

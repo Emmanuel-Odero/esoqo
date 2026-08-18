@@ -146,6 +146,50 @@ export type JamiiApplicantCheckInput = z.infer<typeof jamiiApplicantCheckSchema>
  * @esoko/db's approveJamiiInterest and the admin app's /jamii-interest
  * screen.
  */
+/**
+ * Reserved so a group can't "link" a domain we already serve from —
+ * esoko.co.ke itself, ourjamii.co.ke (this app's own primary domain),
+ * or a bare subdomain of either. Checked case-insensitively against the
+ * normalised hostname before it ever reaches Cloudflare.
+ */
+export const JAMII_RESERVED_DOMAIN_SUFFIXES = ['esoko.co.ke', 'ourjamii.co.ke'] as const;
+
+/**
+ * A group's custom domain for their Our Jamii page — see
+ * @esoko/db's requestJamiiDomain and apps/jamii's dashboard settings
+ * "Domain" panel. Deliberately strict: this is the one place a member
+ * of the public types a string that later becomes a live DNS/TLS
+ * target, so the shape is checked here (client + server, same schema)
+ * before the DAL's own re-validation.
+ *
+ * - No scheme, path, port or trailing dot — a bare hostname only.
+ * - Rejects IP literals (v4 or v6-looking) — a domain is required, not
+ *   an address.
+ * - At least one label + a plausible TLD (2+ alpha chars) so obvious
+ *   junk ("localhost", "mchama") is rejected before hitting the DAL's
+ *   reserved-suffix / uniqueness checks.
+ */
+export const jamiiDomainHostnameSchema = z
+  .string()
+  .trim()
+  .toLowerCase()
+  .max(253)
+  .refine((v) => !/^https?:\/\//.test(v) && !v.includes('/') && !v.includes(':'), {
+    message: 'Enter just the domain, e.g. mchamawetu.org — no https:// or path',
+  })
+  .refine((v) => !/^\d{1,3}(\.\d{1,3}){3}$/.test(v) && !v.includes('['), {
+    message: 'Enter a domain name, not an IP address',
+  })
+  .refine((v) => /^(?!-)[a-z0-9-]{1,63}(?<!-)(\.(?!-)[a-z0-9-]{1,63}(?<!-))*\.[a-z]{2,}$/.test(v), {
+    message: 'Enter a valid domain, e.g. mchamawetu.org',
+  });
+export type JamiiDomainHostnameInput = z.infer<typeof jamiiDomainHostnameSchema>;
+
+export const requestJamiiDomainSchema = z.object({
+  hostname: jamiiDomainHostnameSchema,
+});
+export type RequestJamiiDomainInput = z.infer<typeof requestJamiiDomainSchema>;
+
 export const jamiiInterestSchema = z.object({
   identifier: z.string().trim().min(3, 'Enter your phone number or email'),
   fullName: z.string().trim().min(2, 'Enter your name').max(120).optional().or(z.literal('')),
