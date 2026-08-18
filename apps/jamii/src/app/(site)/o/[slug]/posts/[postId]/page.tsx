@@ -2,6 +2,7 @@ import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import { getJamiiPost } from '@esoko/db';
 import { OrgSectionShell, loadOrgOr404 } from '@/components/OrgSectionShell';
+import { getOrgLinkMode, orgHref } from '@/lib/org-links';
 
 export const dynamic = 'force-dynamic';
 
@@ -12,11 +13,12 @@ export default async function PostDetailPage({
   const page = await loadOrgOr404(slug);
   const post = await getJamiiPost(page.organisationId, postId);
   if (!post) notFound();
+  const mode = await getOrgLinkMode(slug);
 
   return (
-    <OrgSectionShell slug={slug} noSidebar>
+    <OrgSectionShell slug={slug} title={post.title} noSidebar>
       <section className="osec" style={{ marginBottom: 0 }}>
-        <Link href={`/o/${slug}/posts`} style={{ color: 'var(--stamp)', fontWeight: 700, fontSize: '.85rem', display: 'inline-block', marginBottom: 16 }}>
+        <Link href={orgHref(mode, 'posts')} style={{ color: 'var(--stamp)', fontWeight: 700, fontSize: '.85rem', display: 'inline-block', marginBottom: 16 }}>
           ← Back to updates
         </Link>
         {post.imageUrl && (
