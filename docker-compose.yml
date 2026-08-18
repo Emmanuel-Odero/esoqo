@@ -288,6 +288,12 @@ services:
       # port apps/app's dev server binds to, reachable from this container
       # via the host's loopback (see also docker-compose's esoko-dev service).
       ESOKO_JOIN_URL: http://localhost:3001/join
+      # services/core's authenticated /api/cecf/* facade — see
+      # App\Support\CecfApiClient. esoko-dev is the esoko stack's own
+      # compose service name, reachable on the same docker network;
+      # CECF_SERVICE_SECRET must match esoko-dev's own env exactly.
+      ESOKO_CORE_API_URL: http://esoko-dev:4000
+      CECF_SERVICE_SECRET: dev-cecf-secret-local-only
       AUTH_KEY: dev
       SECURE_AUTH_KEY: dev
       LOGGED_IN_KEY: dev
