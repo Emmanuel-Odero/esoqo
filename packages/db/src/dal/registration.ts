@@ -260,6 +260,7 @@ export async function completeRegistration(ctx: Ctx, id: string) {
       const personParty = await tx.party.create({
         data: {
           kind: 'PERSON' as PartyKind,
+          sourceSystem: reg.path === 'CECF_WEB' ? 'CECF' : 'ESOKO',
           county: reg.county,
           ward: reg.ward,
           person: {
@@ -302,6 +303,7 @@ export async function completeRegistration(ctx: Ctx, id: string) {
       const orgParty = await tx.party.create({
         data: {
           kind: 'ORGANISATION' as PartyKind,
+          sourceSystem: reg.path === 'CECF_WEB' ? 'CECF' : 'ESOKO',
           county: reg.county,
           ward: reg.ward,
           subCounty: reg.orgSubCounty,
@@ -336,6 +338,7 @@ export async function completeRegistration(ctx: Ctx, id: string) {
       const bizParty = await tx.party.create({
         data: {
           kind: 'ORGANISATION' as PartyKind,
+          sourceSystem: reg.path === 'CECF_WEB' ? 'CECF' : 'ESOKO',
           county: reg.county,
           ward: reg.ward,
           organisation: {
@@ -515,6 +518,10 @@ export interface ListRegistrationsFilter {
   search?: string;
   /** 'organisations' → joiningAs === 'group'; 'individuals' → anything else. */
   type?: 'individuals' | 'organisations';
+  /** Which front door the registration came through — see
+   *  SourceSystem/JoinPath.CECF_WEB. Powers admin's "CECF Registrations"
+   *  filter/badge. */
+  source?: 'CECF' | 'ESOKO';
   take?: number;
   skip?: number;
 }
@@ -527,6 +534,8 @@ export async function listRegistrations(ctx: Ctx, f: ListRegistrationsFilter = {
     ...(f.county ? { county: f.county } : {}),
     ...(f.type === 'organisations' ? { joiningAs: 'group' } : {}),
     ...(f.type === 'individuals' ? { joiningAs: { not: 'group' } } : {}),
+    ...(f.source === 'CECF' ? { path: 'CECF_WEB' as JoinPath } : {}),
+    ...(f.source === 'ESOKO' ? { path: { not: 'CECF_WEB' as JoinPath } } : {}),
     ...(f.from || f.to
       ? { startedAt: { ...(f.from ? { gte: f.from } : {}), ...(f.to ? { lte: f.to } : {}) } }
       : {}),

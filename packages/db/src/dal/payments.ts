@@ -128,6 +128,52 @@ export async function attachRegistrationCheckoutRequestId(
 }
 
 /**
+ * A Pesapal card order was just submitted — record its OrderTrackingId so
+ * the later IPN confirmation can find the right registration. Mirrors
+ * attachRegistrationCheckoutRequestId above exactly, just for Pesapal's
+ * identifier instead of Daraja's.
+ */
+export async function attachRegistrationPesapalOrder(
+  ctx: Ctx, registrationId: string, orderTrackingId: string, amountKes: number,
+) {
+  requireCapability(ctx, 'registration.write', { registrationId });
+  const payment = await prisma.registrationPayment.upsert({
+    where: { registrationId },
+    create: {
+      registrationId, method: 'CARD', amountKes, pesapalOrderTrackingId: orderTrackingId,
+      status: 'DECLARED', declaredAt: new Date(),
+    },
+    update: { method: 'CARD', amountKes, pesapalOrderTrackingId: orderTrackingId, status: 'DECLARED' },
+  });
+  await recordAudit(ctx, {
+    action: 'payment.pesapal_initiated', targetType: 'payment', targetId: payment.id,
+    payload: { amountKes },
+  });
+  return payment;
+}
+
+/**
+ * Called once Pesapal's GetTransactionStatus confirms the order actually
+ * completed — mirrors confirmRegistrationPaymentByCheckoutId exactly,
+ * just keyed on pesapalOrderTrackingId. Idempotent for the same reason.
+ */
+export async function confirmRegistrationPaymentByPesapalOrderId(orderTrackingId: string) {
+  const payment = await prisma.registrationPayment.findUnique({ where: { pesapalOrderTrackingId: orderTrackingId } });
+  if (!payment) throw new PaymentError('No registration payment matches this Pesapal order', 'NOT_FOUND');
+  if (payment.status === 'CONFIRMED') return payment;
+
+  const updated = await prisma.registrationPayment.update({
+    where: { id: payment.id },
+    data: { status: 'CONFIRMED', confirmedAt: new Date() },
+  });
+  await recordAudit(systemCtx('pesapal-ipn'), {
+    action: 'payment.confirmed', targetType: 'payment', targetId: payment.id,
+    payload: { via: 'pesapal_card', orderTrackingId },
+  });
+  return updated;
+}
+
+/**
  * Called once Daraja confirms the push actually succeeded — either from
  * the real callback (services/core, SYSTEM ctx) or, in console/sandbox
  * dev mode, immediately after initiateStkPush auto-confirms. A real STK

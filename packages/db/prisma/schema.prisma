@@ -35,6 +35,15 @@ enum PartyKind {
   ORGANISATION
 }
 
+/// Which front door a Party first registered through. Sets once, at
+/// completeRegistration/ingestCecfRegistration time, from Registration.path
+/// — Registration itself is a funnel record that gets superseded, so this
+/// is the durable place admin reads "CECF Registrations" from.
+enum SourceSystem {
+  ESOKO
+  CECF
+}
+
 enum OrgKind {
   CHAMA
   SELF_HELP_GROUP
@@ -68,6 +77,8 @@ model Party {
   createdAt DateTime  @default(now())
   updatedAt DateTime  @updatedAt
   deletedAt DateTime? // soft delete — DPA erasure keeps the audit trail
+  /// Which front door this Party first registered through. See SourceSystem.
+  sourceSystem SourceSystem @default(ESOKO)
 
   person                 Person?
   organisation           Organisation?
@@ -519,6 +530,8 @@ enum PaymentMethod {
   MPESA
   BANK_TRANSFER
   CASH_TO_AGENT
+  /// Pesapal-hosted card checkout — see RegistrationPayment.pesapalOrderTrackingId.
+  CARD
 }
 
 enum ApprovalDecision {
@@ -550,7 +563,9 @@ enum JoinPath {
   SELF_USSD
   AGENT_ASSISTED
   COHORT
-  INSTITUTION
+  /// Ingested from the CECF WordPress site's own registration flow, via
+  /// ingestCecfRegistration — never entered through /join directly.
+  CECF_WEB
 }
 
 /// Funnel record. Deliberately separate from Party so an abandoned
@@ -671,6 +686,10 @@ model RegistrationPayment {
   /// arrives twice — see StoreOrder.mpesaCheckoutRequestId for the same
   /// pattern in the storefront.
   checkoutRequestId String?        @unique
+  /// Pesapal's OrderTrackingId for a card checkout, set the moment
+  /// initiatePesapalOrder returns. Same idempotency role as
+  /// checkoutRequestId above, just for the /webhooks/pesapal/ipn callback.
+  pesapalOrderTrackingId String?   @unique
   createdAt         DateTime       @default(now()) @map("created_at")
   updatedAt         DateTime       @updatedAt @map("updated_at")
 

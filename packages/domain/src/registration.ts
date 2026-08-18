@@ -14,7 +14,7 @@ import { COUNTIES } from './counties';
  * or Java — nothing else on the team's stack gives this.
  */
 
-export const joiningAsSchema = z.enum(['me', 'group', 'biz', 'inst']);
+export const joiningAsSchema = z.enum(['me', 'group', 'biz']);
 export type JoiningAs = z.infer<typeof joiningAsSchema>;
 
 export const countySchema = z.enum(COUNTIES);
