@@ -49,6 +49,7 @@ const HEX = /^#[0-9a-fA-F]{6}$/;
 export const jamiiPageProfileSchema = z.object({
   tagline: z.string().trim().max(120).optional().or(z.literal('')),
   missionShort: z.string().trim().max(160).optional().or(z.literal('')),
+  visionShort: z.string().trim().max(160).optional().or(z.literal('')),
   aboutUs: z.string().trim().max(4000).optional().or(z.literal('')),
   meetingSchedule: z.string().trim().max(160).optional().or(z.literal('')),
   contactEmail: z.string().trim().toLowerCase().email('Enter a valid email address').max(160).optional().or(z.literal('')),
@@ -58,7 +59,10 @@ export const jamiiPageProfileSchema = z.object({
   instagram: z.string().trim().max(80).optional().or(z.literal('')),
   twitter: z.string().trim().max(80).optional().or(z.literal('')),
   whatsapp: z.string().trim().max(80).optional().or(z.literal('')),
-  brandAccent: z.string().trim().regex(HEX, 'Colour must be a hex value like #B93A24').optional().or(z.literal('')),
+  brandAccent: z.string().trim().regex(HEX, 'Colour must be a hex value like #D81E56').optional().or(z.literal('')),
+  brandAccentTwo: z.string().trim().regex(HEX, 'Colour must be a hex value like #0E7F9C').optional().or(z.literal('')),
+  brandAccentThree: z.string().trim().regex(HEX, 'Colour must be a hex value like #B8720F').optional().or(z.literal('')),
+  themeDefaultMode: z.enum(['DARK', 'LIGHT']).optional(),
 });
 export type JamiiPageProfileInput = z.infer<typeof jamiiPageProfileSchema>;
 

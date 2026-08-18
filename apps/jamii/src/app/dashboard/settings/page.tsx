@@ -59,6 +59,7 @@ export default async function SettingsScreen() {
         initial={{
           tagline: page.tagline ?? '',
           missionShort: page.missionShort ?? '',
+          visionShort: page.visionShort ?? '',
           aboutUs: page.aboutUs ?? '',
           meetingSchedule: page.meetingSchedule ?? '',
           contactEmail: page.contactEmail ?? '',
@@ -68,6 +69,10 @@ export default async function SettingsScreen() {
           instagram: page.instagram ?? '',
           twitter: page.twitter ?? '',
           whatsapp: page.whatsapp ?? '',
+          brandAccent: page.brandAccent ?? '',
+          brandAccentTwo: page.brandAccentTwo ?? '',
+          brandAccentThree: page.brandAccentThree ?? '',
+          themeDefaultMode: page.themeDefaultMode,
         }}
       />
 

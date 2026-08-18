@@ -1686,6 +1686,11 @@ enum JamiiPageStatus {
   SUSPENDED
 }
 
+enum JamiiThemeMode {
+  DARK
+  LIGHT
+}
+
 enum PublishStatus {
   DRAFT
   PUBLISHED
@@ -1736,7 +1741,22 @@ model JamiiPage {
   logoUrl         String?
   coverStorageKey String?
   coverUrl        String?
-  brandAccent     String?
+
+  /// The whitelabel theme (custom-domain only — see
+  /// apps/jamii/src/components/whitelabel). brandAccent is the primary
+  /// colour (template's "crimson"); the other two are optional — unset
+  /// falls back to the template's own cyan/gold so a org needs to pick
+  /// only one colour to look intentional, three to look bespoke.
+  brandAccent      String?
+  brandAccentTwo   String?
+  brandAccentThree String?
+  /// Which theme mode a first-time visitor sees before their own
+  /// toggle (dark/light/contrast/text-size, all client-side after
+  /// that — see ThemeController) has ever run.
+  themeDefaultMode JamiiThemeMode @default(DARK)
+  /// The "Our vision" card alongside missionShort's "Our mission" one
+  /// on the whitelabel About page.
+  visionShort String?
 
   /// Free text, e.g. "Wednesdays, 4pm · Nyalenda B Social Hall".
   meetingSchedule String?
