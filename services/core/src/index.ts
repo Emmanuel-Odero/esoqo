@@ -6,8 +6,11 @@ import {
   confirmRegistrationPaymentByPesapalOrderId,
   confirmDonationPayment, confirmBookingPayment, StoreOrderError, DonationError, TicketingError,
 } from '@esoko/db';
+import { appEnv } from '@esoko/domain';
 import { parseStkCallback, parsePesapalIpn, confirmPesapalOrder } from '@esoko/payments';
 import { cecfRoutes } from './routes/cecf';
+import { jamiiDomainsRoutes, runJamiiDomainReconcile } from './routes/jamii-domains';
+import { jamiiDomainProvider } from './lib/cloudflare-saas';
 
 /**
  * services/core — the domain API for the core plane.
@@ -27,6 +30,7 @@ const app = Fastify({
 await app.register(helmet, { contentSecurityPolicy: false });
 await app.register(rateLimit, { max: 120, timeWindow: '1 minute' });
 await app.register(cecfRoutes);
+await app.register(jamiiDomainsRoutes);
 
 app.get('/health', async () => ({ ok: true, service: 'core', ts: new Date().toISOString() }));
 
@@ -141,6 +145,27 @@ app.post('/webhooks/pesapal/ipn', async (req, reply) => {
   }
   return reply.send({ ok: true });
 });
+
+/**
+ * Self-driving reconciliation in console mode — there's no cron on a
+ * dev box, and requiring one to test custom domains locally is exactly
+ * the kind of friction console mode exists to remove elsewhere (see
+ * mpesaProvider's "auto-confirms locally", otp.ts's console
+ * short-circuit). Real deploys still need the external cron in
+ * docs/proposals/our-jamii-custom-domains.md — this interval is scoped
+ * to console mode specifically (never `cloudflare`) so it can never
+ * turn into an accidental extra poller hammering Cloudflare's API in
+ * production alongside the real cron.
+ */
+if (jamiiDomainProvider() === 'console') {
+  const RECONCILE_INTERVAL_MS = 5_000;
+  setInterval(() => {
+    runJamiiDomainReconcile(app.log).catch((e) => {
+      app.log.error({ err: e }, 'self-driven jamii domain reconcile failed');
+    });
+  }, RECONCILE_INTERVAL_MS).unref();
+  app.log.info({ appEnv: appEnv() }, 'jamii domains: self-driven reconcile loop running (console mode)');
+}
 
 const port = Number(process.env.PORT ?? 4000);
 await app.listen({ port, host: '0.0.0.0' });

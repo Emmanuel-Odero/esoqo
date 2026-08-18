@@ -1761,6 +1761,7 @@ model JamiiPage {
   programs  JamiiProgram[]
   campaigns Campaign[]
   team      JamiiTeamMember[]
+  domain    JamiiDomain?
 
   @@index([status])
   @@map("jamii_page")
@@ -1840,6 +1841,65 @@ model JamiiTeamMember {
   @@unique([pageId, inviteEmail])
   @@index([personId])
   @@map("jamii_team_member")
+}
+
+/// A group's own domain (e.g. mchamawetu.org), linked to their JamiiPage
+/// so the page reads as their website instead of a page on ours. 1:1 with
+/// JamiiPage on purpose — one active domain per page keeps both the UX
+/// and the security surface (ownership proof, TLS, staff moderation)
+/// simple; relax to many if a real need for it shows up.
+///
+/// Ownership is proven two independent ways before status ever reaches
+/// ACTIVE: Cloudflare's own Custom Hostname verification, and our own
+/// verificationToken as a TXT record — defense in depth so activation
+/// never rests on trusting one vendor's check alone. See
+/// services/core/src/routes/jamii-domains.ts for the reconciler that
+/// drives PENDING_DNS -> VERIFYING -> ACTIVE/FAILED, and
+/// dal/jamii-domain.ts for why the Cloudflare API token itself never
+/// reaches this app or the browser.
+model JamiiDomain {
+  id     String @id @default(uuid()) @db.Uuid
+  pageId String @unique @db.Uuid
+  page   JamiiPage @relation(fields: [pageId], references: [organisationId], onDelete: Cascade)
+
+  /// Lowercased, punycoded, no scheme/path. Unique platform-wide so two
+  /// groups can't race the same domain, and never silently reused by a
+  /// different page after removal.
+  hostname String            @unique
+  status   JamiiDomainStatus @default(PENDING_DNS)
+
+  /// Random value shown to the group as a TXT record — our own proof of
+  /// control, independent of Cloudflare's.
+  verificationToken String
+
+  /// Cloudflare Custom Hostname bookkeeping — opaque IDs/status only,
+  /// never a secret.
+  cfHostnameId  String?
+  cfStatus      String?
+  lastCheckedAt DateTime?
+  failureReason String?
+
+  requestedByPartyId String    @db.Uuid
+  activatedAt        DateTime?
+  removedAt          DateTime?
+  createdAt          DateTime  @default(now())
+  updatedAt          DateTime  @updatedAt
+
+  @@index([status])
+  @@map("jamii_domain")
+}
+
+enum JamiiDomainStatus {
+  /// Just requested — group still needs to add the CNAME + TXT records.
+  PENDING_DNS
+  /// Records seen at least once; Cloudflare is issuing the certificate.
+  VERIFYING
+  /// Live — resolveJamiiDomain() will route traffic for this hostname.
+  ACTIVE
+  /// Cloudflare rejected it, or verification never completed in time.
+  FAILED
+  /// Staff kill-switch — moderateJamiiPage's sibling for domains.
+  SUSPENDED
 }
 
 model Campaign {

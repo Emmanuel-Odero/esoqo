@@ -3,6 +3,7 @@ import { revalidatePath } from 'next/cache';
 import {
   moderateJamiiPage, issueOrgPageVerification, revokeOrgPageVerification, type JamiiPageStatus,
   inviteTeamMember, removeTeamMember, listTeamMembers, type JamiiTeamRole,
+  suspendJamiiDomain, reinstateJamiiDomain, staffRemoveJamiiDomain,
 } from '@esoko/db';
 import { toSafeErrorMessage } from '@esoko/domain';
 import { requireStaff } from '@/lib/session';
@@ -40,6 +41,46 @@ export async function actionUnverifyPage(organisationPartyId: string, reason: st
     const ctx = await requireStaff();
     if (!reason.trim()) return { ok: false, error: 'A reason is required' };
     await revokeOrgPageVerification(ctx, organisationPartyId, reason);
+    revalidatePath('/jamii-pages');
+    return { ok: true };
+  } catch (e) {
+    console.error(e);
+    return { ok: false, error: toSafeErrorMessage(e, "That didn't save. Please try again.") };
+  }
+}
+
+/* ── custom domain ────────────────────────────────────────────── */
+
+export async function actionSuspendDomain(domainId: string, reason: string): Promise<Result> {
+  try {
+    const ctx = await requireStaff();
+    if (!reason.trim()) return { ok: false, error: 'A reason is required' };
+    await suspendJamiiDomain(ctx, domainId, reason);
+    revalidatePath('/jamii-pages');
+    return { ok: true };
+  } catch (e) {
+    console.error(e);
+    return { ok: false, error: toSafeErrorMessage(e, "That didn't save. Please try again.") };
+  }
+}
+
+export async function actionReinstateDomain(domainId: string): Promise<Result> {
+  try {
+    const ctx = await requireStaff();
+    await reinstateJamiiDomain(ctx, domainId);
+    revalidatePath('/jamii-pages');
+    return { ok: true };
+  } catch (e) {
+    console.error(e);
+    return { ok: false, error: toSafeErrorMessage(e, "That didn't save. Please try again.") };
+  }
+}
+
+export async function actionRemoveDomain(domainId: string, reason: string): Promise<Result> {
+  try {
+    const ctx = await requireStaff();
+    if (!reason.trim()) return { ok: false, error: 'A reason is required' };
+    await staffRemoveJamiiDomain(ctx, domainId, reason);
     revalidatePath('/jamii-pages');
     return { ok: true };
   } catch (e) {

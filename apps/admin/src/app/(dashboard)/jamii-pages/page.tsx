@@ -1,5 +1,5 @@
 import { Icon } from '@esoko/ui';
-import { listJamiiPagesForStaff, getJamiiPageCounts } from '@esoko/db';
+import { listJamiiPagesForStaff, getJamiiPageCounts, listJamiiDomainsForStaff } from '@esoko/db';
 import { requireStaff } from '@/lib/session';
 import { PageTable } from './PageTable';
 
@@ -22,6 +22,11 @@ export default async function JamiiPagesPage({
   const canModerate = ctx.capabilities.includes('*') || ctx.capabilities.includes('jamii-page.moderate');
   const canVerify = ctx.capabilities.includes('*') || ctx.capabilities.includes('attestation.issue');
   const canManageTeam = ctx.capabilities.includes('*') || ctx.capabilities.includes('party.write');
+  const canManageDomain = ctx.capabilities.includes('*') || ctx.capabilities.includes('jamii-domain.moderate');
+
+  const domainsByPage = canManageDomain
+    ? new Map((await listJamiiDomainsForStaff(ctx, { take: 500 })).rows.map((d) => [d.pageId, d]))
+    : new Map();
 
   return (
     <>
@@ -65,10 +70,15 @@ export default async function JamiiPagesPage({
           teamCount: p.team.length,
           activeCampaigns: p.campaigns.filter((c) => c.status === 'ACTIVE').length,
           createdAt: p.createdAt.toISOString(),
+          domain: (() => {
+            const d = domainsByPage.get(p.organisationId);
+            return d ? { id: d.id, hostname: d.hostname, status: d.status } : null;
+          })(),
         }))}
         canModerate={canModerate}
         canVerify={canVerify}
         canManageTeam={canManageTeam}
+        canManageDomain={canManageDomain}
         q={sp.q ?? ''}
         status={sp.status ?? ''}
       />

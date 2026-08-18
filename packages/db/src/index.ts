@@ -21,6 +21,10 @@ export {
 } from './dal/cecf-ingest';
 export { confirmDonationPayment, DonationError } from './dal/donation';
 export { confirmBookingPayment, TicketingError } from './dal/ticketing';
+export {
+  listDomainsNeedingReconciliation, markDomainVerifying, markDomainActive,
+  markDomainFailed, touchDomainCheck, finaliseRemovedDomain,
+} from './dal/jamii-domain';
 export * from './capabilities';
 export type { VerifyResult } from './dal/reference';
 export * from './storage';

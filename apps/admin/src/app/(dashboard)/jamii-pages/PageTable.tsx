@@ -6,11 +6,15 @@ import { useAnnounce } from '@esoko/a11y';
 import {
   actionModeratePage, actionVerifyPage, actionUnverifyPage,
   actionListTeam, actionInviteTeamMember, actionRemoveTeamMember,
+  actionSuspendDomain, actionReinstateDomain, actionRemoveDomain,
 } from './actions';
+
+interface DomainInfo { id: string; hostname: string; status: string }
 
 interface Row {
   id: string; slug: string; status: string; officialName: string; county: string;
   verified: boolean; teamCount: number; activeCampaigns: number; createdAt: string;
+  domain: DomainInfo | null;
 }
 
 const STATUS: Record<string, [string, string]> = {
@@ -19,9 +23,20 @@ const STATUS: Record<string, [string, string]> = {
   SUSPENDED: ['p-bad', 'Suspended'],
 };
 
+const DOMAIN_STATUS: Record<string, [string, string]> = {
+  PENDING_DNS: ['p-warn', 'Pending DNS'],
+  VERIFYING: ['p-warn', 'Verifying'],
+  ACTIVE: ['p-ok', 'Active'],
+  FAILED: ['p-bad', 'Failed'],
+  SUSPENDED: ['p-bad', 'Suspended'],
+};
+
 export function PageTable({
-  rows, canModerate, canVerify, canManageTeam, q, status,
-}: { rows: Row[]; canModerate: boolean; canVerify: boolean; canManageTeam: boolean; q: string; status: string }) {
+  rows, canModerate, canVerify, canManageTeam, canManageDomain, q, status,
+}: {
+  rows: Row[]; canModerate: boolean; canVerify: boolean; canManageTeam: boolean; canManageDomain: boolean;
+  q: string; status: string;
+}) {
   const [openId, setOpenId] = useState<string | null>(null);
 
   return (
@@ -53,7 +68,7 @@ export function PageTable({
             <thead>
               <tr>
                 <th>Organisation</th><th>County</th><th>Status</th><th>Verified</th>
-                <th>Team</th><th>Active campaigns</th><th>Started</th><th />
+                <th>Domain</th><th>Team</th><th>Active campaigns</th><th>Started</th><th />
               </tr>
             </thead>
             <tbody>
@@ -71,6 +86,13 @@ export function PageTable({
                       {r.verified
                         ? <span className="pill p-ok"><Icon name="shield-check" size={12} />Verified</span>
                         : <span className="sub">—</span>}
+                    </td>
+                    <td>
+                      {r.domain ? (
+                        <span className={`pill ${DOMAIN_STATUS[r.domain.status]?.[0] ?? 'p-mute'}`}>
+                          {r.domain.hostname}
+                        </span>
+                      ) : <span className="sub">—</span>}
                     </td>
                     <td>{r.teamCount}</td>
                     <td>{r.activeCampaigns}</td>
@@ -94,6 +116,7 @@ export function PageTable({
           canModerate={canModerate}
           canVerify={canVerify}
           canManageTeam={canManageTeam}
+          canManageDomain={canManageDomain}
           onClose={() => setOpenId(null)}
         />
       )}
@@ -106,10 +129,13 @@ const TEAM_ROLE_LABEL: Record<string, string> = { ADMIN: 'Admin', EDITOR: 'Edito
 interface TeamMember { id: string; name: string; email: string; role: string; accepted: boolean }
 
 function PageModal({
-  row, canModerate, canVerify, canManageTeam, onClose,
-}: { row: Row; canModerate: boolean; canVerify: boolean; canManageTeam: boolean; onClose: () => void }) {
+  row, canModerate, canVerify, canManageTeam, canManageDomain, onClose,
+}: {
+  row: Row; canModerate: boolean; canVerify: boolean; canManageTeam: boolean; canManageDomain: boolean;
+  onClose: () => void;
+}) {
   const [reason, setReason] = useState('');
-  const [confirming, setConfirming] = useState<'SUSPENDED' | 'unverify' | null>(null);
+  const [confirming, setConfirming] = useState<'SUSPENDED' | 'unverify' | 'domain-suspend' | 'domain-remove' | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [pending, start] = useTransition();
   const announce = useAnnounce();
@@ -176,6 +202,18 @@ function PageModal({
             </a>
           </p>
 
+          {canManageDomain && row.domain && (
+            <div style={{ marginBottom: 20, paddingBottom: 20, borderBottom: '1px solid var(--line)' }}>
+              <p className="sub" style={{ marginBottom: 8 }}>Custom domain</p>
+              <p style={{ margin: '0 0 8px', display: 'flex', alignItems: 'center', gap: 8 }}>
+                <strong>{row.domain.hostname}</strong>
+                <span className={`pill ${DOMAIN_STATUS[row.domain.status]?.[0] ?? 'p-mute'}`}>
+                  {DOMAIN_STATUS[row.domain.status]?.[1] ?? row.domain.status}
+                </span>
+              </p>
+            </div>
+          )}
+
           {canManageTeam && (
             <div style={{ marginBottom: 20, paddingBottom: 20, borderBottom: '1px solid var(--line)' }}>
               <p className="sub" style={{ marginBottom: 8 }}>
@@ -221,14 +259,19 @@ function PageModal({
             </div>
           )}
 
-          {(confirming === 'SUSPENDED' || confirming === 'unverify') && (
+          {(confirming === 'SUSPENDED' || confirming === 'unverify' || confirming === 'domain-suspend' || confirming === 'domain-remove') && (
             <div style={{ marginBottom: 16 }}>
               <label className="sub" htmlFor="pm-reason" style={{ display: 'block', marginBottom: 6 }}>
                 Reason (recorded in the audit log)
               </label>
               <textarea id="pm-reason" className="inp" rows={2} style={{ width: '100%' }}
                 value={reason} onChange={(e) => setReason(e.target.value)}
-                placeholder={confirming === 'SUSPENDED' ? 'Why is this page being suspended?' : 'Why is verification being revoked?'} />
+                placeholder={
+                  confirming === 'SUSPENDED' ? 'Why is this page being suspended?'
+                  : confirming === 'unverify' ? 'Why is verification being revoked?'
+                  : confirming === 'domain-suspend' ? 'Why is this domain being suspended?'
+                  : 'Why is this domain being removed?'
+                } />
             </div>
           )}
 
@@ -279,6 +322,35 @@ function PageModal({
             <button className="btn btn-p" disabled={pending}
               onClick={() => run(() => actionModeratePage(row.id, 'PUBLISHED', 'Published by staff'), 'Page published')}>
               <Icon name="check" size={15} />Publish
+            </button>
+          )}
+
+          {canManageDomain && row.domain && row.domain.status !== 'SUSPENDED' && confirming !== 'domain-suspend' && (
+            <button className="btn btn-o" disabled={pending} onClick={() => setConfirming('domain-suspend')}>
+              <Icon name="ban" size={15} />Suspend domain
+            </button>
+          )}
+          {canManageDomain && confirming === 'domain-suspend' && (
+            <button className="btn btn-d" disabled={pending || !reason.trim()}
+              onClick={() => run(() => actionSuspendDomain(row.domain!.id, reason), 'Domain suspended')}>
+              Confirm suspend
+            </button>
+          )}
+          {canManageDomain && row.domain?.status === 'SUSPENDED' && (
+            <button className="btn btn-p" disabled={pending}
+              onClick={() => run(() => actionReinstateDomain(row.domain!.id), 'Domain reinstated — verification will re-check')}>
+              <Icon name="check-circle" size={15} />Reinstate domain
+            </button>
+          )}
+          {canManageDomain && row.domain && confirming !== 'domain-remove' && (
+            <button className="btn btn-o" disabled={pending} onClick={() => setConfirming('domain-remove')}>
+              <Icon name="close" size={15} />Remove domain
+            </button>
+          )}
+          {canManageDomain && confirming === 'domain-remove' && (
+            <button className="btn btn-d" disabled={pending || !reason.trim()}
+              onClick={() => run(() => actionRemoveDomain(row.domain!.id, reason), 'Domain removed')}>
+              Confirm remove
             </button>
           )}
         </div>
