@@ -185,9 +185,8 @@ export function Finish({
       </fieldset>
 
       <p className="hint">
-        By joining you agree to CECF&rsquo;s terms of membership, and to Esoko holding your
-        record under its privacy notice — that sharing is what makes these tools work. Nothing
-        about you goes to a bank, buyer or agency unless you allow it, each time.
+        By joining you agree to Esoko&rsquo;s terms of membership and privacy notice.
+        Nothing about you goes to a bank, buyer or agency unless you allow it, each time.
       </p>
     </>
   );

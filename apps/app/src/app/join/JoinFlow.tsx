@@ -120,7 +120,6 @@ export function JoinFlow() {
   );
 
   function pickJoiningAs(v: Form['joiningAs']) {
-    if (v === 'inst') { set('joiningAs', v); setStep(0); return; }
     set('joiningAs', v);
   }
 
@@ -129,7 +128,7 @@ export function JoinFlow() {
     setError(null);
 
     if (step === 1) {
-      if (!f.joiningAs || f.joiningAs === 'inst') return;
+      if (!f.joiningAs) return;
       start(async () => {
         let id = regId;
         const step2 = {
@@ -228,7 +227,7 @@ export function JoinFlow() {
           wantsExpirySms: f.wantsExpirySms,
           acceptedTerms: true,
         });
-        handle(r, () => { setDone(true); announce('Registration sent. Welcome to CECF — your Esoko tools are ready.', 'assertive'); });
+        handle(r, () => { setDone(true); announce('Registration sent. Welcome to Esoko.', 'assertive'); });
       });
     }
   }
@@ -286,10 +285,9 @@ export function JoinFlow() {
         <span className="icbox" style={{ background: 'var(--green-t)', color: 'var(--green)', width: 52, height: 52, borderRadius: 13 }}>
           <Icon name="check-circle" size={28} />
         </span>
-        <h2 className="qh" style={{ marginTop: 18 }}>Welcome to CECF</h2>
+        <h2 className="qh" style={{ marginTop: 18 }}>Welcome to Esoko</h2>
         <p className="qs">
-          Your membership is in. Your record has been shared with Esoko so the tools can
-          work — nothing else moves unless you say so.
+          Your membership is in — your tools are ready. Nothing else moves unless you say so.
         </p>
         {/*
           Dialling access (USSD *483*77#) isn't finalised yet — see the
@@ -297,7 +295,7 @@ export function JoinFlow() {
           alongside that section once it is.
 
         <div className="next done-next">
-          <strong style={{ color: 'var(--cecf-teal)' }}>Next step</strong>
+          <strong style={{ color: 'var(--green)' }}>Next step</strong>
           <p style={{ margin: '8px 0 0' }}>
             Dial <strong className="mono">*483*77#</strong> from this number
             {f.ussdSetupChoice === 'now'
@@ -348,9 +346,9 @@ export function JoinFlow() {
       {/* One-line reassurance above the card on narrow screens — desktop
           shows the "why Esoko" hero beside the form instead. */}
       <p className="jtrust">
-        <span>A CECF membership</span><span className="jt" aria-hidden="true">·</span>
+        <span>An Esoko membership</span><span className="jt" aria-hidden="true">·</span>
         <span>Free — and it stays free</span><span className="jt" aria-hidden="true">·</span>
-        <span>Shared with Esoko, never by default</span>
+        <span>Shared only when you say so</span>
       </p>
 
       {resumable && step === 1 && (
@@ -430,7 +428,7 @@ export function JoinFlow() {
           )}
           <button className="btn btn-p" onClick={next}
             disabled={pending
-              || (step === 1 && (!f.joiningAs || f.joiningAs === 'inst' || f.officialName.trim().length < 2))
+              || (step === 1 && (!f.joiningAs || f.officialName.trim().length < 2))
               || (step === 3 && f.joiningAs === 'group' && !f.groupPartyId && !f.orgName)
               || (step === 3 && f.joiningAs === 'biz' && !f.bizPartyId && !f.bizName)
               || (step === TOTAL_STEPS && !canSubmit)}
@@ -481,7 +479,7 @@ export function JoinFlow() {
         <span className="icbox" style={{ background: 'var(--green-t)', color: 'var(--green)', marginBottom: 12 }}>
           <Icon name="keypad" size={21} />
         </span>
-        <h3 style={{ marginBottom: 8 }}>Or join CECF without the internet</h3>
+        <h3 style={{ marginBottom: 8 }}>Or join Esoko without the internet</h3>
         <p style={{ fontSize: '.93rem', color: 'var(--tx-2)', margin: 0 }}>
           Dial <strong className="mono" style={{ color: 'var(--navy)' }}>*483*77#</strong> from the
           handset you want to register and answer the same questions. No identity

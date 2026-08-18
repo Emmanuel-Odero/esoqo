@@ -1,7 +1,6 @@
 import type { Metadata, Viewport } from 'next';
 import {
   Atkinson_Hyperlegible,
-  Fraunces,
   IBM_Plex_Mono,
   IBM_Plex_Sans,
   Outfit,
@@ -19,7 +18,6 @@ import { ConnectivityBanner } from '@/components/ConnectivityBanner';
  *   Outfit     → display/headlines (friendly, round, high x-height)
  *   Plex Mono  → money, codes, identifiers (tabular numerals)
  *   Atkinson   → the optional "high legibility" accessibility setting
- *   Fraunces   → CECF's brand serif, used only on the /join masthead
  *
  * The CSS variables below are re-declared in app.css so the user-adjustable
  * `data-font="legible"` preference (which swaps --font-body) still wins.
@@ -49,13 +47,6 @@ const atkinson = Atkinson_Hyperlegible({
   subsets: ['latin'],
   weight: ['400', '700'],
   variable: '--font-atkinson',
-  display: 'swap',
-});
-
-const fraunces = Fraunces({
-  subsets: ['latin'],
-  weight: '600',
-  variable: '--font-fraunces',
   display: 'swap',
 });
 
@@ -93,7 +84,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
     <html
       lang="en"
       suppressHydrationWarning
-      className={`${plexSans.variable} ${plexMono.variable} ${outfit.variable} ${atkinson.variable} ${fraunces.variable}`}
+      className={`${plexSans.variable} ${plexMono.variable} ${outfit.variable} ${atkinson.variable}`}
     >
       <body>
         <IconSprite />

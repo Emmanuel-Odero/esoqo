@@ -111,7 +111,7 @@ export async function actionStart(raw: unknown): Promise<ActionResult<{ id: stri
     const ctx = await requestCtx();
     const h = await headers();
     const reg = await startRegistration(ctx, {
-      joiningAs: v.joiningAs === 'inst' ? 'me' : v.joiningAs,
+      joiningAs: v.joiningAs,
       officialName: v.officialName,
       knownAs: v.knownAs || undefined,
       orgName: v.orgName || undefined,

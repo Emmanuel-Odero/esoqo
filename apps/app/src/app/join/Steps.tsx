@@ -161,7 +161,7 @@ export function DocumentStep({ registrationId }: { registrationId: string }) {
               </button>
             </div>
             <p className="hint" style={{ marginTop: 8 }}>
-              {human(file.size)} · only staff reviewing your CECF registration will see this.
+              {human(file.size)} · only staff reviewing your registration will see this.
             </p>
           </div>
         </div>

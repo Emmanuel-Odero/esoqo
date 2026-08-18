@@ -1,31 +1,27 @@
 import { Icon } from '@esoko/ui';
 
 /**
- * The "why join" column — reframed for a CECF-led page. What people are
- * actually signing up for is a CECF membership; what Esoko contributes
- * is the toolkit the membership can trade and save with. The copy stays
- * grounded (one consented record, formal recognition, no fee) rather
- * than aspirational — and matches what CECF actually does per
- * childeldercare.test: taking grassroots groups and MSMEs from informal
- * to formally recognised, not household elder care.
+ * The "why join" column, for esoko's own membership. Previously
+ * reframed around a CECF-led page ("CECF is who you join"); this flow
+ * is esoko's own registration now, so the copy speaks for esoko
+ * directly rather than the toolkit behind someone else's membership.
  */
 export function WhyJoin() {
   return (
-    <section className="cecf-hero" aria-labelledby="why-join-h">
-      <p className="cecf-hero-eyebrow">Your membership carries</p>
-      <h2 id="why-join-h">Formal recognition, and the tools to trade with it</h2>
+    <section className="join-hero" aria-labelledby="why-join-h">
+      <p className="join-hero-eyebrow">Your membership carries</p>
+      <h2 id="why-join-h">A record you can trade with</h2>
       <p className="lede">
-        CECF takes grassroots groups and MSMEs from informal to formally recognised, and
-        connects them to the banks, buyers and government services that unlocks. Your one
-        membership record also opens Esoko&rsquo;s tools — prices, payments and receipts —
-        so the same record that gets you counted can earn for you.
+        One registration — for yourself, your group or your business — opens Esoko&rsquo;s
+        tools straight away: market prices, payments and receipts, and a history that
+        works for you with a bank or a buyer.
       </p>
-      <ul className="cecf-points">
+      <ul className="join-points">
         <li>
-          <span className="icbox"><Icon name="seal" size={18} /></span>
+          <span className="icbox"><Icon name="basket" size={18} /></span>
           <span>
-            <strong>A CECF membership</strong>
-            <span className="d">Support getting your group or business registered, plus dispute mediation and government services.</span>
+            <strong>One record opens a trade</strong>
+            <span className="d">Prices, payments and — for registered traders — a storefront, with no second signup.</span>
           </span>
         </li>
         <li>
@@ -36,10 +32,10 @@ export function WhyJoin() {
           </span>
         </li>
         <li>
-          <span className="icbox"><Icon name="basket" size={18} /></span>
+          <span className="icbox"><Icon name="seal" size={18} /></span>
           <span>
-            <strong>One record opens a trade</strong>
-            <span className="d">Prices, payments and — for registered traders — a storefront, with no second signup.</span>
+            <strong>Formal recognition, when you want it</strong>
+            <span className="d">Track group and business registration status, KRA PIN and more on the same record.</span>
           </span>
         </li>
         <li>

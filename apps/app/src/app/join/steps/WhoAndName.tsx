@@ -17,7 +17,6 @@ const WHO_OPTIONS = [
   { v: 'me', icon: 'user', t: 'Myself', d: 'A trader, farmer, rider, fundi or anyone working on their own' },
   { v: 'group', icon: 'users', t: 'A group', d: 'Chama, self-help group, CBO, faith-based group, cooperative or SACCO' },
   { v: 'biz', icon: 'shop', t: 'A business', d: 'Registered or not — either is fine' },
-  { v: 'inst', icon: 'gov', t: 'A bank, county, buyer or agency', d: 'Institutions are set up by agreement, not through this form' },
 ] as const;
 
 /**
@@ -45,7 +44,7 @@ export function WhoAndName({
 }) {
   const [browsing, setBrowsing] = useState(f.joiningAs === '');
   const chosen = WHO_OPTIONS.find((o) => o.v === f.joiningAs);
-  const qs = !f.joiningAs || f.joiningAs === 'inst'
+  const qs = !f.joiningAs
     ? 'Who is joining? This decides which forms come next.'
     : f.joiningAs === 'me'
       ? 'A personal membership — your own record, on your own terms.'
@@ -55,7 +54,6 @@ export function WhoAndName({
 
   function pick(v: (typeof WHO_OPTIONS)[number]['v']) {
     onPickJoiningAs(v);
-    if (v === 'inst') return;
     // Collapse the picker and move focus to the first name field so the
     // revealed fields are both visible and ready.
     setBrowsing(false);
@@ -94,7 +92,7 @@ export function WhoAndName({
         )}
       </div>
 
-      {f.joiningAs && f.joiningAs !== 'inst' && (
+      {f.joiningAs && (
         <div className="sub2">
           {f.joiningAs === 'group' && (
             <>
