@@ -6,6 +6,19 @@ const nextConfig = {
   typedRoutes: true,
 
   /**
+   * sharp (packages/db/src/image-compression.ts, imported via
+   * '@esoko/db/image-compression' by the upload Server Actions) is a
+   * native binary addon — Turbopack/webpack can't bundle a compiled
+   * .node file into a Server Component/Action bundle the way it does
+   * plain JS, and the build fails with "Module not found: Can't
+   * resolve 'sharp'" without this. serverExternalPackages tells Next
+   * to leave it as a real Node require, resolved at runtime instead of
+   * bundle time — the documented fix for this exact class of package
+   * (sharp, bcrypt, canvas, ...).
+   */
+  serverExternalPackages: ['sharp'],
+
+  /**
    * Dev-server-only (Next ignores this in production builds) — lets
    * local custom-domain testing work against *.localtest.me without
    * the dev overlay's cross-origin guard blocking its own diagnostic
