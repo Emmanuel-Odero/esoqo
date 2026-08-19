@@ -3,6 +3,7 @@
 import { useState, useTransition } from 'react';
 import { useRouter } from 'next/navigation';
 import { AssetUpload } from '@/components/AssetUpload';
+import { RichTextEditor } from '@/components/RichTextEditor';
 import { uploadDraftImage } from '../upload-actions';
 import { actionCreateCampaign, actionUpdateCampaign } from '../actions';
 
@@ -75,7 +76,10 @@ export function CampaignForm({
         </div>
       )}
       <AssetUpload label="Cover photo (optional)" hint="PNG or JPEG, up to 10 MB" aspect="2" url={coverUrl} pending={uploading} onUpload={upload} />
-      <div className="field"><label htmlFor="cbody">Full story (optional)</label><textarea id="cbody" rows={6} value={body ?? ''} onChange={(e) => setBody(e.target.value)} /></div>
+      <div className="field">
+        <label htmlFor="cbody">Full story (optional)</label>
+        <RichTextEditor value={body ?? ''} onChange={setBody} />
+      </div>
       {error && <p style={{ color: 'var(--stamp)', fontSize: '.85rem', marginBottom: 12 }}>{error}</p>}
       <button type="button" className="btn btn-stamp" disabled={pending || uploading || !title.trim() || !summary.trim() || !goalKes} onClick={submit}>
         {pending ? (campaignId ? 'Saving…' : 'Opening…') : campaignId ? 'Save changes' : 'Open campaign'}

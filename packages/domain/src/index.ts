@@ -14,6 +14,7 @@ export * from './counties';
 export * from './businessTypes';
 export * from './store';
 export * from './jamii';
+export * from './rich-text';
 export * from './auth';
 export * from './treasury';
 export * from './ticketing';

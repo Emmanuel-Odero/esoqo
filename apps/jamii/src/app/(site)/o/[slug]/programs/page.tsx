@@ -2,6 +2,7 @@ import { OrgSectionShell, loadOrgOr404 } from '@/components/OrgSectionShell';
 import { getOrgLinkMode } from '@/lib/org-links';
 import { Accordion } from '@/components/Accordion';
 import { OrgDonateBand } from '@/components/OrgDonateBand';
+import { RichText } from '@/components/RichText';
 import { Icon, type IconName } from '@esoko/ui';
 
 export const dynamic = 'force-dynamic';
@@ -30,7 +31,7 @@ export default async function ProgramsPage({ params }: { params: Promise<{ slug:
                   Programme area
                 </div>
                 <h3>{prog.title}</h3>
-                <p>{prog.body}</p>
+                <RichText html={prog.body} />
               </article>
             ))}
           </div>
@@ -50,7 +51,7 @@ export default async function ProgramsPage({ params }: { params: Promise<{ slug:
           <h2>Programs</h2>
           <Accordion
             defaultOpen={0}
-            items={page.programs.map((p) => ({ title: p.title, icon: p.icon ?? undefined, body: p.body }))}
+            items={page.programs.map((p) => ({ title: p.title, icon: p.icon ?? undefined, body: <RichText html={p.body} /> }))}
           />
         </section>
       )}

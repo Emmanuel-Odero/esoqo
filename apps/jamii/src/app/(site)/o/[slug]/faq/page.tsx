@@ -1,4 +1,5 @@
 import { OrgSectionShell, loadOrgOr404 } from '@/components/OrgSectionShell';
+import { RichText } from '@/components/RichText';
 
 export const dynamic = 'force-dynamic';
 
@@ -18,7 +19,7 @@ export default async function FaqPage({ params }: { params: Promise<{ slug: stri
             {faq.map((item, i) => (
               <details key={i} className="faqitem">
                 <summary className="faqq">{item.q}</summary>
-                <div className="faqa"><p>{item.a}</p></div>
+                <RichText html={item.a} className="faqa" />
               </details>
             ))}
           </div>

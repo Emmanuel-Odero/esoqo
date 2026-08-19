@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import { ORG_KINDS } from './registration';
+import { richTextField } from './rich-text';
 
 /**
  * Our Jamii — CECF community mini-sites + crowdfunding.
@@ -50,7 +51,9 @@ export const jamiiPageProfileSchema = z.object({
   tagline: z.string().trim().max(120).optional().or(z.literal('')),
   missionShort: z.string().trim().max(160).optional().or(z.literal('')),
   visionShort: z.string().trim().max(160).optional().or(z.literal('')),
-  aboutUs: z.string().trim().max(4000).optional().or(z.literal('')),
+  // Rich text (Tiptap) — sanitized here, before it ever reaches the DAL.
+  // See rich-text.ts's header comment for the full write/read-time story.
+  aboutUs: richTextField(4000),
   meetingSchedule: z.string().trim().max(160).optional().or(z.literal('')),
   contactEmail: z.string().trim().toLowerCase().email('Enter a valid email address').max(160).optional().or(z.literal('')),
   contactPhone: z.string().trim().regex(/^\+254(7|1)\d{8}$/, 'Enter a valid Kenyan mobile number').optional().or(z.literal('')),
@@ -68,14 +71,14 @@ export type JamiiPageProfileInput = z.infer<typeof jamiiPageProfileSchema>;
 
 export const jamiiFaqItemSchema = z.object({
   q: z.string().trim().min(2, 'Enter a question').max(200),
-  a: z.string().trim().min(2, 'Enter an answer').max(1000),
+  a: richTextField(1000, { length: 2, message: 'Enter an answer' }),
 });
 export const jamiiFaqSchema = z.array(jamiiFaqItemSchema).max(20);
 
 export const jamiiPostSchema = z.object({
   title: z.string().trim().min(2, 'Give the update a title').max(140),
   excerpt: z.string().trim().max(220).optional().or(z.literal('')),
-  body: z.string().trim().min(2, 'Write what happened').max(6000),
+  body: richTextField(6000, { length: 2, message: 'Write what happened' }),
   imageUrl: z.string().trim().max(2000).optional().or(z.literal('')),
 });
 export type JamiiPostInput = z.infer<typeof jamiiPostSchema>;
@@ -97,7 +100,7 @@ export const JAMII_PROGRAM_ICONS = [
 
 export const jamiiProgramSchema = z.object({
   title: z.string().trim().min(2, 'Name the programme').max(120),
-  body: z.string().trim().min(2, 'Describe the programme').max(1000),
+  body: richTextField(1000, { length: 2, message: 'Describe the programme' }),
   icon: z.enum(JAMII_PROGRAM_ICONS).optional(),
 });
 export type JamiiProgramInput = z.infer<typeof jamiiProgramSchema>;
@@ -105,7 +108,7 @@ export type JamiiProgramInput = z.infer<typeof jamiiProgramSchema>;
 export const createCampaignSchema = z.object({
   title: z.string().trim().min(2, 'Give the campaign a title').max(140),
   summary: z.string().trim().min(2, 'Summarise what this raises for').max(280),
-  body: z.string().trim().max(6000).optional().or(z.literal('')),
+  body: richTextField(6000).optional().or(z.literal('')),
   goalKes: z.number().positive('Set a goal above zero').max(100_000_000),
   coverUrl: z.string().trim().max(2000).optional().or(z.literal('')),
   endsAt: z.string().optional().or(z.literal('')),
@@ -115,7 +118,7 @@ export type CreateCampaignInput = z.infer<typeof createCampaignSchema>;
 export const updateCampaignSchema = z.object({
   title: z.string().trim().min(2, 'Give the campaign a title').max(140),
   summary: z.string().trim().min(2, 'Summarise what this raises for').max(280),
-  body: z.string().trim().max(6000).optional().or(z.literal('')),
+  body: richTextField(6000).optional().or(z.literal('')),
   goalKes: z.number().positive('Set a goal above zero').max(100_000_000),
   coverUrl: z.string().trim().max(2000).optional().or(z.literal('')),
   endsAt: z.string().optional().or(z.literal('')),
@@ -125,7 +128,7 @@ export type UpdateCampaignInput = z.infer<typeof updateCampaignSchema>;
 
 export const campaignUpdateSchema = z.object({
   title: z.string().trim().min(2, 'Give the update a title').max(140),
-  body: z.string().trim().min(2, 'Write the update').max(4000),
+  body: richTextField(4000, { length: 2, message: 'Write the update' }),
 });
 
 export const inviteTeamMemberSchema = z.object({

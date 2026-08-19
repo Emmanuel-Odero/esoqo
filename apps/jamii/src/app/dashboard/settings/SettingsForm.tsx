@@ -3,6 +3,7 @@
 import { useState, useTransition } from 'react';
 import { useRouter } from 'next/navigation';
 import { actionUpdateProfile } from '../actions';
+import { RichTextEditor } from '@/components/RichTextEditor';
 
 type Profile = {
   tagline: string; missionShort: string; visionShort: string; aboutUs: string; meetingSchedule: string;
@@ -44,7 +45,10 @@ export function SettingsForm({ pageId, initial }: { pageId: string; initial: Pro
       <div className="field"><label htmlFor="tagline">Tagline</label><input id="tagline" value={values.tagline} onChange={(e) => set('tagline', e.target.value)} /></div>
       <div className="field"><label htmlFor="missionShort">Short mission (for cards)</label><input id="missionShort" value={values.missionShort} onChange={(e) => set('missionShort', e.target.value)} /></div>
       <div className="field"><label htmlFor="visionShort">Short vision</label><input id="visionShort" value={values.visionShort} onChange={(e) => set('visionShort', e.target.value)} placeholder="Inclusive communities where no one is left behind." /></div>
-      <div className="field"><label htmlFor="aboutUs">About</label><textarea id="aboutUs" rows={6} value={values.aboutUs} onChange={(e) => set('aboutUs', e.target.value)} /></div>
+      <div className="field">
+        <label htmlFor="aboutUs">About</label>
+        <RichTextEditor value={values.aboutUs} onChange={(html) => set('aboutUs', html)} />
+      </div>
       <div className="field"><label htmlFor="meetingSchedule">Meeting schedule</label><input id="meetingSchedule" value={values.meetingSchedule} onChange={(e) => set('meetingSchedule', e.target.value)} placeholder="Wednesdays, 4pm · Social Hall" /></div>
       <div className="formrow2">
         <div className="field"><label htmlFor="contactPhone">Public phone</label><input id="contactPhone" value={values.contactPhone} onChange={(e) => set('contactPhone', e.target.value)} placeholder="+254 7XX XXX XXX" /></div>

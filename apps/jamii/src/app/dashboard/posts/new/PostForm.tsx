@@ -3,6 +3,7 @@
 import { useState, useTransition } from 'react';
 import { useRouter } from 'next/navigation';
 import { AssetUpload } from '@/components/AssetUpload';
+import { RichTextEditor } from '@/components/RichTextEditor';
 import { uploadDraftImage } from '../../upload-actions';
 import { actionCreatePost } from '../../actions';
 
@@ -42,9 +43,12 @@ export function PostForm({ pageId }: { pageId: string }) {
       <div className="field"><label htmlFor="title">Title</label><input id="title" value={title} onChange={(e) => setTitle(e.target.value)} /></div>
       <div className="field"><label htmlFor="excerpt">Short excerpt (optional)</label><input id="excerpt" value={excerpt} onChange={(e) => setExcerpt(e.target.value)} /></div>
       <AssetUpload label="Photo (optional)" hint="PNG or JPEG, up to 10 MB" aspect="1.6" url={imageUrl} pending={uploading} onUpload={upload} />
-      <div className="field"><label htmlFor="body">What happened?</label><textarea id="body" rows={8} value={body} onChange={(e) => setBody(e.target.value)} /></div>
+      <div className="field">
+        <label htmlFor="body">What happened?</label>
+        <RichTextEditor value={body} onChange={setBody} />
+      </div>
       {error && <p style={{ color: 'var(--stamp)', fontSize: '.85rem', marginBottom: 12 }}>{error}</p>}
-      <button type="button" className="btn btn-stamp" disabled={pending || uploading || !title.trim() || !body.trim()} onClick={submit}>
+      <button type="button" className="btn btn-stamp" disabled={pending || uploading || !title.trim() || !body.replace(/<[^>]*>/g, '').trim()} onClick={submit}>
         {pending ? 'Publishing…' : 'Publish update'}
       </button>
     </div>

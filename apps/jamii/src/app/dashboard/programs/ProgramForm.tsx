@@ -4,6 +4,7 @@ import { useState, useTransition } from 'react';
 import { useRouter } from 'next/navigation';
 import { Icon, type IconName } from '@esoko/ui';
 import { JAMII_PROGRAM_ICONS } from '@esoko/domain';
+import { RichTextEditor } from '@/components/RichTextEditor';
 import { actionCreateProgram, actionUpdateProgram, actionDeleteProgram } from '../actions';
 
 export function ProgramForm({
@@ -60,10 +61,13 @@ export function ProgramForm({
           {icon && <Icon name={icon as IconName} size={18} />}
         </div>
       </div>
-      <div className="field"><label htmlFor="pbody">Description</label><textarea id="pbody" rows={6} value={body} onChange={(e) => setBody(e.target.value)} /></div>
+      <div className="field">
+        <label htmlFor="pbody">Description</label>
+        <RichTextEditor value={body} onChange={setBody} />
+      </div>
       {error && <p style={{ color: 'var(--stamp)', fontSize: '.85rem', marginBottom: 12 }}>{error}</p>}
       <div style={{ display: 'flex', gap: 10 }}>
-        <button type="button" className="btn btn-stamp" disabled={pending || !title.trim() || !body.trim()} onClick={submit}>
+        <button type="button" className="btn btn-stamp" disabled={pending || !title.trim() || !body.replace(/<[^>]*>/g, '').trim()} onClick={submit}>
           {pending ? 'Saving…' : programId ? 'Save changes' : 'Add programme'}
         </button>
         {programId && (

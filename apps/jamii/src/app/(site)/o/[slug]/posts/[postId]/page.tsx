@@ -3,6 +3,7 @@ import { notFound } from 'next/navigation';
 import { getJamiiPost } from '@esoko/db';
 import { OrgSectionShell, loadOrgOr404 } from '@/components/OrgSectionShell';
 import { getOrgLinkMode, orgHref } from '@/lib/org-links';
+import { RichText } from '@/components/RichText';
 
 export const dynamic = 'force-dynamic';
 
@@ -31,7 +32,7 @@ export default async function PostDetailPage({
           {(post.publishedAt ?? post.createdAt).toLocaleDateString('en-KE', { day: '2-digit', month: 'short', year: 'numeric' })}
           {' · '}{page.organisation.officialName}
         </p>
-        <p>{post.body}</p>
+        <RichText html={post.body} />
       </section>
     </OrgSectionShell>
   );

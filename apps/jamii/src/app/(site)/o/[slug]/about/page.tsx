@@ -1,5 +1,6 @@
 import { OrgSectionShell, loadOrgOr404 } from '@/components/OrgSectionShell';
 import { getOrgLinkMode } from '@/lib/org-links';
+import { RichText } from '@/components/RichText';
 
 export const dynamic = 'force-dynamic';
 
@@ -18,9 +19,7 @@ export default async function AboutPage({ params }: { params: Promise<{ slug: st
       {onCustomDomain ? (
         <div className="wl-about-grid">
           <div>
-            {page.aboutUs
-              ? page.aboutUs.split('\n\n').map((para, i) => <p key={i}>{para}</p>)
-              : <p>This organisation hasn&rsquo;t written its story yet.</p>}
+            <RichText html={page.aboutUs} fallback={<p>This organisation hasn&rsquo;t written its story yet.</p>} />
           </div>
           <div className="wl-mv-pair">
             {page.missionShort && (
@@ -42,9 +41,7 @@ export default async function AboutPage({ params }: { params: Promise<{ slug: st
       ) : (
         <section className="osec">
           <h2>About {org.officialName}</h2>
-          {page.aboutUs
-            ? page.aboutUs.split('\n\n').map((para, i) => <p key={i}>{para}</p>)
-            : <p>This organisation hasn&rsquo;t written its story yet.</p>}
+          <RichText html={page.aboutUs} fallback={<p>This organisation hasn&rsquo;t written its story yet.</p>} />
         </section>
       )}
     </OrgSectionShell>

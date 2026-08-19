@@ -10,23 +10,27 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
+    "@esoko/a11y": "workspace:*",
+    "@esoko/auth": "workspace:*",
+    "@esoko/db": "workspace:*",
+    "@esoko/domain": "workspace:*",
+    "@esoko/payments": "workspace:*",
+    "@esoko/ui": "workspace:*",
+    "@tiptap/extension-link": "^3.30.2",
+    "@tiptap/pm": "^3.30.2",
+    "@tiptap/react": "^3.30.2",
+    "@tiptap/starter-kit": "^3.30.2",
     "next": "^16.2.7",
     "react": "^19.2.0",
     "react-dom": "^19.2.0",
-    "@esoko/db": "workspace:*",
-    "@esoko/domain": "workspace:*",
-    "@esoko/auth": "workspace:*",
-    "@esoko/ui": "workspace:*",
-    "@esoko/a11y": "workspace:*",
-    "@esoko/payments": "workspace:*",
     "server-only": "^0.0.1",
     "zod": "^3.24.1"
   },
   "devDependencies": {
     "@esoko/config": "workspace:*",
-    "typescript": "^5.7.2",
-    "@types/react": "^19.0.2",
     "@types/node": "^22.10.2",
-    "eslint": "^9.17.0"
+    "@types/react": "^19.0.2",
+    "eslint": "^9.17.0",
+    "typescript": "^5.7.2"
   }
 }

@@ -5,6 +5,7 @@ import { loadCampaign, loadCampaignExtras, isVerified } from '@/lib/data';
 import { getOrgLinkMode, orgHref } from '@/lib/org-links';
 import { orgExternalUrl } from '@/lib/org-external-url';
 import { CampaignDonateButton } from '@/components/CampaignDonateButton';
+import { RichText } from '@/components/RichText';
 import { OrgTopNav } from '@/components/OrgTopNav';
 import { OrgFooter } from '@/components/OrgFooter';
 import { WhitelabelThemeRoot } from '@/lib/whitelabel-theme';
@@ -61,9 +62,7 @@ export default async function CampaignPage({
           <div>
             <section className="osec">
               <h2>About this project</h2>
-              {campaign.body
-                ? campaign.body.split('\n\n').map((para, i) => <p key={i}>{para}</p>)
-                : <p>{campaign.summary}</p>}
+              <RichText html={campaign.body} fallback={<p>{campaign.summary}</p>} />
             </section>
 
             {campaign.updates.length > 0 && (
@@ -73,7 +72,7 @@ export default async function CampaignPage({
                   <div key={u.id} className="card updatecard">
                     <div className="udate">{u.postedAt.toLocaleDateString('en-KE', { day: '2-digit', month: 'short', year: 'numeric' })}</div>
                     <h4>{u.title}</h4>
-                    <p>{u.body}</p>
+                    <RichText html={u.body} />
                   </div>
                 ))}
               </section>
