@@ -3,9 +3,14 @@ import helmet from '@fastify/helmet';
 import rateLimit from '@fastify/rate-limit';
 import {
   verifyChain, confirmStoreOrderPayment, confirmRegistrationPaymentByCheckoutId,
+  confirmRegistrationPaymentByPesapalOrderId,
   confirmDonationPayment, confirmBookingPayment, StoreOrderError, DonationError, TicketingError,
 } from '@esoko/db';
-import { parseStkCallback } from '@esoko/payments';
+import { appEnv } from '@esoko/domain';
+import { parseStkCallback, parsePesapalIpn, confirmPesapalOrder } from '@esoko/payments';
+import { cecfRoutes } from './routes/cecf';
+import { jamiiDomainsRoutes, runJamiiDomainReconcile } from './routes/jamii-domains';
+import { jamiiDomainProvider } from './lib/cloudflare-saas';
 
 /**
  * services/core — the domain API for the core plane.
@@ -24,6 +29,8 @@ const app = Fastify({
 
 await app.register(helmet, { contentSecurityPolicy: false });
 await app.register(rateLimit, { max: 120, timeWindow: '1 minute' });
+await app.register(cecfRoutes);
+await app.register(jamiiDomainsRoutes);
 
 app.get('/health', async () => ({ ok: true, service: 'core', ts: new Date().toISOString() }));
 
@@ -107,6 +114,58 @@ app.post('/webhooks/mpesa/stk-callback', async (req, reply) => {
   }
   return reply.send({ ok: true });
 });
+
+/**
+ * Pesapal's IPN — unlike the M-Pesa callback above, an IPN carries only
+ * the OrderTrackingId, never the payment result itself, so this always
+ * calls confirmPesapalOrder (a real GetTransactionStatus round trip)
+ * before trusting anything. Pesapal is currently only wired to
+ * registration payments (CECF card checkout); if it's ever used for the
+ * storefront/donations/ticketing too, this gains the same fall-through
+ * the M-Pesa handler above uses.
+ */
+app.post('/webhooks/pesapal/ipn', async (req, reply) => {
+  const parsed = parsePesapalIpn({ ...(req.query as object), ...(req.body as object) });
+  if (!parsed) {
+    app.log.warn({ query: req.query, body: req.body }, 'unrecognised Pesapal IPN shape');
+    return reply.code(400).send({ ok: false });
+  }
+
+  try {
+    const status = await confirmPesapalOrder(parsed.orderTrackingId);
+    if (!status.succeeded) {
+      app.log.info({ orderTrackingId: parsed.orderTrackingId, status: status.statusDescription }, 'Pesapal order not completed');
+      return reply.send({ ok: true }); // acknowledged — nothing to post
+    }
+    await confirmRegistrationPaymentByPesapalOrderId(parsed.orderTrackingId);
+  } catch (e) {
+    // Still 200 — Pesapal retries on non-2xx, and a retry storm on an
+    // already-broken match helps no one. Logged for a human.
+    app.log.error({ err: e, orderTrackingId: parsed.orderTrackingId }, 'failed to confirm Pesapal registration payment');
+  }
+  return reply.send({ ok: true });
+});
+
+/**
+ * Self-driving reconciliation in console mode — there's no cron on a
+ * dev box, and requiring one to test custom domains locally is exactly
+ * the kind of friction console mode exists to remove elsewhere (see
+ * mpesaProvider's "auto-confirms locally", otp.ts's console
+ * short-circuit). Real deploys still need the external cron in
+ * docs/proposals/our-jamii-custom-domains.md — this interval is scoped
+ * to console mode specifically (never `cloudflare`) so it can never
+ * turn into an accidental extra poller hammering Cloudflare's API in
+ * production alongside the real cron.
+ */
+if (jamiiDomainProvider() === 'console') {
+  const RECONCILE_INTERVAL_MS = 5_000;
+  setInterval(() => {
+    runJamiiDomainReconcile(app.log).catch((e) => {
+      app.log.error({ err: e }, 'self-driven jamii domain reconcile failed');
+    });
+  }, RECONCILE_INTERVAL_MS).unref();
+  app.log.info({ appEnv: appEnv() }, 'jamii domains: self-driven reconcile loop running (console mode)');
+}
 
 const port = Number(process.env.PORT ?? 4000);
 await app.listen({ port, host: '0.0.0.0' });

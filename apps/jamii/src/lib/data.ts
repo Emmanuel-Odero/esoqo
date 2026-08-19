@@ -1,6 +1,8 @@
 import { cache } from 'react';
 import { getJamiiPageBySlug, getCampaignBySlug, getCampaignStats, listRecentDonations } from '@esoko/db';
 
+export { isVerified, orgInitials } from './org-links-shared';
+
 /**
  * React's request-scoped cache() so OrgHeader, OrgSubnav and a section's
  * own page.tsx — all independent server components on the same route —
@@ -18,12 +20,4 @@ export async function loadCampaignExtras(campaignId: string) {
     listRecentDonations(campaignId),
   ]);
   return { stats, donations };
-}
-
-export function isVerified(org: { party: { attestations: { id: string }[] } }): boolean {
-  return org.party.attestations.length > 0;
-}
-
-export function orgInitials(name: string): string {
-  return name.split(/\s+/).filter(Boolean).slice(0, 2).map((w) => w[0]).join('').toUpperCase() || 'CB';
 }

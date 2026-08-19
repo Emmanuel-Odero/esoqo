@@ -19,17 +19,18 @@ add_filter('excerpt_more', function () {
 });
 
 /**
- * The "apply" page itself has never had a working `registrationForm`
- * partial (see missing.blade.php) — every CTA that points at it is
- * already redirected to the real Esoko join flow via
- * App\Support\PageUrl::resolve(). This closes the one gap that leaves
- * open: someone who lands on /apply directly (an old link, a bookmark,
- * a search result) rather than through a CTA.
+ * The "apply" page now has a working `registrationForm` partial
+ * (partials/cecf/registrationForm.blade.php) — someone who lands on
+ * /apply directly (an old link, a bookmark, a search result) gets the
+ * real form the same as anyone arriving through a CTA. The one
+ * remaining redirect is the CECF_LOCAL_REGISTRATION_ENABLED=false
+ * operational kill-switch, same override PageUrl::resolve() honours for
+ * every generated CTA — see its own docblock.
  *
  * @return void
  */
 add_action('template_redirect', function () {
-    if (! is_page()) {
+    if (! is_page() || env('CECF_LOCAL_REGISTRATION_ENABLED', true) !== false) {
         return;
     }
 

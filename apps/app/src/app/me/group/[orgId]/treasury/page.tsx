@@ -1,3 +1,6 @@
+import { notFound } from 'next/navigation';
+import Link from 'next/link';
+import type { Route } from 'next';
 import { Icon } from '@esoko/ui';
 import {
   getMyRecord, getGroupBalance, listContributions, listWithdrawals, getTreasuryPolicy,
@@ -7,41 +10,51 @@ import { ContributionForm } from './ContributionForm';
 import { ContributionsList } from './ContributionsList';
 import { WithdrawalRequestForm } from './WithdrawalRequestForm';
 import { WithdrawalSignForm } from './WithdrawalSignForm';
+import { PayJoinFeeForm } from './PayJoinFeeForm';
+import { TreasuryPolicyForm } from './TreasuryPolicyForm';
 
 export const dynamic = 'force-dynamic';
 
 const OFFICER_ROLES = new Set(['CHAIRPERSON', 'TREASURER', 'SECRETARY']);
 
-export default async function GroupTreasury() {
+export default async function GroupTreasury({ params }: { params: Promise<{ orgId: string }> }) {
   const ctx = await requireSubject();
+  const { orgId } = await params;
   const me = await getMyRecord(ctx);
-  const m = me?.memberships[0];
+  const m = me?.memberships.find((x) => x.orgId === orgId);
+  if (!m) notFound();
 
-  if (!m) {
+  const isOfficer = OFFICER_ROLES.has(m.role);
+
+  // getTreasuryPolicy only needs assertMember (PENDING or ACTIVE), so a
+  // PENDING member can see what they owe before they've paid it.
+  const policy = await getTreasuryPolicy(ctx, orgId);
+
+  if (m.status === 'PENDING') {
     return (
       <>
-        <div className="mehead"><h1>Group treasury</h1>
-          <p>Your group's money, all in one honest place.</p>
-        </div>
-        <div className="mcard">
-          <div className="mempty">
-            <span className="ico"><Icon name="coins" size={22} /></span>
-            <h2 style={{ marginBottom: 7 }}>You are not in a group on Esoko</h2>
-            <p style={{ margin: 0 }}>Once you join one, its balance, contributions and withdrawals show up here.</p>
+        <header className="hero" style={{ padding: '4px 0 14px' }}>
+          <p className="kicker">Group treasury</p>
+          <h1>{m.org.officialName}</h1>
+        </header>
+        {policy.joinFeeKes ? (
+          <PayJoinFeeForm orgId={orgId} joinFeeKes={policy.joinFeeKes} orgName={m.org.officialName} />
+        ) : (
+          <div className="mcard">
+            <p style={{ margin: 0 }}>
+              Your membership is pending — an officer needs to activate it. There is nothing for you
+              to pay right now.
+            </p>
           </div>
-        </div>
+        )}
       </>
     );
   }
 
-  const orgId = m.orgId;
-  const isOfficer = OFFICER_ROLES.has(m.role);
-
-  const [balance, contributions, withdrawals, policy] = await Promise.all([
+  const [balance, contributions, withdrawals] = await Promise.all([
     getGroupBalance(ctx, orgId),
     listContributions(ctx, orgId),
     listWithdrawals(ctx, orgId),
-    getTreasuryPolicy(ctx, orgId),
   ]);
 
   const open = withdrawals.filter((w) => w.status === 'PENDING_SIGNATURES');
@@ -53,6 +66,12 @@ export default async function GroupTreasury() {
 
   return (
     <>
+      <p style={{ margin: '0 0 10px' }}>
+        <Link href={`/me/group/${orgId}` as Route} className="hint" style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+          <Icon name="arrow-left" size={14} />{m.org.officialName}
+        </Link>
+      </p>
+
       <header className="hero" style={{ padding: '4px 0 14px' }}>
         <p className="kicker">Group treasury</p>
         <h1>{m.org.officialName}</h1>
@@ -134,12 +153,15 @@ export default async function GroupTreasury() {
         </section>
       )}
 
-      <ContributionForm orgId={orgId} />
+      {policy.contributionsEnabled && <ContributionForm orgId={orgId} />}
 
       <section className="mcard">
         <h2><Icon name="coins" size={18} />Contributions{isOfficer && pendingContributions > 0 ? (
           <span className="badge b-warn" style={{ marginLeft: 8 }}>{pendingContributions} to confirm</span>
         ) : null}</h2>
+        {!policy.contributionsEnabled && (
+          <p className="hint" style={{ marginBottom: 12 }}>This group is not currently taking contributions.</p>
+        )}
         <ContributionsList
           isOfficer={isOfficer}
           rows={contributions.map((c) => ({
@@ -153,6 +175,16 @@ export default async function GroupTreasury() {
           }))}
         />
       </section>
+
+      {isOfficer && (
+        <TreasuryPolicyForm
+          orgId={orgId}
+          contributionsEnabled={policy.contributionsEnabled}
+          contributionAmountKes={policy.contributionAmountKes}
+          contributionCycle={policy.contributionCycle}
+          joinFeeKes={policy.joinFeeKes}
+        />
+      )}
     </>
   );
 }

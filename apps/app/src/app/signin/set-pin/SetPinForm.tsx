@@ -12,7 +12,6 @@ export function SetPinForm() {
   const [code, setCode] = useState('');
   const [pin, setPin] = useState('');
   const [pinConfirm, setPinConfirm] = useState('');
-  const [devCode, setDevCode] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [pending, startTransition] = useTransition();
   const router = useRouter();
@@ -22,7 +21,6 @@ export function SetPinForm() {
     startTransition(async () => {
       const result = await actionRequestPinCode({ msisdn: msisdn.replace(/\s+/g, '') });
       if (!result.ok) { setError(result.error); return; }
-      setDevCode(result.data.devCode ?? null);
       setStep('code');
     });
   }
@@ -57,14 +55,6 @@ export function SetPinForm() {
 
   return (
     <>
-      {devCode && (
-        <div className="note n-amber" style={{ marginBottom: 16 }}>
-          <div>
-            <strong style={{ display: 'block', marginBottom: 4 }}>Dev mode — code shown here</strong>
-            <p className="mono" style={{ fontSize: '1.1rem', margin: 0 }}>{devCode}</p>
-          </div>
-        </div>
-      )}
       <div className="fld">
         <label className="lab" htmlFor="code"><Icon name="keypad" size={15} />Code</label>
         <input className="inp mono" id="code" value={code} onChange={(e) => setCode(e.target.value)} inputMode="numeric" maxLength={6} />

@@ -3,26 +3,21 @@
 import Link from 'next/link';
 import type { Route } from 'next';
 import { usePathname } from 'next/navigation';
+import { orgHref, ORG_NAV_SECTIONS, type OrgLinkMode } from '@/lib/org-links-shared';
 
-const SECTIONS = [
-  ['about', 'About'],
-  ['programs', 'Programs'],
-  ['campaigns', 'Campaigns'],
-  ['posts', 'Posts'],
-  ['gallery', 'Gallery'],
-  ['leadership', 'Leadership'],
-  ['faq', 'FAQ'],
-  ['contact', 'Contact'],
-] as const;
-
-export function OrgSubnav({ slug }: { slug: string }) {
+// usePathname() reflects the browser's own address bar, not
+// middleware's internal rewrite target — a rewrite is transparent to
+// the client — so it already reads e.g. "/about" on a custom domain
+// and "/o/{slug}/about" on the primary domain, matching orgHref(mode)
+// below with no extra translation needed.
+export function OrgSubnav({ mode }: { mode: OrgLinkMode }) {
   const pathname = usePathname();
 
   return (
     <nav className="subnav">
       <div className="wrap subnav-inner">
-        {SECTIONS.map(([key, label]) => {
-          const href = `/o/${slug}/${key}`;
+        {ORG_NAV_SECTIONS.map(([key, label]) => {
+          const href = orgHref(mode, key);
           const on = pathname === href || pathname.startsWith(`${href}/`);
           return (
             <Link key={key} href={href as Route} aria-current={on ? 'page' : undefined}>{label}</Link>

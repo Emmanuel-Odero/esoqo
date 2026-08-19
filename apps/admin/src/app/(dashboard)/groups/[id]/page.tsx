@@ -41,7 +41,15 @@ export default async function GroupDetailPage({
           <Link href="/groups" className="sub" style={{ display: 'inline-flex', gap: 6, alignItems: 'center', marginBottom: 8 }}>
             <Icon name="arrow-left" size={14} />Back to groups
           </Link>
-          <h1>{group.knownAs || group.officialName}</h1>
+          <h1>
+            {group.knownAs || group.officialName}
+            {group.party.sourceSystem === 'CECF' && (
+              <span className="pill p-info" style={{ marginLeft: 8, fontSize: '.65rem', verticalAlign: 'middle' }}
+                title="Registered via the CECF WordPress site">
+                CECF
+              </span>
+            )}
+          </h1>
           <p>
             {group.party.county} · {group.kind.replace(/_/g, ' ').toLowerCase()}
             {group.registrationNo && <> · registered ({group.registrationNo})</>}

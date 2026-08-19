@@ -3,22 +3,28 @@
 import { headers } from 'next/headers';
 import {
   findSubjectCredential, recordSignInSuccess, recordSignInFailure, setSubjectPin, SetPinError,
-  acceptPendingInvites, createJamiiInterest, JAMII_INTEREST_CREATE, type Ctx,
+  acceptPendingInvites, hasJamiiAccess,
 } from '@esoko/db';
 import {
   verifyPin, hashPin, isWeakPin, issueOtp, verifyOtp, OtpError, checkRateLimit, RateLimitError,
 } from '@esoko/auth';
-import { signInSchema, requestPinCodeSchema, setPinSchema, jamiiInterestSchema } from '@esoko/domain';
+import { signInSchema, requestPinCodeSchema, setPinSchema } from '@esoko/domain';
 import { startSession } from '@/lib/session';
 
 export type ActionResult<T = void> = {
   ok: true; data: T;
 } | {
   ok: false; error: string; field?: string;
-  /** Set when the identifier genuinely isn't a CECF member, rather than a
-   *  wrong PIN or a not-yet-set one — the UI switches to the "submit your
-   *  interest" form instead of a generic retry on this signal. */
+  /** Set when there is no Our Jamii access yet for this identifier —
+   *  either genuinely unknown, or known but not yet approved (see
+   *  `matched`). The UI sends either case to /apply instead of a
+   *  generic retry. */
   notMember?: boolean;
+  /** Only meaningful alongside notMember: true — an existing CECF/Esoko
+   *  Person was found, just not yet approved for Our Jamii, so /apply
+   *  can skip straight to the lightweight "we found you" confirmation
+   *  instead of the full application form. */
+  matched?: boolean;
 };
 
 async function clientIp(): Promise<string> {
@@ -30,6 +36,12 @@ async function clientIp(): Promise<string> {
  * Phone OR email + PIN — same credentials as the rest of Esoko. A
  * PUBLIC HTTP ENDPOINT wearing a function signature, mirroring
  * apps/store's actionSignIn exactly.
+ *
+ * hasJamiiAccess is checked here too, not just before an OTP is issued
+ * — the PIN itself is one shared Esoko credential (see UserCredential),
+ * so someone could have set it through CECF's own join funnel in
+ * apps/app without ever going through /apply. A correct PIN alone must
+ * never be enough to reach the Our Jamii dashboard.
  */
 export async function actionSignIn(raw: unknown): Promise<ActionResult<{ next: string }>> {
   const parsed = signInSchema.safeParse(raw);
@@ -62,6 +74,13 @@ export async function actionSignIn(raw: unknown): Promise<ActionResult<{ next: s
     return { ok: false, error: 'Incorrect PIN.', field: 'pin' };
   }
 
+  if (!(await hasJamiiAccess(cred.partyId))) {
+    return {
+      ok: false,
+      error: 'Your Our Jamii application is still awaiting review. We will let you know once it is approved.',
+    };
+  }
+
   await recordSignInSuccess(cred.partyId);
   await startSession(cred.partyId);
   await acceptPendingInvites(cred.partyId);
@@ -70,14 +89,14 @@ export async function actionSignIn(raw: unknown): Promise<ActionResult<{ next: s
 
 /**
  * Step 1 of setting/resetting a PIN — sends (or, in console mode, logs) a
- * code. Checks membership FIRST: Our Jamii only exists for people who
- * already have an Esoko Person record (created via CECF's join funnel,
- * apps/app/src/app/join) — sending an OTP to a number that will only
- * fail at the final step (see actionSetPin/setSubjectPin's NOT_FOUND)
- * wastes an SMS and a confusing round trip. `notMember: true` tells the
- * UI to offer the interest form instead of "try again."
+ * code. Checks Our Jamii access FIRST: an OTP that only fails at the
+ * final step (see actionSetPin below) wastes an SMS and a confusing
+ * round trip, whether the identifier is a genuine stranger or an
+ * existing member who just hasn't been approved for Our Jamii yet.
+ * `notMember: true` tells the UI to send them to /apply instead of
+ * "try again"; `matched` tells /apply whether to skip the full form.
  */
-export async function actionRequestPinCode(raw: unknown): Promise<ActionResult<{ devCode?: string }>> {
+export async function actionRequestPinCode(raw: unknown): Promise<ActionResult> {
   const parsed = requestPinCodeSchema.safeParse(raw);
   if (!parsed.success) return { ok: false, error: parsed.error.issues[0]?.message ?? 'Enter a valid number' };
 
@@ -86,53 +105,33 @@ export async function actionRequestPinCode(raw: unknown): Promise<ActionResult<{
     return {
       ok: false,
       notMember: true,
-      error: 'Our Jamii is only for CECF members, and we could not find that number on file.',
+      matched: false,
+      error: 'We could not find that number on file.',
+      field: 'msisdn',
+    };
+  }
+  if (!(await hasJamiiAccess(cred.partyId))) {
+    return {
+      ok: false,
+      notMember: true,
+      matched: true,
+      error: 'We have your details, but Our Jamii access has not been approved yet.',
       field: 'msisdn',
     };
   }
 
   try {
-    const result = await issueOtp(parsed.data.msisdn, 'PIN_RESET', await clientIp());
-    return { ok: true, data: { devCode: result.devCode } };
+    await issueOtp(parsed.data.msisdn, 'PIN_RESET', await clientIp());
+    return { ok: true, data: undefined };
   } catch (e) {
     if (e instanceof OtpError) return { ok: false, error: e.message };
     throw e;
   }
 }
 
-/**
- * The "not a CECF member" fallback — a lead, not a Registration (see
- * @esoko/db's createJamiiInterest for why). Anonymous by design, the
- * same shape as apps/app/src/app/join/actions.ts's requestCtx: a
- * narrowly-scoped SYSTEM Ctx that can do exactly this one write.
- */
-async function anonInterestCtx(): Promise<Ctx> {
-  return {
-    actorType: 'SYSTEM',
-    actorId: null,
-    capabilities: [JAMII_INTEREST_CREATE],
-    ip: await clientIp(),
-    __verified: true,
-  };
-}
-
-export async function actionSubmitJamiiInterest(raw: unknown): Promise<ActionResult> {
-  const parsed = jamiiInterestSchema.safeParse(raw);
-  if (!parsed.success) {
-    const issue = parsed.error.issues[0];
-    return { ok: false, error: issue?.message ?? 'Check your details', field: issue?.path[0] as string | undefined };
-  }
-
-  try {
-    await createJamiiInterest(await anonInterestCtx(), parsed.data);
-    return { ok: true, data: undefined };
-  } catch (e) {
-    console.error(e);
-    return { ok: false, error: "That didn't go through — please try again." };
-  }
-}
-
-/** Step 2 — verifies the code, sets the PIN, and signs the subject straight in. */
+/** Step 2 — verifies the code, sets the PIN, and signs the subject straight in.
+ *  Reachable only once actionRequestPinCode has already confirmed Our
+ *  Jamii access, so no second hasJamiiAccess check is needed here. */
 export async function actionSetPin(raw: unknown): Promise<ActionResult<{ next: string }>> {
   const parsed = setPinSchema.safeParse(raw);
   if (!parsed.success) return { ok: false, error: parsed.error.issues[0]?.message ?? 'Check your details' };

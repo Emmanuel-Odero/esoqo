@@ -1,0 +1,53 @@
+name: Our Jamii domain reconcile
+
+# Drives every JamiiDomain through PENDING_DNS -> VERIFYING -> ACTIVE/FAILED
+# and tears down removed ones, by calling services/core's own reconcile
+# endpoint — see docs/proposals/our-jamii-custom-domains.md and
+# services/core/src/routes/jamii-domains.ts. This workflow is deliberately
+# just a scheduler; all the actual logic (Cloudflare calls, DB writes,
+# audit trail) lives in that endpoint, not here — so whichever PaaS
+# services/core eventually runs on (still undecided per ADR-0001 /
+# infra/README.md / Deploy_Render.md), this keeps working unchanged as
+# long as CORE_API_URL points at it.
+#
+# GitHub's own scheduler doesn't promise exact 5-minute cadence under
+# load — that's fine here: the endpoint is idempotent and safe to run
+# late or to overlap with itself (each domain's state transition is a
+# single DB write per tick).
+
+on:
+  schedule:
+    - cron: '*/5 * * * *'
+  workflow_dispatch: {}
+
+concurrency:
+  group: jamii-domain-reconcile
+  cancel-in-progress: false
+
+jobs:
+  reconcile:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Call reconcile endpoint
+        env:
+          CORE_API_URL: ${{ secrets.CORE_API_URL }}
+          JAMII_DOMAIN_RECONCILE_SECRET: ${{ secrets.JAMII_DOMAIN_RECONCILE_SECRET }}
+        run: |
+          if [ -z "$CORE_API_URL" ] || [ -z "$JAMII_DOMAIN_RECONCILE_SECRET" ]; then
+            echo "::error::CORE_API_URL and/or JAMII_DOMAIN_RECONCILE_SECRET repo secrets are not set — see docs/proposals/our-jamii-custom-domains.md"
+            exit 1
+          fi
+
+          http_status=$(curl -sS -o response.json -w '%{http_code}' \
+            -X POST "$CORE_API_URL/internal/jamii-domains/reconcile" \
+            -H "X-Reconcile-Secret: $JAMII_DOMAIN_RECONCILE_SECRET" \
+            -H "Content-Type: application/json" \
+            --max-time 60)
+
+          echo "HTTP $http_status"
+          cat response.json || true
+
+          if [ "$http_status" -lt 200 ] || [ "$http_status" -ge 300 ]; then
+            echo "::error::Reconcile call failed with HTTP $http_status"
+            exit 1
+          fi

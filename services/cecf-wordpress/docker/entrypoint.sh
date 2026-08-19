@@ -58,6 +58,15 @@ if ! su -s /bin/bash www-data -c "wp core is-installed" 2>/dev/null; then
         --skip-email"
     su -s /bin/bash www-data -c "wp theme activate cecf-sage"
 
+    # Required for every page to render anything at all — App\View\
+    # Composers\PageSections guards on function_exists('rwmb_meta') and
+    # silently returns an empty section list otherwise, so a page with
+    # no active Meta Box renders a real, seeded page with a genuinely
+    # empty <main>, not an error. --network because this is a subdomain
+    # multisite install (MULTISITE_SUBDOMAIN) — a plain `wp plugin
+    # activate` only activates for the current site, not every subsite.
+    su -s /bin/bash www-data -c "wp plugin activate meta-box --network"
+
     # `wp core multisite-install --url=` sets both the `home` and
     # `siteurl` options to that one URL — fine for a non-Bedrock install
     # where WordPress core lives at the site root, wrong here, where core

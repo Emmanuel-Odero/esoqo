@@ -4,9 +4,12 @@ import { revalidatePath } from 'next/cache';
 import {
   publishJamiiPage, updateJamiiPage, createJamiiPost, publishJamiiPost,
   createCampaign, inviteTeamMember, removeTeamMember,
+  requestJamiiDomain, removeJamiiDomain,
+  markJamiiContactMessageRead, archiveJamiiContactMessage,
 } from '@esoko/db';
 import {
   jamiiPageProfileSchema, jamiiFaqSchema, jamiiPostSchema, createCampaignSchema, inviteTeamMemberSchema,
+  requestJamiiDomainSchema,
 } from '@esoko/domain';
 import { requireSubject } from '@/lib/session';
 
@@ -89,6 +92,52 @@ export async function actionInviteTeamMember(pageId: string, raw: unknown): Prom
     return { ok: true, data: undefined };
   } catch (e) {
     return { ok: false, error: e instanceof Error ? e.message : 'Could not send the invite' };
+  }
+}
+
+export async function actionRequestDomain(pageId: string, raw: unknown): Promise<ActionResult> {
+  const ctx = await requireSubject();
+  const parsed = requestJamiiDomainSchema.safeParse(raw);
+  if (!parsed.success) return { ok: false, error: parsed.error.issues[0]?.message ?? 'Enter a valid domain' };
+  try {
+    await requestJamiiDomain(ctx, pageId, parsed.data.hostname);
+    revalidatePath('/dashboard/settings');
+    return { ok: true, data: undefined };
+  } catch (e) {
+    return { ok: false, error: e instanceof Error ? e.message : 'Could not link that domain' };
+  }
+}
+
+export async function actionRemoveDomain(pageId: string): Promise<ActionResult> {
+  const ctx = await requireSubject();
+  try {
+    await removeJamiiDomain(ctx, pageId);
+    revalidatePath('/dashboard/settings');
+    return { ok: true, data: undefined };
+  } catch (e) {
+    return { ok: false, error: e instanceof Error ? e.message : 'Could not remove that domain' };
+  }
+}
+
+export async function actionMarkMessageRead(pageId: string, messageId: string): Promise<ActionResult> {
+  const ctx = await requireSubject();
+  try {
+    await markJamiiContactMessageRead(ctx, pageId, messageId);
+    revalidatePath('/dashboard/messages');
+    return { ok: true, data: undefined };
+  } catch (e) {
+    return { ok: false, error: e instanceof Error ? e.message : 'Could not update that message' };
+  }
+}
+
+export async function actionArchiveMessage(pageId: string, messageId: string): Promise<ActionResult> {
+  const ctx = await requireSubject();
+  try {
+    await archiveJamiiContactMessage(ctx, pageId, messageId);
+    revalidatePath('/dashboard/messages');
+    return { ok: true, data: undefined };
+  } catch (e) {
+    return { ok: false, error: e instanceof Error ? e.message : 'Could not archive that message' };
   }
 }
 

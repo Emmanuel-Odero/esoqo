@@ -91,7 +91,17 @@ export async function ctxFromToken(
   return {
     actorType: s.actorType,
     actorId: s.actorId,
-    capabilities: s.capabilities,
+    // SUBJECT capabilities are always exactly capabilitiesForRole('SUBJECT')
+    // — there is no per-subject customisation anywhere in the product, so
+    // re-deriving them fresh on every request (instead of trusting the
+    // array frozen into the session at sign-in) means a subject session
+    // opened before a new self-serve capability shipped picks it up
+    // immediately, no sign-out/sign-in required. STAFF/AGENT capabilities
+    // stay session-frozen: staff.capabilities is deliberately individually
+    // editable per StaffUser (see dal/staff.ts), not role-derived, so
+    // there is no single source to re-derive them from without a DB read
+    // on every request.
+    capabilities: s.actorType === 'SUBJECT' ? capabilitiesForRole('SUBJECT') : s.capabilities,
     partyId: s.partyId ?? null,
     orgId: s.orgId ?? null,
     storeId: s.storeId ?? null,

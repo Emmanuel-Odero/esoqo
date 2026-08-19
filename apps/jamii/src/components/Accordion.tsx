@@ -1,6 +1,7 @@
 'use client';
 
 import { useState } from 'react';
+import { Icon, type IconName } from '@esoko/ui';
 
 export function Accordion({
   items, defaultOpen = 0,
@@ -19,7 +20,9 @@ export function Accordion({
               aria-expanded={isOpen}
               onClick={() => setOpen(isOpen ? null : i)}
             >
-              {item.icon && <span aria-hidden="true">{item.icon}</span>}
+              {/* item.icon is an @esoko/ui IconName (see
+                  JAMII_PROGRAM_ICONS) — never emoji/free text. */}
+              {item.icon && <Icon name={item.icon as IconName} size={17} />}
               <span className="acctitle">{item.title}</span>
               <span className="accplus">{isOpen ? '−' : '+'}</span>
             </button>

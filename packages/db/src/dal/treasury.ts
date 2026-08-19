@@ -39,14 +39,17 @@ const POLICY_DEFAULTS = {
   activeHoursStart: 7,
   activeHoursEnd: 20,
   requireQuorateMeeting: false,
+  contributionsEnabled: true,
   contributionAmountKes: null as number | null,
   contributionCycle: null as string | null,
+  joinFeeKes: null as number | null,
 };
 
 export class TreasuryError extends Error {
   constructor(msg: string, public readonly code:
     'NOT_FOUND' | 'NOT_A_MEMBER' | 'NOT_AN_OFFICER' | 'NOT_A_SIGNER' | 'ALREADY_SIGNED'
-    | 'ALREADY_SETTLED' | 'NOT_DECLARED' | 'WRONG_PIN' | 'NO_PIN_SET' | 'WINDOW_NOT_ELAPSED') {
+    | 'ALREADY_SETTLED' | 'NOT_DECLARED' | 'WRONG_PIN' | 'NO_PIN_SET' | 'WINDOW_NOT_ELAPSED'
+    | 'CONTRIBUTIONS_DISABLED' | 'NOT_PENDING' | 'NO_JOIN_FEE') {
     super(msg);
     this.name = 'TreasuryError';
   }
@@ -66,9 +69,25 @@ async function findOrCreateSettlementAccount(tx: Prisma.TransactionClient) {
   return tx.account.create({ data: { partyId: null, kind: 'SETTLEMENT', currency: 'KES' } });
 }
 
-async function assertActiveMember(orgId: string, personId: string) {
+/** PENDING or ACTIVE, just not exited — enough to read the policy (so a
+ *  PENDING member can see what they owe) or pay a join fee, but not
+ *  enough to contribute, sign, or do anything else treasury-side. */
+async function assertMember(orgId: string, personId: string) {
   const m = await prisma.membership.findFirst({ where: { orgId, personId, exitedAt: null } });
-  if (!m) throw new TreasuryError('You are not an active member of this group', 'NOT_A_MEMBER');
+  if (!m) throw new TreasuryError('You are not a member of this group', 'NOT_A_MEMBER');
+  return m;
+}
+
+async function assertActiveMember(orgId: string, personId: string) {
+  const m = await prisma.membership.findFirst({ where: { orgId, personId, exitedAt: null, status: 'ACTIVE' } });
+  if (!m) {
+    throw new TreasuryError(
+      (await prisma.membership.findFirst({ where: { orgId, personId, exitedAt: null, status: 'PENDING' } }))
+        ? 'Pay the join fee to activate your membership first'
+        : 'You are not an active member of this group',
+      'NOT_A_MEMBER',
+    );
+  }
   return m;
 }
 
@@ -99,7 +118,7 @@ async function getEffectiveSignerIds(orgId: string): Promise<string[]> {
 /** Existing policy, or the hardcoded defaults for a group that has never configured one. */
 export async function getTreasuryPolicy(ctx: Ctx, orgId: string) {
   requireCapability(ctx, 'treasury.read', { partyId: ctx.partyId });
-  await assertActiveMember(orgId, ctx.partyId!);
+  await assertMember(orgId, ctx.partyId!);
 
   const policy = await prisma.groupTreasuryPolicy.findUnique({ where: { orgId } });
   const signers = await prisma.groupSigner.findMany({
@@ -113,8 +132,10 @@ export async function getTreasuryPolicy(ctx: Ctx, orgId: string) {
     activeHoursStart: policy?.activeHoursStart ?? POLICY_DEFAULTS.activeHoursStart,
     activeHoursEnd: policy?.activeHoursEnd ?? POLICY_DEFAULTS.activeHoursEnd,
     requireQuorateMeeting: policy?.requireQuorateMeeting ?? POLICY_DEFAULTS.requireQuorateMeeting,
+    contributionsEnabled: policy?.contributionsEnabled ?? POLICY_DEFAULTS.contributionsEnabled,
     contributionAmountKes: policy?.contributionAmountKes ? Number(policy.contributionAmountKes) : null,
     contributionCycle: policy?.contributionCycle ?? null,
+    joinFeeKes: policy?.joinFeeKes ? Number(policy.joinFeeKes) : null,
     isConfigured: Boolean(policy),
     signers,
   };
@@ -126,8 +147,10 @@ export interface SetTreasuryPolicyInput {
   activeHoursStart?: number;
   activeHoursEnd?: number;
   requireQuorateMeeting?: boolean;
+  contributionsEnabled?: boolean;
   contributionAmountKes?: number | null;
   contributionCycle?: string | null;
+  joinFeeKes?: number | null;
 }
 
 /** Only a current officer may change how their own group's treasury runs. */
@@ -145,6 +168,9 @@ export async function setTreasuryPolicy(ctx: Ctx, orgId: string, input: SetTreas
   }
   if (input.activeHoursEnd !== undefined && (input.activeHoursEnd < 1 || input.activeHoursEnd > 24)) {
     throw new Error('Active hours end must be between 1 and 24');
+  }
+  if (input.joinFeeKes != null && input.joinFeeKes < 0) {
+    throw new Error('A join fee cannot be negative');
   }
 
   const policy = await prisma.groupTreasuryPolicy.upsert({
@@ -297,6 +323,13 @@ export async function declareContribution(ctx: Ctx, input: DeclareContributionIn
   await assertActiveMember(input.orgId, ctx.partyId!);
   if (!(input.amountKes > 0)) throw new Error('Enter an amount above zero');
 
+  const policy = await prisma.groupTreasuryPolicy.findUnique({
+    where: { orgId: input.orgId }, select: { contributionsEnabled: true },
+  });
+  if (policy && !policy.contributionsEnabled) {
+    throw new TreasuryError('This group is not currently taking contributions', 'CONTRIBUTIONS_DISABLED');
+  }
+
   const account = await findOrCreateGroupSavingsAccount(prisma, input.orgId);
   const contribution = await prisma.groupContribution.create({
     data: {
@@ -313,9 +346,49 @@ export async function declareContribution(ctx: Ctx, input: DeclareContributionIn
   return contribution;
 }
 
+/**
+ * A PENDING member declares payment of the join fee set on the group's
+ * policy — same "declare, an officer confirms" shape as declareContribution,
+ * just for the one-off fee rather than a recurring contribution, and
+ * tagged with membershipId so confirming it (postContribution above)
+ * also flips the membership to ACTIVE. Errors if the group charges no
+ * fee, or the caller's membership is already ACTIVE — there is nothing
+ * to pay.
+ */
+export async function createJoinFeePayment(
+  ctx: Ctx, orgId: string, input: { method?: PaymentMethod; reference?: string },
+) {
+  requireCapability(ctx, 'treasury.contribute', { partyId: ctx.partyId });
+  const membership = await assertMember(orgId, ctx.partyId!);
+  if (membership.status !== 'PENDING') {
+    throw new TreasuryError('Your membership is already active — nothing to pay', 'NOT_PENDING');
+  }
+
+  const policy = await prisma.groupTreasuryPolicy.findUnique({ where: { orgId } });
+  const joinFeeKes = policy?.joinFeeKes ? Number(policy.joinFeeKes) : 0;
+  if (!(joinFeeKes > 0)) throw new TreasuryError('This group does not charge a join fee', 'NO_JOIN_FEE');
+
+  const account = await findOrCreateGroupSavingsAccount(prisma, orgId);
+  const contribution = await prisma.groupContribution.create({
+    data: {
+      orgId, accountId: account.id, contributorId: ctx.partyId!, membershipId: membership.id,
+      amountKes: joinFeeKes, method: input.method,
+      reference: input.reference?.trim().toUpperCase(), declaredNote: 'Join fee',
+    },
+  });
+
+  await recordAudit(ctx, {
+    action: 'treasury.joinfee.declared', targetType: 'group_contribution', targetId: contribution.id,
+    payload: { orgId, membershipId: membership.id, amountKes: joinFeeKes },
+  });
+  return contribution;
+}
+
 async function postContribution(
   tx: Prisma.TransactionClient,
-  contribution: { id: string; orgId: string; accountId: string; amountKes: Prisma.Decimal },
+  contribution: {
+    id: string; orgId: string; accountId: string; amountKes: Prisma.Decimal; membershipId?: string | null;
+  },
   extra: { reference?: string } = {},
 ) {
   const settlement = await findOrCreateSettlementAccount(tx);
@@ -331,10 +404,20 @@ async function postContribution(
       },
     },
   });
-  return tx.groupContribution.update({
+  const updated = await tx.groupContribution.update({
     where: { id: contribution.id },
     data: { status: 'CONFIRMED', confirmedAt: new Date(), journalEntryId: entry.id, ...extra },
   });
+
+  // Confirming a join-fee payment is what actually admits the member —
+  // see createJoinFeePayment below and joinFeeKes on GroupTreasuryPolicy.
+  if (contribution.membershipId) {
+    await tx.membership.update({
+      where: { id: contribution.membershipId }, data: { status: 'ACTIVE' },
+    });
+  }
+
+  return updated;
 }
 
 /**

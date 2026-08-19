@@ -154,6 +154,28 @@ services:
         value: https://esoko-core.onrender.com
       - key: NEXT_PUBLIC_CECF_URL
         value: https://childeldercare.foundation
+      # M-Pesa STK push for CECF registration checkout (join flow), store
+      # checkout and ticket bookings — this service is the one that calls
+      # initiateStkPush, see packages/payments/src/mpesa.ts. Defaults to
+      # the Daraja sandbox: real money only moves once someone deliberately
+      # changes MPESA_PROVIDER to "production" here, with production
+      # credentials behind it. The four sync:false values below must be
+      # entered by hand in the Render dashboard — never commit them here.
+      - key: MPESA_PROVIDER
+        value: sandbox
+      - key: MPESA_CONSUMER_KEY
+        sync: false
+      - key: MPESA_CONSUMER_SECRET
+        sync: false
+      - key: MPESA_SHORTCODE
+        sync: false
+      - key: MPESA_PASSKEY
+        sync: false
+      # Safaricom POSTs the payment result here — must be esoko-core's
+      # public URL (not esoko-app's), since that's the service with the
+      # /webhooks/mpesa/stk-callback route.
+      - key: MPESA_CALLBACK_URL
+        value: https://esoko-core.onrender.com/webhooks/mpesa/stk-callback
 
   # ── Admin — operations dashboard ──────────────────────────
   - type: web

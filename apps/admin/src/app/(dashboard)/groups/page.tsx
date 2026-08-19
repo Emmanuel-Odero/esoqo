@@ -54,6 +54,7 @@ export default async function GroupsPage({
           knownAs: g.knownAs ?? null,
           kind: g.kind,
           county: g.party.county,
+          sourceSystem: g.party.sourceSystem,
           registrationNo: g.registrationNo ?? null,
           members: g.members.map((m) => ({
             membershipId: m.id,

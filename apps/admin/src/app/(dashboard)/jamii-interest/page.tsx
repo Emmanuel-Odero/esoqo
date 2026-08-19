@@ -6,9 +6,10 @@ import { InterestTable } from './InterestTable';
 export const dynamic = 'force-dynamic';
 
 /**
- * "Not yet a CECF member" leads from Our Jamii (apps/jamii's
- * /signin/set-pin flow) — see @esoko/db's createJamiiInterest for why
- * this is its own queue rather than folded into Registrations.
+ * Applications for Our Jamii access (apps/jamii's /apply flow) — see
+ * @esoko/db's createJamiiInterest for why this is its own queue rather
+ * than folded into Registrations. Approving one is what actually grants
+ * sign-in access — see approveJamiiInterest.
  */
 export default async function JamiiInterestPage({
   searchParams,
@@ -26,11 +27,10 @@ export default async function JamiiInterestPage({
     <>
       <div className="head">
         <div>
-          <h1>Our Jamii — interest</h1>
+          <h1>Our Jamii — applications</h1>
           <p>
-            People who tried to sign in or set a PIN on Our Jamii with a phone or email that
-            isn&rsquo;t an existing CECF member. Follow up, then either point them to CECF&rsquo;s
-            own join process or dismiss.
+            People who applied for Our Jamii access, whether they were already a CECF member or
+            brand new. Approving one grants sign-in — for a new applicant, it also creates their account.
           </p>
         </div>
       </div>
@@ -63,6 +63,7 @@ export default async function JamiiInterestPage({
           email: r.email,
           county: r.county,
           organisationName: r.organisationName,
+          matched: Boolean(r.personId),
           message: r.message,
           reviewNote: r.reviewNote,
           reviewedAt: r.reviewedAt?.toISOString() ?? null,

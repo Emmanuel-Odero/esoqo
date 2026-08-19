@@ -44,6 +44,10 @@ export function SignInForm() {
       <p style={{ textAlign: 'center', marginTop: 18, fontSize: '.86rem' }}>
         <Link href="/signin/set-pin" style={{ color: 'var(--stamp)', fontWeight: 700 }}>No PIN yet, or forgotten it? Set your PIN</Link>
       </p>
+      <p style={{ textAlign: 'center', marginTop: 8, fontSize: '.86rem' }}>
+        Don&rsquo;t have Our Jamii access yet?{' '}
+        <Link href="/apply" style={{ color: 'var(--stamp)', fontWeight: 700 }}>Apply to join</Link>
+      </p>
     </>
   );
 }

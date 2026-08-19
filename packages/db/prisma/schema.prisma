@@ -35,6 +35,15 @@ enum PartyKind {
   ORGANISATION
 }
 
+/// Which front door a Party first registered through. Sets once, at
+/// completeRegistration/ingestCecfRegistration time, from Registration.path
+/// — Registration itself is a funnel record that gets superseded, so this
+/// is the durable place admin reads "CECF Registrations" from.
+enum SourceSystem {
+  ESOKO
+  CECF
+}
+
 enum OrgKind {
   CHAMA
   SELF_HELP_GROUP
@@ -68,6 +77,8 @@ model Party {
   createdAt DateTime  @default(now())
   updatedAt DateTime  @updatedAt
   deletedAt DateTime? // soft delete — DPA erasure keeps the audit trail
+  /// Which front door this Party first registered through. See SourceSystem.
+  sourceSystem SourceSystem @default(ESOKO)
 
   person                 Person?
   organisation           Organisation?
@@ -83,6 +94,7 @@ model Party {
   storeOrdersAsBuyer     StoreOrder[]
   donationsAsDonor       Donation[]
   jamiiTeamMemberships   JamiiTeamMember[]
+  jamiiApplications      JamiiInterest[]
   bookingsAsBuyer        Booking[]
 
   // ── Group treasury ──
@@ -139,6 +151,10 @@ model Organisation {
   party   Party  @relation(fields: [partyId], references: [id], onDelete: Cascade)
 
   kind              OrgKind
+  /// Free text when kind is OTHER — same shape as businessTypeOther below,
+  /// just for the group-kind picker (join flow, admin's Groups screen,
+  /// self-serve /me/group) rather than the business-type one.
+  kindOther         String?
   officialName      String
   knownAs           String?
   /// Registration number, if held. Verified via Attestation, never trusted raw.
@@ -179,22 +195,37 @@ enum MemberRole {
   OTHER
 }
 
+/// PENDING is only reachable via a group with a joinFeeKes set on its
+/// GroupTreasuryPolicy — see createJoinFeePayment/confirmContribution in
+/// dal/treasury.ts, which flips PENDING -> ACTIVE once the fee's
+/// GroupContribution is confirmed. Every other join path (self-founding,
+/// staff addMember/addNewMember, an invite to a group with no fee) skips
+/// straight to ACTIVE, same as before this status existed.
+enum MembershipStatus {
+  PENDING
+  ACTIVE
+}
+
 model Membership {
-  id         String     @id @default(uuid()) @db.Uuid
-  personId   String     @db.Uuid
-  orgId      String     @db.Uuid
-  role       MemberRole @default(MEMBER)
+  id         String           @id @default(uuid()) @db.Uuid
+  personId   String           @db.Uuid
+  orgId      String           @db.Uuid
+  role       MemberRole       @default(MEMBER)
   /// Free text position, set only when role is OTHER — "Youth rep",
   /// "Auditor", whatever the group actually calls it. Ignored otherwise.
   customRole String?
-  joinedAt   DateTime   @default(now())
+  status     MembershipStatus @default(ACTIVE)
+  joinedAt   DateTime         @default(now())
   exitedAt   DateTime?
 
   person Party        @relation("MemberParty", fields: [personId], references: [id], onDelete: Cascade)
   org    Organisation @relation("MemberOrg", fields: [orgId], references: [partyId], onDelete: Cascade)
 
+  joinFeePayments GroupContribution[] @relation("JoinFeeMembership")
+
   @@unique([personId, orgId])
   @@index([orgId, role])
+  @@index([orgId, status])
   @@map("membership")
 }
 
@@ -499,6 +530,8 @@ enum PaymentMethod {
   MPESA
   BANK_TRANSFER
   CASH_TO_AGENT
+  /// Pesapal-hosted card checkout — see RegistrationPayment.pesapalOrderTrackingId.
+  CARD
 }
 
 enum ApprovalDecision {
@@ -530,7 +563,9 @@ enum JoinPath {
   SELF_USSD
   AGENT_ASSISTED
   COHORT
-  INSTITUTION
+  /// Ingested from the CECF WordPress site's own registration flow, via
+  /// ingestCecfRegistration — never entered through /join directly.
+  CECF_WEB
 }
 
 /// Funnel record. Deliberately separate from Party so an abandoned
@@ -651,6 +686,10 @@ model RegistrationPayment {
   /// arrives twice — see StoreOrder.mpesaCheckoutRequestId for the same
   /// pattern in the storefront.
   checkoutRequestId String?        @unique
+  /// Pesapal's OrderTrackingId for a card checkout, set the moment
+  /// initiatePesapalOrder returns. Same idempotency role as
+  /// checkoutRequestId above, just for the /webhooks/pesapal/ipn callback.
+  pesapalOrderTrackingId String?   @unique
   createdAt         DateTime       @default(now()) @map("created_at")
   updatedAt         DateTime       @updatedAt @map("updated_at")
 
@@ -1647,6 +1686,11 @@ enum JamiiPageStatus {
   SUSPENDED
 }
 
+enum JamiiThemeMode {
+  DARK
+  LIGHT
+}
+
 enum PublishStatus {
   DRAFT
   PUBLISHED
@@ -1678,6 +1722,12 @@ enum JamiiInterestStatus {
   DISMISSED
 }
 
+enum JamiiContactMessageStatus {
+  NEW
+  READ
+  ARCHIVED
+}
+
 model JamiiPage {
   organisationId String       @id @db.Uuid
   organisation   Organisation @relation(fields: [organisationId], references: [partyId], onDelete: Cascade)
@@ -1697,7 +1747,22 @@ model JamiiPage {
   logoUrl         String?
   coverStorageKey String?
   coverUrl        String?
-  brandAccent     String?
+
+  /// The whitelabel theme (custom-domain only — see
+  /// apps/jamii/src/components/whitelabel). brandAccent is the primary
+  /// colour (template's "crimson"); the other two are optional — unset
+  /// falls back to the template's own cyan/gold so a org needs to pick
+  /// only one colour to look intentional, three to look bespoke.
+  brandAccent      String?
+  brandAccentTwo   String?
+  brandAccentThree String?
+  /// Which theme mode a first-time visitor sees before their own
+  /// toggle (dark/light/contrast/text-size, all client-side after
+  /// that — see ThemeController) has ever run.
+  themeDefaultMode JamiiThemeMode @default(DARK)
+  /// The "Our vision" card alongside missionShort's "Our mission" one
+  /// on the whitelabel About page.
+  visionShort String?
 
   /// Free text, e.g. "Wednesdays, 4pm · Nyalenda B Social Hall".
   meetingSchedule String?
@@ -1722,6 +1787,8 @@ model JamiiPage {
   programs  JamiiProgram[]
   campaigns Campaign[]
   team      JamiiTeamMember[]
+  domain    JamiiDomain?
+  messages  JamiiContactMessage[]
 
   @@index([status])
   @@map("jamii_page")
@@ -1741,6 +1808,32 @@ model JamiiPhoto {
 
   @@index([pageId])
   @@map("jamii_photo")
+}
+
+/// A message submitted through the public Contact page's form —
+/// visible only to this page's own team (dashboard "Messages" screen),
+/// never a platform-wide inbox. Deliberately not a JamiiInterest: that
+/// is "wants Our Jamii access" and is reviewed by Esoko staff; this is
+/// a visitor writing to one specific org, reviewed only by that org's
+/// own team via requirePageAccess, the same as every other page-scoped
+/// write in jamii-page.ts.
+model JamiiContactMessage {
+  id     String                    @id @default(uuid()) @db.Uuid
+  pageId String                    @db.Uuid
+  page   JamiiPage                 @relation(fields: [pageId], references: [organisationId], onDelete: Cascade)
+  status JamiiContactMessageStatus @default(NEW)
+
+  name    String
+  email   String  @db.Citext
+  phone   String?
+  subject String?
+  message String
+
+  readAt    DateTime?
+  createdAt DateTime  @default(now())
+
+  @@index([pageId, status, createdAt])
+  @@map("jamii_contact_message")
 }
 
 /// The "Updates" carousel on the public page.
@@ -1779,6 +1872,35 @@ model JamiiProgram {
   @@map("jamii_program")
 }
 
+/// Platform-wide "no photo yet" placeholders for a JamiiPage's media
+/// slots (hero cover, gallery, post cover) — never per-org. `patternKey`
+/// is a code-authored, trusted abstract SVG pattern (see apps/jamii's
+/// illustration registry), not stored SVG markup: an org's own page
+/// content is never rendered as raw HTML/SVG, so there's no
+/// stored-XSS surface here even though this table is staff-editable.
+/// Staff (jamii-media.manage) curate which patterns are on offer and
+/// in what order; apps/jamii picks one per empty slot by category.
+model JamiiMediaAsset {
+  id         String              @id @default(uuid()) @db.Uuid
+  key        String              @unique
+  label      String
+  category   JamiiMediaCategory
+  patternKey String
+  active     Boolean             @default(true)
+  position   Int                 @default(0)
+  createdAt  DateTime            @default(now())
+  updatedAt  DateTime            @updatedAt
+
+  @@index([category, active])
+  @@map("jamii_media_asset")
+}
+
+enum JamiiMediaCategory {
+  HERO
+  GALLERY
+  POST
+}
+
 /// Who may manage a page, and at what level — deliberately separate
 /// from Membership (a person's real role in the group: chairperson,
 /// treasurer, ...). A treasurer isn't necessarily who edits the page,
@@ -1801,6 +1923,65 @@ model JamiiTeamMember {
   @@unique([pageId, inviteEmail])
   @@index([personId])
   @@map("jamii_team_member")
+}
+
+/// A group's own domain (e.g. mchamawetu.org), linked to their JamiiPage
+/// so the page reads as their website instead of a page on ours. 1:1 with
+/// JamiiPage on purpose — one active domain per page keeps both the UX
+/// and the security surface (ownership proof, TLS, staff moderation)
+/// simple; relax to many if a real need for it shows up.
+///
+/// Ownership is proven two independent ways before status ever reaches
+/// ACTIVE: Cloudflare's own Custom Hostname verification, and our own
+/// verificationToken as a TXT record — defense in depth so activation
+/// never rests on trusting one vendor's check alone. See
+/// services/core/src/routes/jamii-domains.ts for the reconciler that
+/// drives PENDING_DNS -> VERIFYING -> ACTIVE/FAILED, and
+/// dal/jamii-domain.ts for why the Cloudflare API token itself never
+/// reaches this app or the browser.
+model JamiiDomain {
+  id     String @id @default(uuid()) @db.Uuid
+  pageId String @unique @db.Uuid
+  page   JamiiPage @relation(fields: [pageId], references: [organisationId], onDelete: Cascade)
+
+  /// Lowercased, punycoded, no scheme/path. Unique platform-wide so two
+  /// groups can't race the same domain, and never silently reused by a
+  /// different page after removal.
+  hostname String            @unique
+  status   JamiiDomainStatus @default(PENDING_DNS)
+
+  /// Random value shown to the group as a TXT record — our own proof of
+  /// control, independent of Cloudflare's.
+  verificationToken String
+
+  /// Cloudflare Custom Hostname bookkeeping — opaque IDs/status only,
+  /// never a secret.
+  cfHostnameId  String?
+  cfStatus      String?
+  lastCheckedAt DateTime?
+  failureReason String?
+
+  requestedByPartyId String    @db.Uuid
+  activatedAt        DateTime?
+  removedAt          DateTime?
+  createdAt          DateTime  @default(now())
+  updatedAt          DateTime  @updatedAt
+
+  @@index([status])
+  @@map("jamii_domain")
+}
+
+enum JamiiDomainStatus {
+  /// Just requested — group still needs to add the CNAME + TXT records.
+  PENDING_DNS
+  /// Records seen at least once; Cloudflare is issuing the certificate.
+  VERIFYING
+  /// Live — resolveJamiiDomain() will route traffic for this hostname.
+  ACTIVE
+  /// Cloudflare rejected it, or verification never completed in time.
+  FAILED
+  /// Staff kill-switch — moderateJamiiPage's sibling for domains.
+  SUSPENDED
 }
 
 model Campaign {
@@ -1889,9 +2070,21 @@ model Donation {
 /// the admin app (see App\Support in cecf-wordpress for the analogous
 /// non-CECF-member redirect on the WordPress side, and this record's
 /// counterpart CTA on /join).
+/// An application for Our Jamii access — CONVERTED is what actually
+/// grants sign-in (see hasJamiiAccess in dal/jamii-interest.ts), so
+/// every first-time Our Jamii sign-in traces back to one of these being
+/// approved, whether the applicant was a brand-new person or someone
+/// who already had a CECF/Esoko account.
 model JamiiInterest {
   id     String              @id @default(uuid()) @db.Uuid
   status JamiiInterestStatus @default(NEW)
+
+  /// Set at submission time when the identifier they applied with
+  /// matched an existing Person, or at approval time when staff approve
+  /// a brand-new applicant and a Person gets created for them. Null in
+  /// between — a pending brand-new application has no Party yet.
+  personId String? @db.Uuid
+  person   Party?  @relation(fields: [personId], references: [id])
 
   fullName         String
   msisdn           String
@@ -1910,6 +2103,7 @@ model JamiiInterest {
   updatedAt DateTime @updatedAt
 
   @@index([status, createdAt])
+  @@index([personId])
   @@map("jamii_interest")
 }
 
@@ -1997,9 +2191,18 @@ model GroupTreasuryPolicy {
   activeHoursEnd        Int     @default(20)
   requireQuorateMeeting Boolean @default(false)
 
+  /// Whether this group runs contributions at all — officers can switch
+  /// it off for a group that only ever does one-off collections, without
+  /// losing the amount/cycle they'd already set.
+  contributionsEnabled  Boolean  @default(true)
   contributionAmountKes Decimal? @db.Decimal(12, 2)
   /// "weekly" | "monthly" | "custom" | null (no fixed cycle).
   contributionCycle     String?
+
+  /// Null or zero = free to join. Otherwise a new member's Membership is
+  /// created PENDING and only activates once this amount is paid and
+  /// confirmed — see createJoinFeePayment in dal/treasury.ts.
+  joinFeeKes Decimal? @db.Decimal(12, 2)
 
   updatedAt   DateTime @updatedAt
   updatedById String?  @db.Uuid
@@ -2052,6 +2255,11 @@ model GroupContribution {
   checkoutRequestId String?        @unique
   journalEntryId    String?        @unique @db.Uuid
   journalEntry      JournalEntry?  @relation(fields: [journalEntryId], references: [id])
+  /// Set only for a join-fee payment (createJoinFeePayment in
+  /// dal/treasury.ts) — confirming this contribution also activates the
+  /// PENDING membership it belongs to. Null for an ordinary contribution.
+  membershipId      String?        @db.Uuid
+  membership        Membership?    @relation("JoinFeeMembership", fields: [membershipId], references: [id])
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt

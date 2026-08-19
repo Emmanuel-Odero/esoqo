@@ -161,7 +161,7 @@ export function DocumentStep({ registrationId }: { registrationId: string }) {
               </button>
             </div>
             <p className="hint" style={{ marginTop: 8 }}>
-              {human(file.size)} · only staff reviewing your CECF registration will see this.
+              {human(file.size)} · only staff reviewing your registration will see this.
             </p>
           </div>
         </div>
@@ -226,7 +226,7 @@ export function PaymentStep({
 
   const [stkMsisdn, setStkMsisdn] = useState(defaultMsisdn ?? '');
   const [stkAmount, setStkAmount] = useState('');
-  const [stkStatus, setStkStatus] = useState<'idle' | 'sending' | 'waiting' | 'confirmed' | 'failed'>('idle');
+  const [stkStatus, setStkStatus] = useState<'idle' | 'sending' | 'waiting' | 'confirmed' | 'failed' | 'timeout'>('idle');
   const [stkError, setStkError] = useState<string | null>(null);
 
   useEffect(() => {
@@ -263,6 +263,25 @@ export function PaymentStep({
     // onChoice/announce excluded — same reasoning as the effect above.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [stkStatus, registrationId]);
+
+  // Safaricom never calls the webhook back for a prompt that just sat
+  // there unanswered, so without this the screen would say "check your
+  // phone" forever. 30s is short enough that someone who genuinely missed
+  // the prompt isn't left staring at a stale screen, at the cost of it
+  // firing before a real ~60s-lifetime prompt has technically expired on
+  // the phone — that's fine, "resend" is one tap away either way. Cleared
+  // automatically the moment stkStatus leaves 'waiting' (confirmed by the
+  // poll above, or a manual resend), so a late confirmation is never
+  // overwritten.
+  useEffect(() => {
+    if (stkStatus !== 'waiting') return;
+    const t = setTimeout(() => {
+      setStkStatus('timeout');
+      announce("We have not heard back yet. The prompt may have expired or been missed — you can send it again.", 'assertive');
+    }, 30_000);
+    return () => clearTimeout(t);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [stkStatus]);
 
   if (feeCoveredByGroup) {
     return (
@@ -391,19 +410,42 @@ export function PaymentStep({
           {stkStatus === 'idle' || stkStatus === 'failed' ? (
             <button type="button" className="btn btn-p" onClick={sendStkPush}
               disabled={pending || !stkMsisdn.trim() || !stkAmount.trim()}>
-              <Icon name="send" size={16} />Send the prompt
+              <Icon name="send" size={16} />{stkStatus === 'failed' ? 'Try again' : 'Send the prompt'}
             </button>
+          ) : stkStatus === 'timeout' ? (
+            <div className="paidbox" style={{ borderColor: 'var(--amber)' }}>
+              <span className="icbox" style={{ background: 'var(--amber-t)', color: 'var(--amber)' }}>
+                <Icon name="alert-triangle" size={19} />
+              </span>
+              <div style={{ flex: 1 }}>
+                <strong style={{ display: 'block', marginBottom: 3 }}>Still waiting on that one</strong>
+                <span className="hint" style={{ margin: '0 0 10px', display: 'block' }}>
+                  We have not heard back — the prompt on {stkMsisdn} may have expired or been missed.
+                  Nothing was charged. Check the number and amount above, then send another.
+                </span>
+                <button type="button" className="btn btn-o btn-sm" onClick={sendStkPush}
+                  disabled={pending || !stkMsisdn.trim() || !stkAmount.trim()}>
+                  <Icon name="refresh" size={14} />Resend prompt
+                </button>
+              </div>
+            </div>
           ) : (
             <div className="paidbox">
               <span className="icbox" style={{ background: 'var(--green-t)', color: 'var(--green)' }}>
                 <Icon name="clock" size={19} />
               </span>
-              <div>
+              <div style={{ flex: 1 }}>
                 <strong style={{ display: 'block', marginBottom: 3 }}>Check your phone</strong>
                 <span className="hint" style={{ margin: 0 }}>
                   A prompt was sent to {stkMsisdn}. Enter your M-Pesa PIN there — this updates on
                   its own once it's confirmed, no need to reload.
                 </span>
+                {stkStatus === 'waiting' && (
+                  <button type="button" className="btn btn-o btn-sm" style={{ marginTop: 10 }}
+                    onClick={sendStkPush} disabled={pending}>
+                    <Icon name="refresh" size={14} />Didn&rsquo;t get it? Resend
+                  </button>
+                )}
               </div>
             </div>
           )}

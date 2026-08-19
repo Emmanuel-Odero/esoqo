@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useTransition } from 'react';
-import { Icon } from '@esoko/ui';
+import { Icon, SelectWithOther } from '@esoko/ui';
 import { useAnnounce } from '@esoko/a11y';
 import { actionCreateWalkIn } from './actions';
 
@@ -217,10 +217,27 @@ function JoiningStep({ f, update }: { f: FormData; update: (k: keyof FormData, v
 
 /* ─────────────────── step 2: personal ─────────────────── */
 
+const ORG_ROLE_OPTIONS = [
+  ['', 'Select role…'], ['CHAIRPERSON', 'Chairperson'], ['TREASURER', 'Treasurer'],
+  ['SECRETARY', 'Secretary'], ['MEMBER', 'Member'], ['OTHER', 'Other'],
+] as const;
+const FIXED_ORG_ROLES = new Set(['CHAIRPERSON', 'TREASURER', 'SECRETARY', 'MEMBER']);
+
 function PersonalStep({ f, update }: { f: FormData; update: (k: keyof FormData, v: string | boolean) => void }) {
-  const [orgRoleOther, setOrgRoleOther] = useState(
-    Boolean(f.orgRole) && !['CHAIRPERSON', 'TREASURER', 'SECRETARY', 'MEMBER'].includes(f.orgRole),
-  );
+  // f.orgRole doubles as both the picked fixed role AND the free text
+  // once "Other" is chosen — there's no separate customRole field on
+  // this form, unlike Membership.role/customRole elsewhere, so this
+  // local state bridges that single field to SelectWithOther's
+  // two-piece (value + customValue) model.
+  const [orgRoleOther, setOrgRoleOther] = useState(Boolean(f.orgRole) && !FIXED_ORG_ROLES.has(f.orgRole));
+  const roleValue = orgRoleOther ? 'OTHER' : f.orgRole;
+  const customRoleValue = orgRoleOther ? f.orgRole : '';
+
+  function handleRoleChange(next: string) {
+    if (next === 'OTHER') { setOrgRoleOther(true); update('orgRole', ''); }
+    else { setOrgRoleOther(false); update('orgRole', next); }
+  }
+
   return (
     <div>
       <p className="sub" style={{ marginBottom: 16 }}>Full name as it appears on their national ID.</p>
@@ -256,24 +273,14 @@ function PersonalStep({ f, update }: { f: FormData; update: (k: keyof FormData, 
           </div>
           <div style={{ marginBottom: 14 }}>
             <label className="sub" htmlFor="wi-orgRole" style={{ display: 'block', marginBottom: 6 }}>Their role in the group</label>
-            <select id="wi-orgRole" className="inp" style={{ width: '100%' }}
-              value={orgRoleOther ? 'OTHER' : f.orgRole}
-              onChange={(e) => {
-                if (e.target.value === 'OTHER') { setOrgRoleOther(true); update('orgRole', ''); }
-                else { setOrgRoleOther(false); update('orgRole', e.target.value); }
-              }}>
-              <option value="">Select role…</option>
-              <option value="CHAIRPERSON">Chairperson</option>
-              <option value="TREASURER">Treasurer</option>
-              <option value="SECRETARY">Secretary</option>
-              <option value="MEMBER">Member</option>
-              <option value="OTHER">Other</option>
-            </select>
-            {orgRoleOther && (
-              <input className="inp" style={{ width: '100%', marginTop: 8 }} value={f.orgRole} maxLength={40}
-                onChange={(e) => update('orgRole', e.target.value)}
-                placeholder="What the group calls this role" />
-            )}
+            <SelectWithOther
+              id="wi-orgRole" bare options={ORG_ROLE_OPTIONS}
+              value={roleValue} onChange={handleRoleChange}
+              customValue={customRoleValue} onCustomChange={(v) => update('orgRole', v)}
+              customPlaceholder="What the group calls this role"
+              selectProps={{ style: { width: '100%' } }}
+              inputProps={{ style: { width: '100%', marginTop: 8 }, maxLength: 40 }}
+            />
           </div>
           <div style={{ marginBottom: 14 }}>
             <label className="sub" htmlFor="wi-memberCount" style={{ display: 'block', marginBottom: 6 }}>How many members in the group?</label>

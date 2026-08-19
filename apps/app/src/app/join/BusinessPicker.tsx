@@ -1,7 +1,7 @@
 'use client';
 
 import { useRef, useState } from 'react';
-import { Icon } from '@esoko/ui';
+import { Icon, SelectWithOther } from '@esoko/ui';
 import { BUSINESS_TYPES, searchSegments } from '@esoko/domain';
 import { actionSearchBusinesses } from './actions';
 import { SearchCombobox } from './SearchCombobox';
@@ -10,6 +10,10 @@ import type { Form } from './form';
 interface BizHit { id: string; name: string; county: string }
 
 const CHANNELS = ['M-Pesa', 'Bank', 'Cash', 'Card', 'Other'];
+const BIZ_TYPE_OPTIONS = [
+  ['', 'Choose one'],
+  ...BUSINESS_TYPES.map((t) => [t.key, `${t.label} — ${t.blurb}`] as const),
+] as const;
 
 /**
  * The business path: registered-or-not first (so an existing
@@ -142,21 +146,12 @@ function BizDetails({
         renderHit={(h) => <span>{h.name}</span>}
       />
 
-      <div className="fld">
-        <label className="lab" htmlFor="bizType">Type of business</label>
-        <select className="inp" id="bizType" value={f.bizType}
-          onChange={(e) => set('bizType', e.target.value)}>
-          <option value="">Choose one</option>
-          {BUSINESS_TYPES.map((t) => <option key={t.key} value={t.key}>{t.label} — {t.blurb}</option>)}
-        </select>
-      </div>
-      {f.bizType === 'OTHER' && (
-        <div className="fld">
-          <label className="lab" htmlFor="bizTypeOther">What kind of business is it?</label>
-          <input className="inp" id="bizTypeOther" value={f.bizTypeOther}
-            onChange={(e) => set('bizTypeOther', e.target.value)} />
-        </div>
-      )}
+      <SelectWithOther
+        id="bizType" label="Type of business" options={BIZ_TYPE_OPTIONS}
+        value={f.bizType} onChange={(v) => set('bizType', v)}
+        customValue={f.bizTypeOther} onCustomChange={(v) => set('bizTypeOther', v)}
+        customLabel="What kind of business is it?"
+      />
 
       {f.bizType && (
         <>

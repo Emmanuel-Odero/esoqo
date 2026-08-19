@@ -1,7 +1,7 @@
 'use client';
 
 import { useRef, useState, useTransition } from 'react';
-import { Icon, type IconName } from '@esoko/ui';
+import { Icon, type IconName, SelectWithOther } from '@esoko/ui';
 import { PRODUCT_CATEGORIES } from '@esoko/domain';
 import {
   saveProfileStep, uploadLogo, uploadFavicon, uploadStorePhoto, removeStorePhoto,
@@ -249,19 +249,14 @@ export function StoreProfileEditor({ storeId, initial }: { storeId: string; init
       {/* ── step 3: what you sell ───────────────────────────── */}
       {current.key === 'catalog' && (
         <div className="field-group">
-          <div className="fld">
-            <label className="lab" htmlFor="p-cat">What does your store mostly sell?</label>
-            <select className="inp" id="p-cat" value={catalog.primaryCategory} onChange={(e) => setCatalog({ ...catalog, primaryCategory: e.target.value })}>
-              <option value="">Not sure yet</option>
-              {PRODUCT_CATEGORIES.map(([k, label]) => <option key={k} value={k}>{label}</option>)}
-            </select>
-            {catalog.primaryCategory === 'OTHER' && (
-              <div className="fld" style={{ marginTop: 12, marginBottom: 0 }}>
-                <label className="lab" htmlFor="p-cat-other">What exactly? <em className="dim">optional</em></label>
-                <input className="inp" id="p-cat-other" value={catalog.otherCategory} onChange={(e) => setCatalog({ ...catalog, otherCategory: e.target.value })} placeholder="e.g. Poultry, dairy & eggs" maxLength={60} />
-              </div>
-            )}
-          </div>
+          <SelectWithOther
+            id="p-cat" label="What does your store mostly sell?"
+            options={[['', 'Not sure yet'], ...PRODUCT_CATEGORIES]}
+            value={catalog.primaryCategory} onChange={(v) => setCatalog({ ...catalog, primaryCategory: v })}
+            customValue={catalog.otherCategory} onCustomChange={(v) => setCatalog({ ...catalog, otherCategory: v })}
+            customLabel="What exactly? (optional)" customPlaceholder="e.g. Poultry, dairy & eggs"
+            inputProps={{ maxLength: 60 }}
+          />
           <div className="fld">
             <label className="lab" htmlFor="p-sku">Roughly how many things does the store carry?</label>
             <input className="inp mono" id="p-sku" value={catalog.skuCount} onChange={(e) => setCatalog({ ...catalog, skuCount: e.target.value })} placeholder="e.g. 120" inputMode="numeric" />

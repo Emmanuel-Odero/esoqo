@@ -30,13 +30,16 @@ class PageUrl
         // A JSON `page` value can carry an in-page anchor, e.g. "about#consortium".
         [$key, $anchor] = array_pad(explode('#', $key, 2), 2, null);
 
-        // "apply" no longer resolves to the local page (its `registrationForm`
-        // section has never had a partial — see missing.blade.php). Every
-        // "Register"/"Apply" CTA site-wide goes through this one key, so
-        // sending it straight to the real Esoko join flow — rather than the
-        // in-theme placeholder — is a single change here, not one per template.
-        // Anchors don't apply off-site, so $anchor is intentionally ignored.
-        if ($key === 'apply') {
+        // "apply" resolves locally again — the `registrationForm` section
+        // now has a real partial (partials/cecf/registrationForm.blade.php,
+        // backed by App\Providers\CecfRegistrationServiceProvider) instead
+        // of missing.blade.php's placeholder, so every "Register"/"Apply"
+        // CTA site-wide can go straight to the working local form. Falls
+        // through to the normal seeded-page lookup below — except for the
+        // one operational escape hatch: setting CECF_LOCAL_REGISTRATION_
+        // ENABLED=false sends every CTA back to esoko's own /join without
+        // a deploy, if the local flow ever needs pulling in a hurry.
+        if ($key === 'apply' && env('CECF_LOCAL_REGISTRATION_ENABLED', true) === false) {
             return self::esokoJoinUrl();
         }
 

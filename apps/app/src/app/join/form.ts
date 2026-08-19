@@ -1,4 +1,4 @@
-export type JoiningAs = 'me' | 'group' | 'biz' | 'inst';
+export type JoiningAs = 'me' | 'group' | 'biz';
 export type YesNoSoon = 'yes' | 'no' | 'soon';
 
 export interface Form {

@@ -93,6 +93,33 @@ services:
       driver: none
 
   # ─────────────────────────────────────────────────────────────
+  # mock-sms — catches SMS in development, the way MailHog catches
+  # email. HTTP GET /sendsms endpoint (Africa's Talking is a
+  # different shape, see packages/auth/src/sms.ts's 'mock' branch),
+  # plus a web UI to read what was "sent". UI + API on
+  # http://localhost:8026. Opt-in: set SMS_PROVIDER=mock (see
+  # .env.example) — development otherwise always forces console.
+  # ─────────────────────────────────────────────────────────────
+  mock-sms:
+    image: mosipqa/mock-smtp:latest
+    container_name: esoko-mock-sms
+    restart: unless-stopped
+    environment:
+      SERVER_HOST: "0.0.0.0"
+      SERVER_PORT: "8080"
+      WS_SERVER_PORT: "8081"
+      # The browser reads these back from GET /config to know where to
+      # open its websocket — must be the host-mapped port (8027) below,
+      # not the container-internal one (8081), or the page never
+      # connects and silently shows "No messages yet" forever.
+      WS_EX_PROTOCOL: "ws"
+      WS_EX_SERVER_PORT: "8027"
+      WS_EX_BASE_PATH: ""
+    ports:
+      - "8026:8080"
+      - "8027:8081"
+
+  # ─────────────────────────────────────────────────────────────
   # Adminer — database inspection. http://localhost:8080
   # Dev only. Never exposed in any deployed environment.
   # ─────────────────────────────────────────────────────────────
@@ -167,6 +194,9 @@ services:
       REDIS_URL: redis://redis:6379
       CORE_API_URL: http://localhost:4000
       NODE_ENV: development
+      SMS_MOCK_URL: http://mock-sms:8080
+      SMTP_HOST: mailhog
+      SMTP_PORT: "1025"
       CHOKIDAR_USEPOLLING: "1"
       WATCHPACK_POLLING: "true"
     volumes:
@@ -258,6 +288,12 @@ services:
       # port apps/app's dev server binds to, reachable from this container
       # via the host's loopback (see also docker-compose's esoko-dev service).
       ESOKO_JOIN_URL: http://localhost:3001/join
+      # services/core's authenticated /api/cecf/* facade — see
+      # App\Support\CecfApiClient. esoko-dev is the esoko stack's own
+      # compose service name, reachable on the same docker network;
+      # CECF_SERVICE_SECRET must match esoko-dev's own env exactly.
+      ESOKO_CORE_API_URL: http://esoko-dev:4000
+      CECF_SERVICE_SECRET: dev-cecf-secret-local-only
       AUTH_KEY: dev
       SECURE_AUTH_KEY: dev
       LOGGED_IN_KEY: dev
