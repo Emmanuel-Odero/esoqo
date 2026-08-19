@@ -28,7 +28,8 @@
     "@esoko/domain": "workspace:*",
     "@node-rs/argon2": "^2.0.2",
     "@prisma/client": "^6.1.0",
-    "prisma": "^6.1.0"
+    "prisma": "^6.1.0",
+    "sharp": "^0.33.5"
   },
   "devDependencies": {
     "tsx": "^4.19.2",

@@ -8,6 +8,7 @@ import {
   GetObjectCommand,
   DeleteObjectCommand,
 } from '@aws-sdk/client-s3';
+import sharp from 'sharp';
 
 /**
  * File storage.
@@ -133,6 +134,55 @@ export function sniff(buf: Buffer, declaredMime: string, filename: string): Snif
     return { ok: false, reason: 'That file does not match the type it claims to be' };
   }
   return { ok: true, mime: hit.mime };
+}
+
+/**
+ * Re-encodes an already-sniffed image before it ever reaches putObject —
+ * every upload call site that accepts a photo runs its bytes through
+ * this first, so storage cost is capped platform-wide rather than
+ * per-feature. Non-image mimes (pdf, doc, docx, xls, xlsx) pass through
+ * this module entirely untouched: recompressing a document format isn't
+ * safe to do generically, and isn't what "compress uploads" means for
+ * that content.
+ *
+ * - Downscales to a max of 2000px on the longest edge (most uploaded
+ *   photos are camera-resolution originals nobody will ever view at
+ *   full size on a page); `withoutEnlargement` means a smaller source
+ *   image is never upscaled.
+ * - Re-encodes at a quality that stays visually close to the original
+ *   while cutting file size meaningfully — 78 for JPEG (WP/most CMSs
+ *   default to 82; a few points lower is not visible at web sizes),
+ *   palette-based quantisation for PNG (`quality` under sharp's PNG
+ *   encoder controls palette size, not a JPEG-style lossy quality).
+ * - sharp strips EXIF/ICC metadata by default (no `.withMetadata()`
+ *   call) — a privacy win (camera GPS tags, device serials) that also
+ *   shaves a further few KB off every photo.
+ *
+ * Falls back to the original bytes if compression ever produces a
+ * larger file than it started with (rare, but possible for an already
+ * heavily-optimised source image) or if sharp throws on a technically
+ * valid-per-sniff() but malformed image — never blocks an upload on a
+ * compression failure.
+ */
+export async function compressImage(buf: Buffer, mime: string): Promise<Buffer> {
+  if (mime !== 'image/jpeg' && mime !== 'image/png') return buf;
+
+  try {
+    const pipeline = sharp(buf).rotate().resize({
+      width: 2000,
+      height: 2000,
+      fit: 'inside',
+      withoutEnlargement: true,
+    });
+
+    const out = mime === 'image/jpeg'
+      ? await pipeline.jpeg({ quality: 78, mozjpeg: true }).toBuffer()
+      : await pipeline.png({ quality: 80, compressionLevel: 9, palette: true }).toBuffer();
+
+    return out.length > 0 && out.length < buf.length ? out : buf;
+  } catch {
+    return buf;
+  }
 }
 
 /** Never derived from user input. */

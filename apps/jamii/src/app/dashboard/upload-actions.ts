@@ -2,7 +2,7 @@
 
 import { revalidatePath } from 'next/cache';
 import {
-  sniff, makeStorageKey, putObject, deleteObject, MAX_BYTES,
+  sniff, compressImage, makeStorageKey, putObject, deleteObject, MAX_BYTES,
   getJamiiPageForManagement, updateJamiiPage, addJamiiPhoto, removeJamiiPhoto,
 } from '@esoko/db';
 import { requireSubject } from '@/lib/session';
@@ -19,7 +19,11 @@ async function readImage(form: FormData): Promise<{ buf: Buffer; mime: string } 
   if (!check.ok || !check.mime || !check.mime.startsWith('image/')) {
     return { error: check.reason ?? 'Only PNG or JPEG photos are accepted' };
   }
-  return { buf, mime: check.mime };
+  // Every image this app ever stores goes through here first — see
+  // compressImage's own header for why (resize + re-encode, PDFs/docs
+  // untouched, always falls back to the original bytes on failure).
+  const compressed = await compressImage(buf, check.mime);
+  return { buf: compressed, mime: check.mime };
 }
 
 /**
