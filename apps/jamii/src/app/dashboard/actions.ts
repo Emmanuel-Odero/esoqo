@@ -6,10 +6,11 @@ import {
   createCampaign, inviteTeamMember, removeTeamMember,
   requestJamiiDomain, removeJamiiDomain,
   markJamiiContactMessageRead, archiveJamiiContactMessage,
+  createJamiiProgram, updateJamiiProgram, deleteJamiiProgram,
 } from '@esoko/db';
 import {
   jamiiPageProfileSchema, jamiiFaqSchema, jamiiPostSchema, createCampaignSchema, inviteTeamMemberSchema,
-  requestJamiiDomainSchema,
+  requestJamiiDomainSchema, jamiiProgramSchema,
 } from '@esoko/domain';
 import { requireSubject } from '@/lib/session';
 
@@ -79,6 +80,43 @@ export async function actionCreateCampaign(pageId: string, raw: unknown): Promis
     return { ok: true, data: undefined };
   } catch (e) {
     return { ok: false, error: e instanceof Error ? e.message : 'Could not open the campaign' };
+  }
+}
+
+export async function actionCreateProgram(pageId: string, raw: unknown): Promise<ActionResult> {
+  const ctx = await requireSubject();
+  const parsed = jamiiProgramSchema.safeParse(raw);
+  if (!parsed.success) return { ok: false, error: parsed.error.issues[0]?.message ?? 'Check your details' };
+  try {
+    await createJamiiProgram(ctx, pageId, parsed.data);
+    revalidatePath('/dashboard/programs');
+    return { ok: true, data: undefined };
+  } catch (e) {
+    return { ok: false, error: e instanceof Error ? e.message : 'Could not add the programme' };
+  }
+}
+
+export async function actionUpdateProgram(pageId: string, programId: string, raw: unknown): Promise<ActionResult> {
+  const ctx = await requireSubject();
+  const parsed = jamiiProgramSchema.safeParse(raw);
+  if (!parsed.success) return { ok: false, error: parsed.error.issues[0]?.message ?? 'Check your details' };
+  try {
+    await updateJamiiProgram(ctx, pageId, programId, parsed.data);
+    revalidatePath('/dashboard/programs');
+    return { ok: true, data: undefined };
+  } catch (e) {
+    return { ok: false, error: e instanceof Error ? e.message : 'Could not save your changes' };
+  }
+}
+
+export async function actionDeleteProgram(pageId: string, programId: string): Promise<ActionResult> {
+  const ctx = await requireSubject();
+  try {
+    await deleteJamiiProgram(ctx, pageId, programId);
+    revalidatePath('/dashboard/programs');
+    return { ok: true, data: undefined };
+  } catch (e) {
+    return { ok: false, error: e instanceof Error ? e.message : 'Could not delete that programme' };
   }
 }
 
