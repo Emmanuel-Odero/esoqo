@@ -31,6 +31,12 @@ export {
 export * from './capabilities';
 export type { VerifyResult } from './dal/reference';
 export * from './storage';
+// Not part of storage.ts itself — see image-compression.ts's own header
+// for why: sharp is a native binary addon that breaks bundling for
+// anything reachable from the DAL-only barrel (apps/jamii's
+// middleware.ts imports '@esoko/db/dal', which pulls in storage.ts via
+// dal/cecf-ingest.ts).
+export { compressImage } from './image-compression';
 export type { MemberRole, OrgKind } from '@prisma/client';
 export type {
   StoreStatus, StoreRoutingMode, StoreOrderStatus, StoreOrderPaymentMethod,
