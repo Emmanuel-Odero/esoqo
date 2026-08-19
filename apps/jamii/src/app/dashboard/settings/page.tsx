@@ -73,6 +73,8 @@ export default async function SettingsScreen() {
           brandAccentTwo: page.brandAccentTwo ?? '',
           brandAccentThree: page.brandAccentThree ?? '',
           themeDefaultMode: page.themeDefaultMode,
+          seoTitle: page.seoTitle ?? '',
+          seoDescription: page.seoDescription ?? '',
         }}
       />
 

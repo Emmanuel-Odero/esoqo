@@ -9,8 +9,27 @@ import { RichText } from '@/components/RichText';
 import { OrgTopNav } from '@/components/OrgTopNav';
 import { OrgFooter } from '@/components/OrgFooter';
 import { WhitelabelThemeRoot } from '@/lib/whitelabel-theme';
+import { buildOrgMetadata, currentOrigin, absoluteAssetUrl } from '@/lib/seo';
 
 export const dynamic = 'force-dynamic';
+
+export async function generateMetadata({
+  params,
+}: { params: Promise<{ slug: string; campaignSlug: string }> }) {
+  const { slug, campaignSlug } = await params;
+  const campaign = await loadCampaign(slug, campaignSlug);
+  if (!campaign) return {};
+  const mode = await getOrgLinkMode(slug);
+  const meta = await buildOrgMetadata(campaign.page, mode, {
+    path: `c/${campaignSlug}`, titleSuffix: campaign.title,
+  });
+  const image = campaign.coverUrl ? absoluteAssetUrl(campaign.coverUrl, await currentOrigin(mode)) : undefined;
+  return {
+    ...meta,
+    description: campaign.summary || meta.description,
+    openGraph: { ...meta.openGraph, ...(image ? { images: [{ url: image }] } : {}) },
+  };
+}
 
 function initials(name: string): string {
   return name.split(/\s+/).filter(Boolean).slice(0, 2).map((w) => w[0]).join('').toUpperCase() || 'D';

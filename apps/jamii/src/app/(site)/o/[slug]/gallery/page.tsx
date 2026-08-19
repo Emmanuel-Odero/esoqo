@@ -1,8 +1,16 @@
 import { listActiveMediaAssets } from '@esoko/db';
 import { OrgSectionShell, loadOrgOr404 } from '@/components/OrgSectionShell';
 import { MediaPlaceholder } from '@/components/placeholders/patterns';
+import { getOrgLinkMode } from '@/lib/org-links';
+import { buildOrgMetadata } from '@/lib/seo';
 
 export const dynamic = 'force-dynamic';
+
+export async function generateMetadata({ params }: { params: Promise<{ slug: string }> }) {
+  const { slug } = await params;
+  const [page, mode] = await Promise.all([loadOrgOr404(slug), getOrgLinkMode(slug)]);
+  return buildOrgMetadata(page, mode, { path: 'gallery', titleSuffix: 'Gallery' });
+}
 
 export default async function GalleryPage({ params }: { params: Promise<{ slug: string }> }) {
   const { slug } = await params;

@@ -11,6 +11,7 @@ type Profile = {
   facebook: string; instagram: string; twitter: string; whatsapp: string;
   brandAccent: string; brandAccentTwo: string; brandAccentThree: string;
   themeDefaultMode: 'DARK' | 'LIGHT';
+  seoTitle: string; seoDescription: string;
 };
 
 /** Matches the whitelabel theme's own defaults (jamii.css's .wl-theme
@@ -107,6 +108,14 @@ export function SettingsForm({ pageId, initial }: { pageId: string; initial: Pro
           choice is remembered on their own device from then on.
         </p>
       </div>
+
+      <h3 style={{ fontSize: '.92rem', color: 'var(--ink)', margin: '22px 0 6px' }}>SEO</h3>
+      <p style={{ fontSize: '.8rem', color: '#8a8368', margin: '0 0 14px' }}>
+        Optional — only set these if the title/description search engines would otherwise show
+        (built from your name and mission) isn&rsquo;t right.
+      </p>
+      <div className="field"><label htmlFor="seoTitle">Search title override</label><input id="seoTitle" value={values.seoTitle} maxLength={70} onChange={(e) => set('seoTitle', e.target.value)} /></div>
+      <div className="field"><label htmlFor="seoDescription">Search description override</label><textarea id="seoDescription" rows={2} maxLength={160} value={values.seoDescription} onChange={(e) => set('seoDescription', e.target.value)} /></div>
 
       {error && <p style={{ color: 'var(--stamp)', fontSize: '.85rem', marginBottom: 10 }}>{error}</p>}
       {saved && !error && <p style={{ color: 'var(--ledger)', fontSize: '.85rem', marginBottom: 10 }}>Saved.</p>}

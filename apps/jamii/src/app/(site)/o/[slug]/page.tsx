@@ -5,9 +5,19 @@ import { OrgTopNav } from '@/components/OrgTopNav';
 import { OrgHomeHero } from '@/components/OrgHomeHero';
 import { OrgHomeSections } from '@/components/OrgHomeSections';
 import { OrgFooter } from '@/components/OrgFooter';
+import { OrgJsonLd } from '@/components/OrgJsonLd';
 import { WhitelabelThemeRoot } from '@/lib/whitelabel-theme';
 import { isVerified } from '@/lib/data';
 import { orgExternalUrl } from '@/lib/org-external-url';
+import { buildOrgMetadata, currentOrigin } from '@/lib/seo';
+
+export async function generateMetadata({ params }: { params: Promise<{ slug: string }> }) {
+  const { slug } = await params;
+  const mode = await getOrgLinkMode(slug);
+  if (mode.base !== '') return {}; // this route redirects to /about there — no separate metadata needed
+  const page = await loadOrgOr404(slug);
+  return buildOrgMetadata(page, mode);
+}
 
 /**
  * The org's index route. On the primary domain this has always just
@@ -34,6 +44,7 @@ export default async function OrgIndex({ params }: { params: Promise<{ slug: str
   // Already on the custom domain — only worth showing here if it's a
   // *different* site (the `website` field), never the domain itself.
   const websiteUrl = externalUrl?.kind === 'website' ? externalUrl : null;
+  const origin = await currentOrigin(mode);
 
   return (
     <WhitelabelThemeRoot
@@ -42,6 +53,7 @@ export default async function OrgIndex({ params }: { params: Promise<{ slug: str
       brandAccentTwo={page.brandAccentTwo}
       brandAccentThree={page.brandAccentThree}
     >
+      <OrgJsonLd page={page} url={origin} />
       <OrgTopNav
         orgName={page.organisation.officialName}
         logoUrl={page.logoUrl}

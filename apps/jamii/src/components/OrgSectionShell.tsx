@@ -5,9 +5,11 @@ import { OrgSidebar } from './OrgSidebar';
 import { OrgTopNav } from './OrgTopNav';
 import { OrgPageBanner } from './OrgPageBanner';
 import { OrgFooter } from './OrgFooter';
+import { OrgJsonLd } from './OrgJsonLd';
 import { loadOrgPage, isVerified } from '@/lib/data';
 import { getOrgLinkMode, orgHref } from '@/lib/org-links';
 import { orgExternalUrl } from '@/lib/org-external-url';
+import { currentOrigin } from '@/lib/seo';
 import { WhitelabelThemeRoot } from '@/lib/whitelabel-theme';
 
 export async function loadOrgOr404(slug: string) {
@@ -29,9 +31,11 @@ export async function OrgSectionShell({
   // Already on the custom domain — only worth showing here if it's a
   // *different* site (the `website` field), never the domain itself.
   const websiteUrl = externalUrl?.kind === 'website' ? externalUrl : null;
+  const origin = await currentOrigin(mode);
 
   const body = (
     <>
+      <OrgJsonLd page={page} url={onCustomDomain ? origin : `${origin}/o/${page.slug}`} />
       {onCustomDomain ? (
         <>
           <OrgTopNav

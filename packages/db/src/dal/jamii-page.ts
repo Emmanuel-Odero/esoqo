@@ -251,6 +251,8 @@ export interface UpdateJamiiPageInput {
   brandAccentTwo?: string;
   brandAccentThree?: string;
   themeDefaultMode?: 'DARK' | 'LIGHT';
+  seoTitle?: string;
+  seoDescription?: string;
 }
 
 export async function updateJamiiPage(ctx: Ctx, pageId: string, patch: UpdateJamiiPageInput) {

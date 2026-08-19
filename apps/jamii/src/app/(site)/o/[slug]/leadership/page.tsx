@@ -1,7 +1,14 @@
 import { OrgSectionShell, loadOrgOr404 } from '@/components/OrgSectionShell';
 import { getOrgLinkMode } from '@/lib/org-links';
+import { buildOrgMetadata } from '@/lib/seo';
 
 export const dynamic = 'force-dynamic';
+
+export async function generateMetadata({ params }: { params: Promise<{ slug: string }> }) {
+  const { slug } = await params;
+  const [page, mode] = await Promise.all([loadOrgOr404(slug), getOrgLinkMode(slug)]);
+  return buildOrgMetadata(page, mode, { path: 'leadership', titleSuffix: 'Team & governance' });
+}
 
 const ROLE_LABEL: Record<string, string> = {
   CHAIRPERSON: 'Chairperson', TREASURER: 'Treasurer', SECRETARY: 'Secretary',

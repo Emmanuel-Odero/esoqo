@@ -1,8 +1,15 @@
 import { OrgSectionShell, loadOrgOr404 } from '@/components/OrgSectionShell';
 import { getOrgLinkMode } from '@/lib/org-links';
 import { RichText } from '@/components/RichText';
+import { buildOrgMetadata } from '@/lib/seo';
 
 export const dynamic = 'force-dynamic';
+
+export async function generateMetadata({ params }: { params: Promise<{ slug: string }> }) {
+  const { slug } = await params;
+  const [page, mode] = await Promise.all([loadOrgOr404(slug), getOrgLinkMode(slug)]);
+  return buildOrgMetadata(page, mode, { path: 'about', titleSuffix: 'Who we are' });
+}
 
 export default async function AboutPage({ params }: { params: Promise<{ slug: string }> }) {
   const { slug } = await params;

@@ -1778,6 +1778,13 @@ model JamiiPage {
   /// overkill, same precedent as Person.displayPrefs.
   faq Json @default("[]")
 
+  /// SEO overrides — when unset, buildOrgMetadata() (apps/jamii/src/lib/
+  /// seo.ts) derives a title/description from officialName/missionShort
+  /// instead. Only worth setting when the auto-derived version is
+  /// genuinely wrong for search, not a duplicate of tagline/mission.
+  seoTitle       String?
+  seoDescription String?
+
   publishedAt DateTime?
   createdAt   DateTime  @default(now())
   updatedAt   DateTime  @updatedAt

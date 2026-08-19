@@ -66,6 +66,11 @@ export const jamiiPageProfileSchema = z.object({
   brandAccentTwo: z.string().trim().regex(HEX, 'Colour must be a hex value like #0E7F9C').optional().or(z.literal('')),
   brandAccentThree: z.string().trim().regex(HEX, 'Colour must be a hex value like #B8720F').optional().or(z.literal('')),
   themeDefaultMode: z.enum(['DARK', 'LIGHT']).optional(),
+  // Only worth setting when the auto-derived title/description
+  // (buildOrgMetadata in apps/jamii/src/lib/seo.ts) is genuinely wrong
+  // for search — most orgs should leave these blank.
+  seoTitle: z.string().trim().max(70).optional().or(z.literal('')),
+  seoDescription: z.string().trim().max(160).optional().or(z.literal('')),
 });
 export type JamiiPageProfileInput = z.infer<typeof jamiiPageProfileSchema>;
 

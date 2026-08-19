@@ -4,8 +4,15 @@ import { OrgSectionShell, loadOrgOr404 } from '@/components/OrgSectionShell';
 import { getOrgLinkMode, orgHref } from '@/lib/org-links';
 import { MediaPlaceholder } from '@/components/placeholders/patterns';
 import { pickMediaAsset } from '@/lib/media';
+import { buildOrgMetadata } from '@/lib/seo';
 
 export const dynamic = 'force-dynamic';
+
+export async function generateMetadata({ params }: { params: Promise<{ slug: string }> }) {
+  const { slug } = await params;
+  const [page, mode] = await Promise.all([loadOrgOr404(slug), getOrgLinkMode(slug)]);
+  return buildOrgMetadata(page, mode, { path: 'posts', titleSuffix: 'Updates' });
+}
 
 export default async function PostsPage({ params }: { params: Promise<{ slug: string }> }) {
   const { slug } = await params;
