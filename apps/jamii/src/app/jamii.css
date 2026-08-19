@@ -75,6 +75,13 @@ header.topnav { position: sticky; top: 0; z-index: 40; background: var(--ink); c
 .pill { display: inline-block; padding: 4px 11px; border-radius: 100px; font-size: .75rem; font-weight: 700; font-family: ui-monospace, monospace }
 .pill-county { background: var(--ink); color: #fff }
 .pill-cause { background: #fff; border: 1.3px solid var(--ink); color: var(--ink) }
+/* Anchor variant of .pill-cause — an org's own site link, in the same
+   .oh-meta pill row as county/cause tags (OrgHeader.tsx). */
+a.pill-link { background: #fff; border: 1.3px solid var(--ledger); color: var(--ledger); text-decoration: none; margin-left: 6px }
+a.pill-link:hover { background: var(--ledger); color: #fff }
+/* .oh-meta already has its own flex `gap`, so the margin above would
+   double up there — cancel it in that one context. */
+.oh-meta a.pill-link { margin-left: 0 }
 .stampmark { display: inline-flex; align-items: center; gap: 5px; border: 2px solid var(--stamp); border-radius: 100px; padding: 3px 10px 3px 6px; color: var(--stamp); font-family: ui-monospace, monospace; font-weight: 700; font-size: .68rem; letter-spacing: .6px; text-transform: uppercase }
 
 /* ── ledger bar ──────────────────────────────────────────── */
@@ -539,9 +546,13 @@ footer.mainfooter b { color: #fff }
 .wl-cta-ghost:hover { border-color: var(--wl-ink) }
 .wl-theme-toggle { padding: 10px 14px; gap: 6px }
 .wl-theme-toggle-icon { font-size: 1rem; line-height: 1 }
+/* Link-only variant of .wl-cta-ghost for the org's `website` field, shown
+   in .wl-nav-cta next to the theme toggle (OrgTopNav.tsx). */
+.wl-website-link { text-decoration: none }
 @media (max-width: 560px) {
   .wl-theme-toggle-label { display: none }
   .wl-theme-toggle { padding: 10px }
+  .wl-website-link { display: none }
 }
 
 .wl-navtoggle {

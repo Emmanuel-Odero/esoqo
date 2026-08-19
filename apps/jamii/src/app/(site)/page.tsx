@@ -3,6 +3,7 @@ import { listJamiiPages, getCampaignStats } from '@esoko/db';
 import { Icon } from '@esoko/ui';
 import { DiscoverFilters } from '@/components/DiscoverFilters';
 import { isVerified, orgInitials } from '@/lib/data';
+import { orgExternalUrl } from '@/lib/org-external-url';
 
 export const dynamic = 'force-dynamic';
 
@@ -56,6 +57,7 @@ export default async function DiscoverPage({
             {pages.map((page) => {
               const org = page.organisation;
               const campaign = page.campaigns[0];
+              const externalUrl = orgExternalUrl(page);
               return (
                 <article key={page.organisationId} className="card orgcard">
                   <div className="oc-top">
@@ -69,6 +71,17 @@ export default async function DiscoverPage({
                       </div>
                       <div style={{ marginTop: 6 }}>
                         <span className="pill pill-county">{org.party.county}</span>
+                        {externalUrl && (
+                          <a
+                            href={externalUrl.href}
+                            target="_blank"
+                            rel="noreferrer"
+                            className="pill pill-link"
+                            onClick={(e) => e.stopPropagation()}
+                          >
+                            {externalUrl.label} ↗
+                          </a>
+                        )}
                       </div>
                     </div>
                   </div>

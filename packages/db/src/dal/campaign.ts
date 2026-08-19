@@ -84,6 +84,10 @@ export async function getCampaignBySlug(pageSlug: string, campaignSlug: string) 
               },
             },
           },
+          // See PUBLIC_PAGE_INCLUDE in jamii-page.ts — same ACTIVE-only
+          // scoping, needed here too so orgExternalUrl() works on the
+          // campaign page (OrgTopNav's websiteUrl prop).
+          domain: { where: { status: 'ACTIVE', removedAt: null } },
         },
       },
       updates: { orderBy: { postedAt: 'desc' } },

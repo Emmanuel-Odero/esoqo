@@ -7,6 +7,7 @@ import { OrgHomeSections } from '@/components/OrgHomeSections';
 import { OrgFooter } from '@/components/OrgFooter';
 import { WhitelabelThemeRoot } from '@/lib/whitelabel-theme';
 import { isVerified } from '@/lib/data';
+import { orgExternalUrl } from '@/lib/org-external-url';
 
 /**
  * The org's index route. On the primary domain this has always just
@@ -29,6 +30,10 @@ export default async function OrgIndex({ params }: { params: Promise<{ slug: str
 
   const page = await loadOrgOr404(slug);
   const activeCampaign = page.campaigns.find((c) => c.status === 'ACTIVE');
+  const externalUrl = orgExternalUrl(page);
+  // Already on the custom domain — only worth showing here if it's a
+  // *different* site (the `website` field), never the domain itself.
+  const websiteUrl = externalUrl?.kind === 'website' ? externalUrl : null;
 
   return (
     <WhitelabelThemeRoot
@@ -44,6 +49,7 @@ export default async function OrgIndex({ params }: { params: Promise<{ slug: str
         mode={mode}
         ctaHref={activeCampaign ? orgHref(mode, `c/${activeCampaign.slug}`) : null}
         ctaLabel="Support us"
+        websiteUrl={websiteUrl}
       />
       <OrgHomeHero page={page} mode={mode} />
       <OrgHomeSections page={page} mode={mode} />

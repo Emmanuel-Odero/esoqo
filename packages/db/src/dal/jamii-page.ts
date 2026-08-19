@@ -163,6 +163,12 @@ const PUBLIC_PAGE_INCLUDE = {
   programs: { orderBy: { position: 'asc' as const } },
   posts: { where: { status: 'PUBLISHED' as const }, orderBy: { publishedAt: 'desc' as const } },
   campaigns: { orderBy: { createdAt: 'desc' as const } },
+  // Only ever an ACTIVE domain is worth exposing publicly — a
+  // PENDING_DNS/FAILED/SUSPENDED row would either not resolve yet or
+  // shouldn't be advertised as "their site". See orgExternalUrl() in
+  // apps/jamii/src/lib/org-external-url.ts, the one place that reads
+  // this.
+  domain: { where: { status: 'ACTIVE' as const, removedAt: null } },
 };
 
 /** Public page lookup. No capability — anyone may browse a published page. */
@@ -206,6 +212,7 @@ export async function listJamiiPages(f: ListJamiiPagesFilter = {}) {
         },
       },
       campaigns: { where: { status: 'ACTIVE' }, orderBy: { createdAt: 'desc' }, take: 1 },
+      domain: { where: { status: 'ACTIVE', removedAt: null } },
     },
     orderBy: { publishedAt: 'desc' },
     take: f.take ?? 50,

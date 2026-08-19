@@ -3,6 +3,7 @@ import { notFound } from 'next/navigation';
 import { Icon } from '@esoko/ui';
 import { loadCampaign, loadCampaignExtras, isVerified } from '@/lib/data';
 import { getOrgLinkMode, orgHref } from '@/lib/org-links';
+import { orgExternalUrl } from '@/lib/org-external-url';
 import { CampaignDonateButton } from '@/components/CampaignDonateButton';
 import { OrgTopNav } from '@/components/OrgTopNav';
 import { OrgFooter } from '@/components/OrgFooter';
@@ -28,6 +29,10 @@ export default async function CampaignPage({
   const org = campaign.page.organisation;
   const daysLeft = campaign.endsAt ? Math.max(0, Math.ceil((campaign.endsAt.getTime() - Date.now()) / 86_400_000)) : null;
   const onCustomDomain = mode.base === '';
+  const externalUrl = orgExternalUrl(campaign.page);
+  // Already on the custom domain — only worth showing here if it's a
+  // *different* site (the `website` field), never the domain itself.
+  const websiteUrl = externalUrl?.kind === 'website' ? externalUrl : null;
 
   const body = (
     <>
@@ -39,6 +44,7 @@ export default async function CampaignPage({
           mode={mode}
           ctaHref={null}
           ctaLabel="Support us"
+          websiteUrl={websiteUrl}
         />
       )}
       <div className={onCustomDomain ? 'wl-content' : undefined}>

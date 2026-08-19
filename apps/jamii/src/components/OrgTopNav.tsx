@@ -17,7 +17,7 @@ import { useWhitelabelTheme } from '@/lib/whitelabel-theme';
  * OrgHeader/OrgSubnav based on `mode`, never both.
  */
 export function OrgTopNav({
-  orgName, logoUrl, mode, ctaHref, ctaLabel,
+  orgName, logoUrl, mode, ctaHref, ctaLabel, websiteUrl,
 }: {
   orgName: string;
   logoUrl: string | null;
@@ -25,6 +25,11 @@ export function OrgTopNav({
   mode: OrgLinkMode;
   ctaHref: ReturnType<typeof orgHref> | null;
   ctaLabel: string;
+  /** The org's plain `website` field only — never their own custom
+   *  domain, which is exactly where the visitor already is; showing
+   *  "visit our domain" while already on that domain says nothing.
+   *  See orgExternalUrl()'s `kind` discriminant. */
+  websiteUrl: { href: string; label: string } | null;
 }) {
   const pathname = usePathname();
   const { theme, toggleTheme, contrast, setContrast, motionOff, setMotionOff, scaleIdx, setScaleIdx } = useWhitelabelTheme();
@@ -89,6 +94,11 @@ export function OrgTopNav({
           </nav>
 
           <div className="wl-nav-cta">
+            {websiteUrl && (
+              <a href={websiteUrl.href} target="_blank" rel="noreferrer" className="wl-cta-ghost wl-website-link">
+                {websiteUrl.label} ↗
+              </a>
+            )}
             <button type="button" className="wl-cta-ghost wl-theme-toggle" aria-pressed={isDark} aria-label="Toggle dark theme" onClick={toggleTheme}>
               <span className="wl-theme-toggle-icon">{isDark ? '☀' : '☾'}</span>
               <span className="wl-theme-toggle-label">{isDark ? 'Light mode' : 'Dark mode'}</span>
