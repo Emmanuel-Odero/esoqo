@@ -43,7 +43,7 @@ export type { MemberRole, OrgKind } from '@prisma/client';
 export type {
   StoreStatus, StoreRoutingMode, StoreOrderStatus, StoreOrderPaymentMethod,
   PosSyncStatus, PosPaymentMethod,
-  JamiiPageStatus, PublishStatus, JamiiTeamRole, CampaignStatus, DonationStatus,
+  JamiiPageStatus, PublishStatus, JamiiTeamRole, CampaignStatus, DonationStatus, JamiiBlockType,
   JamiiInterestStatus, JamiiMediaCategory, JamiiContactMessageStatus,
   TicketVertical, TicketOrgStatus, ListingStatus, ScheduleStatus, SeatStatus,
   BookingStatus, BookingPaymentMethod, TicketStatus,

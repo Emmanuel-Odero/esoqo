@@ -1691,6 +1691,21 @@ enum JamiiThemeMode {
   LIGHT
 }
 
+/// A homepage block's visual shape — see JamiiPageBlock.data for what
+/// each type stores. STATS_TICKER/EXPLORE_GRID/ACTIVE_CAMPAIGN are the
+/// pre-seeded, singleton sections the pre-Phase-2 homepage always
+/// rendered (see OrgHomeSections's DefaultHomeSections fallback); the
+/// rest are genuinely new content types an org can add more than once.
+enum JamiiBlockType {
+  STATS_TICKER
+  EXPLORE_GRID
+  ACTIVE_CAMPAIGN
+  DONATE_BAND
+  RICH_TEXT
+  TESTIMONIAL
+  PHOTO_STRIP
+}
+
 enum PublishStatus {
   DRAFT
   PUBLISHED
@@ -1796,9 +1811,33 @@ model JamiiPage {
   team      JamiiTeamMember[]
   domain    JamiiDomain?
   messages  JamiiContactMessage[]
+  blocks    JamiiPageBlock[]
 
   @@index([status])
   @@map("jamii_page")
+}
+
+/// One section of the custom-domain homepage — see OrgHomeSections.tsx.
+/// Empty for every page until an org saves something in the dashboard's
+/// "Homepage" block editor; the public renderer falls back to the
+/// pre-Phase-2 fixed section order when a page has zero rows, so this
+/// table being empty is the normal, unmigrated state, not an error.
+model JamiiPageBlock {
+  id       String         @id @default(uuid()) @db.Uuid
+  pageId   String         @db.Uuid
+  page     JamiiPage      @relation(fields: [pageId], references: [organisationId], onDelete: Cascade)
+  type     JamiiBlockType
+  position Int            @default(0)
+  visible  Boolean        @default(true)
+  /// Shape depends on `type` — see jamiiPageBlockSchema in
+  /// packages/domain/src/jamii.ts, the single source of truth for what
+  /// each type's data looks like.
+  data      Json     @default("{}")
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([pageId])
+  @@map("jamii_page_block")
 }
 
 /// Gallery images a page puts on its public profile. Same storage-key

@@ -259,3 +259,54 @@ export const jamiiInterestSchema = z.object({
   message: z.string().trim().max(1000).optional().or(z.literal('')),
 });
 export type JamiiInterestInput = z.infer<typeof jamiiInterestSchema>;
+
+/**
+ * Homepage block builder (Phase 2) — see JamiiPageBlock in schema.prisma
+ * for the table this validates writes into, and OrgHomeSections.tsx /
+ * apps/jamii/src/components/blocks/ for how each type renders publicly.
+ *
+ * STATS_TICKER/EXPLORE_GRID/ACTIVE_CAMPAIGN carry no config — they're
+ * fully computed from the page/org at render time, same as today's
+ * pre-Phase-2 homepage. The rest are genuinely editable content.
+ */
+export const jamiiBlockDataSchema = z.discriminatedUnion('type', [
+  z.object({ type: z.literal('STATS_TICKER'), data: z.object({}) }),
+  z.object({ type: z.literal('EXPLORE_GRID'), data: z.object({}) }),
+  z.object({ type: z.literal('ACTIVE_CAMPAIGN'), data: z.object({}) }),
+  z.object({
+    type: z.literal('DONATE_BAND'),
+    data: z.object({
+      heading: z.string().trim().max(140).optional().or(z.literal('')),
+      body: z.string().trim().max(600).optional().or(z.literal('')),
+      listItems: z.array(z.string().trim().max(200)).max(6).optional(),
+    }),
+  }),
+  z.object({
+    type: z.literal('RICH_TEXT'),
+    data: z.object({
+      heading: z.string().trim().max(140).optional().or(z.literal('')),
+      html: richTextField(8000),
+    }),
+  }),
+  z.object({
+    type: z.literal('TESTIMONIAL'),
+    data: z.object({
+      quote: z.string().trim().min(2, 'Enter a quote').max(600),
+      name: z.string().trim().min(2, 'Enter a name').max(120),
+      role: z.string().trim().max(120).optional().or(z.literal('')),
+    }),
+  }),
+  z.object({
+    type: z.literal('PHOTO_STRIP'),
+    data: z.object({ photoIds: z.array(z.string().uuid()).max(12) }),
+  }),
+]);
+
+/** One row of the whole-list "save the entire block array atomically"
+ *  Server Action — same shape as jamiiFaqSchema's whole-list replace.
+ *  `id` is present when editing an existing block, absent for one just
+ *  added client-side (the DAL treats a missing id as "create"). */
+export const jamiiPageBlockSchema = z.object({ id: z.string().uuid().optional(), visible: z.boolean() })
+  .and(jamiiBlockDataSchema);
+export const jamiiPageBlocksSchema = z.array(jamiiPageBlockSchema).max(20);
+export type JamiiPageBlockInput = z.infer<typeof jamiiPageBlockSchema>;

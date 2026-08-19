@@ -29,6 +29,7 @@ export * from './receipt';
 export * from './pricing';
 export * from './auth-credential';
 export * from './jamii-page';
+export * from './jamii-page-block';
 export * from './jamii-domain';
 export * from './jamii-media';
 export * from './jamii-post';

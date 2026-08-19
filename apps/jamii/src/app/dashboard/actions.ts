@@ -7,11 +7,12 @@ import {
   requestJamiiDomain, removeJamiiDomain,
   markJamiiContactMessageRead, archiveJamiiContactMessage,
   createJamiiProgram, updateJamiiProgram, deleteJamiiProgram,
-  setMemberRole, AuthorisationError,
+  setMemberRole, AuthorisationError, saveJamiiPageBlocks,
 } from '@esoko/db';
 import {
   jamiiPageProfileSchema, jamiiFaqSchema, jamiiPostSchema, createCampaignSchema, updateCampaignSchema,
   inviteTeamMemberSchema, requestJamiiDomainSchema, jamiiProgramSchema, setMemberRoleSchema,
+  jamiiPageBlocksSchema,
 } from '@esoko/domain';
 import { requireSubject } from '@/lib/session';
 
@@ -158,6 +159,24 @@ export async function actionUpdateCampaign(pageId: string, campaignId: string, r
     return { ok: true, data: undefined };
   } catch (e) {
     return { ok: false, error: e instanceof Error ? e.message : 'Could not save your changes' };
+  }
+}
+
+/** Whole-list save for the "Homepage" block editor — same
+ *  requireSubject -> safeParse -> DAL -> revalidatePath shape as every
+ *  other action here, just against an array instead of one record
+ *  (see saveJamiiPageBlocks's own header comment for the replace
+ *  semantics). */
+export async function actionSaveHomepageBlocks(pageId: string, raw: unknown): Promise<ActionResult> {
+  const ctx = await requireSubject();
+  const parsed = jamiiPageBlocksSchema.safeParse(raw);
+  if (!parsed.success) return { ok: false, error: parsed.error.issues[0]?.message ?? 'Check your homepage blocks' };
+  try {
+    await saveJamiiPageBlocks(ctx, pageId, parsed.data.map(({ id, type, visible, data }) => ({ id, type, visible, data })));
+    revalidatePath('/dashboard/homepage');
+    return { ok: true, data: undefined };
+  } catch (e) {
+    return { ok: false, error: e instanceof Error ? e.message : 'Could not save your homepage' };
   }
 }
 

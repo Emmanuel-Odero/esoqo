@@ -660,6 +660,24 @@ footer.mainfooter b { color: #fff }
 .wl-teaser-card p { font-size: .88rem; color: var(--wl-ink-soft) }
 .wl-teaser-card .go { margin-top: auto; font-family: var(--font-mono, monospace); font-size: .74rem; letter-spacing: .06em; text-transform: uppercase; color: var(--wl-cyan) }
 
+/* ── homepage block builder (Phase 2) — RichTextBlock/TestimonialBlock/
+   PhotoStripBlock, apps/jamii/src/components/blocks/ ─────────────── */
+.wl-rich-block p { line-height: 1.75; color: var(--wl-ink-soft); font-size: 1.02rem; margin: 0 0 18px }
+.wl-rich-block ul, .wl-rich-block ol { line-height: 1.75; color: var(--wl-ink-soft); font-size: 1.02rem; margin: 0 0 18px; padding-left: 1.4em }
+.wl-rich-block blockquote { margin: 0 0 18px; padding-left: 1em; border-left: 3px solid var(--wl-surface-line); color: var(--wl-ink-soft) }
+.wl-rich-block h3, .wl-rich-block h4 { color: var(--wl-ink); margin: 22px 0 10px }
+.wl-rich-block a { color: var(--wl-accent, var(--wl-cyan)) }
+
+.wl-testimonial { max-width: 62ch; margin: 0 auto; text-align: center; border: 0; padding: 0 }
+.wl-testimonial p { font-size: 1.4rem; font-weight: 600; color: var(--wl-ink); line-height: 1.5; margin: 0 0 18px }
+.wl-testimonial footer { display: flex; flex-direction: column; gap: 2px; font-size: .88rem }
+.wl-testimonial-name { font-weight: 700; color: var(--wl-ink) }
+.wl-testimonial-role { color: var(--wl-ink-soft) }
+
+.wl-photo-strip { display: flex; gap: 14px; overflow-x: auto; padding-bottom: 6px }
+.wl-photo-strip-item { flex: 0 0 auto; width: 240px; height: 170px; border-radius: var(--wl-radius); overflow: hidden; border: 1px solid var(--wl-surface-line) }
+.wl-photo-strip-item img { width: 100%; height: 100%; object-fit: cover }
+
 /* ── about: mission/vision + quote ───────────────────────── */
 .wl-about-grid { display: grid; grid-template-columns: 1.4fr 1fr; gap: 64px; align-items: start }
 @media (max-width: 900px) { .wl-about-grid { grid-template-columns: 1fr; gap: 40px } }
