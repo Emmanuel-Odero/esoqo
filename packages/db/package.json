@@ -19,6 +19,7 @@
     "seed:abledfirst": "tsx prisma/seed-abledfirst.ts",
     "seed:media": "tsx prisma/seed-media.ts",
     "seed:demo": "tsx prisma/seed-demo.ts",
+    "backfill:rich-text": "tsx prisma/backfill-rich-text.ts",
     "studio": "prisma studio",
     "audit:verify": "tsx src/scripts/verify-chain.ts",
     "typecheck": "tsc --noEmit"
