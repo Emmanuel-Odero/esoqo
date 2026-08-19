@@ -19,6 +19,14 @@ done
 : "${PORT:=8080}"
 sed -i "s/__PORT__/${PORT}/" /etc/nginx/nginx.conf
 
+# ── Fix ownership on the mounted uploads disk ───────────────────
+# The Dockerfile's `chown -R www-data:www-data web/app` runs at build
+# time, before Render's persistent disk is mounted at web/app/uploads —
+# the mount then covers that chown with whatever ownership the volume
+# was created with (root:root), leaving www-data unable to write to it.
+# Fix it here, every boot, after the mount is in place.
+chown -R www-data:www-data web/app/uploads
+
 # ── Wait for MySQL (cecf-mariadb) ───────────────────────────────
 : "${DB_HOST:=cecf-mariadb}"
 : "${DB_PORT:=3306}"

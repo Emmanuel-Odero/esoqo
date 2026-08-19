@@ -21,7 +21,17 @@ export function SignInForm() {
     startTransition(async () => {
       const result = await actionSignIn({ identifier, pin });
       if (!result.ok) { setError(result.error); setField(result.field); return; }
-      router.push((params.get('next') || result.data.next) as Route);
+      const next = params.get('next') || result.data.next;
+      // `next` can point off this origin now that ticket booking
+      // (apps/web:3000) sends buyers here to sign in and back —
+      // router.push tries an RSC soft-navigation first, which the
+      // browser's CORS policy blocks for a cross-origin URL. A full
+      // navigation is what a cross-origin redirect needs anyway.
+      if (/^https?:\/\//.test(next) && !next.startsWith(window.location.origin)) {
+        window.location.href = next;
+        return;
+      }
+      router.push(next as Route);
       router.refresh();
     });
   }

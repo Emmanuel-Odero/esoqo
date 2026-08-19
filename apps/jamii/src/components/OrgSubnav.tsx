@@ -1,6 +1,7 @@
 'use client';
 
 import Link from 'next/link';
+import type { Route } from 'next';
 import { usePathname } from 'next/navigation';
 import { orgHref, ORG_NAV_SECTIONS, type OrgLinkMode } from '@/lib/org-links-shared';
 
@@ -19,7 +20,7 @@ export function OrgSubnav({ mode }: { mode: OrgLinkMode }) {
           const href = orgHref(mode, key);
           const on = pathname === href || pathname.startsWith(`${href}/`);
           return (
-            <Link key={key} href={href} aria-current={on ? 'page' : undefined}>{label}</Link>
+            <Link key={key} href={href as Route} aria-current={on ? 'page' : undefined}>{label}</Link>
           );
         })}
       </div>
