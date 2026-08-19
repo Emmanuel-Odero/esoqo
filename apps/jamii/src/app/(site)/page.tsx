@@ -77,7 +77,6 @@ export default async function DiscoverPage({
                             target="_blank"
                             rel="noreferrer"
                             className="pill pill-link"
-                            onClick={(e) => e.stopPropagation()}
                           >
                             {externalUrl.label} ↗
                           </a>
