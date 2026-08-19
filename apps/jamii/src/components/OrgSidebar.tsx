@@ -1,9 +1,10 @@
 import Link from 'next/link';
+import { orgHref, crossToPrimaryHref, type OrgLinkMode } from '@/lib/org-links';
 import type { getJamiiPageBySlug } from '@esoko/db';
 
 type OrgPage = NonNullable<Awaited<ReturnType<typeof getJamiiPageBySlug>>>;
 
-export function OrgSidebar({ page }: { page: OrgPage }) {
+export function OrgSidebar({ page, mode }: { page: OrgPage; mode: OrgLinkMode }) {
   const activeCampaign = page.campaigns.find((c) => c.status === 'ACTIVE');
   const org = page.organisation;
 
@@ -14,15 +15,15 @@ export function OrgSidebar({ page }: { page: OrgPage }) {
         <div className="statrow"><span>Campaigns run</span><b>{page.campaigns.length}</b></div>
         <div className="statrow"><span>County</span><b>{org.party.county}</b></div>
         {activeCampaign ? (
-          <Link href={`/o/${page.slug}/c/${activeCampaign.slug}`} className="btn btn-stamp btn-block" style={{ marginTop: 14 }}>
+          <Link href={orgHref(mode, `c/${activeCampaign.slug}`)} className="btn btn-stamp btn-block" style={{ marginTop: 14 }}>
             Support with M-Pesa
           </Link>
         ) : (
           <p style={{ fontSize: '.82rem', color: '#6b6552', marginTop: 14 }}>No active campaign right now.</p>
         )}
-        <Link href="/dashboard" style={{ display: 'block', textAlign: 'center', marginTop: 10, fontSize: '.78rem', color: '#8a8368', textDecoration: 'underline' }}>
+        <a href={crossToPrimaryHref(mode, 'dashboard')} style={{ display: 'block', textAlign: 'center', marginTop: 10, fontSize: '.78rem', color: '#8a8368', textDecoration: 'underline' }}>
           Represent this organisation? Manage this page →
-        </Link>
+        </a>
       </div>
     </aside>
   );

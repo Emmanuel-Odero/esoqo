@@ -79,14 +79,17 @@ export async function actionSignIn(raw: unknown): Promise<ActionResult<{ next: s
   return { ok: true, data: { next: '/dashboard' } };
 }
 
-/** Step 1 of setting/resetting a PIN — sends (or, in console mode, logs) a code. */
-export async function actionRequestPinCode(raw: unknown): Promise<ActionResult<{ devCode?: string }>> {
+/**
+ * Step 1 of setting/resetting a PIN — sends (or, in console mode, logs to
+ * the terminal; in mock mode, sends to the local mock-sms catcher) a code.
+ */
+export async function actionRequestPinCode(raw: unknown): Promise<ActionResult> {
   const parsed = requestPinCodeSchema.safeParse(raw);
   if (!parsed.success) return { ok: false, error: parsed.error.issues[0]?.message ?? 'Enter a valid number' };
 
   try {
-    const result = await issueOtp(parsed.data.msisdn, 'PIN_RESET', await clientIp());
-    return { ok: true, data: { devCode: result.devCode } };
+    await issueOtp(parsed.data.msisdn, 'PIN_RESET', await clientIp());
+    return { ok: true, data: undefined };
   } catch (e) {
     if (e instanceof OtpError) return { ok: false, error: e.message };
     throw e;

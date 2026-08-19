@@ -1,35 +1,35 @@
 import type { Metadata } from 'next';
 import { JoinFlow } from './JoinFlow';
-import { CecfTopNav } from './CecfTopNav';
-import { CecfMasthead } from './CecfMasthead';
+import { JoinTopNav } from './JoinTopNav';
+import { JoinMasthead } from './JoinMasthead';
 import { WhyJoin } from './WhyJoin';
-import { CecfPartnershipBand } from './CecfPartnershipBand';
-import './join-cecf.css';
+import { JoinCecfCrossLink } from './JoinCecfCrossLink';
+import './join.css';
 
 export const metadata: Metadata = {
-  title: 'Join CECF',
+  title: 'Join Esoko',
   description:
-    'Bring your group, MSME or yourself into formal recognition with the Child & Elder Care Foundation, free — five questions, no documents. Esoko powers the tools behind your membership.',
+    'Bring your group, MSME or yourself onto Esoko, free — market prices, payments and receipts, and a record you can trade with.',
 };
 
 export default function JoinPage() {
   return (
-    <div className="cecf-scope">
-      <CecfTopNav />
-      <CecfMasthead />
+    <div className="join-scope">
+      <JoinTopNav />
+      <JoinMasthead />
 
       {/* Form first in source order, "why join" second — on narrow screens
           (no grid) that's already "why join under the form"; on wide
           screens the grid places it beside the form instead. */}
-      <div className="cecf-layout">
+      <div className="join-layout">
         <div className="wrap">
           <div className="jtop">
             <div>
               <h2 style={{ fontSize: 'clamp(1.35rem,2.6vw,1.7rem)', margin: 0 }}>
                 Tell us about yourself
               </h2>
-              <p style={{ color: 'var(--cecf-ink-2)', margin: '4px 0 0' }}>
-                Five questions, no documents. Your record flows to Esoko so the tools can work.
+              <p style={{ color: 'var(--jn-ink-2)', margin: '4px 0 0' }}>
+                Five questions, no documents. Your record flows straight into Esoko&rsquo;s tools.
               </p>
             </div>
           </div>
@@ -39,7 +39,7 @@ export default function JoinPage() {
         <WhyJoin />
       </div>
 
-      <CecfPartnershipBand />
+      <JoinCecfCrossLink />
     </div>
   );
 }

@@ -5,14 +5,27 @@
  * packages/auth/src/otp.ts: MPESA_PROVIDER=console|sandbox|production,
  * default `console`. Console mode never calls Safaricom — it logs the
  * push and auto-confirms locally, so checkout is fully testable without
- * live credentials. `production` is intentionally unimplemented here;
- * flipping this on is a deliberate, reviewed change, not a default path.
+ * live credentials. `production` calls the real Daraja API —
+ * flipping MPESA_PROVIDER to it in a deployed environment is the
+ * deliberate, reviewed step that starts moving real money, not a
+ * default path (development is hardcoded to console regardless, below).
  *
- * The run mode (APP_ENV — see packages/domain/src/env.ts) decides the
- * effective provider: development is always console (whatever
- * MPESA_PROVIDER says), LOCAL_TEST_PROD defaults to the Daraja sandbox
- * so a production release can be rehearsed without live money, and
- * production honours MPESA_PROVIDER (default console).
+ * The run mode (APP_ENV — see packages/domain/src/env.ts) mostly decides
+ * the effective provider, but the two real risks here are independent
+ * and are guarded separately:
+ *   · real DATA (which database gets hit) — guarded entirely in
+ *     packages/db/src/client.ts; APP_ENV=development refuses to run
+ *     against a non-local DATABASE_URL, full stop.
+ *   · real MONEY (does an STK push reach the live Daraja API) — guarded
+ *     here: `sandbox` moves test money only, so it is honoured whenever
+ *     it's explicitly requested, even from a plain development box —
+ *     that lets you rehearse checkouts locally without route through
+ *     LOCAL_TEST_PROD's production-database switch. `production` is
+ *     never honoured from `development`, no matter what MPESA_PROVIDER
+ *     says — only a genuine `production` deploy or a deliberate
+ *     LOCAL_TEST_PROD rehearsal may reach Safaricom's live API. With no
+ *     explicit MPESA_PROVIDER, development defaults to console and
+ *     LOCAL_TEST_PROD defaults to sandbox.
  *
  * Deliberately no `server-only` marker — this module is called both
  * from Next.js Server Actions and from services/core's plain-Node
@@ -23,13 +36,21 @@
 import { appEnv } from '@esoko/domain';
 
 const SANDBOX_BASE = 'https://sandbox.safaricom.co.ke';
+const PRODUCTION_BASE = 'https://api.safaricom.co.ke';
 
 export function mpesaProvider(): 'console' | 'sandbox' | 'production' {
-  if (appEnv() === 'development') return 'console';
-  const explicit = process.env.MPESA_PROVIDER;
-  if (explicit === 'sandbox' || explicit === 'production' || explicit === 'live') {
-    return explicit === 'live' ? 'production' : explicit;
+  const raw = process.env.MPESA_PROVIDER;
+  const requested = raw === 'live' ? 'production' : raw;
+
+  if (requested === 'sandbox') return 'sandbox'; // test money only — safe in any run mode
+
+  if (requested === 'production') {
+    // Real money. Never from a plain development box, no matter what
+    // this env var says.
+    return appEnv() === 'development' ? 'console' : 'production';
   }
+
+  if (appEnv() === 'development') return 'console';
   return appEnv() === 'LOCAL_TEST_PROD' ? 'sandbox' : 'console';
 }
 
@@ -100,13 +121,16 @@ export async function initiateStkPush(req: StkPushRequest): Promise<StkPushResul
     return initiateDarajaStkPush(req, SANDBOX_BASE);
   }
 
-  throw new MpesaError(
-    `MPESA_PROVIDER="${PROVIDER}" is not implemented — this pass only wires console and sandbox`,
-    'NOT_CONFIGURED',
-  );
+  // PROVIDER === 'production' — same Daraja STK push call as sandbox,
+  // against Safaricom's live base URL. Real money moves the moment this
+  // succeeds, so it only ever runs where mpesaProvider() allows it:
+  // never in development, and in a deployed environment only once
+  // MPESA_PROVIDER is deliberately set to "production" there.
+  return initiateDarajaStkPush(req, PRODUCTION_BASE);
 }
 
-/* ── real Daraja sandbox calls ────────────────────────────────── */
+/* ── real Daraja API calls — same shape for sandbox and production,
+ *    only the base URL and the credentials behind it differ ──────── */
 
 async function getDarajaAccessToken(base: string): Promise<string> {
   const key = process.env.MPESA_CONSUMER_KEY;

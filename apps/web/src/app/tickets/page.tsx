@@ -9,18 +9,13 @@ export const metadata: Metadata = {
 };
 export const dynamic = 'force-dynamic';
 
-const APP_URL = process.env.NEXT_PUBLIC_APP_URL ?? 'http://localhost:3001';
-
 /**
  * The ticketing equivalent of /discover — a public directory, same job
  * for a fourth kind of Esoko business (event companies, tour operators,
- * transport companies) that /discover already does for shops. Browse
- * only, same split as /discover: booking itself happens on the app
- * surface (localhost:3001/tickets/[slug]), a real cross-origin link,
- * not a client-routed page within this site. apps/web previously grew
- * its own copy of the booking flow (session lib, STK push, the lot) —
- * removed; a marketing/info site shouldn't behave like a signed-in
- * dashboard SPA, and there is no reason to run that flow twice.
+ * transport companies) that /discover already does for shops. Unlike
+ * /discover (which links out to apps/store for checkout), booking
+ * itself also happens here — localhost:3000/tickets/[slug] — since
+ * 3001 is reserved for signed-in dashboards, not public storefronts.
  */
 export default async function TicketsDirectory() {
   const listings = await listPublicListings();
@@ -61,7 +56,7 @@ export default async function TicketsDirectory() {
                 fromKes: l.ticketClasses.length ? Math.min(...l.ticketClasses.map((c) => Number(c.priceKes))) : null,
                 nextDepartAt: l.schedules[0]?.departAt.toISOString() ?? null,
                 scheduleCount: l.schedules.length,
-                detailUrl: `${APP_URL}/tickets/${l.slug}`,
+                detailUrl: `/tickets/${l.slug}`,
               }))}
             />
           )}

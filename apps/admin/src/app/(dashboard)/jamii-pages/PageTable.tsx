@@ -1,13 +1,20 @@
 'use client';
 
-import { useState, useTransition } from 'react';
+import { useEffect, useState, useTransition } from 'react';
 import { Icon } from '@esoko/ui';
 import { useAnnounce } from '@esoko/a11y';
-import { actionModeratePage, actionVerifyPage, actionUnverifyPage } from './actions';
+import {
+  actionModeratePage, actionVerifyPage, actionUnverifyPage,
+  actionListTeam, actionInviteTeamMember, actionRemoveTeamMember,
+  actionSuspendDomain, actionReinstateDomain, actionRemoveDomain,
+} from './actions';
+
+interface DomainInfo { id: string; hostname: string; status: string }
 
 interface Row {
   id: string; slug: string; status: string; officialName: string; county: string;
   verified: boolean; teamCount: number; activeCampaigns: number; createdAt: string;
+  domain: DomainInfo | null;
 }
 
 const STATUS: Record<string, [string, string]> = {
@@ -16,9 +23,20 @@ const STATUS: Record<string, [string, string]> = {
   SUSPENDED: ['p-bad', 'Suspended'],
 };
 
+const DOMAIN_STATUS: Record<string, [string, string]> = {
+  PENDING_DNS: ['p-warn', 'Pending DNS'],
+  VERIFYING: ['p-warn', 'Verifying'],
+  ACTIVE: ['p-ok', 'Active'],
+  FAILED: ['p-bad', 'Failed'],
+  SUSPENDED: ['p-bad', 'Suspended'],
+};
+
 export function PageTable({
-  rows, canModerate, canVerify, q, status,
-}: { rows: Row[]; canModerate: boolean; canVerify: boolean; q: string; status: string }) {
+  rows, canModerate, canVerify, canManageTeam, canManageDomain, q, status,
+}: {
+  rows: Row[]; canModerate: boolean; canVerify: boolean; canManageTeam: boolean; canManageDomain: boolean;
+  q: string; status: string;
+}) {
   const [openId, setOpenId] = useState<string | null>(null);
 
   return (
@@ -50,7 +68,7 @@ export function PageTable({
             <thead>
               <tr>
                 <th>Organisation</th><th>County</th><th>Status</th><th>Verified</th>
-                <th>Team</th><th>Active campaigns</th><th>Started</th><th />
+                <th>Domain</th><th>Team</th><th>Active campaigns</th><th>Started</th><th />
               </tr>
             </thead>
             <tbody>
@@ -68,6 +86,13 @@ export function PageTable({
                       {r.verified
                         ? <span className="pill p-ok"><Icon name="shield-check" size={12} />Verified</span>
                         : <span className="sub">—</span>}
+                    </td>
+                    <td>
+                      {r.domain ? (
+                        <span className={`pill ${DOMAIN_STATUS[r.domain.status]?.[0] ?? 'p-mute'}`}>
+                          {r.domain.hostname}
+                        </span>
+                      ) : <span className="sub">—</span>}
                     </td>
                     <td>{r.teamCount}</td>
                     <td>{r.activeCampaigns}</td>
@@ -90,6 +115,8 @@ export function PageTable({
           row={rows.find((r) => r.id === openId)!}
           canModerate={canModerate}
           canVerify={canVerify}
+          canManageTeam={canManageTeam}
+          canManageDomain={canManageDomain}
           onClose={() => setOpenId(null)}
         />
       )}
@@ -97,14 +124,53 @@ export function PageTable({
   );
 }
 
+const TEAM_ROLE_LABEL: Record<string, string> = { ADMIN: 'Admin', EDITOR: 'Editor', CONTRIBUTOR: 'Contributor' };
+
+interface TeamMember { id: string; name: string; email: string; role: string; accepted: boolean }
+
 function PageModal({
-  row, canModerate, canVerify, onClose,
-}: { row: Row; canModerate: boolean; canVerify: boolean; onClose: () => void }) {
+  row, canModerate, canVerify, canManageTeam, canManageDomain, onClose,
+}: {
+  row: Row; canModerate: boolean; canVerify: boolean; canManageTeam: boolean; canManageDomain: boolean;
+  onClose: () => void;
+}) {
   const [reason, setReason] = useState('');
-  const [confirming, setConfirming] = useState<'SUSPENDED' | 'unverify' | null>(null);
+  const [confirming, setConfirming] = useState<'SUSPENDED' | 'unverify' | 'domain-suspend' | 'domain-remove' | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [pending, start] = useTransition();
   const announce = useAnnounce();
+
+  const [team, setTeam] = useState<TeamMember[] | null>(null);
+  const [inviteName, setInviteName] = useState('');
+  const [inviteEmail, setInviteEmail] = useState('');
+  const [inviteRole, setInviteRole] = useState<'ADMIN' | 'EDITOR' | 'CONTRIBUTOR'>('ADMIN');
+
+  useEffect(() => {
+    if (!canManageTeam) return;
+    let cancelled = false;
+    actionListTeam(row.id).then((m) => { if (!cancelled) setTeam(m); });
+    return () => { cancelled = true; };
+  }, [canManageTeam, row.id]);
+
+  function invite() {
+    setError(null);
+    start(async () => {
+      const r = await actionInviteTeamMember(row.id, { name: inviteName, email: inviteEmail, role: inviteRole });
+      if (r.ok) {
+        setInviteName(''); setInviteEmail('');
+        announce(`${inviteName} invited to manage this page`, 'polite');
+        setTeam(await actionListTeam(row.id));
+      } else { setError(r.error); announce(r.error, 'assertive'); }
+    });
+  }
+
+  function removeMember(memberId: string) {
+    start(async () => {
+      const r = await actionRemoveTeamMember(row.id, memberId);
+      if (r.ok) setTeam(await actionListTeam(row.id));
+      else { setError(r.error); announce(r.error, 'assertive'); }
+    });
+  }
 
   const run = (fn: () => Promise<{ ok: boolean; error?: string }>, msg: string) =>
     start(async () => {
@@ -136,14 +202,76 @@ function PageModal({
             </a>
           </p>
 
-          {(confirming === 'SUSPENDED' || confirming === 'unverify') && (
+          {canManageDomain && row.domain && (
+            <div style={{ marginBottom: 20, paddingBottom: 20, borderBottom: '1px solid var(--line)' }}>
+              <p className="sub" style={{ marginBottom: 8 }}>Custom domain</p>
+              <p style={{ margin: '0 0 8px', display: 'flex', alignItems: 'center', gap: 8 }}>
+                <strong>{row.domain.hostname}</strong>
+                <span className={`pill ${DOMAIN_STATUS[row.domain.status]?.[0] ?? 'p-mute'}`}>
+                  {DOMAIN_STATUS[row.domain.status]?.[1] ?? row.domain.status}
+                </span>
+              </p>
+            </div>
+          )}
+
+          {canManageTeam && (
+            <div style={{ marginBottom: 20, paddingBottom: 20, borderBottom: '1px solid var(--line)' }}>
+              <p className="sub" style={{ marginBottom: 8 }}>
+                Team ({team?.length ?? row.teamCount}) — day-to-day editing stays with them; use this
+                only to invite a chama&rsquo;s first admin while onboarding.
+              </p>
+
+              {team === null ? (
+                <p className="sub">Loading…</p>
+              ) : team.length === 0 ? (
+                <p className="sub">No one invited yet.</p>
+              ) : (
+                <ul style={{ listStyle: 'none', padding: 0, margin: '0 0 12px' }}>
+                  {team.map((m) => (
+                    <li key={m.id} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '6px 0' }}>
+                      <span style={{ flex: 1 }}>
+                        <strong>{m.name}</strong> <span className="sub">{m.email}</span>
+                      </span>
+                      <span className="pill p-info">{TEAM_ROLE_LABEL[m.role] ?? m.role}</span>
+                      {!m.accepted && <span className="pill p-warn">Pending</span>}
+                      <button className="btn btn-o btn-sm" disabled={pending} onClick={() => removeMember(m.id)}>
+                        <Icon name="close" size={12} />Remove
+                      </button>
+                    </li>
+                  ))}
+                </ul>
+              )}
+
+              <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                <input className="inp" style={{ flex: '1 1 140px' }} placeholder="Name" value={inviteName}
+                  onChange={(e) => setInviteName(e.target.value)} aria-label="Invite name" />
+                <input className="inp" style={{ flex: '1 1 180px' }} type="email" placeholder="Email" value={inviteEmail}
+                  onChange={(e) => setInviteEmail(e.target.value)} aria-label="Invite email" />
+                <select className="inp" value={inviteRole} onChange={(e) => setInviteRole(e.target.value as typeof inviteRole)}
+                  aria-label="Invite role">
+                  {Object.entries(TEAM_ROLE_LABEL).map(([k, l]) => <option key={k} value={k}>{l}</option>)}
+                </select>
+                <button className="btn btn-o btn-sm" disabled={pending || !inviteName.trim() || !inviteEmail.trim()}
+                  onClick={invite}>
+                  <Icon name="plus" size={14} />Invite
+                </button>
+              </div>
+            </div>
+          )}
+
+          {(confirming === 'SUSPENDED' || confirming === 'unverify' || confirming === 'domain-suspend' || confirming === 'domain-remove') && (
             <div style={{ marginBottom: 16 }}>
               <label className="sub" htmlFor="pm-reason" style={{ display: 'block', marginBottom: 6 }}>
                 Reason (recorded in the audit log)
               </label>
               <textarea id="pm-reason" className="inp" rows={2} style={{ width: '100%' }}
                 value={reason} onChange={(e) => setReason(e.target.value)}
-                placeholder={confirming === 'SUSPENDED' ? 'Why is this page being suspended?' : 'Why is verification being revoked?'} />
+                placeholder={
+                  confirming === 'SUSPENDED' ? 'Why is this page being suspended?'
+                  : confirming === 'unverify' ? 'Why is verification being revoked?'
+                  : confirming === 'domain-suspend' ? 'Why is this domain being suspended?'
+                  : 'Why is this domain being removed?'
+                } />
             </div>
           )}
 
@@ -194,6 +322,35 @@ function PageModal({
             <button className="btn btn-p" disabled={pending}
               onClick={() => run(() => actionModeratePage(row.id, 'PUBLISHED', 'Published by staff'), 'Page published')}>
               <Icon name="check" size={15} />Publish
+            </button>
+          )}
+
+          {canManageDomain && row.domain && row.domain.status !== 'SUSPENDED' && confirming !== 'domain-suspend' && (
+            <button className="btn btn-o" disabled={pending} onClick={() => setConfirming('domain-suspend')}>
+              <Icon name="ban" size={15} />Suspend domain
+            </button>
+          )}
+          {canManageDomain && confirming === 'domain-suspend' && (
+            <button className="btn btn-d" disabled={pending || !reason.trim()}
+              onClick={() => run(() => actionSuspendDomain(row.domain!.id, reason), 'Domain suspended')}>
+              Confirm suspend
+            </button>
+          )}
+          {canManageDomain && row.domain?.status === 'SUSPENDED' && (
+            <button className="btn btn-p" disabled={pending}
+              onClick={() => run(() => actionReinstateDomain(row.domain!.id), 'Domain reinstated — verification will re-check')}>
+              <Icon name="check-circle" size={15} />Reinstate domain
+            </button>
+          )}
+          {canManageDomain && row.domain && confirming !== 'domain-remove' && (
+            <button className="btn btn-o" disabled={pending} onClick={() => setConfirming('domain-remove')}>
+              <Icon name="close" size={15} />Remove domain
+            </button>
+          )}
+          {canManageDomain && confirming === 'domain-remove' && (
+            <button className="btn btn-d" disabled={pending || !reason.trim()}
+              onClick={() => run(() => actionRemoveDomain(row.domain!.id, reason), 'Domain removed')}>
+              Confirm remove
             </button>
           )}
         </div>

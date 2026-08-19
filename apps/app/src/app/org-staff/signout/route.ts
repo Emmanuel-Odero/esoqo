@@ -8,5 +8,5 @@ import { destroyTicketStaffSession } from '@/lib/session';
  */
 export async function GET() {
   await destroyTicketStaffSession();
-  redirect('/tickets');
+  redirect('/');
 }

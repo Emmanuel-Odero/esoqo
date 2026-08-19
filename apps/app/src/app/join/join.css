@@ -1,0 +1,273 @@
+/*
+ * Presentation layer around the /join wizard: an identity strip, a "why
+ * join" hero, and a closing cross-link for anyone who meant to register
+ * with CECF instead. Scoped under .join-scope so these tokens never leak
+ * into shared classes (.wrap, .qcard, .btn, ...) that other routes in
+ * this app — /signin, /me — also depend on. The join wizard itself
+ * (JoinFlow) keeps its existing esoko-token styling untouched.
+ *
+ * This used to be CECF-branded (join-cecf.css) — this flow was CECF's
+ * own front door. It now belongs to esoko alone (CECF runs its own
+ * registration on childeldercare.test), so every colour and font here
+ * is esoko's own from packages/ui/src/tokens.css, not a bespoke palette.
+ */
+.join-scope {
+  --jn-accent: #9A6105;      /* --amber, tokens.css */
+  --jn-accent-t: #FDF4E3;    /* --amber-t */
+  --jn-accent-deep: #7A4D04;
+  --jn-sand: #F4F7FA;        /* --paper */
+  --jn-line: #DCE5EC;        /* --line */
+  --jn-ink: #12283A;         /* --tx */
+  --jn-ink-2: #57718A;       /* --tx-2 */
+  --jn-font-display: var(--font-outfit), "Outfit", system-ui, sans-serif;
+  --jn-font-body: var(--font-plex-sans), "IBM Plex Sans", system-ui, sans-serif;
+}
+
+/* ── identity strip ── */
+.join-topnav {
+  display: flex; align-items: center; justify-content: center;
+  padding: 14px 22px; margin-bottom: 8px;
+  border-bottom: 1px solid var(--jn-line);
+  background: var(--jn-sand);
+}
+.join-topnav-center {
+  display: flex; align-items: center; justify-content: center;
+  gap: 12px 20px; flex-wrap: wrap;
+}
+.join-topnav-brand {
+  display: flex; align-items: center; justify-content: center; gap: 9px;
+  font-family: var(--jn-font-display); font-weight: 700; font-size: 1.05rem;
+  color: var(--jn-ink);
+}
+.join-mark {
+  flex: none; width: 26px; height: 26px; border-radius: 8px;
+  background: var(--green); color: #fff;
+  display: grid; place-items: center;
+}
+.join-nav-btn {
+  display: inline-flex; align-items: center; gap: 7px;
+  padding: 9px 16px; border-radius: 7px; font-size: 0.86rem; font-weight: 600;
+  font-family: var(--jn-font-body);
+  border: 1.5px solid transparent; min-height: 44px; cursor: pointer;
+  text-decoration: none;
+}
+.join-nav-btn.cecf { border-color: var(--jn-accent-deep); color: var(--jn-accent-deep); background: #fff; }
+.join-nav-btn.cecf:hover { background: var(--jn-accent-t); }
+.join-band .join-nav-btn.cecf { background: #E8B45A; color: #241F1B; border-color: transparent; }
+.join-band .join-nav-btn.cecf:hover { background: #F2C26E; }
+
+/* ── masthead ── */
+.join-masthead {
+  position: relative; overflow: hidden;
+  padding: 42px 22px 38px;
+  color: #fff;
+  background: linear-gradient(160deg, var(--navy) 0%, var(--navy-2) 55%, var(--navy-3) 100%);
+}
+.join-masthead::before {
+  content: ''; position: absolute; right: -90px; top: -110px;
+  width: 360px; height: 360px; border-radius: 50%;
+  background: radial-gradient(circle, rgba(31, 161, 99, .30), transparent 62%);
+}
+.join-masthead::after {
+  content: ''; position: absolute; right: 12%; bottom: -80px;
+  width: 240px; height: 240px; border-radius: 50%;
+  border: 1.5px solid rgba(244, 247, 250, .16);
+}
+.join-masthead-inner { max-width: 1040px; margin: 0 auto; position: relative; }
+.join-masthead-top { display: flex; gap: 18px; align-items: center; margin-bottom: 20px; }
+.join-kicker {
+  font-family: var(--font-mono); font-size: 0.72rem; letter-spacing: .14em;
+  text-transform: uppercase; color: #7FD9A8; margin: 0;
+}
+.join-emblem { position: relative; flex: none; width: 74px; height: 74px; }
+.join-emblem-ring {
+  width: 62px; height: 62px; border-radius: 50%;
+  background: var(--jn-sand); color: var(--green);
+  border: 3px solid #fff;
+  display: grid; place-items: center;
+  box-shadow: 0 6px 18px rgba(0, 0, 0, .22);
+}
+.join-emblem-mark { position: absolute; color: var(--green-2); right: -2px; bottom: 8px; }
+.join-masthead h1 {
+  font-family: var(--jn-font-display); font-weight: 800;
+  font-size: clamp(1.9rem, 5vw, 2.9rem); line-height: 1.05;
+  margin: 0 0 12px; color: #fff; max-width: 20ch;
+}
+.join-masthead .join-lede {
+  color: #C9D6E2; font-size: 1.02rem; max-width: 62ch; margin: 0;
+}
+.join-chips {
+  list-style: none; margin: 24px 0 0; padding: 0;
+  display: flex; flex-wrap: wrap; gap: 9px;
+}
+.join-chips li {
+  display: inline-flex; align-items: center; gap: 7px;
+  padding: 8px 13px; border-radius: 999px;
+  background: rgba(255, 255, 255, .10);
+  border: 1px solid rgba(255, 255, 255, .22);
+  font-size: 0.8rem; font-weight: 500; color: #F4F7F7;
+}
+.join-chips li .ic { color: #BFE3CE; }
+.join-chips li.accent { background: #855110; border-color: rgba(255, 255, 255, .22); color: #fff; }
+.join-chips li.accent .ic { color: #FFE9C0; }
+
+/* ── form + "why join" hero: side by side on wide screens, hero
+   drops below the form on narrow ones. Source order is form-then-hero
+   so the narrow-screen (no grid) case needs no reordering — it's
+   already the fallback stacking order. ── */
+.join-layout {
+  max-width: 1040px; margin: 0 auto; padding: 36px 22px 0;
+  display: grid; gap: 40px;
+}
+@media (min-width: 900px) {
+  .join-layout {
+    grid-template-columns: minmax(0, 660px) 1fr;
+    align-items: start;
+    padding-top: 48px;
+  }
+}
+.join-layout .wrap { margin: 0; padding: 0; max-width: none; }
+
+/* ── "why join" column ── */
+.join-hero {
+  max-width: 660px; margin: 0 auto; padding: 6px 0 8px;
+}
+.join-hero-eyebrow {
+  font-family: var(--font-mono); font-size: 0.72rem; letter-spacing: .12em;
+  text-transform: uppercase; color: var(--green-2); margin: 0 0 10px;
+}
+.join-hero h2 {
+  font-family: var(--jn-font-display); font-weight: 800;
+  font-size: clamp(1.4rem, 3vw, 1.9rem); margin-bottom: 10px; color: var(--jn-ink);
+}
+.join-hero p.lede { font-size: 1rem; color: var(--jn-ink-2); max-width: 54ch; }
+.join-points { list-style: none; margin: 22px 0 0; padding: 0; display: grid; gap: 12px; }
+.join-points li {
+  display: flex; gap: 13px; align-items: flex-start;
+  padding: 15px 17px; border: 1px solid var(--jn-line); border-radius: 14px;
+  background: #fff; box-shadow: 0 1px 2px rgba(18, 40, 58, .05);
+}
+.join-points li:first-child .icbox { background: var(--green-t); color: var(--green); }
+.join-points .icbox { background: var(--blue-t); color: var(--blue); }
+.join-points strong { display: block; font-size: 0.93rem; color: var(--jn-ink); }
+.join-points span.d { display: block; font-size: 0.85rem; color: var(--jn-ink-2); margin-top: 2px; }
+
+/* ── closing CECF cross-link ── */
+.join-band {
+  margin-top: 48px;
+  background: var(--jn-sand);
+  border-top: 1px solid var(--jn-line);
+  font-family: var(--jn-font-body);
+}
+.join-band-inner {
+  max-width: 760px; margin: 0 auto; padding: 40px 22px;
+  display: flex; gap: 18px; align-items: flex-start;
+}
+.join-band-icon {
+  flex: none; width: 44px; height: 44px; border-radius: 12px;
+  background: var(--jn-accent-t); color: var(--jn-accent-deep);
+  display: grid; place-items: center;
+}
+.join-band-copy h3 {
+  color: var(--jn-ink); font-size: 1.1rem;
+  font-weight: 800; margin: 0 0 8px;
+}
+.join-band-copy p { color: var(--jn-ink-2); margin: 0 0 14px; font-size: 0.92rem; max-width: 56ch; }
+
+@media (max-width: 560px) {
+  .join-topnav { padding: 12px 16px; }
+  .join-band-inner { padding: 32px 18px; flex-direction: column; }
+  .join-masthead { padding: 34px 18px 32px; }
+}
+
+/* ── /join wizard polish ── */
+
+/* Labeled milestones replace the anonymous progress bar. Scoped, and
+   .pcount (kept) still carries the step/ETA line. */
+.join-scope .psteps {
+  list-style: none; margin: 0 0 8px; padding: 0;
+  display: flex; gap: 2px;
+}
+.join-scope .pstep {
+  flex: 1; min-width: 0;
+  display: flex; flex-direction: column; align-items: center; gap: 6px;
+  position: relative;
+}
+.join-scope .pstep:not(:last-child)::after {
+  content: ''; position: absolute; top: 11px; left: calc(50% + 14px);
+  width: calc(100% - 28px); height: 2px; background: var(--line);
+}
+.join-scope .pstep.done:not(:last-child)::after { background: var(--green); }
+.join-scope .pstep-dot {
+  width: 24px; height: 24px; border-radius: 50%; flex: none; z-index: 1;
+  display: grid; place-items: center;
+  font-family: var(--font-mono); font-size: 0.68rem; font-weight: 600;
+  color: var(--tx-3); border: 1.5px solid var(--line); background: var(--paper);
+}
+.join-scope .pstep.done .pstep-dot { background: var(--green); border-color: var(--green); color: #fff; }
+.join-scope .pstep.current .pstep-dot {
+  border-color: var(--green); color: var(--green);
+  box-shadow: 0 0 0 3px rgba(31, 161, 99, .12);
+}
+.join-scope .pstep-label {
+  font-family: var(--font-mono); font-size: 0.62rem; letter-spacing: .08em;
+  text-transform: uppercase; color: var(--tx-3);
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 100%;
+}
+.join-scope .pstep.done .pstep-label { color: var(--green); }
+.join-scope .pstep.current .pstep-label { color: var(--green); font-weight: 600; }
+
+/* One-line reassurance strip above the wizard card on narrow screens —
+   desktop shows the "why join" column beside the form instead. Rendered
+   as chips to echo the masthead. */
+.join-scope .jtrust {
+  display: none; align-items: center; gap: 8px; flex-wrap: wrap;
+  margin: 0 0 16px;
+}
+.join-scope .jtrust > span {
+  display: inline-flex; align-items: center;
+  padding: 8px 13px; border-radius: 999px;
+  background: #fff; border: 1px solid var(--jn-line);
+  font-size: 0.8rem; font-weight: 500; color: var(--jn-ink-2);
+}
+.join-scope .jtrust .jt { border: 0; padding: 0; background: none; color: var(--jn-accent-deep); font-weight: 700; }
+@media (max-width: 899px) { .join-scope .jtrust { display: flex; } }
+
+/* Phone number field — the identity field gets a touch more presence. */
+.join-scope .inp.msisdn { font-size: 1.12rem; letter-spacing: .02em; }
+
+/* Step 1: once "who's joining" is chosen, the picker cards collapse to a
+   compact summary row so the name fields stay in the viewport and the
+   user never scrolls to reach Continue. */
+.join-scope .opt.chosen { flex-wrap: wrap; padding: 12px 14px; }
+.join-scope .opt.chosen .icbox { width: 28px; height: 28px; }
+.join-scope .opt.chosen .chosen-change {
+  font-family: var(--font-mono); font-size: 0.66rem; letter-spacing: .08em;
+  text-transform: uppercase; color: var(--green); font-weight: 600;
+}
+
+/* OTP reassurance line (step 4, the trust moment). */
+.join-scope .sure {
+  display: flex; align-items: center; gap: 6px;
+  color: var(--green); font-weight: 500;
+}
+
+/* Done card: a pop-in that respects reduced motion. */
+.join-scope .donecard { animation: esoko-done-pop .45s cubic-bezier(.2, .8, .3, 1.2); }
+.join-scope .donecard .icbox { animation: esoko-check-pop .5s .1s cubic-bezier(.2, .8, .3, 1.3) both; }
+@keyframes esoko-done-pop {
+  from { opacity: 0; transform: translateY(6px) scale(.985); }
+  to { opacity: 1; transform: none; }
+}
+@keyframes esoko-check-pop {
+  from { transform: scale(.5); opacity: 0; }
+  to { transform: scale(1); opacity: 1; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .join-scope .donecard, .join-scope .donecard .icbox { animation: none; }
+}
+
+/* "Next step" block on the done card — green-tinted so it reads as an
+   instruction, distinct from any warning tint elsewhere. */
+.join-scope .done-next { background: var(--green-t); border-color: #BFE3CE; }
+.join-scope .done-next strong { color: var(--green); }

@@ -1,14 +1,17 @@
-import { getJamiiPageForManagement } from '@esoko/db';
+import { getJamiiPageForManagement, getJamiiDomain } from '@esoko/db';
 import { requireMyPage } from '@/lib/session';
 import { SettingsForm } from './SettingsForm';
 import { FaqEditor } from './FaqEditor';
 import { PageAssets } from './PageAssets';
+import { DomainPanel } from './DomainPanel';
 import { PublishButton } from '../PublishButton';
 
 export default async function SettingsScreen() {
   const { ctx, page: myPage } = await requireMyPage();
   const page = await getJamiiPageForManagement(ctx, myPage.organisationId);
   if (!page) return null;
+
+  const domain = await getJamiiDomain(ctx, page.organisationId);
 
   const isVerified = page.organisation.party.attestations.length > 0;
 
@@ -40,11 +43,23 @@ export default async function SettingsScreen() {
 
       <PageAssets pageId={page.organisationId} initialLogoUrl={page.logoUrl} initialCoverUrl={page.coverUrl} />
 
+      <DomainPanel
+        pageId={page.organisationId}
+        initial={domain && !domain.removedAt ? {
+          hostname: domain.hostname,
+          status: domain.status,
+          verificationToken: domain.verificationToken,
+          failureReason: domain.failureReason,
+          removedAt: null,
+        } : null}
+      />
+
       <SettingsForm
         pageId={page.organisationId}
         initial={{
           tagline: page.tagline ?? '',
           missionShort: page.missionShort ?? '',
+          visionShort: page.visionShort ?? '',
           aboutUs: page.aboutUs ?? '',
           meetingSchedule: page.meetingSchedule ?? '',
           contactEmail: page.contactEmail ?? '',
@@ -54,6 +69,10 @@ export default async function SettingsScreen() {
           instagram: page.instagram ?? '',
           twitter: page.twitter ?? '',
           whatsapp: page.whatsapp ?? '',
+          brandAccent: page.brandAccent ?? '',
+          brandAccentTwo: page.brandAccentTwo ?? '',
+          brandAccentThree: page.brandAccentThree ?? '',
+          themeDefaultMode: page.themeDefaultMode,
         }}
       />
 

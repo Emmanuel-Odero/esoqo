@@ -19,6 +19,14 @@ done
 : "${PORT:=8080}"
 sed -i "s/__PORT__/${PORT}/" /etc/nginx/nginx.conf
 
+# ── Fix ownership on the mounted uploads disk ───────────────────
+# The Dockerfile's `chown -R www-data:www-data web/app` runs at build
+# time, before Render's persistent disk is mounted at web/app/uploads —
+# the mount then covers that chown with whatever ownership the volume
+# was created with (root:root), leaving www-data unable to write to it.
+# Fix it here, every boot, after the mount is in place.
+chown -R www-data:www-data web/app/uploads
+
 # ── Wait for MySQL (cecf-mariadb) ───────────────────────────────
 : "${DB_HOST:=cecf-mariadb}"
 : "${DB_PORT:=3306}"
@@ -49,6 +57,15 @@ if ! su -s /bin/bash www-data -c "wp core is-installed" 2>/dev/null; then
         --subdomains \
         --skip-email"
     su -s /bin/bash www-data -c "wp theme activate cecf-sage"
+
+    # Required for every page to render anything at all — App\View\
+    # Composers\PageSections guards on function_exists('rwmb_meta') and
+    # silently returns an empty section list otherwise, so a page with
+    # no active Meta Box renders a real, seeded page with a genuinely
+    # empty <main>, not an error. --network because this is a subdomain
+    # multisite install (MULTISITE_SUBDOMAIN) — a plain `wp plugin
+    # activate` only activates for the current site, not every subsite.
+    su -s /bin/bash www-data -c "wp plugin activate meta-box --network"
 
     # `wp core multisite-install --url=` sets both the `home` and
     # `siteurl` options to that one URL — fine for a non-Bedrock install

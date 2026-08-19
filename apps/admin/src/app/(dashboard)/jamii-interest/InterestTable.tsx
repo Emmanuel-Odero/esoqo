@@ -3,12 +3,12 @@
 import { useState, useTransition } from 'react';
 import { Icon } from '@esoko/ui';
 import { useAnnounce } from '@esoko/a11y';
-import { actionReviewInterest } from './actions';
+import { actionReviewInterest, actionApproveInterest } from './actions';
 
 interface Row {
   id: string; status: string; fullName: string; msisdn: string;
   email: string | null; county: string | null; organisationName: string | null;
-  message: string | null; reviewNote: string | null; reviewedAt: string | null;
+  matched: boolean; message: string | null; reviewNote: string | null; reviewedAt: string | null;
   createdAt: string;
 }
 
@@ -104,12 +104,23 @@ function InterestModal({
   const [pending, start] = useTransition();
   const announce = useAnnounce();
 
-  function setStatus(status: 'CONTACTED' | 'CONVERTED' | 'DISMISSED', msg: string) {
+  function setStatus(status: 'CONTACTED' | 'DISMISSED', msg: string) {
     setError(null);
     start(async () => {
       const r = await actionReviewInterest(row.id, status, note);
       if (r.ok) { announce(msg, 'assertive'); onClose(); }
       else { setError(r.error); announce(r.error, 'assertive'); }
+    });
+  }
+
+  function approve() {
+    setError(null);
+    start(async () => {
+      const r = await actionApproveInterest(row.id);
+      if (r.ok) {
+        announce(row.matched ? 'Access granted' : 'Account created and access granted', 'assertive');
+        onClose();
+      } else { setError(r.error); announce(r.error, 'assertive'); }
     });
   }
 
@@ -131,6 +142,13 @@ function InterestModal({
         </div>
 
         <div className="modal-bd">
+          <p className={`pill ${row.matched ? 'p-info' : 'p-warn'}`} style={{ padding: '8px 12px', marginBottom: 14 }}>
+            <Icon name={row.matched ? 'check-circle' : 'user'} size={13} />
+            {row.matched
+              ? 'Already a CECF/Esoko member — approving just grants access'
+              : 'New applicant — approving creates their account'}
+          </p>
+
           <div className="grid2" style={{ gap: 14, marginBottom: 16 }}>
             <div>
               <span className="sub" style={{ display: 'block', marginBottom: 4 }}>Phone</span>
@@ -185,9 +203,9 @@ function InterestModal({
               onClick={() => setStatus('CONTACTED', 'Marked contacted')}>
               <Icon name="phone-call" size={15} />Mark contacted
             </button>
-            <button className="btn btn-p" disabled={pending}
-              onClick={() => setStatus('CONVERTED', 'Marked converted')}>
-              <Icon name="check" size={15} />Mark converted
+            <button className="btn btn-p" disabled={pending} onClick={approve}>
+              <Icon name="check" size={15} />
+              {pending ? 'Approving…' : row.matched ? 'Approve access' : 'Approve & create account'}
             </button>
           </div>
         )}

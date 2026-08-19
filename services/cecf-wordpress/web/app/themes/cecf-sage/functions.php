@@ -3,6 +3,7 @@
 use App\Providers\CecfConsoleServiceProvider;
 use App\Providers\CecfContentServiceProvider;
 use App\Providers\CecfEnquiryServiceProvider;
+use App\Providers\CecfRegistrationServiceProvider;
 use App\Providers\ThemeServiceProvider;
 use Roots\Acorn\Application;
 
@@ -40,6 +41,7 @@ Application::configure()
         ThemeServiceProvider::class,
         CecfContentServiceProvider::class,
         CecfEnquiryServiceProvider::class,
+        CecfRegistrationServiceProvider::class,
         CecfConsoleServiceProvider::class,
     ])
     ->boot();

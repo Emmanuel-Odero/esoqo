@@ -174,6 +174,8 @@ export const CAPABILITY_CATALOGUE = [
     ['jamii-interest.write', 'Follow up on and resolve interest submissions'],
     ['jamii-page.read', 'View every Our Jamii community page'],
     ['jamii-page.moderate', 'Publish, suspend or reinstate a community page'],
+    ['jamii-domain.moderate', "Suspend, reinstate or remove any group's custom domain"],
+    ['jamii-media.manage', 'Curate the platform-wide media-placeholder library (hero/gallery/post patterns)'],
     ['jamii-campaign.read', 'View every crowdfunding campaign'],
     ['jamii-campaign.moderate', 'Cancel or reinstate a campaign'],
     ['jamii-donation.read', 'View donations made platform-wide'],
@@ -261,6 +263,17 @@ export const ROLE_PRESETS = {
             // as an officer/signer of the specific group in question is a
             // membership/role lookup done inside dal/treasury.ts, the same
             // way signPaymentApproval checks separation of duties.
+            // group.create:own is the one exception — there is no group
+            // yet to check membership of, so it just confirms a signed-in
+            // person is founding a group as themselves (see createOwnGroup
+            // in dal/groups.ts, same self-referential shape as
+            // ticketorg.write:own founding a TicketOrg).
+            'group.create:own',
+            // Self-serve member management — see requireGroupOfficer in
+            // dal/groups.ts, which additionally requires the caller to
+            // actually be one of orgId's own officers before this
+            // ':own' capability does anything.
+            'membership.write:own',
             'treasury.read:own', 'treasury.contribute:own', 'treasury.confirm:own',
             'treasury.meeting.write:own', 'attendance.write:own',
             'treasury.withdraw.request:own', 'treasury.withdraw.sign:own',
@@ -296,12 +309,13 @@ export const ROLE_PRESETS = {
               'payment.read', 'payment.record', 'audit.read', 'report.read',
               'duplicate.review', 'consent.read', 'staff.read',
               'store.read', 'store.write', 'store.moderate', 'order.read', 'order.reroute',
-              'product.moderate', 'pricing.read', 'pricing.write',
+              'product.moderate', 'pricing.read', 'pricing.write', 'cashier.write',
               'jamii-interest.read', 'jamii-interest.write',
-              'jamii-page.read', 'jamii-page.moderate',
+              'jamii-page.read', 'jamii-page.moderate', 'jamii-domain.moderate', 'jamii-media.manage',
               'jamii-campaign.read', 'jamii-campaign.moderate', 'jamii-donation.read',
               'treasury.read', 'treasury.confirm', 'portfolio.read',
-              'ticketorg.read', 'ticketorg.moderate', 'booking.read', 'booking.refund'],
+              'ticketorg.read', 'ticketorg.moderate', 'ticketorgstaff.write',
+              'booking.read', 'booking.refund'],
 
   SUPER_ADMIN: ['*'],
 

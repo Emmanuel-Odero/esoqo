@@ -1,14 +1,22 @@
 'use client';
 
 import { useState, type RefObject } from 'react';
-import { Icon } from '@esoko/ui';
+import { Icon, SelectWithOther } from '@esoko/ui';
 import type { Form } from '../form';
+
+// Plain words as both value and label — that's what Form['orgRole']
+// stores directly (no separate enum code), and the sentinel here is
+// 'Other', not the 'OTHER' convention used elsewhere in the product
+// (see WalkInFlow.tsx's admin-side equivalent of this same field).
+const ORG_ROLE_OPTIONS = [
+  ['Chairperson', 'Chairperson'], ['Treasurer', 'Treasurer'], ['Secretary', 'Secretary'],
+  ['Member', 'Member'], ['Other', 'Other'],
+] as const;
 
 const WHO_OPTIONS = [
   { v: 'me', icon: 'user', t: 'Myself', d: 'A trader, farmer, rider, fundi or anyone working on their own' },
   { v: 'group', icon: 'users', t: 'A group', d: 'Chama, self-help group, CBO, faith-based group, cooperative or SACCO' },
   { v: 'biz', icon: 'shop', t: 'A business', d: 'Registered or not — either is fine' },
-  { v: 'inst', icon: 'gov', t: 'A bank, county, buyer or agency', d: 'Institutions are set up by agreement, not through this form' },
 ] as const;
 
 /**
@@ -36,7 +44,7 @@ export function WhoAndName({
 }) {
   const [browsing, setBrowsing] = useState(f.joiningAs === '');
   const chosen = WHO_OPTIONS.find((o) => o.v === f.joiningAs);
-  const qs = !f.joiningAs || f.joiningAs === 'inst'
+  const qs = !f.joiningAs
     ? 'Who is joining? This decides which forms come next.'
     : f.joiningAs === 'me'
       ? 'A personal membership — your own record, on your own terms.'
@@ -46,7 +54,6 @@ export function WhoAndName({
 
   function pick(v: (typeof WHO_OPTIONS)[number]['v']) {
     onPickJoiningAs(v);
-    if (v === 'inst') return;
     // Collapse the picker and move focus to the first name field so the
     // revealed fields are both visible and ready.
     setBrowsing(false);
@@ -85,7 +92,7 @@ export function WhoAndName({
         )}
       </div>
 
-      {f.joiningAs && f.joiningAs !== 'inst' && (
+      {f.joiningAs && (
         <div className="sub2">
           {f.joiningAs === 'group' && (
             <>
@@ -93,23 +100,17 @@ export function WhoAndName({
                 Next you will search for your group — we check first so nobody registers the
                 same group twice. If it is not listed yet, you can register it there.
               </p>
-              <div className="fld">
-                <label className="lab" htmlFor="orgRole">Your role in the group</label>
-                <select className="inp" id="orgRole" value={orgRoleOther ? 'Other' : f.orgRole}
-                  onChange={(e) => {
-                    if (e.target.value === 'Other') { setOrgRoleOther(true); set('orgRole', ''); }
-                    else { setOrgRoleOther(false); set('orgRole', e.target.value); }
-                  }}>
-                  <option>Chairperson</option><option>Treasurer</option>
-                  <option>Secretary</option><option>Member</option>
-                  <option>Other</option>
-                </select>
-                {orgRoleOther && (
-                  <input className="inp" style={{ marginTop: 8 }} value={f.orgRole} maxLength={40}
-                    onChange={(e) => set('orgRole', e.target.value)}
-                    placeholder="What the group calls this role" />
-                )}
-              </div>
+              <SelectWithOther
+                id="orgRole" label="Your role in the group" otherValue="Other"
+                options={ORG_ROLE_OPTIONS}
+                value={orgRoleOther ? 'Other' : f.orgRole}
+                onChange={(v) => {
+                  if (v === 'Other') { setOrgRoleOther(true); set('orgRole', ''); }
+                  else { setOrgRoleOther(false); set('orgRole', v); }
+                }}
+                customValue={f.orgRole} onCustomChange={(v) => set('orgRole', v)}
+                customLabel="Your role in the group" customPlaceholder="What the group calls this role"
+              />
               <div className="sub2" />
             </>
           )}

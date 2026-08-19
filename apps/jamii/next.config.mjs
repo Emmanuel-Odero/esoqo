@@ -6,6 +6,15 @@ const nextConfig = {
   typedRoutes: true,
 
   /**
+   * Dev-server-only (Next ignores this in production builds) — lets
+   * local custom-domain testing work against *.localtest.me without
+   * the dev overlay's cross-origin guard blocking its own diagnostic
+   * requests. See docs/proposals/our-jamii-custom-domains.md's
+   * "Testing locally" section.
+   */
+  allowedDevOrigins: ['*.localtest.me'],
+
+  /**
    * Public org galleries/covers hot-link Wikimedia Commons images in
    * seed/demo data (see the prototype this app is built from) — allowed
    * explicitly rather than opened up wide. Real uploads are served via

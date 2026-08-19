@@ -67,9 +67,10 @@ function fail(e: unknown): ActionResult<never> {
     return { ok: false, error: issue?.message ?? 'Check what you entered and try again.', field: issue?.path[0] as string | undefined };
   }
   if (e instanceof Error) {
-    if ((e as { code?: string }).code === 'MSISDN_TAKEN') {
-      return { ok: false, error: 'That number is already registered. Sign in instead.', field: 'msisdn' };
-    }
+    // MSISDN_TAKEN used to block completion here — completeRegistration
+    // now reuses the existing Person instead of erroring, since sharing a
+    // phone (a family line, a group's contact number) is normal. See the
+    // comment on that reuse in dal/registration.ts.
     return { ok: false, error: e.message };
   }
   // The real error still needs to reach someone — it just should never
@@ -110,7 +111,7 @@ export async function actionStart(raw: unknown): Promise<ActionResult<{ id: stri
     const ctx = await requestCtx();
     const h = await headers();
     const reg = await startRegistration(ctx, {
-      joiningAs: v.joiningAs === 'inst' ? 'me' : v.joiningAs,
+      joiningAs: v.joiningAs,
       officialName: v.officialName,
       knownAs: v.knownAs || undefined,
       orgName: v.orgName || undefined,
@@ -285,7 +286,7 @@ export async function actionMarkStep(registrationId: string, step: number): Prom
 
 export async function actionRequestOtp(
   raw: unknown,
-): Promise<ActionResult<{ devCode?: string; cooldownSeconds: number }>> {
+): Promise<ActionResult<{ cooldownSeconds: number }>> {
   try {
     const v = requestOtpSchema.parse(raw);
     if (!(await ownsRegistration(v.registrationId))) return NOT_OWNER;
@@ -297,7 +298,7 @@ export async function actionRequestOtp(
     await markOtpSent(ctx, v.registrationId);
     return {
       ok: true,
-      data: { devCode: res.devCode, cooldownSeconds: res.cooldownSeconds },
+      data: { cooldownSeconds: res.cooldownSeconds },
     };
   } catch (e) { return fail(e); }
 }

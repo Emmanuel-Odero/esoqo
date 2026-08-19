@@ -1,11 +1,12 @@
 import Link from 'next/link';
 import { Icon } from '@esoko/ui';
 import { isVerified, orgInitials } from '@/lib/data';
+import { orgHref, type OrgLinkMode } from '@/lib/org-links';
 import type { getJamiiPageBySlug } from '@esoko/db';
 
 type OrgPage = NonNullable<Awaited<ReturnType<typeof getJamiiPageBySlug>>>;
 
-export function OrgHeader({ page }: { page: OrgPage }) {
+export function OrgHeader({ page, mode }: { page: OrgPage; mode: OrgLinkMode }) {
   const org = page.organisation;
   const activeCampaign = page.campaigns.find((c) => c.status === 'ACTIVE');
 
@@ -33,7 +34,7 @@ export function OrgHeader({ page }: { page: OrgPage }) {
           </div>
           {activeCampaign && (
             <div className="oh-actions">
-              <Link href={`/o/${page.slug}/c/${activeCampaign.slug}`} className="btn btn-stamp">
+              <Link href={orgHref(mode, `c/${activeCampaign.slug}`)} className="btn btn-stamp">
                 View active campaign
               </Link>
             </div>

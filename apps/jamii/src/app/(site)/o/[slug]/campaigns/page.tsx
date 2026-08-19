@@ -1,12 +1,14 @@
 import Link from 'next/link';
 import { getCampaignStats } from '@esoko/db';
 import { OrgSectionShell, loadOrgOr404 } from '@/components/OrgSectionShell';
+import { getOrgLinkMode, orgHref } from '@/lib/org-links';
 
 export const dynamic = 'force-dynamic';
 
 export default async function CampaignsPage({ params }: { params: Promise<{ slug: string }> }) {
   const { slug } = await params;
   const page = await loadOrgOr404(slug);
+  const mode = await getOrgLinkMode(slug);
   const withStats = await Promise.all(
     page.campaigns.map(async (c) => ({ campaign: c, stats: await getCampaignStats(c.id) })),
   );
@@ -14,7 +16,7 @@ export default async function CampaignsPage({ params }: { params: Promise<{ slug
   const past = withStats.filter((c) => c.campaign.status !== 'ACTIVE');
 
   return (
-    <OrgSectionShell slug={slug}>
+    <OrgSectionShell slug={slug} title="Campaigns">
       <section className="osec">
         <h2>Campaigns</h2>
         {active.length === 0 && past.length === 0 && <p>No campaigns yet.</p>}
@@ -33,7 +35,7 @@ export default async function CampaignsPage({ params }: { params: Promise<{ slug
                   <span><b style={{ color: 'var(--ledger)' }}>KES {stats.raisedKes.toLocaleString('en-KE')}</b> of KES {goal.toLocaleString('en-KE')}</span>
                   <span>{stats.supporters} supporters</span>
                 </div>
-                <Link href={`/o/${slug}/c/${campaign.slug}`} className="btn btn-ink btn-sm" style={{ marginTop: 10, display: 'inline-flex' }}>
+                <Link href={orgHref(mode, `c/${campaign.slug}`)} className="btn btn-ink btn-sm" style={{ marginTop: 10, display: 'inline-flex' }}>
                   Open campaign →
                 </Link>
               </div>

@@ -54,8 +54,12 @@ export async function actionInitiateStkPush(raw: unknown): Promise<StkResult> {
     const push = await initiateStkPush({
       msisdn: v.msisdn,
       amountKes: v.amountKes,
-      accountReference: `EK${v.registrationId.slice(0, 8)}`,
-      description: 'Esoko registration fee',
+      // Daraja truncates AccountReference to 12 chars and TransactionDesc
+      // to 13 (see initiateDarajaStkPush) — both are sized to fit exactly,
+      // so "ESOKO" is guaranteed to show on the phone prompt rather than
+      // getting cut off along with whatever followed it.
+      accountReference: `ESOKO${v.registrationId.slice(0, 7)}`,
+      description: 'Esoko Reg Fee',
     });
 
     await attachRegistrationCheckoutRequestId(ctx, v.registrationId, push.checkoutRequestId, v.amountKes, v.msisdn);

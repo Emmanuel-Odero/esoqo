@@ -8,7 +8,7 @@ export default async function FaqPage({ params }: { params: Promise<{ slug: stri
   const faq = Array.isArray(page.faq) ? (page.faq as { q: string; a: string }[]) : [];
 
   return (
-    <OrgSectionShell slug={slug}>
+    <OrgSectionShell slug={slug} title="FAQ">
       <section className="osec">
         <h2>Frequently asked</h2>
         {faq.length === 0 ? (

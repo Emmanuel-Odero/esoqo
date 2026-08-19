@@ -225,6 +225,7 @@ export async function listMyJamiiPages(ctx: Ctx) {
 export interface UpdateJamiiPageInput {
   tagline?: string;
   missionShort?: string;
+  visionShort?: string;
   aboutUs?: string;
   meetingSchedule?: string;
   contactEmail?: string;
@@ -239,6 +240,10 @@ export interface UpdateJamiiPageInput {
   logoStorageKey?: string;
   coverUrl?: string;
   coverStorageKey?: string;
+  brandAccent?: string;
+  brandAccentTwo?: string;
+  brandAccentThree?: string;
+  themeDefaultMode?: 'DARK' | 'LIGHT';
 }
 
 export async function updateJamiiPage(ctx: Ctx, pageId: string, patch: UpdateJamiiPageInput) {
