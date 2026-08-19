@@ -68,6 +68,52 @@ export async function listCampaigns(pageId: string, status?: 'DRAFT' | 'ACTIVE' 
   });
 }
 
+/** Single-campaign lookup for the dashboard's edit screen — scoped to
+ *  `pageId` so a campaign id from another org's page can't be loaded. */
+export async function getCampaign(ctx: Ctx, pageId: string, campaignId: string) {
+  await requirePageAccess(ctx, pageId, 'CONTRIBUTOR');
+  return prisma.campaign.findFirst({ where: { id: campaignId, pageId } });
+}
+
+export interface UpdateCampaignInput {
+  title?: string;
+  summary?: string;
+  body?: string;
+  goalKes?: number;
+  coverUrl?: string;
+  coverStorageKey?: string;
+  endsAt?: Date | null;
+  status?: CampaignStatus;
+}
+
+/** Mirrors updateJamiiPage's shape (requirePageAccess + recordAudit) — the
+ *  title/slug relationship set up in createCampaign is left alone here
+ *  (no slug regeneration on rename), so an already-shared campaign link
+ *  never breaks under a later edit. */
+export async function updateCampaign(ctx: Ctx, pageId: string, campaignId: string, patch: UpdateCampaignInput) {
+  await requirePageAccess(ctx, pageId, 'EDITOR');
+  const existing = await prisma.campaign.findFirst({ where: { id: campaignId, pageId } });
+  if (!existing) throw new CampaignError('Campaign not found', 'NOT_FOUND');
+  if (patch.title !== undefined && !patch.title.trim()) throw new Error('Give the campaign a title');
+  if (patch.goalKes !== undefined && !(patch.goalKes > 0)) throw new Error('Set a goal above zero');
+
+  const campaign = await prisma.campaign.update({
+    where: { id: campaignId },
+    data: {
+      ...(patch.title !== undefined ? { title: patch.title.trim() } : {}),
+      ...(patch.summary !== undefined ? { summary: patch.summary.trim() } : {}),
+      ...(patch.body !== undefined ? { body: patch.body.trim() || null } : {}),
+      ...(patch.goalKes !== undefined ? { goalKes: patch.goalKes } : {}),
+      ...(patch.coverUrl !== undefined ? { coverUrl: patch.coverUrl || null } : {}),
+      ...(patch.coverStorageKey !== undefined ? { coverStorageKey: patch.coverStorageKey || null } : {}),
+      ...(patch.endsAt !== undefined ? { endsAt: patch.endsAt } : {}),
+      ...(patch.status !== undefined ? { status: patch.status } : {}),
+    },
+  });
+  await recordAudit(ctx, { action: 'campaign.updated', targetType: 'campaign', targetId: campaignId });
+  return campaign;
+}
+
 /** Public campaign lookup, scoped to its page's slug for the /o/[slug]/c/[slug] route. */
 export async function getCampaignBySlug(pageSlug: string, campaignSlug: string) {
   const page = await prisma.jamiiPage.findFirst({ where: { slug: pageSlug, status: 'PUBLISHED' } });

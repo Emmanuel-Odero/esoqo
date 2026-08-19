@@ -1,5 +1,5 @@
 import { requireMyPage } from '@/lib/session';
-import { CampaignForm } from './CampaignForm';
+import { CampaignForm } from '../CampaignForm';
 
 export default async function NewCampaignScreen() {
   const { page } = await requireMyPage();

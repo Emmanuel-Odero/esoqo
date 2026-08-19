@@ -112,6 +112,17 @@ export const createCampaignSchema = z.object({
 });
 export type CreateCampaignInput = z.infer<typeof createCampaignSchema>;
 
+export const updateCampaignSchema = z.object({
+  title: z.string().trim().min(2, 'Give the campaign a title').max(140),
+  summary: z.string().trim().min(2, 'Summarise what this raises for').max(280),
+  body: z.string().trim().max(6000).optional().or(z.literal('')),
+  goalKes: z.number().positive('Set a goal above zero').max(100_000_000),
+  coverUrl: z.string().trim().max(2000).optional().or(z.literal('')),
+  endsAt: z.string().optional().or(z.literal('')),
+  status: z.enum(['DRAFT', 'ACTIVE', 'COMPLETED', 'CANCELLED']),
+});
+export type UpdateCampaignInput = z.infer<typeof updateCampaignSchema>;
+
 export const campaignUpdateSchema = z.object({
   title: z.string().trim().min(2, 'Give the update a title').max(140),
   body: z.string().trim().min(2, 'Write the update').max(4000),

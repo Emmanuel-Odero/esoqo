@@ -3,15 +3,15 @@
 import { revalidatePath } from 'next/cache';
 import {
   publishJamiiPage, updateJamiiPage, createJamiiPost, publishJamiiPost,
-  createCampaign, inviteTeamMember, removeTeamMember,
+  createCampaign, updateCampaign, inviteTeamMember, removeTeamMember,
   requestJamiiDomain, removeJamiiDomain,
   markJamiiContactMessageRead, archiveJamiiContactMessage,
   createJamiiProgram, updateJamiiProgram, deleteJamiiProgram,
   setMemberRole, AuthorisationError,
 } from '@esoko/db';
 import {
-  jamiiPageProfileSchema, jamiiFaqSchema, jamiiPostSchema, createCampaignSchema, inviteTeamMemberSchema,
-  requestJamiiDomainSchema, jamiiProgramSchema, setMemberRoleSchema,
+  jamiiPageProfileSchema, jamiiFaqSchema, jamiiPostSchema, createCampaignSchema, updateCampaignSchema,
+  inviteTeamMemberSchema, requestJamiiDomainSchema, jamiiProgramSchema, setMemberRoleSchema,
 } from '@esoko/domain';
 import { requireSubject } from '@/lib/session';
 
@@ -142,6 +142,22 @@ export async function actionSetMemberRole(raw: unknown): Promise<ActionResult> {
       return { ok: false, error: 'Only this group’s Chairperson, Treasurer or Secretary can change roles.' };
     }
     return { ok: false, error: e instanceof Error ? e.message : 'Could not save that change' };
+  }
+}
+
+export async function actionUpdateCampaign(pageId: string, campaignId: string, raw: unknown): Promise<ActionResult> {
+  const ctx = await requireSubject();
+  const parsed = updateCampaignSchema.safeParse(raw);
+  if (!parsed.success) return { ok: false, error: parsed.error.issues[0]?.message ?? 'Check your details' };
+  try {
+    await updateCampaign(ctx, pageId, campaignId, {
+      ...parsed.data,
+      endsAt: parsed.data.endsAt ? new Date(parsed.data.endsAt) : null,
+    });
+    revalidatePath('/dashboard/campaigns');
+    return { ok: true, data: undefined };
+  } catch (e) {
+    return { ok: false, error: e instanceof Error ? e.message : 'Could not save your changes' };
   }
 }
 
