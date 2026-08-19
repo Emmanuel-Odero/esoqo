@@ -8,6 +8,7 @@ const ITEMS = [
   ['/dashboard/posts', 'Posts'],
   ['/dashboard/programs', 'Programmes'],
   ['/dashboard/campaigns', 'Campaigns'],
+  ['/dashboard/leadership', 'Leadership'],
   ['/dashboard/gallery', 'Gallery'],
   ['/dashboard/messages', 'Messages'],
   ['/dashboard/donors', 'Donors'],

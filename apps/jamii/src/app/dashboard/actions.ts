@@ -7,10 +7,11 @@ import {
   requestJamiiDomain, removeJamiiDomain,
   markJamiiContactMessageRead, archiveJamiiContactMessage,
   createJamiiProgram, updateJamiiProgram, deleteJamiiProgram,
+  setMemberRole, AuthorisationError,
 } from '@esoko/db';
 import {
   jamiiPageProfileSchema, jamiiFaqSchema, jamiiPostSchema, createCampaignSchema, inviteTeamMemberSchema,
-  requestJamiiDomainSchema, jamiiProgramSchema,
+  requestJamiiDomainSchema, jamiiProgramSchema, setMemberRoleSchema,
 } from '@esoko/domain';
 import { requireSubject } from '@/lib/session';
 
@@ -117,6 +118,30 @@ export async function actionDeleteProgram(pageId: string, programId: string): Pr
     return { ok: true, data: undefined };
   } catch (e) {
     return { ok: false, error: e instanceof Error ? e.message : 'Could not delete that programme' };
+  }
+}
+
+/**
+ * See LeadershipScreen's header comment — this calls the same
+ * setMemberRole every other group-management surface uses, gated on
+ * requireGroupOfficer (Chairperson/Treasurer/Secretary), not the
+ * JamiiTeamMember page-access check every other action here runs on.
+ * A page ADMIN who isn't also a recognised officer gets a clear message
+ * instead of the raw "Denied: membership.write".
+ */
+export async function actionSetMemberRole(raw: unknown): Promise<ActionResult> {
+  const ctx = await requireSubject();
+  const parsed = setMemberRoleSchema.safeParse(raw);
+  if (!parsed.success) return { ok: false, error: parsed.error.issues[0]?.message ?? 'Check what you entered' };
+  try {
+    await setMemberRole(ctx, parsed.data.membershipId, parsed.data.role as never, parsed.data.customRole);
+    revalidatePath('/dashboard/leadership');
+    return { ok: true, data: undefined };
+  } catch (e) {
+    if (e instanceof AuthorisationError) {
+      return { ok: false, error: 'Only this group’s Chairperson, Treasurer or Secretary can change roles.' };
+    }
+    return { ok: false, error: e instanceof Error ? e.message : 'Could not save that change' };
   }
 }
 
