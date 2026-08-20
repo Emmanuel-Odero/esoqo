@@ -44,16 +44,28 @@ export function absoluteAssetUrl(url: string, origin: string): string {
 export async function buildOrgMetadata(
   page: OrgMetaPage,
   mode: OrgLinkMode,
-  opts: { path?: string; titleSuffix?: string } = {},
+  opts: {
+    path?: string;
+    titleSuffix?: string;
+    /** A JamiiSitePage's own seoTitle/seoDescription/ogImageUrl — take
+     *  priority over the org-level fields below when set, same fallback
+     *  discipline one level deeper (see JamiiSitePage's doc comment in
+     *  schema.prisma). Passed as `null | undefined` straight from the
+     *  Prisma row is fine; both are treated as "not set". */
+    seoTitle?: string | null;
+    seoDescription?: string | null;
+    ogImageUrl?: string | null;
+  } = {},
 ): Promise<Metadata> {
-  const title = page.seoTitle?.trim() || (opts.titleSuffix
+  const title = opts.seoTitle?.trim() || page.seoTitle?.trim() || (opts.titleSuffix
     ? `${page.organisation.officialName} — ${opts.titleSuffix}`
     : page.organisation.officialName);
-  const description = page.seoDescription?.trim() || page.missionShort?.trim() || page.tagline?.trim()
+  const description = opts.seoDescription?.trim() || page.seoDescription?.trim()
+    || page.missionShort?.trim() || page.tagline?.trim()
     || `${page.organisation.officialName} — a community organisation on Our Jamii.`;
 
   const origin = await currentOrigin(mode);
-  const rawImage = page.coverUrl || page.logoUrl || undefined;
+  const rawImage = opts.ogImageUrl || page.coverUrl || page.logoUrl || undefined;
   const image = rawImage ? absoluteAssetUrl(rawImage, origin) : undefined;
   const path = opts.path ? `/${opts.path.replace(/^\/+/, '')}` : '';
   const canonical = mode.base === '' ? `${origin}${path}` : `${origin}/o/${page.slug}${path}`;

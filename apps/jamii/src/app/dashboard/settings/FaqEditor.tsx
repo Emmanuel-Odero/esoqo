@@ -29,7 +29,7 @@ export function FaqEditor({ pageId, initial }: { pageId: string; initial: { q: s
   }
 
   return (
-    <div className="card" style={{ padding: 22, maxWidth: 640, marginTop: 20 }}>
+    <div id="faq-section" className="card" style={{ padding: 22, maxWidth: 640, marginTop: 20 }}>
       <h3 style={{ fontSize: '1rem', color: 'var(--ink)', marginBottom: 14 }}>Frequently asked questions</h3>
       {items.map((row, i) => (
         <div key={i} style={{ marginBottom: 14, paddingBottom: 14, borderBottom: '1px dashed var(--paper-line)' }}>

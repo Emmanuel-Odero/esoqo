@@ -1,7 +1,6 @@
 import { getJamiiPageForManagement, getJamiiDomain } from '@esoko/db';
 import { requireMyPage } from '@/lib/session';
 import { SettingsForm } from './SettingsForm';
-import { FaqEditor } from './FaqEditor';
 import { PageAssets } from './PageAssets';
 import { DomainPanel } from './DomainPanel';
 import { PublishButton } from '../PublishButton';
@@ -18,7 +17,7 @@ export default async function SettingsScreen() {
   return (
     <>
       <h1>Settings</h1>
-      <p className="sub">Your page profile, FAQ, and verification status.</p>
+      <p className="sub">Appearance, SEO defaults, your domain, and verification status.</p>
 
       <div className="card" style={{ display: 'flex', gap: 16, alignItems: 'center', padding: 20, marginBottom: 20, maxWidth: 640 }}>
         <span className="stampmark">{isVerified ? 'Verified' : 'Unverified'}</span>
@@ -57,18 +56,6 @@ export default async function SettingsScreen() {
       <SettingsForm
         pageId={page.organisationId}
         initial={{
-          tagline: page.tagline ?? '',
-          missionShort: page.missionShort ?? '',
-          visionShort: page.visionShort ?? '',
-          aboutUs: page.aboutUs ?? '',
-          meetingSchedule: page.meetingSchedule ?? '',
-          contactEmail: page.contactEmail ?? '',
-          contactPhone: page.contactPhone ?? '',
-          website: page.website ?? '',
-          facebook: page.facebook ?? '',
-          instagram: page.instagram ?? '',
-          twitter: page.twitter ?? '',
-          whatsapp: page.whatsapp ?? '',
           brandAccent: page.brandAccent ?? '',
           brandAccentTwo: page.brandAccentTwo ?? '',
           brandAccentThree: page.brandAccentThree ?? '',
@@ -77,8 +64,6 @@ export default async function SettingsScreen() {
           seoDescription: page.seoDescription ?? '',
         }}
       />
-
-      <FaqEditor pageId={page.organisationId} initial={Array.isArray(page.faq) ? (page.faq as { q: string; a: string }[]) : []} />
     </>
   );
 }
