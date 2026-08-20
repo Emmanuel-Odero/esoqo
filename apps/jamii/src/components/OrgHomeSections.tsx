@@ -1,4 +1,4 @@
-import { listJamiiPageBlocksPublic } from '@esoko/db';
+import { getJamiiSitePageByKind, listJamiiPageBlocksPublic } from '@esoko/db';
 import type { OrgLinkMode } from '@/lib/org-links-shared';
 import { StatsTickerBlock } from './blocks/StatsTickerBlock';
 import { ExploreGridBlock } from './blocks/ExploreGridBlock';
@@ -17,7 +17,8 @@ import type { OrgPage } from './blocks/types';
  * never regress: a page with zero blocks looks identical to before.
  */
 export async function OrgHomeSections({ page, mode }: { page: OrgPage; mode: OrgLinkMode }) {
-  const blocks = await listJamiiPageBlocksPublic(page.organisationId);
+  const home = await getJamiiSitePageByKind(page.organisationId, 'SYSTEM_HOME');
+  const blocks = home ? await listJamiiPageBlocksPublic(home.id) : [];
   if (blocks.length === 0) return <DefaultHomeSections page={page} mode={mode} />;
 
   return (

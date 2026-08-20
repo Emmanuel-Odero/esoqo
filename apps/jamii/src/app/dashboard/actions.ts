@@ -2,17 +2,22 @@
 
 import { revalidatePath } from 'next/cache';
 import {
-  publishJamiiPage, updateJamiiPage, createJamiiPost, publishJamiiPost,
-  createCampaign, updateCampaign, inviteTeamMember, removeTeamMember,
+  publishJamiiPage, updateJamiiPage, updateJamiiOrgProfile, createJamiiPost, publishJamiiPost,
+  updateJamiiPost, deleteJamiiPost, updateJamiiPhotoCaption,
+  createCampaign, updateCampaign, addCampaignUpdate, deleteCampaignUpdate, inviteTeamMember, removeTeamMember,
   requestJamiiDomain, removeJamiiDomain,
   markJamiiContactMessageRead, archiveJamiiContactMessage,
   createJamiiProgram, updateJamiiProgram, deleteJamiiProgram,
   setMemberRole, AuthorisationError, saveJamiiPageBlocks,
+  createJamiiSitePage, updateJamiiSitePage, publishJamiiSitePage, deleteJamiiSitePage,
+  saveJamiiNavItems, createSupportTicket,
 } from '@esoko/db';
 import {
-  jamiiPageProfileSchema, jamiiFaqSchema, jamiiPostSchema, createCampaignSchema, updateCampaignSchema,
+  jamiiPageProfileSchema, jamiiOrgProfileSchema, jamiiFaqSchema, jamiiPostSchema, createCampaignSchema, updateCampaignSchema,
+  campaignUpdateSchema,
   inviteTeamMemberSchema, requestJamiiDomainSchema, jamiiProgramSchema, setMemberRoleSchema,
-  jamiiPageBlocksSchema,
+  jamiiPageBlocksSchema, jamiiCreateSitePageSchema, jamiiUpdateSitePageSchema, jamiiNavItemsSchema,
+  createSupportTicketSchema,
 } from '@esoko/domain';
 import { requireSubject } from '@/lib/session';
 
@@ -36,6 +41,24 @@ export async function actionUpdateProfile(pageId: string, raw: unknown): Promise
   try {
     await updateJamiiPage(ctx, pageId, parsed.data);
     revalidatePath('/dashboard/settings');
+    revalidatePath('/dashboard/pages', 'layout');
+    return { ok: true, data: undefined };
+  } catch (e) {
+    return { ok: false, error: e instanceof Error ? e.message : 'Could not save your changes' };
+  }
+}
+
+/** The About page's "At a glance" card — see updateJamiiOrgProfile's
+ *  own header comment for why this is a separate write from
+ *  actionUpdateProfile above even though both save from the same
+ *  screen. */
+export async function actionUpdateOrgProfile(pageId: string, raw: unknown): Promise<ActionResult> {
+  const ctx = await requireSubject();
+  const parsed = jamiiOrgProfileSchema.safeParse(raw);
+  if (!parsed.success) return { ok: false, error: parsed.error.issues[0]?.message ?? 'Check your details' };
+  try {
+    await updateJamiiOrgProfile(ctx, pageId, parsed.data as never);
+    revalidatePath('/dashboard/pages', 'layout');
     return { ok: true, data: undefined };
   } catch (e) {
     return { ok: false, error: e instanceof Error ? e.message : 'Could not save your changes' };
@@ -49,6 +72,7 @@ export async function actionUpdateFaq(pageId: string, raw: unknown): Promise<Act
   try {
     await updateJamiiPage(ctx, pageId, { faq: parsed.data });
     revalidatePath('/dashboard/settings');
+    revalidatePath('/dashboard/pages', 'layout');
     return { ok: true, data: undefined };
   } catch (e) {
     return { ok: false, error: e instanceof Error ? e.message : 'Could not save your FAQ' };
@@ -66,6 +90,41 @@ export async function actionCreatePost(pageId: string, raw: unknown): Promise<Ac
     return { ok: true, data: undefined };
   } catch (e) {
     return { ok: false, error: e instanceof Error ? e.message : 'Could not publish your update' };
+  }
+}
+
+export async function actionUpdatePost(pageId: string, postId: string, raw: unknown): Promise<ActionResult> {
+  const ctx = await requireSubject();
+  const parsed = jamiiPostSchema.safeParse(raw);
+  if (!parsed.success) return { ok: false, error: parsed.error.issues[0]?.message ?? 'Check your details' };
+  try {
+    await updateJamiiPost(ctx, pageId, postId, parsed.data);
+    revalidatePath('/dashboard/posts');
+    return { ok: true, data: undefined };
+  } catch (e) {
+    return { ok: false, error: e instanceof Error ? e.message : 'Could not save your changes' };
+  }
+}
+
+export async function actionDeletePost(pageId: string, postId: string): Promise<ActionResult> {
+  const ctx = await requireSubject();
+  try {
+    await deleteJamiiPost(ctx, pageId, postId);
+    revalidatePath('/dashboard/posts');
+    return { ok: true, data: undefined };
+  } catch (e) {
+    return { ok: false, error: e instanceof Error ? e.message : 'Could not delete that update' };
+  }
+}
+
+export async function actionUpdatePhotoCaption(pageId: string, photoId: string, caption: string): Promise<ActionResult> {
+  const ctx = await requireSubject();
+  try {
+    await updateJamiiPhotoCaption(ctx, pageId, photoId, caption);
+    revalidatePath('/dashboard/gallery');
+    return { ok: true, data: undefined };
+  } catch (e) {
+    return { ok: false, error: e instanceof Error ? e.message : 'Could not save that caption' };
   }
 }
 
@@ -162,21 +221,122 @@ export async function actionUpdateCampaign(pageId: string, campaignId: string, r
   }
 }
 
-/** Whole-list save for the "Homepage" block editor — same
- *  requireSubject -> safeParse -> DAL -> revalidatePath shape as every
- *  other action here, just against an array instead of one record
- *  (see saveJamiiPageBlocks's own header comment for the replace
- *  semantics). */
-export async function actionSaveHomepageBlocks(pageId: string, raw: unknown): Promise<ActionResult> {
+/** The "Updates" timeline donors see on the public campaign page — see
+ *  addCampaignUpdate's own header comment; this had no dashboard
+ *  action at all before, despite the DAL function existing. */
+export async function actionAddCampaignUpdate(
+  pageId: string, campaignId: string, raw: unknown,
+): Promise<ActionResult<{ id: string; title: string; body: string; postedAt: Date }>> {
   const ctx = await requireSubject();
-  const parsed = jamiiPageBlocksSchema.safeParse(raw);
-  if (!parsed.success) return { ok: false, error: parsed.error.issues[0]?.message ?? 'Check your homepage blocks' };
+  const parsed = campaignUpdateSchema.safeParse(raw);
+  if (!parsed.success) return { ok: false, error: parsed.error.issues[0]?.message ?? 'Check your details' };
   try {
-    await saveJamiiPageBlocks(ctx, pageId, parsed.data.map(({ id, type, visible, data }) => ({ id, type, visible, data })));
-    revalidatePath('/dashboard/homepage');
+    // Returned rather than just revalidating — the client holds its
+    // own copy of the updates list (see CampaignUpdatesPanel), and
+    // revalidatePath alone doesn't refresh an already-mounted Client
+    // Component's state, only what a fresh navigation would receive.
+    const update = await addCampaignUpdate(ctx, pageId, campaignId, parsed.data.title, parsed.data.body);
+    revalidatePath('/dashboard/campaigns');
+    return { ok: true, data: update };
+  } catch (e) {
+    return { ok: false, error: e instanceof Error ? e.message : 'Could not post that update' };
+  }
+}
+
+export async function actionDeleteCampaignUpdate(pageId: string, campaignId: string, updateId: string): Promise<ActionResult> {
+  const ctx = await requireSubject();
+  try {
+    await deleteCampaignUpdate(ctx, pageId, campaignId, updateId);
+    revalidatePath('/dashboard/campaigns');
     return { ok: true, data: undefined };
   } catch (e) {
-    return { ok: false, error: e instanceof Error ? e.message : 'Could not save your homepage' };
+    return { ok: false, error: e instanceof Error ? e.message : 'Could not delete that update' };
+  }
+}
+
+/** Whole-list save for any page's block editor (Homepage screen and
+ *  the generic Pages screen alike) — same requireSubject -> safeParse
+ *  -> DAL -> revalidatePath shape as every other action here, just
+ *  against an array instead of one record (see saveJamiiPageBlocks's
+ *  own header comment for the replace semantics). */
+export async function actionSavePageBlocks(pageId: string, sitePageId: string, raw: unknown): Promise<ActionResult> {
+  const ctx = await requireSubject();
+  const parsed = jamiiPageBlocksSchema.safeParse(raw);
+  if (!parsed.success) return { ok: false, error: parsed.error.issues[0]?.message ?? 'Check your page sections' };
+  try {
+    await saveJamiiPageBlocks(
+      ctx, pageId, sitePageId,
+      parsed.data.map(({ id, type, visible, data }) => ({ id, type, visible, data })),
+    );
+    revalidatePath('/dashboard/homepage');
+    revalidatePath('/dashboard/pages');
+    return { ok: true, data: undefined };
+  } catch (e) {
+    return { ok: false, error: e instanceof Error ? e.message : 'Could not save your page' };
+  }
+}
+
+export async function actionCreatePage(pageId: string, raw: unknown): Promise<ActionResult<{ id: string; slug: string }>> {
+  const ctx = await requireSubject();
+  const parsed = jamiiCreateSitePageSchema.safeParse(raw);
+  if (!parsed.success) return { ok: false, error: parsed.error.issues[0]?.message ?? 'Check the page title' };
+  try {
+    const row = await createJamiiSitePage(ctx, pageId, parsed.data);
+    revalidatePath('/dashboard/pages');
+    return { ok: true, data: { id: row.id, slug: row.slug } };
+  } catch (e) {
+    return { ok: false, error: e instanceof Error ? e.message : 'Could not create that page' };
+  }
+}
+
+export async function actionUpdatePage(pageId: string, sitePageId: string, raw: unknown): Promise<ActionResult> {
+  const ctx = await requireSubject();
+  const parsed = jamiiUpdateSitePageSchema.safeParse(raw);
+  if (!parsed.success) return { ok: false, error: parsed.error.issues[0]?.message ?? 'Check your details' };
+  try {
+    await updateJamiiSitePage(ctx, pageId, sitePageId, parsed.data);
+    revalidatePath('/dashboard/pages');
+    return { ok: true, data: undefined };
+  } catch (e) {
+    return { ok: false, error: e instanceof Error ? e.message : 'Could not save your changes' };
+  }
+}
+
+export async function actionPublishPageDraft(pageId: string, sitePageId: string): Promise<ActionResult> {
+  const ctx = await requireSubject();
+  try {
+    await publishJamiiSitePage(ctx, pageId, sitePageId);
+    revalidatePath('/dashboard/pages');
+    return { ok: true, data: undefined };
+  } catch (e) {
+    return { ok: false, error: e instanceof Error ? e.message : 'Could not publish that page' };
+  }
+}
+
+export async function actionDeletePage(pageId: string, sitePageId: string): Promise<ActionResult> {
+  const ctx = await requireSubject();
+  try {
+    await deleteJamiiSitePage(ctx, pageId, sitePageId);
+    revalidatePath('/dashboard/pages');
+    return { ok: true, data: undefined };
+  } catch (e) {
+    return { ok: false, error: e instanceof Error ? e.message : 'Could not delete that page' };
+  }
+}
+
+/** Whole-list save for the Navigation screen — same replace semantics
+ *  as actionSavePageBlocks, against saveJamiiNavItems instead. */
+export async function actionSaveNavItems(pageId: string, raw: unknown): Promise<ActionResult> {
+  const ctx = await requireSubject();
+  const parsed = jamiiNavItemsSchema.safeParse(raw);
+  if (!parsed.success) return { ok: false, error: parsed.error.issues[0]?.message ?? 'Check your navigation menu' };
+  try {
+    await saveJamiiNavItems(ctx, pageId, parsed.data);
+    revalidatePath('/dashboard/navigation');
+    revalidatePath('/o/[slug]', 'layout');
+    return { ok: true, data: undefined };
+  } catch (e) {
+    return { ok: false, error: e instanceof Error ? e.message : 'Could not save your navigation menu' };
   }
 }
 
@@ -247,5 +407,21 @@ export async function actionRemoveTeamMember(pageId: string, memberId: string): 
     return { ok: true, data: undefined };
   } catch (e) {
     return { ok: false, error: e instanceof Error ? e.message : 'Could not remove that person' };
+  }
+}
+
+/** "Report an issue" — pageId is just the "what were you working on"
+ *  context (see SupportTicket's own doc comment), not an access check;
+ *  raising a ticket only requires being signed in. */
+export async function actionCreateSupportTicket(pageId: string, raw: unknown): Promise<ActionResult> {
+  const ctx = await requireSubject();
+  const parsed = createSupportTicketSchema.safeParse(raw);
+  if (!parsed.success) return { ok: false, error: parsed.error.issues[0]?.message ?? 'Check your details' };
+  try {
+    await createSupportTicket(ctx, { ...parsed.data, pageId });
+    revalidatePath('/dashboard/support');
+    return { ok: true, data: undefined };
+  } catch (e) {
+    return { ok: false, error: e instanceof Error ? e.message : 'Could not raise that ticket' };
   }
 }
