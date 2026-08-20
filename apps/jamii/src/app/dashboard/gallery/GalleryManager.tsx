@@ -3,8 +3,33 @@
 import { useRef, useState, useTransition } from 'react';
 import { useRouter } from 'next/navigation';
 import { uploadGalleryPhoto, removeGalleryPhoto } from '../upload-actions';
+import { actionUpdatePhotoCaption } from '../actions';
 
 type Photo = { id: string; url: string; storageKey: string; caption: string | null };
+
+function CaptionField({ pageId, photo }: { pageId: string; photo: Photo }) {
+  const [caption, setCaption] = useState(photo.caption ?? '');
+  const [saved, setSaved] = useState(false);
+  const [pending, startTransition] = useTransition();
+
+  function save() {
+    startTransition(async () => {
+      const result = await actionUpdatePhotoCaption(pageId, photo.id, caption);
+      setSaved(result.ok);
+    });
+  }
+
+  return (
+    <input
+      value={caption} placeholder="Caption (also used as alt text)" aria-label="Photo caption"
+      className="gcaption"
+      onChange={(e) => { setCaption(e.target.value); setSaved(false); }}
+      onBlur={() => { if (caption !== (photo.caption ?? '')) save(); }}
+      disabled={pending}
+      style={{ fontSize: '.72rem', opacity: pending ? 0.6 : saved ? 1 : undefined }}
+    />
+  );
+}
 
 export function GalleryManager({ pageId, photos }: { pageId: string; photos: Photo[] }) {
   const [error, setError] = useState<string | null>(null);
@@ -40,9 +65,12 @@ export function GalleryManager({ pageId, photos }: { pageId: string; photos: Pho
       {error && <p style={{ color: 'var(--stamp)', fontSize: '.85rem', marginBottom: 12 }}>{error}</p>}
       <div className="dashgallery">
         {photos.map((photo) => (
-          <div key={photo.id} className="gitem">
-            <img src={photo.url} alt={photo.caption ?? ''} />
-            <button type="button" aria-label="Remove photo" disabled={pending && removingId === photo.id} onClick={() => remove(photo)}>×</button>
+          <div key={photo.id}>
+            <div className="gitem">
+              <img src={photo.url} alt={photo.caption ?? ''} />
+              <button type="button" aria-label="Remove photo" disabled={pending && removingId === photo.id} onClick={() => remove(photo)}>×</button>
+            </div>
+            <CaptionField pageId={pageId} photo={photo} />
           </div>
         ))}
         <button type="button" className="gadd" onClick={() => ref.current?.click()} disabled={pending}>

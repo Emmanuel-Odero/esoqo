@@ -31,6 +31,23 @@ function slugify(name: string): string {
     .slice(0, 60);
 }
 
+/** The same 9 rows backfill-jamii-site-pages.ts seeded for every
+ *  pre-existing page, kept in lockstep with SYSTEM_PAGES there and in
+ *  seed-abledfirst.ts — every JamiiPage, however it comes to exist,
+ *  ends up with the same generic-CMS scaffolding (see JamiiSitePage's
+ *  doc comment in schema.prisma). */
+const SYSTEM_PAGES = [
+  { kind: 'SYSTEM_HOME', slug: '', title: 'Home' },
+  { kind: 'SYSTEM_ABOUT', slug: 'about', title: 'About' },
+  { kind: 'SYSTEM_PROGRAMS', slug: 'programs', title: 'Programs' },
+  { kind: 'SYSTEM_CAMPAIGNS', slug: 'campaigns', title: 'Campaigns' },
+  { kind: 'SYSTEM_POSTS', slug: 'posts', title: 'Posts' },
+  { kind: 'SYSTEM_GALLERY', slug: 'gallery', title: 'Gallery' },
+  { kind: 'SYSTEM_LEADERSHIP', slug: 'leadership', title: 'Leadership' },
+  { kind: 'SYSTEM_FAQ', slug: 'faq', title: 'FAQ' },
+  { kind: 'SYSTEM_CONTACT', slug: 'contact', title: 'Contact' },
+] as const;
+
 /**
  * Bespoke ownership check for a JamiiPage, the same shape as
  * assertOwnsStore in dal/store.ts — page access is granted per person
@@ -65,6 +82,9 @@ export async function requirePageAccess(
 
 export interface CreateJamiiPageInput {
   orgKind: OrgKind;
+  /** Only meaningful when orgKind is 'OTHER' — see createOwnGroup's
+   *  own kindOther for the precedent this follows. */
+  orgKindOther?: string;
   officialName: string;
   county: string;
   ward?: string;
@@ -105,6 +125,7 @@ export async function createJamiiPage(ctx: Ctx, input: CreateJamiiPageInput) {
         organisation: {
           create: {
             kind: input.orgKind,
+            kindOther: input.orgKind === 'OTHER' ? input.orgKindOther?.trim() || null : null,
             officialName,
             registrationNo: input.registrationNo?.trim() || null,
             memberCount: input.memberCount ?? null,
@@ -123,6 +144,29 @@ export async function createJamiiPage(ctx: Ctx, input: CreateJamiiPageInput) {
         tagline: input.tagline?.trim() || null,
       },
     });
+
+    // Generic-CMS scaffolding — see SYSTEM_PAGES above. Nav items skip
+    // SYSTEM_HOME the same way backfill-jamii-site-pages.ts's do; both
+    // nav components prepend "Home" themselves instead of storing it.
+    let navPosition = 0;
+    for (const sp of SYSTEM_PAGES) {
+      // PUBLISHED regardless of the org's own JamiiPage still being
+      // DRAFT — nothing gates public rendering on a SYSTEM_* page's own
+      // status (only CUSTOM pages' status does, via
+      // getJamiiSitePageBySlug), so leaving these DRAFT would just
+      // read as permanently "unpublished" on the Pages screen for no
+      // reason.
+      const row = await tx.jamiiSitePage.create({
+        data: { pageId: party.id, kind: sp.kind, slug: sp.slug, title: sp.title, status: 'PUBLISHED' },
+      });
+      if (sp.kind === 'SYSTEM_HOME') continue;
+      await tx.jamiiNavItem.create({
+        data: {
+          pageId: party.id, label: sp.title, targetKind: 'SITE_PAGE',
+          targetSitePageId: row.id, position: navPosition++, visible: true,
+        },
+      });
+    }
 
     await tx.jamiiTeamMember.create({
       data: {
@@ -265,6 +309,62 @@ export async function updateJamiiPage(ctx: Ctx, pageId: string, patch: UpdateJam
   return page;
 }
 
+export interface UpdateJamiiOrgProfileInput {
+  officialName?: string;
+  orgKind?: OrgKind;
+  /** Only meaningful when orgKind is 'OTHER'. */
+  orgKindOther?: string;
+  /** Cause tags — the "Focus areas" shown on the whitelabel homepage
+   *  hero and the pill row under the org name on the primary domain
+   *  (OrgHomeHero.tsx/OrgHeader.tsx). Free-form short strings, same as
+   *  Organisation.tags itself; there was previously no write path for
+   *  this at all outside a seed script. */
+  tags?: string[];
+  county?: string;
+  ward?: string;
+  registrationNo?: string;
+  memberCount?: number;
+}
+
+/**
+ * The "At a glance" card (org type, county/ward, registration number)
+ * plus the org's name and cause tags, shown across every page —
+ * Organisation/Party fields, not JamiiPage ones, so this is a separate
+ * write from updateJamiiPage even though both are edited from the
+ * same About page screen in the dashboard. Same EDITOR gate as the
+ * rest of that screen.
+ */
+export async function updateJamiiOrgProfile(ctx: Ctx, pageId: string, patch: UpdateJamiiOrgProfileInput) {
+  await requirePageAccess(ctx, pageId, 'EDITOR');
+  if (patch.officialName !== undefined && !patch.officialName.trim()) {
+    throw new Error('Your organisation needs a name');
+  }
+
+  await prisma.$transaction([
+    prisma.organisation.update({
+      where: { partyId: pageId },
+      data: {
+        officialName: patch.officialName?.trim(),
+        kind: patch.orgKind,
+        // Only touched when orgKind itself is part of this write —
+        // otherwise leave whatever's already stored alone.
+        kindOther: patch.orgKind === undefined
+          ? undefined
+          : (patch.orgKind === 'OTHER' ? patch.orgKindOther?.trim() || null : null),
+        tags: patch.tags,
+        registrationNo: patch.registrationNo,
+        memberCount: patch.memberCount,
+      },
+    }),
+    prisma.party.update({
+      where: { id: pageId },
+      data: { county: patch.county, ward: patch.ward || null },
+    }),
+  ]);
+
+  await recordAudit(ctx, { action: 'jamii_org_profile.updated', targetType: 'jamii_page', targetId: pageId });
+}
+
 export async function publishJamiiPage(ctx: Ctx, pageId: string) {
   await requirePageAccess(ctx, pageId, 'ADMIN');
   const page = await prisma.jamiiPage.update({
@@ -290,6 +390,16 @@ export async function addJamiiPhoto(
 export async function removeJamiiPhoto(ctx: Ctx, pageId: string, photoId: string) {
   await requirePageAccess(ctx, pageId, 'EDITOR');
   await prisma.jamiiPhoto.delete({ where: { id: photoId } });
+}
+
+/** Upload has no caption field of its own (a plain file picker) — this
+ *  is how an org adds or fixes one afterward. The caption is the
+ *  photo's alt text on the public Gallery page and in the Photo
+ *  Strip/Gallery Grid blocks, so leaving no way to set it after upload
+ *  was a real accessibility gap, not just a nice-to-have. */
+export async function updateJamiiPhotoCaption(ctx: Ctx, pageId: string, photoId: string, caption: string) {
+  await requirePageAccess(ctx, pageId, 'EDITOR');
+  await prisma.jamiiPhoto.update({ where: { id: photoId, pageId }, data: { caption: caption.trim() || null } });
 }
 
 /* ═══════════════════════════ staff / admin ═══════════════════════════
