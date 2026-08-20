@@ -45,6 +45,7 @@ export type {
   PosSyncStatus, PosPaymentMethod,
   JamiiPageStatus, PublishStatus, JamiiTeamRole, CampaignStatus, DonationStatus, JamiiBlockType,
   JamiiInterestStatus, JamiiMediaCategory, JamiiContactMessageStatus,
+  SupportTicketStatus, SupportTicketCategory,
   TicketVertical, TicketOrgStatus, ListingStatus, ScheduleStatus, SeatStatus,
   BookingStatus, BookingPaymentMethod, TicketStatus,
 } from '@prisma/client';

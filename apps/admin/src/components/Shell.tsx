@@ -43,6 +43,7 @@ const NAV: { group: string; items: [string, IconName, string, string][] }[] = [
   { group: 'Governance', items: [
     ['/staff', 'shield', 'Staff & permissions', 'staff.read'],
     ['/audit', 'scales', 'Audit log', 'audit.read'],
+    ['/support-tickets', 'message', 'Support tickets', 'support-ticket.read'],
   ]},
 ];
 
