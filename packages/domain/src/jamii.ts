@@ -33,13 +33,20 @@ export const JAMII_CAUSES = [
 /** Step 2 of /start — founds the group and its page. */
 export const startJamiiPageSchema = z.object({
   orgKind: z.enum(JAMII_ORG_KINDS as [string, ...string[]]).default('CBO'),
+  // Free text when orgKind is OTHER — same convention as
+  // createOwnGroup's orgKindOther (dal/groups.ts), so a group that
+  // picks "Other" can still say what it actually is.
+  orgKindOther: z.string().trim().max(80).optional().or(z.literal('')),
   officialName: z.string().trim().min(2, 'Give your organisation a name').max(120),
   county: z.string().trim().min(2, 'Choose a county'),
   ward: z.string().trim().max(80).optional().or(z.literal('')),
   registrationNo: z.string().trim().max(60).optional().or(z.literal('')),
   memberCount: z.number().int().positive().max(100_000).optional(),
   tagline: z.string().trim().max(120).optional().or(z.literal('')),
-});
+}).refine(
+  (v) => v.orgKind !== 'OTHER' || Boolean(v.orgKindOther?.trim()),
+  { message: 'Say what kind of organisation this is', path: ['orgKindOther'] },
+);
 export type StartJamiiPageInput = z.infer<typeof startJamiiPageSchema>;
 
 const HEX = /^#[0-9a-fA-F]{6}$/;
@@ -73,6 +80,34 @@ export const jamiiPageProfileSchema = z.object({
   seoDescription: z.string().trim().max(160).optional().or(z.literal('')),
 });
 export type JamiiPageProfileInput = z.infer<typeof jamiiPageProfileSchema>;
+
+/**
+ * The About page's "At a glance" card (org type, county/ward,
+ * registration number) — Organisation/Party fields, edited from the
+ * same About screen as jamiiPageProfileSchema's aboutUs/mission/vision
+ * but written through a separate DAL call (updateJamiiOrgProfile),
+ * since they live on a different table.
+ */
+export const jamiiOrgProfileSchema = z.object({
+  officialName: z.string().trim().min(2, 'Give your organisation a name').max(120).optional(),
+  orgKind: z.enum(JAMII_ORG_KINDS as [string, ...string[]]).optional(),
+  // Free text when orgKind is OTHER — see startJamiiPageSchema's own
+  // orgKindOther comment; every "Other" choice in this app gets a
+  // paired free-text field, not a dead end.
+  orgKindOther: z.string().trim().max(80).optional().or(z.literal('')),
+  // Free-form, not limited to JAMII_CAUSES — that list is only a
+  // suggestion at /start; an org may already have tags outside it
+  // (e.g. seeded data), so this must accept whatever's already there.
+  tags: z.array(z.string().trim().min(1).max(40)).max(8).optional(),
+  county: z.string().trim().min(2, 'Choose a county').optional(),
+  ward: z.string().trim().max(80).optional().or(z.literal('')),
+  registrationNo: z.string().trim().max(60).optional().or(z.literal('')),
+  memberCount: z.number().int().positive().max(100_000).optional(),
+}).refine(
+  (v) => v.orgKind !== 'OTHER' || Boolean(v.orgKindOther?.trim()),
+  { message: 'Say what kind of organisation this is', path: ['orgKindOther'] },
+);
+export type JamiiOrgProfileInput = z.infer<typeof jamiiOrgProfileSchema>;
 
 export const jamiiFaqItemSchema = z.object({
   q: z.string().trim().min(2, 'Enter a question').max(200),
@@ -300,6 +335,88 @@ export const jamiiBlockDataSchema = z.discriminatedUnion('type', [
     type: z.literal('PHOTO_STRIP'),
     data: z.object({ photoIds: z.array(z.string().uuid()).max(12) }),
   }),
+  // Generic-CMS block library (Phase 5) — see JamiiBlockType's own
+  // comment in schema.prisma for the general-purpose vs.
+  // reads-live-data split these 12 types follow.
+  z.object({
+    type: z.literal('HERO'),
+    data: z.object({
+      heading: z.string().trim().min(1, 'Enter a heading').max(140),
+      subheading: z.string().trim().max(280).optional().or(z.literal('')),
+      imageUrl: z.string().trim().max(2000).optional().or(z.literal('')),
+      ctaLabel: z.string().trim().max(40).optional().or(z.literal('')),
+      ctaHref: z.string().trim().max(2000).optional().or(z.literal('')),
+    }),
+  }),
+  z.object({
+    type: z.literal('CTA_BUTTON'),
+    data: z.object({
+      heading: z.string().trim().max(140).optional().or(z.literal('')),
+      body: z.string().trim().max(400).optional().or(z.literal('')),
+      buttonLabel: z.string().trim().min(1, 'Enter a button label').max(40),
+      buttonHref: z.string().trim().min(1, 'Enter a link').max(2000),
+    }),
+  }),
+  z.object({
+    type: z.literal('IMAGE_TEXT'),
+    data: z.object({
+      heading: z.string().trim().max(140).optional().or(z.literal('')),
+      html: richTextField(4000),
+      imageUrl: z.string().trim().max(2000).optional().or(z.literal('')),
+      imagePosition: z.enum(['left', 'right']).default('right'),
+    }),
+  }),
+  z.object({
+    type: z.literal('VIDEO_EMBED'),
+    data: z.object({
+      heading: z.string().trim().max(140).optional().or(z.literal('')),
+      url: z.string().trim().min(1, 'Paste a video URL').max(2000),
+    }),
+  }),
+  z.object({
+    type: z.literal('MAP_EMBED'),
+    data: z.object({
+      heading: z.string().trim().max(140).optional().or(z.literal('')),
+      embedUrl: z.string().trim().min(1, 'Paste a Google Maps embed URL').max(2000),
+    }),
+  }),
+  z.object({
+    type: z.literal('COLUMNS'),
+    data: z.object({
+      heading: z.string().trim().max(140).optional().or(z.literal('')),
+      columns: z.array(z.object({
+        heading: z.string().trim().max(80).optional().or(z.literal('')),
+        html: richTextField(1000),
+      })).min(1).max(3),
+    }),
+  }),
+  z.object({
+    type: z.literal('SPACER'),
+    data: z.object({ height: z.number().int().min(8).max(160).default(48) }),
+  }),
+  z.object({
+    type: z.literal('PROGRAMS_LIST'),
+    data: z.object({ heading: z.string().trim().max(140).optional().or(z.literal('')) }),
+  }),
+  z.object({
+    type: z.literal('TEAM_GRID'),
+    data: z.object({ heading: z.string().trim().max(140).optional().or(z.literal('')) }),
+  }),
+  z.object({
+    type: z.literal('GALLERY_GRID'),
+    data: z.object({ heading: z.string().trim().max(140).optional().or(z.literal('')) }),
+  }),
+  z.object({
+    type: z.literal('FAQ_ACCORDION'),
+    data: z.object({ heading: z.string().trim().max(140).optional().or(z.literal('')) }),
+  }),
+  z.object({
+    type: z.literal('CONTACT_FORM'),
+    data: z.object({
+      heading: z.string().trim().max(140).optional().or(z.literal('')),
+      body: z.string().trim().max(400).optional().or(z.literal('')),
+    }),
+  }),
 ]);
 
 /** One row of the whole-list "save the entire block array atomically"
@@ -310,3 +427,45 @@ export const jamiiPageBlockSchema = z.object({ id: z.string().uuid().optional(),
   .and(jamiiBlockDataSchema);
 export const jamiiPageBlocksSchema = z.array(jamiiPageBlockSchema).max(20);
 export type JamiiPageBlockInput = z.infer<typeof jamiiPageBlockSchema>;
+
+/**
+ * Generic CMS — see JamiiSitePage/JamiiNavItem in schema.prisma. The
+ * dashboard's "Pages" screen only ever asks for a title (the DAL
+ * derives + dedupes the slug, same as createJamiiPage does for the org
+ * slug itself); SEO fields are edited separately, once the page exists.
+ */
+export const jamiiCreateSitePageSchema = z.object({
+  title: z.string().trim().min(2, 'Give the page a title').max(80),
+});
+export type JamiiCreateSitePageInput = z.infer<typeof jamiiCreateSitePageSchema>;
+
+export const jamiiUpdateSitePageSchema = z.object({
+  title: z.string().trim().min(2, 'Give the page a title').max(80).optional(),
+  seoTitle: z.string().trim().max(70).optional().or(z.literal('')),
+  seoDescription: z.string().trim().max(160).optional().or(z.literal('')),
+  ogImageUrl: z.string().trim().max(2000).optional().or(z.literal('')),
+});
+export type JamiiUpdateSitePageInput = z.infer<typeof jamiiUpdateSitePageSchema>;
+
+/**
+ * The Navigation screen's whole-list "save the entire ordered array
+ * atomically" Server Action — same shape as jamiiPageBlocksSchema.
+ * `targetSitePageId`/`externalUrl` are cross-checked against
+ * `targetKind` here so a malformed row (e.g. SITE_PAGE with no id)
+ * never reaches the DAL — refine() over discriminatedUnion because the
+ * two target fields are optional siblings, not literal-tagged variants.
+ */
+export const jamiiNavItemSchema = z.object({
+  id: z.string().uuid().optional(),
+  label: z.string().trim().min(1, 'Give this nav item a label').max(40),
+  visible: z.boolean(),
+  openInNewTab: z.boolean().default(false),
+  targetKind: z.enum(['SITE_PAGE', 'EXTERNAL_URL']),
+  targetSitePageId: z.string().uuid().optional(),
+  externalUrl: z.string().trim().max(2000).optional().or(z.literal('')),
+}).refine(
+  (v) => (v.targetKind === 'SITE_PAGE' ? Boolean(v.targetSitePageId) : Boolean(v.externalUrl?.trim())),
+  { message: 'Choose a page, or enter a URL' },
+);
+export const jamiiNavItemsSchema = z.array(jamiiNavItemSchema).max(24);
+export type JamiiNavItemInput = z.infer<typeof jamiiNavItemSchema>;
