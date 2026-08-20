@@ -156,11 +156,38 @@ export async function getCampaignStats(campaignId: string) {
   return { raisedKes: Number(postings._sum.amount ?? 0), supporters };
 }
 
+/** Verifies `campaignId` actually belongs to `pageId` before any write —
+ *  requirePageAccess alone only proves the caller may manage *a* page,
+ *  not that this particular campaign is theirs; without this check a
+ *  CONTRIBUTOR on one org's page could post/delete updates on any
+ *  other org's campaign by guessing its id. */
+async function assertOwnsCampaign(pageId: string, campaignId: string) {
+  const campaign = await prisma.campaign.findFirst({ where: { id: campaignId, pageId }, select: { id: true } });
+  if (!campaign) throw new CampaignError('Campaign not found', 'NOT_FOUND');
+}
+
 export async function addCampaignUpdate(ctx: Ctx, pageId: string, campaignId: string, title: string, body: string) {
   await requirePageAccess(ctx, pageId, 'CONTRIBUTOR');
+  await assertOwnsCampaign(pageId, campaignId);
   const update = await prisma.campaignUpdate.create({ data: { campaignId, title: title.trim(), body: body.trim() } });
   await recordAudit(ctx, { action: 'campaign.update_posted', targetType: 'campaign', targetId: campaignId });
   return update;
+}
+
+/** The dashboard edit screen's own updates list — getCampaignBySlug's
+ *  public lookup already includes `updates`, but that one is scoped to
+ *  a PUBLISHED page; this is the owner-facing equivalent. */
+export async function listCampaignUpdatesForOwner(ctx: Ctx, pageId: string, campaignId: string) {
+  await requirePageAccess(ctx, pageId, 'CONTRIBUTOR');
+  await assertOwnsCampaign(pageId, campaignId);
+  return prisma.campaignUpdate.findMany({ where: { campaignId }, orderBy: { postedAt: 'desc' } });
+}
+
+export async function deleteCampaignUpdate(ctx: Ctx, pageId: string, campaignId: string, updateId: string) {
+  await requirePageAccess(ctx, pageId, 'EDITOR');
+  await assertOwnsCampaign(pageId, campaignId);
+  await prisma.campaignUpdate.delete({ where: { id: updateId, campaignId } });
+  await recordAudit(ctx, { action: 'campaign.update_deleted', targetType: 'campaign', targetId: campaignId });
 }
 
 /** Recent donations for the campaign's public "supporters" wall. */
