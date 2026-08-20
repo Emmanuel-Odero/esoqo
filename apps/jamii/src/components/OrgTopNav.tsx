@@ -2,8 +2,11 @@
 
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
+import type { Route } from 'next';
 import { usePathname } from 'next/navigation';
-import { orgHref, orgInitials, WHITELABEL_NAV_SECTIONS, type OrgLinkMode } from '@/lib/org-links-shared';
+import {
+  orgHref, orgInitials, WHITELABEL_NAV_SECTIONS, type OrgLinkMode, type ResolvedNavLink,
+} from '@/lib/org-links-shared';
 import { useWhitelabelTheme } from '@/lib/whitelabel-theme';
 
 /**
@@ -17,12 +20,17 @@ import { useWhitelabelTheme } from '@/lib/whitelabel-theme';
  * OrgHeader/OrgSubnav based on `mode`, never both.
  */
 export function OrgTopNav({
-  orgName, logoUrl, mode, ctaHref, ctaLabel, websiteUrl,
+  orgName, logoUrl, mode, navLinks, ctaHref, ctaLabel, websiteUrl,
 }: {
   orgName: string;
   logoUrl: string | null;
   verified: boolean;
   mode: OrgLinkMode;
+  /** From the org's JamiiNavItem rows (see resolveNavLinks) — Home is
+   *  never one of these, it's always prepended below. Empty only for a
+   *  page that somehow has zero nav rows, in which case
+   *  WHITELABEL_NAV_SECTIONS is the pre-generic-CMS fallback. */
+  navLinks: ResolvedNavLink[];
   ctaHref: ReturnType<typeof orgHref> | null;
   ctaLabel: string;
   /** The org's plain `website` field only — never their own custom
@@ -39,14 +47,18 @@ export function OrgTopNav({
   useEffect(() => setNavOpen(false), [pathname]);
 
   const homeHref = orgHref(mode, '');
-  const links = WHITELABEL_NAV_SECTIONS.map(([key, label]) => {
-    const href = orgHref(mode, key);
-    // Home ('') is only ever an exact match — every path starts with
-    // '/', so the startsWith check other items use would make Home
-    // look "current" everywhere.
-    const on = pathname === href || (key !== '' && pathname.startsWith(`${href}/`));
-    return { key, label, href, on };
-  });
+  const sections = navLinks.length > 0
+    ? navLinks
+    : WHITELABEL_NAV_SECTIONS.filter(([key]) => key !== '').map(([key, label]) => (
+        { key, label, href: orgHref(mode, key), external: false, newTab: false }
+      ));
+  const links = [{ key: '__home', label: 'Home', href: homeHref, external: false, newTab: false }, ...sections].map((l) => ({
+    ...l,
+    // Home is only ever an exact match — every path starts with '/',
+    // so the startsWith check other items use would make Home look
+    // "current" everywhere. External links are never "current".
+    on: !l.external && (pathname === l.href || (l.href !== homeHref && pathname.startsWith(`${l.href}/`))),
+  }));
 
   return (
     <div className="wl-site-head">
@@ -88,9 +100,13 @@ export function OrgTopNav({
           </button>
 
           <nav id="primaryNav" className={`wl-navlinks${navOpen ? ' open' : ''}`} aria-label="Site sections">
-            {links.map((l) => (
-              <Link key={l.key} href={l.href} aria-current={l.on ? 'page' : undefined}>{l.label}</Link>
-            ))}
+            {links.map((l) => (l.external ? (
+              <a key={l.key} href={l.href} target={l.newTab ? '_blank' : undefined} rel={l.newTab ? 'noreferrer' : undefined}>
+                {l.label}
+              </a>
+            ) : (
+              <Link key={l.key} href={l.href as Route} aria-current={l.on ? 'page' : undefined}>{l.label}</Link>
+            )))}
           </nav>
 
           <div className="wl-nav-cta">

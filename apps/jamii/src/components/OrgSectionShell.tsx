@@ -1,4 +1,5 @@
 import { notFound } from 'next/navigation';
+import { listJamiiNavItemsPublic } from '@esoko/db';
 import { OrgHeader } from './OrgHeader';
 import { OrgSubnav } from './OrgSubnav';
 import { OrgSidebar } from './OrgSidebar';
@@ -8,6 +9,7 @@ import { OrgFooter } from './OrgFooter';
 import { OrgJsonLd } from './OrgJsonLd';
 import { loadOrgPage, isVerified } from '@/lib/data';
 import { getOrgLinkMode, orgHref } from '@/lib/org-links';
+import { resolveNavLinks } from '@/lib/org-links-shared';
 import { orgExternalUrl } from '@/lib/org-external-url';
 import { currentOrigin } from '@/lib/seo';
 import { WhitelabelThemeRoot } from '@/lib/whitelabel-theme';
@@ -32,6 +34,8 @@ export async function OrgSectionShell({
   // *different* site (the `website` field), never the domain itself.
   const websiteUrl = externalUrl?.kind === 'website' ? externalUrl : null;
   const origin = await currentOrigin(mode);
+  const navItemRows = await listJamiiNavItemsPublic(page.organisationId);
+  const navLinks = resolveNavLinks(navItemRows, mode);
 
   const body = (
     <>
@@ -43,6 +47,7 @@ export async function OrgSectionShell({
             logoUrl={page.logoUrl}
             verified={isVerified(page.organisation)}
             mode={mode}
+            navLinks={navLinks}
             ctaHref={activeCampaign ? orgHref(mode, `c/${activeCampaign.slug}`) : null}
             ctaLabel="Support us"
             websiteUrl={websiteUrl}
@@ -52,7 +57,7 @@ export async function OrgSectionShell({
       ) : (
         <>
           <OrgHeader page={page} mode={mode} />
-          <OrgSubnav mode={mode} />
+          <OrgSubnav mode={mode} navLinks={navLinks} />
         </>
       )}
 

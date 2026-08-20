@@ -1,5 +1,7 @@
 import { redirect } from 'next/navigation';
+import { listJamiiNavItemsPublic } from '@esoko/db';
 import { getOrgLinkMode, orgHref } from '@/lib/org-links';
+import { resolveNavLinks } from '@/lib/org-links-shared';
 import { loadOrgOr404 } from '@/components/OrgSectionShell';
 import { OrgTopNav } from '@/components/OrgTopNav';
 import { OrgHomeHero } from '@/components/OrgHomeHero';
@@ -45,6 +47,7 @@ export default async function OrgIndex({ params }: { params: Promise<{ slug: str
   // *different* site (the `website` field), never the domain itself.
   const websiteUrl = externalUrl?.kind === 'website' ? externalUrl : null;
   const origin = await currentOrigin(mode);
+  const navLinks = resolveNavLinks(await listJamiiNavItemsPublic(page.organisationId), mode);
 
   return (
     <WhitelabelThemeRoot
@@ -59,6 +62,7 @@ export default async function OrgIndex({ params }: { params: Promise<{ slug: str
         logoUrl={page.logoUrl}
         verified={isVerified(page.organisation)}
         mode={mode}
+        navLinks={navLinks}
         ctaHref={activeCampaign ? orgHref(mode, `c/${activeCampaign.slug}`) : null}
         ctaLabel="Support us"
         websiteUrl={websiteUrl}
