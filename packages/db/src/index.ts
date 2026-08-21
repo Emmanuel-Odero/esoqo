@@ -19,7 +19,8 @@ export {
   completeCecfRegistration, addCecfMemberRoster, trySetCecfJoinFee, uploadCecfDocument,
   cecfRegistrantOrgRole, CECF_JOIN_FEE_KES,
 } from './dal/cecf-ingest';
-export { confirmDonationPayment, DonationError } from './dal/donation';
+export { confirmDonationPayment, failDonationPayment, DonationError } from './dal/donation';
+export type { ConfirmDonationResult, DonationNotifyInfo } from './dal/donation';
 export { confirmBookingPayment, TicketingError } from './dal/ticketing';
 export {
   listDomainsNeedingReconciliation, markDomainVerifying, markDomainActive,

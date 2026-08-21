@@ -2226,6 +2226,12 @@ model Donation {
   anonymous    Boolean        @default(false)
   amountKes    Decimal        @db.Decimal(12, 2)
   status       DonationStatus @default(PENDING)
+  /// Safaricom's ResultDesc when the STK push didn't succeed — "Request
+  /// cancelled by user", "The balance is insufficient", a timeout, etc.
+  /// Same precedent as JamiiDomain.failureReason. Shown back to the
+  /// donor so a failed push doesn't just spin forever with no
+  /// explanation (see DonateModal's polling loop).
+  failureReason String?
 
   mpesaCheckoutRequestId String?       @unique
   mpesaReceiptCode       String?

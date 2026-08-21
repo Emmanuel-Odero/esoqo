@@ -4,9 +4,15 @@ import rateLimit from '@fastify/rate-limit';
 import {
   verifyChain, confirmStoreOrderPayment, confirmRegistrationPaymentByCheckoutId,
   confirmRegistrationPaymentByPesapalOrderId,
-  confirmDonationPayment, confirmBookingPayment, StoreOrderError, DonationError, TicketingError,
+  confirmDonationPayment, failDonationPayment, confirmBookingPayment,
+  StoreOrderError, DonationError, TicketingError,
 } from '@esoko/db';
-import { appEnv } from '@esoko/domain';
+import { appEnv, donorThankYouSms, adminDonationAlertSms } from '@esoko/domain';
+// Subpath import, not the '@esoko/auth' barrel — the barrel's index.ts
+// also re-exports pin.ts/session.ts/redis.ts/etc., which DO carry the
+// `server-only` marker and throw outside a Next.js bundling context.
+// sms.ts itself deliberately doesn't (see its own header comment).
+import { sendSms } from '@esoko/auth/sms';
 import { parseStkCallback, parsePesapalIpn, confirmPesapalOrder } from '@esoko/payments';
 import { cecfRoutes } from './routes/cecf';
 import { jamiiDomainsRoutes, runJamiiDomainReconcile } from './routes/jamii-domains';
@@ -72,6 +78,17 @@ app.post('/webhooks/mpesa/stk-callback', async (req, reply) => {
   if (!parsed.succeeded) {
     app.log.info({ checkoutRequestId: parsed.checkoutRequestId, reason: parsed.resultDescription },
       'STK push not completed');
+    // Donations only for now — store/registration/booking checkouts still
+    // silently time out on their own waiting screens when a push fails.
+    // That's a real gap but a separate fix from what was asked for here;
+    // flagged rather than expanded into silently on this pass.
+    try {
+      await failDonationPayment(parsed.checkoutRequestId, parsed.resultDescription);
+    } catch (e) {
+      if (!(e instanceof DonationError && e.code === 'NOT_FOUND')) {
+        app.log.error({ err: e, checkoutRequestId: parsed.checkoutRequestId }, 'failed to record donation failure');
+      }
+    }
     return reply.send({ ok: true }); // acknowledged — nothing to post
   }
 
@@ -94,7 +111,19 @@ app.post('/webhooks/mpesa/stk-callback', async (req, reply) => {
   }
 
   try {
-    await confirmDonationPayment(parsed.checkoutRequestId, parsed.mpesaReceiptCode ?? '');
+    const result = await confirmDonationPayment(parsed.checkoutRequestId, parsed.mpesaReceiptCode ?? '');
+    if (result.justConfirmed && result.notify) {
+      const n = result.notify;
+      // Best-effort — the donation itself is already confirmed and
+      // posted; an SMS provider hiccup here must not fail the webhook
+      // (Safaricom would just retry the whole callback).
+      try {
+        await sendSms(n.donorMsisdn, donorThankYouSms(n), 'donation-thank-you');
+        await Promise.all(n.adminMsisdns.map((to) => sendSms(to, adminDonationAlertSms(n), 'donation-admin-alert')));
+      } catch (e) {
+        app.log.error({ err: e, checkoutRequestId: parsed.checkoutRequestId }, 'failed to send donation SMS notifications');
+      }
+    }
     return reply.send({ ok: true });
   } catch (e) {
     if (!(e instanceof DonationError && e.code === 'NOT_FOUND')) {

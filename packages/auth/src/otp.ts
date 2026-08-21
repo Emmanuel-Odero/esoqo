@@ -108,7 +108,7 @@ export async function issueOtp(
     return { expiresAt, cooldownSeconds: cooldown };
   }
 
-  await sendSms(msisdn, `${code} is your Esoko code. It expires in 10 minutes. Esoko will never ask you for it.`);
+  await sendSms(msisdn, `${code} is your Esoko code. It expires in 10 minutes. Esoko will never ask you for it.`, 'otp');
   return { expiresAt, cooldownSeconds: cooldown };
 }
 
