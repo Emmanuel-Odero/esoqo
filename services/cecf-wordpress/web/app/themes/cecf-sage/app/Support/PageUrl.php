@@ -43,6 +43,16 @@ class PageUrl
             return self::esokoJoinUrl();
         }
 
+        // "Our Jamii" (pages/our-jamii.json) is a real local page introducing
+        // the product, but the product itself — browsing a group's own live
+        // page, or a group's own dashboard — only ever exists on Esoko's
+        // Our Jamii app, never on this WordPress site. Every "page": "jamii"
+        // CTA goes straight there, unconditionally (unlike "apply" above,
+        // there is no local equivalent to fall back to).
+        if ($key === 'jamii') {
+            return self::esokoJamiiUrl();
+        }
+
         $url = self::map()[$key] ?? null;
 
         return $url && $anchor ? "{$url}#{$anchor}" : $url;
@@ -51,6 +61,14 @@ class PageUrl
     public static function esokoJoinUrl(): string
     {
         return env('ESOKO_JOIN_URL', 'http://localhost:3001/join');
+    }
+
+    public static function esokoJamiiUrl(): string
+    {
+        // apps/jamii's own (site)/page.tsx — the "discover" listing of
+        // every published Our Jamii page — lives at the app's root, not a
+        // /discover path segment.
+        return env('ESOKO_JAMII_URL', 'http://localhost:3004/');
     }
 
     /**
