@@ -244,9 +244,9 @@ services:
       - key: WP_ENV
         value: production
       - key: WP_HOME
-        value: https://childeldercare.foundation
+        sync: false   # https://childeldercare.foundation — set by hand in the Render dashboard, not committed here (was hardcoded; see custom-domain setup notes in Deploy_Render.md)
       - key: WP_SITEURL
-        value: https://childeldercare.foundation/wp
+        sync: false   # <WP_HOME>/wp — same reasoning, set by hand in the Render dashboard
       - key: DB_HOST
         fromService:
           type: pserv
@@ -268,7 +268,7 @@ services:
       - key: MULTISITE_SUBDOMAIN
         value: "true"
       - key: MULTISITE_DOMAIN
-        value: childeldercare.foundation
+        sync: false   # childeldercare.foundation — set by hand alongside WP_HOME/WP_SITEURL above
       - key: REDIS_URL
         sync: false
       - key: R2_ACCOUNT_ID

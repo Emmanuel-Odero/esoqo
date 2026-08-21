@@ -569,8 +569,18 @@ After initial deployment, add custom domains in Render Dashboard:
 | `esoko-app` | `app.esoko.co.ke` |
 | `esoko-admin` | `ops.esoko.co.ke` |
 | `esoko-core` | `api.esoko.co.ke` |
+| `cecf-wordpress` | `childeldercare.foundation` + `www.childeldercare.foundation` |
 
-Render provides the target CNAME records for DNS configuration.
+Render provides the target CNAME records for DNS configuration — open the
+service's Settings → Custom Domains → the domain's "…" menu → "View DNS
+details" to see the exact current values (they can change; don't hardcode
+them here). For `cecf-wordpress` specifically, `WP_HOME`, `WP_SITEURL` and
+`MULTISITE_DOMAIN` in `render.yaml` are deliberately `sync: false` — the
+domain value lives only in the Render dashboard, not committed to git, so
+adding the custom domain here is the one step that actually makes the site
+resolve correctly (Bedrock's asset/permalink URLs are all built from
+`WP_HOME` at runtime; a mismatch between that and where DNS actually points
+is what causes theme assets — CSS/JS/images — to 404).
 
 ### SSL/TLS
 
