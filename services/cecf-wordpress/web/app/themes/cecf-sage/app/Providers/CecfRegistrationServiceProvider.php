@@ -68,6 +68,13 @@ class CecfRegistrationServiceProvider extends ServiceProvider
             'args' => ['id' => ['required' => true]],
         ]);
 
+        register_rest_route(self::REST_NAMESPACE, '/registration/(?P<id>[a-f0-9\-]{36})/progress', [
+            'methods' => 'POST',
+            'callback' => [$this, 'progress'],
+            'permission_callback' => '__return_true',
+            'args' => ['id' => ['required' => true]],
+        ]);
+
         register_rest_route(self::REST_NAMESPACE, '/registration/(?P<id>[a-f0-9\-]{36})/declare-payment', [
             'methods' => 'POST',
             'callback' => [$this, 'declarePayment'],
@@ -100,6 +107,12 @@ class CecfRegistrationServiceProvider extends ServiceProvider
             'permission_callback' => '__return_true',
             'args' => ['id' => ['required' => true]],
         ]);
+
+        register_rest_route(self::REST_NAMESPACE, '/groups/search', [
+            'methods' => 'GET',
+            'callback' => [$this, 'groupsSearch'],
+            'permission_callback' => '__return_true',
+        ]);
     }
 
     /* ── handlers — each is a thin forward, response shape mirrors
@@ -113,7 +126,7 @@ class CecfRegistrationServiceProvider extends ServiceProvider
             return new WP_Error(
                 'cecf_bad_request',
                 __('Missing registration details.', 'cecf-sage'),
-                ['status' => 422]
+                ['status' => 422],
             );
         }
 
@@ -130,7 +143,7 @@ class CecfRegistrationServiceProvider extends ServiceProvider
 
         return $this->relay(CecfApiClient::post(
             "/api/cecf/registration/{$request->get_param('id')}/documents",
-            $body
+            $body,
         ));
     }
 
@@ -138,7 +151,27 @@ class CecfRegistrationServiceProvider extends ServiceProvider
     {
         return $this->relay(CecfApiClient::post(
             "/api/cecf/registration/{$request->get_param('id')}/pay-later",
-            []
+            [],
+        ));
+    }
+
+    /**
+     * Best-effort drop-off ping — registration.js fires this after every
+     * step transition so admin's Registrations table can show where a
+     * given registrant is stuck, not just that they're STARTED. Never
+     * something the wizard should block on, so unlike every other
+     * handler here this deliberately doesn't validate $body first: a
+     * malformed or missing step just gets forwarded as-is and esoko's
+     * own {ok:false} response comes back, which registration.js already
+     * swallows (see reportProgress()'s catch-and-ignore).
+     */
+    public function progress(WP_REST_Request $request): WP_REST_Response|WP_Error
+    {
+        $body = $request->get_json_params();
+
+        return $this->relay(CecfApiClient::post(
+            "/api/cecf/registration/{$request->get_param('id')}/progress",
+            is_array($body) ? $body : [],
         ));
     }
 
@@ -148,7 +181,7 @@ class CecfRegistrationServiceProvider extends ServiceProvider
 
         return $this->relay(CecfApiClient::post(
             "/api/cecf/registration/{$request->get_param('id')}/declare-payment",
-            is_array($body) ? $body : []
+            is_array($body) ? $body : [],
         ));
     }
 
@@ -158,7 +191,7 @@ class CecfRegistrationServiceProvider extends ServiceProvider
 
         return $this->relay(CecfApiClient::post(
             "/api/cecf/registration/{$request->get_param('id')}/complete",
-            is_array($body) ? $body : []
+            is_array($body) ? $body : [],
         ));
     }
 
@@ -187,6 +220,25 @@ class CecfRegistrationServiceProvider extends ServiceProvider
     public function paymentStatus(WP_REST_Request $request): WP_REST_Response|WP_Error
     {
         return $this->relay(CecfApiClient::get("/api/cecf/payments/{$request->get_param('id')}/status"));
+    }
+
+    /**
+     * Group suggestions as someone types "yes, I belong to a group" and
+     * starts naming it — lets them link straight to a real Organisation
+     * instead of typing a name that never actually joins anything. See
+     * resources/js/registration.js's group-search wiring.
+     */
+    public function groupsSearch(WP_REST_Request $request): WP_REST_Response|WP_Error
+    {
+        $q = (string) $request->get_param('q');
+        $county = (string) $request->get_param('county');
+
+        $path = '/api/cecf/groups/search?q=' . rawurlencode($q);
+        if ($county !== '') {
+            $path .= '&county=' . rawurlencode($county);
+        }
+
+        return $this->relay(CecfApiClient::get($path));
     }
 
     /**

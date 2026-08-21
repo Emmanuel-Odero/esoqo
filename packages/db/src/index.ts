@@ -27,6 +27,12 @@ export { getFeatureAdoption } from './dal/audit-read';
 export { getPlatformRevenueSplit } from './dal/platform-revenue';
 export { getDonorRepeatRate, getContributorRepeatRate } from './dal/retention';
 export { findStalledGroups } from './dal/group-alerts';
+// searchGroupsPublic is called from services/core's plain-Node ESM
+// CECF facade (routes/cecf.ts) — same reason every other explicit
+// re-export in this file exists: a name several `export *` hops deep
+// in the dal barrel (here, dal/index.ts -> dal/groups.ts) doesn't
+// reliably resolve there without a bundler.
+export { searchGroupsPublic } from './dal/groups';
 export { confirmBookingPayment, TicketingError } from './dal/ticketing';
 export {
   listDomainsNeedingReconciliation, markDomainVerifying, markDomainActive,
