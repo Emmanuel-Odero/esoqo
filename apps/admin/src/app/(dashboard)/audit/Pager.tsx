@@ -1,4 +1,5 @@
 import Link from 'next/link';
+import type { Route } from 'next';
 import { Icon } from '@esoko/ui';
 
 export interface PagerFilters { action?: string; actorType?: string; from?: string; to?: string }
@@ -43,5 +44,5 @@ function PageLink({ href, disabled, children }: { href: string; disabled: boolea
   if (disabled) {
     return <span className="btn btn-o btn-sm" aria-disabled style={{ opacity: 0.45, pointerEvents: 'none' }}>{children}</span>;
   }
-  return <Link className="btn btn-o btn-sm" href={href} scroll={false}>{children}</Link>;
+  return <Link className="btn btn-o btn-sm" href={href as Route} scroll={false}>{children}</Link>;
 }
