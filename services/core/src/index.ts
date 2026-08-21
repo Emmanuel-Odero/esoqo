@@ -17,6 +17,7 @@ import { parseStkCallback, parsePesapalIpn, confirmPesapalOrder } from '@esoko/p
 import { cecfRoutes } from './routes/cecf';
 import { jamiiDomainsRoutes, runJamiiDomainReconcile } from './routes/jamii-domains';
 import { jamiiDomainProvider } from './lib/cloudflare-saas';
+import { runContributionGapDigest } from './jobs/group-alerts';
 
 /**
  * services/core — the domain API for the core plane.
@@ -195,6 +196,22 @@ if (jamiiDomainProvider() === 'console') {
   }, RECONCILE_INTERVAL_MS).unref();
   app.log.info({ appEnv: appEnv() }, 'jamii domains: self-driven reconcile loop running (console mode)');
 }
+
+/**
+ * The contribution-gap digest — real cadence, not console-gated like
+ * the reconcile loop above, because it has nothing to protect
+ * production from: it only ever reads confirmed contributions and
+ * sends an SMS, the same side effect it would have running from an
+ * external cron. Once a day is plenty; a group's quiet streak doesn't
+ * change meaningfully more often than that. See jobs/group-alerts.ts
+ * for why this can run frequently without risking a duplicate text.
+ */
+const DIGEST_INTERVAL_MS = 24 * 60 * 60 * 1000;
+setInterval(() => {
+  runContributionGapDigest(app.log).catch((e) => {
+    app.log.error({ err: e }, 'contribution-gap digest failed');
+  });
+}, DIGEST_INTERVAL_MS).unref();
 
 const port = Number(process.env.PORT ?? 4000);
 await app.listen({ port, host: '0.0.0.0' });

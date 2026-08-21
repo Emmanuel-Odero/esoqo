@@ -2940,3 +2940,66 @@ model Ticket {
   @@index([status])
   @@map("ticket")
 }
+
+/// PRIMARY = esoko.app/o/{slug}; CUSTOM = the org's own domain
+/// (JamiiDomain, ACTIVE) — see apps/jamii/src/middleware.ts, which is
+/// the only writer of SiteVisit below and already resolves this same
+/// distinction for routing, at zero extra DB cost to reuse it here.
+enum DomainMode {
+  PRIMARY
+  CUSTOM
+}
+
+/// Day-bucketed, cookieless page-visit counter — the dashboard proposal's
+/// "we don't even know how many people visit an Our Jamii page" gap.
+/// One row per (org, logical page path, domain mode, day, referrer
+/// host); a repeat hit within the same day increments `count` instead
+/// of inserting a new row, so a viral page doesn't create one row per
+/// visit. `path` is the visitor-facing logical path — "/", "/about",
+/// "/c/{campaignId}" — normalised the same way whether the visitor
+/// arrived via the primary domain or the org's own custom domain, so
+/// the two can be compared side by side for the same page.
+///
+/// Deliberately NOT session/visitor-level — no cookie, no IP stored, no
+/// way to reconstruct one person's path through the site. That's the
+/// privacy trade this proposal explicitly chose (see the dashboard
+/// proposal's sourced reference to cookieless self-hosted analytics
+/// patterns), and it's also why this can't answer "time on page" —
+/// that needs a client beacon, a deliberately separate, not-yet-built
+/// instrumentation layer.
+model SiteVisit {
+  id         BigInt     @id @default(autoincrement())
+  /// JamiiPage.organisationId's slug — not a foreign key. A visit
+  /// counter must never fail to record because of a FK constraint on
+  /// the hot request path; an orphaned slug (org later deleted) is a
+  /// non-issue for a bucketed count with no other relation depending on it.
+  slug       String
+  path       String
+  domainMode DomainMode
+  /// "" (not null) for a direct visit — Postgres treats NULL as
+  /// distinct in a unique index, which would silently defeat the
+  /// day-bucketing upsert below for every referrer-less hit.
+  referrerHost String   @default("")
+  day          DateTime @db.Date
+  count        Int      @default(1)
+
+  @@unique([slug, path, domainMode, day, referrerHost])
+  @@index([slug, day])
+  @@map("site_visit")
+}
+
+/// One row per sendSms call, purely for cost visibility — see
+/// packages/auth/src/sms.ts's own header. `estimatedCostKes` is a
+/// configurable-per-message guess (SMS_COST_PER_MESSAGE_KES), not an
+/// invoice reconciliation; good enough to answer "is this growing" and
+/// "which purpose costs the most" without a billing-API integration.
+model SmsSpend {
+  id               String   @id @default(uuid()) @db.Uuid
+  purpose          String
+  estimatedCostKes Decimal  @db.Decimal(6, 2)
+  provider         String
+  createdAt        DateTime @default(now())
+
+  @@index([purpose, createdAt])
+  @@map("sms_spend")
+}

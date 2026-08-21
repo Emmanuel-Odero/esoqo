@@ -21,6 +21,12 @@ export {
 } from './dal/cecf-ingest';
 export { confirmDonationPayment, failDonationPayment, DonationError } from './dal/donation';
 export type { ConfirmDonationResult, DonationNotifyInfo } from './dal/donation';
+export { recordSiteVisit, getSiteVisitLeaderboard, getSiteVisitDomainSplit, getTopPagesForSite } from './dal/site-visit';
+export { recordSmsSpend, getSmsSpendSummary } from './dal/sms-spend';
+export { getFeatureAdoption } from './dal/audit-read';
+export { getPlatformRevenueSplit } from './dal/platform-revenue';
+export { getDonorRepeatRate, getContributorRepeatRate } from './dal/retention';
+export { findStalledGroups } from './dal/group-alerts';
 export { confirmBookingPayment, TicketingError } from './dal/ticketing';
 export {
   listDomainsNeedingReconciliation, markDomainVerifying, markDomainActive,

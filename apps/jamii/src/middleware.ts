@@ -3,7 +3,7 @@ import { NextResponse, type NextRequest } from 'next/server';
 // storage.ts (S3/fs), which drags filesystem code into the middleware
 // bundle and breaks it. The DAL barrel alone is everything
 // ADR-0003 requires and nothing storage-related.
-import { resolveJamiiDomain } from '@esoko/db/dal';
+import { resolveJamiiDomain, recordSiteVisit } from '@esoko/db/dal';
 
 /**
  * Host-based routing for custom domains — see the "Clean URLs" section
@@ -50,8 +50,40 @@ async function lookupDomain(hostname: string) {
   return value;
 }
 
+/** Where the visitor said they came from — same-site navigation is
+ *  noise (it would just show the org's own domain as its own
+ *  referrer), so only an external referrer is worth keeping. */
+function externalReferrerHost(req: NextRequest, currentHost: string): string | null {
+  const referer = req.headers.get('referer');
+  if (!referer) return null;
+  try {
+    const h = new URL(referer).hostname.toLowerCase();
+    return h && h !== currentHost ? h : null;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Cookieless visit logging — see SiteVisit's schema comment. Fire-and-
+ * forget on purpose: this runs self-hosted under `runtime: 'nodejs'`
+ * on a long-lived process (not a serverless/edge function that freezes
+ * the moment a response is returned), so an unawaited write reliably
+ * completes without adding write latency to every page load. GET only
+ * — a Server Action POST hits the same route and would otherwise
+ * double-count a single page view as a second "visit".
+ */
+function logVisit(req: NextRequest, slug: string, path: string, domainMode: 'PRIMARY' | 'CUSTOM', host: string) {
+  if (req.method !== 'GET') return;
+  void recordSiteVisit({
+    slug, path: path || '/', domainMode, referrerHost: externalReferrerHost(req, host),
+  }).catch(() => {
+    // Best-effort — a logging failure must never affect routing.
+  });
+}
+
 export default async function middleware(req: NextRequest) {
-  const host = (req.headers.get('host') ?? '').toLowerCase().split(':')[0];
+  const host = (req.headers.get('host') ?? '').toLowerCase().split(':')[0] ?? '';
 
   // Always strip any inbound x-jamii-domain-slug first — it's an
   // internal signal middleware sets for the app to trust, not something
@@ -60,6 +92,12 @@ export default async function middleware(req: NextRequest) {
   requestHeaders.delete('x-jamii-domain-slug');
 
   if (!host || primaryHosts().includes(host)) {
+    // Primary-domain visit — only log requests actually inside an
+    // org's site (/o/{slug}/...), not marketing/dashboard/API routes
+    // that were never org page views in the first place.
+    const m = req.nextUrl.pathname.match(/^\/o\/([^/]+)(\/.*)?$/);
+    const orgSlug = m?.[1];
+    if (orgSlug) logVisit(req, orgSlug, m?.[2] ?? '/', 'PRIMARY', host);
     return NextResponse.next({ request: { headers: requestHeaders } });
   }
 
@@ -73,6 +111,8 @@ export default async function middleware(req: NextRequest) {
       headers: { 'Content-Type': 'text/plain; charset=utf-8' },
     });
   }
+
+  logVisit(req, resolved.slug, req.nextUrl.pathname, 'CUSTOM', host);
 
   const url = req.nextUrl.clone();
   url.pathname = `/o/${resolved.slug}${req.nextUrl.pathname}`;
