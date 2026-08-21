@@ -5,7 +5,7 @@ import {
   createRegistrationForPerson, getRegistrationDetail,
   createDocument, listDocumentsForRegistration,
   declarePayment, recordPayment, assignUserPin,
-  assignPersonToGroup, searchGroupsForStaff,
+  assignPersonToGroup, setRegistrationGroupIntent, searchGroupsForStaff,
   sniff, makeStorageKey, safeName, sha256, putObject, MAX_BYTES,
 } from '@esoko/db';
 import { hashPin, generateTempPin } from '@esoko/auth';
@@ -143,6 +143,22 @@ export async function actionAssignToGroup(personId: string, orgPartyId: string):
   try {
     const ctx = await requireStaff();
     await assignPersonToGroup(ctx, personId, orgPartyId);
+    revalidatePath('/registrations');
+    return { ok: true, data: undefined };
+  } catch (e) { return fail(e); }
+}
+
+/** The not-yet-complete counterpart — no Party exists yet to hang a
+ *  real Membership off, so this records the intent on the registration
+ *  row itself; completeRegistration links it into a real Membership
+ *  automatically once the registrant finishes. Gated by
+ *  membership.write only, not registration.write — see
+ *  setRegistrationGroupIntent's own comment for why that distinction
+ *  is the whole point of this action existing separately. */
+export async function actionAssignGroupIntent(registrationId: string, orgPartyId: string, orgName: string): Promise<Result> {
+  try {
+    const ctx = await requireStaff();
+    await setRegistrationGroupIntent(ctx, registrationId, orgPartyId, orgName);
     revalidatePath('/registrations');
     return { ok: true, data: undefined };
   } catch (e) { return fail(e); }

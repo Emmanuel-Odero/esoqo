@@ -21,6 +21,7 @@
     "seed:demo": "tsx prisma/seed-demo.ts",
     "backfill:rich-text": "tsx prisma/backfill-rich-text.ts",
     "repair:audit-chain": "tsx --env-file-if-exists=../../.env prisma/repair-audit-chain.ts",
+    "backfill:registration-org-links": "tsx --env-file-if-exists=../../.env prisma/backfill-registration-org-links.ts",
     "backfill:jamii-site-pages": "tsx prisma/backfill-jamii-site-pages.ts",
     "studio": "prisma studio",
     "audit:verify": "tsx --env-file-if-exists=../../.env src/scripts/verify-chain.ts",

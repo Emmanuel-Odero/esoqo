@@ -8,6 +8,8 @@
   border-top-color:var(--green); animation:spin .7s linear infinite }
 @media(prefers-reduced-motion:reduce){ .spinner{ animation-duration:2.4s } }
 @keyframes spin { to { transform:rotate(360deg) } }
+@keyframes live-pulse { 0%,100% { opacity:1 } 50% { opacity:.35 } }
+@media(prefers-reduced-motion:reduce){ *[style*="live-pulse"]{ animation:none !important } }
 
 /* sidebar */
 aside { background:var(--navy); color:#9FC0D6; padding:18px 0 14px; position:sticky; top:0;

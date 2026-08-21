@@ -13,7 +13,7 @@ export {
   declarePayment, deferPayment,
 } from './dal/payments';
 export {
-  startRegistration, updateRegistration, markMsisdnVerified, getRegistrationDetail,
+  startRegistration, updateRegistration, setRegistrationGroupIntent, markMsisdnVerified, getRegistrationDetail,
 } from './dal/registration';
 export {
   completeCecfRegistration, addCecfMemberRoster, trySetCecfJoinFee, uploadCecfDocument,
