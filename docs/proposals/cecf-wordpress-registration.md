@@ -89,6 +89,7 @@ same string it POSTs, verbatim — see `CecfApiClient::sign()`. A GET request
 | `POST /api/cecf/registration/start` | `startRegistration` + `updateRegistration` — the whole payload from `packages/domain/src/cecf-ingest.ts`'s `cecfIngestSchema` in one call, since WordPress already has everything by the time it calls this (unlike `/join`'s own multi-step wizard) |
 | `POST /api/cecf/registration/:id/documents` | `uploadCecfDocument`, looped |
 | `POST /api/cecf/registration/:id/pay-later` | `deferPayment` |
+| `POST /api/cecf/registration/:id/progress` | `updateRegistration({ lastStep })` — best-effort drop-off ping, see §8 |
 | `POST /api/cecf/registration/:id/declare-payment` | `declarePayment` (bank transfer / cash to agent) |
 | `POST /api/cecf/payments/mpesa/initiate` | `initiateStkPush` + `attachRegistrationCheckoutRequestId` |
 | `POST /api/cecf/payments/pesapal/initiate` | `initiatePesapalOrder` + `attachRegistrationPesapalOrder` |
@@ -118,3 +119,32 @@ business), OTP or whatever verification WordPress chooses to run before setting
 `registrant.msisdnVerified`, and redirecting the browser to Pesapal's hosted page /
 showing the M-Pesa "check your phone" wait. See phases 6–7 of the implementation plan
 for that build.
+
+## 8 · Surviving a refresh — client persistence + progress tracking
+
+Added 21 August 2026. The wizard is entirely client-driven (§6) and `/start` isn't
+called until the "you" step, so refreshing the tab — or closing it and coming back —
+used to lose everything typed, with no server-side trace for anything before "you"
+and no way for admin to tell a registration stuck on documents from one stuck on
+payment.
+
+- **`resources/js/registration.js`** now mirrors `apps/app/join`'s own `localStorage`
+  resume pattern: the whole `state` object plus every named form field is written to
+  `localStorage['esoko:cecf-reg:v1']` after every step transition and field change
+  (debounced), keyed by nothing more than "this browser" — there's no account to key
+  it to. On load, a saved draft shows a `.callout` prompt ("Continue where you left
+  off" / "Start over") before the wizard renders; picking "Continue" repopulates the
+  form and jumps straight to the saved step. Uploaded document bytes are **not**
+  persisted (a rejected multi-MB base64 string per file would blow past most
+  browsers' 5–10MB `localStorage` quota) — a resumed draft keeps the member roster and
+  every text field, but documents must be re-attached. Cleared on `finish()`, same as
+  a successful `/complete`.
+- **`POST /api/cecf/registration/:id/progress`** (new, §5 table) is a fire-and-forget
+  ping registration.js sends after every step transition once `registrationId`
+  exists, bumping `Registration.lastStep` — the same "highest step reached" counter
+  `apps/app/join` already leaves behind, just driven from the client instead of a
+  Server Action per step. `updateRegistration` already refuses to move it backwards,
+  so a resumed-then-abandoned draft never makes admin think someone regressed.
+  admin's Registrations table (`apps/admin/.../registrations/RegistrationTable.tsx`)
+  surfaces this as a step label (e.g. "Step 4 of 7 · fee coverage") next to `STARTED`
+  CECF rows, using the same `SEQUENCES` step order as registration.js.

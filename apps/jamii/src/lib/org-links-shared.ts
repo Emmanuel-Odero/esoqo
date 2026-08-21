@@ -78,3 +78,49 @@ export function crossToPrimaryHref(mode: OrgLinkMode, path: string): string {
   const clean = path.replace(/^\/+/, '');
   return mode.base === '' ? `${primaryOrigin()}/${clean}` : `/${clean}`;
 }
+
+/**
+ * The shape listJamiiNavItemsPublic (@esoko/db) resolves — just enough
+ * to render a link, no Prisma types crossing into these Client
+ * Components. "Home" is never one of these; see JamiiNavItem's own
+ * doc comment and resolveNavLinks below.
+ */
+export interface PublicNavItem {
+  id: string;
+  label: string;
+  targetKind: 'SITE_PAGE' | 'EXTERNAL_URL';
+  targetSitePage: { slug: string } | null;
+  externalUrl: string | null;
+  openInNewTab: boolean;
+}
+
+export interface ResolvedNavLink {
+  key: string;
+  label: string;
+  href: string;
+  external: boolean;
+  newTab: boolean;
+}
+
+/**
+ * OrgTopNav/OrgSubnav's DB-backed nav — resolved server-side (in
+ * OrgSectionShell) from an org's JamiiNavItem rows, replacing the
+ * ORG_NAV_SECTIONS/WHITELABEL_NAV_SECTIONS consts above wherever an
+ * org actually has nav rows (every org does, post-backfill; the consts
+ * remain only as the pre-generic-CMS fallback for the unlikely case of
+ * a page with zero rows).
+ */
+export function resolveNavLinks(items: PublicNavItem[], mode: OrgLinkMode): ResolvedNavLink[] {
+  return items.map((item) => {
+    if (item.targetKind === 'EXTERNAL_URL' && item.externalUrl) {
+      return { key: item.id, label: item.label, href: item.externalUrl, external: true, newTab: item.openInNewTab };
+    }
+    return {
+      key: item.id,
+      label: item.label,
+      href: orgHref(mode, item.targetSitePage?.slug ?? ''),
+      external: false,
+      newTab: item.openInNewTab,
+    };
+  });
+}

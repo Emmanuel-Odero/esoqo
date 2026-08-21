@@ -189,6 +189,44 @@ export async function updateRegistration(
   return reg;
 }
 
+/**
+ * Sets which group a not-yet-complete registration is destined for —
+ * the narrow membership-only counterpart to assignPersonToGroup (which
+ * needs a real Party, only created at completion). Gated by
+ * membership.write, not registration.write: assigning someone to a
+ * group is a membership decision, and a staff account trusted to make
+ * that call shouldn't ALSO need the broader "can edit any field on any
+ * registration" permission just to reach it — that mismatch is exactly
+ * what made this look like "only works on completed registrations"
+ * before, when the real blocker was which capability the UI checked.
+ *
+ * Purely intent — completeRegistration's own linking step (2c) is what
+ * actually creates the Membership once this registration finishes.
+ */
+export async function setRegistrationGroupIntent(ctx: Ctx, id: string, orgPartyId: string, orgName: string) {
+  requireCapability(ctx, 'membership.write', { partyId: orgPartyId });
+
+  const existing = await prisma.registration.findUnique({ where: { id } });
+  if (!existing) throw new Error('Registration not found');
+  if (existing.status === 'COMPLETE') {
+    throw new Error('Already complete — use assignPersonToGroup instead, this registration has a real Party now');
+  }
+
+  const reg = await prisma.registration.update({
+    where: { id },
+    data: { groupPartyId: orgPartyId, groupName: orgName, belongsToGroup: 'yes' },
+  });
+
+  await recordAudit(ctx, {
+    action: 'registration.group_intent_set',
+    targetType: 'registration',
+    targetId: id,
+    payload: { orgPartyId },
+  });
+
+  return reg;
+}
+
 export async function markOtpSent(ctx: Ctx, id: string) {
   requireCapability(ctx, 'registration.write', { registrationId: id });
   const reg = await prisma.registration.update({
@@ -425,10 +463,22 @@ export async function completeRegistration(ctx: Ctx, id: string) {
       data: { partyId: bizPartyId ?? orgPartyId ?? personPartyId },
     });
 
-    // 5 · close the funnel record
+    // 5 · close the funnel record. groupPartyId/bizPartyId are written
+    // back here even for a brand-new org (orgPartyId/bizPartyId from
+    // step 2/2b) — previously only the "joined an existing org via
+    // search" path (2c) ever populated these, so a completed
+    // registration that founded a new group or business had no durable
+    // link back to the Organisation it just created. That gap is
+    // exactly what made "which registration made this group" and "is
+    // this a group or an individual registration" unanswerable from
+    // the registration row alone.
     const done = await tx.registration.update({
       where: { id },
-      data: { status: 'COMPLETE' as RegistrationStatus, completedAt: new Date(), partyId: personPartyId },
+      data: {
+        status: 'COMPLETE' as RegistrationStatus, completedAt: new Date(), partyId: personPartyId,
+        groupPartyId: orgPartyId ?? reg.groupPartyId,
+        bizPartyId: bizPartyId ?? reg.bizPartyId,
+      },
     });
 
     await recordAudit(
@@ -532,8 +582,13 @@ export async function listRegistrations(ctx: Ctx, f: ListRegistrationsFilter = {
   const where = {
     ...(f.status ? { status: f.status } : {}),
     ...(f.county ? { county: f.county } : {}),
-    ...(f.type === 'organisations' ? { joiningAs: 'group' } : {}),
-    ...(f.type === 'individuals' ? { joiningAs: { not: 'group' } } : {}),
+    // A business is an organisation exactly as much as a group is —
+    // both are independent Organisation parties from the person who
+    // registered them (see completeRegistration). This used to only
+    // match joiningAs:'group', which silently filed every business
+    // registration under "Individuals".
+    ...(f.type === 'organisations' ? { joiningAs: { in: ['group', 'biz'] } } : {}),
+    ...(f.type === 'individuals' ? { joiningAs: 'me' } : {}),
     ...(f.source === 'CECF' ? { path: 'CECF_WEB' as JoinPath } : {}),
     ...(f.source === 'ESOKO' ? { path: { not: 'CECF_WEB' as JoinPath } } : {}),
     ...(f.from || f.to
@@ -557,6 +612,17 @@ export async function listRegistrations(ctx: Ctx, f: ListRegistrationsFilter = {
       orderBy: { startedAt: 'desc' },
       take: f.take ?? 25,
       skip: f.skip ?? 0,
+      include: {
+        // Only ever needed to NAME the org this registration is
+        // attached to when it joined one already on file rather than
+        // typing a brand-new name (orgName/bizName stay null in that
+        // case) — see completeRegistration's step 2c. Without this a
+        // "joined an existing group" row has no group name to show at
+        // all, which is exactly the "which group is this member from"
+        // gap this include closes.
+        groupParty: { select: { organisation: { select: { officialName: true } } } },
+        bizParty: { select: { organisation: { select: { officialName: true } } } },
+      },
     }),
     prisma.registration.count({ where }),
   ]);

@@ -5,6 +5,11 @@ import {
   sniff, makeStorageKey, putObject, deleteObject, MAX_BYTES,
   getJamiiPageForManagement, updateJamiiPage, addJamiiPhoto, removeJamiiPhoto,
 } from '@esoko/db';
+// Its own subpath, not the main '@esoko/db' entry — see that package's
+// index.ts for why (sharp, a native binary addon, would otherwise land
+// in every app's Server Component graph just for importing anything
+// else from @esoko/db).
+import { compressImage } from '@esoko/db/image-compression';
 import { requireSubject } from '@/lib/session';
 
 export type UploadResult = { ok: true; url: string; photoId?: string } | { ok: false; error: string };
@@ -19,7 +24,11 @@ async function readImage(form: FormData): Promise<{ buf: Buffer; mime: string } 
   if (!check.ok || !check.mime || !check.mime.startsWith('image/')) {
     return { error: check.reason ?? 'Only PNG or JPEG photos are accepted' };
   }
-  return { buf, mime: check.mime };
+  // Every image this app ever stores goes through here first — see
+  // compressImage's own header for why (resize + re-encode, PDFs/docs
+  // untouched, always falls back to the original bytes on failure).
+  const compressed = await compressImage(buf, check.mime);
+  return { buf: compressed, mime: check.mime };
 }
 
 /**

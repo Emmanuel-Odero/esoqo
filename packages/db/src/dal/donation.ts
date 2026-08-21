@@ -73,13 +73,53 @@ export async function attachDonationCheckoutRequestId(donationId: string, checko
  * fee split, matching the prototype's "100% goes to the group, minus
  * standard M-Pesa fees" promise.
  */
-export async function confirmDonationPayment(checkoutRequestId: string, mpesaReceiptCode: string) {
+export interface DonationNotifyInfo {
+  donorName: string;
+  anonymous: boolean;
+  donorMsisdn: string;
+  amountKes: number;
+  campaignTitle: string;
+  orgName: string;
+  receiptCode: string;
+  /** Numbers to alert — the page's own ADMIN team members' phones,
+   *  falling back to the page's public contact number if no admin has
+   *  one on file. Never empty and never undefined-y — a caller can
+   *  just iterate it. */
+  adminMsisdns: string[];
+}
+
+export interface ConfirmDonationResult {
+  donation: Awaited<ReturnType<typeof prisma.donation.update>>;
+  /** False on an idempotent replay (a repeated Daraja callback for a
+   *  checkoutRequestId already confirmed) — callers use this to avoid
+   *  sending the thank-you/admin-alert SMS twice for the same gift. */
+  justConfirmed: boolean;
+  /** Only populated when justConfirmed — no reason to pull page/team
+   *  data on the no-op replay path. */
+  notify?: DonationNotifyInfo;
+}
+
+export async function confirmDonationPayment(checkoutRequestId: string, mpesaReceiptCode: string): Promise<ConfirmDonationResult> {
   const donation = await prisma.donation.findUnique({
     where: { mpesaCheckoutRequestId: checkoutRequestId },
-    include: { campaign: true },
+    include: {
+      campaign: {
+        include: {
+          page: {
+            include: {
+              organisation: { select: { officialName: true } },
+              team: {
+                where: { role: 'ADMIN', removedAt: null, person: { person: { msisdn: { not: null } } } },
+                include: { person: { include: { person: { select: { msisdn: true } } } } },
+              },
+            },
+          },
+        },
+      },
+    },
   });
   if (!donation) throw new DonationError('No donation matches this payment', 'NOT_FOUND');
-  if (donation.status !== 'PENDING') return donation;
+  if (donation.status !== 'PENDING') return { donation, justConfirmed: false };
   if (!donation.campaign.accountId) throw new Error('Campaign has no ledger account — this should never happen');
 
   const existingEntry = await prisma.journalEntry.findUnique({ where: { idempotencyKey: checkoutRequestId } });
@@ -117,6 +157,51 @@ export async function confirmDonationPayment(checkoutRequestId: string, mpesaRec
   await recordAudit(systemCtx('mpesa-callback'), {
     action: 'donation.confirmed', targetType: 'donation', targetId: donation.id,
     payload: { mpesaReceiptCode, campaignId: donation.campaignId },
+  });
+
+  const adminMsisdns = donation.campaign.page.team
+    .map((m) => m.person?.person?.msisdn)
+    .filter((n): n is string => Boolean(n));
+  if (adminMsisdns.length === 0 && donation.campaign.page.contactPhone) {
+    adminMsisdns.push(donation.campaign.page.contactPhone);
+  }
+
+  return {
+    donation: updated,
+    justConfirmed: true,
+    notify: {
+      donorName: donation.donorName,
+      anonymous: donation.anonymous,
+      donorMsisdn: donation.donorMsisdn,
+      amountKes: Number(donation.amountKes),
+      campaignTitle: donation.campaign.title,
+      orgName: donation.campaign.page.organisation.officialName,
+      receiptCode: code,
+      adminMsisdns,
+    },
+  };
+}
+
+/**
+ * Called from the M-Pesa callback when Safaricom reports the STK push
+ * did NOT succeed (cancelled by the donor, insufficient balance, a
+ * timeout, …) — the counterpart to confirmDonationPayment's success
+ * path. Idempotent the same way: a repeated callback for an already
+ * terminal donation (FAILED or CONFIRMED) is a safe no-op.
+ */
+export async function failDonationPayment(checkoutRequestId: string, reason: string) {
+  const donation = await prisma.donation.findUnique({ where: { mpesaCheckoutRequestId: checkoutRequestId } });
+  if (!donation) throw new DonationError('No donation matches this payment', 'NOT_FOUND');
+  if (donation.status !== 'PENDING') return donation;
+
+  const updated = await prisma.donation.update({
+    where: { id: donation.id },
+    data: { status: 'FAILED', failureReason: reason },
+  });
+
+  await recordAudit(systemCtx('mpesa-callback'), {
+    action: 'donation.failed', targetType: 'donation', targetId: donation.id,
+    payload: { reason, campaignId: donation.campaignId },
   });
 
   return updated;

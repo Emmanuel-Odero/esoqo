@@ -17,15 +17,25 @@
 @endphp
 <section class="sec">
   <div class="wrap narrow">
+    <div class="callout" data-role="resume-banner" hidden>
+      <p data-role="resume-message">{{ __('You have a registration in progress on this device.', 'cecf-sage') }}</p>
+      <div class="fnav" style="margin:0;padding:0;border:0">
+        <button type="button" class="btn btn-o" data-role="resume-start-over">{{ __('Start over', 'cecf-sage') }}</button>
+        <button type="button" class="btn btn-p" data-role="resume-continue">{{ __('Continue where I left off', 'cecf-sage') }}</button>
+      </div>
+    </div>
+
     <form id="cecf-reg" class="fcard" novalidate
       data-start-url="{{ home_url('/wp-json/cecf/v1/registration/start') }}"
       data-documents-url-tpl="{{ home_url('/wp-json/cecf/v1/registration/:id/documents') }}"
       data-complete-url-tpl="{{ home_url('/wp-json/cecf/v1/registration/:id/complete') }}"
       data-pay-later-url-tpl="{{ home_url('/wp-json/cecf/v1/registration/:id/pay-later') }}"
       data-declare-payment-url-tpl="{{ home_url('/wp-json/cecf/v1/registration/:id/declare-payment') }}"
+      data-progress-url-tpl="{{ home_url('/wp-json/cecf/v1/registration/:id/progress') }}"
       data-mpesa-initiate-url="{{ home_url('/wp-json/cecf/v1/payments/mpesa/initiate') }}"
       data-pesapal-initiate-url="{{ home_url('/wp-json/cecf/v1/payments/pesapal/initiate') }}"
       data-status-url-tpl="{{ home_url('/wp-json/cecf/v1/payments/:id/status') }}"
+      data-groups-search-url="{{ home_url('/wp-json/cecf/v1/groups/search') }}"
       data-return-url="{{ home_url('/apply/?paid=1') }}"
     >
       <div class="fprog" role="progressbar" aria-label="{{ __('Registration progress', 'cecf-sage') }}"></div>
@@ -239,6 +249,32 @@
               <option value="{{ $c }}">{{ $c }}</option>
             @endforeach
           </select>
+        </div>
+
+        {{-- Individuals only — a group/business registrant is already
+             answering a version of this by registering one. --}}
+        <div class="fld" data-role="belongs-group-wrap" hidden>
+          <label class="lgl">{{ __('Do you already belong to a group, sacco or cooperative?', 'cecf-sage') }}</label>
+          <div class="opts tight" role="group" data-role="belongs-group">
+            <button type="button" class="opt" data-value="yes" aria-pressed="false">
+              <b>{{ __('Yes', 'cecf-sage') }}</b><i>{{ __('A chama, sacco, cooperative, welfare group or association', 'cecf-sage') }}</i>
+            </button>
+            <button type="button" class="opt" data-value="no" aria-pressed="false">
+              <b>{{ __('No', 'cecf-sage') }}</b><i>{{ __('You can join or start one later', 'cecf-sage') }}</i>
+            </button>
+          </div>
+          <div class="fld" data-role="group-name-wrap" style="position:relative;margin-top:12px" hidden>
+            <label for="groupName">{{ __('Which group?', 'cecf-sage') }}</label>
+            <input id="groupName" name="groupName" type="text" autocomplete="off"
+              placeholder="{{ __('Start typing to search…', 'cecf-sage') }}">
+            <input type="hidden" id="groupPartyId" name="groupPartyId">
+            <ul class="opts tight" data-role="group-suggestions"
+              style="position:absolute;z-index:5;top:100%;left:0;right:0;background:#fff;max-height:220px;overflow:auto;box-shadow:0 4px 14px rgba(0,0,0,.12)"
+              hidden></ul>
+            <p class="hint" data-role="group-name-hint">
+              {{ __('Pick your group from the list if it appears — that links your record to theirs. No match yet? The name you type is saved either way.', 'cecf-sage') }}
+            </p>
+          </div>
         </div>
       </fieldset>
 

@@ -20,6 +20,7 @@ export async function actionStartJamiiPage(raw: unknown): Promise<ActionResult<{
   try {
     const { slug } = await createJamiiPage(ctx, {
       orgKind: parsed.data.orgKind as never,
+      orgKindOther: parsed.data.orgKindOther || undefined,
       officialName: parsed.data.officialName,
       county: parsed.data.county,
       ward: parsed.data.ward || undefined,

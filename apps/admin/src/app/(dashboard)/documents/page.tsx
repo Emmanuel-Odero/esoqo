@@ -1,6 +1,7 @@
 import { Icon } from '@esoko/ui';
 import { listDocuments, getDocumentStats, DOCUMENT_KINDS } from '@esoko/db';
 import { requireStaff } from '@/lib/session';
+import { DonutChart } from '@/components/charts';
 import { DocumentGrid } from './DocumentGrid';
 
 export const dynamic = 'force-dynamic';
@@ -46,6 +47,17 @@ export default async function DocumentsPage({
           );
         })}
       </div>
+
+      {total > 0 && (
+        <div className="card" style={{ marginBottom: 22 }}>
+          <h2><Icon name="document" size={17} />Review status</h2>
+          <DonutChart size={150} centerLabel={{ value: String(total), sub: 'documents' }} segments={[
+            { label: 'Awaiting review', value: by('PENDING_REVIEW'), color: 'var(--amber)' },
+            { label: 'Accepted', value: by('ACCEPTED'), color: 'var(--green-2)' },
+            { label: 'Rejected', value: by('REJECTED'), color: 'var(--red)' },
+          ].filter((s) => s.value > 0)} />
+        </div>
+      )}
 
       <DocumentGrid
         docs={rows.map((d) => ({

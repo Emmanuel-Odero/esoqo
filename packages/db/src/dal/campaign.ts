@@ -68,6 +68,52 @@ export async function listCampaigns(pageId: string, status?: 'DRAFT' | 'ACTIVE' 
   });
 }
 
+/** Single-campaign lookup for the dashboard's edit screen — scoped to
+ *  `pageId` so a campaign id from another org's page can't be loaded. */
+export async function getCampaign(ctx: Ctx, pageId: string, campaignId: string) {
+  await requirePageAccess(ctx, pageId, 'CONTRIBUTOR');
+  return prisma.campaign.findFirst({ where: { id: campaignId, pageId } });
+}
+
+export interface UpdateCampaignInput {
+  title?: string;
+  summary?: string;
+  body?: string;
+  goalKes?: number;
+  coverUrl?: string;
+  coverStorageKey?: string;
+  endsAt?: Date | null;
+  status?: CampaignStatus;
+}
+
+/** Mirrors updateJamiiPage's shape (requirePageAccess + recordAudit) — the
+ *  title/slug relationship set up in createCampaign is left alone here
+ *  (no slug regeneration on rename), so an already-shared campaign link
+ *  never breaks under a later edit. */
+export async function updateCampaign(ctx: Ctx, pageId: string, campaignId: string, patch: UpdateCampaignInput) {
+  await requirePageAccess(ctx, pageId, 'EDITOR');
+  const existing = await prisma.campaign.findFirst({ where: { id: campaignId, pageId } });
+  if (!existing) throw new CampaignError('Campaign not found', 'NOT_FOUND');
+  if (patch.title !== undefined && !patch.title.trim()) throw new Error('Give the campaign a title');
+  if (patch.goalKes !== undefined && !(patch.goalKes > 0)) throw new Error('Set a goal above zero');
+
+  const campaign = await prisma.campaign.update({
+    where: { id: campaignId },
+    data: {
+      ...(patch.title !== undefined ? { title: patch.title.trim() } : {}),
+      ...(patch.summary !== undefined ? { summary: patch.summary.trim() } : {}),
+      ...(patch.body !== undefined ? { body: patch.body.trim() || null } : {}),
+      ...(patch.goalKes !== undefined ? { goalKes: patch.goalKes } : {}),
+      ...(patch.coverUrl !== undefined ? { coverUrl: patch.coverUrl || null } : {}),
+      ...(patch.coverStorageKey !== undefined ? { coverStorageKey: patch.coverStorageKey || null } : {}),
+      ...(patch.endsAt !== undefined ? { endsAt: patch.endsAt } : {}),
+      ...(patch.status !== undefined ? { status: patch.status } : {}),
+    },
+  });
+  await recordAudit(ctx, { action: 'campaign.updated', targetType: 'campaign', targetId: campaignId });
+  return campaign;
+}
+
 /** Public campaign lookup, scoped to its page's slug for the /o/[slug]/c/[slug] route. */
 export async function getCampaignBySlug(pageSlug: string, campaignSlug: string) {
   const page = await prisma.jamiiPage.findFirst({ where: { slug: pageSlug, status: 'PUBLISHED' } });
@@ -84,6 +130,10 @@ export async function getCampaignBySlug(pageSlug: string, campaignSlug: string) 
               },
             },
           },
+          // See PUBLIC_PAGE_INCLUDE in jamii-page.ts — same ACTIVE-only
+          // scoping, needed here too so orgExternalUrl() works on the
+          // campaign page (OrgTopNav's websiteUrl prop).
+          domain: { where: { status: 'ACTIVE', removedAt: null } },
         },
       },
       updates: { orderBy: { postedAt: 'desc' } },
@@ -106,11 +156,38 @@ export async function getCampaignStats(campaignId: string) {
   return { raisedKes: Number(postings._sum.amount ?? 0), supporters };
 }
 
+/** Verifies `campaignId` actually belongs to `pageId` before any write —
+ *  requirePageAccess alone only proves the caller may manage *a* page,
+ *  not that this particular campaign is theirs; without this check a
+ *  CONTRIBUTOR on one org's page could post/delete updates on any
+ *  other org's campaign by guessing its id. */
+async function assertOwnsCampaign(pageId: string, campaignId: string) {
+  const campaign = await prisma.campaign.findFirst({ where: { id: campaignId, pageId }, select: { id: true } });
+  if (!campaign) throw new CampaignError('Campaign not found', 'NOT_FOUND');
+}
+
 export async function addCampaignUpdate(ctx: Ctx, pageId: string, campaignId: string, title: string, body: string) {
   await requirePageAccess(ctx, pageId, 'CONTRIBUTOR');
+  await assertOwnsCampaign(pageId, campaignId);
   const update = await prisma.campaignUpdate.create({ data: { campaignId, title: title.trim(), body: body.trim() } });
   await recordAudit(ctx, { action: 'campaign.update_posted', targetType: 'campaign', targetId: campaignId });
   return update;
+}
+
+/** The dashboard edit screen's own updates list — getCampaignBySlug's
+ *  public lookup already includes `updates`, but that one is scoped to
+ *  a PUBLISHED page; this is the owner-facing equivalent. */
+export async function listCampaignUpdatesForOwner(ctx: Ctx, pageId: string, campaignId: string) {
+  await requirePageAccess(ctx, pageId, 'CONTRIBUTOR');
+  await assertOwnsCampaign(pageId, campaignId);
+  return prisma.campaignUpdate.findMany({ where: { campaignId }, orderBy: { postedAt: 'desc' } });
+}
+
+export async function deleteCampaignUpdate(ctx: Ctx, pageId: string, campaignId: string, updateId: string) {
+  await requirePageAccess(ctx, pageId, 'EDITOR');
+  await assertOwnsCampaign(pageId, campaignId);
+  await prisma.campaignUpdate.delete({ where: { id: updateId, campaignId } });
+  await recordAudit(ctx, { action: 'campaign.update_deleted', targetType: 'campaign', targetId: campaignId });
 }
 
 /** Recent donations for the campaign's public "supporters" wall. */

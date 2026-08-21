@@ -42,6 +42,7 @@
   "require": {
     "php": ">=8.3",
     "composer/installers": "^2.0",
+    "humanmade/s3-uploads": "^3.0",
     "oscarotero/env": "^2.0",
     "roots/bedrock-autoloader": "^1.0",
     "roots/bedrock-disallow-indexing": "^2.0",

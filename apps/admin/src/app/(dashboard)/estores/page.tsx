@@ -3,7 +3,7 @@ import type { Route } from 'next';
 import { Icon } from '@esoko/ui';
 import { getEstoreOverview } from '@esoko/db';
 import { requireStaff } from '@/lib/session';
-import { RevenueTrendChart } from './RevenueTrendChart';
+import { DailyBarChart, DonutChart, RankedBarChart } from '@/components/charts';
 
 export const dynamic = 'force-dynamic';
 
@@ -15,8 +15,6 @@ export default async function EstoresOverviewPage() {
   const ctx = await requireStaff();
   const o = await getEstoreOverview(ctx);
 
-  const maxStatus = Math.max(1, ...o.statusBreakdown.map((s) => s.count));
-  const maxSector = Math.max(1, ...o.sectorBreakdown.map((s) => s.count));
   const maxStoreRevenue = Math.max(1, ...o.topStores.map((s) => s.revenueKes));
 
   return (
@@ -69,27 +67,19 @@ export default async function EstoresOverviewPage() {
 
       <div className="card" style={{ marginBottom: 22 }}>
         <h2><Icon name="trend-up" size={18} />Marketplace revenue, last {o.windowDays} days</h2>
-        <RevenueTrendChart data={o.dailyRevenue} />
+        <DailyBarChart
+          data={o.dailyRevenue.map((d) => ({ date: d.date, value: d.revenueKes }))}
+          color="var(--green-2)" currency height={180} />
       </div>
 
       <div className="grid2" style={{ marginBottom: 22 }}>
         <div className="card">
           <h2><Icon name="shop" size={18} />Store status</h2>
-          <table className="tbl">
-            <tbody>
-              {o.statusBreakdown.map((s) => (
-                <tr key={s.status}>
-                  <td>{STATUS_LABEL[s.status]}</td>
-                  <td className="mono" style={{ width: 40 }}>{s.count}</td>
-                  <td style={{ width: '55%' }}>
-                    <div className="bar">
-                      <span style={{ width: `${(s.count / maxStatus) * 100}%`, background: STATUS_COLOR[s.status] }} />
-                    </div>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+          <DonutChart
+            segments={o.statusBreakdown.map((s) => ({
+              label: STATUS_LABEL[s.status] ?? s.status, value: s.count, color: STATUS_COLOR[s.status] ?? 'var(--tx-3)',
+            }))}
+            centerLabel={{ value: String(o.totalStores), sub: 'stores' }} size={150} />
         </div>
 
         <div className="card">
@@ -97,19 +87,7 @@ export default async function EstoresOverviewPage() {
           {o.sectorBreakdown.length === 0 ? (
             <p className="empty">No stores with a recorded sector yet.</p>
           ) : (
-            <table className="tbl">
-              <tbody>
-                {o.sectorBreakdown.map((s) => (
-                  <tr key={s.sector}>
-                    <td>{s.sector}</td>
-                    <td className="mono" style={{ width: 40 }}>{s.count}</td>
-                    <td style={{ width: '55%' }}>
-                      <div className="bar"><span style={{ width: `${(s.count / maxSector) * 100}%`, background: 'var(--blue)' }} /></div>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+            <RankedBarChart rows={o.sectorBreakdown.map((s) => ({ label: s.sector, value: s.count }))} color="var(--blue)" />
           )}
         </div>
       </div>

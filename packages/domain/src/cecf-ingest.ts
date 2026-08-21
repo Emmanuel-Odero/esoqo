@@ -96,8 +96,13 @@ export const cecfGroupIngestSchema = z.object({
   /** 'group' = one lump-sum registration fee for the whole team.
    *  'self' = each member (this founder included) covers their own
    *  KES 500 — sets GroupTreasuryPolicy.joinFeeKes so future members
-   *  default to PENDING until they pay it themselves. */
-  feeCoverage: z.enum(['group', 'self']),
+   *  default to PENDING until they pay it themselves.
+   *  WordPress's PHP client serializes an unanswered radio as an
+   *  explicit `null` rather than omitting the key, so this accepts
+   *  null/undefined and falls back to 'group' — the same "nothing more
+   *  to do here" default the app's own join flow leaves callers at when
+   *  feeCoverage is left unset (see UpdateRegistrationInput). */
+  feeCoverage: z.enum(['group', 'self']).nullish().transform((v) => v ?? 'group'),
   payment: cecfPaymentSchema.optional(),
   documents: z.array(cecfDocumentUploadSchema).max(6).default([]),
 });
@@ -127,6 +132,14 @@ export const cecfIndividualIngestSchema = z.object({
   registrant: cecfRegistrantSchema,
   payment: cecfPaymentSchema.optional(),
   documents: z.array(cecfDocumentUploadSchema).max(6).default([]),
+  /** "Do you already belong to a group?" — independent of joiningAs,
+   *  same shape as apps/app/join's own belongsToGroup question.
+   *  groupPartyId is set only when they picked a real suggestion from
+   *  /api/cecf/groups/search; groupName alone (no id) means they typed
+   *  a name with no match, same as apps/app's own GroupPicker. */
+  belongsToGroup: z.enum(['yes', 'no']).optional(),
+  groupName: z.string().max(200).optional(),
+  groupPartyId: z.string().uuid().optional(),
 });
 export type CecfIndividualIngest = z.infer<typeof cecfIndividualIngestSchema>;
 

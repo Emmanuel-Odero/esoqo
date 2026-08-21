@@ -12,6 +12,7 @@ function slugify(name: string): string {
 
 export function StartWizard({ signedIn }: { signedIn: boolean }) {
   const [orgKind, setOrgKind] = useState<string>('CBO');
+  const [orgKindOther, setOrgKindOther] = useState('');
   const [name, setName] = useState('');
   const [county, setCounty] = useState<string>(COUNTIES[0]);
   const [tagline, setTagline] = useState('');
@@ -26,7 +27,7 @@ export function StartWizard({ signedIn }: { signedIn: boolean }) {
     }
     setError(null);
     startTransition(async () => {
-      const result = await actionStartJamiiPage({ orgKind, officialName: name, county, tagline });
+      const result = await actionStartJamiiPage({ orgKind, orgKindOther, officialName: name, county, tagline });
       if (!result.ok) { setError(result.error); return; }
       router.push('/dashboard');
       router.refresh();
@@ -55,6 +56,12 @@ export function StartWizard({ signedIn }: { signedIn: boolean }) {
             </button>
           ))}
         </div>
+        {orgKind === 'OTHER' && (
+          <div className="field" style={{ marginTop: 10 }}>
+            <label htmlFor="orgKindOther">What kind of organisation is it?</label>
+            <input id="orgKindOther" value={orgKindOther} onChange={(e) => setOrgKindOther(e.target.value)} />
+          </div>
+        )}
 
         <div className="field" style={{ marginTop: 18 }}>
           <label htmlFor="orgName">Organisation name</label>

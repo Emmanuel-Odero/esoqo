@@ -14,6 +14,15 @@ export * from './counties';
 export * from './businessTypes';
 export * from './store';
 export * from './jamii';
+export * from './support';
+export * from './donation-notify';
+// Re-exported directly as well, same reason as cecf-ingest above:
+// services/core imports these under plain tsx/Node ESM, which doesn't
+// reliably resolve a name several `export *` hops deep in this barrel.
+export { donorThankYouSms, adminDonationAlertSms } from './donation-notify';
+export * from './group-alerts-notify';
+export { contributionGapSms } from './group-alerts-notify';
+export * from './rich-text';
 export * from './auth';
 export * from './treasury';
 export * from './ticketing';

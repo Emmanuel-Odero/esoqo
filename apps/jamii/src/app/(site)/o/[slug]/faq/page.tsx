@@ -1,6 +1,15 @@
 import { OrgSectionShell, loadOrgOr404 } from '@/components/OrgSectionShell';
+import { RichText } from '@/components/RichText';
+import { getOrgLinkMode } from '@/lib/org-links';
+import { buildOrgMetadata } from '@/lib/seo';
 
 export const dynamic = 'force-dynamic';
+
+export async function generateMetadata({ params }: { params: Promise<{ slug: string }> }) {
+  const { slug } = await params;
+  const [page, mode] = await Promise.all([loadOrgOr404(slug), getOrgLinkMode(slug)]);
+  return buildOrgMetadata(page, mode, { path: 'faq', titleSuffix: 'FAQ' });
+}
 
 export default async function FaqPage({ params }: { params: Promise<{ slug: string }> }) {
   const { slug } = await params;
@@ -18,7 +27,7 @@ export default async function FaqPage({ params }: { params: Promise<{ slug: stri
             {faq.map((item, i) => (
               <details key={i} className="faqitem">
                 <summary className="faqq">{item.q}</summary>
-                <div className="faqa"><p>{item.a}</p></div>
+                <RichText html={item.a} className="faqa" />
               </details>
             ))}
           </div>

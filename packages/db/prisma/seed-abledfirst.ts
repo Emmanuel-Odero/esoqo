@@ -1,5 +1,5 @@
 import { readFile } from 'node:fs/promises';
-import { PrismaClient } from '@prisma/client';
+import { PrismaClient, type Prisma } from '@prisma/client';
 import { sniff, makeStorageKey, putObject } from '../src/storage';
 
 const prisma = new PrismaClient();
@@ -93,6 +93,89 @@ function slugifyEmail(name: string): string {
   return name.toLowerCase().replace(/[^a-z0-9]+/g, '.').replace(/(^\.|\.$)/g, '');
 }
 
+/** Same 9 rows backfill-jamii-site-pages.ts seeds for every
+ *  pre-existing org — duplicated here (not imported) because this
+ *  script talks to the DB directly through a plain PrismaClient, no
+ *  Ctx/DAL layer, same as the rest of this file. */
+const SYSTEM_PAGES = [
+  { kind: 'SYSTEM_HOME', slug: '', title: 'Home' },
+  { kind: 'SYSTEM_ABOUT', slug: 'about', title: 'About' },
+  { kind: 'SYSTEM_PROGRAMS', slug: 'programs', title: 'Programs' },
+  { kind: 'SYSTEM_CAMPAIGNS', slug: 'campaigns', title: 'Campaigns' },
+  { kind: 'SYSTEM_POSTS', slug: 'posts', title: 'Posts' },
+  { kind: 'SYSTEM_GALLERY', slug: 'gallery', title: 'Gallery' },
+  { kind: 'SYSTEM_LEADERSHIP', slug: 'leadership', title: 'Leadership' },
+  { kind: 'SYSTEM_FAQ', slug: 'faq', title: 'FAQ' },
+  { kind: 'SYSTEM_CONTACT', slug: 'contact', title: 'Contact' },
+] as const;
+
+/** Two custom pages exercising the generic-CMS block library end to
+ *  end — this is the day-to-day fixture for building/QA-ing Pages,
+ *  Navigation and the wider block set against, per the CMS plan's
+ *  "seed for development" section. */
+const CUSTOM_PAGES: {
+  slug: string; title: string;
+  blocks: { type: string; visible: boolean; data: Record<string, unknown> }[];
+}[] = [
+  {
+    slug: 'our-impact',
+    title: 'Our Impact',
+    blocks: [
+      {
+        type: 'HERO', visible: true,
+        data: {
+          heading: 'Impact you can trace back to a name',
+          subheading: 'Every figure below is a member, a household or a committee — not a projection.',
+        },
+      },
+      {
+        type: 'COLUMNS', visible: true,
+        data: {
+          heading: 'Where the work lands',
+          columns: [
+            { heading: 'Assistive devices', html: '<p>Mobility, hearing and vision aids reaching members who’d otherwise wait years through the public system alone.</p>' },
+            { heading: 'Youth trained', html: '<p>Vocational and digital skills cohorts, with places reserved for young persons with disabilities.</p>' },
+            { heading: 'Households linked', html: '<p>Caregiver and underserved households connected to health, nutrition and social protection services.</p>' },
+          ],
+        },
+      },
+      { type: 'GALLERY_GRID', visible: true, data: { heading: 'From the field' } },
+      { type: 'TESTIMONIAL', visible: true, data: { quote: 'AbledFirst didn’t just refer me for an assessment — they sat with me through every appointment until I actually had the card in hand.', name: 'Isabel Jeptoo', role: 'Self-advocate representative' } },
+    ],
+  },
+  {
+    slug: 'partners',
+    title: 'Partners',
+    blocks: [
+      {
+        type: 'RICH_TEXT', visible: true,
+        data: {
+          heading: 'Partner with AbledFirst Kenya',
+          html: '<p>We work with funders, employers and technical partners who want their support to land on named people, not a line item. Every partnership gets a named contact and a written agreement setting out what each side will do.</p>',
+        },
+      },
+      {
+        type: 'CTA_BUTTON', visible: true,
+        data: { heading: 'Ready to talk?', body: 'Tell us what you’d like to fund, staff or co-deliver.', buttonLabel: 'Contact us', buttonHref: '/contact' },
+      },
+      { type: 'CONTACT_FORM', visible: true, data: { heading: 'Send a message', body: 'Goes straight to our own inbox.' } },
+    ],
+  },
+];
+
+/** The homepage's own block set — richer than DEFAULT_BLOCKS' fallback,
+ *  demonstrating most of the block library in one scroll. */
+const HOME_BLOCKS: { type: string; visible: boolean; data: Record<string, unknown> }[] = [
+  { type: 'HERO', visible: true, data: { heading: 'Voices Heard. Lives Transformed.', subheading: 'Fostering empowerment and inclusion for persons with disabilities, young people and underserved communities across Kenya.', ctaLabel: 'Support our work', ctaHref: '/campaigns' } },
+  { type: 'STATS_TICKER', visible: true, data: {} },
+  { type: 'EXPLORE_GRID', visible: true, data: {} },
+  { type: 'PROGRAMS_LIST', visible: true, data: { heading: 'What we do' } },
+  { type: 'TEAM_GRID', visible: true, data: { heading: 'Who leads this work' } },
+  { type: 'ACTIVE_CAMPAIGN', visible: true, data: {} },
+  { type: 'FAQ_ACCORDION', visible: true, data: { heading: 'Frequently asked' } },
+  { type: 'DONATE_BAND', visible: true, data: {} },
+];
+
 async function main() {
   console.log('Seeding AbledFirst Kenya…');
 
@@ -149,6 +232,69 @@ async function main() {
         aboutUs: ABOUT_US,
         faq: FAQ,
         programs: { create: PROGRAMS.map((p, i) => ({ ...p, position: i })) },
+      },
+    });
+
+    // Generic-CMS pages/nav — see SYSTEM_PAGES/CUSTOM_PAGES/HOME_BLOCKS
+    // above. Mirrors what backfill-jamii-site-pages.ts does for
+    // pre-existing orgs; this org is created fresh so there's nothing
+    // to backfill, it's seeded directly instead.
+    const sitePageIds = new Map<string, string>(); // kind -> id
+    for (const sp of SYSTEM_PAGES) {
+      const row = await tx.jamiiSitePage.create({
+        data: { pageId: party.id, kind: sp.kind, slug: sp.slug, title: sp.title, status: 'PUBLISHED' },
+      });
+      sitePageIds.set(sp.kind, row.id);
+    }
+
+    let navPosition = 0;
+    for (const sp of SYSTEM_PAGES) {
+      if (sp.kind === 'SYSTEM_HOME') continue;
+      await tx.jamiiNavItem.create({
+        data: {
+          pageId: party.id,
+          label: sp.title,
+          targetKind: 'SITE_PAGE',
+          targetSitePageId: sitePageIds.get(sp.kind)!,
+          position: navPosition++,
+          visible: true,
+        },
+      });
+    }
+
+    const homeId = sitePageIds.get('SYSTEM_HOME')!;
+    await tx.jamiiPageBlock.createMany({
+      data: HOME_BLOCKS.map((b, position) => ({
+        pageId: party.id, sitePageId: homeId, type: b.type as never, visible: b.visible,
+        data: b.data as Prisma.InputJsonValue, position,
+      })),
+    });
+
+    for (const cp of CUSTOM_PAGES) {
+      const row = await tx.jamiiSitePage.create({
+        data: { pageId: party.id, kind: 'CUSTOM', slug: cp.slug, title: cp.title, status: 'PUBLISHED' },
+      });
+      await tx.jamiiPageBlock.createMany({
+        data: cp.blocks.map((b, position) => ({
+          pageId: party.id, sitePageId: row.id, type: b.type as never, visible: b.visible,
+          data: b.data as Prisma.InputJsonValue, position,
+        })),
+      });
+      await tx.jamiiNavItem.create({
+        data: {
+          pageId: party.id, label: cp.title, targetKind: 'SITE_PAGE', targetSitePageId: row.id,
+          position: navPosition++, visible: true,
+        },
+      });
+    }
+
+    // A demo external link too — exercises the nav manager's other
+    // target kind (see JamiiNavTargetKind).
+    await tx.jamiiNavItem.create({
+      data: {
+        pageId: party.id, label: 'NCPWD', targetKind: 'EXTERNAL_URL',
+        externalUrl: 'https://www.ncpwd.go.ke', openInNewTab: true,
+        position: navPosition++, visible: true,
       },
     });
 

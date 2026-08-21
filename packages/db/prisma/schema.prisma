@@ -96,6 +96,7 @@ model Party {
   jamiiTeamMemberships   JamiiTeamMember[]
   jamiiApplications      JamiiInterest[]
   bookingsAsBuyer        Booking[]
+  supportTicketsRaised   SupportTicket[]
 
   // ── Group treasury ──
   meetingsCalled          Meeting[]                    @relation("MeetingCalledBy")
@@ -1691,9 +1692,69 @@ enum JamiiThemeMode {
   LIGHT
 }
 
+/// A homepage block's visual shape — see JamiiPageBlock.data for what
+/// each type stores. STATS_TICKER/EXPLORE_GRID/ACTIVE_CAMPAIGN are the
+/// pre-seeded, singleton sections the pre-Phase-2 homepage always
+/// rendered (see OrgHomeSections's DefaultHomeSections fallback); the
+/// rest are genuinely new content types an org can add more than once.
+enum JamiiBlockType {
+  STATS_TICKER
+  EXPLORE_GRID
+  ACTIVE_CAMPAIGN
+  DONATE_BAND
+  RICH_TEXT
+  TESTIMONIAL
+  PHOTO_STRIP
+  // Generic-CMS block library (Phase 5) — general-purpose widgets any
+  // page (home or custom) can use, plus five that read live from the
+  // same tables the old fixed sections did (JamiiProgram, team
+  // members, JamiiPhoto, the `faq` json, the org's contact fields),
+  // same "block carries placement, not a content copy" pattern as
+  // EXPLORE_GRID/ACTIVE_CAMPAIGN above.
+  HERO
+  CTA_BUTTON
+  IMAGE_TEXT
+  VIDEO_EMBED
+  MAP_EMBED
+  COLUMNS
+  SPACER
+  PROGRAMS_LIST
+  TEAM_GRID
+  GALLERY_GRID
+  FAQ_ACCORDION
+  CONTACT_FORM
+}
+
 enum PublishStatus {
   DRAFT
   PUBLISHED
+}
+
+/// A JamiiSitePage's origin. SYSTEM_* rows are seeded once per page
+/// (one each, reserved slug matching the pre-generic-CMS fixed routes
+/// — /about, /faq, etc. — for URL/SEO continuity) and can't be
+/// deleted, only edited; CUSTOM is anything an org creates itself via
+/// the dashboard's "New page" flow and may rename or delete freely.
+enum JamiiSitePageKind {
+  SYSTEM_HOME
+  SYSTEM_ABOUT
+  SYSTEM_PROGRAMS
+  SYSTEM_CAMPAIGNS
+  SYSTEM_POSTS
+  SYSTEM_GALLERY
+  SYSTEM_LEADERSHIP
+  SYSTEM_FAQ
+  SYSTEM_CONTACT
+  CUSTOM
+}
+
+/// What a JamiiNavItem points at — SITE_PAGE resolves via
+/// targetSitePageId (works for both SYSTEM_* and CUSTOM pages alike,
+/// so the nav manager treats every page the same), EXTERNAL_URL uses
+/// the plain `externalUrl` string instead.
+enum JamiiNavTargetKind {
+  SITE_PAGE
+  EXTERNAL_URL
 }
 
 enum JamiiTeamRole {
@@ -1778,6 +1839,13 @@ model JamiiPage {
   /// overkill, same precedent as Person.displayPrefs.
   faq Json @default("[]")
 
+  /// SEO overrides — when unset, buildOrgMetadata() (apps/jamii/src/lib/
+  /// seo.ts) derives a title/description from officialName/missionShort
+  /// instead. Only worth setting when the auto-derived version is
+  /// genuinely wrong for search, not a duplicate of tagline/mission.
+  seoTitle       String?
+  seoDescription String?
+
   publishedAt DateTime?
   createdAt   DateTime  @default(now())
   updatedAt   DateTime  @updatedAt
@@ -1789,9 +1857,123 @@ model JamiiPage {
   team      JamiiTeamMember[]
   domain    JamiiDomain?
   messages  JamiiContactMessage[]
+  blocks    JamiiPageBlock[]
+  sitePages JamiiSitePage[]
+  navItems  JamiiNavItem[]
+  supportTickets SupportTicket[]
 
   @@index([status])
   @@map("jamii_page")
+}
+
+/// One page on an org's site — home, the pre-generic-CMS fixed
+/// sections (now just JamiiSitePageKind.SYSTEM_*, same slugs as
+/// before), and any custom page an org creates. Every page's visible
+/// content lives in its `blocks` (JamiiPageBlock, ordered by
+/// position); this row itself only carries identity, publish status,
+/// and per-page SEO overrides — see buildOrgMetadata (apps/jamii/src/
+/// lib/seo.ts) for the fallback chain from these down to JamiiPage's
+/// own seoTitle/seoDescription.
+///
+/// SYSTEM_* rows are seeded once per JamiiPage (see the backfill in
+/// prisma/migrations — every existing org gets its 9 rows with the
+/// exact slugs the old fixed routes used) and their slug/kind never
+/// change; only CUSTOM rows are created, renamed, or deleted from the
+/// dashboard's "Pages" screen.
+model JamiiSitePage {
+  id     String            @id @default(uuid()) @db.Uuid
+  pageId String            @db.Uuid
+  page   JamiiPage         @relation(fields: [pageId], references: [organisationId], onDelete: Cascade)
+  kind   JamiiSitePageKind @default(CUSTOM)
+
+  /// No leading slash, e.g. "about" or "our-impact" — resolved by
+  /// (site)/o/[slug]/[page]/page.tsx. Unique per org, not
+  /// platform-wide (unlike JamiiPage.slug).
+  slug  String
+  title String
+
+  status PublishStatus @default(DRAFT)
+
+  /// Falls back to JamiiPage.seoTitle/seoDescription, then to
+  /// missionShort/tagline — same chain buildOrgMetadata already
+  /// applies at the org level, just one layer deeper.
+  seoTitle       String?
+  seoDescription String?
+  ogImageUrl     String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  blocks   JamiiPageBlock[]
+  navItems JamiiNavItem[]
+
+  @@unique([pageId, slug])
+  @@index([pageId, kind])
+  @@map("jamii_site_page")
+}
+
+/// One entry in an org's top/sub nav — see org-links-shared.ts's
+/// ORG_NAV_SECTIONS, the static const this table replaces. `position`
+/// is the display order the dashboard's Navigation screen reorders via
+/// drag-and-drop, same convention as JamiiPageBlock.position.
+model JamiiNavItem {
+  id     String    @id @default(uuid()) @db.Uuid
+  pageId String    @db.Uuid
+  page   JamiiPage @relation(fields: [pageId], references: [organisationId], onDelete: Cascade)
+
+  label      String
+  targetKind JamiiNavTargetKind @default(SITE_PAGE)
+
+  /// Set when targetKind is SITE_PAGE — cascades on the page's own
+  /// delete, so removing a custom page quietly drops it from the nav
+  /// too rather than leaving a dead link.
+  targetSitePageId String?        @db.Uuid
+  targetSitePage   JamiiSitePage? @relation(fields: [targetSitePageId], references: [id], onDelete: Cascade)
+  /// Set when targetKind is EXTERNAL_URL instead.
+  externalUrl String?
+
+  position     Int     @default(0)
+  visible      Boolean @default(true)
+  openInNewTab Boolean @default(false)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([pageId, position])
+  @@map("jamii_nav_item")
+}
+
+/// One section of the custom-domain homepage — see OrgHomeSections.tsx.
+/// Empty for every page until an org saves something in the dashboard's
+/// "Homepage" block editor; the public renderer falls back to the
+/// pre-Phase-2 fixed section order when a page has zero rows, so this
+/// table being empty is the normal, unmigrated state, not an error.
+model JamiiPageBlock {
+  id       String         @id @default(uuid()) @db.Uuid
+  pageId   String         @db.Uuid
+  page     JamiiPage      @relation(fields: [pageId], references: [organisationId], onDelete: Cascade)
+  /// Which JamiiSitePage this block belongs to. Nullable through the
+  /// generic-CMS migration only: pre-existing rows are all homepage
+  /// blocks and get backfilled onto that org's SYSTEM_HOME page (see
+  /// the backfill migration); every row written from here on always
+  /// sets this. Not required at the DB level yet so the backfill can
+  /// run as its own transaction after the column lands, same
+  /// two-step-migration discipline as the rich-text backfill.
+  sitePageId String?        @db.Uuid
+  sitePage   JamiiSitePage? @relation(fields: [sitePageId], references: [id], onDelete: Cascade)
+  type     JamiiBlockType
+  position Int            @default(0)
+  visible  Boolean        @default(true)
+  /// Shape depends on `type` — see jamiiPageBlockSchema in
+  /// packages/domain/src/jamii.ts, the single source of truth for what
+  /// each type's data looks like.
+  data      Json     @default("{}")
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([pageId])
+  @@index([sitePageId])
+  @@map("jamii_page_block")
 }
 
 /// Gallery images a page puts on its public profile. Same storage-key
@@ -2044,6 +2226,12 @@ model Donation {
   anonymous    Boolean        @default(false)
   amountKes    Decimal        @db.Decimal(12, 2)
   status       DonationStatus @default(PENDING)
+  /// Safaricom's ResultDesc when the STK push didn't succeed — "Request
+  /// cancelled by user", "The balance is insufficient", a timeout, etc.
+  /// Same precedent as JamiiDomain.failureReason. Shown back to the
+  /// donor so a failed push doesn't just spin forever with no
+  /// explanation (see DonateModal's polling loop).
+  failureReason String?
 
   mpesaCheckoutRequestId String?       @unique
   mpesaReceiptCode       String?
@@ -2105,6 +2293,57 @@ model JamiiInterest {
   @@index([status, createdAt])
   @@index([personId])
   @@map("jamii_interest")
+}
+
+enum SupportTicketCategory {
+  BUG
+  QUESTION
+  BILLING
+  ACCOUNT
+  OTHER
+}
+
+enum SupportTicketStatus {
+  OPEN
+  IN_PROGRESS
+  RESOLVED
+  CLOSED
+}
+
+/// "Report an issue" — any signed-in person, anywhere in the product,
+/// hitting a problem they can't self-serve past. Deliberately tied to
+/// Party (not JamiiPage/Store/etc.) so it isn't jamii-only even though
+/// today's only UI for it lives in the Our Jamii dashboard; `pageId` is
+/// just the optional "what were you working on" context, same
+/// reasoning as JamiiContactMessage's pageId but aimed at Esoko staff
+/// instead of the org's own team.
+model SupportTicket {
+  id String @id @default(uuid()) @db.Uuid
+
+  reporterPartyId String @db.Uuid
+  reporter        Party  @relation(fields: [reporterPartyId], references: [id])
+
+  pageId String?    @db.Uuid
+  page   JamiiPage? @relation(fields: [pageId], references: [organisationId], onDelete: SetNull)
+
+  category SupportTicketCategory @default(OTHER)
+  /// Free text when category is OTHER — same "every Other gets a
+  /// paired free-text field" rule as Organisation.kindOther.
+  categoryOther String?
+
+  subject String
+  message String
+
+  status     SupportTicketStatus @default(OPEN)
+  staffNote  String?
+  resolvedAt DateTime?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([status, createdAt])
+  @@index([reporterPartyId])
+  @@map("support_ticket")
 }
 
 // ═══════════════════════ GROUP TREASURY ═══════════════════════
@@ -2700,4 +2939,67 @@ model Ticket {
   @@index([bookingId])
   @@index([status])
   @@map("ticket")
+}
+
+/// PRIMARY = esoko.app/o/{slug}; CUSTOM = the org's own domain
+/// (JamiiDomain, ACTIVE) — see apps/jamii/src/middleware.ts, which is
+/// the only writer of SiteVisit below and already resolves this same
+/// distinction for routing, at zero extra DB cost to reuse it here.
+enum DomainMode {
+  PRIMARY
+  CUSTOM
+}
+
+/// Day-bucketed, cookieless page-visit counter — the dashboard proposal's
+/// "we don't even know how many people visit an Our Jamii page" gap.
+/// One row per (org, logical page path, domain mode, day, referrer
+/// host); a repeat hit within the same day increments `count` instead
+/// of inserting a new row, so a viral page doesn't create one row per
+/// visit. `path` is the visitor-facing logical path — "/", "/about",
+/// "/c/{campaignId}" — normalised the same way whether the visitor
+/// arrived via the primary domain or the org's own custom domain, so
+/// the two can be compared side by side for the same page.
+///
+/// Deliberately NOT session/visitor-level — no cookie, no IP stored, no
+/// way to reconstruct one person's path through the site. That's the
+/// privacy trade this proposal explicitly chose (see the dashboard
+/// proposal's sourced reference to cookieless self-hosted analytics
+/// patterns), and it's also why this can't answer "time on page" —
+/// that needs a client beacon, a deliberately separate, not-yet-built
+/// instrumentation layer.
+model SiteVisit {
+  id         BigInt     @id @default(autoincrement())
+  /// JamiiPage.organisationId's slug — not a foreign key. A visit
+  /// counter must never fail to record because of a FK constraint on
+  /// the hot request path; an orphaned slug (org later deleted) is a
+  /// non-issue for a bucketed count with no other relation depending on it.
+  slug       String
+  path       String
+  domainMode DomainMode
+  /// "" (not null) for a direct visit — Postgres treats NULL as
+  /// distinct in a unique index, which would silently defeat the
+  /// day-bucketing upsert below for every referrer-less hit.
+  referrerHost String   @default("")
+  day          DateTime @db.Date
+  count        Int      @default(1)
+
+  @@unique([slug, path, domainMode, day, referrerHost])
+  @@index([slug, day])
+  @@map("site_visit")
+}
+
+/// One row per sendSms call, purely for cost visibility — see
+/// packages/auth/src/sms.ts's own header. `estimatedCostKes` is a
+/// configurable-per-message guess (SMS_COST_PER_MESSAGE_KES), not an
+/// invoice reconciliation; good enough to answer "is this growing" and
+/// "which purpose costs the most" without a billing-API integration.
+model SmsSpend {
+  id               String   @id @default(uuid()) @db.Uuid
+  purpose          String
+  estimatedCostKes Decimal  @db.Decimal(6, 2)
+  provider         String
+  createdAt        DateTime @default(now())
+
+  @@index([purpose, createdAt])
+  @@map("sms_spend")
 }

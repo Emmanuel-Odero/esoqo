@@ -59,6 +59,10 @@ export function DonateModal({
           if (pollRef.current) clearInterval(pollRef.current);
           setReceipt(r);
           setStep(3);
+        } else if (r.status === 'FAILED') {
+          if (pollRef.current) clearInterval(pollRef.current);
+          setError(r.failureReason || 'The M-Pesa payment was not completed. Please try again.');
+          setStep(1);
         }
       }, 2500);
     }

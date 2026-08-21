@@ -1,8 +1,15 @@
 import { OrgSectionShell, loadOrgOr404 } from '@/components/OrgSectionShell';
 import { getOrgLinkMode } from '@/lib/org-links';
 import { ContactForm } from '@/components/ContactForm';
+import { buildOrgMetadata } from '@/lib/seo';
 
 export const dynamic = 'force-dynamic';
+
+export async function generateMetadata({ params }: { params: Promise<{ slug: string }> }) {
+  const { slug } = await params;
+  const [page, mode] = await Promise.all([loadOrgOr404(slug), getOrgLinkMode(slug)]);
+  return buildOrgMetadata(page, mode, { path: 'contact', titleSuffix: 'Contact' });
+}
 
 export default async function OrgContactPage({ params }: { params: Promise<{ slug: string }> }) {
   const { slug } = await params;
