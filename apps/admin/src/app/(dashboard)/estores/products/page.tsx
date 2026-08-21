@@ -2,6 +2,7 @@ import { Icon } from '@esoko/ui';
 import { listProductsForStaff } from '@esoko/db';
 import { PRODUCT_CATEGORIES } from '@esoko/domain';
 import { requireStaff } from '@/lib/session';
+import { RankedBarChart } from '@/components/charts';
 import { ProductDirectory } from './ProductDirectory';
 
 export const dynamic = 'force-dynamic';
@@ -66,6 +67,16 @@ export default async function ProductsPage({
           <button className="btn btn-o" type="submit"><Icon name="filter" size={15} />Filter</button>
         </form>
       </div>
+
+      {byCategory.size > 0 && (
+        <div className="card" style={{ marginBottom: 22 }}>
+          <h2><Icon name="box" size={17} />By category, this page</h2>
+          <RankedBarChart color="var(--blue)"
+            rows={[...byCategory.entries()].map(([category, count]) => ({
+              label: Object.fromEntries(PRODUCT_CATEGORIES)[category] ?? category, value: count,
+            }))} />
+        </div>
+      )}
 
       <ProductDirectory
         rows={rows.map((p) => ({

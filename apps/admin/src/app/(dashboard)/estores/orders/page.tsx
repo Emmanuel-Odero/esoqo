@@ -1,7 +1,15 @@
 import { Icon } from '@esoko/ui';
 import { listAllOrdersForStaff } from '@esoko/db';
 import { requireStaff } from '@/lib/session';
+import { DonutChart } from '@/components/charts';
 import { OrderDesk } from './OrderDesk';
+
+const STATUS_LABEL: Record<string, string> = {
+  PENDING_PAYMENT: 'Pending payment', PAID: 'Paid', FULFILLED: 'Fulfilled', CANCELLED: 'Cancelled',
+};
+const STATUS_COLOR: Record<string, string> = {
+  PENDING_PAYMENT: 'var(--amber)', PAID: 'var(--blue)', FULFILLED: 'var(--green-2)', CANCELLED: 'var(--red)',
+};
 
 export const dynamic = 'force-dynamic';
 
@@ -23,6 +31,8 @@ export default async function OrdersPage({
     search: sp.q, take: 100,
   });
   const needingReroute = rows.filter((o) => o.needsReroute).length;
+  const byStatus = new Map<string, number>();
+  for (const o of rows) byStatus.set(o.status, (byStatus.get(o.status) ?? 0) + 1);
 
   return (
     <>
@@ -46,6 +56,16 @@ export default async function OrdersPage({
           <span className="n">{needingReroute}</span><span className="l">Flagged for reroute</span>
         </div>
       </div>
+
+      {byStatus.size > 0 && (
+        <div className="card" style={{ marginBottom: 22 }}>
+          <h2><Icon name="basket" size={17} />Status, this page</h2>
+          <DonutChart size={150}
+            segments={[...byStatus.entries()].map(([status, count]) => ({
+              label: STATUS_LABEL[status] ?? status, value: count, color: STATUS_COLOR[status] ?? 'var(--tx-3)',
+            }))} />
+        </div>
+      )}
 
       <div className="ctl">
         <form className="srch" style={{ display: 'contents' }}>

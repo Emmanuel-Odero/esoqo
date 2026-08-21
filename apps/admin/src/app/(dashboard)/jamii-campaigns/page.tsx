@@ -1,6 +1,7 @@
 import { Icon } from '@esoko/ui';
 import { listCampaignsForStaff, getCampaignCountsForStaff } from '@esoko/db';
 import { requireStaff } from '@/lib/session';
+import { DonutChart } from '@/components/charts';
 import { CampaignTable } from './CampaignTable';
 
 export const dynamic = 'force-dynamic';
@@ -46,6 +47,18 @@ export default async function JamiiCampaignsPage({
           );
         })}
       </div>
+
+      {counts.draft + counts.active + counts.completed + counts.cancelled > 0 && (
+        <div className="card" style={{ marginBottom: 22 }}>
+          <h2><Icon name="trend-up" size={17} />Status split</h2>
+          <DonutChart size={150} segments={[
+            { label: 'Draft', value: counts.draft, color: 'var(--amber)' },
+            { label: 'Active', value: counts.active, color: 'var(--green-2)' },
+            { label: 'Completed', value: counts.completed, color: 'var(--blue)' },
+            { label: 'Cancelled', value: counts.cancelled, color: 'var(--red)' },
+          ].filter((s) => s.value > 0)} />
+        </div>
+      )}
 
       <CampaignTable
         rows={rows.map((c) => ({

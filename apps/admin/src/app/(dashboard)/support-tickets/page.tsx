@@ -1,6 +1,7 @@
 import { Icon } from '@esoko/ui';
 import { listSupportTicketsForStaff, getSupportTicketCountsForStaff } from '@esoko/db';
 import { requireStaff } from '@/lib/session';
+import { DonutChart } from '@/components/charts';
 import { SupportTicketsTable } from './SupportTicketsTable';
 
 export const dynamic = 'force-dynamic';
@@ -50,6 +51,18 @@ export default async function SupportTicketsPage({
           );
         })}
       </div>
+
+      {counts.total > 0 && (
+        <div className="card" style={{ marginBottom: 22 }}>
+          <h2><Icon name="message" size={17} />Status split</h2>
+          <DonutChart size={150} centerLabel={{ value: String(counts.total), sub: 'tickets' }} segments={[
+            { label: 'Open', value: counts.open, color: 'var(--amber)' },
+            { label: 'In progress', value: counts.inProgress, color: 'var(--blue)' },
+            { label: 'Resolved', value: counts.resolved, color: 'var(--green-2)' },
+            { label: 'Closed', value: counts.closed, color: 'var(--tx-3)' },
+          ].filter((s) => s.value > 0)} />
+        </div>
+      )}
 
       <SupportTicketsTable
         rows={rows.map((r) => ({

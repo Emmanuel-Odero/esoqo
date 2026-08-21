@@ -2,6 +2,7 @@ import { Icon } from '@esoko/ui';
 import { listDonationsForStaff, getDonationTotalsForStaff } from '@esoko/db';
 import { maskMsisdn } from '@esoko/domain';
 import { requireStaff } from '@/lib/session';
+import { DonutChart } from '@/components/charts';
 import { DonationTable } from './DonationTable';
 
 export const dynamic = 'force-dynamic';
@@ -48,6 +49,18 @@ export default async function JamiiDonationsPage({
           );
         })}
       </div>
+
+      {totals.confirmed + totals.pending + totals.failed > 0 && (
+        <div className="card" style={{ marginBottom: 22 }}>
+          <h2><Icon name="chart" size={18} />Status split</h2>
+          <DonutChart size={150} segments={[
+            { label: 'Confirmed', value: totals.confirmed, color: 'var(--green-2)' },
+            { label: 'Pending', value: totals.pending, color: 'var(--amber)' },
+            { label: 'Failed', value: totals.failed, color: 'var(--red)' },
+          ].filter((s) => s.value > 0)}
+            centerLabel={{ value: String(totals.confirmed + totals.pending + totals.failed), sub: 'donations' }} />
+        </div>
+      )}
 
       <DonationTable
         rows={rows.map((d) => ({

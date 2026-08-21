@@ -1,5 +1,7 @@
+import { Icon } from '@esoko/ui';
 import { listMediaAssetsForStaff } from '@esoko/db';
 import { requireStaff } from '@/lib/session';
+import { RankedBarChart } from '@/components/charts';
 import { MediaLibraryTable } from './MediaLibraryTable';
 
 export const dynamic = 'force-dynamic';
@@ -19,6 +21,10 @@ export default async function JamiiMediaPage() {
   const rows = await listMediaAssetsForStaff(ctx);
   const canWrite = ctx.capabilities.includes('*') || ctx.capabilities.includes('jamii-media.manage');
 
+  const active = rows.filter((r) => r.active).length;
+  const byCategory = new Map<string, number>();
+  for (const r of rows) byCategory.set(r.category, (byCategory.get(r.category) ?? 0) + 1);
+
   return (
     <>
       <div className="head">
@@ -30,6 +36,27 @@ export default async function JamiiMediaPage() {
           </p>
         </div>
       </div>
+
+      <div className="kpis">
+        <div className="kpi g">
+          <span className="ico" style={{ background: 'var(--green-t)', color: 'var(--green)' }}><Icon name="check-circle" size={16} /></span>
+          <span className="n">{active}</span><span className="l">In rotation</span>
+        </div>
+        <div className="kpi">
+          <span className="n">{rows.length - active}</span><span className="l">Disabled</span>
+        </div>
+        <div className="kpi b">
+          <span className="ico" style={{ background: 'var(--blue-t)', color: 'var(--blue)' }}><Icon name="grid" size={16} /></span>
+          <span className="n">{byCategory.size}</span><span className="l">Categories</span>
+        </div>
+      </div>
+
+      {byCategory.size > 0 && (
+        <div className="card" style={{ marginBottom: 22 }}>
+          <h2>Patterns by category</h2>
+          <RankedBarChart rows={[...byCategory.entries()].map(([label, value]) => ({ label, value }))} color="var(--blue)" />
+        </div>
+      )}
 
       <MediaLibraryTable
         rows={rows.map((r) => ({

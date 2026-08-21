@@ -1,6 +1,7 @@
 import { Icon } from '@esoko/ui';
 import { listJamiiInterests } from '@esoko/db';
 import { requireStaff } from '@/lib/session';
+import { DonutChart } from '@/components/charts';
 import { InterestTable } from './InterestTable';
 
 export const dynamic = 'force-dynamic';
@@ -53,6 +54,18 @@ export default async function JamiiInterestPage({
           );
         })}
       </div>
+
+      {rows.length > 0 && (
+        <div className="card" style={{ marginBottom: 22 }}>
+          <h2><Icon name="users" size={17} />Status split</h2>
+          <DonutChart size={150} centerLabel={{ value: String(rows.length), sub: 'applications' }} segments={[
+            { label: 'New', value: by('NEW'), color: 'var(--amber)' },
+            { label: 'Contacted', value: by('CONTACTED'), color: 'var(--blue)' },
+            { label: 'Converted', value: by('CONVERTED'), color: 'var(--green-2)' },
+            { label: 'Dismissed', value: by('DISMISSED'), color: 'var(--red)' },
+          ].filter((s) => s.value > 0)} />
+        </div>
+      )}
 
       <InterestTable
         rows={rows.map((r) => ({
