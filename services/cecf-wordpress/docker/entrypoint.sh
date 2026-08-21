@@ -84,4 +84,24 @@ else
     su -s /bin/bash www-data -c "wp core update-db --network"
 fi
 
+# ── Media storage (R2) ───────────────────────────────────────────
+# Runs every boot, not just first install — covers a site retrofitted
+# with R2 credentials after having run on local disk for a while, and
+# self-corrects if R2_ACCOUNT_ID is ever unset again (deactivating
+# leaves existing R2-hosted media reachable at their stored URLs; it
+# just stops routing *new* uploads there). `wp plugin is-active`
+# guards keep both directions idempotent rather than erroring on an
+# already-matching state.
+if [ -n "${R2_ACCOUNT_ID:-}" ]; then
+    if ! su -s /bin/bash www-data -c "wp plugin is-active s3-uploads --network" 2>/dev/null; then
+        echo "R2 configured — network-activating s3-uploads."
+        su -s /bin/bash www-data -c "wp plugin activate s3-uploads --network"
+    fi
+else
+    if su -s /bin/bash www-data -c "wp plugin is-active s3-uploads --network" 2>/dev/null; then
+        echo "R2 not configured — network-deactivating s3-uploads."
+        su -s /bin/bash www-data -c "wp plugin deactivate s3-uploads --network"
+    fi
+fi
+
 exec /usr/bin/supervisord -c /etc/supervisor/conf.d/supervisord.conf

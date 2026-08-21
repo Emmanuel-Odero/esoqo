@@ -2,6 +2,7 @@ import Link from 'next/link';
 import { Icon } from '@esoko/ui';
 import { isVerified, orgInitials } from '@/lib/data';
 import { orgHref, type OrgLinkMode } from '@/lib/org-links';
+import { orgExternalUrl } from '@/lib/org-external-url';
 import type { getJamiiPageBySlug } from '@esoko/db';
 
 type OrgPage = NonNullable<Awaited<ReturnType<typeof getJamiiPageBySlug>>>;
@@ -9,6 +10,7 @@ type OrgPage = NonNullable<Awaited<ReturnType<typeof getJamiiPageBySlug>>>;
 export function OrgHeader({ page, mode }: { page: OrgPage; mode: OrgLinkMode }) {
   const org = page.organisation;
   const activeCampaign = page.campaigns.find((c) => c.status === 'ACTIVE');
+  const externalUrl = orgExternalUrl(page);
 
   return (
     <>
@@ -30,6 +32,11 @@ export function OrgHeader({ page, mode }: { page: OrgPage; mode: OrgLinkMode }) 
             <div className="oh-meta">
               <span className="pill pill-county">{org.party.county}</span>
               {org.tags.map((tag) => <span key={tag} className="pill pill-cause">{tag}</span>)}
+              {externalUrl && (
+                <a href={externalUrl.href} target="_blank" rel="noreferrer" className="pill pill-link">
+                  {externalUrl.label} ↗
+                </a>
+              )}
             </div>
           </div>
           {activeCampaign && (

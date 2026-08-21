@@ -2,8 +2,15 @@ import Link from 'next/link';
 import { getCampaignStats } from '@esoko/db';
 import { OrgSectionShell, loadOrgOr404 } from '@/components/OrgSectionShell';
 import { getOrgLinkMode, orgHref } from '@/lib/org-links';
+import { buildOrgMetadata } from '@/lib/seo';
 
 export const dynamic = 'force-dynamic';
+
+export async function generateMetadata({ params }: { params: Promise<{ slug: string }> }) {
+  const { slug } = await params;
+  const [page, mode] = await Promise.all([loadOrgOr404(slug), getOrgLinkMode(slug)]);
+  return buildOrgMetadata(page, mode, { path: 'campaigns', titleSuffix: 'Campaigns' });
+}
 
 export default async function CampaignsPage({ params }: { params: Promise<{ slug: string }> }) {
   const { slug } = await params;

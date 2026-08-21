@@ -3,8 +3,23 @@ import { notFound } from 'next/navigation';
 import { getJamiiPost } from '@esoko/db';
 import { OrgSectionShell, loadOrgOr404 } from '@/components/OrgSectionShell';
 import { getOrgLinkMode, orgHref } from '@/lib/org-links';
+import { RichText } from '@/components/RichText';
+import { buildOrgMetadata, currentOrigin, absoluteAssetUrl } from '@/lib/seo';
 
 export const dynamic = 'force-dynamic';
+
+export async function generateMetadata({ params }: { params: Promise<{ slug: string; postId: string }> }) {
+  const { slug, postId } = await params;
+  const [page, mode] = await Promise.all([loadOrgOr404(slug), getOrgLinkMode(slug)]);
+  const post = await getJamiiPost(page.organisationId, postId);
+  const meta = await buildOrgMetadata(page, mode, { path: `posts/${postId}`, titleSuffix: post?.title });
+  const image = post?.imageUrl ? absoluteAssetUrl(post.imageUrl, await currentOrigin(mode)) : undefined;
+  return {
+    ...meta,
+    description: post?.excerpt?.trim() || meta.description,
+    openGraph: { ...meta.openGraph, ...(image ? { images: [{ url: image }] } : {}) },
+  };
+}
 
 export default async function PostDetailPage({
   params,
@@ -31,7 +46,7 @@ export default async function PostDetailPage({
           {(post.publishedAt ?? post.createdAt).toLocaleDateString('en-KE', { day: '2-digit', month: 'short', year: 'numeric' })}
           {' · '}{page.organisation.officialName}
         </p>
-        <p>{post.body}</p>
+        <RichText html={post.body} />
       </section>
     </OrgSectionShell>
   );

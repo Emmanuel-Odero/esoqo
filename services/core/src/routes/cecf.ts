@@ -6,6 +6,7 @@ import {
   attachRegistrationCheckoutRequestId, attachRegistrationPesapalOrder,
   confirmRegistrationPaymentByCheckoutId, confirmRegistrationPaymentByPesapalOrderId,
   completeCecfRegistration, uploadCecfDocument, cecfRegistrantOrgRole,
+  searchGroupsPublic,
   type Ctx,
 } from '@esoko/db';
 import { initiateStkPush, MpesaError, initiatePesapalOrder, PesapalError } from '@esoko/payments';
@@ -118,8 +119,13 @@ export async function cecfRoutes(app: FastifyInstance) {
         orgName: v.joiningAs === 'group' ? v.orgName : undefined,
         orgKnownAs: v.joiningAs === 'group' ? v.orgKnownAs : undefined,
         orgRole,
-        belongsToGroup: v.joiningAs === 'group' ? 'yes' : undefined,
+        // For 'group' this is implicitly "yes" (they're founding one).
+        // For 'me' it's a real independent answer WordPress's own form
+        // now asks, same as apps/app/join's belongsToGroup step.
+        belongsToGroup: v.joiningAs === 'group' ? 'yes' : v.joiningAs === 'me' ? v.belongsToGroup : undefined,
         feeCoverage: v.joiningAs === 'group' ? v.feeCoverage : undefined,
+        groupName: v.joiningAs === 'me' ? v.groupName : undefined,
+        groupPartyId: v.joiningAs === 'me' ? v.groupPartyId : undefined,
         path: 'CECF_WEB',
       });
 
@@ -192,6 +198,29 @@ export async function cecfRoutes(app: FastifyInstance) {
     } catch (e) { return sendError(reply, e); }
   });
 
+  const progressSchema = z.object({ step: z.coerce.number().int().min(1).max(20) });
+
+  /**
+   * The only thing this does is bump `Registration.lastStep` — same
+   * drop-off signal apps/app/join's own multi-step Server Actions leave
+   * behind for free just by saving each step server-side. WordPress's
+   * wizard collects everything client-side and only calls /start once
+   * (see the table comment above), so without this, a registrant who
+   * closes the tab partway through mid-wizard leaves either nothing at
+   * all (before "you") or a STARTED row admin can't tell apart from one
+   * stuck on step 2 vs step 6. Best-effort, fire-and-forget from
+   * registration.js — a failed ping here must never block the wizard,
+   * so it's the one route that tolerates being silently missed.
+   * updateRegistration already refuses to move lastStep backwards.
+   */
+  app.post<{ Params: { id: string } }>('/api/cecf/registration/:id/progress', async (req, reply) => {
+    try {
+      const v = progressSchema.parse(req.body);
+      await updateRegistration(cecfCtx(), req.params.id, { lastStep: v.step });
+      return reply.send({ ok: true });
+    } catch (e) { return sendError(reply, e); }
+  });
+
   const mpesaInitiateSchema = z.object({
     registrationId: z.string().uuid(),
     msisdn: msisdnSchema,
@@ -242,6 +271,22 @@ export async function cecfRoutes(app: FastifyInstance) {
         await confirmRegistrationPaymentByPesapalOrderId(order.orderTrackingId);
       }
       return reply.send({ ok: true, redirectUrl: order.redirectUrl, orderTrackingId: order.orderTrackingId });
+    } catch (e) { return sendError(reply, e); }
+  });
+
+  /**
+   * Group suggestions as someone types — the same search-before-create
+   * mechanism apps/app/join's own GroupPicker already uses
+   * (searchGroupsPublic), just exposed for WordPress's own registration
+   * wizard to call. Lets an individual who says they already belong to
+   * a group link straight to the real Organisation instead of typing a
+   * name that goes nowhere and never actually joins anything.
+   */
+  app.get<{ Querystring: { q?: string; county?: string } }>('/api/cecf/groups/search', async (req, reply) => {
+    try {
+      const q = (req.query.q ?? '').trim();
+      const results = await searchGroupsPublic(cecfCtx(), q, req.query.county || undefined);
+      return reply.send({ ok: true, groups: results });
     } catch (e) { return sendError(reply, e); }
   });
 

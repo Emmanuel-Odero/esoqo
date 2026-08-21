@@ -1,5 +1,15 @@
-import 'server-only';
+// Deliberately no `server-only` marker — this module is now called both
+// from Next.js Server Actions (donor invites, OTP) and from
+// services/core's plain-Node webhook handler (donation confirm/fail SMS),
+// and `server-only` throws unconditionally outside a Next.js
+// server-component bundling context. Same reasoning as
+// packages/payments/src/mpesa.ts's own header comment.
 import { appEnv } from '@esoko/domain';
+// Deliberately '@esoko/db' (the DAL barrel export), not a deeper
+// subpath — recordSmsSpend carries no server-only marker of its own, so
+// nothing new is added to the "can't run under plain tsx" list this
+// header already tracks.
+import { recordSmsSpend } from '@esoko/db';
 
 /**
  * Resolves the SMS provider for this run mode (see packages/domain/src/env.ts):
@@ -33,11 +43,12 @@ export function smsProvider(): string {
  * live request from a dev box. OTP keeps its own console short-circuit
  * (it carries the dev code), so it never reaches here in console mode.
  */
-export async function sendSms(to: string, message: string): Promise<void> {
+export async function sendSms(to: string, message: string, purpose = 'unspecified'): Promise<void> {
   const provider = smsProvider();
 
   if (provider === 'console') {
     console.log(`\n  ┌─ SMS (console) ─────────────────────\n  │  to: ${to}\n  │  ${message}\n  └───────────────────────────────────\n`);
+    void recordSmsSpend(purpose, provider);
     return;
   }
 
@@ -63,6 +74,7 @@ export async function sendSms(to: string, message: string): Promise<void> {
       console.error('[SMS] mock send failed', res.status, body);
       throw new Error('Could not send the message');
     }
+    void recordSmsSpend(purpose, provider);
     return;
   }
 
@@ -96,4 +108,5 @@ export async function sendSms(to: string, message: string): Promise<void> {
     console.error('[SMS] send failed', res.status, body);
     throw new Error(res.status === 401 || res.status === 403 ? 'SMS credentials were rejected' : 'Could not send the message');
   }
+  void recordSmsSpend(purpose, provider);
 }

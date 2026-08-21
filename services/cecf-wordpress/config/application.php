@@ -157,6 +157,53 @@ Config::define('WP_POST_REVISIONS', env('WP_POST_REVISIONS') ?? true);
 Config::define('CONCATENATE_SCRIPTS', false);
 
 /**
+ * Media storage — Cloudflare R2, same account/bucket-naming scheme as
+ * the rest of esoko (see packages/db/src/storage.ts's own header for
+ * the sibling Node-side config). Backed by humanmade/s3-uploads
+ * (web/app/plugins/s3-uploads, composer.json) — its stream wrapper
+ * makes every core upload path (wp_handle_upload, thumbnail/srcset
+ * generation, the media library) write straight to R2 with no plugin
+ * code of ours involved; web/app/mu-plugins/media-policy.php is what
+ * restricts *which* files are accepted and how they're compressed
+ * before that happens.
+ *
+ * Only defined when R2 credentials are present — same "dev stays local
+ * unless configured otherwise" rule as STORAGE_PROVIDER on the Node
+ * side. Local development with no R2_* vars set falls straight through
+ * to WordPress's own default (wp-content/uploads on local disk); the
+ * plugin is only ever network-activated (docker/entrypoint.sh) when
+ * this block actually ran.
+ */
+if (env('R2_ACCOUNT_ID')) {
+    Config::define('S3_UPLOADS_BUCKET', env('R2_BUCKET') ?: 'cecf-media');
+    Config::define('S3_UPLOADS_KEY', env('R2_ACCESS_KEY_ID'));
+    Config::define('S3_UPLOADS_SECRET', env('R2_SECRET_ACCESS_KEY'));
+    // R2's own documented value, not a real AWS region — required by
+    // the plugin (it wp_die()s without one) and by the SDK's SigV4
+    // signing, but R2 itself only recognises 'auto'.
+    Config::define('S3_UPLOADS_REGION', 'auto');
+    // R2_PUBLIC_URL is the bucket's public-read origin (an r2.dev
+    // subdomain, or a custom domain mapped to the bucket in the
+    // Cloudflare dashboard) — deliberately NOT the same private-proxy
+    // pattern apps/jamii's /img route uses. WordPress media (blog
+    // photos, PDFs linked from posts) is public content by nature;
+    // there is no equivalent "opaque storage key never exposed"
+    // requirement here the way there is for a group's page assets.
+    if (env('R2_PUBLIC_URL')) {
+        Config::define('S3_UPLOADS_BUCKET_URL', env('R2_PUBLIC_URL'));
+    }
+}
+
+// Cloudflare R2's S3-compatible endpoint is account-scoped, not a real
+// AWS region endpoint — the plugin has no built-in constant for this,
+// so it's supplied through its own documented `s3_uploads_s3_client_params`
+// filter instead of forking the plugin. That filter is registered in
+// web/app/mu-plugins/media-policy.php, not here: add_filter() doesn't
+// exist yet at this point in the load order (this file runs before
+// WordPress's plugin API is bootstrapped) — only Config::define() calls
+// belong in application.php.
+
+/**
  * Debugging Settings
  */
 Config::define('WP_DEBUG_DISPLAY', false);

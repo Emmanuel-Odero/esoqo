@@ -2,6 +2,7 @@ import { Icon } from '@esoko/ui';
 import { listGroups, DOCUMENT_KINDS, GROUP_KINDS } from '@esoko/db';
 import { COUNTIES } from '@esoko/domain';
 import { requireStaff } from '@/lib/session';
+import { RankedBarChart, DonutChart } from '@/components/charts';
 import { GroupManager } from './GroupManager';
 
 export const dynamic = 'force-dynamic';
@@ -46,6 +47,29 @@ export default async function GroupsPage({
           );
         })}
       </div>
+
+      {groups.length > 0 && (
+        <div className="grid2" style={{ marginBottom: 22 }}>
+          <div className="card">
+            <h2><Icon name="handshake" size={17} />By kind</h2>
+            <RankedBarChart color="var(--navy-2)" rows={
+              [...groups.reduce((m, g) => m.set(g.kind, (m.get(g.kind) ?? 0) + 1), new Map<string, number>())]
+                .map(([kind, count]) => ({ label: kind.replace(/_/g, ' ').toLowerCase(), value: count }))
+            } />
+          </div>
+          <div className="card">
+            <h2><Icon name="gov" size={17} />Registration channel</h2>
+            <p className="sub" style={{ marginTop: -6, marginBottom: 14 }}>
+              CECF registrations come through the CECF WordPress site&rsquo;s own flow, not this
+              platform&rsquo;s — an active, ongoing channel, not a one-off import.
+            </p>
+            <DonutChart size={150} centerLabel={{ value: String(groups.length), sub: 'groups' }} segments={[
+              { label: 'CECF', value: groups.filter((g) => g.party.sourceSystem === 'CECF').length, color: 'var(--amber)' },
+              { label: 'Esoko app', value: groups.filter((g) => g.party.sourceSystem === 'ESOKO').length, color: 'var(--green-2)' },
+            ].filter((s) => s.value > 0)} />
+          </div>
+        </div>
+      )}
 
       <GroupManager
         groups={groups.map((g) => ({

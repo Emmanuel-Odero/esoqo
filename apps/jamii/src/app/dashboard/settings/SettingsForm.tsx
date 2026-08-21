@@ -5,11 +5,9 @@ import { useRouter } from 'next/navigation';
 import { actionUpdateProfile } from '../actions';
 
 type Profile = {
-  tagline: string; missionShort: string; visionShort: string; aboutUs: string; meetingSchedule: string;
-  contactEmail: string; contactPhone: string; website: string;
-  facebook: string; instagram: string; twitter: string; whatsapp: string;
   brandAccent: string; brandAccentTwo: string; brandAccentThree: string;
   themeDefaultMode: 'DARK' | 'LIGHT';
+  seoTitle: string; seoDescription: string;
 };
 
 /** Matches the whitelabel theme's own defaults (jamii.css's .wl-theme
@@ -17,6 +15,10 @@ type Profile = {
  *  own, so the picker never looks blank. */
 const DEFAULT_SWATCH = { brandAccent: '#D81E56', brandAccentTwo: '#0E7F9C', brandAccentThree: '#B8720F' } as const;
 
+/** Core settings only — appearance and the org-wide SEO fallback.
+ *  About/Contact/FAQ content moved to their own pages under Dashboard
+ *  -> Pages, each edited from the screen that actually shows it; see
+ *  AboutContentForm/ContactContentForm/FaqEditor there. */
 export function SettingsForm({ pageId, initial }: { pageId: string; initial: Profile }) {
   const [values, setValues] = useState(initial);
   const [error, setError] = useState<string | null>(null);
@@ -41,26 +43,7 @@ export function SettingsForm({ pageId, initial }: { pageId: string; initial: Pro
 
   return (
     <div className="card" style={{ padding: 22, maxWidth: 640 }}>
-      <div className="field"><label htmlFor="tagline">Tagline</label><input id="tagline" value={values.tagline} onChange={(e) => set('tagline', e.target.value)} /></div>
-      <div className="field"><label htmlFor="missionShort">Short mission (for cards)</label><input id="missionShort" value={values.missionShort} onChange={(e) => set('missionShort', e.target.value)} /></div>
-      <div className="field"><label htmlFor="visionShort">Short vision</label><input id="visionShort" value={values.visionShort} onChange={(e) => set('visionShort', e.target.value)} placeholder="Inclusive communities where no one is left behind." /></div>
-      <div className="field"><label htmlFor="aboutUs">About</label><textarea id="aboutUs" rows={6} value={values.aboutUs} onChange={(e) => set('aboutUs', e.target.value)} /></div>
-      <div className="field"><label htmlFor="meetingSchedule">Meeting schedule</label><input id="meetingSchedule" value={values.meetingSchedule} onChange={(e) => set('meetingSchedule', e.target.value)} placeholder="Wednesdays, 4pm · Social Hall" /></div>
-      <div className="formrow2">
-        <div className="field"><label htmlFor="contactPhone">Public phone</label><input id="contactPhone" value={values.contactPhone} onChange={(e) => set('contactPhone', e.target.value)} placeholder="+254 7XX XXX XXX" /></div>
-        <div className="field"><label htmlFor="contactEmail">Public email</label><input id="contactEmail" type="email" value={values.contactEmail} onChange={(e) => set('contactEmail', e.target.value)} /></div>
-      </div>
-      <div className="field"><label htmlFor="website">Website</label><input id="website" value={values.website} onChange={(e) => set('website', e.target.value)} placeholder="https://" /></div>
-      <div className="formrow2">
-        <div className="field"><label htmlFor="facebook">Facebook</label><input id="facebook" value={values.facebook} onChange={(e) => set('facebook', e.target.value)} /></div>
-        <div className="field"><label htmlFor="twitter">X (Twitter)</label><input id="twitter" value={values.twitter} onChange={(e) => set('twitter', e.target.value)} /></div>
-      </div>
-      <div className="formrow2">
-        <div className="field"><label htmlFor="instagram">Instagram</label><input id="instagram" value={values.instagram} onChange={(e) => set('instagram', e.target.value)} /></div>
-        <div className="field"><label htmlFor="whatsapp">WhatsApp</label><input id="whatsapp" value={values.whatsapp} onChange={(e) => set('whatsapp', e.target.value)} /></div>
-      </div>
-
-      <h3 style={{ fontSize: '.92rem', color: 'var(--ink)', margin: '22px 0 6px' }}>Custom domain theme</h3>
+      <h3 style={{ fontSize: '.92rem', color: 'var(--ink)', margin: '0 0 6px' }}>Custom domain theme</h3>
       <p style={{ fontSize: '.8rem', color: '#8a8368', margin: '0 0 14px' }}>
         Only shown on your own domain, never on your ourjamii.co.ke page. One colour is enough to
         feel intentional; the other two are optional accents.
@@ -103,6 +86,15 @@ export function SettingsForm({ pageId, initial }: { pageId: string; initial: Pro
           choice is remembered on their own device from then on.
         </p>
       </div>
+
+      <h3 style={{ fontSize: '.92rem', color: 'var(--ink)', margin: '22px 0 6px' }}>SEO</h3>
+      <p style={{ fontSize: '.8rem', color: '#8a8368', margin: '0 0 14px' }}>
+        The site-wide fallback — used for any page that doesn&rsquo;t have its own SEO title/
+        description set. Optional; only set these if the auto-built version (from your name and
+        mission) isn&rsquo;t right.
+      </p>
+      <div className="field"><label htmlFor="seoTitle">Search title override</label><input id="seoTitle" value={values.seoTitle} maxLength={70} onChange={(e) => set('seoTitle', e.target.value)} /></div>
+      <div className="field"><label htmlFor="seoDescription">Search description override</label><textarea id="seoDescription" rows={2} maxLength={160} value={values.seoDescription} onChange={(e) => set('seoDescription', e.target.value)} /></div>
 
       {error && <p style={{ color: 'var(--stamp)', fontSize: '.85rem', marginBottom: 10 }}>{error}</p>}
       {saved && !error && <p style={{ color: 'var(--ledger)', fontSize: '.85rem', marginBottom: 10 }}>Saved.</p>}

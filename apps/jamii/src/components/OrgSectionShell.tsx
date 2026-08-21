@@ -1,12 +1,17 @@
 import { notFound } from 'next/navigation';
+import { listJamiiNavItemsPublic } from '@esoko/db';
 import { OrgHeader } from './OrgHeader';
 import { OrgSubnav } from './OrgSubnav';
 import { OrgSidebar } from './OrgSidebar';
 import { OrgTopNav } from './OrgTopNav';
 import { OrgPageBanner } from './OrgPageBanner';
 import { OrgFooter } from './OrgFooter';
+import { OrgJsonLd } from './OrgJsonLd';
 import { loadOrgPage, isVerified } from '@/lib/data';
 import { getOrgLinkMode, orgHref } from '@/lib/org-links';
+import { resolveNavLinks } from '@/lib/org-links-shared';
+import { orgExternalUrl } from '@/lib/org-external-url';
+import { currentOrigin } from '@/lib/seo';
 import { WhitelabelThemeRoot } from '@/lib/whitelabel-theme';
 
 export async function loadOrgOr404(slug: string) {
@@ -24,9 +29,17 @@ export async function OrgSectionShell({
   const mode = await getOrgLinkMode(slug);
   const onCustomDomain = mode.base === '';
   const activeCampaign = page.campaigns.find((c) => c.status === 'ACTIVE');
+  const externalUrl = orgExternalUrl(page);
+  // Already on the custom domain — only worth showing here if it's a
+  // *different* site (the `website` field), never the domain itself.
+  const websiteUrl = externalUrl?.kind === 'website' ? externalUrl : null;
+  const origin = await currentOrigin(mode);
+  const navItemRows = await listJamiiNavItemsPublic(page.organisationId);
+  const navLinks = resolveNavLinks(navItemRows, mode);
 
   const body = (
     <>
+      <OrgJsonLd page={page} url={onCustomDomain ? origin : `${origin}/o/${page.slug}`} />
       {onCustomDomain ? (
         <>
           <OrgTopNav
@@ -34,15 +47,17 @@ export async function OrgSectionShell({
             logoUrl={page.logoUrl}
             verified={isVerified(page.organisation)}
             mode={mode}
+            navLinks={navLinks}
             ctaHref={activeCampaign ? orgHref(mode, `c/${activeCampaign.slug}`) : null}
             ctaLabel="Support us"
+            websiteUrl={websiteUrl}
           />
           <OrgPageBanner eyebrow={eyebrow ?? page.organisation.officialName} title={title} lede={lede} />
         </>
       ) : (
         <>
           <OrgHeader page={page} mode={mode} />
-          <OrgSubnav mode={mode} />
+          <OrgSubnav mode={mode} navLinks={navLinks} />
         </>
       )}
 

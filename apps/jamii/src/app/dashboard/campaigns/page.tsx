@@ -15,10 +15,10 @@ export default async function CampaignsScreen() {
       </div>
       <div className="card" style={{ padding: 0, overflow: 'auto' }}>
         <table className="dtable">
-          <thead><tr><th>Campaign</th><th>Status</th><th>Raised</th><th>Goal</th><th>Supporters</th></tr></thead>
+          <thead><tr><th>Campaign</th><th>Status</th><th>Raised</th><th>Goal</th><th>Supporters</th><th /></tr></thead>
           <tbody>
             {withStats.length === 0 ? (
-              <tr><td colSpan={5} style={{ color: '#8a8368' }}>No campaigns yet.</td></tr>
+              <tr><td colSpan={6} style={{ color: '#8a8368' }}>No campaigns yet.</td></tr>
             ) : withStats.map(({ c, stats }) => (
               <tr key={c.id}>
                 <td><Link href={`/o/${page.slug}/c/${c.slug}`} style={{ fontWeight: 700 }}>{c.title}</Link></td>
@@ -26,6 +26,7 @@ export default async function CampaignsScreen() {
                 <td className="mono">KES {stats.raisedKes.toLocaleString('en-KE')}</td>
                 <td className="mono">KES {Number(c.goalKes).toLocaleString('en-KE')}</td>
                 <td>{stats.supporters}</td>
+                <td><Link href={`/dashboard/campaigns/${c.id}/edit`}>Edit</Link></td>
               </tr>
             ))}
           </tbody>

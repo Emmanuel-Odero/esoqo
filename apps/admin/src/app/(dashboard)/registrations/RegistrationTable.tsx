@@ -9,16 +9,61 @@ import { maskMsisdn } from '@esoko/domain';
 import {
   actionGetDetail, actionEdit, actionVoid, actionRestore,
   actionRecordPayment, actionAmendPayment, actionAssignUserPin,
-  actionSearchGroupsForStaff, actionAssignToGroup,
+  actionSearchGroupsForStaff, actionAssignToGroup, actionAssignGroupIntent,
   actionUploadWalkInDocument, actionRemoveWalkInDocument,
 } from './actions';
 import WalkInFlow from './WalkInFlow';
 
 interface Row {
   id: string; officialName: string | null; knownAs: string | null; orgName: string | null;
+  bizName: string | null;
   msisdn: string | null; county: string | null; workRaw: string | null;
   status: string; joiningAs: string; path: string; startedAt: string;
+  groupPartyId: string | null; groupOrgName: string | null;
+  bizPartyId: string | null; bizOrgName: string | null;
+  belongsToGroup: string | null; groupName: string | null;
   voidedAt: string | null; voidReason: string | null;
+  lastStep: number; feeCoverage: string | null;
+}
+
+/**
+ * WordPress's CECF wizard (services/cecf-wordpress/.../registration.js)
+ * collects everything client-side and only creates a Registration row
+ * once the "you" step is reached, unlike apps/app/join's own per-step
+ * Server Actions — so `status: STARTED` alone doesn't say where in the
+ * six-to-eight-step wizard someone actually stalled. registration.js
+ * pings `/api/cecf/registration/:id/progress` after every step
+ * transition to bump `lastStep`; this mirrors its own `SEQUENCES` so
+ * that number becomes a real "stuck on payment" / "stuck on documents"
+ * label here instead of a bare integer. Keep in sync with that file if
+ * its step order ever changes.
+ */
+const CECF_SEQUENCES: Record<string, { name: string; label: string }[]> = {
+  me: [
+    { name: 'who', label: "who's joining" }, { name: 'you', label: 'your details' },
+    { name: 'payment', label: 'registration fee' }, { name: 'review', label: 'review & confirm' },
+  ],
+  biz: [
+    { name: 'who', label: "who's joining" }, { name: 'biz-info', label: 'business details' },
+    { name: 'you', label: 'your details' }, { name: 'documents', label: 'documents' },
+    { name: 'payment', label: 'registration fee' }, { name: 'review', label: 'review & confirm' },
+  ],
+  group: [
+    { name: 'who', label: "who's joining" }, { name: 'group-info', label: 'group details' },
+    { name: 'you', label: 'your details' }, { name: 'documents', label: 'documents' },
+    { name: 'fee-coverage', label: 'fee coverage' }, { name: 'payment', label: 'registration fee' },
+    { name: 'roster', label: 'member roster' }, { name: 'review', label: 'review & confirm' },
+  ],
+};
+
+function cecfStepLabel(r: Row): string | null {
+  if (r.path !== 'CECF_WEB' || (r.status !== 'STARTED' && r.status !== 'AWAITING_OTP')) return null;
+  const who = r.joiningAs === 'group' ? 'group' : r.joiningAs === 'biz' ? 'biz' : 'me';
+  const seq = (CECF_SEQUENCES[who] ?? [])
+    .filter((s) => !(who === 'group' && r.feeCoverage === 'self' && s.name === 'payment'));
+  if (!seq.length) return null;
+  const step = Math.min(Math.max(r.lastStep, 1), seq.length);
+  return `Step ${step} of ${seq.length} · ${seq[step - 1]?.label}`;
 }
 
 const STATUS: Record<string, [string, string]> = {
@@ -29,7 +74,36 @@ const STATUS: Record<string, [string, string]> = {
   ABANDONED: ['p-bad', 'Abandoned'],
 };
 
-const JOINING = { me: 'Individual', group: 'Group', biz: 'Business' } as const;
+/**
+ * "Joining as: Group" used to mean two very different things with no
+ * way to tell them apart — someone typing in a brand-new group's name
+ * (they're founding it) and someone picking an already-registered
+ * group off the search list (they're just joining it as a member).
+ * Same split applies to businesses, and an "Individual" registrant can
+ * separately say they belong to a group too (belongsToGroup) — that's
+ * a third, previously-invisible shape. This resolves all of it into
+ * one label + colour + (when there's a group/business involved) a
+ * name to show, computed the same way completeRegistration itself
+ * decides "new org" vs "joined existing" — orgName/bizName present
+ * means they typed a new one; its absence with a party id present
+ * means they picked an existing one from search.
+ */
+type RegKind = 'individual' | 'individual-member' | 'group-new' | 'group-member' | 'biz-new' | 'biz-contact';
+
+function regKind(r: Row): RegKind {
+  if (r.joiningAs === 'group') return r.orgName ? 'group-new' : 'group-member';
+  if (r.joiningAs === 'biz') return r.bizName ? 'biz-new' : 'biz-contact';
+  return r.belongsToGroup === 'yes' ? 'individual-member' : 'individual';
+}
+
+const REG_KIND_META: Record<RegKind, { label: string; pill: string }> = {
+  'individual': { label: 'Individual', pill: 'p-mute' },
+  'individual-member': { label: 'Individual · group member', pill: 'p-info' },
+  'group-new': { label: 'New group', pill: 'p-ok' },
+  'group-member': { label: 'Group member', pill: 'p-info' },
+  'biz-new': { label: 'New business', pill: 'p-ok' },
+  'biz-contact': { label: 'Business contact', pill: 'p-info' },
+};
 
 export function RegistrationTable({
   rows, total, page, pages, counties, canEdit, canVoid, canCreate, canSeePii, canRecordPayment,
@@ -110,36 +184,61 @@ export function RegistrationTable({
           <table className="tbl">
             <thead>
               <tr>
-                <th>Name</th><th>Joining as</th><th>Phone</th><th>County</th>
+                <th>Name</th><th>Registration type</th><th>Phone</th><th>County</th>
                 <th>Work</th><th>Status</th><th>Started</th><th />
               </tr>
             </thead>
             <tbody>
               {rows.map((r) => {
                 const [cls, label] = STATUS[r.status] ?? ['p-mute', r.status];
+                const kind = regKind(r);
+                const meta = REG_KIND_META[kind];
+                const personName = r.officialName || r.knownAs || '—';
                 return (
                   <tr key={r.id} style={r.voidedAt ? { opacity: 0.55 } : undefined}>
                     <td>
-                      {r.orgName ? (
+                      {kind === 'group-new' ? (
                         <>
                           <strong>{r.orgName}</strong>
+                          <span className="sub" style={{ display: 'block' }}>Founded by {personName}</span>
+                        </>
+                      ) : kind === 'biz-new' ? (
+                        <>
+                          <strong>{r.bizName}</strong>
+                          <span className="sub" style={{ display: 'block' }}>Founded by {personName}</span>
+                        </>
+                      ) : kind === 'group-member' || kind === 'individual-member' ? (
+                        <>
+                          <strong>{personName}</strong>
                           <span className="sub" style={{ display: 'block' }}>
-                            Founded by {r.officialName || r.knownAs || '—'}
+                            Member of{' '}
+                            {r.groupPartyId ? (
+                              <Link href={`/groups/${r.groupPartyId}` as Route} style={{ color: 'var(--blue-2)' }}>
+                                {r.groupOrgName || r.groupName || 'a group'}
+                              </Link>
+                            ) : (r.groupOrgName || r.groupName || 'a group')}
+                          </span>
+                        </>
+                      ) : kind === 'biz-contact' ? (
+                        <>
+                          <strong>{personName}</strong>
+                          <span className="sub" style={{ display: 'block' }}>
+                            Contact for {r.bizOrgName || 'a business'}
                           </span>
                         </>
                       ) : (
                         <>
-                          <strong>{r.officialName || r.knownAs || '—'}</strong>
+                          <strong>{personName}</strong>
                           {r.officialName && r.knownAs && (
                             <span className="sub" style={{ display: 'block' }}>Known as {r.knownAs}</span>
                           )}
                         </>
                       )}
                     </td>
-                    <td className="sub">
-                      {JOINING[r.joiningAs as keyof typeof JOINING] ?? r.joiningAs}
+                    <td>
+                      <span className={`pill ${meta.pill}`}>{meta.label}</span>
                       {r.path === 'CECF_WEB' && (
-                        <span className="pill p-info" style={{ marginLeft: 6 }} title="Registered via the CECF WordPress site">
+                        <span className="pill p-mute" style={{ marginLeft: 6 }} title="Registered via the CECF WordPress site">
                           CECF
                         </span>
                       )}
@@ -152,6 +251,11 @@ export function RegistrationTable({
                     <td>
                       <span className={`pill ${cls}`}>{label}</span>
                       {r.voidedAt && <span className="pill p-bad" style={{ marginLeft: 5 }}>Void</span>}
+                      {cecfStepLabel(r) && (
+                        <span className="sub" style={{ display: 'block', marginTop: 4, fontSize: '.79rem' }}>
+                          {cecfStepLabel(r)}
+                        </span>
+                      )}
                     </td>
                     <td className="mono sub" style={{ fontSize: '.79rem' }}>
                       {r.startedAt.slice(0, 10)}
@@ -285,11 +389,14 @@ function DetailDrawer({
     setError(null);
     start(async () => {
       // Once a registration has become a real person, group membership
-      // lives on Membership, not the Registration row — updateRegistration
-      // refuses to touch a COMPLETE registration anyway.
+      // lives on Membership, not the Registration row — completeRegistration
+      // refuses to touch a COMPLETE registration's own fields anyway. Before
+      // that, this is just intent recorded on the registration itself
+      // (see setRegistrationGroupIntent), honoured automatically once
+      // it completes.
       const r = d?.party?.person
         ? await actionAssignToGroup(d.party.person.partyId, group.id)
-        : await actionEdit(id, { groupPartyId: group.id, groupName: group.name, belongsToGroup: 'yes' });
+        : await actionAssignGroupIntent(id, group.id, group.name);
       if (r.ok) {
         announce(`Assigned to ${group.name}`, 'assertive');
         setAssigningGroup(false);
@@ -458,11 +565,16 @@ function DetailDrawer({
               ) : (
                 <p className="sub" style={{ marginBottom: 10 }}>Not currently a member of any group.</p>
               )}
-              {(canManageMembership && d.party?.person || (!d.party && canEdit)) && (
+              {canManageMembership && (
                 <button className="btn btn-o btn-sm" onClick={() => setAssigningGroup(true)}>
                   <Icon name="users" size={13} />
                   {d.party?.memberships?.length ? 'Move to another group' : 'Assign to a group'}
                 </button>
+              )}
+              {!d.party && (
+                <p className="sub" style={{ marginTop: 8, fontSize: '.79rem' }}>
+                  Not complete yet — assigning now sets which group this joins automatically once it is.
+                </p>
               )}
             </div>
           )}

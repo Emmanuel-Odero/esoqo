@@ -19,6 +19,15 @@
 
   const KES_PER_PERSON = 500;
 
+  // Everything up to /start (which needs the "you" step's name/phone/
+  // county) is pure client state — a refresh mid-wizard used to lose it
+  // outright, and even past /start, going back to a saved tab meant
+  // starting over because registrationId only ever lived in `state`.
+  // This key holds a full draft (state + every named field except file
+  // inputs) so a reload can offer to pick up exactly where it left off,
+  // same pattern apps/app/join's own JoinFlow.tsx uses browser-side.
+  const STORAGE_KEY = 'esoko:cecf-reg:v1';
+
   /** @type {{
    *   who: string|null, step: number,
    *   registrationId: string|null,
@@ -34,6 +43,11 @@
     groupRegistered: null, bizRegistered: null,
     feeCoverage: null, paymentMethod: null, paymentDone: false,
     documents: [], members: [],
+    // Individuals only — "do you already belong to a group" (independent
+    // of `who`, which is about who's being registered). groupPartyId is
+    // set only when a real search suggestion was picked; typing a name
+    // with no match leaves it null and groupName carries the free text.
+    belongsToGroup: null, groupPartyId: null,
   };
 
   // "you" comes right after the group/business's own details and before
@@ -76,6 +90,142 @@
     el.textContent = '';
   }
 
+  /* ── draft persistence (survives a refresh or a closed tab) ─────── */
+
+  /** Every named, non-file field's current value — generic over the
+   *  markup so a new field in the Blade partial is picked up for free. */
+  function collectFieldValues() {
+    const values = {};
+    Array.from(form.elements).forEach((el) => {
+      if (!el.name || el.type === 'file') return;
+      values[el.name] = el.type === 'checkbox' || el.type === 'radio' ? el.checked : el.value;
+    });
+    return values;
+  }
+
+  function applyFieldValues(values) {
+    if (!values) return;
+    Array.from(form.elements).forEach((el) => {
+      if (!el.name || el.type === 'file' || !(el.name in values)) return;
+      if (el.type === 'checkbox' || el.type === 'radio') el.checked = Boolean(values[el.name]);
+      else el.value = values[el.name];
+    });
+  }
+
+  /** Saved after every step transition and (debounced) every keystroke.
+   *  Document bytes are deliberately excluded — a couple of base64-
+   *  encoded attachments would blow past most browsers' 5–10MB
+   *  localStorage quota — so a resumed draft keeps every text field and
+   *  the member roster, but files must be re-attached. */
+  // True from the moment a saved draft is offered until the registrant
+  // picks "Continue" or "Start over" — render() still runs during this
+  // window (to show the ordinary step-0 wizard behind the banner), but
+  // must not save over the very draft it's asking about, or a second
+  // reload before they decide would find nothing left to resume.
+  let awaitingResumeChoice = false;
+
+  function saveDraft() {
+    if (awaitingResumeChoice) return;
+    try {
+      window.localStorage.setItem(STORAGE_KEY, JSON.stringify({
+        state: {
+          who: state.who, step: state.step, registrationId: state.registrationId,
+          groupRegistered: state.groupRegistered, bizRegistered: state.bizRegistered,
+          feeCoverage: state.feeCoverage, paymentMethod: state.paymentMethod,
+          paymentDone: state.paymentDone, members: state.members,
+          belongsToGroup: state.belongsToGroup, groupPartyId: state.groupPartyId,
+        },
+        fields: collectFieldValues(),
+      }));
+    } catch (e) { /* storage full or blocked — resuming just won't be offered */ }
+  }
+
+  function clearDraft() {
+    try { window.localStorage.removeItem(STORAGE_KEY); } catch (e) { /* ignore */ }
+  }
+
+  function loadDraft() {
+    try {
+      const raw = window.localStorage.getItem(STORAGE_KEY);
+      if (!raw) return null;
+      const draft = JSON.parse(raw);
+      // step 0 is just the "who" picker — nothing worth resuming yet.
+      if (!draft || !draft.state || !(draft.state.step > 0)) return null;
+      return draft;
+    } catch (e) { return null; }
+  }
+
+  function setOptPressed(role, value) {
+    const group = form.querySelector(`[role="group"][data-role="${role}"]`);
+    if (!group) return;
+    group.querySelectorAll('.opt').forEach((o) => o.setAttribute('aria-pressed', String(o.dataset.value === value)));
+  }
+
+  /** Restores everything render() itself can't derive from `state` alone
+   *  — the pressed `.opt` cards and the fields those clicks reveal —
+   *  before handing off to render() for the actual step display. */
+  function applyDraft(draft) {
+    applyFieldValues(draft.fields);
+    Object.assign(state, draft.state);
+
+    if (state.who) {
+      form.querySelectorAll('[data-who]').forEach((b) => b.setAttribute('aria-pressed', String(b.dataset.who === state.who)));
+    }
+    setOptPressed('group-registered', state.groupRegistered);
+    setOptPressed('biz-registered', state.bizRegistered);
+    setOptPressed('belongs-group', state.belongsToGroup);
+    setOptPressed('fee-coverage', state.feeCoverage);
+    setOptPressed('payment-method', state.paymentMethod);
+    form.querySelector('[data-role="group-regno-wrap"]').hidden = state.groupRegistered !== 'yes';
+    form.querySelector('[data-role="biz-regno-wrap"]').hidden = state.bizRegistered !== 'yes';
+    form.querySelector('[data-role="group-name-wrap"]').hidden = state.belongsToGroup !== 'yes';
+    if (state.paymentMethod) {
+      form.querySelector('[data-role="mpesa-number-wrap"]').hidden = state.paymentMethod !== 'MPESA';
+      form.querySelector('[data-role="pay-mpesa"]').hidden = state.paymentMethod !== 'MPESA';
+      form.querySelector('[data-role="pay-card"]').hidden = state.paymentMethod !== 'CARD';
+    }
+    renderList('member-list', state.members.map((m) => m.officialName));
+  }
+
+  /** Shown once, at load, if a draft worth resuming exists — mirrors
+   *  apps/app/join's own resumable-registration banner. */
+  function offerResume(draft) {
+    const banner = form.previousElementSibling;
+    if (!banner || banner.dataset.role !== 'resume-banner') return;
+
+    const name = (draft.fields && (draft.fields.orgName || draft.fields.bizName || draft.fields.officialName)) || '';
+    banner.querySelector('[data-role="resume-message"]').textContent = name
+      ? `You have a registration in progress on this device, started as ${name}. Any documents you attached will need to be added again.`
+      : 'You have a registration in progress on this device.';
+    banner.hidden = false;
+    awaitingResumeChoice = true;
+
+    banner.querySelector('[data-role="resume-start-over"]').addEventListener('click', () => {
+      awaitingResumeChoice = false;
+      clearDraft();
+      banner.hidden = true;
+    }, { once: true });
+    banner.querySelector('[data-role="resume-continue"]').addEventListener('click', () => {
+      awaitingResumeChoice = false;
+      banner.hidden = true;
+      applyDraft(draft);
+      render();
+    }, { once: true });
+  }
+
+  /** Best-effort — registration.js's only job here is to not let a
+   *  failed ping block the wizard. Lets admin's Registrations table show
+   *  a CECF registrant's actual step (see RegistrationTable.tsx), not
+   *  just STARTED, without WordPress waiting on the response at all. */
+  function reportProgress() {
+    if (!state.registrationId) return;
+    fetch(urlFor('progressUrlTpl', state.registrationId), {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ step: state.step + 1 }),
+    }).catch(() => { /* best-effort */ });
+  }
+
   function render() {
     const seq = currentSequence();
     const name = seq[state.step];
@@ -110,24 +260,30 @@
     if (name === 'review') updateReviewSummary();
 
     clearError();
+    saveDraft();
+    reportProgress();
   }
 
   function updateYouCopy() {
     const heading = form.querySelector('[data-role="you-heading"]');
     const sub = form.querySelector('[data-role="you-sub"]');
     const roleWrap = form.querySelector('[data-role="your-role-wrap"]');
+    const belongsWrap = form.querySelector('[data-role="belongs-group-wrap"]');
     if (state.who === 'group') {
       heading.textContent = 'You, registering the group';
       sub.textContent = 'One person we can reach — usually the chairperson or treasurer.';
       roleWrap.hidden = false;
+      belongsWrap.hidden = true;
     } else if (state.who === 'biz') {
       heading.textContent = 'Contact person';
       sub.textContent = 'Registered as the business’s contact.';
       roleWrap.hidden = true;
+      belongsWrap.hidden = true;
     } else {
       heading.textContent = 'Your details';
       sub.textContent = 'A personal membership — your own record.';
       roleWrap.hidden = true;
+      belongsWrap.hidden = false;
     }
   }
 
@@ -283,7 +439,13 @@
         bizIntendsToRegister: state.bizRegistered === 'no' ? 'yes' : undefined,
       };
     }
-    return { joiningAs: 'me', registrant };
+    return {
+      joiningAs: 'me',
+      registrant,
+      belongsToGroup: state.belongsToGroup || undefined,
+      groupName: state.belongsToGroup === 'yes' ? (form.elements.groupName.value.trim() || undefined) : undefined,
+      groupPartyId: state.belongsToGroup === 'yes' ? (form.elements.groupPartyId.value || undefined) : undefined,
+    };
   }
 
   function urlFor(tplAttr, id) {
@@ -425,6 +587,7 @@
     form.elements.memberName.value = '';
     form.elements.memberPhone.value = '';
     renderList('member-list', state.members.map((m) => m.officialName));
+    saveDraft();
   });
 
   function renderList(role, labels) {
@@ -449,6 +612,13 @@
     } else if (role === 'biz-registered') {
       state.bizRegistered = value;
       form.querySelector('[data-role="biz-regno-wrap"]').hidden = value !== 'yes';
+    } else if (role === 'belongs-group') {
+      state.belongsToGroup = value;
+      form.querySelector('[data-role="group-name-wrap"]').hidden = value !== 'yes';
+      if (value !== 'yes') {
+        form.elements.groupName.value = '';
+        form.elements.groupPartyId.value = '';
+      }
     } else if (role === 'fee-coverage') {
       state.feeCoverage = value;
     } else if (role === 'payment-method') {
@@ -461,6 +631,7 @@
       statusEl.hidden = true;
       statusEl.textContent = '';
     }
+    saveDraft();
   });
 
   /** Fires the actual payment for whichever method is currently
@@ -487,6 +658,69 @@
 
   form.querySelector('[data-role="pay-mpesa"]').addEventListener('click', (e) => payNow(e.currentTarget));
   form.querySelector('[data-role="pay-card"]').addEventListener('click', (e) => payNow(e.currentTarget));
+
+  /* ── group suggestions (individuals who say they belong to one) ──
+   * Same search-before-create idea as apps/app/join's own GroupPicker,
+   * just reached through this site's own cecf/v1 proxy
+   * (App\Providers\CecfRegistrationServiceProvider::groupsSearch) so
+   * the HMAC secret never has to reach the browser. */
+  const groupNameInput = form.elements.groupName;
+  const groupPartyIdInput = form.elements.groupPartyId;
+  const groupSuggestionsList = form.querySelector('[data-role="group-suggestions"]');
+  let groupSearchTimer;
+  let groupSearchSeq = 0;
+
+  function hideGroupSuggestions() {
+    groupSuggestionsList.hidden = true;
+    groupSuggestionsList.innerHTML = '';
+  }
+
+  function renderGroupSuggestions(groups) {
+    if (!groups.length) { hideGroupSuggestions(); return; }
+    groupSuggestionsList.innerHTML = groups.map((g) => (
+      `<li class="opt" data-group-id="${escapeHtml(g.id)}" data-group-name="${escapeHtml(g.name)}" style="cursor:pointer">`
+      + `<b>${escapeHtml(g.name)}</b><i>${escapeHtml(g.county || '')}</i></li>`
+    )).join('');
+    groupSuggestionsList.hidden = false;
+  }
+
+  groupNameInput?.addEventListener('input', () => {
+    // A fresh keystroke means whatever was picked before no longer
+    // necessarily matches what's now typed — require picking again
+    // rather than silently keep a stale link to a different group.
+    groupPartyIdInput.value = '';
+
+    const q = groupNameInput.value.trim();
+    clearTimeout(groupSearchTimer);
+    if (q.length < 2) { hideGroupSuggestions(); return; }
+
+    groupSearchTimer = setTimeout(async () => {
+      const seq = ++groupSearchSeq;
+      try {
+        const res = await fetch(`${form.dataset.groupsSearchUrl}?q=${encodeURIComponent(q)}`);
+        const data = await res.json();
+        // A slower earlier request landing after a faster later one
+        // would otherwise flash stale suggestions over fresh ones.
+        if (seq !== groupSearchSeq) return;
+        renderGroupSuggestions((data && data.ok && data.groups) || []);
+      } catch {
+        if (seq === groupSearchSeq) hideGroupSuggestions();
+      }
+    }, 300);
+  });
+
+  groupSuggestionsList?.addEventListener('click', (e) => {
+    const li = e.target.closest('[data-group-id]');
+    if (!li) return;
+    groupNameInput.value = li.dataset.groupName;
+    groupPartyIdInput.value = li.dataset.groupId;
+    hideGroupSuggestions();
+    saveDraft();
+  });
+
+  form.addEventListener('focusout', (e) => {
+    if (e.target === groupNameInput) setTimeout(hideGroupSuggestions, 150);
+  });
 
   form.querySelectorAll('[data-who]').forEach((btn) => {
     btn.addEventListener('click', () => {
@@ -541,6 +775,7 @@
   }
 
   function finish() {
+    clearDraft();
     form.querySelectorAll('.fstep').forEach((el) => el.classList.remove('on'));
     form.querySelector('[data-role="nav"]').hidden = true;
     const done = form.querySelector('[data-role="done"]');
@@ -568,7 +803,23 @@
 
   form.addEventListener('submit', (e) => e.preventDefault());
 
+  // Keystrokes and selects between step transitions — render() itself
+  // already saves on every step change, this catches everything typed
+  // in between. Debounced so a save isn't fired on every keystroke.
+  let saveTimer;
+  form.addEventListener('input', () => {
+    clearTimeout(saveTimer);
+    saveTimer = setTimeout(saveDraft, 400);
+  });
+  form.addEventListener('change', () => {
+    clearTimeout(saveTimer);
+    saveDraft();
+  });
+
   resumeAfterCardPayment().then((resumed) => {
-    if (!resumed) render();
+    if (resumed) return;
+    const draft = loadDraft();
+    if (draft) offerResume(draft);
+    render();
   });
 })();

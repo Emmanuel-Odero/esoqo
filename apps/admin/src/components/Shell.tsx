@@ -34,6 +34,7 @@ const NAV: { group: string; items: [string, IconName, string, string][] }[] = [
     ['/ticketing', 'tag', 'Organisers', 'ticketorg.read'],
   ]},
   { group: 'Our Jamii', items: [
+    ['/jamii-overview', 'chart', 'Overview', 'jamii-page.read'],
     ['/jamii-pages', 'handshake', 'Pages', 'jamii-page.read'],
     ['/jamii-campaigns', 'trend-up', 'Campaigns', 'jamii-campaign.read'],
     ['/jamii-donations', 'coins', 'Donations', 'jamii-donation.read'],
@@ -43,6 +44,7 @@ const NAV: { group: string; items: [string, IconName, string, string][] }[] = [
   { group: 'Governance', items: [
     ['/staff', 'shield', 'Staff & permissions', 'staff.read'],
     ['/audit', 'scales', 'Audit log', 'audit.read'],
+    ['/support-tickets', 'message', 'Support tickets', 'support-ticket.read'],
   ]},
 ];
 

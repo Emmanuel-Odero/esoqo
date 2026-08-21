@@ -75,6 +75,13 @@ header.topnav { position: sticky; top: 0; z-index: 40; background: var(--ink); c
 .pill { display: inline-block; padding: 4px 11px; border-radius: 100px; font-size: .75rem; font-weight: 700; font-family: ui-monospace, monospace }
 .pill-county { background: var(--ink); color: #fff }
 .pill-cause { background: #fff; border: 1.3px solid var(--ink); color: var(--ink) }
+/* Anchor variant of .pill-cause — an org's own site link, in the same
+   .oh-meta pill row as county/cause tags (OrgHeader.tsx). */
+a.pill-link { background: #fff; border: 1.3px solid var(--ledger); color: var(--ledger); text-decoration: none; margin-left: 6px }
+a.pill-link:hover { background: var(--ledger); color: #fff }
+/* .oh-meta already has its own flex `gap`, so the margin above would
+   double up there — cancel it in that one context. */
+.oh-meta a.pill-link { margin-left: 0 }
 .stampmark { display: inline-flex; align-items: center; gap: 5px; border: 2px solid var(--stamp); border-radius: 100px; padding: 3px 10px 3px 6px; color: var(--stamp); font-family: ui-monospace, monospace; font-weight: 700; font-size: .68rem; letter-spacing: .6px; text-transform: uppercase }
 
 /* ── ledger bar ──────────────────────────────────────────── */
@@ -175,6 +182,13 @@ header.topnav { position: sticky; top: 0; z-index: 40; background: var(--ink); c
 .osec { margin-bottom: 34px }
 .osec h2 { font-size: 1.3rem; color: var(--ink); margin-bottom: 14px }
 .osec p { line-height: 1.7; color: #3B3728; margin: 0 0 12px; font-size: .98rem }
+/* Sanitized rich-text output (sanitizeRichText's allow-list) rendered
+   via dangerouslySetInnerHTML — .osec p above already covers <p>, these
+   fill in the rest of that allow-list. */
+.osec ul, .osec ol { margin: 0 0 12px; padding-left: 1.4em; color: #3B3728; line-height: 1.7 }
+.osec h3, .osec h4 { color: var(--ink); margin: 18px 0 10px }
+.osec blockquote { margin: 0 0 12px; padding-left: 1em; border-left: 3px solid var(--paper-line); color: #6b6552 }
+.osec a { color: var(--ledger) }
 
 .accitem { border: 1px solid var(--paper-line); border-radius: 10px; margin-bottom: 10px; background: var(--paper-lt); overflow: hidden }
 .acchead { width: 100%; display: flex; align-items: center; gap: 12px; padding: 14px 16px; background: none; border: 0; text-align: left; color: var(--stamp) }
@@ -247,6 +261,14 @@ header.topnav { position: sticky; top: 0; z-index: 40; background: var(--ink); c
 .rw-avatar { width: 30px; height: 30px; border-radius: 50%; background: var(--ink); color: var(--marigold); font-family: ui-monospace, monospace; font-size: .68rem; font-weight: 700; display: flex; align-items: center; justify-content: center }
 .rw-amt { font-family: ui-monospace, monospace; font-weight: 700; color: var(--ledger) }
 .rw-time { font-size: .74rem; color: #8a8368 }
+/* A donation CampaignLiveStats' poll just found — briefly highlighted
+ * so it reads as "just now", not merely a different number after a
+ * silent refresh. */
+.rw-fresh { animation: rw-fresh-flash 4s ease-out }
+@keyframes rw-fresh-flash {
+  0% { background: var(--ledger-t, rgba(46, 125, 50, .16)) }
+  100% { background: transparent }
+}
 
 /* ── donate modal ────────────────────────────────────────── */
 .modal-overlay { position: fixed; inset: 0; background: rgba(22, 35, 59, .55); z-index: 100; display: flex; align-items: center; justify-content: center; padding: 20px }
@@ -262,6 +284,20 @@ header.topnav { position: sticky; top: 0; z-index: 40; background: var(--ink); c
 .field input, .field textarea, .field select { width: 100%; padding: 12px 13px; border: 1.5px solid var(--ink); border-radius: 9px; font-family: inherit; font-size: .95rem; background: var(--white); color: var(--ink-text) }
 .field .hint { font-size: .74rem; color: #8a8368; margin-top: 6px }
 .field .err { font-size: .78rem; color: var(--stamp); margin-top: 6px }
+/* RichTextEditor.tsx — dashboard-only WYSIWYG, always the primary
+   "manila ledger" look (see that component's header comment). */
+.rte { border: 1.5px solid var(--ink); border-radius: 9px; background: var(--white); overflow: hidden }
+.rte-toolbar { display: flex; flex-wrap: wrap; gap: 3px; padding: 8px; border-bottom: 1.5px solid var(--paper-line); background: var(--paper-lt) }
+.rte-toolbar button { padding: 5px 9px; border: 1px solid transparent; border-radius: 6px; background: transparent; font-size: .82rem; cursor: pointer; color: var(--ink-text) }
+.rte-toolbar button:hover { background: var(--white); border-color: var(--paper-line) }
+.rte-toolbar button[aria-pressed="true"] { background: var(--ink); color: #fff }
+.rte-content { padding: 13px; min-height: 160px; font-size: .95rem; color: var(--ink-text) }
+.rte-content .ProseMirror { outline: none }
+.rte-content p { margin: 0 0 .8em }
+.rte-content ul, .rte-content ol { margin: 0 0 .8em; padding-left: 1.4em }
+.rte-content h2, .rte-content h3, .rte-content h4 { margin: .6em 0 .4em; color: var(--ink) }
+.rte-content blockquote { margin: 0 0 .8em; padding-left: 1em; border-left: 3px solid var(--paper-line); color: #6b6552 }
+.rte-content a { color: var(--ledger) }
 .mpesabadge { display: flex; align-items: center; gap: 9px; background: var(--ledger-lt); border: 1px solid var(--ledger); border-radius: 9px; padding: 10px 13px; font-size: .8rem; color: var(--ledger); font-weight: 700; margin-bottom: 18px }
 .spinner { width: 40px; height: 40px; border-radius: 50%; border: 4px solid var(--paper-line); border-top-color: var(--stamp); margin: 8px auto 18px; animation: jamii-spin 1s linear infinite }
 @keyframes jamii-spin { to { transform: rotate(360deg) } }
@@ -290,8 +326,18 @@ header.topnav { position: sticky; top: 0; z-index: 40; background: var(--ink); c
 .contactwrap.wide { max-width: 1180px; display: grid; grid-template-columns: 1fr 1fr; gap: 44px; align-items: start }
 
 /* ── dashboard ───────────────────────────────────────────── */
-.dash { display: flex; min-height: calc(100vh - 66px) }
-.dashside { width: 220px; flex: 0 0 auto; background: var(--ink); color: #C3C4C7; padding: 18px 0 30px }
+/* height (not min-height): .dash fills exactly the viewport and never
+ * grows with page content, so the two children below can each scroll
+ * independently instead of the whole document scrolling as one — a
+ * long block editor no longer carries the nav sidebar off-screen with
+ * it. .dashside only scrolls itself if its own menu is ever taller
+ * than the viewport (a lot of custom pages); day to day it just sits
+ * there, fully visible, while .dashcontent scrolls under it. */
+.dash { display: flex; height: 100vh; height: 100dvh; overflow: hidden }
+.dashside {
+  width: 220px; flex: 0 0 auto; background: var(--ink); color: #C3C4C7; padding: 18px 0 30px;
+  height: 100%; overflow-y: auto;
+}
 .dash-orginfo { padding: 6px 18px 16px; border-bottom: 1px solid rgba(255, 255, 255, .1); margin-bottom: 8px }
 .dash-orginfo b { display: block; color: #fff; font-size: .88rem }
 .dash-orginfo span { font-size: .72rem; color: #8C8F94 }
@@ -299,18 +345,33 @@ header.topnav { position: sticky; top: 0; z-index: 40; background: var(--ink); c
 .dashmenu a { display: block; padding: 11px 18px; font-size: .86rem; color: #C3C4C7; border-left: 3px solid transparent }
 .dashmenu a:hover { background: #1e2c47; color: #fff }
 .dashmenu a[aria-current] { background: #22345a; color: #fff; border-left-color: var(--marigold) }
+/* "Pages" row — a normal .dashmenu link plus a small chevron button
+ * beside it (not nested inside it — a <button> can't contain an <a>)
+ * that expands/collapses the page list below without navigating. */
+.dashmenu-row { display: flex; align-items: stretch }
+.dashmenu-row a { flex: 1 }
+.dashmenu-toggle {
+  flex: 0 0 auto; display: flex; align-items: center; padding: 0 16px; background: none; border: 0;
+  color: #8C8F94; cursor: pointer;
+}
+.dashmenu-toggle:hover { color: #fff }
+.dashsubmenu { list-style: none; margin: 0; padding: 2px 0 6px }
+.dashsubmenu a { padding: 8px 18px 8px 34px; font-size: .8rem }
 .dash-badge {
   display: inline-flex; align-items: center; justify-content: center; min-width: 18px; height: 18px;
   padding: 0 5px; margin-left: 8px; border-radius: 999px; background: var(--stamp); color: #fff;
   font-size: .68rem; font-weight: 700; line-height: 18px;
 }
-.dashmain { flex: 1; min-width: 0 }
-.dashbar { height: 50px; background: #fff; border-bottom: 1px solid var(--paper-line); display: flex; align-items: center; justify-content: space-between; padding: 0 24px }
+.dashmain { flex: 1; min-width: 0; height: 100%; display: flex; flex-direction: column }
+.dashbar {
+  flex: 0 0 auto; height: 50px; background: #fff; border-bottom: 1px solid var(--paper-line);
+  display: flex; align-items: center; justify-content: space-between; padding: 0 24px;
+}
 .dashbar .l { font-size: .85rem; color: #6b6552 }
 .dashbar .l b { color: var(--ink) }
 .dashbar .r { display: flex; align-items: center; gap: 14px; font-size: .82rem }
 .dashbar .r a { color: var(--stamp); font-weight: 700 }
-.dashcontent { padding: 26px 30px 70px }
+.dashcontent { flex: 1; min-height: 0; overflow-y: auto; padding: 26px 30px 70px }
 .dashcontent h1 { font-size: 1.35rem; color: var(--ink); margin-bottom: 4px }
 .dashcontent .sub { font-size: .85rem; color: #6b6552; margin-bottom: 22px }
 .titlebar { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 20px; gap: 14px; flex-wrap: wrap }
@@ -356,11 +417,18 @@ table.dtable td { padding: 13px 12px; border-bottom: 1px solid var(--paper-line)
 .asset-hint { font-size: .76rem; color: #8a8368; margin: 0 }
 
 .dashgallery { display: grid; grid-template-columns: repeat(auto-fill, minmax(130px, 1fr)); gap: 12px; margin-top: 16px }
+/* .gitem is the square, clipped thumbnail (image + remove button);
+ * .gcaption sits below it, outside the clip, so a caption an org
+ * types doesn't get cut off by the square photo frame. */
 .dashgallery .gitem { position: relative; aspect-ratio: 1; border-radius: 10px; overflow: hidden; border: 1.5px solid var(--paper-line) }
 .dashgallery .gitem img { width: 100%; height: 100%; object-fit: cover; display: block }
 .dashgallery .gitem button {
   position: absolute; top: 6px; right: 6px; background: rgba(22, 35, 59, .78); color: #fff; border: 0;
   border-radius: 100px; width: 24px; height: 24px; font-size: .8rem; cursor: pointer; line-height: 1;
+}
+.dashgallery .gcaption {
+  display: block; width: 100%; margin-top: 6px; padding: 5px 7px; font-size: .72rem;
+  border: 1px solid var(--paper-line); border-radius: 6px; background: var(--paper);
 }
 .dashgallery .gadd {
   aspect-ratio: 1; border-radius: 10px; border: 1.5px dashed var(--paper-line); background: var(--paper);
@@ -539,9 +607,13 @@ footer.mainfooter b { color: #fff }
 .wl-cta-ghost:hover { border-color: var(--wl-ink) }
 .wl-theme-toggle { padding: 10px 14px; gap: 6px }
 .wl-theme-toggle-icon { font-size: 1rem; line-height: 1 }
+/* Link-only variant of .wl-cta-ghost for the org's `website` field, shown
+   in .wl-nav-cta next to the theme toggle (OrgTopNav.tsx). */
+.wl-website-link { text-decoration: none }
 @media (max-width: 560px) {
   .wl-theme-toggle-label { display: none }
   .wl-theme-toggle { padding: 10px }
+  .wl-website-link { display: none }
 }
 
 .wl-navtoggle {
@@ -628,11 +700,33 @@ footer.mainfooter b { color: #fff }
 .wl-teaser-card p { font-size: .88rem; color: var(--wl-ink-soft) }
 .wl-teaser-card .go { margin-top: auto; font-family: var(--font-mono, monospace); font-size: .74rem; letter-spacing: .06em; text-transform: uppercase; color: var(--wl-cyan) }
 
+/* ── homepage block builder (Phase 2) — RichTextBlock/TestimonialBlock/
+   PhotoStripBlock, apps/jamii/src/components/blocks/ ─────────────── */
+.wl-rich-block p { line-height: 1.75; color: var(--wl-ink-soft); font-size: 1.02rem; margin: 0 0 18px }
+.wl-rich-block ul, .wl-rich-block ol { line-height: 1.75; color: var(--wl-ink-soft); font-size: 1.02rem; margin: 0 0 18px; padding-left: 1.4em }
+.wl-rich-block blockquote { margin: 0 0 18px; padding-left: 1em; border-left: 3px solid var(--wl-surface-line); color: var(--wl-ink-soft) }
+.wl-rich-block h3, .wl-rich-block h4 { color: var(--wl-ink); margin: 22px 0 10px }
+.wl-rich-block a { color: var(--wl-accent, var(--wl-cyan)) }
+
+.wl-testimonial { max-width: 62ch; margin: 0 auto; text-align: center; border: 0; padding: 0 }
+.wl-testimonial p { font-size: 1.4rem; font-weight: 600; color: var(--wl-ink); line-height: 1.5; margin: 0 0 18px }
+.wl-testimonial footer { display: flex; flex-direction: column; gap: 2px; font-size: .88rem }
+.wl-testimonial-name { font-weight: 700; color: var(--wl-ink) }
+.wl-testimonial-role { color: var(--wl-ink-soft) }
+
+.wl-photo-strip { display: flex; gap: 14px; overflow-x: auto; padding-bottom: 6px }
+.wl-photo-strip-item { flex: 0 0 auto; width: 240px; height: 170px; border-radius: var(--wl-radius); overflow: hidden; border: 1px solid var(--wl-surface-line) }
+.wl-photo-strip-item img { width: 100%; height: 100%; object-fit: cover }
+
 /* ── about: mission/vision + quote ───────────────────────── */
 .wl-about-grid { display: grid; grid-template-columns: 1.4fr 1fr; gap: 64px; align-items: start }
 @media (max-width: 900px) { .wl-about-grid { grid-template-columns: 1fr; gap: 40px } }
 .wl-about-grid p { line-height: 1.75; color: var(--wl-ink-soft); font-size: 1.02rem }
 .wl-about-grid p + p { margin-top: 18px }
+.wl-about-grid ul, .wl-about-grid ol { line-height: 1.75; color: var(--wl-ink-soft); font-size: 1.02rem; margin: 18px 0; padding-left: 1.4em }
+.wl-about-grid blockquote { margin: 18px 0; padding-left: 1em; border-left: 3px solid var(--wl-surface-line); color: var(--wl-ink-soft) }
+.wl-about-grid h3, .wl-about-grid h4 { color: var(--wl-ink); margin: 22px 0 10px }
+.wl-about-grid a { color: var(--wl-accent, var(--ledger)) }
 .wl-mv-pair { display: grid; gap: 18px; position: sticky; top: 100px }
 @media (max-width: 900px) { .wl-mv-pair { position: static } }
 .wl-mv-card { background: var(--wl-surface); border: 1px solid var(--wl-surface-line); border-radius: var(--wl-radius); padding: 28px; box-shadow: var(--wl-shadow) }
@@ -766,6 +860,8 @@ footer.mainfooter b { color: #fff }
 .wl-content { background: var(--wl-bg) }
 .wl-content .osec h2 { font-family: var(--font-display, inherit); font-size: 1.4rem; font-weight: 800 }
 .wl-content .osec p { color: var(--wl-ink-soft); font-family: var(--font-body, inherit) }
+.wl-content .osec ul, .wl-content .osec ol, .wl-content .osec blockquote { color: var(--wl-ink-soft); font-family: var(--font-body, inherit) }
+.wl-content .osec h3, .wl-content .osec h4 { font-family: var(--font-display, inherit) }
 
 .wl-content .card { background: var(--wl-surface); border: 1px solid var(--wl-surface-line); box-shadow: none; border-radius: var(--wl-radius) }
 .wl-content .kick, .wl-content .verified-inline, .wl-content .acchead .accplus {

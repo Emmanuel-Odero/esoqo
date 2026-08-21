@@ -4,7 +4,9 @@ import { getStoreDetailForStaff, getStoreAnalyticsForStaff, listCashiers } from 
 import { requireStaff } from '@/lib/session';
 import { StoreDetailPanel } from './StoreDetailPanel';
 import { CashiersPanel } from './CashiersPanel';
-import { RevenueTrendChart } from '../../RevenueTrendChart';
+import { DailyBarChart, DonutChart, RankedBarChart } from '@/components/charts';
+
+const DONUT_PALETTE = ['var(--green-2)', 'var(--blue)', 'var(--amber)', 'var(--red)', 'var(--navy-2)'];
 
 export const dynamic = 'force-dynamic';
 
@@ -47,9 +49,6 @@ export default async function StoreDetailPage({
     || store.enterprise.party.organisation?.knownAs || store.enterprise.party.organisation?.officialName || '—';
   const ownerContact = store.enterprise.party.person?.msisdn ?? null;
 
-  const maxStatusCount = Math.max(1, ...statusBreakdown.map((s) => s.count));
-  const maxPaymentCount = Math.max(1, ...paymentSplit.map((p) => p.count));
-  const maxProductRevenue = Math.max(1, ...topProducts.map((p) => p.revenueKes));
 
   return (
     <>
@@ -133,7 +132,7 @@ export default async function StoreDetailPage({
 
       <div className="card" style={{ marginBottom: 22 }}>
         <h2><Icon name="trend-up" size={18} />Revenue, last {analytics.windowDays} days</h2>
-        <RevenueTrendChart data={dailyRevenue} />
+        <DailyBarChart data={dailyRevenue.map((d) => ({ date: d.date, value: d.revenueKes }))} currency height={170} />
       </div>
 
       <div className="grid2" style={{ marginBottom: 22 }}>
@@ -142,21 +141,11 @@ export default async function StoreDetailPage({
           {store._count.orders === 0 ? (
             <p className="empty">No online orders in this window.</p>
           ) : (
-            <table className="tbl">
-              <tbody>
-                {statusBreakdown.map((s) => (
-                  <tr key={s.status}>
-                    <td>{STATUS_LABEL[s.status]}</td>
-                    <td className="mono" style={{ width: 40 }}>{s.count}</td>
-                    <td style={{ width: '50%' }}>
-                      <div className="bar">
-                        <span style={{ width: `${(s.count / maxStatusCount) * 100}%`, background: STATUS_COLOR[s.status] }} />
-                      </div>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+            <DonutChart size={150}
+              segments={statusBreakdown.map((s) => ({
+                label: STATUS_LABEL[s.status] ?? s.status, value: s.count, color: STATUS_COLOR[s.status] ?? 'var(--tx-3)',
+              }))}
+              centerLabel={{ value: String(store._count.orders), sub: 'orders' }} />
           )}
         </div>
 
@@ -165,19 +154,8 @@ export default async function StoreDetailPage({
           {paymentSplit.length === 0 ? (
             <p className="empty">No sales in this window yet.</p>
           ) : (
-            <table className="tbl">
-              <tbody>
-                {paymentSplit.map((p) => (
-                  <tr key={p.label}>
-                    <td>{p.label}</td>
-                    <td className="mono" style={{ width: 40 }}>{p.count}</td>
-                    <td style={{ width: '50%' }}>
-                      <div className="bar"><span style={{ width: `${(p.count / maxPaymentCount) * 100}%` }} /></div>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+            <DonutChart size={150}
+              segments={paymentSplit.map((p, i) => ({ label: p.label, value: p.count, color: DONUT_PALETTE[i % DONUT_PALETTE.length]! }))} />
           )}
         </div>
       </div>
@@ -187,22 +165,8 @@ export default async function StoreDetailPage({
         {topProducts.length === 0 ? (
           <p className="empty">Nothing sold in this window yet.</p>
         ) : (
-          <table className="tbl">
-            <tbody>
-              {topProducts.map((p) => (
-                <tr key={p.name}>
-                  <td>
-                    <strong>{p.name}</strong>
-                    <span className="sub" style={{ display: 'block', fontSize: '.79rem' }}>{p.unitsSold} sold</span>
-                  </td>
-                  <td className="mono" style={{ width: 110 }}>KES {p.revenueKes.toLocaleString('en-KE')}</td>
-                  <td style={{ width: '40%' }}>
-                    <div className="bar"><span style={{ width: `${(p.revenueKes / maxProductRevenue) * 100}%`, background: 'var(--blue)' }} /></div>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+          <RankedBarChart color="var(--blue)" currency
+            rows={topProducts.map((p) => ({ label: p.name, value: p.revenueKes }))} />
         )}
       </div>
 

@@ -2,6 +2,7 @@ import Link from 'next/link';
 import { Icon } from '@esoko/ui';
 import { getGroup, getGroupAnalytics, listDocumentsForParty } from '@esoko/db';
 import { requireStaff } from '@/lib/session';
+import { RankedBarChart } from '@/components/charts';
 
 export const dynamic = 'force-dynamic';
 
@@ -31,7 +32,6 @@ export default async function GroupDetailPage({
     listDocumentsForParty(ctx, id),
   ]);
 
-  const maxMonth = Math.max(1, ...analytics.joinedByMonth.map((m) => m.count));
   const totalFeeAnswers = analytics.feeCoverage.reduce((n, f) => n + f.count, 0);
 
   return (
@@ -91,19 +91,9 @@ export default async function GroupDetailPage({
           {analytics.joinedByMonth.length === 0 ? (
             <p className="empty">No members yet.</p>
           ) : (
-            <table className="tbl">
-              <tbody>
-                {analytics.joinedByMonth.map((m) => (
-                  <tr key={String(m.month)}>
-                    <td>{new Date(m.month).toLocaleDateString('en-KE', { year: 'numeric', month: 'short' })}</td>
-                    <td className="mono" style={{ width: 50 }}>{m.count}</td>
-                    <td style={{ width: '45%' }}>
-                      <div className="bar"><span style={{ width: `${(m.count / maxMonth) * 100}%` }} /></div>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+            <RankedBarChart color="var(--green-2)" rows={analytics.joinedByMonth.map((m) => ({
+              label: new Date(m.month).toLocaleDateString('en-KE', { year: 'numeric', month: 'short' }), value: m.count,
+            }))} />
           )}
         </div>
 
@@ -115,24 +105,9 @@ export default async function GroupDetailPage({
           {analytics.feeCoverage.length === 0 ? (
             <p className="empty">No one has linked a registration to this group yet.</p>
           ) : (
-            <table className="tbl">
-              <tbody>
-                {analytics.feeCoverage.map((f) => (
-                  <tr key={f.coverage}>
-                    <td>{FEE_LABEL[f.coverage] ?? f.coverage}</td>
-                    <td className="mono" style={{ width: 50 }}>{f.count}</td>
-                    <td style={{ width: '45%' }}>
-                      <div className="bar">
-                        <span style={{
-                          width: `${(f.count / totalFeeAnswers) * 100}%`,
-                          background: f.coverage === 'group' ? 'var(--green)' : f.coverage === 'self' ? 'var(--blue)' : 'var(--amber)',
-                        }} />
-                      </div>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+            <RankedBarChart color="var(--blue)" rows={analytics.feeCoverage.map((f) => ({
+              label: FEE_LABEL[f.coverage] ?? f.coverage, value: f.count,
+            }))} />
           )}
         </div>
       </div>

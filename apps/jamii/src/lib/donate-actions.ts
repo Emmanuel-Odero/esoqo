@@ -2,12 +2,31 @@
 
 import {
   createDonation, attachDonationCheckoutRequestId, confirmDonationPayment, getDonation,
+  type ConfirmDonationResult,
 } from '@esoko/db';
-import { donateSchema } from '@esoko/domain';
+import { donateSchema, donorThankYouSms, adminDonationAlertSms } from '@esoko/domain';
 import { initiateStkPush, MpesaError } from '@esoko/payments';
+import { sendSms } from '@esoko/auth/sms';
 import { getCtx } from '@/lib/session';
 
 export type ActionResult<T> = { ok: true; data: T } | { ok: false; error: string };
+
+/**
+ * Thank the donor and alert the page's admins once a gift is actually
+ * confirmed — best-effort: an SMS provider hiccup must never fail the
+ * donation flow itself, matching apps/app/me/group/actions.ts's
+ * inviteMember precedent.
+ */
+async function notifyDonationConfirmed(result: ConfirmDonationResult): Promise<void> {
+  if (!result.justConfirmed || !result.notify) return;
+  const n = result.notify;
+  try {
+    await sendSms(n.donorMsisdn, donorThankYouSms(n), 'donation-thank-you');
+    await Promise.all(n.adminMsisdns.map((to) => sendSms(to, adminDonationAlertSms(n), 'donation-admin-alert')));
+  } catch {
+    // best-effort — the donation itself already succeeded.
+  }
+}
 
 /**
  * A PUBLIC HTTP ENDPOINT wearing a function signature — a donor need
@@ -46,7 +65,8 @@ export async function donate(raw: unknown): Promise<ActionResult<{ donationId: s
     });
     await attachDonationCheckoutRequestId(donation.id, push.checkoutRequestId);
     if (push.autoConfirmed) {
-      await confirmDonationPayment(push.checkoutRequestId, push.mpesaReceiptCode ?? '');
+      const result = await confirmDonationPayment(push.checkoutRequestId, push.mpesaReceiptCode ?? '');
+      await notifyDonationConfirmed(result);
     }
   } catch (e) {
     return { ok: false, error: e instanceof MpesaError ? e.message : 'Could not start the M-Pesa payment' };
@@ -57,11 +77,14 @@ export async function donate(raw: unknown): Promise<ActionResult<{ donationId: s
 }
 
 /** Polled by the waiting screen while a real Daraja callback is in flight. */
-export async function checkDonationStatus(donationId: string): Promise<{ status: string; receiptCode: string | null; mpesaReceiptCode: string | null }> {
+export async function checkDonationStatus(donationId: string): Promise<{
+  status: string; receiptCode: string | null; mpesaReceiptCode: string | null; failureReason: string | null;
+}> {
   const donation = await getDonation(donationId);
   return {
     status: donation?.status ?? 'PENDING',
     receiptCode: donation?.receiptCode ?? null,
     mpesaReceiptCode: donation?.mpesaReceiptCode ?? null,
+    failureReason: donation?.failureReason ?? null,
   };
 }

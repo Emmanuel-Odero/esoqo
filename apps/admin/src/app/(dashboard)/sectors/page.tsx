@@ -2,6 +2,9 @@ import { Icon } from '@esoko/ui';
 import { getRegistrationSegments, getOverview } from '@esoko/db';
 import { SEGMENTS } from '@esoko/domain';
 import { requireStaff } from '@/lib/session';
+import { RankedBarChart, DonutChart } from '@/components/charts';
+
+const DONUT_PALETTE = ['var(--green-2)', 'var(--blue)', 'var(--amber)', 'var(--navy-2)', 'var(--red)', 'var(--tx-3)'];
 
 export const dynamic = 'force-dynamic';
 
@@ -13,7 +16,6 @@ export default async function SectorsPage() {
   ]);
 
   const total = segments.reduce((n, s) => n + s.count, 0);
-  const max = Math.max(1, ...segments.map((s) => s.count));
   const label = (key: string) => SEGMENTS.find((s) => s.key === key)?.name ?? key.replace(/-/g, ' ');
 
   return (
@@ -53,29 +55,26 @@ export default async function SectorsPage() {
         </div>
       </div>
 
+      {segments.length > 0 && (
+        <div className="card" style={{ marginBottom: 22 }}>
+          <h2>Top 5, share of classified members</h2>
+          {(() => {
+            const top5 = segments.slice(0, 5);
+            const rest = segments.slice(5).reduce((n, s) => n + s.count, 0);
+            const segs = top5.map((s, i) => ({ label: label(s.segment), value: s.count, color: DONUT_PALETTE[i % DONUT_PALETTE.length]! }));
+            if (rest > 0) segs.push({ label: 'Everyone else', value: rest, color: 'var(--tx-3)' });
+            return <DonutChart size={160} centerLabel={{ value: String(total), sub: 'classified' }} segments={segs} />;
+          })()}
+        </div>
+      )}
+
       <div className="card">
         <h2>Members by sector</h2>
         {segments.length === 0 ? (
           <p className="empty">No completed registrations have a matched trade yet.</p>
         ) : (
-          <table className="tbl">
-            <tbody>
-              {segments.map((s) => (
-                <tr key={s.segment}>
-                  <td>{label(s.segment)}</td>
-                  <td className="mono" style={{ width: 60 }}>{s.count}</td>
-                  <td style={{ width: '45%' }}>
-                    <div className="bar">
-                      <span style={{ width: `${(s.count / max) * 100}%`, background: 'var(--blue)' }} />
-                    </div>
-                  </td>
-                  <td className="sub mono" style={{ width: 60, textAlign: 'right' }}>
-                    {total ? Math.round((s.count / total) * 1000) / 10 : 0}%
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+          <RankedBarChart color="var(--blue)"
+            rows={segments.map((s) => ({ label: label(s.segment), value: s.count }))} />
         )}
       </div>
     </>

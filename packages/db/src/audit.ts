@@ -16,15 +16,31 @@ import type { Ctx } from './capabilities';
 
 const CHAIN_SEED = process.env.AUDIT_CHAIN_SEED ?? 'esoko-genesis';
 
+/**
+ * Deterministic serialisation — keys sorted at EVERY level, not just
+ * the top one. This has to be recursive: `payload` is itself an object
+ * (sometimes with nested objects of its own), and Postgres's `jsonb`
+ * column does not preserve the JS insertion order it was written
+ * with — it can silently return `{joiningAs, path}` as `{path,
+ * joiningAs}` on read. A hash computed from `JSON.stringify` at
+ * write-time and recomputed from a re-read jsonb value at verify-time
+ * will then disagree on nothing more than key order, which reads as
+ * "the chain is broken" when nothing was ever tampered with. Sorting
+ * recursively makes the serialisation independent of whatever order
+ * any particular layer — Postgres included — happens to hand keys back in.
+ */
+function sortDeep(v: unknown): unknown {
+  if (Array.isArray(v)) return v.map(sortDeep);
+  if (v !== null && typeof v === 'object') {
+    const o = v as Record<string, unknown>;
+    return Object.keys(o).filter((k) => o[k] !== undefined).sort()
+      .reduce<Record<string, unknown>>((acc, k) => { acc[k] = sortDeep(o[k]); return acc; }, {});
+  }
+  return v;
+}
+
 function canonical(o: Record<string, unknown>): string {
-  // Deterministic: keys sorted, no whitespace, undefined dropped.
-  const keys = Object.keys(o).filter((k) => o[k] !== undefined).sort();
-  return JSON.stringify(
-    keys.reduce<Record<string, unknown>>((acc, k) => {
-      acc[k] = o[k];
-      return acc;
-    }, {}),
-  );
+  return JSON.stringify(sortDeep(o));
 }
 
 function link(prevHash: string, row: Record<string, unknown>): string {

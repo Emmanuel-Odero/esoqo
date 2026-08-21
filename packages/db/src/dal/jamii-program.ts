@@ -9,6 +9,21 @@ export interface CreateJamiiProgramInput {
   icon?: string;
 }
 
+/** Dashboard's own listing — includes drafts (there's no "unpublished"
+ *  concept for programmes, unlike JamiiPost/Campaign), ordered the same
+ *  way the public /programs page renders them. */
+export async function listJamiiPrograms(ctx: Ctx, pageId: string) {
+  await requirePageAccess(ctx, pageId, 'CONTRIBUTOR');
+  return prisma.jamiiProgram.findMany({ where: { pageId }, orderBy: { position: 'asc' } });
+}
+
+/** Single-programme lookup for the edit screen — scoped to `pageId` so a
+ *  programme id from another org's page can't be loaded into this form. */
+export async function getJamiiProgram(ctx: Ctx, pageId: string, programId: string) {
+  await requirePageAccess(ctx, pageId, 'CONTRIBUTOR');
+  return prisma.jamiiProgram.findFirst({ where: { id: programId, pageId } });
+}
+
 export async function createJamiiProgram(ctx: Ctx, pageId: string, input: CreateJamiiProgramInput) {
   await requirePageAccess(ctx, pageId, 'CONTRIBUTOR');
   if (!input.title.trim()) throw new Error('Give the programme a name');

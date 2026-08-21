@@ -1,0 +1,79 @@
+{
+  "sections": [
+    {
+      "type": "phead",
+      "kicker": "Our Jamii",
+      "heading": "A website for your group, built the same day you register",
+      "lead": "Once your group or MSME is registered through CECF, it gets a free public page on Our Jamii — a place people can find you, read what you do, and support a fundraising campaign directly, without you needing to build or pay for a website yourself."
+    },
+    {
+      "type": "prose",
+      "body": [
+        "Our Jamii is built and run by Esoko, CECF's digital-platform partner for registration and formalisation. It is not a separate signup — every group that comes through CECF's registration already has an Esoko account, and Our Jamii is switched on from the same one."
+      ]
+    },
+    {
+      "type": "cardGrid",
+      "kicker": "What you get",
+      "heading": "One page, everything a supporter needs",
+      "columns": 3,
+      "items": [
+        {
+          "icon": "globe",
+          "color": "teal",
+          "title": "A public page with your own web address",
+          "body": "Who you are, what you do, your leadership and your work — written by your own team, editable any time from your dashboard."
+        },
+        {
+          "icon": "receipt",
+          "color": "gold",
+          "title": "Fundraising campaigns with M-Pesa",
+          "body": "Set a goal, publish a campaign, and let people give straight from their phone. Every gift is receipted and reconciled automatically."
+        },
+        {
+          "icon": "people",
+          "color": "teal",
+          "title": "Members, updates and a contact form",
+          "body": "Post news, list your programs, show your gallery, and let people reach you without publishing a personal phone number."
+        }
+      ]
+    },
+    {
+      "type": "twoColumn",
+      "heading": "Built on the same registration you already did",
+      "prose": [
+        "There is nothing extra to fill in. The name, leadership and location CECF captured when your group registered is what your Our Jamii page starts from — your team only ever adds to it, never re-enters it.",
+        "Every donation your page receives is posted to the same ledger and receipt system Esoko already uses for registration fees and group contributions, so a gift to your campaign is accounted for exactly as carefully as any other money moving through your group's account."
+      ],
+      "media": {
+        "type": "illustration",
+        "ref": "community-gathering.svg",
+        "alt": "A community group meeting under a tree"
+      }
+    },
+    {
+      "type": "note",
+      "variant": "info",
+      "body": "**Free for every CECF-registered group and MSME.** There is no separate charge to have a page or to run a campaign — Esoko's own transaction fees apply only to money actually raised, the same standard M-Pesa charges you would pay collecting the same money any other way."
+    },
+    {
+      "type": "ctaBand",
+      "heading": "See a real group's page",
+      "body": "Browse live Our Jamii pages from groups already registered through CECF, or open your own group's dashboard if you have already registered.",
+      "ctas": [
+        {
+          "label": "Visit Our Jamii",
+          "page": "jamii",
+          "style": "primary",
+          "icon": "compass"
+        },
+        {
+          "label": "Register your group first",
+          "page": "apply",
+          "style": "outline-white",
+          "icon": "document"
+        }
+      ]
+    }
+  ]
+}

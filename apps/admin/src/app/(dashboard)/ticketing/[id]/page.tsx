@@ -1,7 +1,7 @@
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import { Icon } from '@esoko/ui';
-import { getTicketOrg, listTicketOrgStaff, AuthorisationError } from '@esoko/db';
+import { getTicketOrg, listTicketOrgStaff, listOrgBookings, can, AuthorisationError } from '@esoko/db';
 import { requireStaff } from '@/lib/session';
 import { OrgStaffPanel } from './OrgStaffPanel';
 
@@ -25,6 +25,15 @@ export default async function TicketOrgDetail({
     ? await listTicketOrgStaff(ctx, id)
     : [];
 
+  const canReadBookings = can(ctx, 'booking.read', { partyId: org.enterprise?.partyId });
+  const bookings = canReadBookings ? await listOrgBookings(ctx, id) : [];
+  const paid = bookings.filter((b) => b.status === 'PAID');
+  const revenueKes = paid.reduce((n, b) => n + Number(b.totalKes), 0);
+  const ticketsIssued = paid.reduce(
+    (n, b) => n + b.tickets.filter((t) => t.status === 'VALID' || t.status === 'USED').length, 0,
+  );
+  const cancelled = bookings.filter((b) => b.status === 'CANCELLED' || b.status === 'REFUNDED').length;
+
   return (
     <>
       <div className="head">
@@ -41,6 +50,26 @@ export default async function TicketOrgDetail({
           </p>
         </div>
       </div>
+
+      {canReadBookings && (
+        <div className="kpis">
+          <div className="kpi g">
+            <span className="ico" style={{ background: 'var(--green-t)', color: 'var(--green)' }}><Icon name="coins" size={16} /></span>
+            <span className="n">KES {revenueKes.toLocaleString('en-KE')}</span><span className="l">Revenue, paid bookings</span>
+          </div>
+          <div className="kpi b">
+            <span className="ico" style={{ background: 'var(--blue-t)', color: 'var(--blue)' }}><Icon name="certificate" size={16} /></span>
+            <span className="n">{ticketsIssued}</span><span className="l">Tickets issued</span>
+          </div>
+          <div className="kpi">
+            <span className="n">{bookings.length}</span><span className="l">Bookings total</span>
+          </div>
+          <div className={`kpi ${cancelled > 0 ? 'r' : ''}`}>
+            <span className="n" style={{ color: cancelled > 0 ? 'var(--red)' : undefined }}>{cancelled}</span>
+            <span className="l">Cancelled / refunded</span>
+          </div>
+        </div>
+      )}
 
       {canManageStaff ? (
         <OrgStaffPanel orgId={id} staff={staff.map((s) => ({

@@ -1,6 +1,7 @@
 import { Icon } from '@esoko/ui';
 import { listTicketOrgsForStaff, getTicketOrgCounts } from '@esoko/db';
 import { requireStaff } from '@/lib/session';
+import { DonutChart } from '@/components/charts';
 import { OrgTable } from './OrgTable';
 
 export const dynamic = 'force-dynamic';
@@ -54,6 +55,16 @@ export default async function TicketingPage({
           );
         })}
       </div>
+
+      {counts.total > 0 && (
+        <div className="card" style={{ marginBottom: 22 }}>
+          <h2><Icon name="tag" size={17} />By vertical</h2>
+          <DonutChart size={150} centerLabel={{ value: String(counts.total), sub: 'organisers' }} segments={[
+            { label: 'Events & tours', value: counts.events, color: 'var(--amber)' },
+            { label: 'Transport', value: counts.transport, color: 'var(--blue)' },
+          ].filter((s) => s.value > 0)} />
+        </div>
+      )}
 
       <OrgTable
         rows={rows.map((o) => ({

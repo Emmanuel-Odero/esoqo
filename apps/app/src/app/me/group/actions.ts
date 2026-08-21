@@ -61,7 +61,7 @@ export async function actionInviteMember(raw: unknown) {
 
     try {
       if (notify.channel === 'sms') {
-        await sendSms(notify.to, `You've been added to ${orgName} on Esoko. Sign in or set your PIN with this number to get started.`);
+        await sendSms(notify.to, `You've been added to ${orgName} on Esoko. Sign in or set your PIN with this number to get started.`, 'group-invite');
       } else {
         await sendEmail(
           notify.to, `You've been invited to ${orgName} on Esoko`,

@@ -1,6 +1,7 @@
 import { Icon } from '@esoko/ui';
 import { listPayments, getPaymentStats, listApprovers, PAYMENT_APPROVAL_THRESHOLD } from '@esoko/db';
 import { requireStaff } from '@/lib/session';
+import { DonutChart } from '@/components/charts';
 import { PaymentQueue } from './PaymentQueue';
 
 export const dynamic = 'force-dynamic';
@@ -56,6 +57,18 @@ export default async function PaymentsPage({
           </div>
         ))}
       </div>
+
+      {stats.some((s) => s.count > 0) && (
+        <div className="card" style={{ marginBottom: 22 }}>
+          <h2><Icon name="scales" size={17} />Status split</h2>
+          <DonutChart size={150} segments={[
+            { label: 'Awaiting signature', value: by('DECLARED')?.count ?? 0, color: 'var(--amber)' },
+            { label: 'Part-signed', value: by('UNDER_REVIEW')?.count ?? 0, color: 'var(--blue)' },
+            { label: 'Confirmed', value: by('CONFIRMED')?.count ?? 0, color: 'var(--green-2)' },
+            { label: 'Rejected', value: by('REJECTED')?.count ?? 0, color: 'var(--red)' },
+          ].filter((s) => s.value > 0)} />
+        </div>
+      )}
 
       {!canApprove && (
         <div className="chain" style={{ background: 'var(--blue-t)', border: '1px solid #C8DDEC', color: 'var(--blue)' }}>

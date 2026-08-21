@@ -279,6 +279,8 @@ services:
         sync: false
       - key: R2_BUCKET
         value: cecf-media
+      - key: R2_PUBLIC_URL
+        sync: false   # bucket's public-read origin — r2.dev subdomain or a custom domain mapped to it
       - key: WP_ADMIN_USER
         sync: false
       - key: WP_ADMIN_PASSWORD
