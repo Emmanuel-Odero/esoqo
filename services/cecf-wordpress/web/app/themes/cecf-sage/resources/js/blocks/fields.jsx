@@ -24,6 +24,27 @@ import {
 } from '@wordpress/components';
 import { __ } from '@wordpress/i18n';
 
+/**
+ * Plain inline SVGs, not `@wordpress/icons`' chevronUp/chevronDown: that
+ * package isn't on `@roots/vite-plugin`'s externalization list the way
+ * `@wordpress/components` is (build fails, "failed to resolve import"),
+ * and a `dashicons-*` icon *name* (WordPress's other icon option) needs
+ * the dashicons font — loaded in wp-admin, but not inside the block
+ * editor's own iframe, where these buttons actually render. An inline
+ * `<svg>` has no such dependency either way.
+ */
+const ChevronUp = (
+  <svg width="16" height="16" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+    <path d="M11.03 8.53a.75.75 0 0 1 .94 0l4.5 3.5a.75.75 0 1 1-.94 1.18L12 9.9l-3.53 3.31a.75.75 0 1 1-.94-1.18l4.5-3.5Z" />
+  </svg>
+);
+
+const ChevronDown = (
+  <svg width="16" height="16" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+    <path d="M12.97 15.47a.75.75 0 0 1-.94 0l-4.5-3.5a.75.75 0 1 1 .94-1.18L12 14.1l3.53-3.31a.75.75 0 1 1 .94 1.18l-4.5 3.5Z" />
+  </svg>
+);
+
 const pageOptions = () => [
   { label: __('— None —', 'cecf-sage'), value: '' },
   ...Object.entries(window.cecfPageOptions || {}).map(([value, label]) => ({ value, label })),
@@ -94,7 +115,7 @@ function ReorderButtons({ index, count, onMove }) {
       <Button
         variant="tertiary"
         size="small"
-        icon="arrow-up-alt2"
+        icon={ChevronUp}
         label={__('Move up', 'cecf-sage')}
         disabled={index === 0}
         onClick={() => onMove(index, 'up')}
@@ -102,7 +123,7 @@ function ReorderButtons({ index, count, onMove }) {
       <Button
         variant="tertiary"
         size="small"
-        icon="arrow-down-alt2"
+        icon={ChevronDown}
         label={__('Move down', 'cecf-sage')}
         disabled={index === count - 1}
         onClick={() => onMove(index, 'down')}
