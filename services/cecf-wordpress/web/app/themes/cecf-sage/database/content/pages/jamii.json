@@ -54,12 +54,12 @@
     {
       "type": "note",
       "variant": "info",
-      "body": "**Free for every CECF-registered group and MSME.** There is no separate charge to have a page or to run a campaign — Esoko's own transaction fees apply only to money actually raised, the same standard M-Pesa charges you would pay collecting the same money any other way."
+      "body": "<strong>Free for every CECF-registered group and MSME.</strong> There is no separate charge to have a page or to run a campaign — Esoko&#039;s own transaction fees apply only to money actually raised, the same standard M-Pesa charges you would pay collecting the same money any other way."
     },
     {
       "type": "ctaBand",
       "heading": "See a real group's page",
-      "body": "Browse live Our Jamii pages from groups already registered through CECF, or open your own group's dashboard if you have already registered.",
+      "body": "Browse live Our Jamii pages from groups already registered through CECF, or open your own group&#039;s dashboard if you have already registered.",
       "ctas": [
         {
           "label": "Visit Our Jamii",

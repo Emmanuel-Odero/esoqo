@@ -45,12 +45,12 @@ const ChevronDown = (
   </svg>
 );
 
-const pageOptions = () => [
+export const pageOptions = () => [
   { label: __('— None —', 'cecf-sage'), value: '' },
   ...Object.entries(window.cecfPageOptions || {}).map(([value, label]) => ({ value, label })),
 ];
 
-const iconOptions = () => [
+export const iconOptions = () => [
   { label: __('— None —', 'cecf-sage'), value: '' },
   ...Object.entries(window.cecfIconOptions || {}).map(([value, label]) => ({ value, label })),
 ];
@@ -60,7 +60,7 @@ const illustrationOptions = () => [
   ...Object.entries(window.cecfIllustrationOptions || {}).map(([value, label]) => ({ value, label })),
 ];
 
-const selectOptions = (options) => Object.entries(options || {}).map(([value, label]) => ({ value, label }));
+export const selectOptions = (options) => Object.entries(options || {}).map(([value, label]) => ({ value, label }));
 
 function emptyValueFor(field) {
   switch (field.type) {
@@ -94,7 +94,7 @@ function emptyItemFor(fields) {
  * exactly one slot away are easier to use accurately than dragging a
  * tall card past several others.
  */
-function moveItem(list, index, direction) {
+export function moveItem(list, index, direction) {
   const target = direction === 'up' ? index - 1 : index + 1;
   if (target < 0 || target >= list.length) {
     return list;
@@ -109,7 +109,7 @@ function moveItem(list, index, direction) {
  * header — disabled rather than hidden at each end, so the row of
  * controls doesn't reflow as items move.
  */
-function ReorderButtons({ index, count, onMove }) {
+export function ReorderButtons({ index, count, onMove }) {
   return (
     <span className="cecf-field-list__reorder">
       <Button
@@ -135,7 +135,7 @@ function ReorderButtons({ index, count, onMove }) {
 /**
  * A repeatable list of plain strings — `facts`, `ticks`, prose paragraphs.
  */
-function StringListField({ field, value, onChange }) {
+export function StringListField({ field, value, onChange }) {
   const items = Array.isArray(value) ? value : [];
   const Control = field.multiline ? TextareaControl : TextControl;
 

@@ -4,7 +4,7 @@
       "type": "phead",
       "kicker": "About",
       "heading": "Who we serve",
-      "lead": "\"Jamii\" is Swahili for community, or family. It is who CECF works for: the grassroots groups and the people behind them, across every county we reach."
+      "lead": "&quot;Jamii&quot; is Swahili for community, or family. It is who CECF works for: the grassroots groups and the people behind them, across every county we reach."
     },
     {
       "type": "linkOut",
@@ -32,7 +32,7 @@
       "type": "cardGrid",
       "kicker": "Who we work with",
       "heading": "The communities we serve",
-      "lead": "CECF's registration and referral work reaches a wide range of groups. These are the communities we most often support.",
+      "lead": "CECF&#039;s registration and referral work reaches a wide range of groups. These are the communities we most often support.",
       "columns": "4",
       "items": [
         {
@@ -81,7 +81,7 @@
           "icon": "clock",
           "color": "green",
           "title": "Older persons & elders",
-          "body": "Elder-support and intergenerational groups — core to CECF's own mission alongside child welfare."
+          "body": "Elder-support and intergenerational groups — core to CECF&#039;s own mission alongside child welfare."
         }
       ]
     },
@@ -107,7 +107,7 @@
     {
       "type": "callout",
       "heading": "One idea, many communities",
-      "body": "Whether it's a chama in Kajiado or a youth collective in Kisumu, an Our Jamii page looks the same everywhere: a name, a purpose, and a direct line to whoever wants to help."
+      "body": "Whether it&#039;s a chama in Kajiado or a youth collective in Kisumu, an Our Jamii page looks the same everywhere: a name, a purpose, and a direct line to whoever wants to help."
     },
     {
       "type": "ctaBand",

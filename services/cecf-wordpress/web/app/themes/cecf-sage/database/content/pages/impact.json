@@ -9,7 +9,7 @@
     {
       "type": "note",
       "variant": "warn",
-      "body": "**Read this first.** The figures below are programme targets and design scope, not delivery results. Verified delivery figures are published in the annual report and audited accounts."
+      "body": "<strong>Read this first.</strong> The figures below are programme targets and design scope, not delivery results. Verified delivery figures are published in the annual report and audited accounts."
     },
     {
       "type": "statGrid",
@@ -115,7 +115,7 @@
     },
     {
       "type": "callout",
-      "body": "**In short:** our model shifts from impact that must be re-funded to impact that funds itself."
+      "body": "<strong>In short:</strong> our model shifts from impact that must be re-funded to impact that funds itself."
     },
     {
       "type": "prose",
@@ -129,7 +129,7 @@
     {
       "type": "note",
       "variant": "info",
-      "body": "Stories are published with the written consent of the group and the individuals named. Where consent is limited, names and locations are changed and we say so. **Replace the illustrative examples below with your verified stories before publication.**"
+      "body": "Stories are published with the written consent of the group and the individuals named. Where consent is limited, names and locations are changed and we say so. <strong>Replace the illustrative examples below with your verified stories before publication.</strong>"
     },
     {
       "type": "storyList",

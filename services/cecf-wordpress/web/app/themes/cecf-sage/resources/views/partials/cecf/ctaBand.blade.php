@@ -3,7 +3,8 @@
     <div class="band-g">
       <div>
         <h2>{{ $data['heading'] ?? '' }}</h2>
-        <p>{!! \App\Support\Markdown::inline($data['body'] ?? '') !!}</p>
+        {{-- Real HTML now -- see phead.blade.php's note on `lead`. --}}
+        <p>{!! $data['body'] ?? '' !!}</p>
       </div>
       <div class="row">
         @foreach ($data['ctas'] ?? [] as $cta)

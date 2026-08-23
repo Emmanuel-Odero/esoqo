@@ -514,3 +514,85 @@ separately: `composer.json` has no Meta Box dependency, no PHP calls
 
 Verified: `pnpm --filter @esoko/cecf-sage-theme build` compiles clean
 (9 modules, no warnings beyond the pre-existing pnpm workspace ones).
+
+## 10. Pass 7 — true inline (WYSIWYG) editing for the highest-traffic types (2026-08-23)
+
+Pass 6 got every block's fields out of the Inspector sidebar, but they
+still lived in a labelled form next to a separate live preview — closer
+to editing than pass 4-5's raw JSON, but still not what "the WordPress
+editor" means to someone who's used it: click the heading/paragraph text
+where it will appear on the page and type, with a real formatting
+toolbar, no separate form.
+
+True inline editing needs a section type's actual visual layout in the
+editor, not just its flat field list — something a schema-driven generic
+renderer structurally can't produce. `resources/js/blocks/layouts.jsx`
+breaks from pass 4-6's "one generic renderer for every type" design on
+purpose: six hand-authored `Edit` components (`phead`, `cardGrid`,
+`ctaBand`, `callout`, `note`, `statGrid` — picked for traffic, not
+difficulty) each reproduce their own `partials/cecf/<type>.blade.php`
+markup/classes directly in JSX, with `<RichText>` standing in for every
+text field. Every other section type still falls back to pass 6's
+generic `SectionForm` — extending `WYSIWYG_LAYOUTS` with more
+hand-authored types over time doesn't touch the ones already done, or
+the fallback path itself.
+
+Two things had to change for this to actually work, not just compile:
+
+- **`lead`/`body`/`fineprint` fields are now real HTML, not `**bold**`
+  markdown-lite.** `<RichText>`'s native value format is HTML; the old
+  `App\Support\Markdown::inline()` pipeline expected a plain string with
+  markdown-lite emphasis. Migrated the existing seed content in
+  `database/content/pages/*.json` once (a scripted, surgical string
+  replacement — not a full JSON re-serialize, so nothing else in each
+  file's formatting changed) via the exact same escape-then-`**`/`*`
+  regex `Markdown::inline()` already used, then dropped the
+  `Markdown::inline()` call from the six migrated partials for exactly
+  those fields (`{!! $data['lead'] !!}` instead of
+  `{!! Markdown::inline($data['lead']) !!}`) — they're pre-escaped, safe
+  HTML now, not something to run through the same pipeline twice.
+  `heading`/`kicker`/`title` fields needed no such migration: they were
+  never run through `Markdown::inline()` to begin with (plain
+  `{{ }}`-escaped output), so a RichText value with no formatting applied
+  is just the plain string either way. Existing already-seeded pages
+  needed a one-time `wp acorn cecf:seed --pages` re-run to pick this up
+  (idempotent by key, safe — see PageSeeder's own docblock).
+- **`resources/css/editor.css` never actually loaded `cecf.css`.** It
+  only imported Tailwind; `.phead`, `.card`, `.band` etc. live in
+  `cecf.css`, imported separately by `app.css` for the public site.
+  Nobody had noticed because pass 4-6's Inspector-sidebar/canvas-form
+  edit views don't depend on it and the `<ServerSideRender>` Preview
+  toggle rendering unstyled just read as "still needs polish" rather
+  than a bug — but the WYSIWYG layouts *are* that styling, directly, so
+  this was a hard blocker once actual visual verification started (every
+  block rendered as unstyled black text at default browser font size).
+  Fixed by having `editor.css` import `cecf.css` the same way `app.css`
+  does; Vite's build now correctly recognises the two entrypoints share
+  identical output and de-duplicates them into one chunk rather than
+  shipping cecf.css's CSS twice.
+- `resources/js/blocks/fields.jsx` exports `pageOptions`/`iconOptions`/
+  `selectOptions`/`moveItem`/`ReorderButtons`/`StringListField` now,
+  reused by layouts.jsx rather than re-implemented — icon/colour/page-
+  link pickers and repeatable-item reorder controls behave identically
+  in both the WYSIWYG layouts and the generic-form fallback.
+- Icon/colour on a `cardGrid` item, and page-link/style/icon on a
+  `ctaBand` button, stayed compact `SelectControl`s inline within the
+  item rather than becoming inline WYSIWYG themselves — they're settings
+  a Content Manager picks from a fixed list, not text they compose, the
+  same reasoning core blocks put comparable settings in the Inspector
+  rather than the canvas. The icon *glyph* itself doesn't render inline
+  here (App\Support\Icon's SVG sprite output isn't reproduced in JS) —
+  the Preview toggle remains the way to check a card's actual icon
+  before publishing.
+
+Verified in the `cecf` docker profile via Chrome automation, against
+real seeded pages (not synthetic test content): `phead` and `cardGrid`
+render fully styled (dark band, kicker dash, serif heading, real card
+grid) with the icon/colour/page-link settings inline and functioning;
+typing directly into a card's heading in place updates it exactly like
+core WordPress blocks; per-item reorder/remove controls appear on
+hover; `callout`/`note` pick up their real background colours
+(`rgb(251, 241, 224)` / white-with-`.warn`-tint) confirming `cecf.css`
+now reaches the canvas. Front end re-checked after both changes:
+`partner-with-us`/`programs` render with real `<strong>` tags where
+`**bold**` used to be, zero literal `**` left in rendered page content.
