@@ -1,12 +1,29 @@
 /*
- * Styles the generic cecf/* block Inspector controls (resources/js/blocks/
- * fields.jsx) render in the sidebar — regular wp-admin chrome, not the
- * iframed post-editor canvas, so it can't reuse editor.css (which is
- * injected *inside* that iframe via block_editor_settings_all, alongside
- * the site's own Tailwind/cecf.css, to make <ServerSideRender> previews
- * look right). Loaded by app/setup.php's admin_head hook, only on the
- * block editor screen, same as editor.js/editor.css.
+ * Styles the generic cecf/* block edit form (resources/js/blocks/
+ * fields.jsx) and its Edit/Preview toolbar toggle (resources/js/blocks/
+ * register.jsx). Loaded twice, deliberately: once into the block
+ * editor's iframed canvas via block_editor_settings_all (app/setup.php)
+ * — required since apiVersion 3 renders `edit()` inside that iframe, a
+ * plain wp-admin enqueue never reaches in there — and once more via the
+ * admin_head hook below for the handful of controls WordPress itself
+ * still renders in the outer wp-admin chrome (e.g. this block's own
+ * validation-error UI).
  */
+
+.cecf-block-form {
+    max-width: 720px;
+    margin: 0 auto;
+    padding: 4px 0;
+}
+
+.cecf-block-form__label {
+    margin: 0 0 16px;
+    font-size: 11px;
+    font-weight: 600;
+    letter-spacing: 0.05em;
+    text-transform: uppercase;
+    color: #757575;
+}
 
 .cecf-field {
     margin-bottom: 16px;
@@ -23,6 +40,11 @@
     flex: 1;
 }
 
+.cecf-field-list__reorder {
+    display: flex;
+    flex-shrink: 0;
+}
+
 .cecf-field-group {
     margin-bottom: 12px;
 }
@@ -31,6 +53,13 @@
     display: flex;
     align-items: center;
     justify-content: space-between;
+    gap: 8px;
+}
+
+.cecf-field-group__actions {
+    display: flex;
+    align-items: center;
+    flex-shrink: 0;
 }
 
 .cecf-block-empty {
@@ -38,4 +67,18 @@
     text-align: center;
     color: #757575;
     font-style: italic;
+}
+
+/*
+ * The block itself, in the canvas: a visible boundary + light background
+ * distinguishes "this is an editable section" from ordinary page content
+ * while in edit mode, without fighting the real styled preview when a
+ * Content Manager switches to Preview (ServerSideRender's own markup
+ * already has its own visual identity, so it gets none of this).
+ */
+.cecf-block:has(.cecf-block-form) {
+    padding: 16px;
+    border: 1px dashed #ccc;
+    border-radius: 4px;
+    background: #fbfbfb;
 }

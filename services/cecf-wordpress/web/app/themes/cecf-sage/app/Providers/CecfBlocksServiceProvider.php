@@ -21,9 +21,10 @@ use Illuminate\Support\ServiceProvider;
  * the "CECF sections" category registered below, or via the block
  * patterns registerPatterns() adds below — "insert a pattern" instead of
  * custom fields is "the usual way WordPress content shows"), fill in
- * labelled fields in the sidebar, see the real styled section update
- * live in the canvas, drag to reorder, publish. Nothing here requires
- * wp-admin's Custom Fields panel.
+ * labelled fields full-width in the canvas itself (a toolbar toggle
+ * switches to the real styled preview — see resources/js/blocks/
+ * register.jsx), drag blocks to reorder sections, publish. Nothing here
+ * requires wp-admin's Custom Fields panel.
  *
  * Design, in one place so it doesn't need repeating on every block:
  *  - Every block has exactly one attribute, `data` (a plain object) — the

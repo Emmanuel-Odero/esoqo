@@ -476,3 +476,41 @@ column heading, and a nested link label three levels deep); a real
 checks fail silently otherwise) round-trips correctly and leaves every
 sibling key in the option untouched. Front end still renders clean
 afterward.
+
+## 9. Pass 6 — moved block editing out of the Inspector sidebar (2026-08-23)
+
+Pass 4 put every `cecf/*` block's fields in the Inspector sidebar (a
+`PanelBody` inside `InspectorControls`), a workable pattern for one or
+two plain-text fields but not for this theme's actual blocks: `cardGrid`
+can hold 8 items each with an icon/color/title/body, `ctaBand` repeats a
+`{label, page, style, icon}` group per button, `table` repeats rows of
+cells — all cramped into a ~280px-wide sidebar, cards nested inside
+cards. Confirmed this was the real complaint behind "still feels like
+Meta Box to edit," not anything left over from Meta Box itself (verified
+separately: `composer.json` has no Meta Box dependency, no PHP calls
+`rwmb_*`, `web/app/plugins/meta-box/` isn't git-tracked — see pass 4).
+
+- `resources/js/blocks/register.jsx`: `edit()` no longer wraps
+  `<SectionForm>` in `<InspectorControls>`. The canvas now shows either
+  the edit form (full block width) or the real `<ServerSideRender>`
+  preview, toggled by a `BlockControls` toolbar button (`Edit`/`Preview`,
+  local `useState`, defaults to `Edit` — not a block attribute, so it's
+  never written to `post_content`).
+- `resources/js/blocks/fields.jsx`: every repeatable field (`stringList`,
+  `rowList`, `repeater`) gained move-up/move-down buttons alongside
+  add/remove — reordering previously meant deleting and re-adding items
+  in the right order. No drag-and-drop library added: with items that can
+  be an editor's-height tall, a button that always moves an item exactly
+  one slot is more reliable to use than dragging a tall card past several
+  others.
+- `app/setup.php`'s `block_editor_settings_all` filter now also imports
+  `blocks-admin.css` into the block editor's iframed canvas (alongside
+  `editor.css`, already there for `<ServerSideRender>`'s Tailwind), since
+  apiVersion-3 blocks render `edit()` inside that iframe — the existing
+  `admin_head` enqueue of the same file only ever reached the outer
+  wp-admin chrome, which is why the sidebar version looked fine before
+  but canvas-rendered fields wouldn't have picked up any styling at all
+  without this.
+
+Verified: `pnpm --filter @esoko/cecf-sage-theme build` compiles clean
+(9 modules, no warnings beyond the pre-existing pnpm workspace ones).

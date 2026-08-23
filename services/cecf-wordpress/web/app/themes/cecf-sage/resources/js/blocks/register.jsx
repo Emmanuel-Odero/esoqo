@@ -6,17 +6,22 @@
  * section type: `edit()` is the same generic component for all ~20,
  * pointed at a different field list each time.
  *
- * Editing model: the canvas shows the block's real, styled front-end
- * markup live via <ServerSideRender> (the exact same
- * partials/cecf/<type>.blade.php partial the public site renders,
- * through the block's own `render_callback`); every editable field lives
- * in the Inspector sidebar (resources/js/blocks/fields.jsx), so a
- * Content Manager sees what they're building while they build it, the
- * same as any other WordPress block — not a raw JSON textarea.
+ * Editing model: every field (resources/js/blocks/fields.jsx) renders
+ * full-width in the canvas itself, not the Inspector sidebar — a ~280px
+ * sidebar is workable for one or two plain-text fields, but this theme's
+ * blocks nest repeaters inside repeaters (cardGrid's items, each with an
+ * icon/color/title/body; ctaBand's ctas; table rows), which turns
+ * unusable once squeezed that narrow. A toolbar toggle switches the
+ * canvas between that edit form and the block's real, styled front-end
+ * markup via <ServerSideRender> (the same partials/cecf/<type>.blade.php
+ * partial the public site renders, through the block's own
+ * render_callback) — so a Content Manager can check how it looks without
+ * permanently losing the width to edit in.
  */
 import { registerBlockType } from '@wordpress/blocks';
-import { InspectorControls, useBlockProps } from '@wordpress/block-editor';
-import { PanelBody } from '@wordpress/components';
+import { BlockControls, useBlockProps } from '@wordpress/block-editor';
+import { ToolbarGroup, ToolbarButton } from '@wordpress/components';
+import { useState } from '@wordpress/element';
 import ServerSideRender from '@wordpress/server-side-render';
 import { __ } from '@wordpress/i18n';
 import { SectionForm } from './fields';
@@ -39,25 +44,48 @@ function blockNameFor(type) {
  */
 function makeEdit(fields, label) {
   return function Edit({ name, attributes, setAttributes }) {
-    const blockProps = useBlockProps();
+    const blockProps = useBlockProps({ className: 'cecf-block' });
     const data = attributes.data || {};
+    // Local UI state only — never serialized into post_content, unlike
+    // `data` above. Starts on "edit": a Content Manager opens a block to
+    // change its content far more often than to just look at it, and the
+    // canvas already showed a live preview before any edit happened
+    // (ServerSideRender re-renders on every keystroke regardless of which
+    // tab is active once they've made a change and switched over).
+    const [view, setView] = useState('edit');
 
     return (
       <>
-        <InspectorControls>
-          <PanelBody title={__('Section content', 'cecf-sage')} initialOpen>
-            <SectionForm
-              fields={fields}
-              data={data}
-              onChange={(next) => setAttributes({ data: next })}
-            />
-          </PanelBody>
-        </InspectorControls>
+        <BlockControls>
+          <ToolbarGroup>
+            <ToolbarButton
+              isPressed={view === 'edit'}
+              onClick={() => setView('edit')}
+            >
+              {__('Edit', 'cecf-sage')}
+            </ToolbarButton>
+            <ToolbarButton
+              isPressed={view === 'preview'}
+              onClick={() => setView('preview')}
+            >
+              {__('Preview', 'cecf-sage')}
+            </ToolbarButton>
+          </ToolbarGroup>
+        </BlockControls>
         <div {...blockProps}>
           {fields.length === 0 ? (
             <p className="cecf-block-empty">{label}</p>
-          ) : (
+          ) : view === 'preview' ? (
             <ServerSideRender block={name} attributes={attributes} />
+          ) : (
+            <div className="cecf-block-form">
+              <p className="cecf-block-form__label">{label}</p>
+              <SectionForm
+                fields={fields}
+                data={data}
+                onChange={(next) => setAttributes({ data: next })}
+              />
+            </div>
           )}
         </div>
       </>

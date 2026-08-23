@@ -1,11 +1,14 @@
 /**
- * One generic, recursive field renderer for every `cecf/*` block's
- * Inspector controls, driven entirely by the schema
- * App\Content\SectionFields hands the editor as `window.cecfSectionSchema`
- * (see App\Providers\CecfBlocksServiceProvider::localizeEditorData()).
+ * One generic, recursive field renderer for every `cecf/*` block's edit
+ * form, driven entirely by the schema App\Content\SectionFields hands the
+ * editor as `window.cecfSectionSchema` (see App\Providers\
+ * CecfBlocksServiceProvider::localizeEditorData()). Rendered full-width
+ * in the block canvas itself (see register.jsx's Edit/Preview toggle),
+ * not the Inspector sidebar — a ~280px sidebar doesn't hold up once
+ * fields nest repeaters inside repeaters, which several section types do.
  *
  * There is deliberately no per-block-type edit.js in this theme — every
- * `cecf/*` block (see register.js) renders the *same* <SectionForm>
+ * `cecf/*` block (see register.jsx) renders the *same* <SectionForm>
  * against a different field list, so adding a field to a section type
  * only ever means editing SectionFields.php, never touching JS.
  */
@@ -62,6 +65,53 @@ function emptyItemFor(fields) {
 }
 
 /**
+ * Swaps `list[index]` with its neighbour in `direction` ('up'/'down') and
+ * returns the new array — the reorder half of every repeatable field
+ * below (string lists, table rows, object repeaters). No drag-and-drop
+ * library: with items that can be an editor's-height tall (a cardGrid
+ * item's icon/color/title/body), buttons that always land the item
+ * exactly one slot away are easier to use accurately than dragging a
+ * tall card past several others.
+ */
+function moveItem(list, index, direction) {
+  const target = direction === 'up' ? index - 1 : index + 1;
+  if (target < 0 || target >= list.length) {
+    return list;
+  }
+  const copy = [...list];
+  [copy[index], copy[target]] = [copy[target], copy[index]];
+  return copy;
+}
+
+/**
+ * The two reorder buttons shared by every repeatable field's row/card
+ * header — disabled rather than hidden at each end, so the row of
+ * controls doesn't reflow as items move.
+ */
+function ReorderButtons({ index, count, onMove }) {
+  return (
+    <span className="cecf-field-list__reorder">
+      <Button
+        variant="tertiary"
+        size="small"
+        icon="arrow-up-alt2"
+        label={__('Move up', 'cecf-sage')}
+        disabled={index === 0}
+        onClick={() => onMove(index, 'up')}
+      />
+      <Button
+        variant="tertiary"
+        size="small"
+        icon="arrow-down-alt2"
+        label={__('Move down', 'cecf-sage')}
+        disabled={index === count - 1}
+        onClick={() => onMove(index, 'down')}
+      />
+    </span>
+  );
+}
+
+/**
  * A repeatable list of plain strings — `facts`, `ticks`, prose paragraphs.
  */
 function StringListField({ field, value, onChange }) {
@@ -81,6 +131,11 @@ function StringListField({ field, value, onChange }) {
               copy[index] = next;
               onChange(copy);
             }}
+          />
+          <ReorderButtons
+            index={index}
+            count={items.length}
+            onMove={(i, direction) => onChange(moveItem(items, i, direction))}
           />
           <Button
             variant="tertiary"
@@ -113,14 +168,21 @@ function RowListField({ field, value, onChange }) {
         <Card key={rowIndex} size="small" className="cecf-field-group">
           <CardHeader>
             <strong>{__('Row', 'cecf-sage')} {rowIndex + 1}</strong>
-            <Button
-              variant="tertiary"
-              isDestructive
-              size="small"
-              onClick={() => onChange(rows.filter((_, i) => i !== rowIndex))}
-            >
-              {__('Remove row', 'cecf-sage')}
-            </Button>
+            <span className="cecf-field-group__actions">
+              <ReorderButtons
+                index={rowIndex}
+                count={rows.length}
+                onMove={(i, direction) => onChange(moveItem(rows, i, direction))}
+              />
+              <Button
+                variant="tertiary"
+                isDestructive
+                size="small"
+                onClick={() => onChange(rows.filter((_, i) => i !== rowIndex))}
+              >
+                {__('Remove row', 'cecf-sage')}
+              </Button>
+            </span>
           </CardHeader>
           <CardBody>
             <StringListField
@@ -155,14 +217,21 @@ function RepeaterField({ field, value, onChange }) {
         <Card key={index} size="small" className="cecf-field-group">
           <CardHeader>
             <strong>{field.label} {index + 1}</strong>
-            <Button
-              variant="tertiary"
-              isDestructive
-              size="small"
-              onClick={() => onChange(items.filter((_, i) => i !== index))}
-            >
-              {__('Remove', 'cecf-sage')}
-            </Button>
+            <span className="cecf-field-group__actions">
+              <ReorderButtons
+                index={index}
+                count={items.length}
+                onMove={(i, direction) => onChange(moveItem(items, i, direction))}
+              />
+              <Button
+                variant="tertiary"
+                isDestructive
+                size="small"
+                onClick={() => onChange(items.filter((_, i) => i !== index))}
+              >
+                {__('Remove', 'cecf-sage')}
+              </Button>
+            </span>
           </CardHeader>
           <CardBody>
             <SectionForm
@@ -314,7 +383,7 @@ function Field({ field, data, onChange }) {
 
 /**
  * The recursive form itself: one <Field> per schema entry. Both the
- * top-level block Inspector panel (register.js) and every nested
+ * top-level block's canvas edit form (register.jsx) and every nested
  * repeater/group above call back into this, which is what makes the
  * schema recursive without any type-specific JS beyond the six renderers
  * above.
