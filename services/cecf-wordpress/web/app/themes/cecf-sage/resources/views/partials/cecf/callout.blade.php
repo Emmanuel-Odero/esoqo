@@ -3,6 +3,7 @@
     <h3 class="mt-l">{{ $data['heading'] }}</h3>
   @endif
   <div class="callout">
-    <p>{!! \App\Support\Markdown::inline($data['body'] ?? '') !!}</p>
+    {{-- Real HTML now -- see phead.blade.php's note on `lead`. --}}
+    <p>{!! $data['body'] ?? '' !!}</p>
   </div>
 </div>

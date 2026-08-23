@@ -2,15 +2,22 @@
 
 namespace App\View\Composers;
 
+use App\Content\SectionTypes;
+use App\Customizer\CecfSectionSetting;
 use Roots\Acorn\View\Composer;
 
 /**
- * Decodes the `cecf_sections` Meta Box field (registered in
- * App\Providers\CecfContentServiceProvider, seeded by database/seeders/
- * PageSeeder.php) into `$cecfSections` for partials/content-page.blade.php
- * to loop over. This is the only place in the theme that reads that field
- * directly — matching App\Content\ContentRepository's role on the seeding
- * side, one reader, not one per view.
+ * Parses the current page's real block content (`get_the_content()`) into
+ * `$cecfSections` for partials/content-page.blade.php to loop over —
+ * every top-level `cecf/*` block becomes one {type, label, data} entry,
+ * same shape this used to decode from the old "cecf_sections" Meta Box
+ * field. That's what keeps every partials/cecf/*.blade.php file (and the
+ * App\Support\* helpers they call) completely unchanged by the move to
+ * blocks: only where `$data` comes from changed, not its shape.
+ *
+ * This is the only place in the theme that reads block content directly
+ * — matching App\Providers\CecfBlocksServiceProvider's role on the
+ * editing side, one reader, not one per view.
  */
 class PageSections extends Composer
 {
@@ -30,24 +37,40 @@ class PageSections extends Composer
      */
     protected function sections(): array
     {
-        if (! function_exists('rwmb_meta')) {
-            return [];
-        }
-
-        $rows = rwmb_meta('cecf_sections', [], get_the_ID());
+        $postId = (int) get_the_ID();
+        $blocks = parse_blocks((string) get_the_content());
         $sections = [];
+        $index = -1;
 
-        foreach ((array) $rows as $row) {
-            $data = json_decode($row['data'] ?? '', true);
+        foreach ($blocks as $block) {
+            $type = SectionTypes::typeFromBlockName((string) ($block['blockName'] ?? ''));
 
-            if (! is_array($data)) {
-                continue; // malformed row — skip rather than break the whole page
+            if ($type === null) {
+                continue; // not a cecf/* section block — e.g. an editor left a note in a core/paragraph block
+            }
+
+            $index++;
+            $data = $block['attrs']['data'] ?? [];
+
+            // While previewing an unpublished Customizer changeset (see
+            // App\Providers\CecfPageEditorServiceProvider/App\Customizer\
+            // CecfSectionSetting), a section's edited-but-unsaved value
+            // lives there instead of in $data above — same "changeset
+            // isn't real until Publish, but the preview iframe reflects
+            // it immediately" behaviour core's own theme_mod/option
+            // setting types get for free, reimplemented here since
+            // per-block page content is neither.
+            if (is_customize_preview()) {
+                $preview = CecfSectionSetting::previewedValue($postId, $index);
+                if ($preview !== null) {
+                    $data = $preview;
+                }
             }
 
             $sections[] = [
-                'type' => $row['type'] ?? '',
-                'label' => $row['label'] ?? '',
-                'data' => $data,
+                'type' => $type,
+                'label' => SectionTypes::options()[$type] ?? $type,
+                'data' => is_array($data) ? $data : [],
             ];
         }
 

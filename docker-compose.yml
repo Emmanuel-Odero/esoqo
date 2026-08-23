@@ -288,7 +288,7 @@ services:
       # port apps/app's dev server binds to, reachable from this container
       # via the host's loopback (see also docker-compose's esoko-dev service).
       ESOKO_JOIN_URL: http://localhost:3001/join
-      # Where every "page": "jamii" CTA sends people (pages/our-jamii.json,
+      # Where every "page": "jamii" CTA sends people (pages/jamii.json,
       # the Programs/nav item introducing the product) — see
       # App\Support\PageUrl::esokoJamiiUrl(). Same host-loopback reasoning
       # as ESOKO_JOIN_URL above; 3004 is apps/jamii's own dev port.

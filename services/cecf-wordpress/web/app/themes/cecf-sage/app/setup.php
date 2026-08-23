@@ -11,14 +11,23 @@ use Illuminate\Support\Facades\Vite;
 /**
  * Inject styles into the block editor.
  *
+ * `editor.css` (Tailwind, for <ServerSideRender>'s preview to look right)
+ * and `blocks-admin.css` (the cecf/* blocks' own edit-form styling) both
+ * need to reach the block editor's canvas, which since apiVersion 3 renders
+ * inside its own iframe — a normal wp-admin `admin_head` enqueue (see
+ * below) never reaches in there, only `block_editor_settings_all`'s
+ * `styles` array does. `blocks-admin.css` still ALSO loads via admin_head
+ * below, for the handful of controls (e.g. block validation errors) that
+ * render in the outer wp-admin chrome, not the iframe.
+ *
  * @return array
  */
 add_filter('block_editor_settings_all', function ($settings) {
-    $style = Vite::asset('resources/css/editor.css');
-
-    $settings['styles'][] = [
-        'css' => "@import url('{$style}')",
-    ];
+    foreach (['resources/css/editor.css', 'resources/css/blocks-admin.css'] as $entry) {
+        $settings['styles'][] = [
+            'css' => "@import url('" . Vite::asset($entry) . "')",
+        ];
+    }
 
     return $settings;
 });
@@ -44,6 +53,7 @@ add_action('admin_head', function () {
     }
     echo Vite::withEntryPoints([
         'resources/js/editor.js',
+        'resources/css/blocks-admin.css',
     ])->toHtml();
 });
 

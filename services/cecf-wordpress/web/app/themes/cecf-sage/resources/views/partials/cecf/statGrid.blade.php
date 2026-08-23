@@ -33,6 +33,7 @@
   @endif
 
   @if (! empty($data['fineprint']))
-    <p class="fineprint">{!! \App\Support\Markdown::inline($data['fineprint']) !!}</p>
+    {{-- Real HTML now -- see phead.blade.php's note on `lead`. --}}
+    <p class="fineprint">{!! $data['fineprint'] !!}</p>
   @endif
 </div>

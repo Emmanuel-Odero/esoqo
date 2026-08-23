@@ -1,0 +1,161 @@
+/*
+ * Styles the generic cecf/* block edit form (resources/js/blocks/
+ * fields.jsx), the hand-authored WYSIWYG layouts (resources/js/blocks/
+ * layouts.jsx), and the Edit/Preview toolbar toggle (resources/js/blocks/
+ * register.jsx). Loaded twice, deliberately: once into the block
+ * editor's iframed canvas via block_editor_settings_all (app/setup.php)
+ * — required since apiVersion 3 renders `edit()` inside that iframe, a
+ * plain wp-admin enqueue never reaches in there — and once more via the
+ * admin_head hook below for the handful of controls WordPress itself
+ * still renders in the outer wp-admin chrome (e.g. this block's own
+ * validation-error UI).
+ */
+
+.cecf-block-form {
+    max-width: 720px;
+    margin: 0 auto;
+    padding: 4px 0;
+}
+
+.cecf-block-form__label {
+    margin: 0 0 16px;
+    font-size: 11px;
+    font-weight: 600;
+    letter-spacing: 0.05em;
+    text-transform: uppercase;
+    color: #757575;
+}
+
+.cecf-field {
+    margin-bottom: 16px;
+}
+
+.cecf-field-list__row {
+    display: flex;
+    align-items: flex-end;
+    gap: 8px;
+    margin-bottom: 8px;
+}
+
+.cecf-field-list__row > .components-base-control {
+    flex: 1;
+}
+
+.cecf-field-list__reorder {
+    display: flex;
+    flex-shrink: 0;
+}
+
+.cecf-field-group {
+    margin-bottom: 12px;
+}
+
+.cecf-field-group .components-card__header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+}
+
+.cecf-field-group__actions {
+    display: flex;
+    align-items: center;
+    flex-shrink: 0;
+}
+
+.cecf-block-empty {
+    padding: 24px;
+    text-align: center;
+    color: #757575;
+    font-style: italic;
+}
+
+/*
+ * The block itself, in the canvas: a visible boundary + light background
+ * distinguishes "this is an editable section" from ordinary page content
+ * while in edit mode, without fighting the real styled preview when a
+ * Content Manager switches to Preview (ServerSideRender's own markup
+ * already has its own visual identity, so it gets none of this).
+ */
+.cecf-block:has(.cecf-block-form) {
+    padding: 16px;
+    border: 1px dashed #ccc;
+    border-radius: 4px;
+    background: #fbfbfb;
+}
+
+/*
+ * layouts.jsx's WYSIWYG cards/rows (cardGrid items, ctaBand buttons,
+ * statGrid stats) — each one gets a per-item reorder/remove control
+ * cluster, shown only on hover/focus so the canvas reads as the real
+ * page most of the time, the same discoverability pattern core blocks
+ * like the Gallery use for their own per-image toolbar.
+ */
+.cecf-item {
+    position: relative;
+    outline: 1px dashed transparent;
+    outline-offset: 4px;
+    transition: outline-color 0.12s;
+}
+
+.cecf-item:hover,
+.cecf-item:focus-within {
+    outline-color: #ccc;
+}
+
+.cecf-item__controls {
+    position: absolute;
+    top: -14px;
+    right: -8px;
+    z-index: 1;
+    display: flex;
+    align-items: center;
+    gap: 2px;
+    padding: 2px;
+    background: #fff;
+    border: 1px solid #ddd;
+    border-radius: 4px;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.15);
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 0.12s;
+}
+
+.cecf-item:hover > .cecf-item__controls,
+.cecf-item:focus-within > .cecf-item__controls {
+    opacity: 1;
+    pointer-events: auto;
+}
+
+/*
+ * The non-text settings sitting inside a WYSIWYG item (icon/colour on a
+ * card, page-link/style/icon on a button) — visually set apart from the
+ * RichText content above it, since they're settings, not page copy.
+ */
+.cecf-item__settings {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    margin-top: 10px;
+    padding-top: 10px;
+    border-top: 1px dashed #ddd;
+}
+
+.cecf-item__settings .components-base-control {
+    min-width: 140px;
+    flex: 1;
+}
+
+.cecf-cta-item {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 4px;
+}
+
+.cecf-ctas {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: flex-start;
+    gap: 16px;
+}

@@ -10,7 +10,8 @@
       <h2>{{ $data['heading'] }}</h2>
     @endif
     @if (! empty($data['lead']))
-      <p class="lead">{!! \App\Support\Markdown::inline($data['lead']) !!}</p>
+      {{-- Real HTML now -- see phead.blade.php's note on `lead`. --}}
+      <p class="lead">{!! $data['lead'] !!}</p>
     @endif
 
     @if ($isMissionVision)
@@ -21,7 +22,7 @@
               <x-icon :name="$item['icon'] ?? 'target'" />
             </span>
             <h3>{{ $item['title'] ?? '' }}</h3>
-            <p class="lead">{!! \App\Support\Markdown::inline($item['body'] ?? '') !!}</p>
+            <p class="lead">{!! $item['body'] ?? '' !!}</p>
           </div>
         @endforeach
       </div>
@@ -38,7 +39,7 @@
             @foreach ($item['mono'] ?? [] as $line)
               <p class="mono">{{ $line }}</p>
             @endforeach
-            <p>{!! \App\Support\Markdown::inline($item['body'] ?? '') !!}</p>
+            <p>{!! $item['body'] ?? '' !!}</p>
             @if ($href)
               <span class="more">
                 <x-icon name="arrow-right" size="16" />

@@ -1,0 +1,132 @@
+{
+  "sections": [
+    {
+      "type": "phead",
+      "kicker": "About",
+      "heading": "Our team",
+      "lead": "The staff who run CECF day to day, and the board and advisors who govern and guide the consortium."
+    },
+    {
+      "type": "note",
+      "variant": "warn",
+      "body": "The names and bios below are <strong>placeholder profiles</strong> for layout purposes only — not real CECF staff or board members. Replace every entry with verified information and consented headshots before this page goes live."
+    },
+    {
+      "type": "teamGrid",
+      "note": "PLACEHOLDER PROFILES — illustrative only, not real CECF personnel. See the note section above and media/photos/PLACEHOLDERS.md. Do not treat as real staff without written confirmation from CECF.",
+      "kicker": "Staff",
+      "heading": "Staff",
+      "lead": "Our staff manage registration, field operations, partnerships and day-to-day programme delivery.",
+      "columns": "3",
+      "items": [
+        {
+          "name": "Wanjiru Kamau",
+          "role": "Executive Director",
+          "bio": "Leads CECF's overall strategy and represents the consortium to government, banks and donor partners.",
+          "color": "teal",
+          "email": "director@cecf.or.ke"
+        },
+        {
+          "name": "Otieno Odhiambo",
+          "role": "Programs Director",
+          "bio": "Oversees the registration and formalisation programme, from field outreach to referral into banking and government services.",
+          "color": "ochre",
+          "email": "programs@cecf.or.ke"
+        },
+        {
+          "name": "Achieng Njeri",
+          "role": "Head of Partnerships & Government Relations",
+          "bio": "Manages CECF's relationships with ministries, regulators, banks and development partners.",
+          "color": "clay",
+          "email": "partnerships@cecf.or.ke"
+        },
+        {
+          "name": "Kiptoo Langat",
+          "role": "Field Operations Manager",
+          "bio": "Coordinates the field officer network that supports groups through registration county by county.",
+          "color": "green",
+          "email": "fieldops@cecf.or.ke"
+        },
+        {
+          "name": "Naliaka Wafula",
+          "role": "Finance & Compliance Manager",
+          "bio": "Oversees CECF's own financial management and compliance, and supports groups preparing for bank account opening.",
+          "color": "teal",
+          "email": "finance@cecf.or.ke"
+        },
+        {
+          "name": "Chebet Rono",
+          "role": "Community Engagement Lead",
+          "bio": "Runs community workshops and group trainings, and coordinates the training calendar with county partners.",
+          "color": "ochre",
+          "email": "engagement@cecf.or.ke"
+        },
+        {
+          "name": "Mutiso Kilonzo",
+          "role": "Communications & Digital Officer",
+          "bio": "Manages CECF's communications, the digital registration platform, and this website.",
+          "color": "clay",
+          "email": "info@cecf.or.ke"
+        }
+      ]
+    },
+    {
+      "type": "teamGrid",
+      "note": "PLACEHOLDER PROFILES — illustrative only, not real CECF personnel. See the note section above and media/photos/PLACEHOLDERS.md. Do not treat as real board members/advisors without written confirmation from CECF.",
+      "kicker": "Governance",
+      "heading": "Board & advisors",
+      "lead": "Our board provides oversight and governance; our advisors bring specialist expertise in government, banking and cooperative development.",
+      "columns": "4",
+      "items": [
+        {
+          "name": "Muthoni Gitau",
+          "role": "Board Chairperson",
+          "bio": "Chairs the board and provides strategic oversight of CECF's mission and governance.",
+          "color": "teal"
+        },
+        {
+          "name": "Barasa Simiyu",
+          "role": "Vice Chairperson",
+          "bio": "Supports the Chair and leads board oversight of programme delivery.",
+          "color": "ochre"
+        },
+        {
+          "name": "Adhiambo Owino",
+          "role": "Treasurer",
+          "bio": "Oversees CECF's finances and reporting on behalf of the board.",
+          "color": "clay"
+        },
+        {
+          "name": "Cherono Kiprop",
+          "role": "Secretary to the Board",
+          "bio": "Maintains board governance records and coordinates board meetings.",
+          "color": "green"
+        },
+        {
+          "name": "Njoroge Mwangi",
+          "role": "Independent Director, Governance & Legal",
+          "bio": "Advises the board on legal, regulatory and governance matters.",
+          "color": "teal"
+        },
+        {
+          "name": "Auma Omondi",
+          "role": "Independent Director, Banking & Finance",
+          "bio": "Brings banking-sector experience to the board's oversight of financial-inclusion partnerships.",
+          "color": "ochre"
+        },
+        {
+          "name": "Korir Cheruiyot",
+          "role": "Advisor, Government & Public Policy",
+          "bio": "Advises on engagement with ministries, regulators and county government.",
+          "color": "clay"
+        },
+        {
+          "name": "Nyambura Karanja",
+          "role": "Advisor, Cooperative & MSME Development",
+          "bio": "Advises on cooperative structures and small-enterprise growth pathways for registered groups.",
+          "color": "green"
+        }
+      ]
+    }
+  ]
+}

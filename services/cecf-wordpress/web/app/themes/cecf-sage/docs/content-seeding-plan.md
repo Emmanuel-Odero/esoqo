@@ -347,20 +347,344 @@ every other page — normalized rather than special-cased in the partial.
 
 ## 6. Still open / next implementation pass
 
-- The 12 deferred section-type partials (`table`, `eventList`, `newsList`,
-  `storyList`, `downloadList`, `sponsorshipGrid`, `partnerList`,
-  `stepList`, `requirementList`, `hero`, `registrationForm` — the last one
-  real interactive work, its own pass wiring the existing 6-step wizard
-  copy to the `cecf_enquiry` REST route built in pass 2).
-- A field-by-field Settings API screen for `cecf_site_settings` (currently
-  a placeholder screen — see `CecfContentServiceProvider::
-  renderSiteSettingsPage()` — settings are seeded correctly but not yet
-  hand-editable in wp-admin without touching the JSON + re-running the seed).
-- Decomposing the 20 section types out of the single `{type, label, data}`
-  Meta Box row into dedicated per-type sub-fields (see
-  `CecfContentServiceProvider`'s docblock) — deliberately deferred, not
-  blocking real content being live and round-trippable now.
 - Real photography to replace the `.ph.fallback` placeholders (`stories`,
   `government`, `careers` — see `database/content/media/photos/
   PLACEHOLDERS.md`), and the trustee/annual-report content flagged as
   TODO in `about.json`'s governance section.
+- The `registrationForm` block/partial pair is copy-only (the 6-step
+  wizard's markup/behaviour is still hand-built JS wired to the
+  `cecf_enquiry` REST route from pass 2) — unchanged by pass 4 below.
+
+## 7. Pass 4 — from a JSON-textarea Meta Box field to real Gutenberg blocks (2026-08-15)
+
+**Problem this pass fixes:** every page section was one row in a Meta Box
+"Page sections" clone group, and the row's entire content — heading, body
+copy, every list item — lived in one `textarea` field the admin UI labelled
+"Section data (JSON)". A Content Manager had to open a page's edit screen,
+scroll past the normal (empty, unused) block editor, find the Meta Box panel
+below it, and hand-edit a pretty-printed JSON blob to change a single word.
+That's what §6's now-removed "Decomposing the 20 section types..." item was
+tracking, and what this pass actually did, going further than a decompose-
+in-place fix: instead of building 20 bespoke Meta Box field-group UIs (still
+a panel below the real editor, still not what "content" means to a WP admin
+user), every section type became a real Gutenberg block, so the block
+editor itself — the screen every WordPress user already expects to build a
+page in — is now the *only* editing surface, wp-admin's Custom Fields panel
+is never involved, and the "Page sections" Meta Box field/panel is gone.
+
+**Approach:**
+- `App\Content\SectionFields` — one field schema per `SectionTypes` value
+  (~20), read from both PHP (block registration) and JS (the editor UI),
+  so a field only needs to be added/changed in one place. Field `type`
+  values (`text`, `textarea`, `select`, `boolean`, `page`, `icon`,
+  `illustration`, `stringList`, `rowList`, `repeater`, `group`) cover every
+  shape the 20 partials already read from `$data` — see that class's
+  docblock.
+- `App\Providers\CecfBlocksServiceProvider` registers one `cecf/<type>`
+  block per section type (`register_block_type()`, no `block.json` files —
+  one PHP array per type, generated from `SectionTypes`/`SectionFields`
+  rather than hand-duplicated 20 times). Every block has exactly one
+  attribute, `data` (an object) — the same shape a JSON section already
+  had, minus `type`. `render_callback` hands that straight to the
+  **unchanged** `resources/views/partials/cecf/<type>.blade.php` partial;
+  none of the 20 partials, nor `App\Support\{Markdown,PageUrl,Icon,Media,
+  ButtonStyle}`, needed to change — only where `$data` comes from changed.
+  Also registers a "CECF sections" block category and two starter block
+  patterns (`cecf/basic-page`, `cecf/highlights-page`) so a Content
+  Manager building a new page has a normal "insert a pattern" starting
+  point instead of needing to know which of ~20 blocks to reach for first.
+- `App\View\Composers\PageSections` now parses the page's real
+  `post_content` (`parse_blocks()`), filtering for `cecf/*` blocks, instead
+  of decoding the old `cecf_sections` Meta Box meta field — same
+  `{type, label, data}` shape handed to `partials.content-page`, so that
+  Blade file didn't need to change either.
+- `database/seeders/PageSeeder.php` now writes each section as real block
+  markup (`serialize_block()`) into `post_content`, instead of a Meta Box
+  meta row — this is also the migration path: re-running
+  `wp acorn cecf:seed --pages` rewrites the 8 live-seeded pages'
+  `post_content` from `database/content/pages/*.json` straight into block
+  markup. (Still not run automatically on deploy — see
+  `App\Console\Commands\CecfSeedCommand`'s docblock, unchanged reasoning.)
+- `App\Content\SectionTypes::blockName()`/`typeFromBlockName()` — the one
+  place the `type` (camelCase) <-> block name (`cecf/kebab-case`) mapping
+  lives, since both the PHP registration/seeder side and the JS side
+  (`resources/js/blocks/register.jsx`, which reimplements the same
+  camelCase-to-kebab-case rule to build the same block names client-side)
+  need it independently and must agree byte-for-byte.
+- `resources/js/blocks/register.jsx` + `fields.jsx` — no hand-written
+  `edit.js` per block type. One generic field-renderer (recursive over
+  `App\Content\SectionFields`'s schema, handed to the editor as
+  `window.cecfSectionSchema`) builds every block's Inspector controls;
+  the block's canvas area shows the real, live-styled front end via
+  `<ServerSideRender>` (the same `render_callback`/Blade partial the
+  public site uses), so a Content Manager sees what they're building
+  while they edit fields in the sidebar — not a raw textarea, not a
+  guess. Confirmed `@roots/vite-plugin`'s `wordpressPlugin()` (already in
+  `vite.config.js`) externalizes every `@wordpress/*` import to the
+  matching `wp.*` global and sets esbuild's JSX pragma to
+  `wp.element.createElement`/`Fragment` automatically — no new npm
+  dependencies were needed, `npm run build` picks up
+  `@wordpress/{blocks,block-editor,components,server-side-render,i18n,
+  dom-ready}` as externals and emits the right WP script-handle list to
+  `editor.deps.json` (verified: a clean `npm run build` after this pass
+  produced `wp-blocks`, `wp-block-editor`, `wp-components`,
+  `wp-server-side-render`, `wp-i18n`, `wp-dom-ready`).
+- `wpackagist-plugin/meta-box` removed from the root `composer.json` (with
+  it, `bin/fix-meta-box-autoload.php` and its Dockerfile/composer.json
+  script wiring, added in pass 2 to work around that plugin's packaging
+  bug) — nothing else in the theme used Meta Box. Verified: `composer
+  update wpackagist-plugin/meta-box` cleanly removed it from
+  `composer.lock` and `web/app/plugins/meta-box/`.
+
+**Was a placeholder, resolved in pass 5 below:** `cecf_site_settings`
+(org info, footer columns) was still a native Settings API screen with no
+field-by-field UI yet (`CecfContentServiceProvider::
+renderSiteSettingsPage()`) — smaller in scope than the 20-section-type
+problem this pass solved, and a reasonable next follow-up.
+
+## 8. Pass 5 — site-wide settings in the native Customizer (2026-08-16)
+
+Replaced the pass-4 Settings API placeholder screen with real controls in
+Appearance → Customize. `App\Providers\CecfContentServiceProvider` now
+registers a "CECF Settings" panel (organisation info, contact
+emails/hours, footer text, one section per footer column, the header
+button) with `type => 'option'` settings whose IDs are bracketed paths
+into the *same* `cecf_site_settings` option
+`database/seeders/SiteSettingsSeeder.php` already wrote and
+`sections/{header,footer}.blade.php` already read — WordPress's own
+Customizer core resolves `cecf_site_settings[footerColumns][0][links][2]
+[label]`-style IDs via `_wp_array_set()` on save, so no custom
+`WP_Customize_Setting` subclass and no reshaping of the option was
+needed.
+
+Footer columns/links are the one variable-cardinality part of this
+option; the Customizer has no native repeater control, so this exposes a
+fixed, generous number of slots (`FOOTER_COLUMN_SLOTS = 4`,
+`FOOTER_LINK_SLOTS = 8`, one above `navigation.json`'s current widest
+column) rather than hand-rolling dynamic-section JS — a blank link label
+or column heading just doesn't render (`sections/footer.blade.php` and
+`sections/header.blade.php` both updated to skip empty slots, the latter
+also fixed to hide the header CTA entirely rather than render an
+empty-label button when only `page` is set).
+
+Verified in the `cecf` docker profile via a real `WP_Customize_Manager`
+instance (`do_action('customize_register', $manager)`): all 8 sections
+and 88 settings register; every setting's `->value()` correctly reads
+back the already-seeded option data (spot-checked `orgName`, a footer
+column heading, and a nested link label three levels deep); a real
+`set_post_value()` + `->save()` write (as a logged-in user — capability
+checks fail silently otherwise) round-trips correctly and leaves every
+sibling key in the option untouched. Front end still renders clean
+afterward.
+
+## 9. Pass 6 — moved block editing out of the Inspector sidebar (2026-08-23)
+
+Pass 4 put every `cecf/*` block's fields in the Inspector sidebar (a
+`PanelBody` inside `InspectorControls`), a workable pattern for one or
+two plain-text fields but not for this theme's actual blocks: `cardGrid`
+can hold 8 items each with an icon/color/title/body, `ctaBand` repeats a
+`{label, page, style, icon}` group per button, `table` repeats rows of
+cells — all cramped into a ~280px-wide sidebar, cards nested inside
+cards. Confirmed this was the real complaint behind "still feels like
+Meta Box to edit," not anything left over from Meta Box itself (verified
+separately: `composer.json` has no Meta Box dependency, no PHP calls
+`rwmb_*`, `web/app/plugins/meta-box/` isn't git-tracked — see pass 4).
+
+- `resources/js/blocks/register.jsx`: `edit()` no longer wraps
+  `<SectionForm>` in `<InspectorControls>`. The canvas now shows either
+  the edit form (full block width) or the real `<ServerSideRender>`
+  preview, toggled by a `BlockControls` toolbar button (`Edit`/`Preview`,
+  local `useState`, defaults to `Edit` — not a block attribute, so it's
+  never written to `post_content`).
+- `resources/js/blocks/fields.jsx`: every repeatable field (`stringList`,
+  `rowList`, `repeater`) gained move-up/move-down buttons alongside
+  add/remove — reordering previously meant deleting and re-adding items
+  in the right order. No drag-and-drop library added: with items that can
+  be an editor's-height tall, a button that always moves an item exactly
+  one slot is more reliable to use than dragging a tall card past several
+  others.
+- `app/setup.php`'s `block_editor_settings_all` filter now also imports
+  `blocks-admin.css` into the block editor's iframed canvas (alongside
+  `editor.css`, already there for `<ServerSideRender>`'s Tailwind), since
+  apiVersion-3 blocks render `edit()` inside that iframe — the existing
+  `admin_head` enqueue of the same file only ever reached the outer
+  wp-admin chrome, which is why the sidebar version looked fine before
+  but canvas-rendered fields wouldn't have picked up any styling at all
+  without this.
+
+Verified: `pnpm --filter @esoko/cecf-sage-theme build` compiles clean
+(9 modules, no warnings beyond the pre-existing pnpm workspace ones).
+
+## 10. Pass 7 — true inline (WYSIWYG) editing for the highest-traffic types (2026-08-23)
+
+Pass 6 got every block's fields out of the Inspector sidebar, but they
+still lived in a labelled form next to a separate live preview — closer
+to editing than pass 4-5's raw JSON, but still not what "the WordPress
+editor" means to someone who's used it: click the heading/paragraph text
+where it will appear on the page and type, with a real formatting
+toolbar, no separate form.
+
+True inline editing needs a section type's actual visual layout in the
+editor, not just its flat field list — something a schema-driven generic
+renderer structurally can't produce. `resources/js/blocks/layouts.jsx`
+breaks from pass 4-6's "one generic renderer for every type" design on
+purpose: six hand-authored `Edit` components (`phead`, `cardGrid`,
+`ctaBand`, `callout`, `note`, `statGrid` — picked for traffic, not
+difficulty) each reproduce their own `partials/cecf/<type>.blade.php`
+markup/classes directly in JSX, with `<RichText>` standing in for every
+text field. Every other section type still falls back to pass 6's
+generic `SectionForm` — extending `WYSIWYG_LAYOUTS` with more
+hand-authored types over time doesn't touch the ones already done, or
+the fallback path itself.
+
+Two things had to change for this to actually work, not just compile:
+
+- **`lead`/`body`/`fineprint` fields are now real HTML, not `**bold**`
+  markdown-lite.** `<RichText>`'s native value format is HTML; the old
+  `App\Support\Markdown::inline()` pipeline expected a plain string with
+  markdown-lite emphasis. Migrated the existing seed content in
+  `database/content/pages/*.json` once (a scripted, surgical string
+  replacement — not a full JSON re-serialize, so nothing else in each
+  file's formatting changed) via the exact same escape-then-`**`/`*`
+  regex `Markdown::inline()` already used, then dropped the
+  `Markdown::inline()` call from the six migrated partials for exactly
+  those fields (`{!! $data['lead'] !!}` instead of
+  `{!! Markdown::inline($data['lead']) !!}`) — they're pre-escaped, safe
+  HTML now, not something to run through the same pipeline twice.
+  `heading`/`kicker`/`title` fields needed no such migration: they were
+  never run through `Markdown::inline()` to begin with (plain
+  `{{ }}`-escaped output), so a RichText value with no formatting applied
+  is just the plain string either way. Existing already-seeded pages
+  needed a one-time `wp acorn cecf:seed --pages` re-run to pick this up
+  (idempotent by key, safe — see PageSeeder's own docblock).
+- **`resources/css/editor.css` never actually loaded `cecf.css`.** It
+  only imported Tailwind; `.phead`, `.card`, `.band` etc. live in
+  `cecf.css`, imported separately by `app.css` for the public site.
+  Nobody had noticed because pass 4-6's Inspector-sidebar/canvas-form
+  edit views don't depend on it and the `<ServerSideRender>` Preview
+  toggle rendering unstyled just read as "still needs polish" rather
+  than a bug — but the WYSIWYG layouts *are* that styling, directly, so
+  this was a hard blocker once actual visual verification started (every
+  block rendered as unstyled black text at default browser font size).
+  Fixed by having `editor.css` import `cecf.css` the same way `app.css`
+  does; Vite's build now correctly recognises the two entrypoints share
+  identical output and de-duplicates them into one chunk rather than
+  shipping cecf.css's CSS twice.
+- `resources/js/blocks/fields.jsx` exports `pageOptions`/`iconOptions`/
+  `selectOptions`/`moveItem`/`ReorderButtons`/`StringListField` now,
+  reused by layouts.jsx rather than re-implemented — icon/colour/page-
+  link pickers and repeatable-item reorder controls behave identically
+  in both the WYSIWYG layouts and the generic-form fallback.
+- Icon/colour on a `cardGrid` item, and page-link/style/icon on a
+  `ctaBand` button, stayed compact `SelectControl`s inline within the
+  item rather than becoming inline WYSIWYG themselves — they're settings
+  a Content Manager picks from a fixed list, not text they compose, the
+  same reasoning core blocks put comparable settings in the Inspector
+  rather than the canvas. The icon *glyph* itself doesn't render inline
+  here (App\Support\Icon's SVG sprite output isn't reproduced in JS) —
+  the Preview toggle remains the way to check a card's actual icon
+  before publishing.
+
+Verified in the `cecf` docker profile via Chrome automation, against
+real seeded pages (not synthetic test content): `phead` and `cardGrid`
+render fully styled (dark band, kicker dash, serif heading, real card
+grid) with the icon/colour/page-link settings inline and functioning;
+typing directly into a card's heading in place updates it exactly like
+core WordPress blocks; per-item reorder/remove controls appear on
+hover; `callout`/`note` pick up their real background colours
+(`rgb(251, 241, 224)` / white-with-`.warn`-tint) confirming `cecf.css`
+now reaches the canvas. Front end re-checked after both changes:
+`partner-with-us`/`programs` render with real `<strong>` tags where
+`**bold**` used to be, zero literal `**` left in rendered page content.
+
+## 11. Pass 8 — the same page content, editable from the Customizer too (2026-08-23)
+
+Not a second content model: every control here reads/writes the exact
+same block inside the exact same page's `post_content` the block editor
+already edits (pass 4-7) — pick whichever editing surface fits the
+moment, they can't drift apart from each other because there's only one
+underlying representation. `App\Providers\CecfContentServiceProvider`'s
+site-wide `cecf_site_settings` panel doesn't fit this: that provider's
+`type => 'option'` controls are flat bracketed paths into one option
+WordPress's own Customizer core resolves natively; page *content* is
+per-page, per-block, and — unlike the footer's fixed-slot repeater
+workaround that provider already needed once — has real repeaters inside
+repeaters (`cardGrid`'s items, each with several fields) that a fixed
+slot count can't represent cleanly at page-body scale.
+
+Registered dynamically from what's currently seeded (`PageSeeder::
+existingPageIds()` + each page's *current* `parse_blocks()` output, not
+`database/content/*.json`) — a Content Manager's already-published edits
+are what this reflects: one `WP_Customize_Panel` per seeded page, one
+`WP_Customize_Section` per `cecf/*` block on it, in that page's own
+section order.
+
+- `App\Customizer\CecfSectionSetting` (`WP_Customize_Setting` subclass,
+  `type = 'cecf_section'`): neither of core's two built-in setting types
+  fits a value that's one block's `data` attribute nested inside a
+  specific page's `post_content`, alongside every other section on that
+  page. `value()`/`update()` read/write exactly that one block via
+  `parse_blocks()`/`serialize_blocks()`, patched in place — `update()`
+  deliberately doesn't reduce the block list to `cecf/*` blocks only
+  first; every other block on the page (including a stray non-`cecf/*`
+  one, see `PageSections`'s own docblock) gets reserialized back
+  unchanged, not dropped.
+- The other thing core's `theme_mod`/`option` types get for free and a
+  custom type doesn't: `preview()`. Overridden to register the
+  changeset's pending value in a static per-request map
+  (`postId` + block index -> `data`) rather than a filter — `App\View\
+  Composers\PageSections::sections()` now checks that map when
+  `is_customize_preview()`, substituting a section's edited-but-unsaved
+  value in place of what's actually saved. Same "a changeset isn't real
+  until Publish, but the preview iframe reflects it immediately"
+  behaviour core's built-in types get automatically, reimplemented by
+  hand since per-block page content is neither.
+- `App\Customizer\CecfSectionControl` (`WP_Customize_Control` subclass):
+  renders one empty mount `<div>` per section, no default label/input
+  markup — `resources/js/customizer-controls.jsx` hydrates it with the
+  *same* `<SectionForm>` (resources/js/blocks/fields.jsx) the block
+  editor's canvas form already renders for that section type, bound to
+  `wp.customize('settingId')` instead of a block's `setAttributes`.
+  Reusing the component rather than reimplementing it is what keeps the
+  two editing surfaces behaving identically (same fields, same
+  repeater/reorder behaviour, same page/icon pickers) instead of two
+  editors that happen to look similar. `App\Providers\
+  CecfBlocksServiceProvider::localizeSchema()` (factored out of pass
+  4-7's `localizeEditorData()`, which only fires on the block-editor
+  screen) hands this the same `window.cecfSectionSchema`/etc. globals.
+- Each page's panel also carries its own permalink (`get_permalink()`,
+  deliberately not `App\Support\PageUrl::resolve()` — that has a special
+  case sending the "jamii" key to Esoko's *external* product site, the
+  wrong URL for "where does this page's own editor point the preview
+  iframe") in a small `window.cecfPagePanelUrls` map, and
+  `customizer-controls.jsx` binds each panel's `expanded` state to
+  `wp.customize.previewer.previewUrl` — without this the preview iframe
+  would stay on whatever page it last showed while editing a different
+  page's panel.
+- One real gotcha, not just plumbing: `wp_add_inline_script()` needs an
+  already core/Vite-*registered* script handle to attach to — true for
+  pass 4-7's `wp-blocks` (a real core handle), not for
+  `customizer-controls.jsx` itself, which is printed as a raw
+  `type="module"` tag via `Vite::withEntryPoints()->toHtml()` (needed for
+  Vite dev-mode HMR), never touching `wp_register_script()` at all.
+  Fixed by echoing `CecfBlocksServiceProvider::schemaInlineJs()`'s output
+  inside a plain classic `<script>` tag ahead of that module tag instead
+  — a classic script always runs before a `type="module"` one appearing
+  later in the same document, so the globals are guaranteed to exist
+  before `customizer-controls.jsx` executes, no registered handle
+  required either way.
+
+Verified in the `cecf` docker profile via Chrome automation, full
+round-trip: expanding a page's panel switches the live preview to that
+page and lists its real numbered sections; opening a section renders the
+genuine `SectionForm` fields (confirmed *not* empty — the
+`wp_add_inline_script()` gotcha above was caught exactly this way, via a
+blank panel, before the classic-`<script>` fix); editing a card's title
+through a Customizer control updates the live preview within the normal
+debounced refresh, confirmed via the real published page still showing
+the *original* text throughout (unsaved changeset, not published);
+clicking Publish then does write through to the real page (`curl`-
+confirmed against `/apply/`); `wp acorn cecf:seed --pages` cleanly
+reverts a published test edit back to `database/content/`'s source of
+truth, and no stray `customize_changeset` posts were left behind
+afterward.

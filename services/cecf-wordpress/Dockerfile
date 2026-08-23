@@ -35,14 +35,20 @@ RUN pnpm --filter @esoko/cecf-sage-theme build
 FROM composer:2 AS vendor
 WORKDIR /app
 COPY services/cecf-wordpress/composer.json services/cecf-wordpress/composer.lock services/cecf-wordpress/wp-cli.yml ./
-COPY services/cecf-wordpress/bin ./bin
-# --no-scripts intentionally skips composer.json's post-install-cmd (arbitrary
-# script execution during a Docker build is a footgun we'd rather not have),
-# so bin/fix-meta-box-autoload.php — see its docblock — is run explicitly
-# instead. Needed because wpackagist-plugin/meta-box ships without its own
-# vendor/autoload.php, which its loader.php requires unconditionally.
+# --no-scripts: arbitrary script execution during a Docker build is a
+# footgun we'd rather not have; nothing in composer.json's scripts needs
+# to run at install time now that wpackagist-plugin/meta-box (the one
+# dependency that did) has been removed — see App\Providers\
+# CecfContentServiceProvider's docblock.
+#
+# mkdir web/app/plugins: with zero `wordpress-plugin`-type Composer
+# dependencies left (meta-box was the only one), composer/installers
+# never creates that directory at all — but the runtime stage below
+# still COPYs it (mirroring how every other Composer-managed dir is
+# copied, and ready for the day a real plugin dependency comes back), so
+# it needs to exist even empty.
 RUN composer install --no-dev --optimize-autoloader --no-interaction --no-scripts \
-    && php bin/fix-meta-box-autoload.php
+    && mkdir -p web/app/plugins
 
 WORKDIR /app/web/app/themes/cecf-sage
 COPY services/cecf-wordpress/web/app/themes/cecf-sage/composer.json \
