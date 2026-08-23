@@ -3,6 +3,7 @@
 namespace App\View\Composers;
 
 use App\Content\SectionTypes;
+use App\Customizer\CecfSectionSetting;
 use Roots\Acorn\View\Composer;
 
 /**
@@ -36,8 +37,10 @@ class PageSections extends Composer
      */
     protected function sections(): array
     {
+        $postId = (int) get_the_ID();
         $blocks = parse_blocks((string) get_the_content());
         $sections = [];
+        $index = -1;
 
         foreach ($blocks as $block) {
             $type = SectionTypes::typeFromBlockName((string) ($block['blockName'] ?? ''));
@@ -46,7 +49,23 @@ class PageSections extends Composer
                 continue; // not a cecf/* section block — e.g. an editor left a note in a core/paragraph block
             }
 
+            $index++;
             $data = $block['attrs']['data'] ?? [];
+
+            // While previewing an unpublished Customizer changeset (see
+            // App\Providers\CecfPageEditorServiceProvider/App\Customizer\
+            // CecfSectionSetting), a section's edited-but-unsaved value
+            // lives there instead of in $data above — same "changeset
+            // isn't real until Publish, but the preview iframe reflects
+            // it immediately" behaviour core's own theme_mod/option
+            // setting types get for free, reimplemented here since
+            // per-block page content is neither.
+            if (is_customize_preview()) {
+                $preview = CecfSectionSetting::previewedValue($postId, $index);
+                if ($preview !== null) {
+                    $data = $preview;
+                }
+            }
 
             $sections[] = [
                 'type' => $type,

@@ -20,6 +20,7 @@ export default defineConfig({
         'resources/css/editor.css',
         'resources/js/editor.js',
         'resources/css/blocks-admin.css',
+        'resources/js/customizer-controls.jsx',
       ],
       refresh: true,
       assets: ['resources/images/**', 'resources/fonts/**'],

@@ -26,9 +26,14 @@ use WP_Customize_Manager;
  * edited.
  *
  * Page body content (the ~20 `cecf/*` block types) is a different
- * concern and stays in the block editor — see
- * App\Providers\CecfBlocksServiceProvider's docblock for why that one
- * isn't Customizer-appropriate (per-page content, not sitewide chrome).
+ * concern from this provider's flat `cecf_site_settings` option — each
+ * page's sections are real Gutenberg blocks in that page's own
+ * `post_content`, not part of this option at all — but it does now also
+ * have a Customizer panel of its own per page, alongside this one; see
+ * App\Providers\CecfPageEditorServiceProvider, which needed a custom
+ * `WP_Customize_Setting`/`WP_Customize_Control` pair
+ * (App\Customizer\CecfSectionSetting/CecfSectionControl) precisely
+ * because it doesn't fit this provider's `type => 'option'` pattern.
  *
  * Footer columns/links are the one part of this option with a variable
  * number of items (`navigation.json` currently has 4 columns, the

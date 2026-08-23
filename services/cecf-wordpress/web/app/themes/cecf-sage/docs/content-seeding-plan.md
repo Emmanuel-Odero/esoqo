@@ -596,3 +596,95 @@ hover; `callout`/`note` pick up their real background colours
 now reaches the canvas. Front end re-checked after both changes:
 `partner-with-us`/`programs` render with real `<strong>` tags where
 `**bold**` used to be, zero literal `**` left in rendered page content.
+
+## 11. Pass 8 — the same page content, editable from the Customizer too (2026-08-23)
+
+Not a second content model: every control here reads/writes the exact
+same block inside the exact same page's `post_content` the block editor
+already edits (pass 4-7) — pick whichever editing surface fits the
+moment, they can't drift apart from each other because there's only one
+underlying representation. `App\Providers\CecfContentServiceProvider`'s
+site-wide `cecf_site_settings` panel doesn't fit this: that provider's
+`type => 'option'` controls are flat bracketed paths into one option
+WordPress's own Customizer core resolves natively; page *content* is
+per-page, per-block, and — unlike the footer's fixed-slot repeater
+workaround that provider already needed once — has real repeaters inside
+repeaters (`cardGrid`'s items, each with several fields) that a fixed
+slot count can't represent cleanly at page-body scale.
+
+Registered dynamically from what's currently seeded (`PageSeeder::
+existingPageIds()` + each page's *current* `parse_blocks()` output, not
+`database/content/*.json`) — a Content Manager's already-published edits
+are what this reflects: one `WP_Customize_Panel` per seeded page, one
+`WP_Customize_Section` per `cecf/*` block on it, in that page's own
+section order.
+
+- `App\Customizer\CecfSectionSetting` (`WP_Customize_Setting` subclass,
+  `type = 'cecf_section'`): neither of core's two built-in setting types
+  fits a value that's one block's `data` attribute nested inside a
+  specific page's `post_content`, alongside every other section on that
+  page. `value()`/`update()` read/write exactly that one block via
+  `parse_blocks()`/`serialize_blocks()`, patched in place — `update()`
+  deliberately doesn't reduce the block list to `cecf/*` blocks only
+  first; every other block on the page (including a stray non-`cecf/*`
+  one, see `PageSections`'s own docblock) gets reserialized back
+  unchanged, not dropped.
+- The other thing core's `theme_mod`/`option` types get for free and a
+  custom type doesn't: `preview()`. Overridden to register the
+  changeset's pending value in a static per-request map
+  (`postId` + block index -> `data`) rather than a filter — `App\View\
+  Composers\PageSections::sections()` now checks that map when
+  `is_customize_preview()`, substituting a section's edited-but-unsaved
+  value in place of what's actually saved. Same "a changeset isn't real
+  until Publish, but the preview iframe reflects it immediately"
+  behaviour core's built-in types get automatically, reimplemented by
+  hand since per-block page content is neither.
+- `App\Customizer\CecfSectionControl` (`WP_Customize_Control` subclass):
+  renders one empty mount `<div>` per section, no default label/input
+  markup — `resources/js/customizer-controls.jsx` hydrates it with the
+  *same* `<SectionForm>` (resources/js/blocks/fields.jsx) the block
+  editor's canvas form already renders for that section type, bound to
+  `wp.customize('settingId')` instead of a block's `setAttributes`.
+  Reusing the component rather than reimplementing it is what keeps the
+  two editing surfaces behaving identically (same fields, same
+  repeater/reorder behaviour, same page/icon pickers) instead of two
+  editors that happen to look similar. `App\Providers\
+  CecfBlocksServiceProvider::localizeSchema()` (factored out of pass
+  4-7's `localizeEditorData()`, which only fires on the block-editor
+  screen) hands this the same `window.cecfSectionSchema`/etc. globals.
+- Each page's panel also carries its own permalink (`get_permalink()`,
+  deliberately not `App\Support\PageUrl::resolve()` — that has a special
+  case sending the "jamii" key to Esoko's *external* product site, the
+  wrong URL for "where does this page's own editor point the preview
+  iframe") in a small `window.cecfPagePanelUrls` map, and
+  `customizer-controls.jsx` binds each panel's `expanded` state to
+  `wp.customize.previewer.previewUrl` — without this the preview iframe
+  would stay on whatever page it last showed while editing a different
+  page's panel.
+- One real gotcha, not just plumbing: `wp_add_inline_script()` needs an
+  already core/Vite-*registered* script handle to attach to — true for
+  pass 4-7's `wp-blocks` (a real core handle), not for
+  `customizer-controls.jsx` itself, which is printed as a raw
+  `type="module"` tag via `Vite::withEntryPoints()->toHtml()` (needed for
+  Vite dev-mode HMR), never touching `wp_register_script()` at all.
+  Fixed by echoing `CecfBlocksServiceProvider::schemaInlineJs()`'s output
+  inside a plain classic `<script>` tag ahead of that module tag instead
+  — a classic script always runs before a `type="module"` one appearing
+  later in the same document, so the globals are guaranteed to exist
+  before `customizer-controls.jsx` executes, no registered handle
+  required either way.
+
+Verified in the `cecf` docker profile via Chrome automation, full
+round-trip: expanding a page's panel switches the live preview to that
+page and lists its real numbered sections; opening a section renders the
+genuine `SectionForm` fields (confirmed *not* empty — the
+`wp_add_inline_script()` gotcha above was caught exactly this way, via a
+blank panel, before the classic-`<script>` fix); editing a card's title
+through a Customizer control updates the live preview within the normal
+debounced refresh, confirmed via the real published page still showing
+the *original* text throughout (unsaved changeset, not published);
+clicking Publish then does write through to the real page (`curl`-
+confirmed against `/apply/`); `wp acorn cecf:seed --pages` cleanly
+reverts a published test edit back to `database/content/`'s source of
+truth, and no stray `customize_changeset` posts were left behind
+afterward.

@@ -180,6 +180,39 @@ class CecfBlocksServiceProvider extends ServiceProvider
             return;
         }
 
+        self::localizeSchema('wp-blocks');
+    }
+
+    /**
+     * The globals above, factored out so App\Customizer\
+     * CecfSectionControl can localize the exact same data onto its own
+     * script handle — wp-customize.php never fires
+     * enqueue_block_editor_assets (localizeEditorData()'s hook above), so
+     * that path can't be reused as-is, but the data it hands the editor
+     * doesn't know or care which admin screen asked for it.
+     */
+    public static function localizeSchema(string $handle): void
+    {
+        wp_add_inline_script($handle, self::schemaInlineJs(), 'before');
+    }
+
+    /**
+     * The bare JS assignments `localizeSchema()` above hands to
+     * `wp_add_inline_script()` — factored out separately because that
+     * helper only works against an already core/Vite-*registered* script
+     * handle (App\Customizer\CecfPageEditorServiceProvider's
+     * `customizer-controls.jsx` isn't one: it's printed as a raw
+     * `<script type="module">` tag via `Vite::withEntryPoints()->toHtml()`,
+     * which never touches `wp_register_script()`, so there's no handle
+     * for `wp_add_inline_script()` to attach to). That caller instead
+     * echoes this directly inside a plain `<script>` tag ahead of its
+     * Vite entrypoint output — a classic script always runs before a
+     * `type="module"` one later in the same document, so the globals are
+     * guaranteed to exist by the time that module executes, no handle
+     * needed.
+     */
+    public static function schemaInlineJs(): string
+    {
         $content = new ContentRepository();
 
         $schema = [];
@@ -200,15 +233,11 @@ class CecfBlocksServiceProvider extends ServiceProvider
 
         $illustrations = array_keys($content->illustrations());
 
-        wp_add_inline_script(
-            'wp-blocks',
-            'window.cecfSectionSchema = ' . wp_json_encode($schema) . ';'
+        return 'window.cecfSectionSchema = ' . wp_json_encode($schema) . ';'
             . 'window.cecfBlockCategory = ' . wp_json_encode(self::CATEGORY) . ';'
             . 'window.cecfSectionLabels = ' . wp_json_encode(SectionTypes::options()) . ';'
             . 'window.cecfPageOptions = ' . wp_json_encode($pages) . ';'
             . 'window.cecfIconOptions = ' . wp_json_encode($icons) . ';'
-            . 'window.cecfIllustrationOptions = ' . wp_json_encode(array_combine($illustrations, $illustrations)) . ';',
-            'before',
-        );
+            . 'window.cecfIllustrationOptions = ' . wp_json_encode(array_combine($illustrations, $illustrations)) . ';';
     }
 }
