@@ -20,9 +20,11 @@
       </div>
 
       @foreach ($columns as $column)
+        @continue(empty($column['heading']))
         <div>
           <h4>{{ $column['heading'] }}</h4>
           @foreach ($column['links'] ?? [] as $link)
+            @continue(empty($link['label']))
             <a href="{{ \App\Support\PageUrl::resolve($link['page']) }}">{{ $link['label'] }}</a>
           @endforeach
         </div>

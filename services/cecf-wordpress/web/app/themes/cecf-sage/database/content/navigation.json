@@ -6,6 +6,8 @@
       "page": "about",
       "children": [
         { "label": "Who we are", "page": "about" },
+        { "label": "Our team", "page": "team" },
+        { "label": "Who we serve", "page": "who-we-serve" },
         { "label": "Partnerships", "page": "partnerships" }
       ]
     },
@@ -46,12 +48,12 @@
       "heading": "About",
       "links": [
         { "label": "Who we are", "page": "about" },
+        { "label": "Who we serve", "page": "who-we-serve" },
         { "label": "Our consortium", "page": "about#consortium" },
         { "label": "Work with us", "page": "about#work-with-us" },
         { "label": "Partnerships", "page": "partnerships" },
         { "label": "Government & agencies", "page": "partnerships#government" },
         { "label": "Banks & insurers", "page": "partnerships#finance" },
-        { "label": "Donors & development partners", "page": "partnerships#donors" },
         { "label": "Corporate sponsorship", "page": "partnerships#corporate" }
       ]
     },
@@ -74,5 +76,5 @@
       ]
     }
   ],
-  "note": "Redesigned per the follow-up IA request: 'primary' is a flat 5-item main menu — Home, About, Programs, Impact, Contact — matching the 5 pages the client named. 'About', 'Programs' and 'Impact' each carry a dropdown/submenu child ('About' > 'Partnerships'; 'Programs' > 'Register / Apply'; 'Impact' > 'News & events') for content judged too distinct to fold further into its parent page as a plain section without bloating it or mixing dissimilar update cadences (News & events churns weekly; Impact & sustainability is a mostly-static annual narrative) — everything else from the original 21-page inventory is already an in-page anchored subsection (see pages/_index.json's note). None of 'Partnerships', 'Apply' or 'News & events' is a top-level nav item; each is reached only via its parent's dropdown, plus section-level links in the matching footer column. 'Contact' moved from footer-only to a full primary nav item. The template's client-side router used '#/<page>' hash routes for all of the 'page' values above; content-seeding-plan.md recommends converting these to real WordPress page slugs/URLs (the mapping from page-key to final slug lives in pages/_index.json's 'slug' field). Values containing '#' (e.g. 'about#consortium', 'programs#register') point to an anchored subsection within that page's merged content, not a separate page.\n\n'Our Jamii' added 2026-08-21 as a flat 6th primary item (no dropdown — it's one page, not a section with children) — see pages/_index.json's own note on why 'jamii' sits outside the rest of this history."
+  "note": "Redesigned per the follow-up IA request: 'primary' is a flat 5-item main menu — Home, About, Programs, Impact, Contact — matching the 5 pages the client named. 'About', 'Programs' and 'Impact' each carry a dropdown/submenu child ('About' > 'Partnerships'; 'Programs' > 'Register / Apply'; 'Impact' > 'News & events') for content judged too distinct to fold further into its parent page as a plain section without bloating it or mixing dissimilar update cadences (News & events churns weekly; Impact & sustainability is a mostly-static annual narrative) — everything else from the original 21-page inventory is already an in-page anchored subsection (see pages/_index.json's note). None of 'Partnerships', 'Apply' or 'News & events' is a top-level nav item; each is reached only via its parent's dropdown, plus section-level links in the matching footer column. 'Contact' moved from footer-only to a full primary nav item. The template's client-side router used '#/<page>' hash routes for all of the 'page' values above; content-seeding-plan.md recommends converting these to real WordPress page slugs/URLs (the mapping from page-key to final slug lives in pages/_index.json's 'slug' field). Values containing '#' (e.g. 'about#consortium', 'programs#register') point to an anchored subsection within that page's merged content, not a separate page.\n\n'Our Jamii' added 2026-08-21 as a flat 6th primary item (no dropdown — it's one page, not a section with children) — see pages/_index.json's own note on why 'jamii' sits outside the rest of this history.\n\n'Our team' and 'Who we serve' added under About's dropdown when the wordpress branch's block-editor/Customizer work was merged back into dev: 'team' is the staff/board listing (pages/team.json); 'who-we-serve' (formerly drafted as a competing 'our-jamii' page — renamed to avoid colliding with the actual Our Jamii product page/slug above) lists the categories of community CECF works with (pages/who-we-serve.json). The About footer column is capped at 8 links by App\\Providers\\CecfContentServiceProvider::FOOTER_LINK_SLOTS, so 'Donors & development partners' and a duplicate 'Our team' entry were dropped from the footer list — both stay reachable via the primary nav dropdown and the Partnerships page itself."
 }

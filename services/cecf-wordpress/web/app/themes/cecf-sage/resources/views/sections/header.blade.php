@@ -1,4 +1,4 @@
-@php($cta = $cecfSettings['primaryCta'] ?? null)
+@php($cta = ! empty($cecfSettings['primaryCta']['label']) ? $cecfSettings['primaryCta'] : null)
 
 <header>
   <div class="hd">

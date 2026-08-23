@@ -7,12 +7,13 @@
   full section's worth of whitespace.
 --}}
 <div class="wrap" style="margin:28px auto">
+  {{-- Real HTML now -- see phead.blade.php's note on `lead`. --}}
   @if ($variant === 'fineprint')
-    <p class="fineprint">{!! \App\Support\Markdown::inline($data['body'] ?? '') !!}</p>
+    <p class="fineprint">{!! $data['body'] ?? '' !!}</p>
   @else
     <div class="note{{ $variant === 'warn' ? ' warn' : '' }}">
       <x-icon :name="$variant === 'warn' ? 'warning' : 'info-circle'" />
-      <p>{!! \App\Support\Markdown::inline($data['body'] ?? '') !!}</p>
+      <p>{!! $data['body'] ?? '' !!}</p>
     </div>
   @endif
 </div>

@@ -158,7 +158,7 @@
     {
       "type": "note",
       "variant": "info",
-      "body": "**Trustee names, executive team and the current annual report** are published here. Replace this note with the live list and the signed accounts before publication."
+      "body": "<strong>Trustee names, executive team and the current annual report</strong> are published here. Replace this note with the live list and the signed accounts before publication."
     },
     {
       "type": "twoColumn",
@@ -346,7 +346,7 @@
     {
       "type": "note",
       "variant": "info",
-      "body": "Send a CV and a short note about why to **careers@cecf.or.ke**. We reply to everybody, including when the answer is no."
+      "body": "Send a CV and a short note about why to <strong>careers@cecf.or.ke</strong>. We reply to everybody, including when the answer is no."
     }
   ]
 }

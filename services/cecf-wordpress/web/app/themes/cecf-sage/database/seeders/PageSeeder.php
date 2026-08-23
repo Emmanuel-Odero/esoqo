@@ -22,9 +22,7 @@ class PageSeeder
 {
     public const KEY_META = '_cecf_page_key';
 
-    public function __construct(protected ContentRepository $content)
-    {
-    }
+    public function __construct(protected ContentRepository $content) {}
 
     /**
      * @return array<string, int> page key => post ID
@@ -85,10 +83,24 @@ class PageSeeder
             'post_status' => 'publish',
             'post_title' => $meta['title'] ?: 'Home',
             'post_name' => $slug,
+            'post_content' => $this->sectionsToBlockMarkup($sections),
             'meta_input' => [
                 self::KEY_META => $key,
             ],
         ];
+
+        // wp_insert_post()/wp_update_post() both call wp_unslash() on the
+        // way in — correct for their normal caller, $_POST data PHP's
+        // magic-quotes-emulation layer already pre-slashed, but wrong for
+        // a clean PHP string built directly, as post_content is here.
+        // wp_slash() cancels that out. Skipping it silently corrupts any
+        // real backslash the JSON in post_content carries — confirmed by
+        // seeding into the `cecf` docker profile: every `&` from
+        // wp_json_encode()'s escaping of "&" (in section headings like
+        // "News & events") came back as literal "u0026" without this.
+        // Same footgun this seeder already had to work around once before,
+        // for update_post_meta()/rwmb_set_meta(), pre-blocks.
+        $postArr = wp_slash($postArr);
 
         if ($existingId) {
             $postArr['ID'] = $existingId;
@@ -98,10 +110,8 @@ class PageSeeder
         }
 
         if (is_wp_error($postId)) {
-            throw new RuntimeException("Failed to seed page '{$key}': ".$postId->get_error_message());
+            throw new RuntimeException("Failed to seed page '{$key}': " . $postId->get_error_message());
         }
-
-        $this->writeSections($postId, $sections);
 
         if ($isHome) {
             update_option('show_on_front', 'page');
@@ -124,60 +134,51 @@ class PageSeeder
                     "Page '%s' section #%d has an unrecognised type: %s. Add it to App\\Content\\SectionTypes if this is intentional.",
                     $key,
                     $i,
-                    var_export($type, true)
+                    var_export($type, true),
                 ));
             }
         }
     }
 
     /**
-     * Writes to the Meta Box "cecf_sections" group+clone field registered
-     * in App\Providers\CecfContentServiceProvider — each row is
-     * {type, label, data}, where `data` is this section's full JSON
-     * payload. See that provider's docblock for why sections aren't
-     * decomposed into per-type sub-fields yet.
+     * Builds real Gutenberg block markup — one self-closing `cecf/<type>`
+     * block per section (App\Providers\CecfBlocksServiceProvider), each
+     * carrying the section's fields as its `data` attribute. This is what
+     * a Content Manager building the same page by hand in the block
+     * editor would end up with in `post_content`; seeding writes it
+     * directly rather than going through wp_insert_post()'s content
+     * filters, since there's no user input here to run through those.
+     *
+     * `wp_json_encode()` HTML-encodes automatically (JSON_HEX_* isn't
+     * needed) but not enough on its own to be safe inside an HTML
+     * comment attribute string the same way `serialize_block()` writes
+     * one — matching WP core's own escaping (`--` and `</` inside string
+     * values) keeps this byte-for-byte what `serialize_blocks()` would
+     * produce for the same attributes, so a round-trip through the block
+     * editor (open, don't touch anything, save) doesn't rewrite the post.
      *
      * @param  array<int, array<string, mixed>>  $sections
      */
-    protected function writeSections(int $postId, array $sections): void
+    protected function sectionsToBlockMarkup(array $sections): string
     {
-        $rows = [];
+        $markup = [];
 
-        foreach ($sections as $i => $section) {
-            $rows[] = [
-                'type' => $section['type'],
-                'label' => sprintf('%s #%d', $section['type'], $i + 1),
-                'data' => wp_json_encode(
-                    $section,
-                    JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE
-                ),
+        foreach ($sections as $section) {
+            $type = $section['type'];
+            unset($section['type']);
+
+            $block = [
+                'blockName' => SectionTypes::blockName($type),
+                'attrs' => ['data' => $section],
+                'innerBlocks' => [],
+                'innerHTML' => '',
+                'innerContent' => [],
             ];
+
+            $markup[] = serialize_block($block);
         }
 
-        // update_post_meta()/rwmb_set_meta() both call wp_unslash() on the
-        // way in — correct for their normal caller, $_POST data that
-        // arrived pre-slashed by PHP's magic-quotes-emulation layer, but
-        // we're calling them directly with a clean PHP string. wp_slash()
-        // here cancels that out. Skipping it silently corrupts any JSON
-        // value containing a real backslash: form.json's phone-number
-        // regex ("...\\d{8}..."), the one place in the seeded content
-        // this actually bit — stripslashes() turned "\\d" into "\d", not
-        // a valid JSON escape, and every downstream json_decode() of that
-        // one section failed with a syntax error while the other 20
-        // pages (no backslashes anywhere in their content) looked fine.
-        $rows = wp_slash($rows);
-
-        if (function_exists('rwmb_set_meta')) {
-            rwmb_set_meta($postId, 'cecf_sections', $rows);
-
-            return;
-        }
-
-        // Meta Box isn't active — fall back to plain post meta so the
-        // seed still succeeds and the data isn't silently dropped; it
-        // just won't render in the Meta Box admin UI until the plugin
-        // is active.
-        update_post_meta($postId, 'cecf_sections', $rows);
+        return implode("\n\n", $markup);
     }
 
     protected function findExisting(string $key): ?int

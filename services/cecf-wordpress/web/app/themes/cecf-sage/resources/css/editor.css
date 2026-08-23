@@ -1,1 +1,13 @@
-@import "tailwindcss";
+/*
+ * Injected into the block editor's iframed canvas by app/setup.php's
+ * block_editor_settings_all filter — the theme's real front-end look,
+ * for <ServerSideRender> previews AND the WYSIWYG canvas layouts
+ * (resources/js/blocks/layouts.jsx) to both look right. Was Tailwind
+ * only until this pass; cecf.css (`.phead`, `.card`, `.band`, …) was
+ * never actually reaching the iframe, so every cecf/* block's Preview
+ * toggle has quietly rendered unstyled since pass 4 introduced it — not
+ * something the sidebar-form pass noticed since a bare form doesn't
+ * depend on it, but the WYSIWYG layouts do, directly.
+ */
+@import "tailwindcss" theme(static);
+@import "./cecf.css";
