@@ -44,6 +44,7 @@ add_action('admin_head', function () {
     }
     echo Vite::withEntryPoints([
         'resources/js/editor.js',
+        'resources/css/blocks-admin.css',
     ])->toHtml();
 });
 

@@ -43,7 +43,7 @@ class PageUrl
             return self::esokoJoinUrl();
         }
 
-        // "Our Jamii" (pages/our-jamii.json) is a real local page introducing
+        // "Our Jamii" (pages/jamii.json) is a real local page introducing
         // the product, but the product itself — browsing a group's own live
         // page, or a group's own dashboard — only ever exists on Esoko's
         // Our Jamii app, never on this WordPress site. Every "page": "jamii"

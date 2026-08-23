@@ -87,6 +87,10 @@ header {
     background: rgba(250, 245, 236, .96); backdrop-filter: blur(14px);
     border-bottom: 1px solid var(--line)
 }
+header::before {
+    content: ""; display: block; height: 3px;
+    background: linear-gradient(90deg, var(--teal), var(--ochre) 50%, var(--clay))
+}
 
 .hd {
     max-width: 1220px; margin: 0 auto; padding: 12px 28px;
@@ -113,27 +117,55 @@ nav.main { display: flex; gap: 2px; margin-left: auto; flex-wrap: wrap; justify-
 nav.main > div { position: relative; flex: 0 0 auto }
 nav.main > div > a {
     display: flex; align-items: center; gap: 6px; padding: 9px 13px;
-    border-radius: 8px; font-size: .9rem; color: var(--ink2); cursor: pointer; min-height: 40px
+    border-radius: 8px; font-size: .9rem; font-weight: 500; color: var(--ink2); cursor: pointer; min-height: 40px;
+    position: relative; transition: color .16s
 }
 nav.main > div > a:hover, nav.main > div.on > a, nav.main > div.open > a { background: var(--tealT); color: var(--teal) }
 nav.main > div > a .cv { transition: transform .2s }
 nav.main > a.navlink {
     display: flex; align-items: center; padding: 9px 13px; border-radius: 8px;
-    font-size: .9rem; color: var(--ink2); min-height: 40px
+    font-size: .9rem; font-weight: 500; color: var(--ink2); min-height: 40px;
+    position: relative; transition: color .16s
 }
 nav.main > a.navlink:hover, nav.main > a.navlink.cur { background: var(--tealT); color: var(--teal) }
 nav.main > div.on > a .cv, nav.main > div.open > a .cv { transform: rotate(180deg) }
 
+/* Underline accent — a second, persistent "you are here" signal on top
+   of the pill hover/current background above (which alone disappears
+   the moment the pointer leaves), echoing the same small ochre bar
+   .kick uses in front of section labels everywhere else on the site. */
+nav.main > div > a::after, nav.main > a.navlink::after {
+    content: ""; position: absolute; left: 13px; right: 13px; bottom: 4px;
+    height: 2px; border-radius: 2px; background: var(--ochre);
+    transform: scaleX(0); transform-origin: left; transition: transform .18s
+}
+nav.main > div > a:hover::after, nav.main > div.on > a::after,
+nav.main > a.navlink:hover::after, nav.main > a.navlink.cur::after { transform: scaleX(1) }
+
 .drop {
-    position: absolute; top: calc(100% + 8px); left: 0; min-width: 262px;
-    background: #fff; border: 1px solid var(--line); border-radius: 12px;
-    box-shadow: var(--shL); padding: 7px; opacity: 0; visibility: hidden;
-    transform: translateY(-6px); transition: .18s; z-index: 10
+    position: absolute; top: calc(100% + 10px); left: 0; min-width: 270px;
+    background: #fff; border: 1px solid var(--line); border-radius: 14px;
+    box-shadow: var(--shL); padding: 8px; opacity: 0; visibility: hidden;
+    transform: translateY(-6px) scale(.98); transition: opacity .18s, transform .18s; z-index: 10;
+    overflow: hidden
+}
+.drop::before {
+    content: ""; position: absolute; top: 0; left: 0; right: 0; height: 3px;
+    background: linear-gradient(90deg, var(--teal), var(--ochre))
 }
 nav.main > div.open .drop { opacity: 1; visibility: visible; transform: none }
-.drop a { display: block; padding: 10px 13px; border-radius: 8px; font-size: .89rem; color: var(--ink2) }
-.drop a:hover { background: var(--sand); color: var(--teal) }
+.drop a {
+    display: flex; align-items: center; gap: 10px; padding: 10px 13px 10px 10px;
+    border-radius: 8px; font-size: .89rem; color: var(--ink2); transition: .14s
+}
+.drop a::before {
+    content: ""; width: 6px; height: 6px; border-radius: 50%; background: var(--line2);
+    flex: none; transition: background .14s
+}
+.drop a:hover { background: var(--sand); color: var(--teal); transform: translateX(2px) }
+.drop a:hover::before { background: var(--ochre) }
 .drop a.cur { background: var(--tealT); color: var(--teal); font-weight: 600 }
+.drop a.cur::before { background: var(--teal) }
 
 .hd .cta { margin-left: 8px }
 .burger {
@@ -253,6 +285,7 @@ a.mgrp-link.cur { color: var(--teal); background: var(--tealT) }
 .btn:disabled { opacity: .45; cursor: not-allowed }
 
 /* cards */
+.cards4 { display: grid; grid-template-columns: repeat(4, 1fr); gap: 20px }
 .cards3 { display: grid; grid-template-columns: repeat(3, 1fr); gap: 20px }
 .cards2 { display: grid; grid-template-columns: repeat(2, 1fr); gap: 20px }
 .card, .pcard { border: 1px solid var(--line); border-radius: 14px; padding: 24px; background: #fff }
@@ -269,6 +302,31 @@ a.mgrp-link.cur { color: var(--teal); background: var(--tealT) }
 .cb.clay { background: var(--clayT); color: var(--clay) }
 .cb.green { background: var(--greenT); color: var(--green) }
 .cb.sm { background: var(--tealT); color: var(--teal) }
+
+/* team */
+.member {
+    text-align: center; border-top: 4px solid var(--line); transition: .18s;
+    position: relative; overflow: hidden
+}
+.member:hover { transform: translateY(-3px); box-shadow: var(--sh); border-color: var(--teal) }
+.member.teal { border-top-color: var(--teal) }
+.member.ochre { border-top-color: var(--ochre) }
+.member.clay { border-top-color: var(--clay) }
+.member.green { border-top-color: var(--green) }
+.avatar {
+    width: 84px; height: 84px; border-radius: 50%; display: grid; place-items: center;
+    margin: 0 auto 18px; font-family: var(--fm); font-size: 1.2rem; font-weight: 700;
+    letter-spacing: .02em; color: #fff
+}
+.avatar.teal { background: var(--teal); box-shadow: 0 0 0 6px var(--tealT) }
+.avatar.ochre { background: var(--ochre); box-shadow: 0 0 0 6px var(--ochreT) }
+.avatar.clay { background: var(--clay); box-shadow: 0 0 0 6px var(--clayT) }
+.avatar.green { background: var(--green); box-shadow: 0 0 0 6px var(--greenT) }
+.role {
+    font-family: var(--fm); font-size: .74rem; letter-spacing: .04em; color: var(--clay);
+    font-weight: 600; margin: -6px 0 10px
+}
+.member .mono { font-size: .8rem; color: var(--ink3) }
 
 /* stats */
 .stat4 {

@@ -19,6 +19,7 @@ export default defineConfig({
         'resources/js/registration.js',
         'resources/css/editor.css',
         'resources/js/editor.js',
+        'resources/css/blocks-admin.css',
       ],
       refresh: true,
       assets: ['resources/images/**', 'resources/fonts/**'],

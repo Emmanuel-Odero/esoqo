@@ -2,15 +2,21 @@
 
 namespace App\View\Composers;
 
+use App\Content\SectionTypes;
 use Roots\Acorn\View\Composer;
 
 /**
- * Decodes the `cecf_sections` Meta Box field (registered in
- * App\Providers\CecfContentServiceProvider, seeded by database/seeders/
- * PageSeeder.php) into `$cecfSections` for partials/content-page.blade.php
- * to loop over. This is the only place in the theme that reads that field
- * directly — matching App\Content\ContentRepository's role on the seeding
- * side, one reader, not one per view.
+ * Parses the current page's real block content (`get_the_content()`) into
+ * `$cecfSections` for partials/content-page.blade.php to loop over —
+ * every top-level `cecf/*` block becomes one {type, label, data} entry,
+ * same shape this used to decode from the old "cecf_sections" Meta Box
+ * field. That's what keeps every partials/cecf/*.blade.php file (and the
+ * App\Support\* helpers they call) completely unchanged by the move to
+ * blocks: only where `$data` comes from changed, not its shape.
+ *
+ * This is the only place in the theme that reads block content directly
+ * — matching App\Providers\CecfBlocksServiceProvider's role on the
+ * editing side, one reader, not one per view.
  */
 class PageSections extends Composer
 {
@@ -30,24 +36,22 @@ class PageSections extends Composer
      */
     protected function sections(): array
     {
-        if (! function_exists('rwmb_meta')) {
-            return [];
-        }
-
-        $rows = rwmb_meta('cecf_sections', [], get_the_ID());
+        $blocks = parse_blocks((string) get_the_content());
         $sections = [];
 
-        foreach ((array) $rows as $row) {
-            $data = json_decode($row['data'] ?? '', true);
+        foreach ($blocks as $block) {
+            $type = SectionTypes::typeFromBlockName((string) ($block['blockName'] ?? ''));
 
-            if (! is_array($data)) {
-                continue; // malformed row — skip rather than break the whole page
+            if ($type === null) {
+                continue; // not a cecf/* section block — e.g. an editor left a note in a core/paragraph block
             }
 
+            $data = $block['attrs']['data'] ?? [];
+
             $sections[] = [
-                'type' => $row['type'] ?? '',
-                'label' => $row['label'] ?? '',
-                'data' => $data,
+                'type' => $type,
+                'label' => SectionTypes::options()[$type] ?? $type,
+                'data' => is_array($data) ? $data : [],
             ];
         }
 

@@ -1,5 +1,6 @@
 <?php
 
+use App\Providers\CecfBlocksServiceProvider;
 use App\Providers\CecfConsoleServiceProvider;
 use App\Providers\CecfContentServiceProvider;
 use App\Providers\CecfEnquiryServiceProvider;
@@ -18,7 +19,7 @@ use Roots\Acorn\Application;
 |
 */
 
-if (! file_exists($composer = __DIR__.'/vendor/autoload.php')) {
+if (! file_exists($composer = __DIR__ . '/vendor/autoload.php')) {
     wp_die(__('Error locating autoloader. Please run <code>composer install</code>.', 'sage'));
 }
 
@@ -40,6 +41,7 @@ Application::configure()
     ->withProviders([
         ThemeServiceProvider::class,
         CecfContentServiceProvider::class,
+        CecfBlocksServiceProvider::class,
         CecfEnquiryServiceProvider::class,
         CecfRegistrationServiceProvider::class,
         CecfConsoleServiceProvider::class,
@@ -63,7 +65,7 @@ collect(['setup', 'filters'])
         if (! locate_template($file = "app/{$file}.php", true, true)) {
             wp_die(
                 /* translators: %s is replaced with the relative file path */
-                sprintf(__('Error locating <code>%s</code> for inclusion.', 'sage'), $file)
+                sprintf(__('Error locating <code>%s</code> for inclusion.', 'sage'), $file),
             );
         }
     });
