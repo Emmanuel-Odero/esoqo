@@ -58,6 +58,8 @@ services:
         sync: false
       - key: AUDIT_CHAIN_SEED
         sync: false
+      - key: CECF_SERVICE_SECRET
+        sync: false   # must match CECF_SERVICE_SECRET on cecf-wordpress below — signs/verifies the WP↔core cecf/v1 <-> /api/cecf/* handshake
       - key: SMS_PROVIDER
         value: console
       - key: SMS_API_KEY
@@ -269,6 +271,10 @@ services:
         value: "true"
       - key: MULTISITE_DOMAIN
         sync: false   # childeldercare.foundation — set by hand alongside WP_HOME/WP_SITEURL above
+      - key: ESOKO_CORE_API_URL
+        value: https://esoko-core.onrender.com   # esoko-core (Oregon) and cecf-wordpress (Frankfurt) are in different regions, so Render's private networking can't reach across them — this must be the public HTTPS URL, not an internal hostname
+      - key: CECF_SERVICE_SECRET
+        sync: false   # must match CECF_SERVICE_SECRET on esoko-core above — generate once, paste into both dashboard entries
       - key: REDIS_URL
         sync: false
       - key: R2_ACCOUNT_ID
