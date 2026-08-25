@@ -52,3 +52,4 @@ export * from './treasury';
 export * from './payment-id';
 export * from './ticketing';
 export * from './cecf-ingest';
+export * from './mall';

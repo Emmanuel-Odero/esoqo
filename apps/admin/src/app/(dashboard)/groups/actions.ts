@@ -5,6 +5,7 @@ import {
   createGroup, type OrgKind,
   createDocument, listDocumentsForParty,
   sniff, makeStorageKey, safeName, sha256, putObject, MAX_BYTES,
+  getPartyByMsisdn, addTenant, endTenancy, setMallSlug, listTenants,
 } from '@esoko/db';
 import { toSafeErrorMessage } from '@esoko/domain';
 import { requireStaff } from '@/lib/session';
@@ -148,5 +149,63 @@ export async function actionListGroupDocuments(partyId: string) {
   return docs.map((d) => ({
     id: d.id, title: d.title, kind: d.kind, mimeType: d.mimeType,
     sizeBytes: d.sizeBytes, uploadedAt: d.uploadedAt.toISOString(),
+  }));
+}
+
+/* ── Mall tenancy ─────────────────────────────────────────────── */
+
+/** Looks a prospective tenant up by phone — returns the enterprises the
+ *  matching person can offer as a tenant (same shape a subject's own
+ *  "which of my enterprises" picker would use, since a mall's tenants
+ *  are Enterprises, not whole organisations). */
+export async function actionFindTenantByPhone(msisdn: string) {
+  const ctx = await requireStaff();
+  if (!msisdn.trim()) return { ok: false as const, error: 'Enter a phone number' };
+  const party = await getPartyByMsisdn(ctx, msisdn.trim());
+  if (!party) return { ok: false as const, error: 'No one on Esoko has that number' };
+  const enterprises = party.enterprises.map((e) => ({ id: e.id, workRaw: e.workRaw }));
+  if (enterprises.length === 0) return { ok: false as const, error: 'That person has no business on file yet' };
+  return { ok: true as const, enterprises };
+}
+
+export async function actionAddTenant(
+  mallOrgId: string, tenantEnterpriseId: string, unitLabel?: string,
+): Promise<Result> {
+  try {
+    const ctx = await requireStaff();
+    await addTenant(ctx, mallOrgId, tenantEnterpriseId, unitLabel);
+    revalidatePath('/groups');
+    return { ok: true };
+  } catch (e) { return fail(e); }
+}
+
+export async function actionEndTenancy(tenancyId: string, reason?: string): Promise<Result> {
+  try {
+    const ctx = await requireStaff();
+    await endTenancy(ctx, tenancyId, reason);
+    revalidatePath('/groups');
+    return { ok: true };
+  } catch (e) { return fail(e); }
+}
+
+export async function actionSetMallSlug(mallOrgId: string, slug: string): Promise<Result> {
+  try {
+    const ctx = await requireStaff();
+    await setMallSlug(ctx, mallOrgId, slug.trim() || null);
+    revalidatePath('/groups');
+    return { ok: true };
+  } catch (e) { return fail(e); }
+}
+
+export async function actionListTenants(mallOrgId: string) {
+  const ctx = await requireStaff();
+  const tenancies = await listTenants(ctx, mallOrgId);
+  return tenancies.map((t) => ({
+    id: t.id,
+    unitLabel: t.unitLabel,
+    endedAt: t.endedAt ? t.endedAt.toISOString() : null,
+    startedAt: t.startedAt.toISOString(),
+    tenantWork: t.tenantEnterprise.workRaw,
+    stores: t.tenantEnterprise.stores.map((s) => ({ id: s.id, name: s.name, slug: s.slug, status: s.status })),
   }));
 }

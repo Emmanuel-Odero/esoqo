@@ -70,21 +70,21 @@ enum OrgKind {
 }
 
 model Party {
-  id        String    @id @default(uuid()) @db.Uuid
-  kind      PartyKind
-  county    String
-  ward      String?
+  id           String       @id @default(uuid()) @db.Uuid
+  kind         PartyKind
+  county       String
+  ward         String?
   /// Below county, above ward. Optional — asked mainly of groups and
   /// businesses, who tend to know these as-registered; individuals
   /// aren't pushed for it.
-  subCounty String?
+  subCounty    String?
   /// Kenya's pre-2013 administrative unit. Some registration paperwork
   /// (group constitutions, old business permits) still cites it, so we
   /// keep it as free text rather than trying to derive it from county.
-  district  String?
-  createdAt DateTime  @default(now())
-  updatedAt DateTime  @updatedAt
-  deletedAt DateTime? // soft delete — DPA erasure keeps the audit trail
+  district     String?
+  createdAt    DateTime     @default(now())
+  updatedAt    DateTime     @updatedAt
+  deletedAt    DateTime? // soft delete — DPA erasure keeps the audit trail
   /// Which front door this Party first registered through. See SourceSystem.
   sourceSystem SourceSystem @default(ESOKO)
 
@@ -182,6 +182,9 @@ model Organisation {
   businessTypeOther String?
   /// Business-only: not yet registered, but says they plan to be.
   intendsToRegister Boolean?
+  /// Only meaningful when kind is MALL: the slug its public tenant
+  /// directory (/m/[mallSlug]) is served at.
+  mallSlug          String?   @unique
 
   members   Membership[] @relation("MemberOrg")
   jamiiPage JamiiPage?
@@ -192,6 +195,9 @@ model Organisation {
   signers            GroupSigner[]
   contributions      GroupContribution[]
   withdrawalRequests WithdrawalRequest[]
+
+  // Only meaningful when kind is MALL — the stores it hosts as tenants.
+  mallTenancies MallTenancy[] @relation("MallTenancies")
 
   @@index([kind])
   @@map("organisation")
@@ -260,12 +266,35 @@ model Enterprise {
   paymentChannels   String[] @default([])
   createdAt         DateTime @default(now())
 
-  stores     Store[]
-  ticketOrgs TicketOrg[]
+  stores        Store[]
+  ticketOrgs    TicketOrg[]
+  mallTenancies MallTenancy[] @relation("TenantEnterprise")
 
   @@index([segment])
   @@index([sector])
   @@map("enterprise")
+}
+
+/// A store's tenancy inside a mall — Organisation{kind: MALL} hosting an
+/// Enterprise (the tenant operating a store there), not Organisation-to-
+/// Organisation: keeps the tenant side consistent with how Store and
+/// TicketOrg already hang off Enterprise rather than Organisation.
+/// Soft-exit via endedAt, same reinstate-not-delete shape as Membership.
+model MallTenancy {
+  id                 String    @id @default(uuid()) @db.Uuid
+  mallOrgId          String    @db.Uuid
+  tenantEnterpriseId String    @db.Uuid
+  /// "Shop 14B" — free text, optional.
+  unitLabel          String?
+  startedAt          DateTime  @default(now())
+  endedAt            DateTime?
+
+  mallOrg          Organisation @relation("MallTenancies", fields: [mallOrgId], references: [partyId], onDelete: Cascade)
+  tenantEnterprise Enterprise   @relation("TenantEnterprise", fields: [tenantEnterpriseId], references: [id], onDelete: Cascade)
+
+  @@unique([mallOrgId, tenantEnterpriseId])
+  @@index([tenantEnterpriseId])
+  @@map("mall_tenancy")
 }
 
 // ─────────────────────── AUTH & CREDENTIALS ─────────────────────
@@ -688,24 +717,24 @@ model RegistrationPayment {
   registrationId String       @unique @db.Uuid
   registration   Registration @relation(fields: [registrationId], references: [id], onDelete: Cascade)
 
-  method            PaymentMethod?
-  reference         String?        @db.Citext
-  amountKes         Decimal?       @db.Decimal(12, 2)
-  declaredNote      String?
-  declaredAt        DateTime?
-  status            PaymentStatus  @default(NOT_DECLARED)
-  confirmedAt       DateTime?
+  method                 PaymentMethod?
+  reference              String?        @db.Citext
+  amountKes              Decimal?       @db.Decimal(12, 2)
+  declaredNote           String?
+  declaredAt             DateTime?
+  status                 PaymentStatus  @default(NOT_DECLARED)
+  confirmedAt            DateTime?
   /// Daraja's CheckoutRequestID for a live STK push, set the moment the
   /// push is sent. Doubles as the idempotency guard for a callback that
   /// arrives twice — see StoreOrder.mpesaCheckoutRequestId for the same
   /// pattern in the storefront.
-  checkoutRequestId String?        @unique
+  checkoutRequestId      String?        @unique
   /// Pesapal's OrderTrackingId for a card checkout, set the moment
   /// initiatePesapalOrder returns. Same idempotency role as
   /// checkoutRequestId above, just for the /webhooks/pesapal/ipn callback.
-  pesapalOrderTrackingId String?   @unique
-  createdAt         DateTime       @default(now()) @map("created_at")
-  updatedAt         DateTime       @updatedAt @map("updated_at")
+  pesapalOrderTrackingId String?        @unique
+  createdAt              DateTime       @default(now()) @map("created_at")
+  updatedAt              DateTime       @updatedAt @map("updated_at")
 
   approvals PaymentApproval[]
 
@@ -1298,9 +1327,9 @@ model StoreCustomer {
   storeId String @db.Uuid
   store   Store  @relation(fields: [storeId], references: [id], onDelete: Cascade)
 
-  msisdn    String
-  name      String?
-  notes     String?
+  msisdn          String
+  name            String?
+  notes           String?
   /// Set when this customer is an onboarded Organisation buying on
   /// account, not an anonymous phone-keyed shopper — lets the same
   /// buyer resolve to one stable customer row across different members
@@ -1316,8 +1345,8 @@ model StoreCustomer {
   /// How much the customer currently owes the shop. Derive from the
   /// ledger (sum of entries), never stored on the row — see the "balances
   /// are derived" rule in this schema's header.
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
 
   ledger   CustomerLedgerEntry[]
   loyalty  LoyaltyEntry[]
@@ -1849,7 +1878,7 @@ model JamiiPage {
   themeDefaultMode JamiiThemeMode @default(DARK)
   /// The "Our vision" card alongside missionShort's "Our mission" one
   /// on the whitelabel About page.
-  visionShort String?
+  visionShort      String?
 
   /// Free text, e.g. "Wednesdays, 4pm · Nyalenda B Social Hall".
   meetingSchedule String?
@@ -1876,16 +1905,16 @@ model JamiiPage {
   createdAt   DateTime  @default(now())
   updatedAt   DateTime  @updatedAt
 
-  photos    JamiiPhoto[]
-  posts     JamiiPost[]
-  programs  JamiiProgram[]
-  campaigns Campaign[]
-  team      JamiiTeamMember[]
-  domain    JamiiDomain?
-  messages  JamiiContactMessage[]
-  blocks    JamiiPageBlock[]
-  sitePages JamiiSitePage[]
-  navItems  JamiiNavItem[]
+  photos         JamiiPhoto[]
+  posts          JamiiPost[]
+  programs       JamiiProgram[]
+  campaigns      Campaign[]
+  team           JamiiTeamMember[]
+  domain         JamiiDomain?
+  messages       JamiiContactMessage[]
+  blocks         JamiiPageBlock[]
+  sitePages      JamiiSitePage[]
+  navItems       JamiiNavItem[]
   supportTickets SupportTicket[]
 
   @@index([status])
@@ -1956,7 +1985,7 @@ model JamiiNavItem {
   targetSitePageId String?        @db.Uuid
   targetSitePage   JamiiSitePage? @relation(fields: [targetSitePageId], references: [id], onDelete: Cascade)
   /// Set when targetKind is EXTERNAL_URL instead.
-  externalUrl String?
+  externalUrl      String?
 
   position     Int     @default(0)
   visible      Boolean @default(true)
@@ -1975,9 +2004,9 @@ model JamiiNavItem {
 /// pre-Phase-2 fixed section order when a page has zero rows, so this
 /// table being empty is the normal, unmigrated state, not an error.
 model JamiiPageBlock {
-  id       String         @id @default(uuid()) @db.Uuid
-  pageId   String         @db.Uuid
-  page     JamiiPage      @relation(fields: [pageId], references: [organisationId], onDelete: Cascade)
+  id         String         @id @default(uuid()) @db.Uuid
+  pageId     String         @db.Uuid
+  page       JamiiPage      @relation(fields: [pageId], references: [organisationId], onDelete: Cascade)
   /// Which JamiiSitePage this block belongs to. Nullable through the
   /// generic-CMS migration only: pre-existing rows are all homepage
   /// blocks and get backfilled onto that org's SYSTEM_HOME page (see
@@ -1987,15 +2016,15 @@ model JamiiPageBlock {
   /// two-step-migration discipline as the rich-text backfill.
   sitePageId String?        @db.Uuid
   sitePage   JamiiSitePage? @relation(fields: [sitePageId], references: [id], onDelete: Cascade)
-  type     JamiiBlockType
-  position Int            @default(0)
-  visible  Boolean        @default(true)
+  type       JamiiBlockType
+  position   Int            @default(0)
+  visible    Boolean        @default(true)
   /// Shape depends on `type` — see jamiiPageBlockSchema in
   /// packages/domain/src/jamii.ts, the single source of truth for what
   /// each type's data looks like.
-  data      Json     @default("{}")
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  data       Json           @default("{}")
+  createdAt  DateTime       @default(now())
+  updatedAt  DateTime       @updatedAt
 
   @@index([pageId])
   @@index([sitePageId])
@@ -2089,15 +2118,15 @@ model JamiiProgram {
 /// Staff (jamii-media.manage) curate which patterns are on offer and
 /// in what order; apps/jamii picks one per empty slot by category.
 model JamiiMediaAsset {
-  id         String              @id @default(uuid()) @db.Uuid
-  key        String              @unique
+  id         String             @id @default(uuid()) @db.Uuid
+  key        String             @unique
   label      String
   category   JamiiMediaCategory
   patternKey String
-  active     Boolean             @default(true)
-  position   Int                 @default(0)
-  createdAt  DateTime            @default(now())
-  updatedAt  DateTime            @updatedAt
+  active     Boolean            @default(true)
+  position   Int                @default(0)
+  createdAt  DateTime           @default(now())
+  updatedAt  DateTime           @updatedAt
 
   @@index([category, active])
   @@map("jamii_media_asset")
@@ -2148,8 +2177,8 @@ model JamiiTeamMember {
 /// dal/jamii-domain.ts for why the Cloudflare API token itself never
 /// reaches this app or the browser.
 model JamiiDomain {
-  id     String @id @default(uuid()) @db.Uuid
-  pageId String @unique @db.Uuid
+  id     String    @id @default(uuid()) @db.Uuid
+  pageId String    @unique @db.Uuid
   page   JamiiPage @relation(fields: [pageId], references: [organisationId], onDelete: Cascade)
 
   /// Lowercased, punycoded, no scheme/path. Unique platform-wide so two
@@ -2242,16 +2271,16 @@ model CampaignUpdate {
 /// donorPartyId is null), paid via the same M-Pesa STK flow as
 /// checkout, settled as a balanced JournalEntry.
 model Donation {
-  id           String         @id @default(uuid()) @db.Uuid
-  campaignId   String         @db.Uuid
-  campaign     Campaign       @relation(fields: [campaignId], references: [id])
-  donorPartyId String?        @db.Uuid
-  donorParty   Party?         @relation(fields: [donorPartyId], references: [id])
-  donorName    String         @default("Anonymous")
-  donorMsisdn  String
-  anonymous    Boolean        @default(false)
-  amountKes    Decimal        @db.Decimal(12, 2)
-  status       DonationStatus @default(PENDING)
+  id            String         @id @default(uuid()) @db.Uuid
+  campaignId    String         @db.Uuid
+  campaign      Campaign       @relation(fields: [campaignId], references: [id])
+  donorPartyId  String?        @db.Uuid
+  donorParty    Party?         @relation(fields: [donorPartyId], references: [id])
+  donorName     String         @default("Anonymous")
+  donorMsisdn   String
+  anonymous     Boolean        @default(false)
+  amountKes     Decimal        @db.Decimal(12, 2)
+  status        DonationStatus @default(PENDING)
   /// Safaricom's ResultDesc when the STK push didn't succeed — "Request
   /// cancelled by user", "The balance is insufficient", a timeout, etc.
   /// Same precedent as JamiiDomain.failureReason. Shown back to the
@@ -2352,7 +2381,7 @@ model SupportTicket {
   pageId String?    @db.Uuid
   page   JamiiPage? @relation(fields: [pageId], references: [organisationId], onDelete: SetNull)
 
-  category SupportTicketCategory @default(OTHER)
+  category      SupportTicketCategory @default(OTHER)
   /// Free text when category is OTHER — same "every Other gets a
   /// paired free-text field" rule as Organisation.kindOther.
   categoryOther String?
@@ -2994,20 +3023,20 @@ enum DomainMode {
 /// that needs a client beacon, a deliberately separate, not-yet-built
 /// instrumentation layer.
 model SiteVisit {
-  id         BigInt     @id @default(autoincrement())
+  id           BigInt     @id @default(autoincrement())
   /// JamiiPage.organisationId's slug — not a foreign key. A visit
   /// counter must never fail to record because of a FK constraint on
   /// the hot request path; an orphaned slug (org later deleted) is a
   /// non-issue for a bucketed count with no other relation depending on it.
-  slug       String
-  path       String
-  domainMode DomainMode
+  slug         String
+  path         String
+  domainMode   DomainMode
   /// "" (not null) for a direct visit — Postgres treats NULL as
   /// distinct in a unique index, which would silently defeat the
   /// day-bucketing upsert below for every referrer-less hit.
-  referrerHost String   @default("")
-  day          DateTime @db.Date
-  count        Int      @default(1)
+  referrerHost String     @default("")
+  day          DateTime   @db.Date
+  count        Int        @default(1)
 
   @@unique([slug, path, domainMode, day, referrerHost])
   @@index([slug, day])

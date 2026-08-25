@@ -228,6 +228,10 @@ export const CAPABILITY_CATALOGUE = [
     ['booking.refund', 'Refund a booking'],
     ['ticket.checkin', 'Scan and check in a ticket at the gate'],
   ]},
+  { group: 'Malls', items: [
+    ['mall.read', 'View a mall and its tenant list'],
+    ['mall.write', "Manage a mall's tenants"],
+  ]},
 ] as const;
 
 export const ALL_CAPABILITIES: Capability[] =
@@ -284,7 +288,12 @@ export const ROLE_PRESETS = {
             'ticketorg.write:own', 'ticketorgstaff.write:own', 'venue.write:own',
             'route.write:own', 'listing.write:own', 'listing.publish:own',
             'ticketclass.write:own', 'schedule.write:own',
-            'booking.read:own', 'booking.create:own', 'booking.cancel:own'],
+            'booking.read:own', 'booking.create:own', 'booking.cancel:own',
+            // Malls — a subject may manage tenants of a mall the same
+            // way they manage a store: the ':own' qualifier only checks
+            // the caller against the mall Organisation's own partyId
+            // (see requireMallOfficer in dal/mall.ts).
+            'mall.read', 'mall.write:own'],
 
   FIELD_AGENT: ['registration.create', 'registration.read:agent=self',
                 'attestation.issue:FIELD_VISIT', 'party.read:county'],
