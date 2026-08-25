@@ -193,6 +193,11 @@ services:
       DIRECT_DATABASE_URL: postgresql://esoko:esoko_dev_only@postgres:5432/esoko
       REDIS_URL: redis://redis:6379
       CORE_API_URL: http://localhost:4000
+      # localhost/127.0.0.1 are jamii's own baked-in defaults (see
+      # apps/jamii/src/middleware.ts) — jamii.esoko.test is the extra dev
+      # hostname nginx fronts it on (docker/nginx/default.conf), added
+      # rather than replacing the defaults so :3004 direct still works too.
+      JAMII_PRIMARY_HOSTS: "jamii.esoko.test,ourjamii.co.ke,localhost,127.0.0.1"
       NODE_ENV: development
       SMS_MOCK_URL: http://mock-sms:8080
       SMTP_HOST: mailhog
