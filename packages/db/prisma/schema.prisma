@@ -199,6 +199,11 @@ model Organisation {
   // Only meaningful when kind is MALL — the stores it hosts as tenants.
   mallTenancies MallTenancy[] @relation("MallTenancies")
 
+  // Only meaningful when kind is WAREHOUSE.
+  storageAgreements StorageAgreement[]
+  stockLocations    StockLocation[]
+  dispatchingStores Store[]            @relation("StoreDispatchWarehouse")
+
   @@index([kind])
   @@map("organisation")
 }
@@ -266,9 +271,10 @@ model Enterprise {
   paymentChannels   String[] @default([])
   createdAt         DateTime @default(now())
 
-  stores        Store[]
-  ticketOrgs    TicketOrg[]
-  mallTenancies MallTenancy[] @relation("TenantEnterprise")
+  stores            Store[]
+  ticketOrgs        TicketOrg[]
+  mallTenancies     MallTenancy[]      @relation("TenantEnterprise")
+  storageAgreements StorageAgreement[]
 
   @@index([segment])
   @@index([sector])
@@ -295,6 +301,53 @@ model MallTenancy {
   @@unique([mallOrgId, tenantEnterpriseId])
   @@index([tenantEnterpriseId])
   @@map("mall_tenancy")
+}
+
+/// A merchant paying a godown to store/handle goods there — the billing
+/// side of a WAREHOUSE Organisation. billingPeriod is display/logic
+/// only (no cron reads it): postWarehouseFee is always triggered
+/// manually, same as every other recurring-payment-shaped feature in
+/// this codebase (see dal/treasury.ts's contribution flow).
+model StorageAgreement {
+  id                 String    @id @default(uuid()) @db.Uuid
+  warehouseOrgId     String    @db.Uuid
+  tenantEnterpriseId String    @db.Uuid
+  feeKes             Decimal   @db.Decimal(12, 2)
+  billingPeriod      String
+  unitLabel          String?
+  startedAt          DateTime  @default(now())
+  endedAt            DateTime?
+
+  warehouseOrg     Organisation @relation(fields: [warehouseOrgId], references: [partyId], onDelete: Cascade)
+  tenantEnterprise Enterprise   @relation(fields: [tenantEnterpriseId], references: [id], onDelete: Cascade)
+
+  @@index([tenantEnterpriseId])
+  @@index([warehouseOrgId])
+  @@map("storage_agreement")
+}
+
+/// Whose stock sits where — a godown acting as fulfilment point for
+/// another seller's Store. Quantity is a snapshot set by
+/// upsertStockLocation, not derived from a movement ledger (no such
+/// ledger exists yet); good enough for "does this godown currently
+/// hold any of this seller's stock", not stock-movement audit.
+model StockLocation {
+  id             String   @id @default(uuid()) @db.Uuid
+  warehouseOrgId String   @db.Uuid
+  storeId        String   @db.Uuid
+  productId      String?  @db.Uuid
+  variantId      String?  @db.Uuid
+  quantity       Int
+  updatedAt      DateTime @updatedAt
+
+  warehouseOrg Organisation    @relation(fields: [warehouseOrgId], references: [partyId], onDelete: Cascade)
+  store        Store           @relation(fields: [storeId], references: [id], onDelete: Cascade)
+  product      Product?        @relation(fields: [productId], references: [id], onDelete: Cascade)
+  variant      ProductVariant? @relation(fields: [variantId], references: [id], onDelete: Cascade)
+
+  @@unique([warehouseOrgId, storeId, productId, variantId])
+  @@index([storeId])
+  @@map("stock_location")
 }
 
 // ─────────────────────── AUTH & CREDENTIALS ─────────────────────
@@ -507,6 +560,10 @@ enum AccountKind {
   /// donor's gift to a named campaign never gets lent out table-banking
   /// style, and the org's own savings never look like donor money.
   CAMPAIGN_RECEIVED
+  /// One per warehouse Organisation. Where postWarehouseFee posts a
+  /// godown's storage/handling fee revenue — the WAREHOUSE-side mirror
+  /// of STORE_REVENUE.
+  WAREHOUSE_REVENUE
 }
 
 model Account {
@@ -863,11 +920,17 @@ model Store {
   skuCount        Int?
 
   /// Where orders are packed/picked up from — "Juja Main, Kiambu".
-  deliveryOrigin String?
+  deliveryOrigin         String?
   /// Free-text delivery areas served — "Juja, Thika, Ruiru".
-  deliveryZones  String[] @default([])
+  deliveryZones          String[]      @default([])
   /// Typical turnaround in days (informational on the storefront).
-  processingDays Int?
+  processingDays         Int?
+  /// A formal godown relationship, when one exists — Organisation{kind:
+  /// WAREHOUSE} this store's orders dispatch from. Optional and purely
+  /// additive: deliveryOrigin above stays the fallback for every store
+  /// with no formal warehouse relationship.
+  dispatchWarehouseOrgId String?       @db.Uuid
+  dispatchWarehouseOrg   Organisation? @relation("StoreDispatchWarehouse", fields: [dispatchWarehouseOrgId], references: [partyId])
 
   /// Currency the store prices in — KES for everything today; kept on
   /// the profile so the storefront can label prices honestly if it ever
@@ -896,9 +959,11 @@ model Store {
   suppliers         Supplier[]
   stockPurchases    StockPurchase[]
   photos            StorePhoto[]
+  stockLocations    StockLocation[]
 
   @@index([enterpriseId])
   @@index([status])
+  @@index([dispatchWarehouseOrgId])
   @@map("store")
 }
 
@@ -975,6 +1040,7 @@ model Product {
   posSaleItems   PosSaleItem[]
   staffNotes     ProductStaffNote[]
   stockPurchases StockPurchase[]
+  stockLocations StockLocation[]
 
   @@index([storeId, status])
   @@index([category])
@@ -1038,6 +1104,7 @@ model ProductVariant {
   posItems       PosSaleItem[]
   orderItems     StoreOrderItem[]
   stockPurchases StockPurchase[]
+  stockLocations StockLocation[]
 
   @@index([productId])
   @@map("product_variant")

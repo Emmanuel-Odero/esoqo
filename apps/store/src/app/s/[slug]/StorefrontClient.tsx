@@ -92,6 +92,10 @@ export function StorefrontClient({ store, products, fulfilmentOptions }: {
   const [deliveryAddress, setDeliveryAddress] = useState('');
   const [placedOrderId, setPlacedOrderId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  // Set only when the store has a formal warehouse relationship — see
+  // Store.dispatchWarehouseOrgId. Display-only, shown on the order
+  // confirmation; doesn't affect fulfilment logic itself.
+  const [dispatchFrom, setDispatchFrom] = useState<string | null>(null);
   // Empty for an anonymous visitor or one with no org memberships — the
   // common case, and the checkout defaults to "buying for myself" either
   // way, so this never blocks or slows down a normal purchase.
@@ -125,7 +129,10 @@ export function StorefrontClient({ store, products, fulfilmentOptions }: {
     if (stage !== 'waiting' || !placedOrderId) return;
     const t = setInterval(async () => {
       const res = await checkOrderStatus(placedOrderId).catch(() => null);
-      if (res?.status === 'PAID' || res?.status === 'FULFILLED') setStage('success');
+      if (res?.status === 'PAID' || res?.status === 'FULFILLED') {
+        setDispatchFrom(res.dispatchFrom);
+        setStage('success');
+      }
     }, 4000);
     return () => clearInterval(t);
   }, [stage, placedOrderId]);
@@ -194,6 +201,7 @@ export function StorefrontClient({ store, products, fulfilmentOptions }: {
       });
       if (!result.ok) { setError(result.error); setStage('error'); return; }
       setPlacedOrderId(result.data.orderId);
+      setDispatchFrom(result.data.dispatchFrom);
       // COD is confirmed by the merchant when the cash lands — the buyer's
       // screen is "order placed", not a payment prompt.
       setStage(result.data.status === 'PAID' || paymentMethod === 'CASH_ON_DELIVERY' ? 'success' : 'waiting');
@@ -659,6 +667,11 @@ export function StorefrontClient({ store, products, fulfilmentOptions }: {
                       {`${store.name} has been notified. You'll get an SMS when your order is ready.`}
                     </p>
                   </>
+                )}
+                {dispatchFrom && (
+                  <p style={{ color: 'var(--tx-3)', fontSize: '.79rem', marginTop: 10 }}>
+                    Dispatched from: {dispatchFrom}
+                  </p>
                 )}
                 <button type="button" className="btn btn-o" style={{ marginTop: 20 }} onClick={() => { setCartOpen(false); setCart({}); setDeliveryOptionId(null); setCollectionNotes(''); setDeliveryAddress(''); setPaymentMethod('MPESA_STK'); setStage('browsing'); }}>
                   Done

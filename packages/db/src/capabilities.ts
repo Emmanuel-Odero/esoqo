@@ -232,6 +232,10 @@ export const CAPABILITY_CATALOGUE = [
     ['mall.read', 'View a mall and its tenant list'],
     ['mall.write', "Manage a mall's tenants"],
   ]},
+  { group: 'Warehouses', items: [
+    ['warehouse.read', "View a godown's storage agreements and stock"],
+    ['warehouse.write', "Manage a godown's storage agreements, stock, and billing"],
+  ]},
 ] as const;
 
 export const ALL_CAPABILITIES: Capability[] =
@@ -293,7 +297,10 @@ export const ROLE_PRESETS = {
             // way they manage a store: the ':own' qualifier only checks
             // the caller against the mall Organisation's own partyId
             // (see requireMallOfficer in dal/mall.ts).
-            'mall.read', 'mall.write:own'],
+            'mall.read', 'mall.write:own',
+            // Warehouses (godowns) — same self-serve shape as malls;
+            // see requireWarehouseOfficer in dal/warehouse.ts.
+            'warehouse.read', 'warehouse.write:own'],
 
   FIELD_AGENT: ['registration.create', 'registration.read:agent=self',
                 'attestation.issue:FIELD_VISIT', 'party.read:county'],

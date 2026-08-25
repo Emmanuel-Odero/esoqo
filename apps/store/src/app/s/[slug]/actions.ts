@@ -20,7 +20,7 @@ export type ActionResult<T> = { ok: true; data: T } | { ok: false; error: string
  *  - CASH_ON_DELIVERY: no push — the order waits at PENDING_PAYMENT and
  *    the merchant confirms payment when the cash is collected.
  */
-export async function checkout(raw: unknown): Promise<ActionResult<{ orderId: string; status: string }>> {
+export async function checkout(raw: unknown): Promise<ActionResult<{ orderId: string; status: string; dispatchFrom: string | null }>> {
   const parsed = checkoutSchema.safeParse(raw);
   if (!parsed.success) {
     return { ok: false, error: parsed.error.issues[0]?.message ?? 'Check your details and try again' };
@@ -45,9 +45,15 @@ export async function checkout(raw: unknown): Promise<ActionResult<{ orderId: st
     return { ok: false, error: e instanceof Error ? e.message : 'Could not place your order' };
   }
 
+  const dispatchFrom = (o: typeof order & { store?: { dispatchWarehouseOrg?: { officialName: string; knownAs: string | null } | null } } | null) => {
+    const org = o?.store?.dispatchWarehouseOrg;
+    return org ? (org.knownAs || org.officialName) : null;
+  };
+
   // Cash on delivery stops here — the buyer owes at the door.
   if (parsed.data.paymentMethod === 'CASH_ON_DELIVERY') {
-    return { ok: true, data: { orderId: order.id, status: 'PENDING_PAYMENT' } };
+    const withStore = await getOrder(ctx, order.id);
+    return { ok: true, data: { orderId: order.id, status: 'PENDING_PAYMENT', dispatchFrom: dispatchFrom(withStore) } };
   }
 
   try {
@@ -66,7 +72,10 @@ export async function checkout(raw: unknown): Promise<ActionResult<{ orderId: st
   }
 
   const updated = await getOrder(ctx, order.id);
-  return { ok: true, data: { orderId: order.id, status: updated?.status ?? 'PENDING_PAYMENT' } };
+  return {
+    ok: true,
+    data: { orderId: order.id, status: updated?.status ?? 'PENDING_PAYMENT', dispatchFrom: dispatchFrom(updated) },
+  };
 }
 
 /** Orgs the visitor can check out on behalf of — empty for an anonymous
@@ -82,9 +91,16 @@ export async function myOrgMemberships(): Promise<{ id: string; name: string }[]
   }));
 }
 
-/** Polled by the waiting screen while a real Daraja callback is in flight. */
-export async function checkOrderStatus(orderId: string): Promise<{ status: string }> {
+/** Polled by the waiting screen while a real Daraja callback is in flight.
+ *  dispatchFrom is set only when the store has a formal warehouse
+ *  relationship (Store.dispatchWarehouseOrgId) — display-only, no
+ *  fulfilment logic depends on it. */
+export async function checkOrderStatus(orderId: string): Promise<{ status: string; dispatchFrom: string | null }> {
   const ctx = await getCtx();
   const order = await getOrder(ctx, orderId);
-  return { status: order?.status ?? 'PENDING_PAYMENT' };
+  const org = order?.store.dispatchWarehouseOrg;
+  return {
+    status: order?.status ?? 'PENDING_PAYMENT',
+    dispatchFrom: org ? (org.knownAs || org.officialName) : null,
+  };
 }

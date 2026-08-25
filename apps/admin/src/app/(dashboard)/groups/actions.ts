@@ -6,6 +6,7 @@ import {
   createDocument, listDocumentsForParty,
   sniff, makeStorageKey, safeName, sha256, putObject, MAX_BYTES,
   getPartyByMsisdn, addTenant, endTenancy, setMallSlug, listTenants,
+  createStorageAgreement, endStorageAgreement, listStorageAgreements, billStoragePeriod,
 } from '@esoko/db';
 import { toSafeErrorMessage } from '@esoko/domain';
 import { requireStaff } from '@/lib/session';
@@ -208,4 +209,55 @@ export async function actionListTenants(mallOrgId: string) {
     tenantWork: t.tenantEnterprise.workRaw,
     stores: t.tenantEnterprise.stores.map((s) => ({ id: s.id, name: s.name, slug: s.slug, status: s.status })),
   }));
+}
+
+/* ── Godown (warehouse) storage billing ─────────────────────────── */
+
+/** Looks a prospective storage customer up by phone — same shape as
+ *  actionFindTenantByPhone, since both pick an Enterprise off a person. */
+export async function actionFindStorageCustomerByPhone(msisdn: string) {
+  return actionFindTenantByPhone(msisdn);
+}
+
+export async function actionCreateStorageAgreement(
+  warehouseOrgId: string, tenantEnterpriseId: string,
+  feeKes: number, billingPeriod: 'MONTHLY' | 'PER_UNIT', unitLabel?: string,
+): Promise<Result> {
+  try {
+    const ctx = await requireStaff();
+    await createStorageAgreement(ctx, warehouseOrgId, tenantEnterpriseId, feeKes, billingPeriod, unitLabel);
+    revalidatePath('/groups');
+    return { ok: true };
+  } catch (e) { return fail(e); }
+}
+
+export async function actionEndStorageAgreement(agreementId: string, reason?: string): Promise<Result> {
+  try {
+    const ctx = await requireStaff();
+    await endStorageAgreement(ctx, agreementId, reason);
+    revalidatePath('/groups');
+    return { ok: true };
+  } catch (e) { return fail(e); }
+}
+
+export async function actionListStorageAgreements(warehouseOrgId: string) {
+  const ctx = await requireStaff();
+  const agreements = await listStorageAgreements(ctx, warehouseOrgId);
+  return agreements.map((a) => ({
+    id: a.id,
+    tenantWork: a.tenantEnterprise.workRaw,
+    feeKes: Number(a.feeKes),
+    billingPeriod: a.billingPeriod,
+    unitLabel: a.unitLabel,
+    startedAt: a.startedAt.toISOString(),
+    endedAt: a.endedAt ? a.endedAt.toISOString() : null,
+  }));
+}
+
+export async function actionBillStoragePeriod(agreementId: string): Promise<Result> {
+  try {
+    const ctx = await requireStaff();
+    await billStoragePeriod(ctx, agreementId);
+    return { ok: true };
+  } catch (e) { return fail(e); }
 }

@@ -237,7 +237,15 @@ export async function confirmStoreOrderCod(ctx: Ctx, orderId: string) {
 export async function getOrder(_ctx: Ctx, orderId: string) {
   return prisma.storeOrder.findUnique({
     where: { id: orderId },
-    include: { items: { include: { product: true } }, store: true },
+    include: {
+      items: { include: { product: true } },
+      // dispatchWarehouseOrg is display-only here — "Dispatched from: X
+      // Godown" on the order confirmation when the store has a formal
+      // warehouse relationship. Nothing about fulfilment logic itself
+      // changes; the warehouse is stamped at the Store level, not
+      // chosen per order.
+      store: { include: { dispatchWarehouseOrg: { select: { officialName: true, knownAs: true } } } },
+    },
   });
 }
 
