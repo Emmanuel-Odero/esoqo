@@ -146,6 +146,13 @@ main { padding:28px 30px 60px; min-width:0 }
 .btn-sm { padding:7px 13px; font-size:.82rem; min-height:36px }
 .btn:disabled { opacity:.45; cursor:not-allowed }
 
+/* tab nav — sub-sections of one record (e.g. an organiser's console) */
+.tabnav { display:flex; gap:4px; flex-wrap:wrap; margin-bottom:20px; border-bottom:1px solid var(--line) }
+.tabnav-item { display:inline-flex; align-items:center; gap:7px; padding:10px 14px; font-size:.87rem;
+  font-weight:600; color:var(--tx-2); border-bottom:2px solid transparent; margin-bottom:-1px }
+.tabnav-item:hover { color:var(--tx) }
+.tabnav-item.active { color:var(--green); border-bottom-color:var(--green) }
+
 /* modal */
 .scrim { position:fixed; inset:0; background:rgba(10,46,77,.55); backdrop-filter:blur(3px);
   z-index:200; display:grid; place-items:center; padding:24px }

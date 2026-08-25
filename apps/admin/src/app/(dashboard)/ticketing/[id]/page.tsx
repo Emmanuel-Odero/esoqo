@@ -4,6 +4,7 @@ import { Icon } from '@esoko/ui';
 import { getTicketOrg, listTicketOrgStaff, listOrgBookings, can, AuthorisationError } from '@esoko/db';
 import { requireStaff } from '@/lib/session';
 import { OrgStaffPanel } from './OrgStaffPanel';
+import { OrgTabs } from './OrgTabs';
 
 export const dynamic = 'force-dynamic';
 
@@ -26,6 +27,9 @@ export default async function TicketOrgDetail({
     : [];
 
   const canReadBookings = can(ctx, 'booking.read', { partyId: org.enterprise?.partyId });
+  const canManageListings = can(ctx, 'listing.write', { partyId: org.enterprise?.partyId });
+  const canManageRoutes = can(ctx, 'venue.write', { partyId: org.enterprise?.partyId })
+    || can(ctx, 'route.write', { partyId: org.enterprise?.partyId });
   const bookings = canReadBookings ? await listOrgBookings(ctx, id) : [];
   const paid = bookings.filter((b) => b.status === 'PAID');
   const revenueKes = paid.reduce((n, b) => n + Number(b.totalKes), 0);
@@ -50,6 +54,8 @@ export default async function TicketOrgDetail({
           </p>
         </div>
       </div>
+
+      <OrgTabs orgId={id} active="overview" tabs={{ routes: canManageRoutes, listings: canManageListings, bookings: canReadBookings }} />
 
       {canReadBookings && (
         <div className="kpis">

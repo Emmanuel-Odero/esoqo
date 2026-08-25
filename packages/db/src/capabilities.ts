@@ -331,7 +331,9 @@ export const ROLE_PRESETS = {
               'jamii-campaign.read', 'jamii-campaign.moderate', 'jamii-donation.read',
               'treasury.read', 'treasury.confirm', 'portfolio.read',
               'ticketorg.read', 'ticketorg.moderate', 'ticketorgstaff.write',
-              'booking.read', 'booking.refund'],
+              'venue.write', 'route.write', 'listing.write', 'listing.publish',
+              'ticketclass.write', 'schedule.write',
+              'booking.read', 'booking.cancel', 'booking.refund'],
 
   SUPER_ADMIN: ['*'],
 
