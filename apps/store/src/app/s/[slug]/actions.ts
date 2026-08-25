@@ -1,7 +1,7 @@
 'use server';
 
 import {
-  createStoreOrder, attachCheckoutRequestId, confirmStoreOrderPayment, getOrder,
+  createStoreOrder, attachCheckoutRequestId, confirmStoreOrderPayment, getOrder, getMyRecord,
 } from '@esoko/db';
 import { checkoutSchema } from '@esoko/domain';
 import { initiateStkPush, MpesaError } from '@esoko/payments';
@@ -39,6 +39,7 @@ export async function checkout(raw: unknown): Promise<ActionResult<{ orderId: st
       deliveryOptionId: parsed.data.deliveryOptionId,
       collectionNotes: parsed.data.collectionNotes,
       deliveryAddress: parsed.data.deliveryAddress,
+      buyingOrgId: parsed.data.buyingOrgId,
     });
   } catch (e) {
     return { ok: false, error: e instanceof Error ? e.message : 'Could not place your order' };
@@ -66,6 +67,19 @@ export async function checkout(raw: unknown): Promise<ActionResult<{ orderId: st
 
   const updated = await getOrder(ctx, order.id);
   return { ok: true, data: { orderId: order.id, status: updated?.status ?? 'PENDING_PAYMENT' } };
+}
+
+/** Orgs the visitor can check out on behalf of — empty for an anonymous
+ *  buyer or one with no memberships, which is the common case and keeps
+ *  the storefront's default "buying for myself" checkout unchanged. */
+export async function myOrgMemberships(): Promise<{ id: string; name: string }[]> {
+  const ctx = await getCtx();
+  if (!ctx.partyId) return [];
+  const me = await getMyRecord(ctx);
+  return (me?.memberships ?? []).map((m) => ({
+    id: m.org.partyId,
+    name: m.org.knownAs || m.org.officialName || 'Unnamed organisation',
+  }));
 }
 
 /** Polled by the waiting screen while a real Daraja callback is in flight. */

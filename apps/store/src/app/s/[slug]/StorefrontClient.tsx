@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useState, useTransition } from 'react';
 import { Icon, type IconName } from '@esoko/ui';
 import { PRODUCT_CATEGORIES } from '@esoko/domain';
-import { checkout, checkOrderStatus } from './actions';
+import { checkout, checkOrderStatus, myOrgMemberships } from './actions';
 
 interface Variant { id: string; label: string; priceKes: number; stockQty: number | null; availableOnOrder: boolean }
 interface Product {
@@ -92,6 +92,11 @@ export function StorefrontClient({ store, products, fulfilmentOptions }: {
   const [deliveryAddress, setDeliveryAddress] = useState('');
   const [placedOrderId, setPlacedOrderId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  // Empty for an anonymous visitor or one with no org memberships — the
+  // common case, and the checkout defaults to "buying for myself" either
+  // way, so this never blocks or slows down a normal purchase.
+  const [myOrgs, setMyOrgs] = useState<{ id: string; name: string }[]>([]);
+  const [buyingOrgId, setBuyingOrgId] = useState<string>('');
   const [pending, startTransition] = useTransition();
   // The clickable share origin — populated only on the client, because
   // SSR has no window.location. Share buttons render once it's known, so
@@ -101,6 +106,10 @@ export function StorefrontClient({ store, products, fulfilmentOptions }: {
 
   // A shared link can carry ?p=<productId> — land the recipient straight
   // on that product's option picker instead of a scroll-and-hunt.
+  useEffect(() => {
+    myOrgMemberships().then(setMyOrgs).catch(() => setMyOrgs([]));
+  }, []);
+
   useEffect(() => {
     setOrigin(window.location.origin);
     const pId = new URLSearchParams(window.location.search).get('p');
@@ -181,6 +190,7 @@ export function StorefrontClient({ store, products, fulfilmentOptions }: {
         collectionNotes,
         deliveryAddress,
         paymentMethod,
+        buyingOrgId: buyingOrgId || undefined,
       });
       if (!result.ok) { setError(result.error); setStage('error'); return; }
       setPlacedOrderId(result.data.orderId);
@@ -587,6 +597,17 @@ export function StorefrontClient({ store, products, fulfilmentOptions }: {
                         <span><Icon name="check-circle" size={13} /> Cash on delivery</span>
                       </button>
                     </div>
+                  </div>
+                )}
+
+                {myOrgs.length > 0 && (
+                  <div className="fld">
+                    <label className="lab" htmlFor="buyingFor">Buying for</label>
+                    <select className="inp" id="buyingFor" value={buyingOrgId}
+                      onChange={(e) => setBuyingOrgId(e.target.value)}>
+                      <option value="">Myself</option>
+                      {myOrgs.map((o) => <option key={o.id} value={o.id}>{o.name}</option>)}
+                    </select>
                   </div>
                 )}
 

@@ -238,6 +238,10 @@ export const checkoutSchema = z.object({
   /** How the buyer pays. CASH_ON_DELIVERY skips the STK push; the
    *  merchant confirms payment when cash is collected. */
   paymentMethod: z.enum(['MPESA_STK', 'CASH_ON_DELIVERY']).default('MPESA_STK'),
+  /** Buying on behalf of an organisation the signed-in buyer belongs to,
+   *  rather than for themselves — membership is verified server-side,
+   *  never trusted from this value alone. */
+  buyingOrgId: z.string().uuid().optional(),
 });
 export type CheckoutInput = z.infer<typeof checkoutSchema>;
 

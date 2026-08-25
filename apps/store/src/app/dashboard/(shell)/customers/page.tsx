@@ -40,7 +40,15 @@ export default async function CustomersPage() {
             <tbody>
               {customers.map((c) => (
                 <tr key={c.id}>
-                  <td>{c.name ?? '—'}</td>
+                  <td>
+                    {c.orgName ? (
+                      <>
+                        <Icon name="handshake" size={13} style={{ marginRight: 5, color: 'var(--tx-3)' }} />
+                        {c.orgName}
+                        {c.name && <span className="sub" style={{ display: 'block', fontSize: '.78rem' }}>via {c.name}</span>}
+                      </>
+                    ) : (c.name ?? '—')}
+                  </td>
                   <td className="mono">{c.msisdn}</td>
                   <td className="mono">
                     {c.balanceKes > 0

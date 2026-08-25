@@ -46,7 +46,11 @@ export default async function DebtsPage() {
             <tbody>
               {debts.map((d) => (
                 <tr key={d.id}>
-                  <td>{d.name ?? '—'}</td>
+                  <td>
+                    {d.orgName ? (
+                      <><Icon name="handshake" size={13} style={{ marginRight: 5, color: 'var(--tx-3)' }} />{d.orgName}</>
+                    ) : (d.name ?? '—')}
+                  </td>
                   <td className="mono">{d.msisdn}</td>
                   <td>
                     {d.owingSinceAt ? (
