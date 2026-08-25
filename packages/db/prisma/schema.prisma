@@ -58,6 +58,14 @@ enum OrgKind {
   SCHOOL
   CLINIC
   MARKET_ASSOCIATION
+  /// A B2B goods supplier — parallel to BUSINESS, not a sub-type of it.
+  SUPPLIER
+  /// Bulk/trade seller — same commerce engine (Store) as any other business.
+  WHOLESALER
+  /// A godown — storage/handling fees plus fulfilment-on-behalf-of-others.
+  WAREHOUSE
+  /// Hosts tenant Stores under one roof — see MallTenancy.
+  MALL
   OTHER
 }
 
@@ -620,6 +628,10 @@ model Registration {
   bizIntendsToRegister String? // only asked when bizIsRegistered = no
   bizPartyId           String?  @db.Uuid
   bizParty             Party?   @relation("RegistrationBizParty", fields: [bizPartyId], references: [id])
+  /// SUPPLIER | WHOLESALER | WAREHOUSE | MALL | BUSINESS (default). Read by
+  /// completeRegistration to pick the new Organisation's OrgKind — a
+  /// parallel field to bizType (legal structure), not a replacement for it.
+  bizOrgKind           String?
   bizSector            String?
   bizType              String?
   bizTypeOther         String?

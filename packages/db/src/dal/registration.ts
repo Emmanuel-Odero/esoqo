@@ -71,6 +71,9 @@ export interface UpdateRegistrationInput {
   bizIsRegistered?: string;
   bizIntendsToRegister?: string;
   bizPartyId?: string;
+  /// SUPPLIER | WHOLESALER | WAREHOUSE | MALL | BUSINESS (default) — which
+  /// OrgKind completeRegistration gives the new Organisation.
+  bizOrgKind?: string;
   bizSector?: string;
   bizType?: string;
   bizTypeOther?: string;
@@ -381,7 +384,7 @@ export async function completeRegistration(ctx: Ctx, id: string) {
           ward: reg.ward,
           organisation: {
             create: {
-              kind: 'BUSINESS' as OrgKind,
+              kind: (reg.bizOrgKind || 'BUSINESS') as OrgKind,
               officialName: reg.bizName,
               registrationNo: reg.bizIsRegistered === 'yes' ? reg.registrationNo : null,
               businessType: reg.bizType,

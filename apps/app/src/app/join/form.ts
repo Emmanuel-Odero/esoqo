@@ -27,6 +27,8 @@ export interface Form {
   bizIntendsToRegister: 'yes' | 'no' | '';
   bizPartyId: string;
   bizName: string;
+  /** SUPPLIER | WHOLESALER | WAREHOUSE | MALL | '' (defaults to BUSINESS). */
+  bizOrgKind: string;
   bizSector: string;
   bizType: string;
   bizTypeOther: string;
@@ -64,7 +66,7 @@ export const EMPTY: Form = {
 
   orgKind: '', orgSubCounty: '', orgDistrict: '', orgTags: [],
 
-  bizIsRegistered: '', bizIntendsToRegister: '', bizPartyId: '', bizName: '',
+  bizIsRegistered: '', bizIntendsToRegister: '', bizPartyId: '', bizName: '', bizOrgKind: '',
   bizSector: '', bizType: '', bizTypeOther: '', bizEmployeeCount: '',
   bizRevenueGoodKes: '', bizRevenueBadKes: '', bizBankProvider: '', bizPaymentChannels: [],
 };
