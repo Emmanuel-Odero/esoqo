@@ -44,6 +44,7 @@ func (s *Server) Router() *gin.Engine {
 		auth.POST("/otp", s.handleIssueOtp)
 		auth.POST("/verify-otp", s.handleVerifyOtp)
 		auth.POST("/sign-in", s.handleSignIn)
+		auth.POST("/pin/reset", s.handleResetPin)
 		auth.POST("/set-pin", s.authRequired(), s.handleSetPin)
 		auth.POST("/sign-out", s.authRequired(), s.handleSignOut)
 

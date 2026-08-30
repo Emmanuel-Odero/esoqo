@@ -193,6 +193,7 @@ services:
       DIRECT_DATABASE_URL: postgresql://esoko:esoko_dev_only@postgres:5432/esoko
       REDIS_URL: redis://redis:6379
       CORE_API_URL: http://localhost:4000
+      CORE_GO_API_URL: http://core-go:4100
       # localhost/127.0.0.1 are jamii's own baked-in defaults (see
       # apps/jamii/src/middleware.ts) — jamii.esoko.test is the extra dev
       # hostname nginx fronts it on (docker/nginx/default.conf), added
@@ -232,6 +233,8 @@ services:
         condition: service_healthy
       redis:
         condition: service_healthy
+      core-go:
+        condition: service_started
 
   # ─────────────────────────────────────────────────────────────
   # core-go — the mobile REST API (Go/Gin). See
@@ -250,7 +253,11 @@ services:
     environment:
       APP_ENV: "${APP_ENV:-development}"
       PORT: "4100"
-      DATABASE_URL: postgresql://esoko:esoko_dev_only@pgbouncer:5432/esoko?pgbouncer=true&connection_limit=10
+      # pgx (unlike Prisma's client) sends query params straight through as
+      # Postgres startup parameters, so Prisma-specific hints like
+      # pgbouncer=true/connection_limit — which pgbouncer itself rejects —
+      # can't be reused verbatim from the TS services' DATABASE_URL.
+      DATABASE_URL: postgresql://esoko:esoko_dev_only@pgbouncer:5432/esoko?sslmode=disable
       REDIS_URL: redis://redis:6379
       SMS_PROVIDER: "${SMS_PROVIDER:-console}"
       SMS_MOCK_URL: http://mock-sms:8080

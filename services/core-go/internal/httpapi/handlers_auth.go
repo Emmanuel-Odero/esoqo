@@ -87,9 +87,14 @@ func (s *Server) handleVerifyOtp(c *gin.Context) {
 
 // ── POST /v1/auth/sign-in (returning users with a PIN already set) ───
 
+// signInRequest accepts phone (E.164) or email — same "identifier" shape
+// as the web sign-in form (packages/domain/src/auth.ts's signInSchema),
+// so apps/app/apps/store/apps/jamii's identical sign-in Server Actions
+// can all call this one endpoint instead of their own copy of
+// findSubjectCredential/recordSignInSuccess/recordSignInFailure.
 type signInRequest struct {
-	Msisdn string `json:"msisdn" binding:"required"`
-	Pin    string `json:"pin" binding:"required"`
+	Identifier string `json:"identifier" binding:"required"`
+	Pin        string `json:"pin" binding:"required"`
 }
 
 func (s *Server) handleSignIn(c *gin.Context) {
@@ -99,9 +104,14 @@ func (s *Server) handleSignIn(c *gin.Context) {
 		return
 	}
 
-	person, err := dbx.FindPersonByMsisdn(c.Request.Context(), s.Pool, req.Msisdn)
+	person, err := dbx.FindPersonByIdentifier(c.Request.Context(), s.Pool, req.Identifier)
 	if err != nil {
 		writeError(c, http.StatusInternalServerError, "SIGN_IN_FAILED", "Could not sign in")
+		return
+	}
+
+	if person != nil && person.FrozenAt != nil {
+		writeError(c, http.StatusForbidden, "ACCOUNT_FROZEN", "This account is frozen. Contact Esoko to unfreeze it.")
 		return
 	}
 
@@ -125,13 +135,70 @@ func (s *Server) handleSignIn(c *gin.Context) {
 		if person != nil && person.PinHash != nil && !locked {
 			_ = dbx.RecordSignInFailure(c.Request.Context(), s.Pool, person.PartyID)
 		}
-		writeError(c, http.StatusUnauthorized, "INVALID_CREDENTIALS", "Phone number or PIN is not right")
+		writeError(c, http.StatusUnauthorized, "INVALID_CREDENTIALS", "No account found, or a PIN has not been set yet.")
 		return
 	}
 
 	_ = dbx.RecordSignInSuccess(c.Request.Context(), s.Pool, person.PartyID)
 
 	token, err := s.issueSubjectSession(c, person.PartyID)
+	if err != nil {
+		writeError(c, http.StatusInternalServerError, "SESSION_CREATE_FAILED", "Could not start a session")
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"token": token})
+}
+
+// ── POST /v1/auth/pin/reset (unauthenticated — proof is the OTP code) ─
+
+// resetPinRequest is the "forgot PIN" flow: request an OTP via
+// POST /v1/auth/otp {msisdn, purpose:"PIN_RESET"} first, then call this
+// with the code. Unlike verify-otp's SIGN_IN path, this never
+// auto-provisions a Person — same NOT_FOUND contract as
+// auth-credential.ts's setSubjectPin.
+type resetPinRequest struct {
+	Msisdn string `json:"msisdn" binding:"required"`
+	Code   string `json:"code" binding:"required"`
+	Pin    string `json:"pin" binding:"required"`
+}
+
+func (s *Server) handleResetPin(c *gin.Context) {
+	var req resetPinRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		writeError(c, http.StatusBadRequest, "INVALID_REQUEST", err.Error())
+		return
+	}
+	if authsvc.IsWeakPin(req.Pin) {
+		writeError(c, http.StatusBadRequest, "WEAK_PIN", "Choose a less predictable PIN — not 1234, 0000 or a run of digits.")
+		return
+	}
+
+	ok, err := s.OTP.VerifyOtp(c.Request.Context(), req.Msisdn, authsvc.OtpPinReset, req.Code)
+	if err != nil {
+		writeOtpError(c, err)
+		return
+	}
+	if !ok {
+		writeError(c, http.StatusUnauthorized, "WRONG_CODE", "That code is not right")
+		return
+	}
+
+	hash, err := authsvc.HashPin(req.Pin)
+	if err != nil {
+		writeError(c, http.StatusBadRequest, "INVALID_PIN", err.Error())
+		return
+	}
+	partyID, err := dbx.SetSubjectPinByMsisdn(c.Request.Context(), s.Pool, req.Msisdn, hash)
+	if err != nil {
+		if err == dbx.ErrPersonNotFound {
+			writeError(c, http.StatusNotFound, "NOT_FOUND", "No Esoko account found with that number")
+			return
+		}
+		writeError(c, http.StatusInternalServerError, "SET_PIN_FAILED", "Could not save PIN")
+		return
+	}
+
+	token, err := s.issueSubjectSession(c, partyID)
 	if err != nil {
 		writeError(c, http.StatusInternalServerError, "SESSION_CREATE_FAILED", "Could not start a session")
 		return

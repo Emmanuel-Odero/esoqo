@@ -3,6 +3,7 @@ package dbx
 import (
 	"context"
 	"errors"
+	"strings"
 	"time"
 
 	"github.com/jackc/pgx/v5"
@@ -24,28 +25,40 @@ type PersonAuth struct {
 	PinHash        *string
 	FailedAttempts int
 	LockedUntil    *time.Time
+	FrozenAt       *time.Time
 }
 
 // FindPersonByMsisdn — the pre-auth lookup, deliberately not
 // capability-gated (mirrors auth-credential.ts's findSubjectCredential).
 func FindPersonByMsisdn(ctx context.Context, pool *pgxpool.Pool, msisdn string) (*PersonAuth, error) {
+	return findPersonByWhere(ctx, pool, `pr.msisdn = $1`, msisdn)
+}
+
+// FindPersonByIdentifier — phone (E.164) or email, whichever the string
+// looks like. Same "@" sniff auth-credential.ts's findSubjectCredential
+// uses, since the web sign-in form accepts either.
+func FindPersonByIdentifier(ctx context.Context, pool *pgxpool.Pool, identifier string) (*PersonAuth, error) {
+	trimmed := strings.TrimSpace(identifier)
+	if strings.Contains(trimmed, "@") {
+		return findPersonByWhere(ctx, pool, `pr.email = $1`, strings.ToLower(trimmed))
+	}
+	return findPersonByWhere(ctx, pool, `pr.msisdn = $1`, trimmed)
+}
+
+func findPersonByWhere(ctx context.Context, pool *pgxpool.Pool, whereClause, arg string) (*PersonAuth, error) {
 	var p PersonAuth
 	err := pool.QueryRow(ctx, `
 		SELECT pr."partyId", pr."officialName", pr."knownAs", pr.msisdn,
-		       uc."pinHash", uc."failedAttempts", uc."lockedUntil"
+		       uc."pinHash", uc."failedAttempts", uc."lockedUntil", uc."frozenAt"
 		FROM person pr
 		LEFT JOIN user_credential uc ON uc."personId" = pr."partyId"
-		WHERE pr.msisdn = $1`, msisdn).
-		Scan(&p.PartyID, &p.OfficialName, &p.KnownAs, &p.Msisdn, &p.PinHash, &p.FailedAttempts, &p.LockedUntil)
+		WHERE `+whereClause, arg).
+		Scan(&p.PartyID, &p.OfficialName, &p.KnownAs, &p.Msisdn, &p.PinHash, &p.FailedAttempts, &p.LockedUntil, &p.FrozenAt)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return nil, nil
 	}
 	if err != nil {
 		return nil, err
-	}
-	if p.FailedAttempts == 0 {
-		// COALESCE NULL -> 0 already handled by driver default for int,
-		// nothing further to do; kept for clarity at the call site.
 	}
 	return &p, nil
 }
@@ -115,6 +128,29 @@ func UpsertPin(ctx context.Context, pool *pgxpool.Pool, partyID, pinHash string)
 		SET "pinHash" = EXCLUDED."pinHash", "pinSetAt" = now(), "failedAttempts" = 0, "lockedUntil" = NULL, "updatedAt" = now()`,
 		partyID, pinHash)
 	return err
+}
+
+// ErrPersonNotFound mirrors auth-credential.ts's SetPinError('NOT_FOUND') —
+// the PIN-reset flow only ever sets a PIN for a Person that already
+// exists (they proved control of the number via OTP first); it never
+// creates one, unlike FindOrCreatePersonByMsisdn's sign-up path.
+var ErrPersonNotFound = errors.New("no Esoko account found with that number")
+
+// SetSubjectPinByMsisdn — same contract as auth-credential.ts's
+// setSubjectPin: upserts UserCredential (a freshly registered Person may
+// have none yet) but only for a Person that already exists.
+func SetSubjectPinByMsisdn(ctx context.Context, pool *pgxpool.Pool, msisdn, pinHash string) (partyID string, err error) {
+	err = pool.QueryRow(ctx, `SELECT "partyId" FROM person WHERE msisdn = $1`, msisdn).Scan(&partyID)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return "", ErrPersonNotFound
+	}
+	if err != nil {
+		return "", err
+	}
+	if err := UpsertPin(ctx, pool, partyID, pinHash); err != nil {
+		return "", err
+	}
+	return partyID, nil
 }
 
 const (

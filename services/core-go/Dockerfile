@@ -2,7 +2,7 @@
 # binary so the runtime image carries no Go toolchain, matching the
 # minimal-footprint reasoning in docs/adr/0004-language-allocation.md.
 
-FROM golang:1.23-alpine AS build
+FROM golang:1.25-alpine AS build
 WORKDIR /src
 COPY services/core-go/go.mod services/core-go/go.sum ./
 RUN go mod download
