@@ -4,6 +4,7 @@ import { hash } from '@node-rs/argon2';
 // package, so importing it by package name would be a self-dependency
 // pnpm doesn't wire up here the way it does for consumers.
 import { ROLE_PRESETS, TICKETING_STAFF_CAPABILITIES } from '../src/capabilities';
+import { findOrCreateTicketCustomer, earnLoyaltyForBooking } from '../src/dal/ticket-customer';
 
 const prisma = new PrismaClient();
 const ARGON = { memoryCost: 19_456, timeCost: 2, parallelism: 1 } as const;
@@ -69,10 +70,17 @@ async function upsertTicketOrg(input: {
 }) {
   return prisma.ticketOrg.upsert({
     where: { slug: input.slug },
-    update: { name: input.name, status: 'ACTIVE' },
+    update: { name: input.name, status: 'ACTIVE', loyaltyEnabled: true, installmentsEnabled: true },
     create: {
       enterpriseId: input.enterpriseId, name: input.name, slug: input.slug, vertical: input.vertical,
       status: 'ACTIVE', contactPhone: input.contactPhone, contactEmail: `${input.slug}@example-demo.esoko`,
+      // On for the demo so the guest-checkout walkthrough has points to
+      // show — Store's equivalent toggle defaults off, this is a
+      // deliberate seed-only override, not a platform default.
+      loyaltyEnabled: true, loyaltyPerKes: 1,
+      // Likewise on for the demo so a future-dated trip offers the
+      // "lipia pole pole" deposit plan.
+      installmentsEnabled: true, minDepositPercent: 20,
     },
   });
 }
@@ -109,10 +117,13 @@ async function upsertListing(input: {
   });
 }
 
-async function upsertTicketClass(listingId: string, name: string, priceKes: number, capacity: number, seated: boolean) {
+async function upsertTicketClass(
+  listingId: string, name: string, priceKes: number, capacity: number, seated: boolean,
+  amenities: string[] = [], amenityNote?: string,
+) {
   const existing = await prisma.ticketClass.findFirst({ where: { listingId, name } });
   if (existing) return existing;
-  return prisma.ticketClass.create({ data: { listingId, name, priceKes, capacity, seated } });
+  return prisma.ticketClass.create({ data: { listingId, name, priceKes, capacity, seated, amenities, amenityNote } });
 }
 
 /** Schedules an occurrence and, for any seated class on the listing,
@@ -198,7 +209,7 @@ async function main() {
     venueId: amphitheatre.id,
   });
   const afrobeatRegular = await upsertTicketClass(afrobeat.id, 'Regular', 1500, 200, false);
-  const afrobeatVip = await upsertTicketClass(afrobeat.id, 'VIP', 5000, 50, false);
+  const afrobeatVip = await upsertTicketClass(afrobeat.id, 'VIP', 5000, 50, false, ['SNACKS'], 'Front-of-stage viewing area');
   const afrobeatSchedule = await scheduleOccurrence(afrobeat.id, daysFromNow(14, 18), 'Main Stage');
   await scheduleOccurrence(afrobeat.id, daysFromNow(21, 18), 'Main Stage');
 
@@ -232,7 +243,10 @@ async function main() {
     routeId: nbomsa.id,
   });
   await upsertTicketClass(coastCoach.id, 'Economy seat', 1200, 44, true);
-  await upsertTicketClass(coastCoach.id, 'Business seat', 2500, 10, true);
+  await upsertTicketClass(coastCoach.id, 'Business seat', 2500, 10, true, ['WIFI', 'SNACKS', 'RECLINING'], 'USB charging port');
+  // A general-admission fare too, so a future-dated occurrence can offer
+  // the "lipia pole pole" deposit plan (installments are GA-only in v1).
+  await upsertTicketClass(coastCoach.id, 'Open seating', 900, 20, false);
   const coastSchedule = await scheduleOccurrence(coastCoach.id, daysFromNow(2, 21), 'KDA 001A');
   await scheduleOccurrence(coastCoach.id, daysFromNow(3, 21), 'KDA 001A');
 
@@ -247,16 +261,22 @@ async function main() {
   console.log(`  transport org: ${transportOrg.name} (${transportOrg.slug}) — 2 listings`);
 
   // ── one sample booking so /me/tickets has something to show ──────
+  // Also the walkthrough's "signed-in buyer earns points" example —
+  // auto-captures a TicketCustomer and earns loyalty exactly the way
+  // createBooking does, since this bypasses the DAL like the rest of
+  // this seed script's direct prisma.*.create calls.
   const existingBooking = await prisma.booking.findFirst({ where: { buyerPartyId: customer.partyId } });
   if (!existingBooking) {
     const seat = await prisma.seat.findFirstOrThrow({ where: { scheduleId: coastSchedule.id, status: 'AVAILABLE' } });
-    await prisma.$transaction(async (tx) => {
+    const coastCustomer = await findOrCreateTicketCustomer(transportOrg.id, customer.msisdn, 'Demo Customer', 'demo.customer@example-demo.esoko');
+    const booking = await prisma.$transaction(async (tx) => {
       await tx.seat.update({ where: { id: seat.id }, data: { status: 'BOOKED' } });
       const economyClass = await tx.ticketClass.findFirstOrThrow({ where: { listingId: coastCoach.id, name: 'Economy seat' } });
-      await tx.booking.create({
+      return tx.booking.create({
         data: {
           scheduleId: coastSchedule.id, buyerPartyId: customer.partyId,
-          buyerName: 'Demo Customer', buyerMsisdn: customer.msisdn,
+          buyerName: 'Demo Customer', buyerMsisdn: customer.msisdn, buyerEmail: 'demo.customer@example-demo.esoko',
+          ticketCustomerId: coastCustomer?.id,
           status: 'PAID', paymentMethod: 'CASH', totalKes: economyClass.priceKes, paidAt: new Date(),
           tickets: { create: [{
             ticketClassId: economyClass.id, seatId: seat.id, code: `DEMO${Math.random().toString(36).slice(2, 8).toUpperCase()}`,
@@ -265,6 +285,7 @@ async function main() {
         },
       });
     });
+    if (coastCustomer) await earnLoyaltyForBooking(transportOrg.id, coastCustomer.id, Number(booking.totalKes), booking.id);
     console.log('  sample booking: 1 paid coach ticket for Demo Customer');
   }
 
@@ -273,10 +294,12 @@ async function main() {
     where: { buyerPartyId: customer.partyId, schedule: { listingId: afrobeat.id } },
   });
   if (existingGaBooking === 0) {
-    await prisma.booking.create({
+    const eventsCustomer = await findOrCreateTicketCustomer(eventsOrg.id, customer.msisdn, 'Demo Customer', 'demo.customer@example-demo.esoko');
+    const booking = await prisma.booking.create({
       data: {
         scheduleId: afrobeatSchedule.id, buyerPartyId: customer.partyId,
-        buyerName: 'Demo Customer', buyerMsisdn: customer.msisdn,
+        buyerName: 'Demo Customer', buyerMsisdn: customer.msisdn, buyerEmail: 'demo.customer@example-demo.esoko',
+        ticketCustomerId: eventsCustomer?.id,
         status: 'PAID', paymentMethod: 'CASH', totalKes: afrobeatRegular.priceKes, paidAt: new Date(),
         tickets: { create: [{
           ticketClassId: afrobeatRegular.id, code: `DEMO${Math.random().toString(36).slice(2, 8).toUpperCase()}`,
@@ -284,9 +307,38 @@ async function main() {
         }] },
       },
     });
+    if (eventsCustomer) await earnLoyaltyForBooking(eventsOrg.id, eventsCustomer.id, Number(booking.totalKes), booking.id);
     console.log('  sample booking: 1 paid event ticket for Demo Customer');
   }
   void afrobeatVip; // reserved for future demo variety — kept unused-but-named for clarity of intent
+
+  // ── one guest booking, no Esoko account at all — the walkthrough's
+  // "guest checkout still earns points and gets notified" example ────
+  const guestMsisdn = '+254700111099';
+  const existingGuestBooking = await prisma.booking.findFirst({ where: { buyerMsisdn: guestMsisdn, buyerPartyId: null } });
+  if (!existingGuestBooking) {
+    const lakeSchedule = await prisma.listingSchedule.findFirstOrThrow({ where: { listingId: lakeShuttle.id } });
+    const seat = await prisma.seat.findFirstOrThrow({ where: { scheduleId: lakeSchedule.id, status: 'AVAILABLE' } });
+    const guestCustomer = await findOrCreateTicketCustomer(transportOrg.id, guestMsisdn, 'Demo Guest Rider', 'demo.guest@example-demo.esoko');
+    const booking = await prisma.$transaction(async (tx) => {
+      await tx.seat.update({ where: { id: seat.id }, data: { status: 'BOOKED' } });
+      const economyClass = await tx.ticketClass.findFirstOrThrow({ where: { listingId: lakeShuttle.id, name: 'Economy seat' } });
+      return tx.booking.create({
+        data: {
+          scheduleId: lakeSchedule.id, buyerPartyId: null,
+          buyerName: 'Demo Guest Rider', buyerMsisdn: guestMsisdn, buyerEmail: 'demo.guest@example-demo.esoko',
+          ticketCustomerId: guestCustomer?.id,
+          status: 'PAID', paymentMethod: 'CASH', totalKes: economyClass.priceKes, paidAt: new Date(),
+          tickets: { create: [{
+            ticketClassId: economyClass.id, seatId: seat.id, code: `DEMO${Math.random().toString(36).slice(2, 8).toUpperCase()}`,
+            holderName: 'Demo Guest Rider', holderMsisdn: guestMsisdn, priceKes: economyClass.priceKes, status: 'VALID',
+          }] },
+        },
+      });
+    });
+    if (guestCustomer) await earnLoyaltyForBooking(transportOrg.id, guestCustomer.id, Number(booking.totalKes), booking.id);
+    console.log(`  sample booking: 1 paid guest checkout (no Esoko account) for ${guestMsisdn}`);
+  }
 
   // ── credential summary ────────────────────────────────────────────
   console.log('\n── demo credentials ──────────────────────────────────────────');
@@ -305,6 +357,8 @@ async function main() {
   console.log('\nEsoko ops (internal, apps/admin) sign in with email + PIN:');
   console.log(`  demo-ticketing-ops@esoko.co.ke   PIN ${opsPin}   — role ESOKO_OPS`);
   console.log('\nPublic browse (no sign-in): http://localhost:3000/tickets or http://localhost:3001/tickets');
+  console.log(`Guest checkout works from there too — no account needed. ${guestMsisdn} (Demo Guest Rider) already`);
+  console.log('has one paid Kisumu shuttle booking as an example, and both demo orgs have loyalty points switched on.');
   console.log('\nAll of the above are demo-only rows, prefixed "Demo" throughout — safe to re-run this script.');
 }
 

@@ -2,11 +2,13 @@ import { Icon } from '@esoko/ui';
 import { getMyBookings } from '@esoko/db';
 import { requireSubject } from '@/lib/session';
 import { RetryPaymentButton } from './RetryPaymentButton';
+import { PayBalanceButton } from './PayBalanceButton';
 
 export const dynamic = 'force-dynamic';
 
 const STATUS_LABEL: Record<string, string> = {
   PENDING_PAYMENT: 'Awaiting payment',
+  PARTIALLY_PAID: 'Part-paid',
   PAID: 'Confirmed',
   CANCELLED: 'Cancelled',
   REFUNDED: 'Refunded',
@@ -74,7 +76,27 @@ export default async function MyTickets() {
             <div className="mrow"><span className="k">Total</span>
               <span className="v mono">KES {Number(b.totalKes).toLocaleString('en-KE')}</span></div>
 
-            {b.status === 'PENDING_PAYMENT' && b.paymentMethod === 'MPESA_STK' && (
+            {b.isInstallment && (b.status === 'PENDING_PAYMENT' || b.status === 'PARTIALLY_PAID') && (() => {
+              const paid = Number(b.amountPaidKes);
+              const total = Number(b.totalKes);
+              const balance = Math.max(0, total - paid);
+              return (
+                <>
+                  <div className="mrow"><span className="k">Paid so far</span>
+                    <span className="v mono">KES {paid.toLocaleString('en-KE')} / {total.toLocaleString('en-KE')}</span></div>
+                  {b.balanceDueBy && (
+                    <div className="mrow"><span className="k">Balance due</span>
+                      <span className="v">{b.balanceDueBy.toLocaleString('en-KE', { timeZone: 'Africa/Nairobi' })}</span></div>
+                  )}
+                  <p className="note" style={{ margin: '8px 0 0', fontSize: '.82rem' }}>
+                    Your ticket is issued once the balance is fully paid.
+                  </p>
+                  <PayBalanceButton bookingId={b.id} balanceKes={balance} />
+                </>
+              );
+            })()}
+
+            {!b.isInstallment && b.status === 'PENDING_PAYMENT' && b.paymentMethod === 'MPESA_STK' && (
               <RetryPaymentButton bookingId={b.id} />
             )}
 

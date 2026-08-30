@@ -1,6 +1,9 @@
 'use server';
 import { revalidatePath } from 'next/cache';
-import { getMyBookings, attachBookingCheckoutRequestId, confirmBookingPayment } from '@esoko/db';
+import {
+  getMyBookings, attachBookingCheckoutRequestId, attachBookingPaymentCheckoutRequestId,
+  createBookingBalancePayment, confirmBookingPayment,
+} from '@esoko/db';
 import { toSafeErrorMessage } from '@esoko/domain';
 import { initiateStkPush, MpesaError } from '@esoko/payments';
 import { requireSubject } from '@/lib/session';
@@ -29,6 +32,30 @@ export async function actionRetryBookingPayment(bookingId: string) {
 
     revalidatePath('/me/tickets');
     return { ok: true as const, data: { status: push.autoConfirmed ? ('PAID' as const) : ('PENDING_PAYMENT' as const) } };
+  } catch (e) {
+    console.error(e);
+    return { ok: false as const, error: e instanceof MpesaError ? e.message : toSafeErrorMessage(e, 'Could not start the M-Pesa payment') };
+  }
+}
+
+/** Pays a portion (or the balance) of an open "lipia pole pole" plan
+ *  from My tickets and fires the M-Pesa prompt for it. Same DAL path as
+ *  the public balance page in apps/web. */
+export async function actionPayBookingBalance(bookingId: string, amountKes: number) {
+  try {
+    const ctx = await requireSubject();
+    const payment = await createBookingBalancePayment(ctx, bookingId, amountKes);
+    const push = await initiateStkPush({
+      msisdn: payment.msisdn,
+      amountKes: payment.amountKes,
+      accountReference: `EKT${bookingId.slice(0, 8)}`,
+      description: 'Trip balance',
+    });
+    await attachBookingPaymentCheckoutRequestId(payment.id, push.checkoutRequestId);
+    if (push.autoConfirmed) await confirmBookingPayment(push.checkoutRequestId);
+
+    revalidatePath('/me/tickets');
+    return { ok: true as const, data: { status: push.autoConfirmed ? ('CONFIRMED' as const) : ('PENDING' as const) } };
   } catch (e) {
     console.error(e);
     return { ok: false as const, error: e instanceof MpesaError ? e.message : toSafeErrorMessage(e, 'Could not start the M-Pesa payment') };

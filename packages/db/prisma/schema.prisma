@@ -2785,17 +2785,83 @@ model TicketOrg {
   /// as Store.settlementPhone — actual payouts run through the ledger.
   settlementPhone String?
 
+  /// Loyalty points for ticket buyers — same idea as Store.loyaltyEnabled,
+  /// off by default, the organiser opts in.
+  loyaltyEnabled Boolean @default(false)
+  /// Points granted per whole KES spent on a paid booking. See
+  /// Store.loyaltyPerKes — one pool per organiser, not per listing.
+  loyaltyPerKes  Int     @default(1)
+
+  /// "Lipia pole pole" — lets a buyer book a future, general-admission
+  /// trip now with a deposit and clear the balance in M-Pesa top-ups
+  /// before departure. Off by default, the organiser opts in, same as
+  /// loyaltyEnabled. Tickets are issued only once the balance is fully
+  /// paid (see createBooking / confirmBookingPayment in dal/ticketing.ts).
+  installmentsEnabled Boolean @default(false)
+  /// Smallest deposit accepted to open an installment plan, as a percent
+  /// of the booking total (floored at MIN_INSTALLMENT_KES in domain).
+  minDepositPercent   Int     @default(20)
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  staff    TicketOrgStaff[]
-  venues   Venue[]
-  routes   Route[]
-  listings Listing[]
+  staff     TicketOrgStaff[]
+  venues    Venue[]
+  routes    Route[]
+  listings  Listing[]
+  customers TicketCustomer[]
 
   @@index([enterpriseId])
   @@index([status])
   @@map("ticket_org")
+}
+
+/// A ticket buyer's loyalty identity, org-scoped — the ticketing
+/// equivalent of StoreCustomer. Auto-captured at checkout the moment a
+/// phone number is on a booking, signed-in or not, same "no deliberate
+/// add-first step" reasoning as findOrCreateCustomer. `email` exists
+/// here (not on StoreCustomer) because ticket issuance is the one flow
+/// that regularly wants to notify by email as well as SMS.
+model TicketCustomer {
+  id    String    @id @default(uuid()) @db.Uuid
+  orgId String    @db.Uuid
+  org   TicketOrg @relation(fields: [orgId], references: [id], onDelete: Cascade)
+
+  msisdn    String
+  name      String?
+  email     String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  bookings Booking[]
+  loyalty  TicketLoyaltyEntry[]
+
+  @@unique([orgId, msisdn])
+  @@index([orgId, name])
+  @@map("ticket_customer")
+}
+
+/// One move in a ticket customer's points balance — mirrors
+/// LoyaltyEntry exactly (signed points, balance is derived by summing,
+/// never stored). Kept as its own table rather than reusing
+/// LoyaltyEntry because that table's customerId is a required FK into
+/// StoreCustomer, which is Store-scoped; a TicketOrg is not a Store.
+model TicketLoyaltyEntry {
+  id         String         @id @default(uuid()) @db.Uuid
+  customerId String         @db.Uuid
+  customer   TicketCustomer @relation(fields: [customerId], references: [id], onDelete: Cascade)
+
+  /// Signed. Positive = earned on a paid booking; negative = redeemed.
+  points    Int
+  /// EARN | REDEEM | ADJUSTMENT
+  kind      String
+  note      String?
+  bookingId String?  @db.Uuid
+  booking   Booking? @relation(fields: [bookingId], references: [id])
+  createdAt DateTime @default(now())
+
+  @@index([customerId, createdAt])
+  @@map("ticket_loyalty_entry")
 }
 
 /// Org-scoped staff login — same shape as Cashier, not a Party. A
@@ -2895,9 +2961,55 @@ model Listing {
 
   ticketClasses TicketClass[]
   schedules     ListingSchedule[]
+  seatMap       SeatMap?
+  addons        Addon[]
 
   @@index([orgId, status])
   @@map("listing")
+}
+
+/// An optional paid extra the organiser offers on top of a ticket —
+/// "WiFi KES 100", "Snacks KES 200", "Lunch KES 500". Distinct from
+/// TicketClass.amenities: amenities are perks already baked into a
+/// class's price and shown as badges; an Addon is its own line item a
+/// buyer opts into per ticket, with its own price. Listing-scoped, not
+/// per-class, so the same catalogue applies whichever seat a buyer picks.
+model Addon {
+  id        String  @id @default(uuid()) @db.Uuid
+  listingId String  @db.Uuid
+  listing   Listing @relation(fields: [listingId], references: [id], onDelete: Cascade)
+
+  name     String
+  priceKes Decimal @db.Decimal(12, 2)
+  /// Soft-off switch — an organiser retiring "Lunch" shouldn't rewrite
+  /// history on tickets that already have it.
+  active   Boolean @default(true)
+
+  createdAt DateTime @default(now())
+
+  ticketAddons TicketAddon[]
+
+  @@index([listingId])
+  @@map("addon")
+}
+
+/// One addon attached to one ticket, price snapshotted at booking
+/// time — same reasoning as Ticket.priceKes: a later Addon price edit
+/// must never rewrite what an already-issued ticket actually cost.
+model TicketAddon {
+  id       String  @id @default(uuid()) @db.Uuid
+  ticketId String  @db.Uuid
+  ticket   Ticket  @relation(fields: [ticketId], references: [id], onDelete: Cascade)
+  addonId  String? @db.Uuid
+  addon    Addon?  @relation(fields: [addonId], references: [id])
+
+  name     String
+  priceKes Decimal @db.Decimal(12, 2)
+
+  createdAt DateTime @default(now())
+
+  @@index([ticketId])
+  @@map("ticket_addon")
 }
 
 enum ScheduleStatus {
@@ -2944,19 +3056,72 @@ model TicketClass {
   listingId String  @db.Uuid
   listing   Listing @relation(fields: [listingId], references: [id], onDelete: Cascade)
 
-  name      String
-  priceKes  Decimal  @db.Decimal(12, 2)
-  seated    Boolean  @default(false)
+  name        String
+  priceKes    Decimal  @db.Decimal(12, 2)
+  seated      Boolean  @default(false)
   /// Per-schedule capacity. For seated classes this is also how many
-  /// Seat rows get generated per schedule.
-  capacity  Int
-  createdAt DateTime @default(now())
+  /// Seat rows get generated per schedule — kept in sync with
+  /// SeatMapSeat's count for this class whenever the organiser saves a
+  /// seat map (see dal/seat-map.ts), so this stays the source of truth
+  /// even for listings with no map (plain GA-style seated classes).
+  capacity    Int
+  /// Fixed perk tags — "WIFI", "SNACKS", "CHARGING", "RECLINING",
+  /// "EXTRA_LEGROOM", "BLANKET". A short closed set (not a free-text
+  /// list) so the public listing can render them as consistent badges
+  /// instead of parsing arbitrary buyer-facing copy.
+  amenities   String[] @default([])
+  /// Anything not covered by the fixed tag set — "USB port", free text,
+  /// shown alongside the badges.
+  amenityNote String?
+  createdAt   DateTime @default(now())
 
-  seats   Seat[]
-  tickets Ticket[]
+  seats        Seat[]
+  tickets      Ticket[]
+  seatMapSeats SeatMapSeat[]
 
   @@index([listingId])
   @@map("ticket_class")
+}
+
+/// The organiser's one-time seat layout for a listing — "this bus is
+/// 11 rows of 2+2" — reused to generate identical Seat rows on every
+/// new schedule (see createSchedule), instead of the old plain
+/// sequential-number fallback. One per listing; a listing with no
+/// SeatMap still works exactly as before (createSchedule falls back to
+/// numbering seats 1..capacity per seated class).
+model SeatMap {
+  id        String  @id @default(uuid()) @db.Uuid
+  listingId String  @unique @db.Uuid
+  listing   Listing @relation(fields: [listingId], references: [id], onDelete: Cascade)
+
+  rows    Int
+  /// "1+1" | "2+1" | "2+2" | "3+2" — seats either side of the aisle.
+  /// Informational for re-rendering the builder; the actual seat
+  /// positions live in SeatMapSeat regardless of this value.
+  pattern String
+
+  seats     SeatMapSeat[]
+  createdAt DateTime      @default(now())
+  updatedAt DateTime      @updatedAt
+
+  @@map("seat_map")
+}
+
+/// One position in the layout — "3B" — and which ticket class currently
+/// owns it. This is the template; actual bookable Seat rows are
+/// generated fresh per schedule from this list (see createSchedule).
+model SeatMapSeat {
+  id            String      @id @default(uuid()) @db.Uuid
+  seatMapId     String      @db.Uuid
+  seatMap       SeatMap     @relation(fields: [seatMapId], references: [id], onDelete: Cascade)
+  ticketClassId String      @db.Uuid
+  ticketClass   TicketClass @relation(fields: [ticketClassId], references: [id], onDelete: Cascade)
+
+  label String
+
+  @@unique([seatMapId, label])
+  @@index([ticketClassId])
+  @@map("seat_map_seat")
 }
 
 enum SeatStatus {
@@ -2988,6 +3153,9 @@ model Seat {
 
 enum BookingStatus {
   PENDING_PAYMENT
+  /// Installment plan open — a deposit (and maybe some top-ups) have
+  /// cleared but the balance is still owed. Tickets not yet issued.
+  PARTIALLY_PAID
   PAID
   CANCELLED
   REFUNDED
@@ -3009,10 +3177,39 @@ model Booking {
   buyerParty   Party?  @relation(fields: [buyerPartyId], references: [id])
   buyerName    String
   buyerMsisdn  String
+  /// Optional — a guest checkout can leave this out. Used for ticket
+  /// issuance/notification alongside SMS, never a login identifier.
+  buyerEmail   String?
+
+  /// The org-scoped loyalty identity this booking earned points on.
+  /// Auto-captured at checkout the same way buyerName/buyerMsisdn are —
+  /// set whether or not buyerPartyId is, since a signed-in subject and
+  /// a guest earn points the same way.
+  ticketCustomerId String?         @db.Uuid
+  ticketCustomer   TicketCustomer? @relation(fields: [ticketCustomerId], references: [id])
 
   status        BookingStatus        @default(PENDING_PAYMENT)
   paymentMethod BookingPaymentMethod @default(MPESA_STK)
   totalKes      Decimal              @db.Decimal(12, 2)
+
+  /// "Lipia pole pole" plan — deposit now, balance in M-Pesa top-ups
+  /// before departure. When true, payments run through BookingPayment
+  /// (not the single mpesaCheckoutRequestId below), no seat/GA capacity
+  /// is held during the plan, and Ticket rows are created only once
+  /// amountPaidKes reaches totalKes.
+  isInstallment Boolean @default(false)
+  /// Sum of every CONFIRMED BookingPayment. 0 for a plain full-payment
+  /// booking; not authoritative there (its single payment is tracked by
+  /// mpesaCheckoutRequestId / status).
+  amountPaidKes Decimal @db.Decimal(12, 2) @default(0)
+  /// Installment plans only — the balance must be cleared by this time
+  /// (the schedule's departAt). Past it, an unpaid plan is swept to
+  /// CANCELLED (see sweepOverdueInstallmentBookings).
+  balanceDueBy  DateTime?
+  /// Installment plans only — the lines to issue as Tickets once the
+  /// balance is fully paid: [{ ticketClassId, holderName?, holderMsisdn?,
+  /// addonIds? }]. Null for plain bookings, which issue tickets inline.
+  plannedLines  Json?
 
   mpesaCheckoutRequestId String?       @unique
   journalEntryId         String?       @unique @db.Uuid
@@ -3021,10 +3218,39 @@ model Booking {
   createdAt DateTime  @default(now())
   paidAt    DateTime?
 
-  tickets Ticket[]
+  tickets        Ticket[]
+  payments       BookingPayment[]
+  loyaltyEntries TicketLoyaltyEntry[]
 
   @@index([scheduleId, status])
   @@map("booking")
+}
+
+/// One M-Pesa payment against a booking. A plain full-payment booking
+/// never creates one (it uses Booking.mpesaCheckoutRequestId). An
+/// installment booking ("lipia pole pole") gets one per push — the
+/// opening DEPOSIT, any number of INSTALLMENT top-ups, and the final
+/// BALANCE that clears the plan. confirmBookingPayment matches the
+/// M-Pesa callback here by checkoutRequestId, marks it CONFIRMED, and
+/// rolls the amount into Booking.amountPaidKes.
+model BookingPayment {
+  id        String  @id @default(uuid()) @db.Uuid
+  bookingId String  @db.Uuid
+  booking   Booking @relation(fields: [bookingId], references: [id], onDelete: Cascade)
+
+  amountKes Decimal @db.Decimal(12, 2)
+  /// DEPOSIT | INSTALLMENT | BALANCE
+  kind      String
+  /// PENDING | CONFIRMED | FAILED
+  status    String  @default("PENDING")
+
+  mpesaCheckoutRequestId String?   @unique
+  mpesaReceiptCode       String?
+  createdAt              DateTime  @default(now())
+  confirmedAt            DateTime?
+
+  @@index([bookingId, status])
+  @@map("booking_payment")
 }
 
 enum TicketStatus {
@@ -3057,6 +3283,8 @@ model Ticket {
   checkedInBy   TicketOrgStaff? @relation(fields: [checkedInById], references: [id])
 
   createdAt DateTime @default(now())
+
+  addons TicketAddon[]
 
   @@index([bookingId])
   @@index([status])

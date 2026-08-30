@@ -7,6 +7,11 @@ import { BookingForm } from './BookingForm';
 
 const APP_URL = process.env.NEXT_PUBLIC_APP_URL ?? 'http://localhost:3001';
 
+const AMENITY_BADGES: Record<string, string> = {
+  WIFI: '📶 WiFi', SNACKS: '🍪 Snacks', CHARGING: '🔌 Charging', RECLINING: '🛋️ Reclining',
+  EXTRA_LEGROOM: '🦵 Extra legroom', BLANKET: '🧣 Blanket',
+};
+
 export async function generateMetadata({ params }: { params: Promise<{ slug: string }> }): Promise<Metadata> {
   const { slug } = await params;
   const listing = await getPublicListing(slug).catch(() => null);
@@ -15,10 +20,11 @@ export async function generateMetadata({ params }: { params: Promise<{ slug: str
 export const dynamic = 'force-dynamic';
 
 /**
- * Booking as a signed-in subject only, same boundary as apps/store's
- * checkout — but the sign-in flow itself lives on apps/app (3001),
- * since that's where every subject session originates. This page just
- * sends people there and back (?next=/tickets/[slug]).
+ * Public checkout, signed in or not — same boundary as apps/store's
+ * storefront. A signed-in subject's name/phone pre-fill from their
+ * record; a guest fills them in on the form itself and gets tickets
+ * issued to that phone (and email, if given), same as apps/store's
+ * checkout captures a StoreCustomer from checkout details alone.
  */
 export default async function TicketDetail({ params }: { params: Promise<{ slug: string }> }) {
   const { slug } = await params;
@@ -56,34 +62,49 @@ export default async function TicketDetail({ params }: { params: Promise<{ slug:
             )}
           </div>
 
+          <div className="card" style={{ marginBottom: 20 }}>
+            <h3 style={{ marginBottom: 12 }}>
+              {listing.org.vertical === 'TRANSPORT' ? 'Seat classes' : 'Ticket options'}
+            </h3>
+            {listing.ticketClasses.map((c) => (
+              <div key={c.id} style={{ padding: '10px 0', borderTop: '1px solid var(--line)' }}>
+                <div className="row" style={{ justifyContent: 'space-between' }}>
+                  <strong>{c.name}</strong>
+                  <span className="mono">KES {Number(c.priceKes).toLocaleString('en-KE')}{c.seated ? ' / seat' : ''}</span>
+                </div>
+                {(c.amenities.length > 0 || c.amenityNote) && (
+                  <p className="sub" style={{ margin: '4px 0 0', fontSize: '.82rem' }}>
+                    {c.amenities.map((a) => AMENITY_BADGES[a] ?? a).join('  ')}
+                    {c.amenityNote ? `  +${c.amenityNote}` : ''}
+                  </p>
+                )}
+              </div>
+            ))}
+          </div>
+
           {upcoming.length === 0 ? (
             <div className="card" style={{ textAlign: 'center' }}>
               <span className="icbox icbox-b" style={{ margin: '0 auto 14px' }}><Icon name="clock" size={20} /></span>
               <h3 style={{ marginBottom: 6 }}>Nothing scheduled right now</h3>
               <p className="sub" style={{ margin: 0 }}>Check back soon for the next occurrence.</p>
             </div>
-          ) : !signedIn ? (
-            <div className="card" style={{ textAlign: 'center' }}>
-              <span className="icbox icbox-b" style={{ margin: '0 auto 14px' }}><Icon name="lock" size={20} /></span>
-              <h3 style={{ marginBottom: 6 }}>Sign in to book</h3>
-              <p className="sub" style={{ margin: '0 0 16px' }}>Tickets are tied to your Esoko account so they're always in "My tickets".</p>
-              <a href={`${APP_URL}/signin?next=${encodeURIComponent(`${process.env.NEXT_PUBLIC_WEB_URL ?? 'http://localhost:3000'}/tickets/${slug}`)}`} className="btn btn-p">
-                Sign in
-              </a>
-            </div>
-          ) : !buyerMsisdn ? (
-            <div className="card" style={{ textAlign: 'center' }}>
-              <span className="icbox icbox-b" style={{ margin: '0 auto 14px' }}><Icon name="phone" size={20} /></span>
-              <h3 style={{ marginBottom: 6 }}>Add a phone number first</h3>
-              <p className="sub" style={{ margin: '0 0 16px' }}>Your tickets and payment prompt go to it.</p>
-              <a href={`${APP_URL}/me`} className="btn btn-p">Go to your Record</a>
-            </div>
           ) : (
             <BookingForm
-              schedules={upcoming.map((s) => ({ id: s.id, departAt: s.departAt.toISOString() }))}
-              ticketClasses={listing.ticketClasses.map((c) => ({ id: c.id, name: c.name, priceKes: Number(c.priceKes), seated: c.seated, capacity: c.capacity }))}
+              schedules={upcoming.map((s) => ({
+                id: s.id, departAt: s.departAt.toISOString(),
+                vehicleOrHallLabel: s.vehicleOrHallLabel, gateInfo: s.gateInfo,
+              }))}
+              ticketClasses={listing.ticketClasses.map((c) => ({
+                id: c.id, name: c.name, priceKes: Number(c.priceKes), seated: c.seated, capacity: c.capacity,
+                amenities: c.amenities, amenityNote: c.amenityNote,
+              }))}
+              seatMap={listing.seatMap ? { rows: listing.seatMap.rows, pattern: listing.seatMap.pattern, seats: listing.seatMap.seats } : null}
+              signedIn={signedIn}
+              installmentsEnabled={listing.org.installmentsEnabled}
+              minDepositPercent={listing.org.minDepositPercent}
               buyerName={buyerName}
               buyerMsisdn={buyerMsisdn}
+              signinUrl={`${APP_URL}/signin?next=${encodeURIComponent(`${process.env.NEXT_PUBLIC_WEB_URL ?? 'http://localhost:3000'}/tickets/${slug}`)}`}
             />
           )}
         </div>
