@@ -4,7 +4,9 @@ package httpapi
 
 import (
 	"net"
+	"time"
 
+	"github.com/gin-contrib/cors"
 	"github.com/gin-gonic/gin"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/redis/go-redis/v9"
@@ -33,7 +35,7 @@ func NewServer(cfg config.Config, pool *pgxpool.Pool, rdb *redis.Client) *Server
 
 func (s *Server) Router() *gin.Engine {
 	r := gin.New()
-	r.Use(gin.Recovery(), requestLogger())
+	r.Use(gin.Recovery(), requestLogger(), s.corsMiddleware())
 
 	r.GET("/health", s.handleHealth)
 	r.GET("/ready", s.handleReady)
@@ -52,6 +54,37 @@ func (s *Server) Router() *gin.Engine {
 	}
 
 	return r
+}
+
+// corsMiddleware exists only for the Flutter *web* target — native
+// iOS/Android builds never send an Origin header, so CORS is a no-op for
+// them either way. Dev defaults to allowing any origin (this is a
+// mobile-first API with no cookies to leak — the bearer token lives in
+// the client's own storage, not an ambient credential a hostile page
+// could ride on); production requires CORS_ALLOWED_ORIGINS to be set
+// explicitly, same dev-safe-by-default pattern as the SMS/M-Pesa
+// provider gating elsewhere in this service.
+func (s *Server) corsMiddleware() gin.HandlerFunc {
+	origins := s.Cfg.CORSAllowedOrigins
+	if len(origins) == 0 {
+		if config.CurrentAppEnv() == config.AppEnvDevelopment {
+			origins = []string{"*"}
+		} else {
+			return func(c *gin.Context) { c.Next() } // no cross-origin access until configured
+		}
+	}
+	cfg := cors.Config{
+		AllowOrigins:     origins,
+		AllowMethods:     []string{"GET", "POST", "OPTIONS"},
+		AllowHeaders:     []string{"Authorization", "Content-Type"},
+		AllowCredentials: false, // bearer token, not a cookie — nothing ambient to protect
+		MaxAge:           12 * time.Hour,
+	}
+	if len(origins) == 1 && origins[0] == "*" {
+		cfg.AllowOrigins = nil
+		cfg.AllowAllOrigins = true
+	}
+	return cors.New(cfg)
 }
 
 func requestLogger() gin.HandlerFunc {

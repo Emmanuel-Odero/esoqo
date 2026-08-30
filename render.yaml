@@ -107,6 +107,8 @@ services:
         value: console
       - key: PESAPAL_PROVIDER
         value: console
+      - key: CORS_ALLOWED_ORIGINS
+        sync: false   # comma-separated; only the Flutter app's web build needs this — set once that's deployed somewhere
 
   # ── Web — public-facing site ───────────────────────────────
   - type: web

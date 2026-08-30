@@ -7,6 +7,7 @@ package config
 import (
 	"os"
 	"strconv"
+	"strings"
 )
 
 // AppEnv mirrors packages/domain/src/env.ts's appEnv(): the single switch
@@ -36,6 +37,10 @@ type Config struct {
 	Port        string
 	DatabaseURL string
 	RedisURL    string
+
+	// CORS — see httpapi.Server.corsMiddleware's own comment; only
+	// matters for the Flutter *web* target, native apps ignore it.
+	CORSAllowedOrigins []string
 
 	// Auth
 	OTPPepper           string
@@ -82,10 +87,16 @@ func Load() Config {
 		rateLimit = 5
 	}
 
+	var corsOrigins []string
+	if raw := getenv("CORS_ALLOWED_ORIGINS", ""); raw != "" {
+		corsOrigins = strings.Split(raw, ",")
+	}
+
 	return Config{
-		Port:        getenv("PORT", "4100"),
-		DatabaseURL: getenv("DATABASE_URL", "postgres://esoko:esoko@localhost:6432/esoko?sslmode=disable"),
-		RedisURL:    getenv("REDIS_URL", "redis://localhost:6379"),
+		Port:               getenv("PORT", "4100"),
+		DatabaseURL:        getenv("DATABASE_URL", "postgres://esoko:esoko@localhost:6432/esoko?sslmode=disable"),
+		RedisURL:           getenv("REDIS_URL", "redis://localhost:6379"),
+		CORSAllowedOrigins: corsOrigins,
 
 		OTPPepper:           getenv("OTP_PEPPER", "dev-pepper-change-me"),
 		OTPDailySpendCapKES: dailyCap,
