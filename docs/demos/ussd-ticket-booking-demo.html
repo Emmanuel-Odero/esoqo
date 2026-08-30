@@ -1,0 +1,616 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>esoko USSD — Ticket Booking Demo</title>
+<style>
+  :root{
+    --bg:#0d1117; --panel:#161b22; --ink:#e6edf3; --muted:#8b949e;
+    --accent:#2ea043; --accent-d:#238636; --line:#30363d;
+    --ussd-bg:#f5f6f8; --ussd-ink:#1a1a1a; --ussd-line:#d5d8dd;
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{
+    font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+    background:radial-gradient(circle at 30% 0%,#1b2230,#0d1117 60%);
+    color:var(--ink); min-height:100vh; display:flex; flex-direction:column;
+    align-items:center; padding:32px 16px 64px;
+  }
+  h1{font-size:1.35rem;font-weight:650;letter-spacing:-.01em}
+  .lead{color:var(--muted);font-size:.9rem;margin:6px 0 26px;text-align:center;max-width:560px;line-height:1.5}
+  .stage{display:flex;gap:40px;flex-wrap:wrap;justify-content:center;align-items:flex-start}
+
+  /* ---------- phone ---------- */
+  .phone{
+    width:330px;height:680px;background:#000;border-radius:44px;
+    padding:14px;box-shadow:0 0 0 2px #23272e,0 30px 60px -20px rgba(0,0,0,.8);
+    position:relative;flex:none;
+  }
+  .notch{
+    position:absolute;top:14px;left:50%;transform:translateX(-50%);
+    width:150px;height:26px;background:#000;border-radius:0 0 18px 18px;z-index:20;
+  }
+  .screen{
+    width:100%;height:100%;background:#101317;border-radius:32px;overflow:hidden;
+    display:flex;flex-direction:column;position:relative;
+  }
+  .statusbar{
+    display:flex;justify-content:space-between;align-items:center;
+    padding:12px 22px 6px;font-size:.72rem;color:#c9d1d9;font-weight:600
+  }
+  .home{
+    flex:1;background:linear-gradient(160deg,#1f6feb,#0d47a1);
+    display:flex;flex-direction:column;align-items:center;justify-content:center;gap:14px;padding:24px
+  }
+  .home h2{font-size:1.05rem}
+  .home p{font-size:.8rem;opacity:.85;text-align:center;line-height:1.5}
+  .dial-btn{
+    margin-top:8px;background:#fff;color:#0d47a1;border:none;border-radius:999px;
+    padding:11px 22px;font-weight:700;font-size:.9rem;cursor:pointer
+  }
+
+  /* ---------- USSD dialog ---------- */
+  .ussd-overlay{
+    position:absolute;inset:0;background:rgba(0,0,0,.45);
+    display:flex;align-items:center;justify-content:center;padding:20px;z-index:30
+  }
+  .ussd{
+    width:100%;background:var(--ussd-bg);color:var(--ussd-ink);border-radius:14px;
+    overflow:hidden;font-size:.9rem;box-shadow:0 20px 40px rgba(0,0,0,.4);
+    animation:pop .16s ease-out
+  }
+  @keyframes pop{from{transform:scale(.94);opacity:0}to{transform:scale(1);opacity:1}}
+  .ussd-head{padding:14px 16px 6px;font-weight:700;font-size:.82rem;color:#555;letter-spacing:.02em}
+  .ussd-body{padding:4px 16px 14px;white-space:pre-wrap;line-height:1.5;min-height:130px}
+  .ussd-input{
+    width:calc(100% - 32px);margin:0 16px 12px;padding:9px 11px;border:1px solid var(--ussd-line);
+    border-radius:8px;font-size:.95rem;background:#fff;color:#000
+  }
+  .ussd-input:disabled{background:#eceef1;color:#8a8f98}
+  .ussd-actions{display:flex;border-top:1px solid var(--ussd-line)}
+  .ussd-actions button{
+    flex:1;border:none;background:transparent;padding:13px 0;font-size:.9rem;font-weight:700;
+    color:#1f6feb;cursor:pointer
+  }
+  .ussd-actions button:first-child{border-right:1px solid var(--ussd-line);color:#6b7280}
+  .ussd-actions button:disabled{color:#b6bcc4;cursor:default}
+
+  /* ---------- SMS ---------- */
+  .sms-screen{flex:1;background:#0b141a;display:flex;flex-direction:column}
+  .sms-top{padding:14px 18px;background:#1f2c33;font-weight:600;font-size:.85rem;border-bottom:1px solid #223}
+  .sms-list{flex:1;padding:16px;display:flex;flex-direction:column;gap:12px;overflow-y:auto}
+  .bubble{
+    background:#202c33;border-radius:12px 12px 12px 4px;padding:10px 12px;font-size:.8rem;
+    line-height:1.5;max-width:88%;white-space:pre-wrap;color:#e9edef;
+    box-shadow:0 1px 2px rgba(0,0,0,.3)
+  }
+  .bubble .from{display:block;font-size:.68rem;color:#8696a0;margin-bottom:3px;font-weight:700}
+  .bubble.mpesa{background:#134d37}
+
+  /* ---------- side log ---------- */
+  .log{
+    width:360px;background:var(--panel);border:1px solid var(--line);border-radius:16px;
+    padding:20px;flex:none
+  }
+  .log h3{font-size:.9rem;margin-bottom:4px}
+  .log .hint{color:var(--muted);font-size:.78rem;margin-bottom:14px;line-height:1.5}
+  .steps{list-style:none;display:flex;flex-direction:column;gap:2px}
+  .steps li{
+    font-size:.8rem;padding:8px 10px;border-radius:8px;color:var(--muted);
+    display:flex;gap:9px;align-items:flex-start;line-height:1.45
+  }
+  .steps li .dot{
+    width:16px;height:16px;border-radius:50%;border:2px solid var(--line);flex:none;margin-top:1px
+  }
+  .steps li.done{color:var(--ink)}
+  .steps li.done .dot{background:var(--accent);border-color:var(--accent)}
+  .steps li.active{color:var(--ink);background:#1f2733}
+  .steps li.active .dot{border-color:var(--accent)}
+  .controls{margin-top:16px;display:flex;gap:8px}
+  .controls button{
+    flex:1;border:1px solid var(--line);background:#21262d;color:var(--ink);
+    padding:9px;border-radius:8px;font-size:.8rem;font-weight:600;cursor:pointer
+  }
+  .controls button.primary{background:var(--accent-d);border-color:var(--accent-d)}
+  code{background:#21262d;padding:1px 5px;border-radius:4px;font-size:.85em}
+  .foot{color:var(--muted);font-size:.72rem;margin-top:28px;text-align:center;max-width:560px;line-height:1.6}
+</style>
+</head>
+<body>
+  <h1>esoko · USSD Ticket Booking</h1>
+  <p class="lead">A feature-phone-style USSD journey mocked on a smartphone. Dial
+    <code>*384*77#</code> to book a bus ticket end to end — no data, no app. Includes
+    <strong>Lipia pole pole</strong>: book a future trip with a deposit and clear the
+    balance in M-Pesa top-ups before you travel. Menu maps to the same
+    schedules / ticket classes / installment plan / M-Pesa STK flow as the esoko web booking page.</p>
+
+  <div class="stage">
+    <div class="phone">
+      <div class="notch"></div>
+      <div class="screen">
+        <div class="statusbar"><span>Safaricom</span><span id="clock">08:41</span><span>▮▮▮ 74%</span></div>
+        <div id="view"></div>
+      </div>
+    </div>
+
+    <div class="log">
+      <h3>Session steps</h3>
+      <p class="hint">USSD is stateless per request — esoko keeps the cart in a
+        short-lived session keyed by MSISDN + session ID. Each screen below is one request/response.</p>
+      <ul class="steps" id="steps"></ul>
+      <div class="controls">
+        <button id="back">◀ Back</button>
+        <button id="restart" class="primary">↻ Restart</button>
+      </div>
+    </div>
+  </div>
+
+  <p class="foot">Demo only — no real USSD gateway or payment. In esoko, the "real M-Pesa prompt"
+    is the same STK push the web checkout fires: console mode auto-confirms locally, and a deployed
+    environment with <code>MPESA_PROVIDER=sandbox</code> (or <code>production</code>) rings the
+    actual phone, with the booking staying PENDING / PART-PAID until Safaricom's callback lands.</p>
+
+<script>
+(function(){
+  "use strict";
+
+  var LISTING = {
+    org: "Prestige Shuttle",
+    route: "Nairobi → Kisumu",
+    departDateLabel: "Sat 6 Sep, 21:30",
+    schedules: [
+      { label: "Sat 6 Sep 21:30 (KDA 887M, night)", depart: "Sat 21:30", future: true },
+      { label: "Tomorrow 07:00 (KCE 442P)", depart: "Tomorrow 07:00", future: false },
+      { label: "Today 14:00 (KBX 123J)", depart: "Today 14:00", future: false }
+    ],
+    classes: [
+      { name: "Economy (open seating)", price: 1500 },
+      { name: "Business (open seating)", price: 2200 },
+      { name: "VIP (WiFi, snacks, charging)", price: 3000 }
+    ]
+  };
+
+  var MSISDN = "0712 345 678";
+  var REF = "ESK-7Q2M";
+  var MIN_DEPOSIT_PCT = 20;
+
+  var s = {};
+  function resetState(){ s = { schedule:null, cls:null, qty:null, phone:null, plan:null, deposit:null, balancePaid:0 }; }
+
+  // Two flows share the phone: BOOK (dial *384*77#) and PAYBAL (pay an
+  // existing plan's balance). `step` on each screen indexes into one of
+  // these lists for the side panel.
+  var STEPS_BOOK = [
+    "Dial *384*77#",
+    "Choose language",
+    "Main menu",
+    "Pick route / trip",
+    "Pick departure",
+    "Pick ticket class",
+    "Enter quantity",
+    "Choose payment plan",
+    "Enter deposit (lipia pole pole)",
+    "Confirm M-Pesa number",
+    "Review & pay",
+    "Enter M-Pesa PIN",
+    "Deposit received — SMS"
+  ];
+  var STEPS_PAYBAL = [
+    "Dial *384*77#",
+    "Choose language",
+    "Main menu › Pay trip balance",
+    "Enter booking ref",
+    "See balance owed",
+    "Enter amount to pay",
+    "Enter M-Pesa PIN",
+    "Balance cleared — SMS"
+  ];
+
+  var view = document.getElementById("view");
+  var stepsEl = document.getElementById("steps");
+  var history = [];
+  var current = "home";
+  var flow = "BOOK";
+
+  function money(n){ return "KES " + n.toLocaleString("en-KE"); }
+  function minDeposit(total){ return Math.max(100, Math.ceil(total * MIN_DEPOSIT_PCT / 100)); }
+  function lineTotal(){ return (s.cls ? s.cls.price : 0) * (s.qty || 0); }
+  function balanceOwed(){ return lineTotal() - (s.deposit || 0) - (s.balancePaid || 0); }
+
+  function renderSteps(activeIdx){
+    var list = flow === "PAYBAL" ? STEPS_PAYBAL : STEPS_BOOK;
+    stepsEl.innerHTML = "";
+    list.forEach(function(t, i){
+      var li = document.createElement("li");
+      li.className = i < activeIdx ? "done" : (i === activeIdx ? "active" : "");
+      li.innerHTML = '<span class="dot"></span><span>' + t + '</span>';
+      stepsEl.appendChild(li);
+    });
+  }
+
+  var screens = {
+    home: function(){ return { step:0, home:true }; },
+
+    lang: function(){
+      return {
+        step:1, head:"esoko Tickets",
+        body:"Welcome to esoko\n1. English\n2. Kiswahili",
+        placeholder:"Reply 1 or 2",
+        validate:function(v){ return v==="1"||v==="2"; },
+        onSend:function(){ go("menu"); }
+      };
+    },
+
+    menu: function(){
+      return {
+        step:2, head:"esoko Tickets",
+        body:"1. Book a bus ticket\n2. Pay trip balance (lipia pole pole)\n3. My tickets\n0. Exit",
+        placeholder:"Reply with a number",
+        validate:function(v){ return v==="1"||v==="2"; },
+        hintOnBad:"This demo wires options 1 and 2.",
+        onSend:function(v){
+          if (v==="2"){ flow="PAYBAL"; go("balRef"); return; }
+          flow="BOOK"; go("route");
+        }
+      };
+    },
+
+    // ── BOOK flow ─────────────────────────────────────────────────
+    route: function(){
+      return {
+        step:3, head:"Book a ticket",
+        body:LISTING.route + " (" + LISTING.org + ")\n1. Continue\n2. Search other routes\n00. Back",
+        placeholder:"Reply 1",
+        validate:function(v){ return v==="1"; },
+        hintOnBad:"This demo only wires option 1.",
+        onSend:function(){ go("schedule"); }
+      };
+    },
+    schedule: function(){
+      var lines = LISTING.schedules.map(function(sc,i){ return (i+1)+". "+sc.label; });
+      return {
+        step:4, head:LISTING.route,
+        body:"Choose departure:\n" + lines.join("\n") + "\n00. Back",
+        placeholder:"Reply 1-" + LISTING.schedules.length,
+        validate:function(v){ return /^[1-3]$/.test(v) && +v <= LISTING.schedules.length; },
+        onSend:function(v){ s.schedule = LISTING.schedules[+v-1]; go("cls"); }
+      };
+    },
+    cls: function(){
+      var lines = LISTING.classes.map(function(c,i){ return (i+1)+". "+c.name+" — "+money(c.price); });
+      return {
+        step:5, head:"Departure " + (s.schedule ? s.schedule.depart : ""),
+        body:"Ticket class:\n" + lines.join("\n") + "\n00. Back",
+        placeholder:"Reply 1-" + LISTING.classes.length,
+        validate:function(v){ return /^[1-3]$/.test(v) && +v <= LISTING.classes.length; },
+        onSend:function(v){ s.cls = LISTING.classes[+v-1]; go("qty"); }
+      };
+    },
+    qty: function(){
+      return {
+        step:6, head:s.cls ? s.cls.name.split(" ")[0] : "Tickets",
+        body:"How many tickets?\n(" + money(s.cls ? s.cls.price : 0) + " each)\nMax 10 per booking.",
+        placeholder:"Enter a number",
+        validate:function(v){ return /^([1-9]|10)$/.test(v); },
+        onSend:function(v){ s.qty = +v; go(s.schedule && s.schedule.future ? "plan" : "phone"); }
+      };
+    },
+    plan: function(){
+      var total = lineTotal();
+      return {
+        step:7, head:"Payment plan",
+        body:
+          "Total " + money(total) + "\n\n" +
+          "1. Pay in full now\n" +
+          "2. Lipia pole pole — deposit now,\n   balance before " + (s.schedule ? s.schedule.depart : "the trip") + "\n" +
+          "00. Back",
+        placeholder:"Reply 1 or 2",
+        validate:function(v){ return v==="1"||v==="2"; },
+        onSend:function(v){
+          if (v==="1"){ s.plan="FULL"; s.deposit = lineTotal(); go("phone"); return; }
+          s.plan="INSTALLMENT"; go("deposit");
+        }
+      };
+    },
+    deposit: function(){
+      var total = lineTotal();
+      var min = minDeposit(total);
+      return {
+        step:8, head:"Lipia pole pole",
+        body:
+          "Total " + money(total) + "\n" +
+          "Minimum first payment " + money(min) + "\n\n" +
+          "Enter how much to pay now:",
+        placeholder:"e.g. " + min,
+        validate:function(v){ return /^\d+$/.test(v) && +v >= min && +v <= total; },
+        hintOnBad:"Enter between " + money(min) + " and " + money(total) + ".",
+        onSend:function(v){ s.deposit = +v; go("phone"); }
+      };
+    },
+    phone: function(){
+      return {
+        step:9, head:"M-Pesa number",
+        body:"Send the M-Pesa prompt to:\n1. This phone (" + MSISDN + ")\n2. A different number",
+        placeholder:"Reply 1 or 2",
+        validate:function(v){ return v==="1"||v==="2"; },
+        hintOnBad:"Option 2 would ask for another MSISDN.",
+        onSend:function(){ s.phone = MSISDN; go("review"); }
+      };
+    },
+    review: function(){
+      var total = lineTotal();
+      var installment = s.plan === "INSTALLMENT";
+      var payNow = installment ? s.deposit : total;
+      var body =
+        LISTING.route + "\n" +
+        (s.schedule ? s.schedule.label : "") + "\n" +
+        (s.cls ? s.cls.name : "") + "  x" + (s.qty||0) + "\n" +
+        "Trip total: " + money(total) + "\n";
+      if (installment){
+        body += "Pay now (deposit): " + money(payNow) + "\n" +
+                "Balance: " + money(total - payNow) + " before " + (s.schedule ? s.schedule.depart : "the trip") + "\n";
+      } else {
+        body += "Pay now: " + money(payNow) + "\n";
+      }
+      body += "\n1. Pay with M-Pesa\n2. Cancel";
+      return {
+        step:10, head:"Confirm booking",
+        body:body,
+        placeholder:"Reply 1 to pay",
+        validate:function(v){ return v==="1"||v==="2"; },
+        onSend:function(v){ if(v==="2"){ restart(); return; } go("pin"); }
+      };
+    },
+    pin: function(){
+      var installment = s.plan === "INSTALLMENT";
+      var payNow = installment ? s.deposit : lineTotal();
+      return {
+        step:11, head:"M-PESA",
+        body:"Enter M-PESA PIN to pay " + money(payNow) + " to\nESOKO TICKETS for " + REF + ".",
+        placeholder:"••••", password:true, sendLabel:"OK",
+        validate:function(v){ return /^\d{4}$/.test(v); },
+        onSend:function(){ go("sending"); }
+      };
+    },
+    sending: function(){
+      return {
+        step:12, head:"M-PESA", body:"Processing payment…\nPlease wait.",
+        noInput:true, allowSend:false,
+        auto:function(){ setTimeout(function(){ go("sms"); }, 1500); }
+      };
+    },
+    sms: function(){ return { step:12, isSMS:true }; },
+
+    // ── PAY BALANCE flow ──────────────────────────────────────────
+    balRef: function(){
+      return {
+        step:3, head:"Pay trip balance",
+        body:"Enter your booking reference\n(from the SMS, e.g. " + REF + "):",
+        placeholder:"Booking ref",
+        validate:function(v){ return v.trim().length >= 4; },
+        onSend:function(v){
+          // If arriving fresh (no cart), seed a demo plan to pay off.
+          if (!s.cls){
+            s.schedule = LISTING.schedules[0];
+            s.cls = LISTING.classes[1];
+            s.qty = 1;
+            s.plan = "INSTALLMENT";
+            s.deposit = minDeposit(LISTING.classes[1].price);
+          }
+          go("balShow");
+        }
+      };
+    },
+    balShow: function(){
+      return {
+        step:4, head:"Booking " + REF,
+        body:
+          LISTING.route + "\n" +
+          (s.schedule ? s.schedule.label : "") + "\n\n" +
+          "Trip total: " + money(lineTotal()) + "\n" +
+          "Paid so far: " + money((s.deposit||0) + (s.balancePaid||0)) + "\n" +
+          "Balance owed: " + money(balanceOwed()) + "\n\n" +
+          "1. Pay balance now\n0. Back",
+        placeholder:"Reply 1",
+        validate:function(v){ return v==="1"; },
+        onSend:function(){ go("balAmount"); }
+      };
+    },
+    balAmount: function(){
+      var owed = balanceOwed();
+      return {
+        step:5, head:"Pay balance",
+        body:"Balance owed " + money(owed) + "\nPay any amount up to that now.\n\nEnter amount:",
+        placeholder:"e.g. " + owed,
+        validate:function(v){ return /^\d+$/.test(v) && +v >= 1 && +v <= owed; },
+        hintOnBad:"Enter between KES 1 and " + money(owed) + ".",
+        onSend:function(v){ s.pendingPay = +v; go("balPin"); }
+      };
+    },
+    balPin: function(){
+      return {
+        step:6, head:"M-PESA",
+        body:"Enter M-PESA PIN to pay " + money(s.pendingPay) + " to\nESOKO TICKETS for " + REF + ".",
+        placeholder:"••••", password:true, sendLabel:"OK",
+        validate:function(v){ return /^\d{4}$/.test(v); },
+        onSend:function(){ go("balSending"); }
+      };
+    },
+    balSending: function(){
+      return {
+        step:6, head:"M-PESA", body:"Processing payment…\nPlease wait.",
+        noInput:true, allowSend:false,
+        auto:function(){
+          setTimeout(function(){
+            s.balancePaid = (s.balancePaid||0) + (s.pendingPay||0);
+            go("balSms");
+          }, 1500);
+        }
+      };
+    },
+    balSms: function(){ return { step:7, isSMS:true, balance:true }; }
+  };
+
+  function go(id){
+    if (id !== "home" && current !== id) history.push(current);
+    current = id;
+    render();
+  }
+  function back(){
+    if (current === "home") return;
+    current = history.length ? history.pop() : "home";
+    render();
+  }
+  function restart(){
+    resetState(); history = []; current = "home"; flow = "BOOK"; render();
+  }
+
+  function render(){
+    var def = screens[current]();
+    renderSteps(def.step);
+    if (def.home) return renderHome();
+    if (def.isSMS) return renderSMS(def);
+
+    var wrap = document.createElement("div");
+    wrap.style.cssText = "flex:1;display:flex;flex-direction:column";
+    wrap.innerHTML =
+      '<div class="ussd-overlay"><div class="ussd">' +
+        '<div class="ussd-head">' + (def.head || "USSD") + '</div>' +
+        '<div class="ussd-body">' + def.body.replace(/</g,"&lt;") + '</div>' +
+        (def.noInput ? "" :
+          '<input class="ussd-input" id="ussd-in" ' +
+            (def.password ? 'type="password" inputmode="numeric"' : 'type="text"') +
+            ' placeholder="' + (def.placeholder||"") + '" autocomplete="off">') +
+        '<div class="ussd-actions">' +
+          '<button id="ussd-cancel">Cancel</button>' +
+          '<button id="ussd-send">' + (def.sendLabel || "Send") + '</button>' +
+        '</div>' +
+      '</div></div>';
+    view.innerHTML = "";
+    view.appendChild(wrap);
+
+    var input = document.getElementById("ussd-in");
+    var sendBtn = document.getElementById("ussd-send");
+    var errEl = null;
+    function showErr(msg){
+      if (!errEl){
+        errEl = document.createElement("div");
+        errEl.style.cssText = "color:#c0392b;font-size:.78rem;padding:0 16px 10px";
+        input.insertAdjacentElement("afterend", errEl);
+      }
+      errEl.textContent = msg;
+    }
+    if (sendBtn) sendBtn.onclick = function(){
+      var v = input ? input.value.trim() : "";
+      if (def.validate && !def.validate(v)){ showErr(def.hintOnBad || "Invalid choice. Try again."); return; }
+      def.onSend && def.onSend(v);
+    };
+    var cancel = document.getElementById("ussd-cancel");
+    if (cancel) cancel.onclick = function(){ restart(); };
+    if (input){
+      input.focus();
+      input.addEventListener("keydown", function(e){ if (e.key === "Enter") sendBtn.click(); });
+    }
+    if (def.auto) def.auto();
+  }
+
+  function renderHome(){
+    view.innerHTML =
+      '<div class="home">' +
+        '<h2>📱 Dialer</h2>' +
+        '<p>Type a USSD code and press call. No internet needed —\nworks on any phone on the network.</p>' +
+        '<div style="font-size:1.6rem;font-weight:700;letter-spacing:2px;margin-top:6px">*384*77#</div>' +
+        '<button class="dial-btn" id="dial">📞 Call</button>' +
+      '</div>';
+    document.getElementById("dial").onclick = function(){ resetState(); flow="BOOK"; go("lang"); };
+  }
+
+  function renderSMS(def){
+    var total = lineTotal();
+    var paid = (s.deposit||0) + (s.balancePaid||0);
+    var owed = Math.max(0, total - paid);
+    var seat = s.qty > 1 ? (s.qty + " seats") : "1 seat";
+    var receipt = "QGH5" + Math.floor(Math.random()*9000+1000);
+    var bubbles = "";
+
+    if (def.balance){
+      bubbles +=
+        '<div class="bubble mpesa"><span class="from">MPESA</span>' +
+          receipt + ' Confirmed. ' + money(s.pendingPay||0) + ' paid to ESOKO TICKETS on ' + todayStr() +
+          '. New M-PESA balance is KES 3,050.00.</div>';
+      if (owed <= 0){
+        bubbles +=
+          '<div class="bubble"><span class="from">ESOKO</span>' +
+            'Booking ' + REF + ' PAID IN FULL ✅\n' +
+            LISTING.route + '\n' + (s.schedule ? s.schedule.label : '') + '\n' +
+            (s.cls ? s.cls.name : '') + ' · ' + seat + '\n' +
+            'Boarding pass + QR: esoko.africa/t/' + REF + '\n' +
+            'Show this SMS or the QR at the gate. Safe travels!</div>' +
+          '<div class="bubble"><span class="from">ESOKO</span>' +
+            'You earned ' + (s.qty*15) + ' esoko loyalty points. Balance: ' + (s.qty*15 + 40) + ' pts.</div>';
+      } else {
+        bubbles +=
+          '<div class="bubble"><span class="from">ESOKO</span>' +
+            'Payment received for ' + REF + '. Paid ' + money(paid) + ' of ' + money(total) + '.\n' +
+            'Balance ' + money(owed) + ' due before ' + (s.schedule ? s.schedule.depart : 'the trip') + '.\n' +
+            'Dial *384*77# › Pay trip balance to top up.</div>';
+      }
+    } else {
+      // BOOK flow SMS
+      var installment = s.plan === "INSTALLMENT";
+      var payNow = installment ? s.deposit : total;
+      bubbles +=
+        '<div class="bubble mpesa"><span class="from">MPESA</span>' +
+          receipt + ' Confirmed. ' + money(payNow) + ' paid to ESOKO TICKETS on ' + todayStr() +
+          '. New M-PESA balance is KES 4,120.00.</div>';
+      if (installment){
+        bubbles +=
+          '<div class="bubble"><span class="from">ESOKO</span>' +
+            'Deposit received for ' + REF + ' 🚌\n' +
+            LISTING.route + ' · ' + (s.schedule ? s.schedule.label : '') + '\n' +
+            (s.cls ? s.cls.name : '') + ' · ' + seat + '\n' +
+            'Paid ' + money(payNow) + ' of ' + money(total) + '. Balance ' + money(total - payNow) + '.\n' +
+            'Pay it any time before ' + (s.schedule ? s.schedule.depart : 'the trip') +
+            ': dial *384*77# › Pay trip balance.\n' +
+            'Your ticket is issued once the balance is cleared.</div>';
+      } else {
+        bubbles +=
+          '<div class="bubble"><span class="from">ESOKO</span>' +
+            'Booking ' + REF + ' CONFIRMED ✅\n' +
+            LISTING.route + '\n' + (s.schedule ? s.schedule.label : '') + '\n' +
+            (s.cls ? s.cls.name : '') + ' · ' + seat + '\n' +
+            'Boarding pass + QR: esoko.africa/t/' + REF + '\n' +
+            'Show this SMS or the QR at the gate. Safe travels!</div>' +
+          '<div class="bubble"><span class="from">ESOKO</span>' +
+            'You earned ' + (s.qty*15) + ' esoko loyalty points. Balance: ' + (s.qty*15 + 40) + ' pts.</div>';
+      }
+    }
+
+    view.innerHTML =
+      '<div class="sms-screen">' +
+        '<div class="sms-top">Messages</div>' +
+        '<div class="sms-list">' + bubbles + '</div>' +
+      '</div>';
+  }
+
+  function todayStr(){
+    var d = new Date();
+    return ("0"+d.getDate()).slice(-2) + "/" + ("0"+(d.getMonth()+1)).slice(-2) + "/" + d.getFullYear();
+  }
+
+  document.getElementById("back").onclick = back;
+  document.getElementById("restart").onclick = restart;
+
+  setInterval(function(){
+    var d = new Date();
+    document.getElementById("clock").textContent =
+      ("0"+d.getHours()).slice(-2) + ":" + ("0"+d.getMinutes()).slice(-2);
+  }, 10000);
+
+  resetState();
+  render();
+})();
+</script>
+</body>
+</html>
