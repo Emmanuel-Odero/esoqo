@@ -73,6 +73,41 @@ services:
       - key: SEED_ADMIN_HASH
         sync: false
 
+  # ── core-go — mobile REST API (Go/Gin). See
+  #    docs/adr/0005-mobile-api-in-go.md. Docker runtime, same shape as
+  #    cecf-wordpress below, since it has no JS build step and isn't a
+  #    pnpm workspace member. Additive alongside esoko-core, not a
+  #    replacement, until the mobile-relevant domains have migrated.
+  - type: web
+    name: esoko-core-go
+    runtime: docker
+    repo: https://github.com/Emmanuel-Odero/esoko-254.git
+    branch: render
+    dockerfilePath: ./services/core-go/Dockerfile
+    dockerContext: .
+    healthCheckPath: /health
+    envVars:
+      - key: APP_ENV
+        value: production
+      - key: DATABASE_URL
+        fromDatabase:
+          name: esoko-db
+          property: connectionString
+      - key: REDIS_URL
+        sync: false   # same Redis instance as esoko-core above — set to the same value
+      - key: SESSION_SECRET
+        sync: false   # must match esoko-core's SESSION_SECRET — sessions are read by both while both run
+      - key: OTP_PEPPER
+        sync: false   # must match esoko-core's OTP_PEPPER
+      - key: AUDIT_CHAIN_SEED
+        sync: false   # must match esoko-core's AUDIT_CHAIN_SEED — same hash chain, same seed
+      - key: SMS_PROVIDER
+        value: console
+      - key: MPESA_PROVIDER
+        value: console
+      - key: PESAPAL_PROVIDER
+        value: console
+
   # ── Web — public-facing site ───────────────────────────────
   - type: web
     name: esoko-web

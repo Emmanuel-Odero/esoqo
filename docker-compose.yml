@@ -234,6 +234,40 @@ services:
         condition: service_healthy
 
   # ─────────────────────────────────────────────────────────────
+  # core-go — the mobile REST API (Go/Gin). See
+  # docs/adr/0005-mobile-api-in-go.md. Own port (4100, not 4000 —
+  # services/core keeps that) so both can run side by side while the
+  # mobile-relevant domains migrate over.
+  # ─────────────────────────────────────────────────────────────
+  core-go:
+    build:
+      context: .
+      dockerfile: services/core-go/Dockerfile
+    container_name: core-go
+    restart: unless-stopped
+    ports:
+      - "4100:4100"
+    environment:
+      APP_ENV: "${APP_ENV:-development}"
+      PORT: "4100"
+      DATABASE_URL: postgresql://esoko:esoko_dev_only@pgbouncer:5432/esoko?pgbouncer=true&connection_limit=10
+      REDIS_URL: redis://redis:6379
+      SMS_PROVIDER: "${SMS_PROVIDER:-console}"
+      SMS_MOCK_URL: http://mock-sms:8080
+      OTP_PEPPER: "${OTP_PEPPER:-dev-pepper-change-me}"
+      SESSION_SECRET: "${SESSION_SECRET:-dev-session-secret-change-me}"
+      AUDIT_CHAIN_SEED: "${AUDIT_CHAIN_SEED:-esoko-genesis}"
+      MPESA_PROVIDER: "${MPESA_PROVIDER:-console}"
+      PESAPAL_PROVIDER: "${PESAPAL_PROVIDER:-console}"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      pgbouncer:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
+  # ─────────────────────────────────────────────────────────────
   # CECF WordPress stack — opt-in only (docker compose --profile cecf up)
   # Mirrors the two-service Render topology: cecf-mariadb (private,
   # self-hosted — Render has no managed MySQL) + cecf-wordpress
