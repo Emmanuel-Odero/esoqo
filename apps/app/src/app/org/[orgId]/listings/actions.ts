@@ -1,11 +1,11 @@
 'use server';
 import { revalidatePath } from 'next/cache';
 import {
-  createListing, createVenue, createRoute, createTicketClass, createSchedule, publishListing,
+  createListing, createVenue, createRoute, createTicketClass, createSchedule, publishListing, saveSeatMap,
 } from '@esoko/db';
 import {
   createListingSchema, createVenueSchema, createRouteSchema,
-  createTicketClassSchema, createScheduleSchema, toSafeErrorMessage,
+  createTicketClassSchema, createScheduleSchema, saveSeatMapSchema, toSafeErrorMessage,
 } from '@esoko/domain';
 import { requireOrgAccess } from '@/lib/session';
 
@@ -73,6 +73,20 @@ export async function actionCreateSchedule(orgId: string, listingId: string, raw
   try {
     const { ctx } = await requireOrgAccess(orgId);
     await createSchedule(ctx, listingId, parsed.data);
+    revalidatePath(`/org/${orgId}/listings/${listingId}`);
+    return { ok: true as const };
+  } catch (e) {
+    console.error(e);
+    return { ok: false as const, error: toSafeErrorMessage(e, FALLBACK) };
+  }
+}
+
+export async function actionSaveSeatMap(orgId: string, listingId: string, raw: unknown) {
+  const parsed = saveSeatMapSchema.safeParse({ ...(raw as object), listingId });
+  if (!parsed.success) return { ok: false as const, error: parsed.error.issues[0]?.message ?? 'Check what you entered' };
+  try {
+    const { ctx } = await requireOrgAccess(orgId);
+    await saveSeatMap(ctx, listingId, parsed.data);
     revalidatePath(`/org/${orgId}/listings/${listingId}`);
     return { ok: true as const };
   } catch (e) {
