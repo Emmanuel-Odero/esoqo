@@ -265,12 +265,75 @@ func (s *Server) handleMe(c *gin.Context) {
 		writeError(c, http.StatusNotFound, "NOT_FOUND", "Profile not found")
 		return
 	}
+
+	// Lazily provisions a short "ESK-####-KE" Esoko ID the first time a
+	// profile is fetched — every account gets one, without a separate
+	// "activate" step, since core-go already verified the phone via OTP
+	// before this session existed. See dbx.EnsureEsokoPaymentId.
+	var esokoID string
+	if profile.Msisdn != nil {
+		esokoID, err = dbx.EnsureEsokoPaymentId(c.Request.Context(), s.Pool, profile.PartyID, *profile.Msisdn)
+		if err != nil {
+			writeError(c, http.StatusInternalServerError, "PAYMENT_ID_FAILED", "Could not prepare your Esoko ID")
+			return
+		}
+	}
+
 	c.JSON(http.StatusOK, gin.H{
 		"partyId":      profile.PartyID,
+		"esokoId":      esokoID,
 		"officialName": profile.OfficialName,
 		"knownAs":      profile.KnownAs,
 		"msisdn":       profile.Msisdn,
 		"capabilities": ctx.Capabilities,
+	})
+}
+
+// ── GET /v1/me/history (authenticated) ────────────────────────────
+
+func (s *Server) handleHistory(c *gin.Context) {
+	ctx := ctxFromGin(c)
+	items, err := dbx.GetHistory(c.Request.Context(), s.Pool, ctx.PartyID)
+	if err != nil {
+		writeError(c, http.StatusInternalServerError, "HISTORY_FAILED", "Could not load your history")
+		return
+	}
+	out := make([]gin.H, 0, len(items))
+	for _, it := range items {
+		out = append(out, gin.H{
+			"kind":       it.Kind,
+			"id":         it.ID,
+			"title":      it.Title,
+			"status":     it.Status,
+			"totalKes":   it.TotalKES,
+			"occurredAt": it.OccurredAt,
+		})
+	}
+	c.JSON(http.StatusOK, gin.H{"items": out})
+}
+
+// ── GET /v1/me/points (authenticated) ─────────────────────────────
+
+func (s *Server) handlePoints(c *gin.Context) {
+	ctx := ctxFromGin(c)
+	profile, err := dbx.GetPersonProfile(c.Request.Context(), s.Pool, ctx.PartyID)
+	if err != nil || profile == nil {
+		writeError(c, http.StatusNotFound, "NOT_FOUND", "Profile not found")
+		return
+	}
+	msisdn := ""
+	if profile.Msisdn != nil {
+		msisdn = *profile.Msisdn
+	}
+	pts, err := dbx.GetPoints(c.Request.Context(), s.Pool, ctx.PartyID, msisdn)
+	if err != nil {
+		writeError(c, http.StatusInternalServerError, "POINTS_FAILED", "Could not load your points")
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{
+		"storePoints":  pts.StorePoints,
+		"ticketPoints": pts.TicketPoints,
+		"totalPoints":  pts.Total(),
 	})
 }
 

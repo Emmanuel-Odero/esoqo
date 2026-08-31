@@ -2,6 +2,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../api/api_client.dart';
 import '../api/api_exception.dart';
+import '../api/providers.dart';
 import '../storage/token_store.dart';
 import 'auth_state.dart';
 
@@ -14,13 +15,20 @@ class AuthController extends Notifier<AuthState> {
 
   @override
   AuthState build() {
-    _api = ApiClient(onUnauthorized: _handleUnauthorized);
+    // Shared with every other screen (see core/api/providers.dart) —
+    // its onUnauthorized reads back into this controller via
+    // signOutLocally, so a 401 anywhere in the app drops straight to
+    // sign-in without each feature needing its own 401 handling.
+    _api = ref.read(apiClientProvider);
     // Fire-and-forget: check for a stored token from a previous session.
     _restore();
     return const AuthUnknown();
   }
 
-  void _handleUnauthorized() {
+  /// Drops local session state without calling the sign-out endpoint —
+  /// used when core-go itself just told us the session is gone (a 401),
+  /// so calling sign-out again would just 401 a second time.
+  void signOutLocally() {
     state = const AuthSignedOut();
   }
 

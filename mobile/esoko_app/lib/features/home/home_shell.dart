@@ -1,11 +1,15 @@
 import 'package:flutter/material.dart';
 
+import '../shopping/store_list_screen.dart';
+import '../tickets/listing_list_screen.dart';
 import 'coming_soon_screen.dart';
-import 'record_screen.dart';
+import 'profile_screen.dart';
 
-/// Bottom-nav shell — Record is real (GET /v1/me); Groups/Shopping/
-/// Tickets are honest placeholders until core-go's Phase 1 domain
-/// endpoints exist (see docs/adr/0005-mobile-api-in-go.md).
+/// Bottom-nav shell — Profile, Shopping and Tickets are real (core-go's
+/// Phase 0 auth + Phase 1 shopping/ticketing endpoints); Groups stays an
+/// honest placeholder until core-go's groups/treasury API ships (see
+/// docs/adr/0005-mobile-api-in-go.md — that's a separate, larger piece
+/// of work not part of this round).
 class HomeShell extends StatefulWidget {
   const HomeShell({super.key});
 
@@ -17,7 +21,7 @@ class _HomeShellState extends State<HomeShell> {
   int _index = 0;
 
   static const _tabs = [
-    (icon: Icons.badge_outlined, label: 'Record'),
+    (icon: Icons.badge_outlined, label: 'Profile'),
     (icon: Icons.groups_outlined, label: 'Groups'),
     (icon: Icons.storefront_outlined, label: 'Shopping'),
     (icon: Icons.confirmation_num_outlined, label: 'Tickets'),
@@ -26,7 +30,7 @@ class _HomeShellState extends State<HomeShell> {
   Widget _body(int index) {
     switch (index) {
       case 0:
-        return const RecordScreen();
+        return const ProfileScreen();
       case 1:
         return const ComingSoonScreen(
           title: 'Groups',
@@ -35,19 +39,9 @@ class _HomeShellState extends State<HomeShell> {
               'the app once core-go\'s groups/treasury API ships.',
         );
       case 2:
-        return const ComingSoonScreen(
-          title: 'Shopping',
-          icon: Icons.storefront_outlined,
-          description: 'Browsing stores and checking out is coming to the app once '
-              'core-go\'s store API ships.',
-        );
+        return const StoreListScreen();
       case 3:
-        return const ComingSoonScreen(
-          title: 'Tickets',
-          icon: Icons.confirmation_num_outlined,
-          description: 'Booking and holding tickets is coming to the app once '
-              'core-go\'s ticketing API ships.',
-        );
+        return const ListingListScreen();
       default:
         return const SizedBox.shrink();
     }

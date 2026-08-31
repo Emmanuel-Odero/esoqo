@@ -3,6 +3,7 @@
 class EsokoProfile {
   const EsokoProfile({
     required this.partyId,
+    this.esokoId,
     required this.officialName,
     this.knownAs,
     this.msisdn,
@@ -11,6 +12,7 @@ class EsokoProfile {
 
   factory EsokoProfile.fromJson(Map<String, dynamic> json) => EsokoProfile(
         partyId: json['partyId'] as String,
+        esokoId: json['esokoId'] as String?,
         officialName: json['officialName'] as String,
         knownAs: json['knownAs'] as String?,
         msisdn: json['msisdn'] as String?,
@@ -18,6 +20,11 @@ class EsokoProfile {
       );
 
   final String partyId;
+  /// The short, human-typeable "ESK-####-KE" code — see
+  /// dbx.EnsureEsokoPaymentId. What the UI should actually show; partyId
+  /// (a raw UUID) is an internal identifier, not something a person
+  /// should ever need to read or type.
+  final String? esokoId;
   final String officialName;
   final String? knownAs;
   final String? msisdn;

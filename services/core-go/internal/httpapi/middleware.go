@@ -48,3 +48,11 @@ func ctxFromGin(c *gin.Context) authsvc.Ctx {
 	ctx, _ := v.(authsvc.Ctx)
 	return ctx
 }
+
+// bearerToken reads the raw token off an optional Authorization header
+// — for routes that behave differently for a signed-in buyer vs a guest
+// without requiring one (see handleCreateOrder/handleCreateBooking).
+func bearerToken(c *gin.Context) string {
+	token, _ := strings.CutPrefix(c.GetHeader("Authorization"), "Bearer ")
+	return token
+}

@@ -47,6 +47,8 @@ dependencies:
   # Bearer token at rest — Keychain on iOS, Keystore on Android. Never
   # SharedPreferences for this; see lib/core/auth/token_store.dart.
   flutter_secure_storage: ^9.2.2
+  # Renders a Ticket's `code` as a scannable QR for "My tickets".
+  qr_flutter: ^4.1.0
 
 dev_dependencies:
   flutter_test:

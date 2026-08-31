@@ -4,6 +4,7 @@ package httpapi
 
 import (
 	"net"
+	"strconv"
 	"time"
 
 	"github.com/gin-contrib/cors"
@@ -51,7 +52,26 @@ func (s *Server) Router() *gin.Engine {
 		auth.POST("/sign-out", s.authRequired(), s.handleSignOut)
 
 		v1.GET("/me", s.authRequired(), s.handleMe)
+		v1.GET("/me/history", s.authRequired(), s.handleHistory)
+		v1.GET("/me/points", s.authRequired(), s.handlePoints)
+
+		v1.GET("/stores", s.handleListStores)
+		v1.GET("/stores/:slug", s.handleGetStore)
+		v1.GET("/stores/:slug/products", s.handleListStoreProducts)
+		v1.GET("/products/:id", s.handleGetProduct)
+		v1.POST("/orders", s.handleCreateOrder)
+		v1.GET("/orders/:id", s.handleGetOrder)
+		v1.GET("/me/orders", s.authRequired(), s.handleListMyOrders)
+
+		v1.GET("/listings", s.handleListListings)
+		v1.GET("/listings/:id", s.handleGetListing)
+		v1.GET("/schedules/:id/seats", s.handleListScheduleSeats)
+		v1.POST("/bookings", s.handleCreateBooking)
+		v1.GET("/bookings/:id", s.handleGetBooking)
+		v1.GET("/me/tickets", s.authRequired(), s.handleListMyBookings)
 	}
+
+	r.POST("/webhooks/mpesa/stk-callback", s.handleMpesaStkCallback)
 
 	return r
 }
@@ -105,4 +125,17 @@ func clientIP(c *gin.Context) string {
 
 func writeError(c *gin.Context, status int, code, message string) {
 	c.JSON(status, gin.H{"error": gin.H{"code": code, "message": message}})
+}
+
+// parseKES parses one of this package's own "%.2f"-formatted KES
+// strings (see dbx.CreateStoreOrder/CreateBooking) back into a float
+// for the STK push amount. Never fed anything but our own output, so a
+// parse failure here is a bug, not user input — hence the 0 fallback
+// rather than plumbing an error through every caller.
+func parseKES(s string) float64 {
+	f, err := strconv.ParseFloat(s, 64)
+	if err != nil {
+		return 0
+	}
+	return f
 }
