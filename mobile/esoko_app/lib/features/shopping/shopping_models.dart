@@ -3,7 +3,10 @@
 /// struct's own exported names, since those handlers return the struct
 /// straight through gin.JSON rather than a hand-shaped map).
 class StoreSummary {
-  StoreSummary({required this.id, required this.slug, required this.name, this.tagline, this.logoUrl, this.primaryCategory});
+  StoreSummary({
+    required this.id, required this.slug, required this.name, this.tagline, this.logoUrl, this.primaryCategory,
+    this.neighborhood, this.latitude, this.longitude,
+  });
 
   factory StoreSummary.fromJson(Map<String, dynamic> json) => StoreSummary(
         id: json['ID'] as String,
@@ -12,6 +15,9 @@ class StoreSummary {
         tagline: json['Tagline'] as String?,
         logoUrl: json['LogoURL'] as String?,
         primaryCategory: json['PrimaryCategory'] as String?,
+        neighborhood: json['Neighborhood'] as String?,
+        latitude: json['Latitude'] as String?,
+        longitude: json['Longitude'] as String?,
       );
 
   final String id;
@@ -20,6 +26,34 @@ class StoreSummary {
   final String? tagline;
   final String? logoUrl;
   final String? primaryCategory;
+  final String? neighborhood;
+  final String? latitude;
+  final String? longitude;
+}
+
+/// One row from GET /v1/stores/nearby — a StoreSummary plus how far
+/// away it is, when the caller supplied a device location at all (null
+/// in neighborhood-text-search mode). See dbx.ListStoresNearby.
+class NearbyStore extends StoreSummary {
+  NearbyStore({
+    required super.id, required super.slug, required super.name, super.tagline, super.logoUrl, super.primaryCategory,
+    super.neighborhood, super.latitude, super.longitude, this.distanceKm,
+  });
+
+  factory NearbyStore.fromJson(Map<String, dynamic> json) => NearbyStore(
+        id: json['ID'] as String,
+        slug: json['Slug'] as String,
+        name: json['Name'] as String,
+        tagline: json['Tagline'] as String?,
+        logoUrl: json['LogoURL'] as String?,
+        primaryCategory: json['PrimaryCategory'] as String?,
+        neighborhood: json['Neighborhood'] as String?,
+        latitude: json['Latitude'] as String?,
+        longitude: json['Longitude'] as String?,
+        distanceKm: (json['DistanceKM'] as num?)?.toDouble(),
+      );
+
+  final double? distanceKm;
 }
 
 class StoreDetail extends StoreSummary {
@@ -121,4 +155,43 @@ class ProductDetail extends ProductSummary {
   final String storeName;
   final String storeSlug;
   final List<ProductVariant> variants;
+}
+
+/// GET /v1/orders/:id and GET /v1/me/orders — see dbx.OrderStatus.
+/// PickupCode/ReadyAt/FulfilmentKind only populate for PICKUP orders
+/// (see core-go's ConfirmStoreOrderPaymentByCheckoutID/
+/// MarkOrderReadyForPickup — a DELIVERY order never gets a pickup code).
+class OrderStatus {
+  OrderStatus({
+    required this.id, required this.storeName, required this.status, required this.totalKes, required this.createdAt,
+    this.pickupCode, this.readyAt, this.fulfilmentKind, this.storeNeighborhood, this.storeLatitude, this.storeLongitude,
+  });
+
+  factory OrderStatus.fromJson(Map<String, dynamic> json) => OrderStatus(
+        id: json['ID'] as String,
+        storeName: json['StoreName'] as String,
+        status: json['Status'] as String,
+        totalKes: json['TotalKES'] as String,
+        createdAt: json['CreatedAt'] as String,
+        pickupCode: json['PickupCode'] as String?,
+        readyAt: json['ReadyAt'] as String?,
+        fulfilmentKind: json['FulfilmentKind'] as String?,
+        storeNeighborhood: json['StoreNeighborhood'] as String?,
+        storeLatitude: json['StoreLatitude'] as String?,
+        storeLongitude: json['StoreLongitude'] as String?,
+      );
+
+  final String id;
+  final String storeName;
+  final String status; // PENDING_PAYMENT | PAID | READY_FOR_PICKUP | FULFILLED | CANCELLED
+  final String totalKes;
+  final String createdAt;
+  final String? pickupCode;
+  final String? readyAt;
+  final String? fulfilmentKind; // PICKUP | DELIVERY
+  final String? storeNeighborhood;
+  final String? storeLatitude;
+  final String? storeLongitude;
+
+  bool get isPickup => fulfilmentKind == 'PICKUP';
 }

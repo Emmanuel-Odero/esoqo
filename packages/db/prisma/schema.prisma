@@ -920,6 +920,20 @@ model Store {
   /// Rough size of the catalogue ("how many things do you sell?").
   skuCount        Int?
 
+  /// Human-readable area for display and text search — "Kilimani,
+  /// Nairobi". Distinct from physicalAddress (a fuller street address):
+  /// this is the label a "near me"/neighborhood search matches against
+  /// and shows on a store card, kept short on purpose.
+  neighborhood String?
+  /// Real coordinates for the "stores near me" search
+  /// (dbx.ListStoresNearby's haversine query) and for a buyer's
+  /// "get directions" link once they've ordered. Both null until set —
+  /// a store without them simply doesn't appear in distance-sorted
+  /// results, same graceful-degradation as every other optional
+  /// storefront field here.
+  latitude     Decimal? @db.Decimal(9, 6)
+  longitude    Decimal? @db.Decimal(9, 6)
+
   /// Where orders are packed/picked up from — "Juja Main, Kiambu".
   deliveryOrigin         String?
   /// Free-text delivery areas served — "Juja, Thika, Ruiru".
@@ -965,6 +979,7 @@ model Store {
   @@index([enterpriseId])
   @@index([status])
   @@index([dispatchWarehouseOrgId])
+  @@index([latitude, longitude])
   @@map("store")
 }
 
@@ -1136,6 +1151,10 @@ model FulfilmentOption {
 enum StoreOrderStatus {
   PENDING_PAYMENT
   PAID
+  /// Packed and waiting at the store for the buyer to collect — only
+  /// reached for orders whose chosen fulfilment option is PICKUP. See
+  /// StoreOrder.pickupCode.
+  READY_FOR_PICKUP
   FULFILLED
   CANCELLED
 }
@@ -1171,6 +1190,18 @@ model StoreOrder {
   /// captured at checkout. Tracked so COD and last-mile delivery have a
   /// real destination on record.
   deliveryAddress  String?
+
+  /// Set once payment clears on a PICKUP order — a short code the
+  /// buyer reads out at the counter, checked against staff input
+  /// before the order can be marked FULFILLED. Never set for DELIVERY
+  /// orders.
+  pickupCode  String?   @unique
+  /// When the store moved this order to READY_FOR_PICKUP.
+  readyAt     DateTime?
+  /// When pickupCode was actually verified and handed over — distinct
+  /// from paidAt/status=FULFILLED alone so "how long did it sit ready"
+  /// is a real, queryable duration.
+  collectedAt DateTime?
 
   /// Cross-channel customer account, when the phone already belongs to a
   /// StoreCustomer (auto-created at checkout or matched by msisdn).

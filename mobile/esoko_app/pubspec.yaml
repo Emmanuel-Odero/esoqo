@@ -49,6 +49,11 @@ dependencies:
   flutter_secure_storage: ^9.2.2
   # Renders a Ticket's `code` as a scannable QR for "My tickets".
   qr_flutter: ^4.1.0
+  # Device location for "stores near me" (GET /v1/stores/nearby) — the
+  # click-and-collect search's GPS mode.
+  geolocator: ^13.0.2
+  # Opens the device's maps app for "Get directions" on a pickup order.
+  url_launcher: ^6.3.1
 
 dev_dependencies:
   flutter_test:

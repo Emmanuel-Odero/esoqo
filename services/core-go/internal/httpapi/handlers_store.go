@@ -2,6 +2,7 @@ package httpapi
 
 import (
 	"net/http"
+	"strconv"
 
 	"github.com/gin-gonic/gin"
 
@@ -13,6 +14,39 @@ func (s *Server) handleListStores(c *gin.Context) {
 	stores, err := dbx.ListStores(c.Request.Context(), s.Pool, 50, 0)
 	if err != nil {
 		writeError(c, http.StatusInternalServerError, "LIST_FAILED", "Could not load stores")
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"stores": stores})
+}
+
+// handleListStoresNearby — GET /v1/stores/nearby?lat=&lng=&radiusKm=&q=&category=.
+// lat/lng are optional together: supply both for a GPS-sorted "near
+// me" search, or omit both and use q/category for a neighborhood-text
+// search when the device has no location permission. See
+// dbx.ListStoresNearby's own comment for why this is one endpoint
+// instead of two.
+func (s *Server) handleListStoresNearby(c *gin.Context) {
+	var lat, lng *float64
+	if latStr, lngStr := c.Query("lat"), c.Query("lng"); latStr != "" && lngStr != "" {
+		latVal, errLat := strconv.ParseFloat(latStr, 64)
+		lngVal, errLng := strconv.ParseFloat(lngStr, 64)
+		if errLat != nil || errLng != nil {
+			writeError(c, http.StatusBadRequest, "INVALID_REQUEST", "lat/lng must be numbers")
+			return
+		}
+		lat, lng = &latVal, &lngVal
+	}
+
+	radiusKM := 15.0
+	if r := c.Query("radiusKm"); r != "" {
+		if v, err := strconv.ParseFloat(r, 64); err == nil && v > 0 {
+			radiusKM = v
+		}
+	}
+
+	stores, err := dbx.ListStoresNearby(c.Request.Context(), s.Pool, lat, lng, radiusKM, c.Query("q"), c.Query("category"), 50)
+	if err != nil {
+		writeError(c, http.StatusInternalServerError, "LIST_FAILED", "Could not load nearby stores")
 		return
 	}
 	c.JSON(http.StatusOK, gin.H{"stores": stores})
@@ -166,11 +200,46 @@ func (s *Server) handleListMyOrders(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"orders": orders})
 }
 
+// handleMarkOrderReady — POST /v1/stores/orders/:id/ready. Store-owner
+// only (see dbx.requireStoreOwner); the store's own Esoko account signs
+// in the same way a buyer would, there's no separate staff login.
+func (s *Server) handleMarkOrderReady(c *gin.Context) {
+	ctx := ctxFromGin(c)
+	if err := dbx.MarkOrderReadyForPickup(c.Request.Context(), s.Pool, c.Param("id"), ctx.PartyID); err != nil {
+		writeOrderOrBookingError(c, err)
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"status": "READY_FOR_PICKUP"})
+}
+
+type confirmCollectedRequest struct {
+	Code string `json:"code" binding:"required"`
+}
+
+// handleConfirmOrderCollected — POST /v1/stores/orders/:id/collect.
+// Store-owner only, same as handleMarkOrderReady.
+func (s *Server) handleConfirmOrderCollected(c *gin.Context) {
+	var req confirmCollectedRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		writeError(c, http.StatusBadRequest, "INVALID_REQUEST", err.Error())
+		return
+	}
+	ctx := ctxFromGin(c)
+	if err := dbx.ConfirmOrderCollected(c.Request.Context(), s.Pool, c.Param("id"), ctx.PartyID, req.Code); err != nil {
+		writeOrderOrBookingError(c, err)
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"status": "FULFILLED"})
+}
+
 func writeOrderOrBookingError(c *gin.Context, err error) {
 	if oe, ok := err.(*dbx.OrderError); ok {
 		status := http.StatusBadRequest
-		if oe.Code == "STORE_NOT_FOUND" {
+		switch oe.Code {
+		case "STORE_NOT_FOUND", "NOT_FOUND":
 			status = http.StatusNotFound
+		case "FORBIDDEN":
+			status = http.StatusForbidden
 		}
 		writeError(c, status, oe.Code, oe.Message)
 		return

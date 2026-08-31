@@ -1,4 +1,11 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
+    <!-- "Stores near me" (GET /v1/stores/nearby) — coarse is enough for
+         a neighborhood-radius search; fine is requested too since
+         that's what geolocator's default accuracy asks for, but the
+         feature degrades gracefully to text search if either is
+         denied. -->
+    <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION"/>
+    <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION"/>
     <application
         android:label="esoko_app"
         android:name="${applicationName}"

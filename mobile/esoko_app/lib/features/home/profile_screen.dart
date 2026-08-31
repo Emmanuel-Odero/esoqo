@@ -6,19 +6,22 @@ import '../../core/api/providers.dart';
 import '../../core/auth/auth_controller.dart';
 import '../../core/auth/auth_state.dart';
 import '../../core/theme/esoko_tokens.dart';
+import '../shopping/order_detail_screen.dart';
 
 /// One history item — a store order or a ticket booking, whichever
 /// GET /v1/me/history's Kind says (see dbx.HistoryItem).
 class _HistoryItem {
-  _HistoryItem({required this.kind, required this.title, required this.status, required this.totalKes, required this.occurredAt});
+  _HistoryItem({required this.kind, required this.id, required this.title, required this.status, required this.totalKes, required this.occurredAt});
   factory _HistoryItem.fromJson(Map<String, dynamic> json) => _HistoryItem(
         kind: json['kind'] as String,
+        id: json['id'] as String,
         title: json['title'] as String,
         status: json['status'] as String,
         totalKes: json['totalKes'] as String,
         occurredAt: DateTime.tryParse(json['occurredAt'] as String? ?? '') ?? DateTime.now(),
       );
   final String kind;
+  final String id;
   final String title;
   final String status;
   final String totalKes;
@@ -125,7 +128,7 @@ class ProfileScreen extends ConsumerWidget {
                     padding: const EdgeInsets.symmetric(vertical: EsokoSpacing.s4),
                     child: Text('No orders or bookings yet.', style: TextStyle(color: EsokoColors.text2)),
                   )
-                : Column(children: [for (final item in items) _historyTile(item)]),
+                : Column(children: [for (final item in items) _historyTile(context, item)]),
             loading: () => const Padding(
               padding: EdgeInsets.symmetric(vertical: EsokoSpacing.s6),
               child: Center(child: CircularProgressIndicator()),
@@ -143,15 +146,30 @@ class ProfileScreen extends ConsumerWidget {
     );
   }
 
-  Widget _historyTile(_HistoryItem item) {
+  Widget _historyTile(BuildContext context, _HistoryItem item) {
     final icon = item.kind == 'order' ? Icons.storefront_outlined : Icons.confirmation_num_outlined;
+    // Only orders have a detail screen today (pickup status, code,
+    // directions) — a ticket booking's "detail" is already the My
+    // tickets tab, so a booking tile stays informational for now.
+    final tappable = item.kind == 'order';
     return Card(
       margin: const EdgeInsets.only(bottom: EsokoSpacing.s2),
       child: ListTile(
         leading: Icon(icon, color: EsokoColors.text2),
         title: Text(item.title),
         subtitle: Text('${item.status} · ${_formatDate(item.occurredAt)}'),
-        trailing: Text('KES ${item.totalKes}'),
+        trailing: tappable
+            ? Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text('KES ${item.totalKes}'),
+                  Icon(Icons.chevron_right_rounded, color: EsokoColors.text3),
+                ],
+              )
+            : Text('KES ${item.totalKes}'),
+        onTap: tappable
+            ? () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => OrderDetailScreen(orderId: item.id)))
+            : null,
       ),
     );
   }

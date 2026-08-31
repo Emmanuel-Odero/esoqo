@@ -1,15 +1,22 @@
 // Package dbx (store.go) ports the buyer-facing slice of
 // packages/db/src/dal/store.ts, product.ts and store-order.ts — public
-// browse + checkout only. Merchant/PoS/reporting functions from those
-// files stay TypeScript-only; there's no mobile buyer screen that needs
-// them (see docs/adr/0005-mobile-api-in-go.md's "mobile v1 scope" note).
+// browse + checkout, plus the pickup-order lifecycle a store owner
+// drives from their own Esoko account (MarkOrderReadyForPickup,
+// ConfirmOrderCollected — see requireStoreOwner's own comment for why
+// that's a real, if v1-simplified, authorization check rather than a
+// new staff-PIN subsystem). PoS/reporting/catalogue-management
+// functions from those TS files stay TypeScript-only; there's no
+// mobile screen that needs them (see docs/adr/0005-mobile-api-in-go.md's
+// "mobile v1 scope" note).
 package dbx
 
 import (
 	"context"
+	cryptorand "crypto/rand"
 	"errors"
 	"fmt"
 	"strconv"
+	"strings"
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -24,13 +31,16 @@ type StoreSummary struct {
 	Tagline         *string
 	LogoURL         *string
 	PrimaryCategory *string
+	Neighborhood    *string
+	Latitude        *string
+	Longitude       *string
 }
 
 // ListStores — public storefront directory. Only ACTIVE stores, same
 // visibility rule as listPublicStores in store.ts.
 func ListStores(ctx context.Context, pool *pgxpool.Pool, limit, offset int) ([]StoreSummary, error) {
 	rows, err := pool.Query(ctx, `
-		SELECT id, slug, name, tagline, "logoUrl", "primaryCategory"
+		SELECT id, slug, name, tagline, "logoUrl", "primaryCategory", neighborhood, latitude::text, longitude::text
 		FROM store WHERE status = 'ACTIVE'
 		ORDER BY "createdAt" DESC
 		LIMIT $1 OFFSET $2`, limit, offset)
@@ -42,7 +52,84 @@ func ListStores(ctx context.Context, pool *pgxpool.Pool, limit, offset int) ([]S
 	var out []StoreSummary
 	for rows.Next() {
 		var s StoreSummary
-		if err := rows.Scan(&s.ID, &s.Slug, &s.Name, &s.Tagline, &s.LogoURL, &s.PrimaryCategory); err != nil {
+		if err := rows.Scan(&s.ID, &s.Slug, &s.Name, &s.Tagline, &s.LogoURL, &s.PrimaryCategory,
+			&s.Neighborhood, &s.Latitude, &s.Longitude); err != nil {
+			return nil, err
+		}
+		out = append(out, s)
+	}
+	return out, rows.Err()
+}
+
+// NearbyStore is ListStoresNearby's row shape — a StoreSummary plus how
+// far away it is, when the caller supplied a device location at all.
+type NearbyStore struct {
+	StoreSummary
+	DistanceKM *float64
+}
+
+// ListStoresNearby serves both of the "click & collect" discovery
+// modes: pass lat/lng for a haversine-distance-sorted search (a real
+// "near me" — Postgres computed, no PostGIS extension needed at this
+// scale); omit them and pass q/category for a neighborhood-text
+// search that works with no location permission at all. q matches
+// name/neighborhood/primaryCategory case-insensitively; category
+// narrows to stores whose primaryCategory matches exactly (case
+// insensitive) — e.g. "Supermarket".
+func ListStoresNearby(ctx context.Context, pool *pgxpool.Pool, lat, lng *float64, radiusKM float64, q, category string, limit int) ([]NearbyStore, error) {
+	if lat != nil && lng != nil {
+		rows, err := pool.Query(ctx, `
+			SELECT id, slug, name, tagline, "logoUrl", "primaryCategory", neighborhood, latitude::text, longitude::text,
+			       distance_km
+			FROM (
+				SELECT *,
+				       6371 * acos(LEAST(1, GREATEST(-1,
+				         cos(radians($1)) * cos(radians(latitude::float8)) * cos(radians(longitude::float8) - radians($2))
+				         + sin(radians($1)) * sin(radians(latitude::float8))
+				       ))) AS distance_km
+				FROM store
+				WHERE status = 'ACTIVE' AND latitude IS NOT NULL AND longitude IS NOT NULL
+			) s
+			WHERE distance_km <= $3
+			  AND ($4 = '' OR name ILIKE '%'||$4||'%' OR neighborhood ILIKE '%'||$4||'%' OR "primaryCategory" ILIKE '%'||$4||'%')
+			  AND ($5 = '' OR "primaryCategory" ILIKE $5)
+			ORDER BY distance_km ASC
+			LIMIT $6`, *lat, *lng, radiusKM, q, category, limit)
+		if err != nil {
+			return nil, err
+		}
+		defer rows.Close()
+		var out []NearbyStore
+		for rows.Next() {
+			var s NearbyStore
+			if err := rows.Scan(&s.ID, &s.Slug, &s.Name, &s.Tagline, &s.LogoURL, &s.PrimaryCategory,
+				&s.Neighborhood, &s.Latitude, &s.Longitude, &s.DistanceKM); err != nil {
+				return nil, err
+			}
+			out = append(out, s)
+		}
+		return out, rows.Err()
+	}
+
+	// No device location — text/category search only, same visibility
+	// rule and shape as ListStores, just filtered.
+	rows, err := pool.Query(ctx, `
+		SELECT id, slug, name, tagline, "logoUrl", "primaryCategory", neighborhood, latitude::text, longitude::text
+		FROM store
+		WHERE status = 'ACTIVE'
+		  AND ($1 = '' OR name ILIKE '%'||$1||'%' OR neighborhood ILIKE '%'||$1||'%' OR "primaryCategory" ILIKE '%'||$1||'%')
+		  AND ($2 = '' OR "primaryCategory" ILIKE $2)
+		ORDER BY "createdAt" DESC
+		LIMIT $3`, q, category, limit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var out []NearbyStore
+	for rows.Next() {
+		var s NearbyStore
+		if err := rows.Scan(&s.ID, &s.Slug, &s.Name, &s.Tagline, &s.LogoURL, &s.PrimaryCategory,
+			&s.Neighborhood, &s.Latitude, &s.Longitude); err != nil {
 			return nil, err
 		}
 		out = append(out, s)
@@ -62,10 +149,10 @@ type StoreDetail struct {
 func GetStoreBySlug(ctx context.Context, pool *pgxpool.Pool, slug string) (*StoreDetail, error) {
 	var d StoreDetail
 	err := pool.QueryRow(ctx, `
-		SELECT id, slug, name, tagline, "logoUrl", "primaryCategory",
+		SELECT id, slug, name, tagline, "logoUrl", "primaryCategory", neighborhood, latitude::text, longitude::text,
 		       "aboutUs", "contactPhone", "deliveryZones", "codEnabled", currency
 		FROM store WHERE slug = $1 AND status = 'ACTIVE'`, slug).
-		Scan(&d.ID, &d.Slug, &d.Name, &d.Tagline, &d.LogoURL, &d.PrimaryCategory,
+		Scan(&d.ID, &d.Slug, &d.Name, &d.Tagline, &d.LogoURL, &d.PrimaryCategory, &d.Neighborhood, &d.Latitude, &d.Longitude,
 			&d.AboutUs, &d.ContactPhone, &d.DeliveryZones, &d.CodEnabled, &d.Currency)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return nil, nil
@@ -416,14 +503,72 @@ func ConfirmStoreOrderPaymentByCheckoutID(ctx context.Context, pool *pgxpool.Poo
 		return err
 	}
 
+	// A pickup code is generated here, not at order creation, because
+	// it's only meaningful once money has actually moved — an unpaid
+	// order has nothing for a buyer to collect. Only PICKUP orders get
+	// one; DELIVERY orders never do.
+	var pickupCode *string
+	var fulfilmentKind *string
+	err = pool.QueryRow(ctx, `
+		SELECT fo.kind FROM store_order so LEFT JOIN fulfilment_option fo ON fo.id = so."deliveryOptionId"
+		WHERE so.id = $1`, orderID).Scan(&fulfilmentKind)
+	if err != nil {
+		return err
+	}
+	if fulfilmentKind != nil && *fulfilmentKind == "PICKUP" {
+		code, err := generatePickupCodeWithRetry(ctx, pool)
+		if err != nil {
+			return err
+		}
+		pickupCode = &code
+	}
+
 	_, err = pool.Exec(ctx, `
-		UPDATE store_order SET status = 'PAID', "paidAt" = now(), "journalEntryId" = $1 WHERE id = $2`,
-		journalEntryID, orderID)
+		UPDATE store_order SET status = 'PAID', "paidAt" = now(), "journalEntryId" = $1, "pickupCode" = $2 WHERE id = $3`,
+		journalEntryID, pickupCode, orderID)
 	if err != nil {
 		return err
 	}
 
 	return earnStoreLoyalty(ctx, pool, orderID, storeID, totalKES)
+}
+
+// generatePickupCode mirrors generateTicketCode's alphabet trick,
+// shorter (6 chars, not 10) — a pickup code is read aloud by a human
+// at a counter, not scanned, so it stays short but keeps the same
+// no-ambiguous-characters alphabet.
+func generatePickupCode() (string, error) {
+	b := make([]byte, 6)
+	if _, err := cryptorand.Read(b); err != nil {
+		return "", err
+	}
+	const alphabet = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789" // no 0/O/1/I ambiguity
+	out := make([]byte, 6)
+	for i := range out {
+		out[i] = alphabet[int(b[i])%len(alphabet)]
+	}
+	return "PKP-" + string(out), nil
+}
+
+// generatePickupCodeWithRetry retries on the rare unique-constraint
+// collision rather than trusting the keyspace is large enough to never
+// need to (33^6 ≈ 1.29B, but a retry loop costs nothing and turns a
+// theoretical collision into a non-event instead of a failed checkout).
+func generatePickupCodeWithRetry(ctx context.Context, pool *pgxpool.Pool) (string, error) {
+	for range 5 {
+		code, err := generatePickupCode()
+		if err != nil {
+			return "", err
+		}
+		var exists bool
+		if err := pool.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM store_order WHERE "pickupCode" = $1)`, code).Scan(&exists); err != nil {
+			return "", err
+		}
+		if !exists {
+			return code, nil
+		}
+	}
+	return "", fmt.Errorf("could not generate a unique pickup code")
 }
 
 // earnStoreLoyalty mirrors earnLoyaltyForSale's effect for an order
@@ -452,34 +597,59 @@ func earnStoreLoyalty(ctx context.Context, pool *pgxpool.Pool, orderID, storeID 
 	return err
 }
 
+// orderStatusSelect is shared by GetStoreOrder and ListOrdersForParty —
+// everything a buyer's order-detail screen needs in one call, since
+// GetOrder is already public-by-id (the order id is the secret, same
+// convention as getOrder in store-order.ts). The LEFT JOIN to
+// fulfilment_option is how a buyer knows this is even a pickup order
+// at all (deliveryOptionId is nullable, and a DELIVERY-fulfilled order
+// carries no pickup code).
+const orderStatusSelect = `
+	SELECT so.id, s.name, so.status::text, so."totalKes"::text, so."createdAt"::text,
+	       so."pickupCode", so."readyAt"::text, fo.kind,
+	       s.neighborhood, s.latitude::text, s.longitude::text
+	FROM store_order so
+	JOIN store s ON s.id = so."storeId"
+	LEFT JOIN fulfilment_option fo ON fo.id = so."deliveryOptionId"`
+
 type OrderStatus struct {
-	ID        string
-	StoreName string
-	Status    string
-	TotalKES  string
-	CreatedAt string
+	ID                string
+	StoreName         string
+	Status            string
+	TotalKES          string
+	CreatedAt         string
+	PickupCode        *string
+	ReadyAt           *string
+	FulfilmentKind    *string // PICKUP | DELIVERY, nil if no fulfilment option was chosen
+	StoreNeighborhood *string
+	StoreLatitude     *string
+	StoreLongitude    *string
 }
 
-func GetStoreOrder(ctx context.Context, pool *pgxpool.Pool, orderID string) (*OrderStatus, error) {
+func scanOrderStatus(row pgx.Row) (*OrderStatus, error) {
 	var o OrderStatus
-	err := pool.QueryRow(ctx, `
-		SELECT so.id, s.name, so.status::text, so."totalKes"::text, so."createdAt"::text
-		FROM store_order so JOIN store s ON s.id = so."storeId"
-		WHERE so.id = $1`, orderID).
-		Scan(&o.ID, &o.StoreName, &o.Status, &o.TotalKES, &o.CreatedAt)
-	if errors.Is(err, pgx.ErrNoRows) {
-		return nil, nil
-	}
+	err := row.Scan(&o.ID, &o.StoreName, &o.Status, &o.TotalKES, &o.CreatedAt,
+		&o.PickupCode, &o.ReadyAt, &o.FulfilmentKind,
+		&o.StoreNeighborhood, &o.StoreLatitude, &o.StoreLongitude)
 	if err != nil {
 		return nil, err
 	}
 	return &o, nil
 }
 
+func GetStoreOrder(ctx context.Context, pool *pgxpool.Pool, orderID string) (*OrderStatus, error) {
+	o, err := scanOrderStatus(pool.QueryRow(ctx, orderStatusSelect+` WHERE so.id = $1`, orderID))
+	if errors.Is(err, pgx.ErrNoRows) {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, err
+	}
+	return o, nil
+}
+
 func ListOrdersForParty(ctx context.Context, pool *pgxpool.Pool, partyID string) ([]OrderStatus, error) {
-	rows, err := pool.Query(ctx, `
-		SELECT so.id, s.name, so.status::text, so."totalKes"::text, so."createdAt"::text
-		FROM store_order so JOIN store s ON s.id = so."storeId"
+	rows, err := pool.Query(ctx, orderStatusSelect+`
 		WHERE so."buyerPartyId" = $1
 		ORDER BY so."createdAt" DESC`, partyID)
 	if err != nil {
@@ -488,11 +658,109 @@ func ListOrdersForParty(ctx context.Context, pool *pgxpool.Pool, partyID string)
 	defer rows.Close()
 	var out []OrderStatus
 	for rows.Next() {
-		var o OrderStatus
-		if err := rows.Scan(&o.ID, &o.StoreName, &o.Status, &o.TotalKES, &o.CreatedAt); err != nil {
+		o, err := scanOrderStatus(rows)
+		if err != nil {
 			return nil, err
 		}
-		out = append(out, o)
+		out = append(out, *o)
 	}
 	return out, rows.Err()
+}
+
+// requireStoreOwner is the shared authorization check for both pickup
+// management actions below. core-go has no separate staff-PIN login
+// (Cashier/TicketOrgStaff are TS-only POS concepts) — a store's own
+// Esoko account, the same one it would use to buy something, is who's
+// allowed to manage that store's pickup orders. Mirrors the
+// groups/treasury "officer" check: same signed-in-party pattern, no
+// new auth subsystem. Returns the store id and a FORBIDDEN OrderError
+// when actingPartyID isn't the owner.
+func requireStoreOwner(ctx context.Context, pool *pgxpool.Pool, orderID, actingPartyID string) (storeID string, err error) {
+	var ownerPartyID string
+	err = pool.QueryRow(ctx, `
+		SELECT s.id, e."partyId"
+		FROM store_order so
+		JOIN store s ON s.id = so."storeId"
+		JOIN enterprise e ON e.id = s."enterpriseId"
+		WHERE so.id = $1`, orderID).Scan(&storeID, &ownerPartyID)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return "", &OrderError{"NOT_FOUND", "That order was not found"}
+	}
+	if err != nil {
+		return "", err
+	}
+	if actingPartyID == "" || actingPartyID != ownerPartyID {
+		return "", &OrderError{"FORBIDDEN", "You don't manage this store"}
+	}
+	return storeID, nil
+}
+
+// MarkOrderReadyForPickup — the store side of the "click & collect"
+// flow: PAID → READY_FOR_PICKUP, only for orders whose chosen
+// fulfilment option is PICKUP. Backfills pickupCode if somehow still
+// empty (a COD-at-pickup order never passed through
+// ConfirmStoreOrderPaymentByCheckoutID's PAID transition, since COD
+// has no STK confirmation step in mobile v1 — this is the fallback so
+// the flow still works end to end for that edge case).
+func MarkOrderReadyForPickup(ctx context.Context, pool *pgxpool.Pool, orderID, actingPartyID string) error {
+	if _, err := requireStoreOwner(ctx, pool, orderID, actingPartyID); err != nil {
+		return err
+	}
+
+	var status string
+	var fulfilmentKind *string
+	var pickupCode *string
+	err := pool.QueryRow(ctx, `
+		SELECT so.status::text, fo.kind, so."pickupCode"
+		FROM store_order so LEFT JOIN fulfilment_option fo ON fo.id = so."deliveryOptionId"
+		WHERE so.id = $1`, orderID).Scan(&status, &fulfilmentKind, &pickupCode)
+	if err != nil {
+		return err
+	}
+	if status != "PAID" {
+		return &OrderError{"INVALID_STATUS", "Only a paid order can be marked ready for pickup"}
+	}
+	if fulfilmentKind == nil || *fulfilmentKind != "PICKUP" {
+		return &OrderError{"NOT_PICKUP", "This order isn't a pickup order"}
+	}
+	if pickupCode == nil {
+		code, err := generatePickupCodeWithRetry(ctx, pool)
+		if err != nil {
+			return err
+		}
+		pickupCode = &code
+	}
+
+	_, err = pool.Exec(ctx, `
+		UPDATE store_order SET status = 'READY_FOR_PICKUP', "readyAt" = now(), "pickupCode" = $1 WHERE id = $2`,
+		pickupCode, orderID)
+	return err
+}
+
+// ConfirmOrderCollected — READY_FOR_PICKUP → FULFILLED, only once the
+// code the staff member typed in matches what the buyer was shown.
+// Comparison is case-insensitive (a human reading a code aloud won't
+// reliably preserve case) but otherwise exact — no partial match.
+func ConfirmOrderCollected(ctx context.Context, pool *pgxpool.Pool, orderID, actingPartyID, code string) error {
+	if _, err := requireStoreOwner(ctx, pool, orderID, actingPartyID); err != nil {
+		return err
+	}
+
+	var status string
+	var pickupCode *string
+	err := pool.QueryRow(ctx, `SELECT status::text, "pickupCode" FROM store_order WHERE id = $1`, orderID).
+		Scan(&status, &pickupCode)
+	if err != nil {
+		return err
+	}
+	if status != "READY_FOR_PICKUP" {
+		return &OrderError{"INVALID_STATUS", "This order isn't ready for pickup"}
+	}
+	if pickupCode == nil || !strings.EqualFold(strings.TrimSpace(code), *pickupCode) {
+		return &OrderError{"WRONG_CODE", "That pickup code doesn't match"}
+	}
+
+	_, err = pool.Exec(ctx, `
+		UPDATE store_order SET status = 'FULFILLED', "collectedAt" = now() WHERE id = $1`, orderID)
+	return err
 }

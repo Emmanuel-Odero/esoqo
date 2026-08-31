@@ -56,12 +56,15 @@ func (s *Server) Router() *gin.Engine {
 		v1.GET("/me/points", s.authRequired(), s.handlePoints)
 
 		v1.GET("/stores", s.handleListStores)
+		v1.GET("/stores/nearby", s.handleListStoresNearby)
 		v1.GET("/stores/:slug", s.handleGetStore)
 		v1.GET("/stores/:slug/products", s.handleListStoreProducts)
 		v1.GET("/products/:id", s.handleGetProduct)
 		v1.POST("/orders", s.handleCreateOrder)
 		v1.GET("/orders/:id", s.handleGetOrder)
 		v1.GET("/me/orders", s.authRequired(), s.handleListMyOrders)
+		v1.POST("/stores/orders/:id/ready", s.authRequired(), s.handleMarkOrderReady)
+		v1.POST("/stores/orders/:id/collect", s.authRequired(), s.handleConfirmOrderCollected)
 
 		v1.GET("/listings", s.handleListListings)
 		v1.GET("/listings/:id", s.handleGetListing)
