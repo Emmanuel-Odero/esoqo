@@ -45,7 +45,7 @@ class StoreDetailScreen extends ConsumerWidget {
                 backgroundColor: style.gradient.last,
                 foregroundColor: Colors.white,
                 flexibleSpace: FlexibleSpaceBar(
-                  title: Text(s.name, style: const TextStyle(fontSize: 16)),
+                  title: Text(s.name, style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w800)),
                   background: Stack(
                     fit: StackFit.expand,
                     children: [

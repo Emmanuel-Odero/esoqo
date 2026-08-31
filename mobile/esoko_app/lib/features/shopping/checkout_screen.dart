@@ -124,7 +124,7 @@ class _CheckoutScreenState extends ConsumerState<CheckoutScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text('Checkout')),
+      appBar: const EsokoAppBar(title: 'Checkout'),
       body: SafeArea(
         child: Center(
           child: ConstrainedBox(

@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../core/api/api_exception.dart';
 import '../../core/auth/auth_controller.dart';
 import '../../core/theme/esoko_tokens.dart';
+import '../../core/widgets/widgets.dart';
 
 enum _Step { phone, resetPin }
 
@@ -73,7 +74,7 @@ class _ForgotPinScreenState extends ConsumerState<ForgotPinScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text('Reset your PIN')),
+      appBar: const EsokoAppBar(title: 'Reset your PIN'),
       body: SafeArea(
         child: Center(
           child: ConstrainedBox(

@@ -3,6 +3,7 @@
 library;
 
 export 'async_view.dart';
+export 'esoko_app_bar.dart';
 export 'esoko_card.dart';
 export 'esoko_empty_state.dart';
 export 'esoko_error_view.dart';

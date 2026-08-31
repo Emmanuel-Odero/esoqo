@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../core/api/api_exception.dart';
 import '../../core/api/providers.dart';
 import '../../core/theme/esoko_tokens.dart';
+import '../../core/widgets/widgets.dart';
 
 enum _Stage { form, submitting, done, failed }
 
@@ -57,7 +58,7 @@ class _ContributeScreenState extends ConsumerState<ContributeScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text('Contribute')),
+      appBar: const EsokoAppBar(title: 'Contribute'),
       body: SafeArea(
         child: Center(
           child: ConstrainedBox(

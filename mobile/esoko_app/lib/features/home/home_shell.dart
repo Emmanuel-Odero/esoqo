@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../../core/widgets/widgets.dart';
 import '../bills/bills_list_screen.dart';
 import '../groups/my_groups_screen.dart';
 import '../shopping/store_list_screen.dart';
@@ -45,7 +46,7 @@ class _HomeShellState extends State<HomeShell> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: Text(_tabs[_index].label)),
+      appBar: EsokoAppBar(title: _tabs[_index].label),
       body: SafeArea(child: IndexedStack(index: _index, children: _screens)),
       bottomNavigationBar: NavigationBar(
         selectedIndex: _index,

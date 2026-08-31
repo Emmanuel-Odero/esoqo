@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../core/api/api_exception.dart';
 import '../../core/api/providers.dart';
 import '../../core/theme/esoko_tokens.dart';
+import '../../core/widgets/widgets.dart';
 
 const _groupKinds = [
   ('CHAMA', 'Chama'),
@@ -54,7 +55,7 @@ class _CreateGroupScreenState extends ConsumerState<CreateGroupScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text('Start a group')),
+      appBar: const EsokoAppBar(title: 'Start a group'),
       body: SafeArea(
         child: Center(
           child: ConstrainedBox(

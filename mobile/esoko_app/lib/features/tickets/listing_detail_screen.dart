@@ -35,7 +35,7 @@ class ListingDetailScreen extends ConsumerWidget {
                 backgroundColor: style.gradient.last,
                 foregroundColor: Colors.white,
                 flexibleSpace: FlexibleSpaceBar(
-                  title: Text(l.title, style: const TextStyle(fontSize: 15)),
+                  title: Text(l.title, style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w800)),
                   background: Stack(
                     fit: StackFit.expand,
                     children: [

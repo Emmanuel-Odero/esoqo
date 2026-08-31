@@ -72,3 +72,19 @@ abstract final class EsokoRadius {
   static const xl2 = 28.0;
   static const pill = 999.0;
 }
+
+/// tokens.css's h1/h2/h3 rule: `font-weight:800; letter-spacing:-.028em;
+/// line-height:1.1`. The web apps also swap in a distinct "Outfit"
+/// display typeface there — this port keeps the platform's default
+/// font (no bundled font assets in this app yet) and carries over the
+/// weight/tracking voice, which is what actually reads as "on brand"
+/// at a glance; introducing a new typeface is a bigger, separate call.
+abstract final class EsokoTypography {
+  static const headlineWeight = FontWeight.w800;
+  static const headlineHeight = 1.1;
+  // -.028em — a fraction of the style's own font size, not a fixed
+  // pixel value, so it tightens proportionally at every text scale
+  // (see EsokoTheme's own headline() helper, which multiplies this by
+  // each TextStyle's fontSize).
+  static const headlineTrackingEm = -0.028;
+}

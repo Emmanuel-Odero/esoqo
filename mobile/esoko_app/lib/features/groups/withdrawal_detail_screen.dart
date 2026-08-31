@@ -56,7 +56,7 @@ class _WithdrawalDetailScreenState extends ConsumerState<WithdrawalDetailScreen>
   Widget build(BuildContext context) {
     final withdrawal = ref.watch(withdrawalDetailProvider(widget.withdrawalId));
     return Scaffold(
-      appBar: AppBar(title: const Text('Withdrawal')),
+      appBar: const EsokoAppBar(title: 'Withdrawal'),
       body: EsokoAsyncView(
         value: withdrawal,
         onRetry: () => ref.invalidate(withdrawalDetailProvider(widget.withdrawalId)),

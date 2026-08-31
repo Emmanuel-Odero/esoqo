@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../core/api/api_exception.dart';
 import '../../core/api/providers.dart';
 import '../../core/theme/esoko_tokens.dart';
+import '../../core/widgets/widgets.dart';
 import 'bill_models.dart';
 
 class AddBillScreen extends ConsumerStatefulWidget {
@@ -63,7 +64,7 @@ class _AddBillScreenState extends ConsumerState<AddBillScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text('Add a bill')),
+      appBar: const EsokoAppBar(title: 'Add a bill'),
       body: SafeArea(
         child: Center(
           child: ConstrainedBox(

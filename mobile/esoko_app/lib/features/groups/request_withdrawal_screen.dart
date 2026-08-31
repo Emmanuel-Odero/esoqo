@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../core/api/api_exception.dart';
 import '../../core/api/providers.dart';
 import '../../core/theme/esoko_tokens.dart';
+import '../../core/widgets/widgets.dart';
 
 /// POST /v1/groups/:id/withdrawals — officer-only (core-go enforces
 /// this; the form is reachable but the request will 403 for a non-
@@ -59,7 +60,7 @@ class _RequestWithdrawalScreenState extends ConsumerState<RequestWithdrawalScree
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text('Request withdrawal')),
+      appBar: const EsokoAppBar(title: 'Request withdrawal'),
       body: SafeArea(
         child: Center(
           child: ConstrainedBox(

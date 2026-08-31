@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../core/api/api_exception.dart';
 import '../../core/auth/auth_controller.dart';
 import '../../core/theme/esoko_tokens.dart';
+import '../../core/widgets/widgets.dart';
 
 enum _Step { phone, code, setPin }
 
@@ -92,7 +93,7 @@ class _OtpSignInScreenState extends ConsumerState<OtpSignInScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text('Sign in with a code')),
+      appBar: const EsokoAppBar(title: 'Sign in with a code'),
       body: SafeArea(
         child: Center(
           child: ConstrainedBox(

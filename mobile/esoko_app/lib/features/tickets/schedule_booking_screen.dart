@@ -133,7 +133,7 @@ class _ScheduleBookingScreenState extends ConsumerState<ScheduleBookingScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: Text(widget.listingTitle)),
+      appBar: EsokoAppBar(title: widget.listingTitle),
       body: SafeArea(
         child: Center(
           child: ConstrainedBox(

@@ -27,7 +27,7 @@ class OrderDetailScreen extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final order = ref.watch(orderDetailProvider(orderId));
     return Scaffold(
-      appBar: AppBar(title: const Text('Order')),
+      appBar: const EsokoAppBar(title: 'Order'),
       body: SafeArea(
         child: EsokoAsyncView(
           value: order,

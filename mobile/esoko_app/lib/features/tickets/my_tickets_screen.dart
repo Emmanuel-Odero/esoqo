@@ -25,7 +25,7 @@ class MyTicketsScreen extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final tickets = ref.watch(myTicketsProvider);
     return Scaffold(
-      appBar: AppBar(title: const Text('My tickets')),
+      appBar: const EsokoAppBar(title: 'My tickets'),
       body: EsokoAsyncView(
         value: tickets,
         isEmpty: (list) => list.isEmpty,

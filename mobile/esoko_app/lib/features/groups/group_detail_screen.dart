@@ -63,7 +63,7 @@ class GroupDetailScreen extends ConsumerWidget {
         false;
 
     return Scaffold(
-      appBar: AppBar(title: Text(group.valueOrNull?.displayName ?? 'Group')),
+      appBar: EsokoAppBar(title: group.valueOrNull?.displayName ?? 'Group'),
       body: RefreshIndicator(
         onRefresh: () async => _refreshAll(ref),
         child: EsokoAsyncView(
