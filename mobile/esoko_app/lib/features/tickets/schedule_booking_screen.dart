@@ -10,11 +10,10 @@ import '../../core/auth/auth_state.dart';
 import '../../core/theme/esoko_tokens.dart';
 import 'ticketing_models.dart';
 
-final scheduleSeatsProvider = FutureProvider.autoDispose.family<List<SeatRow>, String>((ref, scheduleId) async {
+final scheduleSeatsProvider = FutureProvider.autoDispose.family<SeatMapResult, String>((ref, scheduleId) async {
   final api = ref.watch(apiClientProvider);
   final res = await api.get('/v1/schedules/$scheduleId/seats');
-  final list = (res['seats'] as List?) ?? const [];
-  return list.map((e) => SeatRow.fromJson(e as Map<String, dynamic>)).toList();
+  return SeatMapResult.fromJson(res);
 });
 
 enum _Stage { pick, details, waiting, done, failed }
@@ -257,31 +256,72 @@ class _ScheduleBookingScreenState extends ConsumerState<ScheduleBookingScreen> {
   }
 
   Widget _seatPicker(String ticketClassId) {
-    final seats = ref.watch(scheduleSeatsProvider(widget.scheduleId));
-    return seats.when(
-      data: (all) {
-        final forClass = all.where((s) => s.ticketClassId == ticketClassId).toList();
+    final seatMap = ref.watch(scheduleSeatsProvider(widget.scheduleId));
+    return seatMap.when(
+      data: (map) {
+        final forClass = map.seats.where((s) => s.ticketClassId == ticketClassId).toList();
         if (forClass.isEmpty) return Text('No seats configured for this class.', style: TextStyle(color: EsokoColors.text2));
+        final byRow = <int, List<SeatRow>>{};
+        for (final s in forClass) {
+          byRow.putIfAbsent(s.row, () => []).add(s);
+        }
+        final rows = byRow.keys.toList()..sort();
+        for (final r in rows) {
+          byRow[r]!.sort((a, b) => a.column.compareTo(b.column));
+        }
+        final leftCols = map.leftColumns.toSet();
+
         return Column(
           children: [
             Container(
               padding: const EdgeInsets.all(EsokoSpacing.s4),
-              decoration: BoxDecoration(color: EsokoColors.paper, borderRadius: BorderRadius.circular(EsokoRadius.lg)),
+              decoration: BoxDecoration(
+                color: EsokoColors.paper,
+                borderRadius: BorderRadius.circular(EsokoRadius.lg),
+                border: Border.all(color: EsokoColors.line),
+              ),
               child: Column(
                 children: [
-                  Icon(Icons.airline_seat_recline_normal, color: EsokoColors.text3, size: 22),
-                  const SizedBox(height: EsokoSpacing.s1),
-                  Text('FRONT', style: TextStyle(fontSize: 10, letterSpacing: 2, color: EsokoColors.text3)),
-                  const SizedBox(height: EsokoSpacing.s3),
-                  GridView.count(
-                    shrinkWrap: true,
-                    physics: const NeverScrollableScrollPhysics(),
-                    crossAxisCount: 4,
-                    mainAxisSpacing: EsokoSpacing.s2,
-                    crossAxisSpacing: EsokoSpacing.s2,
-                    childAspectRatio: 1,
-                    children: [for (final seat in forClass) _SeatButton(seat: seat, selected: _selectedSeatId == seat.id, onTap: () => setState(() => _selectedSeatId = seat.id))],
+                  // Front-of-bus/hall indicator — a curved cap so the
+                  // seat grid below reads as an actual vehicle/venue
+                  // shape, not just a table of buttons.
+                  Container(
+                    width: 72,
+                    padding: const EdgeInsets.symmetric(vertical: EsokoSpacing.s2),
+                    decoration: BoxDecoration(
+                      color: EsokoColors.line,
+                      borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
+                    ),
+                    child: Column(
+                      children: [
+                        Icon(Icons.airline_seat_recline_normal, color: EsokoColors.text3, size: 18),
+                        Text('FRONT', style: TextStyle(fontSize: 9, letterSpacing: 2, color: EsokoColors.text3)),
+                      ],
+                    ),
                   ),
+                  const SizedBox(height: EsokoSpacing.s4),
+                  for (final r in rows) ...[
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        SizedBox(
+                          width: 18,
+                          child: Text('$r', style: TextStyle(fontSize: 10, color: EsokoColors.text3), textAlign: TextAlign.center),
+                        ),
+                        const SizedBox(width: EsokoSpacing.s2),
+                        for (final seat in byRow[r]!) ...[
+                          _SeatButton(seat: seat, selected: _selectedSeatId == seat.id, onTap: () => setState(() => _selectedSeatId = seat.id)),
+                          // Aisle gap right after the last left-side
+                          // column, before the first right-side column.
+                          if (leftCols.contains(seat.column) && byRow[r]!.indexOf(seat) == leftCols.length - 1)
+                            const SizedBox(width: EsokoSpacing.s5)
+                          else
+                            const SizedBox(width: EsokoSpacing.s2),
+                        ],
+                      ],
+                    ),
+                    const SizedBox(height: EsokoSpacing.s2),
+                  ],
                 ],
               ),
             ),
@@ -410,23 +450,27 @@ class _SeatButton extends StatelessWidget {
     final taken = seat.status != 'AVAILABLE';
     final Color bg = taken ? EsokoColors.line : (selected ? EsokoColors.green : Colors.white);
     final Color fg = taken ? EsokoColors.text3 : (selected ? Colors.white : EsokoColors.text2);
-    return Material(
-      color: bg,
-      borderRadius: BorderRadius.circular(EsokoRadius.sm),
-      child: InkWell(
-        onTap: taken ? null : onTap,
+    return SizedBox(
+      width: 36,
+      height: 36,
+      child: Material(
+        color: bg,
         borderRadius: BorderRadius.circular(EsokoRadius.sm),
-        child: Container(
-          decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(EsokoRadius.sm),
-            border: Border.all(color: selected ? EsokoColors.green : EsokoColors.line),
-          ),
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              Icon(Icons.event_seat, size: 16, color: fg),
-              Text(seat.label, style: TextStyle(fontSize: 10, fontWeight: FontWeight.w700, color: fg)),
-            ],
+        child: InkWell(
+          onTap: taken ? null : onTap,
+          borderRadius: BorderRadius.circular(EsokoRadius.sm),
+          child: Container(
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(EsokoRadius.sm),
+              border: Border.all(color: selected ? EsokoColors.green : EsokoColors.line),
+            ),
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Icon(Icons.event_seat, size: 14, color: fg),
+                Text(seat.label, style: TextStyle(fontSize: 9, fontWeight: FontWeight.w700, color: fg)),
+              ],
+            ),
           ),
         ),
       ),

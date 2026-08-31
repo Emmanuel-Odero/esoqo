@@ -31,13 +31,22 @@ func (s *Server) handleGetListing(c *gin.Context) {
 	c.JSON(http.StatusOK, listing)
 }
 
+// handleListScheduleSeats — seat labels are "{row}{column}" (e.g. "3B"),
+// matching packages/domain/src/ticketing.ts's columnsForPattern
+// convention exactly, so the client can render real seat positions
+// instead of a flat list. "pattern" is hardcoded to "2+2" for now — the
+// schema has a real per-listing SeatMap for an organiser to paint a
+// different layout, but core-go doesn't serve that yet (see the plan's
+// own mobile-v1 scope note); every seat this service currently
+// generates (the Go seeder) uses "2+2", so this is accurate today, not
+// a guess, and is a one-line change once SeatMap is wired up.
 func (s *Server) handleListScheduleSeats(c *gin.Context) {
 	seats, err := dbx.ListScheduleSeats(c.Request.Context(), s.Pool, c.Param("id"))
 	if err != nil {
 		writeError(c, http.StatusInternalServerError, "LIST_FAILED", "Could not load seats")
 		return
 	}
-	c.JSON(http.StatusOK, gin.H{"seats": seats})
+	c.JSON(http.StatusOK, gin.H{"seats": seats, "pattern": "2+2"})
 }
 
 type createBookingRequest struct {

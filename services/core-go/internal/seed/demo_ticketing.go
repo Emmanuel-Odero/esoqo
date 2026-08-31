@@ -3,6 +3,7 @@ package seed
 import (
 	"context"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -202,10 +203,35 @@ type ticketClassSeatSpec struct {
 	seatCount     int
 }
 
+// seatColumnLetters/columnsForPattern port packages/domain/src/ticketing.ts's
+// own columnsForPattern exactly — "2+2" is left=[A,B], right=[C,D],
+// column letters running continuously left to right so "3B" always
+// means row 3, second seat from the left. A seat's label is
+// "{row}{column}", e.g. "3B" — never "{column}{row}"; getting that
+// backwards is what the seed data originally shipped with, before seat
+// position mattered to the booking UI.
+const seatColumnLetters = "ABCDEFG"
+
+func columnsForPattern(pattern string) (left, right []string) {
+	var l, r int
+	_, _ = fmt.Sscanf(pattern, "%d+%d", &l, &r)
+	if l > len(seatColumnLetters) {
+		l = len(seatColumnLetters)
+	}
+	left = strings.Split(seatColumnLetters[:l], "")
+	end := l + r
+	if end > len(seatColumnLetters) {
+		end = len(seatColumnLetters)
+	}
+	right = strings.Split(seatColumnLetters[l:end], "")
+	return left, right
+}
+
 // scheduleOccurrence mirrors createSchedule/scheduleOccurrence:
 // generates one ListingSchedule and, for every seated ticket class
-// given, its numbered Seat rows (labels A1, A2, … same simple sequential
-// fallback the DAL uses when there's no saved SeatMap).
+// given, its numbered Seat rows laid out on a real "2+2" bus pattern —
+// two rows of seats either side of an aisle, so the booking UI can
+// render actual seat positions instead of a flat undifferentiated list.
 func scheduleOccurrence(ctx context.Context, pool *pgxpool.Pool, listingID string, departAt time.Time, vehicleOrHallLabel *string, seatedClasses []ticketClassSeatSpec) error {
 	// Natural key is (listingId, vehicleOrHallLabel), not departAt —
 	// departAt is computed relative to time.Now() so it's never the same
@@ -214,13 +240,16 @@ func scheduleOccurrence(ctx context.Context, pool *pgxpool.Pool, listingID strin
 	// different day. vehicleOrHallLabel is the stable identity across
 	// runs; a re-run just refreshes the date back into the future.
 	var scheduleID string
+	existed := false
 	err := pool.QueryRow(ctx, `
 		SELECT id FROM listing_schedule WHERE "listingId" = $1 AND "vehicleOrHallLabel" = $2`,
 		listingID, vehicleOrHallLabel).Scan(&scheduleID)
 	if err == nil {
-		_, err = pool.Exec(ctx, `
-			UPDATE listing_schedule SET "departAt" = $1, status = 'SCHEDULED' WHERE id = $2`, departAt, scheduleID)
-		return err
+		existed = true
+		if _, err = pool.Exec(ctx, `
+			UPDATE listing_schedule SET "departAt" = $1, status = 'SCHEDULED' WHERE id = $2`, departAt, scheduleID); err != nil {
+			return err
+		}
 	}
 
 	tx, err := pool.Begin(ctx)
@@ -229,17 +258,40 @@ func scheduleOccurrence(ctx context.Context, pool *pgxpool.Pool, listingID strin
 	}
 	defer tx.Rollback(ctx)
 
-	err = tx.QueryRow(ctx, `
-		INSERT INTO listing_schedule (id, "listingId", "departAt", "vehicleOrHallLabel", status, "createdAt")
-		VALUES (gen_random_uuid(), $1, $2, $3, 'SCHEDULED', now())
-		RETURNING id`, listingID, departAt, vehicleOrHallLabel).Scan(&scheduleID)
-	if err != nil {
-		return err
+	if !existed {
+		if err = tx.QueryRow(ctx, `
+			INSERT INTO listing_schedule (id, "listingId", "departAt", "vehicleOrHallLabel", status, "createdAt")
+			VALUES (gen_random_uuid(), $1, $2, $3, 'SCHEDULED', now())
+			RETURNING id`, listingID, departAt, vehicleOrHallLabel).Scan(&scheduleID); err != nil {
+			return err
+		}
 	}
 
+	// Seats are regenerated whenever a schedule has none yet — not just
+	// on first creation — so a re-run after a seat-layout change (or
+	// after the seats were cleared for any other reason) heals itself
+	// instead of silently leaving the schedule seatless forever.
+	var existingSeatCount int
+	if err = tx.QueryRow(ctx, `SELECT count(*) FROM seat WHERE "scheduleId" = $1`, scheduleID).Scan(&existingSeatCount); err != nil {
+		return err
+	}
+	if existingSeatCount > 0 {
+		return tx.Commit(ctx)
+	}
+
+	left, right := columnsForPattern("2+2")
+	columns := append(append([]string{}, left...), right...)
+	perRow := len(columns)
+
 	for _, sc := range seatedClasses {
-		for i := 1; i <= sc.seatCount; i++ {
-			label := fmt.Sprintf("A%d", i)
+		row, col := 1, 0
+		for i := 0; i < sc.seatCount; i++ {
+			if col == perRow {
+				col = 0
+				row++
+			}
+			label := fmt.Sprintf("%d%s", row, columns[col])
+			col++
 			_, err = tx.Exec(ctx, `
 				INSERT INTO seat (id, "scheduleId", "ticketClassId", label, status)
 				VALUES (gen_random_uuid(), $1, $2, $3, 'AVAILABLE')`, scheduleID, sc.ticketClassID, label)
