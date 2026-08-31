@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/api/providers.dart';
 import '../../core/theme/esoko_tokens.dart';
+import '../../core/widgets/widgets.dart';
 import 'category_style.dart';
 import 'gradient_thumb.dart';
 import 'product_detail_screen.dart';
@@ -31,8 +32,10 @@ class StoreDetailScreen extends ConsumerWidget {
     final products = ref.watch(storeProductsProvider(slug));
 
     return Scaffold(
-      body: store.when(
-        data: (s) {
+      body: EsokoAsyncView(
+        value: store,
+        onRetry: () => ref.invalidate(storeDetailProvider(slug)),
+        data: (context, s) {
           final style = CategoryStyle.forCategory(s.primaryCategory);
           return CustomScrollView(
             slivers: [
@@ -73,11 +76,12 @@ class StoreDetailScreen extends ConsumerWidget {
                       spacing: EsokoSpacing.s2,
                       runSpacing: EsokoSpacing.s2,
                       children: [
-                        if (s.primaryCategory != null) _pill(Icons.sell_outlined, s.primaryCategory!, style.gradient.last),
-                        _pill(
-                          s.codEnabled ? Icons.local_shipping_outlined : Icons.phone_iphone_outlined,
-                          s.codEnabled ? 'Cash on delivery' : 'Pay on order',
-                          EsokoColors.blue,
+                        if (s.primaryCategory != null)
+                          EsokoStatusPill(icon: Icons.sell_outlined, label: s.primaryCategory!, color: style.gradient.last),
+                        EsokoStatusPill(
+                          icon: s.codEnabled ? Icons.local_shipping_outlined : Icons.phone_iphone_outlined,
+                          label: s.codEnabled ? 'Cash on delivery' : 'Pay on order',
+                          color: EsokoColors.blue,
                         ),
                       ],
                     ),
@@ -88,28 +92,29 @@ class StoreDetailScreen extends ConsumerWidget {
                     const SizedBox(height: EsokoSpacing.s6),
                     Text('Products', style: Theme.of(context).textTheme.titleLarge),
                     const SizedBox(height: EsokoSpacing.s3),
-                    products.when(
-                      data: (list) => list.isEmpty
-                          ? Text('No products listed yet.', style: TextStyle(color: EsokoColors.text2))
-                          : GridView.count(
-                              shrinkWrap: true,
-                              physics: const NeverScrollableScrollPhysics(),
-                              crossAxisCount: 2,
-                              mainAxisSpacing: EsokoSpacing.s3,
-                              crossAxisSpacing: EsokoSpacing.s3,
-                              childAspectRatio: 0.72,
-                              children: [
-                                for (final p in list)
-                                  _ProductCard(
-                                    product: p,
-                                    onTap: () => Navigator.of(context).push(
-                                      MaterialPageRoute(builder: (_) => ProductDetailScreen(productId: p.id)),
-                                    ),
-                                  ),
-                              ],
+                    EsokoAsyncView(
+                      value: products,
+                      isEmpty: (list) => list.isEmpty,
+                      emptyMessage: 'No products listed yet.',
+                      emptyIcon: Icons.inventory_2_outlined,
+                      onRetry: () => ref.invalidate(storeProductsProvider(slug)),
+                      data: (context, list) => GridView.count(
+                        shrinkWrap: true,
+                        physics: const NeverScrollableScrollPhysics(),
+                        crossAxisCount: 2,
+                        mainAxisSpacing: EsokoSpacing.s3,
+                        crossAxisSpacing: EsokoSpacing.s3,
+                        childAspectRatio: 0.72,
+                        children: [
+                          for (final p in list)
+                            _ProductCard(
+                              product: p,
+                              onTap: () => Navigator.of(context).push(
+                                MaterialPageRoute(builder: (_) => ProductDetailScreen(productId: p.id)),
+                              ),
                             ),
-                      loading: () => const Center(child: CircularProgressIndicator()),
-                      error: (e, _) => Text('Could not load products.', style: TextStyle(color: EsokoColors.red)),
+                        ],
+                      ),
                     ),
                   ]),
                 ),
@@ -117,23 +122,6 @@ class StoreDetailScreen extends ConsumerWidget {
             ],
           );
         },
-        loading: () => const Center(child: CircularProgressIndicator()),
-        error: (e, _) => Center(child: Text('Could not load that store.', style: TextStyle(color: EsokoColors.red))),
-      ),
-    );
-  }
-
-  Widget _pill(IconData icon, String label, Color color) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: EsokoSpacing.s3, vertical: 6),
-      decoration: BoxDecoration(color: color.withValues(alpha: 0.10), borderRadius: BorderRadius.circular(EsokoRadius.pill)),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Icon(icon, size: 14, color: color),
-          const SizedBox(width: 6),
-          Text(label, style: TextStyle(fontSize: 12, color: color, fontWeight: FontWeight.w600)),
-        ],
       ),
     );
   }
@@ -146,57 +134,53 @@ class _ProductCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Material(
-      color: Theme.of(context).cardColor,
-      borderRadius: BorderRadius.circular(EsokoRadius.lg),
-      clipBehavior: Clip.antiAlias,
-      child: InkWell(
-        onTap: onTap,
-        child: Container(
-          decoration: BoxDecoration(border: Border.all(color: EsokoColors.line)),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              AspectRatio(
-                aspectRatio: 1.4,
-                child: Stack(
-                  children: [
-                    GradientThumb(category: product.category, isService: product.isService),
-                    if (product.isService)
-                      Positioned(
-                        top: EsokoSpacing.s2,
-                        left: EsokoSpacing.s2,
-                        child: Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-                          decoration: BoxDecoration(
-                            color: Colors.white.withValues(alpha: 0.92),
-                            borderRadius: BorderRadius.circular(EsokoRadius.pill),
-                          ),
-                          child: const Text('SERVICE', style: TextStyle(fontSize: 9, fontWeight: FontWeight.w800, letterSpacing: 0.4)),
-                        ),
+    return EsokoCard(
+      onTap: onTap,
+      padding: EdgeInsets.zero,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          AspectRatio(
+            aspectRatio: 1.4,
+            child: Stack(
+              children: [
+                GradientThumb(category: product.category, isService: product.isService),
+                if (product.isService)
+                  // Deliberately not EsokoStatusPill — this overlays a
+                  // photo/gradient thumb, so it needs a guaranteed-opaque
+                  // background for contrast, not a tinted-alpha pill.
+                  Positioned(
+                    top: EsokoSpacing.s2,
+                    left: EsokoSpacing.s2,
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                      decoration: BoxDecoration(
+                        color: Colors.white.withValues(alpha: 0.92),
+                        borderRadius: BorderRadius.circular(EsokoRadius.pill),
                       ),
-                  ],
-                ),
-              ),
-              Padding(
-                padding: const EdgeInsets.all(EsokoSpacing.s3),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(product.name, maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(fontWeight: FontWeight.w600)),
-                    const SizedBox(height: EsokoSpacing.s1),
-                    Text('KES ${product.priceKes}', style: TextStyle(color: EsokoColors.green, fontWeight: FontWeight.w700)),
-                    if (!product.isService && product.stockQty != null)
-                      Padding(
-                        padding: const EdgeInsets.only(top: 2),
-                        child: Text('${product.stockQty} in stock', style: TextStyle(fontSize: 11, color: EsokoColors.text3)),
-                      ),
-                  ],
-                ),
-              ),
-            ],
+                      child: const Text('SERVICE', style: TextStyle(fontSize: 9, fontWeight: FontWeight.w800, letterSpacing: 0.4)),
+                    ),
+                  ),
+              ],
+            ),
           ),
-        ),
+          Padding(
+            padding: const EdgeInsets.all(EsokoSpacing.s3),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(product.name, maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(fontWeight: FontWeight.w600)),
+                const SizedBox(height: EsokoSpacing.s1),
+                Text('KES ${product.priceKes}', style: TextStyle(color: EsokoColors.green, fontWeight: FontWeight.w700)),
+                if (!product.isService && product.stockQty != null)
+                  Padding(
+                    padding: const EdgeInsets.only(top: 2),
+                    child: Text('${product.stockQty} in stock', style: TextStyle(fontSize: 11, color: EsokoColors.text3)),
+                  ),
+              ],
+            ),
+          ),
+        ],
       ),
     );
   }

@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/api/providers.dart';
 import '../../core/theme/esoko_tokens.dart';
+import '../../core/widgets/widgets.dart';
 import 'checkout_screen.dart';
 import 'gradient_thumb.dart';
 import 'shopping_models.dart';
@@ -33,8 +34,10 @@ class _ProductDetailScreenState extends ConsumerState<ProductDetailScreen> {
   Widget build(BuildContext context) {
     final product = ref.watch(productDetailProvider(widget.productId));
     return Scaffold(
-      body: product.when(
-        data: (p) => Stack(
+      body: EsokoAsyncView(
+        value: product,
+        onRetry: () => ref.invalidate(productDetailProvider(widget.productId)),
+        data: (context, p) => Stack(
           children: [
             ListView(
               padding: const EdgeInsets.only(bottom: 120),
@@ -66,15 +69,7 @@ class _ProductDetailScreenState extends ConsumerState<ProductDetailScreen> {
                               ],
                             ),
                           ),
-                          if (p.isService)
-                            Container(
-                              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
-                              decoration: BoxDecoration(
-                                color: EsokoColors.blueTint,
-                                borderRadius: BorderRadius.circular(EsokoRadius.pill),
-                              ),
-                              child: Text('SERVICE', style: TextStyle(fontSize: 10, fontWeight: FontWeight.w800, color: EsokoColors.blue)),
-                            ),
+                          if (p.isService) const EsokoStatusPill(label: 'SERVICE', color: EsokoColors.blue),
                         ],
                       ),
                       const SizedBox(height: EsokoSpacing.s3),
@@ -137,8 +132,6 @@ class _ProductDetailScreenState extends ConsumerState<ProductDetailScreen> {
             ),
           ],
         ),
-        loading: () => const Center(child: CircularProgressIndicator()),
-        error: (e, _) => Center(child: Text('Could not load that product.', style: TextStyle(color: EsokoColors.red))),
       ),
     );
   }

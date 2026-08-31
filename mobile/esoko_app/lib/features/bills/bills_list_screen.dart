@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../core/api/api_exception.dart';
 import '../../core/api/providers.dart';
 import '../../core/theme/esoko_tokens.dart';
+import '../../core/widgets/widgets.dart';
 import 'add_bill_screen.dart';
 import 'bill_models.dart';
 
@@ -27,8 +28,10 @@ class BillsListScreen extends ConsumerWidget {
     return Scaffold(
       body: RefreshIndicator(
         onRefresh: () async => ref.invalidate(myBillsProvider),
-        child: bills.when(
-          data: (list) {
+        child: EsokoAsyncView(
+          value: bills,
+          onRetry: () => ref.invalidate(myBillsProvider),
+          data: (context, list) {
             final overdue = list.where((b) => b.overdue).toList();
             final dueSoon = list.where((b) => !b.overdue && b.dueSoon).toList();
             final upcoming = list.where((b) => !b.overdue && !b.dueSoon).toList();
@@ -37,31 +40,15 @@ class BillsListScreen extends ConsumerWidget {
                 SliverToBoxAdapter(
                   child: Padding(
                     padding: const EdgeInsets.fromLTRB(EsokoSpacing.s5, EsokoSpacing.s5, EsokoSpacing.s5, EsokoSpacing.s2),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text('Bills', style: Theme.of(context).textTheme.headlineSmall),
-                        const SizedBox(height: EsokoSpacing.s1),
-                        Text(
-                          'Track what you owe and when — a reminder here, not a payment. Pay however you already do, then mark it paid.',
-                          style: TextStyle(color: EsokoColors.text2),
-                        ),
-                      ],
+                    child: EsokoSectionHeader(
+                      title: 'Bills',
+                      subtitle: 'Track what you owe and when — a reminder here, not a payment. Pay however you already do, then mark it paid.',
                     ),
                   ),
                 ),
                 if (list.isEmpty)
-                  SliverToBoxAdapter(
-                    child: Padding(
-                      padding: const EdgeInsets.all(EsokoSpacing.s8),
-                      child: Column(
-                        children: [
-                          Icon(Icons.receipt_long_outlined, size: 40, color: EsokoColors.text3),
-                          const SizedBox(height: EsokoSpacing.s3),
-                          Text('No bills tracked yet.', style: TextStyle(color: EsokoColors.text2)),
-                        ],
-                      ),
-                    ),
+                  const SliverToBoxAdapter(
+                    child: EsokoEmptyState(icon: Icons.receipt_long_outlined, message: 'No bills tracked yet.'),
                   )
                 else ...[
                   if (overdue.isNotEmpty) _section(context, 'Overdue', overdue, EsokoColors.red),
@@ -72,10 +59,6 @@ class BillsListScreen extends ConsumerWidget {
               ],
             );
           },
-          loading: () => const Center(child: CircularProgressIndicator()),
-          error: (e, _) => Center(
-            child: Text(e is ApiException ? e.message : 'Could not load your bills.', style: TextStyle(color: EsokoColors.red)),
-          ),
         ),
       ),
       floatingActionButton: FloatingActionButton.extended(
@@ -157,37 +140,34 @@ class _BillCardState extends ConsumerState<_BillCard> {
             ? 'Due today'
             : 'Due in ${b.daysUntilDue} day${b.daysUntilDue == 1 ? '' : 's'}';
 
-    return Card(
-      child: Padding(
-        padding: const EdgeInsets.all(EsokoSpacing.s4),
-        child: Row(
-          children: [
-            Container(
-              width: 40,
-              height: 40,
-              decoration: BoxDecoration(color: EsokoColors.blueTint, shape: BoxShape.circle),
-              child: Icon(_categoryIcon(b.category), color: EsokoColors.blue, size: 20),
+    return EsokoCard(
+      child: Row(
+        children: [
+          Container(
+            width: 40,
+            height: 40,
+            decoration: BoxDecoration(color: EsokoColors.blueTint, shape: BoxShape.circle),
+            child: Icon(_categoryIcon(b.category), color: EsokoColors.blue, size: 20),
+          ),
+          const SizedBox(width: EsokoSpacing.s3),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(b.label, style: const TextStyle(fontWeight: FontWeight.w700)),
+                Text(
+                  '$dueLabel${b.amountKes != null ? ' · KES ${b.amountKes}' : ''}',
+                  style: TextStyle(fontSize: 12, color: b.overdue ? EsokoColors.red : EsokoColors.text2),
+                ),
+                if (b.accountRef != null)
+                  Text('Ref: ${b.accountRef}', style: TextStyle(fontSize: 11, color: EsokoColors.text3)),
+              ],
             ),
-            const SizedBox(width: EsokoSpacing.s3),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(b.label, style: const TextStyle(fontWeight: FontWeight.w700)),
-                  Text(
-                    '$dueLabel${b.amountKes != null ? ' · KES ${b.amountKes}' : ''}',
-                    style: TextStyle(fontSize: 12, color: b.overdue ? EsokoColors.red : EsokoColors.text2),
-                  ),
-                  if (b.accountRef != null)
-                    Text('Ref: ${b.accountRef}', style: TextStyle(fontSize: 11, color: EsokoColors.text3)),
-                ],
-              ),
-            ),
-            _paying
-                ? const SizedBox(height: 18, width: 18, child: CircularProgressIndicator(strokeWidth: 2))
-                : TextButton(onPressed: _markPaid, child: const Text('Mark paid')),
-          ],
-        ),
+          ),
+          _paying
+              ? const SizedBox(height: 18, width: 18, child: CircularProgressIndicator(strokeWidth: 2))
+              : TextButton(onPressed: _markPaid, child: const Text('Mark paid')),
+        ],
       ),
     );
   }

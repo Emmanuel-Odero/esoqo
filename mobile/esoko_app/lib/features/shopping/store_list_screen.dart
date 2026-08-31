@@ -4,6 +4,7 @@ import 'package:geolocator/geolocator.dart';
 
 import '../../core/api/providers.dart';
 import '../../core/theme/esoko_tokens.dart';
+import '../../core/widgets/widgets.dart';
 import 'category_style.dart';
 import 'gradient_thumb.dart';
 import 'shopping_models.dart';
@@ -119,16 +120,9 @@ class _StoreListScreenState extends ConsumerState<StoreListScreen> {
           SliverToBoxAdapter(
             child: Padding(
               padding: const EdgeInsets.fromLTRB(EsokoSpacing.s5, EsokoSpacing.s5, EsokoSpacing.s5, EsokoSpacing.s2),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text('Shop the market', style: Theme.of(context).textTheme.headlineSmall),
-                  const SizedBox(height: EsokoSpacing.s1),
-                  Text(
-                    'Shop from home, then collect once it\'s ready — or browse goods, produce and services from stores across Esoko.',
-                    style: TextStyle(color: EsokoColors.text2),
-                  ),
-                ],
+              child: EsokoSectionHeader(
+                title: 'Shop the market',
+                subtitle: 'Shop from home, then collect once it\'s ready — or browse goods, produce and services from stores across Esoko.',
               ),
             ),
           ),
@@ -190,18 +184,24 @@ class _StoreListScreenState extends ConsumerState<StoreListScreen> {
           if (_searching)
             nearby.when(
               data: (list) => list.isEmpty
-                  ? SliverToBoxAdapter(child: _EmptyState(message: 'No stores match — try a different search.'))
+                  ? const SliverToBoxAdapter(
+                      child: EsokoEmptyState(icon: Icons.storefront_outlined, message: 'No stores match — try a different search.'),
+                    )
                   : _storeListSliver(list),
               loading: () => const SliverToBoxAdapter(child: Padding(padding: EdgeInsets.all(EsokoSpacing.s8), child: Center(child: CircularProgressIndicator()))),
-              error: (e, _) => SliverToBoxAdapter(child: _EmptyState(message: 'Could not search stores. Pull to retry.')),
+              error: (e, _) => SliverToBoxAdapter(
+                child: EsokoErrorView(message: 'Could not search stores.', onRetry: () => ref.invalidate(nearbyStoresProvider(query))),
+              ),
             )
           else
             plain.when(
               data: (list) => list.isEmpty
-                  ? SliverToBoxAdapter(child: _EmptyState(message: 'No stores are open yet.'))
+                  ? const SliverToBoxAdapter(child: EsokoEmptyState(icon: Icons.storefront_outlined, message: 'No stores are open yet.'))
                   : _storeListSliver(list),
               loading: () => const SliverToBoxAdapter(child: Padding(padding: EdgeInsets.all(EsokoSpacing.s8), child: Center(child: CircularProgressIndicator()))),
-              error: (e, _) => SliverToBoxAdapter(child: _EmptyState(message: 'Could not load stores. Pull to retry.')),
+              error: (e, _) => SliverToBoxAdapter(
+                child: EsokoErrorView(message: 'Could not load stores.', onRetry: () => ref.invalidate(storesProvider)),
+              ),
             ),
           const SliverToBoxAdapter(child: SizedBox(height: EsokoSpacing.s6)),
         ],
@@ -229,95 +229,52 @@ class _StoreCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final style = CategoryStyle.forCategory(store.primaryCategory);
     final distance = store is NearbyStore ? (store as NearbyStore).distanceKm : null;
-    return Material(
-      color: Theme.of(context).cardColor,
-      borderRadius: BorderRadius.circular(EsokoRadius.lg),
-      clipBehavior: Clip.antiAlias,
-      elevation: 0,
-      child: InkWell(
-        onTap: () => Navigator.of(context).push(
-          MaterialPageRoute(builder: (_) => StoreDetailScreen(slug: store.slug)),
-        ),
-        child: Container(
-          decoration: BoxDecoration(border: Border.all(color: EsokoColors.line)),
-          padding: const EdgeInsets.all(EsokoSpacing.s3),
-          child: Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              SizedBox(
-                width: 64,
-                height: 64,
-                child: GradientThumb(
-                  category: store.primaryCategory,
-                  borderRadius: BorderRadius.circular(EsokoRadius.md),
-                  iconSize: 28,
-                ),
-              ),
-              const SizedBox(width: EsokoSpacing.s4),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(store.name, style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 16)),
-                    const SizedBox(height: EsokoSpacing.s1),
-                    if (store.neighborhood != null || distance != null)
-                      Text(
-                        [
-                          if (distance != null) '${_formatDistance(distance)} away',
-                          if (store.neighborhood != null) store.neighborhood!,
-                        ].join(' · '),
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: TextStyle(color: EsokoColors.text2, fontSize: 12),
-                      )
-                    else if (store.tagline != null)
-                      Text(store.tagline!, maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(color: EsokoColors.text2)),
-                    const SizedBox(height: EsokoSpacing.s2),
-                    if (store.primaryCategory != null)
-                      Container(
-                        padding: const EdgeInsets.symmetric(horizontal: EsokoSpacing.s2, vertical: 3),
-                        decoration: BoxDecoration(
-                          color: style.gradient.last.withValues(alpha: 0.10),
-                          borderRadius: BorderRadius.circular(EsokoRadius.pill),
-                        ),
-                        child: Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            Icon(style.icon, size: 12, color: style.gradient.last),
-                            const SizedBox(width: 4),
-                            Text(store.primaryCategory!, style: TextStyle(fontSize: 11, color: style.gradient.last, fontWeight: FontWeight.w600)),
-                          ],
-                        ),
-                      ),
-                  ],
-                ),
-              ),
-              Icon(Icons.chevron_right_rounded, color: EsokoColors.text3),
-            ],
+    return EsokoCard(
+      onTap: () => Navigator.of(context).push(
+        MaterialPageRoute(builder: (_) => StoreDetailScreen(slug: store.slug)),
+      ),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          SizedBox(
+            width: 64,
+            height: 64,
+            child: GradientThumb(
+              category: store.primaryCategory,
+              borderRadius: BorderRadius.circular(EsokoRadius.md),
+              iconSize: 28,
+            ),
           ),
-        ),
+          const SizedBox(width: EsokoSpacing.s4),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(store.name, style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 16)),
+                const SizedBox(height: EsokoSpacing.s1),
+                if (store.neighborhood != null || distance != null)
+                  Text(
+                    [
+                      if (distance != null) '${_formatDistance(distance)} away',
+                      if (store.neighborhood != null) store.neighborhood!,
+                    ].join(' · '),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(color: EsokoColors.text2, fontSize: 12),
+                  )
+                else if (store.tagline != null)
+                  Text(store.tagline!, maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(color: EsokoColors.text2)),
+                const SizedBox(height: EsokoSpacing.s2),
+                if (store.primaryCategory != null)
+                  EsokoStatusPill(label: store.primaryCategory!, color: style.gradient.last, icon: style.icon),
+              ],
+            ),
+          ),
+          Icon(Icons.chevron_right_rounded, color: EsokoColors.text3),
+        ],
       ),
     );
   }
 
   String _formatDistance(double km) => km < 1 ? '${(km * 1000).round()} m' : '${km.toStringAsFixed(1)} km';
-}
-
-class _EmptyState extends StatelessWidget {
-  const _EmptyState({required this.message});
-  final String message;
-
-  @override
-  Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.all(EsokoSpacing.s8),
-      child: Column(
-        children: [
-          Icon(Icons.storefront_outlined, size: 40, color: EsokoColors.text3),
-          const SizedBox(height: EsokoSpacing.s3),
-          Center(child: Text(message, style: TextStyle(color: EsokoColors.text2))),
-        ],
-      ),
-    );
-  }
 }

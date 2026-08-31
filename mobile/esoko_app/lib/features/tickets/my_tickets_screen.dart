@@ -4,6 +4,7 @@ import 'package:qr_flutter/qr_flutter.dart';
 
 import '../../core/api/providers.dart';
 import '../../core/theme/esoko_tokens.dart';
+import '../../core/widgets/widgets.dart';
 import 'ticketing_models.dart';
 
 final myTicketsProvider = FutureProvider.autoDispose<List<TicketRow>>((ref) async {
@@ -25,29 +26,18 @@ class MyTicketsScreen extends ConsumerWidget {
     final tickets = ref.watch(myTicketsProvider);
     return Scaffold(
       appBar: AppBar(title: const Text('My tickets')),
-      body: tickets.when(
-        data: (list) => list.isEmpty
-            ? Center(
-                child: Padding(
-                  padding: const EdgeInsets.all(EsokoSpacing.s8),
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Icon(Icons.confirmation_num_outlined, size: 40, color: EsokoColors.text3),
-                      const SizedBox(height: EsokoSpacing.s3),
-                      Text('No tickets yet.', style: TextStyle(color: EsokoColors.text2)),
-                    ],
-                  ),
-                ),
-              )
-            : ListView.separated(
-                padding: const EdgeInsets.all(EsokoSpacing.s4),
-                itemCount: list.length,
-                separatorBuilder: (_, _) => const SizedBox(height: EsokoSpacing.s5),
-                itemBuilder: (context, i) => _TicketStub(ticket: list[i]),
-              ),
-        loading: () => const Center(child: CircularProgressIndicator()),
-        error: (e, _) => Center(child: Text('Could not load your tickets.', style: TextStyle(color: EsokoColors.red))),
+      body: EsokoAsyncView(
+        value: tickets,
+        isEmpty: (list) => list.isEmpty,
+        emptyMessage: 'No tickets yet.',
+        emptyIcon: Icons.confirmation_num_outlined,
+        onRetry: () => ref.invalidate(myTicketsProvider),
+        data: (context, list) => ListView.separated(
+          padding: const EdgeInsets.all(EsokoSpacing.s4),
+          itemCount: list.length,
+          separatorBuilder: (_, _) => const SizedBox(height: EsokoSpacing.s5),
+          itemBuilder: (context, i) => _TicketStub(ticket: list[i]),
+        ),
       ),
     );
   }

@@ -8,26 +8,34 @@ import '../../core/api/providers.dart';
 import '../../core/auth/auth_controller.dart';
 import '../../core/auth/auth_state.dart';
 import '../../core/theme/esoko_tokens.dart';
+import '../../core/widgets/widgets.dart';
 import 'ticketing_models.dart';
 
-final scheduleSeatsProvider = FutureProvider.autoDispose.family<SeatMapResult, String>((ref, scheduleId) async {
-  final api = ref.watch(apiClientProvider);
-  final res = await api.get('/v1/schedules/$scheduleId/seats');
-  return SeatMapResult.fromJson(res);
-});
+final scheduleSeatsProvider = FutureProvider.autoDispose
+    .family<SeatMapResult, String>((ref, scheduleId) async {
+      final api = ref.watch(apiClientProvider);
+      final res = await api.get('/v1/schedules/$scheduleId/seats');
+      return SeatMapResult.fromJson(res);
+    });
 
 enum _Stage { pick, details, waiting, done, failed }
 
 /// Picks a ticket class (+ seat, if seated) for one schedule, then books
 /// and pays — POST /v1/bookings → M-Pesa STK → poll GET /v1/bookings/:id.
 class ScheduleBookingScreen extends ConsumerStatefulWidget {
-  const ScheduleBookingScreen({super.key, required this.scheduleId, required this.ticketClasses, required this.listingTitle});
+  const ScheduleBookingScreen({
+    super.key,
+    required this.scheduleId,
+    required this.ticketClasses,
+    required this.listingTitle,
+  });
   final String scheduleId;
   final List<TicketClass> ticketClasses;
   final String listingTitle;
 
   @override
-  ConsumerState<ScheduleBookingScreen> createState() => _ScheduleBookingScreenState();
+  ConsumerState<ScheduleBookingScreen> createState() =>
+      _ScheduleBookingScreenState();
 }
 
 class _ScheduleBookingScreenState extends ConsumerState<ScheduleBookingScreen> {
@@ -46,7 +54,9 @@ class _ScheduleBookingScreenState extends ConsumerState<ScheduleBookingScreen> {
   @override
   void initState() {
     super.initState();
-    _selectedClass = widget.ticketClasses.isNotEmpty ? widget.ticketClasses.first : null;
+    _selectedClass = widget.ticketClasses.isNotEmpty
+        ? widget.ticketClasses.first
+        : null;
     final auth = ref.read(authControllerProvider);
     if (auth is AuthSignedIn) {
       _nameController.text = auth.profile.displayName;
@@ -128,7 +138,10 @@ class _ScheduleBookingScreenState extends ConsumerState<ScheduleBookingScreen> {
         child: Center(
           child: ConstrainedBox(
             constraints: const BoxConstraints(maxWidth: 480),
-            child: Padding(padding: const EdgeInsets.all(EsokoSpacing.s5), child: _body()),
+            child: Padding(
+              padding: const EdgeInsets.all(EsokoSpacing.s5),
+              child: _body(),
+            ),
           ),
         ),
       ),
@@ -145,14 +158,33 @@ class _ScheduleBookingScreenState extends ConsumerState<ScheduleBookingScreen> {
         return Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            _statusBadge(icon: Icons.phone_android_rounded, color: EsokoColors.blue, spinning: true),
+            EsokoStatusBadge(
+              icon: Icons.phone_android_rounded,
+              color: EsokoColors.blue,
+              spinning: true,
+            ),
             const SizedBox(height: EsokoSpacing.s5),
-            Text('Complete payment on your phone', style: Theme.of(context).textTheme.titleMedium, textAlign: TextAlign.center),
+            Text(
+              'Complete payment on your phone',
+              style: Theme.of(context).textTheme.titleMedium,
+              textAlign: TextAlign.center,
+            ),
             const SizedBox(height: EsokoSpacing.s2),
-            Text('Enter your M-Pesa PIN when the prompt arrives.', style: TextStyle(color: EsokoColors.text2), textAlign: TextAlign.center),
+            Text(
+              'Enter your M-Pesa PIN when the prompt arrives.',
+              style: TextStyle(color: EsokoColors.text2),
+              textAlign: TextAlign.center,
+            ),
             if (_totalKes != null) ...[
               const SizedBox(height: EsokoSpacing.s4),
-              Text('KES $_totalKes', style: TextStyle(color: EsokoColors.green, fontWeight: FontWeight.bold, fontSize: 18)),
+              Text(
+                'KES $_totalKes',
+                style: TextStyle(
+                  color: EsokoColors.green,
+                  fontWeight: FontWeight.bold,
+                  fontSize: 18,
+                ),
+              ),
             ],
           ],
         );
@@ -160,11 +192,21 @@ class _ScheduleBookingScreenState extends ConsumerState<ScheduleBookingScreen> {
         return Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            _statusBadge(icon: Icons.check_rounded, color: EsokoColors.green),
+            EsokoStatusBadge(
+              icon: Icons.check_rounded,
+              color: EsokoColors.green,
+            ),
             const SizedBox(height: EsokoSpacing.s4),
-            Text('Booking confirmed', style: Theme.of(context).textTheme.headlineSmall),
+            Text(
+              'Booking confirmed',
+              style: Theme.of(context).textTheme.headlineSmall,
+            ),
             const SizedBox(height: EsokoSpacing.s2),
-            Text('Find your ticket QR any time under Tickets → My tickets.', textAlign: TextAlign.center, style: TextStyle(color: EsokoColors.text2)),
+            Text(
+              'Find your ticket QR any time under Tickets → My tickets.',
+              textAlign: TextAlign.center,
+              style: TextStyle(color: EsokoColors.text2),
+            ),
             const SizedBox(height: EsokoSpacing.s6),
             FilledButton(
               onPressed: () => Navigator.of(context).popUntil((r) => r.isFirst),
@@ -176,33 +218,20 @@ class _ScheduleBookingScreenState extends ConsumerState<ScheduleBookingScreen> {
         return Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            _statusBadge(icon: Icons.priority_high_rounded, color: EsokoColors.red),
+            EsokoStatusBadge(
+              icon: Icons.priority_high_rounded,
+              color: EsokoColors.red,
+            ),
             const SizedBox(height: EsokoSpacing.s4),
             Text(_error ?? 'Something went wrong', textAlign: TextAlign.center),
             const SizedBox(height: EsokoSpacing.s5),
-            OutlinedButton(onPressed: () => setState(() => _stage = _Stage.pick), child: const Text('Start over')),
+            OutlinedButton(
+              onPressed: () => setState(() => _stage = _Stage.pick),
+              child: const Text('Start over'),
+            ),
           ],
         );
     }
-  }
-
-  Widget _statusBadge({required IconData icon, required Color color, bool spinning = false}) {
-    return SizedBox(
-      width: 88,
-      height: 88,
-      child: Stack(
-        alignment: Alignment.center,
-        children: [
-          if (spinning) const SizedBox(width: 88, height: 88, child: CircularProgressIndicator(strokeWidth: 3)),
-          Container(
-            width: 64,
-            height: 64,
-            decoration: BoxDecoration(color: color.withValues(alpha: 0.12), shape: BoxShape.circle),
-            child: Icon(icon, color: color, size: 32),
-          ),
-        ],
-      ),
-    );
   }
 
   Widget _pickStage() {
@@ -210,7 +239,10 @@ class _ScheduleBookingScreenState extends ConsumerState<ScheduleBookingScreen> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        Text('Choose a ticket type', style: Theme.of(context).textTheme.titleMedium),
+        Text(
+          'Choose a ticket type',
+          style: Theme.of(context).textTheme.titleMedium,
+        ),
         const SizedBox(height: EsokoSpacing.s3),
         for (final c in widget.ticketClasses)
           _TicketClassOption(
@@ -232,13 +264,31 @@ class _ScheduleBookingScreenState extends ConsumerState<ScheduleBookingScreen> {
           const SizedBox(height: EsokoSpacing.s2),
           Center(
             child: Container(
-              decoration: BoxDecoration(border: Border.all(color: EsokoColors.line), borderRadius: BorderRadius.circular(EsokoRadius.pill)),
+              decoration: BoxDecoration(
+                border: Border.all(color: EsokoColors.line),
+                borderRadius: BorderRadius.circular(EsokoRadius.pill),
+              ),
               child: Row(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  IconButton(onPressed: _quantity > 1 ? () => setState(() => _quantity--) : null, icon: const Icon(Icons.remove)),
-                  SizedBox(width: 28, child: Text('$_quantity', textAlign: TextAlign.center, style: const TextStyle(fontWeight: FontWeight.w700))),
-                  IconButton(onPressed: () => setState(() => _quantity++), icon: const Icon(Icons.add)),
+                  IconButton(
+                    onPressed: _quantity > 1
+                        ? () => setState(() => _quantity--)
+                        : null,
+                    icon: const Icon(Icons.remove),
+                  ),
+                  SizedBox(
+                    width: 28,
+                    child: Text(
+                      '$_quantity',
+                      textAlign: TextAlign.center,
+                      style: const TextStyle(fontWeight: FontWeight.w700),
+                    ),
+                  ),
+                  IconButton(
+                    onPressed: () => setState(() => _quantity++),
+                    icon: const Icon(Icons.add),
+                  ),
                 ],
               ),
             ),
@@ -259,8 +309,15 @@ class _ScheduleBookingScreenState extends ConsumerState<ScheduleBookingScreen> {
     final seatMap = ref.watch(scheduleSeatsProvider(widget.scheduleId));
     return seatMap.when(
       data: (map) {
-        final forClass = map.seats.where((s) => s.ticketClassId == ticketClassId).toList();
-        if (forClass.isEmpty) return Text('No seats configured for this class.', style: TextStyle(color: EsokoColors.text2));
+        final forClass = map.seats
+            .where((s) => s.ticketClassId == ticketClassId)
+            .toList();
+        if (forClass.isEmpty) {
+          return Text(
+            'No seats configured for this class.',
+            style: TextStyle(color: EsokoColors.text2),
+          );
+        }
         final byRow = <int, List<SeatRow>>{};
         for (final s in forClass) {
           byRow.putIfAbsent(s.row, () => []).add(s);
@@ -287,15 +344,30 @@ class _ScheduleBookingScreenState extends ConsumerState<ScheduleBookingScreen> {
                   // shape, not just a table of buttons.
                   Container(
                     width: 72,
-                    padding: const EdgeInsets.symmetric(vertical: EsokoSpacing.s2),
+                    padding: const EdgeInsets.symmetric(
+                      vertical: EsokoSpacing.s2,
+                    ),
                     decoration: BoxDecoration(
                       color: EsokoColors.line,
-                      borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
+                      borderRadius: const BorderRadius.vertical(
+                        top: Radius.circular(20),
+                      ),
                     ),
                     child: Column(
                       children: [
-                        Icon(Icons.airline_seat_recline_normal, color: EsokoColors.text3, size: 18),
-                        Text('FRONT', style: TextStyle(fontSize: 9, letterSpacing: 2, color: EsokoColors.text3)),
+                        Icon(
+                          Icons.airline_seat_recline_normal,
+                          color: EsokoColors.text3,
+                          size: 18,
+                        ),
+                        Text(
+                          'FRONT',
+                          style: TextStyle(
+                            fontSize: 9,
+                            letterSpacing: 2,
+                            color: EsokoColors.text3,
+                          ),
+                        ),
                       ],
                     ),
                   ),
@@ -306,14 +378,27 @@ class _ScheduleBookingScreenState extends ConsumerState<ScheduleBookingScreen> {
                       children: [
                         SizedBox(
                           width: 18,
-                          child: Text('$r', style: TextStyle(fontSize: 10, color: EsokoColors.text3), textAlign: TextAlign.center),
+                          child: Text(
+                            '$r',
+                            style: TextStyle(
+                              fontSize: 10,
+                              color: EsokoColors.text3,
+                            ),
+                            textAlign: TextAlign.center,
+                          ),
                         ),
                         const SizedBox(width: EsokoSpacing.s2),
                         for (final seat in byRow[r]!) ...[
-                          _SeatButton(seat: seat, selected: _selectedSeatId == seat.id, onTap: () => setState(() => _selectedSeatId = seat.id)),
+                          _SeatButton(
+                            seat: seat,
+                            selected: _selectedSeatId == seat.id,
+                            onTap: () =>
+                                setState(() => _selectedSeatId = seat.id),
+                          ),
                           // Aisle gap right after the last left-side
                           // column, before the first right-side column.
-                          if (leftCols.contains(seat.column) && byRow[r]!.indexOf(seat) == leftCols.length - 1)
+                          if (leftCols.contains(seat.column) &&
+                              byRow[r]!.indexOf(seat) == leftCols.length - 1)
                             const SizedBox(width: EsokoSpacing.s5)
                           else
                             const SizedBox(width: EsokoSpacing.s2),
@@ -340,7 +425,10 @@ class _ScheduleBookingScreenState extends ConsumerState<ScheduleBookingScreen> {
         );
       },
       loading: () => const Center(child: CircularProgressIndicator()),
-      error: (e, _) => Text('Could not load seats.', style: TextStyle(color: EsokoColors.red)),
+      error: (e, _) => Text(
+        'Could not load seats.',
+        style: TextStyle(color: EsokoColors.red),
+      ),
     );
   }
 
@@ -354,7 +442,9 @@ class _ScheduleBookingScreenState extends ConsumerState<ScheduleBookingScreen> {
           decoration: BoxDecoration(
             color: color,
             borderRadius: BorderRadius.circular(4),
-            border: outline ? Border.all(color: EsokoColors.line, width: 1.5) : null,
+            border: outline
+                ? Border.all(color: EsokoColors.line, width: 1.5)
+                : null,
           ),
         ),
         const SizedBox(width: 6),
@@ -369,7 +459,10 @@ class _ScheduleBookingScreenState extends ConsumerState<ScheduleBookingScreen> {
       children: [
         TextField(
           controller: _nameController,
-          decoration: const InputDecoration(labelText: 'Your name', prefixIcon: Icon(Icons.person_outline)),
+          decoration: const InputDecoration(
+            labelText: 'Your name',
+            prefixIcon: Icon(Icons.person_outline),
+          ),
         ),
         const SizedBox(height: EsokoSpacing.s3),
         TextField(
@@ -393,7 +486,11 @@ class _ScheduleBookingScreenState extends ConsumerState<ScheduleBookingScreen> {
 }
 
 class _TicketClassOption extends StatelessWidget {
-  const _TicketClassOption({required this.ticketClass, required this.selected, required this.onTap});
+  const _TicketClassOption({
+    required this.ticketClass,
+    required this.selected,
+    required this.onTap,
+  });
   final TicketClass ticketClass;
   final bool selected;
   final VoidCallback onTap;
@@ -409,7 +506,12 @@ class _TicketClassOption extends StatelessWidget {
         child: Container(
           margin: const EdgeInsets.only(bottom: EsokoSpacing.s2),
           padding: const EdgeInsets.all(EsokoSpacing.s3),
-          decoration: BoxDecoration(border: Border.all(color: selected ? EsokoColors.green : EsokoColors.line, width: selected ? 1.5 : 1)),
+          decoration: BoxDecoration(
+            border: Border.all(
+              color: selected ? EsokoColors.green : EsokoColors.line,
+              width: selected ? 1.5 : 1,
+            ),
+          ),
           child: Row(
             children: [
               Icon(
@@ -418,19 +520,40 @@ class _TicketClassOption extends StatelessWidget {
                 size: 22,
               ),
               const SizedBox(width: EsokoSpacing.s3),
-              Icon(ticketClass.seated ? Icons.event_seat_outlined : Icons.groups_outlined, color: EsokoColors.text2, size: 18),
+              Icon(
+                ticketClass.seated
+                    ? Icons.event_seat_outlined
+                    : Icons.groups_outlined,
+                color: EsokoColors.text2,
+                size: 18,
+              ),
               const SizedBox(width: EsokoSpacing.s2),
               Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text(ticketClass.name, style: const TextStyle(fontWeight: FontWeight.w700)),
+                    Text(
+                      ticketClass.name,
+                      style: const TextStyle(fontWeight: FontWeight.w700),
+                    ),
                     if (ticketClass.amenities.isNotEmpty)
-                      Text(ticketClass.amenities.join(' · '), style: TextStyle(fontSize: 11, color: EsokoColors.text3)),
+                      Text(
+                        ticketClass.amenities.join(' · '),
+                        style: TextStyle(
+                          fontSize: 11,
+                          color: EsokoColors.text3,
+                        ),
+                      ),
                   ],
                 ),
               ),
-              Text('KES ${ticketClass.priceKes}', style: TextStyle(color: EsokoColors.green, fontWeight: FontWeight.w800)),
+              Text(
+                'KES ${ticketClass.priceKes}',
+                style: TextStyle(
+                  color: EsokoColors.green,
+                  fontWeight: FontWeight.w800,
+                ),
+              ),
             ],
           ),
         ),
@@ -440,7 +563,11 @@ class _TicketClassOption extends StatelessWidget {
 }
 
 class _SeatButton extends StatelessWidget {
-  const _SeatButton({required this.seat, required this.selected, required this.onTap});
+  const _SeatButton({
+    required this.seat,
+    required this.selected,
+    required this.onTap,
+  });
   final SeatRow seat;
   final bool selected;
   final VoidCallback onTap;
@@ -448,8 +575,12 @@ class _SeatButton extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final taken = seat.status != 'AVAILABLE';
-    final Color bg = taken ? EsokoColors.line : (selected ? EsokoColors.green : Colors.white);
-    final Color fg = taken ? EsokoColors.text3 : (selected ? Colors.white : EsokoColors.text2);
+    final Color bg = taken
+        ? EsokoColors.line
+        : (selected ? EsokoColors.green : Colors.white);
+    final Color fg = taken
+        ? EsokoColors.text3
+        : (selected ? Colors.white : EsokoColors.text2);
     return SizedBox(
       width: 36,
       height: 36,
@@ -462,13 +593,22 @@ class _SeatButton extends StatelessWidget {
           child: Container(
             decoration: BoxDecoration(
               borderRadius: BorderRadius.circular(EsokoRadius.sm),
-              border: Border.all(color: selected ? EsokoColors.green : EsokoColors.line),
+              border: Border.all(
+                color: selected ? EsokoColors.green : EsokoColors.line,
+              ),
             ),
             child: Column(
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
                 Icon(Icons.event_seat, size: 14, color: fg),
-                Text(seat.label, style: TextStyle(fontSize: 9, fontWeight: FontWeight.w700, color: fg)),
+                Text(
+                  seat.label,
+                  style: TextStyle(
+                    fontSize: 9,
+                    fontWeight: FontWeight.w700,
+                    color: fg,
+                  ),
+                ),
               ],
             ),
           ),

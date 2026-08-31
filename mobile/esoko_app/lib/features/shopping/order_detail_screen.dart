@@ -3,9 +3,9 @@ import 'package:flutter/services.dart' show Clipboard, ClipboardData;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:url_launcher/url_launcher.dart';
 
-import '../../core/api/api_exception.dart';
 import '../../core/api/providers.dart';
 import '../../core/theme/esoko_tokens.dart';
+import '../../core/widgets/widgets.dart';
 import 'shopping_models.dart';
 
 final orderDetailProvider = FutureProvider.autoDispose.family<OrderStatus, String>((ref, orderId) async {
@@ -29,12 +29,10 @@ class OrderDetailScreen extends ConsumerWidget {
     return Scaffold(
       appBar: AppBar(title: const Text('Order')),
       body: SafeArea(
-        child: order.when(
-          data: (o) => _body(context, ref, o),
-          loading: () => const Center(child: CircularProgressIndicator()),
-          error: (e, _) => Center(
-            child: Text(e is ApiException ? e.message : 'Could not load this order.', style: TextStyle(color: EsokoColors.red)),
-          ),
+        child: EsokoAsyncView(
+          value: order,
+          onRetry: () => ref.invalidate(orderDetailProvider(orderId)),
+          data: (context, o) => _body(context, ref, o),
         ),
       ),
     );

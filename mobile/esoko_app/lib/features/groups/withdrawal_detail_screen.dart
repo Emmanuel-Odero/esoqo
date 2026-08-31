@@ -4,7 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../core/api/api_exception.dart';
 import '../../core/api/providers.dart';
 import '../../core/theme/esoko_tokens.dart';
-import '../../core/widgets/pin_prompt_dialog.dart';
+import '../../core/widgets/widgets.dart';
 import 'group_models.dart';
 
 final withdrawalDetailProvider = FutureProvider.autoDispose.family<WithdrawalRow, String>((ref, id) async {
@@ -57,8 +57,10 @@ class _WithdrawalDetailScreenState extends ConsumerState<WithdrawalDetailScreen>
     final withdrawal = ref.watch(withdrawalDetailProvider(widget.withdrawalId));
     return Scaffold(
       appBar: AppBar(title: const Text('Withdrawal')),
-      body: withdrawal.when(
-        data: (w) => ListView(
+      body: EsokoAsyncView(
+        value: withdrawal,
+        onRetry: () => ref.invalidate(withdrawalDetailProvider(widget.withdrawalId)),
+        data: (context, w) => ListView(
           padding: const EdgeInsets.all(EsokoSpacing.s5),
           children: [
             Container(
@@ -124,8 +126,6 @@ class _WithdrawalDetailScreenState extends ConsumerState<WithdrawalDetailScreen>
             ],
           ],
         ),
-        loading: () => const Center(child: CircularProgressIndicator()),
-        error: (e, _) => Center(child: Text('Could not load that withdrawal.', style: TextStyle(color: EsokoColors.red))),
       ),
     );
   }

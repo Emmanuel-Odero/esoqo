@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/api/providers.dart';
 import '../../core/theme/esoko_tokens.dart';
+import '../../core/widgets/widgets.dart';
 import 'schedule_booking_screen.dart';
 import 'ticket_style.dart';
 import 'ticketing_models.dart';
@@ -21,8 +22,10 @@ class ListingDetailScreen extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final listing = ref.watch(listingDetailProvider(listingId));
     return Scaffold(
-      body: listing.when(
-        data: (l) {
+      body: EsokoAsyncView(
+        value: listing,
+        onRetry: () => ref.invalidate(listingDetailProvider(listingId)),
+        data: (context, l) {
           final style = TicketStyle.forVertical(l.vertical);
           return CustomScrollView(
             slivers: [
@@ -96,8 +99,6 @@ class ListingDetailScreen extends ConsumerWidget {
             ],
           );
         },
-        loading: () => const Center(child: CircularProgressIndicator()),
-        error: (e, _) => Center(child: Text('Could not load that listing.', style: TextStyle(color: EsokoColors.red))),
       ),
     );
   }
@@ -110,34 +111,35 @@ class _TicketClassCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      margin: const EdgeInsets.only(bottom: EsokoSpacing.s3),
-      padding: const EdgeInsets.all(EsokoSpacing.s4),
-      decoration: BoxDecoration(border: Border.all(color: EsokoColors.line), borderRadius: BorderRadius.circular(EsokoRadius.lg)),
-      child: Row(
-        children: [
-          Container(
-            width: 40,
-            height: 40,
-            decoration: BoxDecoration(color: accent.withValues(alpha: 0.12), shape: BoxShape.circle),
-            child: Icon(ticketClass.seated ? Icons.event_seat_outlined : Icons.groups_outlined, color: accent, size: 20),
-          ),
-          const SizedBox(width: EsokoSpacing.s3),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(ticketClass.name, style: const TextStyle(fontWeight: FontWeight.w700)),
-                if (ticketClass.amenities.isNotEmpty)
-                  Padding(
-                    padding: const EdgeInsets.only(top: 2),
-                    child: Text(ticketClass.amenities.join(' · '), style: TextStyle(fontSize: 11, color: EsokoColors.text3)),
-                  ),
-              ],
+    return Padding(
+      padding: const EdgeInsets.only(bottom: EsokoSpacing.s3),
+      child: EsokoCard(
+        padding: const EdgeInsets.all(EsokoSpacing.s4),
+        child: Row(
+          children: [
+            Container(
+              width: 40,
+              height: 40,
+              decoration: BoxDecoration(color: accent.withValues(alpha: 0.12), shape: BoxShape.circle),
+              child: Icon(ticketClass.seated ? Icons.event_seat_outlined : Icons.groups_outlined, color: accent, size: 20),
             ),
-          ),
-          Text('KES ${ticketClass.priceKes}', style: TextStyle(color: EsokoColors.green, fontWeight: FontWeight.w800)),
-        ],
+            const SizedBox(width: EsokoSpacing.s3),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(ticketClass.name, style: const TextStyle(fontWeight: FontWeight.w700)),
+                  if (ticketClass.amenities.isNotEmpty)
+                    Padding(
+                      padding: const EdgeInsets.only(top: 2),
+                      child: Text(ticketClass.amenities.join(' · '), style: TextStyle(fontSize: 11, color: EsokoColors.text3)),
+                    ),
+                ],
+              ),
+            ),
+            Text('KES ${ticketClass.priceKes}', style: TextStyle(color: EsokoColors.green, fontWeight: FontWeight.w800)),
+          ],
+        ),
       ),
     );
   }
@@ -152,37 +154,30 @@ class _ScheduleTile extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Material(
-      color: Theme.of(context).cardColor,
-      borderRadius: BorderRadius.circular(EsokoRadius.lg),
-      clipBehavior: Clip.antiAlias,
-      child: InkWell(
+    return Padding(
+      padding: const EdgeInsets.only(bottom: EsokoSpacing.s2),
+      child: EsokoCard(
         onTap: onTap,
-        child: Container(
-          margin: const EdgeInsets.only(bottom: EsokoSpacing.s2),
-          padding: const EdgeInsets.all(EsokoSpacing.s3),
-          decoration: BoxDecoration(border: Border.all(color: EsokoColors.line)),
-          child: Row(
-            children: [
-              Container(
-                width: 40,
-                height: 40,
-                decoration: BoxDecoration(color: accent.withValues(alpha: 0.12), shape: BoxShape.circle),
-                child: Icon(icon, color: accent, size: 18),
+        child: Row(
+          children: [
+            Container(
+              width: 40,
+              height: 40,
+              decoration: BoxDecoration(color: accent.withValues(alpha: 0.12), shape: BoxShape.circle),
+              child: Icon(icon, color: accent, size: 18),
+            ),
+            const SizedBox(width: EsokoSpacing.s3),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(schedule.departAt, style: const TextStyle(fontWeight: FontWeight.w600)),
+                  if (schedule.gateInfo != null) Text(schedule.gateInfo!, style: TextStyle(fontSize: 12, color: EsokoColors.text2)),
+                ],
               ),
-              const SizedBox(width: EsokoSpacing.s3),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(schedule.departAt, style: const TextStyle(fontWeight: FontWeight.w600)),
-                    if (schedule.gateInfo != null) Text(schedule.gateInfo!, style: TextStyle(fontSize: 12, color: EsokoColors.text2)),
-                  ],
-                ),
-              ),
-              Icon(Icons.chevron_right_rounded, color: EsokoColors.text3),
-            ],
-          ),
+            ),
+            Icon(Icons.chevron_right_rounded, color: EsokoColors.text3),
+          ],
         ),
       ),
     );

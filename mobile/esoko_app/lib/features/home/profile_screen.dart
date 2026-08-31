@@ -6,6 +6,7 @@ import '../../core/api/providers.dart';
 import '../../core/auth/auth_controller.dart';
 import '../../core/auth/auth_state.dart';
 import '../../core/theme/esoko_tokens.dart';
+import '../../core/widgets/widgets.dart';
 import '../shopping/order_detail_screen.dart';
 
 /// One history item — a store order or a ticket booking, whichever
@@ -66,11 +67,9 @@ class ProfileScreen extends ConsumerWidget {
       child: ListView(
         padding: const EdgeInsets.all(EsokoSpacing.s6),
         children: [
-          Text('Profile', style: Theme.of(context).textTheme.headlineMedium),
-          const SizedBox(height: EsokoSpacing.s2),
-          Text(
-            'Everything Esoko holds about you — nobody else sees any of it unless you say so.',
-            style: TextStyle(color: EsokoColors.text2),
+          EsokoSectionHeader(
+            title: 'Profile',
+            subtitle: 'Everything Esoko holds about you — nobody else sees any of it unless you say so.',
           ),
           const SizedBox(height: EsokoSpacing.s6),
 
@@ -122,18 +121,13 @@ class ProfileScreen extends ConsumerWidget {
 
           Text('History', style: Theme.of(context).textTheme.titleLarge),
           const SizedBox(height: EsokoSpacing.s3),
-          history.when(
-            data: (items) => items.isEmpty
-                ? Padding(
-                    padding: const EdgeInsets.symmetric(vertical: EsokoSpacing.s4),
-                    child: Text('No orders or bookings yet.', style: TextStyle(color: EsokoColors.text2)),
-                  )
-                : Column(children: [for (final item in items) _historyTile(context, item)]),
-            loading: () => const Padding(
-              padding: EdgeInsets.symmetric(vertical: EsokoSpacing.s6),
-              child: Center(child: CircularProgressIndicator()),
-            ),
-            error: (e, _) => Text('Could not load your history.', style: TextStyle(color: EsokoColors.red)),
+          EsokoAsyncView(
+            value: history,
+            isEmpty: (items) => items.isEmpty,
+            emptyMessage: 'No orders or bookings yet.',
+            emptyIcon: Icons.receipt_long_outlined,
+            onRetry: () => ref.invalidate(_historyProvider),
+            data: (context, items) => Column(children: [for (final item in items) _historyTile(context, item)]),
           ),
 
           const SizedBox(height: EsokoSpacing.s6),

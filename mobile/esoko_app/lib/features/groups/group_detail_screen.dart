@@ -5,6 +5,7 @@ import '../../core/api/providers.dart';
 import '../../core/auth/auth_controller.dart';
 import '../../core/auth/auth_state.dart';
 import '../../core/theme/esoko_tokens.dart';
+import '../../core/widgets/widgets.dart';
 import 'contribute_screen.dart';
 import 'group_models.dart';
 import 'request_withdrawal_screen.dart';
@@ -65,8 +66,10 @@ class GroupDetailScreen extends ConsumerWidget {
       appBar: AppBar(title: Text(group.valueOrNull?.displayName ?? 'Group')),
       body: RefreshIndicator(
         onRefresh: () async => _refreshAll(ref),
-        child: group.when(
-          data: (g) => ListView(
+        child: EsokoAsyncView(
+          value: group,
+          onRetry: () => ref.invalidate(groupDetailProvider(groupId)),
+          data: (context, g) => ListView(
             padding: const EdgeInsets.all(EsokoSpacing.s4),
             children: [
               Container(
@@ -123,7 +126,7 @@ class GroupDetailScreen extends ConsumerWidget {
               const SizedBox(height: EsokoSpacing.s2),
               withdrawals.when(
                 data: (list) => list.isEmpty
-                    ? Text('No withdrawals yet.', style: TextStyle(color: EsokoColors.text2))
+                    ? const EsokoEmptyState(icon: Icons.outbox_outlined, message: 'No withdrawals yet.')
                     : Column(children: [
                         for (final w in list)
                           _WithdrawalTile(
@@ -143,15 +146,13 @@ class GroupDetailScreen extends ConsumerWidget {
               const SizedBox(height: EsokoSpacing.s2),
               contributions.when(
                 data: (list) => list.isEmpty
-                    ? Text('No contributions yet.', style: TextStyle(color: EsokoColors.text2))
+                    ? const EsokoEmptyState(icon: Icons.savings_outlined, message: 'No contributions yet.')
                     : Column(children: [for (final c in list) _ContributionTile(contribution: c)]),
                 loading: () => const Center(child: CircularProgressIndicator()),
                 error: (e, _) => const SizedBox.shrink(),
               ),
             ],
           ),
-          loading: () => const Center(child: CircularProgressIndicator()),
-          error: (e, _) => Center(child: Text('Could not load that group.', style: TextStyle(color: EsokoColors.red))),
         ),
       ),
     );

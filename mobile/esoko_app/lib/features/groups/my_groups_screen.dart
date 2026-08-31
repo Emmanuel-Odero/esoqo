@@ -1,9 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import '../../core/api/api_exception.dart';
 import '../../core/api/providers.dart';
 import '../../core/theme/esoko_tokens.dart';
+import '../../core/widgets/widgets.dart';
 import 'create_group_screen.dart';
 import 'group_detail_screen.dart';
 import 'group_models.dart';
@@ -27,8 +27,10 @@ class MyGroupsScreen extends ConsumerWidget {
     return Scaffold(
       body: RefreshIndicator(
         onRefresh: () async => ref.invalidate(myGroupsProvider),
-        child: groups.when(
-          data: (list) => CustomScrollView(
+        child: EsokoAsyncView(
+          value: groups,
+          onRetry: () => ref.invalidate(myGroupsProvider),
+          data: (context, list) => CustomScrollView(
             slivers: [
               SliverToBoxAdapter(
                 child: Padding(
@@ -36,9 +38,7 @@ class MyGroupsScreen extends ConsumerWidget {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Text('Your groups', style: Theme.of(context).textTheme.headlineSmall),
-                      const SizedBox(height: EsokoSpacing.s1),
-                      Text('Chamas, table banking and welfare groups you belong to.', style: TextStyle(color: EsokoColors.text2)),
+                      EsokoSectionHeader(title: 'Your groups', subtitle: 'Chamas, table banking and welfare groups you belong to.'),
                       const SizedBox(height: EsokoSpacing.s4),
                       Row(
                         children: [
@@ -64,17 +64,8 @@ class MyGroupsScreen extends ConsumerWidget {
                 ),
               ),
               if (list.isEmpty)
-                SliverToBoxAdapter(
-                  child: Padding(
-                    padding: const EdgeInsets.all(EsokoSpacing.s8),
-                    child: Column(
-                      children: [
-                        Icon(Icons.groups_outlined, size: 40, color: EsokoColors.text3),
-                        const SizedBox(height: EsokoSpacing.s3),
-                        Text('No groups yet — start or join one above.', style: TextStyle(color: EsokoColors.text2)),
-                      ],
-                    ),
-                  ),
+                const SliverToBoxAdapter(
+                  child: EsokoEmptyState(icon: Icons.groups_outlined, message: 'No groups yet — start or join one above.'),
                 )
               else
                 SliverPadding(
@@ -100,13 +91,6 @@ class MyGroupsScreen extends ConsumerWidget {
                   ),
                 ),
             ],
-          ),
-          loading: () => const Center(child: CircularProgressIndicator()),
-          error: (e, _) => Center(
-            child: Text(
-              e is ApiException ? e.message : 'Could not load your groups.',
-              style: TextStyle(color: EsokoColors.red),
-            ),
           ),
         ),
       ),

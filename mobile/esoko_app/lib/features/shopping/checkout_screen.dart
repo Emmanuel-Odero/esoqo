@@ -8,6 +8,7 @@ import '../../core/api/providers.dart';
 import '../../core/auth/auth_controller.dart';
 import '../../core/auth/auth_state.dart';
 import '../../core/theme/esoko_tokens.dart';
+import '../../core/widgets/widgets.dart';
 
 enum _Stage { form, placing, waiting, done, failed }
 
@@ -148,7 +149,10 @@ class _CheckoutScreenState extends ConsumerState<CheckoutScreen> {
             const SizedBox(height: EsokoSpacing.s5),
             TextField(
               controller: _nameController,
-              decoration: const InputDecoration(labelText: 'Your name', prefixIcon: Icon(Icons.person_outline)),
+              decoration: const InputDecoration(
+                labelText: 'Your name',
+                prefixIcon: Icon(Icons.person_outline),
+              ),
             ),
             const SizedBox(height: EsokoSpacing.s3),
             TextField(
@@ -174,14 +178,33 @@ class _CheckoutScreenState extends ConsumerState<CheckoutScreen> {
         return Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            _statusBadge(icon: Icons.phone_android_rounded, color: EsokoColors.blue, spinning: true),
+            EsokoStatusBadge(
+              icon: Icons.phone_android_rounded,
+              color: EsokoColors.blue,
+              spinning: true,
+            ),
             const SizedBox(height: EsokoSpacing.s5),
-            Text('Complete payment on your phone', style: Theme.of(context).textTheme.titleMedium, textAlign: TextAlign.center),
+            Text(
+              'Complete payment on your phone',
+              style: Theme.of(context).textTheme.titleMedium,
+              textAlign: TextAlign.center,
+            ),
             const SizedBox(height: EsokoSpacing.s2),
-            Text('Enter your M-Pesa PIN when the prompt arrives.', style: TextStyle(color: EsokoColors.text2), textAlign: TextAlign.center),
+            Text(
+              'Enter your M-Pesa PIN when the prompt arrives.',
+              style: TextStyle(color: EsokoColors.text2),
+              textAlign: TextAlign.center,
+            ),
             if (_totalKes != null) ...[
               const SizedBox(height: EsokoSpacing.s4),
-              Text('KES $_totalKes', style: TextStyle(color: EsokoColors.green, fontWeight: FontWeight.bold, fontSize: 18)),
+              Text(
+                'KES $_totalKes',
+                style: TextStyle(
+                  color: EsokoColors.green,
+                  fontWeight: FontWeight.bold,
+                  fontSize: 18,
+                ),
+              ),
             ],
           ],
         );
@@ -189,11 +212,21 @@ class _CheckoutScreenState extends ConsumerState<CheckoutScreen> {
         return Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            _statusBadge(icon: Icons.check_rounded, color: EsokoColors.green),
+            EsokoStatusBadge(
+              icon: Icons.check_rounded,
+              color: EsokoColors.green,
+            ),
             const SizedBox(height: EsokoSpacing.s4),
-            Text('Order placed', style: Theme.of(context).textTheme.headlineSmall),
+            Text(
+              'Order placed',
+              style: Theme.of(context).textTheme.headlineSmall,
+            ),
             const SizedBox(height: EsokoSpacing.s2),
-            Text('Find it any time in your Profile → History.', textAlign: TextAlign.center, style: TextStyle(color: EsokoColors.text2)),
+            Text(
+              'Find it any time in your Profile → History.',
+              textAlign: TextAlign.center,
+              style: TextStyle(color: EsokoColors.text2),
+            ),
             const SizedBox(height: EsokoSpacing.s6),
             FilledButton(
               onPressed: () => Navigator.of(context).popUntil((r) => r.isFirst),
@@ -205,11 +238,17 @@ class _CheckoutScreenState extends ConsumerState<CheckoutScreen> {
         return Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            _statusBadge(icon: Icons.priority_high_rounded, color: EsokoColors.red),
+            EsokoStatusBadge(
+              icon: Icons.priority_high_rounded,
+              color: EsokoColors.red,
+            ),
             const SizedBox(height: EsokoSpacing.s4),
             Text(_error ?? 'Something went wrong', textAlign: TextAlign.center),
             const SizedBox(height: EsokoSpacing.s5),
-            OutlinedButton(onPressed: () => setState(() => _stage = _Stage.form), child: const Text('Try again')),
+            OutlinedButton(
+              onPressed: () => setState(() => _stage = _Stage.form),
+              child: const Text('Try again'),
+            ),
           ],
         );
     }
@@ -227,30 +266,20 @@ class _CheckoutScreenState extends ConsumerState<CheckoutScreen> {
           CircleAvatar(
             radius: 20,
             backgroundColor: Colors.white,
-            child: Text('${widget.quantity}', style: TextStyle(color: EsokoColors.green, fontWeight: FontWeight.w800)),
+            child: Text(
+              '${widget.quantity}',
+              style: TextStyle(
+                color: EsokoColors.green,
+                fontWeight: FontWeight.w800,
+              ),
+            ),
           ),
           const SizedBox(width: EsokoSpacing.s3),
           Expanded(
-            child: Text(widget.productLabel, style: const TextStyle(fontWeight: FontWeight.w600)),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _statusBadge({required IconData icon, required Color color, bool spinning = false}) {
-    return SizedBox(
-      width: 88,
-      height: 88,
-      child: Stack(
-        alignment: Alignment.center,
-        children: [
-          if (spinning) const SizedBox(width: 88, height: 88, child: CircularProgressIndicator(strokeWidth: 3)),
-          Container(
-            width: 64,
-            height: 64,
-            decoration: BoxDecoration(color: color.withValues(alpha: 0.12), shape: BoxShape.circle),
-            child: Icon(icon, color: color, size: 32),
+            child: Text(
+              widget.productLabel,
+              style: const TextStyle(fontWeight: FontWeight.w600),
+            ),
           ),
         ],
       ),

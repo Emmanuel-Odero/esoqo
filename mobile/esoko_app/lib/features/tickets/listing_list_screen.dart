@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/api/providers.dart';
 import '../../core/theme/esoko_tokens.dart';
+import '../../core/widgets/widgets.dart';
 import 'listing_detail_screen.dart';
 import 'my_tickets_screen.dart';
 import 'ticket_style.dart';
@@ -26,36 +27,30 @@ class ListingListScreen extends ConsumerWidget {
     return Scaffold(
       body: RefreshIndicator(
         onRefresh: () async => ref.invalidate(listingsProvider),
-        child: listings.when(
-          data: (list) => list.isEmpty
-              ? ListView(children: [_empty('No listings are open yet.')])
-              : CustomScrollView(
-                  slivers: [
-                    SliverToBoxAdapter(
-                      child: Padding(
-                        padding: const EdgeInsets.fromLTRB(EsokoSpacing.s5, EsokoSpacing.s5, EsokoSpacing.s5, EsokoSpacing.s2),
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text('Travel & events', style: Theme.of(context).textTheme.headlineSmall),
-                            const SizedBox(height: EsokoSpacing.s1),
-                            Text('Book a seat or a ticket, pay by M-Pesa.', style: TextStyle(color: EsokoColors.text2)),
-                          ],
-                        ),
-                      ),
-                    ),
-                    SliverPadding(
-                      padding: const EdgeInsets.fromLTRB(EsokoSpacing.s4, EsokoSpacing.s2, EsokoSpacing.s4, EsokoSpacing.s9),
-                      sliver: SliverList.separated(
-                        itemCount: list.length,
-                        separatorBuilder: (_, _) => const SizedBox(height: EsokoSpacing.s3),
-                        itemBuilder: (context, i) => _ListingCard(listing: list[i]),
-                      ),
-                    ),
-                  ],
+        child: EsokoAsyncView(
+          value: listings,
+          isEmpty: (list) => list.isEmpty,
+          emptyMessage: 'No listings are open yet.',
+          emptyIcon: Icons.confirmation_num_outlined,
+          onRetry: () => ref.invalidate(listingsProvider),
+          data: (context, list) => CustomScrollView(
+            slivers: [
+              SliverToBoxAdapter(
+                child: Padding(
+                  padding: const EdgeInsets.fromLTRB(EsokoSpacing.s5, EsokoSpacing.s5, EsokoSpacing.s5, EsokoSpacing.s2),
+                  child: EsokoSectionHeader(title: 'Travel & events', subtitle: 'Book a seat or a ticket, pay by M-Pesa.'),
                 ),
-          loading: () => const Center(child: CircularProgressIndicator()),
-          error: (e, _) => ListView(children: [_empty('Could not load listings. Pull to retry.')]),
+              ),
+              SliverPadding(
+                padding: const EdgeInsets.fromLTRB(EsokoSpacing.s4, EsokoSpacing.s2, EsokoSpacing.s4, EsokoSpacing.s9),
+                sliver: SliverList.separated(
+                  itemCount: list.length,
+                  separatorBuilder: (_, _) => const SizedBox(height: EsokoSpacing.s3),
+                  itemBuilder: (context, i) => _ListingCard(listing: list[i]),
+                ),
+              ),
+            ],
+          ),
         ),
       ),
       floatingActionButton: FloatingActionButton.extended(
@@ -66,16 +61,6 @@ class ListingListScreen extends ConsumerWidget {
     );
   }
 
-  Widget _empty(String message) => Padding(
-        padding: const EdgeInsets.all(EsokoSpacing.s8),
-        child: Column(
-          children: [
-            Icon(Icons.confirmation_num_outlined, size: 40, color: EsokoColors.text3),
-            const SizedBox(height: EsokoSpacing.s3),
-            Center(child: Text(message, style: TextStyle(color: EsokoColors.text2))),
-          ],
-        ),
-      );
 }
 
 class _ListingCard extends StatelessWidget {

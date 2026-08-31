@@ -27,28 +27,26 @@ class _HomeShellState extends State<HomeShell> {
     (icon: Icons.receipt_long_outlined, label: 'Bills'),
   ];
 
-  Widget _body(int index) {
-    switch (index) {
-      case 0:
-        return const ProfileScreen();
-      case 1:
-        return const MyGroupsScreen();
-      case 2:
-        return const StoreListScreen();
-      case 3:
-        return const ListingListScreen();
-      case 4:
-        return const BillsListScreen();
-      default:
-        return const SizedBox.shrink();
-    }
-  }
+  // Built once, not per switch — an IndexedStack keeps every tab
+  // mounted (just hidden) instead of disposing and reconstructing the
+  // outgoing tab, which is what made switching tabs feel like a fresh
+  // reload: each tab's FutureProvider.autoDispose watchers were torn
+  // down and refetched from scratch every time, losing scroll
+  // position and in-flight search text along with it. Staying mounted
+  // is what keeps those providers alive across a switch, for free.
+  static const _screens = [
+    ProfileScreen(),
+    MyGroupsScreen(),
+    StoreListScreen(),
+    ListingListScreen(),
+    BillsListScreen(),
+  ];
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(title: Text(_tabs[_index].label)),
-      body: SafeArea(child: _body(_index)),
+      body: SafeArea(child: IndexedStack(index: _index, children: _screens)),
       bottomNavigationBar: NavigationBar(
         selectedIndex: _index,
         onDestinationSelected: (i) => setState(() => _index = i),
