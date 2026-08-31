@@ -144,17 +144,28 @@ class _CheckoutScreenState extends ConsumerState<CheckoutScreen> {
         return Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            Text('${widget.quantity} × ${widget.productLabel}', style: Theme.of(context).textTheme.titleMedium),
-            const SizedBox(height: EsokoSpacing.s4),
-            TextField(controller: _nameController, decoration: const InputDecoration(labelText: 'Your name')),
+            _orderSummary(),
+            const SizedBox(height: EsokoSpacing.s5),
+            TextField(
+              controller: _nameController,
+              decoration: const InputDecoration(labelText: 'Your name', prefixIcon: Icon(Icons.person_outline)),
+            ),
             const SizedBox(height: EsokoSpacing.s3),
             TextField(
               controller: _msisdnController,
               keyboardType: TextInputType.phone,
-              decoration: const InputDecoration(labelText: 'M-Pesa phone number', hintText: '+254 7…'),
+              decoration: const InputDecoration(
+                labelText: 'M-Pesa phone number',
+                hintText: '+254 7…',
+                prefixIcon: Icon(Icons.phone_iphone_outlined),
+              ),
             ),
             const SizedBox(height: EsokoSpacing.s5),
-            FilledButton(onPressed: _placeOrder, child: const Text('Pay with M-Pesa')),
+            FilledButton.icon(
+              onPressed: _placeOrder,
+              icon: const Icon(Icons.lock_outline, size: 18),
+              label: const Text('Pay with M-Pesa'),
+            ),
           ],
         );
       case _Stage.placing:
@@ -163,12 +174,14 @@ class _CheckoutScreenState extends ConsumerState<CheckoutScreen> {
         return Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            const CircularProgressIndicator(),
-            const SizedBox(height: EsokoSpacing.s4),
-            const Text('Check your phone and enter your M-Pesa PIN to complete payment.', textAlign: TextAlign.center),
+            _statusBadge(icon: Icons.phone_android_rounded, color: EsokoColors.blue, spinning: true),
+            const SizedBox(height: EsokoSpacing.s5),
+            Text('Complete payment on your phone', style: Theme.of(context).textTheme.titleMedium, textAlign: TextAlign.center),
+            const SizedBox(height: EsokoSpacing.s2),
+            Text('Enter your M-Pesa PIN when the prompt arrives.', style: TextStyle(color: EsokoColors.text2), textAlign: TextAlign.center),
             if (_totalKes != null) ...[
-              const SizedBox(height: EsokoSpacing.s2),
-              Text('KES $_totalKes', style: TextStyle(color: EsokoColors.green, fontWeight: FontWeight.bold)),
+              const SizedBox(height: EsokoSpacing.s4),
+              Text('KES $_totalKes', style: TextStyle(color: EsokoColors.green, fontWeight: FontWeight.bold, fontSize: 18)),
             ],
           ],
         );
@@ -176,12 +189,12 @@ class _CheckoutScreenState extends ConsumerState<CheckoutScreen> {
         return Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Icon(Icons.check_circle, color: EsokoColors.green, size: 56),
-            const SizedBox(height: EsokoSpacing.s3),
-            Text('Order placed', style: Theme.of(context).textTheme.titleLarge),
+            _statusBadge(icon: Icons.check_rounded, color: EsokoColors.green),
+            const SizedBox(height: EsokoSpacing.s4),
+            Text('Order placed', style: Theme.of(context).textTheme.headlineSmall),
             const SizedBox(height: EsokoSpacing.s2),
-            const Text('Find it any time in your Profile → History.', textAlign: TextAlign.center),
-            const SizedBox(height: EsokoSpacing.s5),
+            Text('Find it any time in your Profile → History.', textAlign: TextAlign.center, style: TextStyle(color: EsokoColors.text2)),
+            const SizedBox(height: EsokoSpacing.s6),
             FilledButton(
               onPressed: () => Navigator.of(context).popUntil((r) => r.isFirst),
               child: const Text('Done'),
@@ -192,13 +205,55 @@ class _CheckoutScreenState extends ConsumerState<CheckoutScreen> {
         return Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Icon(Icons.error_outline, color: EsokoColors.red, size: 48),
-            const SizedBox(height: EsokoSpacing.s3),
-            Text(_error ?? 'Something went wrong', textAlign: TextAlign.center),
+            _statusBadge(icon: Icons.priority_high_rounded, color: EsokoColors.red),
             const SizedBox(height: EsokoSpacing.s4),
+            Text(_error ?? 'Something went wrong', textAlign: TextAlign.center),
+            const SizedBox(height: EsokoSpacing.s5),
             OutlinedButton(onPressed: () => setState(() => _stage = _Stage.form), child: const Text('Try again')),
           ],
         );
     }
+  }
+
+  Widget _orderSummary() {
+    return Container(
+      padding: const EdgeInsets.all(EsokoSpacing.s4),
+      decoration: BoxDecoration(
+        color: EsokoColors.greenTint,
+        borderRadius: BorderRadius.circular(EsokoRadius.lg),
+      ),
+      child: Row(
+        children: [
+          CircleAvatar(
+            radius: 20,
+            backgroundColor: Colors.white,
+            child: Text('${widget.quantity}', style: TextStyle(color: EsokoColors.green, fontWeight: FontWeight.w800)),
+          ),
+          const SizedBox(width: EsokoSpacing.s3),
+          Expanded(
+            child: Text(widget.productLabel, style: const TextStyle(fontWeight: FontWeight.w600)),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _statusBadge({required IconData icon, required Color color, bool spinning = false}) {
+    return SizedBox(
+      width: 88,
+      height: 88,
+      child: Stack(
+        alignment: Alignment.center,
+        children: [
+          if (spinning) const SizedBox(width: 88, height: 88, child: CircularProgressIndicator(strokeWidth: 3)),
+          Container(
+            width: 64,
+            height: 64,
+            decoration: BoxDecoration(color: color.withValues(alpha: 0.12), shape: BoxShape.circle),
+            child: Icon(icon, color: color, size: 32),
+          ),
+        ],
+      ),
+    );
   }
 }

@@ -146,12 +146,14 @@ class _ScheduleBookingScreenState extends ConsumerState<ScheduleBookingScreen> {
         return Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            const CircularProgressIndicator(),
-            const SizedBox(height: EsokoSpacing.s4),
-            const Text('Check your phone and enter your M-Pesa PIN to complete payment.', textAlign: TextAlign.center),
+            _statusBadge(icon: Icons.phone_android_rounded, color: EsokoColors.blue, spinning: true),
+            const SizedBox(height: EsokoSpacing.s5),
+            Text('Complete payment on your phone', style: Theme.of(context).textTheme.titleMedium, textAlign: TextAlign.center),
+            const SizedBox(height: EsokoSpacing.s2),
+            Text('Enter your M-Pesa PIN when the prompt arrives.', style: TextStyle(color: EsokoColors.text2), textAlign: TextAlign.center),
             if (_totalKes != null) ...[
-              const SizedBox(height: EsokoSpacing.s2),
-              Text('KES $_totalKes', style: TextStyle(color: EsokoColors.green, fontWeight: FontWeight.bold)),
+              const SizedBox(height: EsokoSpacing.s4),
+              Text('KES $_totalKes', style: TextStyle(color: EsokoColors.green, fontWeight: FontWeight.bold, fontSize: 18)),
             ],
           ],
         );
@@ -159,12 +161,12 @@ class _ScheduleBookingScreenState extends ConsumerState<ScheduleBookingScreen> {
         return Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Icon(Icons.check_circle, color: EsokoColors.green, size: 56),
-            const SizedBox(height: EsokoSpacing.s3),
-            Text('Booking confirmed', style: Theme.of(context).textTheme.titleLarge),
+            _statusBadge(icon: Icons.check_rounded, color: EsokoColors.green),
+            const SizedBox(height: EsokoSpacing.s4),
+            Text('Booking confirmed', style: Theme.of(context).textTheme.headlineSmall),
             const SizedBox(height: EsokoSpacing.s2),
-            const Text('Find your ticket QR any time under Tickets → My tickets.', textAlign: TextAlign.center),
-            const SizedBox(height: EsokoSpacing.s5),
+            Text('Find your ticket QR any time under Tickets → My tickets.', textAlign: TextAlign.center, style: TextStyle(color: EsokoColors.text2)),
+            const SizedBox(height: EsokoSpacing.s6),
             FilledButton(
               onPressed: () => Navigator.of(context).popUntil((r) => r.isFirst),
               child: const Text('Done'),
@@ -175,14 +177,33 @@ class _ScheduleBookingScreenState extends ConsumerState<ScheduleBookingScreen> {
         return Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Icon(Icons.error_outline, color: EsokoColors.red, size: 48),
-            const SizedBox(height: EsokoSpacing.s3),
-            Text(_error ?? 'Something went wrong', textAlign: TextAlign.center),
+            _statusBadge(icon: Icons.priority_high_rounded, color: EsokoColors.red),
             const SizedBox(height: EsokoSpacing.s4),
+            Text(_error ?? 'Something went wrong', textAlign: TextAlign.center),
+            const SizedBox(height: EsokoSpacing.s5),
             OutlinedButton(onPressed: () => setState(() => _stage = _Stage.pick), child: const Text('Start over')),
           ],
         );
     }
+  }
+
+  Widget _statusBadge({required IconData icon, required Color color, bool spinning = false}) {
+    return SizedBox(
+      width: 88,
+      height: 88,
+      child: Stack(
+        alignment: Alignment.center,
+        children: [
+          if (spinning) const SizedBox(width: 88, height: 88, child: CircularProgressIndicator(strokeWidth: 3)),
+          Container(
+            width: 64,
+            height: 64,
+            decoration: BoxDecoration(color: color.withValues(alpha: 0.12), shape: BoxShape.circle),
+            child: Icon(icon, color: color, size: 32),
+          ),
+        ],
+      ),
+    );
   }
 
   Widget _pickStage() {
@@ -193,30 +214,35 @@ class _ScheduleBookingScreenState extends ConsumerState<ScheduleBookingScreen> {
         Text('Choose a ticket type', style: Theme.of(context).textTheme.titleMedium),
         const SizedBox(height: EsokoSpacing.s3),
         for (final c in widget.ticketClasses)
-          RadioListTile<String>(
-            value: c.id,
-            groupValue: tc?.id,
-            title: Text('${c.name} — KES ${c.priceKes}'),
-            subtitle: c.amenities.isNotEmpty ? Text(c.amenities.join(', ')) : null,
-            onChanged: (_) => setState(() {
+          _TicketClassOption(
+            ticketClass: c,
+            selected: tc?.id == c.id,
+            onTap: () => setState(() {
               _selectedClass = c;
               _selectedSeatId = null;
             }),
           ),
         if (tc != null && tc.seated) ...[
-          const SizedBox(height: EsokoSpacing.s3),
+          const SizedBox(height: EsokoSpacing.s4),
           Text('Choose a seat', style: Theme.of(context).textTheme.titleMedium),
-          const SizedBox(height: EsokoSpacing.s2),
+          const SizedBox(height: EsokoSpacing.s3),
           _seatPicker(tc.id),
         ] else if (tc != null) ...[
-          const SizedBox(height: EsokoSpacing.s3),
-          Row(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              IconButton(onPressed: _quantity > 1 ? () => setState(() => _quantity--) : null, icon: const Icon(Icons.remove_circle_outline)),
-              Text('$_quantity', style: Theme.of(context).textTheme.titleMedium),
-              IconButton(onPressed: () => setState(() => _quantity++), icon: const Icon(Icons.add_circle_outline)),
-            ],
+          const SizedBox(height: EsokoSpacing.s4),
+          Text('Quantity', style: Theme.of(context).textTheme.titleMedium),
+          const SizedBox(height: EsokoSpacing.s2),
+          Center(
+            child: Container(
+              decoration: BoxDecoration(border: Border.all(color: EsokoColors.line), borderRadius: BorderRadius.circular(EsokoRadius.pill)),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  IconButton(onPressed: _quantity > 1 ? () => setState(() => _quantity--) : null, icon: const Icon(Icons.remove)),
+                  SizedBox(width: 28, child: Text('$_quantity', textAlign: TextAlign.center, style: const TextStyle(fontWeight: FontWeight.w700))),
+                  IconButton(onPressed: () => setState(() => _quantity++), icon: const Icon(Icons.add)),
+                ],
+              ),
+            ),
           ),
         ],
         const SizedBox(height: EsokoSpacing.s5),
@@ -236,18 +262,40 @@ class _ScheduleBookingScreenState extends ConsumerState<ScheduleBookingScreen> {
       data: (all) {
         final forClass = all.where((s) => s.ticketClassId == ticketClassId).toList();
         if (forClass.isEmpty) return Text('No seats configured for this class.', style: TextStyle(color: EsokoColors.text2));
-        return Wrap(
-          spacing: EsokoSpacing.s2,
-          runSpacing: EsokoSpacing.s2,
+        return Column(
           children: [
-            for (final seat in forClass)
-              ChoiceChip(
-                label: Text(seat.label),
-                selected: _selectedSeatId == seat.id,
-                onSelected: seat.status == 'AVAILABLE' ? (_) => setState(() => _selectedSeatId = seat.id) : null,
-                disabledColor: EsokoColors.line,
-                labelStyle: TextStyle(color: seat.status == 'AVAILABLE' ? null : EsokoColors.text3),
+            Container(
+              padding: const EdgeInsets.all(EsokoSpacing.s4),
+              decoration: BoxDecoration(color: EsokoColors.paper, borderRadius: BorderRadius.circular(EsokoRadius.lg)),
+              child: Column(
+                children: [
+                  Icon(Icons.airline_seat_recline_normal, color: EsokoColors.text3, size: 22),
+                  const SizedBox(height: EsokoSpacing.s1),
+                  Text('FRONT', style: TextStyle(fontSize: 10, letterSpacing: 2, color: EsokoColors.text3)),
+                  const SizedBox(height: EsokoSpacing.s3),
+                  GridView.count(
+                    shrinkWrap: true,
+                    physics: const NeverScrollableScrollPhysics(),
+                    crossAxisCount: 4,
+                    mainAxisSpacing: EsokoSpacing.s2,
+                    crossAxisSpacing: EsokoSpacing.s2,
+                    childAspectRatio: 1,
+                    children: [for (final seat in forClass) _SeatButton(seat: seat, selected: _selectedSeatId == seat.id, onTap: () => setState(() => _selectedSeatId = seat.id))],
+                  ),
+                ],
               ),
+            ),
+            const SizedBox(height: EsokoSpacing.s3),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                _seatLegend(EsokoColors.line, 'Taken'),
+                const SizedBox(width: EsokoSpacing.s4),
+                _seatLegend(EsokoColors.paper, 'Available', outline: true),
+                const SizedBox(width: EsokoSpacing.s4),
+                _seatLegend(EsokoColors.green, 'Selected'),
+              ],
+            ),
           ],
         );
       },
@@ -256,20 +304,132 @@ class _ScheduleBookingScreenState extends ConsumerState<ScheduleBookingScreen> {
     );
   }
 
+  Widget _seatLegend(Color color, String label, {bool outline = false}) {
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Container(
+          width: 14,
+          height: 14,
+          decoration: BoxDecoration(
+            color: color,
+            borderRadius: BorderRadius.circular(4),
+            border: outline ? Border.all(color: EsokoColors.line, width: 1.5) : null,
+          ),
+        ),
+        const SizedBox(width: 6),
+        Text(label, style: TextStyle(fontSize: 11, color: EsokoColors.text2)),
+      ],
+    );
+  }
+
   Widget _detailsStage() {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        TextField(controller: _nameController, decoration: const InputDecoration(labelText: 'Your name')),
+        TextField(
+          controller: _nameController,
+          decoration: const InputDecoration(labelText: 'Your name', prefixIcon: Icon(Icons.person_outline)),
+        ),
         const SizedBox(height: EsokoSpacing.s3),
         TextField(
           controller: _msisdnController,
           keyboardType: TextInputType.phone,
-          decoration: const InputDecoration(labelText: 'M-Pesa phone number', hintText: '+254 7…'),
+          decoration: const InputDecoration(
+            labelText: 'M-Pesa phone number',
+            hintText: '+254 7…',
+            prefixIcon: Icon(Icons.phone_iphone_outlined),
+          ),
         ),
         const SizedBox(height: EsokoSpacing.s5),
-        FilledButton(onPressed: _book, child: const Text('Pay with M-Pesa')),
+        FilledButton.icon(
+          onPressed: _book,
+          icon: const Icon(Icons.lock_outline, size: 18),
+          label: const Text('Pay with M-Pesa'),
+        ),
       ],
+    );
+  }
+}
+
+class _TicketClassOption extends StatelessWidget {
+  const _TicketClassOption({required this.ticketClass, required this.selected, required this.onTap});
+  final TicketClass ticketClass;
+  final bool selected;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return Material(
+      color: selected ? EsokoColors.greenTint : Theme.of(context).cardColor,
+      borderRadius: BorderRadius.circular(EsokoRadius.lg),
+      clipBehavior: Clip.antiAlias,
+      child: InkWell(
+        onTap: onTap,
+        child: Container(
+          margin: const EdgeInsets.only(bottom: EsokoSpacing.s2),
+          padding: const EdgeInsets.all(EsokoSpacing.s3),
+          decoration: BoxDecoration(border: Border.all(color: selected ? EsokoColors.green : EsokoColors.line, width: selected ? 1.5 : 1)),
+          child: Row(
+            children: [
+              Icon(
+                selected ? Icons.check_circle : Icons.circle_outlined,
+                color: selected ? EsokoColors.green : EsokoColors.text3,
+                size: 22,
+              ),
+              const SizedBox(width: EsokoSpacing.s3),
+              Icon(ticketClass.seated ? Icons.event_seat_outlined : Icons.groups_outlined, color: EsokoColors.text2, size: 18),
+              const SizedBox(width: EsokoSpacing.s2),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(ticketClass.name, style: const TextStyle(fontWeight: FontWeight.w700)),
+                    if (ticketClass.amenities.isNotEmpty)
+                      Text(ticketClass.amenities.join(' · '), style: TextStyle(fontSize: 11, color: EsokoColors.text3)),
+                  ],
+                ),
+              ),
+              Text('KES ${ticketClass.priceKes}', style: TextStyle(color: EsokoColors.green, fontWeight: FontWeight.w800)),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _SeatButton extends StatelessWidget {
+  const _SeatButton({required this.seat, required this.selected, required this.onTap});
+  final SeatRow seat;
+  final bool selected;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final taken = seat.status != 'AVAILABLE';
+    final Color bg = taken ? EsokoColors.line : (selected ? EsokoColors.green : Colors.white);
+    final Color fg = taken ? EsokoColors.text3 : (selected ? Colors.white : EsokoColors.text2);
+    return Material(
+      color: bg,
+      borderRadius: BorderRadius.circular(EsokoRadius.sm),
+      child: InkWell(
+        onTap: taken ? null : onTap,
+        borderRadius: BorderRadius.circular(EsokoRadius.sm),
+        child: Container(
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(EsokoRadius.sm),
+            border: Border.all(color: selected ? EsokoColors.green : EsokoColors.line),
+          ),
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Icon(Icons.event_seat, size: 16, color: fg),
+              Text(seat.label, style: TextStyle(fontSize: 10, fontWeight: FontWeight.w700, color: fg)),
+            ],
+          ),
+        ),
+      ),
     );
   }
 }

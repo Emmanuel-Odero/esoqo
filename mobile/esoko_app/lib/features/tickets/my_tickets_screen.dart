@@ -14,8 +14,9 @@ final myTicketsProvider = FutureProvider.autoDispose<List<TicketRow>>((ref) asyn
 });
 
 /// GET /v1/me/tickets (authenticated) — every ticket ever issued to this
-/// signed-in person, QR-coded by its `code` (the same string a gate
-/// scanner's check-in flow reads — see Ticket.code in schema.prisma).
+/// signed-in person, styled as a tear-off stub and QR-coded by its
+/// `code` (the same string a gate scanner's check-in flow reads — see
+/// Ticket.code in schema.prisma).
 class MyTicketsScreen extends ConsumerWidget {
   const MyTicketsScreen({super.key});
 
@@ -29,14 +30,21 @@ class MyTicketsScreen extends ConsumerWidget {
             ? Center(
                 child: Padding(
                   padding: const EdgeInsets.all(EsokoSpacing.s8),
-                  child: Text('No tickets yet.', style: TextStyle(color: EsokoColors.text2)),
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(Icons.confirmation_num_outlined, size: 40, color: EsokoColors.text3),
+                      const SizedBox(height: EsokoSpacing.s3),
+                      Text('No tickets yet.', style: TextStyle(color: EsokoColors.text2)),
+                    ],
+                  ),
                 ),
               )
             : ListView.separated(
                 padding: const EdgeInsets.all(EsokoSpacing.s4),
                 itemCount: list.length,
-                separatorBuilder: (_, _) => const SizedBox(height: EsokoSpacing.s3),
-                itemBuilder: (context, i) => _TicketCard(ticket: list[i]),
+                separatorBuilder: (_, _) => const SizedBox(height: EsokoSpacing.s5),
+                itemBuilder: (context, i) => _TicketStub(ticket: list[i]),
               ),
         loading: () => const Center(child: CircularProgressIndicator()),
         error: (e, _) => Center(child: Text('Could not load your tickets.', style: TextStyle(color: EsokoColors.red))),
@@ -45,47 +53,128 @@ class MyTicketsScreen extends ConsumerWidget {
   }
 }
 
-class _TicketCard extends StatelessWidget {
-  const _TicketCard({required this.ticket});
+class _TicketStub extends StatelessWidget {
+  const _TicketStub({required this.ticket});
   final TicketRow ticket;
 
   @override
   Widget build(BuildContext context) {
     final valid = ticket.status == 'VALID';
-    return Card(
-      child: Padding(
-        padding: const EdgeInsets.all(EsokoSpacing.s5),
-        child: Column(
-          children: [
-            Row(
+    final accent = valid ? EsokoColors.navy : EsokoColors.text3;
+
+    return Material(
+      elevation: 2,
+      shadowColor: Colors.black.withValues(alpha: 0.15),
+      borderRadius: BorderRadius.circular(EsokoRadius.lg),
+      clipBehavior: Clip.antiAlias,
+      child: Column(
+        children: [
+          // Stub head — ticket-class + status, on a navy band like a
+          // real boarding pass/admission ticket.
+          Container(
+            padding: const EdgeInsets.all(EsokoSpacing.s4),
+            color: accent,
+            child: Row(
               children: [
+                Icon(Icons.confirmation_num_rounded, color: Colors.white.withValues(alpha: 0.85), size: 20),
+                const SizedBox(width: EsokoSpacing.s2),
                 Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(ticket.className, style: Theme.of(context).textTheme.titleMedium),
-                      if (ticket.seatLabel != null) Text('Seat ${ticket.seatLabel}', style: TextStyle(color: EsokoColors.text2)),
-                      Text('KES ${ticket.priceKes}', style: TextStyle(color: EsokoColors.green)),
-                    ],
-                  ),
+                  child: Text(ticket.className, style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w700, fontSize: 15)),
                 ),
-                Chip(
-                  label: Text(ticket.status),
-                  backgroundColor: valid ? EsokoColors.greenTint : EsokoColors.line,
-                  labelStyle: TextStyle(color: valid ? EsokoColors.green : EsokoColors.text3, fontSize: 11),
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                  decoration: BoxDecoration(
+                    color: Colors.white.withValues(alpha: 0.16),
+                    borderRadius: BorderRadius.circular(EsokoRadius.pill),
+                  ),
+                  child: Text(ticket.status, style: const TextStyle(color: Colors.white, fontSize: 10, fontWeight: FontWeight.w800, letterSpacing: 0.4)),
                 ),
               ],
             ),
-            const SizedBox(height: EsokoSpacing.s4),
-            if (valid)
-              QrImageView(data: ticket.code, size: 160, backgroundColor: Colors.white)
-            else
-              Icon(Icons.qr_code_2, size: 160, color: EsokoColors.line),
-            const SizedBox(height: EsokoSpacing.s2),
-            SelectableText(ticket.code, style: const TextStyle(fontFamily: 'monospace')),
-          ],
-        ),
+          ),
+          // Perforation — the tear-off line between stub head and body.
+          _Perforation(color: accent),
+          Container(
+            color: Theme.of(context).cardColor,
+            padding: const EdgeInsets.fromLTRB(EsokoSpacing.s5, EsokoSpacing.s5, EsokoSpacing.s5, EsokoSpacing.s4),
+            child: Column(
+              children: [
+                if (ticket.seatLabel != null)
+                  Padding(
+                    padding: const EdgeInsets.only(bottom: EsokoSpacing.s3),
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Icon(Icons.event_seat_outlined, size: 16, color: EsokoColors.text2),
+                        const SizedBox(width: 6),
+                        Text('Seat ${ticket.seatLabel}', style: TextStyle(color: EsokoColors.text2, fontWeight: FontWeight.w600)),
+                      ],
+                    ),
+                  ),
+                Container(
+                  padding: const EdgeInsets.all(EsokoSpacing.s3),
+                  decoration: BoxDecoration(
+                    border: Border.all(color: EsokoColors.line),
+                    borderRadius: BorderRadius.circular(EsokoRadius.md),
+                  ),
+                  child: valid
+                      ? QrImageView(data: ticket.code, size: 148, backgroundColor: Colors.white)
+                      : SizedBox(
+                          width: 148,
+                          height: 148,
+                          child: Icon(Icons.block_flipped, size: 48, color: EsokoColors.line),
+                        ),
+                ),
+                const SizedBox(height: EsokoSpacing.s3),
+                SelectableText(ticket.code, style: const TextStyle(fontFamily: 'monospace', fontWeight: FontWeight.w700, letterSpacing: 1)),
+                const SizedBox(height: EsokoSpacing.s1),
+                Text('KES ${ticket.priceKes}', style: TextStyle(color: EsokoColors.green, fontWeight: FontWeight.w700)),
+              ],
+            ),
+          ),
+        ],
       ),
     );
   }
 }
+
+/// A row of small semicircular notches — the visual "tear here" line
+/// between a ticket stub's header and its QR body.
+class _Perforation extends StatelessWidget {
+  const _Perforation({required this.color});
+  final Color color;
+
+  @override
+  Widget build(BuildContext context) {
+    return SizedBox(
+      height: 12,
+      child: CustomPaint(
+        painter: _PerforationPainter(bandColor: color, holeColor: Theme.of(context).scaffoldBackgroundColor),
+        size: const Size(double.infinity, 12),
+      ),
+    );
+  }
+}
+
+class _PerforationPainter extends CustomPainter {
+  _PerforationPainter({required this.bandColor, required this.holeColor});
+  final Color bandColor;
+  final Color holeColor;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    canvas.drawRect(Rect.fromLTWH(0, 0, size.width, size.height / 2), Paint()..color = bandColor);
+    const radius = 6.0;
+    final count = (size.width / (radius * 3)).floor();
+    final spacing = size.width / count;
+    final holePaint = Paint()..color = holeColor;
+    for (var i = 0; i <= count; i++) {
+      canvas.drawCircle(Offset(i * spacing, 0), radius, holePaint);
+    }
+  }
+
+  @override
+  bool shouldRepaint(covariant _PerforationPainter oldDelegate) =>
+      oldDelegate.bandColor != bandColor || oldDelegate.holeColor != holeColor;
+}
+
