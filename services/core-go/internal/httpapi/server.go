@@ -69,6 +69,28 @@ func (s *Server) Router() *gin.Engine {
 		v1.POST("/bookings", s.handleCreateBooking)
 		v1.GET("/bookings/:id", s.handleGetBooking)
 		v1.GET("/me/tickets", s.authRequired(), s.handleListMyBookings)
+
+		v1.POST("/groups", s.authRequired(), s.handleCreateGroup)
+		v1.POST("/groups/:id/join", s.authRequired(), s.handleJoinGroup)
+		v1.GET("/groups/search", s.authRequired(), s.handleSearchGroups)
+		v1.GET("/me/groups", s.authRequired(), s.handleListMyGroups)
+		v1.GET("/groups/:id", s.authRequired(), s.handleGetGroup)
+
+		v1.GET("/groups/:id/policy", s.authRequired(), s.handleGetTreasuryPolicy)
+		v1.POST("/groups/:id/contributions", s.authRequired(), s.handleDeclareContribution)
+		v1.POST("/groups/:id/contributions/:cid/confirm", s.authRequired(), s.handleConfirmContribution)
+		v1.GET("/groups/:id/contributions", s.authRequired(), s.handleListContributions)
+		v1.GET("/groups/:id/balance", s.authRequired(), s.handleGetGroupBalance)
+		v1.POST("/groups/:id/withdrawals", s.authRequired(), s.handleRequestWithdrawal)
+		v1.GET("/groups/:id/withdrawals", s.authRequired(), s.handleListWithdrawals)
+		v1.POST("/withdrawals/:id/sign", s.authRequired(), s.handleSignWithdrawal)
+		v1.GET("/withdrawals/:id", s.authRequired(), s.handleGetWithdrawal)
+
+		v1.POST("/me/bills", s.authRequired(), s.handleCreateBill)
+		v1.GET("/me/bills", s.authRequired(), s.handleListMyBills)
+		v1.POST("/me/bills/:id/pay", s.authRequired(), s.handleMarkBillPaid)
+		v1.PATCH("/me/bills/:id", s.authRequired(), s.handleUpdateBill)
+		v1.DELETE("/me/bills/:id", s.authRequired(), s.handleArchiveBill)
 	}
 
 	r.POST("/webhooks/mpesa/stk-callback", s.handleMpesaStkCallback)

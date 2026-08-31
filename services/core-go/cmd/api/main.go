@@ -11,6 +11,8 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/jackc/pgx/v5/pgxpool"
+
 	"github.com/esoko/core-go/internal/config"
 	"github.com/esoko/core-go/internal/dbx"
 	"github.com/esoko/core-go/internal/httpapi"
@@ -49,6 +51,13 @@ func main() {
 		}
 	}()
 
+	// ExecuteWithdrawalIfDue is meant to run from a scheduled sweep, not
+	// a request — see dbx.SweepDueWithdrawals's own comment. A withdrawal
+	// only ever executes here, once its standby window has elapsed AND
+	// its signature threshold is met; never on the request that got it
+	// there.
+	go runWithdrawalSweep(ctx, pool)
+
 	<-ctx.Done()
 	log.Println("core-go: shutting down")
 
@@ -56,5 +65,25 @@ func main() {
 	defer cancel()
 	if err := httpServer.Shutdown(shutdownCtx); err != nil {
 		log.Printf("core-go: graceful shutdown failed: %v", err)
+	}
+}
+
+func runWithdrawalSweep(ctx context.Context, pool *pgxpool.Pool) {
+	ticker := time.NewTicker(1 * time.Minute)
+	defer ticker.Stop()
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-ticker.C:
+			swept, err := dbx.SweepDueWithdrawals(ctx, pool)
+			if err != nil {
+				log.Printf("core-go: withdrawal sweep failed: %v", err)
+				continue
+			}
+			if swept > 0 {
+				log.Printf("core-go: withdrawal sweep executed/expired %d request(s)", swept)
+			}
+		}
 	}
 }

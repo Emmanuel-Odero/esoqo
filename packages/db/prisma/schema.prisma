@@ -106,6 +106,7 @@ model Party {
   jamiiApplications      JamiiInterest[]
   bookingsAsBuyer        Booking[]
   supportTicketsRaised   SupportTicket[]
+  bills                  Bill[]
 
   // ── Group treasury ──
   meetingsCalled          Meeting[]                    @relation("MeetingCalledBy")
@@ -2745,6 +2746,70 @@ model GroupCreditInsightSnapshot {
 
   @@index([partyId, computedAt])
   @@map("group_credit_insight_snapshot")
+}
+
+// ─────────────────────────────── BILLS ───────────────────────────
+
+/// A personal recurring/one-off bill a Person tracks — KPLC, water,
+/// DSTV, rent, school fees. Esoko has no Safaricom B2B relationship to
+/// actually pay a third-party biller (only STK push into Esoko's own
+/// till), so this is deliberately track-and-remind only: nothing here
+/// moves money. See BillPayment's own comment for the "mark as paid"
+/// half of that contract.
+model Bill {
+  id      String @id @default(uuid()) @db.Uuid
+  partyId String @db.Uuid
+  party   Party  @relation(fields: [partyId], references: [id], onDelete: Cascade)
+
+  /// "KPLC — home", "DSTV" — whatever the person calls it themselves.
+  label      String
+  /// ELECTRICITY | WATER | PAY_TV | RENT | SCHOOL_FEES | INTERNET |
+  /// OTHER. Plain string, not an enum — same reasoning as Product's own
+  /// category: a new bill type should never need a migration.
+  category   String
+  /// Meter/account/paybill number, free text — shown back to the person
+  /// so they can find it when they go to actually pay elsewhere.
+  accountRef String?
+  /// Null when the amount varies bill to bill (e.g. an electricity
+  /// token top-up) — the person just gets reminded, not shown a number
+  /// that would usually be wrong.
+  amountKes  Decimal? @db.Decimal(12, 2)
+  /// MONTHLY | WEEKLY | ONE_TIME.
+  cycle      String
+  nextDueAt  DateTime
+  /// How many days ahead of nextDueAt this shows as "due soon" rather
+  /// than just "upcoming" — an in-app indicator only; there is no
+  /// push-notification wiring in this app yet, so this is never a
+  /// promise of an alert arriving anywhere.
+  reminderDaysBefore Int @default(3)
+  /// ACTIVE | PAUSED | ARCHIVED. ARCHIVED is a soft delete — same
+  /// discipline as everywhere else in this schema that keeps history.
+  status     String   @default("ACTIVE")
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  payments BillPayment[]
+
+  @@index([partyId, status])
+  @@map("bill")
+}
+
+/// A self-reported "I paid this" log entry — never a real money
+/// movement (no JournalEntry/Posting here, unlike every other payment
+/// model in this schema), because Esoko genuinely doesn't move this
+/// money. Recording it is what lets nextDueAt advance for a recurring
+/// bill and gives the person their own payment history.
+model BillPayment {
+  id        String   @id @default(uuid()) @db.Uuid
+  billId    String   @db.Uuid
+  bill      Bill     @relation(fields: [billId], references: [id], onDelete: Cascade)
+  amountKes Decimal  @db.Decimal(12, 2)
+  paidAt    DateTime @default(now())
+  note      String?
+
+  @@index([billId, paidAt])
+  @@map("bill_payment")
 }
 
 // ─────────────────────────── TICKETING ──────────────────────────

@@ -47,7 +47,18 @@ func (s *Server) handleMpesaStkCallback(c *gin.Context) {
 		return
 	}
 
-	// Belongs to neither domain core-go owns yet (registration/donation
-	// payments, chama contributions — still TS-only) — not an error here.
+	// Chama contributions paid by STK — this was a known gap noted when
+	// the webhook was first ported (see the Phase 0 commit): only store
+	// orders and bookings were dispatched here, never contributions.
+	if err := dbx.ConfirmContributionByCheckoutID(ctx, s.Pool, cb.CheckoutRequestID, cb.MpesaReceiptCode); err == nil {
+		c.JSON(http.StatusOK, gin.H{"ok": true})
+		return
+	} else if err != dbx.ErrContributionNotFound {
+		writeError(c, http.StatusInternalServerError, "CONFIRM_FAILED", "Could not confirm payment")
+		return
+	}
+
+	// Belongs to no domain core-go owns yet (registration/donation
+	// payments — still TS-only) — not an error here.
 	c.JSON(http.StatusOK, gin.H{"ok": true})
 }
