@@ -1,8 +1,9 @@
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import { Icon } from '@esoko/ui';
-import { getTicketOrg, listTicketOrgStaff, listOrgBookings, can, AuthorisationError } from '@esoko/db';
+import { can, AuthorisationError } from '@esoko/db';
 import { requireStaff } from '@/lib/session';
+import { adminGo, adminOrgForCan, type GoConsoleOrg, type GoStaffRow, type GoBookingRow } from '@/lib/go-ticketing';
 import { OrgStaffPanel } from './OrgStaffPanel';
 import { OrgTabs } from './OrgTabs';
 
@@ -18,24 +19,26 @@ export default async function TicketOrgDetail({
   const { id } = await params;
   const canManageStaff = ctx.capabilities.includes('*') || ctx.capabilities.includes('ticketorgstaff.write');
 
-  const org = await getTicketOrg(ctx, id).catch((e) => {
-    if (e instanceof AuthorisationError) notFound();
-    throw e;
-  });
+  const org = await adminGo<{ org: GoConsoleOrg }>(`/v1/ticketorgs/${id}`)
+    .then((r) => adminOrgForCan(r.org))
+    .catch((e) => {
+      if (e instanceof AuthorisationError) notFound();
+      throw e;
+    });
   const staff = canManageStaff
-    ? await listTicketOrgStaff(ctx, id)
+    ? await adminGo<{ staff: GoStaffRow[] }>(`/v1/ticketorgs/${id}/staff`).then((r) => r.staff)
     : [];
 
   const canReadBookings = can(ctx, 'booking.read', { partyId: org.enterprise?.partyId });
   const canManageListings = can(ctx, 'listing.write', { partyId: org.enterprise?.partyId });
   const canManageRoutes = can(ctx, 'venue.write', { partyId: org.enterprise?.partyId })
     || can(ctx, 'route.write', { partyId: org.enterprise?.partyId });
-  const bookings = canReadBookings ? await listOrgBookings(ctx, id) : [];
+  const bookings = canReadBookings
+    ? await adminGo<{ bookings: GoBookingRow[] }>(`/v1/ticketorgs/${id}/bookings`).then((r) => r.bookings)
+    : [];
   const paid = bookings.filter((b) => b.status === 'PAID');
   const revenueKes = paid.reduce((n, b) => n + Number(b.totalKes), 0);
-  const ticketsIssued = paid.reduce(
-    (n, b) => n + b.tickets.filter((t) => t.status === 'VALID' || t.status === 'USED').length, 0,
-  );
+  const ticketsIssued = paid.reduce((n, b) => n + b.issuedCount, 0);
   const cancelled = bookings.filter((b) => b.status === 'CANCELLED' || b.status === 'REFUNDED').length;
 
   return (

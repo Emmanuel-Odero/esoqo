@@ -8,6 +8,7 @@ import {
 import { RouteAnnouncer, SkipLinks, LiveRegion } from '@esoko/a11y';
 import { IconSprite } from '@esoko/ui';
 import '@esoko/ui/tokens.css';
+import '@esoko/ui/ui.css';
 import './app.css';
 import { ServiceWorkerRegister } from '@/components/ServiceWorkerRegister';
 import { ConnectivityBanner } from '@/components/ConnectivityBanner';

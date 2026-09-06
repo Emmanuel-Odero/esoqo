@@ -1,9 +1,8 @@
 import { notFound } from 'next/navigation';
 import { Icon } from '@esoko/ui';
-import { getTicketOrg, getOrgListing, getSeatMap } from '@esoko/db';
 import { type AmenityTag } from '@esoko/domain';
 import { requireOrgAccess } from '@/lib/session';
-import { canOrg } from '@/lib/ticketing';
+import { canOrg, orgGo, orgForCan, type GoOrg, type GoListing, type GoSeatMap } from '@/lib/ticketing';
 import { TicketClassForm } from './TicketClassForm';
 import { ScheduleForm } from './ScheduleForm';
 import { PublishControls } from './PublishControls';
@@ -21,8 +20,13 @@ export default async function ListingDetail(
 ) {
   const { orgId, listingId } = await params;
   const { ctx } = await requireOrgAccess(orgId);
-  const org = await getTicketOrg(ctx, orgId);
-  const listing = await getOrgListing(ctx, orgId, listingId).catch(() => null);
+  const org = await orgGo<{ org: GoOrg }>(orgId, `/v1/ticketorgs/${orgId}`)
+    .then((r) => orgForCan(r.org))
+    .catch(() => null);
+  if (!org) notFound();
+  const listing = await orgGo<{ listing: GoListing }>(orgId, `/v1/ticketorgs/${orgId}/listings/${listingId}`)
+    .then((r) => r.listing)
+    .catch(() => null);
   if (!listing) notFound();
 
   const canPublish = canOrg(ctx, org, 'listing.publish');
@@ -30,7 +34,11 @@ export default async function ListingDetail(
   const canWriteSchedules = canOrg(ctx, org, 'schedule.write');
 
   const seatedClasses = listing.ticketClasses.filter((c) => c.seated);
-  const seatMap = canWriteClasses && seatedClasses.length > 0 ? await getSeatMap(ctx, listingId) : null;
+  const seatMap = canWriteClasses && seatedClasses.length > 0
+    ? await orgGo<{ seatMap: GoSeatMap | null }>(orgId, `/v1/org-listings/${listingId}/seatmap`)
+        .then((r) => r.seatMap)
+        .catch(() => null)
+    : null;
 
   return (
     <>
@@ -85,8 +93,8 @@ export default async function ListingDetail(
         {listing.schedules.length === 0 ? <p style={{ margin: 0, color: 'var(--tx-2)' }}>None scheduled yet.</p> : (
           listing.schedules.map((s) => (
             <div className="mrow" key={s.id}>
-              <span className="k">{s.departAt.toLocaleString('en-KE')}</span>
-              <span className="v">{s.status.toLowerCase()} · {s._count.bookings} booking{s._count.bookings === 1 ? '' : 's'}</span>
+              <span className="k">{new Date(s.departAt).toLocaleString('en-KE')}</span>
+              <span className="v">{s.status.toLowerCase()} · {s.bookingsCount} booking{s.bookingsCount === 1 ? '' : 's'}</span>
             </div>
           ))
         )}

@@ -2,6 +2,7 @@ import type { Metadata, Viewport } from 'next';
 import { RouteAnnouncer, SkipLinks, LiveRegion } from '@esoko/a11y';
 import { IconSprite } from '@esoko/ui';
 import '@esoko/ui/tokens.css';
+import '@esoko/ui/ui.css';
 import './jamii.css';
 
 export const metadata: Metadata = {

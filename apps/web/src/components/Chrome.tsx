@@ -1,5 +1,6 @@
 'use client';
 
+import * as React from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { Icon } from '@esoko/ui';
@@ -39,6 +40,15 @@ export function Logo({ inverse = false }: { inverse?: boolean }) {
 
 export function Header() {
   const path = usePathname();
+  const [open, setOpen] = React.useState(false);
+
+  React.useEffect(() => { setOpen(false); }, [path]);
+  React.useEffect(() => {
+    if (!open) return;
+    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') setOpen(false); };
+    document.addEventListener('keydown', onKey);
+    return () => document.removeEventListener('keydown', onKey);
+  }, [open ]);
 
   return (
     <header>
@@ -63,8 +73,38 @@ export function Header() {
               <Icon name="arrow-right" size={15} />Join free
             </a>
           </div>
+          <button
+            className="hd-menu-btn"
+            aria-expanded={open}
+            aria-controls="mobile-nav"
+            aria-label={open ? 'Close menu' : 'Open menu'}
+            onClick={() => setOpen((v) => !v)}
+          >
+            <Icon name={open ? 'close' : 'menu'} size={22} />
+          </button>
         </div>
       </div>
+      {open && (
+        <div className="hd-drawer-wrap">
+          <button className="hd-scrim" aria-label="Close menu" onClick={() => setOpen(false)} tabIndex={-1} />
+          <nav className="hd-drawer" id="mobile-nav" aria-label="Mobile">
+            {NAV.map(([href, label]) => {
+              const active = path === href || path.startsWith(`${href}/`);
+              return (
+                <Link key={href} href={href} aria-current={active ? 'page' : undefined}>
+                  {label}
+                </Link>
+              );
+            })}
+            <div className="hd-drawer-cta">
+              <a className="btn btn-o" href={`${APP}/signin`}>Sign in</a>
+              <a className="btn btn-p" href={`${APP}/join`}>
+                <Icon name="arrow-right" size={15} />Join free
+              </a>
+            </div>
+          </nav>
+        </div>
+      )}
     </header>
   );
 }

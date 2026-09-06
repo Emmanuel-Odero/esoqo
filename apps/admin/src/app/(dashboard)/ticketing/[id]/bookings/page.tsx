@@ -1,10 +1,11 @@
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import { Icon } from '@esoko/ui';
-import { getTicketOrg, listOrgBookings, can, AuthorisationError } from '@esoko/db';
+import { can, AuthorisationError } from '@esoko/db';
 import { requireStaff } from '@/lib/session';
 import { OrgTabs } from '../OrgTabs';
 import { BookingsPanel } from './BookingsPanel';
+import { adminGo, adminOrgForCan, type GoConsoleOrg, type GoBookingRow } from '@/lib/go-ticketing';
 
 export const dynamic = 'force-dynamic';
 
@@ -19,15 +20,17 @@ export default async function OrgBookingsPage({ params }: { params: Promise<{ id
   const ctx = await requireStaff();
   const { id } = await params;
 
-  const org = await getTicketOrg(ctx, id).catch((e) => {
-    if (e instanceof AuthorisationError) notFound();
-    throw e;
-  });
+  const org = await adminGo<{ org: GoConsoleOrg }>(`/v1/ticketorgs/${id}`)
+    .then((r) => adminOrgForCan(r.org))
+    .catch((e) => {
+      if (e instanceof AuthorisationError) notFound();
+      throw e;
+    });
 
   if (!can(ctx, 'booking.read', { partyId: org.enterprise?.partyId })) notFound();
   const canCancel = can(ctx, 'booking.cancel', { partyId: org.enterprise?.partyId });
 
-  const bookings = await listOrgBookings(ctx, id);
+  const bookings = await adminGo<{ bookings: GoBookingRow[] }>(`/v1/ticketorgs/${id}/bookings`).then((r) => r.bookings);
 
   return (
     <>
@@ -51,15 +54,15 @@ export default async function OrgBookingsPage({ params }: { params: Promise<{ id
         canCancel={canCancel}
         bookings={bookings.map((b) => ({
           id: b.id,
-          listingTitle: b.schedule.listing.title,
+          listingTitle: b.listingTitle,
           buyerName: b.buyerName,
           buyerMsisdn: b.buyerMsisdn,
           status: b.status,
           paymentMethod: b.paymentMethod,
           totalKes: Number(b.totalKes),
-          ticketCount: b.tickets.length,
-          checkedInCount: b.tickets.filter((t) => t.status === 'USED').length,
-          createdAt: b.createdAt.toISOString(),
+          ticketCount: b.ticketCount,
+          checkedInCount: b.checkedInCount,
+          createdAt: new Date(b.createdAt).toISOString(),
         }))}
       />
     </>

@@ -1,10 +1,11 @@
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import { Icon } from '@esoko/ui';
-import { getTicketOrg, listOrgListings, listOrgVenuesAndRoutes, can, AuthorisationError } from '@esoko/db';
+import { can, AuthorisationError } from '@esoko/db';
 import { requireStaff } from '@/lib/session';
 import { OrgTabs } from '../OrgTabs';
 import { ListingsPanel } from './ListingsPanel';
+import { adminGo, adminOrgForCan, type GoConsoleOrg, type GoConsoleListing, type GoVenueRow, type GoRouteRow } from '@/lib/go-ticketing';
 
 export const dynamic = 'force-dynamic';
 
@@ -18,17 +19,20 @@ export default async function OrgListingsPage({ params }: { params: Promise<{ id
   const ctx = await requireStaff();
   const { id } = await params;
 
-  const org = await getTicketOrg(ctx, id).catch((e) => {
-    if (e instanceof AuthorisationError) notFound();
-    throw e;
-  });
+  const org = await adminGo<{ org: GoConsoleOrg }>(`/v1/ticketorgs/${id}`)
+    .then((r) => adminOrgForCan(r.org))
+    .catch((e) => {
+      if (e instanceof AuthorisationError) notFound();
+      throw e;
+    });
 
   if (!can(ctx, 'listing.write', { partyId: org.enterprise?.partyId })) notFound();
 
-  const [listings, { venues, routes }] = await Promise.all([
-    listOrgListings(ctx, id),
-    listOrgVenuesAndRoutes(ctx, id),
+  const [listings, places] = await Promise.all([
+    adminGo<{ listings: GoConsoleListing[] }>(`/v1/ticketorgs/${id}/listings`).then((r) => r.listings),
+    adminGo<{ venues: GoVenueRow[]; routes: GoRouteRow[] }>(`/v1/ticketorgs/${id}/venues-routes`),
   ]);
+  const { venues, routes } = places;
 
   const canPublish = can(ctx, 'listing.publish', { partyId: org.enterprise?.partyId });
 
@@ -62,7 +66,7 @@ export default async function OrgListingsPage({ params }: { params: Promise<{ id
           routeLabel: l.route ? `${l.route.originName} → ${l.route.destinationName}` : null,
           ticketClassCount: l.ticketClasses.length,
           scheduleCount: l.schedules.length,
-          createdAt: l.createdAt.toISOString(),
+          createdAt: new Date(l.createdAt).toISOString(),
         }))}
       />
     </>

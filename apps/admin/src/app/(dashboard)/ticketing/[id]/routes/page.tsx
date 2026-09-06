@@ -1,10 +1,11 @@
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import { Icon } from '@esoko/ui';
-import { getTicketOrg, listOrgVenuesAndRoutes, can, AuthorisationError } from '@esoko/db';
+import { can, AuthorisationError } from '@esoko/db';
 import { requireStaff } from '@/lib/session';
 import { OrgTabs } from '../OrgTabs';
 import { RouteVenuePanel } from './RouteVenuePanel';
+import { adminGo, adminOrgForCan, type GoConsoleOrg, type GoVenueRow, type GoRouteRow } from '@/lib/go-ticketing';
 
 export const dynamic = 'force-dynamic';
 
@@ -19,16 +20,19 @@ export default async function OrgRoutesPage({ params }: { params: Promise<{ id: 
   const ctx = await requireStaff();
   const { id } = await params;
 
-  const org = await getTicketOrg(ctx, id).catch((e) => {
-    if (e instanceof AuthorisationError) notFound();
-    throw e;
-  });
+  const org = await adminGo<{ org: GoConsoleOrg }>(`/v1/ticketorgs/${id}`)
+    .then((r) => adminOrgForCan(r.org))
+    .catch((e) => {
+      if (e instanceof AuthorisationError) notFound();
+      throw e;
+    });
 
   const canManage = can(ctx, 'venue.write', { partyId: org.enterprise?.partyId })
     || can(ctx, 'route.write', { partyId: org.enterprise?.partyId });
   if (!canManage) notFound();
 
-  const { venues, routes } = await listOrgVenuesAndRoutes(ctx, id);
+  const places = await adminGo<{ venues: GoVenueRow[]; routes: GoRouteRow[] }>(`/v1/ticketorgs/${id}/venues-routes`);
+  const { venues, routes } = places;
 
   return (
     <>
