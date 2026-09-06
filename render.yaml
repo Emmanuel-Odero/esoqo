@@ -109,6 +109,8 @@ services:
         value: console
       - key: CORS_ALLOWED_ORIGINS
         sync: false   # comma-separated; only the Flutter app's web build needs this — set once that's deployed somewhere
+      - key: TS_CORE_WEBHOOK_URL
+        value: https://esoko-core.onrender.com
 
   # ── Web — public-facing site ───────────────────────────────
   - type: web
@@ -146,6 +148,11 @@ services:
         value: https://esoko-app-lvqp.onrender.com
       - key: CORE_API_URL
         value: https://esoko-core.onrender.com
+      # Server Actions call core-go directly (sign-in already did;
+      # ticket bookings + balance top-ups now do too) — same host Go
+      # serves the mobile API from, so web and mobile share one writer.
+      - key: CORE_GO_API_URL
+        value: https://esoko-core-go.onrender.com
 
   # ── App — authenticated PWA surface ────────────────────────
   - type: web
@@ -191,6 +198,8 @@ services:
         value: https://esoko-app-lvqp.onrender.com
       - key: CORE_API_URL
         value: https://esoko-core.onrender.com
+      - key: CORE_GO_API_URL
+        value: https://esoko-core-go.onrender.com
       - key: NEXT_PUBLIC_CECF_URL
         value: https://childeldercare.foundation
       # M-Pesa STK push for CECF registration checkout (join flow), store
@@ -210,11 +219,14 @@ services:
         sync: false
       - key: MPESA_PASSKEY
         sync: false
-      # Safaricom POSTs the payment result here — must be esoko-core's
-      # public URL (not esoko-app's), since that's the service with the
-      # /webhooks/mpesa/stk-callback route.
+      # Safaricom POSTs the payment result here — core-go is the
+      # canonical target: it confirms store, booking (full + lipia pole
+      # pole), contribution and fare payments, and forwards anything it
+      # doesn't own (registration/donation) to esoko-core via
+      # TS_CORE_WEBHOOK_URL below. Every confirm on both sides is
+      # idempotent, so a callback seen twice can never double-post.
       - key: MPESA_CALLBACK_URL
-        value: https://esoko-core.onrender.com/webhooks/mpesa/stk-callback
+        value: https://esoko-core-go.onrender.com/webhooks/mpesa/stk-callback
 
   # ── Admin — operations dashboard ──────────────────────────
   - type: web

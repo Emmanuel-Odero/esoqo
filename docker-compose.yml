@@ -266,6 +266,9 @@ services:
       AUDIT_CHAIN_SEED: "${AUDIT_CHAIN_SEED:-esoko-genesis}"
       MPESA_PROVIDER: "${MPESA_PROVIDER:-console}"
       PESAPAL_PROVIDER: "${PESAPAL_PROVIDER:-console}"
+      # Strangler bridge: Daraja callbacks Go doesn't own yet
+      # (registration/donation) are forwarded byte-identical to TS core.
+      TS_CORE_WEBHOOK_URL: http://esoko-dev:4000
     depends_on:
       postgres:
         condition: service_healthy
