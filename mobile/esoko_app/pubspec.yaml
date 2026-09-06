@@ -49,11 +49,17 @@ dependencies:
   flutter_secure_storage: ^9.2.2
   # Renders a Ticket's `code` as a scannable QR for "My tickets".
   qr_flutter: ^4.1.0
+  # Camera QR scan for bus boarding codes + tout receipt verify.
+  # Thin UI only: every scan resolves through core-go (HMAC + status).
+  # v7 uses Apple Vision on iOS (no MLKit pods) — required for
+  # simulator builds (MLImage has no simulator slice).
+  mobile_scanner: ^7.4.0
   # Device location for "stores near me" (GET /v1/stores/nearby) — the
   # click-and-collect search's GPS mode.
   geolocator: ^13.0.2
   # Opens the device's maps app for "Get directions" on a pickup order.
   url_launcher: ^6.3.1
+  quick_actions: ^1.1.0
 
 dev_dependencies:
   flutter_test:
@@ -119,18 +125,39 @@ flutter:
   # For details regarding fonts from package dependencies,
   # see https://flutter.dev/to/font-from-package
 
-# App icon — the same navy-and-white mark as packages/ui/src/Logo.tsx
-# (web), rasterized to assets/branding/. Regenerate after editing the
-# source SVGs with: dart run flutter_launcher_icons
+  # The Outfit display typeface — the same one tokens.css uses for
+  # --font-display on web — bundled so mobile matches the web's brand
+  # voice (see EsokoTypography). This is a single variable-weight TTF
+  # (Thin–Black); the duplicate entries below let Flutter resolve each
+  # FontWeight against the same file instead of metric-synthesizing it.
+  fonts:
+    - family: Outfit
+      fonts:
+        - asset: assets/fonts/Outfit.ttf
+          weight: 400
+        - asset: assets/fonts/Outfit.ttf
+          weight: 500
+        - asset: assets/fonts/Outfit.ttf
+          weight: 600
+        - asset: assets/fonts/Outfit.ttf
+          weight: 700
+        - asset: assets/fonts/Outfit.ttf
+          weight: 800
+
+# App icon — the green Esoko mark (assets/branding/esoko-app-icon.png).
+# iOS/Android launcher icons are generated from a full-bleed, alpha-free
+# copy (esoko-app-icon-flat.png) because Apple rejects alpha; the Android
+# adaptive icon layers the original rounded design over the same green.
+# Regenerate after editing the artwork with: dart run flutter_launcher_icons
 flutter_launcher_icons:
   android: true
   ios: true
-  image_path: "assets/branding/app_icon.png"
-  # Android adaptive icon: navy background, mark-only foreground with
+  image_path: "assets/branding/esoko-app-icon-flat.png"
+  # Android adaptive icon: green background, mark-only foreground with
   # generous padding so it survives circular/squircle/square launcher
   # masks without clipping.
-  adaptive_icon_background: "#0A2E4D"
-  adaptive_icon_foreground: "assets/branding/app_icon_adaptive_fg.png"
+  adaptive_icon_background: "#02B026"
+  adaptive_icon_foreground: "assets/branding/esoko-app-icon.png"
   remove_alpha_ios: true
   web:
     generate: true
@@ -140,11 +167,13 @@ flutter_launcher_icons:
 
 # Native launch screen shown before the Flutter engine/first frame is
 # ready — this is the actual "before app opens" loader, distinct from
-# any in-app splash widget. Same navy/white lockup as the app icon.
-# Regenerate with: dart run flutter_native_splash:create
+# any in-app splash widget. The logo is the red-mark + green-wordmark
+# lockup (esoko-full-logo-clean.png, chroma-keyed off its #212121 mock
+# canvas) sitting on the navy brand color, matching the dark mock it
+# was designed on. Regenerate with: dart run flutter_native_splash:create
 flutter_native_splash:
   color: "#0A2E4D"
-  image: assets/branding/splash_logo.png
+  image: assets/branding/esoko-full-logo-clean.png
   android_12:
     color: "#0A2E4D"
-    image: assets/branding/splash_logo.png
+    image: assets/branding/esoko-full-logo-clean.png

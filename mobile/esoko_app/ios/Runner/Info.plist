@@ -28,6 +28,8 @@
 		<true/>
 		<key>NSLocationWhenInUseUsageDescription</key>
 		<string>Esoko uses your location to find malls, supermarkets and shops near you for pickup shopping.</string>
+		<key>NSCameraUsageDescription</key>
+		<string>Esoko uses your camera to scan bus QRs, vouchers, tickets and payment codes.</string>
 		<key>UIApplicationSceneManifest</key>
 		<dict>
 			<key>UIApplicationSupportsMultipleScenes</key>

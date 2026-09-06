@@ -6,6 +6,9 @@
          denied. -->
     <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION"/>
     <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION"/>
+    <!-- Universal scanner camera (bus QRs, vouchers, payment codes) —
+         every MobileScanner screen resolves through core-go. -->
+    <uses-permission android:name="android.permission.CAMERA"/>
     <application
         android:label="esoko_app"
         android:name="${applicationName}"
