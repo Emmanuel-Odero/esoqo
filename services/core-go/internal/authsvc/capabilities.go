@@ -112,10 +112,78 @@ type RoleName string
 
 const RoleSubject RoleName = "SUBJECT"
 
+// TicketingCapabilities — ports the Ticketing group of
+// packages/db/src/capabilities.ts's CAPABILITY_CATALOGUE. Same
+// scoping contract as the fleet grants below.
+const (
+	CapTicketOrgRead     = "ticketorg.read"
+	CapTicketOrgWrite    = "ticketorg.write"
+	CapTicketOrgModerate = "ticketorg.moderate"
+	CapTicketOrgStaff    = "ticketorgstaff.write"
+	CapVenueWrite        = "venue.write"
+	CapRouteWrite        = "route.write"
+	CapListingWrite      = "listing.write"
+	CapListingPublish    = "listing.publish"
+	CapTicketClassWrite  = "ticketclass.write"
+	CapScheduleWrite     = "schedule.write"
+	CapBookingRead       = "booking.read"
+	CapBookingCreate     = "booking.create"
+	CapBookingCancel     = "booking.cancel"
+	CapBookingRefund     = "booking.refund"
+	CapTicketCheckin     = "ticket.checkin"
+)
+
+// FleetCapabilities — short-routes / town-service grants. Org-scoped
+// via Ctx.TicketOrgID for AGENT sessions (crew, managers); owners hold
+// the same names with the :own qualifier (enterprise party match, same
+// as ticketorg.write:own). Kept as plain strings so the admin UI and
+// mobile gating (EsokoProfile.has) render from one catalogue.
+const (
+	CapFleetRead         = "fleet.read"
+	CapFleetWrite        = "fleet.write"
+	CapCrewRead          = "crew.read"
+	CapCrewWrite         = "crew.write"
+	CapTripRead          = "trip.read"
+	CapTripWrite         = "trip.write"
+	CapVehicleTrack      = "vehicle.track"
+	CapFarePay           = "fare.pay"
+	CapFareRead          = "fare.read"
+	CapFareVerify        = "fare.verify"
+	CapCollectionDeclare = "collection.declare"
+	CapCollectionRead    = "collection.read"
+
+	CapVoucherCreate = "voucher.create"
+	CapVoucherRead   = "voucher.read"
+	CapVoucherSpend  = "voucher.spend"
+	CapVoucherFreeze = "voucher.freeze"
+	CapLoyaltyRead   = "loyalty.read"
+)
+
+// TicketingStaffCapabilities ports TICKETING_STAFF_CAPABILITIES from
+// packages/db/src/capabilities.ts. An AGENT session's list IS the grant —
+// scoping is the ctx.TicketOrgID match in dbx.AssertOwnsOrg, not a
+// qualifier. CREW (driver/conductor PIN login) is the new least-privilege
+// bundle: declare today's cash + ping position + see own trip's fares.
+var TicketingStaffCapabilities = map[string][]string{
+	"SCANNER": {"ticket.checkin", "ticketorg.read", CapFareVerify, CapFareRead},
+	"MANAGER": {"ticket.checkin", "listing.write", "listing.publish", "ticketclass.write",
+		"schedule.write", "venue.write", "route.write",
+		"booking.read", "booking.cancel", "booking.refund", "ticketorg.read",
+		CapFleetRead, CapCrewRead, CapTripRead, CapFareRead, CapFareVerify, CapCollectionRead, CapVehicleTrack,
+		CapVoucherRead, CapVoucherFreeze, CapLoyaltyRead},
+	"ADMIN": {"ticket.checkin", "listing.write", "listing.publish", "ticketclass.write",
+		"schedule.write", "venue.write", "route.write",
+		"booking.read", "booking.cancel", "booking.refund",
+		"ticketorg.read", "ticketorg.write", "ticketorgstaff.write",
+		CapFleetRead, CapFleetWrite, CapCrewRead, CapCrewWrite,
+		CapTripRead, CapTripWrite, CapFareRead, CapFarePay,
+		CapCollectionRead, CapCollectionDeclare, CapVehicleTrack},
+	"CREW": {CapCollectionDeclare, CapVehicleTrack, CapFareRead, CapFareVerify, "ticketorg.read"},
+}
+
 // RolePresets — convenience bundles only; the model is the capability list
-// on the account. Only SUBJECT is ported for Phase 0/1 (mobile's own
-// actor type); staff/agent presets stay TypeScript-only until an admin
-// surface is needed here.
+// on the account. SUBJECT is re-derived per request in
+// SessionService.CtxFromToken; AGENT lists are frozen at staff sign-in.
 var RolePresets = map[RoleName][]string{
 	RoleSubject: {
 		"entity.read:own", "entity.write:own", "consent.read:own", "consent.write:own",
@@ -130,12 +198,16 @@ var RolePresets = map[RoleName][]string{
 		"treasury.meeting.write:own", "attendance.write:own",
 		"treasury.withdraw.request:own", "treasury.withdraw.sign:own",
 		"treasury.policy.write:own", "paymentid.issue:own", "portfolio.read:own",
-		"ticketorg.write:own", "ticketorgstaff.write:own", "venue.write:own",
+		"ticketorg.read:own", "ticketorg.write:own", "ticketorgstaff.write:own", "venue.write:own",
 		"route.write:own", "listing.write:own", "listing.publish:own",
 		"ticketclass.write:own", "schedule.write:own",
 		"booking.read:own", "booking.create:own", "booking.cancel:own",
 		"mall.read", "mall.write:own",
 		"warehouse.read", "warehouse.write:own",
+		"fleet.read:own", "fleet.write:own", "crew.read:own", "crew.write:own",
+		"trip.read:own", "trip.write:own", "vehicle.track:own",
+		"fare.pay:own", "fare.read:own", "collection.declare:own", "collection.read:own",
+		"voucher.create:own", "voucher.read:own", "voucher.spend:own", "voucher.freeze:own", "loyalty.read:own",
 	},
 }
 

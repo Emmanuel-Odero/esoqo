@@ -100,7 +100,8 @@ type createOrderRequest struct {
 	StoreSlug        string  `json:"storeSlug" binding:"required"`
 	BuyerName        string  `json:"buyerName" binding:"required"`
 	BuyerMsisdn      string  `json:"buyerMsisdn" binding:"required"`
-	PaymentMethod    string  `json:"paymentMethod" binding:"required"` // MPESA_STK | CASH_ON_DELIVERY
+	PaymentMethod    string  `json:"paymentMethod" binding:"required"` // MPESA_STK | CASH_ON_DELIVERY | VOUCHER
+	VoucherID        *string `json:"voucherId"`
 	DeliveryOptionID *string `json:"deliveryOptionId"`
 	DeliveryAddress  *string `json:"deliveryAddress"`
 	CollectionNotes  *string `json:"collectionNotes"`
@@ -140,6 +141,7 @@ func (s *Server) handleCreateOrder(c *gin.Context) {
 		BuyerName:        req.BuyerName,
 		BuyerMsisdn:      req.BuyerMsisdn,
 		PaymentMethod:    req.PaymentMethod,
+		VoucherID:        req.VoucherID,
 		Items:            items,
 		DeliveryOptionID: req.DeliveryOptionID,
 		DeliveryAddress:  req.DeliveryAddress,
@@ -147,6 +149,12 @@ func (s *Server) handleCreateOrder(c *gin.Context) {
 	})
 	if err != nil {
 		writeOrderOrBookingError(c, err)
+		return
+	}
+
+	if req.PaymentMethod == "VOUCHER" {
+		// Settled inline in CreateStoreOrder — no STK round-trip.
+		c.JSON(http.StatusOK, gin.H{"orderId": orderID, "totalKes": totalKES, "status": "PAID", "method": "VOUCHER"})
 		return
 	}
 
@@ -167,7 +175,7 @@ func (s *Server) handleCreateOrder(c *gin.Context) {
 		_ = dbx.AttachOrderCheckoutRequestID(c.Request.Context(), s.Pool, orderID, stk.CheckoutRequestID)
 		resp["checkoutRequestId"] = stk.CheckoutRequestID
 		if stk.AutoConfirmed {
-			_ = dbx.ConfirmStoreOrderPaymentByCheckoutID(c.Request.Context(), s.Pool, stk.CheckoutRequestID)
+			_ = dbx.ConfirmStoreOrderPaymentByCheckoutID(c.Request.Context(), s.Pool, stk.CheckoutRequestID, s.Cfg.LoyaltyEarnEnabled)
 			resp["status"] = "PAID"
 		}
 	}

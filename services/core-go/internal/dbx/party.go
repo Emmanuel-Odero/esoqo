@@ -187,6 +187,29 @@ type PersonProfile struct {
 	Email        *string
 }
 
+// UpdateKnownAs sets the caller's display name ("what people actually
+// call them" — the product's day-to-day name). Empty clears it back to
+// the official name. Self-scoped by partyID: no capability beyond a
+// valid subject session.
+func UpdateKnownAs(ctx context.Context, pool *pgxpool.Pool, partyID, knownAs string) error {
+	knownAs = strings.TrimSpace(knownAs)
+	if len(knownAs) > 80 {
+		return errors.New("name too long")
+	}
+	var stored *string
+	if knownAs != "" {
+		stored = &knownAs
+	}
+	res, err := pool.Exec(ctx, `UPDATE person SET "knownAs" = $1 WHERE "partyId" = $2`, stored, partyID)
+	if err != nil {
+		return err
+	}
+	if res.RowsAffected() == 0 {
+		return ErrPersonNotFound
+	}
+	return nil
+}
+
 func GetPersonProfile(ctx context.Context, pool *pgxpool.Pool, partyID string) (*PersonProfile, error) {
 	var p PersonProfile
 	err := pool.QueryRow(ctx, `

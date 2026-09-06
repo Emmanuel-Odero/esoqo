@@ -22,7 +22,15 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/esoko/core-go/internal/ledger"
+	"github.com/esoko/core-go/internal/loyalty"
 )
+
+func earnUnifiedLoyalty(ctx context.Context, pool *pgxpool.Pool, partyID string, kes float64, ref string, enabled bool) error {
+	if partyID == "" {
+		return nil
+	}
+	return loyalty.EarnForSpend(ctx, pool, partyID, kes, ref, enabled)
+}
 
 type StoreSummary struct {
 	ID              string
@@ -266,7 +274,8 @@ type CreateOrderInput struct {
 	BuyerPartyID     *string
 	BuyerName        string
 	BuyerMsisdn      string
-	PaymentMethod    string // MPESA_STK | CASH_ON_DELIVERY
+	PaymentMethod    string // MPESA_STK | CASH_ON_DELIVERY | VOUCHER
+	VoucherID        *string
 	Items            []OrderItemInput
 	DeliveryOptionID *string
 	DeliveryAddress  *string
@@ -299,6 +308,12 @@ func CreateStoreOrder(ctx context.Context, pool *pgxpool.Pool, in CreateOrderInp
 	}
 	if in.PaymentMethod == "CASH_ON_DELIVERY" && !store.CodEnabled {
 		return "", "", &OrderError{"COD_NOT_AVAILABLE", "This store does not accept cash on delivery"}
+	}
+	if in.PaymentMethod == "VOUCHER" && (in.VoucherID == nil || *in.VoucherID == "") {
+		return "", "", &OrderError{"VOUCHER_REQUIRED", "Choose a voucher to pay with"}
+	}
+	if in.PaymentMethod != "MPESA_STK" && in.PaymentMethod != "CASH_ON_DELIVERY" && in.PaymentMethod != "VOUCHER" {
+		return "", "", &OrderError{"INVALID_ITEM", "Payment method must be MPESA_STK, CASH_ON_DELIVERY or VOUCHER"}
 	}
 
 	tx, err := pool.Begin(ctx)
@@ -404,13 +419,13 @@ func CreateStoreOrder(ctx context.Context, pool *pgxpool.Pool, in CreateOrderInp
 		INSERT INTO store_order (
 			id, "storeId", "buyerPartyId", "buyerName", "buyerMsisdn", status, "paymentMethod",
 			"totalKes", "deliveryOptionId", "deliveryFeeKes", "collectionNotes", "deliveryAddress",
-			"customerId", "createdAt"
+			"customerId", "voucherId", "createdAt"
 		) VALUES (
 			gen_random_uuid(), $1, $2, $3, $4, 'PENDING_PAYMENT', $5,
-			$6, $7, $8, $9, $10, $11, now()
+			$6, $7, $8, $9, $10, $11, $12, now()
 		) RETURNING id`,
 		store.ID, in.BuyerPartyID, in.BuyerName, in.BuyerMsisdn, in.PaymentMethod,
-		total, in.DeliveryOptionID, deliveryFeeKES, in.CollectionNotes, in.DeliveryAddress, customerID).
+		total, in.DeliveryOptionID, deliveryFeeKES, in.CollectionNotes, in.DeliveryAddress, customerID, in.VoucherID).
 		Scan(&orderID)
 	if err != nil {
 		return "", "", err
@@ -442,7 +457,69 @@ func CreateStoreOrder(ctx context.Context, pool *pgxpool.Pool, in CreateOrderInp
 	if err := tx.Commit(ctx); err != nil {
 		return "", "", err
 	}
+	// VOUCHER settles inline (no STK round-trip): debit the purpose-locked
+	// card, post the merchant ledger, mark PAID. Spend failure cancels the
+	// order so stock/accounting never diverge from money movement.
+	if in.PaymentMethod == "VOUCHER" {
+		if err := SettleStoreOrderVoucher(ctx, pool, orderID, *in.VoucherID, true); err != nil {
+			if oerr, ok := err.(*OrderError); ok {
+				return "", "", oerr
+			}
+			return "", "", &OrderError{"VOUCHER_FAILED", err.Error()}
+		}
+		return orderID, fmt.Sprintf("%.2f", total), nil
+	}
 	return orderID, fmt.Sprintf("%.2f", total), nil
+}
+
+// SettleStoreOrderVoucher debits a SHOPPING|GENERAL voucher for a
+// PENDING_PAYMENT order and marks it PAID. Idempotent per order.
+func SettleStoreOrderVoucher(ctx context.Context, pool *pgxpool.Pool, orderID, voucherID string, loyaltyEnabled bool) error {
+	var status, totalText, storeID string
+	var buyerParty *string
+	if err := pool.QueryRow(ctx, `SELECT status::text, "totalKes"::text, "storeId", "buyerPartyId"::text FROM store_order WHERE id = $1`, orderID).
+		Scan(&status, &totalText, &storeID, &buyerParty); err != nil {
+		return err
+	}
+	if status != "PENDING_PAYMENT" {
+		return nil
+	}
+	total, err := strconv.ParseFloat(totalText, 64)
+	if err != nil {
+		return err
+	}
+	var enterpriseParty string
+	if err := pool.QueryRow(ctx, `SELECT e."partyId" FROM store s JOIN enterprise e ON e.id = s."enterpriseId" WHERE s.id = $1`, storeID).Scan(&enterpriseParty); err != nil {
+		return err
+	}
+	settlement, err := ledger.EnsureAccount(ctx, pool, nil, "SETTLEMENT", "KES")
+	if err != nil {
+		return err
+	}
+	revenue, err := ledger.EnsureAccount(ctx, pool, &enterpriseParty, "STORE_REVENUE", "KES")
+	if err != nil {
+		return err
+	}
+	entryID, err := ledger.PostEntry(ctx, pool, "store-order:"+orderID, "Store order voucher payment", "core-go:store-order:"+orderID,
+		[]ledger.Posting{{AccountID: settlement, AmountKES: total}, {AccountID: revenue, AmountKES: -total}})
+	if err != nil {
+		return err
+	}
+	if err := SpendVoucher(ctx, pool, voucherID, "SHOPPING", int(total*10+0.5), "store-order:"+orderID, entryID); err != nil {
+		_, _ = pool.Exec(ctx, `UPDATE store_order SET status = 'CANCELLED' WHERE id = $1`, orderID)
+		if _, ok := err.(*FleetError); ok {
+			return &OrderError{"VOUCHER_FAILED", err.Error()}
+		}
+		return err
+	}
+	if _, err := pool.Exec(ctx, `UPDATE store_order SET status = 'PAID', "paidAt" = now(), "journalEntryId" = $1 WHERE id = $2`, entryID, orderID); err != nil {
+		return err
+	}
+	_ = earnStoreLoyalty(ctx, pool, orderID, storeID, total)
+	if buyerParty != nil && *buyerParty != "" {
+		_ = earnUnifiedLoyalty(ctx, pool, *buyerParty, total, "store-order:"+orderID, loyaltyEnabled)
+	}
+	return nil
 }
 
 func AttachOrderCheckoutRequestID(ctx context.Context, pool *pgxpool.Pool, orderID, checkoutRequestID string) error {
@@ -459,12 +536,13 @@ func AttachOrderCheckoutRequestID(ctx context.Context, pool *pgxpool.Pool, order
 // shape services/core/src/index.ts uses.
 var ErrOrderNotFound = errors.New("no order for that checkout request")
 
-func ConfirmStoreOrderPaymentByCheckoutID(ctx context.Context, pool *pgxpool.Pool, checkoutRequestID string) error {
+func ConfirmStoreOrderPaymentByCheckoutID(ctx context.Context, pool *pgxpool.Pool, checkoutRequestID string, loyaltyEnabled bool) error {
 	var orderID, status, totalKESText, storeID string
+	var buyerParty *string
 	err := pool.QueryRow(ctx, `
-		SELECT id, status::text, "totalKes"::text, "storeId" FROM store_order
+		SELECT id, status::text, "totalKes"::text, "storeId", "buyerPartyId"::text FROM store_order
 		WHERE "mpesaCheckoutRequestId" = $1`, checkoutRequestID).
-		Scan(&orderID, &status, &totalKESText, &storeID)
+		Scan(&orderID, &status, &totalKESText, &storeID, &buyerParty)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return ErrOrderNotFound
 	}
@@ -530,7 +608,11 @@ func ConfirmStoreOrderPaymentByCheckoutID(ctx context.Context, pool *pgxpool.Poo
 		return err
 	}
 
-	return earnStoreLoyalty(ctx, pool, orderID, storeID, totalKES)
+	_ = earnStoreLoyalty(ctx, pool, orderID, storeID, totalKES)
+	if buyerParty != nil && *buyerParty != "" {
+		_ = earnUnifiedLoyalty(ctx, pool, *buyerParty, totalKES, "store-order:"+orderID, loyaltyEnabled)
+	}
+	return nil
 }
 
 // generatePickupCode mirrors generateTicketCode's alphabet trick,

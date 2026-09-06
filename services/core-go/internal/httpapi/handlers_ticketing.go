@@ -10,7 +10,11 @@ import (
 )
 
 func (s *Server) handleListListings(c *gin.Context) {
-	listings, err := dbx.ListPublicListings(c.Request.Context(), s.Pool, 50, 0)
+	vertical := c.Query("vertical")
+	if vertical != "EVENTS" && vertical != "TRANSPORT" {
+		vertical = ""
+	}
+	listings, err := dbx.ListPublicListings(c.Request.Context(), s.Pool, vertical, 50, 0)
 	if err != nil {
 		writeError(c, http.StatusInternalServerError, "LIST_FAILED", "Could not load listings")
 		return
@@ -50,14 +54,18 @@ func (s *Server) handleListScheduleSeats(c *gin.Context) {
 }
 
 type createBookingRequest struct {
-	ScheduleID  string  `json:"scheduleId" binding:"required"`
-	BuyerName   string  `json:"buyerName" binding:"required"`
-	BuyerMsisdn string  `json:"buyerMsisdn" binding:"required"`
-	BuyerEmail  *string `json:"buyerEmail"`
-	Lines       []struct {
+	ScheduleID    string  `json:"scheduleId" binding:"required"`
+	BuyerName     string  `json:"buyerName" binding:"required"`
+	BuyerMsisdn   string  `json:"buyerMsisdn" binding:"required"`
+	BuyerEmail    *string `json:"buyerEmail"`
+	PaymentMethod string  `json:"paymentMethod"`
+	VoucherID     *string `json:"voucherId"`
+	Lines         []struct {
 		TicketClassID string  `json:"ticketClassId" binding:"required"`
 		SeatID        *string `json:"seatId"`
 		Quantity      int     `json:"quantity"`
+		HolderName    *string `json:"holderName"`
+		HolderMsisdn  *string `json:"holderMsisdn"`
 	} `json:"lines" binding:"required"`
 }
 
@@ -76,7 +84,7 @@ func (s *Server) handleCreateBooking(c *gin.Context) {
 		if qty == 0 {
 			qty = 1 // a seated line implies one ticket even if the client omits quantity
 		}
-		lines[i] = dbx.BookingLineInput{TicketClassID: l.TicketClassID, SeatID: l.SeatID, Quantity: qty}
+		lines[i] = dbx.BookingLineInput{TicketClassID: l.TicketClassID, SeatID: l.SeatID, Quantity: qty, HolderName: l.HolderName, HolderMsisdn: l.HolderMsisdn}
 	}
 
 	var buyerPartyID *string
@@ -86,16 +94,33 @@ func (s *Server) handleCreateBooking(c *gin.Context) {
 		}
 	}
 
+	method := req.PaymentMethod
+	if method == "" {
+		method = "MPESA_STK"
+	}
+	if method != "MPESA_STK" && method != "CASH" && method != "VOUCHER" {
+		writeError(c, http.StatusBadRequest, "INVALID_REQUEST", "paymentMethod must be MPESA_STK, CASH or VOUCHER")
+		return
+	}
+
 	bookingID, totalKES, err := dbx.CreateBooking(c.Request.Context(), s.Pool, dbx.CreateBookingInput{
-		ScheduleID:   req.ScheduleID,
-		BuyerPartyID: buyerPartyID,
-		BuyerName:    req.BuyerName,
-		BuyerMsisdn:  req.BuyerMsisdn,
-		BuyerEmail:   req.BuyerEmail,
-		Lines:        lines,
+		ScheduleID:    req.ScheduleID,
+		BuyerPartyID:  buyerPartyID,
+		BuyerName:     req.BuyerName,
+		BuyerMsisdn:   req.BuyerMsisdn,
+		BuyerEmail:    req.BuyerEmail,
+		PaymentMethod: method,
+		VoucherID:     req.VoucherID,
+		Lines:         lines,
 	})
 	if err != nil {
 		writeOrderOrBookingError(c, err)
+		return
+	}
+
+	if method == "CASH" || method == "VOUCHER" {
+		// Till/walk-in sale or voucher debit — PAID on commit, no STK push.
+		c.JSON(http.StatusOK, gin.H{"bookingId": bookingID, "totalKes": totalKES, "status": "PAID", "method": method})
 		return
 	}
 
@@ -113,7 +138,7 @@ func (s *Server) handleCreateBooking(c *gin.Context) {
 	_ = dbx.AttachBookingCheckoutRequestID(c.Request.Context(), s.Pool, bookingID, stk.CheckoutRequestID)
 	resp["checkoutRequestId"] = stk.CheckoutRequestID
 	if stk.AutoConfirmed {
-		_ = dbx.ConfirmBookingPaymentByCheckoutID(c.Request.Context(), s.Pool, stk.CheckoutRequestID)
+		_ = dbx.ConfirmBookingPaymentByCheckoutID(c.Request.Context(), s.Pool, stk.CheckoutRequestID, s.Cfg.LoyaltyEarnEnabled)
 		resp["status"] = "PAID"
 	}
 

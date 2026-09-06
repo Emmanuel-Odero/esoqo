@@ -52,6 +52,7 @@ func (s *Server) Router() *gin.Engine {
 		auth.POST("/sign-out", s.authRequired(), s.handleSignOut)
 
 		v1.GET("/me", s.authRequired(), s.handleMe)
+		v1.PATCH("/me", s.authRequired(), s.handleUpdateMe)
 		v1.GET("/me/history", s.authRequired(), s.handleHistory)
 		v1.GET("/me/points", s.authRequired(), s.handlePoints)
 
@@ -70,8 +71,84 @@ func (s *Server) Router() *gin.Engine {
 		v1.GET("/listings/:id", s.handleGetListing)
 		v1.GET("/schedules/:id/seats", s.handleListScheduleSeats)
 		v1.POST("/bookings", s.handleCreateBooking)
+		v1.POST("/bookings/installment", s.handleOpenInstallmentPlan)
+		v1.POST("/bookings/:id/balance", s.handlePayBookingBalance)
 		v1.GET("/bookings/:id", s.handleGetBooking)
 		v1.GET("/me/tickets", s.authRequired(), s.handleListMyBookings)
+		v1.GET("/me/orgs", s.authRequired(), s.handleListMyOrgs)
+		v1.GET("/fleet/active-trips", s.handleListPublicActiveTrips)
+
+		v1.POST("/ticket-staff/sign-in", s.handleTicketStaffSignIn)
+
+		v1.POST("/ticketorgs", s.authRequired(), s.handleCreateTicketOrg)
+		v1.GET("/ticketorgs/by-slug/:slug", s.handleGetTicketOrgBySlug)
+		v1.GET("/ticketorgs/:id", s.authRequired(), s.handleGetTicketOrg)
+		v1.GET("/ticketorgs/:id/listings", s.authRequired(), s.handleListOrgListings)
+		v1.POST("/ticketorgs/:id/listings", s.authRequired(), s.handleCreateListing)
+		v1.GET("/ticketorgs/:id/listings/:listingId", s.authRequired(), s.handleGetOrgListing)
+		v1.GET("/ticketorgs/:id/venues-routes", s.authRequired(), s.handleListVenuesRoutes)
+		v1.POST("/ticketorgs/:id/venues", s.authRequired(), s.handleCreateVenue)
+		v1.POST("/ticketorgs/:id/routes", s.authRequired(), s.handleCreateOrgRoute)
+		v1.GET("/ticketorgs/:id/staff", s.authRequired(), s.handleListOrgStaff)
+		v1.POST("/ticketorgs/:id/staff", s.authRequired(), s.handleCreateOrgStaff)
+		v1.GET("/ticketorgs/:id/bookings", s.authRequired(), s.handleListOrgBookings)
+		v1.POST("/ticketorgs/:id/checkin", s.authRequired(), s.handleCheckInTicket)
+
+		v1.POST("/org-listings/:id/publish", s.authRequired(), s.handlePublishListing)
+		v1.POST("/org-listings/:id/classes", s.authRequired(), s.handleCreateTicketClass)
+		v1.POST("/org-listings/:id/schedules", s.authRequired(), s.handleCreateSchedule)
+		v1.GET("/org-listings/:id/seatmap", s.authRequired(), s.handleGetSeatMap)
+		v1.PUT("/org-listings/:id/seatmap", s.authRequired(), s.handleSaveSeatMap)
+		v1.POST("/org-listings/:id/addons", s.authRequired(), s.handleCreateAddon)
+		v1.POST("/org-staff/:id/active", s.authRequired(), s.handleSetOrgStaffActive)
+
+		v1.POST("/bookings/:id/cancel", s.authRequired(), s.handleCancelBooking)
+		v1.POST("/bookings/:id/retry", s.authRequired(), s.handleRetryBookingPayment)
+		v1.GET("/bookings/:id/status", s.handleGetBookingStatus)
+		v1.GET("/bookings/:id/balance-view", s.handleGetBookingBalanceView)
+		v1.GET("/me/bookings", s.authRequired(), s.handleListMyBookingsRich)
+
+		v1.GET("/admin/ticketorgs", s.authRequired(), s.handleAdminListTicketOrgs)
+		v1.GET("/admin/ticketorgs/counts", s.authRequired(), s.handleAdminTicketOrgCounts)
+		v1.POST("/admin/ticketorgs/:id/status", s.authRequired(), s.handleAdminSetTicketOrgStatus)
+
+		v1.POST("/fleet/vehicles", s.authRequired(), s.handleCreateVehicle)
+		v1.GET("/fleet/orgs/:orgId/vehicles", s.authRequired(), s.handleListVehicles)
+		v1.POST("/fleet/vehicles/:id/status", s.authRequired(), s.handleSetVehicleStatus)
+
+		v1.POST("/fleet/crew", s.authRequired(), s.handleCreateCrew)
+		v1.GET("/fleet/orgs/:orgId/crew", s.authRequired(), s.handleListCrew)
+		v1.POST("/fleet/crew/:id/active", s.authRequired(), s.handleSetCrewActive)
+
+		v1.POST("/fleet/short-routes", s.authRequired(), s.handleCreateShortRoute)
+		v1.GET("/fleet/orgs/:orgId/short-routes", s.authRequired(), s.handleListShortRoutes)
+
+		v1.POST("/fleet/trips", s.authRequired(), s.handleCreateTrip)
+		v1.GET("/fleet/orgs/:orgId/trips", s.authRequired(), s.handleListTrips)
+		v1.POST("/fleet/trips/:id/close", s.authRequired(), s.handleCloseTrip)
+		v1.POST("/fleet/trips/:id/pings", s.authRequired(), s.handlePostPing)
+		v1.GET("/fleet/orgs/:orgId/positions", s.authRequired(), s.handleLatestPositions)
+		v1.POST("/fleet/trips/:id/declare", s.authRequired(), s.handleDeclare)
+		v1.GET("/fleet/trips/:id/collections", s.authRequired(), s.handleTripCollections)
+
+		v1.POST("/fares", s.handleCreateFare)
+		v1.GET("/fares/:id", s.handleGetFare)
+		v1.GET("/fares/:id/status", s.handleFareStatus)
+		v1.POST("/fares/verify", s.authRequired(), s.handleVerifyFare)
+		v1.GET("/trips/resolve", s.handleResolveTrip)
+		v1.GET("/scan/resolve", s.handleResolveScan)
+		v1.GET("/fleet/trips/:id/qr", s.authRequired(), s.handleTripQr)
+		v1.GET("/me/fares", s.authRequired(), s.handleListMyFares)
+
+		v1.POST("/vouchers", s.authRequired(), s.handleCreateVoucher)
+		v1.POST("/vouchers/:id/load", s.authRequired(), s.handleLoadVoucher)
+		v1.GET("/vouchers/:id/status", s.authRequired(), s.handleVoucherStatus)
+		v1.GET("/vouchers/resolve", s.handleResolveVoucher)
+		v1.GET("/me/vouchers", s.authRequired(), s.handleListMyVouchers)
+		v1.POST("/vouchers/:id/freeze", s.authRequired(), s.handleFreezeVoucher)
+		v1.GET("/me/loyalty", s.authRequired(), s.handleMyLoyalty)
+
+		v1.GET("/admin/fraud/summary", s.authRequired(), s.handleFraudSummary)
 
 		v1.POST("/groups", s.authRequired(), s.handleCreateGroup)
 		v1.POST("/groups/:id/join", s.authRequired(), s.handleJoinGroup)
@@ -120,7 +197,7 @@ func (s *Server) corsMiddleware() gin.HandlerFunc {
 	}
 	cfg := cors.Config{
 		AllowOrigins:     origins,
-		AllowMethods:     []string{"GET", "POST", "OPTIONS"},
+		AllowMethods:     []string{"GET", "POST", "PATCH", "OPTIONS"},
 		AllowHeaders:     []string{"Authorization", "Content-Type"},
 		AllowCredentials: false, // bearer token, not a cookie — nothing ambient to protect
 		MaxAge:           12 * time.Hour,

@@ -102,6 +102,13 @@ func SeedDemoTicketing(ctx context.Context, pool *pgxpool.Pool) error {
 	}
 	_ = regularClassID
 
+	// Short-route demo: one vehicle, driver + conductor, a 3-stage town
+	// route and an open trip — so the fare-pay / live-map / collections
+	// walkthrough works without manual setup.
+	if err := ensureDemoFleet(ctx, pool, transportOrgID); err != nil {
+		return fmt.Errorf("demo fleet: %w", err)
+	}
+
 	// A demo buyer, ready to sign in and book against the listings
 	// above from the mobile app — same convenience seed-demo.ts's
 	// demo customer gave the web walkthrough.
@@ -110,7 +117,76 @@ func SeedDemoTicketing(ctx context.Context, pool *pgxpool.Pool) error {
 	}
 
 	fmt.Println("  ticketing: 2 orgs, 2 listings, 3 schedules, staff logins (Demo Scanner/Manager/Admin, PIN 111111/222222/333333), demo buyer +254700200200 (PIN 200200)")
+	fmt.Println("  fleet: 1 vehicle (KDA 123X), driver + conductor, 1 short route (3 stages), 1 open trip")
 	return nil
+}
+
+func ensureDemoFleet(ctx context.Context, pool *pgxpool.Pool, orgID string) error {
+	var vehicleID string
+	err := pool.QueryRow(ctx, `SELECT id FROM fleet_vehicle WHERE "orgId" = $1 AND "plateNo" = 'KDA 123X'`, orgID).Scan(&vehicleID)
+	if err != nil {
+		err = pool.QueryRow(ctx, `
+			INSERT INTO fleet_vehicle (id, "orgId", "plateNo", capacity, label, status, "createdAt", "updatedAt")
+			VALUES (gen_random_uuid(), $1, 'KDA 123X', 33, 'Demo town bus', 'ACTIVE', now(), now())
+			RETURNING id`, orgID).Scan(&vehicleID)
+		if err != nil {
+			return err
+		}
+	}
+	crewIDs := map[string]string{}
+	for _, cm := range []struct{ name, role string }{{"Demo Driver", "DRIVER"}, {"Demo Conductor", "CONDUCTOR"}} {
+		var id string
+		err := pool.QueryRow(ctx, `SELECT id FROM crew_member WHERE "orgId" = $1 AND name = $2`, orgID, cm.name).Scan(&id)
+		if err != nil {
+			msisdn := "+254700100110"
+			err = pool.QueryRow(ctx, `
+				INSERT INTO crew_member (id, "orgId", name, msisdn, role, active, "createdAt", "updatedAt")
+				VALUES (gen_random_uuid(), $1, $2, $3, $4::"CrewRole", true, now(), now())
+				RETURNING id`, orgID, cm.name, msisdn, cm.role).Scan(&id)
+			if err != nil {
+				return err
+			}
+		}
+		crewIDs[cm.role] = id
+	}
+	var routeID string
+	err = pool.QueryRow(ctx, `SELECT id FROM short_route WHERE "orgId" = $1 AND name = 'Demo Town Loop'`, orgID).Scan(&routeID)
+	if err != nil {
+		err = pool.QueryRow(ctx, `
+			INSERT INTO short_route (id, "orgId", name, active, "createdAt")
+			VALUES (gen_random_uuid(), $1, 'Demo Town Loop', true, now()) RETURNING id`, orgID).Scan(&routeID)
+		if err != nil {
+			return err
+		}
+		for i, st := range []struct {
+			name string
+			fare float64
+		}{{"Stage 1", 50}, {"Stage 2", 80}, {"Terminus", 100}} {
+			_, err = pool.Exec(ctx, `
+				INSERT INTO fare_stage (id, "shortRouteId", name, "order", "fareKes")
+				VALUES (gen_random_uuid(), $1, $2, $3, $4)
+				ON CONFLICT ("shortRouteId", "order") DO NOTHING`, routeID, st.name, i+1, st.fare)
+			if err != nil {
+				return err
+			}
+		}
+	}
+	var open int
+	if err := pool.QueryRow(ctx, `SELECT count(*) FROM trip WHERE "vehicleId" = $1 AND status = 'ACTIVE'`, vehicleID).Scan(&open); err != nil {
+		return err
+	}
+	if open == 0 {
+		_, err = pool.Exec(ctx, `
+			INSERT INTO trip (id, "orgId", "vehicleId", "driverId", "conductorId", "shortRouteId", status, "startedAt", "createdAt", "qrToken", "qrShortCode", "qrRotatedAt")
+			VALUES (gen_random_uuid(), $1, $2, $3, $4, $5, 'ACTIVE', now(), now(), 'DEMO-' || substr(gen_random_uuid()::text,1,6), 'BUS-DEMO', now())`,
+			orgID, vehicleID, crewIDs["DRIVER"], crewIDs["CONDUCTOR"], routeID)
+		if err != nil {
+			return err
+		}
+	}
+	// Backfill QR for trips seeded before boarding codes existed.
+	_, err = pool.Exec(ctx, `UPDATE trip SET "qrToken" = 'DEMO-' || substr(gen_random_uuid()::text,1,6), "qrShortCode" = 'BUS-' || substr(gen_random_uuid()::text,1,6), "qrRotatedAt" = now() WHERE "qrShortCode" IS NULL`)
+	return err
 }
 
 func ensureTicketOrg(ctx context.Context, pool *pgxpool.Pool, enterpriseID, name, slug, vertical, contactPhone string) (string, error) {

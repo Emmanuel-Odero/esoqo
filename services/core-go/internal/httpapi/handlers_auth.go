@@ -289,6 +289,36 @@ func (s *Server) handleMe(c *gin.Context) {
 	})
 }
 
+// ── PATCH /v1/me (authenticated) ────────────────────────────────
+// Edits the caller's own display name. Self-scoped: the party comes
+// from the session, never the body, so there is nothing to forge.
+
+type updateMeRequest struct {
+	KnownAs *string `json:"knownAs"`
+}
+
+func (s *Server) handleUpdateMe(c *gin.Context) {
+	ctx := ctxFromGin(c)
+	var req updateMeRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		writeError(c, http.StatusBadRequest, "INVALID_REQUEST", err.Error())
+		return
+	}
+	if req.KnownAs == nil {
+		writeError(c, http.StatusBadRequest, "INVALID_REQUEST", "Nothing to update")
+		return
+	}
+	if err := dbx.UpdateKnownAs(c.Request.Context(), s.Pool, ctx.PartyID, *req.KnownAs); err != nil {
+		if err == dbx.ErrPersonNotFound {
+			writeError(c, http.StatusNotFound, "NOT_FOUND", "Profile not found")
+			return
+		}
+		writeError(c, http.StatusBadRequest, "INVALID_REQUEST", err.Error())
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"ok": true})
+}
+
 // ── GET /v1/me/history (authenticated) ────────────────────────────
 
 func (s *Server) handleHistory(c *gin.Context) {

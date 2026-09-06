@@ -68,6 +68,19 @@ type Config struct {
 	PesapalConsumerKey    string
 	PesapalConsumerSecret string
 	PesapalIPNID          string
+
+	// Strangler bridge: when Daraja callbacks land here for checkouts Go
+	// doesn't own yet (registration/donation — still TS-only), the raw
+	// body is forwarded to the TS core webhook. Empty = disabled.
+	TsCoreWebhookURL string
+
+	// Fleet QR + fare proof + vouchers. HMAC secret signs trip/voucher
+	// QR payloads (never trust raw trip IDs from a scanner). TTL bounds
+	// how long a CONFIRMED fare counts as valid proof to a tout.
+	FleetQrSecret      string
+	FareProofTTLMin    int
+	VouchersEnabled    bool
+	LoyaltyEarnEnabled bool
 }
 
 func getenv(key, fallback string) string {
@@ -75,6 +88,14 @@ func getenv(key, fallback string) string {
 		return v
 	}
 	return fallback
+}
+
+func getenvInt(key string, fallback int) int {
+	v, err := strconv.Atoi(getenv(key, ""))
+	if err != nil {
+		return fallback
+	}
+	return v
 }
 
 func Load() Config {
@@ -120,5 +141,12 @@ func Load() Config {
 		PesapalConsumerKey:    getenv("PESAPAL_CONSUMER_KEY", ""),
 		PesapalConsumerSecret: getenv("PESAPAL_CONSUMER_SECRET", ""),
 		PesapalIPNID:          getenv("PESAPAL_IPN_ID", ""),
+
+		TsCoreWebhookURL: getenv("TS_CORE_WEBHOOK_URL", ""),
+
+		FleetQrSecret:      getenv("FLEET_QR_SECRET", "dev-fleet-qr-secret-change-me"),
+		FareProofTTLMin:    getenvInt("FARE_PROOF_TTL_MIN", 90),
+		VouchersEnabled:    getenv("VOUCHERS_ENABLED", "true") == "true",
+		LoyaltyEarnEnabled: getenv("LOYALTY_EARN_ENABLED", "true") == "true",
 	}
 }

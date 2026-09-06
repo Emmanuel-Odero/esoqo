@@ -37,5 +37,10 @@ func main() {
 		log.Fatalf("seed: demo stores: %v", err)
 	}
 
+	log.Println("seeding pilot SACCO…")
+	if err := seed.SeedPilotData(ctx, pool, cfg.FleetQrSecret); err != nil {
+		log.Fatalf("seed: pilot: %v", err)
+	}
+
 	log.Println("\nNo real registrations, parties or prices were seeded — reference data and clearly-labelled \"Demo\" content only.")
 }
