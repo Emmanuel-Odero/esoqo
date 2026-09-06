@@ -7,7 +7,6 @@ package dbx
 
 import (
 	"context"
-	cryptorand "crypto/rand"
 	"errors"
 	"fmt"
 	"strconv"
@@ -15,8 +14,17 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 
+	"github.com/esoko/core-go/internal/fleetqr"
 	"github.com/esoko/core-go/internal/ledger"
+	"github.com/esoko/core-go/internal/loyalty"
 )
+
+func earnUnifiedLoyaltyTicket(ctx context.Context, pool *pgxpool.Pool, partyID string, kes float64, ref string) error {
+	if partyID == "" {
+		return nil
+	}
+	return loyalty.EarnForSpend(ctx, pool, partyID, kes, ref, true)
+}
 
 type ListingSummary struct {
 	ID                string
@@ -26,23 +34,38 @@ type ListingSummary struct {
 	Vertical          string // EVENTS | TRANSPORT
 	VenueOrRouteLabel *string
 	FromPriceKES      *string
+	// Enriched for the web directory (mobile ignores extras): split
+	// venue/route/county, next departure and schedule count.
+	OrgName       *string `json:"OrgName"`
+	VenueName     *string `json:"VenueName"`
+	VenueCounty   *string `json:"VenueCounty"`
+	RouteOrigin   *string `json:"RouteOrigin"`
+	RouteDest     *string `json:"RouteDest"`
+	NextDepartAt  *string `json:"NextDepartAt"`
+	ScheduleCount int     `json:"ScheduleCount"`
 }
 
 // ListPublicListings mirrors listPublicListings — only PUBLISHED
-// listings, cheapest ticket class shown as the "from" price the same
-// way a storefront shows its cheapest variant.
-func ListPublicListings(ctx context.Context, pool *pgxpool.Pool, limit, offset int) ([]ListingSummary, error) {
+// listings of ACTIVE orgs, cheapest ticket class shown as the "from"
+// price the same way a storefront shows its cheapest variant.
+func ListPublicListings(ctx context.Context, pool *pgxpool.Pool, vertical string, limit, offset int) ([]ListingSummary, error) {
 	rows, err := pool.Query(ctx, `
 		SELECT l.id, l.slug, l.title, l."coverImageUrl", o.vertical,
 		       COALESCE(v.name, r."originName" || ' → ' || r."destinationName"),
-		       (SELECT MIN(tc."priceKes")::text FROM ticket_class tc WHERE tc."listingId" = l.id)
+		       (SELECT MIN(tc."priceKes")::text FROM ticket_class tc WHERE tc."listingId" = l.id),
+		       o.name, v.name, v.county, r."originName", r."destinationName",
+		       (SELECT to_char(MIN(ls."departAt"), 'YYYY-MM-DD"T"HH24:MI:SS"Z"') FROM listing_schedule ls
+		         WHERE ls."listingId" = l.id AND ls.status = 'SCHEDULED'),
+		       (SELECT count(*) FROM listing_schedule ls
+		         WHERE ls."listingId" = l.id AND ls.status = 'SCHEDULED')
 		FROM listing l
 		JOIN ticket_org o ON o.id = l."orgId"
 		LEFT JOIN venue v ON v.id = l."venueId"
 		LEFT JOIN route r ON r.id = l."routeId"
-		WHERE l.status = 'PUBLISHED'
+		WHERE l.status = 'PUBLISHED' AND o.status = 'ACTIVE'
+		  AND ($1 = '' OR o.vertical::text = $1)
 		ORDER BY l."createdAt" DESC
-		LIMIT $1 OFFSET $2`, limit, offset)
+		LIMIT $2 OFFSET $3`, vertical, limit, offset)
 	if err != nil {
 		return nil, err
 	}
@@ -51,7 +74,8 @@ func ListPublicListings(ctx context.Context, pool *pgxpool.Pool, limit, offset i
 	var out []ListingSummary
 	for rows.Next() {
 		var s ListingSummary
-		if err := rows.Scan(&s.ID, &s.Slug, &s.Title, &s.CoverURL, &s.Vertical, &s.VenueOrRouteLabel, &s.FromPriceKES); err != nil {
+		if err := rows.Scan(&s.ID, &s.Slug, &s.Title, &s.CoverURL, &s.Vertical, &s.VenueOrRouteLabel, &s.FromPriceKES,
+			&s.OrgName, &s.VenueName, &s.VenueCounty, &s.RouteOrigin, &s.RouteDest, &s.NextDepartAt, &s.ScheduleCount); err != nil {
 			return nil, err
 		}
 		out = append(out, s)
@@ -60,79 +84,184 @@ func ListPublicListings(ctx context.Context, pool *pgxpool.Pool, limit, offset i
 }
 
 type ScheduleSummary struct {
-	ID       string
-	DepartAt string
-	ArriveAt *string
-	GateInfo *string
-	Status   string
+	ID                 string
+	DepartAt           string
+	ArriveAt           *string
+	GateInfo           *string
+	VehicleOrHallLabel *string
+	Status             string
 }
 
 type TicketClassSummary struct {
-	ID        string
-	Name      string
-	PriceKES  string
-	Seated    bool
-	Capacity  int
-	Amenities []string
+	ID          string
+	Name        string
+	PriceKES    string
+	Seated      bool
+	Capacity    int
+	Amenities   []string
+	AmenityNote *string
+}
+
+type DetailOrg struct {
+	Name                string `json:"Name"`
+	Vertical            string `json:"Vertical"`
+	InstallmentsEnabled bool   `json:"InstallmentsEnabled"`
+	MinDepositPercent   int    `json:"MinDepositPercent"`
+}
+
+type DetailVenue struct {
+	Name   string  `json:"Name"`
+	County *string `json:"County"`
+}
+
+type DetailRoute struct {
+	OriginName      string `json:"OriginName"`
+	DestinationName string `json:"DestinationName"`
+}
+
+type DetailSeat struct {
+	Label         string `json:"Label"`
+	TicketClassID string `json:"TicketClassID"`
+}
+
+type DetailSeatMap struct {
+	Rows    int          `json:"Rows"`
+	Pattern string       `json:"Pattern"`
+	Seats   []DetailSeat `json:"Seats"`
+}
+
+type DetailAddon struct {
+	ID       string `json:"ID"`
+	Name     string `json:"Name"`
+	PriceKES string `json:"PriceKES"`
 }
 
 type ListingDetail struct {
 	ListingSummary
 	Description   *string
+	Org           *DetailOrg   `json:"Org"`
+	Venue         *DetailVenue `json:"Venue"`
+	Route         *DetailRoute `json:"Route"`
 	TicketClasses []TicketClassSummary
 	Schedules     []ScheduleSummary
+	SeatMap       *DetailSeatMap `json:"SeatMap"`
+	Addons        []DetailAddon  `json:"Addons"`
 }
 
-func GetPublicListing(ctx context.Context, pool *pgxpool.Pool, id string) (*ListingDetail, error) {
+// GetPublicListing mirrors TS getPublicListing — PUBLISHED listings of
+// ACTIVE orgs, addressable by slug (storefront) or id. Enriched
+// additively over the mobile shape: org flags, venue/route splits,
+// amenity notes, hall labels, seat-map template and active addons.
+func GetPublicListing(ctx context.Context, pool *pgxpool.Pool, idOrSlug string) (*ListingDetail, error) {
 	var d ListingDetail
+	var org DetailOrg
+	var venueName, venueCounty, routeOrigin, routeDest *string
 	err := pool.QueryRow(ctx, `
 		SELECT l.id, l.slug, l.title, l.description, l."coverImageUrl", o.vertical,
-		       COALESCE(v.name, r."originName" || ' → ' || r."destinationName")
+		       COALESCE(v.name, r."originName" || ' → ' || r."destinationName"),
+		       o.name, o.vertical::text, o."installmentsEnabled", o."minDepositPercent",
+		       v.name, v.county, r."originName", r."destinationName"
 		FROM listing l
 		JOIN ticket_org o ON o.id = l."orgId"
 		LEFT JOIN venue v ON v.id = l."venueId"
 		LEFT JOIN route r ON r.id = l."routeId"
-		WHERE l.id = $1 AND l.status = 'PUBLISHED'`, id).
-		Scan(&d.ID, &d.Slug, &d.Title, &d.Description, &d.CoverURL, &d.Vertical, &d.VenueOrRouteLabel)
+		WHERE (l.slug = $1 OR l.id::text = $1) AND l.status = 'PUBLISHED' AND o.status = 'ACTIVE'`, idOrSlug).
+		Scan(&d.ID, &d.Slug, &d.Title, &d.Description, &d.CoverURL, &d.Vertical, &d.VenueOrRouteLabel,
+			&org.Name, &org.Vertical, &org.InstallmentsEnabled, &org.MinDepositPercent,
+			&venueName, &venueCounty, &routeOrigin, &routeDest)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return nil, nil
 	}
 	if err != nil {
 		return nil, err
 	}
+	d.Org = &org
+	if venueName != nil {
+		d.Venue = &DetailVenue{Name: *venueName, County: venueCounty}
+	} else if routeOrigin != nil {
+		d.Route = &DetailRoute{OriginName: *routeOrigin, DestinationName: derefStr(routeDest)}
+	}
 
 	tcRows, err := pool.Query(ctx, `
-		SELECT id, name, "priceKes"::text, seated, capacity, amenities
-		FROM ticket_class WHERE "listingId" = $1`, id)
+		SELECT id, name, "priceKes"::text, seated, capacity, amenities, "amenityNote"
+		FROM ticket_class WHERE "listingId" = $1`, d.ID)
 	if err != nil {
 		return nil, err
 	}
 	defer tcRows.Close()
 	for tcRows.Next() {
 		var tc TicketClassSummary
-		if err := tcRows.Scan(&tc.ID, &tc.Name, &tc.PriceKES, &tc.Seated, &tc.Capacity, &tc.Amenities); err != nil {
+		if err := tcRows.Scan(&tc.ID, &tc.Name, &tc.PriceKES, &tc.Seated, &tc.Capacity, &tc.Amenities, &tc.AmenityNote); err != nil {
 			return nil, err
+		}
+		if tc.Amenities == nil {
+			tc.Amenities = []string{}
 		}
 		d.TicketClasses = append(d.TicketClasses, tc)
 	}
 
 	schRows, err := pool.Query(ctx, `
-		SELECT id, "departAt"::text, "arriveAt"::text, "gateInfo", status::text
+		SELECT id, to_char("departAt", 'YYYY-MM-DD"T"HH24:MI:SS"Z"'),
+		       to_char("arriveAt", 'YYYY-MM-DD"T"HH24:MI:SS"Z"'), "gateInfo", "vehicleOrHallLabel", status::text
 		FROM listing_schedule
 		WHERE "listingId" = $1 AND status = 'SCHEDULED' AND "departAt" > now()
-		ORDER BY "departAt" ASC`, id)
+		ORDER BY "departAt" ASC`, d.ID)
 	if err != nil {
 		return nil, err
 	}
 	defer schRows.Close()
 	for schRows.Next() {
 		var s ScheduleSummary
-		if err := schRows.Scan(&s.ID, &s.DepartAt, &s.ArriveAt, &s.GateInfo, &s.Status); err != nil {
+		if err := schRows.Scan(&s.ID, &s.DepartAt, &s.ArriveAt, &s.GateInfo, &s.VehicleOrHallLabel, &s.Status); err != nil {
 			return nil, err
 		}
 		d.Schedules = append(d.Schedules, s)
 	}
-	return &d, schRows.Err()
+	if err := schRows.Err(); err != nil {
+		return nil, err
+	}
+
+	var mapID, pattern string
+	var mapRows int
+	err = pool.QueryRow(ctx, `SELECT id, rows, pattern FROM seat_map WHERE "listingId" = $1`, d.ID).Scan(&mapID, &mapRows, &pattern)
+	if err == nil {
+		sm := &DetailSeatMap{Rows: mapRows, Pattern: pattern}
+		mrows, err := pool.Query(ctx, `SELECT label, "ticketClassId" FROM seat_map_seat WHERE "seatMapId" = $1`, mapID)
+		if err != nil {
+			return nil, err
+		}
+		for mrows.Next() {
+			var s DetailSeat
+			if err := mrows.Scan(&s.Label, &s.TicketClassID); err != nil {
+				mrows.Close()
+				return nil, err
+			}
+			sm.Seats = append(sm.Seats, s)
+		}
+		mrows.Close()
+		if err := mrows.Err(); err != nil {
+			return nil, err
+		}
+		d.SeatMap = sm
+	} else if !errors.Is(err, pgx.ErrNoRows) {
+		return nil, err
+	}
+
+	arows, err := pool.Query(ctx, `
+		SELECT id, name, "priceKes"::text FROM addon
+		WHERE "listingId" = $1 AND active = true ORDER BY "createdAt" ASC`, d.ID)
+	if err != nil {
+		return nil, err
+	}
+	defer arows.Close()
+	for arows.Next() {
+		var a DetailAddon
+		if err := arows.Scan(&a.ID, &a.Name, &a.PriceKES); err != nil {
+			return nil, err
+		}
+		d.Addons = append(d.Addons, a)
+	}
+	return &d, arows.Err()
 }
 
 type SeatRow struct {
@@ -170,6 +299,9 @@ type BookingLineInput struct {
 	// nil for a GA class, where Quantity tickets are issued unseated.
 	SeatID   *string
 	Quantity int
+	// Optional per-ticket holder — falls back to the buyer at insert.
+	HolderName   *string
+	HolderMsisdn *string
 }
 
 type CreateBookingInput struct {
@@ -178,7 +310,13 @@ type CreateBookingInput struct {
 	BuyerName    string
 	BuyerMsisdn  string
 	BuyerEmail   *string
-	Lines        []BookingLineInput
+	// PaymentMethod is MPESA_STK (default when empty), CASH or VOUCHER.
+	// CASH books straight to PAID with loyalty earned inline — the TS
+	// createBooking parity for till/walk-in sales. VOUCHER debits a
+	// GENERAL purpose card the same way.
+	PaymentMethod string
+	VoucherID     *string
+	Lines         []BookingLineInput
 }
 
 type BookingError struct {
@@ -215,11 +353,31 @@ func CreateBooking(ctx context.Context, pool *pgxpool.Pool, in CreateBookingInpu
 	}
 	defer tx.Rollback(ctx)
 
+	method := in.PaymentMethod
+	if method == "" {
+		method = "MPESA_STK"
+	}
+	if method == "VOUCHER" && (in.VoucherID == nil || *in.VoucherID == "") {
+		return "", "", &BookingError{"VOUCHER_REQUIRED", "Choose a voucher to pay with"}
+	}
+
 	total := 0.0
 	type ticketToIssue struct {
 		ticketClassID string
 		seatID        *string
 		priceKES      float64
+		holderName    string
+		holderMsisdn  string
+	}
+	holderOf := func(name, msisdn *string) (string, string) {
+		hn, hm := in.BuyerName, in.BuyerMsisdn
+		if name != nil && *name != "" {
+			hn = *name
+		}
+		if msisdn != nil && *msisdn != "" {
+			hm = *msisdn
+		}
+		return hn, hm
 	}
 	var toIssue []ticketToIssue
 
@@ -258,7 +416,8 @@ func CreateBooking(ctx context.Context, pool *pgxpool.Pool, in CreateBookingInpu
 				return "", "", err
 			}
 			total += priceKES
-			toIssue = append(toIssue, ticketToIssue{line.TicketClassID, line.SeatID, priceKES})
+			hn, hm := holderOf(line.HolderName, line.HolderMsisdn)
+			toIssue = append(toIssue, ticketToIssue{line.TicketClassID, line.SeatID, priceKES, hn, hm})
 		} else {
 			// GA capacity check: booked tickets for this class+schedule
 			// (via any Ticket whose booking is on this schedule) plus
@@ -278,7 +437,8 @@ func CreateBooking(ctx context.Context, pool *pgxpool.Pool, in CreateBookingInpu
 			}
 			for i := 0; i < line.Quantity; i++ {
 				total += priceKES
-				toIssue = append(toIssue, ticketToIssue{line.TicketClassID, nil, priceKES})
+				hn, hm := holderOf(line.HolderName, line.HolderMsisdn)
+				toIssue = append(toIssue, ticketToIssue{line.TicketClassID, nil, priceKES, hn, hm})
 			}
 		}
 	}
@@ -295,14 +455,23 @@ func CreateBooking(ctx context.Context, pool *pgxpool.Pool, in CreateBookingInpu
 		return "", "", err
 	}
 
+	// method/status are code constants (never user input): MPESA_STK →
+	// PENDING_PAYMENT, CASH/VOUCHER → PAID on commit with loyalty earned below.
+	status := "PENDING_PAYMENT"
+	paidKES := 0.0
+	if method == "CASH" || method == "VOUCHER" {
+		status = "PAID"
+		paidKES = total
+	}
 	err = tx.QueryRow(ctx, `
 		INSERT INTO booking (
 			id, "scheduleId", "buyerPartyId", "buyerName", "buyerMsisdn", "buyerEmail",
-			"ticketCustomerId", status, "paymentMethod", "totalKes", "createdAt"
+			"ticketCustomerId", status, "paymentMethod", "totalKes", "paidAt", "amountPaidKes", "voucherId", "createdAt"
 		) VALUES (
-			gen_random_uuid(), $1, $2, $3, $4, $5, $6, 'PENDING_PAYMENT', 'MPESA_STK', $7, now()
+			gen_random_uuid(), $1, $2, $3, $4, $5, $6, $7::"BookingStatus", $8::"BookingPaymentMethod", $9,
+			CASE WHEN $7 = 'PAID' THEN now() ELSE NULL END, $10, $11, now()
 		) RETURNING id`,
-		in.ScheduleID, in.BuyerPartyID, in.BuyerName, in.BuyerMsisdn, in.BuyerEmail, ticketCustomerID, total).
+		in.ScheduleID, in.BuyerPartyID, in.BuyerName, in.BuyerMsisdn, in.BuyerEmail, ticketCustomerID, status, method, total, paidKES, in.VoucherID).
 		Scan(&bookingID)
 	if err != nil {
 		return "", "", err
@@ -316,7 +485,7 @@ func CreateBooking(ctx context.Context, pool *pgxpool.Pool, in CreateBookingInpu
 		_, err = tx.Exec(ctx, `
 			INSERT INTO ticket (id, "bookingId", "ticketClassId", "seatId", code, "holderName", "holderMsisdn", "priceKes", status, "createdAt")
 			VALUES (gen_random_uuid(), $1, $2, $3, $4, $5, $6, $7, 'VALID', now())`,
-			bookingID, t.ticketClassID, t.seatID, code, in.BuyerName, in.BuyerMsisdn, t.priceKES)
+			bookingID, t.ticketClassID, t.seatID, code, t.holderName, t.holderMsisdn, t.priceKES)
 		if err != nil {
 			return "", "", err
 		}
@@ -325,20 +494,74 @@ func CreateBooking(ctx context.Context, pool *pgxpool.Pool, in CreateBookingInpu
 	if err := tx.Commit(ctx); err != nil {
 		return "", "", err
 	}
+
+	// CASH is PAID on commit — earn loyalty now, mirroring TS
+	// createBooking (M-Pesa earns later, at webhook confirm). VOUCHER
+	// settles the same way after debiting the GENERAL card below.
+	if method == "CASH" {
+		_ = earnTicketLoyalty(ctx, pool, bookingID, ticketCustomerID, total)
+	}
+	if method == "VOUCHER" {
+		if err := settleBookingVoucher(ctx, pool, bookingID, *in.VoucherID, ticketCustomerID, total); err != nil {
+			_, _ = pool.Exec(ctx, `UPDATE booking SET status = 'CANCELLED' WHERE id = $1`, bookingID)
+			if berr, ok := err.(*BookingError); ok {
+				return "", "", berr
+			}
+			return "", "", &BookingError{"VOUCHER_FAILED", err.Error()}
+		}
+	}
 	return bookingID, fmt.Sprintf("%.2f", total), nil
 }
 
+// settleBookingVoucher posts the merchant ledger for a PAID booking,
+// debits the GENERAL voucher, and earns both legacy + unified loyalty.
+// Idempotent per booking.
+func settleBookingVoucher(ctx context.Context, pool *pgxpool.Pool, bookingID, voucherID, ticketCustomerID string, total float64) error {
+	var orgEnterpriseParty, buyerParty string
+	if err := pool.QueryRow(ctx, `
+		SELECT e."partyId", COALESCE(bk."buyerPartyId"::text,'')
+		FROM booking bk
+		JOIN listing_schedule ls ON ls.id = bk."scheduleId"
+		JOIN listing l ON l.id = ls."listingId"
+		JOIN ticket_org o ON o.id = l."orgId"
+		JOIN enterprise e ON e.id = o."enterpriseId"
+		WHERE bk.id = $1`, bookingID).Scan(&orgEnterpriseParty, &buyerParty); err != nil {
+		return err
+	}
+	settlement, err := ledger.EnsureAccount(ctx, pool, nil, "SETTLEMENT", "KES")
+	if err != nil {
+		return err
+	}
+	revenue, err := ledger.EnsureAccount(ctx, pool, &orgEnterpriseParty, "SUSPENSE", "KES")
+	if err != nil {
+		return err
+	}
+	entryID, err := ledger.PostEntry(ctx, pool, "booking:"+bookingID, "Ticket booking voucher payment", "core-go:booking:"+bookingID,
+		[]ledger.Posting{{AccountID: settlement, AmountKES: total}, {AccountID: revenue, AmountKES: -total}})
+	if err != nil {
+		return err
+	}
+	if err := SpendVoucher(ctx, pool, voucherID, "GENERAL", int(total*10+0.5), "booking:"+bookingID, entryID); err != nil {
+		if _, ok := err.(*FleetError); ok {
+			return &BookingError{"VOUCHER_FAILED", err.Error()}
+		}
+		return err
+	}
+	_, _ = pool.Exec(ctx, `UPDATE booking SET "journalEntryId" = $1 WHERE id = $2`, entryID, bookingID)
+	_ = earnTicketLoyalty(ctx, pool, bookingID, ticketCustomerID, total)
+	if buyerParty != "" {
+		_ = earnUnifiedLoyaltyTicket(ctx, pool, buyerParty, total, "booking:"+bookingID)
+	}
+	return nil
+}
+
 func generateTicketCode() (string, error) {
-	b := make([]byte, 10)
-	if _, err := cryptorand.Read(b); err != nil {
-		return "", err
-	}
-	const alphabet = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789" // no 0/O/1/I ambiguity
-	out := make([]byte, 10)
-	for i := range out {
-		out[i] = alphabet[int(b[i%len(b)])%len(alphabet)]
-	}
-	return "TKT-" + string(out), nil
+	// Same unambiguous alphabet + unbiased sampling as every other Esoko
+	// short code (see fleetqr). Space is 31^10 ≈ 8×10^14 and ticket.code
+	// is @unique, so collisions are not worth a retry loop — a clash
+	// would fail the whole booking transaction, which is vanishingly
+	// unlikely and loud when it ever happens.
+	return "TKT-" + fleetqr.RandomSegment(10), nil
 }
 
 func AttachBookingCheckoutRequestID(ctx context.Context, pool *pgxpool.Pool, bookingID, checkoutRequestID string) error {
@@ -360,12 +583,12 @@ var ErrBookingNotFound = errors.New("no booking for that checkout request")
 // honest placeholder rather than inventing a schema value core-go can't
 // migrate on its own. Flagged, not silent — see the plan this shipped
 // from.
-func ConfirmBookingPaymentByCheckoutID(ctx context.Context, pool *pgxpool.Pool, checkoutRequestID string) error {
-	var bookingID, status, totalKESText, ticketCustomerID string
+func ConfirmBookingPaymentByCheckoutID(ctx context.Context, pool *pgxpool.Pool, checkoutRequestID string, loyaltyEnabled bool) error {
+	var bookingID, status, totalKESText, ticketCustomerID, buyerParty string
 	err := pool.QueryRow(ctx, `
-		SELECT id, status::text, "totalKes"::text, COALESCE("ticketCustomerId"::text, '')
+		SELECT id, status::text, "totalKes"::text, COALESCE("ticketCustomerId"::text, ''), COALESCE("buyerPartyId"::text, '')
 		FROM booking WHERE "mpesaCheckoutRequestId" = $1`, checkoutRequestID).
-		Scan(&bookingID, &status, &totalKESText, &ticketCustomerID)
+		Scan(&bookingID, &status, &totalKESText, &ticketCustomerID, &buyerParty)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return ErrBookingNotFound
 	}
@@ -416,6 +639,9 @@ func ConfirmBookingPaymentByCheckoutID(ctx context.Context, pool *pgxpool.Pool, 
 		return err
 	}
 
+	if buyerParty != "" {
+		_ = loyalty.EarnForSpend(ctx, pool, buyerParty, totalKES, "booking:"+bookingID, loyaltyEnabled)
+	}
 	if ticketCustomerID == "" {
 		return nil
 	}

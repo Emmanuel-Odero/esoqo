@@ -2,14 +2,13 @@ package dbx
 
 import (
 	"context"
-	"crypto/rand"
 	"encoding/json"
 	"errors"
-	"math/big"
-	"strconv"
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
+
+	"github.com/esoko/core-go/internal/fleetqr"
 )
 
 // EnsureEsokoPaymentId ports packages/db/src/dal/payment-id.ts's
@@ -33,9 +32,12 @@ func EnsureEsokoPaymentId(ctx context.Context, pool *pgxpool.Pool, partyID, msis
 		return "", err
 	}
 
-	// Same collision-retry budget as the TS version — 9,000 possible
-	// codes (1000-9999) makes a clash vanishingly unlikely at pilot scale.
-	for attempt := 0; attempt < 3; attempt++ {
+	// The old 4-digit format (ESK-1000-KE..ESK-9999-KE) gives only 9,000
+	// codes — it would exhaust at a ten-thousandth of a million-user
+	// launch. New codes draw from the full 31-char unambiguous alphabet:
+	// ESK-XXXXXX-KE is ~8.87×10^8 shapes, unique-constrained, re-rolled
+	// on a clash. Old codes keep resolving; they're just no longer minted.
+	for attempt := 0; attempt < 5; attempt++ {
 		code, err := generatePaymentIdCode()
 		if err != nil {
 			return "", err
@@ -55,11 +57,7 @@ func EnsureEsokoPaymentId(ctx context.Context, pool *pgxpool.Pool, partyID, msis
 }
 
 func generatePaymentIdCode() (string, error) {
-	n, err := rand.Int(rand.Reader, big.NewInt(9000))
-	if err != nil {
-		return "", err
-	}
-	return "ESK-" + strconv.FormatInt(n.Int64()+1000, 10) + "-KE", nil
+	return "ESK-" + fleetqr.RandomSegment(6) + "-KE", nil
 }
 
 // ensureMsisdnVerifiedAttestation mirrors registration.ts's exact
@@ -112,4 +110,21 @@ func isUniqueViolation(err error) bool {
 		return pgErr.SQLState() == "23505"
 	}
 	return false
+}
+
+// retryUnique re-runs fn up to 5 times, re-rolling ONLY when the failure
+// is a Postgres unique-constraint violation (23505) — the signal that a
+// freshly-minted short code or token collided with an existing row. Any
+// other error stops immediately. The DB's @unique constraints are the
+// single source of truth for code uniqueness; retry is how the minters
+// hold onto that guarantee without ever duplicating a code.
+func retryUnique(fn func() error) error {
+	var err error
+	for attempt := 0; attempt < 5; attempt++ {
+		err = fn()
+		if err == nil || !isUniqueViolation(err) {
+			return err
+		}
+	}
+	return errors.New("could not allocate a unique code — try again")
 }
