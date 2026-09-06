@@ -73,12 +73,18 @@ abstract final class EsokoRadius {
   static const pill = 999.0;
 }
 
+/// Typefaces as named in tokens.css's --font-display/--font body. The
+/// mobile app bundles the Outfit variable font (see pubspec.yaml) and
+/// uses it for the whole app — headings *and* body — so the mobile
+/// voice matches web's --font-display everywhere.
+abstract final class EsokoFonts {
+  /// Display + body typeface, bundled from Google Fonts' "Outfit" (the
+  /// same family tokens.css points --font-display at).
+  static const display = 'Outfit';
+}
+
 /// tokens.css's h1/h2/h3 rule: `font-weight:800; letter-spacing:-.028em;
-/// line-height:1.1`. The web apps also swap in a distinct "Outfit"
-/// display typeface there — this port keeps the platform's default
-/// font (no bundled font assets in this app yet) and carries over the
-/// weight/tracking voice, which is what actually reads as "on brand"
-/// at a glance; introducing a new typeface is a bigger, separate call.
+/// line-height:1.1` — carried onto the bundled Outfit display typeface.
 abstract final class EsokoTypography {
   static const headlineWeight = FontWeight.w800;
   static const headlineHeight = 1.1;
@@ -87,4 +93,50 @@ abstract final class EsokoTypography {
   // (see EsokoTheme's own headline() helper, which multiplies this by
   // each TextStyle's fontSize).
   static const headlineTrackingEm = -0.028;
+}
+
+/// Motion tokens — ported from tokens.css's --dur-* / --ease-out so the
+/// product's transitions stay consistent with web (and with the
+/// prefers-reduced-motion story). Use these, never ad-hoc durations.
+abstract final class EsokoMotion {
+  static const fast = Duration(milliseconds: 120);
+  static const medium = Duration(milliseconds: 200);
+  static const slow = Duration(milliseconds: 320);
+
+  /// tokens.css --ease-out: cubic-bezier(.2,.8,.3,1).
+  static const easeOut = Cubic(0.2, 0.8, 0.3, 1.0);
+
+  /// Curve for press/enter feels — a slight overshoot spring read.
+  static const spring = Curves.easeOutCubic;
+
+  /// Skeleton shimmer sweep period. Long and calm on purpose — a fast
+  /// shimmer reads as "panicking", this one as "working".
+  static const shimmer = Duration(milliseconds: 1400);
+}
+
+/// Shadow + elevation tokens, ported from tokens.css's --sh-* / --e-*.
+/// These give interactive/raised surfaces their "floats above the page"
+/// depth while keeping dense shadows out of the brand's quiet voice.
+abstract final class EsokoShadows {
+  /// --sh-s: resting state for interactive cards.
+  static const card = [
+    BoxShadow(color: Color(0x0D0A2E4D), blurRadius: 2, offset: Offset(0, 1)),
+    BoxShadow(color: Color(0x0D0A2E4D), blurRadius: 14, offset: Offset(0, 4)),
+  ];
+
+  /// --sh-m: the lifted state on hover/press, or floating overlays.
+  static const lifted = [
+    BoxShadow(color: Color(0x1A0A2E4D), blurRadius: 28, offset: Offset(0, 8)),
+  ];
+
+  /// --sh-l: for sheets and modals that read as a distinct layer.
+  static const sheet = [
+    BoxShadow(color: Color(0x2E0A2E4D), blurRadius: 60, offset: Offset(0, 24)),
+  ];
+
+  /// Green primary-action glow — tokens.css .btn-p's
+  /// `box-shadow: 0 2px 8px rgba(18,121,74,.25)`.
+  static const action = [
+    BoxShadow(color: Color(0x407A124B), blurRadius: 8, offset: Offset(0, 2)),
+  ];
 }

@@ -2,19 +2,18 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:geolocator/geolocator.dart';
 
-import '../../core/api/providers.dart';
 import '../../core/theme/esoko_tokens.dart';
 import '../../core/widgets/widgets.dart';
 import 'category_style.dart';
 import 'gradient_thumb.dart';
 import 'shopping_models.dart';
 import 'store_detail_screen.dart';
+import 'stores_repository.dart';
 
-final storesProvider = FutureProvider.autoDispose<List<StoreSummary>>((ref) async {
-  final api = ref.watch(apiClientProvider);
-  final res = await api.get('/v1/stores');
-  final list = (res['stores'] as List?) ?? const [];
-  return list.map((e) => StoreSummary.fromJson(e as Map<String, dynamic>)).toList();
+final storesProvider = FutureProvider.autoDispose<List<StoreSummary>>((
+  ref,
+) async {
+  return ref.watch(storesRepositoryProvider).directory();
 });
 
 typedef _NearbyQuery = ({double? lat, double? lng, String q});
@@ -22,18 +21,14 @@ typedef _NearbyQuery = ({double? lat, double? lng, String q});
 /// GET /v1/stores/nearby — covers both click-and-collect discovery
 /// modes: pass lat/lng for a GPS-sorted "near me" search, or just q for
 /// a neighborhood-text search. See dbx.ListStoresNearby's own comment.
-final nearbyStoresProvider = FutureProvider.autoDispose.family<List<NearbyStore>, _NearbyQuery>((ref, query) async {
-  final api = ref.watch(apiClientProvider);
-  final params = <String, String>{
-    if (query.lat != null) 'lat': query.lat!.toStringAsFixed(6),
-    if (query.lng != null) 'lng': query.lng!.toStringAsFixed(6),
-    if (query.q.isNotEmpty) 'q': query.q,
-  };
-  final qs = params.entries.map((e) => '${e.key}=${Uri.encodeQueryComponent(e.value)}').join('&');
-  final res = await api.get('/v1/stores/nearby${qs.isEmpty ? '' : '?$qs'}');
-  final list = (res['stores'] as List?) ?? const [];
-  return list.map((e) => NearbyStore.fromJson(e as Map<String, dynamic>)).toList();
-});
+final nearbyStoresProvider = FutureProvider.autoDispose
+    .family<List<NearbyStore>, _NearbyQuery>((ref, query) async {
+      return ref.watch(storesRepositoryProvider).nearby(
+            lat: query.lat,
+            lng: query.lng,
+            q: query.q,
+          );
+    });
 
 /// Shopping tab home. Defaults to the plain store directory; a
 /// "Use my location" chip switches to GET /v1/stores/nearby's
@@ -70,9 +65,11 @@ class _StoreListScreenState extends ConsumerState<StoreListScreen> {
       if (permission == LocationPermission.denied) {
         permission = await Geolocator.requestPermission();
       }
-      if (permission == LocationPermission.denied || permission == LocationPermission.deniedForever) {
+      if (permission == LocationPermission.denied ||
+          permission == LocationPermission.deniedForever) {
         setState(() {
-          _locationError = 'Location permission denied — search by neighborhood instead.';
+          _locationError =
+              'Location permission denied — search by neighborhood instead.';
           _locating = false;
         });
         return;
@@ -85,7 +82,9 @@ class _StoreListScreenState extends ConsumerState<StoreListScreen> {
         return;
       }
       final position = await Geolocator.getCurrentPosition(
-        locationSettings: const LocationSettings(accuracy: LocationAccuracy.medium),
+        locationSettings: const LocationSettings(
+          accuracy: LocationAccuracy.medium,
+        ),
       );
       setState(() {
         _position = position;
@@ -93,7 +92,8 @@ class _StoreListScreenState extends ConsumerState<StoreListScreen> {
       });
     } catch (_) {
       setState(() {
-        _locationError = 'Could not get your location — search by neighborhood instead.';
+        _locationError =
+            'Could not get your location — search by neighborhood instead.';
         _locating = false;
       });
     }
@@ -103,7 +103,11 @@ class _StoreListScreenState extends ConsumerState<StoreListScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final query = (lat: _position?.latitude, lng: _position?.longitude, q: _query);
+    final query = (
+      lat: _position?.latitude,
+      lng: _position?.longitude,
+      q: _query,
+    );
     final nearby = ref.watch(nearbyStoresProvider(query));
     final plain = ref.watch(storesProvider);
 
@@ -115,14 +119,23 @@ class _StoreListScreenState extends ConsumerState<StoreListScreen> {
           ref.invalidate(storesProvider);
         }
       },
-      child: CustomScrollView(
+      // Tablet-decent: cap the column at 840 (M3 expanded) so the list
+      // doesn't stretch edge-to-edge on large windows. No-op on phones.
+      child: Center(
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 840),
+          child: CustomScrollView(
         slivers: [
           SliverToBoxAdapter(
             child: Padding(
-              padding: const EdgeInsets.fromLTRB(EsokoSpacing.s5, EsokoSpacing.s5, EsokoSpacing.s5, EsokoSpacing.s2),
-              child: EsokoSectionHeader(
-                title: 'Shop the market',
-                subtitle: 'Shop from home, then collect once it\'s ready — or browse goods, produce and services from stores across Esoko.',
+              padding: const EdgeInsets.fromLTRB(
+                EsokoSpacing.s5,
+                EsokoSpacing.s5,
+                EsokoSpacing.s5,
+                EsokoSpacing.s2,
+              ),
+              child: EsokoPageLead(
+                'Shop from home, then collect once it\'s ready — or browse goods, produce and services from stores across Esoko.',
               ),
             ),
           ),
@@ -132,21 +145,10 @@ class _StoreListScreenState extends ConsumerState<StoreListScreen> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  TextField(
+                  EsokoSearchField(
                     controller: _searchController,
-                    decoration: InputDecoration(
-                      hintText: 'Search by neighbourhood or store — "Kilimani"',
-                      prefixIcon: const Icon(Icons.search_rounded),
-                      suffixIcon: _query.isNotEmpty
-                          ? IconButton(
-                              icon: const Icon(Icons.clear_rounded),
-                              onPressed: () => setState(() {
-                                _searchController.clear();
-                                _query = '';
-                              }),
-                            )
-                          : null,
-                    ),
+                    hint: 'Search by neighbourhood or store — "Kilimani"',
+                    debounce: const Duration(milliseconds: 350),
                     onChanged: (v) => setState(() => _query = v.trim()),
                   ),
                   const SizedBox(height: EsokoSpacing.s3),
@@ -155,10 +157,25 @@ class _StoreListScreenState extends ConsumerState<StoreListScreen> {
                     crossAxisAlignment: WrapCrossAlignment.center,
                     children: [
                       ChoiceChip(
-                        label: Text(_position != null ? 'Using your location' : 'Use my location'),
+                        label: Text(
+                          _position != null
+                              ? 'Using your location'
+                              : 'Use my location',
+                        ),
                         avatar: _locating
-                            ? const SizedBox(width: 14, height: 14, child: CircularProgressIndicator(strokeWidth: 2))
-                            : Icon(_position != null ? Icons.my_location_rounded : Icons.location_searching_rounded, size: 16),
+                            ? const SizedBox(
+                                width: 14,
+                                height: 14,
+                                child: CircularProgressIndicator(
+                                  strokeWidth: 2,
+                                ),
+                              )
+                            : Icon(
+                                _position != null
+                                    ? Icons.my_location_rounded
+                                    : Icons.location_searching_rounded,
+                                size: 16,
+                              ),
                         selected: _position != null,
                         onSelected: (_) {
                           if (_position != null) {
@@ -169,53 +186,61 @@ class _StoreListScreenState extends ConsumerState<StoreListScreen> {
                         },
                       ),
                       if (_position != null)
-                        Text('Sorted by distance', style: TextStyle(fontSize: 12, color: EsokoColors.text2)),
+                        Text(
+                          'Sorted by distance',
+                          style: TextStyle(
+                            fontSize: 12,
+                            color: EsokoColors.text2,
+                          ),
+                        ),
                     ],
                   ),
-                  if (_locationError != null) ...[
-                    const SizedBox(height: EsokoSpacing.s2),
-                    Text(_locationError!, style: TextStyle(fontSize: 12, color: EsokoColors.red)),
-                  ],
+                  if (_locationError != null)
+                    EsokoFormError(message: _locationError!),
                 ],
               ),
             ),
           ),
           const SliverToBoxAdapter(child: SizedBox(height: EsokoSpacing.s2)),
           if (_searching)
-            nearby.when(
-              data: (list) => list.isEmpty
-                  ? const SliverToBoxAdapter(
-                      child: EsokoEmptyState(icon: Icons.storefront_outlined, message: 'No stores match — try a different search.'),
-                    )
-                  : _storeListSliver(list),
-              loading: () => const SliverToBoxAdapter(child: Padding(padding: EdgeInsets.all(EsokoSpacing.s8), child: Center(child: CircularProgressIndicator()))),
-              error: (e, _) => SliverToBoxAdapter(
-                child: EsokoErrorView(message: 'Could not search stores.', onRetry: () => ref.invalidate(nearbyStoresProvider(query))),
-              ),
+            EsokoSliverAsyncView(
+              value: nearby,
+              isEmpty: (list) => list.isEmpty,
+              emptyMessage: 'No stores match — try a different search.',
+              emptyIcon: Icons.storefront_outlined,
+              onRetry: () => ref.invalidate(nearbyStoresProvider(query)),
+              data: (context, list) => [_storeListSliver(list)],
             )
           else
-            plain.when(
-              data: (list) => list.isEmpty
-                  ? const SliverToBoxAdapter(child: EsokoEmptyState(icon: Icons.storefront_outlined, message: 'No stores are open yet.'))
-                  : _storeListSliver(list),
-              loading: () => const SliverToBoxAdapter(child: Padding(padding: EdgeInsets.all(EsokoSpacing.s8), child: Center(child: CircularProgressIndicator()))),
-              error: (e, _) => SliverToBoxAdapter(
-                child: EsokoErrorView(message: 'Could not load stores.', onRetry: () => ref.invalidate(storesProvider)),
-              ),
+            EsokoSliverAsyncView(
+              value: plain,
+              isEmpty: (list) => list.isEmpty,
+              emptyMessage: 'No stores are open yet.',
+              emptyIcon: Icons.storefront_outlined,
+              onRetry: () => ref.invalidate(storesProvider),
+              data: (context, list) => [_storeListSliver(list)],
             ),
           const SliverToBoxAdapter(child: SizedBox(height: EsokoSpacing.s6)),
-        ],
+          ],
+        ),
+        ),
       ),
     );
   }
 
   Widget _storeListSliver(List<StoreSummary> list) {
     return SliverPadding(
-      padding: const EdgeInsets.fromLTRB(EsokoSpacing.s4, EsokoSpacing.s2, EsokoSpacing.s4, EsokoSpacing.s2),
+      padding: const EdgeInsets.fromLTRB(
+        EsokoSpacing.s4,
+        EsokoSpacing.s2,
+        EsokoSpacing.s4,
+        EsokoSpacing.s2,
+      ),
       sliver: SliverList.separated(
         itemCount: list.length,
         separatorBuilder: (_, _) => const SizedBox(height: EsokoSpacing.s3),
-        itemBuilder: (context, i) => _StoreCard(store: list[i]),
+        itemBuilder: (context, i) =>
+            EsokoStagger(index: i, child: _StoreCard(store: list[i])),
       ),
     );
   }
@@ -228,7 +253,9 @@ class _StoreCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final style = CategoryStyle.forCategory(store.primaryCategory);
-    final distance = store is NearbyStore ? (store as NearbyStore).distanceKm : null;
+    final distance = store is NearbyStore
+        ? (store as NearbyStore).distanceKm
+        : null;
     return EsokoCard(
       onTap: () => Navigator.of(context).push(
         MaterialPageRoute(builder: (_) => StoreDetailScreen(slug: store.slug)),
@@ -236,13 +263,19 @@ class _StoreCard extends StatelessWidget {
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          SizedBox(
-            width: 64,
-            height: 64,
-            child: GradientThumb(
-              category: store.primaryCategory,
-              borderRadius: BorderRadius.circular(EsokoRadius.md),
-              iconSize: 28,
+          Hero(
+            tag: 'store-hero-${store.slug}',
+            child: Material(
+              color: Colors.transparent,
+              child: SizedBox(
+                width: 64,
+                height: 64,
+                child: GradientThumb(
+                  category: store.primaryCategory,
+                  borderRadius: BorderRadius.circular(EsokoRadius.md),
+                  iconSize: 28,
+                ),
+              ),
             ),
           ),
           const SizedBox(width: EsokoSpacing.s4),
@@ -250,7 +283,13 @@ class _StoreCard extends StatelessWidget {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(store.name, style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 16)),
+                Text(
+                  store.name,
+                  style: const TextStyle(
+                    fontWeight: FontWeight.w700,
+                    fontSize: 16,
+                  ),
+                ),
                 const SizedBox(height: EsokoSpacing.s1),
                 if (store.neighborhood != null || distance != null)
                   Text(
@@ -263,10 +302,19 @@ class _StoreCard extends StatelessWidget {
                     style: TextStyle(color: EsokoColors.text2, fontSize: 12),
                   )
                 else if (store.tagline != null)
-                  Text(store.tagline!, maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(color: EsokoColors.text2)),
+                  Text(
+                    store.tagline!,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(color: EsokoColors.text2),
+                  ),
                 const SizedBox(height: EsokoSpacing.s2),
                 if (store.primaryCategory != null)
-                  EsokoStatusPill(label: store.primaryCategory!, color: style.gradient.last, icon: style.icon),
+                  EsokoStatusPill(
+                    label: store.primaryCategory!,
+                    color: style.gradient.last,
+                    icon: style.icon,
+                  ),
               ],
             ),
           ),
@@ -276,5 +324,6 @@ class _StoreCard extends StatelessWidget {
     );
   }
 
-  String _formatDistance(double km) => km < 1 ? '${(km * 1000).round()} m' : '${km.toStringAsFixed(1)} km';
+  String _formatDistance(double km) =>
+      km < 1 ? '${(km * 1000).round()} m' : '${km.toStringAsFixed(1)} km';
 }

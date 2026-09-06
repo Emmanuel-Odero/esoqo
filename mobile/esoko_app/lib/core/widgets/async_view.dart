@@ -2,8 +2,10 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../api/api_exception.dart';
+import '../theme/esoko_tokens.dart';
 import 'esoko_empty_state.dart';
 import 'esoko_error_view.dart';
+import 'esoko_skeleton.dart';
 
 /// The shared shape for "a screen watching one FutureProvider" — every
 /// screen used to write its own `provider.when(loading: ..., error:
@@ -39,18 +41,36 @@ class EsokoAsyncView<T> extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final Widget child;
+    final String state;
     if (value.hasValue) {
       final v = value.requireValue;
       if (isEmpty != null && emptyMessage != null && isEmpty!(v)) {
-        return EsokoEmptyState(message: emptyMessage!, icon: emptyIcon);
+        state = 'empty';
+        child = EsokoEmptyState(message: emptyMessage!, icon: emptyIcon);
+      } else {
+        state = 'data';
+        child = data(context, v);
       }
-      return data(context, v);
-    }
-    if (value.hasError) {
+    } else if (value.hasError) {
       final error = value.error;
       final message = error is ApiException ? error.message : 'Something went wrong. Pull to retry.';
-      return EsokoErrorView(message: message, onRetry: onRetry);
+      state = 'error';
+      child = EsokoErrorView(message: message, onRetry: onRetry);
+    } else {
+      state = 'loading';
+      child = const EsokoSkeletonList();
     }
-    return const Center(child: CircularProgressIndicator());
+    // Cross-fade between lifecycle states (skeleton → data, data →
+    // error) instead of snapping — the transition itself is part of the
+    // polish. Keyed by state so a data→data refresh doesn't replay it,
+    // and skipped entirely under reduced motion.
+    final reduced = MediaQuery.disableAnimationsOf(context);
+    return AnimatedSwitcher(
+      duration: reduced ? Duration.zero : EsokoMotion.medium,
+      switchInCurve: EsokoMotion.easeOut,
+      switchOutCurve: EsokoMotion.easeOut,
+      child: KeyedSubtree(key: ValueKey(state), child: child),
+    );
   }
 }

@@ -104,19 +104,12 @@ class _OtpSignInScreenState extends ConsumerState<OtpSignInScreen> {
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
                   ..._stepFields(),
-                  if (_error != null) ...[
-                    const SizedBox(height: EsokoSpacing.s2),
-                    Text(_error!, style: TextStyle(color: EsokoColors.red)),
-                  ],
+                  if (_error != null) EsokoFormError(message: _error!),
                   const SizedBox(height: EsokoSpacing.s4),
-                  FilledButton(
-                    onPressed: _loading ? null : _onPrimaryAction,
-                    child: _loading
-                        ? const SizedBox(
-                            height: 20, width: 20,
-                            child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
-                          )
-                        : Text(_primaryLabel),
+                  EsokoLoadingButton(
+                    label: _primaryLabel,
+                    loading: _loading,
+                    onPressed: _onPrimaryAction,
                   ),
                 ],
               ),
@@ -133,33 +126,43 @@ class _OtpSignInScreenState extends ConsumerState<OtpSignInScreen> {
         return [
           const Text('Enter your phone number and we\'ll send you a code.'),
           const SizedBox(height: EsokoSpacing.s4),
-          TextField(
+          EsokoFormField(
             controller: _msisdnController,
+            label: 'Phone number',
+            hint: '+254 7…',
             keyboardType: TextInputType.phone,
-            decoration: const InputDecoration(labelText: 'Phone number', hintText: '+254 7…'),
+            textInputAction: TextInputAction.done,
+            autofillHints: const [AutofillHints.telephoneNumber],
+            onSubmitted: (_) => _requestCode(),
           ),
         ];
       case _Step.code:
         return [
           Text('Enter the code sent to ${_msisdnController.text.trim()}.'),
           const SizedBox(height: EsokoSpacing.s4),
-          TextField(
+          EsokoFormField(
             controller: _codeController,
+            label: '6-digit code',
             keyboardType: TextInputType.number,
+            textInputAction: TextInputAction.done,
+            autofillHints: const [AutofillHints.oneTimeCode],
             maxLength: 6,
-            decoration: const InputDecoration(labelText: '6-digit code'),
+            onSubmitted: (_) => _verifyCode(),
           ),
         ];
       case _Step.setPin:
         return [
           const Text('You\'re signed in. Set a PIN now for faster sign-in next time.'),
           const SizedBox(height: EsokoSpacing.s4),
-          TextField(
+          EsokoFormField(
             controller: _pinController,
+            label: 'New PIN (4–6 digits)',
             obscureText: true,
             keyboardType: TextInputType.number,
+            textInputAction: TextInputAction.done,
+            autofillHints: const [AutofillHints.newPassword],
             maxLength: 6,
-            decoration: const InputDecoration(labelText: 'New PIN (4–6 digits)'),
+            onSubmitted: (_) => _savePin(),
           ),
         ];
     }

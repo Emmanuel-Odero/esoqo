@@ -18,9 +18,11 @@ import 'package:flutter/material.dart';
 /// place to grow from later (a subtitle, a consistent action-icon
 /// treatment) without another sweep through every screen.
 class EsokoAppBar extends StatelessWidget implements PreferredSizeWidget {
-  const EsokoAppBar({super.key, required this.title, this.actions, this.leading, this.centerTitle});
+  const EsokoAppBar({super.key, required this.title, this.titleWidget, this.actions, this.leading, this.centerTitle});
 
   final String title;
+  /// Replaces [title] with a custom widget (e.g. a brand lockup) when set.
+  final Widget? titleWidget;
   final List<Widget>? actions;
   final Widget? leading;
   final bool? centerTitle;
@@ -28,7 +30,7 @@ class EsokoAppBar extends StatelessWidget implements PreferredSizeWidget {
   @override
   Widget build(BuildContext context) {
     return AppBar(
-      title: Text(title, overflow: TextOverflow.ellipsis),
+      title: titleWidget ?? Text(title, overflow: TextOverflow.ellipsis),
       actions: actions,
       leading: leading,
       centerTitle: centerTitle,

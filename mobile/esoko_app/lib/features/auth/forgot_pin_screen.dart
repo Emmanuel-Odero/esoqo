@@ -87,42 +87,44 @@ class _ForgotPinScreenState extends ConsumerState<ForgotPinScreen> {
                   if (_step == _Step.phone) ...[
                     const Text('Enter the phone number on your Esoko account.'),
                     const SizedBox(height: EsokoSpacing.s4),
-                    TextField(
+                    EsokoFormField(
                       controller: _msisdnController,
+                      label: 'Phone number',
+                      hint: '+254 7…',
                       keyboardType: TextInputType.phone,
-                      decoration: const InputDecoration(labelText: 'Phone number', hintText: '+254 7…'),
+                      textInputAction: TextInputAction.done,
+                      autofillHints: const [AutofillHints.telephoneNumber],
+                      onSubmitted: (_) => _requestCode(),
                     ),
                   ] else ...[
                     Text('Enter the code sent to ${_msisdnController.text.trim()} and choose a new PIN.'),
                     const SizedBox(height: EsokoSpacing.s4),
-                    TextField(
+                    EsokoFormField(
                       controller: _codeController,
+                      label: '6-digit code',
                       keyboardType: TextInputType.number,
+                      textInputAction: TextInputAction.next,
+                      autofillHints: const [AutofillHints.oneTimeCode],
                       maxLength: 6,
-                      decoration: const InputDecoration(labelText: '6-digit code'),
                     ),
                     const SizedBox(height: EsokoSpacing.s3),
-                    TextField(
+                    EsokoFormField(
                       controller: _pinController,
+                      label: 'New PIN (4–6 digits)',
                       obscureText: true,
                       keyboardType: TextInputType.number,
+                      textInputAction: TextInputAction.done,
+                      autofillHints: const [AutofillHints.newPassword],
                       maxLength: 6,
-                      decoration: const InputDecoration(labelText: 'New PIN (4–6 digits)'),
+                      onSubmitted: (_) => _resetPin(),
                     ),
                   ],
-                  if (_error != null) ...[
-                    const SizedBox(height: EsokoSpacing.s2),
-                    Text(_error!, style: TextStyle(color: EsokoColors.red)),
-                  ],
+                  if (_error != null) EsokoFormError(message: _error!),
                   const SizedBox(height: EsokoSpacing.s4),
-                  FilledButton(
-                    onPressed: _loading ? null : (_step == _Step.phone ? _requestCode : _resetPin),
-                    child: _loading
-                        ? const SizedBox(
-                            height: 20, width: 20,
-                            child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
-                          )
-                        : Text(_step == _Step.phone ? 'Send code' : 'Save new PIN'),
+                  EsokoLoadingButton(
+                    label: _step == _Step.phone ? 'Send code' : 'Save new PIN',
+                    loading: _loading,
+                    onPressed: _step == _Step.phone ? _requestCode : _resetPin,
                   ),
                 ],
               ),

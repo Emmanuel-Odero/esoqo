@@ -7,7 +7,12 @@ import '../../core/theme/esoko_tokens.dart';
 /// Deliberately not backed by fabricated sample data: better an
 /// admittedly-empty screen than a fake chama balance nobody can trust.
 class ComingSoonScreen extends StatelessWidget {
-  const ComingSoonScreen({super.key, required this.title, required this.icon, required this.description});
+  const ComingSoonScreen({
+    super.key,
+    required this.title,
+    required this.icon,
+    required this.description,
+  });
 
   final String title;
   final IconData icon;

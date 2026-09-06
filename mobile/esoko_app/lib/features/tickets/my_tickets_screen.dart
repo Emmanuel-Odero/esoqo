@@ -2,17 +2,14 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:qr_flutter/qr_flutter.dart';
 
-import '../../core/api/providers.dart';
 import '../../core/theme/esoko_tokens.dart';
 import '../../core/widgets/widgets.dart';
 import 'ticketing_models.dart';
+import 'ticketing_repository.dart';
 
-final myTicketsProvider = FutureProvider.autoDispose<List<TicketRow>>((ref) async {
-  final api = ref.watch(apiClientProvider);
-  final res = await api.get('/v1/me/tickets');
-  final list = (res['tickets'] as List?) ?? const [];
-  return list.map((e) => TicketRow.fromJson(e as Map<String, dynamic>)).toList();
-});
+final myTicketsProvider = FutureProvider.autoDispose<List<TicketRow>>(
+  (ref) => ref.watch(ticketingRepositoryProvider).myTickets(),
+);
 
 /// GET /v1/me/tickets (authenticated) — every ticket ever issued to this
 /// signed-in person, styled as a tear-off stub and QR-coded by its
@@ -26,17 +23,25 @@ class MyTicketsScreen extends ConsumerWidget {
     final tickets = ref.watch(myTicketsProvider);
     return Scaffold(
       appBar: const EsokoAppBar(title: 'My tickets'),
-      body: EsokoAsyncView(
-        value: tickets,
-        isEmpty: (list) => list.isEmpty,
-        emptyMessage: 'No tickets yet.',
-        emptyIcon: Icons.confirmation_num_outlined,
-        onRetry: () => ref.invalidate(myTicketsProvider),
-        data: (context, list) => ListView.separated(
-          padding: const EdgeInsets.all(EsokoSpacing.s4),
-          itemCount: list.length,
-          separatorBuilder: (_, _) => const SizedBox(height: EsokoSpacing.s5),
-          itemBuilder: (context, i) => _TicketStub(ticket: list[i]),
+      body: RefreshIndicator(
+        onRefresh: () async => ref.invalidate(myTicketsProvider),
+        child: EsokoAsyncView(
+          value: tickets,
+          isEmpty: (list) => list.isEmpty,
+          emptyMessage: 'No tickets yet.',
+          emptyIcon: Icons.confirmation_num_outlined,
+          onRetry: () => ref.invalidate(myTicketsProvider),
+          data: (context, list) => Center(
+            child: ConstrainedBox(
+              constraints: const BoxConstraints(maxWidth: 840),
+              child: ListView.separated(
+                padding: const EdgeInsets.all(EsokoSpacing.s4),
+                itemCount: list.length,
+                separatorBuilder: (_, _) => const SizedBox(height: EsokoSpacing.s5),
+                itemBuilder: (context, i) => EsokoStagger(index: i, child: _TicketStub(ticket: list[i])),
+              ),
+            ),
+          ),
         ),
       ),
     );
@@ -101,24 +106,31 @@ class _TicketStub extends StatelessWidget {
                       ],
                     ),
                   ),
-                Container(
-                  padding: const EdgeInsets.all(EsokoSpacing.s3),
-                  decoration: BoxDecoration(
-                    border: Border.all(color: EsokoColors.line),
-                    borderRadius: BorderRadius.circular(EsokoRadius.md),
+                Semantics(
+                  // A QR means nothing to a screen reader — expose the
+                  // same check-in payload as labelled text instead.
+                  label: valid
+                      ? 'Ticket QR code for ${ticket.className}, code ${ticket.code}'
+                      : 'Expired ticket for ${ticket.className}',
+                  child: Container(
+                    padding: const EdgeInsets.all(EsokoSpacing.s3),
+                    decoration: BoxDecoration(
+                      border: Border.all(color: EsokoColors.line),
+                      borderRadius: BorderRadius.circular(EsokoRadius.md),
+                    ),
+                    child: valid
+                        ? QrImageView(data: ticket.code, size: 148, backgroundColor: Colors.white)
+                        : SizedBox(
+                            width: 148,
+                            height: 148,
+                            child: Icon(Icons.block_flipped, size: 48, color: EsokoColors.line),
+                          ),
                   ),
-                  child: valid
-                      ? QrImageView(data: ticket.code, size: 148, backgroundColor: Colors.white)
-                      : SizedBox(
-                          width: 148,
-                          height: 148,
-                          child: Icon(Icons.block_flipped, size: 48, color: EsokoColors.line),
-                        ),
                 ),
                 const SizedBox(height: EsokoSpacing.s3),
                 SelectableText(ticket.code, style: const TextStyle(fontFamily: 'monospace', fontWeight: FontWeight.w700, letterSpacing: 1)),
                 const SizedBox(height: EsokoSpacing.s1),
-                Text('KES ${ticket.priceKes}', style: TextStyle(color: EsokoColors.green, fontWeight: FontWeight.w700)),
+                EsokoAmountText(ticket.priceKes, fontSize: 14),
               ],
             ),
           ),

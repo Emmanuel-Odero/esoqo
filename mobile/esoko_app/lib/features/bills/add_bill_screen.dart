@@ -2,10 +2,10 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/api/api_exception.dart';
-import '../../core/api/providers.dart';
 import '../../core/theme/esoko_tokens.dart';
 import '../../core/widgets/widgets.dart';
 import 'bill_models.dart';
+import 'bills_repository.dart';
 
 class AddBillScreen extends ConsumerStatefulWidget {
   const AddBillScreen({super.key});
@@ -44,15 +44,16 @@ class _AddBillScreenState extends ConsumerState<AddBillScreen> {
       _error = null;
     });
     try {
-      final api = ref.read(apiClientProvider);
-      await api.post('/v1/me/bills', {
-        'label': _labelController.text.trim(),
-        'category': _category,
-        if (_accountRefController.text.trim().isNotEmpty) 'accountRef': _accountRefController.text.trim(),
-        if (_amountController.text.trim().isNotEmpty) 'amountKes': double.tryParse(_amountController.text.trim()),
-        'cycle': _cycle,
-        'nextDueAt': _nextDueAt.toUtc().toIso8601String(),
-      });
+      await ref
+          .read(billsRepositoryProvider)
+          .addBill(
+            label: _labelController.text.trim(),
+            category: _category,
+            accountRef: _accountRefController.text.trim(),
+            amountKes: double.tryParse(_amountController.text.trim()),
+            cycle: _cycle,
+            nextDueAt: _nextDueAt,
+          );
       if (mounted) Navigator.of(context).pop(true);
     } on ApiException catch (e) {
       setState(() => _error = e.message);
@@ -74,53 +75,65 @@ class _AddBillScreenState extends ConsumerState<AddBillScreen> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
-                  TextField(
+                  EsokoFormField(
                     controller: _labelController,
-                    decoration: const InputDecoration(labelText: 'Name', hintText: 'e.g. KPLC — home'),
+                    label: 'Name',
+                    hint: 'e.g. KPLC — home',
+                    textInputAction: TextInputAction.next,
                   ),
                   const SizedBox(height: EsokoSpacing.s3),
-                  DropdownButtonFormField<String>(
+                  EsokoDropdown<String>(
+                    label: 'Category',
                     initialValue: _category,
-                    decoration: const InputDecoration(labelText: 'Category'),
-                    items: [for (final c in billCategories) DropdownMenuItem(value: c.$1, child: Text(c.$2))],
-                    onChanged: (v) => setState(() => _category = v ?? _category),
+                    items: [
+                      for (final c in billCategories)
+                        DropdownMenuItem(value: c.$1, child: Text(c.$2)),
+                    ],
+                    onChanged: (v) =>
+                        setState(() => _category = v ?? _category),
                   ),
                   const SizedBox(height: EsokoSpacing.s3),
-                  TextField(
+                  EsokoFormField(
                     controller: _accountRefController,
-                    decoration: const InputDecoration(labelText: 'Account / meter number (optional)'),
+                    label: 'Account / meter number (optional)',
+                    textInputAction: TextInputAction.next,
                   ),
                   const SizedBox(height: EsokoSpacing.s3),
-                  TextField(
+                  EsokoFormField(
                     controller: _amountController,
-                    keyboardType: const TextInputType.numberWithOptions(decimal: true),
-                    decoration: const InputDecoration(labelText: 'Usual amount, KES (optional)', hintText: 'Leave blank if it varies'),
+                    label: 'Usual amount, KES (optional)',
+                    hint: 'Leave blank if it varies',
+                    keyboardType: const TextInputType.numberWithOptions(
+                      decimal: true,
+                    ),
+                    textInputAction: TextInputAction.done,
                   ),
                   const SizedBox(height: EsokoSpacing.s3),
-                  DropdownButtonFormField<String>(
+                  EsokoDropdown<String>(
+                    label: 'Repeats',
                     initialValue: _cycle,
-                    decoration: const InputDecoration(labelText: 'Repeats'),
-                    items: [for (final c in billCycles) DropdownMenuItem(value: c.$1, child: Text(c.$2))],
+                    items: [
+                      for (final c in billCycles)
+                        DropdownMenuItem(value: c.$1, child: Text(c.$2)),
+                    ],
                     onChanged: (v) => setState(() => _cycle = v ?? _cycle),
                   ),
                   const SizedBox(height: EsokoSpacing.s3),
                   ListTile(
                     contentPadding: EdgeInsets.zero,
                     title: const Text('Next due date'),
-                    subtitle: Text('${_nextDueAt.year}-${_nextDueAt.month.toString().padLeft(2, '0')}-${_nextDueAt.day.toString().padLeft(2, '0')}'),
+                    subtitle: Text(
+                      '${_nextDueAt.year}-${_nextDueAt.month.toString().padLeft(2, '0')}-${_nextDueAt.day.toString().padLeft(2, '0')}',
+                    ),
                     trailing: const Icon(Icons.calendar_today_outlined),
                     onTap: _pickDate,
                   ),
-                  if (_error != null) ...[
-                    const SizedBox(height: EsokoSpacing.s2),
-                    Text(_error!, style: TextStyle(color: EsokoColors.red)),
-                  ],
+                  if (_error != null) EsokoFormError(message: _error!),
                   const SizedBox(height: EsokoSpacing.s5),
-                  FilledButton(
-                    onPressed: _loading ? null : _save,
-                    child: _loading
-                        ? const SizedBox(height: 20, width: 20, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
-                        : const Text('Save bill'),
+                  EsokoLoadingButton(
+                    label: 'Save bill',
+                    loading: _loading,
+                    onPressed: _save,
                   ),
                 ],
               ),

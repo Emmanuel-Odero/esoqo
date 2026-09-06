@@ -3,16 +3,14 @@ import 'package:flutter/services.dart' show Clipboard, ClipboardData;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:url_launcher/url_launcher.dart';
 
-import '../../core/api/providers.dart';
 import '../../core/theme/esoko_tokens.dart';
 import '../../core/widgets/widgets.dart';
 import 'shopping_models.dart';
+import 'stores_repository.dart';
 
-final orderDetailProvider = FutureProvider.autoDispose.family<OrderStatus, String>((ref, orderId) async {
-  final api = ref.watch(apiClientProvider);
-  final res = await api.get('/v1/orders/$orderId');
-  return OrderStatus.fromJson(res);
-});
+final orderDetailProvider = FutureProvider.autoDispose.family<OrderStatus, String>(
+  (ref, orderId) => ref.watch(storesRepositoryProvider).order(orderId),
+);
 
 /// One order's status — placed, paid, ready for pickup (with the
 /// collection code), or already collected. GET /v1/orders/:id is
@@ -47,37 +45,36 @@ class OrderDetailScreen extends ConsumerWidget {
       child: ListView(
         padding: const EdgeInsets.all(EsokoSpacing.s5),
         children: [
-          Text(o.storeName, style: Theme.of(context).textTheme.headlineSmall),
-          const SizedBox(height: EsokoSpacing.s1),
-          Text('KES ${o.totalKes} · placed ${_formatDate(o.createdAt)}', style: TextStyle(color: EsokoColors.text2)),
-          const SizedBox(height: EsokoSpacing.s6),
-          if (o.isPickup) _timeline(o) else _deliveryStatus(o),
-          if (o.isPickup && (o.status == 'READY_FOR_PICKUP' || o.status == 'FULFILLED')) ...[
-            const SizedBox(height: EsokoSpacing.s6),
-            _pickupCodeCard(context, o),
-          ],
-          if (o.isPickup && o.storeNeighborhood != null) ...[
-            const SizedBox(height: EsokoSpacing.s5),
-            _directionsCard(o),
-          ],
+          EsokoAdaptiveBody(
+            padding: EdgeInsets.zero,
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(o.storeName, style: Theme.of(context).textTheme.headlineSmall),
+                const SizedBox(height: EsokoSpacing.s1),
+                Text('KES ${o.totalKes} · placed ${_formatDate(o.createdAt)}', style: TextStyle(color: EsokoColors.text2)),
+                const SizedBox(height: EsokoSpacing.s6),
+                if (o.isPickup) _timeline(o) else _deliveryStatus(o),
+                if (o.isPickup && (o.status == 'READY_FOR_PICKUP' || o.status == 'FULFILLED')) ...[
+                  const SizedBox(height: EsokoSpacing.s6),
+                  _pickupCodeCard(context, o),
+                ],
+                if (o.isPickup && o.storeNeighborhood != null) ...[
+                  const SizedBox(height: EsokoSpacing.s5),
+                  _directionsCard(o),
+                ],
+              ],
+            ),
+          ),
         ],
       ),
     );
   }
 
   Widget _cancelled(BuildContext context, OrderStatus o) {
-    return Center(
-      child: Padding(
-        padding: const EdgeInsets.all(EsokoSpacing.s8),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(Icons.cancel_outlined, size: 40, color: EsokoColors.text3),
-            const SizedBox(height: EsokoSpacing.s3),
-            Text('This order was cancelled.', style: TextStyle(color: EsokoColors.text2)),
-          ],
-        ),
-      ),
+    return const EsokoEmptyState(
+      icon: Icons.cancel_outlined,
+      message: 'This order was cancelled.',
     );
   }
 
@@ -167,6 +164,7 @@ class OrderDetailScreen extends ConsumerWidget {
           const SizedBox(height: EsokoSpacing.s3),
           GestureDetector(
             onTap: () {
+              EsokoHaptics.confirm();
               Clipboard.setData(ClipboardData(text: o.pickupCode ?? ''));
               ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Pickup code copied')));
             },

@@ -4,19 +4,18 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/api/api_exception.dart';
-import '../../core/api/providers.dart';
 import '../../core/auth/auth_controller.dart';
 import '../../core/auth/auth_state.dart';
 import '../../core/theme/esoko_tokens.dart';
 import '../../core/widgets/widgets.dart';
 import 'ticketing_models.dart';
+import 'ticketing_repository.dart';
 
 final scheduleSeatsProvider = FutureProvider.autoDispose
-    .family<SeatMapResult, String>((ref, scheduleId) async {
-      final api = ref.watch(apiClientProvider);
-      final res = await api.get('/v1/schedules/$scheduleId/seats');
-      return SeatMapResult.fromJson(res);
-    });
+    .family<SeatMapResult, String>(
+      (ref, scheduleId) =>
+          ref.watch(ticketingRepositoryProvider).seats(scheduleId),
+    );
 
 enum _Stage { pick, details, waiting, done, failed }
 
@@ -50,6 +49,8 @@ class _ScheduleBookingScreenState extends ConsumerState<ScheduleBookingScreen> {
 
   final _nameController = TextEditingController();
   final _msisdnController = TextEditingController();
+  final _voucherCodeController = TextEditingController();
+  String _method = 'MPESA_STK';
 
   @override
   void initState() {
@@ -69,6 +70,7 @@ class _ScheduleBookingScreenState extends ConsumerState<ScheduleBookingScreen> {
     _pollTimer?.cancel();
     _nameController.dispose();
     _msisdnController.dispose();
+    _voucherCodeController.dispose();
     super.dispose();
   }
 
@@ -80,22 +82,31 @@ class _ScheduleBookingScreenState extends ConsumerState<ScheduleBookingScreen> {
       _error = null;
     });
     try {
-      final api = ref.read(apiClientProvider);
-      final res = await api.post('/v1/bookings', {
-        'scheduleId': widget.scheduleId,
-        'buyerName': _nameController.text.trim(),
-        'buyerMsisdn': _msisdnController.text.trim(),
-        'lines': [
-          {
-            'ticketClassId': tc.id,
-            if (_selectedSeatId != null) 'seatId': _selectedSeatId,
-            'quantity': tc.seated ? 1 : _quantity,
-          },
-        ],
-      });
-      _bookingId = res['bookingId'] as String?;
-      _totalKes = res['totalKes'] as String?;
-      if (res['status'] == 'PAID') {
+      final repo = ref.read(ticketingRepositoryProvider);
+      String? voucherId;
+      if (_method == 'VOUCHER') {
+        voucherId = await repo.resolveVoucherCode(_voucherCodeController.text);
+        if (voucherId == null) {
+          setState(() {
+            _stage = _Stage.failed;
+            _error = 'Voucher not found — check the code.';
+          });
+          return;
+        }
+      }
+      final placed = await repo.placeBooking(
+        scheduleId: widget.scheduleId,
+        ticketClassId: tc.id,
+        seatId: _selectedSeatId,
+        quantity: tc.seated ? 1 : _quantity,
+        buyerName: _nameController.text.trim(),
+        buyerMsisdn: _msisdnController.text.trim(),
+        paymentMethod: _method,
+        voucherId: voucherId,
+      );
+      _bookingId = placed.bookingId;
+      _totalKes = placed.totalKes;
+      if (placed.paid) {
         setState(() => _stage = _Stage.done);
         return;
       }
@@ -114,13 +125,19 @@ class _ScheduleBookingScreenState extends ConsumerState<ScheduleBookingScreen> {
       attempts++;
       if (_bookingId == null || attempts > 15) {
         timer.cancel();
+        // Don't strand the user on an indefinite spinner — surface a
+        // recoverable failure with retry (same contract as checkout).
+        if (mounted && _stage == _Stage.waiting) {
+          setState(() {
+            _stage = _Stage.failed;
+            _error = 'We could not confirm your M-Pesa payment. If you were charged, it will appear in My tickets — otherwise try again.';
+          });
+        }
         return;
       }
       try {
-        final api = ref.read(apiClientProvider);
-        final res = await api.get('/v1/bookings/$_bookingId');
-        final booking = res['booking'] as Map<String, dynamic>?;
-        if (booking?['Status'] == 'PAID') {
+        final repo = ref.read(ticketingRepositoryProvider);
+        if (await repo.isBookingPaid(_bookingId!)) {
           timer.cancel();
           if (mounted) setState(() => _stage = _Stage.done);
         }
@@ -132,6 +149,7 @@ class _ScheduleBookingScreenState extends ConsumerState<ScheduleBookingScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final reduced = MediaQuery.disableAnimationsOf(context);
     return Scaffold(
       appBar: EsokoAppBar(title: widget.listingTitle),
       body: SafeArea(
@@ -140,7 +158,17 @@ class _ScheduleBookingScreenState extends ConsumerState<ScheduleBookingScreen> {
             constraints: const BoxConstraints(maxWidth: 480),
             child: Padding(
               padding: const EdgeInsets.all(EsokoSpacing.s5),
-              child: _body(),
+              // Same contract as checkout: the stage machine
+              // cross-fades, money never visually jumps.
+              child: AnimatedSwitcher(
+                duration: reduced ? Duration.zero : EsokoMotion.medium,
+                switchInCurve: EsokoMotion.easeOut,
+                switchOutCurve: EsokoMotion.easeOut,
+                child: KeyedSubtree(
+                  key: ValueKey(_stage),
+                  child: _body(),
+                ),
+              ),
             ),
           ),
         ),
@@ -155,81 +183,23 @@ class _ScheduleBookingScreenState extends ConsumerState<ScheduleBookingScreen> {
       case _Stage.details:
         return _detailsStage();
       case _Stage.waiting:
-        return Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            EsokoStatusBadge(
-              icon: Icons.phone_android_rounded,
-              color: EsokoColors.blue,
-              spinning: true,
-            ),
-            const SizedBox(height: EsokoSpacing.s5),
-            Text(
-              'Complete payment on your phone',
-              style: Theme.of(context).textTheme.titleMedium,
-              textAlign: TextAlign.center,
-            ),
-            const SizedBox(height: EsokoSpacing.s2),
-            Text(
-              'Enter your M-Pesa PIN when the prompt arrives.',
-              style: TextStyle(color: EsokoColors.text2),
-              textAlign: TextAlign.center,
-            ),
-            if (_totalKes != null) ...[
-              const SizedBox(height: EsokoSpacing.s4),
-              Text(
-                'KES $_totalKes',
-                style: TextStyle(
-                  color: EsokoColors.green,
-                  fontWeight: FontWeight.bold,
-                  fontSize: 18,
-                ),
-              ),
-            ],
-          ],
+        return EsokoResultView.waiting(
+          title: 'Complete payment on your phone',
+          message: 'Enter your M-Pesa PIN when the prompt arrives.',
+          amountKes: _totalKes,
         );
       case _Stage.done:
-        return Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            EsokoStatusBadge(
-              icon: Icons.check_rounded,
-              color: EsokoColors.green,
-            ),
-            const SizedBox(height: EsokoSpacing.s4),
-            Text(
-              'Booking confirmed',
-              style: Theme.of(context).textTheme.headlineSmall,
-            ),
-            const SizedBox(height: EsokoSpacing.s2),
-            Text(
-              'Find your ticket QR any time under Tickets → My tickets.',
-              textAlign: TextAlign.center,
-              style: TextStyle(color: EsokoColors.text2),
-            ),
-            const SizedBox(height: EsokoSpacing.s6),
-            FilledButton(
-              onPressed: () => Navigator.of(context).popUntil((r) => r.isFirst),
-              child: const Text('Done'),
-            ),
-          ],
+        return EsokoResultView.success(
+          title: 'Booking confirmed',
+          message: 'Find your ticket QR any time under Tickets → My tickets.',
+          primaryLabel: 'Done',
+          onPrimary: () => Navigator.of(context).popUntil((r) => r.isFirst),
         );
       case _Stage.failed:
-        return Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            EsokoStatusBadge(
-              icon: Icons.priority_high_rounded,
-              color: EsokoColors.red,
-            ),
-            const SizedBox(height: EsokoSpacing.s4),
-            Text(_error ?? 'Something went wrong', textAlign: TextAlign.center),
-            const SizedBox(height: EsokoSpacing.s5),
-            OutlinedButton(
-              onPressed: () => setState(() => _stage = _Stage.pick),
-              child: const Text('Start over'),
-            ),
-          ],
+        return EsokoResultView.failure(
+          errorMessage: _error ?? 'Something went wrong',
+          primaryLabel: 'Start over',
+          onPrimary: () => setState(() => _stage = _Stage.pick),
         );
     }
   }
@@ -248,10 +218,13 @@ class _ScheduleBookingScreenState extends ConsumerState<ScheduleBookingScreen> {
           _TicketClassOption(
             ticketClass: c,
             selected: tc?.id == c.id,
-            onTap: () => setState(() {
-              _selectedClass = c;
-              _selectedSeatId = null;
-            }),
+            onTap: () {
+              EsokoHaptics.tap();
+              setState(() {
+                _selectedClass = c;
+                _selectedSeatId = null;
+              });
+            },
           ),
         if (tc != null && tc.seated) ...[
           const SizedBox(height: EsokoSpacing.s4),
@@ -263,34 +236,9 @@ class _ScheduleBookingScreenState extends ConsumerState<ScheduleBookingScreen> {
           Text('Quantity', style: Theme.of(context).textTheme.titleMedium),
           const SizedBox(height: EsokoSpacing.s2),
           Center(
-            child: Container(
-              decoration: BoxDecoration(
-                border: Border.all(color: EsokoColors.line),
-                borderRadius: BorderRadius.circular(EsokoRadius.pill),
-              ),
-              child: Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  IconButton(
-                    onPressed: _quantity > 1
-                        ? () => setState(() => _quantity--)
-                        : null,
-                    icon: const Icon(Icons.remove),
-                  ),
-                  SizedBox(
-                    width: 28,
-                    child: Text(
-                      '$_quantity',
-                      textAlign: TextAlign.center,
-                      style: const TextStyle(fontWeight: FontWeight.w700),
-                    ),
-                  ),
-                  IconButton(
-                    onPressed: () => setState(() => _quantity++),
-                    icon: const Icon(Icons.add),
-                  ),
-                ],
-              ),
+            child: EsokoStepper(
+              value: _quantity,
+              onChanged: (v) => setState(() => _quantity = v),
             ),
           ),
         ],
@@ -392,8 +340,10 @@ class _ScheduleBookingScreenState extends ConsumerState<ScheduleBookingScreen> {
                           _SeatButton(
                             seat: seat,
                             selected: _selectedSeatId == seat.id,
-                            onTap: () =>
-                                setState(() => _selectedSeatId = seat.id),
+                            onTap: () {
+                              EsokoHaptics.tap();
+                              setState(() => _selectedSeatId = seat.id);
+                            },
                           ),
                           // Aisle gap right after the last left-side
                           // column, before the first right-side column.
@@ -424,10 +374,12 @@ class _ScheduleBookingScreenState extends ConsumerState<ScheduleBookingScreen> {
           ],
         );
       },
-      loading: () => const Center(child: CircularProgressIndicator()),
-      error: (e, _) => Text(
-        'Could not load seats.',
-        style: TextStyle(color: EsokoColors.red),
+      loading: () => const Padding(
+        padding: EdgeInsets.all(EsokoSpacing.s1),
+        child: EsokoSkeletonCard(lines: 4),
+      ),
+      error: (e, _) => EsokoFormError(
+        message: e is ApiException ? e.message : 'Could not load seats.',
       ),
     );
   }
@@ -457,28 +409,28 @@ class _ScheduleBookingScreenState extends ConsumerState<ScheduleBookingScreen> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        TextField(
-          controller: _nameController,
-          decoration: const InputDecoration(
-            labelText: 'Your name',
-            prefixIcon: Icon(Icons.person_outline),
-          ),
+        EsokoPaymentMethodToggle<String>(
+          selected: _method,
+          onChanged: (m) => setState(() => _method = m),
+          options: const [('MPESA_STK', 'M-Pesa'), ('VOUCHER', 'Voucher')],
         ),
-        const SizedBox(height: EsokoSpacing.s3),
-        TextField(
-          controller: _msisdnController,
-          keyboardType: TextInputType.phone,
-          decoration: const InputDecoration(
-            labelText: 'M-Pesa phone number',
-            hintText: '+254 7…',
-            prefixIcon: Icon(Icons.phone_iphone_outlined),
+        if (_method == 'VOUCHER') ...[
+          const SizedBox(height: 12),
+          EsokoFormField(
+            controller: _voucherCodeController,
+            label: 'Voucher code',
+            hint: 'e.g. VCH-XXXXXX',
+            icon: Icons.wallet_outlined,
           ),
-        ),
-        const SizedBox(height: EsokoSpacing.s5),
-        FilledButton.icon(
-          onPressed: _book,
-          icon: const Icon(Icons.lock_outline, size: 18),
-          label: const Text('Pay with M-Pesa'),
+        ],
+        const SizedBox(height: 12),
+        EsokoPayerFields(
+          nameController: _nameController,
+          msisdnController: _msisdnController,
+          payLabel: _method == 'VOUCHER'
+              ? 'Pay with voucher'
+              : 'Pay with M-Pesa',
+          onPay: _book,
         ),
       ],
     );
@@ -575,9 +527,11 @@ class _SeatButton extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final taken = seat.status != 'AVAILABLE';
+    // Available seats sit on the scheme surface, never a hardcoded
+    // white — the seat map stays legible in dark mode.
     final Color bg = taken
         ? EsokoColors.line
-        : (selected ? EsokoColors.green : Colors.white);
+        : (selected ? EsokoColors.green : Theme.of(context).colorScheme.surface);
     final Color fg = taken
         ? EsokoColors.text3
         : (selected ? Colors.white : EsokoColors.text2);

@@ -2,9 +2,9 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/api/api_exception.dart';
-import '../../core/api/providers.dart';
 import '../../core/theme/esoko_tokens.dart';
 import '../../core/widgets/widgets.dart';
+import 'groups_repository.dart';
 
 enum _Stage { form, submitting, done, failed }
 
@@ -38,13 +38,15 @@ class _ContributeScreenState extends ConsumerState<ContributeScreen> {
       _error = null;
     });
     try {
-      final api = ref.read(apiClientProvider);
-      final res = await api.post('/v1/groups/${widget.groupId}/contributions', {
-        'amountKes': amount,
-        'method': _method,
-      });
+      final status = await ref
+          .read(groupsRepositoryProvider)
+          .contribute(
+            groupId: widget.groupId,
+            amountKes: amount,
+            method: _method,
+          );
       setState(() {
-        _resultStatus = res['status'] as String?;
+        _resultStatus = status;
         _stage = _Stage.done;
       });
     } on ApiException catch (e) {
@@ -57,13 +59,24 @@ class _ContributeScreenState extends ConsumerState<ContributeScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final reduced = MediaQuery.disableAnimationsOf(context);
     return Scaffold(
       appBar: const EsokoAppBar(title: 'Contribute'),
       body: SafeArea(
         child: Center(
           child: ConstrainedBox(
             constraints: const BoxConstraints(maxWidth: 420),
-            child: Padding(padding: const EdgeInsets.all(EsokoSpacing.s6), child: _body()),
+            child: Padding(
+              padding: const EdgeInsets.all(EsokoSpacing.s6),
+              // Same contract as the other money flows: the stage
+              // machine cross-fades, money never visually jumps.
+              child: AnimatedSwitcher(
+                duration: reduced ? Duration.zero : EsokoMotion.medium,
+                switchInCurve: EsokoMotion.easeOut,
+                switchOutCurve: EsokoMotion.easeOut,
+                child: KeyedSubtree(key: ValueKey(_stage), child: _body()),
+              ),
+            ),
           ),
         ),
       ),
@@ -76,19 +89,24 @@ class _ContributeScreenState extends ConsumerState<ContributeScreen> {
         return Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            TextField(
+            EsokoFormField(
               controller: _amountController,
-              keyboardType: const TextInputType.numberWithOptions(decimal: true),
-              decoration: const InputDecoration(labelText: 'Amount (KES)', prefixIcon: Icon(Icons.payments_outlined)),
+              label: 'Amount (KES)',
+              icon: Icons.payments_outlined,
+              keyboardType: const TextInputType.numberWithOptions(
+                decimal: true,
+              ),
+              textInputAction: TextInputAction.done,
+              onSubmitted: (_) => _submit(),
             ),
             const SizedBox(height: EsokoSpacing.s4),
-            SegmentedButton<String>(
-              segments: const [
-                ButtonSegment(value: 'MPESA', label: Text('M-Pesa'), icon: Icon(Icons.phone_iphone_outlined)),
-                ButtonSegment(value: 'CASH_TO_AGENT', label: Text('Cash'), icon: Icon(Icons.money_outlined)),
-              ],
-              selected: {_method},
-              onSelectionChanged: (s) => setState(() => _method = s.first),
+            EsokoPaymentMethodToggle<String>(
+              selected: _method,
+              onChanged: (m) {
+                EsokoHaptics.tap();
+                setState(() => _method = m);
+              },
+              options: const [('MPESA', 'M-Pesa'), ('CASH_TO_AGENT', 'Cash')],
             ),
             if (_method != 'MPESA')
               Padding(
@@ -98,46 +116,43 @@ class _ContributeScreenState extends ConsumerState<ContributeScreen> {
                   style: TextStyle(color: EsokoColors.text2, fontSize: 12),
                 ),
               ),
-            if (_error != null) ...[
-              const SizedBox(height: EsokoSpacing.s3),
-              Text(_error!, style: TextStyle(color: EsokoColors.red)),
-            ],
+            if (_error != null) EsokoFormError(message: _error!),
             const SizedBox(height: EsokoSpacing.s5),
-            FilledButton(onPressed: _submit, child: Text(_method == 'MPESA' ? 'Pay with M-Pesa' : 'Declare contribution')),
+            EsokoLoadingButton(
+              label: _method == 'MPESA'
+                  ? 'Pay with M-Pesa'
+                  : 'Declare contribution',
+              icon: _method == 'MPESA'
+                  ? Icons.lock_outline
+                  : Icons.edit_outlined,
+              onPressed: _submit,
+            ),
           ],
         );
       case _Stage.submitting:
-        return const Center(child: CircularProgressIndicator());
+        return const Padding(
+          padding: EdgeInsets.all(EsokoSpacing.s6),
+          child: EsokoSkeletonCard(leading: false),
+        );
       case _Stage.done:
         final confirmed = _resultStatus == 'CONFIRMED';
-        return Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(confirmed ? Icons.check_circle : Icons.hourglass_top_rounded, color: confirmed ? EsokoColors.green : EsokoColors.amber, size: 56),
-            const SizedBox(height: EsokoSpacing.s3),
-            Text(confirmed ? 'Contribution confirmed' : 'Contribution declared', style: Theme.of(context).textTheme.titleLarge),
-            const SizedBox(height: EsokoSpacing.s2),
-            Text(
-              confirmed
-                  ? 'It has been added to the group balance.'
-                  : "An officer will confirm it once they've verified the payment.",
-              textAlign: TextAlign.center,
-              style: TextStyle(color: EsokoColors.text2),
-            ),
-            const SizedBox(height: EsokoSpacing.s5),
-            FilledButton(onPressed: () => Navigator.of(context).pop(), child: const Text('Done')),
-          ],
+        return EsokoResultView.success(
+          title: confirmed ? 'Contribution confirmed' : 'Contribution declared',
+          message: confirmed
+              ? 'It has been added to the group balance.'
+              : "An officer will confirm it once they've verified the payment.",
+          successIcon: confirmed
+              ? Icons.check_rounded
+              : Icons.hourglass_top_rounded,
+          badgeColor: confirmed ? EsokoColors.green : EsokoColors.amber,
+          primaryLabel: 'Done',
+          onPrimary: () => Navigator.of(context).pop(),
         );
       case _Stage.failed:
-        return Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(Icons.error_outline, color: EsokoColors.red, size: 48),
-            const SizedBox(height: EsokoSpacing.s3),
-            Text(_error ?? 'Something went wrong', textAlign: TextAlign.center),
-            const SizedBox(height: EsokoSpacing.s4),
-            OutlinedButton(onPressed: () => setState(() => _stage = _Stage.form), child: const Text('Try again')),
-          ],
+        return EsokoResultView.failure(
+          errorMessage: _error ?? 'Something went wrong',
+          primaryLabel: 'Try again',
+          onPrimary: () => setState(() => _stage = _Stage.form),
         );
     }
   }

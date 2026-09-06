@@ -1,18 +1,16 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import '../../core/api/providers.dart';
 import '../../core/theme/esoko_tokens.dart';
 import '../../core/widgets/widgets.dart';
 import 'schedule_booking_screen.dart';
 import 'ticket_style.dart';
 import 'ticketing_models.dart';
+import 'ticketing_repository.dart';
 
-final listingDetailProvider = FutureProvider.autoDispose.family<ListingDetail, String>((ref, id) async {
-  final api = ref.watch(apiClientProvider);
-  final res = await api.get('/v1/listings/$id');
-  return ListingDetail.fromJson(res);
-});
+final listingDetailProvider = FutureProvider.autoDispose.family<ListingDetail, String>(
+  (ref, id) => ref.watch(ticketingRepositoryProvider).listing(id),
+);
 
 class ListingDetailScreen extends ConsumerWidget {
   const ListingDetailScreen({super.key, required this.listingId});
@@ -27,7 +25,9 @@ class ListingDetailScreen extends ConsumerWidget {
         onRetry: () => ref.invalidate(listingDetailProvider(listingId)),
         data: (context, l) {
           final style = TicketStyle.forVertical(l.vertical);
-          return CustomScrollView(
+          return RefreshIndicator(
+            onRefresh: () async => ref.invalidate(listingDetailProvider(listingId)),
+            child: CustomScrollView(
             slivers: [
               SliverAppBar(
                 expandedHeight: 170,
@@ -35,7 +35,9 @@ class ListingDetailScreen extends ConsumerWidget {
                 backgroundColor: style.gradient.last,
                 foregroundColor: Colors.white,
                 flexibleSpace: FlexibleSpaceBar(
-                  title: Text(l.title, style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w800)),
+                  // Same trap as store_detail: explicit style needs an
+                  // explicit white, foregroundColor doesn't reach it.
+                  title: Text(l.title, style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w800, color: Colors.white)),
                   background: Stack(
                     fit: StackFit.expand,
                     children: [
@@ -75,28 +77,42 @@ class ListingDetailScreen extends ConsumerWidget {
                       Text(l.description!, style: TextStyle(color: EsokoColors.text2, height: 1.5)),
                     ],
                     const SizedBox(height: EsokoSpacing.s6),
-                    Text('Ticket types', style: Theme.of(context).textTheme.titleLarge),
+                    const EsokoSubHeader('Ticket types'),
                     const SizedBox(height: EsokoSpacing.s3),
-                    for (final tc in l.ticketClasses) _TicketClassCard(ticketClass: tc, accent: style.gradient.last),
+                    for (var i = 0; i < l.ticketClasses.length; i++)
+                      EsokoStagger(
+                        index: i,
+                        child: _TicketClassCard(ticketClass: l.ticketClasses[i], accent: style.gradient.last),
+                      ),
                     const SizedBox(height: EsokoSpacing.s6),
-                    Text(l.isTransport ? 'Departures' : 'Showtimes', style: Theme.of(context).textTheme.titleLarge),
+                    EsokoSubHeader(l.isTransport ? 'Departures · ${l.schedules.length}' : 'Showtimes · ${l.schedules.length}'),
                     const SizedBox(height: EsokoSpacing.s3),
                     if (l.schedules.isEmpty)
-                      Text('No upcoming dates.', style: TextStyle(color: EsokoColors.text2))
+                      const EsokoEmptyState(
+                        icon: Icons.event_busy_outlined,
+                        message: 'No upcoming dates — check back soon.',
+                      )
                     else
-                      for (final s in l.schedules)
-                        _ScheduleTile(
-                          schedule: s,
-                          icon: style.icon,
-                          accent: style.gradient.last,
-                          onTap: () => Navigator.of(context).push(MaterialPageRoute(
-                            builder: (_) => ScheduleBookingScreen(scheduleId: s.id, ticketClasses: l.ticketClasses, listingTitle: l.title),
-                          )),
+                      // Indices continue past the ticket classes so the
+                      // entrance cascades down the whole screen, not per
+                      // section.
+                      for (var j = 0; j < l.schedules.length; j++)
+                        EsokoStagger(
+                          index: l.ticketClasses.length + j,
+                          child: _ScheduleTile(
+                            schedule: l.schedules[j],
+                            icon: style.icon,
+                            accent: style.gradient.last,
+                            onTap: () => Navigator.of(context).push(MaterialPageRoute(
+                              builder: (_) => ScheduleBookingScreen(scheduleId: l.schedules[j].id, ticketClasses: l.ticketClasses, listingTitle: l.title),
+                            )),
+                          ),
                         ),
                   ]),
                 ),
               ),
             ],
+            ),
           );
         },
       ),
@@ -113,33 +129,13 @@ class _TicketClassCard extends StatelessWidget {
   Widget build(BuildContext context) {
     return Padding(
       padding: const EdgeInsets.only(bottom: EsokoSpacing.s3),
-      child: EsokoCard(
-        padding: const EdgeInsets.all(EsokoSpacing.s4),
-        child: Row(
-          children: [
-            Container(
-              width: 40,
-              height: 40,
-              decoration: BoxDecoration(color: accent.withValues(alpha: 0.12), shape: BoxShape.circle),
-              child: Icon(ticketClass.seated ? Icons.event_seat_outlined : Icons.groups_outlined, color: accent, size: 20),
-            ),
-            const SizedBox(width: EsokoSpacing.s3),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(ticketClass.name, style: const TextStyle(fontWeight: FontWeight.w700)),
-                  if (ticketClass.amenities.isNotEmpty)
-                    Padding(
-                      padding: const EdgeInsets.only(top: 2),
-                      child: Text(ticketClass.amenities.join(' · '), style: TextStyle(fontSize: 11, color: EsokoColors.text3)),
-                    ),
-                ],
-              ),
-            ),
-            Text('KES ${ticketClass.priceKes}', style: TextStyle(color: EsokoColors.green, fontWeight: FontWeight.w800)),
-          ],
-        ),
+      child: EsokoListTile(
+        title: ticketClass.name,
+        subtitle: ticketClass.amenities.isEmpty ? null : ticketClass.amenities.join(' · '),
+        icon: ticketClass.seated ? Icons.event_seat_outlined : Icons.groups_outlined,
+        iconColor: accent,
+        iconBackground: accent.withValues(alpha: 0.12),
+        trailing: EsokoAmountText(ticketClass.priceKes, fontSize: 14),
       ),
     );
   }
@@ -156,29 +152,13 @@ class _ScheduleTile extends StatelessWidget {
   Widget build(BuildContext context) {
     return Padding(
       padding: const EdgeInsets.only(bottom: EsokoSpacing.s2),
-      child: EsokoCard(
+      child: EsokoListTile(
+        title: schedule.departAt,
+        subtitle: schedule.gateInfo,
+        icon: icon,
+        iconColor: accent,
+        iconBackground: accent.withValues(alpha: 0.12),
         onTap: onTap,
-        child: Row(
-          children: [
-            Container(
-              width: 40,
-              height: 40,
-              decoration: BoxDecoration(color: accent.withValues(alpha: 0.12), shape: BoxShape.circle),
-              child: Icon(icon, color: accent, size: 18),
-            ),
-            const SizedBox(width: EsokoSpacing.s3),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(schedule.departAt, style: const TextStyle(fontWeight: FontWeight.w600)),
-                  if (schedule.gateInfo != null) Text(schedule.gateInfo!, style: TextStyle(fontSize: 12, color: EsokoColors.text2)),
-                ],
-              ),
-            ),
-            Icon(Icons.chevron_right_rounded, color: EsokoColors.text3),
-          ],
-        ),
       ),
     );
   }

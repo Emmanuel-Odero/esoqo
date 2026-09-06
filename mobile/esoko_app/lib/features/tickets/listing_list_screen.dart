@@ -1,20 +1,17 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import '../../core/api/providers.dart';
 import '../../core/theme/esoko_tokens.dart';
 import '../../core/widgets/widgets.dart';
 import 'listing_detail_screen.dart';
 import 'my_tickets_screen.dart';
 import 'ticket_style.dart';
 import 'ticketing_models.dart';
+import 'ticketing_repository.dart';
 
-final listingsProvider = FutureProvider.autoDispose<List<ListingSummary>>((ref) async {
-  final api = ref.watch(apiClientProvider);
-  final res = await api.get('/v1/listings');
-  final list = (res['listings'] as List?) ?? const [];
-  return list.map((e) => ListingSummary.fromJson(e as Map<String, dynamic>)).toList();
-});
+final listingsProvider = FutureProvider.autoDispose<List<ListingSummary>>(
+  (ref) => ref.watch(ticketingRepositoryProvider).listings(),
+);
 
 /// Tickets tab home — GET /v1/listings (events + transport), with a
 /// shortcut to "My tickets" (GET /v1/me/tickets, authenticated).
@@ -27,29 +24,37 @@ class ListingListScreen extends ConsumerWidget {
     return Scaffold(
       body: RefreshIndicator(
         onRefresh: () async => ref.invalidate(listingsProvider),
-        child: EsokoAsyncView(
-          value: listings,
-          isEmpty: (list) => list.isEmpty,
-          emptyMessage: 'No listings are open yet.',
-          emptyIcon: Icons.confirmation_num_outlined,
-          onRetry: () => ref.invalidate(listingsProvider),
-          data: (context, list) => CustomScrollView(
-            slivers: [
-              SliverToBoxAdapter(
-                child: Padding(
-                  padding: const EdgeInsets.fromLTRB(EsokoSpacing.s5, EsokoSpacing.s5, EsokoSpacing.s5, EsokoSpacing.s2),
-                  child: EsokoSectionHeader(title: 'Travel & events', subtitle: 'Book a seat or a ticket, pay by M-Pesa.'),
-                ),
+        // Tablet-decent: cap the column at 840 (M3 expanded) so the
+        // list doesn't stretch edge-to-edge on large windows. No-op
+        // on phones.
+        child: Center(
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 840),
+            child: EsokoAsyncView(
+              value: listings,
+              isEmpty: (list) => list.isEmpty,
+              emptyMessage: 'No listings are open yet.',
+              emptyIcon: Icons.confirmation_num_outlined,
+              onRetry: () => ref.invalidate(listingsProvider),
+              data: (context, list) => CustomScrollView(
+                slivers: [
+                  SliverToBoxAdapter(
+                    child: Padding(
+                      padding: const EdgeInsets.fromLTRB(EsokoSpacing.s5, EsokoSpacing.s5, EsokoSpacing.s5, EsokoSpacing.s2),
+                      child: EsokoPageLead('Book a seat or a ticket, pay by M-Pesa.'),
+                    ),
+                  ),
+                  SliverPadding(
+                    padding: const EdgeInsets.fromLTRB(EsokoSpacing.s4, EsokoSpacing.s2, EsokoSpacing.s4, EsokoSpacing.s9),
+                    sliver: SliverList.separated(
+                      itemCount: list.length,
+                      separatorBuilder: (_, _) => const SizedBox(height: EsokoSpacing.s3),
+                      itemBuilder: (context, i) => EsokoStagger(index: i, child: _ListingCard(listing: list[i])),
+                    ),
+                  ),
+                ],
               ),
-              SliverPadding(
-                padding: const EdgeInsets.fromLTRB(EsokoSpacing.s4, EsokoSpacing.s2, EsokoSpacing.s4, EsokoSpacing.s9),
-                sliver: SliverList.separated(
-                  itemCount: list.length,
-                  separatorBuilder: (_, _) => const SizedBox(height: EsokoSpacing.s3),
-                  itemBuilder: (context, i) => _ListingCard(listing: list[i]),
-                ),
-              ),
-            ],
+            ),
           ),
         ),
       ),
@@ -70,17 +75,15 @@ class _ListingCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final style = TicketStyle.forVertical(listing.vertical);
-    return Material(
-      color: Theme.of(context).cardColor,
-      borderRadius: BorderRadius.circular(EsokoRadius.lg),
-      clipBehavior: Clip.antiAlias,
-      child: InkWell(
-        onTap: () => Navigator.of(context).push(
-          MaterialPageRoute(builder: (_) => ListingDetailScreen(listingId: listing.id)),
-        ),
-        child: Container(
-          decoration: BoxDecoration(border: Border.all(color: EsokoColors.line)),
-          child: Stack(
+    // EsokoCard (not a hand-rolled Material+InkWell) so the tile gets
+    // the shared press scale-down + haptic for free. Padding is zeroed
+    // because the gradient art runs full-bleed inside the card bounds.
+    return EsokoCard(
+      padding: EdgeInsets.zero,
+      onTap: () => Navigator.of(context).push(
+        MaterialPageRoute(builder: (_) => ListingDetailScreen(listingId: listing.id)),
+      ),
+      child: Stack(
             children: [
               Positioned.fill(
                 child: DecoratedBox(
@@ -147,8 +150,6 @@ class _ListingCard extends StatelessWidget {
               ),
             ],
           ),
-        ),
-      ),
     );
   }
 }

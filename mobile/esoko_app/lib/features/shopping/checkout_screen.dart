@@ -4,11 +4,11 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/api/api_exception.dart';
-import '../../core/api/providers.dart';
 import '../../core/auth/auth_controller.dart';
 import '../../core/auth/auth_state.dart';
 import '../../core/theme/esoko_tokens.dart';
 import '../../core/widgets/widgets.dart';
+import 'stores_repository.dart';
 
 enum _Stage { form, placing, waiting, done, failed }
 
@@ -40,6 +40,8 @@ class CheckoutScreen extends ConsumerStatefulWidget {
 class _CheckoutScreenState extends ConsumerState<CheckoutScreen> {
   final _nameController = TextEditingController();
   final _msisdnController = TextEditingController();
+  final _voucherCodeController = TextEditingController();
+  String _method = 'MPESA_STK';
   _Stage _stage = _Stage.form;
   String? _error;
   String? _orderId;
@@ -61,6 +63,7 @@ class _CheckoutScreenState extends ConsumerState<CheckoutScreen> {
     _pollTimer?.cancel();
     _nameController.dispose();
     _msisdnController.dispose();
+    _voucherCodeController.dispose();
     super.dispose();
   }
 
@@ -70,23 +73,31 @@ class _CheckoutScreenState extends ConsumerState<CheckoutScreen> {
       _error = null;
     });
     try {
-      final api = ref.read(apiClientProvider);
-      final res = await api.post('/v1/orders', {
-        'storeSlug': widget.storeSlug,
-        'buyerName': _nameController.text.trim(),
-        'buyerMsisdn': _msisdnController.text.trim(),
-        'paymentMethod': 'MPESA_STK',
-        'items': [
-          {
-            'productId': widget.productId,
-            if (widget.variantId != null) 'variantId': widget.variantId,
-            'quantity': widget.quantity,
-          },
-        ],
-      });
-      _orderId = res['orderId'] as String?;
-      _totalKes = res['totalKes'] as String?;
-      if (res['status'] == 'PAID') {
+      final repo = ref.read(storesRepositoryProvider);
+      String? voucherId;
+      if (_method == 'VOUCHER') {
+        voucherId = await repo.resolveVoucherCode(_voucherCodeController.text);
+        if (voucherId == null) {
+          setState(() {
+            _stage = _Stage.failed;
+            _error = 'Voucher not found — check the code.';
+          });
+          return;
+        }
+      }
+      final placed = await repo.placeOrder(
+        storeSlug: widget.storeSlug,
+        productId: widget.productId,
+        variantId: widget.variantId,
+        quantity: widget.quantity,
+        buyerName: _nameController.text.trim(),
+        buyerMsisdn: _msisdnController.text.trim(),
+        paymentMethod: _method,
+        voucherId: voucherId,
+      );
+      _orderId = placed.orderId;
+      _totalKes = placed.totalKes;
+      if (placed.paid) {
         setState(() => _stage = _Stage.done);
         return;
       }
@@ -106,12 +117,19 @@ class _CheckoutScreenState extends ConsumerState<CheckoutScreen> {
       attempts++;
       if (_orderId == null || attempts > 15) {
         timer.cancel();
+        // Don't strand the user on an indefinite spinner — surface a
+        // recoverable failure with retry.
+        if (mounted && _stage == _Stage.waiting) {
+          setState(() {
+            _stage = _Stage.failed;
+            _error = 'We could not confirm your M-Pesa payment. If you were charged, it will appear in History — otherwise try again.';
+          });
+        }
         return;
       }
       try {
-        final api = ref.read(apiClientProvider);
-        final res = await api.get('/v1/orders/$_orderId');
-        if (res['Status'] == 'PAID') {
+        final repo = ref.read(storesRepositoryProvider);
+        if (await repo.isOrderPaid(_orderId!)) {
           timer.cancel();
           if (mounted) setState(() => _stage = _Stage.done);
         }
@@ -123,6 +141,7 @@ class _CheckoutScreenState extends ConsumerState<CheckoutScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final reduced = MediaQuery.disableAnimationsOf(context);
     return Scaffold(
       appBar: const EsokoAppBar(title: 'Checkout'),
       body: SafeArea(
@@ -131,7 +150,18 @@ class _CheckoutScreenState extends ConsumerState<CheckoutScreen> {
             constraints: const BoxConstraints(maxWidth: 420),
             child: Padding(
               padding: const EdgeInsets.all(EsokoSpacing.s6),
-              child: _body(),
+              // The stage machine cross-fades (form → skeleton →
+              // waiting → result) instead of snapping — money moving
+              // should never visually jump.
+              child: AnimatedSwitcher(
+                duration: reduced ? Duration.zero : EsokoMotion.medium,
+                switchInCurve: EsokoMotion.easeOut,
+                switchOutCurve: EsokoMotion.easeOut,
+                child: KeyedSubtree(
+                  key: ValueKey(_stage),
+                  child: _body(),
+                ),
+              ),
             ),
           ),
         ),
@@ -146,142 +176,74 @@ class _CheckoutScreenState extends ConsumerState<CheckoutScreen> {
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
             _orderSummary(),
-            const SizedBox(height: EsokoSpacing.s5),
-            TextField(
-              controller: _nameController,
-              decoration: const InputDecoration(
-                labelText: 'Your name',
-                prefixIcon: Icon(Icons.person_outline),
-              ),
+            const SizedBox(height: EsokoSpacing.s4),
+            EsokoPaymentMethodToggle<String>(
+              selected: _method,
+              onChanged: (m) => setState(() => _method = m),
+              options: const [
+                ('MPESA_STK', 'M-Pesa'),
+                ('VOUCHER', 'Voucher'),
+              ],
             ),
-            const SizedBox(height: EsokoSpacing.s3),
-            TextField(
-              controller: _msisdnController,
-              keyboardType: TextInputType.phone,
-              decoration: const InputDecoration(
-                labelText: 'M-Pesa phone number',
-                hintText: '+254 7…',
-                prefixIcon: Icon(Icons.phone_iphone_outlined),
+            if (_method == 'VOUCHER') ...[
+              const SizedBox(height: EsokoSpacing.s3),
+              EsokoFormField(
+                controller: _voucherCodeController,
+                label: 'Voucher code',
+                hint: 'e.g. VCH-XXXXXX',
+                icon: Icons.wallet_outlined,
               ),
-            ),
-            const SizedBox(height: EsokoSpacing.s5),
-            FilledButton.icon(
-              onPressed: _placeOrder,
-              icon: const Icon(Icons.lock_outline, size: 18),
-              label: const Text('Pay with M-Pesa'),
+            ],
+            const SizedBox(height: EsokoSpacing.s4),
+            EsokoPayerFields(
+              nameController: _nameController,
+              msisdnController: _msisdnController,
+              payLabel: _method == 'VOUCHER' ? 'Pay with voucher' : 'Pay with M-Pesa',
+              onPay: _placeOrder,
             ),
           ],
         );
       case _Stage.placing:
-        return const Center(child: CircularProgressIndicator());
+        return const Padding(
+          padding: EdgeInsets.all(EsokoSpacing.s6),
+          child: EsokoSkeletonCard(leading: false),
+        );
       case _Stage.waiting:
-        return Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            EsokoStatusBadge(
-              icon: Icons.phone_android_rounded,
-              color: EsokoColors.blue,
-              spinning: true,
-            ),
-            const SizedBox(height: EsokoSpacing.s5),
-            Text(
-              'Complete payment on your phone',
-              style: Theme.of(context).textTheme.titleMedium,
-              textAlign: TextAlign.center,
-            ),
-            const SizedBox(height: EsokoSpacing.s2),
-            Text(
-              'Enter your M-Pesa PIN when the prompt arrives.',
-              style: TextStyle(color: EsokoColors.text2),
-              textAlign: TextAlign.center,
-            ),
-            if (_totalKes != null) ...[
-              const SizedBox(height: EsokoSpacing.s4),
-              Text(
-                'KES $_totalKes',
-                style: TextStyle(
-                  color: EsokoColors.green,
-                  fontWeight: FontWeight.bold,
-                  fontSize: 18,
-                ),
-              ),
-            ],
-          ],
+        return EsokoResultView.waiting(
+          title: 'Complete payment on your phone',
+          message: 'Enter your M-Pesa PIN when the prompt arrives.',
+          amountKes: _totalKes,
         );
       case _Stage.done:
-        return Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            EsokoStatusBadge(
-              icon: Icons.check_rounded,
-              color: EsokoColors.green,
-            ),
-            const SizedBox(height: EsokoSpacing.s4),
-            Text(
-              'Order placed',
-              style: Theme.of(context).textTheme.headlineSmall,
-            ),
-            const SizedBox(height: EsokoSpacing.s2),
-            Text(
-              'Find it any time in your Profile → History.',
-              textAlign: TextAlign.center,
-              style: TextStyle(color: EsokoColors.text2),
-            ),
-            const SizedBox(height: EsokoSpacing.s6),
-            FilledButton(
-              onPressed: () => Navigator.of(context).popUntil((r) => r.isFirst),
-              child: const Text('Done'),
-            ),
-          ],
+        return EsokoResultView.success(
+          title: 'Order placed',
+          message: 'Find it any time in Settings → History.',
+          primaryLabel: 'Done',
+          onPrimary: () => Navigator.of(context).popUntil((r) => r.isFirst),
         );
       case _Stage.failed:
-        return Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            EsokoStatusBadge(
-              icon: Icons.priority_high_rounded,
-              color: EsokoColors.red,
-            ),
-            const SizedBox(height: EsokoSpacing.s4),
-            Text(_error ?? 'Something went wrong', textAlign: TextAlign.center),
-            const SizedBox(height: EsokoSpacing.s5),
-            OutlinedButton(
-              onPressed: () => setState(() => _stage = _Stage.form),
-              child: const Text('Try again'),
-            ),
-          ],
+        return EsokoResultView.failure(
+          errorMessage: _error ?? 'Something went wrong',
+          primaryLabel: 'Try again',
+          onPrimary: () => setState(() => _stage = _Stage.form),
         );
     }
   }
 
   Widget _orderSummary() {
-    return Container(
-      padding: const EdgeInsets.all(EsokoSpacing.s4),
-      decoration: BoxDecoration(
-        color: EsokoColors.greenTint,
-        borderRadius: BorderRadius.circular(EsokoRadius.lg),
-      ),
-      child: Row(
-        children: [
-          CircleAvatar(
-            radius: 20,
-            backgroundColor: Colors.white,
-            child: Text(
-              '${widget.quantity}',
-              style: TextStyle(
-                color: EsokoColors.green,
-                fontWeight: FontWeight.w800,
-              ),
-            ),
+    final scheme = Theme.of(context).colorScheme;
+    return EsokoListTile(
+      title: widget.productLabel,
+      leading: CircleAvatar(
+        radius: 20,
+        backgroundColor: scheme.surface,
+        child: Text(
+          '${widget.quantity}',
+          style: TextStyle(
+            color: scheme.primary,
+            fontWeight: FontWeight.w800,
           ),
-          const SizedBox(width: EsokoSpacing.s3),
-          Expanded(
-            child: Text(
-              widget.productLabel,
-              style: const TextStyle(fontWeight: FontWeight.w600),
-            ),
-          ),
-        ],
+        ),
       ),
     );
   }

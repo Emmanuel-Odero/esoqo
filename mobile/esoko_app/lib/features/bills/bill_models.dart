@@ -3,25 +3,35 @@
 /// are derived on every read, never stored.
 class BillRow {
   BillRow({
-    required this.id, required this.label, required this.category, this.accountRef,
-    this.amountKes, required this.cycle, required this.nextDueAt, required this.reminderDaysBefore,
-    required this.status, required this.daysUntilDue, required this.overdue, required this.dueSoon,
+    required this.id,
+    required this.label,
+    required this.category,
+    this.accountRef,
+    this.amountKes,
+    required this.cycle,
+    required this.nextDueAt,
+    required this.reminderDaysBefore,
+    required this.status,
+    required this.daysUntilDue,
+    required this.overdue,
+    required this.dueSoon,
   });
 
   factory BillRow.fromJson(Map<String, dynamic> json) => BillRow(
-        id: json['ID'] as String,
-        label: json['Label'] as String,
-        category: json['Category'] as String,
-        accountRef: json['AccountRef'] as String?,
-        amountKes: json['AmountKES'] as String?,
-        cycle: json['Cycle'] as String,
-        nextDueAt: DateTime.tryParse(json['NextDueAt'] as String? ?? '') ?? DateTime.now(),
-        reminderDaysBefore: json['ReminderDaysBefore'] as int? ?? 3,
-        status: json['Status'] as String,
-        daysUntilDue: json['DaysUntilDue'] as int? ?? 0,
-        overdue: json['Overdue'] as bool? ?? false,
-        dueSoon: json['DueSoon'] as bool? ?? false,
-      );
+    id: json['ID'] as String,
+    label: json['Label'] as String,
+    category: json['Category'] as String,
+    accountRef: json['AccountRef'] as String?,
+    amountKes: json['AmountKES'] as String?,
+    cycle: json['Cycle'] as String,
+    nextDueAt:
+        DateTime.tryParse(json['NextDueAt'] as String? ?? '') ?? DateTime.now(),
+    reminderDaysBefore: json['ReminderDaysBefore'] as int? ?? 3,
+    status: json['Status'] as String,
+    daysUntilDue: json['DaysUntilDue'] as int? ?? 0,
+    overdue: json['Overdue'] as bool? ?? false,
+    dueSoon: json['DueSoon'] as bool? ?? false,
+  );
 
   final String id;
   final String label;

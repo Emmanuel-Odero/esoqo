@@ -86,6 +86,19 @@ class AuthController extends Notifier<AuthState> {
   /// forgot-PIN flow — that's [resetPin]).
   Future<void> setPin(String pin) => _api.post('/v1/auth/set-pin', {'pin': pin});
 
+  /// Re-reads GET /v1/me into state — call after any profile mutation
+  /// so the greeting and capabilities reflect the change immediately.
+  Future<void> refreshProfile() async {
+    final me = await _api.get('/v1/me');
+    state = AuthSignedIn(EsokoProfile.fromJson(me));
+  }
+
+  /// Edits the caller's display name — PATCH /v1/me — then refreshes.
+  Future<void> updateName(String knownAs) async {
+    await _api.patch('/v1/me', {'knownAs': knownAs});
+    await refreshProfile();
+  }
+
   Future<void> signOut() async {
     try {
       await _api.post('/v1/auth/sign-out');
