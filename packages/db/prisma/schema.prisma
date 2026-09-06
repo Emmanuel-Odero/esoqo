@@ -604,6 +604,8 @@ model JournalEntry {
   posSale           PosSale?
   donation          Donation?
   booking           Booking?
+  farePayment       FarePayment?
+  voucherEntry      VoucherLedgerEntry?
 
   @@index([occurredAt])
   @@map("journal_entry")
@@ -1162,6 +1164,7 @@ enum StoreOrderStatus {
 enum StoreOrderPaymentMethod {
   MPESA_STK
   CASH_ON_DELIVERY
+  VOUCHER
 }
 
 /// A checkout on the public storefront. The buyer need not be a
@@ -1213,6 +1216,7 @@ model StoreOrder {
   mpesaCheckoutRequestId String?       @unique
   journalEntryId         String?       @unique @db.Uuid
   journalEntry           JournalEntry? @relation(fields: [journalEntryId], references: [id])
+  voucherId              String?       @db.Uuid
 
   createdAt DateTime  @default(now())
   paidAt    DateTime?
@@ -2793,29 +2797,29 @@ model Bill {
   party   Party  @relation(fields: [partyId], references: [id], onDelete: Cascade)
 
   /// "KPLC — home", "DSTV" — whatever the person calls it themselves.
-  label      String
+  label              String
   /// ELECTRICITY | WATER | PAY_TV | RENT | SCHOOL_FEES | INTERNET |
   /// OTHER. Plain string, not an enum — same reasoning as Product's own
   /// category: a new bill type should never need a migration.
-  category   String
+  category           String
   /// Meter/account/paybill number, free text — shown back to the person
   /// so they can find it when they go to actually pay elsewhere.
-  accountRef String?
+  accountRef         String?
   /// Null when the amount varies bill to bill (e.g. an electricity
   /// token top-up) — the person just gets reminded, not shown a number
   /// that would usually be wrong.
-  amountKes  Decimal? @db.Decimal(12, 2)
+  amountKes          Decimal? @db.Decimal(12, 2)
   /// MONTHLY | WEEKLY | ONE_TIME.
-  cycle      String
-  nextDueAt  DateTime
+  cycle              String
+  nextDueAt          DateTime
   /// How many days ahead of nextDueAt this shows as "due soon" rather
   /// than just "upcoming" — an in-app indicator only; there is no
   /// push-notification wiring in this app yet, so this is never a
   /// promise of an alert arriving anywhere.
-  reminderDaysBefore Int @default(3)
+  reminderDaysBefore Int      @default(3)
   /// ACTIVE | PAUSED | ARCHIVED. ARCHIVED is a soft delete — same
   /// discipline as everywhere else in this schema that keeps history.
-  status     String   @default("ACTIVE")
+  status             String   @default("ACTIVE")
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -2901,11 +2905,15 @@ model TicketOrg {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  staff     TicketOrgStaff[]
-  venues    Venue[]
-  routes    Route[]
-  listings  Listing[]
-  customers TicketCustomer[]
+  staff       TicketOrgStaff[]
+  venues      Venue[]
+  routes      Route[]
+  listings    Listing[]
+  customers   TicketCustomer[]
+  vehicles    FleetVehicle[]
+  crew        CrewMember[]
+  shortRoutes ShortRoute[]
+  trips       Trip[]
 
   @@index([enterpriseId])
   @@index([status])
@@ -3260,6 +3268,7 @@ enum BookingStatus {
 enum BookingPaymentMethod {
   MPESA_STK
   CASH
+  VOUCHER
 }
 
 /// A checkout — mirrors StoreOrder. The buyer need not be a
@@ -3293,11 +3302,11 @@ model Booking {
   /// (not the single mpesaCheckoutRequestId below), no seat/GA capacity
   /// is held during the plan, and Ticket rows are created only once
   /// amountPaidKes reaches totalKes.
-  isInstallment Boolean @default(false)
+  isInstallment Boolean   @default(false)
   /// Sum of every CONFIRMED BookingPayment. 0 for a plain full-payment
   /// booking; not authoritative there (its single payment is tracked by
   /// mpesaCheckoutRequestId / status).
-  amountPaidKes Decimal @db.Decimal(12, 2) @default(0)
+  amountPaidKes Decimal   @default(0) @db.Decimal(12, 2)
   /// Installment plans only — the balance must be cleared by this time
   /// (the schedule's departAt). Past it, an unpaid plan is swept to
   /// CANCELLED (see sweepOverdueInstallmentBookings).
@@ -3310,6 +3319,7 @@ model Booking {
   mpesaCheckoutRequestId String?       @unique
   journalEntryId         String?       @unique @db.Uuid
   journalEntry           JournalEntry? @relation(fields: [journalEntryId], references: [id])
+  voucherId              String?       @db.Uuid
 
   createdAt DateTime  @default(now())
   paidAt    DateTime?
@@ -3387,6 +3397,209 @@ model Ticket {
   @@map("ticket")
 }
 
+// ─────────────────── TRANSPORT FLEET / SHORT ROUTES ─────────────
+// Org-scoped (reusable per transport company, same as TicketOrg).
+// Long-haul reserved-seat booking (Route/Listing/Schedule/Booking)
+// is untouched; these tables cover town/matatu short hops: fleet
+// registry, crew roster, duty trips, stage fares, onboard fare
+// payments, GPS pings and cash declarations. All writes go through
+// services/core-go (Go is the sole DB writer); this schema is DDL
+// source of truth only.
+
+enum FleetVehicleStatus {
+  ACTIVE
+  GROUNDED
+}
+
+model FleetVehicle {
+  id    String    @id @default(uuid()) @db.Uuid
+  orgId String    @db.Uuid
+  org   TicketOrg @relation(fields: [orgId], references: [id], onDelete: Cascade)
+
+  plateNo  String
+  capacity Int?
+  label    String?
+  status   FleetVehicleStatus @default(ACTIVE)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  trips Trip[]
+
+  @@unique([orgId, plateNo])
+  @@index([orgId, status])
+  @@map("fleet_vehicle")
+}
+
+enum CrewRole {
+  DRIVER
+  CONDUCTOR
+}
+
+model CrewMember {
+  id    String    @id @default(uuid()) @db.Uuid
+  orgId String    @db.Uuid
+  org   TicketOrg @relation(fields: [orgId], references: [id], onDelete: Cascade)
+
+  name   String
+  msisdn String?
+  role   CrewRole
+  active Boolean  @default(true)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  drivenTrips    Trip[]                  @relation("TripDriver")
+  conductedTrips Trip[]                  @relation("TripConductor")
+  declarations   CollectionDeclaration[]
+
+  @@index([orgId, role, active])
+  @@map("crew_member")
+}
+
+model ShortRoute {
+  id    String    @id @default(uuid()) @db.Uuid
+  orgId String    @db.Uuid
+  org   TicketOrg @relation(fields: [orgId], references: [id], onDelete: Cascade)
+
+  name      String
+  active    Boolean  @default(true)
+  createdAt DateTime @default(now())
+
+  stages FareStage[]
+  trips  Trip[]
+
+  @@index([orgId, active])
+  @@map("short_route")
+}
+
+model FareStage {
+  id           String     @id @default(uuid()) @db.Uuid
+  shortRouteId String     @db.Uuid
+  shortRoute   ShortRoute @relation(fields: [shortRouteId], references: [id], onDelete: Cascade)
+
+  name    String
+  order   Int
+  fareKes Decimal @db.Decimal(12, 2)
+
+  faresFrom FarePayment[] @relation("FareFrom")
+  faresTo   FarePayment[] @relation("FareTo")
+
+  @@unique([shortRouteId, order])
+  @@index([shortRouteId])
+  @@map("fare_stage")
+}
+
+enum TripStatus {
+  ACTIVE
+  CLOSED
+}
+
+model Trip {
+  id    String    @id @default(uuid()) @db.Uuid
+  orgId String    @db.Uuid
+  org   TicketOrg @relation(fields: [orgId], references: [id], onDelete: Cascade)
+
+  vehicleId String       @db.Uuid
+  vehicle   FleetVehicle @relation(fields: [vehicleId], references: [id])
+
+  driverId    String?     @db.Uuid
+  driver      CrewMember? @relation("TripDriver", fields: [driverId], references: [id])
+  conductorId String?     @db.Uuid
+  conductor   CrewMember? @relation("TripConductor", fields: [conductorId], references: [id])
+
+  shortRouteId String?     @db.Uuid
+  shortRoute   ShortRoute? @relation(fields: [shortRouteId], references: [id])
+
+  status    TripStatus @default(ACTIVE)
+  startedAt DateTime   @default(now())
+  endedAt   DateTime?
+
+  createdAt DateTime @default(now())
+
+  qrToken     String?   @unique
+  qrShortCode String?   @unique
+  qrRotatedAt DateTime?
+
+  pings        VehiclePing[]
+  fares        FarePayment[]
+  declarations CollectionDeclaration[]
+
+  @@index([orgId, status])
+  @@index([vehicleId, status])
+  @@map("trip")
+}
+
+model VehiclePing {
+  id     String @id @default(uuid()) @db.Uuid
+  tripId String @db.Uuid
+  trip   Trip   @relation(fields: [tripId], references: [id], onDelete: Cascade)
+
+  lat Decimal  @db.Decimal(10, 7)
+  lng Decimal  @db.Decimal(10, 7)
+  at  DateTime @default(now())
+
+  @@index([tripId, at])
+  @@map("vehicle_ping")
+}
+
+enum FarePaymentStatus {
+  PENDING
+  CONFIRMED
+  FAILED
+}
+
+model FarePayment {
+  id     String @id @default(uuid()) @db.Uuid
+  tripId String @db.Uuid
+  trip   Trip   @relation(fields: [tripId], references: [id], onDelete: Cascade)
+
+  stageFromId String?    @db.Uuid
+  stageFrom   FareStage? @relation("FareFrom", fields: [stageFromId], references: [id])
+  stageToId   String?    @db.Uuid
+  stageTo     FareStage? @relation("FareTo", fields: [stageToId], references: [id])
+
+  amountKes   Decimal           @db.Decimal(12, 2)
+  /// MPESA_STK | CASH | VOUCHER
+  method      String
+  buyerMsisdn String?
+  buyerName   String?
+  buyerPartyId String? @db.Uuid
+  voucherId   String?  @db.Uuid
+  voucher     VoucherCard? @relation("FareVoucher", fields: [voucherId], references: [id])
+  status      FarePaymentStatus @default(PENDING)
+
+  mpesaCheckoutRequestId String?       @unique
+  mpesaReceiptCode       String?
+  journalEntryId         String?       @unique @db.Uuid
+  journalEntry           JournalEntry? @relation(fields: [journalEntryId], references: [id])
+
+  createdAt   DateTime  @default(now())
+  confirmedAt DateTime?
+  verifications FareVerification[]
+
+  @@index([tripId, status])
+  @@index([mpesaReceiptCode])
+  @@index([buyerPartyId])
+  @@map("fare_payment")
+}
+
+model CollectionDeclaration {
+  id     String @id @default(uuid()) @db.Uuid
+  tripId String @db.Uuid
+  trip   Trip   @relation(fields: [tripId], references: [id], onDelete: Cascade)
+
+  crewId String     @db.Uuid
+  crew   CrewMember @relation(fields: [crewId], references: [id])
+
+  declaredCashKes Decimal  @db.Decimal(12, 2)
+  createdAt       DateTime @default(now())
+
+  @@index([tripId])
+  @@index([crewId])
+  @@map("collection_declaration")
+}
+
 /// PRIMARY = esoko.app/o/{slug}; CUSTOM = the org's own domain
 /// (JamiiDomain, ACTIVE) — see apps/jamii/src/middleware.ts, which is
 /// the only writer of SiteVisit below and already resolves this same
@@ -3448,4 +3661,83 @@ model SmsSpend {
 
   @@index([purpose, createdAt])
   @@map("sms_spend")
+}
+
+// ── Esoko voucher cards + unified loyalty + fare verification ──
+// Go (services/core-go) is the sole writer; Prisma holds DDL only.
+
+enum VoucherPurpose {
+  FARE
+  RENT
+  SHOPPING
+  GENERAL
+}
+
+enum VoucherStatus {
+  ACTIVE
+  FROZEN
+  EXPIRED
+}
+
+model VoucherCard {
+  id                   String        @id @default(uuid()) @db.Uuid
+  ownerPartyId         String        @db.Uuid
+  giftedByPartyId      String?       @db.Uuid
+  label                String        @default("Voucher")
+  purpose              VoucherPurpose @default(GENERAL)
+  status               VoucherStatus  @default(ACTIVE)
+  qrToken              String        @unique
+  shortCode            String        @unique
+  expiresAt            DateTime?
+  mpesaCheckoutRequestId String?     @unique
+  createdAt            DateTime      @default(now())
+  updatedAt            DateTime      @updatedAt
+  entries              VoucherLedgerEntry[]
+  fares                FarePayment[] @relation("FareVoucher")
+
+  @@index([ownerPartyId, status])
+  @@map("voucher_card")
+}
+
+model VoucherLedgerEntry {
+  id             String       @id @default(uuid()) @db.Uuid
+  voucherId      String       @db.Uuid
+  voucher        VoucherCard  @relation(fields: [voucherId], references: [id], onDelete: Cascade)
+  points         Int
+  kesEquiv       Decimal      @db.Decimal(12, 2)
+  kind           String
+  refId          String?
+  journalEntryId String?      @unique @db.Uuid
+  journalEntry   JournalEntry? @relation(fields: [journalEntryId], references: [id])
+  createdAt      DateTime     @default(now())
+
+  @@index([voucherId, createdAt])
+  @@map("voucher_ledger_entry")
+}
+
+model PartyLoyaltyEntry {
+  id        String   @id @default(uuid()) @db.Uuid
+  partyId   String   @db.Uuid
+  points    Int
+  kind      String
+  refId     String?
+  createdAt DateTime @default(now())
+
+  @@index([partyId, createdAt])
+  @@map("party_loyalty_entry")
+}
+
+model FareVerification {
+  id              String      @id @default(uuid()) @db.Uuid
+  fareId          String      @db.Uuid
+  fare            FarePayment @relation(fields: [fareId], references: [id], onDelete: Cascade)
+  verifierPartyId String?
+  verifierAgentId String?
+  scopeTripId     String?     @db.Uuid
+  result          String
+  createdAt       DateTime    @default(now())
+
+  @@index([fareId, createdAt])
+  @@index([scopeTripId, createdAt])
+  @@map("fare_verification")
 }

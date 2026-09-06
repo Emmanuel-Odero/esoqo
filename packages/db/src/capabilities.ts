@@ -33,7 +33,8 @@ export interface Ctx {
   storeId?: string | null;
   /** Set for an AGENT context scoped to one ticketing org — a
    *  TicketOrgStaff session (admin/manager/scanner), not a Party. See
-   *  assertOwnsOrg in dal/ticketing.ts: same reasoning as storeId. */
+   *  AssertOwnsOrg in services/core-go/internal/dbx: same reasoning
+   *  as storeId. */
   ticketOrgId?: string | null;
   ip?: string | null;
   /**
@@ -228,6 +229,19 @@ export const CAPABILITY_CATALOGUE = [
     ['booking.refund', 'Refund a booking'],
     ['ticket.checkin', 'Scan and check in a ticket at the gate'],
   ]},
+  { group: 'Fleet & short routes', items: [
+    ['fleet.read', 'View vehicles'],
+    ['fleet.write', 'Register or ground vehicles'],
+    ['crew.read', 'View drivers and conductors'],
+    ['crew.write', 'Onboard or deactivate crew'],
+    ['trip.read', 'View duty trips'],
+    ['trip.write', 'Assign or close duty trips'],
+    ['vehicle.track', 'See live vehicle positions'],
+    ['fare.pay', 'Pay bus fare'],
+    ['fare.read', 'View fare payments'],
+    ['collection.declare', 'Declare cash collected on a trip'],
+    ['collection.read', 'View collections and variances'],
+  ]},
   { group: 'Malls', items: [
     ['mall.read', 'View a mall and its tenant list'],
     ['mall.write', "Manage a mall's tenants"],
@@ -289,10 +303,13 @@ export const ROLE_PRESETS = {
             // Ticketing — a subject may open a ticketing org the same way
             // they open a store (own:enterprise), and always books tickets
             // as themselves.
-            'ticketorg.write:own', 'ticketorgstaff.write:own', 'venue.write:own',
+            'ticketorg.read:own', 'ticketorg.write:own', 'ticketorgstaff.write:own', 'venue.write:own',
             'route.write:own', 'listing.write:own', 'listing.publish:own',
             'ticketclass.write:own', 'schedule.write:own',
             'booking.read:own', 'booking.create:own', 'booking.cancel:own',
+            'fleet.read:own', 'fleet.write:own', 'crew.read:own', 'crew.write:own',
+            'trip.read:own', 'trip.write:own', 'vehicle.track:own',
+            'fare.pay:own', 'fare.read:own', 'collection.declare:own', 'collection.read:own',
             // Malls — a subject may manage tenants of a mall the same
             // way they manage a store: the ':own' qualifier only checks
             // the caller against the mall Organisation's own partyId
@@ -371,8 +388,8 @@ export type CashierRole = keyof typeof CASHIER_CAPABILITIES;
 /**
  * What a TicketOrgStaff session can do — the ticketing-org equivalent
  * of CASHIER_CAPABILITIES. Not a Party, scoped to one org via
- * ctx.ticketOrgId (see assertOwnsOrg in dal/ticketing.ts), same
- * reasoning as ctx.storeId for cashiers.
+ * ctx.ticketOrgId (see AssertOwnsOrg in services/core-go/internal/dbx),
+ * same reasoning as ctx.storeId for cashiers.
  *
  * SCANNER — the gate. Nothing but check-in and reading which org
  *           they're signed into (the console shell needs the org's
@@ -388,11 +405,16 @@ export const TICKETING_STAFF_CAPABILITIES = {
   SCANNER: ['ticket.checkin', 'ticketorg.read'],
   MANAGER: ['ticket.checkin', 'listing.write', 'listing.publish', 'ticketclass.write',
             'schedule.write', 'venue.write', 'route.write',
-            'booking.read', 'booking.cancel', 'booking.refund', 'ticketorg.read'],
+            'booking.read', 'booking.cancel', 'booking.refund', 'ticketorg.read',
+            'fleet.read', 'crew.read', 'trip.read', 'fare.read', 'collection.read', 'vehicle.track'],
   ADMIN:   ['ticket.checkin', 'listing.write', 'listing.publish', 'ticketclass.write',
             'schedule.write', 'venue.write', 'route.write',
             'booking.read', 'booking.cancel', 'booking.refund',
-            'ticketorg.read', 'ticketorg.write', 'ticketorgstaff.write'],
+            'ticketorg.read', 'ticketorg.write', 'ticketorgstaff.write',
+            'fleet.read', 'fleet.write', 'crew.read', 'crew.write',
+            'trip.read', 'trip.write', 'fare.read', 'fare.pay',
+            'collection.read', 'collection.declare', 'vehicle.track'],
+  CREW:    ['collection.declare', 'vehicle.track', 'fare.read', 'ticketorg.read'],
 } as const satisfies Record<string, readonly Capability[]>;
 
 export type TicketingStaffRole = keyof typeof TICKETING_STAFF_CAPABILITIES;

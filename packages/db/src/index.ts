@@ -33,7 +33,9 @@ export { findStalledGroups } from './dal/group-alerts';
 // in the dal barrel (here, dal/index.ts -> dal/groups.ts) doesn't
 // reliably resolve there without a bundler.
 export { searchGroupsPublic } from './dal/groups';
-export { confirmBookingPayment, TicketingError } from './dal/ticketing';
+// confirmBookingPayment/TicketingError lived here for services/core's
+// webhook — now confirmed by core-go (sole writer); the TS webhook
+// forwards booking/fare callbacks there instead.
 export {
   listDomainsNeedingReconciliation, markDomainVerifying, markDomainActive,
   markDomainFailed, touchDomainCheck, finaliseRemovedDomain,
