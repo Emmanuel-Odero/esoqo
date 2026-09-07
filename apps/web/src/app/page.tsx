@@ -19,7 +19,7 @@ export const dynamic = 'force-dynamic'; // the board moves once a morning
 const SECTIONS = [
   ['for-me', 'Is Esoko for me?'], ['does', 'What Esoko does'], ['daily', 'Every day'],
   ['papers', 'Papers & certificates'], ['institutions', 'Who is connected'],
-  ['counties', 'Where we work'], ['join', 'How to join'],
+  ['counties', 'Where we work'], ['join', 'How to join'], ['app', 'Get the app'],
 ] as const;
 
 const DOES = [
@@ -48,6 +48,9 @@ export default async function Home() {
     listPricesForDate(ctx, new Date()),
     listCounties(ctx),
   ]);
+
+  const playStoreUrl = process.env.NEXT_PUBLIC_PLAY_STORE_URL;
+  const appStoreUrl = process.env.NEXT_PUBLIC_APP_STORE_URL;
 
   const board: Quote[] = quotes.slice(0, 5).map((q) => ({
     commodity: q.commodity.name, unit: q.commodity.unit,
@@ -246,6 +249,70 @@ export default async function Home() {
                 <p style={{ color: 'var(--tx-2)', fontSize: '.94rem', margin: '7px 0 0' }}>{body}</p>
               </div>
             ))}
+          </div>
+        </div>
+      </section>
+
+      <section className="sec" id="app">
+        <div className="wrap">
+          <p className="kicker">Get the app</p>
+          <h2 style={{ marginBottom: 12 }}>The same Esoko, on Android and iPhone</h2>
+          <p className="lead" style={{ marginBottom: 28 }}>
+            The app speaks to the same account as{' '}
+            <strong style={{ color: 'var(--tx)' }}>*483*77#</strong> — prices, money, your group,
+            records and papers — and adds the scanner for bus QRs, vouchers, tickets and payment
+            codes. Free to download, free to join.
+          </p>
+          <div className="grid g2">
+            <div className="card">
+              <div className="shead" style={{ marginBottom: 16 }}>
+                <span className="icbox icbox-g"><Icon name="download" size={19} /></span>
+                <div>
+                  <h3 style={{ marginBottom: 2 }}>Download the app</h3>
+                  <p className="sub" style={{ margin: 0 }}>On the Google Play and Apple App stores.</p>
+                </div>
+              </div>
+              <div className="row">
+                {playStoreUrl ? (
+                  <a className="store" href={playStoreUrl}>
+                    <Icon name="phone" size={20} />
+                    <span className="store-l">Get it on<strong>Google Play</strong></span>
+                  </a>
+                ) : (
+                  <span className="store store-soon"><span className="store-l" style={{ textAlign: 'left' }}>Android<strong>Coming soon</strong></span></span>
+                )}
+                {appStoreUrl ? (
+                  <a className="store" href={appStoreUrl}>
+                    <Icon name="phone" size={20} />
+                    <span className="store-l">Download on the<strong>App Store</strong></span>
+                  </a>
+                ) : (
+                  <span className="store store-soon"><span className="store-l" style={{ textAlign: 'left' }}>iPhone<strong>Coming soon</strong></span></span>
+                )}
+              </div>
+            </div>
+            <div className="card">
+              <div className="shead" style={{ marginBottom: 4 }}>
+                <span className="icbox icbox-b"><Icon name="key" size={19} /></span>
+                <div>
+                  <h3 style={{ marginBottom: 2 }}>Signing in</h3>
+                  <p className="sub" style={{ margin: 0 }}>Same number, same account as the dial code.</p>
+                </div>
+              </div>
+              {([
+                ['1', 'Open the app and tap Sign in.'],
+                ['2', 'Enter the number you registered with Esoko.'],
+                ['3', 'Type the code we send you by SMS — then set a PIN for next time.'],
+              ] as const).map(([n, body]) => (
+                <div key={n} style={{ display: 'flex', gap: 13, alignItems: 'flex-start', padding: '10px 0', borderTop: '1px solid var(--line)' }}>
+                  <span className="mono" style={{ width: 28, height: 28, borderRadius: 7, background: 'var(--navy)', color: '#fff', display: 'grid', placeItems: 'center', fontWeight: 600, flex: 'none' }}>{n}</span>
+                  <p className="sub" style={{ margin: '3px 0 0' }}>{body}</p>
+                </div>
+              ))}
+              <p className="sub" style={{ margin: '10px 0 0', color: 'var(--red)' }}>
+                Esoko will never ask you for your PIN.
+              </p>
+            </div>
           </div>
         </div>
       </section>
