@@ -39,10 +39,6 @@ class _EsokoStaggerState extends State<EsokoStagger>
   @override
   void initState() {
     super.initState();
-    if (MediaQuery.disableAnimationsOf(context)) {
-      _controller.value = 1.0;
-      return;
-    }
     final delay = Duration(
       milliseconds: (widget.index * widget.perItem.inMilliseconds)
           .clamp(0, widget.maxDelay.inMilliseconds),
@@ -50,6 +46,14 @@ class _EsokoStaggerState extends State<EsokoStagger>
     Future<void>.delayed(delay).then((_) {
       if (mounted) _controller.forward();
     });
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    if (MediaQuery.disableAnimationsOf(context)) {
+      _controller.value = 1.0;
+    }
   }
 
   @override
