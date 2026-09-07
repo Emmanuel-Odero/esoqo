@@ -36,6 +36,13 @@
 		</dict>
 	<key>NSLocationWhenInUseUsageDescription</key>
 		<string>Esoko uses your location to find malls, supermarkets and shops near you for pickup shopping.</string>
+		<!-- iOS 14+ local-network privacy: reaching core-go on the same
+		     Wi-Fi or hotspot (e.g. the Mac running the dev server) is a
+		     local-network connection and needs this declaration, or iOS
+		     blocks it without a prompt. Dev-only; the production API
+		     will be public HTTPS and unaffected. -->
+		<key>NSLocalNetworkUsageDescription</key>
+		<string>Esoko connects to the Esoko server on your Wi-Fi or hotspot network to load your record.</string>
 		<key>NSCameraUsageDescription</key>
 		<string>Esoko uses your camera to scan bus QRs, vouchers, tickets and payment codes.</string>
 		<key>UIApplicationSceneManifest</key>

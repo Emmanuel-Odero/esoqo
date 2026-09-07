@@ -59,6 +59,10 @@ dependencies:
   geolocator: ^13.0.2
   # Opens the device's maps app for "Get directions" on a pickup order.
   url_launcher: ^6.3.1
+  # WiFi gateway address for physical-device dev builds — lets an iPhone
+  # that joined the Mac's hotspot reach the machine running core-go via
+  # the hotspot's default gateway (see lib/core/api/api_config.dart).
+  network_info_plus: ^6.1.0
   quick_actions: ^1.1.0
 
 dev_dependencies:

@@ -6,6 +6,11 @@ import 'api_exception.dart';
 
 /// Thin wrapper around Dio for core-go's `/v1/*` REST surface.
 ///
+/// - Resolves the base URL lazily via [ApiConfig.candidateHosts] — on a
+///   physical iPhone the machine running core-go depends on the network
+///   the device is on (which hotspot direction, LAN, etc.), so the app
+///   probes each candidate on GET /health and keeps the first that
+///   answers. An explicit `--dart-define=API_BASE_URL` is used verbatim.
 /// - Attaches `Authorization: Bearer <token>` from [TokenStore] on every
 ///   request that has one.
 /// - On a 401, clears the stored token and calls [onUnauthorized] so the
@@ -31,6 +36,53 @@ class ApiClient {
 
   late final Dio _dio;
   final void Function()? _onUnauthorized;
+  Future<void>? _baseUrlInit;
+  List<String> _hostsTried = const [];
+
+  /// Resolves the real base URL once, before the first request. Dio's
+  /// `baseUrl` set in the constructor is only a placeholder until then.
+  Future<void> _ensureBaseUrl() {
+    return _baseUrlInit ??= _resolveBaseUrl();
+  }
+
+  Future<void> _resolveBaseUrl() async {
+    if (ApiConfig.overrideUrl.isNotEmpty) {
+      _dio.options.baseUrl = ApiConfig.overrideUrl;
+      _hostsTried = [ApiConfig.overrideUrl];
+      return;
+    }
+    final hosts = await ApiConfig.candidateHosts();
+    _hostsTried = hosts;
+    for (final host in hosts) {
+      final base = 'http://$host:${ApiConfig.port}';
+      if (await _probe(base)) {
+        _dio.options.baseUrl = base;
+        return;
+      }
+    }
+    // Nothing answered — keep the first candidate so the request below
+    // fails fast, and let the real error say which hosts were tried.
+    _dio.options.baseUrl = 'http://${hosts.first}:${ApiConfig.port}';
+  }
+
+  /// True when `GET /health` on [base] gets *any* HTTP response — the
+  /// server is alive even if it reports not-ready. Only network-level
+  /// failures (refused / unreachable / timeout) mark a candidate dead.
+  Future<bool> _probe(String base) async {
+    final previous = _dio.options.baseUrl;
+    _dio.options.baseUrl = base;
+    try {
+      await _dio.get('/health', options: Options(
+        connectTimeout: const Duration(milliseconds: 1500),
+        receiveTimeout: const Duration(milliseconds: 2000),
+      ));
+      return true;
+    } on DioException {
+      return false;
+    } finally {
+      _dio.options.baseUrl = previous;
+    }
+  }
 
   Future<Map<String, dynamic>> get(String path) => _send('GET', path);
 
@@ -41,6 +93,7 @@ class ApiClient {
       _send('PATCH', path, body);
 
   Future<Map<String, dynamic>> _send(String method, String path, [Map<String, dynamic>? body]) async {
+    await _ensureBaseUrl();
     late final Response<dynamic> response;
     try {
       response = await _dio.request(path, data: body, options: Options(method: method));
@@ -48,7 +101,9 @@ class ApiClient {
       throw ApiException(
         statusCode: 0,
         code: 'NETWORK_ERROR',
-        message: e.message ?? 'Could not reach Esoko. Check your connection.',
+        message: e.message != null
+            ? '${e.message} Tried: ${_hostsTried.join(', ')}.'
+            : 'Could not reach Esoko. Check your connection.',
       );
     }
 

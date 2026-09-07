@@ -57,14 +57,25 @@ flutter pub get
 flutter run -d chrome                    # web — localhost:4100 default
 flutter run -d <ios-simulator-or-device> # iOS — localhost:4100 default
 flutter run -d <android-emulator>        # Android — 10.0.2.2:4100 default
+```
 
-# Physical device (any platform): localhost means the device itself, not
-# your Mac — override with your machine's LAN IP:
+**Physical iPhone (hotspot, either direction):** the app probes a short
+list of likely hosts (`GET /health`) and keeps the first that answers —
+the Wi-Fi gateway covers the *Mac-hosted* hotspot, and gateway+1/+2 cover
+the *iPhone-hosted* hotspot where the Mac is the first DHCP client
+(172.20.10.2). iOS prompts once for local-network access (the
+`NSLocalNetworkUsageDescription` in Info.plist); accept it. core-go is
+reachable either way since it binds `:4100` on all interfaces.
+
+**Other physical devices, or when the phone itself is the hotspot:** the
+app can't guess the machine running core-go — override with its IP:
+
+```bash
 flutter run --dart-define=API_BASE_URL=http://192.168.x.x:4100
 ```
 
 `ApiConfig` (`lib/core/api/api_config.dart`) documents the per-platform
-default in full.
+resolution in full.
 
 ## Wear OS
 
