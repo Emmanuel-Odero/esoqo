@@ -1,4 +1,5 @@
 import 'package:dio/dio.dart';
+import 'package:flutter/foundation.dart' show debugPrint;
 
 import '../storage/token_store.dart';
 import 'api_config.dart';
@@ -49,14 +50,19 @@ class ApiClient {
     if (ApiConfig.overrideUrl.isNotEmpty) {
       _dio.options.baseUrl = ApiConfig.overrideUrl;
       _hostsTried = [ApiConfig.overrideUrl];
+      debugPrint('esoko/api: using --dart-define API_BASE_URL=${ApiConfig.overrideUrl}');
       return;
     }
     final hosts = await ApiConfig.candidateHosts();
     _hostsTried = hosts;
+    debugPrint('esoko/api: core-go candidates: ${hosts.join(', ')}');
     for (final host in hosts) {
       final base = 'http://$host:${ApiConfig.port}';
-      if (await _probe(base)) {
+      final ok = await _probe(base);
+      debugPrint('esoko/api: $base -> ${ok ? 'ALIVE' : 'no core-go'}');
+      if (ok) {
         _dio.options.baseUrl = base;
+        debugPrint('esoko/api: resolved base URL = $base');
         return;
       }
     }

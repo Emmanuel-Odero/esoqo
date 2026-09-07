@@ -59,13 +59,15 @@ flutter run -d <ios-simulator-or-device> # iOS — localhost:4100 default
 flutter run -d <android-emulator>        # Android — 10.0.2.2:4100 default
 ```
 
-**Physical iPhone (hotspot, either direction):** the app probes a short
-list of likely hosts (`GET /health`) and keeps the first that answers —
-the Wi-Fi gateway covers the *Mac-hosted* hotspot, and gateway+1/+2 cover
-the *iPhone-hosted* hotspot where the Mac is the first DHCP client
-(172.20.10.2). iOS prompts once for local-network access (the
-`NSLocalNetworkUsageDescription` in Info.plist); accept it. core-go is
-reachable either way since it binds `:4100` on all interfaces.
+**Physical iPhone (hotspot, either direction):** the app probes a list of
+likely hosts (`GET /health`) and keeps the first that answers. On the
+172.20.10.0/28 subnet — the one iOS personal hotspots and macOS Internet
+Sharing both use — it probes every host in the block (.2–.14), so it finds
+the Mac wherever DHCP put it on that hotspot (there is no reliable single
+address guess: the Mac can land anywhere in .2–.14). iOS prompts once for
+local-network access (the `NSLocalNetworkUsageDescription` in Info.plist);
+accept it. core-go is reachable either way since it binds `:4100` on all
+interfaces.
 
 **Other physical devices, or when the phone itself is the hotspot:** the
 app can't guess the machine running core-go — override with its IP:
