@@ -26,7 +26,15 @@
 		<string>$(FLUTTER_BUILD_NUMBER)</string>
 		<key>LSRequiresIPhoneOS</key>
 		<true/>
-		<key>NSLocationWhenInUseUsageDescription</key>
+		<key>NSAppTransportSecurity</key>
+		<dict>
+			<!-- Allow plain-HTTP (http://) to core-go during development —
+			     there is no HTTPS on the local dev server. Narrow this to
+			     real domains with HTTPS in production. -->
+			<key>NSAllowsArbitraryLoads</key>
+			<true/>
+		</dict>
+	<key>NSLocationWhenInUseUsageDescription</key>
 		<string>Esoko uses your location to find malls, supermarkets and shops near you for pickup shopping.</string>
 		<key>NSCameraUsageDescription</key>
 		<string>Esoko uses your camera to scan bus QRs, vouchers, tickets and payment codes.</string>

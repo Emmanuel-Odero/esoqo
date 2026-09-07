@@ -9,10 +9,15 @@
     <!-- Universal scanner camera (bus QRs, vouchers, payment codes) —
          every MobileScanner screen resolves through core-go. -->
     <uses-permission android:name="android.permission.CAMERA"/>
+    <!-- Required to reach core-go (and any network API) in release/profile
+         builds — the debug manifest only covers the Flutter tool's own
+         debug traffic. -->
+    <uses-permission android:name="android.permission.INTERNET"/>
     <application
         android:label="esoko_app"
         android:name="${applicationName}"
-        android:icon="@mipmap/ic_launcher">
+        android:icon="@mipmap/ic_launcher"
+        android:usesCleartextTraffic="true">
         <activity
             android:name=".MainActivity"
             android:exported="true"
