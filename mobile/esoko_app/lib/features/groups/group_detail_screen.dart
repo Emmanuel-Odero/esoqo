@@ -30,6 +30,11 @@ final groupWithdrawalsProvider = FutureProvider.autoDispose
       (ref, id) => ref.watch(groupsRepositoryProvider).withdrawals(id),
     );
 
+final groupTimelineProvider = FutureProvider.autoDispose
+    .family<List<TimelineEntry>, String>(
+      (ref, id) => ref.watch(groupsRepositoryProvider).timeline(id),
+    );
+
 class GroupDetailScreen extends ConsumerWidget {
   const GroupDetailScreen({super.key, required this.groupId});
   final String groupId;
@@ -39,6 +44,7 @@ class GroupDetailScreen extends ConsumerWidget {
     ref.invalidate(groupBalanceProvider(groupId));
     ref.invalidate(groupContributionsProvider(groupId));
     ref.invalidate(groupWithdrawalsProvider(groupId));
+    ref.invalidate(groupTimelineProvider(groupId));
   }
 
   @override
@@ -47,6 +53,7 @@ class GroupDetailScreen extends ConsumerWidget {
     final balance = ref.watch(groupBalanceProvider(groupId));
     final contributions = ref.watch(groupContributionsProvider(groupId));
     final withdrawals = ref.watch(groupWithdrawalsProvider(groupId));
+    final timeline = ref.watch(groupTimelineProvider(groupId));
     final auth = ref.watch(authControllerProvider);
     final myPartyId = auth is AuthSignedIn ? auth.profile.partyId : null;
 
@@ -121,6 +128,28 @@ class GroupDetailScreen extends ConsumerWidget {
                       ],
                     ],
                   ),
+                  const SizedBox(height: EsokoSpacing.s6),
+                  const EsokoSubHeader('Timeline'),
+                  const SizedBox(height: EsokoSpacing.s2),
+                  EsokoAsyncView(
+                    value: timeline,
+                    isEmpty: (list) => list.isEmpty,
+                    emptyMessage:
+                        'Nothing yet — contributions and withdrawals show up here as they happen.',
+                    emptyIcon: Icons.history_outlined,
+                    onRetry: () =>
+                        ref.invalidate(groupTimelineProvider(groupId)),
+                    data: (context, list) => Column(
+                      children: [
+                        for (var i = 0; i < list.length; i++)
+                          EsokoStagger(
+                            index: i,
+                            child: _TimelineTile(entry: list[i]),
+                          ),
+                      ],
+                    ),
+                  ),
+
                   const SizedBox(height: EsokoSpacing.s6),
                   const EsokoSubHeader('Members'),
                   const SizedBox(height: EsokoSpacing.s2),
@@ -235,6 +264,36 @@ class _WithdrawalTile extends StatelessWidget {
         icon: Icons.outbox_outlined,
         iconColor: statusColor,
         onTap: onTap,
+      ),
+    );
+  }
+}
+
+/// One row of the member-visible timeline — the direct antidote to
+/// "the treasurer said it was fine": every member reads the same
+/// tamper-evident feed, not a summary handed down at the next meeting.
+/// Colour comes from [TimelineEntry.kind] (set by the Go formatter),
+/// never guessed from the line's English text here.
+class _TimelineTile extends StatelessWidget {
+  const _TimelineTile({required this.entry});
+  final TimelineEntry entry;
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    final (color, icon) = switch (entry.kind) {
+      'posted' => (scheme.primary, EsokoIconName.checkCircle),
+      'rejected' => (scheme.error, EsokoIconName.ban),
+      'requested' => (EsokoColors.amber, EsokoIconName.clock),
+      _ => (Theme.of(context).textTheme.bodySmall?.color ?? scheme.outline, EsokoIconName.info),
+    };
+    return Padding(
+      padding: const EdgeInsets.only(bottom: EsokoSpacing.s2),
+      child: EsokoListTile(
+        title: entry.line,
+        subtitle: entry.occurredAt,
+        esokoIcon: icon,
+        iconColor: color,
       ),
     );
   }

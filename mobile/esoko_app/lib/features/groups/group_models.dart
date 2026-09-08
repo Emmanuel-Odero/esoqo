@@ -198,3 +198,30 @@ class WithdrawalRow {
   final bool canSign;
   final List<SignatureRow> signatures;
 }
+
+/// One line of GET /v1/groups/:id/timeline — the plain-language,
+/// member-visible feed dbx.GroupTimeline renders from the group's own
+/// slice of the hash-chained audit log. This is the direct antidote to
+/// "the treasurer said the money was accounted for" — a member reads
+/// what happened, not what they were told happened.
+class TimelineEntry {
+  TimelineEntry({
+    required this.occurredAt,
+    required this.line,
+    required this.kind,
+  });
+
+  factory TimelineEntry.fromJson(Map<String, dynamic> json) => TimelineEntry(
+    occurredAt: json['OccurredAt'] as String? ?? '',
+    line: json['Line'] as String? ?? '',
+    kind: json['Kind'] as String? ?? 'info',
+  );
+
+  final String occurredAt;
+  final String line;
+
+  /// info | posted | requested | rejected — see formatTimelineEntry on
+  /// the Go side. Drives the status-pill colour, never parsed out of
+  /// [line]'s English text.
+  final String kind;
+}

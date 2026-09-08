@@ -73,7 +73,10 @@ func (s *Server) handleMpesaStkCallback(c *gin.Context) {
 	// Chama contributions paid by STK — this was a known gap noted when
 	// the webhook was first ported (see the Phase 0 commit): only store
 	// orders and bookings were dispatched here, never contributions.
-	if err := dbx.ConfirmContributionByCheckoutID(ctx, s.Pool, cb.CheckoutRequestID, cb.MpesaReceiptCode); err == nil {
+	if contributionID, alreadyConfirmed, err := dbx.ConfirmContributionByCheckoutID(ctx, s.Pool, cb.CheckoutRequestID, cb.MpesaReceiptCode); err == nil {
+		if !alreadyConfirmed {
+			s.notifyContributionConfirmed(c, contributionID)
+		}
 		c.JSON(http.StatusOK, gin.H{"ok": true})
 		return
 	} else if err != dbx.ErrContributionNotFound {

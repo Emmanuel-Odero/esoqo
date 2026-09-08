@@ -11,12 +11,12 @@ import (
 // TicketStaff is the sign-in projection of ticket_org_staff — never
 // exposes anything beyond what the PIN check needs.
 type TicketStaff struct {
-	ID           string
-	OrgID        string
-	Name         string
-	Role         string
-	Active       bool
-	PinHash      string
+	ID      string
+	OrgID   string
+	Name    string
+	Role    string
+	Active  bool
+	PinHash string
 	// CrewMemberID — set only for role = CREW logins a manager has
 	// linked to a CrewMember. Returned to the client at sign-in so a
 	// crew session can declare/close against itself without a picker;

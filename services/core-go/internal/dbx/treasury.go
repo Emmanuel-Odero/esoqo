@@ -11,6 +11,7 @@ import (
 	"crypto/hmac"
 	"crypto/sha256"
 	"encoding/hex"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"strconv"
@@ -307,10 +308,12 @@ func postContribution(ctx context.Context, tx pgx.Tx, contributionID, orgID, acc
 
 // ConfirmContribution mirrors confirmContribution — single-signature
 // officer confirmation (money-in carries far less risk than money-out).
-func ConfirmContribution(ctx context.Context, pool *pgxpool.Pool, contributionID, confirmerID string) error {
+// alreadyConfirmed lets the caller skip re-sending the "contribution
+// posted" SMS fan-out on a call that turned out to be a no-op.
+func ConfirmContribution(ctx context.Context, pool *pgxpool.Pool, contributionID, confirmerID string) (alreadyConfirmed bool, err error) {
 	tx, err := pool.Begin(ctx)
 	if err != nil {
-		return err
+		return false, err
 	}
 	defer tx.Rollback(ctx)
 
@@ -322,45 +325,46 @@ func ConfirmContribution(ctx context.Context, pool *pgxpool.Pool, contributionID
 		FROM group_contribution WHERE id = $1 FOR UPDATE`, contributionID).
 		Scan(&orgID, &accountID, &status, &amountKESText, &membershipID)
 	if errors.Is(err, pgx.ErrNoRows) {
-		return &TreasuryError{"NOT_FOUND", "Contribution not found"}
+		return false, &TreasuryError{"NOT_FOUND", "Contribution not found"}
 	}
 	if err != nil {
-		return err
+		return false, err
 	}
 	if status == "CONFIRMED" {
-		return nil
+		return true, nil
 	}
 	if status == "REJECTED" || status == "WAIVED" {
-		return &TreasuryError{"ALREADY_SETTLED", "This contribution has already been settled"}
+		return false, &TreasuryError{"ALREADY_SETTLED", "This contribution has already been settled"}
 	}
 
 	officer, err := IsOfficer(ctx, pool, orgID, confirmerID)
 	if err != nil {
-		return err
+		return false, err
 	}
 	if !officer {
-		return &TreasuryError{"NOT_AN_OFFICER", "Only an officer can confirm a contribution"}
+		return false, &TreasuryError{"NOT_AN_OFFICER", "Only an officer can confirm a contribution"}
 	}
 
 	amountKES, err := strconv.ParseFloat(amountKESText, 64)
 	if err != nil {
-		return err
+		return false, err
 	}
 	if err := postContribution(ctx, tx, contributionID, orgID, accountID, amountKES, membershipID, nil); err != nil {
-		return err
+		return false, err
 	}
-	return tx.Commit(ctx)
+	return false, tx.Commit(ctx)
 }
 
 var ErrContributionNotFound = errors.New("no contribution matches this checkout request")
 
 // ConfirmContributionByCheckoutID — the webhook path, mirrors
 // confirmContributionByCheckoutId. Idempotent: a callback delivered
-// twice is a no-op.
-func ConfirmContributionByCheckoutID(ctx context.Context, pool *pgxpool.Pool, checkoutRequestID, mpesaReceipt string) error {
+// twice is a no-op (alreadyConfirmed true on the second delivery, so
+// the caller knows not to fan out a second "contribution posted" SMS).
+func ConfirmContributionByCheckoutID(ctx context.Context, pool *pgxpool.Pool, checkoutRequestID, mpesaReceipt string) (contributionID string, alreadyConfirmed bool, err error) {
 	tx, err := pool.Begin(ctx)
 	if err != nil {
-		return err
+		return "", false, err
 	}
 	defer tx.Rollback(ctx)
 
@@ -371,23 +375,23 @@ func ConfirmContributionByCheckoutID(ctx context.Context, pool *pgxpool.Pool, ch
 		FROM group_contribution WHERE "checkoutRequestId" = $1 FOR UPDATE`, checkoutRequestID).
 		Scan(&id, &orgID, &accountID, &status, &amountKESText, &membershipID)
 	if errors.Is(err, pgx.ErrNoRows) {
-		return ErrContributionNotFound
+		return "", false, ErrContributionNotFound
 	}
 	if err != nil {
-		return err
+		return "", false, err
 	}
 	if status == "CONFIRMED" {
-		return nil
+		return id, true, nil
 	}
 
 	amountKES, err := strconv.ParseFloat(amountKESText, 64)
 	if err != nil {
-		return err
+		return "", false, err
 	}
 	if err := postContribution(ctx, tx, id, orgID, accountID, amountKES, membershipID, &mpesaReceipt); err != nil {
-		return err
+		return "", false, err
 	}
-	return tx.Commit(ctx)
+	return id, false, tx.Commit(ctx)
 }
 
 func AttachContributionCheckoutRequestID(ctx context.Context, pool *pgxpool.Pool, contributionID, checkoutRequestID string) error {
@@ -674,14 +678,26 @@ func SignWithdrawal(ctx context.Context, pool *pgxpool.Pool, withdrawalID, signe
 	return &SignWithdrawalResult{Status: "PENDING_SIGNATURES"}, nil
 }
 
+// ExecutedWithdrawal is what the sweep hands back per row — enough for
+// the caller (cmd/api/main.go's ticker) to record an audit row and fan
+// out the "everybody gets a copy" SMS without a second query, since the
+// caller has no gin.Context/handler layer to re-derive it from.
+type ExecutedWithdrawal struct {
+	ID        string
+	OrgID     string
+	Status    string // EXECUTED | EXPIRED | (unchanged status, when not actually due)
+	AmountKES string
+	PayeeName string
+}
+
 // ExecuteWithdrawalIfDue mirrors executeWithdrawalIfDue — requires BOTH
 // the standby window elapsed AND the signature threshold met, never
 // either alone. Meant to run from a periodic sweep (see
 // SweepDueWithdrawals and cmd/api/main.go's ticker), not a request.
-func ExecuteWithdrawalIfDue(ctx context.Context, pool *pgxpool.Pool, withdrawalID string) (string, error) {
+func ExecuteWithdrawalIfDue(ctx context.Context, pool *pgxpool.Pool, withdrawalID string) (*ExecutedWithdrawal, error) {
 	tx, err := pool.Begin(ctx)
 	if err != nil {
-		return "", err
+		return nil, err
 	}
 	defer tx.Rollback(ctx)
 
@@ -693,39 +709,39 @@ func ExecuteWithdrawalIfDue(ctx context.Context, pool *pgxpool.Pool, withdrawalI
 		FROM withdrawal_request WHERE id = $1 FOR UPDATE`, withdrawalID).
 		Scan(&orgID, &accountID, &status, &purpose, &payeeName, &amountKESText, &standbyOpensAt, &requiredSigners)
 	if errors.Is(err, pgx.ErrNoRows) {
-		return "", &TreasuryError{"NOT_FOUND", "Withdrawal request not found"}
+		return nil, &TreasuryError{"NOT_FOUND", "Withdrawal request not found"}
 	}
 	if err != nil {
-		return "", err
+		return nil, err
 	}
 	if status != "PENDING_SIGNATURES" {
-		return status, nil
+		return &ExecutedWithdrawal{ID: withdrawalID, OrgID: orgID, Status: status, AmountKES: amountKESText, PayeeName: payeeName}, nil
 	}
 	if time.Now().Before(standbyOpensAt) {
-		return "", &TreasuryError{"WINDOW_NOT_ELAPSED", "The standby window has not elapsed yet"}
+		return nil, &TreasuryError{"WINDOW_NOT_ELAPSED", "The standby window has not elapsed yet"}
 	}
 
 	var approvals int
 	err = tx.QueryRow(ctx, `SELECT count(*) FROM withdrawal_signature WHERE "withdrawalId" = $1 AND decision = 'APPROVE'`, withdrawalID).Scan(&approvals)
 	if err != nil {
-		return "", err
+		return nil, err
 	}
 
 	if approvals < requiredSigners {
 		_, err = tx.Exec(ctx, `UPDATE withdrawal_request SET status = 'EXPIRED', "decidedAt" = now() WHERE id = $1`, withdrawalID)
 		if err != nil {
-			return "", err
+			return nil, err
 		}
-		return "EXPIRED", tx.Commit(ctx)
+		return &ExecutedWithdrawal{ID: withdrawalID, OrgID: orgID, Status: "EXPIRED", AmountKES: amountKESText, PayeeName: payeeName}, tx.Commit(ctx)
 	}
 
 	amountKES, err := strconv.ParseFloat(amountKESText, 64)
 	if err != nil {
-		return "", err
+		return nil, err
 	}
 	settlementID, err := findOrCreateSettlementAccountTx(ctx, tx)
 	if err != nil {
-		return "", err
+		return nil, err
 	}
 	var journalEntryID string
 	err = tx.QueryRow(ctx, `
@@ -733,13 +749,13 @@ func ExecuteWithdrawalIfDue(ctx context.Context, pool *pgxpool.Pool, withdrawalI
 		VALUES (gen_random_uuid(), $1, $2, now(), now())
 		RETURNING id`, "WITHDRAWAL-"+withdrawalID, "Withdrawal: "+purpose).Scan(&journalEntryID)
 	if err != nil {
-		return "", err
+		return nil, err
 	}
 	for _, p := range []ledger.Posting{{AccountID: accountID, AmountKES: -amountKES}, {AccountID: settlementID, AmountKES: amountKES}} {
 		_, err = tx.Exec(ctx, `INSERT INTO posting (id, "entryId", "accountId", amount) VALUES (gen_random_uuid(), $1, $2, $3)`,
 			journalEntryID, p.AccountID, p.AmountKES)
 		if err != nil {
-			return "", err
+			return nil, err
 		}
 	}
 
@@ -747,36 +763,43 @@ func ExecuteWithdrawalIfDue(ctx context.Context, pool *pgxpool.Pool, withdrawalI
 		UPDATE withdrawal_request SET status = 'EXECUTED', "decidedAt" = now(), "journalEntryId" = $1 WHERE id = $2`,
 		journalEntryID, withdrawalID)
 	if err != nil {
-		return "", err
+		return nil, err
 	}
-	return "EXECUTED", tx.Commit(ctx)
+	return &ExecutedWithdrawal{ID: withdrawalID, OrgID: orgID, Status: "EXECUTED", AmountKES: amountKESText, PayeeName: payeeName}, tx.Commit(ctx)
 }
 
 // SweepDueWithdrawals — the periodic-sweep half of ExecuteWithdrawalIfDue.
 // Called from a ticker in cmd/api/main.go, not from any HTTP handler.
-func SweepDueWithdrawals(ctx context.Context, pool *pgxpool.Pool) (int, error) {
+// SweepDueWithdrawals returns one ExecutedWithdrawal per row it actually
+// moved to EXECUTED or EXPIRED — the caller (cmd/api/main.go) uses this
+// to record an audit row and notify the group per withdrawal, not just
+// a count to log.
+func SweepDueWithdrawals(ctx context.Context, pool *pgxpool.Pool) ([]ExecutedWithdrawal, error) {
 	rows, err := pool.Query(ctx, `
 		SELECT id FROM withdrawal_request WHERE status = 'PENDING_SIGNATURES' AND "standbyOpensAt" <= now()`)
 	if err != nil {
-		return 0, err
+		return nil, err
 	}
 	var ids []string
 	for rows.Next() {
 		var id string
 		if err := rows.Scan(&id); err != nil {
 			rows.Close()
-			return 0, err
+			return nil, err
 		}
 		ids = append(ids, id)
 	}
 	rows.Close()
 
-	swept := 0
+	var swept []ExecutedWithdrawal
 	for _, id := range ids {
-		if _, err := ExecuteWithdrawalIfDue(ctx, pool, id); err != nil {
+		res, err := ExecuteWithdrawalIfDue(ctx, pool, id)
+		if err != nil || res == nil {
 			continue // one bad row must not block the rest of the sweep
 		}
-		swept++
+		if res.Status == "EXECUTED" || res.Status == "EXPIRED" {
+			swept = append(swept, *res)
+		}
 	}
 	return swept, nil
 }
@@ -791,6 +814,7 @@ type SignatureRow struct {
 
 type WithdrawalRow struct {
 	ID              string
+	OrgID           string
 	Status          string
 	AmountKES       string
 	Purpose         string
@@ -865,6 +889,7 @@ func GetWithdrawal(ctx context.Context, pool *pgxpool.Pool, withdrawalID, viewer
 		SELECT id, "orgId", status::text, "amountKes"::text, purpose, "payeeName", "requiredSigners", "standbyOpensAt", "broadcastAt"
 		FROM withdrawal_request WHERE id = $1`, withdrawalID).
 		Scan(&w.ID, &orgID, &w.Status, &w.AmountKES, &w.Purpose, &w.PayeeName, &w.RequiredSigners, &w.StandbyOpensAt, &w.BroadcastAt)
+	w.OrgID = orgID
 	if errors.Is(err, pgx.ErrNoRows) {
 		return nil, nil
 	}
@@ -896,4 +921,169 @@ func GetWithdrawal(ctx context.Context, pool *pgxpool.Pool, withdrawalID, viewer
 	}
 	w.CanSign = isSigner && !alreadySigned && w.Status == "PENDING_SIGNATURES"
 	return &w, nil
+}
+
+// ── member-visible timeline + contribution-posted notification ────
+//
+// The cheapest, highest-trust slice of the treasury feature (see the
+// group-treasury proposal, §4): every member sees a plain-language,
+// tamper-evident feed of what happened to their group's money, instead
+// of taking a treasurer's word for it. Built on the audit log that
+// already exists for every other domain — no new storage, just a
+// consistent targetType/targetId convention (see recordTreasuryAudit
+// in handlers_treasury.go) and a formatter here.
+
+// ContributionNotifyDetail is what the "contribution posted" SMS and
+// the timeline's own declared/confirmed lines both need — one query,
+// reused by both callers instead of two near-identical ones.
+type ContributionNotifyDetail struct {
+	OrgID           string
+	OrgName         string
+	ContributorName string
+	AmountKES       string
+}
+
+func GetContributionNotifyDetail(ctx context.Context, pool *pgxpool.Pool, contributionID string) (*ContributionNotifyDetail, error) {
+	var d ContributionNotifyDetail
+	err := pool.QueryRow(ctx, `
+		SELECT gc."orgId", COALESCE(o."knownAs", o."officialName"),
+		       COALESCE(pe."knownAs", pe."officialName"), gc."amountKes"::text
+		FROM group_contribution gc
+		JOIN organisation o ON o."partyId" = gc."orgId"
+		JOIN person pe ON pe."partyId" = gc."contributorId"
+		WHERE gc.id = $1`, contributionID).
+		Scan(&d.OrgID, &d.OrgName, &d.ContributorName, &d.AmountKES)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, err
+	}
+	return &d, nil
+}
+
+// MemberContact — an active member's phone, for SMS fan-out. Nil
+// Msisdn is filtered by the caller (a staff-added member with no phone
+// on file yet just never gets the text — still an active member).
+type MemberContact struct {
+	PersonID string
+	Msisdn   *string
+}
+
+func ActiveMemberContacts(ctx context.Context, pool *pgxpool.Pool, orgID string) ([]MemberContact, error) {
+	rows, err := pool.Query(ctx, `
+		SELECT m."personId", pe.msisdn
+		FROM membership m
+		JOIN person pe ON pe."partyId" = m."personId"
+		WHERE m."orgId" = $1 AND m."exitedAt" IS NULL AND m.status = 'ACTIVE'`, orgID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var out []MemberContact
+	for rows.Next() {
+		var c MemberContact
+		if err := rows.Scan(&c.PersonID, &c.Msisdn); err != nil {
+			return nil, err
+		}
+		out = append(out, c)
+	}
+	return out, rows.Err()
+}
+
+// TimelineEntry — one plain-language line for GroupDetailScreen.
+type TimelineEntry struct {
+	OccurredAt string
+	Line       string
+	// Kind lets the mobile status-pill pick a colour without parsing
+	// Line's English text — "requested" (amber), "signed"/"posted"
+	// (green), "rejected" (red), "info" (neutral).
+	Kind string
+}
+
+// GroupTimeline reads the org's own slice of the hash-chained audit
+// log and renders it as something a member actually reads, not
+// something that exists only for a dispute. Requires active
+// membership — unlike ListContributions/GetGroupBalance/
+// GetTreasuryPolicy elsewhere in this file, which today take no viewer
+// at all and so answer for *any* authenticated caller, not just a
+// member of the group in question. That's a pre-existing gap this
+// function deliberately doesn't repeat, not one it fixes — flagged
+// rather than silently widened or narrowed elsewhere in this pass.
+func GroupTimeline(ctx context.Context, pool *pgxpool.Pool, orgID, viewerPartyID string, limit int) ([]TimelineEntry, error) {
+	if err := assertActiveMember(ctx, pool, orgID, viewerPartyID); err != nil {
+		return nil, err
+	}
+	rows, err := pool.Query(ctx, `
+		SELECT "occurredAt"::text, action, payload
+		FROM audit_event
+		WHERE "targetType" = 'group' AND "targetId" = $1
+		ORDER BY "occurredAt" DESC LIMIT $2`, orgID, limit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var out []TimelineEntry
+	for rows.Next() {
+		var occurredAt, action string
+		var payloadRaw []byte
+		if err := rows.Scan(&occurredAt, &action, &payloadRaw); err != nil {
+			return nil, err
+		}
+		var payload map[string]interface{}
+		_ = json.Unmarshal(payloadRaw, &payload) // malformed payload → empty map, formatter falls back gracefully
+		line, kind := formatTimelineEntry(action, payload)
+		out = append(out, TimelineEntry{OccurredAt: occurredAt, Line: line, Kind: kind})
+	}
+	return out, rows.Err()
+}
+
+func payloadString(p map[string]interface{}, key string) string {
+	if v, ok := p[key].(string); ok {
+		return v
+	}
+	return ""
+}
+
+// formatTimelineEntry turns one audit_event row into a member-legible
+// line. Falls back to a generic-but-honest line for any action it
+// doesn't recognise, rather than dropping the row — a future action
+// this function hasn't been taught yet should still show up as
+// *something*, since silently disappearing activity is worse than an
+// unpolished line for it.
+func formatTimelineEntry(action string, p map[string]interface{}) (line, kind string) {
+	amount := payloadString(p, "amountKes")
+	name := payloadString(p, "contributorName")
+	switch action {
+	case "treasury.contribution.declared":
+		return fmt.Sprintf("%s declared a contribution of KES %s — awaiting confirmation", name, amount), "info"
+	case "treasury.contribution.confirmed":
+		balance := payloadString(p, "newBalanceKes")
+		return fmt.Sprintf("KES %s from %s confirmed — new balance KES %s", amount, name, balance), "posted"
+	case "treasury.withdrawal.requested":
+		return fmt.Sprintf("Withdrawal of KES %s requested for %s — %s",
+			payloadString(p, "amountKes"), payloadString(p, "payeeName"), payloadString(p, "purpose")), "requested"
+	case "treasury.withdrawal.signed":
+		decision := payloadString(p, "decision")
+		signer := payloadString(p, "signerName")
+		status := payloadString(p, "resultingStatus")
+		verb, entryKind := "approved", "posted"
+		suffix := ""
+		switch {
+		case decision == "REJECT":
+			verb, entryKind = "rejected", "rejected"
+			suffix = " — request halted"
+		case status == "APPROVED":
+			suffix = " — threshold reached"
+		default:
+			entryKind = "requested" // approved, but the threshold isn't met yet
+		}
+		return fmt.Sprintf("%s %s the withdrawal%s", signer, verb, suffix), entryKind
+	case "treasury.withdrawal.executed":
+		return fmt.Sprintf("Withdrawal of KES %s to %s executed", payloadString(p, "amountKes"), payloadString(p, "payeeName")), "posted"
+	case "treasury.withdrawal.expired":
+		return fmt.Sprintf("Withdrawal of KES %s expired — threshold not reached in time", payloadString(p, "amountKes")), "requested"
+	default:
+		return action, "info"
+	}
 }

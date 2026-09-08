@@ -56,7 +56,7 @@ func main() {
 	// only ever executes here, once its standby window has elapsed AND
 	// its signature threshold is met; never on the request that got it
 	// there.
-	go runWithdrawalSweep(ctx, pool)
+	go runWithdrawalSweep(ctx, pool, server)
 
 	<-ctx.Done()
 	log.Println("core-go: shutting down")
@@ -68,7 +68,7 @@ func main() {
 	}
 }
 
-func runWithdrawalSweep(ctx context.Context, pool *pgxpool.Pool) {
+func runWithdrawalSweep(ctx context.Context, pool *pgxpool.Pool, server *httpapi.Server) {
 	ticker := time.NewTicker(1 * time.Minute)
 	defer ticker.Stop()
 	for {
@@ -81,8 +81,15 @@ func runWithdrawalSweep(ctx context.Context, pool *pgxpool.Pool) {
 				log.Printf("core-go: withdrawal sweep failed: %v", err)
 				continue
 			}
-			if swept > 0 {
-				log.Printf("core-go: withdrawal sweep executed/expired %d request(s)", swept)
+			for _, w := range swept {
+				// The audit row + member SMS for each executed/expired
+				// withdrawal — see RecordWithdrawalOutcome's own comment
+				// for why this can't happen at the handler layer like
+				// every other treasury audit row in this file.
+				server.RecordWithdrawalOutcome(ctx, w)
+			}
+			if len(swept) > 0 {
+				log.Printf("core-go: withdrawal sweep executed/expired %d request(s)", len(swept))
 			}
 		}
 	}

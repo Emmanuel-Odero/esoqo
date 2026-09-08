@@ -1753,6 +1753,13 @@ model AuditEvent {
   @@index([occurredAt])
   @@index([action, occurredAt])
   @@index([actorId])
+  /// Added for GroupTimeline (dbx.GroupTimeline) — a member-visible,
+  /// plain-language feed scoped to one group (targetType "group",
+  /// targetId the org's partyId), read often enough on GroupDetailScreen
+  /// that this needed its own index rather than relying on the
+  /// (action, occurredAt) one above, which doesn't help a targetId
+  /// filter at all.
+  @@index([targetType, targetId, occurredAt])
   @@map("audit_event")
 }
 

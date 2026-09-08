@@ -166,6 +166,7 @@ func (s *Server) Router() *gin.Engine {
 		v1.GET("/groups/:id/withdrawals", s.authRequired(), s.handleListWithdrawals)
 		v1.POST("/withdrawals/:id/sign", s.authRequired(), s.handleSignWithdrawal)
 		v1.GET("/withdrawals/:id", s.authRequired(), s.handleGetWithdrawal)
+		v1.GET("/groups/:id/timeline", s.authRequired(), s.handleGroupTimeline)
 
 		v1.POST("/me/bills", s.authRequired(), s.handleCreateBill)
 		v1.GET("/me/bills", s.authRequired(), s.handleListMyBills)

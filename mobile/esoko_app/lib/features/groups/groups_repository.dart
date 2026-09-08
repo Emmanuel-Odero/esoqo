@@ -77,6 +77,17 @@ class GroupsRepository {
     return WithdrawalRow.fromJson(res);
   }
 
+  /// GET /v1/groups/:id/timeline — plain-language, member-visible feed;
+  /// 403s for a non-member (dbx.GroupTimeline requires active
+  /// membership), same as every other write in this file already does.
+  Future<List<TimelineEntry>> timeline(String id) async {
+    final res = await _api.get('/v1/groups/$id/timeline');
+    final list = (res['entries'] as List?) ?? const [];
+    return list
+        .map((e) => TimelineEntry.fromJson(e as Map<String, dynamic>))
+        .toList();
+  }
+
   /// POST /v1/groups — founds a group with the signed-in person as
   /// CHAIRPERSON; returns the new group id.
   Future<String> createGroup({
