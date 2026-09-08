@@ -7,6 +7,7 @@ import '../../core/auth/scan_access.dart';
 import '../../core/theme/esoko_tokens.dart';
 import '../../core/widgets/widgets.dart';
 import '../bills/bills_list_screen.dart';
+import '../fleet/fleet_providers.dart';
 import '../fleet/transport_screen.dart';
 import '../groups/my_groups_screen.dart';
 import '../scan/scan_sheet.dart';
@@ -21,43 +22,66 @@ import '../tickets/listing_list_screen.dart';
 class HomeHubScreen extends ConsumerWidget {
   const HomeHubScreen({super.key});
 
-  static const _services = [
-    (
+  static const _services = {
+    'Shopping': (
       title: 'Shopping',
       subtitle: 'Stores near you — order ahead, collect when ready.',
       icon: Icons.storefront_outlined,
       appBar: 'Shopping',
       screen: StoreListScreen(),
     ),
-    (
+    'Tickets': (
       title: 'Tickets',
       subtitle: 'Events, travel and bookings in one place.',
       icon: Icons.confirmation_num_outlined,
       appBar: 'Tickets',
       screen: ListingListScreen(),
     ),
-    (
+    'Transport': (
       title: 'Transport',
       subtitle: 'Pay bus fare or run your fleet.',
       icon: Icons.directions_bus_outlined,
       appBar: 'Transport',
       screen: TransportScreen(),
     ),
-    (
+    'Groups': (
       title: 'Groups',
       subtitle: 'Chamas, table banking and welfare groups.',
       icon: Icons.groups_outlined,
       appBar: 'Groups',
       screen: MyGroupsScreen(),
     ),
-    (
+    'Bills': (
       title: 'Bills',
       subtitle: 'Track what you owe and mark it paid.',
       icon: Icons.receipt_long_outlined,
       appBar: 'Bills',
       screen: BillsListScreen(),
     ),
-  ];
+  };
+
+  /// Same five services, reordered around whatever this person is
+  /// actually holding right now instead of a fixed alphabetical-feeling
+  /// list — see the journey-map memo, §2. Signals used are all read-only
+  /// and already fetched elsewhere in the app (no new endpoint):
+  /// `fare.verify` (an unrestricted crew grant, never handed out by the
+  /// SUBJECT preset's blanket `:own` capabilities — see
+  /// core/auth/scan_access.dart) means crew; a non-empty `myOrgsProvider`
+  /// means the person actually runs a ticketing/transport company, not
+  /// just holds the structural `*.write:own` grant every subject has;
+  /// a non-empty group list means they're an active group member.
+  /// Ties resolve toward whichever signal is most time-pressured first
+  /// (crew > runs-a-company > group member > plain subject default).
+  static List<String> _order({
+    required bool crew,
+    required bool runsOrg,
+    required bool inGroup,
+  }) {
+    if (crew) return const ['Transport', 'Bills', 'Shopping', 'Tickets', 'Groups'];
+    if (runsOrg) return const ['Transport', 'Tickets', 'Bills', 'Shopping', 'Groups'];
+    if (inGroup) return const ['Groups', 'Bills', 'Transport', 'Shopping', 'Tickets'];
+    return const ['Transport', 'Bills', 'Shopping', 'Tickets', 'Groups'];
+  }
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -65,6 +89,17 @@ class HomeHubScreen extends ConsumerWidget {
     final profile = auth is AuthSignedIn ? auth.profile : null;
     final name = profile?.displayName;
     final canVerify = canVerifyFare(profile);
+
+    // Best-effort, non-blocking: the hub renders the default order
+    // immediately and only re-sorts once these resolve, rather than
+    // holding the whole screen behind two extra network round-trips.
+    final runsOrg = auth is AuthSignedIn
+        ? (ref.watch(myOrgsProvider).valueOrNull?.isNotEmpty ?? false)
+        : false;
+    final inGroup = auth is AuthSignedIn
+        ? (ref.watch(myGroupsProvider).valueOrNull?.isNotEmpty ?? false)
+        : false;
+    final order = _order(crew: canVerify, runsOrg: runsOrg, inGroup: inGroup);
 
     return ListView(
       padding: const EdgeInsets.fromLTRB(
@@ -86,31 +121,32 @@ class HomeHubScreen extends ConsumerWidget {
           subtitle: 'Everything Esoko does for you — pick where to go.',
         ),
         const SizedBox(height: EsokoSpacing.s4),
-        for (final service in _services) ...[
-          Semantics(
-            button: true,
-            label: '${service.title}: ${service.subtitle}',
-            child: EsokoListTile(
-              title: service.title,
-              subtitle: service.subtitle,
-              leading: Hero(
-                tag: 'esoko-service-${service.title}',
-                child: EsokoQuickActionIcon(icon: service.icon),
-              ),
-              onTap: () => Navigator.of(context).push(
-                MaterialPageRoute(
-                  builder: (_) => EsokoServiceScaffold(
-                    title: service.appBar,
-                    icon: service.icon,
-                    heroTag: 'esoko-service-${service.title}',
-                    child: service.screen,
+        for (final title in order)
+          if (_services[title] case final service?) ...[
+            Semantics(
+              button: true,
+              label: '${service.title}: ${service.subtitle}',
+              child: EsokoListTile(
+                title: service.title,
+                subtitle: service.subtitle,
+                leading: Hero(
+                  tag: 'esoko-service-${service.title}',
+                  child: EsokoQuickActionIcon(icon: service.icon),
+                ),
+                onTap: () => Navigator.of(context).push(
+                  MaterialPageRoute(
+                    builder: (_) => EsokoServiceScaffold(
+                      title: service.appBar,
+                      icon: service.icon,
+                      heroTag: 'esoko-service-${service.title}',
+                      child: service.screen,
+                    ),
                   ),
                 ),
               ),
             ),
-          ),
-          const SizedBox(height: EsokoSpacing.s3),
-        ],
+            const SizedBox(height: EsokoSpacing.s3),
+          ],
       ],
     );
   }
@@ -256,8 +292,11 @@ class _ScanCta extends StatelessWidget {
               ? 'Pay for goods or verify a staff fare collection.'
               : 'Pay a shopper’s or traveller’s QR code. No cash needed.',
           textAlign: TextAlign.center,
-          style: const TextStyle(
-            color: EsokoColors.text3,
+          // Theme-derived, not the fixed EsokoColors.text3 — this sits
+          // on the home tab's normal scaffold background (paper/dark),
+          // unlike the navy hero card above it, which is always dark.
+          style: TextStyle(
+            color: Theme.of(context).textTheme.bodySmall?.color,
             fontSize: 12.5,
             height: 1.4,
           ),
