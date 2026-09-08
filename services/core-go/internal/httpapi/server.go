@@ -190,6 +190,13 @@ func (s *Server) Router() *gin.Engine {
 
 		v1.POST("/me/voucher-batches", s.authRequired(), s.handleIssueAllowanceBatch)
 		v1.GET("/me/voucher-batches", s.authRequired(), s.handleListVoucherBatches)
+
+		v1.POST("/parcels", s.handleBookParcel)
+		v1.GET("/parcels/:code/status", s.handleGetParcelStatus)
+		v1.POST("/parcels/:code/handoff", s.authRequired(), s.handleScanParcelHandoff)
+		v1.POST("/parcels/:code/deliver", s.authRequired(), s.handleDeliverParcel)
+		v1.GET("/me/parcels", s.authRequired(), s.handleListMyParcels)
+		v1.GET("/me/parcels/holding", s.authRequired(), s.handleListHeldParcels)
 	}
 
 	r.POST("/webhooks/mpesa/stk-callback", s.handleMpesaStkCallback)

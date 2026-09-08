@@ -10,15 +10,17 @@ import '../bills/bills_list_screen.dart';
 import '../fleet/fleet_providers.dart';
 import '../fleet/transport_screen.dart';
 import '../groups/my_groups_screen.dart';
+import '../parcels/parcels_hub_screen.dart';
 import '../scan/scan_sheet.dart';
 import '../shopping/store_list_screen.dart';
 import '../tickets/listing_list_screen.dart';
 
-/// The one place for the four services — Shopping, Tickets, Groups and
-/// Bills all live here instead of competing for bottom-nav slots. Each
-/// tile pushes its existing list screen inside an [EsokoServiceScaffold]
-/// so the destination keeps a proper title and back button, with the
-/// service icon hero-flying from the tile into the app bar.
+/// The one place for the services — Shopping, Tickets, Transport,
+/// Groups, Bills and Parcels all live here instead of competing for
+/// bottom-nav slots. Each tile pushes its existing list screen inside
+/// an [EsokoServiceScaffold] so the destination keeps a proper title
+/// and back button, with the service icon hero-flying from the tile
+/// into the app bar.
 class HomeHubScreen extends ConsumerWidget {
   const HomeHubScreen({super.key});
 
@@ -58,9 +60,16 @@ class HomeHubScreen extends ConsumerWidget {
       appBar: 'Bills',
       screen: BillsListScreen(),
     ),
+    'Parcels': (
+      title: 'Parcels',
+      subtitle: 'Send a parcel, track it, or hand off custody.',
+      icon: Icons.local_shipping_outlined,
+      appBar: 'Parcels',
+      screen: ParcelsHubScreen(),
+    ),
   };
 
-  /// Same five services, reordered around whatever this person is
+  /// Same six services, reordered around whatever this person is
   /// actually holding right now instead of a fixed alphabetical-feeling
   /// list — see the journey-map memo, §2. Signals used are all read-only
   /// and already fetched elsewhere in the app (no new endpoint):
@@ -72,15 +81,23 @@ class HomeHubScreen extends ConsumerWidget {
   /// a non-empty group list means they're an active group member.
   /// Ties resolve toward whichever signal is most time-pressured first
   /// (crew > runs-a-company > group member > plain subject default).
+  /// Parcels has no signal of its own yet — it sits last in every
+  /// order until a "parcels I'm holding" count is worth surfacing here.
   static List<String> _order({
     required bool crew,
     required bool runsOrg,
     required bool inGroup,
   }) {
-    if (crew) return const ['Transport', 'Bills', 'Shopping', 'Tickets', 'Groups'];
-    if (runsOrg) return const ['Transport', 'Tickets', 'Bills', 'Shopping', 'Groups'];
-    if (inGroup) return const ['Groups', 'Bills', 'Transport', 'Shopping', 'Tickets'];
-    return const ['Transport', 'Bills', 'Shopping', 'Tickets', 'Groups'];
+    if (crew) {
+      return const ['Transport', 'Bills', 'Shopping', 'Tickets', 'Groups', 'Parcels'];
+    }
+    if (runsOrg) {
+      return const ['Transport', 'Tickets', 'Bills', 'Shopping', 'Groups', 'Parcels'];
+    }
+    if (inGroup) {
+      return const ['Groups', 'Bills', 'Transport', 'Shopping', 'Tickets', 'Parcels'];
+    }
+    return const ['Transport', 'Bills', 'Shopping', 'Tickets', 'Groups', 'Parcels'];
   }
 
   @override

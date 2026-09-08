@@ -308,6 +308,7 @@ class ScanRepository {
         );
       case 'trip':
       case 'voucher':
+      case 'parcel':
         return ScanResolution(kind: kind, action: action);
       default:
         return ScanResolution.unknown;

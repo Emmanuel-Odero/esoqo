@@ -10,7 +10,7 @@ import (
 
 // GET /v1/scan/resolve?code= — the universal scanner dispatcher, public.
 // One code in, one Kind + action out (trip|voucher|fare|product|store|
-// table|ticket|order|party|certificate|unknown); every projection is
+// table|ticket|order|party|certificate|parcel|unknown); every projection is
 // public-safe, so guests can scan too. Anything permission-sensitive
 // (full fare details, ticket check-in) stays behind its own capability
 // rule.
@@ -60,6 +60,8 @@ func (s *Server) handleResolveScan(c *gin.Context) {
 		out["party"] = hit.Party
 	case dbx.ScanKindCertificate:
 		out["certificate"] = hit.Certificate
+	case dbx.ScanKindParcel:
+		out["parcel"] = hit.Parcel
 	}
 	c.JSON(http.StatusOK, out)
 }

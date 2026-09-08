@@ -30,6 +30,7 @@ const (
 	ScanKindOrder       = "order"
 	ScanKindParty       = "party"
 	ScanKindCertificate = "certificate"
+	ScanKindParcel      = "parcel"
 	ScanKindUnknown     = "unknown"
 )
 
@@ -45,6 +46,7 @@ const (
 	ActionVerify   = "verify"
 	ActionOpen     = "open"
 	ActionInfo     = "info"
+	ActionTrack    = "track"
 )
 
 func actionForKind(kind string) string {
@@ -69,6 +71,8 @@ func actionForKind(kind string) string {
 		return ActionPay
 	case ScanKindCertificate:
 		return ActionVerify
+	case ScanKindParcel:
+		return ActionTrack
 	default:
 		return ActionInfo
 	}
@@ -88,6 +92,7 @@ type ScanHit struct {
 	Order       *OrderHit
 	Party       *PartyHit
 	Certificate *CertificateHit
+	Parcel      *ParcelStatusView
 }
 
 func unknownHit() *ScanHit {
@@ -117,6 +122,8 @@ func hit[T any](kind string, payload T) *ScanHit {
 		h.Party = any(payload).(*PartyHit)
 	case ScanKindCertificate:
 		h.Certificate = any(payload).(*CertificateHit)
+	case ScanKindParcel:
+		h.Parcel = any(payload).(*ParcelStatusView)
 	}
 	return h
 }
@@ -142,6 +149,7 @@ var shortCodePrefixes = []struct {
 	{prefix: "TKT-", kind: ScanKindTicket},
 	{prefix: "PKP-", kind: ScanKindOrder},
 	{prefix: "ESK-", kind: ScanKindParty},
+	{prefix: "PKG-", kind: ScanKindParcel, checkedLen: 6},
 }
 
 // VoucherPublic is the card anyone holding the QR may see.
@@ -385,6 +393,10 @@ func resolveShortCode(ctx context.Context, pool *pgxpool.Pool, kind, code, qrSec
 		}
 	case ScanKindParty:
 		if p, err := ResolvePartyByPaymentID(ctx, pool, code); err == nil && p != nil {
+			return hit(kind, p)
+		}
+	case ScanKindParcel:
+		if p, err := GetParcelStatus(ctx, pool, code); err == nil && p != nil {
 			return hit(kind, p)
 		}
 	}

@@ -31,18 +31,19 @@ type Prefix string
 
 // Registered prefixes — the single namespace table for short codes.
 const (
-	PrefixTrip       Prefix = "TRIP" // trip token, rotated per trip
-	PrefixBus        Prefix = "BUS"  // passenger-facing boarding code
-	PrefixVoucher    Prefix = "VCH"
-	PrefixTicket     Prefix = "TKT"
-	PrefixPickup     Prefix = "PKP"
-	PrefixPaymentID  Prefix = "ESK"
+	PrefixTrip      Prefix = "TRIP" // trip token, rotated per trip
+	PrefixBus       Prefix = "BUS"  // passenger-facing boarding code
+	PrefixVoucher   Prefix = "VCH"
+	PrefixTicket    Prefix = "TKT"
+	PrefixPickup    Prefix = "PKP"
+	PrefixPaymentID Prefix = "ESK"
+	PrefixParcel    Prefix = "PKG"
 )
 
 // ValidPrefix reports whether p is a registered code prefix.
 func ValidPrefix(p Prefix) bool {
 	switch p {
-	case PrefixTrip, PrefixBus, PrefixVoucher, PrefixTicket, PrefixPickup, PrefixPaymentID:
+	case PrefixTrip, PrefixBus, PrefixVoucher, PrefixTicket, PrefixPickup, PrefixPaymentID, PrefixParcel:
 		return true
 	}
 	return false

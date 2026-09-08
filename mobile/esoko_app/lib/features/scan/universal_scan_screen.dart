@@ -11,6 +11,7 @@ import '../../core/theme/esoko_tokens.dart';
 import '../../core/widgets/widgets.dart';
 import '../fleet/fare_pay_screen.dart';
 import '../fleet/verify_fare_screen.dart';
+import '../parcels/parcel_status_screen.dart';
 import '../shopping/product_detail_screen.dart';
 import '../shopping/self_checkout_screen.dart';
 import '../shopping/store_detail_screen.dart';
@@ -19,12 +20,13 @@ import 'scan_repository.dart';
 
 /// One scanner for every Esoko code. GET /v1/scan/resolve sniffs the
 /// kind (trip, voucher, fare, product, store, table, ticket, order,
-/// party, certificate) plus an `action` hint, and this screen routes to
-/// the matching flow — matatu boarding, mall self-checkout (shelf
-/// barcode → product → checkout), restaurant tables (menu + table
-/// label), vouchers, fare receipts, event tickets, store pickup codes,
-/// payment-id cards and printed certificates. Thin UI: Go owns the
-/// dispatch, and crew-only details stay behind the verify rule.
+/// party, certificate, parcel) plus an `action` hint, and this screen
+/// routes to the matching flow — matatu boarding, mall self-checkout
+/// (shelf barcode → product → checkout), restaurant tables (menu +
+/// table label), vouchers, fare receipts, event tickets, store pickup
+/// codes, payment-id cards, printed certificates, and parcel tracking.
+/// Thin UI: Go owns the dispatch, and crew-only details stay behind
+/// the verify rule.
 class UniversalScanScreen extends ConsumerStatefulWidget {
   const UniversalScanScreen({super.key});
 
@@ -124,6 +126,12 @@ class _UniversalScanScreenState extends ConsumerState<UniversalScanScreen> {
             ),
           );
         }
+      case 'parcel':
+        Navigator.of(context).pushReplacement(
+          MaterialPageRoute(
+            builder: (_) => ParcelStatusScreen(code: _code.text.trim()),
+          ),
+        );
       default:
         setState(
           () => _error =
