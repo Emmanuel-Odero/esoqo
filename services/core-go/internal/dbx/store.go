@@ -286,6 +286,13 @@ type CreateOrderInput struct {
 	// as PENDING_PAYMENT — the kitchen finding out an order exists
 	// doesn't wait on payment confirming, unlike a retail pickup order.
 	TableLabel *string
+	// IsSelfCheckout — set when the order came from a mall/supermarket
+	// basket built by scanning shelf barcodes (see UniversalScanScreen's
+	// basket mode), not a packed order collected later. Drives the same
+	// pickupCode mechanism as a PICKUP fulfilment option (see
+	// ConfirmStoreOrderPaymentByCheckoutID), just gated by this flag
+	// instead — see self_checkout.go.
+	IsSelfCheckout bool
 }
 
 type OrderError struct {
@@ -430,14 +437,14 @@ func CreateStoreOrder(ctx context.Context, pool *pgxpool.Pool, in CreateOrderInp
 		INSERT INTO store_order (
 			id, "storeId", "buyerPartyId", "buyerName", "buyerMsisdn", status, "paymentMethod",
 			"totalKes", "deliveryOptionId", "deliveryFeeKes", "collectionNotes", "deliveryAddress",
-			"customerId", "voucherId", "tableLabel", "dineInStatus", "createdAt"
+			"customerId", "voucherId", "tableLabel", "dineInStatus", "isSelfCheckout", "createdAt"
 		) VALUES (
 			gen_random_uuid(), $1, $2, $3, $4, 'PENDING_PAYMENT', $5,
-			$6, $7, $8, $9, $10, $11, $12, $13, $14, now()
+			$6, $7, $8, $9, $10, $11, $12, $13, $14, $15, now()
 		) RETURNING id`,
 		store.ID, in.BuyerPartyID, in.BuyerName, in.BuyerMsisdn, in.PaymentMethod,
 		total, in.DeliveryOptionID, deliveryFeeKES, in.CollectionNotes, in.DeliveryAddress, customerID, in.VoucherID,
-		in.TableLabel, dineInStatus).
+		in.TableLabel, dineInStatus, in.IsSelfCheckout).
 		Scan(&orderID)
 	if err != nil {
 		return "", "", err
@@ -595,17 +602,19 @@ func ConfirmStoreOrderPaymentByCheckoutID(ctx context.Context, pool *pgxpool.Poo
 
 	// A pickup code is generated here, not at order creation, because
 	// it's only meaningful once money has actually moved — an unpaid
-	// order has nothing for a buyer to collect. Only PICKUP orders get
-	// one; DELIVERY orders never do.
+	// order has nothing for a buyer to collect. PICKUP orders and
+	// self-checkout baskets both get one (see self_checkout.go);
+	// DELIVERY orders never do.
 	var pickupCode *string
 	var fulfilmentKind *string
+	var isSelfCheckout bool
 	err = pool.QueryRow(ctx, `
-		SELECT fo.kind FROM store_order so LEFT JOIN fulfilment_option fo ON fo.id = so."deliveryOptionId"
-		WHERE so.id = $1`, orderID).Scan(&fulfilmentKind)
+		SELECT fo.kind, so."isSelfCheckout" FROM store_order so LEFT JOIN fulfilment_option fo ON fo.id = so."deliveryOptionId"
+		WHERE so.id = $1`, orderID).Scan(&fulfilmentKind, &isSelfCheckout)
 	if err != nil {
 		return err
 	}
-	if fulfilmentKind != nil && *fulfilmentKind == "PICKUP" {
+	if (fulfilmentKind != nil && *fulfilmentKind == "PICKUP") || isSelfCheckout {
 		code, err := generatePickupCodeWithRetry(ctx, pool)
 		if err != nil {
 			return err

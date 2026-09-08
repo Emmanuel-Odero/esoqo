@@ -157,7 +157,11 @@ class ScanResolution {
     required this.action,
     this.fare,
     this.productId,
+    this.productVariantId,
+    this.productName,
+    this.productPriceKes,
     this.storeSlug,
+    this.storeName,
     this.tableLabel,
     this.ticket,
     this.order,
@@ -174,8 +178,21 @@ class ScanResolution {
   /// Set when kind == 'product'.
   final String? productId;
 
-  /// Set when kind == 'store'.
+  /// Set when kind == 'product' and the SKU resolved to a variant.
+  final String? productVariantId;
+
+  /// Set when kind == 'product' — the basket-mode line label, so the
+  /// scanner never has to re-fetch product detail to show a basket row.
+  final String? productName;
+
+  /// Set when kind == 'product'.
+  final String? productPriceKes;
+
+  /// Set when kind == 'store', 'table', or 'product'.
   final String? storeSlug;
+
+  /// Set when kind == 'store', 'table', or 'product'.
+  final String? storeName;
 
   /// Set when kind == 'table'.
   final String? tableLabel;
@@ -229,19 +246,32 @@ class ScanRepository {
           ),
         );
       case 'product':
-        final id =
-            (res['product'] as Map<String, dynamic>?)?['productId'] as String?;
-        return ScanResolution(kind: kind, action: action, productId: id);
+        final p = res['product'] as Map<String, dynamic>?;
+        return ScanResolution(
+          kind: kind,
+          action: action,
+          productId: p?['productId'] as String?,
+          productVariantId: p?['variantId'] as String?,
+          productName: p?['name'] as String?,
+          productPriceKes: p?['priceKes'] as String?,
+          storeSlug: p?['storeSlug'] as String?,
+          storeName: p?['storeName'] as String?,
+        );
       case 'store':
-        final slug =
-            (res['store'] as Map<String, dynamic>?)?['slug'] as String?;
-        return ScanResolution(kind: kind, action: action, storeSlug: slug);
+        final s = res['store'] as Map<String, dynamic>?;
+        return ScanResolution(
+          kind: kind,
+          action: action,
+          storeSlug: s?['slug'] as String?,
+          storeName: s?['name'] as String?,
+        );
       case 'table':
         final t = res['table'] as Map<String, dynamic>?;
         return ScanResolution(
           kind: kind,
           action: action,
           storeSlug: t?['storeSlug'] as String?,
+          storeName: t?['storeName'] as String?,
           tableLabel: t?['tableLabel'] as String?,
         );
       case 'ticket':

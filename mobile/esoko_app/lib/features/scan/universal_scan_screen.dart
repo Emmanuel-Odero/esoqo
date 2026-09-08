@@ -12,6 +12,7 @@ import '../../core/widgets/widgets.dart';
 import '../fleet/fare_pay_screen.dart';
 import '../fleet/verify_fare_screen.dart';
 import '../shopping/product_detail_screen.dart';
+import '../shopping/self_checkout_screen.dart';
 import '../shopping/store_detail_screen.dart';
 import '../vouchers/voucher_wallet_screen.dart';
 import 'scan_repository.dart';
@@ -37,6 +38,13 @@ class _UniversalScanScreenState extends ConsumerState<UniversalScanScreen> {
   bool _busy = false;
   String? _error;
   ScanResolution? _result;
+
+  /// When on, a scanned product joins the self-checkout basket instead
+  /// of navigating to its product page — the "scanning should just be
+  /// scanning" rule from the journey-map memo: a shopper walking a mall
+  /// aisle scans one item after another without a screen change each
+  /// time.
+  bool _basketMode = false;
 
   @override
   void dispose() {
@@ -76,6 +84,18 @@ class _UniversalScanScreenState extends ConsumerState<UniversalScanScreen> {
         final id = r.productId;
         if (id == null) {
           setState(() => _error = 'Could not read that product.');
+        } else if (_basketMode) {
+          if (r.storeSlug == null || r.productName == null || r.productPriceKes == null) {
+            setState(() => _error = 'Could not read that product.');
+          } else {
+            ref.read(selfCheckoutBasketProvider.notifier).addScan(
+                  storeSlug: r.storeSlug!,
+                  storeName: r.storeName ?? 'This store',
+                  productId: id,
+                  name: r.productName!,
+                  priceKes: r.productPriceKes!,
+                );
+          }
         } else {
           Navigator.of(context).pushReplacement(
             MaterialPageRoute(
@@ -134,6 +154,7 @@ class _UniversalScanScreenState extends ConsumerState<UniversalScanScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: const EsokoAppBar(title: 'Scan'),
+      bottomNavigationBar: _basketMode ? const SelfCheckoutBasketBar() : null,
       body: SafeArea(
         child: Center(
           child: ConstrainedBox(
@@ -144,7 +165,17 @@ class _UniversalScanScreenState extends ConsumerState<UniversalScanScreen> {
                 const EsokoPageLead(
                   'Bus QR, shelf barcode, ticket, voucher, or payment card — one scanner.',
                 ),
-                const SizedBox(height: EsokoSpacing.s4),
+                const SizedBox(height: EsokoSpacing.s3),
+                SwitchListTile.adaptive(
+                  contentPadding: EdgeInsets.zero,
+                  title: const Text('Self-checkout basket'),
+                  subtitle: const Text(
+                    'Scan every item on the shelf, pay once at the end.',
+                  ),
+                  value: _basketMode,
+                  onChanged: (v) => setState(() => _basketMode = v),
+                ),
+                const SizedBox(height: EsokoSpacing.s1),
                 SizedBox(
                   height: 260,
                   child: ClipRRect(

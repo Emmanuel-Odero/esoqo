@@ -109,7 +109,11 @@ type createOrderRequest struct {
 	// TableLabel — set by the universal scan screen when this checkout
 	// started from a table QR. See dbx.CreateOrderInput.
 	TableLabel *string `json:"tableLabel"`
-	Items      []struct {
+	// IsSelfCheckout — set by the universal scan screen's basket mode
+	// when this checkout is a mall/supermarket self-checkout rather than
+	// a single-product buy. See dbx.CreateOrderInput.
+	IsSelfCheckout bool `json:"isSelfCheckout"`
+	Items          []struct {
 		ProductID string  `json:"productId" binding:"required"`
 		VariantID *string `json:"variantId"`
 		Quantity  int     `json:"quantity" binding:"required"`
@@ -151,6 +155,7 @@ func (s *Server) handleCreateOrder(c *gin.Context) {
 		DeliveryAddress:  req.DeliveryAddress,
 		CollectionNotes:  req.CollectionNotes,
 		TableLabel:       req.TableLabel,
+		IsSelfCheckout:   req.IsSelfCheckout,
 	})
 	if err != nil {
 		writeOrderOrBookingError(c, err)
@@ -442,6 +447,38 @@ func (s *Server) handleAddTip(c *gin.Context) {
 		return
 	}
 	c.JSON(http.StatusOK, gin.H{"ok": true})
+}
+
+// ── mall self-checkout: guard exit-code verification ──────────────
+
+type resolveExitCodeRequest struct {
+	Code string `json:"code" binding:"required"`
+}
+
+// handleResolveExitCode — POST /v1/stores/:slug/exit-code/resolve.
+// Store-owner-scoped (see dbx.ResolveExitCode) — the mall/supermarket
+// equivalent of handleConfirmOrderCollected, but store-scoped rather
+// than order-scoped since a guard only ever has the code, never an
+// order id. Response is deliberately PII-minimal: item count and
+// total only, no buyer name or phone.
+func (s *Server) handleResolveExitCode(c *gin.Context) {
+	var req resolveExitCodeRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		writeError(c, http.StatusBadRequest, "INVALID_REQUEST", err.Error())
+		return
+	}
+	ctx := ctxFromGin(c)
+	result, err := dbx.ResolveExitCode(c.Request.Context(), s.Pool, c.Param("slug"), ctx.PartyID, req.Code)
+	if err != nil {
+		writeOrderOrBookingError(c, err)
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{
+		"orderId":       result.OrderID,
+		"itemCount":     result.ItemCount,
+		"totalKes":      result.TotalKES,
+		"alreadyExited": result.AlreadyExited,
+	})
 }
 
 func writeOrderOrBookingError(c *gin.Context, err error) {

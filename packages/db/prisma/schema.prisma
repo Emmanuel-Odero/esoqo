@@ -1299,6 +1299,17 @@ model StoreOrder {
   tableLabel   String?
   dineInStatus DineInStatus?
 
+  /// A basket built by scanning shelf barcodes and paid at the door,
+  /// not packed and collected later — mall/supermarket self-checkout.
+  /// Distinct from a PICKUP FulfilmentOption (which means "come back
+  /// and collect a packed order"): this buyer already has the goods in
+  /// hand the moment they pay, they just need to prove it walking out.
+  /// Drives the exact same pickupCode mechanism (see
+  /// ConfirmStoreOrderPaymentByCheckoutID) rather than a new code
+  /// space — a guard's exit check and a pickup counter's collection
+  /// check are the same shape, just gated by a different reason.
+  isSelfCheckout Boolean @default(false)
+
   /// Tip, and who it's credited to — separate from totalKes so it
   /// never inflates the line the kitchen/register actually rang up.
   /// tippedCashierId is resolved from the table's active

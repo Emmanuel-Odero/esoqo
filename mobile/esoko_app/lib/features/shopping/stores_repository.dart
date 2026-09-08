@@ -268,6 +268,79 @@ class StoresRepository {
     });
     return CashierRow.fromJson(res['cashier'] as Map<String, dynamic>);
   }
+
+  // ── mall self-checkout ─────────────────────────────────────────────
+
+  /// POST /v1/orders — basket-built self-checkout, `isSelfCheckout: true`
+  /// so the server mints an exit code the same way it mints a pickup
+  /// code (see dbx.CreateOrderInput.IsSelfCheckout). A separate method
+  /// from placeTableOrder for the same reason that one is separate from
+  /// placeOrder: distinct semantics deserve their own name, even though
+  /// the wire shape is nearly identical.
+  Future<PlacedOrder> placeSelfCheckoutOrder({
+    required String storeSlug,
+    required Map<String, int> quantitiesByProductId,
+    required String buyerName,
+    required String buyerMsisdn,
+  }) async {
+    final res = await _api.post('/v1/orders', {
+      'storeSlug': storeSlug,
+      'buyerName': buyerName,
+      'buyerMsisdn': buyerMsisdn,
+      'paymentMethod': 'MPESA_STK',
+      'isSelfCheckout': true,
+      'items': [
+        for (final entry in quantitiesByProductId.entries)
+          {'productId': entry.key, 'quantity': entry.value},
+      ],
+    });
+    return PlacedOrder(
+      orderId: res['orderId'] as String?,
+      totalKes: res['totalKes'] as String?,
+      paid: _isPaid(res),
+    );
+  }
+
+  /// POST /v1/stores/:slug/exit-code/resolve — the guard's verification
+  /// step. Store-owner-scoped (see dbx.ResolveExitCode); throws
+  /// ApiException with codes WRONG_CODE / NOT_PAID / FORBIDDEN, which
+  /// the guard screen renders as a plain red result rather than a form
+  /// error.
+  Future<ExitCodeResult> resolveExitCode({
+    required String storeSlug,
+    required String code,
+  }) async {
+    final res = await _api.post(
+      '/v1/stores/$storeSlug/exit-code/resolve',
+      {'code': code},
+    );
+    return ExitCodeResult.fromJson(res);
+  }
+}
+
+/// The guard-facing, PII-minimal answer to a resolved exit code — item
+/// count and total only, never the buyer's name or phone (see
+/// dbx.ExitCodeResult's own comment on why).
+class ExitCodeResult {
+  const ExitCodeResult({
+    required this.orderId,
+    required this.itemCount,
+    required this.totalKes,
+    required this.alreadyExited,
+  });
+
+  factory ExitCodeResult.fromJson(Map<String, dynamic> json) =>
+      ExitCodeResult(
+        orderId: json['orderId'] as String? ?? '',
+        itemCount: (json['itemCount'] as num?)?.toInt() ?? 0,
+        totalKes: json['totalKes'] as String? ?? '0',
+        alreadyExited: json['alreadyExited'] as bool? ?? false,
+      );
+
+  final String orderId;
+  final int itemCount;
+  final String totalKes;
+  final bool alreadyExited;
 }
 
 /// The shaped answer to POST /v1/orders the checkout stage machine acts on.

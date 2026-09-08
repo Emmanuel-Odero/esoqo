@@ -10,6 +10,7 @@ import 'category_style.dart';
 import 'gradient_thumb.dart';
 import 'product_detail_screen.dart';
 import 'shopping_models.dart';
+import 'self_checkout_screen.dart';
 import 'store_list_screen.dart' show savedStoresProvider;
 import 'stores_repository.dart';
 import 'table_board_screen.dart';
@@ -86,6 +87,16 @@ class StoreDetailScreen extends ConsumerWidget {
                         onPressed: () => Navigator.of(context).push(
                           MaterialPageRoute(
                             builder: (_) => TableBoardScreen(slug: slug),
+                          ),
+                        ),
+                      ),
+                    if (signedIn)
+                      IconButton(
+                        icon: const Icon(Icons.verified_user_outlined),
+                        tooltip: 'Exit check',
+                        onPressed: () => Navigator.of(context).push(
+                          MaterialPageRoute(
+                            builder: (_) => SelfCheckoutGuardScreen(slug: slug),
                           ),
                         ),
                       ),

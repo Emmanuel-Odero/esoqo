@@ -76,6 +76,7 @@ func (s *Server) Router() *gin.Engine {
 		v1.POST("/stores/:slug/tables/:table/assign", s.authRequired(), s.handleAssignTable)
 		v1.GET("/stores/:slug/cashiers", s.authRequired(), s.handleListCashiers)
 		v1.POST("/stores/:slug/cashiers", s.authRequired(), s.handleCreateCashier)
+		v1.POST("/stores/:slug/exit-code/resolve", s.authRequired(), s.handleResolveExitCode)
 
 		v1.GET("/listings", s.handleListListings)
 		v1.GET("/listings/:id", s.handleGetListing)
