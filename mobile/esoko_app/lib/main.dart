@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:quick_actions/quick_actions.dart';
 
+import 'core/auth/agent_session.dart';
 import 'core/auth/auth_controller.dart';
 import 'core/auth/auth_state.dart';
 import 'core/router.dart';
@@ -74,7 +75,8 @@ class _SplashGate extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final auth = ref.watch(authControllerProvider);
-    if (auth is AuthUnknown) {
+    final agent = ref.watch(agentSessionControllerProvider);
+    if (auth is AuthUnknown || agent is AgentUnknown) {
       return const Scaffold(body: Center(child: CircularProgressIndicator()));
     }
     return child ?? const SizedBox.shrink();

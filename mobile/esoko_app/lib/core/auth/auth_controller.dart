@@ -33,6 +33,17 @@ class AuthController extends Notifier<AuthState> {
   }
 
   Future<void> _restore() async {
+    // An agent (crew) session owns the one token slot right now — see
+    // core/storage/token_store.dart. GET /v1/me is a SUBJECT-only
+    // endpoint (it resolves a Party); calling it with an agent token
+    // would just fail and, worse, this controller would then clear the
+    // token out from under AgentSessionController. Settle into
+    // signed-out without touching storage — the agent controller reads
+    // the very same key and owns clearing it.
+    if (await TokenStore.instance.readKind() == SessionKind.agent) {
+      state = const AuthSignedOut();
+      return;
+    }
     final token = await TokenStore.instance.read();
     if (token == null) {
       state = const AuthSignedOut();

@@ -176,10 +176,50 @@ class FleetRepository {
     });
   }
 
-  /// POST /v1/fleet/trips/:id/close.
-  Future<void> closeTrip(String tripId) {
-    return _api.post('/v1/fleet/trips/$tripId/close');
+  /// POST /v1/fleet/trips/:id/close — note/endStatus are the crew
+  /// end-of-shift additions (see TripEndStatus); both stay optional so
+  /// a manager closing without either still works exactly as before.
+  Future<void> closeTrip(String tripId, {String? note, String? endStatus}) {
+    return _api.post('/v1/fleet/trips/$tripId/close', {
+      if (note != null) 'note': note,
+      if (endStatus != null) 'endStatus': endStatus,
+    });
   }
+
+  /// GET /v1/fleet/my-trip — crew-scoped "which trip am I on right now"
+  /// (an AGENT-only read; a SUBJECT session always gets null here). See
+  /// dbx.MyActiveTrip.
+  Future<MyTrip?> myActiveTrip() async {
+    final res = await _api.get('/v1/fleet/my-trip');
+    final t = res['trip'] as Map<String, dynamic>?;
+    return t == null ? null : MyTrip.fromJson(t);
+  }
+}
+
+/// GET /v1/fleet/my-trip's projection — just enough to head the crew
+/// shift screen.
+class MyTrip {
+  const MyTrip({
+    required this.id,
+    required this.vehiclePlate,
+    this.routeName,
+    required this.startedAt,
+    required this.crewMemberId,
+  });
+
+  factory MyTrip.fromJson(Map<String, dynamic> json) => MyTrip(
+        id: json['ID'] as String,
+        vehiclePlate: json['VehiclePlate'] as String,
+        routeName: json['RouteName'] as String?,
+        startedAt: json['StartedAt'] as String,
+        crewMemberId: json['CrewMemberID'] as String,
+      );
+
+  final String id;
+  final String vehiclePlate;
+  final String? routeName;
+  final String startedAt;
+  final String crewMemberId;
 }
 
 /// A resolved scan: which org it belongs to (for the manual fallback)

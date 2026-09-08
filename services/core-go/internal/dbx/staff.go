@@ -11,12 +11,19 @@ import (
 // TicketStaff is the sign-in projection of ticket_org_staff — never
 // exposes anything beyond what the PIN check needs.
 type TicketStaff struct {
-	ID      string
-	OrgID   string
-	Name    string
-	Role    string
-	Active  bool
-	PinHash string
+	ID           string
+	OrgID        string
+	Name         string
+	Role         string
+	Active       bool
+	PinHash      string
+	// CrewMemberID — set only for role = CREW logins a manager has
+	// linked to a CrewMember. Returned to the client at sign-in so a
+	// crew session can declare/close against itself without a picker;
+	// re-checked from the database (not the session) at every write
+	// that needs it, so a manager changing the link takes effect
+	// immediately. See dbx.CloseTrip and TicketOrgStaff.crewMemberId.
+	CrewMemberID *string
 }
 
 // FindTicketStaffForSignIn ports TS getTicketOrgStaffPinHashForSignIn:
@@ -35,10 +42,10 @@ func FindTicketStaffForSignIn(ctx context.Context, pool *pgxpool.Pool, orgSlug, 
 	}
 	var s TicketStaff
 	err = pool.QueryRow(ctx, `
-		SELECT id, "orgId", name, role, active, "pinHash"
+		SELECT id, "orgId", name, role, active, "pinHash", "crewMemberId"
 		FROM ticket_org_staff
 		WHERE "orgId" = $1 AND active = true AND LOWER(name) = LOWER($2)`,
-		orgID, name).Scan(&s.ID, &s.OrgID, &s.Name, &s.Role, &s.Active, &s.PinHash)
+		orgID, name).Scan(&s.ID, &s.OrgID, &s.Name, &s.Role, &s.Active, &s.PinHash, &s.CrewMemberID)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return nil, nil
 	}

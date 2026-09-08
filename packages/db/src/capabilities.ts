@@ -236,9 +236,11 @@ export const CAPABILITY_CATALOGUE = [
     ['crew.write', 'Onboard or deactivate crew'],
     ['trip.read', 'View duty trips'],
     ['trip.write', 'Assign or close duty trips'],
+    ['trip.close:own', 'Close a duty trip you are the assigned driver or conductor on'],
     ['vehicle.track', 'See live vehicle positions'],
     ['fare.pay', 'Pay bus fare'],
     ['fare.read', 'View fare payments'],
+    ['fare.verify', 'Verify a fare payment (crew)'],
     ['collection.declare', 'Declare cash collected on a trip'],
     ['collection.read', 'View collections and variances'],
   ]},
@@ -402,11 +404,20 @@ export type CashierRole = keyof typeof CASHIER_CAPABILITIES;
  * ADMIN    — everything, including org.write and staff.write.
  */
 export const TICKETING_STAFF_CAPABILITIES = {
-  SCANNER: ['ticket.checkin', 'ticketorg.read'],
+  // fare.verify on SCANNER/MANAGER below brings this in line with
+  // authsvc.TicketingStaffCapabilities (services/core-go) — it was
+  // granted there but never ported back here, a real gap (not just a
+  // docs one): a SCANNER/MANAGER/CREW signing in through apps/app's
+  // web org-staff flow silently couldn't verify a fare that the same
+  // role could verify signing in through mobile. Ported 1:1 per
+  // docs/adr/0005-mobile-api-in-go.md; ADMIN's own omission of
+  // fare.verify is pre-existing on the Go side too and left as-is here
+  // rather than changed unasked.
+  SCANNER: ['ticket.checkin', 'ticketorg.read', 'fare.verify', 'fare.read'],
   MANAGER: ['ticket.checkin', 'listing.write', 'listing.publish', 'ticketclass.write',
             'schedule.write', 'venue.write', 'route.write',
             'booking.read', 'booking.cancel', 'booking.refund', 'ticketorg.read',
-            'fleet.read', 'crew.read', 'trip.read', 'fare.read', 'collection.read', 'vehicle.track'],
+            'fleet.read', 'crew.read', 'trip.read', 'fare.read', 'fare.verify', 'collection.read', 'vehicle.track'],
   ADMIN:   ['ticket.checkin', 'listing.write', 'listing.publish', 'ticketclass.write',
             'schedule.write', 'venue.write', 'route.write',
             'booking.read', 'booking.cancel', 'booking.refund',
@@ -414,7 +425,13 @@ export const TICKETING_STAFF_CAPABILITIES = {
             'fleet.read', 'fleet.write', 'crew.read', 'crew.write',
             'trip.read', 'trip.write', 'fare.read', 'fare.pay',
             'collection.read', 'collection.declare', 'vehicle.track'],
-  CREW:    ['collection.declare', 'vehicle.track', 'fare.read', 'ticketorg.read'],
+  // trip.close:own — a CREW login may close only the one trip it's
+  // linked to as driver/conductor (TicketOrgStaff.crewMemberId); see
+  // dbx.CloseTrip. CREW deliberately still lacks trip.write/trip.read.
+  // collection.read: a crew member declaring cash has to be able to
+  // see the running tally they're declaring against — same org-wide
+  // scope collection.declare already carries for CREW, not a new one.
+  CREW:    ['collection.declare', 'collection.read', 'vehicle.track', 'fare.read', 'fare.verify', 'trip.close:own', 'ticketorg.read'],
 } as const satisfies Record<string, readonly Capability[]>;
 
 export type TicketingStaffRole = keyof typeof TICKETING_STAFF_CAPABILITIES;

@@ -151,6 +151,16 @@ const (
 	CapFareVerify        = "fare.verify"
 	CapCollectionDeclare = "collection.declare"
 	CapCollectionRead    = "collection.read"
+	// CapTripCloseOwn — narrower than CapTripWrite: a CREW session may
+	// close a trip only when TicketOrgStaff.crewMemberId (resolved from
+	// ctx.ActorID) matches that trip's own driverId/conductorId — see
+	// dbx.CloseTrip. Exact-match capability like CapFareVerify/
+	// CapCollectionDeclare above, not the generic SUBJECT ':own'
+	// qualifier (that mechanism is PartyID-based and AGENT sessions
+	// bypass it entirely per AssertOwnsOrg) — the ':own' in the name
+	// documents intent, matches() short-circuits on it via plain string
+	// equality either way.
+	CapTripCloseOwn = "trip.close:own"
 
 	CapVoucherCreate = "voucher.create"
 	CapVoucherRead   = "voucher.read"
@@ -178,7 +188,14 @@ var TicketingStaffCapabilities = map[string][]string{
 		CapFleetRead, CapFleetWrite, CapCrewRead, CapCrewWrite,
 		CapTripRead, CapTripWrite, CapFareRead, CapFarePay,
 		CapCollectionRead, CapCollectionDeclare, CapVehicleTrack},
-	"CREW": {CapCollectionDeclare, CapVehicleTrack, CapFareRead, CapFareVerify, "ticketorg.read"},
+	// CapCollectionRead added alongside CapTripCloseOwn: a crew member
+	// declaring cash has to be able to see the running tally they're
+	// declaring against (fares confirmed vs cash counted) — the whole
+	// point of collection.declare existing on this bundle. Same
+	// org-wide scope collection.declare already has for CREW (not
+	// restricted to the caller's own trip; ownership is the trip match
+	// at declare time, not the read), so this isn't a new precedent.
+	"CREW": {CapCollectionDeclare, CapCollectionRead, CapVehicleTrack, CapFareRead, CapFareVerify, CapTripCloseOwn, "ticketorg.read"},
 }
 
 // RolePresets — convenience bundles only; the model is the capability list

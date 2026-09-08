@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:mobile_scanner/mobile_scanner.dart';
 
 import '../../core/api/api_exception.dart';
+import '../../core/auth/agent_session.dart';
 import '../../core/auth/auth_controller.dart';
 import '../../core/auth/auth_state.dart';
 import '../../core/auth/scan_access.dart';
@@ -45,7 +46,8 @@ class _UniversalScanScreenState extends ConsumerState<UniversalScanScreen> {
 
   bool get _canVerify {
     final auth = ref.read(authControllerProvider);
-    return auth is AuthSignedIn && canVerifyFare(auth.profile);
+    if (auth is AuthSignedIn && canVerifyFare(auth.profile)) return true;
+    return ref.read(agentSessionControllerProvider) is AgentSignedIn;
   }
 
   void _route(BuildContext context, ScanResolution r) {

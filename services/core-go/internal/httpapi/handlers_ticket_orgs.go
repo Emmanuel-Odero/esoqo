@@ -315,6 +315,9 @@ type createOrgStaffRequest struct {
 	Name string `json:"name" binding:"required"`
 	Pin  string `json:"pin" binding:"required"`
 	Role string `json:"role"`
+	// CrewMemberID — only meaningful for role "CREW"; see
+	// dbx.CreateTicketOrgStaff.
+	CrewMemberID *string `json:"crewMemberId"`
 }
 
 func (s *Server) handleCreateOrgStaff(c *gin.Context) {
@@ -339,7 +342,7 @@ func (s *Server) handleCreateOrgStaff(c *gin.Context) {
 	if role == "" {
 		role = "SCANNER"
 	}
-	staff, err := dbx.CreateTicketOrgStaff(c.Request.Context(), s.Pool, ctxFromGin(c), c.Param("id"), req.Name, hash, role)
+	staff, err := dbx.CreateTicketOrgStaff(c.Request.Context(), s.Pool, ctxFromGin(c), c.Param("id"), req.Name, hash, role, req.CrewMemberID)
 	if err != nil {
 		writeOrgError(c, err)
 		return

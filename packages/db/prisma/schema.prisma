@@ -2989,9 +2989,22 @@ model TicketOrgStaff {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
+  /// Set only for role = CREW: which CrewMember (driver/conductor) this
+  /// PIN login actually is. A CREW login without this link can still
+  /// declare cash (that write only checks org membership) but cannot
+  /// close a trip — the trip.close:own capability requires this link to
+  /// resolve, and to match the trip's own driverId/conductorId, before a
+  /// crew session may close it. Deliberately not unique: a driver and a
+  /// conductor on the same trip are two different CrewMember rows, and
+  /// nothing stops one CrewMember having more than one PIN login over
+  /// time (a replaced phone, say) if an org chooses to issue one.
+  crewMemberId String?     @db.Uuid
+  crewMember   CrewMember? @relation(fields: [crewMemberId], references: [id], onDelete: SetNull)
+
   checkIns Ticket[]
 
   @@index([orgId])
+  @@index([crewMemberId])
   @@map("ticket_org_staff")
 }
 
@@ -3452,6 +3465,8 @@ model CrewMember {
   drivenTrips    Trip[]                  @relation("TripDriver")
   conductedTrips Trip[]                  @relation("TripConductor")
   declarations   CollectionDeclaration[]
+  /// PIN logins linked to this person — see TicketOrgStaff.crewMemberId.
+  staffLogins    TicketOrgStaff[]
 
   @@index([orgId, role, active])
   @@map("crew_member")
@@ -3495,6 +3510,19 @@ enum TripStatus {
   CLOSED
 }
 
+/// What shape the crew left the vehicle in at end of shift — three
+/// quick-chip codes rather than free text alone, so a fleet owner can
+/// scan a fleet's worth of trips for anything needing attention without
+/// reading every note. OK is not the default: a crew session must
+/// affirmatively pick one when closing their own trip (see
+/// dbx.CloseTrip) — a manager closing on their behalf may still close
+/// without either, same as before this field existed.
+enum TripEndStatus {
+  OK
+  NEEDS_FUEL
+  NEEDS_REPAIR
+}
+
 model Trip {
   id    String    @id @default(uuid()) @db.Uuid
   orgId String    @db.Uuid
@@ -3514,6 +3542,9 @@ model Trip {
   status    TripStatus @default(ACTIVE)
   startedAt DateTime   @default(now())
   endedAt   DateTime?
+  /// Set together, only at close — see TripEndStatus and dbx.CloseTrip.
+  endStatus TripEndStatus?
+  endNote   String?
 
   createdAt DateTime @default(now())
 

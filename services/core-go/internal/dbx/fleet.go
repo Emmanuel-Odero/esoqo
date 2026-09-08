@@ -420,22 +420,128 @@ func CreateTrip(ctx context.Context, pool *pgxpool.Pool, c authsvc.Ctx, orgID, v
 	return &t, nil
 }
 
-func CloseTrip(ctx context.Context, pool *pgxpool.Pool, c authsvc.Ctx, tripID string) error {
+var validTripEndStatus = map[string]bool{"OK": true, "NEEDS_FUEL": true, "NEEDS_REPAIR": true}
+
+// crewOwnsTrip — the actual security check behind trip.close:own,
+// pulled out as a pure function so it's unit-testable without a live
+// Postgres pool (see fleet_test.go). An empty crewMemberID (no link, or
+// the lookup found none) never matches, deliberately fails closed:
+// a CREW login with no CrewMember set can declare cash but can never
+// close a trip, since there is nothing to prove it's THIS trip's crew.
+func crewOwnsTrip(crewMemberID string, driverID, conductorID *string) bool {
+	if crewMemberID == "" {
+		return false
+	}
+	return (driverID != nil && crewMemberID == *driverID) ||
+		(conductorID != nil && crewMemberID == *conductorID)
+}
+
+// crewMemberIDForStaff resolves a CREW AGENT session's linked
+// CrewMember — looked up fresh from the database on every call (not
+// cached on Ctx) so a manager re-linking or unlinking the login takes
+// effect on the very next request, never a stale grant.
+func crewMemberIDForStaff(ctx context.Context, pool *pgxpool.Pool, staffID string) (string, error) {
+	var crewMemberID *string
+	err := pool.QueryRow(ctx, `SELECT "crewMemberId" FROM ticket_org_staff WHERE id = $1`, staffID).Scan(&crewMemberID)
+	if errors.Is(err, pgx.ErrNoRows) || crewMemberID == nil {
+		return "", nil
+	}
+	if err != nil {
+		return "", err
+	}
+	return *crewMemberID, nil
+}
+
+// CloseTrip ends a trip either as its manager (CapTripWrite, org-wide —
+// unchanged) or, new here, as the crew member actually driving/
+// conducting it (CapTripCloseOwn): a CREW AGENT session may close only
+// the one trip whose driverId or conductorId matches the CrewMember its
+// login is linked to. note/endStatus are optional either way — a
+// manager closing on someone's behalf may still leave both nil, exactly
+// as before this field existed; see TripEndStatus in schema.prisma.
+func CloseTrip(ctx context.Context, pool *pgxpool.Pool, c authsvc.Ctx, tripID string, note *string, endStatus *string) error {
 	var orgID, status string
-	if err := pool.QueryRow(ctx, `SELECT "orgId", status::text FROM trip WHERE id = $1`, tripID).Scan(&orgID, &status); err != nil {
+	var driverID, conductorID *string
+	if err := pool.QueryRow(ctx, `SELECT "orgId", status::text, "driverId", "conductorId" FROM trip WHERE id = $1`, tripID).Scan(&orgID, &status, &driverID, &conductorID); err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return &FleetError{"NOT_FOUND", "Trip not found"}
 		}
 		return err
 	}
-	if _, err := AssertOwnsOrg(ctx, pool, c, orgID, authsvc.CapTripWrite); err != nil {
-		return err
+	if _, managerErr := AssertOwnsOrg(ctx, pool, c, orgID, authsvc.CapTripWrite); managerErr != nil {
+		if _, crewErr := AssertOwnsOrg(ctx, pool, c, orgID, authsvc.CapTripCloseOwn); crewErr != nil {
+			// Neither grant held — surface the manager-path error; both
+			// are 403s with the same shape, so which capability name
+			// shows up doesn't leak which path almost worked.
+			return managerErr
+		}
+		crewMemberID, err := crewMemberIDForStaff(ctx, pool, c.ActorID)
+		if err != nil {
+			return err
+		}
+		if !crewOwnsTrip(crewMemberID, driverID, conductorID) {
+			return &authsvc.AuthorisationError{Capability: authsvc.CapTripCloseOwn, ActorType: c.ActorType, ActorID: c.ActorID}
+		}
 	}
 	if status != "ACTIVE" {
 		return &FleetError{"TRIP_CLOSED", "That trip is already closed"}
 	}
-	_, err := pool.Exec(ctx, `UPDATE trip SET status = 'CLOSED', "endedAt" = now() WHERE id = $1`, tripID)
+	if endStatus != nil && !validTripEndStatus[*endStatus] {
+		return &FleetError{"BAD_INPUT", "endStatus must be OK, NEEDS_FUEL or NEEDS_REPAIR"}
+	}
+	_, err := pool.Exec(ctx, `
+		UPDATE trip SET status = 'CLOSED', "endedAt" = now(), "endNote" = $2, "endStatus" = $3
+		WHERE id = $1`, tripID, note, endStatus)
 	return err
+}
+
+// MyTrip is the crew-facing "my shift" projection — just enough to
+// head the shift screen (which vehicle, which route, since when). No
+// passenger PII, same reasoning as the public active-trips projection.
+type MyTrip struct {
+	ID           string
+	VehiclePlate string
+	RouteName    *string
+	StartedAt    string
+	CrewMemberID string
+}
+
+// MyActiveTrip — the crew-scoped alternative to ListTrips (which needs
+// CapTripRead, deliberately not part of the CREW bundle). Self-scoped by
+// construction rather than by a capability qualifier: an AGENT session
+// with no linked CrewMember, or one whose CrewMember isn't driving or
+// conducting anything right now, correctly gets "no trip", never
+// another crew member's. Requires an AGENT session — a SUBJECT asking
+// "my trip" has no CrewMember to resolve and always gets nil.
+func MyActiveTrip(ctx context.Context, pool *pgxpool.Pool, c authsvc.Ctx) (*MyTrip, error) {
+	if !c.Verified || c.ActorType != authsvc.ActorAgent || c.ActorID == "" {
+		return nil, nil
+	}
+	crewMemberID, err := crewMemberIDForStaff(ctx, pool, c.ActorID)
+	if err != nil {
+		return nil, err
+	}
+	if crewMemberID == "" {
+		return nil, nil
+	}
+	var t MyTrip
+	err = pool.QueryRow(ctx, `
+		SELECT t.id, v."plateNo", r.name, t."startedAt"::text
+		FROM trip t
+		JOIN fleet_vehicle v ON v.id = t."vehicleId"
+		LEFT JOIN short_route r ON r.id = t."shortRouteId"
+		WHERE t."orgId" = $1 AND t.status = 'ACTIVE'
+		  AND (t."driverId" = $2 OR t."conductorId" = $2)
+		ORDER BY t."startedAt" DESC LIMIT 1`,
+		c.TicketOrgID, crewMemberID).Scan(&t.ID, &t.VehiclePlate, &t.RouteName, &t.StartedAt)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, err
+	}
+	t.CrewMemberID = crewMemberID
+	return &t, nil
 }
 
 func ListTrips(ctx context.Context, pool *pgxpool.Pool, c authsvc.Ctx, orgID string, activeOnly bool) ([]Trip, error) {

@@ -91,7 +91,10 @@ func (s *Server) handleTicketStaffSignIn(c *gin.Context) {
 		writeError(c, http.StatusInternalServerError, "SESSION_CREATE_FAILED", "Could not start a session")
 		return
 	}
-	c.JSON(http.StatusOK, gin.H{"token": token, "orgId": staff.OrgID, "role": staff.Role, "name": staff.Name})
+	c.JSON(http.StatusOK, gin.H{
+		"token": token, "orgId": staff.OrgID, "role": staff.Role, "name": staff.Name,
+		"crewMemberId": staff.CrewMemberID,
+	})
 }
 
 // ── fleet ────────────────────────────────────────────────────────
@@ -278,12 +281,41 @@ func (s *Server) handleListTrips(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"trips": trips})
 }
 
-func (s *Server) handleCloseTrip(c *gin.Context) {
-	if err := dbx.CloseTrip(c.Request.Context(), s.Pool, ctxFromGin(c), c.Param("id")); err != nil {
+// handleMyActiveTrip — GET /v1/fleet/my-trip. Crew-scoped "which trip
+// am I on right now", not gated by a capability the CREW bundle
+// deliberately doesn't hold (trip.read) — see dbx.MyActiveTrip.
+func (s *Server) handleMyActiveTrip(c *gin.Context) {
+	trip, err := dbx.MyActiveTrip(c.Request.Context(), s.Pool, ctxFromGin(c))
+	if err != nil {
 		writeFleetError(c, err)
 		return
 	}
-	s.recordFleetAudit(c, "fleet.trip.closed", "trip", c.Param("id"), nil)
+	c.JSON(http.StatusOK, gin.H{"trip": trip})
+}
+
+type closeTripRequest struct {
+	// Both optional — a manager closing on someone's behalf may still
+	// send neither, exactly as before this field existed.
+	Note      *string `json:"note"`
+	EndStatus *string `json:"endStatus"`
+}
+
+func (s *Server) handleCloseTrip(c *gin.Context) {
+	var req closeTripRequest
+	// No `binding:"required"` fields on this body — an empty/absent
+	// body is valid (manager close, no note), so a bind error here can
+	// only mean malformed JSON, not a missing field.
+	if c.Request.ContentLength > 0 {
+		if err := c.ShouldBindJSON(&req); err != nil {
+			writeError(c, http.StatusBadRequest, "INVALID_REQUEST", err.Error())
+			return
+		}
+	}
+	if err := dbx.CloseTrip(c.Request.Context(), s.Pool, ctxFromGin(c), c.Param("id"), req.Note, req.EndStatus); err != nil {
+		writeFleetError(c, err)
+		return
+	}
+	s.recordFleetAudit(c, "fleet.trip.closed", "trip", c.Param("id"), map[string]interface{}{"endStatus": req.EndStatus})
 	c.JSON(http.StatusOK, gin.H{"ok": true})
 }
 

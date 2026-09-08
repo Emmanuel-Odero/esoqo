@@ -126,12 +126,13 @@ type SeatMapJSON struct {
 }
 
 type OrgStaffJSON struct {
-	ID        string `json:"id"`
-	OrgID     string `json:"orgId"`
-	Name      string `json:"name"`
-	Role      string `json:"role"`
-	Active    bool   `json:"active"`
-	CreatedAt string `json:"createdAt"`
+	ID           string  `json:"id"`
+	OrgID        string  `json:"orgId"`
+	Name         string  `json:"name"`
+	Role         string  `json:"role"`
+	Active       bool    `json:"active"`
+	CreatedAt    string  `json:"createdAt"`
+	CrewMemberID *string `json:"crewMemberId,omitempty"`
 }
 
 type OrgBookingJSON struct {
@@ -928,7 +929,14 @@ func SetAddonActive(ctx context.Context, pool *pgxpool.Pool, c authsvc.Ctx, addo
 
 // ── org staff ────────────────────────────────────────────────────
 
-func CreateTicketOrgStaff(ctx context.Context, pool *pgxpool.Pool, c authsvc.Ctx, orgID, name, pinHash, role string) (*OrgStaffJSON, error) {
+// crewMemberID is only meaningful (and only persisted) for role ==
+// "CREW" — a manager links the PIN login to the actual CrewMember
+// (driver/conductor) row it's for, which is what lets that login later
+// close only the one trip it's driving/conducting (trip.close:own — see
+// dbx.CloseTrip). Any other role passing a non-empty crewMemberID is a
+// caller mistake, not silently accepted: it's ignored so a MANAGER/ADMIN
+// login can never end up impersonating a crew member's trip access.
+func CreateTicketOrgStaff(ctx context.Context, pool *pgxpool.Pool, c authsvc.Ctx, orgID, name, pinHash, role string, crewMemberID *string) (*OrgStaffJSON, error) {
 	if _, err := AssertOwnsOrg(ctx, pool, c, orgID, "ticketorgstaff.write"); err != nil {
 		return nil, err
 	}
@@ -938,13 +946,31 @@ func CreateTicketOrgStaff(ctx context.Context, pool *pgxpool.Pool, c authsvc.Ctx
 	if role != "ADMIN" && role != "MANAGER" && role != "SCANNER" && role != "CREW" {
 		role = "SCANNER"
 	}
+	if role != "CREW" {
+		crewMemberID = nil
+	}
+	if crewMemberID != nil && strings.TrimSpace(*crewMemberID) != "" {
+		var crewOrg string
+		if err := pool.QueryRow(ctx, `SELECT "orgId" FROM crew_member WHERE id = $1`, *crewMemberID).Scan(&crewOrg); err != nil {
+			if errors.Is(err, pgx.ErrNoRows) {
+				return nil, &OrgError{"NOT_FOUND", "Crew member not found"}
+			}
+			return nil, err
+		}
+		if crewOrg != orgID {
+			return nil, &OrgError{"BAD_INPUT", "That crew member belongs to another organiser"}
+		}
+	} else {
+		crewMemberID = nil
+	}
 	var s OrgStaffJSON
 	var createdAt string
 	err := pool.QueryRow(ctx, `
-		INSERT INTO ticket_org_staff (id, "orgId", name, "pinHash", role, active, "createdAt", "updatedAt")
-		VALUES (gen_random_uuid(), $1, $2, $3, $4, true, now(), now())
-		RETURNING id, "orgId", name, role, active, to_char("createdAt", 'YYYY-MM-DD"T"HH24:MI:SS"Z"')`,
-		orgID, strings.TrimSpace(name), pinHash, role).Scan(&s.ID, &s.OrgID, &s.Name, &s.Role, &s.Active, &createdAt)
+		INSERT INTO ticket_org_staff (id, "orgId", name, "pinHash", role, "crewMemberId", active, "createdAt", "updatedAt")
+		VALUES (gen_random_uuid(), $1, $2, $3, $4, $5, true, now(), now())
+		RETURNING id, "orgId", name, role, active, to_char("createdAt", 'YYYY-MM-DD"T"HH24:MI:SS"Z"'), "crewMemberId"`,
+		orgID, strings.TrimSpace(name), pinHash, role, crewMemberID).Scan(
+		&s.ID, &s.OrgID, &s.Name, &s.Role, &s.Active, &createdAt, &s.CrewMemberID)
 	if err != nil {
 		return nil, err
 	}
@@ -960,7 +986,7 @@ func ListTicketOrgStaff(ctx context.Context, pool *pgxpool.Pool, c authsvc.Ctx, 
 		return nil, err
 	}
 	rows, err := pool.Query(ctx, `
-		SELECT id, "orgId", name, role, active, to_char("createdAt", 'YYYY-MM-DD"T"HH24:MI:SS"Z"')
+		SELECT id, "orgId", name, role, active, to_char("createdAt", 'YYYY-MM-DD"T"HH24:MI:SS"Z"'), "crewMemberId"
 		FROM ticket_org_staff WHERE "orgId" = $1 ORDER BY name ASC`, orgID)
 	if err != nil {
 		return nil, err
@@ -969,7 +995,7 @@ func ListTicketOrgStaff(ctx context.Context, pool *pgxpool.Pool, c authsvc.Ctx, 
 	var out []OrgStaffJSON
 	for rows.Next() {
 		var s OrgStaffJSON
-		if err := rows.Scan(&s.ID, &s.OrgID, &s.Name, &s.Role, &s.Active, &s.CreatedAt); err != nil {
+		if err := rows.Scan(&s.ID, &s.OrgID, &s.Name, &s.Role, &s.Active, &s.CreatedAt, &s.CrewMemberID); err != nil {
 			return nil, err
 		}
 		out = append(out, s)

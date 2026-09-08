@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../core/auth/agent_session.dart';
 import '../../core/auth/auth_controller.dart';
 import '../../core/auth/auth_state.dart';
 import '../../core/auth/scan_access.dart';
@@ -22,7 +23,8 @@ Future<void> showScanSheet(BuildContext context) {
       builder: (context, ref, _) {
         final auth = ref.watch(authControllerProvider);
         final profile = auth is AuthSignedIn ? auth.profile : null;
-        final crew = canVerifyFare(profile);
+        final agent = ref.watch(agentSessionControllerProvider);
+        final crew = canVerifyFare(profile) || agent is AgentSignedIn;
         return SafeArea(
           child: Padding(
             padding: const EdgeInsets.all(EsokoSpacing.s4),

@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:mobile_scanner/mobile_scanner.dart';
 
 import '../../core/api/api_exception.dart';
+import '../../core/auth/agent_session.dart';
 import '../../core/auth/auth_controller.dart';
 import '../../core/auth/auth_state.dart';
 import '../../core/auth/scan_access.dart';
@@ -68,8 +69,12 @@ class _VerifyFareScreenState extends ConsumerState<VerifyFareScreen> {
     final profile = auth is AuthSignedIn ? auth.profile : null;
     // Reached without the grant (e.g. via a quick action): say so
     // plainly. The server still answers own-receipt checks, so the
-    // screen stays useful instead of dead-ending.
-    final crew = canVerifyFare(profile);
+    // screen stays useful instead of dead-ending. An agent (crew) PIN
+    // session has no [EsokoProfile] at all — canVerifyFare alone would
+    // wrongly show the "sign in with a crew account" banner to someone
+    // who very much did; a signed-in CREW/SCANNER agent counts too.
+    final agent = ref.watch(agentSessionControllerProvider);
+    final crew = canVerifyFare(profile) || agent is AgentSignedIn;
     return Scaffold(
       appBar: const EsokoAppBar(title: 'Verify fare'),
       body: SafeArea(

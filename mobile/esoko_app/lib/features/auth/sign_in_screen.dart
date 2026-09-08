@@ -106,6 +106,10 @@ class _SignInScreenState extends ConsumerState<SignInScreen> {
                     onPressed: () => context.push('/sign-in/otp'),
                     child: const Text('Sign in with a code instead'),
                   ),
+                  TextButton(
+                    onPressed: () => context.push('/crew-sign-in'),
+                    child: const Text('Driver or conductor? Sign in as crew'),
+                  ),
                 ],
               ),
             ),

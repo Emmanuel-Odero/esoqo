@@ -130,6 +130,7 @@ func (s *Server) Router() *gin.Engine {
 		v1.GET("/fleet/orgs/:orgId/positions", s.authRequired(), s.handleLatestPositions)
 		v1.POST("/fleet/trips/:id/declare", s.authRequired(), s.handleDeclare)
 		v1.GET("/fleet/trips/:id/collections", s.authRequired(), s.handleTripCollections)
+		v1.GET("/fleet/my-trip", s.authRequired(), s.handleMyActiveTrip)
 
 		v1.POST("/fares", s.handleCreateFare)
 		v1.GET("/fares/:id", s.handleGetFare)
