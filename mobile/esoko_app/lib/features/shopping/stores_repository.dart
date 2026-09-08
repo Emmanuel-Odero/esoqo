@@ -165,6 +165,109 @@ class StoresRepository {
     final s = res['status'] ?? res['Status'];
     return (s as String?)?.toUpperCase() == 'PAID';
   }
+
+  /// GET /v1/orders/:id — the full status view, including dine-in
+  /// fields. Separate from isOrderPaid (which only cares about one
+  /// bool) because the table-order confirmation screen needs the whole
+  /// picture: table, kitchen status, tip.
+  Future<OrderStatus> orderStatus(String orderId) async {
+    final res = await _api.get('/v1/orders/$orderId');
+    return OrderStatus.fromJson(res);
+  }
+
+  /// POST /v1/orders — table-attached, multi-item. Deliberately a
+  /// separate method from placeOrder (single retail item) rather than
+  /// widening that one — see checkout_screen.dart's own note on why
+  /// retail stays single-item; a dine-in order is a basket by nature,
+  /// a retail "buy this one thing" tap is not.
+  Future<PlacedOrder> placeTableOrder({
+    required String storeSlug,
+    required String tableLabel,
+    required Map<String, int> quantitiesByProductId,
+    required String buyerName,
+    required String buyerMsisdn,
+  }) async {
+    final res = await _api.post('/v1/orders', {
+      'storeSlug': storeSlug,
+      'buyerName': buyerName,
+      'buyerMsisdn': buyerMsisdn,
+      'paymentMethod': 'MPESA_STK',
+      'tableLabel': tableLabel,
+      'items': [
+        for (final entry in quantitiesByProductId.entries)
+          {'productId': entry.key, 'quantity': entry.value},
+      ],
+    });
+    return PlacedOrder(
+      orderId: res['orderId'] as String?,
+      totalKes: res['totalKes'] as String?,
+      paid: _isPaid(res),
+    );
+  }
+
+  /// POST /v1/orders/:id/tip — guest-safe by design (see
+  /// dbx.AddTip's own comment on why: a guest checkout must be able to
+  /// tip too).
+  Future<void> addTip({required String orderId, required double tipKes}) {
+    return _api.post('/v1/orders/$orderId/tip', {'tipKes': tipKes});
+  }
+
+  // ── staff: table board (store-owner-scoped — see dbx/dine_in.go) ──
+
+  /// GET /v1/stores/:slug/tables — every dine-in order not yet CLOSED.
+  Future<List<TableOrderRow>> tableOrders(String slug) async {
+    final res = await _api.get('/v1/stores/$slug/tables');
+    final list = (res['orders'] as List?) ?? const [];
+    return list
+        .map((e) => TableOrderRow.fromJson(e as Map<String, dynamic>))
+        .toList();
+  }
+
+  /// POST /v1/stores/orders/:id/dine-in-status.
+  Future<void> updateDineInStatus({
+    required String orderId,
+    required String status,
+  }) {
+    return _api.post('/v1/stores/orders/$orderId/dine-in-status', {
+      'status': status,
+    });
+  }
+
+  /// POST /v1/stores/:slug/tables/:table/assign.
+  Future<void> assignTable({
+    required String slug,
+    required String table,
+    required String cashierId,
+  }) {
+    return _api.post('/v1/stores/$slug/tables/${Uri.encodeComponent(table)}/assign', {
+      'cashierId': cashierId,
+    });
+  }
+
+  /// GET /v1/stores/:slug/cashiers.
+  Future<List<CashierRow>> cashiers(String slug) async {
+    final res = await _api.get('/v1/stores/$slug/cashiers');
+    final list = (res['cashiers'] as List?) ?? const [];
+    return list
+        .map((e) => CashierRow.fromJson(e as Map<String, dynamic>))
+        .toList();
+  }
+
+  /// POST /v1/stores/:slug/cashiers — adds a named staff member (a
+  /// waiter) this store's table board can then assign to tables.
+  Future<CashierRow> createCashier({
+    required String slug,
+    required String name,
+    required String pin,
+    String role = 'CASHIER',
+  }) async {
+    final res = await _api.post('/v1/stores/$slug/cashiers', {
+      'name': name,
+      'pin': pin,
+      'role': role,
+    });
+    return CashierRow.fromJson(res['cashier'] as Map<String, dynamic>);
+  }
 }
 
 /// The shaped answer to POST /v1/orders the checkout stage machine acts on.

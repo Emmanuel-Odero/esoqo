@@ -280,6 +280,12 @@ type CreateOrderInput struct {
 	DeliveryOptionID *string
 	DeliveryAddress  *string
 	CollectionNotes  *string
+	// TableLabel — set when the order came from a scanned restaurant
+	// table QR (see dbx/scan.go's ScanKindTable). A dine-in order starts
+	// life at DineInStatus ORDERED the moment it's placed, same instant
+	// as PENDING_PAYMENT — the kitchen finding out an order exists
+	// doesn't wait on payment confirming, unlike a retail pickup order.
+	TableLabel *string
 }
 
 type OrderError struct {
@@ -415,17 +421,23 @@ func CreateStoreOrder(ctx context.Context, pool *pgxpool.Pool, in CreateOrderInp
 		return "", "", err
 	}
 
+	var dineInStatus *string
+	if in.TableLabel != nil && *in.TableLabel != "" {
+		s := "ORDERED"
+		dineInStatus = &s
+	}
 	err = tx.QueryRow(ctx, `
 		INSERT INTO store_order (
 			id, "storeId", "buyerPartyId", "buyerName", "buyerMsisdn", status, "paymentMethod",
 			"totalKes", "deliveryOptionId", "deliveryFeeKes", "collectionNotes", "deliveryAddress",
-			"customerId", "voucherId", "createdAt"
+			"customerId", "voucherId", "tableLabel", "dineInStatus", "createdAt"
 		) VALUES (
 			gen_random_uuid(), $1, $2, $3, $4, 'PENDING_PAYMENT', $5,
-			$6, $7, $8, $9, $10, $11, $12, now()
+			$6, $7, $8, $9, $10, $11, $12, $13, $14, now()
 		) RETURNING id`,
 		store.ID, in.BuyerPartyID, in.BuyerName, in.BuyerMsisdn, in.PaymentMethod,
-		total, in.DeliveryOptionID, deliveryFeeKES, in.CollectionNotes, in.DeliveryAddress, customerID, in.VoucherID).
+		total, in.DeliveryOptionID, deliveryFeeKES, in.CollectionNotes, in.DeliveryAddress, customerID, in.VoucherID,
+		in.TableLabel, dineInStatus).
 		Scan(&orderID)
 	if err != nil {
 		return "", "", err
@@ -689,7 +701,8 @@ func earnStoreLoyalty(ctx context.Context, pool *pgxpool.Pool, orderID, storeID 
 const orderStatusSelect = `
 	SELECT so.id, s.name, so.status::text, so."totalKes"::text, so."createdAt"::text,
 	       so."pickupCode", so."readyAt"::text, fo.kind,
-	       s.neighborhood, s.latitude::text, s.longitude::text
+	       s.neighborhood, s.latitude::text, s.longitude::text,
+	       so."tableLabel", so."dineInStatus"::text, so."tipKes"::text
 	FROM store_order so
 	JOIN store s ON s.id = so."storeId"
 	LEFT JOIN fulfilment_option fo ON fo.id = so."deliveryOptionId"`
@@ -706,13 +719,17 @@ type OrderStatus struct {
 	StoreNeighborhood *string
 	StoreLatitude     *string
 	StoreLongitude    *string
+	TableLabel        *string
+	DineInStatus      *string // ORDERED | PREPARING | SERVED | PAYING | CLOSED, nil for a non-dine-in order
+	TipKES            *string
 }
 
 func scanOrderStatus(row pgx.Row) (*OrderStatus, error) {
 	var o OrderStatus
 	err := row.Scan(&o.ID, &o.StoreName, &o.Status, &o.TotalKES, &o.CreatedAt,
 		&o.PickupCode, &o.ReadyAt, &o.FulfilmentKind,
-		&o.StoreNeighborhood, &o.StoreLatitude, &o.StoreLongitude)
+		&o.StoreNeighborhood, &o.StoreLatitude, &o.StoreLongitude,
+		&o.TableLabel, &o.DineInStatus, &o.TipKES)
 	if err != nil {
 		return nil, err
 	}

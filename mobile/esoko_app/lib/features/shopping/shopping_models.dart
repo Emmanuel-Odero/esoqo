@@ -210,6 +210,7 @@ class OrderStatus {
   OrderStatus({
     required this.id, required this.storeName, required this.status, required this.totalKes, required this.createdAt,
     this.pickupCode, this.readyAt, this.fulfilmentKind, this.storeNeighborhood, this.storeLatitude, this.storeLongitude,
+    this.tableLabel, this.dineInStatus, this.tipKes,
   });
 
   factory OrderStatus.fromJson(Map<String, dynamic> json) => OrderStatus(
@@ -224,6 +225,9 @@ class OrderStatus {
         storeNeighborhood: json['StoreNeighborhood'] as String?,
         storeLatitude: json['StoreLatitude'] as String?,
         storeLongitude: json['StoreLongitude'] as String?,
+        tableLabel: json['TableLabel'] as String?,
+        dineInStatus: json['DineInStatus'] as String?,
+        tipKes: json['TipKES'] as String?,
       );
 
   final String id;
@@ -237,6 +241,62 @@ class OrderStatus {
   final String? storeNeighborhood;
   final String? storeLatitude;
   final String? storeLongitude;
+  final String? tableLabel;
+  final String? dineInStatus; // ORDERED | PREPARING | SERVED | PAYING | CLOSED
+  final String? tipKes;
 
   bool get isPickup => fulfilmentKind == 'PICKUP';
+  bool get isDineIn => tableLabel != null;
+}
+
+/// GET /v1/stores/:slug/tables's answer — the table board: one row per
+/// dine-in order not yet CLOSED. See dbx.ListTableOrders.
+class TableOrderRow {
+  const TableOrderRow({
+    required this.orderId,
+    required this.tableLabel,
+    required this.dineInStatus,
+    required this.totalKes,
+    this.waiterName,
+    required this.createdAt,
+  });
+
+  factory TableOrderRow.fromJson(Map<String, dynamic> json) => TableOrderRow(
+    orderId: json['OrderID'] as String,
+    tableLabel: json['TableLabel'] as String,
+    dineInStatus: json['DineInStatus'] as String,
+    totalKes: json['TotalKES'] as String,
+    waiterName: json['WaiterName'] as String?,
+    createdAt: json['CreatedAt'] as String,
+  );
+
+  final String orderId;
+  final String tableLabel;
+  final String dineInStatus;
+  final String totalKes;
+  final String? waiterName;
+  final String createdAt;
+}
+
+/// A store's staff roster (GET/POST /v1/stores/:slug/cashiers) — used
+/// here only to populate the table board's "assign a waiter" picker.
+class CashierRow {
+  const CashierRow({
+    required this.id,
+    required this.name,
+    required this.role,
+    required this.active,
+  });
+
+  factory CashierRow.fromJson(Map<String, dynamic> json) => CashierRow(
+    id: json['ID'] as String,
+    name: json['Name'] as String,
+    role: json['Role'] as String,
+    active: json['Active'] as bool? ?? true,
+  );
+
+  final String id;
+  final String name;
+  final String role;
+  final bool active;
 }

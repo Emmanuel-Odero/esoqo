@@ -6,6 +6,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 
+	"github.com/esoko/core-go/internal/authsvc"
 	"github.com/esoko/core-go/internal/dbx"
 	"github.com/esoko/core-go/internal/payments"
 )
@@ -105,7 +106,10 @@ type createOrderRequest struct {
 	DeliveryOptionID *string `json:"deliveryOptionId"`
 	DeliveryAddress  *string `json:"deliveryAddress"`
 	CollectionNotes  *string `json:"collectionNotes"`
-	Items            []struct {
+	// TableLabel — set by the universal scan screen when this checkout
+	// started from a table QR. See dbx.CreateOrderInput.
+	TableLabel *string `json:"tableLabel"`
+	Items      []struct {
 		ProductID string  `json:"productId" binding:"required"`
 		VariantID *string `json:"variantId"`
 		Quantity  int     `json:"quantity" binding:"required"`
@@ -146,6 +150,7 @@ func (s *Server) handleCreateOrder(c *gin.Context) {
 		DeliveryOptionID: req.DeliveryOptionID,
 		DeliveryAddress:  req.DeliveryAddress,
 		CollectionNotes:  req.CollectionNotes,
+		TableLabel:       req.TableLabel,
 	})
 	if err != nil {
 		writeOrderOrBookingError(c, err)
@@ -297,6 +302,146 @@ func (s *Server) handleConfirmOrderCollected(c *gin.Context) {
 		return
 	}
 	c.JSON(http.StatusOK, gin.H{"status": "FULFILLED"})
+}
+
+// ── eatery dine-in: staff roster, table board, status, tips ───────
+
+type createCashierRequest struct {
+	Name string `json:"name" binding:"required"`
+	Pin  string `json:"pin" binding:"required"`
+	Role string `json:"role"`
+}
+
+// handleCreateCashier — POST /v1/stores/:slug/cashiers. Store-owner
+// only; PIN hashing happens at this boundary, same as every other
+// staff-PIN creation path in this codebase (never stored raw).
+func (s *Server) handleCreateCashier(c *gin.Context) {
+	var req createCashierRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		writeError(c, http.StatusBadRequest, "INVALID_REQUEST", err.Error())
+		return
+	}
+	if authsvc.IsWeakPin(req.Pin) {
+		writeError(c, http.StatusBadRequest, "WEAK_PIN", "Choose a less guessable PIN")
+		return
+	}
+	hash, err := authsvc.HashPin(req.Pin)
+	if err != nil {
+		writeError(c, http.StatusBadRequest, "INVALID_PIN", err.Error())
+		return
+	}
+	ctx := ctxFromGin(c)
+	store, err := dbx.GetStoreBySlug(c.Request.Context(), s.Pool, c.Param("slug"))
+	if err != nil || store == nil {
+		writeError(c, http.StatusNotFound, "STORE_NOT_FOUND", "That store was not found")
+		return
+	}
+	cashier, err := dbx.CreateCashier(c.Request.Context(), s.Pool, store.ID, req.Name, hash, req.Role, ctx.PartyID)
+	if err != nil {
+		writeOrderOrBookingError(c, err)
+		return
+	}
+	c.JSON(http.StatusCreated, gin.H{"cashier": cashier})
+}
+
+func (s *Server) handleListCashiers(c *gin.Context) {
+	ctx := ctxFromGin(c)
+	store, err := dbx.GetStoreBySlug(c.Request.Context(), s.Pool, c.Param("slug"))
+	if err != nil || store == nil {
+		writeError(c, http.StatusNotFound, "STORE_NOT_FOUND", "That store was not found")
+		return
+	}
+	cashiers, err := dbx.ListCashiers(c.Request.Context(), s.Pool, store.ID, ctx.PartyID)
+	if err != nil {
+		writeOrderOrBookingError(c, err)
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"cashiers": cashiers})
+}
+
+type assignTableRequest struct {
+	CashierID string `json:"cashierId" binding:"required"`
+}
+
+// handleAssignTable — POST /v1/stores/:slug/tables/:table/assign.
+// Store-owner only (see dbx.requireStoreOwnerByID's own comment on why
+// there's no separate waiter PIN login yet).
+func (s *Server) handleAssignTable(c *gin.Context) {
+	var req assignTableRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		writeError(c, http.StatusBadRequest, "INVALID_REQUEST", err.Error())
+		return
+	}
+	ctx := ctxFromGin(c)
+	store, err := dbx.GetStoreBySlug(c.Request.Context(), s.Pool, c.Param("slug"))
+	if err != nil || store == nil {
+		writeError(c, http.StatusNotFound, "STORE_NOT_FOUND", "That store was not found")
+		return
+	}
+	id, err := dbx.AssignTable(c.Request.Context(), s.Pool, store.ID, c.Param("table"), req.CashierID, ctx.PartyID)
+	if err != nil {
+		writeOrderOrBookingError(c, err)
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"assignmentId": id})
+}
+
+// handleListTableOrders — GET /v1/stores/:slug/tables. The table board:
+// every dine-in order not yet CLOSED, oldest first (whoever's been
+// waiting longest surfaces at the top).
+func (s *Server) handleListTableOrders(c *gin.Context) {
+	ctx := ctxFromGin(c)
+	store, err := dbx.GetStoreBySlug(c.Request.Context(), s.Pool, c.Param("slug"))
+	if err != nil || store == nil {
+		writeError(c, http.StatusNotFound, "STORE_NOT_FOUND", "That store was not found")
+		return
+	}
+	orders, err := dbx.ListTableOrders(c.Request.Context(), s.Pool, store.ID, ctx.PartyID)
+	if err != nil {
+		writeOrderOrBookingError(c, err)
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"orders": orders})
+}
+
+type dineInStatusRequest struct {
+	Status string `json:"status" binding:"required"`
+}
+
+// handleUpdateDineInStatus — POST /v1/stores/orders/:id/dine-in-status.
+// Store-owner only, same as handleMarkOrderReady/handleConfirmOrderCollected.
+func (s *Server) handleUpdateDineInStatus(c *gin.Context) {
+	var req dineInStatusRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		writeError(c, http.StatusBadRequest, "INVALID_REQUEST", err.Error())
+		return
+	}
+	ctx := ctxFromGin(c)
+	if err := dbx.UpdateDineInStatus(c.Request.Context(), s.Pool, c.Param("id"), req.Status, ctx.PartyID); err != nil {
+		writeOrderOrBookingError(c, err)
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"dineInStatus": req.Status})
+}
+
+type addTipRequest struct {
+	TipKES float64 `json:"tipKes" binding:"required"`
+}
+
+// handleAddTip — POST /v1/orders/:id/tip. Guest-safe by the same "the
+// order id is the secret" convention GetStoreOrder already documents —
+// a guest checkout must be able to tip too, not just a signed-in buyer.
+func (s *Server) handleAddTip(c *gin.Context) {
+	var req addTipRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		writeError(c, http.StatusBadRequest, "INVALID_REQUEST", err.Error())
+		return
+	}
+	if err := dbx.AddTip(c.Request.Context(), s.Pool, c.Param("id"), req.TipKES); err != nil {
+		writeOrderOrBookingError(c, err)
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"ok": true})
 }
 
 func writeOrderOrBookingError(c *gin.Context, err error) {

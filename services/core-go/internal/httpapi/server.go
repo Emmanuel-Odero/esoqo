@@ -70,6 +70,12 @@ func (s *Server) Router() *gin.Engine {
 		v1.DELETE("/me/saved-stores/:storeId", s.authRequired(), s.handleUnsaveStore)
 		v1.POST("/stores/orders/:id/ready", s.authRequired(), s.handleMarkOrderReady)
 		v1.POST("/stores/orders/:id/collect", s.authRequired(), s.handleConfirmOrderCollected)
+		v1.POST("/stores/orders/:id/dine-in-status", s.authRequired(), s.handleUpdateDineInStatus)
+		v1.POST("/orders/:id/tip", s.handleAddTip)
+		v1.GET("/stores/:slug/tables", s.authRequired(), s.handleListTableOrders)
+		v1.POST("/stores/:slug/tables/:table/assign", s.authRequired(), s.handleAssignTable)
+		v1.GET("/stores/:slug/cashiers", s.authRequired(), s.handleListCashiers)
+		v1.POST("/stores/:slug/cashiers", s.authRequired(), s.handleCreateCashier)
 
 		v1.GET("/listings", s.handleListListings)
 		v1.GET("/listings/:id", s.handleGetListing)

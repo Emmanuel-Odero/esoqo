@@ -12,6 +12,8 @@ import 'product_detail_screen.dart';
 import 'shopping_models.dart';
 import 'store_list_screen.dart' show savedStoresProvider;
 import 'stores_repository.dart';
+import 'table_board_screen.dart';
+import 'table_order_screen.dart';
 
 final storeDetailProvider = FutureProvider.autoDispose
     .family<StoreDetail, String>(
@@ -55,6 +57,13 @@ class StoreDetailScreen extends ConsumerWidget {
     }
 
     return Scaffold(
+      bottomNavigationBar: tableLabel == null
+          ? null
+          : TableCartBar(
+              storeSlug: slug,
+              tableLabel: tableLabel!,
+              products: products.valueOrNull ?? const [],
+            ),
       body: EsokoAsyncView(
         value: store,
         onRetry: () => ref.invalidate(storeDetailProvider(slug)),
@@ -69,7 +78,19 @@ class StoreDetailScreen extends ConsumerWidget {
                   pinned: true,
                   backgroundColor: style.gradient.last,
                   foregroundColor: Colors.white,
-                  actions: [if (signedIn) _SaveStoreButton(storeId: s.id)],
+                  actions: [
+                    if (signedIn)
+                      IconButton(
+                        icon: const Icon(Icons.table_restaurant_outlined),
+                        tooltip: 'Table board',
+                        onPressed: () => Navigator.of(context).push(
+                          MaterialPageRoute(
+                            builder: (_) => TableBoardScreen(slug: slug),
+                          ),
+                        ),
+                      ),
+                    if (signedIn) _SaveStoreButton(storeId: s.id),
+                  ],
                   flexibleSpace: FlexibleSpaceBar(
                     // Explicit white: an explicit TextStyle without a color
                     // does NOT inherit SliverAppBar.foregroundColor here, so
@@ -273,6 +294,11 @@ class StoreDetailScreen extends ConsumerWidget {
                                           ),
                                         ),
                                       ),
+                                      onQuickAdd: tableLabel == null
+                                          ? null
+                                          : () => ref
+                                              .read(tableCartProvider.notifier)
+                                              .add(list[i].id),
                                     ),
                                   ),
                               ],
@@ -393,9 +419,15 @@ class _UsualProductCard extends StatelessWidget {
 }
 
 class _ProductCard extends StatelessWidget {
-  const _ProductCard({required this.product, required this.onTap});
+  const _ProductCard({required this.product, required this.onTap, this.onQuickAdd});
   final ProductSummary product;
   final VoidCallback onTap;
+
+  /// Set only when this store screen is scoped to a table (see
+  /// StoreDetailScreen.tableLabel) — a menu is browsed by adding
+  /// straight from the grid, not by detouring through the product
+  /// detail page for every dish.
+  final VoidCallback? onQuickAdd;
 
   @override
   Widget build(BuildContext context) {
@@ -456,11 +488,36 @@ class _ProductCard extends StatelessWidget {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text(
-                    product.name,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: const TextStyle(fontWeight: FontWeight.w600),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: Text(
+                          product.name,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: const TextStyle(fontWeight: FontWeight.w600),
+                        ),
+                      ),
+                      if (onQuickAdd != null)
+                        InkWell(
+                          onTap: onQuickAdd,
+                          borderRadius: BorderRadius.circular(EsokoRadius.pill),
+                          child: Container(
+                            width: 22,
+                            height: 22,
+                            decoration: BoxDecoration(
+                              color: Theme.of(context).colorScheme.primary,
+                              shape: BoxShape.circle,
+                            ),
+                            alignment: Alignment.center,
+                            child: const Icon(
+                              Icons.add_rounded,
+                              size: 16,
+                              color: Colors.white,
+                            ),
+                          ),
+                        ),
+                    ],
                   ),
                   const SizedBox(height: EsokoSpacing.s1),
                   EsokoAmountText(product.priceKes, fontSize: 14),

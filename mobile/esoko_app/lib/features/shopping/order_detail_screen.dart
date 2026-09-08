@@ -5,6 +5,7 @@ import 'package:url_launcher/url_launcher.dart';
 
 import '../../core/theme/esoko_tokens.dart';
 import '../../core/widgets/widgets.dart';
+import '../../core/api/api_exception.dart';
 import 'shopping_models.dart';
 import 'stores_repository.dart';
 
@@ -54,7 +55,12 @@ class OrderDetailScreen extends ConsumerWidget {
                 const SizedBox(height: EsokoSpacing.s1),
                 Text('KES ${o.totalKes} · placed ${_formatDate(o.createdAt)}', style: TextStyle(color: EsokoColors.text2)),
                 const SizedBox(height: EsokoSpacing.s6),
-                if (o.isPickup) _timeline(o) else _deliveryStatus(o),
+                if (o.isDineIn)
+                  _dineInStatus(ref, o)
+                else if (o.isPickup)
+                  _timeline(o)
+                else
+                  _deliveryStatus(o),
                 if (o.isPickup && (o.status == 'READY_FOR_PICKUP' || o.status == 'FULFILLED')) ...[
                   const SizedBox(height: EsokoSpacing.s6),
                   _pickupCodeCard(context, o),
@@ -124,6 +130,36 @@ class OrderDetailScreen extends ConsumerWidget {
             style: TextStyle(color: reached ? EsokoColors.text : EsokoColors.text3, fontWeight: reached ? FontWeight.w700 : FontWeight.w500),
           ),
         ),
+      ],
+    );
+  }
+
+  static const _dineInStages = [
+    (status: 'ORDERED', label: 'Sent to the kitchen', icon: Icons.receipt_long_outlined),
+    (status: 'PREPARING', label: 'Preparing', icon: Icons.soup_kitchen_outlined),
+    (status: 'SERVED', label: 'Served', icon: Icons.room_service_outlined),
+    (status: 'PAYING', label: 'Paying', icon: Icons.payments_outlined),
+    (status: 'CLOSED', label: 'Closed', icon: Icons.check_circle_outline),
+  ];
+
+  /// A diner's own view of their table — the same timeline treatment
+  /// as pickup's own _timeline, plus a tip once there's someone to
+  /// credit it to (SERVED or later, matching when a real table would
+  /// actually be settling up).
+  Widget _dineInStatus(WidgetRef ref, OrderStatus o) {
+    final currentIndex = _dineInStages.indexWhere((s) => s.status == o.dineInStatus);
+    final canTip = currentIndex >= _dineInStages.indexWhere((s) => s.status == 'SERVED');
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text('Table ${o.tableLabel}', style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 16)),
+        const SizedBox(height: EsokoSpacing.s4),
+        for (var i = 0; i < _dineInStages.length; i++)
+          _timelineRow(_dineInStages[i], reached: i <= currentIndex, isLast: i == _dineInStages.length - 1),
+        if (canTip) ...[
+          const SizedBox(height: EsokoSpacing.s4),
+          _TipButton(orderId: o.id, existingTipKes: o.tipKes),
+        ],
       ],
     );
   }
@@ -213,5 +249,64 @@ class OrderDetailScreen extends ConsumerWidget {
     final d = DateTime.tryParse(iso);
     if (d == null) return iso;
     return '${d.year}-${d.month.toString().padLeft(2, '0')}-${d.day.toString().padLeft(2, '0')}';
+  }
+}
+
+/// A tip, added once — reuses the same "one KES amount, entered fast"
+/// dialog as the tout's cash tally (Phase 2) and an instalment top-up
+/// (Phase 4). Guest-safe: the order id is the trust boundary here (see
+/// dbx.AddTip's own comment), same as every other buyer-facing action
+/// on this screen.
+class _TipButton extends ConsumerStatefulWidget {
+  const _TipButton({required this.orderId, this.existingTipKes});
+  final String orderId;
+  final String? existingTipKes;
+
+  @override
+  ConsumerState<_TipButton> createState() => _TipButtonState();
+}
+
+class _TipButtonState extends ConsumerState<_TipButton> {
+  bool _busy = false;
+  String? _tipKes;
+
+  @override
+  void initState() {
+    super.initState();
+    _tipKes = widget.existingTipKes;
+  }
+
+  Future<void> _addTip() async {
+    final amount = await showAmountDialog(context, title: 'Add a tip');
+    if (amount == null) return;
+    setState(() => _busy = true);
+    try {
+      await ref.read(storesRepositoryProvider).addTip(orderId: widget.orderId, tipKes: amount);
+      setState(() => _tipKes = amount.toStringAsFixed(2));
+    } on ApiException catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(e.message)));
+      }
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    if (_tipKes != null) {
+      return Row(
+        children: [
+          const Icon(Icons.volunteer_activism_outlined, size: 18, color: EsokoColors.green),
+          const SizedBox(width: 8),
+          Text('KES \$_tipKes tip added — thank you', style: const TextStyle(fontWeight: FontWeight.w600)),
+        ],
+      );
+    }
+    return OutlinedButton.icon(
+      onPressed: _busy ? null : _addTip,
+      icon: const Icon(Icons.volunteer_activism_outlined, size: 18),
+      label: const Text('Add a tip'),
+    );
   }
 }

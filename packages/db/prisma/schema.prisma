@@ -979,6 +979,7 @@ model Store {
   photos            StorePhoto[]
   stockLocations    StockLocation[]
   savedBy           SavedStore[]
+  tableAssignments  TableAssignment[]
 
   @@index([enterpriseId])
   @@index([status])
@@ -1182,6 +1183,45 @@ enum StoreOrderStatus {
   CANCELLED
 }
 
+/// Kitchen-facing state for a dine-in order — deliberately a parallel
+/// enum, not folded into StoreOrderStatus above: retail pickup/delivery
+/// semantics (PENDING_PAYMENT/READY_FOR_PICKUP/FULFILLED) mean nothing
+/// to a kitchen, and a paid dine-in order sits at ORDERED/PREPARING/
+/// SERVED for the whole meal while StoreOrderStatus itself is already
+/// PAID — two independent lifecycles on one order, not one state
+/// machine wearing two hats. Only set when StoreOrder.tableLabel is.
+enum DineInStatus {
+  ORDERED
+  PREPARING
+  SERVED
+  PAYING
+  CLOSED
+}
+
+/// One waiter/host's current table, for the length of a shift. A
+/// person's own device isn't required to run this in v1 — the store
+/// owner's existing subject session assigns and reassigns tables from
+/// the table board the same way OrgFleetScreen already lets a fleet
+/// owner run trips without every driver having their own login; per-
+/// cashier PIN sign-in to claim a table directly is a natural fast-
+/// follow (mirrors TicketOrgStaff/CREW's own path — see
+/// docs/adr/0005), not built in this pass. Superseding a table's
+/// assignment ends the old row rather than deleting it, so "who served
+/// table 4 at 8pm last Tuesday" stays answerable.
+model TableAssignment {
+  id         String    @id @default(uuid()) @db.Uuid
+  storeId    String    @db.Uuid
+  store      Store     @relation(fields: [storeId], references: [id], onDelete: Cascade)
+  tableLabel String
+  cashierId  String    @db.Uuid
+  cashier    Cashier   @relation(fields: [cashierId], references: [id], onDelete: Cascade)
+  assignedAt DateTime  @default(now())
+  endedAt    DateTime?
+
+  @@index([storeId, tableLabel, endedAt])
+  @@map("table_assignment")
+}
+
 enum StoreOrderPaymentMethod {
   MPESA_STK
   CASH_ON_DELIVERY
@@ -1252,6 +1292,23 @@ model StoreOrder {
   rerouteFlaggedById String?   @db.Uuid
   rerouteFlaggedAt   DateTime?
 
+  /// Set when this order came from a scanned restaurant table QR
+  /// (esoko://table?slug=...&table=...) — the actual persistence the
+  /// universal scanner's own comment always claimed existed. Nullable:
+  /// most orders (retail pickup/delivery) have no table at all.
+  tableLabel   String?
+  dineInStatus DineInStatus?
+
+  /// Tip, and who it's credited to — separate from totalKes so it
+  /// never inflates the line the kitchen/register actually rang up.
+  /// tippedCashierId is resolved from the table's active
+  /// TableAssignment at the moment the tip is added, not looked up
+  /// again later — a table's assignment changing after should never
+  /// retroactively move a tip someone already gave.
+  tipKes          Decimal? @db.Decimal(12, 2)
+  tippedCashierId String?  @db.Uuid
+  tippedCashier   Cashier? @relation(fields: [tippedCashierId], references: [id])
+
   items                 StoreOrderItem[]
   receipts              Receipt[]
   customerLedgerEntries CustomerLedgerEntry[]
@@ -1259,6 +1316,7 @@ model StoreOrder {
 
   @@index([storeId, status])
   @@index([needsReroute])
+  @@index([storeId, tableLabel, dineInStatus])
   @@map("store_order")
 }
 
@@ -1549,9 +1607,11 @@ model Cashier {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  shifts   Shift[]
-  posSales PosSale[]
-  refunds  PosRefund[]
+  shifts           Shift[]
+  posSales         PosSale[]
+  refunds          PosRefund[]
+  tableAssignments TableAssignment[]
+  tippedOrders     StoreOrder[]
 
   @@index([storeId])
   @@map("cashier")
