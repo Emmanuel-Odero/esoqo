@@ -101,7 +101,7 @@ class _ShiftBodyState extends ConsumerState<_ShiftBody> {
       );
       return;
     }
-    final amount = await showDeclareCashDialog(context);
+    final amount = await showAmountDialog(context, title: 'Cash counted');
     if (amount == null) return;
     setState(() {
       _busy = true;
@@ -246,35 +246,6 @@ class _ShiftBodyState extends ConsumerState<_ShiftBody> {
       ],
     );
   }
-}
-
-/// A single amount, entered fast at the roadside — a numeric field, not
-/// a form. Returns the KES amount, or null if cancelled.
-Future<double?> showDeclareCashDialog(BuildContext context) {
-  final controller = TextEditingController();
-  return showDialog<double>(
-    context: context,
-    builder: (context) => AlertDialog(
-      title: const Text('Cash counted'),
-      content: TextField(
-        controller: controller,
-        autofocus: true,
-        keyboardType: const TextInputType.numberWithOptions(decimal: true),
-        decoration: const InputDecoration(prefixText: 'KES ', labelText: 'Amount'),
-        onSubmitted: (v) => Navigator.of(context).pop(double.tryParse(v.trim())),
-      ),
-      actions: [
-        TextButton(
-          onPressed: () => Navigator.of(context).pop(),
-          child: const Text('Cancel'),
-        ),
-        FilledButton(
-          onPressed: () => Navigator.of(context).pop(double.tryParse(controller.text.trim())),
-          child: const Text('Record'),
-        ),
-      ],
-    ),
-  );
 }
 
 class EndShiftResult {

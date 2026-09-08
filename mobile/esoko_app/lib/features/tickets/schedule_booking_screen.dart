@@ -17,7 +17,7 @@ final scheduleSeatsProvider = FutureProvider.autoDispose
           ref.watch(ticketingRepositoryProvider).seats(scheduleId),
     );
 
-enum _Stage { pick, details, waiting, done, failed }
+enum _Stage { pick, details, waiting, done, depositDone, failed }
 
 /// Picks a ticket class (+ seat, if seated) for one schedule, then books
 /// and pays — POST /v1/bookings → M-Pesa STK → poll GET /v1/bookings/:id.
@@ -50,7 +50,16 @@ class _ScheduleBookingScreenState extends ConsumerState<ScheduleBookingScreen> {
   final _nameController = TextEditingController();
   final _msisdnController = TextEditingController();
   final _voucherCodeController = TextEditingController();
+  final _depositController = TextEditingController();
   String _method = 'MPESA_STK';
+
+  /// Lipa pole pole — a deposit now, the rest before departure. Only
+  /// ever offered for a non-seated (GA) class; the server enforces the
+  /// same rule (dbx.OpenInstallmentPlan) and everything else about
+  /// eligibility (org opt-in, 48h+ lead time, minimum deposit) — this
+  /// flag only decides which endpoint _book() calls, never whether the
+  /// plan is actually allowed.
+  bool _payInInstallments = false;
 
   @override
   void initState() {
@@ -71,12 +80,17 @@ class _ScheduleBookingScreenState extends ConsumerState<ScheduleBookingScreen> {
     _nameController.dispose();
     _msisdnController.dispose();
     _voucherCodeController.dispose();
+    _depositController.dispose();
     super.dispose();
   }
 
   Future<void> _book() async {
     final tc = _selectedClass;
     if (tc == null) return;
+    if (_payInInstallments) {
+      await _openInstallmentPlan(tc);
+      return;
+    }
     setState(() {
       _stage = _Stage.waiting;
       _error = null;
@@ -110,7 +124,7 @@ class _ScheduleBookingScreenState extends ConsumerState<ScheduleBookingScreen> {
         setState(() => _stage = _Stage.done);
         return;
       }
-      _startPolling();
+      _startPolling(untilPaid: true);
     } on ApiException catch (e) {
       setState(() {
         _stage = _Stage.failed;
@@ -119,7 +133,56 @@ class _ScheduleBookingScreenState extends ConsumerState<ScheduleBookingScreen> {
     }
   }
 
-  void _startPolling() {
+  Future<void> _openInstallmentPlan(TicketClass tc) async {
+    final deposit = double.tryParse(_depositController.text.trim());
+    if (deposit == null || deposit <= 0) {
+      setState(() => _error = 'Enter how much you\'re paying today.');
+      return;
+    }
+    setState(() {
+      _stage = _Stage.waiting;
+      _error = null;
+    });
+    try {
+      final repo = ref.read(ticketingRepositoryProvider);
+      final placed = await repo.openInstallmentPlan(
+        scheduleId: widget.scheduleId,
+        ticketClassId: tc.id,
+        quantity: _quantity,
+        buyerName: _nameController.text.trim(),
+        buyerMsisdn: _msisdnController.text.trim(),
+        depositKes: deposit,
+      );
+      _bookingId = placed.bookingId;
+      _totalKes = placed.totalKes;
+      if (placed.paymentError != null) {
+        setState(() {
+          _stage = _Stage.failed;
+          _error = placed.paymentError;
+        });
+        return;
+      }
+      if (placed.status != 'PENDING_PAYMENT') {
+        // Console/dev mode auto-confirms the deposit inline — no need
+        // to poll for what the response already tells us happened.
+        setState(() => _stage = _Stage.depositDone);
+        return;
+      }
+      _startPolling(untilPaid: false);
+    } on ApiException catch (e) {
+      setState(() {
+        _stage = _Stage.failed;
+        _error = e.message;
+      });
+    }
+  }
+
+  /// untilPaid selects which "done" a confirmed payment means: a
+  /// regular booking is done once status flips to PAID; a deposit is
+  /// done once it clears at all (status leaves PENDING_PAYMENT) — the
+  /// plan itself stays PARTIALLY_PAID until the balance is fully paid
+  /// off, which is expected, not a failure to keep polling for.
+  void _startPolling({required bool untilPaid}) {
     var attempts = 0;
     _pollTimer = Timer.periodic(const Duration(seconds: 2), (timer) async {
       attempts++;
@@ -137,9 +200,17 @@ class _ScheduleBookingScreenState extends ConsumerState<ScheduleBookingScreen> {
       }
       try {
         final repo = ref.read(ticketingRepositoryProvider);
-        if (await repo.isBookingPaid(_bookingId!)) {
-          timer.cancel();
-          if (mounted) setState(() => _stage = _Stage.done);
+        if (untilPaid) {
+          if (await repo.isBookingPaid(_bookingId!)) {
+            timer.cancel();
+            if (mounted) setState(() => _stage = _Stage.done);
+          }
+        } else {
+          final status = await repo.bookingStatus(_bookingId!);
+          if (status.status != 'PENDING_PAYMENT') {
+            timer.cancel();
+            if (mounted) setState(() => _stage = _Stage.depositDone);
+          }
         }
       } on ApiException {
         // transient — keep polling until the attempt cap above
@@ -164,10 +235,7 @@ class _ScheduleBookingScreenState extends ConsumerState<ScheduleBookingScreen> {
                 duration: reduced ? Duration.zero : EsokoMotion.medium,
                 switchInCurve: EsokoMotion.easeOut,
                 switchOutCurve: EsokoMotion.easeOut,
-                child: KeyedSubtree(
-                  key: ValueKey(_stage),
-                  child: _body(),
-                ),
+                child: KeyedSubtree(key: ValueKey(_stage), child: _body()),
               ),
             ),
           ),
@@ -192,6 +260,14 @@ class _ScheduleBookingScreenState extends ConsumerState<ScheduleBookingScreen> {
         return EsokoResultView.success(
           title: 'Booking confirmed',
           message: 'Find your ticket QR any time under Tickets → My tickets.',
+          primaryLabel: 'Done',
+          onPrimary: () => Navigator.of(context).popUntil((r) => r.isFirst),
+        );
+      case _Stage.depositDone:
+        return EsokoResultView.success(
+          title: 'Deposit received',
+          message:
+              'Your seat isn\'t issued yet — pay the rest any time before departure under Tickets → My tickets, and your ticket QR appears the moment the balance clears.',
           primaryLabel: 'Done',
           onPrimary: () => Navigator.of(context).popUntil((r) => r.isFirst),
         );
@@ -263,7 +339,9 @@ class _ScheduleBookingScreenState extends ConsumerState<ScheduleBookingScreen> {
         if (forClass.isEmpty) {
           return Text(
             'No seats configured for this class.',
-            style: TextStyle(color: EsokoColors.text2),
+            style: TextStyle(
+              color: Theme.of(context).textTheme.bodySmall?.color,
+            ),
           );
         }
         final byRow = <int, List<SeatRow>>{};
@@ -281,7 +359,10 @@ class _ScheduleBookingScreenState extends ConsumerState<ScheduleBookingScreen> {
             Container(
               padding: const EdgeInsets.all(EsokoSpacing.s4),
               decoration: BoxDecoration(
-                color: EsokoColors.paper,
+                // Theme's own surface tone, not the fixed EsokoColors.
+                // paper — that pastel stayed light-mode-white even in
+                // dark mode, sticking out as a bright panel.
+                color: Theme.of(context).colorScheme.surfaceContainerHighest,
                 borderRadius: BorderRadius.circular(EsokoRadius.lg),
                 border: Border.all(color: EsokoColors.line),
               ),
@@ -305,7 +386,7 @@ class _ScheduleBookingScreenState extends ConsumerState<ScheduleBookingScreen> {
                       children: [
                         Icon(
                           Icons.airline_seat_recline_normal,
-                          color: EsokoColors.text3,
+                          color: Theme.of(context).textTheme.bodySmall?.color,
                           size: 18,
                         ),
                         Text(
@@ -313,7 +394,7 @@ class _ScheduleBookingScreenState extends ConsumerState<ScheduleBookingScreen> {
                           style: TextStyle(
                             fontSize: 9,
                             letterSpacing: 2,
-                            color: EsokoColors.text3,
+                            color: Theme.of(context).textTheme.bodySmall?.color,
                           ),
                         ),
                       ],
@@ -330,7 +411,10 @@ class _ScheduleBookingScreenState extends ConsumerState<ScheduleBookingScreen> {
                             '$r',
                             style: TextStyle(
                               fontSize: 10,
-                              color: EsokoColors.text3,
+                              color: Theme.of(context)
+                                  .textTheme
+                                  .bodySmall
+                                  ?.color,
                             ),
                             textAlign: TextAlign.center,
                           ),
@@ -366,7 +450,11 @@ class _ScheduleBookingScreenState extends ConsumerState<ScheduleBookingScreen> {
               children: [
                 _seatLegend(EsokoColors.line, 'Taken'),
                 const SizedBox(width: EsokoSpacing.s4),
-                _seatLegend(EsokoColors.paper, 'Available', outline: true),
+                _seatLegend(
+                  Theme.of(context).colorScheme.surfaceContainerHighest,
+                  'Available',
+                  outline: true,
+                ),
                 const SizedBox(width: EsokoSpacing.s4),
                 _seatLegend(EsokoColors.green, 'Selected'),
               ],
@@ -400,36 +488,81 @@ class _ScheduleBookingScreenState extends ConsumerState<ScheduleBookingScreen> {
           ),
         ),
         const SizedBox(width: 6),
-        Text(label, style: TextStyle(fontSize: 11, color: EsokoColors.text2)),
+        Text(
+          label,
+          style: TextStyle(
+            fontSize: 11,
+            color: Theme.of(context).textTheme.bodySmall?.color,
+          ),
+        ),
       ],
     );
   }
 
   Widget _detailsStage() {
+    // Lipa pole pole is only ever offered for a GA (non-seated) class —
+    // matches dbx.OpenInstallmentPlan's own restriction exactly, so the
+    // toggle never promises something the server would then refuse.
+    final canInstallment = _selectedClass?.seated == false;
+    final total = _selectedClass == null
+        ? 0.0
+        : (double.tryParse(_selectedClass!.priceKes) ?? 0) * _quantity;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        EsokoPaymentMethodToggle<String>(
-          selected: _method,
-          onChanged: (m) => setState(() => _method = m),
-          options: const [('MPESA_STK', 'M-Pesa'), ('VOUCHER', 'Voucher')],
-        ),
-        if (_method == 'VOUCHER') ...[
+        if (canInstallment) ...[
+          EsokoPaymentMethodToggle<bool>(
+            selected: _payInInstallments,
+            onChanged: (v) => setState(() => _payInInstallments = v),
+            options: const [
+              (false, 'Pay in full'),
+              (true, 'Pay a deposit'),
+            ],
+          ),
+          const SizedBox(height: 12),
+        ],
+        if (_payInInstallments) ...[
+          Text(
+            'Total KES ${total.toStringAsFixed(0)} — pay what you can today, the rest any time before departure.',
+            style: TextStyle(
+              fontSize: 12.5,
+              color: Theme.of(context).textTheme.bodySmall?.color,
+            ),
+          ),
           const SizedBox(height: 12),
           EsokoFormField(
-            controller: _voucherCodeController,
-            label: 'Voucher code',
-            hint: 'e.g. VCH-XXXXXX',
-            icon: Icons.wallet_outlined,
+            controller: _depositController,
+            label: 'Paying today (KES)',
+            keyboardType: TextInputType.number,
+            icon: Icons.payments_outlined,
           ),
+        ] else ...[
+          EsokoPaymentMethodToggle<String>(
+            selected: _method,
+            onChanged: (m) => setState(() => _method = m),
+            options: const [('MPESA_STK', 'M-Pesa'), ('VOUCHER', 'Voucher')],
+          ),
+          if (_method == 'VOUCHER') ...[
+            const SizedBox(height: 12),
+            EsokoFormField(
+              controller: _voucherCodeController,
+              label: 'Voucher code',
+              hint: 'e.g. VCH-XXXXXX',
+              icon: Icons.wallet_outlined,
+            ),
+          ],
+        ],
+        if (_error != null) ...[
+          const SizedBox(height: 12),
+          EsokoFormError(message: _error!),
         ],
         const SizedBox(height: 12),
         EsokoPayerFields(
           nameController: _nameController,
           msisdnController: _msisdnController,
-          payLabel: _method == 'VOUCHER'
-              ? 'Pay with voucher'
-              : 'Pay with M-Pesa',
+          payLabel: _payInInstallments
+              ? 'Pay deposit'
+              : (_method == 'VOUCHER' ? 'Pay with voucher' : 'Pay with M-Pesa'),
           onPay: _book,
         ),
       ],
@@ -449,8 +582,16 @@ class _TicketClassOption extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final muted = Theme.of(context).textTheme.bodySmall?.color;
     return Material(
-      color: selected ? EsokoColors.greenTint : Theme.of(context).cardColor,
+      // Alpha wash of primary, not the fixed EsokoColors.greenTint — see
+      // the identical fix in order_detail_screen's timeline/pickup-code
+      // card: a fixed pastel only reads right on a light surface.
+      color: selected
+          ? scheme.primary.withValues(alpha: isDark ? 0.20 : 0.12)
+          : Theme.of(context).cardColor,
       borderRadius: BorderRadius.circular(EsokoRadius.lg),
       clipBehavior: Clip.antiAlias,
       child: InkWell(
@@ -460,7 +601,7 @@ class _TicketClassOption extends StatelessWidget {
           padding: const EdgeInsets.all(EsokoSpacing.s3),
           decoration: BoxDecoration(
             border: Border.all(
-              color: selected ? EsokoColors.green : EsokoColors.line,
+              color: selected ? scheme.primary : EsokoColors.line,
               width: selected ? 1.5 : 1,
             ),
           ),
@@ -468,7 +609,7 @@ class _TicketClassOption extends StatelessWidget {
             children: [
               Icon(
                 selected ? Icons.check_circle : Icons.circle_outlined,
-                color: selected ? EsokoColors.green : EsokoColors.text3,
+                color: selected ? scheme.primary : muted,
                 size: 22,
               ),
               const SizedBox(width: EsokoSpacing.s3),
@@ -476,7 +617,7 @@ class _TicketClassOption extends StatelessWidget {
                 ticketClass.seated
                     ? Icons.event_seat_outlined
                     : Icons.groups_outlined,
-                color: EsokoColors.text2,
+                color: muted,
                 size: 18,
               ),
               const SizedBox(width: EsokoSpacing.s2),
@@ -491,10 +632,7 @@ class _TicketClassOption extends StatelessWidget {
                     if (ticketClass.amenities.isNotEmpty)
                       Text(
                         ticketClass.amenities.join(' · '),
-                        style: TextStyle(
-                          fontSize: 11,
-                          color: EsokoColors.text3,
-                        ),
+                        style: TextStyle(fontSize: 11, color: muted),
                       ),
                   ],
                 ),
@@ -502,7 +640,7 @@ class _TicketClassOption extends StatelessWidget {
               Text(
                 'KES ${ticketClass.priceKes}',
                 style: TextStyle(
-                  color: EsokoColors.green,
+                  color: scheme.primary,
                   fontWeight: FontWeight.w800,
                 ),
               ),
@@ -531,10 +669,13 @@ class _SeatButton extends StatelessWidget {
     // white — the seat map stays legible in dark mode.
     final Color bg = taken
         ? EsokoColors.line
-        : (selected ? EsokoColors.green : Theme.of(context).colorScheme.surface);
-    final Color fg = taken
-        ? EsokoColors.text3
-        : (selected ? Colors.white : EsokoColors.text2);
+        : (selected
+              ? EsokoColors.green
+              : Theme.of(context).colorScheme.surface);
+    final muted = Theme.of(context).textTheme.bodySmall?.color;
+    final Color? fg = taken
+        ? muted?.withValues(alpha: 0.6)
+        : (selected ? Colors.white : muted);
     return SizedBox(
       width: 36,
       height: 36,

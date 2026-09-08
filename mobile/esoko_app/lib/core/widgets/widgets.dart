@@ -3,6 +3,7 @@
 library;
 
 export 'async_view.dart';
+export 'esoko_amount_dialog.dart';
 export 'esoko_amount_text.dart';
 export 'esoko_app_bar.dart';
 export 'esoko_adaptive_body.dart';

@@ -181,3 +181,131 @@ class TicketRow {
   final String status;
   final String bookingId;
 }
+
+/// The shaped answer to POST /v1/bookings/installment and
+/// POST /v1/bookings/:id/balance — same shape either way (open a plan,
+/// or top it up), the deposit-vs-top-up distinction lives in which
+/// repository method was called, not in this type.
+class PlacedInstallment {
+  const PlacedInstallment({
+    this.bookingId,
+    required this.status,
+    this.totalKes,
+    this.balanceKes,
+    this.checkoutRequestId,
+    this.paymentError,
+  });
+
+  final String? bookingId;
+  final String status; // PENDING_PAYMENT | PARTIALLY_PAID | PAID
+  final String? totalKes;
+  final String? balanceKes;
+  final String? checkoutRequestId;
+
+  /// Set when the STK push itself failed to fire (e.g. no gateway
+  /// configured) — the booking/top-up still exists, just unpaid; the
+  /// screen surfaces this as a retryable failure, not a lost booking.
+  final String? paymentError;
+}
+
+/// GET /v1/bookings/:id/status's response — polled after opening a plan
+/// (until the deposit clears) and after a top-up (until it clears).
+/// Distinct from the plain GET /v1/bookings/:id booking used by regular
+/// bookings — this one carries the installment-specific fields
+/// (amountPaidKes/balanceKes/balanceDueBy) that endpoint doesn't.
+class BookingStatusView {
+  const BookingStatusView({
+    required this.id,
+    required this.status,
+    required this.isInstallment,
+    required this.totalKes,
+    required this.amountPaidKes,
+    required this.balanceKes,
+    this.balanceDueBy,
+  });
+
+  factory BookingStatusView.fromJson(Map<String, dynamic> json) =>
+      BookingStatusView(
+        id: json['id'] as String? ?? '',
+        status: json['status'] as String? ?? 'PENDING_PAYMENT',
+        isInstallment: json['isInstallment'] as bool? ?? false,
+        totalKes: json['totalKes'] as String? ?? '0',
+        amountPaidKes: json['amountPaidKes'] as String? ?? '0',
+        balanceKes: json['balanceKes'] as String? ?? '0',
+        balanceDueBy: json['balanceDueBy'] as String?,
+      );
+
+  final String id;
+  final String status;
+  final bool isInstallment;
+  final String totalKes;
+  final String amountPaidKes;
+  final String balanceKes;
+  final String? balanceDueBy;
+}
+
+/// One row of GET /v1/me/bookings (handleListMyBookingsRich) — every
+/// booking the signed-in person has ever placed, richer than
+/// GET /v1/me/tickets because an open installment plan has no tickets
+/// issued yet (see dbx.OpenInstallmentPlan's own comment: nothing is
+/// reserved or issued until the balance clears). This is what "My
+/// tickets" reads to show payment plans in progress, distinct from
+/// issued tickets.
+class MyBookingRich {
+  const MyBookingRich({
+    required this.id,
+    required this.status,
+    required this.totalKes,
+    required this.amountPaidKes,
+    required this.isInstallment,
+    this.balanceDueBy,
+    required this.listingTitle,
+    required this.orgName,
+    required this.vertical,
+    required this.departAt,
+    this.venueName,
+    this.routeFrom,
+    this.routeTo,
+  });
+
+  factory MyBookingRich.fromJson(Map<String, dynamic> json) => MyBookingRich(
+    id: json['id'] as String? ?? '',
+    status: json['status'] as String? ?? '',
+    totalKes: json['totalKes'] as String? ?? '0',
+    amountPaidKes: json['amountPaidKes'] as String? ?? '0',
+    isInstallment: json['isInstallment'] as bool? ?? false,
+    balanceDueBy: json['balanceDueBy'] as String?,
+    listingTitle: json['listingTitle'] as String? ?? '',
+    orgName: json['orgName'] as String? ?? '',
+    vertical: json['vertical'] as String? ?? '',
+    departAt: json['departAt'] as String? ?? '',
+    venueName: json['venueName'] as String?,
+    routeFrom: json['routeFrom'] as String?,
+    routeTo: json['routeTo'] as String?,
+  );
+
+  final String id;
+  final String status; // PENDING_PAYMENT | PARTIALLY_PAID | PAID | CANCELLED | REFUNDED
+  final String totalKes;
+  final String amountPaidKes;
+  final bool isInstallment;
+  final String? balanceDueBy;
+  final String listingTitle;
+  final String orgName;
+  final String vertical;
+  final String departAt;
+  final String? venueName;
+  final String? routeFrom;
+  final String? routeTo;
+
+  bool get isOpenPlan => isInstallment && status == 'PARTIALLY_PAID';
+
+  double get totalKesValue => double.tryParse(totalKes) ?? 0;
+  double get paidKesValue => double.tryParse(amountPaidKes) ?? 0;
+  double get progress =>
+      totalKesValue <= 0 ? 0 : (paidKesValue / totalKesValue).clamp(0.0, 1.0);
+
+  String get where => routeFrom != null && routeTo != null
+      ? '$routeFrom → $routeTo'
+      : (venueName ?? orgName);
+}

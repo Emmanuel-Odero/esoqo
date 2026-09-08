@@ -100,6 +100,78 @@ class TicketingRepository {
     final booking = res['booking'] as Map<String, dynamic>?;
     return booking?['Status'] == 'PAID';
   }
+
+  /// POST /v1/bookings/installment — "lipa pole pole": one line per
+  /// ticket (GA classes only, checked server-side), a deposit now, the
+  /// rest before the trip. Claims no seat/GA slot yet — nothing is
+  /// reserved or issued until the balance clears (see
+  /// dbx.OpenInstallmentPlan).
+  Future<PlacedInstallment> openInstallmentPlan({
+    required String scheduleId,
+    required String ticketClassId,
+    required int quantity,
+    required String buyerName,
+    required String buyerMsisdn,
+    required double depositKes,
+  }) async {
+    final res = await _api.post('/v1/bookings/installment', {
+      'scheduleId': scheduleId,
+      'buyerName': buyerName,
+      'buyerMsisdn': buyerMsisdn,
+      'depositKes': depositKes,
+      'lines': [
+        for (var i = 0; i < quantity; i++) {'ticketClassId': ticketClassId},
+      ],
+    });
+    return PlacedInstallment(
+      bookingId: res['bookingId'] as String?,
+      status: res['status'] as String? ?? 'PENDING_PAYMENT',
+      totalKes: res['totalKes']?.toString(),
+      balanceKes: res['balanceKes']?.toString(),
+      checkoutRequestId: res['checkoutRequestId'] as String?,
+      paymentError: res['paymentError'] as String?,
+    );
+  }
+
+  /// POST /v1/bookings/:id/balance — a top-up against an open plan.
+  /// Once this clears the balance in full, core-go issues the tickets
+  /// (capacity-checked at that moment, not when the plan was opened).
+  Future<PlacedInstallment> payInstallmentBalance({
+    required String bookingId,
+    required double amountKes,
+  }) async {
+    final res = await _api.post('/v1/bookings/$bookingId/balance', {
+      'amountKes': amountKes,
+    });
+    return PlacedInstallment(
+      bookingId: bookingId,
+      status: res['status'] as String? ?? 'PARTIALLY_PAID',
+      balanceKes: res['balanceKes']?.toString(),
+      checkoutRequestId: res['checkoutRequestId'] as String?,
+      paymentError: res['paymentError'] as String?,
+    );
+  }
+
+  /// GET /v1/bookings/:id/status — polled after opening a plan (until
+  /// the deposit clears) and after each top-up (until it clears).
+  Future<BookingStatusView> bookingStatus(String bookingId) async {
+    final res = await _api.get('/v1/bookings/$bookingId/status');
+    return BookingStatusView.fromJson(
+      (res['status'] as Map<String, dynamic>?) ?? const {},
+    );
+  }
+
+  /// GET /v1/me/bookings — every booking ever placed, richer than
+  /// myTickets() because an open installment plan has no tickets
+  /// issued yet. What "My tickets" reads to show payment plans in
+  /// progress, not just issued tickets.
+  Future<List<MyBookingRich>> myBookings() async {
+    final res = await _api.get('/v1/me/bookings');
+    final list = (res['bookings'] as List?) ?? const [];
+    return list
+        .map((e) => MyBookingRich.fromJson(e as Map<String, dynamic>))
+        .toList();
+  }
 }
 
 /// The shaped answer to POST /v1/bookings the booking stage machine acts on.
