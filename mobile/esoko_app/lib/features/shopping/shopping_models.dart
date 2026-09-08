@@ -56,6 +56,51 @@ class NearbyStore extends StoreSummary {
   final double? distanceKm;
 }
 
+/// One row of GET /v1/me/saved-stores — a StoreSummary plus when it was
+/// saved. See dbx.ListSavedStores.
+class SavedStore extends StoreSummary {
+  SavedStore({
+    required super.id, required super.slug, required super.name, super.tagline, super.logoUrl, super.primaryCategory,
+    required this.savedAt,
+  });
+
+  factory SavedStore.fromJson(Map<String, dynamic> json) => SavedStore(
+        id: json['ID'] as String,
+        slug: json['Slug'] as String,
+        name: json['Name'] as String,
+        tagline: json['Tagline'] as String?,
+        logoUrl: json['LogoURL'] as String?,
+        primaryCategory: json['PrimaryCategory'] as String?,
+        savedAt: json['SavedAt'] as String? ?? '',
+      );
+
+  final String savedAt;
+}
+
+/// GET /v1/stores/:slug/usual's answer — the signed-in buyer's
+/// most-frequently-ordered product at this store, or null when they've
+/// never ordered from it (or aren't signed in). See dbx.UsualProduct.
+class UsualProduct {
+  const UsualProduct({
+    required this.productId,
+    required this.name,
+    required this.priceKes,
+    this.variantId,
+  });
+
+  factory UsualProduct.fromJson(Map<String, dynamic> json) => UsualProduct(
+        productId: json['ProductID'] as String,
+        name: json['Name'] as String,
+        priceKes: json['PriceKES'] as String,
+        variantId: json['VariantID'] as String?,
+      );
+
+  final String productId;
+  final String name;
+  final String priceKes;
+  final String? variantId;
+}
+
 class StoreDetail extends StoreSummary {
   StoreDetail({
     required super.id, required super.slug, required super.name, super.tagline, super.logoUrl, super.primaryCategory,

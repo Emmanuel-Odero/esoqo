@@ -98,6 +98,8 @@ class ApiClient {
   Future<Map<String, dynamic>> patch(String path, [Map<String, dynamic>? body]) =>
       _send('PATCH', path, body);
 
+  Future<Map<String, dynamic>> delete(String path) => _send('DELETE', path);
+
   Future<Map<String, dynamic>> _send(String method, String path, [Map<String, dynamic>? body]) async {
     await _ensureBaseUrl();
     late final Response<dynamic> response;

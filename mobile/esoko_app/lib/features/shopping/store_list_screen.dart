@@ -2,6 +2,9 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:geolocator/geolocator.dart';
 
+import '../../core/auth/auth_controller.dart';
+import '../../core/auth/auth_state.dart';
+
 import '../../core/theme/esoko_tokens.dart';
 import '../../core/widgets/widgets.dart';
 import 'category_style.dart';
@@ -18,16 +21,22 @@ final storesProvider = FutureProvider.autoDispose<List<StoreSummary>>((
 
 typedef _NearbyQuery = ({double? lat, double? lng, String q});
 
+/// GET /v1/me/saved-stores — "My spots". Only ever watched from a
+/// signed-in context (see _MySpotsSection and StoreDetailScreen's save
+/// star) — a guest never fires this request in the first place, rather
+/// than firing it and swallowing the resulting 401.
+final savedStoresProvider = FutureProvider.autoDispose<List<SavedStore>>((ref) {
+  return ref.watch(storesRepositoryProvider).savedStores();
+});
+
 /// GET /v1/stores/nearby — covers both click-and-collect discovery
 /// modes: pass lat/lng for a GPS-sorted "near me" search, or just q for
 /// a neighborhood-text search. See dbx.ListStoresNearby's own comment.
 final nearbyStoresProvider = FutureProvider.autoDispose
     .family<List<NearbyStore>, _NearbyQuery>((ref, query) async {
-      return ref.watch(storesRepositoryProvider).nearby(
-            lat: query.lat,
-            lng: query.lng,
-            q: query.q,
-          );
+      return ref
+          .watch(storesRepositoryProvider)
+          .nearby(lat: query.lat, lng: query.lng, q: query.q);
     });
 
 /// Shopping tab home. Defaults to the plain store directory; a
@@ -125,104 +134,112 @@ class _StoreListScreenState extends ConsumerState<StoreListScreen> {
         child: ConstrainedBox(
           constraints: const BoxConstraints(maxWidth: 840),
           child: CustomScrollView(
-        slivers: [
-          SliverToBoxAdapter(
-            child: Padding(
-              padding: const EdgeInsets.fromLTRB(
-                EsokoSpacing.s5,
-                EsokoSpacing.s5,
-                EsokoSpacing.s5,
-                EsokoSpacing.s2,
-              ),
-              child: EsokoPageLead(
-                'Shop from home, then collect once it\'s ready — or browse goods, produce and services from stores across Esoko.',
-              ),
-            ),
-          ),
-          SliverToBoxAdapter(
-            child: Padding(
-              padding: const EdgeInsets.symmetric(horizontal: EsokoSpacing.s5),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  EsokoSearchField(
-                    controller: _searchController,
-                    hint: 'Search by neighbourhood or store — "Kilimani"',
-                    debounce: const Duration(milliseconds: 350),
-                    onChanged: (v) => setState(() => _query = v.trim()),
+            slivers: [
+              SliverToBoxAdapter(
+                child: Padding(
+                  padding: const EdgeInsets.fromLTRB(
+                    EsokoSpacing.s5,
+                    EsokoSpacing.s5,
+                    EsokoSpacing.s5,
+                    EsokoSpacing.s2,
                   ),
-                  const SizedBox(height: EsokoSpacing.s3),
-                  Wrap(
-                    spacing: EsokoSpacing.s2,
-                    crossAxisAlignment: WrapCrossAlignment.center,
+                  child: EsokoPageLead(
+                    'Shop from home, then collect once it\'s ready — or browse goods, produce and services from stores across Esoko.',
+                  ),
+                ),
+              ),
+              if (ref.watch(authControllerProvider) is AuthSignedIn)
+                const SliverToBoxAdapter(child: _MySpotsSection()),
+              SliverToBoxAdapter(
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: EsokoSpacing.s5,
+                  ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      ChoiceChip(
-                        label: Text(
-                          _position != null
-                              ? 'Using your location'
-                              : 'Use my location',
-                        ),
-                        avatar: _locating
-                            ? const SizedBox(
-                                width: 14,
-                                height: 14,
-                                child: CircularProgressIndicator(
-                                  strokeWidth: 2,
-                                ),
-                              )
-                            : Icon(
-                                _position != null
-                                    ? Icons.my_location_rounded
-                                    : Icons.location_searching_rounded,
-                                size: 16,
-                              ),
-                        selected: _position != null,
-                        onSelected: (_) {
-                          if (_position != null) {
-                            setState(() => _position = null);
-                          } else {
-                            _useMyLocation();
-                          }
-                        },
+                      EsokoSearchField(
+                        controller: _searchController,
+                        hint: 'Search by neighbourhood or store — "Kilimani"',
+                        debounce: const Duration(milliseconds: 350),
+                        onChanged: (v) => setState(() => _query = v.trim()),
                       ),
-                      if (_position != null)
-                        Text(
-                          'Sorted by distance',
-                          style: TextStyle(
-                            fontSize: 12,
-                            color: EsokoColors.text2,
+                      const SizedBox(height: EsokoSpacing.s3),
+                      Wrap(
+                        spacing: EsokoSpacing.s2,
+                        crossAxisAlignment: WrapCrossAlignment.center,
+                        children: [
+                          ChoiceChip(
+                            label: Text(
+                              _position != null
+                                  ? 'Using your location'
+                                  : 'Use my location',
+                            ),
+                            avatar: _locating
+                                ? const SizedBox(
+                                    width: 14,
+                                    height: 14,
+                                    child: CircularProgressIndicator(
+                                      strokeWidth: 2,
+                                    ),
+                                  )
+                                : Icon(
+                                    _position != null
+                                        ? Icons.my_location_rounded
+                                        : Icons.location_searching_rounded,
+                                    size: 16,
+                                  ),
+                            selected: _position != null,
+                            onSelected: (_) {
+                              if (_position != null) {
+                                setState(() => _position = null);
+                              } else {
+                                _useMyLocation();
+                              }
+                            },
                           ),
-                        ),
+                          if (_position != null)
+                            Text(
+                              'Sorted by distance',
+                              style: TextStyle(
+                                fontSize: 12,
+                                color: EsokoColors.text2,
+                              ),
+                            ),
+                        ],
+                      ),
+                      if (_locationError != null)
+                        EsokoFormError(message: _locationError!),
                     ],
                   ),
-                  if (_locationError != null)
-                    EsokoFormError(message: _locationError!),
-                ],
+                ),
               ),
-            ),
+              const SliverToBoxAdapter(
+                child: SizedBox(height: EsokoSpacing.s2),
+              ),
+              if (_searching)
+                EsokoSliverAsyncView(
+                  value: nearby,
+                  isEmpty: (list) => list.isEmpty,
+                  emptyMessage: 'No stores match — try a different search.',
+                  emptyIcon: Icons.storefront_outlined,
+                  onRetry: () => ref.invalidate(nearbyStoresProvider(query)),
+                  data: (context, list) => [_storeListSliver(list)],
+                )
+              else
+                EsokoSliverAsyncView(
+                  value: plain,
+                  isEmpty: (list) => list.isEmpty,
+                  emptyMessage: 'No stores are open yet.',
+                  emptyIcon: Icons.storefront_outlined,
+                  onRetry: () => ref.invalidate(storesProvider),
+                  data: (context, list) => [_storeListSliver(list)],
+                ),
+              const SliverToBoxAdapter(
+                child: SizedBox(height: EsokoSpacing.s6),
+              ),
+            ],
           ),
-          const SliverToBoxAdapter(child: SizedBox(height: EsokoSpacing.s2)),
-          if (_searching)
-            EsokoSliverAsyncView(
-              value: nearby,
-              isEmpty: (list) => list.isEmpty,
-              emptyMessage: 'No stores match — try a different search.',
-              emptyIcon: Icons.storefront_outlined,
-              onRetry: () => ref.invalidate(nearbyStoresProvider(query)),
-              data: (context, list) => [_storeListSliver(list)],
-            )
-          else
-            EsokoSliverAsyncView(
-              value: plain,
-              isEmpty: (list) => list.isEmpty,
-              emptyMessage: 'No stores are open yet.',
-              emptyIcon: Icons.storefront_outlined,
-              onRetry: () => ref.invalidate(storesProvider),
-              data: (context, list) => [_storeListSliver(list)],
-            ),
-          const SliverToBoxAdapter(child: SizedBox(height: EsokoSpacing.s6)),
-          ],
-        ),
         ),
       ),
     );
@@ -239,8 +256,10 @@ class _StoreListScreenState extends ConsumerState<StoreListScreen> {
       sliver: SliverList.separated(
         itemCount: list.length,
         separatorBuilder: (_, _) => const SizedBox(height: EsokoSpacing.s3),
-        itemBuilder: (context, i) =>
-            EsokoStagger(index: i, child: _StoreCard(store: list[i])),
+        itemBuilder: (context, i) => EsokoStagger(
+          index: i,
+          child: _StoreCard(store: list[i]),
+        ),
       ),
     );
   }
@@ -326,4 +345,42 @@ class _StoreCard extends StatelessWidget {
 
   String _formatDistance(double km) =>
       km < 1 ? '${(km * 1000).round()} m' : '${km.toStringAsFixed(1)} km';
+}
+
+/// "My spots" — renders nothing at all for someone with no saved
+/// stores, same reasoning as MyTicketsScreen's payment-plans section
+/// (Phase 4): this exists for the minority who've actually used it, not
+/// as a permanent fixture everyone scrolls past on every visit.
+class _MySpotsSection extends ConsumerWidget {
+  const _MySpotsSection();
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final saved = ref.watch(savedStoresProvider);
+    final list = saved.valueOrNull;
+    if (list == null || list.isEmpty) return const SizedBox.shrink();
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(
+        EsokoSpacing.s5,
+        0,
+        EsokoSpacing.s5,
+        EsokoSpacing.s4,
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const EsokoSubHeader('My spots'),
+          const SizedBox(height: EsokoSpacing.s2),
+          for (var i = 0; i < list.length; i++)
+            Padding(
+              padding: const EdgeInsets.only(bottom: EsokoSpacing.s3),
+              child: EsokoStagger(
+                index: i,
+                child: _StoreCard(store: list[i]),
+              ),
+            ),
+        ],
+      ),
+    );
+  }
 }

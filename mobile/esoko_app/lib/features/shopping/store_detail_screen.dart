@@ -2,12 +2,15 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:url_launcher/url_launcher.dart';
 
+import '../../core/auth/auth_controller.dart';
+import '../../core/auth/auth_state.dart';
 import '../../core/theme/esoko_tokens.dart';
 import '../../core/widgets/widgets.dart';
 import 'category_style.dart';
 import 'gradient_thumb.dart';
 import 'product_detail_screen.dart';
 import 'shopping_models.dart';
+import 'store_list_screen.dart' show savedStoresProvider;
 import 'stores_repository.dart';
 
 final storeDetailProvider = FutureProvider.autoDispose
@@ -18,6 +21,14 @@ final storeDetailProvider = FutureProvider.autoDispose
 final storeProductsProvider = FutureProvider.autoDispose
     .family<List<ProductSummary>, String>(
       (ref, slug) => ref.watch(storesRepositoryProvider).products(slug),
+    );
+
+/// GET /v1/stores/:slug/usual — the "order the usual" shortcut. Null
+/// for a guest or anyone who's never ordered from this store; the
+/// screen just doesn't show the card in that case, not an empty one.
+final usualProductProvider = FutureProvider.autoDispose
+    .family<UsualProduct?, String>(
+      (ref, slug) => ref.watch(storesRepositoryProvider).usualProduct(slug),
     );
 
 class StoreDetailScreen extends ConsumerWidget {
@@ -32,10 +43,15 @@ class StoreDetailScreen extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final store = ref.watch(storeDetailProvider(slug));
     final products = ref.watch(storeProductsProvider(slug));
+    final usual = ref.watch(usualProductProvider(slug));
+    final auth = ref.watch(authControllerProvider);
+    final signedIn = auth is AuthSignedIn;
 
     Future<void> refreshAll() async {
       ref.invalidate(storeDetailProvider(slug));
       ref.invalidate(storeProductsProvider(slug));
+      ref.invalidate(usualProductProvider(slug));
+      if (signedIn) ref.invalidate(savedStoresProvider);
     }
 
     return Scaffold(
@@ -53,6 +69,7 @@ class StoreDetailScreen extends ConsumerWidget {
                   pinned: true,
                   backgroundColor: style.gradient.last,
                   foregroundColor: Colors.white,
+                  actions: [if (signedIn) _SaveStoreButton(storeId: s.id)],
                   flexibleSpace: FlexibleSpaceBar(
                     // Explicit white: an explicit TextStyle without a color
                     // does NOT inherit SliverAppBar.foregroundColor here, so
@@ -197,6 +214,27 @@ class StoreDetailScreen extends ConsumerWidget {
                           style: TextStyle(color: EsokoColors.text2),
                         ),
                       ],
+                      usual.when(
+                        data: (u) => u == null
+                            ? const SizedBox.shrink()
+                            : Padding(
+                                padding: const EdgeInsets.only(
+                                  top: EsokoSpacing.s4,
+                                ),
+                                child: _UsualProductCard(
+                                  usual: u,
+                                  onTap: () => Navigator.of(context).push(
+                                    MaterialPageRoute(
+                                      builder: (_) => ProductDetailScreen(
+                                        productId: u.productId,
+                                      ),
+                                    ),
+                                  ),
+                                ),
+                              ),
+                        loading: () => const SizedBox.shrink(),
+                        error: (_, _) => const SizedBox.shrink(),
+                      ),
                       const SizedBox(height: EsokoSpacing.s6),
                       EsokoAsyncView(
                         value: products,
@@ -249,6 +287,106 @@ class StoreDetailScreen extends ConsumerWidget {
             ),
           );
         },
+      ),
+    );
+  }
+}
+
+/// The star toggle in the app bar — "My spots". Derives whether this
+/// store is already saved from savedStoresProvider (already-fetched
+/// list membership, same pattern GroupDetailScreen uses to derive
+/// isOfficer) rather than a dedicated per-store endpoint that doesn't
+/// exist and isn't needed for a list this short.
+class _SaveStoreButton extends ConsumerStatefulWidget {
+  const _SaveStoreButton({required this.storeId});
+  final String storeId;
+
+  @override
+  ConsumerState<_SaveStoreButton> createState() => _SaveStoreButtonState();
+}
+
+class _SaveStoreButtonState extends ConsumerState<_SaveStoreButton> {
+  bool _busy = false;
+
+  Future<void> _toggle(bool currentlySaved) async {
+    setState(() => _busy = true);
+    final repo = ref.read(storesRepositoryProvider);
+    try {
+      if (currentlySaved) {
+        await repo.unsaveStore(widget.storeId);
+      } else {
+        await repo.saveStore(widget.storeId);
+      }
+      ref.invalidate(savedStoresProvider);
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final saved = ref.watch(savedStoresProvider);
+    final isSaved =
+        saved.valueOrNull?.any((s) => s.id == widget.storeId) ?? false;
+    return IconButton(
+      onPressed: _busy ? null : () => _toggle(isSaved),
+      icon: Icon(isSaved ? Icons.star_rounded : Icons.star_border_rounded),
+      color: isSaved ? EsokoColors.amber : Colors.white,
+      tooltip: isSaved ? 'Remove from My spots' : 'Save to My spots',
+    );
+  }
+}
+
+/// "Order the usual" — pinned above the catalogue when this buyer has
+/// ordered from this store before, so returning to a favourite spot
+/// skips re-browsing entirely. See dbx.UsualProduct's own comment on
+/// how it's ranked.
+class _UsualProductCard extends StatelessWidget {
+  const _UsualProductCard({required this.usual, required this.onTap});
+  final UsualProduct usual;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return EsokoCard(
+      onTap: onTap,
+      child: Row(
+        children: [
+          Container(
+            width: 40,
+            height: 40,
+            decoration: BoxDecoration(
+              color: EsokoColors.greenTint,
+              borderRadius: BorderRadius.circular(EsokoRadius.md),
+            ),
+            alignment: Alignment.center,
+            child: const Icon(Icons.replay_rounded, color: EsokoColors.green),
+          ),
+          const SizedBox(width: EsokoSpacing.s3),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'Your usual',
+                  style: TextStyle(
+                    fontSize: 11.5,
+                    fontWeight: FontWeight.w700,
+                    color: EsokoColors.green,
+                    letterSpacing: 0.3,
+                  ),
+                ),
+                Text(
+                  usual.name,
+                  style: const TextStyle(fontWeight: FontWeight.w600),
+                ),
+              ],
+            ),
+          ),
+          EsokoAmountText(usual.priceKes, fontSize: 14),
+          const SizedBox(width: EsokoSpacing.s1),
+          const Icon(Icons.chevron_right_rounded),
+        ],
       ),
     );
   }

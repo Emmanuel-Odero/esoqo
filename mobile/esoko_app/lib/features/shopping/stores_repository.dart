@@ -75,6 +75,34 @@ class StoresRepository {
     return ProductDetail.fromJson(res);
   }
 
+  /// GET /v1/me/saved-stores — "My spots": stores this person has
+  /// bookmarked, newest-saved first.
+  Future<List<SavedStore>> savedStores() async {
+    final res = await _api.get('/v1/me/saved-stores');
+    final list = (res['stores'] as List?) ?? const [];
+    return list
+        .map((e) => SavedStore.fromJson(e as Map<String, dynamic>))
+        .toList();
+  }
+
+  /// POST /v1/me/saved-stores/:storeId — idempotent; saving twice is a
+  /// no-op on the server, never an error.
+  Future<void> saveStore(String storeId) =>
+      _api.post('/v1/me/saved-stores/$storeId');
+
+  /// DELETE /v1/me/saved-stores/:storeId — likewise idempotent.
+  Future<void> unsaveStore(String storeId) =>
+      _api.delete('/v1/me/saved-stores/$storeId');
+
+  /// GET /v1/stores/:slug/usual — the signed-in buyer's most-frequently
+  /// -ordered product at this store, or null (never ordered here, or
+  /// signed out).
+  Future<UsualProduct?> usualProduct(String slug) async {
+    final res = await _api.get('/v1/stores/$slug/usual');
+    final usual = res['usual'] as Map<String, dynamic>?;
+    return usual == null ? null : UsualProduct.fromJson(usual);
+  }
+
   /// GET /v1/orders/:id — one order's fulfilment status.
   Future<OrderStatus> order(String orderId) async {
     final res = await _api.get('/v1/orders/$orderId');

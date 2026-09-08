@@ -107,6 +107,7 @@ model Party {
   bookingsAsBuyer        Booking[]
   supportTicketsRaised   SupportTicket[]
   bills                  Bill[]
+  savedStores            SavedStore[]
 
   // ── Group treasury ──
   meetingsCalled          Meeting[]                    @relation("MeetingCalledBy")
@@ -977,12 +978,32 @@ model Store {
   stockPurchases    StockPurchase[]
   photos            StorePhoto[]
   stockLocations    StockLocation[]
+  savedBy           SavedStore[]
 
   @@index([enterpriseId])
   @@index([status])
   @@index([dispatchWarehouseOrgId])
   @@index([latitude, longitude])
   @@map("store")
+}
+
+/// A person's own "My spots" list — shops/eateries they've marked as
+/// theirs, so the shopping tab can put those ahead of general discovery
+/// instead of every visit re-browsing a place ordered from weekly. Pure
+/// bookmark: what makes it useful (order history, "the usual") is
+/// derived fresh from StoreOrder/StoreOrderItem at read time (see
+/// dbx.UsualProduct), never duplicated onto this row.
+model SavedStore {
+  id      String   @id @default(uuid()) @db.Uuid
+  partyId String   @db.Uuid
+  party   Party    @relation(fields: [partyId], references: [id], onDelete: Cascade)
+  storeId String   @db.Uuid
+  store   Store    @relation(fields: [storeId], references: [id], onDelete: Cascade)
+  savedAt DateTime @default(now())
+
+  @@unique([partyId, storeId])
+  @@index([partyId, savedAt])
+  @@map("saved_store")
 }
 
 /// Photo-gallery images a store puts on its storefront — the shopfront

@@ -208,6 +208,65 @@ func (s *Server) handleListMyOrders(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"orders": orders})
 }
 
+// ── "My spots" — a person's own saved-store bookmarks ────────────
+
+func (s *Server) handleListSavedStores(c *gin.Context) {
+	ctx := ctxFromGin(c)
+	stores, err := dbx.ListSavedStores(c.Request.Context(), s.Pool, ctx.PartyID)
+	if err != nil {
+		writeError(c, http.StatusInternalServerError, "LIST_FAILED", "Could not load your saved stores")
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"stores": stores})
+}
+
+func (s *Server) handleSaveStore(c *gin.Context) {
+	ctx := ctxFromGin(c)
+	if err := dbx.SaveStore(c.Request.Context(), s.Pool, ctx.PartyID, c.Param("storeId")); err != nil {
+		writeError(c, http.StatusInternalServerError, "SAVE_FAILED", "Could not save that store")
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"ok": true})
+}
+
+func (s *Server) handleUnsaveStore(c *gin.Context) {
+	ctx := ctxFromGin(c)
+	if err := dbx.UnsaveStore(c.Request.Context(), s.Pool, ctx.PartyID, c.Param("storeId")); err != nil {
+		writeError(c, http.StatusInternalServerError, "UNSAVE_FAILED", "Could not remove that store")
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"ok": true})
+}
+
+// handleGetUsualProduct — GET /v1/stores/:slug/usual. Guest-safe route
+// (no authRequired — the store detail screen calls this even for a
+// signed-out visitor) but returns null for anyone without a resolvable
+// party, same "degrade to guest, never error" contract as
+// optionalBuyerPartyID elsewhere in this codebase.
+func (s *Server) handleGetUsualProduct(c *gin.Context) {
+	partyID := ""
+	if token := bearerToken(c); token != "" {
+		if ctx, _ := s.Session.CtxFromToken(c.Request.Context(), token, clientIP(c)); ctx != nil {
+			partyID = ctx.PartyID
+		}
+	}
+	if partyID == "" {
+		c.JSON(http.StatusOK, gin.H{"usual": nil})
+		return
+	}
+	store, err := dbx.GetStoreBySlug(c.Request.Context(), s.Pool, c.Param("slug"))
+	if err != nil || store == nil {
+		c.JSON(http.StatusOK, gin.H{"usual": nil})
+		return
+	}
+	usual, err := dbx.UsualProduct(c.Request.Context(), s.Pool, partyID, store.ID)
+	if err != nil {
+		writeError(c, http.StatusInternalServerError, "GET_FAILED", "Could not load your usual order")
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"usual": usual})
+}
+
 // handleMarkOrderReady — POST /v1/stores/orders/:id/ready. Store-owner
 // only (see dbx.requireStoreOwner); the store's own Esoko account signs
 // in the same way a buyer would, there's no separate staff login.
