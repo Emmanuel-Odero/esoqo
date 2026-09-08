@@ -743,7 +743,10 @@ func CreateFare(ctx context.Context, pool *pgxpool.Pool, c authsvc.Ctx, in Creat
 			return nil, err
 		}
 		points := int(amount*10 + 0.5)
-		if err := SpendVoucher(ctx, pool, *in.VoucherID, "FARE", points, "fare:"+f.ID, entryID); err != nil {
+		// FUEL/TRAVEL also accepted here — an employer-issued commute
+		// allowance is spent the same way a self-bought FARE voucher is
+		// (see dbx.IssueAllowanceVoucherBatch).
+		if err := SpendVoucher(ctx, pool, *in.VoucherID, "FARE,FUEL,TRAVEL", points, "fare:"+f.ID, entryID); err != nil {
 			_, _ = pool.Exec(ctx, `UPDATE fare_payment SET status = 'FAILED' WHERE id = $1`, f.ID)
 			if ferr, ok := err.(*FleetError); ok {
 				return nil, ferr

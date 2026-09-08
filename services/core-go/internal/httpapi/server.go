@@ -184,6 +184,12 @@ func (s *Server) Router() *gin.Engine {
 		v1.POST("/me/bills/:id/pay", s.authRequired(), s.handleMarkBillPaid)
 		v1.PATCH("/me/bills/:id", s.authRequired(), s.handleUpdateBill)
 		v1.DELETE("/me/bills/:id", s.authRequired(), s.handleArchiveBill)
+		v1.GET("/bills/:id/funding", s.handleGetBillFunding)
+		v1.GET("/bills/:id/contributions", s.handleListBillContributions)
+		v1.POST("/bills/:id/contributions", s.handleContributeToBill)
+
+		v1.POST("/me/voucher-batches", s.authRequired(), s.handleIssueAllowanceBatch)
+		v1.GET("/me/voucher-batches", s.authRequired(), s.handleListVoucherBatches)
 	}
 
 	r.POST("/webhooks/mpesa/stk-callback", s.handleMpesaStkCallback)

@@ -51,4 +51,87 @@ class VouchersRepository {
         'recipientMsisdn': recipientMsisdn,
     });
   }
+
+  /// POST /v1/me/voucher-batches — an employer's one M-Pesa payment
+  /// fanning out to N employee FUEL/TRAVEL allowance vouchers (see
+  /// dbx.IssueAllowanceVoucherBatch). Employees are given by phone
+  /// number, not party id — the server resolves/creates each Person,
+  /// same pattern gifting a single voucher already uses.
+  Future<IssuedAllowanceBatch> issueAllowanceBatch({
+    required String purpose,
+    required String label,
+    required double amountPerEmployeeKes,
+    required List<String> employeeMsisdns,
+    required String employerMsisdn,
+  }) async {
+    final res = await _api.post('/v1/me/voucher-batches', {
+      'purpose': purpose,
+      'label': label,
+      'amountPerEmployeeKes': amountPerEmployeeKes,
+      'employeeMsisdns': employeeMsisdns,
+      'employerMsisdn': employerMsisdn,
+    });
+    return IssuedAllowanceBatch(
+      batchId: res['batchId'] as String? ?? '',
+      totalKes: (res['totalKes'] as num?)?.toDouble() ?? 0,
+      status: res['status'] as String? ?? 'PENDING_PAYMENT',
+    );
+  }
+
+  /// GET /v1/me/voucher-batches — the employer's own "batches I've
+  /// issued" list.
+  Future<List<VoucherBatchRow>> myVoucherBatches() async {
+    final res = await _api.get('/v1/me/voucher-batches');
+    final list = (res['batches'] as List?) ?? const [];
+    return list
+        .map((e) => VoucherBatchRow.fromJson(e as Map<String, dynamic>))
+        .toList();
+  }
+}
+
+class IssuedAllowanceBatch {
+  const IssuedAllowanceBatch({
+    required this.batchId,
+    required this.totalKes,
+    required this.status,
+  });
+  final String batchId;
+  final double totalKes;
+  final String status;
+  bool get paid => status.toUpperCase() == 'ISSUED';
+}
+
+/// Wire type matching dbx.VoucherBatchRow.
+class VoucherBatchRow {
+  VoucherBatchRow({
+    required this.id,
+    required this.purpose,
+    required this.label,
+    required this.amountPerEmployeeKes,
+    required this.employeeCount,
+    required this.status,
+    required this.issuedCount,
+    required this.createdAt,
+  });
+
+  factory VoucherBatchRow.fromJson(Map<String, dynamic> json) =>
+      VoucherBatchRow(
+        id: json['ID'] as String,
+        purpose: json['Purpose'] as String,
+        label: json['Label'] as String,
+        amountPerEmployeeKes: json['AmountPerEmployeeKES'] as String,
+        employeeCount: json['EmployeeCount'] as int? ?? 0,
+        status: json['Status'] as String,
+        issuedCount: json['IssuedCount'] as int? ?? 0,
+        createdAt: json['CreatedAt'] as String,
+      );
+
+  final String id;
+  final String purpose;
+  final String label;
+  final String amountPerEmployeeKes;
+  final int employeeCount;
+  final String status;
+  final int issuedCount;
+  final String createdAt;
 }

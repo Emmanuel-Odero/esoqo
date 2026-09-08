@@ -18,11 +18,17 @@ class _AddBillScreenState extends ConsumerState<AddBillScreen> {
   final _labelController = TextEditingController();
   final _accountRefController = TextEditingController();
   final _amountController = TextEditingController();
+  final _targetController = TextEditingController();
   String _category = 'ELECTRICITY';
   String _cycle = 'MONTHLY';
   DateTime _nextDueAt = DateTime.now().add(const Duration(days: 7));
   bool _loading = false;
   String? _error;
+  // Off by default: funding is an opt-in step, not the norm — most
+  // bills stay plain track-and-remind, per the Bill model's own
+  // "nothing here moves money" default.
+  bool _fundingEnabled = false;
+  bool _autoPayEnabled = false;
 
   Future<void> _pickDate() async {
     final picked = await showDatePicker(
@@ -39,21 +45,32 @@ class _AddBillScreenState extends ConsumerState<AddBillScreen> {
       setState(() => _error = 'Give this bill a name');
       return;
     }
+    final target = double.tryParse(_targetController.text.trim());
+    if (_fundingEnabled && (target == null || target <= 0)) {
+      setState(() => _error = 'Enter how much you\'re raising toward');
+      return;
+    }
     setState(() {
       _loading = true;
       _error = null;
     });
     try {
-      await ref
-          .read(billsRepositoryProvider)
-          .addBill(
-            label: _labelController.text.trim(),
-            category: _category,
-            accountRef: _accountRefController.text.trim(),
-            amountKes: double.tryParse(_amountController.text.trim()),
-            cycle: _cycle,
-            nextDueAt: _nextDueAt,
-          );
+      final repo = ref.read(billsRepositoryProvider);
+      final billId = await repo.addBill(
+        label: _labelController.text.trim(),
+        category: _category,
+        accountRef: _accountRefController.text.trim(),
+        amountKes: double.tryParse(_amountController.text.trim()),
+        cycle: _cycle,
+        nextDueAt: _nextDueAt,
+      );
+      if (_fundingEnabled && target != null) {
+        await repo.setFundingTarget(
+          id: billId,
+          targetKes: target,
+          autoPayEnabled: _autoPayEnabled,
+        );
+      }
       if (mounted) Navigator.of(context).pop(true);
     } on ApiException catch (e) {
       setState(() => _error = e.message);
@@ -128,6 +145,33 @@ class _AddBillScreenState extends ConsumerState<AddBillScreen> {
                     trailing: const Icon(Icons.calendar_today_outlined),
                     onTap: _pickDate,
                   ),
+                  const SizedBox(height: EsokoSpacing.s3),
+                  SwitchListTile.adaptive(
+                    contentPadding: EdgeInsets.zero,
+                    title: const Text('Let family or friends help pay'),
+                    subtitle: const Text(
+                      'A shareable progress bar — chip-ins are real M-Pesa payments.',
+                    ),
+                    value: _fundingEnabled,
+                    onChanged: (v) => setState(() => _fundingEnabled = v),
+                  ),
+                  if (_fundingEnabled) ...[
+                    const SizedBox(height: EsokoSpacing.s3),
+                    EsokoFormField(
+                      controller: _targetController,
+                      label: 'Target amount, KES',
+                      keyboardType: const TextInputType.numberWithOptions(
+                        decimal: true,
+                      ),
+                    ),
+                    const SizedBox(height: EsokoSpacing.s2),
+                    SwitchListTile.adaptive(
+                      contentPadding: EdgeInsets.zero,
+                      title: const Text('Auto mark paid once fully funded'),
+                      value: _autoPayEnabled,
+                      onChanged: (v) => setState(() => _autoPayEnabled = v),
+                    ),
+                  ],
                   if (_error != null) EsokoFormError(message: _error!),
                   const SizedBox(height: EsokoSpacing.s5),
                   EsokoLoadingButton(

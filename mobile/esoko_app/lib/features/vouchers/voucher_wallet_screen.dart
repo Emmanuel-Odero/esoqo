@@ -5,6 +5,7 @@ import 'package:qr_flutter/qr_flutter.dart';
 import '../../core/api/api_exception.dart';
 import '../../core/theme/esoko_tokens.dart';
 import '../../core/widgets/widgets.dart';
+import 'allowance_batch_screen.dart';
 import 'voucher_models.dart';
 import 'voucher_providers.dart';
 import 'vouchers_repository.dart';
@@ -77,7 +78,18 @@ class _VoucherWalletScreenState extends ConsumerState<VoucherWalletScreen> {
     final loyalty = ref.watch(myLoyaltyProvider);
     final vouchers = ref.watch(myVouchersProvider);
     return Scaffold(
-      appBar: const EsokoAppBar(title: 'Vouchers'),
+      appBar: EsokoAppBar(
+        title: 'Vouchers',
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.groups_outlined),
+            tooltip: 'Employee allowances',
+            onPressed: () => Navigator.of(context).push(
+              MaterialPageRoute(builder: (_) => const AllowanceBatchScreen()),
+            ),
+          ),
+        ],
+      ),
       body: SafeArea(
         child: Center(
           child: ConstrainedBox(

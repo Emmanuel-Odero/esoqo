@@ -5,6 +5,7 @@ import '../../core/api/api_exception.dart';
 import '../../core/theme/esoko_tokens.dart';
 import '../../core/widgets/widgets.dart';
 import 'add_bill_screen.dart';
+import 'bill_funding_screen.dart';
 import 'bill_models.dart';
 import 'bills_repository.dart';
 
@@ -181,7 +182,7 @@ class _BillCardState extends ConsumerState<_BillCard> {
         ? 'Due today'
         : 'Due in ${b.daysUntilDue} day${b.daysUntilDue == 1 ? '' : 's'}';
 
-    return EsokoListTile(
+    final tile = EsokoListTile(
       title: b.label,
       subtitle:
           '$dueLabel${b.amountKes != null ? ' · KES ${b.amountKes}' : ''}${b.accountRef != null ? ' · Ref ${b.accountRef}' : ''}',
@@ -189,6 +190,35 @@ class _BillCardState extends ConsumerState<_BillCard> {
       trailing: _paying
           ? const EsokoSkeleton(width: 64, height: 14)
           : TextButton(onPressed: _markPaid, child: const Text('Mark paid')),
+      onTap: b.isFunding
+          ? () => Navigator.of(context).push(
+                MaterialPageRoute(
+                  builder: (_) => BillFundingScreen(billId: b.id),
+                ),
+              )
+          : null,
+    );
+    if (!b.isFunding) return tile;
+    // A funded bill gets its progress fill directly under the tile —
+    // the "gamified" half of this screen: a friend/family chip-in
+    // moves this bar, not just a self-reported "mark paid" tap.
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        tile,
+        Padding(
+          padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
+          child: ClipRRect(
+            borderRadius: BorderRadius.circular(EsokoRadius.pill),
+            child: LinearProgressIndicator(
+              value: b.fundingProgress,
+              minHeight: 6,
+              backgroundColor:
+                  Theme.of(context).colorScheme.primary.withValues(alpha: 0.12),
+            ),
+          ),
+        ),
+      ],
     );
   }
 }

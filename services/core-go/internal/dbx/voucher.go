@@ -45,7 +45,7 @@ var (
 	ErrVoucherLoadNotFound = errors.New("no voucher load for that checkout request")
 )
 
-var voucherPurposes = map[string]bool{"FARE": true, "RENT": true, "SHOPPING": true, "GENERAL": true}
+var voucherPurposes = map[string]bool{"FARE": true, "RENT": true, "SHOPPING": true, "GENERAL": true, "FUEL": true, "TRAVEL": true}
 
 // Voucher is the card row plus derived balance.
 type Voucher struct {
@@ -305,7 +305,10 @@ func LoadVoucherWithLoyalty(ctx context.Context, pool *pgxpool.Pool, c authsvc.C
 
 // SpendVoucher debits points for a purpose-checked purchase. Must run in
 // the caller's tx-adjacent flow; the SPEND row's refId gives idempotency
-// per purchase (e.g. fare:<id>).
+// per purchase (e.g. fare:<id>). wantPurpose accepts a comma-separated
+// list so one call site can honour more than one purpose (a fare
+// payment takes a FARE voucher, and now an employer-issued FUEL or
+// TRAVEL allowance voucher too — see dbx.IssueAllowanceVoucherBatch).
 func SpendVoucher(ctx context.Context, pool *pgxpool.Pool, voucherID, wantPurpose string, points int, refID, journalEntryID string) error {
 	if points <= 0 {
 		return &FleetError{"BAD_INPUT", "Amount must be above zero"}
@@ -325,7 +328,14 @@ func SpendVoucher(ctx context.Context, pool *pgxpool.Pool, voucherID, wantPurpos
 		_, _ = pool.Exec(ctx, `UPDATE voucher_card SET status = 'EXPIRED', "updatedAt" = now() WHERE id = $1`, voucherID)
 		return ErrVoucherExpired
 	}
-	if purpose != "GENERAL" && purpose != wantPurpose {
+	accepted := false
+	for _, want := range strings.Split(wantPurpose, ",") {
+		if purpose == want {
+			accepted = true
+			break
+		}
+	}
+	if purpose != "GENERAL" && !accepted {
 		return ErrVoucherWrongPurpose
 	}
 	var done bool

@@ -100,6 +100,22 @@ func (s *Server) handleMpesaStkCallback(c *gin.Context) {
 		return
 	}
 
+	if _, _, err := dbx.ConfirmVoucherBatchByCheckoutID(ctx, s.Pool, cb.CheckoutRequestID, cb.MpesaReceiptCode); err == nil {
+		c.JSON(http.StatusOK, gin.H{"ok": true})
+		return
+	} else if err != dbx.ErrVoucherBatchNotFound {
+		writeError(c, http.StatusInternalServerError, "CONFIRM_FAILED", "Could not confirm payment")
+		return
+	}
+
+	if _, _, err := dbx.ConfirmBillContributionByCheckoutID(ctx, s.Pool, cb.CheckoutRequestID); err == nil {
+		c.JSON(http.StatusOK, gin.H{"ok": true})
+		return
+	} else if err != dbx.ErrBillContributionNotFound {
+		writeError(c, http.StatusInternalServerError, "CONFIRM_FAILED", "Could not confirm payment")
+		return
+	}
+
 	// Belongs to no Go-owned domain (registration/donation payments —
 	// still TS-only): forward byte-identical to the TS core webhook when
 	// configured, else ack. Never an error here either way.

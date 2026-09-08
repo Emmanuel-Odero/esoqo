@@ -566,6 +566,16 @@ enum AccountKind {
   /// godown's storage/handling fee revenue — the WAREHOUSE-side mirror
   /// of STORE_REVENUE.
   WAREHOUSE_REVENUE
+  /// The platform-pooled counterpart to every VoucherCard's balance —
+  /// see ConfirmVoucherLoadByCheckoutID/ConfirmVoucherBatchByCheckoutID
+  /// in services/core-go. Pre-existing drift closed here: this value
+  /// was already live in the database (added by an earlier core-go-only
+  /// migration) but had never been added to this schema file.
+  VOUCHER_FLOAT
+  /// One per bill owner. Where a BillContribution settles — money
+  /// raised toward a bill's targetKes, held here until the bill is
+  /// marked paid (auto or manual). See dbx.ConfirmBillContributionByCheckoutID.
+  BILL_FUNDING
 }
 
 model Account {
@@ -2920,13 +2930,59 @@ model Bill {
   /// discipline as everywhere else in this schema that keeps history.
   status             String   @default("ACTIVE")
 
+  /// Null means this bill doesn't accept funding at all — targetKes is
+  /// what turns on the "gamified" half (a shareable progress bar,
+  /// family/friends chipping in). Unlike amountKes above (a plain
+  /// reminder number), a target being met is what BillContribution
+  /// rows accumulate toward.
+  targetKes      Decimal? @db.Decimal(12, 2)
+  /// Once contributions (since the last payment) reach targetKes, the
+  /// bill is auto-marked paid the same way a manual "mark paid" tap
+  /// already works — see dbx.ContributeToBill. Off by default: a
+  /// target with auto-pay off is progress-tracking only, the owner
+  /// still taps "mark paid" themselves.
+  autoPayEnabled Boolean  @default(false)
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  payments BillPayment[]
+  payments      BillPayment[]
+  contributions BillContribution[]
 
   @@index([partyId, status])
   @@map("bill")
+}
+
+enum BillContributionStatus {
+  PENDING
+  PAID
+}
+
+/// A named person's chip-in toward a bill's targetKes — the same
+/// "who put in what, when" discipline as GroupContribution/Posting,
+/// never a running total anyone can edit in place (see this app's own
+/// security posture on cash-handling flows). Unlike BillPayment (a
+/// self-reported "I paid this" log that moves no real money — see
+/// that model's own comment), a BillContribution is real money: it
+/// settles through the ledger exactly like a StoreOrder or
+/// GroupContribution, via M-Pesa STK. contributorPartyId is null for
+/// a guest contributor (a friend/family member without an Esoko
+/// account) — contributorName is always captured directly since the
+/// contribution card shows who gave what.
+model BillContribution {
+  id                     String                  @id @default(uuid()) @db.Uuid
+  billId                 String                  @db.Uuid
+  bill                   Bill                    @relation(fields: [billId], references: [id], onDelete: Cascade)
+  contributorPartyId     String?                 @db.Uuid
+  contributorName        String
+  amountKes              Decimal                 @db.Decimal(12, 2)
+  status                 BillContributionStatus  @default(PENDING)
+  mpesaCheckoutRequestId String?                 @unique
+  journalEntryId         String?                 @db.Uuid
+  createdAt              DateTime                @default(now())
+
+  @@index([billId, status])
+  @@map("bill_contribution")
 }
 
 /// A self-reported "I paid this" log entry — never a real money
@@ -3801,6 +3857,12 @@ enum VoucherPurpose {
   RENT
   SHOPPING
   GENERAL
+  /// Employer-issued allowance, redeemable at a fleet route flagged
+  /// acceptsVoucherPurpose FUEL — see dbx.IssueAllowanceVoucherBatch.
+  FUEL
+  /// Employer-issued allowance, redeemable the same way TRAVEL trips
+  /// (ticketing bookings) accept a voucher payment method.
+  TRAVEL
 }
 
 enum VoucherStatus {
@@ -3827,6 +3889,32 @@ model VoucherCard {
 
   @@index([ownerPartyId, status])
   @@map("voucher_card")
+}
+
+/// An employer's one M-Pesa payment fanning out to N employee
+/// FUEL/TRAVEL allowance vouchers — see dbx.IssueAllowanceVoucherBatch.
+/// Vouchers themselves aren't minted until the payment confirms (same
+/// "nothing exists until it's actually paid for" rule CreateStoreOrder
+/// already follows), so this row is the batch's own pending state, not
+/// a join table — employeePartyIds is a plain JSON array rather than N
+/// separate rows because there's nothing per-employee to track here
+/// beyond "was included in this batch"; each employee's own
+/// VoucherCard row is where their individual balance/history lives.
+model VoucherBatch {
+  id                     String   @id @default(uuid()) @db.Uuid
+  employerPartyId        String   @db.Uuid
+  purpose                String
+  label                  String
+  amountPerEmployeeKes   Decimal  @db.Decimal(12, 2)
+  employeePartyIds       Json
+  /// PENDING | ISSUED.
+  status                 String   @default("PENDING")
+  mpesaCheckoutRequestId String?  @unique
+  issuedCount            Int      @default(0)
+  createdAt              DateTime @default(now())
+
+  @@index([employerPartyId, createdAt])
+  @@map("voucher_batch")
 }
 
 model VoucherLedgerEntry {
