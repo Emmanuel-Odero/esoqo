@@ -1,12 +1,16 @@
+import { cookies } from 'next/headers';
 import { Icon } from '@esoko/ui';
-import { getMyBookings } from '@esoko/db';
+import { SESSION_COOKIE } from '@esoko/auth';
 import { requireSubject } from '@/lib/session';
+import { goUrl, type GoMyBooking } from '@/lib/ticketing';
 import { RetryPaymentButton } from './RetryPaymentButton';
+import { PayBalanceButton } from './PayBalanceButton';
 
 export const dynamic = 'force-dynamic';
 
 const STATUS_LABEL: Record<string, string> = {
   PENDING_PAYMENT: 'Awaiting payment',
+  PARTIALLY_PAID: 'Part-paid',
   PAID: 'Confirmed',
   CANCELLED: 'Cancelled',
   REFUNDED: 'Refunded',
@@ -19,14 +23,33 @@ const TICKET_LABEL: Record<string, string> = {
   REFUNDED: 'Refunded',
 };
 
+type BookingView = Omit<GoMyBooking, 'departAt' | 'balanceDueBy'> & {
+  departAt: Date;
+  balanceDueBy: Date | null;
+};
+
 /**
  * Every subject's booking history — event tickets and transport
  * tickets side by side, same as Payments shows every registration fee
- * regardless of which group it belongs to.
+ * regardless of which group it belongs to. Reads come from core-go
+ * (GET /v1/me/bookings, the getMyBookings port).
  */
 export default async function MyTickets() {
-  const ctx = await requireSubject();
-  const bookings = await getMyBookings(ctx);
+  await requireSubject();
+  const token = (await cookies()).get(SESSION_COOKIE)?.value;
+  const bookings: BookingView[] = token
+    ? await fetch(goUrl('/v1/me/bookings'), {
+        headers: { Authorization: `Bearer ${token}` },
+        cache: 'no-store',
+      })
+        .then((r) => (r.ok ? r.json() : { bookings: [] }))
+        .then((j) => ((j?.bookings ?? []) as GoMyBooking[]).map((b) => ({
+          ...b,
+          departAt: new Date(b.departAt),
+          balanceDueBy: b.balanceDueBy ? new Date(b.balanceDueBy) : null,
+        })))
+        .catch(() => [])
+    : [];
 
   return (
     <>
@@ -55,18 +78,17 @@ export default async function MyTickets() {
         bookings.map((b) => (
           <div className="mcard" key={b.id} style={{ marginBottom: 14 }}>
             <h2>
-              <Icon name={b.schedule.listing.org.vertical === 'TRANSPORT' ? 'truck' : 'calendar'} size={18} />
-              {b.schedule.listing.title}
+              <Icon name={b.vertical === 'TRANSPORT' ? 'truck' : 'calendar'} size={18} />
+              {b.listingTitle}
             </h2>
             <div className="mrow"><span className="k">Organiser</span>
-              <span className="v">{b.schedule.listing.org.name}</span></div>
+              <span className="v">{b.orgName}</span></div>
             <div className="mrow"><span className="k">When</span>
-              <span className="v">{b.schedule.departAt.toLocaleString('en-KE', { timeZone: 'Africa/Nairobi' })}</span></div>
-            {(b.schedule.listing.venue || b.schedule.listing.route) && (
+              <span className="v">{b.departAt.toLocaleString('en-KE', { timeZone: 'Africa/Nairobi' })}</span></div>
+            {(b.venueName || b.routeFrom) && (
               <div className="mrow"><span className="k">Where</span>
                 <span className="v">
-                  {b.schedule.listing.venue?.name
-                    ?? `${b.schedule.listing.route?.originName} → ${b.schedule.listing.route?.destinationName}`}
+                  {b.venueName ?? `${b.routeFrom} → ${b.routeTo}`}
                 </span></div>
             )}
             <div className="mrow"><span className="k">Status</span>
@@ -74,7 +96,27 @@ export default async function MyTickets() {
             <div className="mrow"><span className="k">Total</span>
               <span className="v mono">KES {Number(b.totalKes).toLocaleString('en-KE')}</span></div>
 
-            {b.status === 'PENDING_PAYMENT' && b.paymentMethod === 'MPESA_STK' && (
+            {b.isInstallment && (b.status === 'PENDING_PAYMENT' || b.status === 'PARTIALLY_PAID') && (() => {
+              const paid = Number(b.amountPaidKes);
+              const total = Number(b.totalKes);
+              const balance = Math.max(0, total - paid);
+              return (
+                <>
+                  <div className="mrow"><span className="k">Paid so far</span>
+                    <span className="v mono">KES {paid.toLocaleString('en-KE')} / {total.toLocaleString('en-KE')}</span></div>
+                  {b.balanceDueBy && (
+                    <div className="mrow"><span className="k">Balance due</span>
+                      <span className="v">{b.balanceDueBy.toLocaleString('en-KE', { timeZone: 'Africa/Nairobi' })}</span></div>
+                  )}
+                  <p className="note" style={{ margin: '8px 0 0', fontSize: '.82rem' }}>
+                    Your ticket is issued once the balance is fully paid.
+                  </p>
+                  <PayBalanceButton bookingId={b.id} balanceKes={balance} />
+                </>
+              );
+            })()}
+
+            {!b.isInstallment && b.status === 'PENDING_PAYMENT' && b.paymentMethod === 'MPESA_STK' && (
               <RetryPaymentButton bookingId={b.id} />
             )}
 

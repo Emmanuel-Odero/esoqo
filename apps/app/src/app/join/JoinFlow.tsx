@@ -189,6 +189,7 @@ export function JoinFlow() {
           bizIntendsToRegister: f.bizIntendsToRegister || undefined,
           bizPartyId: f.bizPartyId || undefined,
           bizName: f.bizName || undefined,
+          bizOrgKind: f.bizOrgKind || undefined,
           bizSector: f.bizSector || undefined,
           bizType: f.bizType || undefined,
           bizTypeOther: f.bizTypeOther || undefined,

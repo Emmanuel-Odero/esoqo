@@ -1,44 +1,80 @@
 import type { Metadata } from 'next';
 import { notFound } from 'next/navigation';
 import { Icon } from '@esoko/ui';
-import { getPublicListing, getMyRecord } from '@esoko/db';
+import { getMyRecord } from '@esoko/db';
 import { getCtx } from '@/lib/session';
 import { BookingForm } from './BookingForm';
 
 const APP_URL = process.env.NEXT_PUBLIC_APP_URL ?? 'http://localhost:3001';
+const CORE_GO_URL = process.env.CORE_GO_API_URL ?? 'http://localhost:4100';
+
+const AMENITY_BADGES: Record<string, string> = {
+  WIFI: '📶 WiFi', SNACKS: '🍪 Snacks', CHARGING: '🔌 Charging', RECLINING: '🛋️ Reclining',
+  EXTRA_LEGROOM: '🦵 Extra legroom', BLANKET: '🧣 Blanket',
+};
+
+interface GoPublicListing {
+  ID: string;
+  Slug: string;
+  Title: string;
+  Description?: string | null;
+  Vertical: string;
+  Org?: { Name: string; Vertical: string; InstallmentsEnabled: boolean; MinDepositPercent: number } | null;
+  Venue?: { Name: string } | null;
+  Route?: { OriginName: string; DestinationName: string } | null;
+  TicketClasses: {
+    ID: string; Name: string; PriceKES: string; Seated: boolean; Capacity: number;
+    Amenities: string[]; AmenityNote?: string | null;
+  }[];
+  Schedules: {
+    ID: string; DepartAt: string; GateInfo?: string | null; VehicleOrHallLabel?: string | null; Status: string;
+  }[];
+  SeatMap?: { Rows: number; Pattern: string; Seats: { Label: string; TicketClassID: string }[] } | null;
+}
+
+async function getListing(slug: string): Promise<GoPublicListing | null> {
+  const res = await fetch(`${CORE_GO_URL}/v1/listings/${encodeURIComponent(slug)}`, { cache: 'no-store' });
+  if (!res.ok) return null;
+  const json = (await res.json().catch(() => null)) as GoPublicListing | null;
+  // Go embeds the detail at top level (flat struct), not under a key.
+  return json && json.ID ? json : null;
+}
 
 export async function generateMetadata({ params }: { params: Promise<{ slug: string }> }): Promise<Metadata> {
   const { slug } = await params;
-  const listing = await getPublicListing(slug).catch(() => null);
-  return { title: listing?.title ?? 'Not found' };
+  const listing = await getListing(slug).catch(() => null);
+  return { title: listing?.Title ?? 'Not found' };
 }
 export const dynamic = 'force-dynamic';
 
 /**
- * Booking as a signed-in subject only, same boundary as apps/store's
- * checkout — but the sign-in flow itself lives on apps/app (3001),
- * since that's where every subject session originates. This page just
- * sends people there and back (?next=/tickets/[slug]).
+ * Public checkout, signed in or not — same boundary as apps/store's
+ * storefront. A signed-in subject's name/phone pre-fill from their
+ * record; a guest fills them in on the form itself and gets tickets
+ * issued to that phone (and email, if given), same as apps/store's
+ * checkout captures a StoreCustomer from checkout details alone.
+ * Listing reads come from core-go; only the buyer-record pre-fill
+ * still touches the party record.
  */
 export default async function TicketDetail({ params }: { params: Promise<{ slug: string }> }) {
   const { slug } = await params;
-  const listing = await getPublicListing(slug).catch(() => null);
-  if (!listing) notFound();
+  const listing = await getListing(slug).catch(() => null);
+  if (!listing || !listing.Org) notFound();
 
   const ctx = await getCtx();
   const signedIn = ctx.actorType === 'SUBJECT' && Boolean(ctx.partyId);
   const me = signedIn ? await getMyRecord(ctx) : null;
   const buyerName = me?.person?.knownAs || me?.person?.officialName || '';
   const buyerMsisdn = me?.person?.msisdn || '';
-  const upcoming = listing.schedules.filter((s) => s.departAt > new Date());
+  const upcoming = listing.Schedules.filter((s) => new Date(s.DepartAt) > new Date());
 
   return (
     <>
       <section className="phead">
         <div className="wrap">
-          <p className="kicker">{listing.org.vertical === 'TRANSPORT' ? 'Transport' : 'Events'}</p>
-          <h1>{listing.title}</h1>
-          <p className="lead">{listing.description || `Run by ${listing.org.name}`}</p>
+          <p className="kicker">{listing.Org.Vertical === 'TRANSPORT' ? 'Transport' : 'Events'}</p>
+          <h1>{listing.Title}</h1>
+          <p className="lead">{listing.Description || `Run by ${listing.Org.Name}`}</p>
         </div>
       </section>
 
@@ -46,14 +82,34 @@ export default async function TicketDetail({ params }: { params: Promise<{ slug:
         <div className="wrap" style={{ maxWidth: 640 }}>
           <div className="card" style={{ marginBottom: 20 }}>
             <div className="row" style={{ justifyContent: 'space-between' }}>
-              <span className="sub">Organiser</span><strong>{listing.org.name}</strong>
+              <span className="sub">Organiser</span><strong>{listing.Org.Name}</strong>
             </div>
-            {(listing.venue || listing.route) && (
+            {(listing.Venue || listing.Route) && (
               <div className="row" style={{ justifyContent: 'space-between', marginTop: 10 }}>
-                <span className="sub">{listing.org.vertical === 'TRANSPORT' ? 'Route' : 'Venue'}</span>
-                <strong>{listing.venue?.name ?? `${listing.route?.originName} → ${listing.route?.destinationName}`}</strong>
+                <span className="sub">{listing.Org.Vertical === 'TRANSPORT' ? 'Route' : 'Venue'}</span>
+                <strong>{listing.Venue?.Name ?? `${listing.Route?.OriginName} → ${listing.Route?.DestinationName}`}</strong>
               </div>
             )}
+          </div>
+
+          <div className="card" style={{ marginBottom: 20 }}>
+            <h3 style={{ marginBottom: 12 }}>
+              {listing.Org.Vertical === 'TRANSPORT' ? 'Seat classes' : 'Ticket options'}
+            </h3>
+            {listing.TicketClasses.map((c) => (
+              <div key={c.ID} style={{ padding: '10px 0', borderTop: '1px solid var(--line)' }}>
+                <div className="row" style={{ justifyContent: 'space-between' }}>
+                  <strong>{c.Name}</strong>
+                  <span className="mono">KES {Number(c.PriceKES).toLocaleString('en-KE')}{c.Seated ? ' / seat' : ''}</span>
+                </div>
+                {((c.Amenities?.length ?? 0) > 0 || c.AmenityNote) && (
+                  <p className="sub" style={{ margin: '4px 0 0', fontSize: '.82rem' }}>
+                    {(c.Amenities ?? []).map((a) => AMENITY_BADGES[a] ?? a).join('  ')}
+                    {c.AmenityNote ? `  +${c.AmenityNote}` : ''}
+                  </p>
+                )}
+              </div>
+            ))}
           </div>
 
           {upcoming.length === 0 ? (
@@ -62,28 +118,27 @@ export default async function TicketDetail({ params }: { params: Promise<{ slug:
               <h3 style={{ marginBottom: 6 }}>Nothing scheduled right now</h3>
               <p className="sub" style={{ margin: 0 }}>Check back soon for the next occurrence.</p>
             </div>
-          ) : !signedIn ? (
-            <div className="card" style={{ textAlign: 'center' }}>
-              <span className="icbox icbox-b" style={{ margin: '0 auto 14px' }}><Icon name="lock" size={20} /></span>
-              <h3 style={{ marginBottom: 6 }}>Sign in to book</h3>
-              <p className="sub" style={{ margin: '0 0 16px' }}>Tickets are tied to your Esoko account so they're always in "My tickets".</p>
-              <a href={`${APP_URL}/signin?next=${encodeURIComponent(`${process.env.NEXT_PUBLIC_WEB_URL ?? 'http://localhost:3000'}/tickets/${slug}`)}`} className="btn btn-p">
-                Sign in
-              </a>
-            </div>
-          ) : !buyerMsisdn ? (
-            <div className="card" style={{ textAlign: 'center' }}>
-              <span className="icbox icbox-b" style={{ margin: '0 auto 14px' }}><Icon name="phone" size={20} /></span>
-              <h3 style={{ marginBottom: 6 }}>Add a phone number first</h3>
-              <p className="sub" style={{ margin: '0 0 16px' }}>Your tickets and payment prompt go to it.</p>
-              <a href={`${APP_URL}/me`} className="btn btn-p">Go to your Record</a>
-            </div>
           ) : (
             <BookingForm
-              schedules={upcoming.map((s) => ({ id: s.id, departAt: s.departAt.toISOString() }))}
-              ticketClasses={listing.ticketClasses.map((c) => ({ id: c.id, name: c.name, priceKes: Number(c.priceKes), seated: c.seated, capacity: c.capacity }))}
+              schedules={upcoming.map((s) => ({
+                id: s.ID, departAt: s.DepartAt,
+                vehicleOrHallLabel: s.VehicleOrHallLabel ?? undefined, gateInfo: s.GateInfo ?? undefined,
+              }))}
+              ticketClasses={listing.TicketClasses.map((c) => ({
+                id: c.ID, name: c.Name, priceKes: Number(c.PriceKES), seated: c.Seated, capacity: c.Capacity,
+                amenities: c.Amenities ?? [], amenityNote: c.AmenityNote ?? undefined,
+              }))}
+              seatMap={listing.SeatMap ? {
+                rows: listing.SeatMap.Rows,
+                pattern: listing.SeatMap.Pattern,
+                seats: (listing.SeatMap.Seats ?? []).map((s) => ({ label: s.Label, ticketClassId: s.TicketClassID })),
+              } : null}
+              signedIn={signedIn}
+              installmentsEnabled={listing.Org.InstallmentsEnabled}
+              minDepositPercent={listing.Org.MinDepositPercent}
               buyerName={buyerName}
               buyerMsisdn={buyerMsisdn}
+              signinUrl={`${APP_URL}/signin?next=${encodeURIComponent(`${process.env.NEXT_PUBLIC_WEB_URL ?? 'http://localhost:3000'}/tickets/${slug}`)}`}
             />
           )}
         </div>

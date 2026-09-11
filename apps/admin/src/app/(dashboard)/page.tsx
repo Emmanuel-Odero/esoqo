@@ -1,3 +1,5 @@
+import type { Route } from 'next';
+import { redirect } from 'next/navigation';
 import { Icon } from '@esoko/ui';
 import {
   getOverview, getFunnel, getStepFunnel, getByCounty, getBySegment,
@@ -7,6 +9,7 @@ import {
   getSmsSpendSummary, getDonorRepeatRate, can,
 } from '@esoko/db';
 import { requireStaff } from '@/lib/session';
+import { firstAccessibleRoute } from '@/lib/nav-routes';
 import { AttentionList, SplitPair, type AttentionItem } from '@/components/dash';
 import { MiniTrend, RankedBarChart, DonutChart, Gauge } from '@/components/charts';
 
@@ -34,6 +37,17 @@ export default async function OverviewPage({
   searchParams,
 }: { searchParams: Promise<{ days?: string }> }) {
   const ctx = await requireStaff();
+  // This whole page is the cross-domain report surface — every panel
+  // on it reads through report.read one way or another, despite the
+  // file's own older doc comment implying finer-grained gating. A
+  // narrowly-scoped account (parcels ops, a single-store cashier's
+  // login, ...) never has that capability, so send it straight to the
+  // first section it actually can open instead of hard-crashing on
+  // the default landing page — same "don't dead-end a valid sign-in"
+  // fix as the parcel payment button's dead "Choose a price" state.
+  if (!can(ctx, 'report.read')) {
+    redirect((firstAccessibleRoute(ctx.capabilities) ?? '/no-access') as Route);
+  }
   const sp = await searchParams;
   const days = [7, 30, 90].includes(Number(sp.days)) ? Number(sp.days) : 30;
 

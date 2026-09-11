@@ -137,6 +137,25 @@ function BizDetails({
 
   return (
     <>
+      <fieldset style={{ border: 0, padding: 0 }}>
+        <legend className="lab">What kind of business is this?</legend>
+        <div className="opts">
+          {([
+            ['', 'Business', 'Shop, service, or anything general'],
+            ['SUPPLIER', 'Supplier', 'You supply goods to other businesses'],
+            ['WHOLESALER', 'Wholesaler', 'You sell in bulk to retailers'],
+            ['WAREHOUSE', 'Godown', 'You store or handle goods for others'],
+            ['MALL', 'Mall', 'You host other businesses as tenants'],
+          ] as const).map(([v, t, d]) => (
+            <button key={v || 'BUSINESS'} type="button" className="opt"
+              aria-pressed={f.bizOrgKind === v}
+              onClick={() => set('bizOrgKind', v)}>
+              <span><span className="t">{t}</span><span className="d">{d}</span></span>
+            </button>
+          ))}
+        </div>
+      </fieldset>
+
       <SearchCombobox<{ key: string; name: string }>
         id="bizSector" label="What sector is it in?" icon="search"
         value={f.bizSector} onInputChange={onSectorInput}

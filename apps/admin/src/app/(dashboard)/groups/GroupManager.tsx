@@ -71,6 +71,7 @@ export function GroupManager({
   const router = useRouter();
   const [sel, setSel] = useState<string | null>(groups[0]?.id ?? null);
   const [q, setQ] = useState('');
+  const [kindFilter, setKindFilter] = useState('');
   const [creating, setCreating] = useState(false);
   const pendingSelectRef = useRef<string | null>(null);
 
@@ -81,8 +82,13 @@ export function GroupManager({
     }
   }, [groups]);
 
+  // Chamas, businesses and now suppliers/wholesalers/godowns/malls all
+  // land in this one list — a kind filter keeps it legible now that a
+  // real mix of them exists, without touching the server query.
+  const kindsPresent = [...new Set(groups.map((g) => g.kind))].sort();
   const view = groups.filter((g) =>
-    !q || `${g.name} ${g.knownAs ?? ''} ${g.county}`.toLowerCase().includes(q.toLowerCase()));
+    (!kindFilter || g.kind === kindFilter) &&
+    (!q || `${g.name} ${g.knownAs ?? ''} ${g.county}`.toLowerCase().includes(q.toLowerCase())));
   const current = groups.find((g) => g.id === sel);
 
   return (
@@ -94,6 +100,15 @@ export function GroupManager({
             <input className="inp" value={q} onChange={(e) => setQ(e.target.value)}
               aria-label="Search groups" placeholder="Search groups…" />
           </div>
+          {kindsPresent.length > 1 && (
+            <select className="inp" style={{ width: 150 }} value={kindFilter}
+              onChange={(e) => setKindFilter(e.target.value)} aria-label="Filter by kind">
+              <option value="">All kinds</option>
+              {kindsPresent.map((k) => (
+                <option key={k} value={k}>{k.replace(/_/g, ' ').toLowerCase()}</option>
+              ))}
+            </select>
+          )}
           {canCreate && (
             <button className="btn btn-p btn-sm" onClick={() => setCreating(true)} aria-label="Register a new group">
               <Icon name="plus" size={14} />New
@@ -132,7 +147,8 @@ export function GroupManager({
                   )}
                 </strong>
                 <span className="sub" style={{ fontSize: '.79rem' }}>
-                  {g.county} · {g.members.length} {g.members.length === 1 ? 'member' : 'members'}
+                  {g.kind.replace(/_/g, ' ').toLowerCase()} · {g.county} ·{' '}
+                  {g.members.length} {g.members.length === 1 ? 'member' : 'members'}
                 </span>
               </button>
             ))}

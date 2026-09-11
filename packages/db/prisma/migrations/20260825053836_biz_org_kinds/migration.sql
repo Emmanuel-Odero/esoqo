@@ -1,0 +1,8 @@
+-- AlterEnum
+ALTER TYPE "OrgKind" ADD VALUE 'SUPPLIER';
+ALTER TYPE "OrgKind" ADD VALUE 'WHOLESALER';
+ALTER TYPE "OrgKind" ADD VALUE 'WAREHOUSE';
+ALTER TYPE "OrgKind" ADD VALUE 'MALL';
+
+-- AlterTable
+ALTER TABLE "registration" ADD COLUMN "bizOrgKind" TEXT;

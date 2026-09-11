@@ -2,9 +2,8 @@ import type { Metadata } from 'next';
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import { Icon, Logo, type IconName } from '@esoko/ui';
-import { getTicketOrg } from '@esoko/db';
 import { requireOrgAccess } from '@/lib/session';
-import { canOrg } from '@/lib/ticketing';
+import { canOrg, orgGo, orgForCan, type GoOrg } from '@/lib/ticketing';
 import '@/app/me/me.css';
 
 export const metadata: Metadata = { title: { default: 'Organiser console', template: '%s · Esoko' } };
@@ -28,7 +27,9 @@ export default async function OrgLayout(
   const { orgId } = await params;
   const { kind, ctx } = await requireOrgAccess(orgId);
 
-  const org = await getTicketOrg(ctx, orgId).catch(() => null);
+  const org = await orgGo<{ org: GoOrg }>(orgId, `/v1/ticketorgs/${orgId}`)
+    .then((r) => orgForCan(r.org))
+    .catch(() => null);
   if (!org) notFound();
 
   const tabs: { href: string; icon: IconName; label: string; show: boolean }[] = [

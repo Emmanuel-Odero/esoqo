@@ -1,16 +1,20 @@
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import { Icon, type IconName } from '@esoko/ui';
-import { getTicketOrg, listOrgListings, listOrgBookings } from '@esoko/db';
+import { AuthorisationError } from '@esoko/db';
 import { requireOrgAccess } from '@/lib/session';
-import { canOrg } from '@/lib/ticketing';
+import { canOrg, orgGo, orgForCan, type GoOrg, type GoListing, type GoOrgBooking } from '@/lib/ticketing';
 
 export const dynamic = 'force-dynamic';
 
 export default async function OrgDashboard({ params }: { params: Promise<{ orgId: string }> }) {
   const { orgId } = await params;
   const { ctx } = await requireOrgAccess(orgId);
-  const org = await getTicketOrg(ctx, orgId).catch(() => null);
+  // Console reads come from core-go (dbx.AssertOwnsOrg enforces); the
+  // TS session ctx above is only for nav gating via canOrg.
+  const org = await orgGo<{ org: GoOrg }>(orgId, `/v1/ticketorgs/${orgId}`)
+    .then((r) => orgForCan(r.org))
+    .catch(() => null);
   if (!org) notFound();
 
   const canListings = canOrg(ctx, org, 'listing.write');
@@ -19,12 +23,28 @@ export default async function OrgDashboard({ params }: { params: Promise<{ orgId
   const canStaff = canOrg(ctx, org, 'ticketorgstaff.write');
 
   const [listings, bookings] = await Promise.all([
-    canListings ? listOrgListings(ctx, orgId) : Promise.resolve([]),
-    canBookings ? listOrgBookings(ctx, orgId) : Promise.resolve([]),
+    canListings
+      ? orgGo<{ listings: GoListing[] }>(orgId, `/v1/ticketorgs/${orgId}/listings`)
+          .then((r) => r.listings)
+          .catch((e) => {
+            if (e instanceof AuthorisationError) notFound();
+            throw e;
+          })
+      : Promise.resolve([]),
+    canBookings
+      ? orgGo<{ bookings: GoOrgBooking[] }>(orgId, `/v1/ticketorgs/${orgId}/bookings`)
+          .then((r) => r.bookings)
+          .catch((e) => {
+            if (e instanceof AuthorisationError) notFound();
+            throw e;
+          })
+      : Promise.resolve([]),
   ]);
 
   const published = listings.filter((l) => l.status === 'PUBLISHED').length;
-  const upcoming = listings.flatMap((l) => l.schedules).filter((s) => s.departAt > new Date() && s.status === 'SCHEDULED').length;
+  const upcoming = listings
+    .flatMap((l) => l.schedules)
+    .filter((s) => new Date(s.departAt) > new Date() && s.status === 'SCHEDULED').length;
   const paidBookings = bookings.filter((b) => b.status === 'PAID').length;
   const revenueKes = bookings.filter((b) => b.status === 'PAID').reduce((sum, b) => sum + Number(b.totalKes), 0);
 

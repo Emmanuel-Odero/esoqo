@@ -1,8 +1,8 @@
 import { Icon } from '@esoko/ui';
-import { listTicketOrgsForStaff, getTicketOrgCounts } from '@esoko/db';
 import { requireStaff } from '@/lib/session';
 import { DonutChart } from '@/components/charts';
 import { OrgTable } from './OrgTable';
+import { adminGo, type GoAdminOrg } from '@/lib/go-ticketing';
 
 export const dynamic = 'force-dynamic';
 
@@ -10,16 +10,22 @@ export const dynamic = 'force-dynamic';
  * Every ticketing organiser platform-wide — event companies, tour/travel
  * operators, transport (bus/matatu SACCO) companies. The counterpart to
  * apps/app's self-service /org/[orgId] (which only ever shows an owner
- * their own organiser). See @esoko/db's listTicketOrgsForStaff.
+ * their own organiser). Directory + counts come from core-go.
  */
 export default async function TicketingPage({
   searchParams,
 }: { searchParams: Promise<{ status?: string; vertical?: string; q?: string }> }) {
   const ctx = await requireStaff();
   const sp = await searchParams;
+  const params = new URLSearchParams({
+    ...(sp.status ? { status: sp.status } : {}),
+    ...(sp.vertical ? { vertical: sp.vertical } : {}),
+    ...(sp.q ? { search: sp.q } : {}),
+    take: '100',
+  });
   const [{ rows }, counts] = await Promise.all([
-    listTicketOrgsForStaff(ctx, { status: sp.status as never, vertical: sp.vertical as never, search: sp.q, take: 100 }),
-    getTicketOrgCounts(ctx),
+    adminGo<{ rows: GoAdminOrg[]; total: number }>(`/v1/admin/ticketorgs?${params}`),
+    adminGo<{ total: number; active: number; events: number; transport: number }>('/v1/admin/ticketorgs/counts'),
   ]);
   const canModerate = ctx.capabilities.includes('*') || ctx.capabilities.includes('ticketorg.moderate');
   const canManageStaff = ctx.capabilities.includes('*') || ctx.capabilities.includes('ticketorgstaff.write');
@@ -73,11 +79,10 @@ export default async function TicketingPage({
           slug: o.slug,
           vertical: o.vertical,
           status: o.status,
-          owner: o.enterprise.party.person?.knownAs || o.enterprise.party.person?.officialName
-            || o.enterprise.party.organisation?.knownAs || o.enterprise.party.organisation?.officialName || '—',
-          staffCount: o._count.staff,
-          listingCount: o._count.listings,
-          createdAt: o.createdAt.toISOString(),
+          owner: o.ownerName || '—',
+          staffCount: o.staffCount,
+          listingCount: o.listingsCount,
+          createdAt: new Date(o.createdAt).toISOString(),
         }))}
         canModerate={canModerate}
         canManageStaff={canManageStaff}

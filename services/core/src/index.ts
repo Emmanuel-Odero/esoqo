@@ -4,8 +4,8 @@ import rateLimit from '@fastify/rate-limit';
 import {
   verifyChain, confirmStoreOrderPayment, confirmRegistrationPaymentByCheckoutId,
   confirmRegistrationPaymentByPesapalOrderId,
-  confirmDonationPayment, failDonationPayment, confirmBookingPayment,
-  StoreOrderError, DonationError, TicketingError,
+  confirmDonationPayment, failDonationPayment,
+  StoreOrderError, DonationError,
 } from '@esoko/db';
 import { appEnv, donorThankYouSms, adminDonationAlertSms } from '@esoko/domain';
 // Subpath import, not the '@esoko/auth' barrel — the barrel's index.ts
@@ -62,12 +62,14 @@ app.get('/ready', async (_req, reply) => {
  * need, and the first genuine consumer of this service beyond /health
  * and /ready.
  *
- * A single checkout can only ever belong to one of four things — store
- * checkout, a registration fee, an Our Jamii donation, or a ticketing
- * booking — so this tries the store order first (the most established
- * of the four) and falls through to registration, then donation, then
- * booking, only on a NOT_FOUND from the attempt before it. Any other
- * failure from an attempt is a real error, not "try the next kind."
+ * A single checkout can only ever belong to one of three things here —
+ * store checkout, a registration fee, or an Our Jamii donation — so
+ * this tries the store order first and falls through to registration,
+ * then donation, only on a NOT_FOUND from the attempt before it.
+ * Ticketing bookings and short-route fares are confirmed by
+ * services/core-go (sole writer since the console migration) and are
+ * forwarded there below — Go's confirms are idempotent, so a callback
+ * seen by both services can never double-post.
  */
 app.post('/webhooks/mpesa/stk-callback', async (req, reply) => {
   const parsed = parseStkCallback(req.body);
@@ -135,15 +137,38 @@ app.post('/webhooks/mpesa/stk-callback', async (req, reply) => {
     }
   }
 
-  try {
-    await confirmBookingPayment(parsed.checkoutRequestId);
-  } catch (e) {
-    if (!(e instanceof TicketingError && e.code === 'NOT_FOUND')) {
-      app.log.error({ err: e, checkoutRequestId: parsed.checkoutRequestId }, 'failed to confirm booking payment');
-    }
-  }
+  // Booking and fare callbacks are confirmed by core-go (the sole
+  // writer for those tables since the console migration) — forward the
+  // raw body there best-effort and still 200: Go's confirms are
+  // idempotent, and Safaricom must never retry a handed-off callback.
+  await forwardCallbackToGo(req.body, app.log, parsed.checkoutRequestId);
   return reply.send({ ok: true });
 });
+
+/**
+ * Strangler bridge: during the TS→Go migration both webhook routes are
+ * live and Daraja may be configured with either callback URL, so a
+ * Go-owned checkout (fare, Go-initiated booking) can arrive here.
+ * Forward the untouched body; never throw (caller always 200s).
+ */
+async function forwardCallbackToGo(
+  body: unknown,
+  log: { warn: (obj: unknown, msg: string) => void },
+  checkoutRequestId: string,
+): Promise<void> {
+  const base = process.env.CORE_GO_URL ?? 'http://localhost:4100';
+  try {
+    const res = await fetch(`${base}/webhooks/mpesa/stk-callback`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+      signal: AbortSignal.timeout(5000),
+    });
+    if (!res.ok) log.warn({ checkoutRequestId, status: res.status }, 'go webhook forward non-2xx');
+  } catch (e) {
+    log.warn({ checkoutRequestId, err: e }, 'go webhook forward failed');
+  }
+}
 
 /**
  * Pesapal's IPN — unlike the M-Pesa callback above, an IPN carries only

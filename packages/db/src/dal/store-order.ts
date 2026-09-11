@@ -25,6 +25,13 @@ export interface CreateOrderInput {
   deliveryOptionId?: string | null;
   collectionNotes?: string;
   deliveryAddress?: string;
+  /// Buying on behalf of an Organisation (a business ordering from a
+  /// supplier/wholesaler), not for yourself. The caller must belong to
+  /// this org — checked here, not trusted from the client — and the
+  /// order's buyerPartyId becomes the ORG's Party, not the signed-in
+  /// person's, so credit terms/balance track the org, not whoever placed
+  /// this particular order.
+  buyingOrgId?: string;
 }
 
 /**
@@ -87,15 +94,30 @@ export async function createStoreOrder(ctx: Ctx, input: CreateOrderInput) {
   });
   const totalKes = items.reduce((sum, i) => sum + Number(i.unitPriceKes) * i.quantity, 0) + deliveryFeeKes;
 
+  // Buying on behalf of an org: the caller must actually belong to it —
+  // never trust a client-supplied org id at face value. An exited
+  // membership doesn't count.
+  let buyerPartyId = ctx.partyId ?? null;
+  if (input.buyingOrgId) {
+    if (!ctx.partyId) throw new StoreOrderError('Sign in to buy on behalf of an organisation', 'NOT_FOUND');
+    const membership = await prisma.membership.findFirst({
+      where: { personId: ctx.partyId, orgId: input.buyingOrgId, exitedAt: null },
+    });
+    if (!membership) throw new StoreOrderError('You are not a member of that organisation', 'NOT_FOUND');
+    buyerPartyId = input.buyingOrgId;
+  }
+
   // Auto-capture — same "a phone number is all it takes" rule the PoS
   // terminal follows, so a shopper's order and loyalty history line up
-  // whether they bought online or walked into the shop.
-  const customer = await findOrCreateCustomer(store.id, input.buyerMsisdn, input.buyerName);
+  // whether they bought online or walked into the shop. An org buyer
+  // resolves to one stable customer row regardless of which member places
+  // the order.
+  const customer = await findOrCreateCustomer(store.id, input.buyerMsisdn, input.buyerName, input.buyingOrgId);
 
   const order = await prisma.storeOrder.create({
     data: {
       storeId: store.id,
-      buyerPartyId: ctx.partyId ?? null,
+      buyerPartyId,
       buyerName: input.buyerName,
       buyerMsisdn: input.buyerMsisdn,
       paymentMethod: input.paymentMethod,
@@ -215,7 +237,15 @@ export async function confirmStoreOrderCod(ctx: Ctx, orderId: string) {
 export async function getOrder(_ctx: Ctx, orderId: string) {
   return prisma.storeOrder.findUnique({
     where: { id: orderId },
-    include: { items: { include: { product: true } }, store: true },
+    include: {
+      items: { include: { product: true } },
+      // dispatchWarehouseOrg is display-only here — "Dispatched from: X
+      // Godown" on the order confirmation when the store has a formal
+      // warehouse relationship. Nothing about fulfilment logic itself
+      // changes; the warehouse is stamped at the Store level, not
+      // chosen per order.
+      store: { include: { dispatchWarehouseOrg: { select: { officialName: true, knownAs: true } } } },
+    },
   });
 }
 

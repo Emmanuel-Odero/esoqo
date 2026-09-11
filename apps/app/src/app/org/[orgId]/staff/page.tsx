@@ -1,22 +1,25 @@
 import { notFound } from 'next/navigation';
 import { Icon } from '@esoko/ui';
-import { listTicketOrgStaff, getTicketOrg, AuthorisationError } from '@esoko/db';
+import { AuthorisationError } from '@esoko/db';
 import { requireOrgAccess } from '@/lib/session';
+import { orgGo, type GoOrg, type GoStaff } from '@/lib/ticketing';
 import { StaffForm } from './StaffForm';
 
 export const dynamic = 'force-dynamic';
 
 export default async function OrgStaff({ params }: { params: Promise<{ orgId: string }> }) {
   const { orgId } = await params;
-  const { ctx } = await requireOrgAccess(orgId);
+  await requireOrgAccess(orgId);
   // Only ADMIN/owner hold ticketorgstaff.write — a MANAGER or SCANNER
   // reaching this URL directly is refused rather than crashed.
   const [org, staff] = await Promise.all([
-    getTicketOrg(ctx, orgId),
-    listTicketOrgStaff(ctx, orgId).catch((e) => {
-      if (e instanceof AuthorisationError) notFound();
-      throw e;
-    }),
+    orgGo<{ org: GoOrg }>(orgId, `/v1/ticketorgs/${orgId}`).then((r) => r.org),
+    orgGo<{ staff: GoStaff[] }>(orgId, `/v1/ticketorgs/${orgId}/staff`)
+      .then((r) => r.staff)
+      .catch((e) => {
+        if (e instanceof AuthorisationError) notFound();
+        throw e;
+      }),
   ]);
   const signInUrl = `/org-staff/${org.slug}`;
 

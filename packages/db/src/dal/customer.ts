@@ -31,20 +31,50 @@ export class CustomerError extends Error {
  * that lets it place an order at all, the same reasoning as that
  * function's own "no capability required" comment.
  */
-export async function findOrCreateCustomer(storeId: string, msisdn: string, name?: string | null) {
+/**
+ * Resolves or creates the customer record a sale/order attaches to.
+ *
+ * When `partyId` is given (an org buying on account, see
+ * createStoreOrder's `buyingOrgId`), identity resolves by
+ * `(storeId, partyId)` first — a stable identity across whichever member
+ * of the org happens to place the order — falling back to the existing
+ * `(storeId, msisdn)` lookup only if no org-linked row exists yet.
+ * Every existing anonymous-consumer call site (no partyId) is
+ * unaffected — same behaviour as before.
+ */
+export async function findOrCreateCustomer(
+  storeId: string, msisdn: string, name?: string | null, partyId?: string | null,
+) {
   const trimmed = msisdn.trim();
   if (!trimmed) throw new CustomerError('A phone number is required', 'BAD_INPUT');
+
+  if (partyId) {
+    const existingByParty = await prisma.storeCustomer.findFirst({ where: { storeId, partyId } });
+    if (existingByParty) {
+      if (name && !existingByParty.name) {
+        return prisma.storeCustomer.update({ where: { id: existingByParty.id }, data: { name } });
+      }
+      return existingByParty;
+    }
+  }
 
   const existing = await prisma.storeCustomer.findUnique({ where: { storeId_msisdn: { storeId, msisdn: trimmed } } });
   if (existing) {
     // A name arriving later (e.g. POS didn't have one, checkout did) is
-    // worth keeping — but never overwrite a name already on file.
-    if (name && !existing.name) {
-      return prisma.storeCustomer.update({ where: { id: existing.id }, data: { name } });
+    // worth keeping — but never overwrite a name already on file. An
+    // org buyer placing their first order through an already-known phone
+    // number gets linked here too, rather than spawning a second row.
+    if ((name && !existing.name) || (partyId && !existing.partyId)) {
+      return prisma.storeCustomer.update({
+        where: { id: existing.id },
+        data: { name: name && !existing.name ? name : undefined, partyId: partyId ?? undefined },
+      });
     }
     return existing;
   }
-  return prisma.storeCustomer.create({ data: { storeId, msisdn: trimmed, name: name || null } });
+  return prisma.storeCustomer.create({
+    data: { storeId, msisdn: trimmed, name: name || null, partyId: partyId || null },
+  });
 }
 
 function balanceOf(entries: { amountKes: Prisma.Decimal }[]) {
@@ -58,13 +88,20 @@ export async function listCustomers(ctx: Ctx, storeId: string) {
   await assertOwnsStore(ctx, storeId, 'customer.read');
   const customers = await prisma.storeCustomer.findMany({
     where: { storeId },
-    include: { ledger: { select: { amountKes: true } }, loyalty: { select: { points: true } } },
+    include: {
+      ledger: { select: { amountKes: true } }, loyalty: { select: { points: true } },
+      party: { include: { organisation: { select: { officialName: true, knownAs: true } } } },
+    },
     orderBy: { updatedAt: 'desc' },
   });
   return customers.map((c) => ({
     id: c.id, storeId: c.storeId, msisdn: c.msisdn, name: c.name, notes: c.notes,
     createdAt: c.createdAt, updatedAt: c.updatedAt,
     balanceKes: balanceOf(c.ledger), points: pointsOf(c.loyalty),
+    // Set only for an org buying on account — see findOrCreateCustomer.
+    orgName: c.party?.organisation?.knownAs || c.party?.organisation?.officialName || null,
+    creditLimitKes: c.creditLimitKes ? Number(c.creditLimitKes) : null,
+    creditTermsDays: c.creditTermsDays,
   }));
 }
 
@@ -77,12 +114,16 @@ export async function listDebts(ctx: Ctx, storeId: string) {
   await assertOwnsStore(ctx, storeId, 'customer.read');
   const customers = await prisma.storeCustomer.findMany({
     where: { storeId },
-    include: { ledger: { orderBy: { createdAt: 'asc' }, select: { kind: true, amountKes: true, createdAt: true } } },
+    include: {
+      ledger: { orderBy: { createdAt: 'asc' }, select: { kind: true, amountKes: true, createdAt: true } },
+      party: { include: { organisation: { select: { officialName: true, knownAs: true } } } },
+    },
   });
 
   return customers
     .map((c) => ({
       id: c.id, name: c.name, msisdn: c.msisdn,
+      orgName: c.party?.organisation?.knownAs || c.party?.organisation?.officialName || null,
       balanceKes: balanceOf(c.ledger),
       owingSinceAt: c.ledger.find((e) => e.kind === 'SALE')?.createdAt ?? null,
     }))

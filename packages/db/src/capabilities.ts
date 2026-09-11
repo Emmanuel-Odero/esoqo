@@ -33,7 +33,8 @@ export interface Ctx {
   storeId?: string | null;
   /** Set for an AGENT context scoped to one ticketing org — a
    *  TicketOrgStaff session (admin/manager/scanner), not a Party. See
-   *  assertOwnsOrg in dal/ticketing.ts: same reasoning as storeId. */
+   *  AssertOwnsOrg in services/core-go/internal/dbx: same reasoning
+   *  as storeId. */
   ticketOrgId?: string | null;
   ip?: string | null;
   /**
@@ -228,6 +229,38 @@ export const CAPABILITY_CATALOGUE = [
     ['booking.refund', 'Refund a booking'],
     ['ticket.checkin', 'Scan and check in a ticket at the gate'],
   ]},
+  { group: 'Fleet & short routes', items: [
+    ['fleet.read', 'View vehicles'],
+    ['fleet.write', 'Register or ground vehicles'],
+    ['crew.read', 'View drivers and conductors'],
+    ['crew.write', 'Onboard or deactivate crew'],
+    ['trip.read', 'View duty trips'],
+    ['trip.write', 'Assign or close duty trips'],
+    ['trip.close:own', 'Close a duty trip you are the assigned driver or conductor on'],
+    ['vehicle.track', 'See live vehicle positions'],
+    ['fare.pay', 'Pay bus fare'],
+    ['fare.read', 'View fare payments'],
+    ['fare.verify', 'Verify a fare payment (crew)'],
+    ['collection.declare', 'Declare cash collected on a trip'],
+    ['collection.read', 'View collections and variances'],
+  ]},
+  { group: 'Malls', items: [
+    ['mall.read', 'View a mall and its tenant list'],
+    ['mall.write', "Manage a mall's tenants"],
+  ]},
+  { group: 'Warehouses', items: [
+    ['warehouse.read', "View a godown's storage agreements and stock"],
+    ['warehouse.write', "Manage a godown's storage agreements, stock, and billing"],
+  ]},
+  { group: 'Parcels', items: [
+    ['parcels.read', 'View parcels, including draft/pending-payment bookings'],
+    ['parcels.assign', 'Assign a collector and schedule a parcel pickup'],
+    ['parcels.cancel', 'Cancel a draft or not-yet-picked-up parcel'],
+    ['parcels.refund', "Mark a cancelled parcel's M-Pesa payment as refunded"],
+    ['parcels.edit', 'Correct a draft or booked parcel\'s receiver, destination or notes'],
+    ['parcels.couriers.manage', 'Onboard, vet, suspend and reinstate parcel couriers'],
+    ['parcel_pricing.write', 'Change parcel pricing, zones and bargain rules'],
+  ]},
 ] as const;
 
 export const ALL_CAPABILITIES: Capability[] =
@@ -281,10 +314,21 @@ export const ROLE_PRESETS = {
             // Ticketing — a subject may open a ticketing org the same way
             // they open a store (own:enterprise), and always books tickets
             // as themselves.
-            'ticketorg.write:own', 'ticketorgstaff.write:own', 'venue.write:own',
+            'ticketorg.read:own', 'ticketorg.write:own', 'ticketorgstaff.write:own', 'venue.write:own',
             'route.write:own', 'listing.write:own', 'listing.publish:own',
             'ticketclass.write:own', 'schedule.write:own',
-            'booking.read:own', 'booking.create:own', 'booking.cancel:own'],
+            'booking.read:own', 'booking.create:own', 'booking.cancel:own',
+            'fleet.read:own', 'fleet.write:own', 'crew.read:own', 'crew.write:own',
+            'trip.read:own', 'trip.write:own', 'vehicle.track:own',
+            'fare.pay:own', 'fare.read:own', 'collection.declare:own', 'collection.read:own',
+            // Malls — a subject may manage tenants of a mall the same
+            // way they manage a store: the ':own' qualifier only checks
+            // the caller against the mall Organisation's own partyId
+            // (see requireMallOfficer in dal/mall.ts).
+            'mall.read', 'mall.write:own',
+            // Warehouses (godowns) — same self-serve shape as malls;
+            // see requireWarehouseOfficer in dal/warehouse.ts.
+            'warehouse.read', 'warehouse.write:own'],
 
   FIELD_AGENT: ['registration.create', 'registration.read:agent=self',
                 'attestation.issue:FIELD_VISIT', 'party.read:county'],
@@ -315,7 +359,9 @@ export const ROLE_PRESETS = {
               'jamii-campaign.read', 'jamii-campaign.moderate', 'jamii-donation.read',
               'treasury.read', 'treasury.confirm', 'portfolio.read',
               'ticketorg.read', 'ticketorg.moderate', 'ticketorgstaff.write',
-              'booking.read', 'booking.refund'],
+              'venue.write', 'route.write', 'listing.write', 'listing.publish',
+              'ticketclass.write', 'schedule.write',
+              'booking.read', 'booking.cancel', 'booking.refund'],
 
   SUPER_ADMIN: ['*'],
 
@@ -353,8 +399,8 @@ export type CashierRole = keyof typeof CASHIER_CAPABILITIES;
 /**
  * What a TicketOrgStaff session can do — the ticketing-org equivalent
  * of CASHIER_CAPABILITIES. Not a Party, scoped to one org via
- * ctx.ticketOrgId (see assertOwnsOrg in dal/ticketing.ts), same
- * reasoning as ctx.storeId for cashiers.
+ * ctx.ticketOrgId (see AssertOwnsOrg in services/core-go/internal/dbx),
+ * same reasoning as ctx.storeId for cashiers.
  *
  * SCANNER — the gate. Nothing but check-in and reading which org
  *           they're signed into (the console shell needs the org's
@@ -367,14 +413,34 @@ export type CashierRole = keyof typeof CASHIER_CAPABILITIES;
  * ADMIN    — everything, including org.write and staff.write.
  */
 export const TICKETING_STAFF_CAPABILITIES = {
-  SCANNER: ['ticket.checkin', 'ticketorg.read'],
+  // fare.verify on SCANNER/MANAGER below brings this in line with
+  // authsvc.TicketingStaffCapabilities (services/core-go) — it was
+  // granted there but never ported back here, a real gap (not just a
+  // docs one): a SCANNER/MANAGER/CREW signing in through apps/app's
+  // web org-staff flow silently couldn't verify a fare that the same
+  // role could verify signing in through mobile. Ported 1:1 per
+  // docs/adr/0005-mobile-api-in-go.md; ADMIN's own omission of
+  // fare.verify is pre-existing on the Go side too and left as-is here
+  // rather than changed unasked.
+  SCANNER: ['ticket.checkin', 'ticketorg.read', 'fare.verify', 'fare.read'],
   MANAGER: ['ticket.checkin', 'listing.write', 'listing.publish', 'ticketclass.write',
             'schedule.write', 'venue.write', 'route.write',
-            'booking.read', 'booking.cancel', 'booking.refund', 'ticketorg.read'],
+            'booking.read', 'booking.cancel', 'booking.refund', 'ticketorg.read',
+            'fleet.read', 'crew.read', 'trip.read', 'fare.read', 'fare.verify', 'collection.read', 'vehicle.track'],
   ADMIN:   ['ticket.checkin', 'listing.write', 'listing.publish', 'ticketclass.write',
             'schedule.write', 'venue.write', 'route.write',
             'booking.read', 'booking.cancel', 'booking.refund',
-            'ticketorg.read', 'ticketorg.write', 'ticketorgstaff.write'],
+            'ticketorg.read', 'ticketorg.write', 'ticketorgstaff.write',
+            'fleet.read', 'fleet.write', 'crew.read', 'crew.write',
+            'trip.read', 'trip.write', 'fare.read', 'fare.pay',
+            'collection.read', 'collection.declare', 'vehicle.track'],
+  // trip.close:own — a CREW login may close only the one trip it's
+  // linked to as driver/conductor (TicketOrgStaff.crewMemberId); see
+  // dbx.CloseTrip. CREW deliberately still lacks trip.write/trip.read.
+  // collection.read: a crew member declaring cash has to be able to
+  // see the running tally they're declaring against — same org-wide
+  // scope collection.declare already carries for CREW, not a new one.
+  CREW:    ['collection.declare', 'collection.read', 'vehicle.track', 'fare.read', 'fare.verify', 'trip.close:own', 'ticketorg.read'],
 } as const satisfies Record<string, readonly Capability[]>;
 
 export type TicketingStaffRole = keyof typeof TICKETING_STAFF_CAPABILITIES;

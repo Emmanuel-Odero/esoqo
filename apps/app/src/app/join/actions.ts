@@ -255,6 +255,7 @@ export async function actionSaveStanding(
         update.bizIntendsToRegister = standing.bizIntendsToRegister;
         update.registrationNo = standing.registrationNo || undefined;
         update.bizName = details.bizName;
+        update.bizOrgKind = details.bizOrgKind || undefined;
         update.bizSector = details.bizSector || undefined;
         update.bizType = details.bizType;
         update.bizTypeOther = details.bizTypeOther || undefined;

@@ -189,11 +189,12 @@ export async function createOwnGroup(
   return party;
 }
 
-export async function listGroups(ctx: Ctx, f: { search?: string; county?: string } = {}) {
+export async function listGroups(ctx: Ctx, f: { search?: string; county?: string; kind?: OrgKind } = {}) {
   requireCapability(ctx, 'party.read', { county: f.county });
   return prisma.organisation.findMany({
     where: {
       ...(f.county ? { party: { county: f.county } } : {}),
+      ...(f.kind ? { kind: f.kind } : {}),
       ...(f.search
         ? { officialName: { contains: f.search, mode: 'insensitive' as const } }
         : {}),

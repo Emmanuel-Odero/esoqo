@@ -1,14 +1,21 @@
 import type { Metadata } from 'next';
 import { notFound } from 'next/navigation';
 import { Icon, Logo } from '@esoko/ui';
-import { getTicketOrgBySlug } from '@esoko/db';
+import { goUrl } from '@/lib/ticketing';
 import { OrgStaffSignInForm } from './OrgStaffSignInForm';
 
 export const dynamic = 'force-dynamic';
 
+async function getOrgBySlug(slug: string): Promise<{ name: string } | null> {
+  const res = await fetch(goUrl(`/v1/ticketorgs/by-slug/${encodeURIComponent(slug)}`), { cache: 'no-store' });
+  if (!res.ok) return null;
+  const json = (await res.json().catch(() => null)) as { org?: { name: string } } | null;
+  return json?.org ?? null;
+}
+
 export async function generateMetadata({ params }: { params: Promise<{ slug: string }> }): Promise<Metadata> {
   const { slug } = await params;
-  const org = await getTicketOrgBySlug(slug);
+  const org = await getOrgBySlug(slug);
   return { title: org ? `Staff sign in — ${org.name}` : 'Organiser not found' };
 }
 
@@ -21,7 +28,7 @@ export async function generateMetadata({ params }: { params: Promise<{ slug: str
  */
 export default async function OrgStaffSignInPage({ params }: { params: Promise<{ slug: string }> }) {
   const { slug } = await params;
-  const org = await getTicketOrgBySlug(slug);
+  const org = await getOrgBySlug(slug);
   if (!org) notFound();
 
   return (

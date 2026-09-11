@@ -3,6 +3,9 @@ import { Icon } from '@esoko/ui';
 import { getGroup, getGroupAnalytics, listDocumentsForParty } from '@esoko/db';
 import { requireStaff } from '@/lib/session';
 import { RankedBarChart } from '@/components/charts';
+import { actionListTenants, actionListStorageAgreements } from '../actions';
+import { MallTenancyPanel } from './MallTenancyPanel';
+import { WarehousePanel } from './WarehousePanel';
 
 export const dynamic = 'force-dynamic';
 
@@ -27,9 +30,11 @@ export default async function GroupDetailPage({
     );
   }
 
-  const [analytics, documents] = await Promise.all([
+  const [analytics, documents, tenancies, storageAgreements] = await Promise.all([
     getGroupAnalytics(ctx, id),
     listDocumentsForParty(ctx, id),
+    group.kind === 'MALL' ? actionListTenants(id) : Promise.resolve(null),
+    group.kind === 'WAREHOUSE' ? actionListStorageAgreements(id) : Promise.resolve(null),
   ]);
 
   const totalFeeAnswers = analytics.feeCoverage.reduce((n, f) => n + f.count, 0);
@@ -138,6 +143,13 @@ export default async function GroupDetailPage({
           </table>
         )}
       </div>
+
+      {tenancies && (
+        <MallTenancyPanel mallOrgId={group.partyId} mallSlug={group.mallSlug ?? null} tenancies={tenancies} />
+      )}
+      {storageAgreements && (
+        <WarehousePanel warehouseOrgId={group.partyId} agreements={storageAgreements} />
+      )}
     </>
   );
 }

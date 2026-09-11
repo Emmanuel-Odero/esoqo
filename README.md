@@ -19,7 +19,7 @@ pnpm install
 pnpm stack:up            # postgres · pgbouncer · redis · mailhog · mock-sms
 pnpm db:generate
 pnpm db:migrate
-pnpm db:seed             # reference data only — no fake users
+pnpm db:seed             # reference data, plus clearly-labelled "Demo" content — see below
 pnpm dev
 ```
 
@@ -33,13 +33,28 @@ pnpm dev
 | SMS catcher (`SMS_PROVIDER=mock`) | http://localhost:8026 |
 | Database UI | `docker compose --profile tools up -d adminer` → :8080 |
 
-`pnpm db:seed` creates exactly one login — a staff account so the admin
-app is reachable on first run. Nothing else is seeded (no subjects, no
-groups, no registrations):
+`pnpm db:seed` now shells out to `services/core-go`'s Go seeder
+(`services/core-go/internal/seed` — see `docs/adr/0005-mobile-api-in-go.md`;
+`packages/db/prisma/seed.ts`/`seed-demo.ts` were retired once it covered
+the same ground). It creates the one staff login the admin app needs on
+first run, reference data (counties/issuers/markets/commodities/pricing
+rules — no fake registrations or real parties), and — folded in from
+what used to be a separate `seed:demo` step — a handful of
+clearly-"Demo"-prefixed ticket orgs, listings and stores so the mobile
+app and web walkthroughs have real content to click through:
 
 | App | Login | Credential |
 |---|---|---|
 | Operations (`:3002`) | `ops@esoko.co.ke` | PIN `482915` — or whatever `SEED_ADMIN_PIN` was set to at seed time |
+| Mobile app — buyer | `+254700200200` | PIN `200200` |
+| Mobile app — merchant | `+254700300300` | PIN `300300` |
+| Ticketing staff (Demo Scanner/Manager/Admin) | org PIN sign-in | `111111` / `222222` / `333333` |
+
+`packages/db/prisma/seed-abledfirst.ts` and `seed-media.ts` are
+untouched — Our Jamii CMS content (page-builder text, media-placeholder
+patterns), not commerce/ticketing/groups, so they're outside
+`services/core-go`'s domain. Run them the same way as before
+(`pnpm --filter @esoko/db seed:abledfirst` / `seed:media`).
 
 Change this PIN (`SEED_ADMIN_PIN` env var before seeding, or
 `SEED_ADMIN_HASH` for a precomputed Argon2id hash) before any deployment —

@@ -204,7 +204,12 @@ async function main() {
         county: 'Nairobi',
         organisation: {
           create: {
-            kind: 'CBO',
+            // No native PBO value in OrgKind — Public Benefit
+            // Organisation is Kenya's post-2013 legal status for what
+            // used to register as an NGO, so it goes through OTHER +
+            // kindOther the same way any other free-text org kind does.
+            kind: 'OTHER',
+            kindOther: 'PBO',
             officialName: 'AbledFirst Kenya',
             tags: ['disability-inclusion', 'youth', 'community-empowerment'],
           },
@@ -230,6 +235,7 @@ async function main() {
         brandAccentThree: '#B8720F',
         themeDefaultMode: 'DARK',
         aboutUs: ABOUT_US,
+        contactPhone: '+254799850565',
         faq: FAQ,
         programs: { create: PROGRAMS.map((p, i) => ({ ...p, position: i })) },
       },
@@ -346,7 +352,8 @@ async function main() {
     });
 
     return party;
-  });
+  }, { timeout: 30_000 }); // default 5s is tight once this runs over the
+  // network against a remote (non-local) DATABASE_URL — see LOCAL_TEST_PROD.
 
   // Logo — sniffed and stored through the exact same path
   // uploadPageAsset uses, so it's indistinguishable from a real upload.
