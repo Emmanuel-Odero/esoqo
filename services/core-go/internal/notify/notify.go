@@ -34,6 +34,7 @@ package notify
 
 import (
 	"fmt"
+	"strings"
 	"time"
 )
 
@@ -195,4 +196,61 @@ func ParcelReceiptConfirmed(code, receiverName string, rating int) string {
 	return fmt.Sprintf(
 		"Esoko Logistics: %s confirmed receiving parcel %s and rated its condition %d/5. Thanks for using Esoko.",
 		trunc(receiverName), code, rating)
+}
+
+// CourierOnboarded — the confirmation text a newly admin-added courier
+// gets, the moment dbx.AdminAddCourier creates their account: their own
+// Esoko ID (see EnsureEsokoPaymentId), proof their phone number is the
+// one actually on file rather than a typo nobody would otherwise
+// notice until a dispatch SMS went nowhere.
+func CourierOnboarded(name, esokoID string) string {
+	return fmt.Sprintf(
+		"Esoko: Welcome %s! You've been added to the Esoko courier team. Your Esoko ID is %s. Sign in with this phone number to get started.",
+		trunc(name), esokoID)
+}
+
+// CourierTeamMemberAdded — sent to a manager or member the moment
+// dbx.CreateCourierTeam/AddCourierTeamMember adds them to a named
+// team: same "your Esoko ID, and proof this number is right" role
+// CourierOnboarded plays for an individual courier, plus which team
+// and role they've actually been given, and sets the expectation that
+// this number is the one that'll hear about every trip going forward
+// (see CourierTripCompleted) — so a member isn't just added and left
+// wondering what happens next.
+func CourierTeamMemberAdded(name, teamName, role, esokoID string) string {
+	return fmt.Sprintf(
+		"Esoko: Welcome %s! You've been added to courier team \"%s\" as %s. Your Esoko ID is %s. You'll get full trip and tracking alerts on this number. Sign in to get started.",
+		trunc(name), trunc(teamName), roleLabel(role), esokoID)
+}
+
+// CourierTeamMemberUpdated — sent whenever a staffer corrects a
+// roster entry (see dbx.UpdateCourierTeamMember): a changed phone
+// number in particular is exactly the kind of thing someone needs to
+// actually see land on their phone to trust it's right, same
+// reasoning CourierOnboarded's own comment already gives for a fresh
+// add.
+func CourierTeamMemberUpdated(name, teamName, role, esokoID string) string {
+	return fmt.Sprintf(
+		"Esoko: Your details on courier team \"%s\" were updated - name %s, role %s. Your Esoko ID is %s. You'll get full trip and tracking alerts on this number.",
+		trunc(teamName), trunc(name), roleLabel(role), esokoID)
+}
+
+// CourierTripCompleted — sent to every member of a fleet's team (see
+// dbx.GetCourierTripCompletionInfo) the moment a staffer marks that
+// fleet's trip complete: the fleet's back and its packages have
+// arrived, closing the loop the same way ParcelDelivered closes it for
+// an individual parcel's own sender/receiver pair.
+func CourierTripCompleted(fleetNumber string, parcelCount int) string {
+	if parcelCount == 1 {
+		return fmt.Sprintf("Esoko Logistics: Fleet %s's trip is complete - its 1 parcel has arrived.", fleetNumber)
+	}
+	return fmt.Sprintf("Esoko Logistics: Fleet %s's trip is complete - all %d parcels have arrived.", fleetNumber, parcelCount)
+}
+
+// roleLabel lowercases a role string for mid-sentence use ("as
+// manager", not "as MANAGER") without a lookup table that would need
+// updating for every new role CourierTeamMember.role might ever hold —
+// see that column's own comment on why it's a plain string.
+func roleLabel(role string) string {
+	return strings.ToLower(role)
 }

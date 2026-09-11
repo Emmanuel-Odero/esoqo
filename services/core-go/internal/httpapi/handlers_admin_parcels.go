@@ -609,6 +609,44 @@ func (s *Server) handleOnboardCourier(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"courierId": courierID, "status": "PENDING_VETTING"})
 }
 
+type adminAddCourierRequest struct {
+	Name        string  `json:"name" binding:"required"`
+	Msisdn      string  `json:"msisdn" binding:"required"`
+	Email       *string `json:"email"`
+	VehicleType string  `json:"vehicleType" binding:"required"`
+}
+
+// handleAdminAddCourier — POST /v1/admin/parcels/couriers/add. The
+// "just add them" path for a courier team member who's never signed
+// up on their own — same capability as onboarding an existing Party
+// (parcels.couriers.manage), since it ends at the same PENDING_VETTING
+// state either way. Texts the new courier their Esoko ID the moment
+// the account exists — see notify.CourierOnboarded — best-effort: a
+// missing text is a communication gap, not a reason to fail an
+// account that already exists (same reasoning notifyContributionConfirmed
+// already follows for its own best-effort broadcast).
+func (s *Server) handleAdminAddCourier(c *gin.Context) {
+	ctx := ctxFromGin(c)
+	if err := authsvc.RequireCapability(ctx, "parcels.couriers.manage", nil); err != nil {
+		writeParcelAdminError(c, err)
+		return
+	}
+	var req adminAddCourierRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		writeError(c, http.StatusBadRequest, "INVALID_REQUEST", err.Error())
+		return
+	}
+	courierID, _, esokoID, err := dbx.AdminAddCourier(c.Request.Context(), s.Pool, dbx.AdminAddCourierInput{
+		Name: req.Name, Msisdn: req.Msisdn, Email: req.Email, VehicleType: req.VehicleType,
+	})
+	if err != nil {
+		writeParcelCourierError(c, err)
+		return
+	}
+	_ = authsvc.SendSms(req.Msisdn, notify.CourierOnboarded(req.Name, esokoID), "COURIER_ONBOARDED")
+	c.JSON(http.StatusOK, gin.H{"courierId": courierID, "esokoId": esokoID, "status": "PENDING_VETTING"})
+}
+
 type setCourierStatusRequest struct {
 	Status string  `json:"status" binding:"required"` // ACTIVE | SUSPENDED | REJECTED | PENDING_VETTING
 	Note   *string `json:"note"`

@@ -238,8 +238,30 @@ func (s *Server) Router() *gin.Engine {
 		v1.GET("/admin/parcels/couriers/candidates", s.authRequired(), s.handleAdminSearchOnboardCandidates)
 		v1.GET("/admin/parcels/couriers", s.authRequired(), s.handleAdminListCouriers)
 		v1.POST("/admin/parcels/couriers", s.authRequired(), s.handleOnboardCourier)
+		// A sibling of /admin/parcels/couriers, not nested under it —
+		// couriers/:id/status below already claims that tree position
+		// for POST, and gin's router panics on a static segment and a
+		// param segment sharing one (see this file's other comment on
+		// the near-identical /parcels/labels/generate vs
+		// /parcels/labels/info/:code clash).
+		v1.POST("/admin/parcels/courier-team", s.authRequired(), s.handleAdminAddCourier)
 		v1.POST("/admin/parcels/couriers/:id/status", s.authRequired(), s.handleSetCourierStatus)
 		v1.GET("/admin/parcels/couriers/:id/performance", s.authRequired(), s.handleGetCourierPerformance)
+
+		// Courier teams — a dispatch-planning layer on top of the
+		// individual-courier routes above (see handlers_courier_teams.go).
+		// "courier-teams" (plural), not "courier-team" — that singular
+		// path above is a different, older action (AdminAddCourier);
+		// kept apart rather than reusing to avoid conflating the two.
+		v1.POST("/admin/parcels/courier-teams", s.authRequired(), s.handleCreateCourierTeam)
+		v1.GET("/admin/parcels/courier-teams", s.authRequired(), s.handleListCourierTeams)
+		v1.GET("/admin/parcels/courier-teams/:id", s.authRequired(), s.handleGetCourierTeam)
+		v1.PATCH("/admin/parcels/courier-teams/:id", s.authRequired(), s.handleUpdateCourierTeam)
+		v1.POST("/admin/parcels/courier-teams/:id/members", s.authRequired(), s.handleAddCourierTeamMember)
+		v1.PATCH("/admin/parcels/courier-teams/:id/members/:partyId", s.authRequired(), s.handleUpdateCourierTeamMember)
+		v1.POST("/admin/parcels/courier-teams/:id/fleets", s.authRequired(), s.handleAddCourierFleet)
+		v1.POST("/admin/parcels/fleets/:id/assign", s.authRequired(), s.handleAssignParcelsToFleet)
+		v1.POST("/admin/parcels/trips/:id/complete", s.authRequired(), s.handleCompleteCourierTrip)
 
 		v1.GET("/admin/parcels/zones", s.authRequired(), s.handleAdminListParcelZones)
 		v1.POST("/admin/parcels/zones", s.authRequired(), s.handleAdminCreateParcelZone)
