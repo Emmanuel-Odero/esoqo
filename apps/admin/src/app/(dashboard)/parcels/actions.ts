@@ -147,6 +147,28 @@ export async function actionOnboardCourier(partyId: string, vehicleType: string)
   }
 }
 
+// The "just add them" path for a courier team member who's never
+// signed up on their own — unlike actionOnboardCourier (which turns an
+// *existing* Party, found by search, into a courier), this creates the
+// account too, straight from name/phone/vehicle. core-go texts the new
+// courier their Esoko ID the moment the account exists — see
+// notify.CourierOnboarded — so this doubles as phone-number
+// confirmation: if the text never lands, the number was wrong.
+export async function actionAddCourierTeamMember(input: {
+  name: string; msisdn: string; email?: string; vehicleType: string;
+}): Promise<{ ok: true; esokoId: string } | { ok: false; error: string }> {
+  try {
+    await requireStaff();
+    const { esokoId } = await adminGo<{ esokoId: string }>('/v1/admin/parcels/courier-team', {
+      method: 'POST', body: JSON.stringify(input),
+    });
+    revalidatePath('/parcels/couriers');
+    return { ok: true, esokoId };
+  } catch (e) {
+    return { ok: false, error: e instanceof Error ? e.message : 'Could not add that courier' };
+  }
+}
+
 export async function actionSetCourierStatus(courierId: string, status: string, note?: string): Promise<Result> {
   try {
     await requireStaff();
@@ -296,6 +318,126 @@ export async function actionAttachParcelLabelInfo(code: string, info: ParcelLabe
     return { ok: true };
   } catch (e) {
     return { ok: false, error: e instanceof Error ? e.message : 'Could not attach that info' };
+  }
+}
+
+// ── Courier teams ──
+// A dispatch-planning layer on top of the individual-courier role
+// above: a team (manager + roster) owns one or more fleets (a
+// physical vehicle, its own fleet number), each fleet running trips —
+// a batch of parcels handed to it, from dispatch until a staffer
+// marks it back. See dbx's parcel_teams.go for the full rationale.
+
+export interface CourierTeamRow {
+  ID: string; Name: string; ManagerName: string | null;
+  MemberCount: number; FleetCount: number; CreatedAt: string;
+}
+
+export interface CourierTeamMemberRow { PartyID: string; Name: string; Msisdn: string | null; Role: string; AddedAt: string }
+export interface CourierFleetRow { ID: string; FleetNumber: string; VehicleType: string; OpenTripID: string | null; AssignedOpen: number }
+
+export async function actionListCourierTeams(): Promise<CourierTeamRow[]> {
+  await requireStaff();
+  const { teams } = await adminGo<{ teams: CourierTeamRow[] | null }>('/v1/admin/parcels/courier-teams');
+  return teams ?? [];
+}
+
+export async function actionGetCourierTeam(teamId: string): Promise<{ name: string; members: CourierTeamMemberRow[]; fleets: CourierFleetRow[] } | null> {
+  try {
+    await requireStaff();
+    const res = await adminGo<{ name: string; members: CourierTeamMemberRow[] | null; fleets: CourierFleetRow[] | null }>(`/v1/admin/parcels/courier-teams/${teamId}`);
+    return { name: res.name, members: res.members ?? [], fleets: res.fleets ?? [] };
+  } catch {
+    return null;
+  }
+}
+
+export async function actionCreateCourierTeam(input: {
+  name: string; manager: { name: string; msisdn: string; role?: string };
+}): Promise<{ ok: true; teamId: string } | { ok: false; error: string }> {
+  try {
+    await requireStaff();
+    const { teamId } = await adminGo<{ teamId: string }>('/v1/admin/parcels/courier-teams', {
+      method: 'POST', body: JSON.stringify(input),
+    });
+    revalidatePath('/parcels/teams');
+    return { ok: true, teamId };
+  } catch (e) {
+    return { ok: false, error: e instanceof Error ? e.message : 'Could not create that team' };
+  }
+}
+
+export async function actionAddTeamRosterMember(teamId: string, input: { name: string; msisdn: string; role?: string }): Promise<Result> {
+  try {
+    await requireStaff();
+    await adminGo(`/v1/admin/parcels/courier-teams/${teamId}/members`, { method: 'POST', body: JSON.stringify(input) });
+    revalidatePath(`/parcels/teams/${teamId}`);
+    return { ok: true };
+  } catch (e) {
+    return { ok: false, error: e instanceof Error ? e.message : 'Could not add that member' };
+  }
+}
+
+export async function actionRenameCourierTeam(teamId: string, name: string): Promise<Result> {
+  try {
+    await requireStaff();
+    await adminGo(`/v1/admin/parcels/courier-teams/${teamId}`, { method: 'PATCH', body: JSON.stringify({ name }) });
+    revalidatePath(`/parcels/teams/${teamId}`);
+    revalidatePath('/parcels/teams');
+    return { ok: true };
+  } catch (e) {
+    return { ok: false, error: e instanceof Error ? e.message : 'Could not rename that team' };
+  }
+}
+
+// Corrects a roster entry — texts the member on their (possibly new)
+// number the moment it's saved, same as adding them does; see
+// notify.CourierTeamMemberUpdated.
+export async function actionUpdateTeamRosterMember(
+  teamId: string, partyId: string, input: { name: string; msisdn: string; role?: string },
+): Promise<Result> {
+  try {
+    await requireStaff();
+    await adminGo(`/v1/admin/parcels/courier-teams/${teamId}/members/${partyId}`, { method: 'PATCH', body: JSON.stringify(input) });
+    revalidatePath(`/parcels/teams/${teamId}`);
+    return { ok: true };
+  } catch (e) {
+    return { ok: false, error: e instanceof Error ? e.message : 'Could not update that member' };
+  }
+}
+
+export async function actionAddCourierFleet(teamId: string, input: { fleetNumber: string; vehicleType: string }): Promise<Result> {
+  try {
+    await requireStaff();
+    await adminGo(`/v1/admin/parcels/courier-teams/${teamId}/fleets`, { method: 'POST', body: JSON.stringify(input) });
+    revalidatePath(`/parcels/teams/${teamId}`);
+    return { ok: true };
+  } catch (e) {
+    return { ok: false, error: e instanceof Error ? e.message : 'Could not add that fleet' };
+  }
+}
+
+export async function actionAssignParcelsToFleet(fleetId: string, codes: string[]): Promise<{ ok: true; assigned: string[] } | { ok: false; error: string }> {
+  try {
+    await requireStaff();
+    const { assigned } = await adminGo<{ assigned: string[] | null }>(`/v1/admin/parcels/fleets/${fleetId}/assign`, {
+      method: 'POST', body: JSON.stringify({ codes }),
+    });
+    revalidatePath('/parcels/teams', 'layout');
+    return { ok: true, assigned: assigned ?? [] };
+  } catch (e) {
+    return { ok: false, error: e instanceof Error ? e.message : 'Could not assign those parcels' };
+  }
+}
+
+export async function actionCompleteCourierTrip(tripId: string): Promise<Result> {
+  try {
+    await requireStaff();
+    await adminGo(`/v1/admin/parcels/trips/${tripId}/complete`, { method: 'POST' });
+    revalidatePath('/parcels/teams', 'layout');
+    return { ok: true };
+  } catch (e) {
+    return { ok: false, error: e instanceof Error ? e.message : 'Could not complete that trip' };
   }
 }
 
