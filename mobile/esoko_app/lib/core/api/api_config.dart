@@ -61,14 +61,33 @@ abstract final class ApiConfig {
   /// so the resolved URL still points somewhere sane if nothing answers.
   /// The [overrideUrl], when set, is an explicit instruction handled
   /// separately — it is never probed.
+  ///
+  /// Deliberately bounded — see [extendedCandidateHosts] for the rest.
+  /// A plain LAN/24's dev machine could be at any host on it (e.g.
+  /// router-assigned .7, not just .1/.2/.3), but firing 254 concurrent
+  /// connections on *every* cold start to cover that is real load on
+  /// the WiFi radio right as the first real request also needs to go
+  /// out — it was itself producing spurious connection failures on
+  /// otherwise-fine requests. ApiClient tries this bounded list first
+  /// and only escalates to the full sweep if none of it answers.
   static Future<List<String>> candidateHosts() async {
     if (kIsWeb) return const ['localhost'];
     if (Platform.isAndroid) return const ['10.0.2.2'];
-    if (Platform.isIOS && !_isIosSimulator) return _physicalIosCandidates();
+    if (Platform.isIOS && !_isIosSimulator) return _physicalIosCandidates(quickOnly: true);
     return const ['localhost'];
   }
 
-  static Future<List<String>> _physicalIosCandidates() async {
+  /// The full /24 sweep [candidateHosts] intentionally skips — last
+  /// resort only, when nothing in the bounded list answered.
+  static Future<List<String>> extendedCandidateHosts() async {
+    if (kIsWeb || Platform.isAndroid) return const [];
+    if (Platform.isIOS && !_isIosSimulator) return _physicalIosCandidates(quickOnly: false);
+    return const [];
+  }
+
+  static const _quickSubnetLimit = 30;
+
+  static Future<List<String>> _physicalIosCandidates({required bool quickOnly}) async {
     final hosts = <String>[];
     void add(String host) {
       if (host.isNotEmpty && !hosts.contains(host)) hosts.add(host);
@@ -92,8 +111,8 @@ abstract final class ApiConfig {
     //    is 172.20.10.0/28 — the iPhone serves it when it *is* the hotspot
     //    (its own address on the hotspot interface is 172.20.10.1), so the
     //    Mac that joined it is somewhere in .2–.14 even when DHCP lands it
-    //    well away from .2. Outside that subnet, guess the classic /24
-    //    .1/.2/.3.
+    //    well away from .2. Outside that subnet, guess a bounded (quick
+    //    pass) or exhaustive (extended pass) /24 range.
     try {
       final interfaces = await NetworkInterface.list(type: InternetAddressType.IPv4);
       for (final iface in interfaces) {
@@ -101,10 +120,16 @@ abstract final class ApiConfig {
           if (addr.isLoopback) continue;
           final ip = addr.address;
           if (_isHotspotSubnet(ip)) {
+            if (!quickOnly) continue; // already covered by the quick pass
             _addHotspotNeighbors(ip, add);
+          } else if (quickOnly) {
+            for (var last = 1; last <= _quickSubnetLimit; last++) {
+              final candidate = _rewriteLastOctet(ip, last);
+              if (candidate != null) add(candidate);
+            }
           } else {
-            for (final delta in [1, 2, 3]) {
-              final candidate = _rewriteLastOctet(ip, delta);
+            for (var last = _quickSubnetLimit + 1; last <= 254; last++) {
+              final candidate = _rewriteLastOctet(ip, last);
               if (candidate != null) add(candidate);
             }
           }
@@ -114,8 +139,10 @@ abstract final class ApiConfig {
       // Fall through; hosts may still contain the gateway from step 1.
     }
 
-    add('10.0.2.2'); // Android-emulator alias, harmless on iOS (refused)
-    add('localhost');
+    if (quickOnly) {
+      add('10.0.2.2'); // Android-emulator alias, harmless on iOS (refused)
+      add('localhost');
+    }
     return hosts;
   }
 

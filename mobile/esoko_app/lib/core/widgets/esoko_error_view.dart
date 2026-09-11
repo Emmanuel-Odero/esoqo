@@ -14,7 +14,11 @@ class EsokoErrorView extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Padding(
+    // Scrollable, not just a bare Column: a long message (e.g. a
+    // NETWORK_ERROR listing tried hosts) must never force a RenderFlex
+    // overflow in whatever fixed-height context this renders inside —
+    // it scrolls instead.
+    return SingleChildScrollView(
       padding: const EdgeInsets.all(EsokoSpacing.s8),
       child: Column(
         mainAxisSize: MainAxisSize.min,
@@ -40,3 +44,4 @@ class EsokoErrorView extends StatelessWidget {
     );
   }
 }
+

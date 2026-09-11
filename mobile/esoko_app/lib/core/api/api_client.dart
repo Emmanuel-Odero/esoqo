@@ -1,7 +1,9 @@
+import 'dart:async';
 import 'dart:convert';
 
 import 'package:dio/dio.dart';
 import 'package:flutter/foundation.dart' show debugPrint;
+import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 
 import '../storage/token_store.dart';
 import 'api_config.dart';
@@ -14,6 +16,13 @@ import 'api_exception.dart';
 ///   the device is on (which hotspot direction, LAN, etc.), so the app
 ///   probes each candidate on GET /health and keeps the first that
 ///   answers. An explicit `--dart-define=API_BASE_URL` is used verbatim.
+///   The winning host is cached (see [_cachedHost]/[_cacheHost]) and
+///   tried alone on the next cold start before falling back to a full
+///   re-probe — candidateHosts() can run to a couple hundred entries on
+///   a plain /24 LAN, and firing that many concurrent connections on
+///   every launch is real load on the WiFi radio right as the first
+///   real request also needs to go out, which was itself producing
+///   spurious connectionTimeout failures on otherwise-fine requests.
 /// - Attaches `Authorization: Bearer <token>` from [TokenStore] on every
 ///   request that has one.
 /// - On a 401, clears the stored token and calls [onUnauthorized] so the
@@ -56,6 +65,9 @@ class ApiClient {
   Future<void>? _baseUrlInit;
   List<String> _hostsTried = const [];
 
+  static const _cachedHostKey = 'esoko_api_base_url';
+  static const _hostCacheStorage = FlutterSecureStorage();
+
   /// Resolves the real base URL once, before the first request. Dio's
   /// `baseUrl` set in the constructor is only a placeholder until then.
   Future<void> _ensureBaseUrl() {
@@ -69,22 +81,66 @@ class ApiClient {
       debugPrint('esoko/api: using --dart-define API_BASE_URL=${ApiConfig.overrideUrl}');
       return;
     }
+
+    // Try last session's winner alone first — same host, same network,
+    // most of the time (nobody switches WiFi between app launches most
+    // days). One quick probe beats firing the whole candidate list.
+    final cached = await _hostCacheStorage.read(key: _cachedHostKey);
+    if (cached != null && await _probe(cached)) {
+      _dio.options.baseUrl = cached;
+      _hostsTried = [cached];
+      debugPrint('esoko/api: reusing cached base URL = $cached');
+      return;
+    }
+
     final hosts = await ApiConfig.candidateHosts();
     _hostsTried = hosts;
     debugPrint('esoko/api: core-go candidates: ${hosts.join(', ')}');
-    for (final host in hosts) {
-      final base = 'http://$host:${ApiConfig.port}';
-      final ok = await _probe(base);
-      debugPrint('esoko/api: $base -> ${ok ? 'ALIVE' : 'no core-go'}');
-      if (ok) {
-        _dio.options.baseUrl = base;
-        debugPrint('esoko/api: resolved base URL = $base');
-        return;
+    // Probed concurrently — take whichever answers first, rather than
+    // walking the list one host at a time with a timeout each. This
+    // list is deliberately bounded (see ApiConfig.candidateHosts); only
+    // when *none* of it answers do we pay for the full /24 sweep below.
+    var winner = await _firstAlive(hosts);
+    if (winner == null) {
+      final extended = await ApiConfig.extendedCandidateHosts();
+      if (extended.isNotEmpty) {
+        _hostsTried = [...hosts, ...extended];
+        debugPrint('esoko/api: quick pass found nothing, sweeping ${extended.length} more');
+        winner = await _firstAlive(extended);
       }
+    }
+    if (winner != null) {
+      _dio.options.baseUrl = winner;
+      debugPrint('esoko/api: resolved base URL = $winner');
+      unawaited(_hostCacheStorage.write(key: _cachedHostKey, value: winner));
+      return;
     }
     // Nothing answered — keep the first candidate so the request below
     // fails fast, and let the real error say which hosts were tried.
     _dio.options.baseUrl = 'http://${hosts.first}:${ApiConfig.port}';
+  }
+
+  /// Probes every host in [hosts] in parallel and resolves to the base URL
+  /// of the first one that answers, or `null` if none do. Unlike
+  /// `Future.any`, a losing (unreachable) probe doesn't end the race —
+  /// only a successful one does, or the pool running dry.
+  Future<String?> _firstAlive(List<String> hosts) {
+    if (hosts.isEmpty) return Future.value(null);
+    final completer = Completer<String?>();
+    var remaining = hosts.length;
+    for (final host in hosts) {
+      final base = 'http://$host:${ApiConfig.port}';
+      unawaited(_probe(base).then((ok) {
+        if (completer.isCompleted) return;
+        debugPrint('esoko/api: $base -> ${ok ? 'ALIVE' : 'no core-go'}');
+        if (ok) {
+          completer.complete(base);
+        } else if (--remaining == 0) {
+          completer.complete(null);
+        }
+      }));
+    }
+    return completer.future;
   }
 
   /// True when `GET /health` on [base] gets *any* HTTP response — the
@@ -104,6 +160,19 @@ class ApiClient {
     } finally {
       _dio.options.baseUrl = previous;
     }
+  }
+
+  /// A user-facing rendering of [_hostsTried] — the full list can now
+  /// run to a couple hundred entries (a whole /24 sweep, see
+  /// ApiConfig._physicalIosCandidates), which used to get dumped
+  /// verbatim into the NETWORK_ERROR message and blow out any layout
+  /// that rendered it (EsokoErrorView included). Callers still get the
+  /// count for debugging; only the first few hosts are spelled out.
+  String get _triedSummary {
+    const shown = 4;
+    if (_hostsTried.length <= shown) return _hostsTried.join(', ');
+    final head = _hostsTried.take(shown).join(', ');
+    return '$head, and ${_hostsTried.length - shown} more';
   }
 
   Future<Map<String, dynamic>> get(String path) => _send('GET', path);
@@ -126,7 +195,7 @@ class ApiClient {
         statusCode: 0,
         code: 'NETWORK_ERROR',
         message: e.message != null
-            ? '${e.message} Tried: ${_hostsTried.join(', ')}.'
+            ? '${e.message} Tried $_triedSummary.'
             : 'Could not reach Esoko. Check your connection.',
       );
     }
