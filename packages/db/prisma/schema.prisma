@@ -3189,11 +3189,55 @@ model Parcel {
   deliveredAt DateTime?
 
   handoffs ParcelHandoff[]
+  labelStockEntries ParcelLabelStock[]
 
   @@index([currentHolderPartyId, status])
   @@index([senderPartyId, createdAt])
   @@index([status])
   @@map("parcel")
+}
+
+/// A pool of pre-minted PKG-… codes that exist *before* any booking —
+/// printed and stuck onto an envelope/box ahead of time, then "filled
+/// in" the moment a shipment actually needs one (see dbx.BookParcel's
+/// ExistingCode param), instead of every physical label being printed
+/// fresh at booking time. Its own table, not a nullable half of Parcel
+/// — a blank label has none of Parcel's required fields and never
+/// goes through Parcel's own status lifecycle; it's either unused or
+/// spent, nothing else.
+model ParcelLabelStock {
+  id               String    @id @default(uuid()) @db.Uuid
+  code             String    @unique
+  createdAt        DateTime  @default(now())
+  createdByStaffId String?   @db.Uuid
+  /// Both null until BookParcel binds this code to a real shipment —
+  /// set together, in the same transaction, never independently.
+  usedAt           DateTime?
+  usedByParcelId   String?   @db.Uuid
+  usedByParcel     Parcel?   @relation(fields: [usedByParcelId], references: [id])
+
+  /// Structured info attached in the field the moment a handler
+  /// sticks this label on a physical item, independent of (and
+  /// usually well before) a real booking. All optional — a handler
+  /// might only know the item and destination at first, and fill in
+  /// the rest later (AttachParcelLabelInfo overwrites, doesn't merge,
+  /// so the caller always resends the full set it wants kept).
+  /// GetParcelStatus's guest-safe scan/track projection falls back to
+  /// this when no real Parcel exists yet for the code.
+  itemDescription       String?
+  destination           String?
+  ownerName             String?
+  /// Phone or email, whichever the owner gave — one free-text field
+  /// rather than two, since a handler in the field is copying down
+  /// whatever the owner said, not filling out a typed contact form.
+  ownerContact          String?
+  ownerGender           String?
+  itemType              String?
+  weightRangeKg         String?
+  infoAttachedAt        DateTime?
+  infoAttachedByStaffId String?   @db.Uuid
+
+  @@map("parcel_label_stock")
 }
 
 /// Admin-owned pricing config, one row per ParcelType — same
