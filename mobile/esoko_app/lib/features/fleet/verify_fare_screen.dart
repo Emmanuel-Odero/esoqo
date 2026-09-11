@@ -3,7 +3,6 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:mobile_scanner/mobile_scanner.dart';
 
 import '../../core/api/api_exception.dart';
-import '../../core/auth/agent_session.dart';
 import '../../core/auth/auth_controller.dart';
 import '../../core/auth/auth_state.dart';
 import '../../core/auth/scan_access.dart';
@@ -69,12 +68,12 @@ class _VerifyFareScreenState extends ConsumerState<VerifyFareScreen> {
     final profile = auth is AuthSignedIn ? auth.profile : null;
     // Reached without the grant (e.g. via a quick action): say so
     // plainly. The server still answers own-receipt checks, so the
-    // screen stays useful instead of dead-ending. An agent (crew) PIN
-    // session has no [EsokoProfile] at all — canVerifyFare alone would
-    // wrongly show the "sign in with a crew account" banner to someone
-    // who very much did; a signed-in CREW/SCANNER agent counts too.
-    final agent = ref.watch(agentSessionControllerProvider);
-    final crew = canVerifyFare(profile) || agent is AgentSignedIn;
+    // screen stays useful instead of dead-ending. canVerifyFare already
+    // reflects an activated CREW/SCANNER org context (see core/auth/
+    // org_context_state.dart) — the capability shows up on the profile
+    // the moment GET /v1/me is called with the org-context header
+    // attached, no separate agent-session check needed any more.
+    final crew = canVerifyFare(profile);
     return Scaffold(
       appBar: const EsokoAppBar(title: 'Verify fare'),
       body: SafeArea(
@@ -86,7 +85,7 @@ class _VerifyFareScreenState extends ConsumerState<VerifyFareScreen> {
                 child: Padding(
                   padding: EdgeInsets.all(EsokoSpacing.s4),
                   child: Text(
-                    'Crew feature — sign in with a crew account to verify any fare. You can still check your own receipts here.',
+                    'Crew feature — switch on staff duty (Profile > Acting as) to verify any fare. You can still check your own receipts here.',
                   ),
                 ),
               ),

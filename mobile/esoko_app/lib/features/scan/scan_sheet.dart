@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import '../../core/auth/agent_session.dart';
 import '../../core/auth/auth_controller.dart';
 import '../../core/auth/auth_state.dart';
 import '../../core/auth/scan_access.dart';
@@ -23,8 +22,12 @@ Future<void> showScanSheet(BuildContext context) {
       builder: (context, ref, _) {
         final auth = ref.watch(authControllerProvider);
         final profile = auth is AuthSignedIn ? auth.profile : null;
-        final agent = ref.watch(agentSessionControllerProvider);
-        final crew = canVerifyFare(profile) || agent is AgentSignedIn;
+        // canVerifyFare already reflects an activated org-staff context
+        // (see core/auth/org_context_state.dart): the fare.verify/
+        // ticketorg.read capability shows up on the profile the moment
+        // GET /v1/me is called with the org-context header attached —
+        // no separate agent-session check needed any more.
+        final crew = canVerifyFare(profile);
         return SafeArea(
           child: Padding(
             padding: const EdgeInsets.all(EsokoSpacing.s4),

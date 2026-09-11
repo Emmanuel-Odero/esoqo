@@ -14,20 +14,12 @@ import 'verify_fare_screen.dart';
 import '../vouchers/voucher_wallet_screen.dart';
 
 /// Transport home — public fare payment on top; the companies the
-/// signed-in subject runs below (rendered only when their capabilities
-/// include a fleet grant — owners hold `fleet.read:own`). Every
-/// manager action inside is enforced server-side by
-/// dbx.AssertOwnsOrg; this gating is navigation convenience only.
+/// signed-in subject actually runs below, rendered only when
+/// `myOrgsProvider` actually has entries. Every manager action inside
+/// is enforced server-side by dbx.AssertOwnsOrg; this gating is
+/// navigation convenience only.
 class TransportScreen extends ConsumerWidget {
   const TransportScreen({super.key});
-
-  static bool canManage(EsokoProfile? profile) {
-    if (profile == null) return false;
-    return profile.has('fleet.read') ||
-        profile.has('fleet.read:own') ||
-        profile.has('trip.read') ||
-        profile.has('trip.read:own');
-  }
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -36,6 +28,15 @@ class TransportScreen extends ConsumerWidget {
     // Crew-only entries never render for passengers — the server
     // enforces the same rule, this just keeps the screen clean.
     final crew = canVerifyFare(profile);
+    // NOT `profile.has('fleet.read:own')` — every signed-in SUBJECT
+    // holds that blanket `:own` grant unconditionally (see
+    // authsvc.RolePresets), so it can't tell "runs a company" from
+    // "plain personal account"; the whole point of the profile
+    // switcher was to keep this section out of the way for the second
+    // group. Whether `myOrgsProvider` actually came back non-empty is
+    // the real signal — same one home_hub_screen's own reorder logic
+    // uses for the same reason (see its "runsOrg" comment).
+    final runsOrg = ref.watch(myOrgsProvider).valueOrNull?.isNotEmpty ?? false;
 
     // Bar-less Scaffold: the Home hub wraps this screen in its own
     // Scaffold + EsokoAppBar (like ListingListScreen/MyGroupsScreen) —
@@ -55,9 +56,13 @@ class TransportScreen extends ConsumerWidget {
                   child: EsokoListTile(
                     title: 'Scan to board',
                     subtitle: 'Scan the Esoko code inside the matatu to pay.',
-                    leading: const EsokoQuickActionIcon(icon: Icons.qr_code_scanner_outlined),
+                    leading: const EsokoQuickActionIcon(
+                      icon: Icons.qr_code_scanner_outlined,
+                    ),
                     onTap: () => Navigator.of(context).push(
-                      MaterialPageRoute(builder: (_) => const UniversalScanScreen()),
+                      MaterialPageRoute(
+                        builder: (_) => const UniversalScanScreen(),
+                      ),
                     ),
                   ),
                 ),
@@ -65,8 +70,11 @@ class TransportScreen extends ConsumerWidget {
                   index: 1,
                   child: EsokoListTile(
                     title: 'Pay bus fare',
-                    subtitle: 'Pick a bus on the road and pay by M-Pesa or voucher.',
-                    leading: const EsokoQuickActionIcon(icon: Icons.payments_outlined),
+                    subtitle:
+                        'Pick a bus on the road and pay by M-Pesa or voucher.',
+                    leading: const EsokoQuickActionIcon(
+                      icon: Icons.payments_outlined,
+                    ),
                     onTap: () => Navigator.of(context).push(
                       MaterialPageRoute(builder: (_) => const FarePayScreen()),
                     ),
@@ -78,9 +86,13 @@ class TransportScreen extends ConsumerWidget {
                     child: EsokoListTile(
                       title: 'Verify fare (crew)',
                       subtitle: 'Scan passenger receipt or M-Pesa code.',
-                      leading: const EsokoQuickActionIcon(icon: Icons.verified_outlined),
+                      leading: const EsokoQuickActionIcon(
+                        icon: Icons.verified_outlined,
+                      ),
                       onTap: () => Navigator.of(context).push(
-                        MaterialPageRoute(builder: (_) => const VerifyFareScreen()),
+                        MaterialPageRoute(
+                          builder: (_) => const VerifyFareScreen(),
+                        ),
                       ),
                     ),
                   ),
@@ -89,13 +101,17 @@ class TransportScreen extends ConsumerWidget {
                   child: EsokoListTile(
                     title: 'Vouchers',
                     subtitle: 'Fare, rent, shopping cards + loyalty.',
-                    leading: const EsokoQuickActionIcon(icon: Icons.wallet_outlined),
+                    leading: const EsokoQuickActionIcon(
+                      icon: Icons.wallet_outlined,
+                    ),
                     onTap: () => Navigator.of(context).push(
-                      MaterialPageRoute(builder: (_) => const VoucherWalletScreen()),
+                      MaterialPageRoute(
+                        builder: (_) => const VoucherWalletScreen(),
+                      ),
                     ),
                   ),
                 ),
-                if (canManage(profile)) ...[
+                if (runsOrg) ...[
                   const SizedBox(height: EsokoSpacing.s5),
                   EsokoSectionHeader(
                     title: 'My companies',
@@ -128,10 +144,15 @@ class TransportScreen extends ConsumerWidget {
               child: EsokoListTile(
                 title: list[i].name,
                 subtitle: list[i].status,
-                leading: const EsokoQuickActionIcon(icon: Icons.directions_bus_outlined),
+                leading: const EsokoQuickActionIcon(
+                  icon: Icons.directions_bus_outlined,
+                ),
                 onTap: () => Navigator.of(context).push(
                   MaterialPageRoute(
-                    builder: (_) => OrgFleetScreen(orgId: list[i].id, orgName: list[i].name),
+                    builder: (_) => OrgFleetScreen(
+                      orgId: list[i].id,
+                      orgName: list[i].name,
+                    ),
                   ),
                 ),
               ),

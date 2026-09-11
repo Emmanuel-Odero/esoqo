@@ -6,9 +6,14 @@ import 'package:qr_flutter/qr_flutter.dart';
 import '../../core/api/api_exception.dart';
 import '../../core/auth/auth_controller.dart';
 import '../../core/auth/auth_state.dart';
+import '../../core/auth/org_context_state.dart';
 import '../../core/theme/esoko_tokens.dart';
 import '../../core/widgets/widgets.dart';
+import '../fleet/fleet_models.dart';
+import '../fleet/fleet_providers.dart';
+import '../fleet/org_fleet_screen.dart';
 import '../shopping/order_detail_screen.dart';
+import 'org_duty_switcher_screen.dart';
 import 'profile_repository.dart';
 
 final _historyProvider = FutureProvider.autoDispose<List<HistoryItem>>(
@@ -143,18 +148,19 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    _row('Name', profile.displayName),
-                    if (profile.msisdn != null) _row('Phone', profile.msisdn!),
+                    _row('Name', profile.displayName, context),
+                    if (profile.msisdn != null)
+                      _row('Phone', profile.msisdn!, context),
                     if (profile.esokoId != null)
                       _row(
                         'Esoko ID',
                         profile.esokoId!,
+                        context,
                         mono: true,
                         copyable: true,
-                        context: context,
                       )
                     else
-                      _row('Esoko ID', 'Preparing…'),
+                      _row('Esoko ID', 'Preparing…', context),
                     const SizedBox(height: EsokoSpacing.s3),
                     if (_editingName) ...[
                       EsokoFormField(
@@ -226,6 +232,13 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                         child: Container(
                           padding: const EdgeInsets.all(EsokoSpacing.s3),
                           decoration: BoxDecoration(
+                            // Deliberately always white, in both themes
+                            // — not a contrast bug like the others in
+                            // this sweep. A QR code needs a white
+                            // backing for reliable camera scanning
+                            // regardless of app theme; a dark backing
+                            // would make it harder for other people's
+                            // phones to scan this code.
                             color: Colors.white,
                             borderRadius: BorderRadius.circular(EsokoRadius.md),
                             border: Border.all(color: EsokoColors.line),
@@ -253,7 +266,9 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                             );
                             ScaffoldMessenger.of(context).showSnackBar(
                               const SnackBar(
-                                content: Text('Esoko ID copied — share or type it anywhere'),
+                                content: Text(
+                                  'Esoko ID copied — share or type it anywhere',
+                                ),
                               ),
                             );
                           },
@@ -266,7 +281,9 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                       Center(
                         child: Text(
                           'Preparing your payment code…',
-                          style: TextStyle(color: EsokoColors.text2),
+                          style: TextStyle(
+                            color: Theme.of(context).textTheme.bodySmall?.color,
+                          ),
                         ),
                       ),
                     ],
@@ -355,6 +372,9 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                   ],
                 ),
               ),
+              const SizedBox(height: EsokoSpacing.s4),
+
+              _MyCompaniesAndRoles(),
               const SizedBox(height: EsokoSpacing.s4),
 
               points.when(
@@ -457,10 +477,10 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
 
   Widget _row(
     String label,
-    String value, {
+    String value,
+    BuildContext context, {
     bool mono = false,
     bool copyable = false,
-    BuildContext? context,
   }) {
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: EsokoSpacing.s2),
@@ -468,7 +488,15 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
         children: [
           SizedBox(
             width: 90,
-            child: Text(label, style: TextStyle(color: EsokoColors.text2)),
+            // Theme-derived, not the fixed EsokoColors.text2 — this
+            // card's surface flips between light and dark with the
+            // theme.
+            child: Text(
+              label,
+              style: TextStyle(
+                color: Theme.of(context).textTheme.bodySmall?.color,
+              ),
+            ),
           ),
           Expanded(
             child: Text(
@@ -476,7 +504,7 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
               style: TextStyle(fontFamily: mono ? 'monospace' : null),
             ),
           ),
-          if (copyable && context != null)
+          if (copyable)
             IconButton(
               icon: const Icon(Icons.copy_outlined, size: 18),
               tooltip: 'Copy Esoko ID',
@@ -488,6 +516,94 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
               },
             ),
         ],
+      ),
+    );
+  }
+}
+
+/// Consolidates what used to be scattered across the app: companies the
+/// signed-in person owns (previously only discoverable inside whichever
+/// vertical tab they happened to live under — Transport for a fleet
+/// company, nowhere yet on mobile for an events company) and staff
+/// duty grants (previously a single unlabelled "Acting as" row). One
+/// place, per docs/proposals/esoko-unified-crew-identity.md's "log in
+/// once, see everything you're entitled to" intent. Renders nothing for
+/// a plain subject with neither — no empty section clutter for the
+/// common case.
+class _MyCompaniesAndRoles extends ConsumerWidget {
+  const _MyCompaniesAndRoles();
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final orgs = ref.watch(myOrgsProvider).valueOrNull ?? const <OrgSummary>[];
+    final grants = ref.watch(orgContextControllerProvider).grants;
+    if (orgs.isEmpty && grants.isEmpty) return const SizedBox.shrink();
+
+    return EsokoCard(
+      padding: const EdgeInsets.all(EsokoSpacing.s5),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text('My companies & roles', style: Theme.of(context).textTheme.titleMedium),
+          const SizedBox(height: EsokoSpacing.s1),
+          const Text('Every company you own, and every staff duty you can switch on.'),
+          if (orgs.isNotEmpty) ...[
+            const SizedBox(height: EsokoSpacing.s4),
+            for (final org in orgs) _ownedOrgTile(context, org),
+          ],
+          if (grants.isNotEmpty) ...[
+            const SizedBox(height: EsokoSpacing.s4),
+            for (final grant in grants) _grantTile(context, grant),
+            const SizedBox(height: EsokoSpacing.s2),
+            OutlinedButton.icon(
+              onPressed: () => showHatsQuickSwitchSheet(context),
+              icon: const Icon(Icons.swap_horiz, size: 16),
+              label: const Text('Switch duty'),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+
+  // Blue, not green — SCREEN_CONVENTIONS.md's colour rule: a company is
+  // an institution, not the person's own record, even when they own it.
+  Widget _ownedOrgTile(BuildContext context, OrgSummary org) {
+    final manageable = org.vertical == 'TRANSPORT';
+    return Padding(
+      padding: const EdgeInsets.only(bottom: EsokoSpacing.s2),
+      child: EsokoListTile(
+        title: org.name,
+        subtitle: '${org.vertical} · ${org.status}',
+        iconColor: EsokoColors.blue,
+        iconBackground: EsokoColors.blueTint,
+        icon: Icons.storefront_outlined,
+        trailing: manageable ? null : const EsokoStatusPill(label: 'Web console', color: EsokoColors.blue),
+        onTap: manageable
+            ? () => Navigator.of(context).push(
+                  MaterialPageRoute(builder: (_) => OrgFleetScreen(orgId: org.id, orgName: org.name)),
+                )
+            : () => ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(content: Text('Manage this company from the Esoko web console for now.')),
+                ),
+      ),
+    );
+  }
+
+  Widget _grantTile(BuildContext context, OrgGrant grant) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: EsokoSpacing.s2),
+      child: EsokoListTile(
+        title: grant.orgName,
+        subtitle: grant.suspended ? 'Suspended' : '${grant.role}${grant.active ? ' · on duty' : ''}',
+        iconColor: EsokoColors.blue,
+        iconBackground: EsokoColors.blueTint,
+        icon: Icons.badge_outlined,
+        trailing: grant.suspended
+            ? const EsokoStatusPill(label: 'Suspended', color: Colors.red)
+            : grant.active
+                ? const EsokoStatusPill(label: 'On duty', color: EsokoColors.green)
+                : null,
       ),
     );
   }

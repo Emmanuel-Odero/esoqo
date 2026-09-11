@@ -40,7 +40,9 @@ class _ForgotPinScreenState extends ConsumerState<ForgotPinScreen> {
       _error = null;
     });
     try {
-      await ref.read(authControllerProvider.notifier).requestOtp(
+      await ref
+          .read(authControllerProvider.notifier)
+          .requestOtp(
             msisdn: _msisdnController.text.trim(),
             purpose: 'PIN_RESET',
           );
@@ -58,7 +60,9 @@ class _ForgotPinScreenState extends ConsumerState<ForgotPinScreen> {
       _error = null;
     });
     try {
-      await ref.read(authControllerProvider.notifier).resetPin(
+      await ref
+          .read(authControllerProvider.notifier)
+          .resetPin(
             msisdn: _msisdnController.text.trim(),
             code: _codeController.text.trim(),
             pin: _pinController.text.trim(),
@@ -73,65 +77,54 @@ class _ForgotPinScreenState extends ConsumerState<ForgotPinScreen> {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: const EsokoAppBar(title: 'Reset your PIN'),
-      body: SafeArea(
-        child: Center(
-          child: ConstrainedBox(
-            constraints: const BoxConstraints(maxWidth: 420),
-            child: SingleChildScrollView(
-              padding: const EdgeInsets.all(EsokoSpacing.s6),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  if (_step == _Step.phone) ...[
-                    const Text('Enter the phone number on your Esoko account.'),
-                    const SizedBox(height: EsokoSpacing.s4),
-                    EsokoFormField(
-                      controller: _msisdnController,
-                      label: 'Phone number',
-                      hint: '+254 7…',
-                      keyboardType: TextInputType.phone,
-                      textInputAction: TextInputAction.done,
-                      autofillHints: const [AutofillHints.telephoneNumber],
-                      onSubmitted: (_) => _requestCode(),
-                    ),
-                  ] else ...[
-                    Text('Enter the code sent to ${_msisdnController.text.trim()} and choose a new PIN.'),
-                    const SizedBox(height: EsokoSpacing.s4),
-                    EsokoFormField(
-                      controller: _codeController,
-                      label: '6-digit code',
-                      keyboardType: TextInputType.number,
-                      textInputAction: TextInputAction.next,
-                      autofillHints: const [AutofillHints.oneTimeCode],
-                      maxLength: 6,
-                    ),
-                    const SizedBox(height: EsokoSpacing.s3),
-                    EsokoFormField(
-                      controller: _pinController,
-                      label: 'New PIN (4–6 digits)',
-                      obscureText: true,
-                      keyboardType: TextInputType.number,
-                      textInputAction: TextInputAction.done,
-                      autofillHints: const [AutofillHints.newPassword],
-                      maxLength: 6,
-                      onSubmitted: (_) => _resetPin(),
-                    ),
-                  ],
-                  if (_error != null) EsokoFormError(message: _error!),
-                  const SizedBox(height: EsokoSpacing.s4),
-                  EsokoLoadingButton(
-                    label: _step == _Step.phone ? 'Send code' : 'Save new PIN',
-                    loading: _loading,
-                    onPressed: _step == _Step.phone ? _requestCode : _resetPin,
-                  ),
-                ],
-              ),
-            ),
+    return EsokoAuthScaffold(
+      title: 'Reset your PIN',
+      subtitle: 'We\'ll text a code to confirm it\'s you.',
+      onBack: () => Navigator.of(context).pop(),
+      children: [
+        if (_step == _Step.phone) ...[
+          EsokoFormField(
+            controller: _msisdnController,
+            label: 'Phone number',
+            hint: '+254 7…',
+            keyboardType: TextInputType.phone,
+            textInputAction: TextInputAction.done,
+            autofillHints: const [AutofillHints.telephoneNumber],
+            onSubmitted: (_) => _requestCode(),
           ),
+        ] else ...[
+          Text(
+            'Enter the code sent to ${_msisdnController.text.trim()} and choose a new PIN.',
+          ),
+          const SizedBox(height: EsokoSpacing.s4),
+          EsokoFormField(
+            controller: _codeController,
+            label: '6-digit code',
+            keyboardType: TextInputType.number,
+            textInputAction: TextInputAction.next,
+            autofillHints: const [AutofillHints.oneTimeCode],
+            maxLength: 6,
+          ),
+          const SizedBox(height: EsokoSpacing.s3),
+          EsokoFormField(
+            controller: _pinController,
+            label: 'New PIN (4–6 digits)',
+            obscureText: true,
+            keyboardType: TextInputType.number,
+            textInputAction: TextInputAction.done,
+            autofillHints: const [AutofillHints.newPassword],
+            maxLength: 6,
+            onSubmitted: (_) => _resetPin(),
+          ),
+        ],
+        if (_error != null) EsokoFormError(message: _error!),
+        const SizedBox(height: EsokoSpacing.s4),
+        EsokoLoadingButton(
+          label: _step == _Step.phone ? 'Send code' : 'Save new PIN',
+          loading: _loading,
+          onPressed: _step == _Step.phone ? _requestCode : _resetPin,
         ),
-      ),
+      ],
     );
   }
 }

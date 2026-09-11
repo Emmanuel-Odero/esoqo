@@ -100,7 +100,7 @@ class _ContributeScreenState extends ConsumerState<ContributeScreen> {
               onSubmitted: (_) => _submit(),
             ),
             const SizedBox(height: EsokoSpacing.s4),
-            EsokoPaymentMethodToggle<String>(
+            EsokoSegmentedToggle<String>(
               selected: _method,
               onChanged: (m) {
                 EsokoHaptics.tap();
@@ -109,11 +109,11 @@ class _ContributeScreenState extends ConsumerState<ContributeScreen> {
               options: const [('MPESA', 'M-Pesa'), ('CASH_TO_AGENT', 'Cash')],
             ),
             if (_method != 'MPESA')
-              Padding(
-                padding: const EdgeInsets.only(top: EsokoSpacing.s2),
-                child: Text(
-                  'This records your claim — an officer confirms it once the cash is actually in hand.',
-                  style: TextStyle(color: EsokoColors.text2, fontSize: 12),
+              const Padding(
+                padding: EdgeInsets.only(top: EsokoSpacing.s3),
+                child: EsokoInlineNotice(
+                  icon: EsokoIconName.clock,
+                  message: "This records your claim — it won't count toward the group balance until an officer confirms the cash is actually in hand.",
                 ),
               ),
             if (_error != null) EsokoFormError(message: _error!),
@@ -122,9 +122,9 @@ class _ContributeScreenState extends ConsumerState<ContributeScreen> {
               label: _method == 'MPESA'
                   ? 'Pay with M-Pesa'
                   : 'Declare contribution',
-              icon: _method == 'MPESA'
-                  ? Icons.lock_outline
-                  : Icons.edit_outlined,
+              esokoIcon: _method == 'MPESA'
+                  ? EsokoIconName.lock
+                  : EsokoIconName.document,
               onPressed: _submit,
             ),
           ],

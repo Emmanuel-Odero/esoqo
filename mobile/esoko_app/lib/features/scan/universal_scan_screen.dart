@@ -3,7 +3,6 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:mobile_scanner/mobile_scanner.dart';
 
 import '../../core/api/api_exception.dart';
-import '../../core/auth/agent_session.dart';
 import '../../core/auth/auth_controller.dart';
 import '../../core/auth/auth_state.dart';
 import '../../core/auth/scan_access.dart';
@@ -56,8 +55,7 @@ class _UniversalScanScreenState extends ConsumerState<UniversalScanScreen> {
 
   bool get _canVerify {
     final auth = ref.read(authControllerProvider);
-    if (auth is AuthSignedIn && canVerifyFare(auth.profile)) return true;
-    return ref.read(agentSessionControllerProvider) is AgentSignedIn;
+    return auth is AuthSignedIn && canVerifyFare(auth.profile);
   }
 
   void _route(BuildContext context, ScanResolution r) {
@@ -193,6 +191,18 @@ class _UniversalScanScreenState extends ConsumerState<UniversalScanScreen> {
                         final v = cap.barcodes.firstOrNull?.rawValue;
                         if (v != null) _resolve(v);
                       },
+                      errorBuilder: (context, error) {
+                        final message =
+                            error.errorDetails?.message ??
+                            'Camera could not start (${error.errorCode.name}).';
+                        debugPrint('esoko/scan: MobileScanner error: $message');
+                        return Center(
+                          child: Padding(
+                            padding: const EdgeInsets.all(EsokoSpacing.s3),
+                            child: EsokoFormError(message: message),
+                          ),
+                        );
+                      },
                     ),
                   ),
                 ),
@@ -291,7 +301,10 @@ class _UniversalScanScreenState extends ConsumerState<UniversalScanScreen> {
           const SizedBox(height: 4),
           Text('${t.eventName} · ${t.orgName}'),
           if (t.seatLabel != null)
-            Text('Seat ${t.seatLabel}', style: const TextStyle(fontWeight: FontWeight.w600)),
+            Text(
+              'Seat ${t.seatLabel}',
+              style: const TextStyle(fontWeight: FontWeight.w600),
+            ),
           const SizedBox(height: EsokoSpacing.s2),
           Text(
             'KES ${t.priceKes}',
@@ -311,8 +324,11 @@ class _UniversalScanScreenState extends ConsumerState<UniversalScanScreen> {
           ),
           const SizedBox(height: 4),
           Text(
-            'Gate check-in happens at the event.', 
-            style: TextStyle(color: EsokoColors.text2, fontSize: 12),
+            'Gate check-in happens at the event.',
+            style: TextStyle(
+              color: Theme.of(context).textTheme.bodySmall?.color,
+              fontSize: 12,
+            ),
           ),
         ],
       ),
@@ -325,8 +341,8 @@ class _UniversalScanScreenState extends ConsumerState<UniversalScanScreen> {
     final label = ready
         ? 'Ready to collect'
         : done
-            ? 'Collected'
-            : o.status;
+        ? 'Collected'
+        : o.status;
     return EsokoCard(
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -409,7 +425,10 @@ class _UniversalScanScreenState extends ConsumerState<UniversalScanScreen> {
           const SizedBox(height: EsokoSpacing.s2),
           Text(
             'Payment card — paying them is a phone tap away.',
-            style: TextStyle(color: EsokoColors.text2, fontSize: 12),
+            style: TextStyle(
+              color: Theme.of(context).textTheme.bodySmall?.color,
+              fontSize: 12,
+            ),
           ),
         ],
       ),
@@ -431,7 +450,9 @@ class _UniversalScanScreenState extends ConsumerState<UniversalScanScreen> {
             const SizedBox(height: 4),
             Text(
               'Type the code again, or check it at esoko.co.ke/verify.',
-              style: TextStyle(color: EsokoColors.text2),
+              style: TextStyle(
+                color: Theme.of(context).textTheme.bodySmall?.color,
+              ),
             ),
           ],
         ),
@@ -461,26 +482,44 @@ class _UniversalScanScreenState extends ConsumerState<UniversalScanScreen> {
             const SizedBox(height: EsokoSpacing.s1),
             Text('Issued ${_formatDate(c.issuedOn)}'),
           ],
-          if (c.validUntil != null) Text('Valid until ${_formatDate(c.validUntil!)}'),
+          if (c.validUntil != null)
+            Text('Valid until ${_formatDate(c.validUntil!)}'),
           const SizedBox(height: EsokoSpacing.s2),
           Text(
             'Verified directly from Esoko — no account needed.',
-            style: TextStyle(color: EsokoColors.text2, fontSize: 12),
+            style: TextStyle(
+              color: Theme.of(context).textTheme.bodySmall?.color,
+              fontSize: 12,
+            ),
           ),
         ],
       ),
     );
   }
 
-  Widget _statusPill(BuildContext context, String label,
-      {required bool ok, bool warn = false}) {
+  Widget _statusPill(
+    BuildContext context,
+    String label, {
+    required bool ok,
+    bool warn = false,
+  }) {
     final scheme = Theme.of(context).colorScheme;
+    // EsokoColors.amber, not Material's generic Colors.amber/orange —
+    // brand colour, and one that (like scheme.primary/.error here) reads
+    // fine as text on its own low-alpha wash in both themes. The old
+    // Colors.orange.shade900 was picked for contrast against a *light*
+    // amber background specifically and went dark-on-dark the moment
+    // that background alpha-blended over a dark surface instead.
     final bg = warn
-        ? Colors.amber.withValues(alpha: 0.16)
+        ? EsokoColors.amber.withValues(alpha: 0.14)
         : ok
-            ? scheme.primary.withValues(alpha: 0.14)
-            : scheme.error.withValues(alpha: 0.12);
-    final fg = warn ? Colors.orange.shade900 : ok ? scheme.primary : scheme.error;
+        ? scheme.primary.withValues(alpha: 0.14)
+        : scheme.error.withValues(alpha: 0.12);
+    final fg = warn
+        ? EsokoColors.amber
+        : ok
+        ? scheme.primary
+        : scheme.error;
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
       decoration: BoxDecoration(
@@ -489,7 +528,12 @@ class _UniversalScanScreenState extends ConsumerState<UniversalScanScreen> {
       ),
       child: Text(
         label,
-        style: TextStyle(color: fg, fontSize: 11, fontWeight: FontWeight.w800, letterSpacing: 0.3),
+        style: TextStyle(
+          color: fg,
+          fontSize: 11,
+          fontWeight: FontWeight.w800,
+          letterSpacing: 0.3,
+        ),
       ),
     );
   }
@@ -497,7 +541,20 @@ class _UniversalScanScreenState extends ConsumerState<UniversalScanScreen> {
   String _formatDate(String iso) {
     final t = DateTime.tryParse(iso)?.toLocal();
     if (t == null) return iso;
-    const months = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+    const months = [
+      'Jan',
+      'Feb',
+      'Mar',
+      'Apr',
+      'May',
+      'Jun',
+      'Jul',
+      'Aug',
+      'Sep',
+      'Oct',
+      'Nov',
+      'Dec',
+    ];
     return '${t.day} ${months[t.month - 1]} ${t.year}';
   }
 }

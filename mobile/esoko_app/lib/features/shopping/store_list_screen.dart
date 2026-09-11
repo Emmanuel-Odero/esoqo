@@ -4,7 +4,6 @@ import 'package:geolocator/geolocator.dart';
 
 import '../../core/auth/auth_controller.dart';
 import '../../core/auth/auth_state.dart';
-
 import '../../core/theme/esoko_tokens.dart';
 import '../../core/widgets/widgets.dart';
 import 'category_style.dart';
@@ -19,15 +18,17 @@ final storesProvider = FutureProvider.autoDispose<List<StoreSummary>>((
   return ref.watch(storesRepositoryProvider).directory();
 });
 
-typedef _NearbyQuery = ({double? lat, double? lng, String q});
-
 /// GET /v1/me/saved-stores — "My spots". Only ever watched from a
 /// signed-in context (see _MySpotsSection and StoreDetailScreen's save
 /// star) — a guest never fires this request in the first place, rather
 /// than firing it and swallowing the resulting 401.
-final savedStoresProvider = FutureProvider.autoDispose<List<SavedStore>>((ref) {
+final savedStoresProvider = FutureProvider.autoDispose<List<SavedStore>>((
+  ref,
+) {
   return ref.watch(storesRepositoryProvider).savedStores();
 });
+
+typedef _NearbyQuery = ({double? lat, double? lng, String q});
 
 /// GET /v1/stores/nearby — covers both click-and-collect discovery
 /// modes: pass lat/lng for a GPS-sorted "near me" search, or just q for
@@ -203,7 +204,10 @@ class _StoreListScreenState extends ConsumerState<StoreListScreen> {
                               'Sorted by distance',
                               style: TextStyle(
                                 fontSize: 12,
-                                color: EsokoColors.text2,
+                                color: Theme.of(context)
+                                    .textTheme
+                                    .bodySmall
+                                    ?.color,
                               ),
                             ),
                         ],
@@ -318,14 +322,19 @@ class _StoreCard extends StatelessWidget {
                     ].join(' · '),
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
-                    style: TextStyle(color: EsokoColors.text2, fontSize: 12),
+                    style: TextStyle(
+                      color: Theme.of(context).textTheme.bodySmall?.color,
+                      fontSize: 12,
+                    ),
                   )
                 else if (store.tagline != null)
                   Text(
                     store.tagline!,
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
-                    style: TextStyle(color: EsokoColors.text2),
+                    style: TextStyle(
+                      color: Theme.of(context).textTheme.bodySmall?.color,
+                    ),
                   ),
                 const SizedBox(height: EsokoSpacing.s2),
                 if (store.primaryCategory != null)
@@ -337,7 +346,10 @@ class _StoreCard extends StatelessWidget {
               ],
             ),
           ),
-          Icon(Icons.chevron_right_rounded, color: EsokoColors.text3),
+          Icon(
+            Icons.chevron_right_rounded,
+            color: Theme.of(context).textTheme.bodySmall?.color,
+          ),
         ],
       ),
     );
@@ -374,10 +386,7 @@ class _MySpotsSection extends ConsumerWidget {
           for (var i = 0; i < list.length; i++)
             Padding(
               padding: const EdgeInsets.only(bottom: EsokoSpacing.s3),
-              child: EsokoStagger(
-                index: i,
-                child: _StoreCard(store: list[i]),
-              ),
+              child: EsokoStagger(index: i, child: _StoreCard(store: list[i])),
             ),
         ],
       ),

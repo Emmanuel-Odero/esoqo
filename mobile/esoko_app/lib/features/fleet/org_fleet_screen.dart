@@ -8,6 +8,7 @@ import '../../core/widgets/widgets.dart';
 import 'fleet_models.dart';
 import 'fleet_providers.dart';
 import 'fleet_repository.dart';
+import 'org_staff_screen.dart';
 
 /// Manager console for one transport company — every section is gated
 /// server-side (trip.read / fleet.read / crew.read / vehicle.track),
@@ -58,6 +59,17 @@ class OrgFleetScreen extends ConsumerWidget {
                   EsokoSectionHeader(title: 'Crew', subtitle: 'Drivers and touts.'),
                   const SizedBox(height: EsokoSpacing.s2),
                   _crew(ref),
+                  const SizedBox(height: EsokoSpacing.s5),
+                  EsokoListTile(
+                    title: 'Staff & duty roles',
+                    subtitle: 'Who can act as scanner, manager or crew for this org — suspend or reinstate access.',
+                    icon: Icons.badge_outlined,
+                    iconColor: EsokoColors.blue,
+                    iconBackground: EsokoColors.blueTint,
+                    onTap: () => Navigator.of(context).push(
+                      MaterialPageRoute(builder: (_) => OrgStaffScreen(orgId: orgId, orgName: orgName)),
+                    ),
+                  ),
                 ],
               ),
             ),

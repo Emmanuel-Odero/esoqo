@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/auth/auth_controller.dart';
 import '../../core/auth/auth_state.dart';
+import '../../core/auth/org_context_state.dart';
 import '../../core/auth/scan_access.dart';
 import '../../core/theme/esoko_tokens.dart';
 import '../../core/widgets/widgets.dart';
@@ -81,6 +82,12 @@ class HomeHubScreen extends ConsumerWidget {
   /// a non-empty group list means they're an active group member.
   /// Ties resolve toward whichever signal is most time-pressured first
   /// (crew > runs-a-company > group member > plain subject default).
+  /// A live, OTP-activated org-staff context (see core/auth/
+  /// org_context_state.dart and docs/proposals/
+  /// esoko-unified-crew-identity.md) is folded into the same "crew" tier
+  /// at the call site — someone switched on for a shift is exactly as
+  /// time-pressured as an AGENT crew session, regardless of which
+  /// mechanism granted it.
   /// Parcels has no signal of its own yet — it sits last in every
   /// order until a "parcels I'm holding" count is worth surfacing here.
   static List<String> _order({
@@ -89,15 +96,43 @@ class HomeHubScreen extends ConsumerWidget {
     required bool inGroup,
   }) {
     if (crew) {
-      return const ['Transport', 'Bills', 'Shopping', 'Tickets', 'Groups', 'Parcels'];
+      return const [
+        'Transport',
+        'Bills',
+        'Shopping',
+        'Tickets',
+        'Groups',
+        'Parcels',
+      ];
     }
     if (runsOrg) {
-      return const ['Transport', 'Tickets', 'Bills', 'Shopping', 'Groups', 'Parcels'];
+      return const [
+        'Transport',
+        'Tickets',
+        'Bills',
+        'Shopping',
+        'Groups',
+        'Parcels',
+      ];
     }
     if (inGroup) {
-      return const ['Groups', 'Bills', 'Transport', 'Shopping', 'Tickets', 'Parcels'];
+      return const [
+        'Groups',
+        'Bills',
+        'Transport',
+        'Shopping',
+        'Tickets',
+        'Parcels',
+      ];
     }
-    return const ['Transport', 'Bills', 'Shopping', 'Tickets', 'Groups', 'Parcels'];
+    return const [
+      'Transport',
+      'Bills',
+      'Shopping',
+      'Tickets',
+      'Groups',
+      'Parcels',
+    ];
   }
 
   @override
@@ -106,6 +141,7 @@ class HomeHubScreen extends ConsumerWidget {
     final profile = auth is AuthSignedIn ? auth.profile : null;
     final name = profile?.displayName;
     final canVerify = canVerifyFare(profile);
+    final onOrgDuty = ref.watch(orgContextControllerProvider).active != null;
 
     // Best-effort, non-blocking: the hub renders the default order
     // immediately and only re-sorts once these resolve, rather than
@@ -116,7 +152,11 @@ class HomeHubScreen extends ConsumerWidget {
     final inGroup = auth is AuthSignedIn
         ? (ref.watch(myGroupsProvider).valueOrNull?.isNotEmpty ?? false)
         : false;
-    final order = _order(crew: canVerify, runsOrg: runsOrg, inGroup: inGroup);
+    final order = _order(
+      crew: canVerify || onOrgDuty,
+      runsOrg: runsOrg,
+      inGroup: inGroup,
+    );
 
     return ListView(
       padding: const EdgeInsets.fromLTRB(

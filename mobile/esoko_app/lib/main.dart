@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:quick_actions/quick_actions.dart';
 
-import 'core/auth/agent_session.dart';
 import 'core/auth/auth_controller.dart';
 import 'core/auth/auth_state.dart';
 import 'core/router.dart';
@@ -58,6 +57,11 @@ class _EsokoAppState extends ConsumerState<EsokoApp> {
       debugShowCheckedModeBanner: false,
       theme: EsokoTheme.light(),
       darkTheme: EsokoTheme.dark(),
+      // Explicit, not left to MaterialApp's own default (which happens
+      // to also be .system) — this is the one line that actually wires
+      // "follow the phone's appearance setting" together with the two
+      // themes above; it deserves to be visible here, not implicit.
+      themeMode: ThemeMode.system,
       routerConfig: router,
       builder: (context, child) => _SplashGate(child: child),
     );
@@ -75,8 +79,7 @@ class _SplashGate extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final auth = ref.watch(authControllerProvider);
-    final agent = ref.watch(agentSessionControllerProvider);
-    if (auth is AuthUnknown || agent is AgentUnknown) {
+    if (auth is AuthUnknown) {
       return const Scaffold(body: Center(child: CircularProgressIndicator()));
     }
     return child ?? const SizedBox.shrink();

@@ -68,7 +68,12 @@ class _CreateGroupScreenState extends ConsumerState<CreateGroupScreen> {
                 children: [
                   Text(
                     "You'll be the group's chairperson and its first signer.",
-                    style: TextStyle(color: EsokoColors.text2),
+                    // Theme-derived, not the fixed EsokoColors.text2 —
+                    // this sits on the scaffold background, which
+                    // switches between paper and darkSurface.
+                    style: TextStyle(
+                      color: Theme.of(context).textTheme.bodySmall?.color,
+                    ),
                   ),
                   const SizedBox(height: EsokoSpacing.s5),
                   EsokoDropdown<String>(

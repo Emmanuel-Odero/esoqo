@@ -181,7 +181,12 @@ class StoreDetailScreen extends ConsumerWidget {
                           ),
                           child: Text(
                             s.tagline!,
-                            style: TextStyle(color: EsokoColors.text2),
+                            style: TextStyle(
+                              color: Theme.of(context)
+                                  .textTheme
+                                  .bodySmall
+                                  ?.color,
+                            ),
                           ),
                         ),
                       if (s.neighborhood != null)
@@ -194,13 +199,21 @@ class StoreDetailScreen extends ConsumerWidget {
                               Icon(
                                 Icons.place_outlined,
                                 size: 16,
-                                color: EsokoColors.text2,
+                                color: Theme.of(context)
+                                    .textTheme
+                                    .bodySmall
+                                    ?.color,
                               ),
                               const SizedBox(width: 6),
                               Expanded(
                                 child: Text(
                                   s.neighborhood!,
-                                  style: TextStyle(color: EsokoColors.text2),
+                                  style: TextStyle(
+                                    color: Theme.of(context)
+                                        .textTheme
+                                        .bodySmall
+                                        ?.color,
+                                  ),
                                 ),
                               ),
                             ],
@@ -243,7 +256,9 @@ class StoreDetailScreen extends ConsumerWidget {
                         const SizedBox(height: EsokoSpacing.s4),
                         Text(
                           s.aboutUs!,
-                          style: TextStyle(color: EsokoColors.text2),
+                          style: TextStyle(
+                            color: Theme.of(context).textTheme.bodySmall?.color,
+                          ),
                         ),
                       ],
                       usual.when(
@@ -481,12 +496,17 @@ class _ProductCard extends StatelessWidget {
                           color: Colors.white.withValues(alpha: 0.92),
                           borderRadius: BorderRadius.circular(EsokoRadius.pill),
                         ),
+                        // Explicit dark colour, not the ambient default
+                        // — that default flips to near-white in dark
+                        // mode, which would sit on this *always-white*
+                        // pill (see the comment above) as white-on-white.
                         child: const Text(
                           'SERVICE',
                           style: TextStyle(
                             fontSize: 9,
                             fontWeight: FontWeight.w800,
                             letterSpacing: 0.4,
+                            color: EsokoColors.navy,
                           ),
                         ),
                       ),
@@ -539,7 +559,7 @@ class _ProductCard extends StatelessWidget {
                         '${product.stockQty} in stock',
                         style: TextStyle(
                           fontSize: 11,
-                          color: EsokoColors.text3,
+                          color: Theme.of(context).textTheme.bodySmall?.color,
                         ),
                       ),
                     ),

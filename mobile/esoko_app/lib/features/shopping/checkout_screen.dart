@@ -177,7 +177,7 @@ class _CheckoutScreenState extends ConsumerState<CheckoutScreen> {
           children: [
             _orderSummary(),
             const SizedBox(height: EsokoSpacing.s4),
-            EsokoPaymentMethodToggle<String>(
+            EsokoSegmentedToggle<String>(
               selected: _method,
               onChanged: (m) => setState(() => _method = m),
               options: const [

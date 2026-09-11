@@ -71,12 +71,13 @@ class BillsListScreen extends ConsumerWidget {
                           EsokoColors.amber,
                         ),
                       if (upcoming.isNotEmpty)
-                        _section(
-                          context,
-                          'Upcoming',
-                          upcoming,
-                          EsokoColors.text2,
-                        ),
+                        // No accent colour — "Upcoming" isn't a status
+                        // like Overdue/Due soon, so it gets the
+                        // heading's normal (theme-adaptive) colour
+                        // instead of a fixed EsokoColors.text2, which
+                        // only had readable contrast against a dark
+                        // background, not light paper.
+                        _section(context, 'Upcoming', upcoming, null),
                     ],
                     const SliverToBoxAdapter(
                       child: SizedBox(height: EsokoSpacing.s9),
@@ -104,7 +105,7 @@ class BillsListScreen extends ConsumerWidget {
     BuildContext context,
     String title,
     List<BillRow> bills,
-    Color accent,
+    Color? accent,
   ) {
     return SliverMainAxisGroup(
       slivers: [

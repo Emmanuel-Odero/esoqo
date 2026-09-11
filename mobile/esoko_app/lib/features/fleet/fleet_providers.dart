@@ -50,3 +50,11 @@ final collectionsProvider = FutureProvider.autoDispose
     .family<CollectionsSummary, String>(
       (ref, tripId) => ref.watch(fleetRepositoryProvider).collections(tripId),
     );
+
+/// GET /v1/ticketorgs/:id/staff-grants (authenticated,
+/// ticketorgstaff.write) — the unified-crew-identity roster (docs/
+/// proposals/esoko-unified-crew-identity.md).
+final orgStaffGrantsProvider = FutureProvider.autoDispose
+    .family<List<OrgStaffGrant>, String>(
+      (ref, orgId) => ref.watch(fleetRepositoryProvider).staffGrants(orgId),
+    );

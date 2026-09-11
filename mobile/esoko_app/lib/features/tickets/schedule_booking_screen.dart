@@ -511,7 +511,7 @@ class _ScheduleBookingScreenState extends ConsumerState<ScheduleBookingScreen> {
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         if (canInstallment) ...[
-          EsokoPaymentMethodToggle<bool>(
+          EsokoSegmentedToggle<bool>(
             selected: _payInInstallments,
             onChanged: (v) => setState(() => _payInInstallments = v),
             options: const [
@@ -537,7 +537,7 @@ class _ScheduleBookingScreenState extends ConsumerState<ScheduleBookingScreen> {
             icon: Icons.payments_outlined,
           ),
         ] else ...[
-          EsokoPaymentMethodToggle<String>(
+          EsokoSegmentedToggle<String>(
             selected: _method,
             onChanged: (m) => setState(() => _method = m),
             options: const [('MPESA_STK', 'M-Pesa'), ('VOUCHER', 'Voucher')],

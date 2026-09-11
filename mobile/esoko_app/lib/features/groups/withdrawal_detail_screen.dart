@@ -68,76 +68,107 @@ class _WithdrawalDetailScreenState
         value: withdrawal,
         onRetry: () =>
             ref.invalidate(withdrawalDetailProvider(widget.withdrawalId)),
-        data: (context, w) => Center(
-          child: ConstrainedBox(
-            constraints: const BoxConstraints(maxWidth: 840),
-            child: ListView(
-              padding: const EdgeInsets.all(EsokoSpacing.s5),
-              children: [
-                EsokoAmountHeader(
-                  label: 'Withdrawal',
-                  amountKes: w.amountKes,
-                  detail: '${w.purpose}\nto ${w.payeeName}',
-                  trailing: Chip(label: Text(w.status)),
-                ),
-                const SizedBox(height: EsokoSpacing.s5),
-                if (w.status == 'PENDING_SIGNATURES') ...[
-                  Row(
-                    children: [
-                      Icon(Icons.schedule, size: 16, color: EsokoColors.text2),
-                      const SizedBox(width: 6),
-                      Expanded(
-                        child: Text(
-                          'Can execute from ${_formatDate(w.standbyOpensAt)}, once ${w.requiredSigners} signer${w.requiredSigners == 1 ? '' : 's'} approve.',
-                          style: TextStyle(
-                            color: EsokoColors.text2,
-                            fontSize: 12,
+        data: (context, w) {
+          final scheme = Theme.of(context).colorScheme;
+          // Theme-derived, not a fixed EsokoColors.text2 — this screen's
+          // body sits directly on the scaffold background, which is
+          // EsokoColors.paper in light mode and darkSurface in dark; a
+          // hardcoded light-tuned grey loses contrast on the latter.
+          final muted = Theme.of(context).textTheme.bodySmall?.color;
+          final (statusColor, statusIcon) = switch (w.status) {
+            'EXECUTED' => (scheme.primary, EsokoIconName.checkCircle),
+            'REJECTED' || 'EXPIRED' => (scheme.error, EsokoIconName.ban),
+            _ => (EsokoColors.amber, EsokoIconName.clock),
+          };
+          final quorumDone = w.requiredSigners == 0
+              ? 1.0
+              : (w.approveCount / w.requiredSigners).clamp(0.0, 1.0);
+          return Center(
+            child: ConstrainedBox(
+              constraints: const BoxConstraints(maxWidth: 840),
+              child: ListView(
+                padding: const EdgeInsets.all(EsokoSpacing.s5),
+                children: [
+                  EsokoAmountHeader(
+                    label: 'Withdrawal',
+                    amountKes: w.amountKes,
+                    detail: '${w.purpose}\nto ${w.payeeName}',
+                    trailing: EsokoStatusPill(
+                      label: w.status,
+                      color: statusColor,
+                      esokoIcon: statusIcon,
+                    ),
+                  ),
+                  const SizedBox(height: EsokoSpacing.s5),
+                  if (w.status == 'PENDING_SIGNATURES') ...[
+                    Row(
+                      children: [
+                        EsokoIcon(EsokoIconName.clock, size: 16, color: muted),
+                        const SizedBox(width: 6),
+                        Expanded(
+                          child: Text(
+                            'Can execute from ${_formatDate(w.standbyOpensAt)}, once ${w.requiredSigners} signer${w.requiredSigners == 1 ? '' : 's'} approve.',
+                            style: TextStyle(color: muted, fontSize: 12),
                           ),
                         ),
+                      ],
+                    ),
+                    const SizedBox(height: EsokoSpacing.s4),
+                  ],
+                  Row(
+                    children: [
+                      Text(
+                        '${w.approveCount} of ${w.requiredSigners} signed',
+                        style: Theme.of(context).textTheme.titleMedium,
                       ),
                     ],
+                  ),
+                  const SizedBox(height: EsokoSpacing.s2),
+                  ClipRRect(
+                    borderRadius: BorderRadius.circular(EsokoRadius.pill),
+                    child: LinearProgressIndicator(
+                      value: quorumDone,
+                      minHeight: 6,
+                      backgroundColor: EsokoColors.line,
+                      valueColor: AlwaysStoppedAnimation(statusColor),
+                    ),
                   ),
                   const SizedBox(height: EsokoSpacing.s4),
-                ],
-                Text(
-                  '${w.approveCount} of ${w.requiredSigners} signed',
-                  style: Theme.of(context).textTheme.titleMedium,
-                ),
-                const SizedBox(height: EsokoSpacing.s2),
-                for (var i = 0; i < w.signatures.length; i++)
-                  EsokoStagger(
-                    index: i,
-                    child: _SignatureTile(signature: w.signatures[i]),
-                  ),
-                if (_error != null) EsokoFormError(message: _error!),
-                if (w.canSign) ...[
-                  const SizedBox(height: EsokoSpacing.s5),
-                  Row(
-                    children: [
-                      Expanded(
-                        child: OutlinedButton(
-                          onPressed: _signing ? null : () => _sign('REJECT'),
-                          style: OutlinedButton.styleFrom(
-                            foregroundColor: EsokoColors.red,
+                  for (var i = 0; i < w.signatures.length; i++)
+                    EsokoStagger(
+                      index: i,
+                      child: _SignatureTile(signature: w.signatures[i]),
+                    ),
+                  if (_error != null) EsokoFormError(message: _error!),
+                  if (w.canSign) ...[
+                    const SizedBox(height: EsokoSpacing.s5),
+                    Row(
+                      children: [
+                        Expanded(
+                          child: OutlinedButton(
+                            onPressed: _signing ? null : () => _sign('REJECT'),
+                            style: OutlinedButton.styleFrom(
+                              foregroundColor: EsokoColors.red,
+                            ),
+                            child: const Text('Reject'),
                           ),
-                          child: const Text('Reject'),
                         ),
-                      ),
-                      const SizedBox(width: EsokoSpacing.s3),
-                      Expanded(
-                        child: EsokoLoadingButton(
-                          label: 'Approve',
-                          loading: _signing,
-                          onPressed: () => _sign('APPROVE'),
+                        const SizedBox(width: EsokoSpacing.s3),
+                        Expanded(
+                          child: EsokoLoadingButton(
+                            label: 'Approve',
+                            loading: _signing,
+                            onPressed: () => _sign('APPROVE'),
+                          ),
                         ),
-                      ),
-                    ],
-                  ),
+                      ],
+                    ),
+                  ],
                 ],
-              ],
+              ),
             ),
-          ),
-        ),
+          );
+        },
       ),
     );
   }

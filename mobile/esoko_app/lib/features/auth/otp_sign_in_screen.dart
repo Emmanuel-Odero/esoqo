@@ -42,7 +42,9 @@ class _OtpSignInScreenState extends ConsumerState<OtpSignInScreen> {
       _error = null;
     });
     try {
-      await ref.read(authControllerProvider.notifier).requestOtp(
+      await ref
+          .read(authControllerProvider.notifier)
+          .requestOtp(
             msisdn: _msisdnController.text.trim(),
             purpose: 'SIGN_IN',
           );
@@ -60,7 +62,9 @@ class _OtpSignInScreenState extends ConsumerState<OtpSignInScreen> {
       _error = null;
     });
     try {
-      final hasPinSet = await ref.read(authControllerProvider.notifier).verifyOtpAndSignIn(
+      final hasPinSet = await ref
+          .read(authControllerProvider.notifier)
+          .verifyOtpAndSignIn(
             msisdn: _msisdnController.text.trim(),
             code: _codeController.text.trim(),
           );
@@ -81,7 +85,9 @@ class _OtpSignInScreenState extends ConsumerState<OtpSignInScreen> {
       _error = null;
     });
     try {
-      await ref.read(authControllerProvider.notifier).setPin(_pinController.text.trim());
+      await ref
+          .read(authControllerProvider.notifier)
+          .setPin(_pinController.text.trim());
       // Already signed in from _verifyCode — router takes it from here.
     } on ApiException catch (e) {
       setState(() => _error = e.message);
@@ -92,40 +98,31 @@ class _OtpSignInScreenState extends ConsumerState<OtpSignInScreen> {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: const EsokoAppBar(title: 'Sign in with a code'),
-      body: SafeArea(
-        child: Center(
-          child: ConstrainedBox(
-            constraints: const BoxConstraints(maxWidth: 420),
-            child: SingleChildScrollView(
-              padding: const EdgeInsets.all(EsokoSpacing.s6),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  ..._stepFields(),
-                  if (_error != null) EsokoFormError(message: _error!),
-                  const SizedBox(height: EsokoSpacing.s4),
-                  EsokoLoadingButton(
-                    label: _primaryLabel,
-                    loading: _loading,
-                    onPressed: _onPrimaryAction,
-                  ),
-                ],
-              ),
-            ),
-          ),
+    return EsokoAuthScaffold(
+      title: 'Sign in with a code',
+      subtitle: 'We\'ll text you a one-time code — no PIN needed.',
+      onBack: () => Navigator.of(context).pop(),
+      children: [
+        ..._stepFields(),
+        if (_error != null) EsokoFormError(message: _error!),
+        const SizedBox(height: EsokoSpacing.s4),
+        EsokoLoadingButton(
+          label: _primaryLabel,
+          loading: _loading,
+          onPressed: _onPrimaryAction,
         ),
-      ),
+      ],
     );
   }
 
   List<Widget> _stepFields() {
     switch (_step) {
       case _Step.phone:
+        // No repeated "enter your phone number" line here — the header
+        // subtitle above already says why this screen exists; a second
+        // sentence just restating "type your phone number" once you
+        // can already see the phone number field would be noise.
         return [
-          const Text('Enter your phone number and we\'ll send you a code.'),
-          const SizedBox(height: EsokoSpacing.s4),
           EsokoFormField(
             controller: _msisdnController,
             label: 'Phone number',
@@ -152,7 +149,9 @@ class _OtpSignInScreenState extends ConsumerState<OtpSignInScreen> {
         ];
       case _Step.setPin:
         return [
-          const Text('You\'re signed in. Set a PIN now for faster sign-in next time.'),
+          const Text(
+            'You\'re signed in. Set a PIN now for faster sign-in next time.',
+          ),
           const SizedBox(height: EsokoSpacing.s4),
           EsokoFormField(
             controller: _pinController,
@@ -169,14 +168,14 @@ class _OtpSignInScreenState extends ConsumerState<OtpSignInScreen> {
   }
 
   String get _primaryLabel => switch (_step) {
-        _Step.phone => 'Send code',
-        _Step.code => 'Verify',
-        _Step.setPin => 'Save PIN',
-      };
+    _Step.phone => 'Send code',
+    _Step.code => 'Verify',
+    _Step.setPin => 'Save PIN',
+  };
 
   Future<void> _onPrimaryAction() => switch (_step) {
-        _Step.phone => _requestCode(),
-        _Step.code => _verifyCode(),
-        _Step.setPin => _savePin(),
-      };
+    _Step.phone => _requestCode(),
+    _Step.code => _verifyCode(),
+    _Step.setPin => _savePin(),
+  };
 }

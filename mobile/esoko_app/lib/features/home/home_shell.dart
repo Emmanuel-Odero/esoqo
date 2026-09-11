@@ -1,8 +1,12 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../core/auth/org_context_state.dart';
+import '../../core/theme/esoko_tokens.dart';
 import '../../core/widgets/widgets.dart';
 import '../scan/scan_sheet.dart';
 import 'home_hub_screen.dart';
+import 'org_duty_switcher_screen.dart';
 import 'profile_screen.dart';
 
 /// Bottom nav — Home, Scan, Settings. Scan is an action, not a screen:
@@ -12,14 +16,14 @@ import 'profile_screen.dart';
 /// An IndexedStack keeps both tabs mounted so switching never refetches or
 /// loses scroll position (each tab's FutureProvider.autoDispose watchers
 /// stay alive across a switch).
-class HomeShell extends StatefulWidget {
+class HomeShell extends ConsumerStatefulWidget {
   const HomeShell({super.key});
 
   @override
-  State<HomeShell> createState() => _HomeShellState();
+  ConsumerState<HomeShell> createState() => _HomeShellState();
 }
 
-class _HomeShellState extends State<HomeShell> {
+class _HomeShellState extends ConsumerState<HomeShell> {
   int _index = 0;
 
   static const _tabs = [
@@ -52,10 +56,33 @@ class _HomeShellState extends State<HomeShell> {
 
   @override
   Widget build(BuildContext context) {
+    // Which identity is active changes the bar itself, not just a small
+    // icon inside it — blue (institution) + the org's own name/role
+    // while switched on, the ordinary navy brand mark otherwise. Only
+    // applies on the Home tab; Settings keeps its plain "Settings" bar
+    // regardless, since account switching lives on Home.
+    final active = ref.watch(orgContextControllerProvider).active;
+    final onDuty = _index == 0 && active != null;
+
     return Scaffold(
       appBar: EsokoAppBar(
         title: _title(),
-        titleWidget: _index == 0 ? const EsokoBrandLockup() : null,
+        backgroundColor: onDuty ? EsokoColors.blue : null,
+        titleWidget: _index == 0
+            ? (onDuty
+                ? Text(
+                    '${active.orgName} · ${active.role}',
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w700, fontSize: 17),
+                  )
+                // Default size (30) reads too small against this app
+                // bar's own 19px title style elsewhere — this is the
+                // one place the brand mark itself is the "title", so
+                // it gets more room than other call sites keep for a
+                // leading/inline lockup.
+                : const EsokoBrandLockup(size: 40))
+            : null,
+        actions: _index == 0 ? const [HatsIconButton(), SizedBox(width: EsokoSpacing.s2)] : null,
       ),
       body: SafeArea(
         child: IndexedStack(index: _screenIndex(), children: _screens),

@@ -18,11 +18,19 @@ enum _Stage { trips, pay, waiting, done, failed }
 /// GET /v1/fares/:id. Public: works signed out (guest fare, same as
 /// guest booking), pre-fills identity when signed in.
 class FarePayScreen extends ConsumerStatefulWidget {
-  const FarePayScreen({super.key, this.initialSlug = '', this.resolvedTripId = '', this.resolvedPlate = '', this.tripQrCode = ''});
+  const FarePayScreen({
+    super.key,
+    this.initialSlug = '',
+    this.resolvedTripId = '',
+    this.resolvedPlate = '',
+    this.tripQrCode = '',
+  });
   final String initialSlug;
+
   /// Set when arriving from ScanBusScreen (GET /v1/trips/resolve).
   final String resolvedTripId;
   final String resolvedPlate;
+
   /// Raw scanned payload (esoko://t?... or BUS-XXXXXX) — sent back as
   /// tripQrCode so Go re-verifies the HMAC instead of trusting tripId.
   final String tripQrCode;
@@ -117,7 +125,8 @@ class _FarePayScreenState extends ConsumerState<FarePayScreen> {
   Future<void> _pay() async {
     final trip = _trip;
     if (trip == null) return;
-    if (_nameController.text.trim().isEmpty || _msisdnController.text.trim().isEmpty) {
+    if (_nameController.text.trim().isEmpty ||
+        _msisdnController.text.trim().isEmpty) {
       setState(() {
         _stageState = _Stage.failed;
         _error = 'Enter your name and M-Pesa number';
@@ -129,7 +138,9 @@ class _FarePayScreenState extends ConsumerState<FarePayScreen> {
       _error = null;
     });
     try {
-      final placed = await ref.read(fleetRepositoryProvider).payFare(
+      final placed = await ref
+          .read(fleetRepositoryProvider)
+          .payFare(
             trip: trip,
             stage: _stage,
             tripQrCode: _tripQrCode,
@@ -205,10 +216,7 @@ class _FarePayScreenState extends ConsumerState<FarePayScreen> {
                 duration: reduced ? Duration.zero : EsokoMotion.medium,
                 switchInCurve: EsokoMotion.easeOut,
                 switchOutCurve: EsokoMotion.easeOut,
-                child: KeyedSubtree(
-                  key: ValueKey(_stageState),
-                  child: _body(),
-                ),
+                child: KeyedSubtree(key: ValueKey(_stageState), child: _body()),
               ),
             ),
           ),
@@ -272,12 +280,17 @@ class _FarePayScreenState extends ConsumerState<FarePayScreen> {
         ),
         const SizedBox(height: EsokoSpacing.s4),
         if (_slug.isEmpty)
-          const Text('Enter a transport company code above to see its buses on the road right now.')
+          const Text(
+            'Enter a transport company code above to see its buses on the road right now.',
+          )
         else
           _tripList(),
         if (_trip != null) ...[
           const SizedBox(height: EsokoSpacing.s5),
-          Text('Pay for ${_trip!.vehiclePlate}', style: Theme.of(context).textTheme.titleMedium),
+          Text(
+            'Pay for ${_trip!.vehiclePlate}',
+            style: Theme.of(context).textTheme.titleMedium,
+          ),
           const SizedBox(height: EsokoSpacing.s3),
           if (_trip!.stages.isNotEmpty)
             EsokoDropdown<FareStage>(
@@ -285,18 +298,18 @@ class _FarePayScreenState extends ConsumerState<FarePayScreen> {
               initialValue: _stage,
               items: [
                 for (final s in _trip!.stages)
-                  DropdownMenuItem(value: s, child: Text('${s.name} — KES ${s.fareKes}')),
+                  DropdownMenuItem(
+                    value: s,
+                    child: Text('${s.name} — KES ${s.fareKes}'),
+                  ),
               ],
               onChanged: (s) => setState(() => _stage = s),
             ),
           const SizedBox(height: EsokoSpacing.s3),
-          EsokoPaymentMethodToggle<String>(
+          EsokoSegmentedToggle<String>(
             selected: _method,
             onChanged: (m) => setState(() => _method = m),
-            options: const [
-              ('MPESA_STK', 'M-Pesa'),
-              ('VOUCHER', 'Voucher'),
-            ],
+            options: const [('MPESA_STK', 'M-Pesa'), ('VOUCHER', 'Voucher')],
           ),
           const SizedBox(height: EsokoSpacing.s3),
           EsokoPayerFields(
@@ -332,7 +345,9 @@ class _FarePayScreenState extends ConsumerState<FarePayScreen> {
                   EsokoHaptics.tap();
                   setState(() {
                     _trip = list[i];
-                    _stage = list[i].stages.isNotEmpty ? list[i].stages.last : null;
+                    _stage = list[i].stages.isNotEmpty
+                        ? list[i].stages.last
+                        : null;
                     _stageState = _Stage.pay;
                   });
                 },
@@ -360,12 +375,19 @@ class _TripTile extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
+    final isDark = Theme.of(context).brightness == Brightness.dark;
     return EsokoListTile(
       title: trip.vehiclePlate,
       subtitle: trip.routeName ?? 'On duty',
       icon: Icons.directions_bus_outlined,
-      iconColor: selected ? EsokoColors.green : null,
-      iconBackground: selected ? EsokoColors.greenTint : null,
+      iconColor: selected ? scheme.primary : null,
+      // An alpha wash of the theme's own primary, not the fixed
+      // EsokoColors.greenTint — that pastel only ever read right as a
+      // *light* highlight; in dark mode it was a light patch glued onto
+      // an otherwise-dark row.
+      iconBackground: selected
+          ? scheme.primary.withValues(alpha: isDark ? 0.22 : 0.14)
+          : null,
       trailing: selected
           ? Icon(Icons.check_circle, color: scheme.primary, size: 22)
           : const Icon(Icons.chevron_right_rounded),

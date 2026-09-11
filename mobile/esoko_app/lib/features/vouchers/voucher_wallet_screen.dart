@@ -171,7 +171,12 @@ class _VoucherWalletScreenState extends ConsumerState<VoucherWalletScreen> {
                 ),
                 if (_msg != null) ...[
                   const SizedBox(height: EsokoSpacing.s2),
-                  Text(_msg!, style: const TextStyle(color: EsokoColors.text2)),
+                  Text(
+                    _msg!,
+                    style: TextStyle(
+                      color: Theme.of(context).textTheme.bodySmall?.color,
+                    ),
+                  ),
                 ],
                 const SizedBox(height: EsokoSpacing.s5),
                 const EsokoSectionHeader(

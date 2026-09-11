@@ -75,31 +75,9 @@ class _RequestWithdrawalScreenState
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
-                  Container(
-                    padding: const EdgeInsets.all(EsokoSpacing.s4),
-                    decoration: BoxDecoration(
-                      color: EsokoColors.amberTint,
-                      borderRadius: BorderRadius.circular(EsokoRadius.md),
-                    ),
-                    child: Row(
-                      children: [
-                        Icon(
-                          Icons.info_outline,
-                          color: EsokoColors.amber,
-                          size: 20,
-                        ),
-                        const SizedBox(width: EsokoSpacing.s2),
-                        Expanded(
-                          child: Text(
-                            "This goes to every signer for approval and won't move money until the group's standby window passes.",
-                            style: TextStyle(
-                              fontSize: 12,
-                              color: EsokoColors.text2,
-                            ),
-                          ),
-                        ),
-                      ],
-                    ),
+                  const EsokoInlineNotice(
+                    icon: EsokoIconName.info,
+                    message: "This goes to every signer for approval and won't move money until the group's standby window passes.",
                   ),
                   const SizedBox(height: EsokoSpacing.s5),
                   EsokoFormField(
@@ -139,7 +117,7 @@ class _RequestWithdrawalScreenState
                   const SizedBox(height: EsokoSpacing.s5),
                   EsokoLoadingButton(
                     label: 'Broadcast to signers',
-                    icon: Icons.send_outlined,
+                    esokoIcon: EsokoIconName.send,
                     loading: _loading,
                     onPressed: _submit,
                   ),

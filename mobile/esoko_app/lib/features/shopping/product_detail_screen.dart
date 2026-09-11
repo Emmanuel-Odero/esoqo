@@ -102,13 +102,19 @@ class _ProductDetailScreenState extends ConsumerState<ProductDetailScreen> {
                                       Icon(
                                         Icons.storefront_outlined,
                                         size: 14,
-                                        color: EsokoColors.text3,
+                                        color: Theme.of(context)
+                                            .textTheme
+                                            .bodySmall
+                                            ?.color,
                                       ),
                                       const SizedBox(width: 4),
                                       Text(
                                         p.storeName,
                                         style: TextStyle(
-                                          color: EsokoColors.text2,
+                                          color: Theme.of(context)
+                                              .textTheme
+                                              .bodySmall
+                                              ?.color,
                                         ),
                                       ),
                                     ],
@@ -142,7 +148,10 @@ class _ProductDetailScreenState extends ConsumerState<ProductDetailScreen> {
                           Text(
                             p.description!,
                             style: TextStyle(
-                              color: EsokoColors.text2,
+                              color: Theme.of(context)
+                                  .textTheme
+                                  .bodySmall
+                                  ?.color,
                               height: 1.5,
                             ),
                           ),
@@ -310,7 +319,10 @@ class _BuyBar extends StatelessWidget {
                 children: [
                   Text(
                     'Total',
-                    style: TextStyle(fontSize: 11, color: EsokoColors.text3),
+                    style: TextStyle(
+                      fontSize: 11,
+                      color: Theme.of(context).textTheme.bodySmall?.color,
+                    ),
                   ),
                   EsokoAmountText(
                     totalLabel.replaceFirst('KES ', ''),

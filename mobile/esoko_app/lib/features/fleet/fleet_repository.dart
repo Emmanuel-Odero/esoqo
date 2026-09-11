@@ -65,6 +65,50 @@ class FleetRepository {
         .toList();
   }
 
+  /// GET /v1/ticketorgs/:id/staff-grants — the unified-crew-identity
+  /// roster (docs/proposals/esoko-unified-crew-identity.md): every
+  /// Party who can act as staff for this org, and their live
+  /// active/suspended status.
+  Future<List<OrgStaffGrant>> staffGrants(String orgId) async {
+    final res = await _api.get('/v1/ticketorgs/$orgId/staff-grants');
+    final list = (res['staff'] as List?) ?? const [];
+    return list
+        .map((e) => OrgStaffGrant.fromJson(e as Map<String, dynamic>))
+        .toList();
+  }
+
+  /// POST /v1/ticketorgs/:id/staff-grants — onboards a crew member who
+  /// already holds an Esoko account (looked up by phone number). 404s
+  /// with NO_ACCOUNT if they don't — there is no account-less path, by
+  /// design (see the proposal's "crew must have accounts" decision).
+  Future<void> createStaffGrant({
+    required String orgId,
+    required String msisdn,
+    required String role,
+    String? crewMemberId,
+  }) {
+    return _api.post('/v1/ticketorgs/$orgId/staff-grants', {
+      'msisdn': msisdn,
+      'role': role,
+      if (crewMemberId != null) 'crewMemberId': crewMemberId,
+    });
+  }
+
+  /// POST /v1/ticketorgs/:id/staff-grants/:partyId/suspend — kills the
+  /// person's live activation immediately and marks the grant suspended;
+  /// reinstating is a separate, deliberate step (see [reinstateStaffGrant]).
+  Future<void> suspendStaffGrant(String orgId, String partyId) {
+    return _api.post('/v1/ticketorgs/$orgId/staff-grants/$partyId/suspend');
+  }
+
+  /// POST /v1/ticketorgs/:id/staff-grants/:partyId/reinstate — only
+  /// clears the suspension; the person still needs a fresh OTP to
+  /// actually switch back on duty (core-go never auto-restores a live
+  /// activation here).
+  Future<void> reinstateStaffGrant(String orgId, String partyId) {
+    return _api.post('/v1/ticketorgs/$orgId/staff-grants/$partyId/reinstate');
+  }
+
   /// GET /v1/fleet/orgs/:orgId/positions — latest ping per vehicle.
   Future<List<VehiclePosition>> positions(String orgId) async {
     final res = await _api.get('/v1/fleet/orgs/$orgId/positions');

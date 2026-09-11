@@ -56,7 +56,10 @@ class MyGroupsScreen extends ConsumerWidget {
                                       builder: (_) => const JoinGroupScreen(),
                                     ),
                                   ),
-                                  icon: const Icon(Icons.search, size: 18),
+                                  icon: const EsokoIcon(
+                                    EsokoIconName.search,
+                                    size: 18,
+                                  ),
                                   label: const Text('Join a group'),
                                 ),
                               ),
@@ -68,7 +71,10 @@ class MyGroupsScreen extends ConsumerWidget {
                                       builder: (_) => const CreateGroupScreen(),
                                     ),
                                   ),
-                                  icon: const Icon(Icons.add, size: 18),
+                                  icon: const EsokoIcon(
+                                    EsokoIconName.plus,
+                                    size: 18,
+                                  ),
                                   label: const Text('Start a group'),
                                 ),
                               ),
@@ -81,7 +87,7 @@ class MyGroupsScreen extends ConsumerWidget {
                   if (list.isEmpty)
                     const SliverToBoxAdapter(
                       child: EsokoEmptyState(
-                        icon: Icons.groups_outlined,
+                        esokoIcon: EsokoIconName.users,
                         message: 'No groups yet — start or join one above.',
                       ),
                     )
@@ -105,7 +111,30 @@ class MyGroupsScreen extends ConsumerWidget {
                               title: g.displayName,
                               subtitle:
                                   '${_titleCase(g.kind)} · ${g.memberCount} member${g.memberCount == 1 ? '' : 's'}',
-                              initial: g.displayName,
+                              // Hero'd so the initial-avatar carries over
+                              // into GroupDetailScreen's app bar — same
+                              // contract as listing-hero/store-hero.
+                              leading: Hero(
+                                tag: 'group-hero-${g.id}',
+                                child: CircleAvatar(
+                                  backgroundColor: Theme.of(context)
+                                      .colorScheme
+                                      .primaryContainer,
+                                  child: Text(
+                                    g.displayName.isEmpty
+                                        ? '?'
+                                        : g.displayName
+                                              .substring(0, 1)
+                                              .toUpperCase(),
+                                    style: TextStyle(
+                                      color: Theme.of(context)
+                                          .colorScheme
+                                          .primary,
+                                      fontWeight: FontWeight.w700,
+                                    ),
+                                  ),
+                                ),
+                              ),
                               onTap: () => Navigator.of(context).push(
                                 MaterialPageRoute(
                                   builder: (_) =>

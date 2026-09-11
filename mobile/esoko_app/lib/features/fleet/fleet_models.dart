@@ -122,6 +122,41 @@ class CrewMember {
   final bool active;
 }
 
+/// One row on the org's staff roster — GET /v1/ticketorgs/:id/staff-grants
+/// (docs/proposals/esoko-unified-crew-identity.md). Distinct from
+/// [CrewMember]: a staff grant is a *person's account's* permission to
+/// act as SCANNER/MANAGER/ADMIN/CREW for this org; a CrewMember is the
+/// driver/conductor roster entry a CREW grant may (or may not yet) be
+/// linked to — see [crewMemberId].
+class OrgStaffGrant {
+  const OrgStaffGrant({
+    required this.partyId,
+    required this.partyName,
+    required this.msisdn,
+    required this.role,
+    required this.status,
+    this.crewMemberId,
+  });
+
+  factory OrgStaffGrant.fromJson(Map<String, dynamic> json) => OrgStaffGrant(
+        partyId: json['partyId'] as String,
+        partyName: json['partyName'] as String? ?? 'Staff member',
+        msisdn: json['msisdn'] as String?,
+        role: json['role'] as String,
+        status: json['status'] as String,
+        crewMemberId: json['crewMemberId'] as String?,
+      );
+
+  final String partyId;
+  final String partyName;
+  final String? msisdn;
+  final String role; // SCANNER | MANAGER | ADMIN | CREW
+  final String status; // active | suspended
+  final String? crewMemberId;
+
+  bool get suspended => status == 'suspended';
+}
+
 /// Full duty-trip row for managers — includes crew names (authenticated
 /// read, see dbx.ListTrips).
 class FleetTrip {

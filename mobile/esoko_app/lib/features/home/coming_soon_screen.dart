@@ -20,20 +20,26 @@ class ComingSoonScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    // Theme-derived, not the fixed EsokoColors.text2/.text3 — this
+    // sits directly on the scaffold background, which flips between
+    // paper and darkSurface.
+    final theme = Theme.of(context);
+    final iconColor = theme.textTheme.bodyMedium?.color?.withValues(alpha: 0.7);
+    final textColor = theme.textTheme.bodySmall?.color;
     return Center(
       child: Padding(
         padding: const EdgeInsets.all(EsokoSpacing.s6),
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Icon(icon, size: 48, color: EsokoColors.text3),
+            Icon(icon, size: 48, color: iconColor),
             const SizedBox(height: EsokoSpacing.s4),
-            Text(title, style: Theme.of(context).textTheme.titleLarge),
+            Text(title, style: theme.textTheme.titleLarge),
             const SizedBox(height: EsokoSpacing.s2),
             Text(
               description,
               textAlign: TextAlign.center,
-              style: TextStyle(color: EsokoColors.text2),
+              style: TextStyle(color: textColor),
             ),
           ],
         ),
