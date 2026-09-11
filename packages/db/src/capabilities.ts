@@ -252,6 +252,15 @@ export const CAPABILITY_CATALOGUE = [
     ['warehouse.read', "View a godown's storage agreements and stock"],
     ['warehouse.write', "Manage a godown's storage agreements, stock, and billing"],
   ]},
+  { group: 'Parcels', items: [
+    ['parcels.read', 'View parcels, including draft/pending-payment bookings'],
+    ['parcels.assign', 'Assign a collector and schedule a parcel pickup'],
+    ['parcels.cancel', 'Cancel a draft or not-yet-picked-up parcel'],
+    ['parcels.refund', "Mark a cancelled parcel's M-Pesa payment as refunded"],
+    ['parcels.edit', 'Correct a draft or booked parcel\'s receiver, destination or notes'],
+    ['parcels.couriers.manage', 'Onboard, vet, suspend and reinstate parcel couriers'],
+    ['parcel_pricing.write', 'Change parcel pricing, zones and bargain rules'],
+  ]},
 ] as const;
 
 export const ALL_CAPABILITIES: Capability[] =

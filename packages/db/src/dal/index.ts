@@ -32,6 +32,7 @@ export * from './cashier';
 export * from './shift';
 export * from './receipt';
 export * from './pricing';
+export * from './parcel-pricing';
 export * from './auth-credential';
 export * from './jamii-page';
 export * from './jamii-page-block';

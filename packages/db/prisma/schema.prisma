@@ -108,6 +108,9 @@ model Party {
   supportTicketsRaised   SupportTicket[]
   bills                  Bill[]
   savedStores            SavedStore[]
+  orgStaffGrants         OrgStaffGrant[] @relation("OrgStaffGrantParty")
+  orgStaffGrantsGranted  OrgStaffGrant[] @relation("OrgStaffGrantGrantedBy")
+  orgStaffGrantsSuspended OrgStaffGrant[] @relation("OrgStaffGrantSuspendedBy")
 
   // ── Group treasury ──
   meetingsCalled          Meeting[]                    @relation("MeetingCalledBy")
@@ -576,6 +579,11 @@ enum AccountKind {
   /// raised toward a bill's targetKes, held here until the bill is
   /// marked paid (auto or manual). See dbx.ConfirmBillContributionByCheckoutID.
   BILL_FUNDING
+  /// Single platform-pooled account (no partyId), same shape as
+  /// VOUCHER_FLOAT — parcels are an Esoko-run service, not a
+  /// per-merchant marketplace, so there's no per-store revenue split
+  /// to make. See dbx.ConfirmParcelPaymentByCheckoutID.
+  PARCEL_REVENUE
 }
 
 model Account {
@@ -1827,8 +1835,9 @@ model StaffUser {
   createdAt      DateTime  @default(now())
   updatedAt      DateTime  @updatedAt
 
-  approvals           PaymentApproval[]
-  pricingRulesUpdated PricingRule[]
+  approvals             PaymentApproval[]
+  pricingRulesUpdated   PricingRule[]
+  parcelPricingRulesSet ParcelPricingRule[] @relation("parcelPricingRulesSet")
 
   @@index([active, rolePreset])
   @@map("staff_user")
@@ -3004,18 +3013,57 @@ model BillPayment {
 
 // ─────────────────────────── PARCELS ─────────────────────────────
 // A physical object's custody chain: who booked it, who's holding it
-// right now, and the append-only log of every hand-off in between —
-// same "append, never mutate" shape WithdrawalSignature already uses
-// for a fact that must stay provable after the fact. No payment here
-// (unlike every checkout-shaped model elsewhere in this schema) — this
-// is logistics tracking, not a marketplace; the parcel's own fee, if
-// any, is arranged off-app between sender and courier for v1.
+// right now, and the append-only log of every hand-off in between.
+// Now priced (see ParcelPricingRule) and payable in-app — a booking
+// starts as DRAFT_PENDING_PAYMENT and only becomes real (BOOKED) once
+// paidAt is set, same "don't count it until it's paid" rule
+// StoreOrder's PENDING_PAYMENT status already follows.
 
 enum ParcelStatus {
+  DRAFT_PENDING_PAYMENT
   BOOKED
   PICKED_UP
   IN_TRANSIT
   DELIVERED
+  /// Set only by an admin (see dbx.CancelParcel) — a draft abandoned
+  /// before payment, or a paid-but-not-yet-picked-up parcel the sender
+  /// asked to stop. Never reachable once a courier has scanned it into
+  /// custody (PICKED_UP or later) — physically already in motion.
+  CANCELLED
+}
+
+enum ParcelType {
+  ENVELOPE_DOCUMENT
+  SMALL
+  MEDIUM
+  LARGE
+  HEAVY_OVERSIZE
+}
+
+enum ParcelTransportMode {
+  BODA
+  TUKTUK
+  VAN
+  TRUCK
+  /// Added for ParcelCourier.vehicleType reuse (see that model's own
+  /// comment) — a courier's actual vehicle, not just a dispatch
+  /// suggestion, so the enum needed the two modes a pricing bracket
+  /// never suggested but a real courier still rides.
+  BICYCLE
+  ON_FOOT
+}
+
+/// PENDING_VETTING → ACTIVE is a staff decision (see
+/// dbx.SetCourierStatus) — no document/KYC pipeline exists yet (see the
+/// plan's explicit deferral), so vetting today is a manual staff call,
+/// not an automated check. SUSPENDED/REJECTED are both staff-only
+/// terminal-ish states; SUSPENDED can be reinstated back to ACTIVE,
+/// REJECTED cannot (that person books elsewhere).
+enum ParcelCourierStatus {
+  PENDING_VETTING
+  ACTIVE
+  SUSPENDED
+  REJECTED
 }
 
 model Parcel {
@@ -3039,19 +3087,103 @@ model Parcel {
   senderMsisdn     String
   receiverName     String
   receiverMsisdn   String
-  /// Free text, not geocoded — same reasoning as Bill.accountRef: a
-  /// human-readable description ("Westlands, opposite Sarit") is more
-  /// useful to a courier on a boda than a lat/lng this app doesn't
-  /// collect.
+  /// Free text, always kept — a human-readable description ("Westlands,
+  /// opposite Sarit") is what a courier actually reads. originZoneId/
+  /// destinationZoneId below are the pricing/dispatch signal now that
+  /// ParcelZone exists; both are optional and independent of this text
+  /// so an older client (or a sender who skips zone selection) still
+  /// books fine, just without distance-aware pricing or a map pin.
   originLabel      String
   destinationLabel String
   notes            String?
+
+  /// Optional — drives distance-based pricing (see dbx.SetParcelPrice)
+  /// and the live dispatch map. Null on any booking that didn't pick a
+  /// zone, which degrades gracefully to the flat weight-bracket price.
+  originZoneId      String? @db.Uuid
+  destinationZoneId String? @db.Uuid
+
+  /// Computed once, the moment the parcel becomes BOOKED, from the
+  /// matched ParcelPricingRule.slaHours — a promise made at payment
+  /// time, never silently redefined by a later admin rate-card edit
+  /// (same "copy it in, don't leave it derived" reasoning transportMode
+  /// above already follows). Null for a parcel type with no SLA
+  /// configured yet.
+  slaDeadlineAt DateTime?
+
+  /// A staff member flagging a parcel that's stuck or otherwise needs
+  /// attention mid-transit — see dbx.FlagParcelException. Distinct from
+  /// cancellation: an exception doesn't stop the parcel, it's a "keep
+  /// an eye on this one" note.
+  exceptionNote             String?
+  exceptionFlaggedAt        DateTime?
+  exceptionFlaggedByStaffId String?   @db.Uuid
+
+  /// Drives the ParcelPricingRule lookup at booking time — the size/
+  /// weight bracket the sender declares, not a courier's later guess.
+  parcelType    ParcelType
+  weightKg      Decimal?             @db.Decimal(6, 2)
+  fragile       Boolean              @default(false)
+  /// Copied from the matched ParcelPricingRule at booking time so a
+  /// later admin price-rule edit never reshuffles an in-flight parcel.
+  transportMode ParcelTransportMode?
+
+  /// The agreed price — either the pricing rule's standard point or a
+  /// bargainReason-backed offer, always re-validated server-side
+  /// against ParcelPricingRule (see dbx's price-selection function),
+  /// never trusted verbatim from the client.
+  priceKes      Decimal? @db.Decimal(10, 2)
+  bargainReason String?
+
+  /// MPESA_STK | ESOKO_POINTS — same two-method shape store checkout's
+  /// PaymentMethod already follows, minus CASH_ON_DELIVERY (a parcel's
+  /// fee is the courier dispatch cost, always collected up front).
+  paymentMethod            String?
+  paymentCheckoutRequestId String?
+  /// Set only for an MPESA_STK payment, once confirmed (see
+  /// dbx.ConfirmParcelPaymentByCheckoutID) — same "quote the actual
+  /// transaction back to the payer" role fare_payment/booking_payment's
+  /// own mpesaReceiptCode columns already play. Null for ESOKO_POINTS.
+  mpesaReceiptCode String?
+  paidAt           DateTime?
+
+  /// Who's coming to collect it and when, set by an admin scheduling a
+  /// pickup — distinct from currentHolderPartyId, which only changes
+  /// once that person actually scans the code (see ScanHandoff).
+  assignedCollectorPartyId String?   @db.Uuid
+  collectionScheduledAt    DateTime?
+  collectionNote           String?
 
   /// Whoever currently has the parcel in hand — null only before the
   /// first hand-off (still with the sender). Updated on every
   /// ParcelHandoff row, never edited independently of one.
   currentHolderPartyId String? @db.Uuid
-  status               ParcelStatus @default(BOOKED)
+  status               ParcelStatus @default(DRAFT_PENDING_PAYMENT)
+
+  /// Set together, only by dbx.CancelParcel. cancelledByStaffId is a
+  /// StaffUser id (an admin action), never a Party — a sender can't
+  /// self-cancel today, only ask an admin to.
+  cancelledAt        DateTime?
+  cancellationReason String?
+  cancelledByStaffId String?   @db.Uuid
+
+  /// NOT_APPLICABLE | PENDING | REFUNDED — set by dbx.CancelParcel
+  /// (REFUNDED immediately for an auto-reversed ESOKO_POINTS payment,
+  /// PENDING for an MPESA_STK one with no automatic reversal available)
+  /// and closed out by dbx.MarkParcelRefunded once an admin has
+  /// actually processed the M-Pesa refund out of band.
+  refundStatus      String    @default("NOT_APPLICABLE")
+  refundedAt        DateTime?
+  refundedByStaffId String?   @db.Uuid
+
+  /// Set once by dbx.ConfirmParcelReceipt — the receiver (no Esoko
+  /// account required) proving control of their registered number via
+  /// OTP after the parcel has been marked DELIVERED, then rating the
+  /// condition it arrived in. Distinct from deliveredAt, which is the
+  /// courier's own claim of drop-off.
+  receiptConfirmedAt     DateTime?
+  receiptConditionRating Int?
+  receiptFeedback        String?
 
   createdAt   DateTime  @default(now())
   deliveredAt DateTime?
@@ -3060,21 +3192,157 @@ model Parcel {
 
   @@index([currentHolderPartyId, status])
   @@index([senderPartyId, createdAt])
+  @@index([status])
   @@map("parcel")
+}
+
+/// Admin-owned pricing config, one row per ParcelType — same
+/// "admin-editable rate card" shape PricingRule already follows for
+/// platform fees, scoped to parcel dispatch pricing. Read by Go's dbx
+/// at booking time via raw SQL (shared-table, different-writer split,
+/// same as Parcel itself: Prisma holds DDL, this table's rows are
+/// written by the admin app via Prisma, read-only from core-go).
+model ParcelPricingRule {
+  id          String     @id @default(uuid()) @db.Uuid
+  parcelType  ParcelType @unique
+  /// Free-text display line, e.g. "0.5kg to 2.2kg" — kept alongside
+  /// minWeightKg/maxWeightKg below rather than derived from them, so an
+  /// admin can still write "Up to 0.5kg" instead of "0kg to 0.5kg".
+  weightLabel String
+
+  /// The actual bracket boundaries, inclusive — what BookParcel's
+  /// weight-to-parcelType matching (mobile) and any future server-side
+  /// check runs against. weightLabel is prose for a human; these two
+  /// are the numbers a program can compare.
+  minWeightKg Decimal @db.Decimal(6, 2)
+  maxWeightKg Decimal @db.Decimal(6, 2)
+
+  minKes Decimal @db.Decimal(10, 2)
+  maxKes Decimal @db.Decimal(10, 2)
+
+  /// How far below minKes a reason-backed offer may land, e.g. 5–15%.
+  bargainMinPct Decimal @db.Decimal(5, 2)
+  bargainMaxPct Decimal @db.Decimal(5, 2)
+  /// [{ "reason": "Not fragile", "extraDiscountPct": 5 }, ...] — each
+  /// reason's extraDiscountPct is added on top of bargainMinPct, capped
+  /// at bargainMaxPct, and is what the mobile app's "make an offer"
+  /// step must show — never a free-typed number.
+  bargainReasons Json @default("[]")
+
+  suggestedTransportMode ParcelTransportMode
+
+  /// How many hours after payment this parcel type is promised
+  /// delivered by — copied onto Parcel.slaDeadlineAt at BOOKED time
+  /// (see dbx.ConfirmParcelPaymentByCheckoutID/PayParcelWithPoints).
+  /// Null means no SLA is tracked for this type yet — same
+  /// "unconfigured means opt-out, not zero" convention bargainReasons'
+  /// empty-array default already follows.
+  slaHours Int?
+
+  updatedAt   DateTime   @updatedAt
+  updatedById String?    @db.Uuid
+  updatedBy   StaffUser? @relation("parcelPricingRulesSet", fields: [updatedById], references: [id])
+
+  @@map("parcel_pricing_rule")
 }
 
 /// One custody transfer, append-only — scanning a parcel's code is
 /// what creates this row (see dbx.ScanHandoff), never a direct edit to
 /// Parcel.currentHolderPartyId.
 model ParcelHandoff {
-  id        String   @id @default(uuid()) @db.Uuid
-  parcelId  String   @db.Uuid
-  parcel    Parcel   @relation(fields: [parcelId], references: [id], onDelete: Cascade)
-  toPartyId String   @db.Uuid
-  createdAt DateTime @default(now())
+  id       String @id @default(uuid()) @db.Uuid
+  parcelId String @db.Uuid
+  parcel   Parcel @relation(fields: [parcelId], references: [id], onDelete: Cascade)
+  /// Null on the very first pickup (meaning "from the sender"), the
+  /// previous currentHolderPartyId otherwise — added so the chain of
+  /// custody can actually be reconstructed (see dbx.ListParcelHandoffs)
+  /// instead of only being inferable from row order.
+  fromPartyId String?  @db.Uuid
+  toPartyId   String   @db.Uuid
+  createdAt   DateTime @default(now())
 
   @@index([parcelId, createdAt])
   @@map("parcel_handoff")
+}
+
+/// The formal courier role — distinct from "any Party", which is all
+/// ScanHandoff/AssignParcelCollector used to require (see the security
+/// fix in dbx.ScanHandoff's own comment, and CollectorLite's comment on
+/// why collector search used to just be "an existing Party with a
+/// phone"). A Party becomes a courier once staff onboard them here;
+/// PENDING_VETTING until a staff member flips them ACTIVE (see
+/// dbx.SetCourierStatus) — no document/KYC upload pipeline yet, see the
+/// plan's explicit deferral note.
+model ParcelCourier {
+  id      String @id @default(uuid()) @db.Uuid
+  partyId String @unique @db.Uuid
+
+  vehicleType ParcelTransportMode
+  status      ParcelCourierStatus @default(PENDING_VETTING)
+  vettingNote String?
+
+  activatedAt DateTime?
+  suspendedAt DateTime?
+
+  createdAt   DateTime @default(now())
+  updatedById String?  @db.Uuid
+
+  pings ParcelCourierPing[]
+
+  @@index([status])
+  @@map("parcel_courier")
+}
+
+/// Admin-managed named hub with coordinates — the pricing/dispatch
+/// signal a parcel's free-text origin/destination label was never
+/// meant to be (see Parcel.originLabel's own comment). Deliberately a
+/// small admin-curated list of real hubs, not free-typed geocoding —
+/// there's no geocoding provider anywhere in this codebase, and a
+/// curated zone list is what "zone-based pricing" (as opposed to
+/// continuous lat/lng distance) actually means.
+model ParcelZone {
+  id     String  @id @default(uuid()) @db.Uuid
+  name   String  @unique
+  lat    Decimal @db.Decimal(9, 6)
+  lng    Decimal @db.Decimal(9, 6)
+  active Boolean @default(true)
+
+  createdAt DateTime @default(now())
+
+  @@map("parcel_zone")
+}
+
+/// One global admin-editable rate — deliberately not a per-zone-pair
+/// rate matrix (see the plan's explicit deferral note); every zone-to-
+/// zone price is this same perKmKes times the haversine distance
+/// between the two zones (see dbx.HaversineKm), floored at
+/// minChargeableKm so a same-zone delivery isn't priced as free.
+model ParcelDistanceRate {
+  id             String  @id @default(uuid()) @db.Uuid
+  perKmKes       Decimal @db.Decimal(10, 2)
+  minChargeableKm Decimal @db.Decimal(6, 2) @default(1)
+
+  updatedAt   DateTime @updatedAt
+  updatedById String?  @db.Uuid
+
+  @@map("parcel_distance_rate")
+}
+
+/// A courier's own location, posted while their "Nearby jobs" tab is
+/// open (see handlers_parcels.go's pings handler) — mirrors
+/// VehiclePing's exact shape (fleet.go/schema.prisma's Trip vertical)
+/// for the same reason: one row per ping, latest-per-courier read via
+/// DISTINCT ON, no separate "current position" column to keep in sync.
+model ParcelCourierPing {
+  id              String        @id @default(uuid()) @db.Uuid
+  courierPartyId  String        @db.Uuid
+  courier         ParcelCourier @relation(fields: [courierPartyId], references: [partyId], onDelete: Cascade)
+  lat             Decimal       @db.Decimal(10, 7)
+  lng             Decimal       @db.Decimal(10, 7)
+  at              DateTime      @default(now())
+
+  @@index([courierPartyId, at])
+  @@map("parcel_courier_ping")
 }
 
 // ─────────────────────────── TICKETING ──────────────────────────
@@ -3144,6 +3412,7 @@ model TicketOrg {
   crew        CrewMember[]
   shortRoutes ShortRoute[]
   trips       Trip[]
+  staffGrants OrgStaffGrant[]
 
   @@index([enterpriseId])
   @@index([status])
@@ -3236,6 +3505,60 @@ model TicketOrgStaff {
   @@index([orgId])
   @@index([crewMemberId])
   @@map("ticket_org_staff")
+}
+
+/// Unified crew identity (docs/proposals/esoko-unified-crew-identity.md):
+/// makes `party` *eligible* to act as SCANNER/MANAGER/ADMIN/CREW staff
+/// for `org`, replacing the AGENT-only TicketOrgStaff PIN login for
+/// anyone who has (or is required to have) their own Esoko account. A
+/// grant alone authorises nothing — every org-scoped request also needs
+/// a live org_context_activation, so requireCapability() never grants
+/// these capabilities just because the grant row says "active".
+///
+/// status transitions:
+///   active -> suspended    (an owner/manager kills the grant AND any
+///                           live activation, immediately)
+///   suspended -> active    (an owner/manager explicitly reinstates —
+///                           never automatic, never self-service)
+/// Reinstating does not restore a live activation; the next
+/// activate-context attempt still requires OTP, same as any other
+/// lapsed activation.
+model OrgStaffGrant {
+  id    String    @id @default(uuid()) @db.Uuid
+  orgId String    @db.Uuid
+  org   TicketOrg @relation(fields: [orgId], references: [id], onDelete: Cascade)
+
+  partyId String @db.Uuid
+  party   Party  @relation("OrgStaffGrantParty", fields: [partyId], references: [id], onDelete: Cascade)
+
+  /// SCANNER | MANAGER | ADMIN | CREW — same bundle names as
+  /// authsvc.TicketingStaffCapabilities; activation looks the role's
+  /// capability list up from that same catalogue, never a copy here.
+  role   String
+  status String @default("active")
+
+  grantedBy   String @db.Uuid
+  grantedByParty Party @relation("OrgStaffGrantGrantedBy", fields: [grantedBy], references: [id], onDelete: Restrict)
+
+  suspendedBy      String? @db.Uuid
+  suspendedByParty Party?  @relation("OrgStaffGrantSuspendedBy", fields: [suspendedBy], references: [id], onDelete: SetNull)
+  suspendedAt      DateTime?
+
+  /// Set only for role = CREW — same purpose as TicketOrgStaff's own
+  /// crewMemberId (see that model's doc comment): which CrewMember
+  /// (driver/conductor) this grant actually is, so trip.close:own can
+  /// resolve it. A CREW grant with no link can still declare cash but
+  /// never close a trip — fails closed, same as the AGENT path.
+  crewMemberId String?     @db.Uuid
+  crewMember   CrewMember? @relation(fields: [crewMemberId], references: [id], onDelete: SetNull)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([orgId, partyId])
+  @@index([partyId])
+  @@index([crewMemberId])
+  @@map("org_staff_grant")
 }
 
 /// Events vertical: where. Optional on Listing — a purely virtual
@@ -3697,6 +4020,9 @@ model CrewMember {
   declarations   CollectionDeclaration[]
   /// PIN logins linked to this person — see TicketOrgStaff.crewMemberId.
   staffLogins    TicketOrgStaff[]
+  /// SUBJECT staff grants linked to this person — see
+  /// OrgStaffGrant.crewMemberId, the AGENT-retirement replacement.
+  staffGrants    OrgStaffGrant[]
 
   @@index([orgId, role, active])
   @@map("crew_member")
