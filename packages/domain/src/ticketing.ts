@@ -135,7 +135,8 @@ export const createBookingSchema = z.object({
   buyerName: nameSchema,
   buyerMsisdn: msisdnSchema,
   buyerEmail: z.string().trim().toLowerCase().email('Enter a valid email address').max(160).optional().or(z.literal('')),
-  paymentMethod: z.enum(['MPESA_STK', 'CASH']),
+  paymentMethod: z.enum(['MPESA_STK', 'CASH', 'VOUCHER']),
+  voucherId: z.string().uuid().optional(),
   lines: z.array(bookingLineSchema).min(1, 'Add at least one ticket').max(20),
   /** Omitted = pay the full amount now (the default). `INSTALLMENT`
    *  opens a "lipia pole pole" plan — see dal/ticketing.ts createBooking. */
@@ -162,3 +163,22 @@ export const checkInTicketSchema = z.object({
   code: z.string().trim().min(4).max(40),
 });
 export type CheckInTicketInput = z.infer<typeof checkInTicketSchema>;
+
+// ── Fare verify + trip QR + vouchers (thin UI validation; Go enforces) ──
+
+export const verifyFareSchema = z.object({
+  code: z.string().trim().min(4).max(200),
+  scopeTripId: z.string().uuid().optional(),
+});
+export type VerifyFareInput = z.infer<typeof verifyFareSchema>;
+
+export const voucherPurposeSchema = z.enum(['FARE', 'RENT', 'SHOPPING', 'GENERAL']);
+
+export const createVoucherSchema = z.object({
+  label: z.string().trim().max(80).optional(),
+  purpose: voucherPurposeSchema,
+  amountKes: z.number().positive().max(1000000).optional(),
+  recipientMsisdn: z.string().trim().max(20).optional(),
+  loadMethod: z.enum(['MPESA_STK', 'LOYALTY']).optional(),
+});
+export type CreateVoucherInput = z.infer<typeof createVoucherSchema>;

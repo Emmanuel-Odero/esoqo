@@ -1,22 +1,45 @@
 import type { Metadata } from 'next';
 import { notFound } from 'next/navigation';
 import { Icon } from '@esoko/ui';
-import { getBookingForBalancePayment } from '@esoko/db';
 import { BalancePayForm } from './BalancePayForm';
+
+const CORE_GO_URL = process.env.CORE_GO_API_URL ?? 'http://localhost:4100';
 
 export const dynamic = 'force-dynamic';
 export const metadata: Metadata = { title: 'Pay your trip balance' };
 
+interface GoBalanceView {
+  id: string;
+  status: string;
+  buyerName: string;
+  buyerMsisdn: string;
+  totalKes: number;
+  amountPaidKes: number;
+  balanceKes: number;
+  balanceDueBy: string | null;
+  departAt: string;
+  listingTitle: string;
+  orgName: string;
+  where: string | null;
+  payments: { amountKes: number; kind: string; status: string; confirmedAt: string | null }[];
+}
+
 /**
  * Public "lipia pole pole" balance page. The booking id in the URL is
  * the secret — same trust model as the checkout status poll for a guest
- * booking (getBookingForBalancePayment). A buyer bookmarks this from the
- * checkout success screen or the SMS, and comes back to pay the balance
- * in whatever amounts they like before the trip.
+ * booking (GET /v1/bookings/:id/balance-view). A buyer bookmarks this
+ * from the checkout success screen or the SMS, and comes back to pay
+ * the balance in whatever amounts they like before the trip.
  */
 export default async function BookingBalancePage({ params }: { params: Promise<{ bookingId: string }> }) {
   const { bookingId } = await params;
-  const b = await getBookingForBalancePayment(bookingId).catch(() => null);
+  const b: GoBalanceView | null = await fetch(
+    `${CORE_GO_URL}/v1/bookings/${encodeURIComponent(bookingId)}/balance-view`,
+    { cache: 'no-store' },
+  )
+    .then((r) => (r.ok ? r.json() : null))
+    .then((j) => (j?.booking ?? null) as GoBalanceView | null)
+    .catch(() => null);
   if (!b) notFound();
 
   const paidPct = b.totalKes > 0 ? Math.min(100, Math.round((b.amountPaidKes / b.totalKes) * 100)) : 0;

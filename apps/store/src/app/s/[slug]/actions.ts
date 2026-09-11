@@ -26,6 +26,14 @@ export async function checkout(raw: unknown): Promise<ActionResult<{ orderId: st
     return { ok: false, error: parsed.error.issues[0]?.message ?? 'Check your details and try again' };
   }
 
+  // Voucher settlement lives in core-go (ledger + purpose lock) — the
+  // TS storefront DAL has no voucher writer by design. Guard before the
+  // DAL call so its StoreOrderPaymentMethod type (pre-regen) never sees
+  // the new variant.
+  if (parsed.data.paymentMethod === 'VOUCHER') {
+    return { ok: false, error: 'Voucher checkout runs in the Esoko app for now — pick M-Pesa here.' };
+  }
+
   const ctx = await getCtx();
 
   let order;

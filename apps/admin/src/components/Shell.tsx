@@ -32,6 +32,14 @@ const NAV: { group: string; items: [string, IconName, string, string][] }[] = [
   ]},
   { group: 'Ticketing', items: [
     ['/ticketing', 'tag', 'Organisers', 'ticketorg.read'],
+    ['/fraud', 'shield', 'Fare fraud', 'ticketorg.read'],
+    ['/vouchers', 'coins', 'Vouchers', 'ticketorg.read'],
+  ]},
+  { group: 'Parcels', items: [
+    ['/parcels', 'basket', 'Parcels', 'parcels.read'],
+    ['/parcels/live', 'trend-up', 'Live dispatch', 'parcels.read'],
+    ['/parcels/couriers', 'users', 'Couriers', 'parcels.couriers.manage'],
+    ['/parcels/pricing', 'coins', 'Pricing', 'parcel_pricing.write'],
   ]},
   { group: 'Our Jamii', items: [
     ['/jamii-overview', 'chart', 'Overview', 'jamii-page.read'],

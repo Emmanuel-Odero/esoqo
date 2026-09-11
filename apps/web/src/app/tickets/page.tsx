@@ -1,13 +1,27 @@
 import type { Metadata } from 'next';
 import { Icon } from '@esoko/ui';
-import { listPublicListings } from '@esoko/db';
 import { TicketBrowser } from './TicketBrowser';
+
+const CORE_GO_URL = process.env.CORE_GO_API_URL ?? 'http://localhost:4100';
 
 export const metadata: Metadata = {
   title: 'Events & transport',
   description: 'Events, tours and transport companies selling tickets on Esoko — browse and book directly.',
 };
 export const dynamic = 'force-dynamic';
+
+interface GoListingSummary {
+  ID: string;
+  Slug: string;
+  Title: string;
+  Vertical: string;
+  VenueOrRouteLabel?: string | null;
+  FromPriceKES?: string | null;
+  OrgName?: string | null;
+  VenueCounty?: string | null;
+  NextDepartAt?: string | null;
+  ScheduleCount: number;
+}
 
 /**
  * The ticketing equivalent of /discover — a public directory, same job
@@ -16,9 +30,13 @@ export const dynamic = 'force-dynamic';
  * /discover (which links out to apps/store for checkout), booking
  * itself also happens here — localhost:3000/tickets/[slug] — since
  * 3001 is reserved for signed-in dashboards, not public storefronts.
+ * Directory reads come from core-go (GET /v1/listings).
  */
 export default async function TicketsDirectory() {
-  const listings = await listPublicListings();
+  const listings: GoListingSummary[] = await fetch(`${CORE_GO_URL}/v1/listings?limit=100`, { cache: 'no-store' })
+    .then((r) => (r.ok ? r.json() : { listings: [] }))
+    .then((j) => (j?.listings ?? []) as GoListingSummary[])
+    .catch(() => []);
 
   return (
     <>
@@ -47,16 +65,16 @@ export default async function TicketsDirectory() {
           ) : (
             <TicketBrowser
               listings={listings.map((l) => ({
-                slug: l.slug,
-                title: l.title,
-                orgName: l.org.name,
-                vertical: l.org.vertical,
-                where: l.venue?.name ?? (l.route ? `${l.route.originName} → ${l.route.destinationName}` : null),
-                county: l.venue?.county ?? null,
-                fromKes: l.ticketClasses.length ? Math.min(...l.ticketClasses.map((c) => Number(c.priceKes))) : null,
-                nextDepartAt: l.schedules[0]?.departAt.toISOString() ?? null,
-                scheduleCount: l.schedules.length,
-                detailUrl: `/tickets/${l.slug}`,
+                slug: l.Slug,
+                title: l.Title,
+                orgName: l.OrgName ?? '',
+                vertical: l.Vertical as 'EVENTS' | 'TRANSPORT',
+                where: l.VenueOrRouteLabel ?? null,
+                county: l.VenueCounty ?? null,
+                fromKes: l.FromPriceKES != null ? Number(l.FromPriceKES) : null,
+                nextDepartAt: l.NextDepartAt ?? null,
+                scheduleCount: l.ScheduleCount,
+                detailUrl: `/tickets/${l.Slug}`,
               }))}
             />
           )}

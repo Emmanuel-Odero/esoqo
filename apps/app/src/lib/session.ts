@@ -39,10 +39,14 @@ export async function getTicketStaffCtx(): Promise<Ctx | null> {
   return ctx?.actorType === 'AGENT' && ctx.ticketOrgId ? ctx : null;
 }
 
-export async function createTicketStaffSession(input: {
-  staffId: string; orgId: string; capabilities: string[];
-}): Promise<void> {
-  const token = await createSession(
+export async function createTicketStaffSession(
+  input: { staffId: string; orgId: string; capabilities: string[] },
+  existingToken?: string,
+): Promise<void> {
+  // Sessions are minted by core-go (POST /v1/ticket-staff/sign-in) —
+  // this only plants the bearer cookie. The legacy self-mint branch
+  // remains for tests/local tooling, never the sign-in flow.
+  const token = existingToken ?? await createSession(
     { actorType: 'AGENT', actorId: input.staffId, ticketOrgId: input.orgId, capabilities: input.capabilities },
     TICKET_STAFF_SESSION_TTL,
   );

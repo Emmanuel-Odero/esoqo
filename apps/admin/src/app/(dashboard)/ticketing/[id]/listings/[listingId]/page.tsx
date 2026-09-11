@@ -1,10 +1,11 @@
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import { Icon } from '@esoko/ui';
-import { getTicketOrg, getOrgListing, can, AuthorisationError, TicketingError } from '@esoko/db';
+import { can, AuthorisationError } from '@esoko/db';
 import { requireStaff } from '@/lib/session';
 import { OrgTabs } from '../../OrgTabs';
 import { ListingDetailPanel } from './ListingDetailPanel';
+import { adminGo, adminOrgForCan, type GoConsoleOrg, type GoConsoleListing } from '@/lib/go-ticketing';
 
 export const dynamic = 'force-dynamic';
 
@@ -18,17 +19,19 @@ export default async function ListingDetailPage({
   const ctx = await requireStaff();
   const { id, listingId } = await params;
 
-  const org = await getTicketOrg(ctx, id).catch((e) => {
-    if (e instanceof AuthorisationError) notFound();
-    throw e;
-  });
+  const org = await adminGo<{ org: GoConsoleOrg }>(`/v1/ticketorgs/${id}`)
+    .then((r) => adminOrgForCan(r.org))
+    .catch((e) => {
+      if (e instanceof AuthorisationError) notFound();
+      throw e;
+    });
 
   if (!can(ctx, 'listing.write', { partyId: org.enterprise?.partyId })) notFound();
 
-  const listing = await getOrgListing(ctx, id, listingId).catch((e) => {
-    if (e instanceof AuthorisationError || e instanceof TicketingError) notFound();
-    throw e;
-  });
+  const listing = await adminGo<{ listing: GoConsoleListing }>(`/v1/ticketorgs/${id}/listings/${listingId}`)
+    .then((r) => r.listing)
+    .catch(() => null);
+  if (!listing) notFound();
 
   return (
     <>
@@ -52,12 +55,12 @@ export default async function ListingDetailPage({
         }))}
         schedules={listing.schedules.map((s) => ({
           id: s.id,
-          departAt: s.departAt.toISOString(),
-          arriveAt: s.arriveAt ? s.arriveAt.toISOString() : null,
+          departAt: s.departAt,
+          arriveAt: s.arriveAt,
           gateInfo: s.gateInfo,
           vehicleOrHallLabel: s.vehicleOrHallLabel,
           status: s.status,
-          bookingCount: s._count.bookings,
+          bookingCount: s.bookingsCount,
         }))}
       />
     </>
