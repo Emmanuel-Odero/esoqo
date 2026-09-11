@@ -3191,10 +3191,91 @@ model Parcel {
   handoffs ParcelHandoff[]
   labelStockEntries ParcelLabelStock[]
 
+  /// Which fleet trip (if any) this parcel is riding on — see
+  /// CourierTrip's own comment. Independent of assignedCollectorPartyId
+  /// (an individual courier's own pickup scheduling); a parcel can
+  /// have either, both, or neither.
+  courierTripId String?      @db.Uuid
+  courierTrip   CourierTrip? @relation(fields: [courierTripId], references: [id])
+
   @@index([currentHolderPartyId, status])
   @@index([senderPartyId, createdAt])
   @@index([status])
+  @@index([courierTripId])
   @@map("parcel")
+}
+
+/// A courier team — a manager plus a roster of members (see
+/// CourierTeamMember), owning one or more fleets (CourierFleet). A
+/// dispatch-planning layer on top of the existing individual-courier
+/// role (ParcelCourier), not a replacement for it: a team member
+/// doesn't need to be a vetted ParcelCourier to be on a fleet's trip.
+model CourierTeam {
+  id               String   @id @default(uuid()) @db.Uuid
+  name             String
+  createdAt        DateTime @default(now())
+  createdByStaffId String?  @db.Uuid
+
+  members CourierTeamMember[]
+  fleets  CourierFleet[]
+
+  @@map("courier_team")
+}
+
+/// One person on a team's roster, manager included (role = "MANAGER")
+/// — no separate managerPartyId on CourierTeam, so "who's the
+/// manager" always comes from here instead of two sources of truth.
+/// role is a plain string (MANAGER | MEMBER | DRIVER | ...), not an
+/// enum — same "capability strings, not a role enum" reasoning
+/// StaffUser.capabilities already follows, for the same reason: the
+/// set of useful team roles is more likely to grow by one more string
+/// than to need a schema migration.
+model CourierTeamMember {
+  id      String   @id @default(uuid()) @db.Uuid
+  teamId  String   @db.Uuid
+  team    CourierTeam @relation(fields: [teamId], references: [id], onDelete: Cascade)
+  partyId String   @db.Uuid
+  role    String   @default("MEMBER")
+  addedAt DateTime @default(now())
+
+  @@unique([teamId, partyId])
+  @@map("courier_team_member")
+}
+
+/// One physical vehicle under a team, identified by its own
+/// fleetNumber — a team can run several at once (see CourierTeam's
+/// own comment).
+model CourierFleet {
+  id          String              @id @default(uuid()) @db.Uuid
+  teamId      String              @db.Uuid
+  team        CourierTeam         @relation(fields: [teamId], references: [id], onDelete: Cascade)
+  fleetNumber String              @unique
+  vehicleType ParcelTransportMode
+  createdAt   DateTime            @default(now())
+
+  trips CourierTrip[]
+
+  @@map("courier_fleet")
+}
+
+/// One open (IN_PROGRESS) trip per fleet at a time — assigning a
+/// parcel to a fleet lands on whichever trip is currently open for it
+/// (opening a fresh one if none is), and marking that trip COMPLETE
+/// fires the "packages have arrived" SMS to the whole team (manager +
+/// every member — see notify.CourierTripCompleted) and frees the
+/// fleet to start a new one.
+model CourierTrip {
+  id                  String    @id @default(uuid()) @db.Uuid
+  fleetId             String    @db.Uuid
+  fleet               CourierFleet @relation(fields: [fleetId], references: [id], onDelete: Cascade)
+  status              String    @default("IN_PROGRESS")
+  startedAt           DateTime  @default(now())
+  completedAt         DateTime?
+  completedByStaffId  String?   @db.Uuid
+
+  parcels Parcel[]
+
+  @@map("courier_trip")
 }
 
 /// A pool of pre-minted PKG-… codes that exist *before* any booking —
