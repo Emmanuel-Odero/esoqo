@@ -208,6 +208,7 @@ func (s *Server) Router() *gin.Engine {
 		v1.POST("/parcels/:code/price", s.handleSetParcelPrice)
 		v1.POST("/parcels/:code/pay", s.handlePayParcel)
 		v1.GET("/parcels/:code/status", s.handleGetParcelStatus)
+		v1.GET("/parcels/:code/label", s.authRequired(), s.handleGetParcelLabel)
 		v1.POST("/parcels/:code/handoff", s.authRequired(), s.handleScanParcelHandoff)
 		v1.POST("/parcels/:code/deliver", s.authRequired(), s.handleDeliverParcel)
 		v1.POST("/parcels/:code/receipt/otp", s.handleRequestParcelReceiptOtp)
@@ -246,6 +247,15 @@ func (s *Server) Router() *gin.Engine {
 		v1.GET("/admin/parcels/distance-rate", s.authRequired(), s.handleAdminGetDistanceRate)
 		v1.POST("/admin/parcels/distance-rate", s.authRequired(), s.handleAdminSetDistanceRate)
 		v1.GET("/admin/parcels/live", s.authRequired(), s.handleAdminGetLiveDispatch)
+
+		v1.POST("/admin/parcels/labels/generate", s.authRequired(), s.handleAdminGenerateParcelLabels)
+		v1.GET("/admin/parcels/labels", s.authRequired(), s.handleAdminListParcelLabelStock)
+		// info/:code, not :code/info — gin's router panics on a static
+		// segment ("generate") and a param segment (":code") sharing
+		// the same tree position (see this file's own comment on the
+		// near-identical /me/parcels vs /parcels/:code clash above).
+		// Putting the static "info" segment first avoids the conflict.
+		v1.POST("/admin/parcels/labels/info/:code", s.authRequired(), s.handleAttachParcelLabelInfo)
 	}
 
 	r.POST("/webhooks/mpesa/stk-callback", s.handleMpesaStkCallback)

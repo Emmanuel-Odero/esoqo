@@ -65,6 +65,12 @@ type BookParcelInput struct {
 	// price-calc time, same "fail open to the simpler price" choice.
 	OriginZoneID      *string
 	DestinationZoneID *string
+	// ExistingCode — a code already printed and stuck on the physical
+	// parcel ahead of time (see ParcelLabelStock), rather than one
+	// minted fresh here. When set, BookParcel validates it against the
+	// unused pool and spends it atomically with the insert instead of
+	// generating a new fleetqr code.
+	ExistingCode *string
 }
 
 // BookParcel mints the parcel's own tracking code (PKG-…, via
@@ -100,9 +106,48 @@ func BookParcel(ctx context.Context, pool *pgxpool.Pool, in BookParcelInput) (pa
 	if err != nil {
 		return "", "", "", err
 	}
-	err = retryUnique(func() error {
-		code = fleetqr.ShortCodeChecked(fleetqr.PrefixParcel, 6)
+
+	insertParcel := func(useCode string) error {
 		return pool.QueryRow(ctx, `
+			INSERT INTO parcel (
+				id, code, "deliveryCode", "senderPartyId", "senderName", "senderMsisdn",
+				"receiverName", "receiverMsisdn", "originLabel", "destinationLabel", notes,
+				"parcelType", "weightKg", fragile, "transportMode", "originZoneId", "destinationZoneId",
+				status, "createdAt"
+			) VALUES (
+				gen_random_uuid(), $1, $2, $3, $4, $5, $6, $7, $8, $9, $10,
+				$11::"ParcelType", $12, $13, $14::"ParcelTransportMode", $15, $16,
+				'DRAFT_PENDING_PAYMENT', now()
+			) RETURNING id`,
+			useCode, deliveryCode, in.SenderPartyID, in.SenderName, in.SenderMsisdn,
+			in.ReceiverName, in.ReceiverMsisdn, in.OriginLabel, in.DestinationLabel, in.Notes,
+			in.ParcelType, in.WeightKg, in.Fragile, pricing.SuggestedTransportMode,
+			in.OriginZoneID, in.DestinationZoneID).
+			Scan(&parcelID)
+	}
+
+	if in.ExistingCode != nil && *in.ExistingCode != "" {
+		// A pre-printed label being filled in — see ParcelLabelStock's
+		// own comment. Claiming the stock row and inserting the parcel
+		// happen in one transaction so two staff scanning the same
+		// physical label at once can't both win it.
+		code = *in.ExistingCode
+		tx, terr := pool.Begin(ctx)
+		if terr != nil {
+			return "", "", "", terr
+		}
+		defer func() { _ = tx.Rollback(ctx) }()
+		var stockID string
+		lockErr := tx.QueryRow(ctx, `
+			SELECT id FROM parcel_label_stock WHERE code = $1 AND "usedAt" IS NULL FOR UPDATE`,
+			code).Scan(&stockID)
+		if errors.Is(lockErr, pgx.ErrNoRows) {
+			return "", "", "", &ParcelError{"BAD_INPUT", "That label code isn't a known, unused pre-printed label"}
+		}
+		if lockErr != nil {
+			return "", "", "", lockErr
+		}
+		if err := tx.QueryRow(ctx, `
 			INSERT INTO parcel (
 				id, code, "deliveryCode", "senderPartyId", "senderName", "senderMsisdn",
 				"receiverName", "receiverMsisdn", "originLabel", "destinationLabel", notes,
@@ -117,7 +162,23 @@ func BookParcel(ctx context.Context, pool *pgxpool.Pool, in BookParcelInput) (pa
 			in.ReceiverName, in.ReceiverMsisdn, in.OriginLabel, in.DestinationLabel, in.Notes,
 			in.ParcelType, in.WeightKg, in.Fragile, pricing.SuggestedTransportMode,
 			in.OriginZoneID, in.DestinationZoneID).
-			Scan(&parcelID)
+			Scan(&parcelID); err != nil {
+			return "", "", "", err
+		}
+		if _, err := tx.Exec(ctx, `
+			UPDATE parcel_label_stock SET "usedAt" = now(), "usedByParcelId" = $1 WHERE id = $2`,
+			parcelID, stockID); err != nil {
+			return "", "", "", err
+		}
+		if err := tx.Commit(ctx); err != nil {
+			return "", "", "", err
+		}
+		return parcelID, code, deliveryCode, nil
+	}
+
+	err = retryUnique(func() error {
+		code = fleetqr.ShortCodeChecked(fleetqr.PrefixParcel, 6)
+		return insertParcel(code)
 	})
 	return parcelID, code, deliveryCode, err
 }
@@ -469,8 +530,37 @@ type ParcelStatusView struct {
 	// public view; they surface to the sender via SMS and to admin via
 	// AdminParcelRow instead.
 	ReceiptConfirmedAt *time.Time `json:"receiptConfirmedAt"`
+	// PreLabel/PreLabelInfo — set only on the pre-printed-label
+	// fallback below, when [code] isn't a real, booked Parcel (yet).
+	// Status reads "LABEL_PRINTED" in that case — a sentinel no real
+	// Parcel row ever has, so a client can tell the two cases apart
+	// from this one JSON shape without a separate endpoint.
+	PreLabel     bool             `json:"preLabel"`
+	PreLabelInfo *ParcelLabelInfo `json:"preLabelInfo"`
 }
 
+// ParcelLabelInfo is the structured info a handler attached to a
+// pre-printed label in the field (see AttachParcelLabelInfo) — nil
+// until at least an item description has been filled in, even for a
+// genuinely pre-printed (but still blank) label.
+type ParcelLabelInfo struct {
+	ItemDescription string    `json:"itemDescription"`
+	Destination     *string   `json:"destination"`
+	OwnerName       *string   `json:"ownerName"`
+	OwnerContact    *string   `json:"ownerContact"`
+	OwnerGender     *string   `json:"ownerGender"`
+	ItemType        *string   `json:"itemType"`
+	WeightRangeKg   *string   `json:"weightRangeKg"`
+	AttachedAt      time.Time `json:"attachedAt"`
+}
+
+// GetParcelStatus is the guest-safe projection anyone scanning or
+// typing a PKG- code sees, on the web track page and the mobile scan
+// flow alike. A code that was pre-printed (see ParcelLabelStock) but
+// never became a real booking still resolves here instead of 404ing —
+// falls back to whatever field note was attached to it (see
+// AttachParcelLabelInfo), so "scan the label, see what's on it" works
+// the same whether or not the item behind it was ever formally booked.
 func GetParcelStatus(ctx context.Context, pool *pgxpool.Pool, code string) (*ParcelStatusView, error) {
 	var v ParcelStatusView
 	err := pool.QueryRow(ctx, `
@@ -481,13 +571,260 @@ func GetParcelStatus(ctx context.Context, pool *pgxpool.Pool, code string) (*Par
 		Scan(&v.Code, &v.Status, &v.OriginLabel, &v.DestinationLabel, &v.ParcelType,
 			&v.PriceKes, &v.CollectionScheduledAt, &v.CreatedAt, &v.DeliveredAt,
 			&v.CancellationReason, &v.CancelledAt, &v.ReceiptConfirmedAt)
+	if err == nil {
+		return &v, nil
+	}
+	if !errors.Is(err, pgx.ErrNoRows) {
+		return nil, err
+	}
+
+	var stock ParcelStatusView
+	var createdAt time.Time
+	var itemDescription *string
+	var info ParcelLabelInfo
+	var infoAttachedAt *time.Time
+	serr := pool.QueryRow(ctx, `
+		SELECT code, "createdAt", "itemDescription", destination, "ownerName", "ownerContact",
+		       "ownerGender", "itemType", "weightRangeKg", "infoAttachedAt"
+		FROM parcel_label_stock WHERE code = $1`, code).
+		Scan(&stock.Code, &createdAt, &itemDescription, &info.Destination, &info.OwnerName,
+			&info.OwnerContact, &info.OwnerGender, &info.ItemType, &info.WeightRangeKg, &infoAttachedAt)
+	if errors.Is(serr, pgx.ErrNoRows) {
+		return nil, nil
+	}
+	if serr != nil {
+		return nil, serr
+	}
+	stock.Status = "LABEL_PRINTED"
+	stock.CreatedAt = createdAt
+	stock.PreLabel = true
+	if itemDescription != nil {
+		info.ItemDescription = *itemDescription
+		if infoAttachedAt != nil {
+			info.AttachedAt = *infoAttachedAt
+		}
+		stock.PreLabelInfo = &info
+	}
+	return &stock, nil
+}
+
+// ParcelLabel is what a handler prints and sticks on the physical
+// parcel — enough to sort/route it and confirm the receiver by eye,
+// deliberately short of the full ParcelRow: no phone numbers, no
+// price, no sender/receiver address — a label rides in the open on the
+// outside of the package, so it gets the same PII-minimal treatment
+// ParcelStatusView gives anyone who scans the code. ReceiverPhoneLast4
+// is the one exception, and only the last 4 digits — enough for a
+// courier to confirm "is this your parcel?" at the door without the
+// label itself being a usable contact card if the parcel is lost.
+type ParcelLabel struct {
+	Code               string    `json:"code"`
+	Status             string    `json:"status"`
+	ParcelType         string    `json:"parcelType"`
+	WeightKg           *float64  `json:"weightKg"`
+	OriginLabel        string    `json:"originLabel"`
+	DestinationLabel   string    `json:"destinationLabel"`
+	ReceiverName       string    `json:"receiverName"`
+	ReceiverPhoneLast4 string    `json:"receiverPhoneLast4"`
+	CreatedAt          time.Time `json:"createdAt"`
+}
+
+// GetParcelLabel loads the label projection for [code]. Authorization
+// is the caller's job (see handleGetParcelLabel) — this is a pure
+// read, same split GetParcelStatus/ScanHandoff already keep between
+// "can they see it" and "what's in it".
+func GetParcelLabel(ctx context.Context, pool *pgxpool.Pool, code string) (*ParcelLabel, error) {
+	var v ParcelLabel
+	var receiverMsisdn string
+	err := pool.QueryRow(ctx, `
+		SELECT code, status::text, "parcelType"::text, "weightKg", "originLabel", "destinationLabel",
+		       "receiverName", "receiverMsisdn", "createdAt"
+		FROM parcel WHERE code = $1`, code).
+		Scan(&v.Code, &v.Status, &v.ParcelType, &v.WeightKg, &v.OriginLabel, &v.DestinationLabel,
+			&v.ReceiverName, &receiverMsisdn, &v.CreatedAt)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return nil, nil
 	}
 	if err != nil {
 		return nil, err
 	}
+	if len(receiverMsisdn) >= 4 {
+		v.ReceiverPhoneLast4 = receiverMsisdn[len(receiverMsisdn)-4:]
+	}
 	return &v, nil
+}
+
+// IsParcelHandler — true when [partyID] is either currently holding
+// [code] or is the collector an admin assigned it to, the same two
+// custody-adjacent roles ScanHandoff already treats as entitled to act
+// on the parcel. A handler in either state has physical possession (or
+// is about to), so seeing/printing its label is no wider a grant than
+// what they already have.
+func IsParcelHandler(ctx context.Context, pool *pgxpool.Pool, code, partyID string) (bool, error) {
+	if partyID == "" {
+		return false, nil
+	}
+	var currentHolder, assignedCollector *string
+	err := pool.QueryRow(ctx, `
+		SELECT "currentHolderPartyId", "assignedCollectorPartyId" FROM parcel WHERE code = $1`, code).
+		Scan(&currentHolder, &assignedCollector)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return false, nil
+	}
+	if err != nil {
+		return false, err
+	}
+	return (currentHolder != nil && *currentHolder == partyID) ||
+		(assignedCollector != nil && *assignedCollector == partyID), nil
+}
+
+// ParcelLabelStockRow is one pre-printed, not-yet-spent label — wire
+// type matching dbx.ListUnusedParcelLabelStock, what an ops screen
+// re-prints a batch of blank labels from.
+type ParcelLabelStockRow struct {
+	Code      string    `json:"code"`
+	CreatedAt time.Time `json:"createdAt"`
+}
+
+// errCodeSpaceCollision — GenerateParcelLabelStock's own signal to
+// retryUnique that a freshly-minted code needs re-rolling, for the one
+// collision case that never touches Postgres's real unique index: the
+// candidate code matches an *already-booked* parcel's own code (a
+// different table, so no DB constraint catches it). Satisfies the same
+// `SQLState() string` shape isUniqueViolation checks for.
+type sqlStateError string
+
+func (e sqlStateError) Error() string    { return string(e) }
+func (e sqlStateError) SQLState() string { return "23505" }
+
+var errCodeSpaceCollision = sqlStateError("code already used by a booked parcel")
+
+// GenerateParcelLabelStock mints [count] fresh, unbound PKG-… codes —
+// same fleetqr contract BookParcel's own code minting uses, so a blank
+// pre-printed label and a booked-at-checkout label look identical and
+// share one scanning/QR pipeline. Returns them in mint order, newest
+// last, so the caller can print/display "batch of N" as one strip.
+func GenerateParcelLabelStock(ctx context.Context, pool *pgxpool.Pool, count int, staffID *string) ([]string, error) {
+	if count < 1 || count > 500 {
+		return nil, &ParcelError{"BAD_INPUT", "Generate between 1 and 500 labels at a time"}
+	}
+	codes := make([]string, 0, count)
+	for i := 0; i < count; i++ {
+		var code string
+		err := retryUnique(func() error {
+			code = fleetqr.ShortCodeChecked(fleetqr.PrefixParcel, 6)
+			// Same code space as parcel.code (both PKG-…, both unique)
+			// — check both tables so a blank label can never collide
+			// with an already-booked parcel's own tracking code.
+			var exists bool
+			if qerr := pool.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM parcel WHERE code = $1)`, code).Scan(&exists); qerr != nil {
+				return qerr
+			}
+			if exists {
+				return errCodeSpaceCollision // forces retryUnique to mint another
+			}
+			_, err := pool.Exec(ctx, `
+				INSERT INTO parcel_label_stock (id, code, "createdAt", "createdByStaffId")
+				VALUES (gen_random_uuid(), $1, now(), $2)`, code, staffID)
+			return err
+		})
+		if err != nil {
+			return codes, err
+		}
+		codes = append(codes, code)
+	}
+	return codes, nil
+}
+
+// ListUnusedParcelLabelStock — the still-genuinely-blank half of the
+// pool (never bound to a real parcel, never even had a note attached
+// in the field), newest first, for a "reprint this batch" or "how
+// many do we have left" view. A label with itemInfo attached is
+// excluded the same as a used one — it's already spoken for, even if
+// it never becomes a real booking.
+func ListUnusedParcelLabelStock(ctx context.Context, pool *pgxpool.Pool, limit int) ([]ParcelLabelStockRow, error) {
+	if limit <= 0 || limit > 1000 {
+		limit = 200
+	}
+	rows, err := pool.Query(ctx, `
+		SELECT code, "createdAt" FROM parcel_label_stock
+		WHERE "usedAt" IS NULL AND "infoAttachedAt" IS NULL
+		ORDER BY "createdAt" DESC LIMIT $1`, limit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var out []ParcelLabelStockRow
+	for rows.Next() {
+		var r ParcelLabelStockRow
+		if err := rows.Scan(&r.Code, &r.CreatedAt); err != nil {
+			return nil, err
+		}
+		out = append(out, r)
+	}
+	return out, rows.Err()
+}
+
+// AttachParcelLabelInfo writes a free-form note onto a pre-printed
+// label — "TV stand for Kevin, HQ -> Westlands" — the moment a
+// handler sticks it on a physical item in the field, well before (if
+// ever) that item goes through a full sender/receiver/pricing/payment
+// booking. Overwrites any previous note on repeat calls (correcting a
+// typo shouldn't need a separate "clear" step) but refuses once the
+// code has already been spent on a real booking — that's a stronger,
+// one-way commitment ExistingCode already made; a note at that point
+// would just be confusing about which system of record is current.
+// ParcelLabelInfoInput is what a handler fills in for a pre-printed
+// label in the field — see AttachParcelLabelInfo's own comment. Every
+// field is optional individually (a handler might only know the item
+// and destination at first), but at least ItemDescription is required
+// — a completely empty attach is a no-op that shouldn't have been
+// called.
+type ParcelLabelInfoInput struct {
+	ItemDescription string
+	Destination     *string
+	OwnerName       *string
+	OwnerContact    *string
+	OwnerGender     *string
+	ItemType        *string
+	WeightRangeKg   *string
+}
+
+// AttachParcelLabelInfo writes structured info onto a pre-printed
+// label — item description, destination, owner name/contact/gender,
+// item type, weight range — the moment a handler sticks it on a
+// physical item in the field, well before (if ever) that item goes
+// through a full sender/receiver/pricing/payment booking. Overwrites
+// (never merges) on repeat calls — the caller always resends the full
+// set it wants kept, same as an edit form re-submitting every field —
+// but refuses once the code has already been spent on a real booking:
+// that's a stronger, one-way commitment ExistingCode already made,
+// and an in-field note at that point would just be a second, possibly
+// conflicting system of record.
+func AttachParcelLabelInfo(ctx context.Context, pool *pgxpool.Pool, code string, in ParcelLabelInfoInput, staffID *string) error {
+	if in.ItemDescription == "" {
+		return &ParcelError{"BAD_INPUT", "A short item description is required"}
+	}
+	tag, err := pool.Exec(ctx, `
+		UPDATE parcel_label_stock
+		SET "itemDescription" = $1, "destination" = $2, "ownerName" = $3, "ownerContact" = $4,
+		    "ownerGender" = $5, "itemType" = $6, "weightRangeKg" = $7,
+		    "infoAttachedAt" = now(), "infoAttachedByStaffId" = $8
+		WHERE code = $9 AND "usedAt" IS NULL`,
+		in.ItemDescription, in.Destination, in.OwnerName, in.OwnerContact,
+		in.OwnerGender, in.ItemType, in.WeightRangeKg, staffID, code)
+	if err != nil {
+		return err
+	}
+	if tag.RowsAffected() == 0 {
+		var exists, used bool
+		_ = pool.QueryRow(ctx, `SELECT true, "usedAt" IS NOT NULL FROM parcel_label_stock WHERE code = $1`, code).Scan(&exists, &used)
+		if used {
+			return &ParcelError{"BAD_INPUT", "That label is already bound to a booked parcel — info can't be attached to it anymore"}
+		}
+		return &ParcelError{"NOT_FOUND", "That label code isn't a known pre-printed label"}
+	}
+	return nil
 }
 
 // ParcelNotifyInfo is what the handoff/delivery handlers need to

@@ -28,6 +28,10 @@ type bookParcelRequest struct {
 	Fragile           bool     `json:"fragile"`
 	OriginZoneID      *string  `json:"originZoneId"`
 	DestinationZoneID *string  `json:"destinationZoneId"`
+	// ExistingCode — a code already printed and stuck on the physical
+	// parcel ahead of time (see dbx.ParcelLabelStock). Optional; when
+	// omitted BookParcel mints a fresh code as before.
+	ExistingCode *string `json:"existingCode"`
 }
 
 // handleBookParcel — POST /v1/parcels. Guest-or-authenticated, same
@@ -53,6 +57,7 @@ func (s *Server) handleBookParcel(c *gin.Context) {
 		OriginLabel: req.OriginLabel, DestinationLabel: req.DestinationLabel, Notes: req.Notes,
 		ParcelType: req.ParcelType, WeightKg: req.WeightKg, Fragile: req.Fragile,
 		OriginZoneID: req.OriginZoneID, DestinationZoneID: req.DestinationZoneID,
+		ExistingCode: req.ExistingCode,
 	})
 	if err != nil {
 		writeParcelError(c, err)
@@ -285,6 +290,41 @@ func (s *Server) handleGetParcelStatus(c *gin.Context) {
 		return
 	}
 	c.JSON(http.StatusOK, status)
+}
+
+// handleGetParcelLabel — GET /v1/parcels/:code/label. Auth required.
+// Backs the print-a-label flow: a handler/courier currently holding or
+// assigned to the parcel, or org staff with the "parcels.read"
+// capability (dispatch/ops), can pull the label projection — everyone
+// else gets DENIED, same as an admin route would, even though this
+// lives under /v1/parcels rather than /v1/admin/parcels (couriers
+// don't have admin capabilities to check against, only custody).
+func (s *Server) handleGetParcelLabel(c *gin.Context) {
+	ctx := ctxFromGin(c)
+	code := c.Param("code")
+	authorized := authsvc.RequireCapability(ctx, "parcels.read", nil) == nil
+	if !authorized {
+		isHandler, err := dbx.IsParcelHandler(c.Request.Context(), s.Pool, code, ctx.PartyID)
+		if err != nil {
+			writeError(c, http.StatusInternalServerError, "GET_FAILED", "Could not load that parcel")
+			return
+		}
+		authorized = isHandler
+	}
+	if !authorized {
+		writeError(c, http.StatusForbidden, "DENIED", "You don't have this parcel in your custody")
+		return
+	}
+	label, err := dbx.GetParcelLabel(c.Request.Context(), s.Pool, code)
+	if err != nil {
+		writeError(c, http.StatusInternalServerError, "GET_FAILED", "Could not load that parcel")
+		return
+	}
+	if label == nil {
+		writeError(c, http.StatusNotFound, "NOT_FOUND", "That parcel was not found")
+		return
+	}
+	c.JSON(http.StatusOK, label)
 }
 
 // handleScanParcelHandoff — POST /v1/parcels/:code/handoff. Auth

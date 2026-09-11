@@ -2,6 +2,7 @@ package httpapi
 
 import (
 	"net/http"
+	"strconv"
 	"time"
 
 	"github.com/gin-gonic/gin"
@@ -679,4 +680,108 @@ func (s *Server) handleAdminListParcelHandoffs(c *gin.Context) {
 		return
 	}
 	c.JSON(http.StatusOK, gin.H{"handoffs": rows})
+}
+
+// ── Pre-printed label stock ──
+// A pool of blank PKG-… codes minted ahead of any booking — see
+// dbx.ParcelLabelStock's own comment. Print a batch, stick them on
+// envelopes/boxes in advance, then BookParcel's ExistingCode binds one
+// to a real shipment the moment it's needed.
+
+type generateParcelLabelsRequest struct {
+	Count int `json:"count" binding:"required"`
+}
+
+// handleAdminGenerateParcelLabels — POST /v1/admin/parcels/labels/generate.
+// Same trust tier as scheduling a collector (parcels.assign) — this is
+// an operational/dispatch task, not a pricing or cancellation one.
+func (s *Server) handleAdminGenerateParcelLabels(c *gin.Context) {
+	ctx := ctxFromGin(c)
+	if err := authsvc.RequireCapability(ctx, "parcels.assign", nil); err != nil {
+		writeParcelAdminError(c, err)
+		return
+	}
+	var req generateParcelLabelsRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		writeError(c, http.StatusBadRequest, "INVALID_REQUEST", err.Error())
+		return
+	}
+	var staffID *string
+	if ctx.ActorID != "" {
+		id := ctx.ActorID
+		staffID = &id
+	}
+	codes, err := dbx.GenerateParcelLabelStock(c.Request.Context(), s.Pool, req.Count, staffID)
+	if err != nil {
+		writeParcelAdminError(c, err)
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"codes": codes})
+}
+
+// handleAdminListParcelLabelStock — GET /v1/admin/parcels/labels?limit=.
+func (s *Server) handleAdminListParcelLabelStock(c *gin.Context) {
+	ctx := ctxFromGin(c)
+	if err := authsvc.RequireCapability(ctx, "parcels.read", nil); err != nil {
+		writeParcelAdminError(c, err)
+		return
+	}
+	limit := 200
+	if v := c.Query("limit"); v != "" {
+		if parsed, perr := strconv.Atoi(v); perr == nil {
+			limit = parsed
+		}
+	}
+	rows, err := dbx.ListUnusedParcelLabelStock(c.Request.Context(), s.Pool, limit)
+	if err != nil {
+		writeError(c, http.StatusInternalServerError, "LIST_FAILED", "Could not load label stock")
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"labels": rows})
+}
+
+type attachParcelLabelInfoRequest struct {
+	ItemDescription string  `json:"itemDescription" binding:"required"`
+	Destination     *string `json:"destination"`
+	OwnerName       *string `json:"ownerName"`
+	OwnerContact    *string `json:"ownerContact"`
+	OwnerGender     *string `json:"ownerGender"`
+	ItemType        *string `json:"itemType"`
+	WeightRangeKg   *string `json:"weightRangeKg"`
+}
+
+// handleAttachParcelLabelInfo — POST /v1/admin/parcels/labels/:code/info.
+// Same trust tier as generating labels in the first place
+// (parcels.assign) — writing what a pre-printed label is now stuck on
+// is the same operational/dispatch class of action.
+func (s *Server) handleAttachParcelLabelInfo(c *gin.Context) {
+	ctx := ctxFromGin(c)
+	if err := authsvc.RequireCapability(ctx, "parcels.assign", nil); err != nil {
+		writeParcelAdminError(c, err)
+		return
+	}
+	var req attachParcelLabelInfoRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		writeError(c, http.StatusBadRequest, "INVALID_REQUEST", err.Error())
+		return
+	}
+	var staffID *string
+	if ctx.ActorID != "" {
+		id := ctx.ActorID
+		staffID = &id
+	}
+	in := dbx.ParcelLabelInfoInput{
+		ItemDescription: req.ItemDescription,
+		Destination:     req.Destination,
+		OwnerName:       req.OwnerName,
+		OwnerContact:    req.OwnerContact,
+		OwnerGender:     req.OwnerGender,
+		ItemType:        req.ItemType,
+		WeightRangeKg:   req.WeightRangeKg,
+	}
+	if err := dbx.AttachParcelLabelInfo(c.Request.Context(), s.Pool, c.Param("code"), in, staffID); err != nil {
+		writeParcelAdminError(c, err)
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"ok": true})
 }
