@@ -218,6 +218,87 @@ export async function actionSetDistanceRate(perKmKes: number, minChargeableKm: n
   }
 }
 
+// ── Label printing ──
+
+// Wire type matching Go's dbx.ParcelLabel (GET /v1/parcels/:code/label)
+// — deliberately thin, no phone numbers beyond the last 4 digits, no
+// price, no addresses beyond the origin/destination labels. See that
+// struct's own comment: a label rides on the outside of the package,
+// so it stays PII-minimal the same way the guest-safe tracking view
+// does.
+export interface ParcelLabel {
+  code: string; status: string; parcelType: string; weightKg: number | null;
+  originLabel: string; destinationLabel: string;
+  receiverName: string; receiverPhoneLast4: string; createdAt: string;
+}
+
+export async function actionGetParcelLabel(code: string): Promise<ParcelLabel | null> {
+  try {
+    await requireStaff();
+    return await adminGo<ParcelLabel>(`/v1/parcels/${encodeURIComponent(code)}/label`);
+  } catch {
+    return null;
+  }
+}
+
+// ── Pre-printed label stock ──
+// A pool of blank PKG-… codes minted ahead of any booking — print a
+// batch, stick them on envelopes/boxes in advance, then a booking's
+// existingCode binds one to a real shipment the moment it's needed.
+// See dbx.ParcelLabelStock's own comment for the full rationale.
+
+export interface ParcelLabelStockRow { code: string; createdAt: string }
+
+export async function actionGenerateParcelLabels(count: number): Promise<{ ok: true; codes: string[] } | { ok: false; error: string }> {
+  try {
+    await requireStaff();
+    const { codes } = await adminGo<{ codes: string[] | null }>('/v1/admin/parcels/labels/generate', {
+      method: 'POST', body: JSON.stringify({ count }),
+    });
+    return { ok: true, codes: codes ?? [] };
+  } catch (e) {
+    return { ok: false, error: e instanceof Error ? e.message : 'Could not generate labels' };
+  }
+}
+
+export async function actionListParcelLabelStock(): Promise<ParcelLabelStockRow[]> {
+  await requireStaff();
+  const { labels } = await adminGo<{ labels: ParcelLabelStockRow[] | null }>('/v1/admin/parcels/labels?limit=200');
+  return labels ?? [];
+}
+
+// Structured info attached to a pre-printed label — item, destination,
+// owner name/contact/gender, item type, weight range — the moment it's
+// actually stuck on a physical item, independent of (and usually well
+// before) a real booking. core-go's GET /v1/parcels/:code/status then
+// surfaces this same info to anyone who scans/tracks the code, on the
+// web track page and the mobile app's scan flow alike (see
+// dbx.GetParcelStatus's own comment on the fallback). Every field but
+// itemDescription is optional — a handler might only know the item
+// and destination at first.
+export interface ParcelLabelInfoInput {
+  itemDescription: string;
+  destination?: string;
+  ownerName?: string;
+  ownerContact?: string;
+  ownerGender?: string;
+  itemType?: string;
+  weightRangeKg?: string;
+}
+
+export async function actionAttachParcelLabelInfo(code: string, info: ParcelLabelInfoInput): Promise<Result> {
+  try {
+    await requireStaff();
+    await adminGo(`/v1/admin/parcels/labels/info/${encodeURIComponent(code)}`, {
+      method: 'POST', body: JSON.stringify(info),
+    });
+    revalidatePath('/parcels/labels');
+    return { ok: true };
+  } catch (e) {
+    return { ok: false, error: e instanceof Error ? e.message : 'Could not attach that info' };
+  }
+}
+
 // ── Live dispatch ──
 
 export interface LiveCourierPosition { CourierPartyID: string; Name: string; VehicleType: string; Lat: string; Lng: string; At: string }

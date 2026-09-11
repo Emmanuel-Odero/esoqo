@@ -9,12 +9,18 @@ import {
   type CollectorLite, type HandoffRow,
 } from './actions';
 import type { AdminParcelRow } from './ParcelsTable';
+import { ParcelLabelPrint } from './ParcelLabelPrint';
 
 const CANCELLABLE = new Set(['DRAFT_PENDING_PAYMENT', 'BOOKED']);
 const FLAGGABLE = new Set(['PICKED_UP', 'IN_TRANSIT']);
 const EDITABLE = new Set(['DRAFT_PENDING_PAYMENT', 'BOOKED']);
+// A label only means anything once there's a price/route locked in —
+// same "not while it's still a draft" rule EDITABLE's inverse would
+// suggest, but expressed as "everything past DRAFT" rather than
+// enumerating every later status.
+const LABELABLE = new Set(['BOOKED', 'PICKED_UP', 'IN_TRANSIT', 'DELIVERED']);
 
-type Panel = 'edit' | 'assign' | 'cancel' | 'flag' | null;
+type Panel = 'edit' | 'assign' | 'cancel' | 'flag' | 'label' | null;
 
 /**
  * Everything the old wide table tried to show in columns, plus every
@@ -65,6 +71,19 @@ export function ParcelDetailModal({
 
         <div className="modal-bd">
           <DetailSections parcel={parcel} handoffs={handoffs} handoffsLoading={handoffsLoading} />
+
+          {LABELABLE.has(parcel.Status) && (
+            <div style={{ margin: '18px 0 0' }}>
+              <button className="btn btn-o btn-sm" onClick={() => setPanel(panel === 'label' ? null : 'label')}>
+                <Icon name="qr" size={13} />{panel === 'label' ? 'Hide label' : 'Print label'}
+              </button>
+              {panel === 'label' && (
+                <div style={{ marginTop: 10 }}>
+                  <ParcelLabelPrint code={parcel.Code} onClose={() => setPanel(null)} />
+                </div>
+              )}
+            </div>
+          )}
 
           {canManage && (
             <>
