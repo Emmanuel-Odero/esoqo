@@ -5,6 +5,7 @@ import '../api/api_exception.dart';
 import '../theme/esoko_tokens.dart';
 import 'esoko_empty_state.dart';
 import 'esoko_error_view.dart';
+import 'esoko_icon.dart';
 import 'esoko_skeleton.dart';
 
 /// The shared shape for "a screen watching one FutureProvider" — every
@@ -29,6 +30,7 @@ class EsokoAsyncView<T> extends StatelessWidget {
     this.isEmpty,
     this.emptyMessage,
     this.emptyIcon = Icons.inbox_outlined,
+    this.emptyEsokoIcon,
     this.onRetry,
   });
 
@@ -36,7 +38,13 @@ class EsokoAsyncView<T> extends StatelessWidget {
   final Widget Function(BuildContext context, T data) data;
   final bool Function(T data)? isEmpty;
   final String? emptyMessage;
+
+  /// Legacy Material glyph — prefer [emptyEsokoIcon] for anything new.
   final IconData emptyIcon;
+
+  /// Branded 24px stroke icon (see EsokoIcon) for the empty state. Takes
+  /// precedence over [emptyIcon] when both are given.
+  final EsokoIconName? emptyEsokoIcon;
   final VoidCallback? onRetry;
 
   @override
@@ -47,14 +55,20 @@ class EsokoAsyncView<T> extends StatelessWidget {
       final v = value.requireValue;
       if (isEmpty != null && emptyMessage != null && isEmpty!(v)) {
         state = 'empty';
-        child = EsokoEmptyState(message: emptyMessage!, icon: emptyIcon);
+        child = EsokoEmptyState(
+          message: emptyMessage!,
+          icon: emptyIcon,
+          esokoIcon: emptyEsokoIcon,
+        );
       } else {
         state = 'data';
         child = data(context, v);
       }
     } else if (value.hasError) {
       final error = value.error;
-      final message = error is ApiException ? error.message : 'Something went wrong. Pull to retry.';
+      final message = error is ApiException
+          ? error.message
+          : 'Something went wrong. Pull to retry.';
       state = 'error';
       child = EsokoErrorView(message: message, onRetry: onRetry);
     } else {

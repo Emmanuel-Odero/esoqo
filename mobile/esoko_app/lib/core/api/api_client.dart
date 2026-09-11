@@ -1,3 +1,5 @@
+import 'dart:convert';
+
 import 'package:dio/dio.dart';
 import 'package:flutter/foundation.dart' show debugPrint;
 
@@ -31,6 +33,20 @@ class ApiClient {
     _dio.interceptors.add(InterceptorsWrapper(onRequest: (options, handler) async {
       final token = await TokenStore.instance.read();
       if (token != null) options.headers['Authorization'] = 'Bearer $token';
+      // A SUBJECT that has switched on org-staff duty (see
+      // core/auth/org_context_state.dart) sends which org it means —
+      // this is a convenience label, never a credential: core-go
+      // re-checks the live activation + grant status on every request
+      // regardless of what this header says.
+      final orgContextRaw = await TokenStore.instance.readOrgContext();
+      if (orgContextRaw != null) {
+        try {
+          final orgId = (jsonDecode(orgContextRaw) as Map<String, dynamic>)['orgId'] as String?;
+          if (orgId != null) options.headers['X-Esoko-Org-Context'] = orgId;
+        } catch (_) {
+          // Malformed cache — ignore, just send the request without it.
+        }
+      }
       handler.next(options);
     }));
   }

@@ -73,14 +73,27 @@ abstract final class EsokoRadius {
   static const pill = 999.0;
 }
 
-/// Typefaces as named in tokens.css's --font-display/--font body. The
-/// mobile app bundles the Outfit variable font (see pubspec.yaml) and
-/// uses it for the whole app — headings *and* body — so the mobile
-/// voice matches web's --font-display everywhere.
+/// Typefaces as named in tokens.css's --font-display/--font-body/
+/// --font-mono. Web speaks with three distinct voices; the mobile app
+/// used to bundle only Outfit and apply it everywhere (headings *and*
+/// body *and* prices), which is why numbers and copy read flatter here
+/// than on web. All three are now bundled (see pubspec.yaml) so the
+/// same voice split applies on mobile.
 abstract final class EsokoFonts {
-  /// Display + body typeface, bundled from Google Fonts' "Outfit" (the
-  /// same family tokens.css points --font-display at).
+  /// Display typeface — tokens.css's --font-display. Headings, section
+  /// titles, anywhere the brand's bold/tight voice belongs.
   static const display = 'Outfit';
+
+  /// Body typeface — tokens.css's --font-body. Paragraphs, labels,
+  /// button text: the default reading voice everywhere that isn't a
+  /// heading or a number.
+  static const body = 'IBMPlexSans';
+
+  /// Data/mono typeface — tokens.css's --font-mono. Prices, IDs, codes,
+  /// anything tabular where digits need to line up and read
+  /// unambiguously (a "0" must never be mistaken for an "8" on a phone
+  /// screen in bright sun).
+  static const mono = 'IBMPlexMono';
 }
 
 /// tokens.css's h1/h2/h3 rule: `font-weight:800; letter-spacing:-.028em;
@@ -93,6 +106,24 @@ abstract final class EsokoTypography {
   // (see EsokoTheme's own headline() helper, which multiplies this by
   // each TextStyle's fontSize).
   static const headlineTrackingEm = -0.028;
+
+  /// Money/ID/code text — EsokoFonts.mono at a given size+weight, tabular
+  /// figures on so digit columns align (KES amounts, ESK-Ids, ticket
+  /// codes). Use this instead of the ambient body/display font any time
+  /// the text is a number a user will double-check against cash in hand.
+  static TextStyle mono({
+    double fontSize = 15,
+    FontWeight fontWeight = FontWeight.w500,
+    Color? color,
+    double? height,
+  }) => TextStyle(
+    fontFamily: EsokoFonts.mono,
+    fontSize: fontSize,
+    fontWeight: fontWeight,
+    color: color,
+    height: height,
+    fontFeatures: const [FontFeature.tabularFigures()],
+  );
 }
 
 /// Motion tokens — ported from tokens.css's --dur-* / --ease-out so the

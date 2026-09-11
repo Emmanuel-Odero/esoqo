@@ -8,23 +8,25 @@ import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 /// transport (see services/core-go/README.md and
 /// docs/adr/0005-mobile-api-in-go.md).
 ///
-/// One token slot, two kinds of session: a signed-in Party (SUBJECT,
-/// via /v1/auth/*) or an org-scoped crew PIN login (AGENT, via
-/// /v1/ticket-staff/sign-in — see core/auth/agent_session.dart). They
-/// are mutually exclusive on one device by construction, same as a
-/// physical work phone either being someone's personal Esoko account or
-/// signed in to a till/scanner terminal, never both — writing one kind
-/// always clears the other. [ApiClient] doesn't care which kind is
-/// active; it just attaches whatever [read] returns.
-enum SessionKind { subject, agent }
-
+/// One token slot, one kind of session: a signed-in Party (SUBJECT, via
+/// /v1/auth/*). There used to be a second kind here — an org-scoped crew
+/// PIN login (AGENT, via /v1/ticket-staff/sign-in) that was mutually
+/// exclusive with a SUBJECT session on the same device. It's retired
+/// from this app: per company policy every crew member holds their own
+/// Esoko account, so org-staff duty is now a SUBJECT session
+/// *additionally* carrying a live, OTP-activated org context (see
+/// [writeOrgContext] below and docs/proposals/
+/// esoko-unified-crew-identity.md) rather than a whole second credential
+/// and a second, device-locking session kind. core-go's AGENT session
+/// type and `/v1/ticket-staff/sign-in` endpoint still exist server-side
+/// (unmigrated staff, other clients) — this app just no longer creates
+/// or reads that kind of session.
 class TokenStore {
   TokenStore._();
   static final TokenStore instance = TokenStore._();
 
   static const _key = 'esoko_session_token';
-  static const _kindKey = 'esoko_session_kind';
-  static const _agentContextKey = 'esoko_agent_context';
+  static const _orgContextKey = 'esoko_org_context';
 
   final _storage = const FlutterSecureStorage(
     aOptions: AndroidOptions(encryptedSharedPreferences: true),
@@ -32,39 +34,25 @@ class TokenStore {
 
   Future<String?> read() => _storage.read(key: _key);
 
-  Future<SessionKind?> readKind() async {
-    final raw = await _storage.read(key: _kindKey);
-    return switch (raw) {
-      'agent' => SessionKind.agent,
-      'subject' => SessionKind.subject,
-      _ => null,
-    };
-  }
-
-  /// Raw JSON blob describing the current agent session (org id, role,
-  /// name, linked crewMemberId) — only meaningful when [readKind] is
-  /// [SessionKind.agent]. See AgentSession.toJson/fromJson.
-  Future<String?> readAgentContext() => _storage.read(key: _agentContextKey);
-
-  /// A person signing in as themselves — clears any prior crew session
-  /// on this device, same as a work terminal being handed back before
-  /// someone signs in on their own account.
-  Future<void> write(String token) async {
-    await _storage.write(key: _key, value: token);
-    await _storage.write(key: _kindKey, value: 'subject');
-    await _storage.delete(key: _agentContextKey);
-  }
-
-  /// A crew PIN login — see AgentSessionController.signInAsCrew.
-  Future<void> writeAgent(String token, String agentContextJson) async {
-    await _storage.write(key: _key, value: token);
-    await _storage.write(key: _kindKey, value: 'agent');
-    await _storage.write(key: _agentContextKey, value: agentContextJson);
-  }
+  Future<void> write(String token) => _storage.write(key: _key, value: token);
 
   Future<void> clear() => Future.wait([
         _storage.delete(key: _key),
-        _storage.delete(key: _kindKey),
-        _storage.delete(key: _agentContextKey),
+        _storage.delete(key: _orgContextKey),
       ]);
+
+  /// A SUBJECT's live, OTP-activated org-staff context (see
+  /// core/auth/org_context_state.dart) — an *overlay* on top of the one
+  /// subject session, not a competing session kind: it never touches
+  /// [_key], and clearing it never signs the person out. Stored so
+  /// [ApiClient] can attach `X-Esoko-Org-Context` without an extra round
+  /// trip, and so the switcher survives a cold start; the only thing
+  /// that actually authorises anything is core-go's own live
+  /// Redis+Postgres check on every request, never this cache.
+  Future<void> writeOrgContext(String orgContextJson) =>
+      _storage.write(key: _orgContextKey, value: orgContextJson);
+
+  Future<String?> readOrgContext() => _storage.read(key: _orgContextKey);
+
+  Future<void> clearOrgContext() => _storage.delete(key: _orgContextKey);
 }

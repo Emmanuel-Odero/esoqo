@@ -64,6 +64,10 @@ dependencies:
   # the hotspot's default gateway (see lib/core/api/api_config.dart).
   network_info_plus: ^6.1.0
   quick_actions: ^1.1.0
+  # Renders the branded 24px stroke-icon set (ported from
+  # packages/ui/src/Icon.tsx, see assets/icons/ + EsokoIcon) — no emoji,
+  # no generic Cupertino/Material glyphs, matching web's icon language.
+  flutter_svg: ^2.0.17
 
 dev_dependencies:
   flutter_test:
@@ -102,6 +106,7 @@ flutter:
   #   - images/a_dot_ham.jpeg
   assets:
     - assets/branding/
+    - assets/icons/
 
   # An image asset can refer to one or more resolution-specific "variants", see
   # https://flutter.dev/to/resolution-aware-images
@@ -147,6 +152,31 @@ flutter:
           weight: 700
         - asset: assets/fonts/Outfit.ttf
           weight: 800
+
+    # Body typeface — tokens.css's --font-body. Web's other two voices
+    # (mobile only had --font-display before this redesign pass): a
+    # single variable-weight TTF, same duplicate-entry trick as Outfit.
+    - family: IBMPlexSans
+      fonts:
+        - asset: assets/fonts/IBMPlexSans.ttf
+          weight: 400
+        - asset: assets/fonts/IBMPlexSans.ttf
+          weight: 500
+        - asset: assets/fonts/IBMPlexSans.ttf
+          weight: 600
+        - asset: assets/fonts/IBMPlexSans.ttf
+          weight: 700
+
+    # Data/mono typeface — tokens.css's --font-mono, used for prices,
+    # IDs, codes: anywhere digits need to line up and read unambiguously.
+    - family: IBMPlexMono
+      fonts:
+        - asset: assets/fonts/IBMPlexMono-Regular.ttf
+          weight: 400
+        - asset: assets/fonts/IBMPlexMono-Medium.ttf
+          weight: 500
+        - asset: assets/fonts/IBMPlexMono-SemiBold.ttf
+          weight: 600
 
 # App icon — the green Esoko mark (assets/branding/esoko-app-icon.png).
 # iOS/Android launcher icons are generated from a full-bleed, alpha-free

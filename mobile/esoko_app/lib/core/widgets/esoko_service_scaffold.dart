@@ -22,12 +22,18 @@ class EsokoServiceScaffold extends StatelessWidget {
     required this.icon,
     required this.heroTag,
     required this.child,
+    this.bottom,
   });
 
   final String title;
   final IconData icon;
   final String heroTag;
   final Widget child;
+
+  /// A tab strip attached under the title — see EsokoAppBar.bottom's own
+  /// comment for why a same-screen toggle belongs here, not floating in
+  /// the body.
+  final PreferredSizeWidget? bottom;
 
   @override
   Widget build(BuildContext context) {
@@ -42,11 +48,10 @@ class EsokoServiceScaffold extends StatelessWidget {
               child: EsokoQuickActionIcon(icon: icon, size: 32),
             ),
             const SizedBox(width: 10),
-            Flexible(
-              child: Text(title, overflow: TextOverflow.ellipsis),
-            ),
+            Flexible(child: Text(title, overflow: TextOverflow.ellipsis)),
           ],
         ),
+        bottom: bottom,
       ),
       body: SafeArea(child: child),
     );

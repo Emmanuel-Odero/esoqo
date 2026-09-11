@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../theme/esoko_tokens.dart';
 import 'esoko_haptics.dart';
+import 'esoko_icon.dart';
 
 /// Primary action button with a built-in loading state — while `loading`
 /// the button disables and shows a 20px on-colour spinner in place of its
@@ -17,12 +18,19 @@ class EsokoLoadingButton extends StatefulWidget {
     super.key,
     required this.label,
     this.icon,
+    this.esokoIcon,
     required this.onPressed,
     this.loading = false,
   });
 
   final String label;
+
+  /// Legacy Material glyph — prefer [esokoIcon] for anything new.
   final IconData? icon;
+
+  /// Branded 24px stroke icon (see EsokoIcon). Takes precedence over
+  /// [icon] when both are given.
+  final EsokoIconName? esokoIcon;
   final VoidCallback? onPressed;
   final bool loading;
 
@@ -46,18 +54,28 @@ class _EsokoLoadingButtonState extends State<EsokoLoadingButton> {
       width: 20,
       child: CircularProgressIndicator(strokeWidth: 2, color: onPrimary),
     );
+    final hasIcon = widget.icon != null || widget.esokoIcon != null;
     if (widget.loading) {
-      if (widget.icon == null) {
+      if (!hasIcon) {
         return FilledButton(onPressed: null, child: spinner);
       }
-      return FilledButton.icon(onPressed: null, icon: spinner, label: Text(widget.label));
+      return FilledButton.icon(
+        onPressed: null,
+        icon: spinner,
+        label: Text(widget.label),
+      );
     }
-    if (widget.icon == null) {
-      return FilledButton(onPressed: widget.onPressed == null ? null : _press, child: Text(widget.label));
+    if (!hasIcon) {
+      return FilledButton(
+        onPressed: widget.onPressed == null ? null : _press,
+        child: Text(widget.label),
+      );
     }
     return FilledButton.icon(
       onPressed: widget.onPressed == null ? null : _press,
-      icon: Icon(widget.icon, size: 18),
+      icon: widget.esokoIcon != null
+          ? EsokoIcon(widget.esokoIcon!, size: 18)
+          : Icon(widget.icon, size: 18),
       label: Text(widget.label),
     );
   }

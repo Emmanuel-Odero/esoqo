@@ -21,7 +21,16 @@ class EsokoErrorView extends StatelessWidget {
         children: [
           Icon(Icons.error_outline_rounded, size: 40, color: EsokoColors.red),
           const SizedBox(height: EsokoSpacing.s3),
-          Text(message, textAlign: TextAlign.center, style: TextStyle(color: EsokoColors.text2)),
+          // Theme-derived, not the fixed EsokoColors.text2 — this
+          // renders directly on whatever's behind it (scaffold or
+          // card), which flips between paper and darkSurface.
+          Text(
+            message,
+            textAlign: TextAlign.center,
+            style: TextStyle(
+              color: Theme.of(context).textTheme.bodySmall?.color,
+            ),
+          ),
           if (onRetry != null) ...[
             const SizedBox(height: EsokoSpacing.s4),
             OutlinedButton(onPressed: onRetry, child: const Text('Retry')),

@@ -10,7 +10,12 @@ import '../theme/esoko_tokens.dart';
 /// green 3px rule + small caps label (see tokens.css `.ui-kicker`) —
 /// giving a screen an intentional, quiet "above the title" marker.
 class EsokoSectionHeader extends StatelessWidget {
-  const EsokoSectionHeader({super.key, required this.title, this.subtitle, this.kicker});
+  const EsokoSectionHeader({
+    super.key,
+    required this.title,
+    this.subtitle,
+    this.kicker,
+  });
 
   final String title;
   final String? subtitle;
@@ -52,7 +57,13 @@ class EsokoSectionHeader extends StatelessWidget {
         Text(title, style: theme.textTheme.headlineSmall),
         if (subtitle != null) ...[
           const SizedBox(height: EsokoSpacing.s1),
-          Text(subtitle!, style: TextStyle(color: EsokoColors.text2, height: 1.4)),
+          // Theme-derived, not the fixed EsokoColors.text2 — this
+          // heading sits atop nearly every list screen's scaffold
+          // background, which flips between paper and darkSurface.
+          Text(
+            subtitle!,
+            style: theme.textTheme.bodySmall?.copyWith(height: 1.4),
+          ),
         ],
       ],
     );
