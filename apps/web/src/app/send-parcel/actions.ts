@@ -147,9 +147,30 @@ export async function actionPayParcel(
   }
 }
 
+// The structured info a handler attached to a pre-printed label in
+// the field — wire type matching Go's dbx.ParcelLabelInfo.
+export interface ParcelLabelInfo {
+  itemDescription: string;
+  destination: string | null;
+  ownerName: string | null;
+  ownerContact: string | null;
+  ownerGender: string | null;
+  itemType: string | null;
+  weightRangeKg: string | null;
+  attachedAt: string;
+}
+
 export interface ParcelStatusView {
   code: string; status: string; originLabel: string; destinationLabel: string;
   parcelType: string; priceKes: string | null; createdAt: string; deliveredAt: string | null;
+  // preLabel/preLabelInfo — set when `code` is a pre-printed label
+  // (see dbx.ParcelLabelStock) scanned/tracked before it was ever
+  // attached to a real booking. status reads "LABEL_PRINTED" in that
+  // case; preLabelInfo is null until at least an item description has
+  // been attached to it (see the admin "Attach info to a label"
+  // screen), even for a genuinely pre-printed (but still blank) label.
+  preLabel?: boolean;
+  preLabelInfo?: ParcelLabelInfo | null;
 }
 
 /** Guest-safe — the same code the sender was shown is the bearer

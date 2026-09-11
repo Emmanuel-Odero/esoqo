@@ -1,7 +1,8 @@
 'use client';
-import { useState, useTransition } from 'react';
+import { useCallback, useState, useTransition } from 'react';
 import { Icon } from '@esoko/ui';
 import { actionCheckParcelStatus, type ParcelStatusView } from '../actions';
+import { ParcelScanner } from './ParcelScanner';
 
 const STATUS_LABEL: Record<string, string> = {
   DRAFT_PENDING_PAYMENT: 'Awaiting payment',
@@ -10,6 +11,11 @@ const STATUS_LABEL: Record<string, string> = {
   IN_TRANSIT: 'In transit',
   DELIVERED: 'Delivered',
   CANCELLED: 'Cancelled',
+  // A pre-printed label (see dbx.ParcelLabelStock) scanned before it
+  // was ever attached to a real booking — never has a route/price, so
+  // it gets its own render branch below rather than fitting into the
+  // Route/Price/Delivered rows every real status uses.
+  LABEL_PRINTED: 'Pre-printed label',
 };
 
 const fieldStyle: React.CSSProperties = {
@@ -21,13 +27,24 @@ export function TrackParcelForm() {
   const [result, setResult] = useState<ParcelStatusView | null | undefined>(undefined);
   const [pending, start] = useTransition();
 
-  function lookup() {
-    if (!code.trim()) return;
+  // Takes an explicit override so a scan result (which sets `code`
+  // and wants to look up in the same breath) isn't racing the state
+  // update — `code` in a closure here would still read the pre-scan
+  // value until the next render.
+  function lookup(override?: string) {
+    const value = (override ?? code).trim();
+    if (!value) return;
     start(async () => {
-      const res = await actionCheckParcelStatus(code.trim().toUpperCase());
+      const res = await actionCheckParcelStatus(value.toUpperCase());
       setResult(res);
     });
   }
+
+  const handleScan = useCallback((scanned: string) => {
+    setCode(scanned);
+    lookup(scanned);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   return (
     <div className="card">
@@ -36,9 +53,13 @@ export function TrackParcelForm() {
         <input id="track-code" className="mono" style={fieldStyle} value={code}
           onChange={(e) => setCode(e.target.value)} placeholder="PKG-XXXXXX"
           onKeyDown={(e) => e.key === 'Enter' && lookup()} />
-        <button type="button" className="btn btn-p btn-sm" disabled={pending || !code.trim()} onClick={lookup}>
+        <button type="button" className="btn btn-p btn-sm" disabled={pending || !code.trim()} onClick={() => lookup()}>
           {pending ? 'Checking…' : 'Track'}
         </button>
+      </div>
+
+      <div style={{ marginTop: 10 }}>
+        <ParcelScanner onScan={handleScan} />
       </div>
 
       {result === null && (
@@ -47,7 +68,29 @@ export function TrackParcelForm() {
         </p>
       )}
 
-      {result && (
+      {result && result.preLabel && (
+        <div style={{ marginTop: 18, borderTop: '1px solid var(--line)', paddingTop: 16 }}>
+          <div className="row" style={{ justifyContent: 'space-between', marginBottom: 8 }}>
+            <span className="sub">Status</span>
+            <strong>{STATUS_LABEL.LABEL_PRINTED}</strong>
+          </div>
+          {result.preLabelInfo ? (
+            <>
+              <p style={{ margin: '0 0 8px' }}>{result.preLabelInfo.itemDescription}</p>
+              <LabelInfoRow label="Destination" value={result.preLabelInfo.destination} />
+              <LabelInfoRow label="Owner" value={result.preLabelInfo.ownerName} />
+              <LabelInfoRow label="Contact" value={result.preLabelInfo.ownerContact} />
+              <LabelInfoRow label="Gender" value={result.preLabelInfo.ownerGender} />
+              <LabelInfoRow label="Item type" value={result.preLabelInfo.itemType} />
+              <LabelInfoRow label="Weight" value={result.preLabelInfo.weightRangeKg} />
+            </>
+          ) : (
+            <p style={{ margin: 0 }}>This label hasn&apos;t been attached to a shipment yet.</p>
+          )}
+        </div>
+      )}
+
+      {result && !result.preLabel && (
         <div style={{ marginTop: 18, borderTop: '1px solid var(--line)', paddingTop: 16 }}>
           <div className="row" style={{ justifyContent: 'space-between', marginBottom: 8 }}>
             <span className="sub">Status</span>
@@ -71,6 +114,16 @@ export function TrackParcelForm() {
           )}
         </div>
       )}
+    </div>
+  );
+}
+
+function LabelInfoRow({ label, value }: { label: string; value: string | null }) {
+  if (!value) return null;
+  return (
+    <div className="row" style={{ justifyContent: 'space-between', marginBottom: 6 }}>
+      <span className="sub">{label}</span>
+      <span>{value}</span>
     </div>
   );
 }
