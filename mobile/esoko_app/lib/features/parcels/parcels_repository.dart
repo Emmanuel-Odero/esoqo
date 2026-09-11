@@ -54,6 +54,10 @@ class ParcelsRepository {
     String? notes,
     String? originZoneId,
     String? destinationZoneId,
+    // A code already printed and stuck on the physical parcel ahead of
+    // time (see dbx.ParcelLabelStock) — scanned or typed in at booking
+    // instead of letting the server mint a fresh one.
+    String? existingCode,
   }) async {
     final res = await _api.post('/v1/parcels', {
       'senderName': senderName,
@@ -68,6 +72,7 @@ class ParcelsRepository {
       if (notes != null && notes.isNotEmpty) 'notes': notes,
       if (originZoneId != null) 'originZoneId': originZoneId,
       if (destinationZoneId != null) 'destinationZoneId': destinationZoneId,
+      if (existingCode != null && existingCode.isNotEmpty) 'existingCode': existingCode,
     });
     return BookedParcel(
       parcelId: res['parcelId'] as String,
@@ -158,6 +163,16 @@ class ParcelsRepository {
       if (e.code == 'NOT_FOUND') return null;
       rethrow;
     }
+  }
+
+  /// GET /v1/parcels/:code/label — auth required. 403s (surfaced as
+  /// ApiException with code DENIED) for anyone who isn't currently
+  /// holding/assigned to the parcel or org staff with parcels.read.
+  Future<ParcelLabel> label(String code) async {
+    final res = await _api.get(
+      '/v1/parcels/${Uri.encodeComponent(code)}/label',
+    );
+    return ParcelLabel.fromJson(res);
   }
 
   /// POST /v1/parcels/:code/handoff — a driver/handler scanning a

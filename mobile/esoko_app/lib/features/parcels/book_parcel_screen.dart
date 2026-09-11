@@ -39,6 +39,7 @@ class _BookParcelScreenState extends ConsumerState<BookParcelScreen> {
   final _destination = TextEditingController();
   final _weight = TextEditingController();
   final _notes = TextEditingController();
+  final _existingCode = TextEditingController();
   String _parcelType = parcelTypes.first.$1;
   String _weightUnit = 'KG';
   bool _fragile = false;
@@ -123,6 +124,7 @@ class _BookParcelScreenState extends ConsumerState<BookParcelScreen> {
     _destination.dispose();
     _weight.dispose();
     _notes.dispose();
+    _existingCode.dispose();
     super.dispose();
   }
 
@@ -156,6 +158,7 @@ class _BookParcelScreenState extends ConsumerState<BookParcelScreen> {
             notes: _notes.text.trim(),
             originZoneId: _originZoneId,
             destinationZoneId: _destinationZoneId,
+            existingCode: _existingCode.text.trim(),
           );
       if (!mounted) return;
       // pushReplacement, not push — the booking form is done; the price
@@ -311,6 +314,13 @@ class _BookParcelScreenState extends ConsumerState<BookParcelScreen> {
                   controller: _notes,
                   label: 'Notes (optional)',
                   hint: 'e.g. Call on arrival',
+                ),
+                const SizedBox(height: EsokoSpacing.s2),
+                EsokoFormField(
+                  controller: _existingCode,
+                  label: 'Pre-printed label code (optional)',
+                  hint: 'e.g. PKG-T7HZ967 — already on the parcel?',
+                  icon: Icons.qr_code_2_outlined,
                 ),
                 if (_error != null) ...[
                   const SizedBox(height: EsokoSpacing.s3),

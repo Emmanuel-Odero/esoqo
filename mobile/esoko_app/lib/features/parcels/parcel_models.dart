@@ -127,6 +127,8 @@ class ParcelStatusView {
     this.cancellationReason,
     this.cancelledAt,
     this.receiptConfirmedAt,
+    this.preLabel = false,
+    this.preLabelInfo,
   });
 
   factory ParcelStatusView.fromJson(Map<String, dynamic> json) =>
@@ -153,10 +155,15 @@ class ParcelStatusView {
         receiptConfirmedAt: json['receiptConfirmedAt'] == null
             ? null
             : DateTime.tryParse(json['receiptConfirmedAt'] as String),
+        preLabel: json['preLabel'] as bool? ?? false,
+        preLabelInfo: json['preLabelInfo'] == null
+            ? null
+            : ParcelLabelInfo.fromJson(
+                json['preLabelInfo'] as Map<String, dynamic>),
       );
 
   final String code;
-  final String status; // DRAFT_PENDING_PAYMENT | BOOKED | PICKED_UP | IN_TRANSIT | DELIVERED | CANCELLED
+  final String status; // DRAFT_PENDING_PAYMENT | BOOKED | PICKED_UP | IN_TRANSIT | DELIVERED | CANCELLED | LABEL_PRINTED
   final String originLabel;
   final String destinationLabel;
   final String parcelType;
@@ -167,6 +174,54 @@ class ParcelStatusView {
   final String? cancellationReason;
   final DateTime? cancelledAt;
   final DateTime? receiptConfirmedAt;
+  // preLabel/preLabelInfo — a pre-printed label (see
+  // dbx.ParcelLabelStock) that was scanned/tracked before ever
+  // becoming a real booking. status reads "LABEL_PRINTED" in that
+  // case; every other field above is meaningless (blank/zero) except
+  // createdAt. preLabelInfo is null until at least an item description
+  // has been attached in the field (see the admin "Attach info to a
+  // label" screen), even for a genuinely pre-printed (but still blank)
+  // label.
+  final bool preLabel;
+  final ParcelLabelInfo? preLabelInfo;
+}
+
+/// The structured info a handler attached to a pre-printed label in
+/// the field — wire type matching Go's dbx.ParcelLabelInfo.
+class ParcelLabelInfo {
+  ParcelLabelInfo({
+    required this.itemDescription,
+    this.destination,
+    this.ownerName,
+    this.ownerContact,
+    this.ownerGender,
+    this.itemType,
+    this.weightRangeKg,
+    required this.attachedAt,
+  });
+
+  factory ParcelLabelInfo.fromJson(Map<String, dynamic> json) =>
+      ParcelLabelInfo(
+        itemDescription: json['itemDescription'] as String,
+        destination: json['destination'] as String?,
+        ownerName: json['ownerName'] as String?,
+        ownerContact: json['ownerContact'] as String?,
+        ownerGender: json['ownerGender'] as String?,
+        itemType: json['itemType'] as String?,
+        weightRangeKg: json['weightRangeKg'] as String?,
+        attachedAt:
+            DateTime.tryParse(json['attachedAt'] as String? ?? '') ??
+                DateTime.now(),
+      );
+
+  final String itemDescription;
+  final String? destination;
+  final String? ownerName;
+  final String? ownerContact;
+  final String? ownerGender;
+  final String? itemType;
+  final String? weightRangeKg;
+  final DateTime attachedAt;
 }
 
 /// One line on "parcels I sent" or "parcels I'm holding" — wire type
@@ -319,7 +374,53 @@ String parcelStatusMessage(ParcelStatusView status) {
       return status.cancellationReason == null
           ? 'Cancelled — see your SMS for details.'
           : 'Cancelled — ${status.cancellationReason}.';
+    case 'LABEL_PRINTED':
+      return status.preLabelInfo == null
+          ? "This is a pre-printed label — it hasn't been attached to a shipment yet."
+          : 'Pre-printed label — attached to: ${status.preLabelInfo!.itemDescription}';
     default:
       return status.status;
   }
+}
+
+/// The label projection a handler/courier prints and sticks on the
+/// physical parcel — wire type matching dbx.ParcelLabel (GET
+/// /v1/parcels/:code/label). Deliberately thin: no phone numbers
+/// beyond the last 4 digits, no price, no sender/receiver address —
+/// see that struct's own comment for why a label stays PII-minimal.
+class ParcelLabel {
+  ParcelLabel({
+    required this.code,
+    required this.status,
+    required this.parcelType,
+    this.weightKg,
+    required this.originLabel,
+    required this.destinationLabel,
+    required this.receiverName,
+    required this.receiverPhoneLast4,
+    required this.createdAt,
+  });
+
+  factory ParcelLabel.fromJson(Map<String, dynamic> json) => ParcelLabel(
+    code: json['code'] as String,
+    status: json['status'] as String,
+    parcelType: json['parcelType'] as String,
+    weightKg: (json['weightKg'] as num?)?.toDouble(),
+    originLabel: json['originLabel'] as String,
+    destinationLabel: json['destinationLabel'] as String,
+    receiverName: json['receiverName'] as String,
+    receiverPhoneLast4: json['receiverPhoneLast4'] as String? ?? '',
+    createdAt:
+        DateTime.tryParse(json['createdAt'] as String? ?? '') ?? DateTime.now(),
+  );
+
+  final String code;
+  final String status;
+  final String parcelType;
+  final double? weightKg;
+  final String originLabel;
+  final String destinationLabel;
+  final String receiverName;
+  final String receiverPhoneLast4;
+  final DateTime createdAt;
 }

@@ -68,6 +68,13 @@ dependencies:
   # packages/ui/src/Icon.tsx, see assets/icons/ + EsokoIcon) — no emoji,
   # no generic Cupertino/Material glyphs, matching web's icon language.
   flutter_svg: ^2.0.17
+  # Renders the Code128 1D barcode on a parcel label — qr_flutter
+  # above covers the QR half of the same label.
+  barcode_widget: ^2.0.4
+  # Builds the printable parcel-label PDF and hands it to the OS print
+  # sheet (AirPrint et al) — see ParcelLabelScreen.
+  printing: ^5.13.4
+  pdf: ^3.11.1
 
 dev_dependencies:
   flutter_test:
