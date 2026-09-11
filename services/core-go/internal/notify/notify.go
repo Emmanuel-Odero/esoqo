@@ -75,6 +75,18 @@ func ContributionConfirmed(amountKES, contributorName, orgName, newBalanceKES, r
 		amountKES, trunc(contributorName), trunc(orgName), newBalanceKES, reference)
 }
 
+// ContributionDeclared — the contributor's own immediate receipt for a
+// DECLARED (not-yet-confirmed) contribution: manual/cash declarations
+// sit until an officer confirms them, which could be a while, so this
+// is what tells the member "we got it" before that happens. Separate
+// from ContributionConfirmed, which broadcasts to every active member
+// once money is actually credited — this one is contributor-only and
+// fires at declare time instead.
+func ContributionDeclared(amountKES, method, reference string) string {
+	return fmt.Sprintf("Esoko: your KES %s contribution (%s) was recorded - ref %s. You'll get a text once it's confirmed.",
+		amountKES, strings.ToLower(method), reference)
+}
+
 // ParcelCollectionScheduled — sent to the sender the moment an admin
 // assigns a collector, so "someone is coming for it" lands before the
 // courier ever shows up. Includes the collector's own phone number —

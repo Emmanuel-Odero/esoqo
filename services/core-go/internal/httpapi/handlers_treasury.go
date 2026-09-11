@@ -113,12 +113,17 @@ func (s *Server) handleDeclareContribution(c *gin.Context) {
 		return
 	}
 
+	profile, _ := dbx.GetPersonProfile(c.Request.Context(), s.Pool, ctx.PartyID)
 	contributorName := ctx.PartyID
-	if profile, _ := dbx.GetPersonProfile(c.Request.Context(), s.Pool, ctx.PartyID); profile != nil {
+	var contributorMsisdn string
+	if profile != nil {
 		if profile.KnownAs != nil && *profile.KnownAs != "" {
 			contributorName = *profile.KnownAs
 		} else {
 			contributorName = profile.OfficialName
+		}
+		if profile.Msisdn != nil {
+			contributorMsisdn = *profile.Msisdn
 		}
 	}
 	method := "DECLARED"
@@ -138,13 +143,9 @@ func (s *Server) handleDeclareContribution(c *gin.Context) {
 	// officer's manual confirm — same convenience the checkout flows
 	// elsewhere in the app already give.
 	if req.Method != nil && *req.Method == "MPESA" {
-		var msisdn string
-		if profile, _ := dbx.GetPersonProfile(c.Request.Context(), s.Pool, ctx.PartyID); profile != nil && profile.Msisdn != nil {
-			msisdn = *profile.Msisdn
-		}
-		if msisdn != "" {
+		if contributorMsisdn != "" {
 			stk, err := payments.InitiateStkPush(s.Cfg, payments.StkPushRequest{
-				Msisdn: msisdn, AmountKES: req.AmountKES, AccountReference: contributionID[:8], Description: "Chama contribution",
+				Msisdn: contributorMsisdn, AmountKES: req.AmountKES, AccountReference: contributionID[:8], Description: "Chama contribution",
 			})
 			if err == nil {
 				_ = dbx.AttachContributionCheckoutRequestID(c.Request.Context(), s.Pool, contributionID, stk.CheckoutRequestID)
@@ -160,6 +161,22 @@ func (s *Server) handleDeclareContribution(c *gin.Context) {
 			}
 		}
 	}
+
+	// Everyone else on the treasury member list gets told once this is
+	// CONFIRMED (see notifyContributionConfirmed) — but the person who
+	// just declared it hears nothing at all until an officer gets
+	// around to confirming, which could be a while for a cash/manual
+	// declaration. This closes that gap: an immediate, contributor-only
+	// "got it, pending" text. Skipped when the MPESA path above already
+	// auto-confirmed within this same request — that already sent the
+	// full CONFIRMED broadcast, which the contributor receives too as
+	// an active member, so this would just be a redundant second text.
+	if resp["status"] == "DECLARED" && contributorMsisdn != "" {
+		_ = authsvc.SendSms(contributorMsisdn,
+			notify.ContributionDeclared(fmt.Sprintf("%.2f", req.AmountKES), method, contributionID[:8]),
+			"TREASURY_CONTRIBUTION")
+	}
+
 	c.JSON(http.StatusOK, resp)
 }
 
