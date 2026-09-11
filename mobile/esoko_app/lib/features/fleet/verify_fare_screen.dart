@@ -119,10 +119,16 @@ class _VerifyFareScreenState extends ConsumerState<VerifyFareScreen> {
                   ),
                 ),
                 const SizedBox(width: EsokoSpacing.s2),
-                EsokoLoadingButton(
-                  label: 'Verify',
-                  loading: _busy,
-                  onPressed: () => _verify(_code.text),
+                // Fixed width, not a bare Row child — see
+                // parcels_hub_screen.dart's comment on the "BoxConstraints
+                // forces an infinite width" FilledButton-in-a-Row bug.
+                SizedBox(
+                  width: 96,
+                  child: EsokoLoadingButton(
+                    label: 'Verify',
+                    loading: _busy,
+                    onPressed: () => _verify(_code.text),
+                  ),
                 ),
               ],
             ),

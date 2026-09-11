@@ -220,10 +220,18 @@ class _UniversalScanScreenState extends ConsumerState<UniversalScanScreen> {
                       ),
                     ),
                     const SizedBox(width: EsokoSpacing.s2),
-                    EsokoLoadingButton(
-                      label: 'Go',
-                      loading: _busy,
-                      onPressed: () => _resolve(_code.text),
+                    // Fixed width, not a bare Row child — un-widthed,
+                    // FilledButton's internal ButtonStyleButton throws
+                    // "BoxConstraints forces an infinite width" in a
+                    // Row (see parcels_hub_screen.dart's own comment
+                    // on this exact bug).
+                    SizedBox(
+                      width: 72,
+                      child: EsokoLoadingButton(
+                        label: 'Go',
+                        loading: _busy,
+                        onPressed: () => _resolve(_code.text),
+                      ),
                     ),
                   ],
                 ),
