@@ -42,5 +42,15 @@ func main() {
 		log.Fatalf("seed: pilot: %v", err)
 	}
 
+	log.Println("seeding unified-crew-identity demo accounts…")
+	accounts, err := seed.SeedDemoUnifiedIdentity(ctx, pool)
+	if err != nil {
+		log.Fatalf("seed: unified identity: %v", err)
+	}
+	log.Println("\nDemo sign-in accounts (phone + PIN, POST /v1/auth/sign-in):")
+	for _, a := range accounts {
+		log.Printf("  %-16s PIN %-8s %-24s %s\n", a.Msisdn, a.Pin, a.Name, a.Description)
+	}
+
 	log.Println("\nNo real registrations, parties or prices were seeded — reference data and clearly-labelled \"Demo\" content only.")
 }

@@ -88,6 +88,22 @@ func AssertOwnsOrg(ctx context.Context, pool *pgxpool.Pool, c authsvc.Ctx, orgID
 		}
 		return partyID, nil
 	}
+	// SUBJECT with a live, OTP-activated org-staff context for this exact
+	// org (see authsvc.OrgContextService / docs/proposals/
+	// esoko-unified-crew-identity.md): the middleware layer only ever
+	// merges in the unqualified TicketingStaffCapabilities bundle when
+	// ctx.TicketOrgID is set, so this check is the same exact-match shape
+	// as the AGENT branch above — never a fallback that widens access,
+	// only an additional allow path. Deliberately falls through to the
+	// :own owner check below on a miss, rather than denying outright: an
+	// owner acting on their own org must never be blocked just because
+	// they separately hold an (irrelevant to this org) activated staff
+	// context elsewhere.
+	if c.ActorType == authsvc.ActorSubject && c.TicketOrgID != "" && c.TicketOrgID == orgID {
+		if err := authsvc.RequireCapability(c, capability, nil); err == nil {
+			return partyID, nil
+		}
+	}
 	if err := authsvc.RequireCapability(c, capability, map[string]string{"partyId": partyID}); err != nil {
 		return "", err
 	}
@@ -475,7 +491,19 @@ func CloseTrip(ctx context.Context, pool *pgxpool.Pool, c authsvc.Ctx, tripID st
 			// shows up doesn't leak which path almost worked.
 			return managerErr
 		}
-		crewMemberID, err := crewMemberIDForStaff(ctx, pool, c.ActorID)
+		// Two ways a CREW bundle can be held here: an AGENT PIN session
+		// (legacy — see docs/proposals/esoko-unified-crew-identity.md),
+		// or a SUBJECT with a live, OTP-activated CREW context for this
+		// exact org. Each resolves its crewMemberId link from a
+		// different table; which one applies is decided by ActorType,
+		// never both at once.
+		var crewMemberID string
+		var err error
+		if c.ActorType == authsvc.ActorSubject {
+			crewMemberID, err = CrewMemberIDForGrant(ctx, pool, orgID, c.PartyID)
+		} else {
+			crewMemberID, err = crewMemberIDForStaff(ctx, pool, c.ActorID)
+		}
 		if err != nil {
 			return err
 		}
@@ -508,16 +536,31 @@ type MyTrip struct {
 
 // MyActiveTrip — the crew-scoped alternative to ListTrips (which needs
 // CapTripRead, deliberately not part of the CREW bundle). Self-scoped by
-// construction rather than by a capability qualifier: an AGENT session
-// with no linked CrewMember, or one whose CrewMember isn't driving or
-// conducting anything right now, correctly gets "no trip", never
-// another crew member's. Requires an AGENT session — a SUBJECT asking
-// "my trip" has no CrewMember to resolve and always gets nil.
+// construction rather than by a capability qualifier: a session with no
+// linked CrewMember, or one whose CrewMember isn't driving or conducting
+// anything right now, correctly gets "no trip", never another crew
+// member's.
+//
+// Two shapes hold a CREW bundle here (see CloseTrip's own comment): a
+// legacy AGENT PIN session (c.ActorID is a ticket_org_staff id), or a
+// SUBJECT with a live, OTP-activated CREW context (c.TicketOrgID set by
+// the middleware, c.PartyID is the person). Anything else — a plain
+// SUBJECT with no activated context, or an AGENT session for another
+// role — has no CrewMember to resolve and always gets nil.
 func MyActiveTrip(ctx context.Context, pool *pgxpool.Pool, c authsvc.Ctx) (*MyTrip, error) {
-	if !c.Verified || c.ActorType != authsvc.ActorAgent || c.ActorID == "" {
+	if !c.Verified {
 		return nil, nil
 	}
-	crewMemberID, err := crewMemberIDForStaff(ctx, pool, c.ActorID)
+	var crewMemberID string
+	var err error
+	switch {
+	case c.ActorType == authsvc.ActorSubject && c.TicketOrgID != "":
+		crewMemberID, err = CrewMemberIDForGrant(ctx, pool, c.TicketOrgID, c.PartyID)
+	case c.ActorType == authsvc.ActorAgent && c.ActorID != "":
+		crewMemberID, err = crewMemberIDForStaff(ctx, pool, c.ActorID)
+	default:
+		return nil, nil
+	}
 	if err != nil {
 		return nil, err
 	}

@@ -10,6 +10,7 @@ import (
 	"github.com/esoko/core-go/internal/audit"
 	"github.com/esoko/core-go/internal/authsvc"
 	"github.com/esoko/core-go/internal/dbx"
+	"github.com/esoko/core-go/internal/notify"
 	"github.com/esoko/core-go/internal/payments"
 )
 
@@ -73,8 +74,7 @@ func (s *Server) notifyContributionConfirmed(c *gin.Context, contributionID stri
 	if err != nil {
 		return
 	}
-	message := fmt.Sprintf("KES %s from %s credited to %s, new balance KES %s — ref %s",
-		detail.AmountKES, detail.ContributorName, detail.OrgName, balanceText, contributionID[:8])
+	message := notify.ContributionConfirmed(detail.AmountKES, detail.ContributorName, detail.OrgName, balanceText, contributionID[:8])
 	for _, m := range members {
 		if m.Msisdn == nil || *m.Msisdn == "" {
 			continue

@@ -260,11 +260,27 @@ services:
       DATABASE_URL: postgresql://esoko:esoko_dev_only@pgbouncer:5432/esoko?sslmode=disable
       REDIS_URL: redis://redis:6379
       SMS_PROVIDER: "${SMS_PROVIDER:-console}"
+      SMS_TEST_ENV: "${SMS_TEST_ENV:-}"
       SMS_MOCK_URL: http://mock-sms:8080
+      CELCOM_API_KEY: "${CELCOM_API_KEY:-}"
+      CELCOM_PARTNER_ID: "${CELCOM_PARTNER_ID:-}"
+      CELCOM_SHORTCODE: "${CELCOM_SHORTCODE:-}"
       OTP_PEPPER: "${OTP_PEPPER:-dev-pepper-change-me}"
+      # Default (5/hour/msisdn) is a production anti-SMS-pumping guard,
+      # not something local dev should ever hit — the same demo number
+      # gets OTP'd repeatedly across sign-in, PIN reset, and every
+      # org-context activation test in one afternoon. Loosened here
+      # only; production still gets the real default via this same env
+      # var if left unset there.
+      OTP_RATE_LIMIT_PER_HOUR: "${OTP_RATE_LIMIT_PER_HOUR:-200}"
       SESSION_SECRET: "${SESSION_SECRET:-dev-session-secret-change-me}"
       AUDIT_CHAIN_SEED: "${AUDIT_CHAIN_SEED:-esoko-genesis}"
       MPESA_PROVIDER: "${MPESA_PROVIDER:-console}"
+      MPESA_CONSUMER_KEY: "${MPESA_CONSUMER_KEY:-}"
+      MPESA_CONSUMER_SECRET: "${MPESA_CONSUMER_SECRET:-}"
+      MPESA_SHORTCODE: "${MPESA_SHORTCODE:-}"
+      MPESA_PASSKEY: "${MPESA_PASSKEY:-}"
+      MPESA_CALLBACK_URL: "${MPESA_CALLBACK_URL:-}"
       PESAPAL_PROVIDER: "${PESAPAL_PROVIDER:-console}"
       # Strangler bridge: Daraja callbacks Go doesn't own yet
       # (registration/donation) are forwarded byte-identical to TS core.

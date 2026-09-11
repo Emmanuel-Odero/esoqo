@@ -84,6 +84,21 @@ func (s *Server) handleMpesaStkCallback(c *gin.Context) {
 		return
 	}
 
+	if parcelCode, justConfirmed, err := dbx.ConfirmParcelPaymentByCheckoutID(ctx, s.Pool, cb.CheckoutRequestID, cb.MpesaReceiptCode, s.Cfg.LoyaltyEarnEnabled); err == nil {
+		if justConfirmed {
+			// The async path handlePayParcel's own inline auto-confirm
+			// can't cover — a sender whose STK push wasn't auto-
+			// confirmed within the client's poll window previously
+			// heard nothing at all once this callback landed.
+			s.sendParcelPaymentConfirmedSms(c, parcelCode)
+		}
+		c.JSON(http.StatusOK, gin.H{"ok": true})
+		return
+	} else if err != dbx.ErrParcelPaymentNotFound {
+		writeError(c, http.StatusInternalServerError, "CONFIRM_FAILED", "Could not confirm payment")
+		return
+	}
+
 	if err := dbx.ConfirmFarePaymentByCheckoutID(ctx, s.Pool, cb.CheckoutRequestID, cb.MpesaReceiptCode, s.Cfg.LoyaltyEarnEnabled); err == nil {
 		c.JSON(http.StatusOK, gin.H{"ok": true})
 		return

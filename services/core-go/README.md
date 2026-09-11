@@ -59,3 +59,17 @@ go run ./cmd/api
 
 `GIN_MODE=release` before deploying — Phase 0 leaves Gin's debug route
 dump on since this only ever runs locally so far.
+
+Then seed reference data, demo fixtures and 20 ready-to-use sign-in
+accounts (no self-serve sign-up screen exists, so this is how you get a
+signed-in session locally without an SMS provider):
+
+```bash
+go run ./cmd/seed
+```
+
+See **[DEMO_ACCOUNTS.md](./DEMO_ACCOUNTS.md)** for the full phone/PIN
+list — store owners, ticketing/transport company owners, every
+org-staff-grant role (including a suspended one and a "dual hat" account
+that owns a company *and* holds a staff grant elsewhere), and plain
+shoppers.

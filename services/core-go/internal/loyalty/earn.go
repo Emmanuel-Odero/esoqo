@@ -69,6 +69,25 @@ func PartyPoints(ctx context.Context, pool *pgxpool.Pool, partyID string) (int, 
 	return pts, err
 }
 
+// RefundToParty credits back the exact points a cancelled purchase
+// spent — distinct from EarnForSpend, which only ever credits the 10%
+// cashback rate. Idempotent per refId, same guard shape EarnForSpend
+// uses, so a retried cancellation can never double-refund.
+func RefundToParty(ctx context.Context, pool *pgxpool.Pool, partyID string, points int, refID string) error {
+	if partyID == "" || points <= 0 {
+		return nil
+	}
+	var exists bool
+	if err := pool.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM party_loyalty_entry WHERE "partyId" = $1 AND kind = 'REFUND' AND "refId" = $2)`, partyID, refID).Scan(&exists); err != nil {
+		return err
+	}
+	if exists {
+		return nil
+	}
+	_, err := pool.Exec(ctx, `INSERT INTO party_loyalty_entry (id, "partyId", points, kind, "refId", "createdAt") VALUES (gen_random_uuid(), $1, $2, 'REFUND', $3, now())`, partyID, points, refID)
+	return err
+}
+
 // SpendFromParty debits loyalty points for a voucher load. Fails when
 // balance is insufficient. Caller must hold the surrounding tx semantics;
 // this is a single INSERT guarded by a balance check.

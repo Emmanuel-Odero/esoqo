@@ -22,6 +22,7 @@ type Server struct {
 	Redis   *redis.Client
 	OTP     *authsvc.OtpService
 	Session *authsvc.SessionService
+	OrgCtx  *authsvc.OrgContextService
 }
 
 func NewServer(cfg config.Config, pool *pgxpool.Pool, rdb *redis.Client) *Server {
@@ -31,6 +32,7 @@ func NewServer(cfg config.Config, pool *pgxpool.Pool, rdb *redis.Client) *Server
 		Redis:   rdb,
 		OTP:     authsvc.NewOtpService(rdb, cfg.OTPPepper, cfg.OTPDailySpendCapKES, cfg.OTPRateLimitPerHour),
 		Session: authsvc.NewSessionService(rdb),
+		OrgCtx:  authsvc.NewOrgContextService(rdb, time.Duration(cfg.OrgContextActivationDays)*24*time.Hour),
 	}
 }
 
@@ -87,6 +89,11 @@ func (s *Server) Router() *gin.Engine {
 		v1.GET("/bookings/:id", s.handleGetBooking)
 		v1.GET("/me/tickets", s.authRequired(), s.handleListMyBookings)
 		v1.GET("/me/orgs", s.authRequired(), s.handleListMyOrgs)
+		v1.GET("/me/org-grants", s.authRequired(), s.handleListMyOrgGrants)
+		v1.POST("/org-context/activate/request", s.authRequired(), s.handleOrgContextActivateRequest)
+		v1.POST("/org-context/activate/verify", s.authRequired(), s.handleOrgContextActivateVerify)
+		v1.POST("/org-context/deactivate", s.authRequired(), s.handleOrgContextDeactivate)
+		v1.GET("/org-context/status", s.authRequired(), s.handleOrgContextStatus)
 		v1.GET("/fleet/active-trips", s.handleListPublicActiveTrips)
 
 		v1.POST("/ticket-staff/sign-in", s.handleTicketStaffSignIn)
@@ -102,6 +109,10 @@ func (s *Server) Router() *gin.Engine {
 		v1.POST("/ticketorgs/:id/routes", s.authRequired(), s.handleCreateOrgRoute)
 		v1.GET("/ticketorgs/:id/staff", s.authRequired(), s.handleListOrgStaff)
 		v1.POST("/ticketorgs/:id/staff", s.authRequired(), s.handleCreateOrgStaff)
+		v1.GET("/ticketorgs/:id/staff-grants", s.authRequired(), s.handleListOrgStaffGrants)
+		v1.POST("/ticketorgs/:id/staff-grants", s.authRequired(), s.handleCreateOrgStaffGrant)
+		v1.POST("/ticketorgs/:id/staff-grants/:partyId/suspend", s.authRequired(), s.handleSuspendOrgStaffGrant)
+		v1.POST("/ticketorgs/:id/staff-grants/:partyId/reinstate", s.authRequired(), s.handleReinstateOrgStaffGrant)
 		v1.GET("/ticketorgs/:id/bookings", s.authRequired(), s.handleListOrgBookings)
 		v1.POST("/ticketorgs/:id/checkin", s.authRequired(), s.handleCheckInTicket)
 
@@ -192,11 +203,49 @@ func (s *Server) Router() *gin.Engine {
 		v1.GET("/me/voucher-batches", s.authRequired(), s.handleListVoucherBatches)
 
 		v1.POST("/parcels", s.handleBookParcel)
+		v1.GET("/parcels/pricing", s.handleGetParcelPricing)
+		v1.GET("/parcels/zones", s.handleListParcelZones)
+		v1.POST("/parcels/:code/price", s.handleSetParcelPrice)
+		v1.POST("/parcels/:code/pay", s.handlePayParcel)
 		v1.GET("/parcels/:code/status", s.handleGetParcelStatus)
 		v1.POST("/parcels/:code/handoff", s.authRequired(), s.handleScanParcelHandoff)
 		v1.POST("/parcels/:code/deliver", s.authRequired(), s.handleDeliverParcel)
+		v1.POST("/parcels/:code/receipt/otp", s.handleRequestParcelReceiptOtp)
+		v1.POST("/parcels/:code/receipt/confirm", s.handleConfirmParcelReceipt)
+		v1.GET("/parcels/:code/handoffs", s.authRequired(), s.handleListParcelHandoffs)
+		v1.POST("/parcels/:code/claim", s.authRequired(), s.handleClaimParcel)
+		// Deliberately NOT under /parcels/... — gin's router can't mix a
+		// static "couriers" segment with the sibling :code wildcard at
+		// the same position in the same method's tree (every other
+		// /parcels/:code/... route above already claims that slot).
+		v1.POST("/parcel-couriers/me/pings", s.authRequired(), s.handlePostCourierPing)
+		v1.GET("/parcel-couriers/me/available-jobs", s.authRequired(), s.handleListAvailableJobs)
 		v1.GET("/me/parcels", s.authRequired(), s.handleListMyParcels)
 		v1.GET("/me/parcels/holding", s.authRequired(), s.handleListHeldParcels)
+
+		v1.GET("/admin/parcels", s.authRequired(), s.handleAdminListParcels)
+		v1.GET("/admin/parcels/stats", s.authRequired(), s.handleAdminParcelStats)
+		v1.GET("/admin/parcels/collectors", s.authRequired(), s.handleAdminSearchCollectors)
+		v1.POST("/admin/parcels/:id/assign", s.authRequired(), s.handleAssignParcelCollector)
+		v1.POST("/admin/parcels/:id/cancel", s.authRequired(), s.handleCancelParcel)
+		v1.POST("/admin/parcels/:id/refund", s.authRequired(), s.handleMarkParcelRefunded)
+		v1.PATCH("/admin/parcels/:id", s.authRequired(), s.handleUpdateParcelDetails)
+		v1.POST("/admin/parcels/:id/exception", s.authRequired(), s.handleFlagParcelException)
+		v1.POST("/admin/parcels/:id/exception/clear", s.authRequired(), s.handleClearParcelException)
+		v1.GET("/admin/parcels/:id/handoffs", s.authRequired(), s.handleAdminListParcelHandoffs)
+
+		v1.GET("/admin/parcels/couriers/candidates", s.authRequired(), s.handleAdminSearchOnboardCandidates)
+		v1.GET("/admin/parcels/couriers", s.authRequired(), s.handleAdminListCouriers)
+		v1.POST("/admin/parcels/couriers", s.authRequired(), s.handleOnboardCourier)
+		v1.POST("/admin/parcels/couriers/:id/status", s.authRequired(), s.handleSetCourierStatus)
+		v1.GET("/admin/parcels/couriers/:id/performance", s.authRequired(), s.handleGetCourierPerformance)
+
+		v1.GET("/admin/parcels/zones", s.authRequired(), s.handleAdminListParcelZones)
+		v1.POST("/admin/parcels/zones", s.authRequired(), s.handleAdminCreateParcelZone)
+		v1.PATCH("/admin/parcels/zones/:id", s.authRequired(), s.handleAdminUpdateParcelZone)
+		v1.GET("/admin/parcels/distance-rate", s.authRequired(), s.handleAdminGetDistanceRate)
+		v1.POST("/admin/parcels/distance-rate", s.authRequired(), s.handleAdminSetDistanceRate)
+		v1.GET("/admin/parcels/live", s.authRequired(), s.handleAdminGetLiveDispatch)
 	}
 
 	r.POST("/webhooks/mpesa/stk-callback", s.handleMpesaStkCallback)

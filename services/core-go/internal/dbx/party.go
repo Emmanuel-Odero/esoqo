@@ -49,7 +49,7 @@ func findPersonByWhere(ctx context.Context, pool *pgxpool.Pool, whereClause, arg
 	var p PersonAuth
 	err := pool.QueryRow(ctx, `
 		SELECT pr."partyId", pr."officialName", pr."knownAs", pr.msisdn,
-		       uc."pinHash", uc."failedAttempts", uc."lockedUntil", uc."frozenAt"
+		       uc."pinHash", COALESCE(uc."failedAttempts", 0), uc."lockedUntil", uc."frozenAt"
 		FROM person pr
 		LEFT JOIN user_credential uc ON uc."personId" = pr."partyId"
 		WHERE `+whereClause, arg).

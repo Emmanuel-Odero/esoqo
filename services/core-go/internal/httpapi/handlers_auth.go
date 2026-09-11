@@ -1,6 +1,7 @@
 package httpapi
 
 import (
+	"log"
 	"net/http"
 	"time"
 
@@ -65,16 +66,19 @@ func (s *Server) handleVerifyOtp(c *gin.Context) {
 
 	partyID, err := dbx.FindOrCreatePersonByMsisdn(c.Request.Context(), s.Pool, req.Msisdn)
 	if err != nil {
+		log.Printf("otp verify: person lookup/create failed for %s: %v", req.Msisdn, err)
 		writeError(c, http.StatusInternalServerError, "PERSON_LOOKUP_FAILED", "Could not complete sign-in")
 		return
 	}
 	if err := dbx.MarkMsisdnVerified(c.Request.Context(), s.Pool, partyID); err != nil {
+		log.Printf("otp verify: mark msisdn verified failed for %s: %v", partyID, err)
 		writeError(c, http.StatusInternalServerError, "PERSON_LOOKUP_FAILED", "Could not complete sign-in")
 		return
 	}
 
 	token, err := s.issueSubjectSession(c, partyID)
 	if err != nil {
+		log.Printf("otp verify: session issue failed for %s: %v", partyID, err)
 		writeError(c, http.StatusInternalServerError, "SESSION_CREATE_FAILED", "Could not start a session")
 		return
 	}
@@ -390,5 +394,6 @@ func writeOtpError(c *gin.Context, err error) {
 		writeError(c, status, string(otpErr.Code), otpErr.Message)
 		return
 	}
+	log.Printf("otp request failed: %v", err)
 	writeError(c, http.StatusInternalServerError, "OTP_FAILED", "Could not process that request")
 }

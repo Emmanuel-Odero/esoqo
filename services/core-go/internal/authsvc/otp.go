@@ -13,6 +13,8 @@ import (
 	"time"
 
 	"github.com/redis/go-redis/v9"
+
+	"github.com/esoko/core-go/internal/notify"
 )
 
 // Ported 1:1 from packages/auth/src/otp.ts. Codes are never stored, only
@@ -23,11 +25,12 @@ import (
 type OtpPurpose string
 
 const (
-	OtpRegistration OtpPurpose = "REGISTRATION"
-	OtpSignIn       OtpPurpose = "SIGN_IN"
-	OtpPinReset     OtpPurpose = "PIN_RESET"
-	OtpStepUp       OtpPurpose = "STEP_UP"
-	OtpConsentGrant OtpPurpose = "CONSENT_GRANT"
+	OtpRegistration  OtpPurpose = "REGISTRATION"
+	OtpSignIn        OtpPurpose = "SIGN_IN"
+	OtpPinReset      OtpPurpose = "PIN_RESET"
+	OtpStepUp        OtpPurpose = "STEP_UP"
+	OtpConsentGrant  OtpPurpose = "CONSENT_GRANT"
+	OtpParcelReceipt OtpPurpose = "PARCEL_RECEIPT"
 )
 
 const (
@@ -148,7 +151,7 @@ func (s *OtpService) IssueOtp(ctx context.Context, msisdn string, purpose OtpPur
 		return &SendResult{ExpiresAt: expiresAt, CooldownSeconds: cooldown}, nil
 	}
 
-	if err := SendSms(msisdn, fmt.Sprintf("%s is your Esoko code. It expires in 10 minutes. Esoko will never ask you for it.", code), "otp"); err != nil {
+	if err := SendSms(msisdn, notify.OtpCode(code), "otp"); err != nil {
 		return nil, err
 	}
 	return &SendResult{ExpiresAt: expiresAt, CooldownSeconds: cooldown}, nil

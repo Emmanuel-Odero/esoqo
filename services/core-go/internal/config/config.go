@@ -49,6 +49,16 @@ type Config struct {
 	SessionSecret       string
 	AuditChainSeed      string
 
+	// OrgContextActivationDays — how long a SUBJECT's OTP-verified org
+	// context (docs/proposals/esoko-unified-crew-identity.md) stays
+	// switched on before the next org-scoped action needs a fresh OTP
+	// again. Deliberately configurable, not the original design's fixed
+	// shift-length window: a stolen/unlocked phone risk is mitigated by
+	// an org admin's suspend (kills the activation immediately,
+	// independent of this TTL), not by forcing a short expiry on
+	// everyone by default.
+	OrgContextActivationDays int
+
 	// SMS
 	SMSProvider string
 	SMSAPIKey   string
@@ -124,6 +134,9 @@ func Load() Config {
 		OTPRateLimitPerHour: rateLimit,
 		SessionSecret:       getenv("SESSION_SECRET", "dev-session-secret-change-me"),
 		AuditChainSeed:      getenv("AUDIT_CHAIN_SEED", "esoko-genesis"),
+		// 60 days — the middle of the 30-90 day range ops asked for;
+		// override with ORG_CONTEXT_ACTIVATION_DAYS per environment.
+		OrgContextActivationDays: getenvInt("ORG_CONTEXT_ACTIVATION_DAYS", 60),
 
 		SMSProvider: getenv("SMS_PROVIDER", "console"),
 		SMSAPIKey:   getenv("SMS_API_KEY", ""),

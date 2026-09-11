@@ -58,6 +58,11 @@ func main() {
 	// there.
 	go runWithdrawalSweep(ctx, pool, server)
 
+	// Cancels a DRAFT_PENDING_PAYMENT parcel booking abandoned over 24h
+	// ago — see dbx.SweepStaleParcelDrafts's own comment. Not
+	// time-critical like a due withdrawal, so a longer interval.
+	go runParcelDraftSweep(ctx, pool)
+
 	<-ctx.Done()
 	log.Println("core-go: shutting down")
 
@@ -90,6 +95,26 @@ func runWithdrawalSweep(ctx context.Context, pool *pgxpool.Pool, server *httpapi
 			}
 			if len(swept) > 0 {
 				log.Printf("core-go: withdrawal sweep executed/expired %d request(s)", len(swept))
+			}
+		}
+	}
+}
+
+func runParcelDraftSweep(ctx context.Context, pool *pgxpool.Pool) {
+	ticker := time.NewTicker(15 * time.Minute)
+	defer ticker.Stop()
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-ticker.C:
+			n, err := dbx.SweepStaleParcelDrafts(ctx, pool)
+			if err != nil {
+				log.Printf("core-go: parcel draft sweep failed: %v", err)
+				continue
+			}
+			if n > 0 {
+				log.Printf("core-go: parcel draft sweep cancelled %d abandoned booking(s)", n)
 			}
 		}
 	}
