@@ -125,25 +125,21 @@ class _VoucherWalletScreenState extends ConsumerState<VoucherWalletScreen> {
                   onChanged: (v) => setState(() => _purpose = v ?? 'FARE'),
                 ),
                 const SizedBox(height: EsokoSpacing.s3),
-                EsokoFormField(
+                EsokoField.text(
                   controller: _label,
                   label: 'Label',
                   hint: 'e.g. School run',
                   icon: Icons.label_outlined,
                 ),
                 const SizedBox(height: EsokoSpacing.s3),
-                EsokoFormField(
+                EsokoField.amount(
                   controller: _amount,
-                  label: 'Amount KES',
                   hint: 'e.g. 200',
-                  icon: Icons.payments_outlined,
                 ),
                 const SizedBox(height: EsokoSpacing.s3),
-                EsokoFormField(
+                EsokoField.phone(
                   controller: _recipient,
                   label: 'Gift to (optional)',
-                  hint: '+254…',
-                  icon: Icons.card_giftcard_outlined,
                 ),
                 const SizedBox(height: EsokoSpacing.s3),
                 EsokoDropdown<String>(
@@ -163,7 +159,8 @@ class _VoucherWalletScreenState extends ConsumerState<VoucherWalletScreen> {
                       setState(() => _loadMethod = v ?? 'MPESA_STK'),
                 ),
                 const SizedBox(height: EsokoSpacing.s3),
-                EsokoLoadingButton(
+                EsokoButton.primary(
+                  expand: false,
                   label: 'Create voucher',
                   icon: Icons.add_circle_outline,
                   loading: _loading,

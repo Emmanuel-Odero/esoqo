@@ -80,42 +80,31 @@ class _RequestWithdrawalScreenState
                     message: "This goes to every signer for approval and won't move money until the group's standby window passes.",
                   ),
                   const SizedBox(height: EsokoSpacing.s5),
-                  EsokoFormField(
+                  EsokoField.amount(
                     controller: _amountController,
-                    label: 'Amount (KES)',
-                    icon: Icons.payments_outlined,
-                    keyboardType: const TextInputType.numberWithOptions(
-                      decimal: true,
-                    ),
                     textInputAction: TextInputAction.next,
                   ),
                   const SizedBox(height: EsokoSpacing.s3),
-                  EsokoFormField(
+                  EsokoField.text(
                     controller: _purposeController,
                     label: 'Purpose',
                     hint: 'e.g. Venue deposit for AGM',
-                    textInputAction: TextInputAction.next,
                   ),
                   const SizedBox(height: EsokoSpacing.s3),
-                  EsokoFormField(
+                  EsokoField.name(
                     controller: _payeeNameController,
                     label: 'Paid to (name)',
-                    textInputAction: TextInputAction.next,
-                    autofillHints: const [AutofillHints.name],
                   ),
                   const SizedBox(height: EsokoSpacing.s3),
-                  EsokoFormField(
+                  EsokoField.phone(
                     controller: _payeeMsisdnController,
                     label: 'Payee phone (optional)',
-                    hint: '+254 7…',
-                    keyboardType: TextInputType.phone,
-                    textInputAction: TextInputAction.done,
-                    autofillHints: const [AutofillHints.telephoneNumber],
                     onSubmitted: (_) => _submit(),
                   ),
                   if (_error != null) EsokoFormError(message: _error!),
                   const SizedBox(height: EsokoSpacing.s5),
-                  EsokoLoadingButton(
+                  EsokoButton.primary(
+                    expand: false,
                     label: 'Broadcast to signers',
                     esokoIcon: EsokoIconName.send,
                     loading: _loading,

@@ -163,13 +163,11 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                       _row('Esoko ID', 'Preparing…', context),
                     const SizedBox(height: EsokoSpacing.s3),
                     if (_editingName) ...[
-                      EsokoFormField(
+                      EsokoField.name(
                         controller: _nameController,
                         label: 'What people call you',
                         hint: profile.displayName,
-                        icon: Icons.person_outline,
                         textInputAction: TextInputAction.done,
-                        autofillHints: const [AutofillHints.name],
                         onSubmitted: (_) => _saveName(),
                       ),
                       if (_nameError != null) ...[
@@ -180,7 +178,8 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                       Row(
                         children: [
                           Expanded(
-                            child: EsokoLoadingButton(
+                            child: EsokoButton.primary(
+                              expand: false,
                               label: 'Save name',
                               icon: Icons.check_outlined,
                               loading: _savingName,
@@ -188,25 +187,26 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                             ),
                           ),
                           const SizedBox(width: EsokoSpacing.s2),
-                          TextButton(
+                          EsokoButton.tertiary(
+                            label: 'Cancel',
                             onPressed: _savingName
                                 ? null
                                 : () => setState(() {
                                     _editingName = false;
                                     _nameError = null;
                                   }),
-                            child: const Text('Cancel'),
                           ),
                         ],
                       ),
                     ] else
-                      OutlinedButton.icon(
+                      EsokoButton.secondary(
+                        label: 'Edit name',
+                        icon: Icons.edit_outlined,
+                        expand: false,
                         onPressed: () {
                           _nameController.text = profile.knownAs ?? '';
                           setState(() => _editingName = true);
                         },
-                        icon: const Icon(Icons.edit_outlined, size: 16),
-                        label: const Text('Edit name'),
                       ),
                   ],
                 ),
@@ -259,7 +259,10 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                       ),
                       const SizedBox(height: EsokoSpacing.s2),
                       Center(
-                        child: OutlinedButton.icon(
+                        child: EsokoButton.secondary(
+                          label: 'Copy code',
+                          icon: Icons.copy_outlined,
+                          expand: false,
                           onPressed: () {
                             Clipboard.setData(
                               ClipboardData(text: profile.esokoId!),
@@ -272,8 +275,6 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                               ),
                             );
                           },
-                          icon: const Icon(Icons.copy_outlined, size: 16),
-                          label: const Text('Copy code'),
                         ),
                       ),
                     ] else ...[
@@ -305,25 +306,19 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                     const Text('Change the PIN you sign in with.'),
                     const SizedBox(height: EsokoSpacing.s3),
                     if (_changingPin) ...[
-                      EsokoFormField(
+                      EsokoField.pin(
                         controller: _pinController,
                         label: 'New PIN',
-                        hint: '4 to 6 digits',
-                        icon: Icons.lock_outline,
-                        keyboardType: TextInputType.number,
-                        obscureText: true,
-                        maxLength: 6,
+                        helper: '4 to 6 digits',
+                        autofill: PinAutofill.create,
                         textInputAction: TextInputAction.next,
                       ),
                       const SizedBox(height: EsokoSpacing.s3),
-                      EsokoFormField(
+                      // No autofill on the repeat: filling it from the
+                      // keychain would defeat the point of asking twice.
+                      EsokoField.pin(
                         controller: _pinConfirmController,
                         label: 'Repeat new PIN',
-                        icon: Icons.lock_outline,
-                        keyboardType: TextInputType.number,
-                        obscureText: true,
-                        maxLength: 6,
-                        textInputAction: TextInputAction.done,
                         onSubmitted: (_) => _savePin(),
                       ),
                       if (_pinError != null) ...[
@@ -343,7 +338,8 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                       Row(
                         children: [
                           Expanded(
-                            child: EsokoLoadingButton(
+                            child: EsokoButton.primary(
+                              expand: false,
                               label: 'Change PIN',
                               icon: Icons.lock_outline,
                               loading: _savingPin,
@@ -351,7 +347,8 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                             ),
                           ),
                           const SizedBox(width: EsokoSpacing.s2),
-                          TextButton(
+                          EsokoButton.tertiary(
+                            label: 'Cancel',
                             onPressed: _savingPin
                                 ? null
                                 : () => setState(() {
@@ -359,15 +356,15 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                                     _pinError = null;
                                     _pinDone = null;
                                   }),
-                            child: const Text('Cancel'),
                           ),
                         ],
                       ),
                     ] else
-                      OutlinedButton.icon(
+                      EsokoButton.secondary(
+                        label: 'Change PIN',
+                        icon: Icons.lock_outline,
+                        expand: false,
                         onPressed: () => setState(() => _changingPin = true),
-                        icon: const Icon(Icons.lock_outline, size: 16),
-                        label: const Text('Change PIN'),
                       ),
                   ],
                 ),
@@ -434,10 +431,10 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
               ),
 
               const SizedBox(height: EsokoSpacing.s6),
-              OutlinedButton(
+              EsokoButton.secondary(
+                label: 'Sign out',
                 onPressed: () =>
                     ref.read(authControllerProvider.notifier).signOut(),
-                child: const Text('Sign out'),
               ),
             ],
           ),
@@ -555,10 +552,11 @@ class _MyCompaniesAndRoles extends ConsumerWidget {
             const SizedBox(height: EsokoSpacing.s4),
             for (final grant in grants) _grantTile(context, grant),
             const SizedBox(height: EsokoSpacing.s2),
-            OutlinedButton.icon(
+            EsokoButton.secondary(
+              label: 'Switch duty',
+              icon: Icons.swap_horiz,
+              expand: false,
               onPressed: () => showHatsQuickSwitchSheet(context),
-              icon: const Icon(Icons.swap_horiz, size: 16),
-              label: const Text('Switch duty'),
             ),
           ],
         ],

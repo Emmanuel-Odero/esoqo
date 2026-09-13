@@ -64,10 +64,11 @@ class ParcelLabelScreen extends ConsumerWidget {
                 children: [
                   EsokoCard(child: _LabelContent(code: l.code)),
                   const SizedBox(height: EsokoSpacing.s5),
-                  FilledButton.icon(
+                  EsokoButton.primary(
+                    label: 'Print label',
+                    icon: Icons.print_outlined,
+                    expand: false,
                     onPressed: () => _print(l),
-                    icon: const Icon(Icons.print_outlined),
-                    label: const Text('Print label'),
                   ),
                 ],
               ),

@@ -2,15 +2,18 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/auth/auth_controller.dart';
+import '../../core/auth/active_role.dart';
 import '../../core/auth/auth_state.dart';
 import '../../core/auth/org_context_state.dart';
 import '../../core/auth/scan_access.dart';
+import '../../core/money/money.dart';
 import '../../core/theme/esoko_tokens.dart';
 import '../../core/widgets/widgets.dart';
 import '../bills/bills_list_screen.dart';
 import '../fleet/fleet_providers.dart';
 import '../fleet/transport_screen.dart';
 import '../groups/my_groups_screen.dart';
+import '../parcels/parcel_models.dart';
 import '../parcels/parcels_hub_screen.dart';
 import '../scan/scan_sheet.dart';
 import '../shopping/store_list_screen.dart';
@@ -88,13 +91,34 @@ class HomeHubScreen extends ConsumerWidget {
   /// at the call site — someone switched on for a shift is exactly as
   /// time-pressured as an AGENT crew session, regardless of which
   /// mechanism granted it.
-  /// Parcels has no signal of its own yet — it sits last in every
-  /// order until a "parcels I'm holding" count is worth surfacing here.
+  /// Parcels used to sit last in every order, with a note here saying it
+  /// would stay there "until a 'parcels I'm holding' count is worth
+  /// surfacing". That condition is now met: a courier mid-round has a
+  /// custody count and, on a cash-on-delivery run, somebody else's money
+  /// in their pocket. So [holdingParcels] joins the same top tier
+  /// `crew` already occupies, for the identical reason — a person
+  /// carrying something that has to reach a door today is the most
+  /// time-pressured state this hub can detect, and burying it under
+  /// five other services was costing them taps on every single job.
+  ///
+  /// Everyone else still sees Parcels last: for a person who sends one
+  /// parcel a month it genuinely is the least urgent tile.
   static List<String> _order({
     required bool crew,
     required bool runsOrg,
     required bool inGroup,
+    required bool holdingParcels,
   }) {
+    if (holdingParcels) {
+      return const [
+        'Parcels',
+        'Transport',
+        'Bills',
+        'Shopping',
+        'Tickets',
+        'Groups',
+      ];
+    }
     if (crew) {
       return const [
         'Transport',
@@ -135,6 +159,55 @@ class HomeHubScreen extends ConsumerWidget {
     ];
   }
 
+  /// The live figure worth stating on the lead card before any tap.
+  /// Null for roles that have none — an empty chip is worse than no
+  /// chip.
+  static String? _leadDetail(ActiveRole role, Money codFloat) {
+    return switch (role.role) {
+      EsokoRole.courier => codFloat.isPositive
+          ? '${role.heldParcels} in hand · KES ${codFloat.format()} to hand in'
+          : '${role.heldParcels} in hand',
+      _ => null,
+    };
+  }
+
+  /// The one action this role most likely opened the app for.
+  static String _leadPrimaryLabel(ActiveRole role) => switch (role.role) {
+        EsokoRole.personal => 'Scan anything',
+        EsokoRole.courier => 'My parcels',
+        EsokoRole.crew => 'Verify a fare',
+        EsokoRole.scanner => 'Scan a ticket',
+        EsokoRole.manager => 'Today’s takings',
+      };
+
+  static void _onLeadPrimary(BuildContext context, ActiveRole role) {
+    switch (role.role) {
+      case EsokoRole.personal:
+      case EsokoRole.scanner:
+      case EsokoRole.crew:
+        // All three land on the scanner: it is the dispatcher that
+        // already routes a bus QR, a ticket, a shelf tag or a receipt to
+        // the right screen (see UniversalScanScreen), so the role only
+        // needs to change the words, not the destination.
+        showScanSheet(context);
+      case EsokoRole.courier:
+        Navigator.of(context).push(
+          MaterialPageRoute(builder: (_) => const ParcelsHubScreen()),
+        );
+      case EsokoRole.manager:
+        Navigator.of(context).push(
+          MaterialPageRoute(builder: (_) => const TransportScreen()),
+        );
+    }
+  }
+
+  /// What a courier mid-round needs off the hub without tapping in.
+  static String _parcelSubtitle(int heldCount, Money codFloat) {
+    final parcels = '$heldCount ${heldCount == 1 ? 'parcel' : 'parcels'} in your hands';
+    if (!codFloat.isPositive) return '$parcels.';
+    return '$parcels · KES ${codFloat.format()} to hand in.';
+  }
+
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final auth = ref.watch(authControllerProvider);
@@ -152,10 +225,30 @@ class HomeHubScreen extends ConsumerWidget {
     final inGroup = auth is AuthSignedIn
         ? (ref.watch(myGroupsProvider).valueOrNull?.isNotEmpty ?? false)
         : false;
+    // Same best-effort, non-blocking treatment the two signals above
+    // get: the hub renders immediately and re-sorts if this resolves.
+    final held = auth is AuthSignedIn
+        ? (ref.watch(heldParcelsProvider).valueOrNull ?? const <ParcelRow>[])
+        : const <ParcelRow>[];
+    final codFloat = auth is AuthSignedIn
+        ? (ref.watch(codHoldingProvider).valueOrNull?.amountKes ?? Money.zero)
+        : Money.zero;
+
+    // The role the app should lead with, from signals this screen
+    // already has. Held parcels outrank an org grant — see
+    // resolveActiveRole for why custody wins.
+    final role = resolveActiveRole(
+      auth: auth,
+      orgContext: ref.watch(orgContextControllerProvider),
+      heldParcels: held.length,
+      holdingCash: codFloat.isPositive,
+    );
+
     final order = _order(
       crew: canVerify || onOrgDuty,
       runsOrg: runsOrg,
       inGroup: inGroup,
+      holdingParcels: held.isNotEmpty,
     );
 
     return ListView(
@@ -166,12 +259,20 @@ class HomeHubScreen extends ConsumerWidget {
         EsokoSpacing.s6,
       ),
       children: [
-        _Greeting(
+        // One card that changes with who you are, instead of the same
+        // greeting plus the same scan prompt for everybody.
+        EsokoRoleLead(
+          role: role,
           displayName: name ?? 'Welcome back',
           esokoId: profile?.esokoId,
+          detail: _leadDetail(role, codFloat),
+          primaryLabel: _leadPrimaryLabel(role),
+          onPrimary: () => _onLeadPrimary(context, role),
+          secondaryLabel: role.role == EsokoRole.courier ? 'Scan' : null,
+          onSecondary: role.role == EsokoRole.courier
+              ? () => showScanSheet(context)
+              : null,
         ),
-        const SizedBox(height: EsokoSpacing.s5),
-        _ScanCta(canVerify: canVerify),
         const SizedBox(height: EsokoSpacing.s5),
         EsokoSectionHeader(
           title: 'Your services',
@@ -185,7 +286,13 @@ class HomeHubScreen extends ConsumerWidget {
               label: '${service.title}: ${service.subtitle}',
               child: EsokoListTile(
                 title: service.title,
-                subtitle: service.subtitle,
+                // Parcels is the one tile whose subtitle is worth
+                // replacing with live state: "3 in your hands" answers
+                // the question a courier opened the app to ask, and the
+                // cash line is somebody else's money they're carrying.
+                subtitle: title == 'Parcels' && held.isNotEmpty
+                    ? _parcelSubtitle(held.length, codFloat)
+                    : service.subtitle,
                 leading: Hero(
                   tag: 'esoko-service-${service.title}',
                   child: EsokoQuickActionIcon(icon: service.icon),
@@ -204,160 +311,6 @@ class HomeHubScreen extends ConsumerWidget {
             ),
             const SizedBox(height: EsokoSpacing.s3),
           ],
-      ],
-    );
-  }
-}
-
-/// Navy "hero" greeting card — the app's authority band (navy tokens),
-/// carrying the person's name, their ESK-Id pill and the tagline. A soft
-/// navy gradient + the brand's sheet shadow make the top of Home read as
-/// deliberate rather than a plain list header.
-class _Greeting extends StatelessWidget {
-  const _Greeting({required this.displayName, this.esokoId});
-
-  final String displayName;
-  final String? esokoId;
-
-  @override
-  Widget build(BuildContext context) {
-    final esokoId = this.esokoId;
-    return Container(
-      padding: const EdgeInsets.all(EsokoSpacing.s5),
-      decoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(EsokoRadius.xl),
-        gradient: const LinearGradient(
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-          colors: [EsokoColors.navy, EsokoColors.navy2],
-        ),
-        boxShadow: EsokoShadows.sheet,
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      'Hello,',
-                      style: TextStyle(
-                        color: Colors.white.withValues(alpha: 0.72),
-                        fontSize: 14,
-                        fontWeight: FontWeight.w500,
-                      ),
-                    ),
-                    const SizedBox(height: 2),
-                    Text(
-                      displayName,
-                      style: const TextStyle(
-                        color: Colors.white,
-                        fontSize: 26,
-                        fontWeight: FontWeight.w800,
-                        height: 1.1,
-                        letterSpacing: -0.4,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-              Container(
-                width: 52,
-                height: 52,
-                decoration: BoxDecoration(
-                  color: Colors.white.withValues(alpha: 0.12),
-                  shape: BoxShape.circle,
-                  border: Border.all(
-                    color: Colors.white.withValues(alpha: 0.2),
-                  ),
-                ),
-                alignment: Alignment.center,
-                child: Text(
-                  displayName.characters.first.toUpperCase(),
-                  style: const TextStyle(
-                    color: Colors.white,
-                    fontSize: 22,
-                    fontWeight: FontWeight.w700,
-                  ),
-                ),
-              ),
-            ],
-          ),
-          if (esokoId != null) ...[
-            const SizedBox(height: EsokoSpacing.s4),
-            Container(
-              padding: const EdgeInsets.symmetric(
-                horizontal: EsokoSpacing.s3,
-                vertical: 6,
-              ),
-              decoration: BoxDecoration(
-                color: EsokoColors.greenTint.withValues(alpha: 0.16),
-                borderRadius: BorderRadius.circular(EsokoRadius.pill),
-              ),
-              child: Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  const Icon(
-                    Icons.badge_outlined,
-                    size: 14,
-                    color: Color(0xFF7FD3A8),
-                  ),
-                  const SizedBox(width: 6),
-                  Text(
-                    esokoId.toUpperCase(),
-                    style: const TextStyle(
-                      color: Color(0xFF7FD3A8),
-                      fontSize: 12.5,
-                      fontWeight: FontWeight.w700,
-                      letterSpacing: 0.4,
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ],
-        ],
-      ),
-    );
-  }
-}
-
-/// Full-width scan action — the green "you and yours" primary, glowing
-/// with the action shadow, with a mirror summary line underneath.
-class _ScanCta extends StatelessWidget {
-  const _ScanCta({required this.canVerify});
-
-  final bool canVerify;
-
-  @override
-  Widget build(BuildContext context) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        EsokoLoadingButton(
-          label: canVerify ? 'Scan to pay or verify' : 'Scan to pay',
-          icon: Icons.qr_code_scanner_outlined,
-          onPressed: () => showScanSheet(context),
-        ),
-        const SizedBox(height: EsokoSpacing.s2),
-        Text(
-          canVerify
-              ? 'Pay for goods or verify a staff fare collection.'
-              : 'Pay a shopper’s or traveller’s QR code. No cash needed.',
-          textAlign: TextAlign.center,
-          // Theme-derived, not the fixed EsokoColors.text3 — this sits
-          // on the home tab's normal scaffold background (paper/dark),
-          // unlike the navy hero card above it, which is always dark.
-          style: TextStyle(
-            color: Theme.of(context).textTheme.bodySmall?.color,
-            fontSize: 12.5,
-            height: 1.4,
-          ),
-        ),
       ],
     );
   }

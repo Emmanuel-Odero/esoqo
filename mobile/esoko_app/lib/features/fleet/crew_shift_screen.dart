@@ -282,14 +282,16 @@ class _ShiftBodyState extends ConsumerState<_ShiftBody> {
           error: (_, _) => const EsokoFormError(message: 'Could not load the tally.'),
         ),
         const SizedBox(height: EsokoSpacing.s4),
-        EsokoLoadingButton(
+        EsokoButton.primary(
+          expand: false,
           label: 'Declare cash counted',
           icon: Icons.payments_outlined,
           loading: _busy,
           onPressed: _declareCash,
         ),
         const SizedBox(height: EsokoSpacing.s3),
-        EsokoLoadingButton(
+        EsokoButton.primary(
+          expand: false,
           label: 'Verify a fare',
           icon: Icons.verified_outlined,
           onPressed: () => Navigator.of(context).push(
@@ -299,16 +301,20 @@ class _ShiftBodyState extends ConsumerState<_ShiftBody> {
           ),
         ),
         const SizedBox(height: EsokoSpacing.s3),
-        EsokoLoadingButton(
+        EsokoButton.primary(
+          expand: false,
           label: 'Scan a passenger receipt',
           icon: Icons.qr_code_scanner_outlined,
           onPressed: () => showScanSheet(context),
         ),
         const SizedBox(height: EsokoSpacing.s5),
-        OutlinedButton.icon(
-          onPressed: _busy ? null : _endShift,
-          icon: const Icon(Icons.flag_outlined),
-          label: const Text('End shift'),
+        // Gated by showEndShiftDialog, which collects the note and end
+        // status — so no second confirmation here.
+        EsokoButton.destructiveGated(
+          label: 'End shift',
+          icon: Icons.flag_outlined,
+          loading: _busy,
+          onPressed: _endShift,
         ),
         if (_notice != null) ...[
           const SizedBox(height: EsokoSpacing.s3),

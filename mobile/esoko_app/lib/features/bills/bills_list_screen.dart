@@ -190,7 +190,7 @@ class _BillCardState extends ConsumerState<_BillCard> {
       icon: _categoryIcon(b.category),
       trailing: _paying
           ? const EsokoSkeleton(width: 64, height: 14)
-          : TextButton(onPressed: _markPaid, child: const Text('Mark paid')),
+          : EsokoButton.tertiary(label: 'Mark paid', onPressed: _markPaid),
       onTap: b.isFunding
           ? () => Navigator.of(context).push(
                 MaterialPageRoute(

@@ -130,7 +130,9 @@ class GroupDetailScreen extends ConsumerWidget {
                   Row(
                     children: [
                       Expanded(
-                        child: FilledButton.icon(
+                        child: EsokoButton.primary(
+                          label: 'Contribute',
+                          esokoIcon: EsokoIconName.coins,
                           onPressed: () async {
                             await Navigator.of(context).push(
                               MaterialPageRoute(
@@ -140,14 +142,14 @@ class GroupDetailScreen extends ConsumerWidget {
                             );
                             _refreshAll(ref);
                           },
-                          icon: const EsokoIcon(EsokoIconName.coins, size: 18),
-                          label: const Text('Contribute'),
                         ),
                       ),
                       if (isOfficer) ...[
                         const SizedBox(width: EsokoSpacing.s3),
                         Expanded(
-                          child: OutlinedButton.icon(
+                          child: EsokoButton.secondary(
+                            label: 'Withdraw',
+                            esokoIcon: EsokoIconName.send,
                             onPressed: () async {
                               await Navigator.of(context).push(
                                 MaterialPageRoute(
@@ -157,8 +159,6 @@ class GroupDetailScreen extends ConsumerWidget {
                               );
                               _refreshAll(ref);
                             },
-                            icon: const EsokoIcon(EsokoIconName.send, size: 18),
-                            label: const Text('Withdraw'),
                           ),
                         ),
                       ],

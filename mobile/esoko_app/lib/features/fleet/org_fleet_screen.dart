@@ -304,15 +304,14 @@ class _TripDetailScreenState extends ConsumerState<TripDetailScreen> {
               error: (_, _) => const Text('Could not load crew.'),
             ),
             const SizedBox(height: EsokoSpacing.s3),
-            EsokoFormField(
+            EsokoField.amount(
               controller: _amountController,
-              label: 'Cash counted (KES)',
+              label: 'Cash counted',
               hint: 'e.g. 4500',
-              icon: Icons.payments_outlined,
-              keyboardType: TextInputType.number,
             ),
             const SizedBox(height: EsokoSpacing.s3),
-            EsokoLoadingButton(
+            EsokoButton.primary(
+              expand: false,
               label: 'Record declaration',
               icon: Icons.check_outlined,
               loading: _busy,
@@ -324,10 +323,13 @@ class _TripDetailScreenState extends ConsumerState<TripDetailScreen> {
             ],
             if (trip.active) ...[
               const SizedBox(height: EsokoSpacing.s5),
-              OutlinedButton.icon(
-                onPressed: _busy ? null : _close,
-                icon: const Icon(Icons.flag_outlined),
-                label: const Text('Close trip'),
+              EsokoButton.destructive(
+                label: 'Close trip',
+                confirm: 'Closing a trip ends it for everyone on board and '
+                    'cannot be undone. Close it now?',
+                icon: Icons.flag_outlined,
+                loading: _busy,
+                onPressed: _close,
               ),
             ],
           ],

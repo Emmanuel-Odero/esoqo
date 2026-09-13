@@ -89,14 +89,8 @@ class _ContributeScreenState extends ConsumerState<ContributeScreen> {
         return Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            EsokoFormField(
+            EsokoField.amount(
               controller: _amountController,
-              label: 'Amount (KES)',
-              icon: Icons.payments_outlined,
-              keyboardType: const TextInputType.numberWithOptions(
-                decimal: true,
-              ),
-              textInputAction: TextInputAction.done,
               onSubmitted: (_) => _submit(),
             ),
             const SizedBox(height: EsokoSpacing.s4),
@@ -118,7 +112,8 @@ class _ContributeScreenState extends ConsumerState<ContributeScreen> {
               ),
             if (_error != null) EsokoFormError(message: _error!),
             const SizedBox(height: EsokoSpacing.s5),
-            EsokoLoadingButton(
+            EsokoButton.primary(
+              expand: false,
               label: _method == 'MPESA'
                   ? 'Pay with M-Pesa'
                   : 'Declare contribution',

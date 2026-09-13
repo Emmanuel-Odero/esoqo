@@ -6,7 +6,7 @@ import 'package:flutter/material.dart';
 /// blocks (add_bill, org_fleet, fare_pay, create_group, voucher_wallet)
 /// that each re-decided the label treatment. Visual styling (fill,
 /// radius, focus ring) still comes from the theme's `inputDecorationTheme`
-/// via the material field, same as [EsokoFormField].
+/// via the material field, same as [EsokoField].
 class EsokoDropdown<T> extends StatelessWidget {
   const EsokoDropdown({
     super.key,

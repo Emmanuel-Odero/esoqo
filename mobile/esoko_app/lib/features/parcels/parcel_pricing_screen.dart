@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/api/api_exception.dart';
+import '../../core/money/money.dart';
 import '../../core/theme/esoko_tokens.dart';
 import '../../core/widgets/widgets.dart';
 import 'parcel_models.dart';
@@ -120,7 +121,7 @@ class _ParcelPricingScreenState extends ConsumerState<ParcelPricingScreen> {
                           _priceOption(
                             title: 'Standard',
                             subtitle:
-                                '${_pricing!.weightLabel} · usually KES ${_pricing!.minKes.toStringAsFixed(0)}–${_pricing!.maxKes.toStringAsFixed(0)}',
+                                '${_pricing!.weightLabel} · usually KES ${_pricing!.minKes.format()}–${_pricing!.maxKes.format()}',
                             priceKes: _pricing!.minKes,
                             selected: _selectedReason == null,
                             onTap: () => setState(() => _selectedReason = null),
@@ -151,7 +152,8 @@ class _ParcelPricingScreenState extends ConsumerState<ParcelPricingScreen> {
                             EsokoFormError(message: _error!),
                           ],
                           const SizedBox(height: EsokoSpacing.s5),
-                          EsokoLoadingButton(
+                          EsokoButton.primary(
+                            expand: false,
                             label: 'Continue to payment',
                             loading: _submitting,
                             onPressed: _continue,
@@ -175,7 +177,7 @@ class _ParcelPricingScreenState extends ConsumerState<ParcelPricingScreen> {
   Widget _priceOption({
     required String title,
     required String subtitle,
-    required double priceKes,
+    required Money priceKes,
     required bool selected,
     required VoidCallback onTap,
   }) {
@@ -217,7 +219,7 @@ class _ParcelPricingScreenState extends ConsumerState<ParcelPricingScreen> {
                 ),
               ),
               Text(
-                'KES ${priceKes.toStringAsFixed(0)}',
+                'KES ${priceKes.format()}',
                 style: EsokoTypography.mono(fontWeight: FontWeight.w800, color: scheme.primary),
               ),
             ],

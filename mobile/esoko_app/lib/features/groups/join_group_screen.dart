@@ -95,9 +95,9 @@ class _JoinGroupScreenState extends ConsumerState<JoinGroupScreen> {
                             subtitle: g.county,
                             trailing: _joiningId == g.id
                                 ? const EsokoSkeleton(width: 44, height: 14)
-                                : TextButton(
+                                : EsokoButton.tertiary(
+                                    label: 'Join',
                                     onPressed: () => _join(g),
-                                    child: const Text('Join'),
                                   ),
                           ),
                         );

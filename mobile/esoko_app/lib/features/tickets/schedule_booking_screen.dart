@@ -319,11 +319,12 @@ class _ScheduleBookingScreenState extends ConsumerState<ScheduleBookingScreen> {
           ),
         ],
         const SizedBox(height: EsokoSpacing.s5),
-        FilledButton(
+        EsokoButton.primary(
+          label: 'Continue',
+          expand: false,
           onPressed: tc == null || (tc.seated && _selectedSeatId == null)
               ? null
               : () => setState(() => _stage = _Stage.details),
-          child: const Text('Continue'),
         ),
       ],
     );
@@ -530,11 +531,9 @@ class _ScheduleBookingScreenState extends ConsumerState<ScheduleBookingScreen> {
             ),
           ),
           const SizedBox(height: 12),
-          EsokoFormField(
+          EsokoField.amount(
             controller: _depositController,
-            label: 'Paying today (KES)',
-            keyboardType: TextInputType.number,
-            icon: Icons.payments_outlined,
+            label: 'Paying today',
           ),
         ] else ...[
           EsokoSegmentedToggle<String>(
@@ -544,11 +543,10 @@ class _ScheduleBookingScreenState extends ConsumerState<ScheduleBookingScreen> {
           ),
           if (_method == 'VOUCHER') ...[
             const SizedBox(height: 12),
-            EsokoFormField(
+            EsokoField.code(
               controller: _voucherCodeController,
               label: 'Voucher code',
               hint: 'e.g. VCH-XXXXXX',
-              icon: Icons.wallet_outlined,
             ),
           ],
         ],

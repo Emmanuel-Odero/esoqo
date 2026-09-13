@@ -50,32 +50,26 @@ class MyGroupsScreen extends ConsumerWidget {
                           Row(
                             children: [
                               Expanded(
-                                child: OutlinedButton.icon(
+                                child: EsokoButton.secondary(
+                                  label: 'Join a group',
+                                  esokoIcon: EsokoIconName.search,
                                   onPressed: () => Navigator.of(context).push(
                                     MaterialPageRoute(
                                       builder: (_) => const JoinGroupScreen(),
                                     ),
                                   ),
-                                  icon: const EsokoIcon(
-                                    EsokoIconName.search,
-                                    size: 18,
-                                  ),
-                                  label: const Text('Join a group'),
                                 ),
                               ),
                               const SizedBox(width: EsokoSpacing.s3),
                               Expanded(
-                                child: FilledButton.icon(
+                                child: EsokoButton.primary(
+                                  label: 'Start a group',
+                                  esokoIcon: EsokoIconName.plus,
                                   onPressed: () => Navigator.of(context).push(
                                     MaterialPageRoute(
                                       builder: (_) => const CreateGroupScreen(),
                                     ),
                                   ),
-                                  icon: const EsokoIcon(
-                                    EsokoIconName.plus,
-                                    size: 18,
-                                  ),
-                                  label: const Text('Start a group'),
                                 ),
                               ),
                             ],

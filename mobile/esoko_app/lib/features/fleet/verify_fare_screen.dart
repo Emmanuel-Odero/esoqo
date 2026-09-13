@@ -109,12 +109,10 @@ class _VerifyFareScreenState extends ConsumerState<VerifyFareScreen> {
             Row(
               children: [
                 Expanded(
-                  child: EsokoFormField(
+                  child: EsokoField.code(
                     controller: _code,
                     label: 'Receipt / M-Pesa code',
                     hint: 'e.g. QHX7AB12CD',
-                    icon: Icons.confirmation_number_outlined,
-                    textInputAction: TextInputAction.go,
                     onSubmitted: _verify,
                   ),
                 ),
@@ -124,7 +122,8 @@ class _VerifyFareScreenState extends ConsumerState<VerifyFareScreen> {
                 // forces an infinite width" FilledButton-in-a-Row bug.
                 SizedBox(
                   width: 96,
-                  child: EsokoLoadingButton(
+                  child: EsokoButton.primary(
+                    expand: false,
                     label: 'Verify',
                     loading: _busy,
                     onPressed: () => _verify(_code.text),

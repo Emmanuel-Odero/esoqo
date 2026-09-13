@@ -1,9 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 import '../../core/auth/auth_controller.dart';
 import '../../core/auth/auth_state.dart';
+import '../../core/money/money.dart';
 import '../../core/theme/esoko_tokens.dart';
 import '../../core/widgets/widgets.dart';
 import 'parcel_label_screen.dart';
@@ -93,9 +95,37 @@ class ParcelStatusScreen extends ConsumerWidget {
                     parcelStatusMessage(s),
                     style: Theme.of(context).textTheme.bodyMedium,
                   ),
+                  // The delivery promise, finally shown. slaDeadlineAt
+                  // has been on the parcel since it was paid for, and
+                  // "when will it get here" is the single question a
+                  // tracking screen exists to answer — it just had no
+                  // way through to this page before.
+                  if (parcelEtaText(s) != null) ...[
+                    const SizedBox(height: EsokoSpacing.s2),
+                    Row(
+                      children: [
+                        const Icon(Icons.schedule_outlined, size: 16),
+                        const SizedBox(width: EsokoSpacing.s1),
+                        Expanded(
+                          child: Text(
+                            parcelEtaText(s)!,
+                            style: Theme.of(context).textTheme.bodySmall,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ],
+                  // Waiting at a shop is an instruction, not a status:
+                  // the receiver's next action is a walk to a specific
+                  // door, so the address, hours and phone travel with it.
+                  if (s.agent != null) ...[
+                    const SizedBox(height: EsokoSpacing.s4),
+                    _AgentCard(agent: s.agent!),
+                  ],
                   const SizedBox(height: EsokoSpacing.s5),
                   if (s.status == 'DRAFT_PENDING_PAYMENT')
-                    EsokoLoadingButton(
+                    EsokoButton.primary(
+                      expand: false,
                       label: s.priceKes == null
                           ? 'Complete payment'
                           : 'Complete payment (KES ${s.priceKes})',
@@ -119,7 +149,7 @@ class ParcelStatusScreen extends ConsumerWidget {
                             MaterialPageRoute(
                               builder: (_) => ParcelPaymentScreen(
                                 code: s.code,
-                                priceKes: double.tryParse(s.priceKes!) ?? 0,
+                                priceKes: Money.tryParse(s.priceKes) ?? Money.zero,
                               ),
                             ),
                           );
@@ -130,24 +160,39 @@ class ParcelStatusScreen extends ConsumerWidget {
                         ref.invalidate(parcelStatusProvider(code));
                       },
                     )
-                  else if (s.status == 'CANCELLED')
-                    // No progress tracker here — it used to render
-                    // every stage "unreached" (grey) under the raw
+                  else if (s.status == 'CANCELLED' ||
+                      s.status == 'FAILED_DELIVERY' ||
+                      s.status == 'HELD_AT_AGENT' ||
+                      s.status == 'RETURNED_TO_SENDER')
+                    // None of these are points on parcelStatusStages —
+                    // they're departures from it. The tracker used to
+                    // render every stage "unreached" (grey) under a raw
                     // "CANCELLED" string, which read as if the booking
-                    // had simply never started rather than actually
-                    // being stopped.
+                    // had never started rather than having been stopped;
+                    // the same would be true, and more misleading, for a
+                    // parcel that genuinely travelled and then failed at
+                    // the door. They get a card that says what happened.
                     EsokoCard(
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          const Text(
-                            'Cancelled',
-                            style: TextStyle(fontWeight: FontWeight.w700),
+                          Text(
+                            parcelStatusLabel(s.status),
+                            style: const TextStyle(fontWeight: FontWeight.w700),
                           ),
+                          if (s.status == 'FAILED_DELIVERY') ...[
+                            const SizedBox(height: EsokoSpacing.s1),
+                            Text(
+                              '${s.deliveryAttempts} '
+                              '${s.deliveryAttempts == 1 ? 'attempt' : 'attempts'} so far'
+                              '${s.lastAttemptAt != null ? ' · last ${parcelHumanTime(s.lastAttemptAt)}' : ''}',
+                              style: Theme.of(context).textTheme.bodySmall,
+                            ),
+                          ],
                           if (s.cancelledAt != null) ...[
                             const SizedBox(height: EsokoSpacing.s1),
                             Text(
-                              'on ${s.cancelledAt!.toLocal()}'.split('.').first,
+                              'on ${parcelHumanTime(s.cancelledAt)}',
                               style: Theme.of(context).textTheme.bodySmall,
                             ),
                           ],
@@ -209,16 +254,37 @@ class ParcelStatusScreen extends ConsumerWidget {
                         isLast: i == parcelStatusStages.length - 1,
                       ),
                   if (s.status == 'DELIVERED') ...[
+                    // The evidence half of a delivery — what turns "it
+                    // says delivered but I never got it" from an
+                    // argument into a question with an answer.
+                    if (s.podReceivedByName != null) ...[
+                      const SizedBox(height: EsokoSpacing.s4),
+                      EsokoCard(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            const Text(
+                              'Proof of delivery',
+                              style: TextStyle(fontWeight: FontWeight.w700),
+                            ),
+                            const SizedBox(height: EsokoSpacing.s1),
+                            Text(
+                              'Received by ${s.podReceivedByName}'
+                              '${s.podMethod == 'AGENT_COLLECTION' ? ' at the pickup point' : ''}',
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
                     const SizedBox(height: EsokoSpacing.s4),
                     if (s.receiptConfirmedAt != null)
                       Text(
-                        'Receipt confirmed on ${s.receiptConfirmedAt!.toLocal()}'
-                            .split('.')
-                            .first,
+                        'Receipt confirmed ${parcelHumanTime(s.receiptConfirmedAt)}',
                         style: Theme.of(context).textTheme.bodySmall,
                       )
                     else
-                      OutlinedButton(
+                      EsokoButton.secondary(
+                        label: 'Confirm you received this parcel',
                         onPressed: () async {
                           final confirmed = await Navigator.of(context).push<bool>(
                             MaterialPageRoute(
@@ -230,7 +296,6 @@ class ParcelStatusScreen extends ConsumerWidget {
                             ref.invalidate(parcelStatusProvider(code));
                           }
                         },
-                        child: const Text('Confirm you received this parcel'),
                       ),
                   ],
                   if (ref.watch(authControllerProvider) is AuthSignedIn) ...[
@@ -246,14 +311,14 @@ class ParcelStatusScreen extends ConsumerWidget {
                     // result itself.
                     _LabelInfoSection(code: s.code),
                     const SizedBox(height: EsokoSpacing.s4),
-                    OutlinedButton.icon(
+                    EsokoButton.secondary(
+                      label: 'Print label',
+                      icon: Icons.qr_code_2_outlined,
                       onPressed: () => Navigator.of(context).push(
                         MaterialPageRoute(
                           builder: (_) => ParcelLabelScreen(code: s.code),
                         ),
                       ),
-                      icon: const Icon(Icons.qr_code_2_outlined),
-                      label: const Text('Print label'),
                     ),
                   ],
                   if (deliveryCode != null) ...[
@@ -333,6 +398,69 @@ class ParcelStatusScreen extends ConsumerWidget {
   }
 }
 
+/// Where to collect a parcel that's on a pickup point's shelf.
+///
+/// A status of "waiting at a pickup point" is useless on its own: the
+/// receiver's next action is a walk to a specific door, so the address,
+/// the hours and a phone number belong in the same card — along with
+/// the two things they'll actually tap, a call and directions.
+class _AgentCard extends StatelessWidget {
+  const _AgentCard({required this.agent});
+  final ParcelAgentStop agent;
+
+  @override
+  Widget build(BuildContext context) {
+    final small = Theme.of(context).textTheme.bodySmall;
+    return EsokoCard(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text('Collect from', style: small),
+          const SizedBox(height: EsokoSpacing.s1),
+          Text(agent.name, style: const TextStyle(fontWeight: FontWeight.w700)),
+          Text(agent.locationHint, style: small),
+          if (agent.openingHours != null)
+            Text('Open ${agent.openingHours}', style: small),
+          if (agent.holdingFeeKes.isPositive)
+            Text(
+              'KES ${agent.holdingFeeKes.format()} collection fee, '
+              'payable at the shop',
+              style: small,
+            ),
+          const SizedBox(height: EsokoSpacing.s2),
+          Row(
+            children: [
+              if (agent.msisdn.isNotEmpty)
+                Expanded(
+                  child: EsokoButton.secondary(
+                    label: 'Call',
+                    icon: Icons.phone_outlined,
+                    onPressed: () =>
+                        launchUrl(Uri.parse('tel:${agent.msisdn}')),
+                  ),
+                ),
+              if (agent.msisdn.isNotEmpty) const SizedBox(width: EsokoSpacing.s2),
+              Expanded(
+                child: EsokoButton.secondary(
+                  label: 'Directions',
+                  icon: Icons.map_outlined,
+                  onPressed: () => launchUrl(
+                    Uri.parse(
+                      'https://www.google.com/maps/search/?api=1'
+                      '&query=${agent.lat},${agent.lng}',
+                    ),
+                    mode: LaunchMode.externalApplication,
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+}
+
 /// The parcel_handoff log, finally surfaced somewhere — see
 /// dbx.ListParcelHandoffs's own comment on it having been write-only.
 /// Scoped to the parcel's own sender server-side (see
@@ -349,7 +477,7 @@ class _HandoffHistorySection extends ConsumerWidget {
     final handoffs = ref.watch(parcelHandoffHistoryProvider(code));
     return handoffs.when(
       loading: () => const SizedBox.shrink(),
-      error: (_, __) => const SizedBox.shrink(),
+      error: (_, _) => const SizedBox.shrink(),
       data: (rows) {
         if (rows == null || rows.isEmpty) return const SizedBox.shrink();
         return EsokoCard(
@@ -366,7 +494,7 @@ class _HandoffHistorySection extends ConsumerWidget {
                   padding: const EdgeInsets.only(bottom: EsokoSpacing.s1),
                   child: Text(
                     '${h.fromName ?? 'Sender'} → ${h.toName} — '
-                    '${h.createdAt.toLocal()}'.split('.').first,
+                    '${parcelHumanTime(h.createdAt)}',
                     style: Theme.of(context).textTheme.bodySmall,
                   ),
                 ),
@@ -409,6 +537,25 @@ class _LabelInfoSection extends ConsumerWidget {
                   '${l.weightKg != null ? ' · ${l.weightKg!.toStringAsFixed(1)} kg' : ''}'),
               Text('Receiver: ${l.receiverName}'
                   '${l.receiverPhoneLast4.isNotEmpty ? ' (…${l.receiverPhoneLast4})' : ''}'),
+              // The whole point of capturing a pin: a courier holding
+              // this parcel gets one tap into their maps app instead of
+              // phoning the receiver for directions, which is what the
+              // free-text label alone forces and what this market's
+              // delivery-failure rate is largely made of.
+              if (l.hasDestinationPin) ...[
+                const SizedBox(height: EsokoSpacing.s2),
+                EsokoButton.secondary(
+                  label: 'Navigate to the drop-off',
+                  icon: Icons.navigation_outlined,
+                  onPressed: () => launchUrl(
+                    Uri.parse(
+                      'https://www.google.com/maps/search/?api=1'
+                      '&query=${l.destinationLat},${l.destinationLng}',
+                    ),
+                    mode: LaunchMode.externalApplication,
+                  ),
+                ),
+              ],
             ],
           ),
         ),

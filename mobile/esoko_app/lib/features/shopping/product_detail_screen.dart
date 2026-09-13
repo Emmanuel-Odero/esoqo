@@ -331,9 +331,10 @@ class _BuyBar extends StatelessWidget {
                 ],
               ),
               const Spacer(),
-              FilledButton(
+              EsokoButton.primary(
+                label: buttonLabel,
+                expand: false,
                 onPressed: enabled ? onBuy : null,
-                child: Text(buttonLabel),
               ),
             ],
           ),

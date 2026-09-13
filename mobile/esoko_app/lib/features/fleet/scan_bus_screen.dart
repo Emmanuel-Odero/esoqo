@@ -87,18 +87,17 @@ class _ScanBusScreenState extends ConsumerState<ScanBusScreen> {
               ),
             ),
             const SizedBox(height: EsokoSpacing.s4),
-            EsokoFormField(
+            EsokoField.code(
               controller: _code,
               label: 'Bus code',
               hint: 'e.g. BUS-4F8K2Q',
-              icon: Icons.qr_code_2_outlined,
-              textInputAction: TextInputAction.go,
               onSubmitted: _resolve,
             ),
             const SizedBox(height: EsokoSpacing.s3),
             SizedBox(
               height: EsokoSpacing.s7,
-              child: EsokoLoadingButton(
+              child: EsokoButton.primary(
+                expand: false,
                 label: 'Find bus',
                 loading: _busy,
                 onPressed: () => _resolve(_code.text),

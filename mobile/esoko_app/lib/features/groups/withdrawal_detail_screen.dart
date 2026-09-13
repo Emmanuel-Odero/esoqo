@@ -145,17 +145,20 @@ class _WithdrawalDetailScreenState
                     Row(
                       children: [
                         Expanded(
-                          child: OutlinedButton(
-                            onPressed: _signing ? null : () => _sign('REJECT'),
-                            style: OutlinedButton.styleFrom(
-                              foregroundColor: EsokoColors.red,
-                            ),
-                            child: const Text('Reject'),
+                          // Gated by the PIN prompt _sign() opens, so the
+                          // button must not ask a second time.
+                          child: EsokoButton.destructiveGated(
+                            label: 'Reject',
+                            loading: _signing,
+                            onPressed: () => _sign('REJECT'),
                           ),
                         ),
                         const SizedBox(width: EsokoSpacing.s3),
                         Expanded(
-                          child: EsokoLoadingButton(
+                          // Institutional, not primary: signing this is
+                          // an act of the group, not of you — the
+                          // example EsokoButtonRole itself cites.
+                          child: EsokoButton.institutional(
                             label: 'Approve',
                             loading: _signing,
                             onPressed: () => _sign('APPROVE'),

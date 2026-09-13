@@ -307,11 +307,11 @@ class OrderDetailScreen extends ConsumerWidget {
           child: Text(o.storeNeighborhood!, style: TextStyle(color: muted)),
         ),
         if (o.storeLatitude != null && o.storeLongitude != null)
-          TextButton.icon(
+          EsokoButton.tertiary(
+            label: 'Directions',
+            icon: Icons.directions_outlined,
             onPressed: () =>
                 _openDirections(o.storeLatitude!, o.storeLongitude!),
-            icon: const Icon(Icons.directions_outlined, size: 18),
-            label: const Text('Directions'),
           ),
       ],
     );
@@ -388,10 +388,11 @@ class _TipButtonState extends ConsumerState<_TipButton> {
         ],
       );
     }
-    return OutlinedButton.icon(
-      onPressed: _busy ? null : _addTip,
-      icon: const Icon(Icons.volunteer_activism_outlined, size: 18),
-      label: const Text('Add a tip'),
+    return EsokoButton.secondary(
+      label: 'Add a tip',
+      icon: Icons.volunteer_activism_outlined,
+      loading: _busy,
+      onPressed: _addTip,
     );
   }
 }

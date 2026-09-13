@@ -72,7 +72,8 @@ class BillFundingScreen extends ConsumerWidget {
                     ),
                     const SizedBox(height: EsokoSpacing.s5),
                     if (!s.funded)
-                      EsokoLoadingButton(
+                      EsokoButton.primary(
+                        expand: false,
                         label: 'Chip in',
                         loading: false,
                         onPressed: () async {
@@ -179,31 +180,27 @@ class _ContributeScreenState extends ConsumerState<_ContributeScreen> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
-                  EsokoFormField(
+                  EsokoField.name(
                     controller: _nameController,
                     label: 'Your name',
-                    icon: Icons.person_outline,
                   ),
                   const SizedBox(height: EsokoSpacing.s3),
-                  EsokoFormField(
+                  EsokoField.phone(
                     controller: _msisdnController,
                     label: 'M-Pesa number',
-                    icon: Icons.phone_outlined,
-                    keyboardType: TextInputType.phone,
+                    textInputAction: TextInputAction.next,
                   ),
                   const SizedBox(height: EsokoSpacing.s3),
-                  EsokoFormField(
+                  EsokoField.amount(
                     controller: _amountController,
-                    label: 'Amount (KES)',
-                    icon: Icons.payments_outlined,
-                    keyboardType: TextInputType.number,
                   ),
                   if (_error != null) ...[
                     const SizedBox(height: EsokoSpacing.s3),
                     EsokoFormError(message: _error!),
                   ],
                   const SizedBox(height: EsokoSpacing.s4),
-                  EsokoLoadingButton(
+                  EsokoButton.primary(
+                    expand: false,
                     label: 'Pay with M-Pesa',
                     loading: _busy,
                     onPressed: _send,

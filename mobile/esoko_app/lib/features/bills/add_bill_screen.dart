@@ -92,11 +92,10 @@ class _AddBillScreenState extends ConsumerState<AddBillScreen> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
-                  EsokoFormField(
+                  EsokoField.text(
                     controller: _labelController,
                     label: 'Name',
                     hint: 'e.g. KPLC — home',
-                    textInputAction: TextInputAction.next,
                   ),
                   const SizedBox(height: EsokoSpacing.s3),
                   EsokoDropdown<String>(
@@ -110,20 +109,15 @@ class _AddBillScreenState extends ConsumerState<AddBillScreen> {
                         setState(() => _category = v ?? _category),
                   ),
                   const SizedBox(height: EsokoSpacing.s3),
-                  EsokoFormField(
+                  EsokoField.text(
                     controller: _accountRefController,
                     label: 'Account / meter number (optional)',
-                    textInputAction: TextInputAction.next,
                   ),
                   const SizedBox(height: EsokoSpacing.s3),
-                  EsokoFormField(
+                  EsokoField.amount(
                     controller: _amountController,
-                    label: 'Usual amount, KES (optional)',
+                    label: 'Usual amount (optional)',
                     hint: 'Leave blank if it varies',
-                    keyboardType: const TextInputType.numberWithOptions(
-                      decimal: true,
-                    ),
-                    textInputAction: TextInputAction.done,
                   ),
                   const SizedBox(height: EsokoSpacing.s3),
                   EsokoDropdown<String>(
@@ -157,12 +151,9 @@ class _AddBillScreenState extends ConsumerState<AddBillScreen> {
                   ),
                   if (_fundingEnabled) ...[
                     const SizedBox(height: EsokoSpacing.s3),
-                    EsokoFormField(
+                    EsokoField.amount(
                       controller: _targetController,
-                      label: 'Target amount, KES',
-                      keyboardType: const TextInputType.numberWithOptions(
-                        decimal: true,
-                      ),
+                      label: 'Target amount',
                     ),
                     const SizedBox(height: EsokoSpacing.s2),
                     SwitchListTile.adaptive(
@@ -174,7 +165,8 @@ class _AddBillScreenState extends ConsumerState<AddBillScreen> {
                   ],
                   if (_error != null) EsokoFormError(message: _error!),
                   const SizedBox(height: EsokoSpacing.s5),
-                  EsokoLoadingButton(
+                  EsokoButton.primary(
+                    expand: false,
                     label: 'Save bill',
                     loading: _loading,
                     onPressed: _save,

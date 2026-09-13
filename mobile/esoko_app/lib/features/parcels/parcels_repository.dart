@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../core/api/api_client.dart';
 import '../../core/api/api_exception.dart';
 import '../../core/api/providers.dart';
+import '../../core/money/money.dart';
 import 'parcel_models.dart';
 
 /// The parcels feature slice of the Riverpod convention (see
@@ -58,6 +59,20 @@ class ParcelsRepository {
     // time (see dbx.ParcelLabelStock) — scanned or typed in at booking
     // instead of letting the server mint a fresh one.
     String? existingCode,
+    // The pickup point the receiver collects from instead of a doorstep
+    // delivery — earns the rate card's agent-drop discount.
+    String? destinationAgentId,
+    // Declared contents value plus the cover bought against it. Both or
+    // neither; the server validates the pair and freezes the fee.
+    double? declaredValueKes,
+    String? coverageTierId,
+    // A dropped pin for either end. Addressing failure is this market's
+    // largest cause of delivery failure; a pin is what a courier's maps
+    // app can route to, where the free-text label is prose to read.
+    double? originLat,
+    double? originLng,
+    double? destinationLat,
+    double? destinationLng,
   }) async {
     final res = await _api.post('/v1/parcels', {
       'senderName': senderName,
@@ -67,12 +82,19 @@ class ParcelsRepository {
       'originLabel': originLabel,
       'destinationLabel': destinationLabel,
       'parcelType': parcelType,
-      if (weightKg != null) 'weightKg': weightKg,
+      'weightKg': ?weightKg,
       'fragile': fragile,
       if (notes != null && notes.isNotEmpty) 'notes': notes,
-      if (originZoneId != null) 'originZoneId': originZoneId,
-      if (destinationZoneId != null) 'destinationZoneId': destinationZoneId,
+      'originZoneId': ?originZoneId,
+      'destinationZoneId': ?destinationZoneId,
       if (existingCode != null && existingCode.isNotEmpty) 'existingCode': existingCode,
+      'destinationAgentId': ?destinationAgentId,
+      'declaredValueKes': ?declaredValueKes,
+      'coverageTierId': ?coverageTierId,
+      'originLat': ?originLat,
+      'originLng': ?originLng,
+      'destinationLat': ?destinationLat,
+      'destinationLng': ?destinationLng,
     });
     return BookedParcel(
       parcelId: res['parcelId'] as String,
@@ -87,18 +109,63 @@ class ParcelsRepository {
   /// distanceKm) so the sender sees the real price before confirming —
   /// see dbx.DistanceSurchargeKes's own comment on the degradation path
   /// when either is omitted.
+  /// This is a pure read and creates nothing — which is the point. The
+  /// booking form used to POST a DRAFT_PENDING_PAYMENT parcel just to
+  /// find out what one cost, which is where the admin console's
+  /// stale-draft backlog came from. Every modifier goes to the server
+  /// rather than being applied here, so the number shown to the sender
+  /// is the number SetParcelPrice will independently re-derive and
+  /// accept (see dbx.ParcelPriceBand).
   Future<ParcelPricing> getPricing(
     String parcelType, {
     String? originZoneId,
     String? destinationZoneId,
+    String? destinationAgentId,
+    double? declaredValueKes,
+    String? coverageTierId,
+    // A dropped pin for either end. Addressing failure is this market's
+    // largest cause of delivery failure; a pin is what a courier's maps
+    // app can route to, where the free-text label is prose to read.
+    double? originLat,
+    double? originLng,
+    double? destinationLat,
+    double? destinationLng,
   }) async {
     var path = '/v1/parcels/pricing?parcelType=${Uri.encodeComponent(parcelType)}';
     if (originZoneId != null && destinationZoneId != null) {
       path += '&originZoneId=${Uri.encodeComponent(originZoneId)}'
           '&destinationZoneId=${Uri.encodeComponent(destinationZoneId)}';
     }
+    if (destinationAgentId != null) {
+      path += '&destinationAgentId=${Uri.encodeComponent(destinationAgentId)}';
+    }
+    if (declaredValueKes != null && coverageTierId != null) {
+      path += '&declaredValueKes=$declaredValueKes'
+          '&coverageTierId=${Uri.encodeComponent(coverageTierId)}';
+    }
     final res = await _api.get(path);
     return ParcelPricing.fromJson(res);
+  }
+
+  /// GET /v1/parcels/agents — public, active pickup points. With
+  /// coordinates it returns the nearest shops that still have shelf
+  /// space; without, the whole active list.
+  Future<List<ParcelAgent>> listAgents({double? lat, double? lng}) async {
+    var path = '/v1/parcels/agents';
+    if (lat != null && lng != null) path += '?lat=$lat&lng=$lng';
+    final res = await _api.get(path);
+    final list = (res['agents'] as List?) ?? const [];
+    return list.map((e) => ParcelAgent.fromJson(e as Map<String, dynamic>)).toList();
+  }
+
+  /// GET /v1/parcels/coverage — cover levels, each already quoted
+  /// against [declaredValueKes] by the server.
+  Future<List<ParcelCoverageTier>> listCoverageTiers(double declaredValueKes) async {
+    final res = await _api.get('/v1/parcels/coverage?declaredValueKes=$declaredValueKes');
+    final list = (res['tiers'] as List?) ?? const [];
+    return list
+        .map((e) => ParcelCoverageTier.fromJson(e as Map<String, dynamic>))
+        .toList();
   }
 
   /// GET /v1/parcels/pricing (no parcelType) — every type's pricing at
@@ -126,12 +193,14 @@ class ParcelsRepository {
   /// allowed range/reason itself.
   Future<void> setPrice({
     required String code,
-    required double priceKes,
+    required Money priceKes,
     String? bargainReason,
   }) {
     return _api.post('/v1/parcels/${Uri.encodeComponent(code)}/price', {
-      'priceKes': priceKes,
-      if (bargainReason != null) 'bargainReason': bargainReason,
+      // Exact decimal string; core-go's money.Amount binding takes
+      // either shape, so older builds sending a number still work.
+      'priceKes': priceKes.toWire(),
+      'bargainReason': ?bargainReason,
     });
   }
 
@@ -144,7 +213,7 @@ class ParcelsRepository {
   }) async {
     final res = await _api.post('/v1/parcels/${Uri.encodeComponent(code)}/pay', {
       'paymentMethod': paymentMethod,
-      if (msisdn != null) 'msisdn': msisdn,
+      'msisdn': ?msisdn,
     });
     return ParcelPaymentResult(
       status: res['status'] as String,
@@ -185,10 +254,158 @@ class ParcelsRepository {
   }
 
   /// POST /v1/parcels/:code/deliver — the terminal handoff, proved by
-  /// the deliveryCode only the sender was shown.
-  Future<void> deliver({required String code, required String deliveryCode}) {
+  /// the deliveryCode only the sender was shown, plus whatever proof
+  /// the courier captured at the door.
+  ///
+  /// [photoKey] is what [uploadPodPhoto] returned — a storage key, never
+  /// a URL this client composed. [receivedByName] is the single most
+  /// useful field in a later dispute: whoever actually took the parcel
+  /// is frequently not the receiver (a watchman, a shop attendant, a
+  /// neighbour), and the code-only flow threw that away entirely.
+  Future<void> deliver({
+    required String code,
+    required String deliveryCode,
+    String? photoKey,
+    double? lat,
+    double? lng,
+    String? receivedByName,
+    // What the buyer paid at the door, for a cash-on-delivery parcel.
+    // The server refuses to complete a COD delivery without it — handing
+    // over goods with the money unrecorded is the exact failure COD has
+    // to be built to prevent.
+    Money? codCollectedKes,
+  }) {
     return _api.post('/v1/parcels/${Uri.encodeComponent(code)}/deliver', {
       'deliveryCode': deliveryCode,
+      'photoKey': ?photoKey,
+      'lat': ?lat,
+      'lng': ?lng,
+      if (receivedByName != null && receivedByName.isNotEmpty)
+        'receivedByName': receivedByName,
+      // An exact decimal string. core-go binds this through money.Amount
+      // (handlers_parcels.go's deliverParcelRequest), which accepts a
+      // string or a number — so this no longer has to round-trip a
+      // courier's cash through a float on the way out. The number form
+      // still works and is what older builds of this app send; see
+      // step 3 of docs/proposals/money-representation.md.
+      if (codCollectedKes != null)
+        'codCollectedKes': codCollectedKes.toWire(),
+    });
+  }
+
+  /// GET /v1/me/courier-earnings — a courier's own money: what they're
+  /// owed, what they've been paid, and the rate behind both.
+  Future<CourierEarningsView> courierEarnings() async {
+    final res = await _api.get('/v1/me/courier-earnings');
+    final list = (res['deliveries'] as List?) ?? const [];
+    return CourierEarningsView(
+      earnings: CourierEarnings.fromJson(
+        (res['earnings'] as Map<String, dynamic>?) ?? const {},
+      ),
+      deliveries: list
+          .map((e) => CourierEarningRow.fromJson(e as Map<String, dynamic>))
+          .toList(),
+      tariff: CourierTariff.fromJson(
+        (res['tariff'] as Map<String, dynamic>?) ?? const {},
+      ),
+    );
+  }
+
+  /// GET /v1/parcels/trips — buses a parcel could ride right now.
+  Future<List<DepartingTrip>> listDepartingTrips({String q = ''}) async {
+    final res = await _api.get('/v1/parcels/trips?q=${Uri.encodeComponent(q)}');
+    final list = (res['trips'] as List?) ?? const [];
+    return list.map((e) => DepartingTrip.fromJson(e as Map<String, dynamic>)).toList();
+  }
+
+  /// GET /v1/parcels/trips/:tripId/stages — the stops on that bus's
+  /// route, in travel order.
+  Future<List<TripStage>> listTripStages(String tripId) async {
+    final res = await _api.get('/v1/parcels/trips/${Uri.encodeComponent(tripId)}/stages');
+    final list = (res['stages'] as List?) ?? const [];
+    return list.map((e) => TripStage.fromJson(e as Map<String, dynamic>)).toList();
+  }
+
+  /// POST /v1/parcels/:code/board — a conductor loading a parcel they
+  /// already hold onto the bus they are crewing. Boarding is not a
+  /// custody transfer: the server checks custody AND crew separately.
+  Future<void> boardOnTrip({
+    required String code,
+    required String tripId,
+    String? dropStageId,
+  }) {
+    return _api.post('/v1/parcels/${Uri.encodeComponent(code)}/board', {
+      'tripId': tripId,
+      'dropStageId': ?dropStageId,
+    });
+  }
+
+  /// POST /v1/parcels/:code/drop — off at a stage. Custody stays with
+  /// the conductor until it reaches a receiver or a pickup point.
+  Future<void> dropFromTrip(String code) {
+    return _api.post('/v1/parcels/${Uri.encodeComponent(code)}/drop');
+  }
+
+  /// GET /v1/me/cod-holding — how much collected cash this rider is
+  /// still carrying, which is what they reconcile against at the end of
+  /// a round.
+  Future<RiderCodHolding> codHolding() async {
+    final res = await _api.get('/v1/me/cod-holding');
+    return RiderCodHolding.fromJson(res);
+  }
+
+  /// POST /v1/parcels/:code/pod-photo — multipart. Returns the storage
+  /// key to pass to [deliver]; the image itself is only ever readable
+  /// back through the API's own authorised route.
+  Future<String> uploadPodPhoto({
+    required String code,
+    required List<int> bytes,
+    String filename = 'pod.jpg',
+  }) async {
+    final res = await _api.uploadImage(
+      '/v1/parcels/${Uri.encodeComponent(code)}/pod-photo',
+      field: 'photo',
+      bytes: bytes,
+      filename: filename,
+    );
+    return res['photoKey'] as String;
+  }
+
+  /// POST /v1/parcels/:code/attempt — "I got there and couldn't hand it
+  /// over". Custody deliberately doesn't move: the courier still has
+  /// the parcel. Returns the running attempt count, which is what
+  /// decides whether the next step is another try or a return.
+  Future<int> recordAttempt({
+    required String code,
+    required String reason,
+    String? note,
+    double? lat,
+    double? lng,
+  }) async {
+    final res = await _api.post('/v1/parcels/${Uri.encodeComponent(code)}/attempt', {
+      'reason': reason,
+      if (note != null && note.isNotEmpty) 'note': note,
+      'lat': ?lat,
+      'lng': ?lng,
+    });
+    return (res['attempts'] as num?)?.toInt() ?? 0;
+  }
+
+  /// POST /v1/parcels/:code/hold-at-agent — dropping a parcel on a
+  /// shop's shelf. The receiver gets an SMS with the shop's name,
+  /// location and hours.
+  Future<void> holdAtAgent({required String code, required String agentId}) {
+    return _api.post('/v1/parcels/${Uri.encodeComponent(code)}/hold-at-agent', {
+      'agentId': agentId,
+    });
+  }
+
+  /// POST /v1/parcels/:code/return — the give-up path. Terminal, and
+  /// distinct from a cancellation: the journey happened and was billed,
+  /// it just ended at the origin.
+  Future<void> returnToSender({required String code, required String reason}) {
+    return _api.post('/v1/parcels/${Uri.encodeComponent(code)}/return', {
+      'reason': reason,
     });
   }
 

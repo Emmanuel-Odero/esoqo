@@ -118,7 +118,8 @@ class _ParcelReceiptConfirmationScreenState
             "we'll text a code to the phone number on file for this delivery.",
           ),
           const SizedBox(height: EsokoSpacing.s5),
-          EsokoLoadingButton(
+          EsokoButton.primary(
+            expand: false,
             label: 'Send code',
             loading: _loading,
             onPressed: _requestCode,
@@ -128,12 +129,10 @@ class _ParcelReceiptConfirmationScreenState
         return [
           Text('Enter the code sent to ${_maskedMsisdn ?? 'your number'}.'),
           const SizedBox(height: EsokoSpacing.s4),
-          EsokoFormField(
+          EsokoField.otp(
             controller: _otpController,
             label: '6-digit code',
-            keyboardType: TextInputType.number,
-            autofillHints: const [AutofillHints.oneTimeCode],
-            maxLength: 6,
+            autofocus: false,
           ),
           const SizedBox(height: EsokoSpacing.s4),
           const Text(
@@ -152,7 +151,8 @@ class _ParcelReceiptConfirmationScreenState
             decoration: const InputDecoration(labelText: 'Feedback (optional)'),
           ),
           const SizedBox(height: EsokoSpacing.s5),
-          EsokoLoadingButton(
+          EsokoButton.primary(
+            expand: false,
             label: 'Confirm receipt',
             loading: _loading,
             onPressed: _confirm,

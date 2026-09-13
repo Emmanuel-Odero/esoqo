@@ -90,7 +90,7 @@ class FleetRepository {
     return _api.post('/v1/ticketorgs/$orgId/staff-grants', {
       'msisdn': msisdn,
       'role': role,
-      if (crewMemberId != null) 'crewMemberId': crewMemberId,
+      'crewMemberId': ?crewMemberId,
     });
   }
 
@@ -225,8 +225,8 @@ class FleetRepository {
   /// a manager closing without either still works exactly as before.
   Future<void> closeTrip(String tripId, {String? note, String? endStatus}) {
     return _api.post('/v1/fleet/trips/$tripId/close', {
-      if (note != null) 'note': note,
-      if (endStatus != null) 'endStatus': endStatus,
+      'note': ?note,
+      'endStatus': ?endStatus,
     });
   }
 

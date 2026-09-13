@@ -6,6 +6,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../core/api/api_exception.dart';
 import '../../core/auth/auth_controller.dart';
 import '../../core/auth/auth_state.dart';
+import '../../core/money/money.dart';
 import '../../core/theme/esoko_tokens.dart';
 import '../../core/widgets/widgets.dart';
 import 'parcels_repository.dart';
@@ -24,7 +25,7 @@ class ParcelPaymentScreen extends ConsumerStatefulWidget {
   });
 
   final String code;
-  final double priceKes;
+  final Money priceKes;
 
   @override
   ConsumerState<ParcelPaymentScreen> createState() =>
@@ -160,7 +161,7 @@ class _ParcelPaymentScreenState extends ConsumerState<ParcelPaymentScreen> {
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
             Text('Total', style: Theme.of(context).textTheme.bodySmall),
-            EsokoAmountText(widget.priceKes.toStringAsFixed(0), fontSize: 28),
+            EsokoAmountText(widget.priceKes.format(), fontSize: 28),
             const SizedBox(height: EsokoSpacing.s4),
             EsokoSegmentedToggle<String>(
               selected: _method,
@@ -196,12 +197,9 @@ class _ParcelPaymentScreenState extends ConsumerState<ParcelPaymentScreen> {
                   icon: Icons.phone_iphone_outlined,
                 )
               else
-                EsokoFormField(
+                EsokoField.phone(
                   controller: _msisdnController,
                   label: 'M-Pesa phone number',
-                  hint: 'e.g. 0712345678',
-                  icon: Icons.phone_outlined,
-                  keyboardType: TextInputType.phone,
                 ),
             ],
             if (_error != null) ...[
@@ -209,7 +207,8 @@ class _ParcelPaymentScreenState extends ConsumerState<ParcelPaymentScreen> {
               EsokoFormError(message: _error!),
             ],
             const SizedBox(height: EsokoSpacing.s4),
-            EsokoLoadingButton(
+            EsokoButton.primary(
+              expand: false,
               label: _method == 'ESOKO_POINTS' ? 'Pay with points' : 'Pay with M-Pesa',
               onPressed: _pay,
             ),
@@ -224,7 +223,7 @@ class _ParcelPaymentScreenState extends ConsumerState<ParcelPaymentScreen> {
         return EsokoResultView.waiting(
           title: 'Complete payment on your phone',
           message: 'Enter your M-Pesa PIN when the prompt arrives.',
-          amountKes: widget.priceKes.toStringAsFixed(0),
+          amountKes: widget.priceKes.format(),
         );
       case _Stage.done:
         return EsokoResultView.success(

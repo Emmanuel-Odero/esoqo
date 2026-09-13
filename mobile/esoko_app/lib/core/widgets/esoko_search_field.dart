@@ -2,7 +2,7 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 
-import 'esoko_form_field.dart';
+import 'esoko_field.dart';
 
 /// Search input with a conditional clear button — the shared shape for the
 /// store directory and group-joining searches. `onChanged` receives trimmed
@@ -56,12 +56,10 @@ class _EsokoSearchFieldState extends State<EsokoSearchField> {
 
   @override
   Widget build(BuildContext context) {
-    return EsokoFormField(
+    return EsokoField.search(
       controller: widget.controller,
-      label: widget.label,
+      label: widget.label ?? 'Search',
       hint: widget.hint,
-      icon: Icons.search_rounded,
-      textInputAction: TextInputAction.search,
       onChanged: _emit,
       onSubmitted: widget.onSubmitted,
       suffixIcon: ListenableBuilder(

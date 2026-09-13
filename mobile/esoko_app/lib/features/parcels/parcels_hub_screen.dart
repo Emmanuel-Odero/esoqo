@@ -3,11 +3,15 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:geolocator/geolocator.dart';
+import 'package:mobile_scanner/mobile_scanner.dart';
 
 import '../../core/api/api_exception.dart';
 import '../../core/theme/esoko_tokens.dart';
 import '../../core/widgets/widgets.dart';
 import 'book_parcel_screen.dart';
+import 'complete_delivery_screen.dart';
+import 'courier_earnings_screen.dart';
+import 'load_on_bus_screen.dart';
 import 'parcel_models.dart';
 import 'parcel_status_screen.dart';
 import 'parcels_repository.dart';
@@ -18,6 +22,14 @@ final myParcelsProvider = FutureProvider.autoDispose<List<ParcelRow>>(
 
 final heldParcelsProvider = FutureProvider.autoDispose<List<ParcelRow>>(
   (ref) => ref.watch(parcelsRepositoryProvider).heldParcels(),
+);
+
+/// The cash a rider is still carrying. Its own provider rather than a
+/// field on the held list, because it survives a parcel leaving that
+/// list: money collected on a parcel delivered an hour ago is still in
+/// the rider's pocket until they hand it over.
+final codHoldingProvider = FutureProvider.autoDispose<RiderCodHolding>(
+  (ref) => ref.watch(parcelsRepositoryProvider).codHolding(),
 );
 
 final availableJobsProvider = FutureProvider.autoDispose<List<AvailableJob>>(
@@ -53,6 +65,7 @@ class ParcelsHubScreen extends ConsumerStatefulWidget {
 class _ParcelsHubScreenState extends ConsumerState<ParcelsHubScreen> {
   final _acceptCodeController = TextEditingController();
   bool _acceptBusy = false;
+  bool _scanningAccept = false;
   int _tab = 0;
 
   // Nearby-jobs tab state. The ping loop only ever fires while this tab
@@ -84,6 +97,7 @@ class _ParcelsHubScreenState extends ConsumerState<ParcelsHubScreen> {
   void _refreshAll() {
     ref.invalidate(myParcelsProvider);
     ref.invalidate(heldParcelsProvider);
+    ref.invalidate(codHoldingProvider);
   }
 
   Future<void> _postPing(Position position) async {
@@ -187,41 +201,31 @@ class _ParcelsHubScreenState extends ConsumerState<ParcelsHubScreen> {
     }
   }
 
-  Future<void> _deliverParcel(ParcelRow row) async {
-    final codeController = TextEditingController();
-    final code = await showDialog<String>(
-      context: context,
-      builder: (dialogContext) => AlertDialog(
-        title: const Text('Confirm delivery'),
-        content: EsokoFormField(
-          controller: codeController,
-          label: 'Delivery code',
-          hint: 'Ask the receiver for their code',
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(dialogContext).pop(),
-            child: const Text('Cancel'),
-          ),
-          FilledButton(
-            onPressed: () =>
-                Navigator.of(dialogContext).pop(codeController.text.trim()),
-            child: const Text('Confirm'),
-          ),
-        ],
-      ),
+  /// Opens the full at-the-door flow rather than the one-field
+  /// AlertDialog this used to be. That dialog could only express
+  /// success: there was no way to record a failed attempt, no proof of
+  /// who took the parcel, and no way to leave it somewhere the receiver
+  /// could collect it — see CompleteDeliveryScreen's own comment.
+  /// "Send it on the bus you ride" at the point of use — a conductor
+  /// putting a parcel they already hold into the boot of the vehicle
+  /// they're crewing. Offered on every held parcel rather than gated on
+  /// a pre-fetched trip: the screen behind it explains clearly when the
+  /// person isn't on a running trip, which beats a button that silently
+  /// isn't there for reasons nobody can see.
+  Future<void> _loadOnBus(ParcelRow row) async {
+    final boarded = await Navigator.of(context).push<bool>(
+      MaterialPageRoute(builder: (_) => LoadOnBusScreen(parcel: row)),
     );
-    if (code == null || code.isEmpty || !mounted) return;
-    try {
-      await ref
-          .read(parcelsRepositoryProvider)
-          .deliver(code: row.code, deliveryCode: code);
+    if (boarded == true) ref.invalidate(heldParcelsProvider);
+  }
+
+  Future<void> _completeDelivery(ParcelRow row) async {
+    final done = await Navigator.of(context).push<bool>(
+      MaterialPageRoute(builder: (_) => CompleteDeliveryScreen(parcel: row)),
+    );
+    if (done == true) {
       ref.invalidate(heldParcelsProvider);
-    } on ApiException catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context)
-            .showSnackBar(SnackBar(content: Text(e.message)));
-      }
+      ref.invalidate(codHoldingProvider);
     }
   }
 
@@ -271,15 +275,16 @@ class _ParcelsHubScreenState extends ConsumerState<ParcelsHubScreen> {
                             const SizedBox(height: EsokoSpacing.s2),
                         itemBuilder: (context, i) {
                           final p = list[i];
-                          final statusLabel = p.status == 'DRAFT_PENDING_PAYMENT'
-                              ? 'Draft — pending payment'
-                              : p.status;
+                          // parcelStatusLabel, never the raw enum — this
+                          // list used to render "PKG-X · IN_TRANSIT"
+                          // while the detail screen one tap away showed
+                          // a written sentence about the same parcel.
                           return EsokoListTile(
                             title: '${p.originLabel} → ${p.destinationLabel}',
-                            subtitle: '${p.code} · $statusLabel',
-                            icon: p.status == 'DRAFT_PENDING_PAYMENT'
-                                ? Icons.pending_outlined
-                                : Icons.local_shipping_outlined,
+                            subtitle: '${p.code} · '
+                                '${parcelStatusLabel(p.status)} · '
+                                '${parcelHumanTime(p.createdAt)}',
+                            icon: _statusIcon(p.status),
                             onTap: () => Navigator.of(context).push(
                               MaterialPageRoute(
                                 builder: (_) => ParcelStatusScreen(
@@ -300,13 +305,31 @@ class _ParcelsHubScreenState extends ConsumerState<ParcelsHubScreen> {
                         child: Row(
                           children: [
                             Expanded(
-                              child: EsokoFormField(
+                              child: EsokoField.code(
                                 controller: _acceptCodeController,
                                 label: 'Accept a parcel',
                                 hint: 'PKG-XXXXXXX',
-                                icon: Icons.qr_code_2_outlined,
-                                textInputAction: TextInputAction.go,
                                 onSubmitted: (_) => _acceptParcel(),
+                              ),
+                            ),
+                            const SizedBox(width: EsokoSpacing.s2),
+                            // Scanning belongs here more than anywhere:
+                            // taking custody is the single most repeated
+                            // action a courier performs, and it was the
+                            // one place in the whole product that still
+                            // made them type PKG-XXXXXXX by hand while
+                            // the public web tracker had a QR scanner.
+                            SizedBox(
+                              width: 52,
+                              child: IconButton.filledTonal(
+                                onPressed: () =>
+                                    setState(() => _scanningAccept = !_scanningAccept),
+                                icon: Icon(_scanningAccept
+                                    ? Icons.close
+                                    : Icons.qr_code_scanner),
+                                tooltip: _scanningAccept
+                                    ? 'Close scanner'
+                                    : 'Scan a parcel',
                               ),
                             ),
                             const SizedBox(width: EsokoSpacing.s2),
@@ -328,7 +351,8 @@ class _ParcelsHubScreenState extends ConsumerState<ParcelsHubScreen> {
                             // look cut off).
                             SizedBox(
                               width: 96,
-                              child: EsokoLoadingButton(
+                              child: EsokoButton.primary(
+                                expand: false,
                                 label: 'Accept',
                                 loading: _acceptBusy,
                                 onPressed: _acceptParcel,
@@ -337,6 +361,36 @@ class _ParcelsHubScreenState extends ConsumerState<ParcelsHubScreen> {
                           ],
                         ),
                       ),
+                      // A rider carrying somebody else's cash should
+                      // never have to go looking for the total. Hidden
+                      // entirely at zero rather than shown as "KES 0" —
+                      // most riders never touch COD, and a permanent
+                      // empty money row is noise on their main screen.
+                      const _CodFloatBanner(),
+                      if (_scanningAccept)
+                        Padding(
+                          padding: const EdgeInsets.fromLTRB(
+                            EsokoSpacing.s4, 0, EsokoSpacing.s4, EsokoSpacing.s4,
+                          ),
+                          child: SizedBox(
+                            height: 200,
+                            child: ClipRRect(
+                              borderRadius: BorderRadius.circular(EsokoRadius.md),
+                              child: MobileScanner(
+                                onDetect: (cap) {
+                                  final v = cap.barcodes.firstOrNull?.rawValue;
+                                  if (v == null || _acceptBusy) return;
+                                  setState(() {
+                                    _acceptCodeController.text =
+                                        v.trim().toUpperCase();
+                                    _scanningAccept = false;
+                                  });
+                                  _acceptParcel();
+                                },
+                              ),
+                            ),
+                          ),
+                        ),
                       Expanded(
                         child: RefreshIndicator(
                           onRefresh: () async =>
@@ -356,11 +410,31 @@ class _ParcelsHubScreenState extends ConsumerState<ParcelsHubScreen> {
                                   const SizedBox(height: EsokoSpacing.s2),
                               itemBuilder: (context, i) {
                                 final p = list[i];
+                                // Attempt count leads the subtitle when
+                                // there is one: ListParcelsHeld sorts
+                                // these to the top precisely because a
+                                // parcel that has already failed twice
+                                // is the one that needs a decision, not
+                                // another silent lap in the bag.
+                                final cod = p.needsCodCollection
+                                    ? 'COLLECT KES ${p.codExpectedKes.format()} · '
+                                    : '';
+                                final detail = p.deliveryAttempts > 0
+                                    ? '${p.deliveryAttempts} failed '
+                                        '${p.deliveryAttempts == 1 ? 'try' : 'tries'} · '
+                                        'to ${p.receiverName}'
+                                    : 'to ${p.receiverName}';
                                 return EsokoListTile(
                                   title:
                                       '${p.originLabel} → ${p.destinationLabel}',
-                                  subtitle: '${p.code} · to ${p.receiverName}',
-                                  icon: Icons.inventory_2_outlined,
+                                  // The amount to collect leads, ahead
+                                  // of everything else: it is the one
+                                  // thing a courier must know before
+                                  // they knock, and finding it out
+                                  // afterwards is finding it out too
+                                  // late.
+                                  subtitle: '${p.code} · $cod$detail',
+                                  icon: _statusIcon(p.status),
                                   // Fixed width, not a bare TextButton —
                                   // see SCREEN_CONVENTIONS.md / the fix in
                                   // org_duty_switcher_screen.dart: an
@@ -371,11 +445,40 @@ class _ParcelsHubScreenState extends ConsumerState<ParcelsHubScreen> {
                                   // destination label plus a receiver
                                   // name easily does), which renders as a
                                   // silently blank tile, not a crash.
+                                  // Two actions now (finish, or load onto
+                                  // a bus), so the trailing slot is a
+                                  // menu rather than a button. Still
+                                  // fixed-width — see SCREEN_CONVENTIONS
+                                  // .md: an unconstrained widget in
+                                  // `trailing` renders as a silently
+                                  // blank tile once title+subtitle get
+                                  // long, which a real route label plus
+                                  // a COD amount easily does.
                                   trailing: SizedBox(
-                                    width: 84,
-                                    child: TextButton(
-                                      onPressed: () => _deliverParcel(p),
-                                      child: const Text('Deliver'),
+                                    width: 48,
+                                    child: PopupMenuButton<String>(
+                                      tooltip: 'Actions',
+                                      onSelected: (v) {
+                                        if (v == 'finish') _completeDelivery(p);
+                                        if (v == 'bus') _loadOnBus(p);
+                                      },
+                                      itemBuilder: (_) => const [
+                                        PopupMenuItem(
+                                          value: 'finish',
+                                          // "Finish" rather than
+                                          // "Deliver": the screen behind
+                                          // it covers a failed attempt
+                                          // and an agent drop too, and a
+                                          // courier who couldn't deliver
+                                          // must not have to press
+                                          // "Deliver" to say so.
+                                          child: Text('Finish delivery'),
+                                        ),
+                                        PopupMenuItem(
+                                          value: 'bus',
+                                          child: Text('Load on my bus'),
+                                        ),
+                                      ],
                                     ),
                                   ),
                                 );
@@ -387,6 +490,11 @@ class _ParcelsHubScreenState extends ConsumerState<ParcelsHubScreen> {
                     ],
                   ),
                   _NearbyJobsTab(
+                    onOpenEarnings: () => Navigator.of(context).push(
+                      MaterialPageRoute(
+                        builder: (_) => const CourierEarningsScreen(),
+                      ),
+                    ),
                     jobs: jobs,
                     position: _position,
                     locating: _locating,
@@ -421,6 +529,50 @@ class _ParcelsHubScreenState extends ConsumerState<ParcelsHubScreen> {
   }
 }
 
+/// What this rider is holding in cash right now.
+class _CodFloatBanner extends ConsumerWidget {
+  const _CodFloatBanner();
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final holding = ref.watch(codHoldingProvider);
+    return holding.maybeWhen(
+      data: (h) {
+        if (!h.amountKes.isPositive) return const SizedBox.shrink();
+        return Padding(
+          padding: const EdgeInsets.fromLTRB(
+            EsokoSpacing.s4, 0, EsokoSpacing.s4, EsokoSpacing.s3,
+          ),
+          child: EsokoInlineNotice(
+            color: EsokoColors.navy,
+            icon: EsokoIconName.coins,
+            message: 'You are holding KES ${h.amountKes.format()} '
+                'from ${h.parcelCount} '
+                '${h.parcelCount == 1 ? 'parcel' : 'parcels'}. '
+                'Hand it in at the end of your round.',
+          ),
+        );
+      },
+      // A failed or pending fetch shows nothing at all: a wrong cash
+      // figure on a courier's screen is worse than no figure.
+      orElse: () => const SizedBox.shrink(),
+    );
+  }
+}
+
+/// One glyph per lifecycle state, so a list scan reads at a glance —
+/// the off-timeline states in particular (a failed attempt, a parcel on
+/// a shop shelf) must not look identical to a healthy in-transit one.
+IconData _statusIcon(String status) => switch (status) {
+      'DRAFT_PENDING_PAYMENT' => Icons.pending_outlined,
+      'FAILED_DELIVERY' => Icons.report_problem_outlined,
+      'HELD_AT_AGENT' => Icons.storefront_outlined,
+      'DELIVERED' => Icons.check_circle_outline,
+      'RETURNED_TO_SENDER' => Icons.keyboard_return_outlined,
+      'CANCELLED' => Icons.cancel_outlined,
+      _ => Icons.local_shipping_outlined,
+    };
+
 /// BOOKED, unassigned parcels near this courier's last posted ping —
 /// the gig/on-demand claim flow (see this screen's own doc comment).
 /// Location is opt-in per visit, same "Use my location" tap
@@ -428,6 +580,7 @@ class _ParcelsHubScreenState extends ConsumerState<ParcelsHubScreen> {
 /// the background before someone's actually looking at this tab.
 class _NearbyJobsTab extends StatelessWidget {
   const _NearbyJobsTab({
+    required this.onOpenEarnings,
     required this.jobs,
     required this.position,
     required this.locating,
@@ -437,6 +590,7 @@ class _NearbyJobsTab extends StatelessWidget {
     required this.onClaim,
   });
 
+  final VoidCallback onOpenEarnings;
   final AsyncValue<List<AvailableJob>> jobs;
   final Position? position;
   final bool locating;
@@ -461,7 +615,8 @@ class _NearbyJobsTab extends StatelessWidget {
                 textAlign: TextAlign.center,
               ),
               const SizedBox(height: EsokoSpacing.s3),
-              EsokoLoadingButton(
+              EsokoButton.primary(
+                expand: false,
                 label: 'Use my location',
                 loading: locating,
                 onPressed: onUseLocation,
@@ -475,6 +630,24 @@ class _NearbyJobsTab extends StatelessWidget {
         ),
       );
     }
+    return Column(
+      children: [
+        Padding(
+          padding: const EdgeInsets.fromLTRB(
+            EsokoSpacing.s4, EsokoSpacing.s3, EsokoSpacing.s4, 0,
+          ),
+          child: EsokoButton.secondary(
+            label: 'Your earnings',
+            icon: Icons.payments_outlined,
+            onPressed: onOpenEarnings,
+          ),
+        ),
+        Expanded(child: _jobsList()),
+      ],
+    );
+  }
+
+  Widget _jobsList() {
     return EsokoAsyncView(
       value: jobs,
       isEmpty: (l) => l.isEmpty,
@@ -497,7 +670,8 @@ class _NearbyJobsTab extends StatelessWidget {
             icon: Icons.local_shipping_outlined,
             trailing: SizedBox(
               width: 84,
-              child: EsokoLoadingButton(
+              child: EsokoButton.primary(
+                expand: false,
                 label: 'Claim',
                 loading: claimingCode == job.code,
                 onPressed: () => onClaim(job),

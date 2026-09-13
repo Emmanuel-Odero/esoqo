@@ -196,9 +196,10 @@ class _TableOrderCardState extends ConsumerState<_TableOrderCard> {
                   children: [
                     const Text('No staff added yet.'),
                     const SizedBox(height: EsokoSpacing.s3),
-                    OutlinedButton(
+                    EsokoButton.secondary(
+                      label: 'Add staff from the app bar',
+                      expand: false,
                       onPressed: () => Navigator.of(context).pop(),
-                      child: const Text('Add staff from the app bar'),
                     ),
                   ],
                 ),
@@ -297,7 +298,8 @@ class _TableOrderCardState extends ConsumerState<_TableOrderCard> {
           ],
           if (next != null) ...[
             const SizedBox(height: EsokoSpacing.s3),
-            EsokoLoadingButton(
+            EsokoButton.primary(
+              expand: false,
               label: 'Mark as ${next.toLowerCase()}',
               loading: _busy,
               onPressed: _advance,

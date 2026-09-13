@@ -214,11 +214,8 @@ class _AddStaffDialogState extends ConsumerState<_AddStaffDialog> {
           children: [
             const Text('They need their own Esoko account already — look them up by phone number.'),
             const SizedBox(height: EsokoSpacing.s3),
-            EsokoFormField(
+            EsokoField.phone(
               controller: _msisdnController,
-              label: 'Phone number',
-              hint: '+254 7…',
-              keyboardType: TextInputType.phone,
             ),
             const SizedBox(height: EsokoSpacing.s3),
             EsokoDropdown<String>(
@@ -265,7 +262,7 @@ class _AddStaffDialogState extends ConsumerState<_AddStaffDialog> {
       ),
       actions: [
         TextButton(onPressed: _saving ? null : () => Navigator.of(context).pop(), child: const Text('Cancel')),
-        EsokoLoadingButton(label: 'Add', loading: _saving, onPressed: _save),
+        EsokoButton.primary(expand: false, label: 'Add', loading: _saving, onPressed: _save),
       ],
     );
   }

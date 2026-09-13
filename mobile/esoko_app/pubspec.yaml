@@ -68,6 +68,11 @@ dependencies:
   # packages/ui/src/Icon.tsx, see assets/icons/ + EsokoIcon) — no emoji,
   # no generic Cupertino/Material glyphs, matching web's icon language.
   flutter_svg: ^2.0.17
+  # Camera capture for proof-of-delivery photos. image_picker rather
+  # than the full `camera` plugin: this needs one shot from the system
+  # camera UI, not a live preview surface, and the OS camera app is
+  # what a courier already knows how to use one-handed at a doorstep.
+  image_picker: ^1.1.2
   # Renders the Code128 1D barcode on a parcel label — qr_flutter
   # above covers the QR half of the same label.
   barcode_widget: ^2.0.4

@@ -194,7 +194,8 @@ class _InstallmentPlanCardState extends ConsumerState<_InstallmentPlanCard> {
             ),
           ],
           const SizedBox(height: EsokoSpacing.s3),
-          EsokoLoadingButton(
+          EsokoButton.primary(
+            expand: false,
             label: 'Pay towards balance',
             loading: _busy,
             onPressed: _payBalance,

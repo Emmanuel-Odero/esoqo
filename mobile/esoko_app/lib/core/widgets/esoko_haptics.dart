@@ -1,7 +1,7 @@
 import 'package:flutter/services.dart';
 
 /// One-line haptic accents for the design system's press moments —
-/// [EsokoCard] taps and [EsokoLoadingButton] presses call these so
+/// [EsokoCard] taps and [EsokoButton] presses call these so
 /// screens never reach for `HapticFeedback` directly and every tap
 /// feels the same weight across the app.
 ///
@@ -19,5 +19,15 @@ abstract final class EsokoHaptics {
   /// Slightly heavier knock for committing (primary buttons).
   static void confirm() {
     if (enabled) HapticFeedback.lightImpact();
+  }
+
+  /// A deliberately heavier knock before something destructive.
+  ///
+  /// Distinct from [confirm] on purpose: the moment before "End duty" or
+  /// "Cancel this parcel" should not feel identical to the moment before
+  /// "Pay". A different weight is the cheapest possible cue that the
+  /// next tap matters more, and it arrives before the dialog does.
+  static void warn() {
+    if (enabled) HapticFeedback.mediumImpact();
   }
 }

@@ -86,23 +86,21 @@ class _CreateGroupScreenState extends ConsumerState<CreateGroupScreen> {
                     onChanged: (v) => setState(() => _kind = v ?? _kind),
                   ),
                   const SizedBox(height: EsokoSpacing.s3),
-                  EsokoFormField(
+                  EsokoField.text(
                     controller: _nameController,
                     label: 'Group name',
-                    textInputAction: TextInputAction.next,
                   ),
                   const SizedBox(height: EsokoSpacing.s3),
-                  EsokoFormField(
+                  EsokoField.quantity(
                     controller: _countyController,
                     label: 'County code',
-                    hint: 'e.g. 047 for Nairobi',
-                    keyboardType: TextInputType.number,
-                    textInputAction: TextInputAction.done,
+                    helper: 'e.g. 047 for Nairobi',
                     onSubmitted: (_) => _create(),
                   ),
                   if (_error != null) EsokoFormError(message: _error!),
                   const SizedBox(height: EsokoSpacing.s5),
-                  EsokoLoadingButton(
+                  EsokoButton.primary(
+                    expand: false,
                     label: 'Create group',
                     loading: _loading,
                     onPressed: _create,

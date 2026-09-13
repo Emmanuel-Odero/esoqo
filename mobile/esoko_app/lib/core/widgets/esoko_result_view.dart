@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../theme/esoko_tokens.dart';
-import 'esoko_loading_button.dart';
+import 'esoko_button.dart';
 import 'esoko_status_badge.dart';
 
 /// Full-screen flow result — spinning/waiting, success or failure — for the
@@ -101,7 +101,7 @@ class EsokoResultView extends StatelessWidget {
           ],
           if (primaryLabel != null) ...[
             const SizedBox(height: EsokoSpacing.s6),
-            EsokoLoadingButton(label: primaryLabel!, onPressed: onPrimary),
+            EsokoButton.primary(expand: false, label: primaryLabel!, onPressed: onPrimary),
             if (secondaryLabel != null) ...[
               const SizedBox(height: EsokoSpacing.s3),
               OutlinedButton(onPressed: onSecondary, child: Text(secondaryLabel!)),

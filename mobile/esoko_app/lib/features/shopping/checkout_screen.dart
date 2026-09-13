@@ -187,11 +187,10 @@ class _CheckoutScreenState extends ConsumerState<CheckoutScreen> {
             ),
             if (_method == 'VOUCHER') ...[
               const SizedBox(height: EsokoSpacing.s3),
-              EsokoFormField(
+              EsokoField.code(
                 controller: _voucherCodeController,
                 label: 'Voucher code',
                 hint: 'e.g. VCH-XXXXXX',
-                icon: Icons.wallet_outlined,
               ),
             ],
             const SizedBox(height: EsokoSpacing.s4),

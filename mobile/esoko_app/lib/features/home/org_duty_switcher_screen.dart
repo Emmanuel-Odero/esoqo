@@ -442,18 +442,14 @@ class _OtpStepState extends ConsumerState<_OtpStep> {
           const SizedBox(height: EsokoSpacing.s2),
           Text('Enter the code we sent you to switch to ${widget.orgName}.'),
           const SizedBox(height: EsokoSpacing.s4),
-          EsokoFormField(
+          EsokoField.otp(
             controller: _codeController,
             label: '6-digit code',
-            keyboardType: TextInputType.number,
-            textInputAction: TextInputAction.done,
-            autofillHints: const [AutofillHints.oneTimeCode],
-            maxLength: 6,
             onSubmitted: (_) => _verify(),
           ),
           if (_error != null) EsokoFormError(message: _error!),
           const SizedBox(height: EsokoSpacing.s4),
-          EsokoLoadingButton(label: 'Verify', loading: _loading, onPressed: _verify),
+          EsokoButton.primary(expand: false, label: 'Verify', loading: _loading, onPressed: _verify),
         ],
       ),
     );

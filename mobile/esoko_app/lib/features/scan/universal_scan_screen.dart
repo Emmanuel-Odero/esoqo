@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart' show kDebugMode;
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:mobile_scanner/mobile_scanner.dart';
@@ -195,7 +196,9 @@ class _UniversalScanScreenState extends ConsumerState<UniversalScanScreen> {
                         final message =
                             error.errorDetails?.message ??
                             'Camera could not start (${error.errorCode.name}).';
-                        debugPrint('esoko/scan: MobileScanner error: $message');
+                        if (kDebugMode) {
+                          debugPrint('esoko/scan: MobileScanner error: $message');
+                        }
                         return Center(
                           child: Padding(
                             padding: const EdgeInsets.all(EsokoSpacing.s3),
@@ -210,12 +213,10 @@ class _UniversalScanScreenState extends ConsumerState<UniversalScanScreen> {
                 Row(
                   children: [
                     Expanded(
-                      child: EsokoFormField(
+                      child: EsokoField.code(
                         controller: _code,
                         label: 'Code',
                         hint: 'BUS- · VCH- · TKT- · PKP- · ESK-',
-                        icon: Icons.qr_code_2_outlined,
-                        textInputAction: TextInputAction.go,
                         onSubmitted: _resolve,
                       ),
                     ),
@@ -227,7 +228,8 @@ class _UniversalScanScreenState extends ConsumerState<UniversalScanScreen> {
                     // on this exact bug).
                     SizedBox(
                       width: 72,
-                      child: EsokoLoadingButton(
+                      child: EsokoButton.primary(
+                        expand: false,
                         label: 'Go',
                         loading: _busy,
                         onPressed: () => _resolve(_code.text),

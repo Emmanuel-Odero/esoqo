@@ -57,40 +57,29 @@ class _SignInScreenState extends ConsumerState<SignInScreen> {
       title: 'Sign in',
       subtitle: 'Your Esoko record, groups, shopping and tickets in one place.',
       children: [
-        EsokoFormField(
-          controller: _identifierController,
-          label: 'Phone number or email',
-          hint: '+254 7… or you@example.com',
-          keyboardType: TextInputType.emailAddress,
-          textInputAction: TextInputAction.next,
-          autofillHints: const [AutofillHints.username],
-        ),
+        EsokoField.identifier(controller: _identifierController),
         const SizedBox(height: EsokoSpacing.s4),
-        EsokoFormField(
+        EsokoField.pin(
           controller: _pinController,
-          label: 'PIN',
-          obscureText: true,
-          keyboardType: TextInputType.number,
-          textInputAction: TextInputAction.done,
-          autofillHints: const [AutofillHints.password],
-          maxLength: 6,
+          autofill: PinAutofill.signIn,
           onSubmitted: (_) => _submit(),
         ),
         if (_error != null) EsokoFormError(message: _error!),
         const SizedBox(height: EsokoSpacing.s4),
-        EsokoLoadingButton(
+        EsokoButton.primary(
+          expand: false,
           label: 'Sign in',
           loading: _loading,
           onPressed: _submit,
         ),
         const SizedBox(height: EsokoSpacing.s3),
-        TextButton(
+        EsokoButton.tertiary(
+          label: 'Forgot your PIN?',
           onPressed: () => context.push('/forgot-pin'),
-          child: const Text('Forgot your PIN?'),
         ),
-        TextButton(
+        EsokoButton.tertiary(
+          label: 'Sign in with a code instead',
           onPressed: () => context.push('/sign-in/otp'),
-          child: const Text('Sign in with a code instead'),
         ),
         // No pre-login "sign in as crew" path any more — every crew
         // member has their own Esoko account (docs/proposals/

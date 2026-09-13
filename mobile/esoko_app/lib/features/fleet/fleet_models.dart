@@ -1,3 +1,5 @@
+import '../../core/money/money.dart';
+
 /// Wire types for the transport fleet surface — matches core-go's Go
 /// struct JSON (see services/core-go/internal/dbx/fleet.go and
 /// ticket_orgs.go). Gin marshals without tags, so keys are the
@@ -253,8 +255,9 @@ class CollectionsSummary {
   final int fareCount;
   final int declarationCount;
 
-  bool get hasVariance {
-    final v = double.tryParse(cashVarianceKes) ?? 0;
-    return v < -0.005 || v > 0.005;
-  }
+  /// Exact cents, so this is a real "is there a variance" question
+  /// rather than "is the float far enough from zero". A one-cent
+  /// variance in a crew's cash-up is a variance.
+  bool get hasVariance =>
+      !(Money.tryParse(cashVarianceKes) ?? Money.zero).isZero;
 }

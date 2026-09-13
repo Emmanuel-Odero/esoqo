@@ -137,22 +137,20 @@ class _AllowanceBatchScreenState extends ConsumerState<AllowanceBatchScreen> {
                   onChanged: (v) => setState(() => _purpose = v ?? _purpose),
                 ),
                 const SizedBox(height: EsokoSpacing.s3),
-                EsokoFormField(
+                EsokoField.text(
                   controller: _labelController,
                   label: 'Label (optional)',
                   hint: 'e.g. September fuel allowance',
                 ),
                 const SizedBox(height: EsokoSpacing.s3),
-                EsokoFormField(
+                EsokoField.amount(
                   controller: _amountController,
-                  label: 'Amount per employee, KES',
-                  keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                  label: 'Amount per employee',
                 ),
                 const SizedBox(height: EsokoSpacing.s3),
-                EsokoFormField(
+                EsokoField.phone(
                   controller: _employerMsisdnController,
                   label: 'Pay from (your M-Pesa number)',
-                  keyboardType: TextInputType.phone,
                 ),
                 const SizedBox(height: EsokoSpacing.s4),
                 EsokoSubHeader('Employees'),
@@ -160,11 +158,9 @@ class _AllowanceBatchScreenState extends ConsumerState<AllowanceBatchScreen> {
                 Row(
                   children: [
                     Expanded(
-                      child: EsokoFormField(
+                      child: EsokoField.phone(
                         controller: _employeeMsisdnController,
                         label: 'Employee phone number',
-                        icon: Icons.person_add_outlined,
-                        keyboardType: TextInputType.phone,
                         onSubmitted: (_) => _addEmployee(),
                       ),
                     ),
@@ -203,7 +199,8 @@ class _AllowanceBatchScreenState extends ConsumerState<AllowanceBatchScreen> {
                   ),
                 ],
                 const SizedBox(height: EsokoSpacing.s4),
-                EsokoLoadingButton(
+                EsokoButton.primary(
+                  expand: false,
                   label: 'Issue allowance batch',
                   loading: _busy,
                   onPressed: _issue,

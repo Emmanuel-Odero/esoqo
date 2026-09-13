@@ -1,3 +1,5 @@
+import '../../core/money/money.dart';
+
 /// Wire types for voucher cards — matches core-go handlers_voucher.go.
 class VoucherCard {
   VoucherCard({
@@ -19,7 +21,7 @@ class VoucherCard {
     shortCode: json['shortCode'] as String? ?? '',
     qrPayload: json['qrPayload'] as String? ?? '',
     balancePoints: (json['balancePoints'] as num?)?.toInt() ?? 0,
-    balanceKes: (json['balanceKes'] as num?)?.toDouble() ?? 0,
+    balanceKes: Money.fromJson(json['balanceKes']) ?? Money.zero,
   );
 
   final String id;
@@ -29,7 +31,7 @@ class VoucherCard {
   final String shortCode;
   final String qrPayload;
   final int balancePoints;
-  final double balanceKes;
+  final Money balanceKes;
 
   bool get frozen => status != 'ACTIVE';
 }

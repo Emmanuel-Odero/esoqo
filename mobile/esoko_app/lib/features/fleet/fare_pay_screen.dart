@@ -261,12 +261,10 @@ class _FarePayScreenState extends ConsumerState<FarePayScreen> {
         Row(
           children: [
             Expanded(
-              child: EsokoFormField(
+              child: EsokoField.search(
                 controller: _slugController,
                 label: 'Company code',
                 hint: 'e.g. demo-rapid-coach',
-                icon: Icons.directions_bus_outlined,
-                textInputAction: TextInputAction.search,
                 onSubmitted: (_) => _loadTrips(),
               ),
             ),

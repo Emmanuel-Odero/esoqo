@@ -501,16 +501,15 @@ class _SelfCheckoutGuardScreenState
                       ),
                     ),
                   const SizedBox(height: EsokoSpacing.s6),
-                  EsokoFormField(
+                  EsokoField.code(
                     controller: _codeController,
                     label: 'Exit code',
                     hint: 'PKP-XXXXXX',
-                    icon: Icons.qr_code_2_outlined,
-                    textInputAction: TextInputAction.go,
                     onSubmitted: _check,
                   ),
                   const SizedBox(height: EsokoSpacing.s3),
-                  EsokoLoadingButton(
+                  EsokoButton.primary(
+                    expand: false,
                     label: 'Check',
                     loading: _busy,
                     onPressed: () => _check(_codeController.text),

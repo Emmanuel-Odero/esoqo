@@ -2,7 +2,7 @@ import 'dart:async';
 import 'dart:convert';
 
 import 'package:dio/dio.dart';
-import 'package:flutter/foundation.dart' show debugPrint;
+import 'package:flutter/foundation.dart' show debugPrint, kDebugMode;
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 
 import '../storage/token_store.dart';
@@ -68,6 +68,17 @@ class ApiClient {
   static const _cachedHostKey = 'esoko_api_base_url';
   static const _hostCacheStorage = FlutterSecureStorage();
 
+  /// Host-resolution tracing, debug builds only.
+  ///
+  /// `debugPrint` is not stripped from release builds despite the name,
+  /// and what this traces is the device's local network — the gateway
+  /// address, every LAN IP the phone holds, which of them answered. That
+  /// is the user's network topology, and it has no business in a
+  /// shipped app's logs where anything reading device logs can see it.
+  static void _trace(String message) {
+    if (kDebugMode) debugPrint('esoko/api: $message');
+  }
+
   /// Resolves the real base URL once, before the first request. Dio's
   /// `baseUrl` set in the constructor is only a placeholder until then.
   Future<void> _ensureBaseUrl() {
@@ -78,7 +89,7 @@ class ApiClient {
     if (ApiConfig.overrideUrl.isNotEmpty) {
       _dio.options.baseUrl = ApiConfig.overrideUrl;
       _hostsTried = [ApiConfig.overrideUrl];
-      debugPrint('esoko/api: using --dart-define API_BASE_URL=${ApiConfig.overrideUrl}');
+      _trace('using --dart-define API_BASE_URL=${ApiConfig.overrideUrl}');
       return;
     }
 
@@ -89,13 +100,13 @@ class ApiClient {
     if (cached != null && await _probe(cached)) {
       _dio.options.baseUrl = cached;
       _hostsTried = [cached];
-      debugPrint('esoko/api: reusing cached base URL = $cached');
+      _trace('reusing cached base URL = $cached');
       return;
     }
 
     final hosts = await ApiConfig.candidateHosts();
     _hostsTried = hosts;
-    debugPrint('esoko/api: core-go candidates: ${hosts.join(', ')}');
+    _trace('core-go candidates: ${hosts.join(', ')}');
     // Probed concurrently — take whichever answers first, rather than
     // walking the list one host at a time with a timeout each. This
     // list is deliberately bounded (see ApiConfig.candidateHosts); only
@@ -105,13 +116,13 @@ class ApiClient {
       final extended = await ApiConfig.extendedCandidateHosts();
       if (extended.isNotEmpty) {
         _hostsTried = [...hosts, ...extended];
-        debugPrint('esoko/api: quick pass found nothing, sweeping ${extended.length} more');
+        _trace('quick pass found nothing, sweeping ${extended.length} more');
         winner = await _firstAlive(extended);
       }
     }
     if (winner != null) {
       _dio.options.baseUrl = winner;
-      debugPrint('esoko/api: resolved base URL = $winner');
+      _trace('resolved base URL = $winner');
       unawaited(_hostCacheStorage.write(key: _cachedHostKey, value: winner));
       return;
     }
@@ -132,7 +143,7 @@ class ApiClient {
       final base = 'http://$host:${ApiConfig.port}';
       unawaited(_probe(base).then((ok) {
         if (completer.isCompleted) return;
-        debugPrint('esoko/api: $base -> ${ok ? 'ALIVE' : 'no core-go'}');
+        _trace('$base -> ${ok ? 'ALIVE' : 'no core-go'}');
         if (ok) {
           completer.complete(base);
         } else if (--remaining == 0) {
@@ -185,7 +196,32 @@ class ApiClient {
 
   Future<Map<String, dynamic>> delete(String path) => _send('DELETE', path);
 
-  Future<Map<String, dynamic>> _send(String method, String path, [Map<String, dynamic>? body]) async {
+  /// Multipart upload for a field-captured image — today, a courier's
+  /// proof-of-delivery photo.
+  ///
+  /// Routed through [_send] rather than its own request path so an
+  /// upload gets the same base-URL resolution, the same 401 handling
+  /// and the same ApiException shape as every other call. Dio picks the
+  /// multipart content type off the FormData body itself, so nothing
+  /// here has to set a boundary by hand.
+  ///
+  /// The server ignores whatever content type is claimed and decides
+  /// from magic bytes (see internal/storage.Sniff), so [filename] is
+  /// only ever a hint for logs — it never becomes a path or an
+  /// extension anything trusts.
+  Future<Map<String, dynamic>> uploadImage(
+    String path, {
+    required String field,
+    required List<int> bytes,
+    required String filename,
+  }) async {
+    final form = FormData.fromMap({
+      field: MultipartFile.fromBytes(bytes, filename: filename),
+    });
+    return _send('POST', path, form);
+  }
+
+  Future<Map<String, dynamic>> _send(String method, String path, [Object? body]) async {
     await _ensureBaseUrl();
     late final Response<dynamic> response;
     try {

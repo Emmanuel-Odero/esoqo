@@ -83,13 +83,8 @@ class _ForgotPinScreenState extends ConsumerState<ForgotPinScreen> {
       onBack: () => Navigator.of(context).pop(),
       children: [
         if (_step == _Step.phone) ...[
-          EsokoFormField(
+          EsokoField.phone(
             controller: _msisdnController,
-            label: 'Phone number',
-            hint: '+254 7…',
-            keyboardType: TextInputType.phone,
-            textInputAction: TextInputAction.done,
-            autofillHints: const [AutofillHints.telephoneNumber],
             onSubmitted: (_) => _requestCode(),
           ),
         ] else ...[
@@ -97,29 +92,20 @@ class _ForgotPinScreenState extends ConsumerState<ForgotPinScreen> {
             'Enter the code sent to ${_msisdnController.text.trim()} and choose a new PIN.',
           ),
           const SizedBox(height: EsokoSpacing.s4),
-          EsokoFormField(
-            controller: _codeController,
-            label: '6-digit code',
-            keyboardType: TextInputType.number,
-            textInputAction: TextInputAction.next,
-            autofillHints: const [AutofillHints.oneTimeCode],
-            maxLength: 6,
-          ),
+          EsokoField.otp(controller: _codeController),
           const SizedBox(height: EsokoSpacing.s3),
-          EsokoFormField(
+          EsokoField.pin(
             controller: _pinController,
-            label: 'New PIN (4–6 digits)',
-            obscureText: true,
-            keyboardType: TextInputType.number,
-            textInputAction: TextInputAction.done,
-            autofillHints: const [AutofillHints.newPassword],
-            maxLength: 6,
+            label: 'New PIN',
+            helper: '4 to 6 digits',
+            autofill: PinAutofill.create,
             onSubmitted: (_) => _resetPin(),
           ),
         ],
         if (_error != null) EsokoFormError(message: _error!),
         const SizedBox(height: EsokoSpacing.s4),
-        EsokoLoadingButton(
+        EsokoButton.primary(
+          expand: false,
           label: _step == _Step.phone ? 'Send code' : 'Save new PIN',
           loading: _loading,
           onPressed: _step == _Step.phone ? _requestCode : _resetPin,

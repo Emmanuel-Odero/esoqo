@@ -106,7 +106,8 @@ class _OtpSignInScreenState extends ConsumerState<OtpSignInScreen> {
         ..._stepFields(),
         if (_error != null) EsokoFormError(message: _error!),
         const SizedBox(height: EsokoSpacing.s4),
-        EsokoLoadingButton(
+        EsokoButton.primary(
+          expand: false,
           label: _primaryLabel,
           loading: _loading,
           onPressed: _onPrimaryAction,
@@ -123,13 +124,8 @@ class _OtpSignInScreenState extends ConsumerState<OtpSignInScreen> {
         // sentence just restating "type your phone number" once you
         // can already see the phone number field would be noise.
         return [
-          EsokoFormField(
+          EsokoField.phone(
             controller: _msisdnController,
-            label: 'Phone number',
-            hint: '+254 7…',
-            keyboardType: TextInputType.phone,
-            textInputAction: TextInputAction.done,
-            autofillHints: const [AutofillHints.telephoneNumber],
             onSubmitted: (_) => _requestCode(),
           ),
         ];
@@ -137,13 +133,8 @@ class _OtpSignInScreenState extends ConsumerState<OtpSignInScreen> {
         return [
           Text('Enter the code sent to ${_msisdnController.text.trim()}.'),
           const SizedBox(height: EsokoSpacing.s4),
-          EsokoFormField(
+          EsokoField.otp(
             controller: _codeController,
-            label: '6-digit code',
-            keyboardType: TextInputType.number,
-            textInputAction: TextInputAction.done,
-            autofillHints: const [AutofillHints.oneTimeCode],
-            maxLength: 6,
             onSubmitted: (_) => _verifyCode(),
           ),
         ];
@@ -153,14 +144,11 @@ class _OtpSignInScreenState extends ConsumerState<OtpSignInScreen> {
             'You\'re signed in. Set a PIN now for faster sign-in next time.',
           ),
           const SizedBox(height: EsokoSpacing.s4),
-          EsokoFormField(
+          EsokoField.pin(
             controller: _pinController,
-            label: 'New PIN (4–6 digits)',
-            obscureText: true,
-            keyboardType: TextInputType.number,
-            textInputAction: TextInputAction.done,
-            autofillHints: const [AutofillHints.newPassword],
-            maxLength: 6,
+            label: 'New PIN',
+            helper: '4 to 6 digits',
+            autofill: PinAutofill.create,
             onSubmitted: (_) => _savePin(),
           ),
         ];
