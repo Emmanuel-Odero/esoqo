@@ -10,6 +10,8 @@ import '../../core/theme/esoko_tokens.dart';
 import '../../core/widgets/widgets.dart';
 import 'ticketing_models.dart';
 import 'ticketing_repository.dart';
+import 'widgets/seat_button.dart';
+import 'widgets/ticket_class_option.dart';
 
 final scheduleSeatsProvider = FutureProvider.autoDispose
     .family<SeatMapResult, String>(
@@ -291,7 +293,7 @@ class _ScheduleBookingScreenState extends ConsumerState<ScheduleBookingScreen> {
         ),
         const SizedBox(height: EsokoSpacing.s3),
         for (final c in widget.ticketClasses)
-          _TicketClassOption(
+          TicketClassOption(
             ticketClass: c,
             selected: tc?.id == c.id,
             onTap: () {
@@ -422,7 +424,7 @@ class _ScheduleBookingScreenState extends ConsumerState<ScheduleBookingScreen> {
                         ),
                         const SizedBox(width: EsokoSpacing.s2),
                         for (final seat in byRow[r]!) ...[
-                          _SeatButton(
+                          SeatButton(
                             seat: seat,
                             selected: _selectedSeatId == seat.id,
                             onTap: () {
@@ -564,149 +566,6 @@ class _ScheduleBookingScreenState extends ConsumerState<ScheduleBookingScreen> {
           onPay: _book,
         ),
       ],
-    );
-  }
-}
-
-class _TicketClassOption extends StatelessWidget {
-  const _TicketClassOption({
-    required this.ticketClass,
-    required this.selected,
-    required this.onTap,
-  });
-  final TicketClass ticketClass;
-  final bool selected;
-  final VoidCallback onTap;
-
-  @override
-  Widget build(BuildContext context) {
-    final scheme = Theme.of(context).colorScheme;
-    final isDark = Theme.of(context).brightness == Brightness.dark;
-    final muted = Theme.of(context).textTheme.bodySmall?.color;
-    return Material(
-      // Alpha wash of primary, not the fixed EsokoColors.greenTint — see
-      // the identical fix in order_detail_screen's timeline/pickup-code
-      // card: a fixed pastel only reads right on a light surface.
-      color: selected
-          ? scheme.primary.withValues(alpha: isDark ? 0.20 : 0.12)
-          : Theme.of(context).cardColor,
-      borderRadius: BorderRadius.circular(EsokoRadius.lg),
-      clipBehavior: Clip.antiAlias,
-      child: InkWell(
-        onTap: onTap,
-        child: Container(
-          margin: const EdgeInsets.only(bottom: EsokoSpacing.s2),
-          padding: const EdgeInsets.all(EsokoSpacing.s3),
-          decoration: BoxDecoration(
-            border: Border.all(
-              color: selected ? scheme.primary : EsokoColors.line,
-              width: selected ? 1.5 : 1,
-            ),
-          ),
-          child: Row(
-            children: [
-              Icon(
-                selected ? Icons.check_circle : Icons.circle_outlined,
-                color: selected ? scheme.primary : muted,
-                size: 22,
-              ),
-              const SizedBox(width: EsokoSpacing.s3),
-              Icon(
-                ticketClass.seated
-                    ? Icons.event_seat_outlined
-                    : Icons.groups_outlined,
-                color: muted,
-                size: 18,
-              ),
-              const SizedBox(width: EsokoSpacing.s2),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      ticketClass.name,
-                      style: const TextStyle(fontWeight: FontWeight.w700),
-                    ),
-                    if (ticketClass.amenities.isNotEmpty)
-                      Text(
-                        ticketClass.amenities.join(' · '),
-                        style: TextStyle(fontSize: 11, color: muted),
-                      ),
-                  ],
-                ),
-              ),
-              Text(
-                'KES ${ticketClass.priceKes}',
-                style: TextStyle(
-                  color: scheme.primary,
-                  fontWeight: FontWeight.w800,
-                ),
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-class _SeatButton extends StatelessWidget {
-  const _SeatButton({
-    required this.seat,
-    required this.selected,
-    required this.onTap,
-  });
-  final SeatRow seat;
-  final bool selected;
-  final VoidCallback onTap;
-
-  @override
-  Widget build(BuildContext context) {
-    final taken = seat.status != 'AVAILABLE';
-    // Available seats sit on the scheme surface, never a hardcoded
-    // white — the seat map stays legible in dark mode.
-    final Color bg = taken
-        ? EsokoColors.line
-        : (selected
-              ? EsokoColors.green
-              : Theme.of(context).colorScheme.surface);
-    final muted = Theme.of(context).textTheme.bodySmall?.color;
-    final Color? fg = taken
-        ? muted?.withValues(alpha: 0.6)
-        : (selected ? Colors.white : muted);
-    return SizedBox(
-      width: 36,
-      height: 36,
-      child: Material(
-        color: bg,
-        borderRadius: BorderRadius.circular(EsokoRadius.sm),
-        child: InkWell(
-          onTap: taken ? null : onTap,
-          borderRadius: BorderRadius.circular(EsokoRadius.sm),
-          child: Container(
-            decoration: BoxDecoration(
-              borderRadius: BorderRadius.circular(EsokoRadius.sm),
-              border: Border.all(
-                color: selected ? EsokoColors.green : EsokoColors.line,
-              ),
-            ),
-            child: Column(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                Icon(Icons.event_seat, size: 14, color: fg),
-                Text(
-                  seat.label,
-                  style: TextStyle(
-                    fontSize: 9,
-                    fontWeight: FontWeight.w700,
-                    color: fg,
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ),
-      ),
     );
   }
 }

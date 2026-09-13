@@ -14,6 +14,8 @@ import 'courier_earnings_screen.dart';
 import 'load_on_bus_screen.dart';
 import 'parcel_models.dart';
 import 'parcel_status_screen.dart';
+import 'widgets/cod_float_banner.dart';
+import 'widgets/nearby_jobs_tab.dart';
 import 'parcels_repository.dart';
 
 final myParcelsProvider = FutureProvider.autoDispose<List<ParcelRow>>(
@@ -366,7 +368,7 @@ class _ParcelsHubScreenState extends ConsumerState<ParcelsHubScreen> {
                       // entirely at zero rather than shown as "KES 0" —
                       // most riders never touch COD, and a permanent
                       // empty money row is noise on their main screen.
-                      const _CodFloatBanner(),
+                      const CodFloatBanner(),
                       if (_scanningAccept)
                         Padding(
                           padding: const EdgeInsets.fromLTRB(
@@ -489,7 +491,7 @@ class _ParcelsHubScreenState extends ConsumerState<ParcelsHubScreen> {
                       ),
                     ],
                   ),
-                  _NearbyJobsTab(
+                  NearbyJobsTab(
                     onOpenEarnings: () => Navigator.of(context).push(
                       MaterialPageRoute(
                         builder: (_) => const CourierEarningsScreen(),
@@ -529,37 +531,6 @@ class _ParcelsHubScreenState extends ConsumerState<ParcelsHubScreen> {
   }
 }
 
-/// What this rider is holding in cash right now.
-class _CodFloatBanner extends ConsumerWidget {
-  const _CodFloatBanner();
-
-  @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final holding = ref.watch(codHoldingProvider);
-    return holding.maybeWhen(
-      data: (h) {
-        if (!h.amountKes.isPositive) return const SizedBox.shrink();
-        return Padding(
-          padding: const EdgeInsets.fromLTRB(
-            EsokoSpacing.s4, 0, EsokoSpacing.s4, EsokoSpacing.s3,
-          ),
-          child: EsokoInlineNotice(
-            color: EsokoColors.navy,
-            icon: EsokoIconName.coins,
-            message: 'You are holding KES ${h.amountKes.format()} '
-                'from ${h.parcelCount} '
-                '${h.parcelCount == 1 ? 'parcel' : 'parcels'}. '
-                'Hand it in at the end of your round.',
-          ),
-        );
-      },
-      // A failed or pending fetch shows nothing at all: a wrong cash
-      // figure on a courier's screen is worse than no figure.
-      orElse: () => const SizedBox.shrink(),
-    );
-  }
-}
-
 /// One glyph per lifecycle state, so a list scan reads at a glance —
 /// the off-timeline states in particular (a failed attempt, a parcel on
 /// a shop shelf) must not look identical to a healthy in-transit one.
@@ -572,114 +543,3 @@ IconData _statusIcon(String status) => switch (status) {
       'CANCELLED' => Icons.cancel_outlined,
       _ => Icons.local_shipping_outlined,
     };
-
-/// BOOKED, unassigned parcels near this courier's last posted ping —
-/// the gig/on-demand claim flow (see this screen's own doc comment).
-/// Location is opt-in per visit, same "Use my location" tap
-/// store_list_screen.dart already asks for — nothing pings silently in
-/// the background before someone's actually looking at this tab.
-class _NearbyJobsTab extends StatelessWidget {
-  const _NearbyJobsTab({
-    required this.onOpenEarnings,
-    required this.jobs,
-    required this.position,
-    required this.locating,
-    required this.locationError,
-    required this.claimingCode,
-    required this.onUseLocation,
-    required this.onClaim,
-  });
-
-  final VoidCallback onOpenEarnings;
-  final AsyncValue<List<AvailableJob>> jobs;
-  final Position? position;
-  final bool locating;
-  final String? locationError;
-  final String? claimingCode;
-  final VoidCallback onUseLocation;
-  final ValueChanged<AvailableJob> onClaim;
-
-  @override
-  Widget build(BuildContext context) {
-    if (position == null) {
-      return Center(
-        child: Padding(
-          padding: const EdgeInsets.all(EsokoSpacing.s5),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              const Icon(Icons.near_me_outlined, size: 40),
-              const SizedBox(height: EsokoSpacing.s3),
-              const Text(
-                'Share your location to see jobs near you.',
-                textAlign: TextAlign.center,
-              ),
-              const SizedBox(height: EsokoSpacing.s3),
-              EsokoButton.primary(
-                expand: false,
-                label: 'Use my location',
-                loading: locating,
-                onPressed: onUseLocation,
-              ),
-              if (locationError != null) ...[
-                const SizedBox(height: EsokoSpacing.s2),
-                EsokoFormError(message: locationError!),
-              ],
-            ],
-          ),
-        ),
-      );
-    }
-    return Column(
-      children: [
-        Padding(
-          padding: const EdgeInsets.fromLTRB(
-            EsokoSpacing.s4, EsokoSpacing.s3, EsokoSpacing.s4, 0,
-          ),
-          child: EsokoButton.secondary(
-            label: 'Your earnings',
-            icon: Icons.payments_outlined,
-            onPressed: onOpenEarnings,
-          ),
-        ),
-        Expanded(child: _jobsList()),
-      ],
-    );
-  }
-
-  Widget _jobsList() {
-    return EsokoAsyncView(
-      value: jobs,
-      isEmpty: (l) => l.isEmpty,
-      emptyMessage: 'No jobs nearby right now.',
-      emptyIcon: Icons.local_shipping_outlined,
-      data: (context, list) => ListView.separated(
-        padding: const EdgeInsets.all(EsokoSpacing.s4),
-        itemCount: list.length,
-        separatorBuilder: (_, _) => const SizedBox(height: EsokoSpacing.s2),
-        itemBuilder: (context, i) {
-          final job = list[i];
-          final subtitle = [
-            job.code,
-            if (job.distanceKm != null) '${job.distanceKm!.toStringAsFixed(1)} km away',
-            if (job.priceKes != null) 'KES ${double.tryParse(job.priceKes!)?.toStringAsFixed(0) ?? job.priceKes}',
-          ].join(' · ');
-          return EsokoListTile(
-            title: '${job.originLabel} → ${job.destinationLabel}',
-            subtitle: subtitle,
-            icon: Icons.local_shipping_outlined,
-            trailing: SizedBox(
-              width: 84,
-              child: EsokoButton.primary(
-                expand: false,
-                label: 'Claim',
-                loading: claimingCode == job.code,
-                onPressed: () => onClaim(job),
-              ),
-            ),
-          );
-        },
-      ),
-    );
-  }
-}
