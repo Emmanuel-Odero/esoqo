@@ -10,10 +10,10 @@ import 'scan_access.dart';
 /// ## Why this exists
 ///
 /// Switching into an org context repainted the app bar blue and
-/// reordered six tiles. That was the whole of it: `HomeShell` held
-/// `static const _screens = [HomeHubScreen(), ProfileScreen()]` — two
-/// screens, for every role. So "acting as" worked correctly and felt
-/// like nothing happened, which is the worst combination: the
+/// reordered six tiles. That was the whole of it: `HomeShell` held two
+/// screens for every role, Home and Settings, neither of which changed
+/// shape with who you were acting as. So "acting as" worked correctly
+/// and felt like nothing happened, which is the worst combination: the
 /// machinery is right, and the person cannot tell.
 ///
 /// A role is not a permission. The server decides what anyone may do

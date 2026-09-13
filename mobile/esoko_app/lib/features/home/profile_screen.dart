@@ -12,30 +12,23 @@ import '../../core/widgets/widgets.dart';
 import '../fleet/fleet_models.dart';
 import '../fleet/fleet_providers.dart';
 import '../fleet/org_fleet_screen.dart';
-import '../shopping/order_detail_screen.dart';
 import 'org_duty_switcher_screen.dart';
-import 'profile_repository.dart';
 
-final _historyProvider = FutureProvider.autoDispose<List<HistoryItem>>(
-  (ref) => ref.watch(profileRepositoryProvider).myHistory(),
-);
-
-final _pointsProvider = FutureProvider.autoDispose<int>(
-  (ref) => ref.watch(profileRepositoryProvider).myPoints(),
-);
-
-/// The "Settings" tab body — account identity (now editable), security
-/// (change PIN), loyalty points and history. Formerly the standalone
-/// "Profile" tab; it moved here so the bottom nav stays at Home +
-/// Settings.
-class ProfileScreen extends ConsumerStatefulWidget {
-  const ProfileScreen({super.key});
+/// The "Account" tab body — identity (editable), payment QR, security
+/// (change PIN), and the companies/duty grants you hold. Loyalty
+/// points moved to Money and order/booking history moved to Activity —
+/// both are answers to "what's mine" or "what happened", not "who am
+/// I", and burying them here under Sign out was why this screen ran to
+/// 608 lines with the one thing genuinely about the account (a name, a
+/// PIN) sandwiched in the middle.
+class AccountScreen extends ConsumerStatefulWidget {
+  const AccountScreen({super.key});
 
   @override
-  ConsumerState<ProfileScreen> createState() => _ProfileScreenState();
+  ConsumerState<AccountScreen> createState() => _AccountScreenState();
 }
 
-class _ProfileScreenState extends ConsumerState<ProfileScreen> {
+class _AccountScreenState extends ConsumerState<AccountScreen> {
   final _nameController = TextEditingController();
   final _pinController = TextEditingController();
   final _pinConfirmController = TextEditingController();
@@ -123,13 +116,11 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
       );
     }
     final profile = auth.profile;
-    final history = ref.watch(_historyProvider);
-    final points = ref.watch(_pointsProvider);
 
     return RefreshIndicator(
       onRefresh: () async {
-        ref.invalidate(_historyProvider);
-        ref.invalidate(_pointsProvider);
+        await ref.read(orgContextControllerProvider.notifier).refreshGrants();
+        ref.invalidate(myOrgsProvider);
       },
       child: Center(
         child: ConstrainedBox(
@@ -372,64 +363,6 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
               const SizedBox(height: EsokoSpacing.s4),
 
               _MyCompaniesAndRoles(),
-              const SizedBox(height: EsokoSpacing.s4),
-
-              points.when(
-                data: (total) {
-                  final scheme = Theme.of(context).colorScheme;
-                  return EsokoCard(
-                    color: scheme.primaryContainer,
-                    padding: const EdgeInsets.all(EsokoSpacing.s5),
-                    child: Row(
-                      children: [
-                        Icon(Icons.stars_rounded, color: scheme.primary),
-                        const SizedBox(width: EsokoSpacing.s3),
-                        Expanded(
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text(
-                                '$total points',
-                                style: Theme.of(context).textTheme.titleMedium,
-                              ),
-                              const Text(
-                                'Loyalty points across shops and tickets',
-                              ),
-                            ],
-                          ),
-                        ),
-                      ],
-                    ),
-                  );
-                },
-                loading: () => const Padding(
-                  padding: EdgeInsets.symmetric(vertical: EsokoSpacing.s2),
-                  child: EsokoSkeletonCard(leading: false, lines: 2),
-                ),
-                error: (_, _) =>
-                    const EsokoFormError(message: 'Points unavailable'),
-              ),
-              const SizedBox(height: EsokoSpacing.s6),
-
-              const EsokoSubHeader('History'),
-              const SizedBox(height: EsokoSpacing.s3),
-              EsokoAsyncView(
-                value: history,
-                isEmpty: (items) => items.isEmpty,
-                emptyMessage: 'No orders or bookings yet.',
-                emptyIcon: Icons.receipt_long_outlined,
-                onRetry: () => ref.invalidate(_historyProvider),
-                data: (context, items) => Column(
-                  children: [
-                    for (var i = 0; i < items.length; i++)
-                      EsokoStagger(
-                        index: i,
-                        child: _historyTile(context, items[i]),
-                      ),
-                  ],
-                ),
-              ),
-
               const SizedBox(height: EsokoSpacing.s6),
               EsokoButton.secondary(
                 label: 'Sign out',
@@ -442,35 +375,6 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
       ),
     );
   }
-
-  Widget _historyTile(BuildContext context, HistoryItem item) {
-    final icon = item.kind == 'order'
-        ? Icons.storefront_outlined
-        : Icons.confirmation_num_outlined;
-    // Only orders have a detail screen today (pickup status, code,
-    // directions) — a ticket booking's "detail" is already the My
-    // tickets tab, so a booking tile stays informational for now.
-    final tappable = item.kind == 'order';
-    return Padding(
-      padding: const EdgeInsets.only(bottom: EsokoSpacing.s2),
-      child: EsokoListTile(
-        title: item.title,
-        subtitle:
-            '${item.status} · ${_formatDate(item.occurredAt)} · KES ${item.totalKes}',
-        icon: icon,
-        onTap: tappable
-            ? () => Navigator.of(context).push(
-                MaterialPageRoute(
-                  builder: (_) => OrderDetailScreen(orderId: item.id),
-                ),
-              )
-            : null,
-      ),
-    );
-  }
-
-  String _formatDate(DateTime d) =>
-      '${d.year}-${d.month.toString().padLeft(2, '0')}-${d.day.toString().padLeft(2, '0')}';
 
   Widget _row(
     String label,

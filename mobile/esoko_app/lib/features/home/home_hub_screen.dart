@@ -20,7 +20,7 @@ import '../shopping/store_list_screen.dart';
 import '../tickets/listing_list_screen.dart';
 
 /// The one place for the services — Shopping, Tickets, Transport,
-/// Groups, Bills and Parcels all live here instead of competing for
+/// Chama, Bills and Parcels all live here instead of competing for
 /// bottom-nav slots. Each tile pushes its existing list screen inside
 /// an [EsokoServiceScaffold] so the destination keeps a proper title
 /// and back button, with the service icon hero-flying from the tile
@@ -50,11 +50,15 @@ class HomeHubScreen extends ConsumerWidget {
       appBar: 'Transport',
       screen: TransportScreen(),
     ),
-    'Groups': (
-      title: 'Groups',
-      subtitle: 'Chamas, table banking and welfare groups.',
+    // Named for what it actually is, not the generic container it used
+    // to be filed under — "Groups" could be any messaging app's
+    // feature; "Chama" is the word every user already reaches for, and
+    // it's the one name here no competitor can credibly borrow.
+    'Chama': (
+      title: 'Chama',
+      subtitle: 'Table banking, welfare and savings groups.',
       icon: Icons.groups_outlined,
-      appBar: 'Groups',
+      appBar: 'Chama',
       screen: MyGroupsScreen(),
     ),
     'Bills': (
@@ -116,7 +120,7 @@ class HomeHubScreen extends ConsumerWidget {
         'Bills',
         'Shopping',
         'Tickets',
-        'Groups',
+        'Chama',
       ];
     }
     if (crew) {
@@ -125,7 +129,7 @@ class HomeHubScreen extends ConsumerWidget {
         'Bills',
         'Shopping',
         'Tickets',
-        'Groups',
+        'Chama',
         'Parcels',
       ];
     }
@@ -135,13 +139,13 @@ class HomeHubScreen extends ConsumerWidget {
         'Tickets',
         'Bills',
         'Shopping',
-        'Groups',
+        'Chama',
         'Parcels',
       ];
     }
     if (inGroup) {
       return const [
-        'Groups',
+        'Chama',
         'Bills',
         'Transport',
         'Shopping',
@@ -154,7 +158,7 @@ class HomeHubScreen extends ConsumerWidget {
       'Bills',
       'Shopping',
       'Tickets',
-      'Groups',
+      'Chama',
       'Parcels',
     ];
   }

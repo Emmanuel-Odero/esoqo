@@ -41,7 +41,7 @@ final nearbyStoresProvider = FutureProvider.autoDispose
     });
 
 /// Shopping tab home. Defaults to the plain store directory; a
-/// "Use my location" chip switches to GET /v1/stores/nearby's
+/// "Use current location" chip switches to GET /v1/stores/nearby's
 /// GPS-distance mode, and the search field switches it to
 /// neighborhood-text mode — both degrade gracefully back to the plain
 /// list when cleared/denied, so browsing everything never regresses.
@@ -174,7 +174,7 @@ class _StoreListScreenState extends ConsumerState<StoreListScreen> {
                             label: Text(
                               _position != null
                                   ? 'Using your location'
-                                  : 'Use my location',
+                                  : 'Use current location',
                             ),
                             avatar: _locating
                                 ? const SizedBox(
@@ -359,8 +359,8 @@ class _StoreCard extends StatelessWidget {
       km < 1 ? '${(km * 1000).round()} m' : '${km.toStringAsFixed(1)} km';
 }
 
-/// "My spots" — renders nothing at all for someone with no saved
-/// stores, same reasoning as MyTicketsScreen's payment-plans section
+/// "Your spots" — renders nothing at all for someone with no saved
+/// stores, same reasoning as YourTicketsBody's payment-plans section
 /// (Phase 4): this exists for the minority who've actually used it, not
 /// as a permanent fixture everyone scrolls past on every visit.
 class _MySpotsSection extends ConsumerWidget {

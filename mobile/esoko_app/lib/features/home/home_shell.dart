@@ -4,35 +4,46 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../core/auth/active_role.dart';
 import '../../core/theme/esoko_tokens.dart';
 import '../../core/widgets/widgets.dart';
+import '../activity/activity_screen.dart';
+import '../money/money_screen.dart';
 import '../scan/scan_sheet.dart';
 import 'home_hub_screen.dart';
 import 'org_duty_switcher_screen.dart';
 import 'profile_screen.dart';
 
-/// The app's frame: two real destinations, and Scan as the action it
+/// The app's frame: four destinations, and Scan as the action it
 /// actually is.
+///
+/// ## Four, not two
+///
+/// This used to be `static const _screens = [HomeHubScreen(),
+/// ProfileScreen()]` — Home and a Settings screen holding everything
+/// that didn't fit Home, points and order history included. Neither
+/// was reachable except by scrolling to the bottom of one long list,
+/// which is another way of saying neither had a destination at all.
+/// Money and Activity are the two questions that kept getting asked of
+/// this app with no screen that answered them — "what's mine" and
+/// "what happened" — so they're real tabs now, not sections.
 ///
 /// ## Scan was a tab that was not a destination
 ///
 /// The bottom bar used to carry Home · Scan · Settings, where tapping
 /// Scan opened a modal sheet and left the selection where it was. That
 /// is a broken contract — a tab is a *place*, and a tab that opens a
-/// sheet teaches people their taps do not mean what they look like. The
-/// code apologised for it in two expressions, `_index > 1 ? 1 : 0` and
-/// `selectedIndex: _index == 2 ? 2 : 0`, which existed only to keep a
-/// non-destination out of the destination index.
-///
-/// Scan is now a centre floating action button: still one tap from
-/// anywhere, still the app's signature action, but no longer pretending
-/// to be somewhere you can be. The two remaining destinations index
-/// straight into [_screens] with no arithmetic.
+/// sheet teaches people their taps do not mean what they look like.
+/// Scan is a centre floating action button instead: still one tap from
+/// anywhere, still the app's signature action, but never pretending to
+/// be somewhere you can be. The four real destinations index straight
+/// into [_screens] with no arithmetic.
 ///
 /// ## The chrome says who you are
 ///
 /// The app bar takes its colour from [ActiveRole], so switching into an
 /// org is visible in the frame and not only inside one card — navy for
 /// your own account, blue for an institution you are acting for, amber
-/// while you are carrying somebody's parcels.
+/// while you are carrying somebody's parcels. Only the Home tab wears
+/// it: Money, Activity and Account are about the person, not the hat
+/// they're wearing, so tinting them would say something untrue.
 class HomeShell extends ConsumerStatefulWidget {
   const HomeShell({super.key});
 
@@ -43,16 +54,20 @@ class HomeShell extends ConsumerStatefulWidget {
 class _HomeShellState extends ConsumerState<HomeShell> {
   int _index = 0;
 
-  static const _screens = [HomeHubScreen(), ProfileScreen()];
+  static const _screens = [
+    HomeHubScreen(),
+    MoneyScreen(),
+    ActivityScreen(),
+    AccountScreen(),
+  ];
+
+  static const _titles = ['Home', 'Money', 'Activity', 'Account'];
 
   @override
   Widget build(BuildContext context) {
     final role = ref.watch(activeRoleProvider);
     final onHome = _index == 0;
 
-    // Only the Home tab wears the role's colour. Settings is about the
-    // account itself rather than the hat being worn, so tinting it blue
-    // would say something untrue.
     final Color? barColour = !onHome
         ? null
         : switch (role.role) {
@@ -63,7 +78,7 @@ class _HomeShellState extends ConsumerState<HomeShell> {
 
     return Scaffold(
       appBar: EsokoAppBar(
-        title: onHome ? 'Home' : 'Settings',
+        title: _titles[_index],
         backgroundColor: barColour,
         titleWidget: onHome
             ? (role.isPersonal
@@ -96,7 +111,7 @@ class _HomeShellState extends ConsumerState<HomeShell> {
       floatingActionButtonLocation: FloatingActionButtonLocation.centerDocked,
       bottomNavigationBar: BottomAppBar(
         // notchMargin + the docked FAB above cut the notch the scanner
-        // sits in; the two destinations live either side of it.
+        // sits in; two destinations sit either side of it.
         shape: const CircularNotchedRectangle(),
         notchMargin: 6,
         height: 64,
@@ -110,14 +125,28 @@ class _HomeShellState extends ConsumerState<HomeShell> {
               selected: _index == 0,
               onTap: () => setState(() => _index = 0),
             ),
+            _NavItem(
+              icon: Icons.account_balance_wallet_outlined,
+              activeIcon: Icons.account_balance_wallet_rounded,
+              label: 'Money',
+              selected: _index == 1,
+              onTap: () => setState(() => _index = 1),
+            ),
             // The gap the FAB occupies.
             const SizedBox(width: 56),
             _NavItem(
-              icon: Icons.settings_outlined,
-              activeIcon: Icons.settings_rounded,
-              label: 'Settings',
-              selected: _index == 1,
-              onTap: () => setState(() => _index = 1),
+              icon: Icons.history_outlined,
+              activeIcon: Icons.history_rounded,
+              label: 'Activity',
+              selected: _index == 2,
+              onTap: () => setState(() => _index = 2),
+            ),
+            _NavItem(
+              icon: Icons.person_outline,
+              activeIcon: Icons.person_rounded,
+              label: 'Account',
+              selected: _index == 3,
+              onTap: () => setState(() => _index = 3),
             ),
           ],
         ),

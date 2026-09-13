@@ -8,7 +8,7 @@ import '../parcel_models.dart';
 
 /// BOOKED, unassigned parcels near this courier's last posted ping —
 /// the gig/on-demand claim flow (see this screen's own doc comment).
-/// Location is opt-in per visit, same "Use my location" tap
+/// Location is opt-in per visit, same "Use current location" tap
 /// store_list_screen.dart already asks for — nothing pings silently in
 /// the background before someone's actually looking at this tab.
 class NearbyJobsTab extends StatelessWidget {
@@ -51,7 +51,7 @@ class NearbyJobsTab extends StatelessWidget {
               const SizedBox(height: EsokoSpacing.s3),
               EsokoButton.primary(
                 expand: false,
-                label: 'Use my location',
+                label: 'Use current location',
                 loading: locating,
                 onPressed: onUseLocation,
               ),

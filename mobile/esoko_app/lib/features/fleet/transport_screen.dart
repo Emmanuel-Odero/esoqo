@@ -11,7 +11,6 @@ import 'fare_pay_screen.dart';
 import 'fleet_providers.dart';
 import 'org_fleet_screen.dart';
 import 'verify_fare_screen.dart';
-import '../vouchers/voucher_wallet_screen.dart';
 
 /// Transport home — public fare payment on top; the companies the
 /// signed-in subject actually runs below, rendered only when
@@ -96,21 +95,10 @@ class TransportScreen extends ConsumerWidget {
                       ),
                     ),
                   ),
-                EsokoStagger(
-                  index: 3,
-                  child: EsokoListTile(
-                    title: 'Vouchers',
-                    subtitle: 'Fare, rent, shopping cards + loyalty.',
-                    leading: const EsokoQuickActionIcon(
-                      icon: Icons.wallet_outlined,
-                    ),
-                    onTap: () => Navigator.of(context).push(
-                      MaterialPageRoute(
-                        builder: (_) => const VoucherWalletScreen(),
-                      ),
-                    ),
-                  ),
-                ),
+                // Vouchers moved to the Money tab — a fare card is
+                // money, not a bus, and it belongs with the other
+                // things that are yours rather than filed under
+                // whichever service happened to spend it first.
                 if (runsOrg) ...[
                   const SizedBox(height: EsokoSpacing.s5),
                   EsokoSectionHeader(
@@ -140,7 +128,7 @@ class TransportScreen extends ConsumerWidget {
         children: [
           for (var i = 0; i < list.length; i++)
             EsokoStagger(
-              index: 4 + i,
+              index: 3 + i,
               child: EsokoListTile(
                 title: list[i].name,
                 subtitle: list[i].status,

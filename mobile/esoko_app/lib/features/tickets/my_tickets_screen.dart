@@ -26,8 +26,13 @@ final myBookingsProvider = FutureProvider.autoDispose<List<MyBookingRich>>(
 /// Ticket.code in schema.prisma). Payment plans still being paid off
 /// (lipa pole pole) show above the tickets, since they're not tickets
 /// yet — nothing is issued until the balance clears.
-class MyTicketsScreen extends ConsumerWidget {
-  const MyTicketsScreen({super.key});
+///
+/// Bar-less and scaffold-less on purpose: this is one segment of
+/// [ListingListScreen]'s Browse/Your tickets toggle, not a screen of
+/// its own — see SCREEN_CONVENTIONS.md Rule 1 on a wrapped body never
+/// building its own app bar.
+class YourTicketsBody extends ConsumerWidget {
+  const YourTicketsBody({super.key});
 
   void _refreshAll(WidgetRef ref) {
     ref.invalidate(myTicketsProvider);
@@ -37,29 +42,26 @@ class MyTicketsScreen extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final tickets = ref.watch(myTicketsProvider);
-    return Scaffold(
-      appBar: const EsokoAppBar(title: 'Your tickets'),
-      body: RefreshIndicator(
-        onRefresh: () async => _refreshAll(ref),
-        child: EsokoAsyncView(
-          value: tickets,
-          isEmpty: (list) => list.isEmpty,
-          emptyMessage: 'No tickets yet.',
-          emptyIcon: Icons.confirmation_num_outlined,
-          onRetry: () => ref.invalidate(myTicketsProvider),
-          data: (context, list) => Center(
-            child: ConstrainedBox(
-              constraints: const BoxConstraints(maxWidth: 840),
-              child: ListView(
-                padding: const EdgeInsets.all(EsokoSpacing.s4),
-                children: [
-                  _PaymentPlansSection(onChanged: () => _refreshAll(ref)),
-                  for (var i = 0; i < list.length; i++) ...[
-                    if (i > 0) const SizedBox(height: EsokoSpacing.s5),
-                    EsokoStagger(index: i, child: _TicketStub(ticket: list[i])),
-                  ],
+    return RefreshIndicator(
+      onRefresh: () async => _refreshAll(ref),
+      child: EsokoAsyncView(
+        value: tickets,
+        isEmpty: (list) => list.isEmpty,
+        emptyMessage: 'No tickets yet.',
+        emptyIcon: Icons.confirmation_num_outlined,
+        onRetry: () => ref.invalidate(myTicketsProvider),
+        data: (context, list) => Center(
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 840),
+            child: ListView(
+              padding: const EdgeInsets.all(EsokoSpacing.s4),
+              children: [
+                _PaymentPlansSection(onChanged: () => _refreshAll(ref)),
+                for (var i = 0; i < list.length; i++) ...[
+                  if (i > 0) const SizedBox(height: EsokoSpacing.s5),
+                  EsokoStagger(index: i, child: _TicketStub(ticket: list[i])),
                 ],
-              ),
+              ],
             ),
           ),
         ),

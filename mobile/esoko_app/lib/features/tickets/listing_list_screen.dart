@@ -13,59 +13,103 @@ final listingsProvider = FutureProvider.autoDispose<List<ListingSummary>>(
   (ref) => ref.watch(ticketingRepositoryProvider).listings(),
 );
 
-/// Tickets tab home — GET /v1/listings (events + transport), with a
-/// shortcut to "My tickets" (GET /v1/me/tickets, authenticated).
-class ListingListScreen extends ConsumerWidget {
+/// Tickets tab home — GET /v1/listings (events + transport) and
+/// GET /v1/me/tickets (authenticated), as two segments of one screen
+/// rather than a list with a button to a separate one. A booking
+/// mid-instalment used to be findable only by first opening Browse,
+/// finding the button, then opening a second screen — three steps to
+/// see money you already owe.
+class ListingListScreen extends ConsumerStatefulWidget {
   const ListingListScreen({super.key});
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<ListingListScreen> createState() => _ListingListScreenState();
+}
+
+class _ListingListScreenState extends ConsumerState<ListingListScreen> {
+  int _segment = 0;
+
+  @override
+  Widget build(BuildContext context) {
     final listings = ref.watch(listingsProvider);
     return Scaffold(
-      body: RefreshIndicator(
-        onRefresh: () async => ref.invalidate(listingsProvider),
-        // Tablet-decent: cap the column at 840 (M3 expanded) so the
-        // list doesn't stretch edge-to-edge on large windows. No-op
-        // on phones.
+      body: SafeArea(
         child: Center(
           child: ConstrainedBox(
             constraints: const BoxConstraints(maxWidth: 840),
-            child: EsokoAsyncView(
-              value: listings,
-              isEmpty: (list) => list.isEmpty,
-              emptyMessage: 'No listings are open yet.',
-              emptyIcon: Icons.confirmation_num_outlined,
-              onRetry: () => ref.invalidate(listingsProvider),
-              data: (context, list) => CustomScrollView(
-                slivers: [
-                  SliverToBoxAdapter(
-                    child: Padding(
-                      padding: const EdgeInsets.fromLTRB(EsokoSpacing.s5, EsokoSpacing.s5, EsokoSpacing.s5, EsokoSpacing.s2),
-                      child: EsokoPageLead('Book a seat or a ticket, pay by M-Pesa.'),
-                    ),
+            child: Column(
+              children: [
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(
+                    EsokoSpacing.s5,
+                    EsokoSpacing.s5,
+                    EsokoSpacing.s5,
+                    EsokoSpacing.s3,
                   ),
-                  SliverPadding(
-                    padding: const EdgeInsets.fromLTRB(EsokoSpacing.s4, EsokoSpacing.s2, EsokoSpacing.s4, EsokoSpacing.s9),
-                    sliver: SliverList.separated(
-                      itemCount: list.length,
-                      separatorBuilder: (_, _) => const SizedBox(height: EsokoSpacing.s3),
-                      itemBuilder: (context, i) => EsokoStagger(index: i, child: _ListingCard(listing: list[i])),
-                    ),
+                  child: EsokoSegmentedToggle<int>(
+                    selected: _segment,
+                    onChanged: (v) => setState(() => _segment = v),
+                    options: const [
+                      (0, 'Browse'),
+                      (1, 'Your tickets'),
+                    ],
                   ),
-                ],
-              ),
+                ),
+                Expanded(
+                  child: _segment == 0
+                      ? _BrowseBody(listings: listings, ref: ref)
+                      : const YourTicketsBody(),
+                ),
+              ],
             ),
           ),
         ),
       ),
-      floatingActionButton: FloatingActionButton.extended(
-        onPressed: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => const MyTicketsScreen())),
-        icon: const Icon(Icons.confirmation_num_outlined),
-        label: const Text('Your tickets'),
+    );
+  }
+}
+
+class _BrowseBody extends StatelessWidget {
+  const _BrowseBody({required this.listings, required this.ref});
+  final AsyncValue<List<ListingSummary>> listings;
+  final WidgetRef ref;
+
+  @override
+  Widget build(BuildContext context) {
+    return RefreshIndicator(
+      onRefresh: () async => ref.invalidate(listingsProvider),
+      child: EsokoAsyncView(
+        value: listings,
+        isEmpty: (list) => list.isEmpty,
+        emptyMessage: 'No listings are open yet.',
+        emptyIcon: Icons.confirmation_num_outlined,
+        onRetry: () => ref.invalidate(listingsProvider),
+        data: (context, list) => CustomScrollView(
+          slivers: [
+            const SliverToBoxAdapter(
+              child: Padding(
+                padding: EdgeInsets.fromLTRB(
+                  EsokoSpacing.s5,
+                  0,
+                  EsokoSpacing.s5,
+                  EsokoSpacing.s2,
+                ),
+                child: EsokoPageLead('Book a seat or a ticket, pay by M-Pesa.'),
+              ),
+            ),
+            SliverPadding(
+              padding: const EdgeInsets.fromLTRB(EsokoSpacing.s4, EsokoSpacing.s2, EsokoSpacing.s4, EsokoSpacing.s9),
+              sliver: SliverList.separated(
+                itemCount: list.length,
+                separatorBuilder: (_, _) => const SizedBox(height: EsokoSpacing.s3),
+                itemBuilder: (context, i) => EsokoStagger(index: i, child: _ListingCard(listing: list[i])),
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }
-
 }
 
 class _ListingCard extends StatelessWidget {

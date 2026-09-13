@@ -30,11 +30,23 @@ class BillsListScreen extends ConsumerWidget {
           value: bills,
           onRetry: () => ref.invalidate(myBillsProvider),
           data: (context, list) {
-            final overdue = list.where((b) => b.overdue).toList();
-            final dueSoon = list.where((b) => !b.overdue && b.dueSoon).toList();
+            // GET /v1/me/bills returns newest-added first — a fine
+            // order for "everything I track", but not for "what needs
+            // me soonest". Each bucket is sorted by daysUntilDue
+            // ascending here: for Overdue that puts the longest-overdue
+            // bill on top (the one that's been waiting longest), for
+            // Due soon/Upcoming it puts the closest deadline first —
+            // the actual ask of a bucket titled by urgency.
+            int byUrgency(BillRow a, BillRow b) =>
+                a.daysUntilDue.compareTo(b.daysUntilDue);
+            final overdue = list.where((b) => b.overdue).toList()
+              ..sort(byUrgency);
+            final dueSoon = list.where((b) => !b.overdue && b.dueSoon).toList()
+              ..sort(byUrgency);
             final upcoming = list
                 .where((b) => !b.overdue && !b.dueSoon)
-                .toList();
+                .toList()
+              ..sort(byUrgency);
             return Center(
               child: ConstrainedBox(
                 constraints: const BoxConstraints(maxWidth: 840),
