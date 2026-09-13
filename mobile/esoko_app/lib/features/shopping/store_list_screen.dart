@@ -381,7 +381,7 @@ class _MySpotsSection extends ConsumerWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const EsokoSubHeader('My spots'),
+          const EsokoSubHeader('Your spots'),
           const SizedBox(height: EsokoSpacing.s2),
           for (var i = 0; i < list.length; i++)
             Padding(

@@ -114,7 +114,7 @@ class TransportScreen extends ConsumerWidget {
                 if (runsOrg) ...[
                   const SizedBox(height: EsokoSpacing.s5),
                   EsokoSectionHeader(
-                    title: 'My companies',
+                    title: 'Your companies',
                     subtitle: 'Fleets you run.',
                   ),
                   const SizedBox(height: EsokoSpacing.s2),

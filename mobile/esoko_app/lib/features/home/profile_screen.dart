@@ -219,7 +219,7 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
-                      'My payment QR',
+                      'Your payment QR',
                       style: Theme.of(context).textTheme.titleMedium,
                     ),
                     const SizedBox(height: EsokoSpacing.s2),
@@ -541,7 +541,7 @@ class _MyCompaniesAndRoles extends ConsumerWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text('My companies & roles', style: Theme.of(context).textTheme.titleMedium),
+          Text('Your companies & roles', style: Theme.of(context).textTheme.titleMedium),
           const SizedBox(height: EsokoSpacing.s1),
           const Text('Every company you own, and every staff duty you can switch on.'),
           if (orgs.isNotEmpty) ...[

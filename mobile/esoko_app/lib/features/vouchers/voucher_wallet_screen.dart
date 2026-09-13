@@ -177,7 +177,7 @@ class _VoucherWalletScreenState extends ConsumerState<VoucherWalletScreen> {
                 ],
                 const SizedBox(height: EsokoSpacing.s5),
                 const EsokoSectionHeader(
-                  title: 'My cards',
+                  title: 'Your cards',
                   subtitle: 'Show QR to pay or be verified.',
                 ),
                 EsokoAsyncView(

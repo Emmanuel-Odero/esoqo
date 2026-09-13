@@ -38,7 +38,7 @@ class CrewShiftScreen extends ConsumerWidget {
       // bar itself says "you're in an org context" here too, not just
       // the fact of being on this screen at all.
       appBar: EsokoAppBar(
-        title: profile?.displayName ?? 'My shift',
+        title: profile?.displayName ?? 'Your shift',
         backgroundColor: active != null ? EsokoColors.blue : null,
         actions: [
           // The switcher stays reachable even mid-shift — being on duty

@@ -139,6 +139,15 @@ class EsokoSkeletonList extends StatelessWidget {
     return ListView.separated(
       padding: const EdgeInsets.all(EsokoSpacing.s6),
       physics: const NeverScrollableScrollPhysics(),
+      // Sizes to its own content. Without this the ListView tries to
+      // expand to fill, and in any unbounded parent — a Column, a
+      // Stack laid out loose, another scrollable — that throws
+      // "Vertical viewport was given unbounded height" during layout.
+      // Being a placeholder that never scrolls, it has no reason to
+      // want the extra space, and the throw is the silent kind: the
+      // screen renders blank with nothing in the UI to say why (see
+      // SCREEN_CONVENTIONS.md Rule 4 for the same failure mode).
+      shrinkWrap: true,
       itemCount: count,
       separatorBuilder: (_, _) => const SizedBox(height: EsokoSpacing.s3),
       itemBuilder: (_, _) => const EsokoSkeletonCard(),

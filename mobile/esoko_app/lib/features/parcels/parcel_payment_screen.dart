@@ -112,7 +112,7 @@ class _ParcelPaymentScreenState extends ConsumerState<ParcelPaymentScreen> {
         if (mounted && _stage == _Stage.waiting) {
           setState(() {
             _stage = _Stage.failed;
-            _error = 'We could not confirm your M-Pesa payment. If you were charged, check My parcels — otherwise try again.';
+            _error = 'We could not confirm your M-Pesa payment. If you were charged, check Your parcels — otherwise try again.';
           });
         }
         return;
@@ -184,7 +184,7 @@ class _ParcelPaymentScreenState extends ConsumerState<ParcelPaymentScreen> {
                     if (v == 'MY') _msisdnController.text = _myMsisdn!;
                   }),
                   options: [
-                    ('MY', 'My number'),
+                    ('MY', 'Your number'),
                     ('OTHER', 'Another number'),
                   ],
                 ),

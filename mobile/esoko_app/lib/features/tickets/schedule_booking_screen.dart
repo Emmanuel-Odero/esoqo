@@ -195,7 +195,7 @@ class _ScheduleBookingScreenState extends ConsumerState<ScheduleBookingScreen> {
         if (mounted && _stage == _Stage.waiting) {
           setState(() {
             _stage = _Stage.failed;
-            _error = 'We could not confirm your M-Pesa payment. If you were charged, it will appear in My tickets — otherwise try again.';
+            _error = 'We could not confirm your M-Pesa payment. If you were charged, it will appear in Your tickets — otherwise try again.';
           });
         }
         return;
@@ -261,7 +261,7 @@ class _ScheduleBookingScreenState extends ConsumerState<ScheduleBookingScreen> {
       case _Stage.done:
         return EsokoResultView.success(
           title: 'Booking confirmed',
-          message: 'Find your ticket QR any time under Tickets → My tickets.',
+          message: 'Find your ticket QR any time under Tickets → Your tickets.',
           primaryLabel: 'Done',
           onPrimary: () => Navigator.of(context).popUntil((r) => r.isFirst),
         );
@@ -269,7 +269,7 @@ class _ScheduleBookingScreenState extends ConsumerState<ScheduleBookingScreen> {
         return EsokoResultView.success(
           title: 'Deposit received',
           message:
-              'Your seat isn\'t issued yet — pay the rest any time before departure under Tickets → My tickets, and your ticket QR appears the moment the balance clears.',
+              'Your seat isn\'t issued yet — pay the rest any time before departure under Tickets → Your tickets, and your ticket QR appears the moment the balance clears.',
           primaryLabel: 'Done',
           onPrimary: () => Navigator.of(context).popUntil((r) => r.isFirst),
         );

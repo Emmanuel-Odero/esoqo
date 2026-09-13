@@ -61,7 +61,7 @@ class ListingListScreen extends ConsumerWidget {
       floatingActionButton: FloatingActionButton.extended(
         onPressed: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => const MyTicketsScreen())),
         icon: const Icon(Icons.confirmation_num_outlined),
-        label: const Text('My tickets'),
+        label: const Text('Your tickets'),
       ),
     );
   }

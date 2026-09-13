@@ -174,7 +174,7 @@ class HomeHubScreen extends ConsumerWidget {
   /// The one action this role most likely opened the app for.
   static String _leadPrimaryLabel(ActiveRole role) => switch (role.role) {
         EsokoRole.personal => 'Scan anything',
-        EsokoRole.courier => 'My parcels',
+        EsokoRole.courier => 'Your parcels',
         EsokoRole.crew => 'Verify a fare',
         EsokoRole.scanner => 'Scan a ticket',
         EsokoRole.manager => 'Today’s takings',
@@ -252,11 +252,18 @@ class HomeHubScreen extends ConsumerWidget {
     );
 
     return ListView(
+      // The bottom inset clears the scan FAB, not just the bar.
+      // Scaffold already keeps the body above `bottomNavigationBar`,
+      // but a centre-docked FAB overhangs that bar by half its height
+      // and sits *on* the body — so the last tile scrolls underneath it
+      // and its subtitle becomes unreadable at the one moment somebody
+      // is trying to read it. s9 is the FAB's overhang plus the same
+      // s6 breathing room every other edge gets.
       padding: const EdgeInsets.fromLTRB(
         EsokoSpacing.s6,
         EsokoSpacing.s4,
         EsokoSpacing.s6,
-        EsokoSpacing.s6,
+        EsokoSpacing.s9 + EsokoSpacing.s6,
       ),
       children: [
         // One card that changes with who you are, instead of the same

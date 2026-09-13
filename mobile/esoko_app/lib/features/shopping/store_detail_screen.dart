@@ -384,7 +384,7 @@ class _SaveStoreButtonState extends ConsumerState<_SaveStoreButton> {
       onPressed: _busy ? null : () => _toggle(isSaved),
       icon: Icon(isSaved ? Icons.star_rounded : Icons.star_border_rounded),
       color: isSaved ? EsokoColors.amber : Colors.white,
-      tooltip: isSaved ? 'Remove from My spots' : 'Save to My spots',
+      tooltip: isSaved ? 'Remove from Your spots' : 'Save to Your spots',
     );
   }
 }
