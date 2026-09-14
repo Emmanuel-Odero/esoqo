@@ -52,19 +52,40 @@ class BillsListScreen extends ConsumerWidget {
                 constraints: const BoxConstraints(maxWidth: 840),
                 child: CustomScrollView(
                   slivers: [
-                    SliverToBoxAdapter(
-                      child: Padding(
-                        padding: const EdgeInsets.fromLTRB(
-                          EsokoSpacing.s5,
-                          EsokoSpacing.s5,
-                          EsokoSpacing.s5,
-                          EsokoSpacing.s2,
+                    // What's actually leaving your pocket this week,
+                    // before the list of what's tracked. The proposal's
+                    // point: this screen is opened to answer "how much,
+                    // and when", and that answer used to require adding
+                    // the tiles up by eye.
+                    if (overdue.isNotEmpty || dueSoon.isNotEmpty)
+                      SliverToBoxAdapter(
+                        child: Padding(
+                          padding: const EdgeInsets.fromLTRB(
+                            EsokoSpacing.s5,
+                            EsokoSpacing.s5,
+                            EsokoSpacing.s5,
+                            EsokoSpacing.s2,
+                          ),
+                          child: _DueSoonTotal(
+                            bills: [...overdue, ...dueSoon],
+                            anyOverdue: overdue.isNotEmpty,
+                          ),
                         ),
-                        child: EsokoPageLead(
-                          'Track what you owe and when — a reminder here, not a payment. Pay however you already do, then mark it paid.',
+                      )
+                    else
+                      SliverToBoxAdapter(
+                        child: Padding(
+                          padding: const EdgeInsets.fromLTRB(
+                            EsokoSpacing.s5,
+                            EsokoSpacing.s5,
+                            EsokoSpacing.s5,
+                            EsokoSpacing.s2,
+                          ),
+                          child: EsokoPageLead(
+                            'Track what you owe and when — a reminder here, not a payment. Pay however you already do, then mark it paid.',
+                          ),
                         ),
                       ),
-                    ),
                     if (list.isEmpty)
                       const SliverToBoxAdapter(
                         child: EsokoEmptyState(
@@ -232,6 +253,88 @@ class _BillCardState extends ConsumerState<_BillCard> {
           ),
         ),
       ],
+    );
+  }
+}
+
+/// The headline figure this screen exists to answer: how much is
+/// actually leaving your pocket, and how soon.
+///
+/// Sums only what's overdue or due soon — deliberately not every
+/// tracked bill. A total that included next month's rent would be a
+/// bigger, truer-sounding number that nobody can act on this week,
+/// and the point of leading with a figure is that it's the one you'd
+/// budget against today.
+///
+/// Bills with no amount set (the "reminder only" case — amountKes is
+/// nullable server-side) are counted in the bill count but not the
+/// total, and the card says so rather than quietly under-reporting.
+class _DueSoonTotal extends StatelessWidget {
+  const _DueSoonTotal({required this.bills, required this.anyOverdue});
+
+  final List<BillRow> bills;
+  final bool anyOverdue;
+
+  @override
+  Widget build(BuildContext context) {
+    var total = 0.0;
+    var unpriced = 0;
+    for (final b in bills) {
+      final amount = double.tryParse(b.amountKes ?? '');
+      if (amount == null) {
+        unpriced++;
+      } else {
+        total += amount;
+      }
+    }
+
+    final accent = anyOverdue ? EsokoColors.red : EsokoColors.amber;
+    final count = bills.length;
+
+    return EsokoCard(
+      color: EsokoColors.navy,
+      padding: const EdgeInsets.all(EsokoSpacing.s5),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Container(
+                width: 8,
+                height: 8,
+                decoration: BoxDecoration(color: accent, shape: BoxShape.circle),
+              ),
+              const SizedBox(width: EsokoSpacing.s2),
+              Text(
+                anyOverdue ? 'Overdue and due soon' : 'Due soon',
+                style: TextStyle(
+                  color: Colors.white.withValues(alpha: 0.72),
+                  fontSize: 12.5,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: EsokoSpacing.s2),
+          Text(
+            'KES ${total.toStringAsFixed(0)}',
+            style: EsokoTypography.mono(
+              fontSize: 30,
+              fontWeight: FontWeight.w800,
+              color: Colors.white,
+            ),
+          ),
+          Text(
+            unpriced == 0
+                ? '$count ${count == 1 ? 'bill' : 'bills'}'
+                : '$count ${count == 1 ? 'bill' : 'bills'} · $unpriced with no amount set',
+            style: TextStyle(
+              color: Colors.white.withValues(alpha: 0.72),
+              fontSize: 12.5,
+            ),
+          ),
+        ],
+      ),
     );
   }
 }
