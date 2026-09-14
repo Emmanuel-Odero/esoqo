@@ -14,9 +14,11 @@ package seed
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"time"
 
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/esoko/core-go/internal/authsvc"
@@ -50,6 +52,34 @@ func ensureCrewMemberSeed(ctx context.Context, pool *pgxpool.Pool, orgID, name, 
 		VALUES (gen_random_uuid(), $1, $2, $3, $4::"CrewRole", true, now(), now())
 		RETURNING id`, orgID, name, msisdn, role).Scan(&id)
 	return id, err
+}
+
+// ensureDemoGroup is the idempotent wrapper around dbx.CreateOwnGroup
+// this file's own "rerunning never duplicates" promise needed and did
+// not have. CreateOwnGroup mints a fresh Organisation every call —
+// correct for the real endpoint (two chamas may legitimately share a
+// name), wrong for a seed, which had been quietly giving Faith a
+// brand-new "Demo Kilimani Women Chama" on every run. Five reruns left
+// her a member of five identically-named groups, which is what the
+// mobile Chama hub's balance hero then had to add up.
+//
+// Matched on founder + official name rather than name alone, so this
+// can never adopt a group some other demo person founded.
+func ensureDemoGroup(ctx context.Context, pool *pgxpool.Pool, founderPartyID, orgKind, officialName, knownAs, county string) (string, error) {
+	var id string
+	err := pool.QueryRow(ctx, `
+		SELECT o."partyId" FROM organisation o
+		JOIN membership m ON m."orgId" = o."partyId" AND m."personId" = $1 AND m."exitedAt" IS NULL
+		WHERE o."officialName" = $2
+		ORDER BY m."joinedAt" ASC
+		LIMIT 1`, founderPartyID, officialName).Scan(&id)
+	if err == nil {
+		return id, nil
+	}
+	if !errors.Is(err, pgx.ErrNoRows) {
+		return "", err
+	}
+	return dbx.CreateOwnGroup(ctx, pool, founderPartyID, orgKind, officialName, knownAs, county)
 }
 
 // DemoAccount is one row of the credentials table SeedDemoUnifiedIdentity
@@ -115,7 +145,7 @@ func SeedDemoUnifiedIdentity(ctx context.Context, pool *pgxpool.Pool) ([]DemoAcc
 	if err != nil {
 		return nil, fmt.Errorf("faith: %w", err)
 	}
-	chamaID, err := dbx.CreateOwnGroup(ctx, pool, faith, "CHAMA", "Demo Kilimani Women Chama", "Kilimani Chama", "047")
+	chamaID, err := ensureDemoGroup(ctx, pool, faith, "CHAMA", "Demo Kilimani Women Chama", "Kilimani Chama", "047")
 	if err != nil {
 		return nil, fmt.Errorf("chama: %w", err)
 	}
@@ -135,7 +165,7 @@ func SeedDemoUnifiedIdentity(ctx context.Context, pool *pgxpool.Pool) ([]DemoAcc
 	if err != nil {
 		return nil, fmt.Errorf("winnie: %w", err)
 	}
-	if _, err := dbx.CreateOwnGroup(ctx, pool, winnie, "SACCO", "Demo Umoja Boda SACCO", "Umoja Boda", "047"); err != nil {
+	if _, err := ensureDemoGroup(ctx, pool, winnie, "SACCO", "Demo Umoja Boda SACCO", "Umoja Boda", "047"); err != nil {
 		return nil, fmt.Errorf("umoja sacco: %w", err)
 	}
 	add("+254700500019", "500019", "Demo Winnie Achola", "Group treasurer/chairperson — Demo Umoja Boda SACCO")
@@ -313,7 +343,7 @@ func SeedDemoUnifiedIdentity(ctx context.Context, pool *pgxpool.Pool) ([]DemoAcc
 	if err != nil {
 		return nil, fmt.Errorf("brian k: %w", err)
 	}
-	add("+254700500018", "500018", "Demo Brian Kimutai", "Plain shopper — no company, no staff grant. Also doubles as a parcel courier below (parcels have no separate staff role — see dbx/parcels.go: any signed-in Party can accept/deliver a scan).")
+	add("+254700500018", "500018", "Demo Brian Kimutai", "Plain shopper — no company, no staff grant. Also doubles as a parcel courier below (custody itself needs no special role — any signed-in Party can accept/deliver a scan; the courier-company portal added later is a separate, org-scoped login, see ensureDemoParcelOrg).")
 
 	// ── 21: a hotelier — modelled as a Store (primaryCategory
 	// "Hospitality"), not a new domain concept. There is no dedicated
@@ -371,6 +401,14 @@ func SeedDemoUnifiedIdentity(ctx context.Context, pool *pgxpool.Pool) ([]DemoAcc
 		return nil, fmt.Errorf("demo parcels: %w", err)
 	}
 
+	// ── Bills: nothing had ever seeded one, so the mobile Bills screen
+	// (and its overdue/due-soon urgency sort — see bills_list_screen.dart's
+	// byUrgency comparator) had zero real data to render against on any
+	// demo account. Esther gets one of each urgency bucket.
+	if err := ensureDemoBills(ctx, pool, esther); err != nil {
+		return nil, fmt.Errorf("demo bills: %w", err)
+	}
+
 	// ── 22–23: dedicated parcel couriers — Brian and Alice above already
 	// hold parcels as "whichever signed-in Party scanned the code" (see
 	// ensureDemoParcels' own comment), but neither is a formal
@@ -382,13 +420,13 @@ func SeedDemoUnifiedIdentity(ctx context.Context, pool *pgxpool.Pool) ([]DemoAcc
 	if err != nil {
 		return nil, fmt.Errorf("peter mwangi: %w", err)
 	}
-	add("+254700500022", "500022", "Demo Peter Mwangi", "Parcel courier — BODA, Active, online now (posts a fresh ping so Live dispatch shows them)")
+	add("+254700500022", "500022", "Demo Peter Mwangi", "Parcel courier — BODA, Active, online now (posts a fresh ping so Live dispatch shows them). Also RIDER at Demo Swift Riders.")
 
 	susanAchieng, err := person("+254700500023", "Demo Susan Wanjala", "500023")
 	if err != nil {
 		return nil, fmt.Errorf("susan achieng: %w", err)
 	}
-	add("+254700500023", "500023", "Demo Susan Wanjala", "Parcel courier — VAN, Active, online now (posts a fresh ping so Live dispatch shows them)")
+	add("+254700500023", "500023", "Demo Susan Wanjala", "Parcel courier — VAN, Active, online now (posts a fresh ping so Live dispatch shows them). Also DISPATCHER at Demo Swift Riders.")
 
 	if err := ensureDemoParcelCouriers(ctx, pool, []demoCourier{
 		{partyID: brianK, vehicleType: "BODA", online: false, lat: 0, lng: 0},
@@ -407,6 +445,28 @@ func SeedDemoUnifiedIdentity(ctx context.Context, pool *pgxpool.Pool) ([]DemoAcc
 	if err := ensureDemoParcelZones(ctx, pool); err != nil {
 		return nil, fmt.Errorf("demo parcel zones: %w", err)
 	}
+
+	// ── A courier company, so the operator portal has something behind
+	// it on a fresh seed. Without this, /parcel-co/<slug> 404s and two
+	// of the product's six personas still have nothing to sign in to —
+	// which is exactly the gap tenancy was added to close, so leaving
+	// the demo unable to show it would be an odd place to stop.
+	//
+	// Peter and Susan (already seeded as active couriers above) become
+	// its rider and dispatcher rather than getting parcel-only
+	// doppelgangers, matching this file's standing rule of reusing the
+	// same demo people across verticals.
+	if err := ensureDemoParcelOrg(ctx, pool, peterMwangi, susanAchieng); err != nil {
+		return nil, fmt.Errorf("demo parcel org: %w", err)
+	}
+	// Courier-company staff sign in by NAME at their company's own URL,
+	// not by phone — so the "msisdn" column here carries that URL. The
+	// three below are the same login for three different role bundles;
+	// signing in as each is the fastest way to see what a rider can do
+	// that a dispatcher can't, and vice versa.
+	add("/parcel-co/demo-swift-riders", "500024", "Demo Njeri Kamau", "Courier-company MANAGER — team + earnings. Sign in by name at that URL, not by phone.")
+	add("/parcel-co/demo-swift-riders", "500023", "Demo Susan Wanjala", "Courier-company DISPATCHER — assigns parcels to riders, no earnings.")
+	add("/parcel-co/demo-swift-riders", "500022", "Demo Peter Mwangi", "Courier-company RIDER — carries and closes parcels only.")
 
 	_ = authsvc.DummyPinHash // referenced for parity with the other seed files' pattern
 	return accounts, nil
@@ -441,6 +501,111 @@ func ensureDemoParcelCouriers(ctx context.Context, pool *pgxpool.Pool, couriers 
 				return fmt.Errorf("courier ping %s: %w", c.partyID, err)
 			}
 		}
+	}
+	return nil
+}
+
+// ensureDemoParcelOrg stands up one courier company with a manager, a
+// dispatcher and a rider, so a fresh seed can actually demonstrate the
+// operator side: open /parcel-co/demo-swift-riders, sign in as any of
+// the three, and see that company's own parcels and nobody else's.
+//
+// PINs match the phone-number convention every other demo login in this
+// file uses (last six digits), so there is one rule to remember rather
+// than a special case for parcels.
+//
+// Idempotent on the company's slug and on each staff member's
+// (org, name) pair — this seed is re-run constantly during development
+// and must never accumulate duplicate riders.
+func ensureDemoParcelOrg(ctx context.Context, pool *pgxpool.Pool, riderPartyID, dispatcherPartyID string) error {
+	// The company hangs off the rider's own enterprise — one of the demo
+	// people running a business, same shape as every other tenant here,
+	// rather than a synthetic "courier co" party with no history.
+	ent, err := EnsureEnterprise(ctx, pool, riderPartyID, "logistics")
+	if err != nil {
+		return fmt.Errorf("courier enterprise: %w", err)
+	}
+
+	var orgID string
+	if err := pool.QueryRow(ctx, `
+		INSERT INTO parcel_org (
+			id, "enterpriseId", name, slug, status, "contactPerson", "contactPhone",
+			"commissionPct", "createdAt", "updatedAt"
+		) VALUES (
+			gen_random_uuid(), $1, 'Demo Swift Riders', 'demo-swift-riders', 'ACTIVE',
+			'Demo Peter Mwangi', '+254700500022', 15, now(), now()
+		)
+		ON CONFLICT (slug) DO UPDATE SET status = 'ACTIVE', "updatedAt" = now()
+		RETURNING id`, ent).Scan(&orgID); err != nil {
+		return fmt.Errorf("parcel org: %w", err)
+	}
+
+	staff := []struct {
+		name    string
+		role    string
+		pin     string
+		partyID *string
+	}{
+		// The manager is an office login: no partyId, because they never
+		// take custody of anything. A rider's login does carry one —
+		// custody is always attributed to a real person, never to a staff
+		// row (see ParcelOrgStaff.partyId).
+		{"Demo Njeri Kamau", "MANAGER", "500024", nil},
+		{"Demo Susan Wanjala", "DISPATCHER", "500023", &dispatcherPartyID},
+		{"Demo Peter Mwangi", "RIDER", "500022", &riderPartyID},
+	}
+	for _, s := range staff {
+		hash, err := authsvc.HashPin(s.pin)
+		if err != nil {
+			return fmt.Errorf("parcel staff pin %s: %w", s.name, err)
+		}
+		// No unique constraint on (orgId, name) in the schema — a company
+		// may legitimately employ two people with the same name — so this
+		// seeds idempotently by checking first rather than relying on
+		// ON CONFLICT.
+		var existing string
+		err = pool.QueryRow(ctx, `
+			SELECT id FROM parcel_org_staff WHERE "orgId" = $1 AND lower(name) = lower($2)`,
+			orgID, s.name).Scan(&existing)
+		if err == nil {
+			if _, err := pool.Exec(ctx, `
+				UPDATE parcel_org_staff SET "pinHash" = $1, role = $2, active = true,
+				       "partyId" = $3, "updatedAt" = now()
+				WHERE id = $4`, hash, s.role, s.partyID, existing); err != nil {
+				return fmt.Errorf("parcel staff update %s: %w", s.name, err)
+			}
+			continue
+		}
+		if !errors.Is(err, pgx.ErrNoRows) {
+			return fmt.Errorf("parcel staff lookup %s: %w", s.name, err)
+		}
+		if _, err := pool.Exec(ctx, `
+			INSERT INTO parcel_org_staff (id, "orgId", name, "pinHash", role, active, "partyId", "createdAt", "updatedAt")
+			VALUES (gen_random_uuid(), $1, $2, $3, $4, true, $5, now(), now())`,
+			orgID, s.name, hash, s.role, s.partyID); err != nil {
+			return fmt.Errorf("parcel staff insert %s: %w", s.name, err)
+		}
+	}
+
+	// Put the demo couriers on this company's books so the rider's
+	// Nearby-jobs and the dispatcher's assign screen agree about who
+	// works here.
+	if _, err := pool.Exec(ctx, `
+		UPDATE parcel_courier SET "parcelOrgId" = $1 WHERE "partyId" = ANY($2)`,
+		orgID, []string{riderPartyID, dispatcherPartyID}); err != nil {
+		return fmt.Errorf("courier org membership: %w", err)
+	}
+
+	// Hand it the unpaid demo parcels so the portal isn't an empty
+	// table. Only DRAFT/BOOKED ones: AssignParcelToOrg refuses anything
+	// already paid for, and the seed must not do by raw SQL what the
+	// application refuses to do for good reason.
+	if _, err := pool.Exec(ctx, `
+		UPDATE parcel SET "parcelOrgId" = $1
+		WHERE "parcelOrgId" IS NULL
+		  AND "paidAt" IS NULL
+		  AND status IN ('DRAFT_PENDING_PAYMENT', 'BOOKED')`, orgID); err != nil {
+		return fmt.Errorf("parcel org backfill: %w", err)
 	}
 	return nil
 }
@@ -636,6 +801,48 @@ func ensureDemoParcels(ctx context.Context, pool *pgxpool.Pool, esther, amina, d
 				VALUES (gen_random_uuid(), $1, $2, now())`, parcelID, *s.holderPartyID); err != nil {
 				return fmt.Errorf("parcel handoff %s: %w", s.code, err)
 			}
+		}
+	}
+	return nil
+}
+
+// ensureDemoBills gives Esther one bill in each urgency bucket the
+// mobile Bills screen groups by (bills_list_screen.dart's byUrgency
+// comparator sorts overdue/due-soon/upcoming, each bucket sorted by
+// due date) — without this, every demo account had zero bills and
+// nobody could see that sort actually run against real rows.
+func ensureDemoBills(ctx context.Context, pool *pgxpool.Pool, esther string) error {
+	type spec struct {
+		label, category    string
+		accountRef         string
+		amountKES          *float64
+		cycle              string
+		daysFromNow        int // negative = already overdue
+		reminderDaysBefore int
+	}
+	kplc := 1450.0
+	dstv := 3200.0
+	specs := []spec{
+		// Overdue — daysFromNow < 0.
+		{label: "KPLC — home", category: "ELECTRICITY", accountRef: "12345678901", amountKES: &kplc, cycle: "MONTHLY", daysFromNow: -3, reminderDaysBefore: 3},
+		// Due soon — inside its own reminder window.
+		{label: "DSTV Compact", category: "PAY_TV", accountRef: "1044837201", amountKES: &dstv, cycle: "MONTHLY", daysFromNow: 2, reminderDaysBefore: 3},
+		// Upcoming — outside the reminder window, sorted after the
+		// two above but still listed, and with a null amount to
+		// exercise the "amount varies" display path.
+		{label: "Nairobi Water", category: "WATER", accountRef: "88213", amountKES: nil, cycle: "MONTHLY", daysFromNow: 21, reminderDaysBefore: 3},
+	}
+	for _, s := range specs {
+		var existing string
+		err := pool.QueryRow(ctx, `SELECT id FROM bill WHERE "partyId" = $1 AND label = $2`, esther, s.label).Scan(&existing)
+		if err == nil {
+			continue // already seeded — re-running the seed must not duplicate or reset due dates
+		}
+		if _, err := pool.Exec(ctx, `
+			INSERT INTO bill (id, "partyId", label, category, "accountRef", "amountKes", cycle, "nextDueAt", "reminderDaysBefore", status, "createdAt", "updatedAt")
+			VALUES (gen_random_uuid(), $1, $2, $3, $4, $5, $6, now() + make_interval(days => $7), $8, 'ACTIVE', now(), now())`,
+			esther, s.label, s.category, s.accountRef, s.amountKES, s.cycle, s.daysFromNow, s.reminderDaysBefore); err != nil {
+			return fmt.Errorf("bill %s: %w", s.label, err)
 		}
 	}
 	return nil
