@@ -38,16 +38,31 @@ final availableJobsProvider = FutureProvider.autoDispose<List<AvailableJob>>(
   (ref) => ref.watch(parcelsRepositoryProvider).listAvailableJobs(),
 );
 
-/// Three tabs, one screen: "Sent" (what I'm shipping, with the delivery
-/// code to pass on), "Holding" (what's currently in my custody as a
-/// driver/handler — the scoped-session-shaped screen Phases 2/6/7 each
-/// have their own version of), and "Nearby" (BOOKED jobs near my last
-/// posted location, first-tap-claims-it — the gig/on-demand half of the
+/// Three tabs, one screen, each a role rather than a status filter:
+/// "Sending" (what I'm shipping, with the delivery code to pass on),
+/// "Holding" (what's currently in my custody as a driver/handler — the
+/// scoped-session-shaped screen Phases 2/6/7 each have their own
+/// version of), and "Nearby" (BOOKED jobs near my last posted
+/// location, first-tap-claims-it — the gig/on-demand half of the
 /// hybrid dispatch model; "Holding"'s code-entry stays the fleet/
 /// scheduled-pickup half). Accepting an already-assigned parcel is a
 /// code entry on the Holding tab, not the universal scanner — a
 /// handler's whole job is custody transfer, one dedicated action, not
 /// routed through the general-purpose scan-and-dispatch screen.
+///
+/// ## No "Receiving" segment
+///
+/// The reorganisation proposal sketched a fourth segment mirroring
+/// Sending — everything addressed to me. It isn't built: GET
+/// /v1/me/parcels filters on `senderPartyId` only (see
+/// dbx.ListMyParcels), so there is no query that returns a parcel
+/// someone else booked with my number as the receiver. Most receivers
+/// aren't signed in anyway — they track and confirm receipt through
+/// the public code/OTP flow this app also serves guests through (see
+/// requestReceiptOtp/confirmReceipt below), so this is a real gap only
+/// for the minority who both hold an Esoko account and are the
+/// receiver. Needs a receiverMsisdn-matching query before it can be a
+/// tab rather than a stub.
 ///
 /// The Sent/Holding toggle is an [EsokoSegmentedToggle] pill above an
 /// `IndexedStack` — it used to visually collide with the first list
@@ -255,7 +270,7 @@ class _ParcelsHubScreenState extends ConsumerState<ParcelsHubScreen> {
               child: EsokoSegmentedToggle<int>(
                 selected: _tab,
                 onChanged: (v) => setState(() => _tab = v),
-                options: const [(0, 'Sent'), (1, 'Holding'), (2, 'Nearby')],
+                options: const [(0, 'Sending'), (1, 'Holding'), (2, 'Nearby')],
               ),
             ),
             Expanded(

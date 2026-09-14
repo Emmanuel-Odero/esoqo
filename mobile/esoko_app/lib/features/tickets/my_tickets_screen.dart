@@ -56,6 +56,7 @@ class YourTicketsBody extends ConsumerWidget {
             child: ListView(
               padding: const EdgeInsets.all(EsokoSpacing.s4),
               children: [
+                const _TodaysJourneySection(),
                 _PaymentPlansSection(onChanged: () => _refreshAll(ref)),
                 for (var i = 0; i < list.length; i++) ...[
                   if (i > 0) const SizedBox(height: EsokoSpacing.s5),
@@ -68,6 +69,75 @@ class YourTicketsBody extends ConsumerWidget {
       ),
     );
   }
+}
+
+/// A paid, boarded-or-boarding transport booking departing today —
+/// the one thing worth surfacing above everything else you've ever
+/// bought a ticket for. No new endpoint: [MyBookingRich.departAt]
+/// already comes back on every row of [myBookingsProvider], which
+/// this segment was already fetching for the payment-plans section
+/// below; this just reads the field nobody had used yet.
+///
+/// Renders nothing outside a travel day, same "nothing until it's
+/// real" rule as [_PaymentPlansSection] — a permanent empty journey
+/// card would be noise for the far more common event ticket.
+class _TodaysJourneySection extends ConsumerWidget {
+  const _TodaysJourneySection();
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final bookings = ref.watch(myBookingsProvider).valueOrNull;
+    if (bookings == null) return const SizedBox.shrink();
+
+    final now = DateTime.now();
+    final today = bookings.where((b) {
+      if (b.status != 'PAID' || b.routeFrom == null || b.routeTo == null) {
+        return false;
+      }
+      final depart = DateTime.tryParse(b.departAt)?.toLocal();
+      return depart != null &&
+          depart.year == now.year &&
+          depart.month == now.month &&
+          depart.day == now.day;
+    }).toList()
+      ..sort((a, b) => a.departAt.compareTo(b.departAt));
+    if (today.isEmpty) return const SizedBox.shrink();
+
+    return Padding(
+      padding: const EdgeInsets.only(bottom: EsokoSpacing.s5),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          const EsokoSubHeader("Today's journey"),
+          const SizedBox(height: EsokoSpacing.s2),
+          for (var i = 0; i < today.length; i++)
+            Padding(
+              padding: const EdgeInsets.only(bottom: EsokoSpacing.s3),
+              child: EsokoAttentionCard(
+                when: _departureWhen(today[i].departAt, now),
+                title: '${today[i].routeFrom} → ${today[i].routeTo}',
+                detail: today[i].orgName,
+                accent: EsokoColors.green,
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+}
+
+/// "Boarding now" inside 30 minutes of departure, otherwise the clock
+/// time — a countdown is useful right before a bus leaves and noise
+/// every other time this screen is opened today.
+String _departureWhen(String departAt, DateTime now) {
+  final depart = DateTime.tryParse(departAt)?.toLocal();
+  if (depart == null) return 'Today';
+  final until = depart.difference(now);
+  if (until.inMinutes <= 30 && until.inMinutes >= -15) return 'Boarding now';
+  if (until.isNegative) return 'Departed';
+  final hh = depart.hour.toString().padLeft(2, '0');
+  final mm = depart.minute.toString().padLeft(2, '0');
+  return 'Departs $hh:$mm';
 }
 
 /// Renders nothing at all when there are no open plans — this section

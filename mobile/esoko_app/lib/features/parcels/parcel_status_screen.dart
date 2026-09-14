@@ -33,7 +33,7 @@ final parcelHandoffHistoryProvider = FutureProvider.autoDispose
 /// A parcel's own tracking page — guest-safe (see
 /// dbx.GetParcelStatus), same screen a sender, a receiver, or anyone
 /// they forward the code to all see identically. [deliveryCode] is
-/// only ever passed in by the sender's own "Sent" list (see
+/// only ever passed in by the sender's own "Sending" list (see
 /// ParcelsHubScreen) — never fetched from the server here, since the
 /// public status endpoint never returns it.
 class ParcelStatusScreen extends ConsumerWidget {

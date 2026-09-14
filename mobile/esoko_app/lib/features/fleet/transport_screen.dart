@@ -50,14 +50,14 @@ class TransportScreen extends ConsumerWidget {
               children: [
                 const EsokoPageLead('Pay bus fare, or run your fleet.'),
                 const SizedBox(height: EsokoSpacing.s4),
+                // The proposal's scan-to-board hero: of the three things
+                // this screen can do, this is the one that happens
+                // standing inside a moving matatu with one hand free,
+                // so it gets the card everything else in the app leads
+                // with rather than a row identical to "Verify fare".
                 EsokoStagger(
                   index: 0,
-                  child: EsokoListTile(
-                    title: 'Scan to board',
-                    subtitle: 'Scan the Esoko code inside the matatu to pay.',
-                    leading: const EsokoQuickActionIcon(
-                      icon: Icons.qr_code_scanner_outlined,
-                    ),
+                  child: _ScanToBoardHero(
                     onTap: () => Navigator.of(context).push(
                       MaterialPageRoute(
                         builder: (_) => const UniversalScanScreen(),
@@ -65,6 +65,7 @@ class TransportScreen extends ConsumerWidget {
                     ),
                   ),
                 ),
+                const SizedBox(height: EsokoSpacing.s4),
                 EsokoStagger(
                   index: 1,
                   child: EsokoListTile(
@@ -145,6 +146,73 @@ class TransportScreen extends ConsumerWidget {
                 ),
               ),
             ),
+        ],
+      ),
+    );
+  }
+}
+
+/// The full-card, one-tap version of "Scan to board" — navy, per
+/// SCREEN_CONVENTIONS.md Rule 3 (this is the person's own action, not
+/// an institution's), matching the wallet/identity heroes Money and
+/// Account already lead with. The whole card is tappable, not just the
+/// button beneath the icon, since a thumb reaching for a bus door
+/// shouldn't need to land on a precise target.
+class _ScanToBoardHero extends StatelessWidget {
+  const _ScanToBoardHero({required this.onTap});
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return EsokoCard(
+      color: EsokoColors.navy,
+      padding: const EdgeInsets.all(EsokoSpacing.s5),
+      onTap: onTap,
+      child: Row(
+        children: [
+          Container(
+            width: 56,
+            height: 56,
+            decoration: BoxDecoration(
+              color: Colors.white.withValues(alpha: 0.16),
+              borderRadius: BorderRadius.circular(EsokoRadius.lg),
+            ),
+            alignment: Alignment.center,
+            child: const Icon(
+              Icons.qr_code_scanner_rounded,
+              color: Colors.white,
+              size: 28,
+            ),
+          ),
+          const SizedBox(width: EsokoSpacing.s4),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'Scan to board',
+                  style: TextStyle(
+                    color: Colors.white,
+                    fontFamily: EsokoFonts.display,
+                    fontSize: 19,
+                    fontWeight: FontWeight.w800,
+                  ),
+                ),
+                const SizedBox(height: 2),
+                Text(
+                  'Scan the Esoko code inside the matatu to pay.',
+                  style: TextStyle(
+                    color: Colors.white.withValues(alpha: 0.8),
+                    fontSize: 12.5,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          Icon(
+            Icons.chevron_right_rounded,
+            color: Colors.white.withValues(alpha: 0.7),
+          ),
         ],
       ),
     );

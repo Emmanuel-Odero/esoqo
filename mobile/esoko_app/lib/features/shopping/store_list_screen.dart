@@ -8,6 +8,7 @@ import '../../core/theme/esoko_tokens.dart';
 import '../../core/widgets/widgets.dart';
 import 'category_style.dart';
 import 'gradient_thumb.dart';
+import 'order_detail_screen.dart';
 import 'shopping_models.dart';
 import 'store_detail_screen.dart';
 import 'stores_repository.dart';
@@ -26,6 +27,15 @@ final savedStoresProvider = FutureProvider.autoDispose<List<SavedStore>>((
   ref,
 ) {
   return ref.watch(storesRepositoryProvider).savedStores();
+});
+
+/// GET /v1/me/orders — every order ever placed. Watched here only for
+/// _ReadyForPickupSection's filter; the full history has no screen of
+/// its own yet (see that section's doc comment).
+final myOrdersProvider = FutureProvider.autoDispose<List<OrderStatus>>((
+  ref,
+) {
+  return ref.watch(storesRepositoryProvider).myOrders();
 });
 
 typedef _NearbyQuery = ({double? lat, double? lng, String q});
@@ -149,8 +159,10 @@ class _StoreListScreenState extends ConsumerState<StoreListScreen> {
                   ),
                 ),
               ),
-              if (ref.watch(authControllerProvider) is AuthSignedIn)
+              if (ref.watch(authControllerProvider) is AuthSignedIn) ...[
+                const SliverToBoxAdapter(child: _ReadyForPickupSection()),
                 const SliverToBoxAdapter(child: _MySpotsSection()),
+              ],
               SliverToBoxAdapter(
                 child: Padding(
                   padding: const EdgeInsets.symmetric(
@@ -357,6 +369,65 @@ class _StoreCard extends StatelessWidget {
 
   String _formatDistance(double km) =>
       km < 1 ? '${(km * 1000).round()} m' : '${km.toStringAsFixed(1)} km';
+}
+
+/// An order sitting on a shelf with your name on it — the proposal's
+/// "lead with ready-to-collect": of everything this screen could open
+/// with, a physical thing already paid for and waiting is the one
+/// thing actually worth a special trip before you go browsing for
+/// anything else. GET /v1/me/orders was already modelled on the
+/// client (see [OrderStatus]'s own doc comment) but nothing had called
+/// it — this is that call, filtered to the one status that means
+/// "go get it".
+///
+/// Renders nothing outside that state, same "nothing until it's real"
+/// rule as [_MySpotsSection] below.
+class _ReadyForPickupSection extends ConsumerWidget {
+  const _ReadyForPickupSection();
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final orders = ref.watch(myOrdersProvider).valueOrNull;
+    if (orders == null) return const SizedBox.shrink();
+    final ready = orders.where((o) => o.status == 'READY_FOR_PICKUP').toList();
+    if (ready.isEmpty) return const SizedBox.shrink();
+
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(
+        EsokoSpacing.s5,
+        0,
+        EsokoSpacing.s5,
+        EsokoSpacing.s4,
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const EsokoSubHeader('Ready for pickup'),
+          const SizedBox(height: EsokoSpacing.s2),
+          for (var i = 0; i < ready.length; i++)
+            Padding(
+              padding: const EdgeInsets.only(bottom: EsokoSpacing.s3),
+              child: EsokoStagger(
+                index: i,
+                child: EsokoAttentionCard(
+                  when: ready[i].pickupCode == null
+                      ? 'Ready now'
+                      : 'Code ${ready[i].pickupCode}',
+                  title: ready[i].storeName,
+                  detail: 'KES ${ready[i].totalKes} · tap to show the code',
+                  accent: EsokoColors.green,
+                  onTap: () => Navigator.of(context).push(
+                    MaterialPageRoute(
+                      builder: (_) => OrderDetailScreen(orderId: ready[i].id),
+                    ),
+                  ),
+                ),
+              ),
+            ),
+        ],
+      ),
+    );
+  }
 }
 
 /// "Your spots" — renders nothing at all for someone with no saved

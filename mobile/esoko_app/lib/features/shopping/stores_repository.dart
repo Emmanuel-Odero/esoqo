@@ -109,6 +109,16 @@ class StoresRepository {
     return OrderStatus.fromJson(res);
   }
 
+  /// GET /v1/me/orders — every order this buyer has ever placed, newest
+  /// first (see dbx.ListOrdersForParty). The model already documented
+  /// this route; nothing on the client had called it until the Shopping
+  /// hub needed to lead with ready-for-pickup orders.
+  Future<List<OrderStatus>> myOrders() async {
+    final res = await _api.get('/v1/me/orders');
+    final list = (res['orders'] as List?) ?? const [];
+    return list.map((e) => OrderStatus.fromJson(e as Map<String, dynamic>)).toList();
+  }
+
   /// Resolve a human voucher code (VCH-XXXXXX) to its card id, or null
   /// when the server doesn't know it.
   Future<String?> resolveVoucherCode(String code) async {

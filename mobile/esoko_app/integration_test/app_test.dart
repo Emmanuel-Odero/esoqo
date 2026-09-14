@@ -146,6 +146,43 @@ void main() {
     });
   });
 
+  group('Transport', () {
+    testWidgets('the scan-to-board hero renders without throwing', (
+      tester,
+    ) async {
+      await _bootSignedOut(tester);
+      await _signIn(tester, identifier: esther.phone, pin: esther.pin);
+
+      await tester.tap(find.text('Home'));
+      await tester.pumpAndSettle();
+      await _scrollToAndTap(tester, 'Transport');
+
+      expect(find.text('Scan to board'), findsOneWidget);
+      expect(find.text('Pay bus fare'), findsOneWidget);
+      expect(tester.takeException(), isNull);
+    });
+  });
+
+  group('Shopping', () {
+    testWidgets('the store directory renders without throwing', (
+      tester,
+    ) async {
+      await _bootSignedOut(tester);
+      await _signIn(tester, identifier: esther.phone, pin: esther.pin);
+
+      await tester.tap(find.text('Home'));
+      await tester.pumpAndSettle();
+      await _scrollToAndTap(tester, 'Shopping');
+      await tester.pumpAndSettle(const Duration(seconds: 2));
+
+      expect(tester.takeException(), isNull);
+      // Esther has no orders seeded, so "Ready for pickup" must not
+      // appear — the same "nothing until it's real" check Account's
+      // test already runs on Points/History.
+      expect(find.text('Ready for pickup'), findsNothing);
+    });
+  });
+
   group('Bills', () {
     testWidgets('the screen renders without throwing', (tester) async {
       await _bootSignedOut(tester);
