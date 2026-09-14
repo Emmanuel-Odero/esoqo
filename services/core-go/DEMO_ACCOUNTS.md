@@ -208,6 +208,29 @@ same bearer-code convention as a pickup code); complete a delivery
 with `POST /v1/parcels/:code/deliver` using the matching delivery code
 above, signed in as whoever currently holds it.
 
+## Bills
+
+Three bills on **Esther Muthoni (500017)**, one per urgency bucket the
+mobile Bills screen groups by — `bills_list_screen.dart`'s `byUrgency`
+comparator had no seeded data to sort against on any account before
+these, so the grouping could only ever be read, never seen:
+
+| Label | Category | Due | Amount | Bucket |
+|---|---|---|---|---|
+| `KPLC — home` | ELECTRICITY | 3 days ago | KES 1,450 | **Overdue** |
+| `DSTV Compact` | PAY_TV | in 2 days | KES 3,200 | **Due soon** (inside its 3-day reminder window) |
+| `Nairobi Water` | WATER | in 21 days | *none* | Upcoming — null amount, exercising the "amount varies" display path |
+
+Due dates are relative to seed time (`now() + interval`), so they stay
+in their buckets only for about a fortnight after a seed run — re-run
+`go run ./cmd/seed` to reset them. Bills are matched on label per
+party, so re-running never duplicates them, but it also never moves an
+existing bill's due date; delete the rows first if you want fresh ones.
+
+Esther is also the account the mobile integration tests sign in as
+(`mobile/esoko_app/integration_test/app_test.dart`), where the overdue
+KPLC bill is asserted to sort above the due-soon DSTV one.
+
 ## On "other profile types" (hoteliers, etc.)
 
 There is no dedicated hotel/hospitality domain model in

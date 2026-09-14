@@ -8,6 +8,8 @@ class GroupSummary {
     required this.kind,
     required this.county,
     required this.memberCount,
+    this.balanceKes = '0',
+    this.pendingSignatures = 0,
   });
 
   factory GroupSummary.fromJson(Map<String, dynamic> json) => GroupSummary(
@@ -17,6 +19,11 @@ class GroupSummary {
     kind: json['Kind'] as String,
     county: json['County'] as String,
     memberCount: json['MemberCount'] as int? ?? 0,
+    // Absent (not just zero) on SearchGroupsPublic's rows — this
+    // model is shared with that anonymous search, which never queries
+    // either figure. Defaults keep that path from throwing.
+    balanceKes: json['BalanceKES'] as String? ?? '0',
+    pendingSignatures: json['PendingSignatures'] as int? ?? 0,
   );
 
   final String id;
@@ -25,6 +32,17 @@ class GroupSummary {
   final String kind;
   final String county;
   final int memberCount;
+
+  /// This group's own savings balance — see dbx.ListMyGroups' own
+  /// comment: a correlated subquery on the same row, not a second
+  /// round trip per group.
+  final String balanceKes;
+
+  /// Withdrawals in this group waiting on a signature only this
+  /// person can give — zero for everyone else in the group, and zero
+  /// once they've signed. Mirrors dbx.GetEffectiveSignerIds' fallback
+  /// rule (explicit signers, else officers) by hand in SQL.
+  final int pendingSignatures;
 
   String get displayName =>
       knownAs?.isNotEmpty == true ? knownAs! : officialName;

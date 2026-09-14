@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../core/money/money.dart';
 import '../../core/theme/esoko_tokens.dart';
 import '../../core/widgets/widgets.dart';
 import 'create_group_screen.dart';
@@ -46,6 +47,28 @@ class MyGroupsScreen extends ConsumerWidget {
                           EsokoPageLead(
                             'Chamas, table banking and welfare groups you belong to.',
                           ),
+                          if (list.isNotEmpty) ...[
+                            const SizedBox(height: EsokoSpacing.s4),
+                            _ChamaHero(groups: list),
+                            for (final g in list.where(
+                              (g) => g.pendingSignatures > 0,
+                            )) ...[
+                              const SizedBox(height: EsokoSpacing.s3),
+                              EsokoAttentionCard(
+                                when: g.pendingSignatures == 1
+                                    ? 'Your signature is needed'
+                                    : '${g.pendingSignatures} withdrawals need your signature',
+                                title: g.displayName,
+                                accent: EsokoColors.amber,
+                                onTap: () => Navigator.of(context).push(
+                                  MaterialPageRoute(
+                                    builder: (_) =>
+                                        GroupDetailScreen(groupId: g.id),
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ],
                           const SizedBox(height: EsokoSpacing.s4),
                           Row(
                             children: [
@@ -145,6 +168,58 @@ class MyGroupsScreen extends ConsumerWidget {
             ),
           ),
         ),
+      ),
+    );
+  }
+}
+
+/// Total savings across every chama this person belongs to — the
+/// figure the reorganisation proposal wanted leading this screen,
+/// blocked until dbx.ListMyGroups carried balance/pendingSignatures
+/// inline (see that function's own comment on the N+1 this avoids).
+/// Navy, per SCREEN_CONVENTIONS.md Rule 3: this is money that belongs
+/// to groups the person is *in*, stated as a fact, not an institution
+/// acting on them.
+class _ChamaHero extends StatelessWidget {
+  const _ChamaHero({required this.groups});
+  final List<GroupSummary> groups;
+
+  @override
+  Widget build(BuildContext context) {
+    final total = Money.sum(
+      groups.map((g) => Money.fromJson(g.balanceKes) ?? Money.zero),
+    );
+    return EsokoCard(
+      color: EsokoColors.navy,
+      padding: const EdgeInsets.all(EsokoSpacing.s5),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            'Across your groups',
+            style: TextStyle(
+              color: Colors.white.withValues(alpha: 0.72),
+              fontSize: 12.5,
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+          const SizedBox(height: EsokoSpacing.s1),
+          Text(
+            'KES ${total.format()}',
+            style: EsokoTypography.mono(
+              fontSize: 30,
+              fontWeight: FontWeight.w800,
+              color: Colors.white,
+            ),
+          ),
+          Text(
+            '${groups.length} ${groups.length == 1 ? 'group' : 'groups'}',
+            style: TextStyle(
+              color: Colors.white.withValues(alpha: 0.72),
+              fontSize: 12.5,
+            ),
+          ),
+        ],
       ),
     );
   }

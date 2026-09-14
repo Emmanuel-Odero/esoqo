@@ -39,16 +39,21 @@ void main() {
 
         // The six service tiles from home_hub_screen._services — Chama
         // by its renamed label, never the old "Groups".
-        expect(find.text('Transport'), findsOneWidget);
-        expect(find.text('Bills'), findsOneWidget);
-        expect(find.text('Shopping'), findsOneWidget);
-        expect(find.text('Tickets'), findsOneWidget);
+        //
         // Scrolled into view first, not asserted blind: a ListView
         // only builds elements inside its viewport plus cache extent,
         // so a tile below the fold genuinely has no element and
         // find.text correctly returns zero. That's what made the first
         // version of this test fail against a screen that was in fact
-        // rendering correctly.
+        // rendering correctly — and since ensureDemoBills gave Esther
+        // an overdue bill, "Needs you today" now always renders at
+        // least one attention card above the grid, pushing every tile
+        // further down than it sat when this account had nothing due.
+        await _scrollTo(tester, 'Transport');
+        expect(find.text('Transport'), findsOneWidget);
+        expect(find.text('Bills'), findsOneWidget);
+        expect(find.text('Shopping'), findsOneWidget);
+        expect(find.text('Tickets'), findsOneWidget);
         await _scrollTo(tester, 'Chama');
         expect(find.text('Chama'), findsOneWidget);
         expect(find.text('Groups'), findsNothing);
@@ -114,6 +119,38 @@ void main() {
         find.text('Chamas, table banking and welfare groups you belong to.'),
         findsOneWidget,
       );
+      expect(tester.takeException(), isNull);
+    });
+
+    testWidgets('a member sees the balance hero, not an N+1 of empty cards', (
+      tester,
+    ) async {
+      await _bootSignedOut(tester);
+      await _signIn(tester, identifier: faith.phone, pin: faith.pin);
+
+      await tester.tap(find.text('Home'));
+      await tester.pumpAndSettle();
+      await _scrollToAndTap(tester, 'Chama');
+
+      // The hero the proposal asked for, unblocked by dbx.ListMyGroups
+      // carrying BalanceKES inline (see that function's own comment).
+      // Faith founded Demo Kilimani Women Chama, so the group list is
+      // non-empty and the hero must render — a figure, not a spinner
+      // and not nothing.
+      //
+      // Deliberately not asserting an exact group count: seed runs
+      // before ensureDemoGroup existed left some dev databases with
+      // several identically-named chamas for Faith (CreateOwnGroup
+      // mints a fresh Organisation per call). The seed no longer adds
+      // to that, but an existing local DB still carries them, and the
+      // hero is correct either way — it sums whatever the server
+      // returns.
+      expect(find.text('Across your groups'), findsOneWidget);
+      expect(find.textContaining('KES '), findsWidgets);
+      expect(find.textContaining('group'), findsWidgets);
+      // GroupSummary.displayName prefers knownAs over officialName,
+      // so the tiles read "Kilimani Chama", not the registered name.
+      expect(find.text('Kilimani Chama'), findsWidgets);
       expect(tester.takeException(), isNull);
     });
   });
@@ -190,16 +227,22 @@ void main() {
 
       await tester.tap(find.text('Home'));
       await tester.pumpAndSettle();
-      await tester.tap(find.text('Bills'));
+      // Not a bare tap: Esther now has a seeded overdue bill (see
+      // ensureDemoBills), so "Needs you today" renders an attention
+      // card above the service grid and pushes the Bills tile out of
+      // the unscrolled viewport — the same off-screen trap
+      // _scrollToAndTap exists for.
+      await _scrollToAndTap(tester, 'Bills');
       await tester.pumpAndSettle(const Duration(seconds: 2));
 
       expect(find.text('Bills'), findsWidgets);
       expect(tester.takeException(), isNull);
-      // The urgency-sort itself (bills_list_screen.dart's byUrgency
-      // comparator) needs an account seeded with more than one Overdue
-      // or Due-soon bill to observe ordering on screen — none of the
-      // demo accounts in DEMO_ACCOUNTS.md currently are. Add one there
-      // before asserting tile order here.
+      // The urgency sort itself (bills_list_screen.dart's byUrgency
+      // comparator): ensureDemoBills gives Esther one overdue bill
+      // (KPLC) and one due-soon (DSTV) — overdue must render first.
+      final kplc = tester.getCenter(find.text('KPLC — home'));
+      final dstv = tester.getCenter(find.text('DSTV Compact'));
+      expect(kplc.dy, lessThan(dstv.dy));
     });
   });
 }
@@ -218,6 +261,14 @@ class _DemoAccount {
 /// [HatsIconButton] or ActiveRole's institutional tints should be in
 /// play here.
 const esther = _DemoAccount('+254700500017', '500017');
+
+/// Demo Faith Njeri — founder (and therefore CHAIRPERSON, so an
+/// effective signer) of Demo Kilimani Women Chama. The only demo
+/// account that actually belongs to a group, which makes her the only
+/// one who can exercise the Chama hub's balance hero and its
+/// signature-needed cards at all — Esther's group list is empty, so
+/// every one of those widgets correctly renders nothing for her.
+const faith = _DemoAccount('+254700500003', '500003');
 
 /// Boots from a guaranteed-clean slate.
 ///

@@ -281,6 +281,7 @@ services:
       MPESA_SHORTCODE: "${MPESA_SHORTCODE:-}"
       MPESA_PASSKEY: "${MPESA_PASSKEY:-}"
       MPESA_CALLBACK_URL: "${MPESA_CALLBACK_URL:-}"
+      MPESA_CALLBACK_SECRET: "${MPESA_CALLBACK_SECRET:-}"
       PESAPAL_PROVIDER: "${PESAPAL_PROVIDER:-console}"
       # Strangler bridge: Daraja callbacks Go doesn't own yet
       # (registration/donation) are forwarded byte-identical to TS core.
