@@ -9,6 +9,7 @@ import '../../core/auth/scan_access.dart';
 import '../../core/money/money.dart';
 import '../../core/theme/esoko_tokens.dart';
 import '../../core/widgets/widgets.dart';
+import '../bills/bill_models.dart';
 import '../bills/bills_list_screen.dart';
 import '../fleet/fleet_providers.dart';
 import '../fleet/transport_screen.dart';
@@ -205,12 +206,12 @@ class HomeHubScreen extends ConsumerWidget {
     }
   }
 
-  /// What a courier mid-round needs off the hub without tapping in.
-  static String _parcelSubtitle(int heldCount, Money codFloat) {
-    final parcels = '$heldCount ${heldCount == 1 ? 'parcel' : 'parcels'} in your hands';
-    if (!codFloat.isPositive) return '$parcels.';
-    return '$parcels · KES ${codFloat.format()} to hand in.';
-  }
+  /// Statuses that mean a parcel is moving and hasn't arrived — the set
+  /// worth surfacing on the hub before anybody taps into Parcels.
+  /// DRAFT_PENDING_PAYMENT is deliberately out: an unpaid draft isn't
+  /// on its way anywhere, and putting it under "Needs you today" would
+  /// be nagging about something the sender already abandoned.
+  static const _inFlight = {'BOOKED', 'PICKED_UP', 'IN_TRANSIT'};
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -255,14 +256,16 @@ class HomeHubScreen extends ConsumerWidget {
       holdingParcels: held.isNotEmpty,
     );
 
+    final attention = _attention(ref, signedIn: auth is AuthSignedIn);
+
     return ListView(
       // The bottom inset clears the scan FAB, not just the bar.
       // Scaffold already keeps the body above `bottomNavigationBar`,
       // but a centre-docked FAB overhangs that bar by half its height
-      // and sits *on* the body — so the last tile scrolls underneath it
-      // and its subtitle becomes unreadable at the one moment somebody
-      // is trying to read it. s9 is the FAB's overhang plus the same
-      // s6 breathing room every other edge gets.
+      // and sits *on* the body — so the last row scrolls underneath it
+      // at the one moment somebody is trying to read it. s9 is the
+      // FAB's overhang plus the same s6 breathing room every other
+      // edge gets.
       padding: const EdgeInsets.fromLTRB(
         EsokoSpacing.s6,
         EsokoSpacing.s4,
@@ -284,45 +287,143 @@ class HomeHubScreen extends ConsumerWidget {
               ? () => showScanSheet(context)
               : null,
         ),
-        const SizedBox(height: EsokoSpacing.s5),
-        EsokoSectionHeader(
-          title: 'Your services',
-          subtitle: 'Everything Esoko does for you — pick where to go.',
-        ),
+
+        // Anything with a deadline on it, before the launcher. This is
+        // the half of the hub that changes day to day — a bill about to
+        // fall due, a parcel still moving — and it renders nothing at
+        // all when there's nothing pressing, rather than an empty
+        // "Nothing to do" card that everyone learns to scroll past.
+        if (attention.isNotEmpty) ...[
+          const SizedBox(height: EsokoSpacing.s5),
+          const EsokoSubHeader('Needs you today'),
+          const SizedBox(height: EsokoSpacing.s3),
+          for (var i = 0; i < attention.length; i++) ...[
+            EsokoStagger(index: i, child: attention[i]),
+            const SizedBox(height: EsokoSpacing.s3),
+          ],
+        ],
+
         const SizedBox(height: EsokoSpacing.s4),
-        for (final title in order)
-          if (_services[title] case final service?) ...[
-            Semantics(
-              button: true,
-              label: '${service.title}: ${service.subtitle}',
-              child: EsokoListTile(
-                title: service.title,
-                // Parcels is the one tile whose subtitle is worth
-                // replacing with live state: "3 in your hands" answers
-                // the question a courier opened the app to ask, and the
-                // cash line is somebody else's money they're carrying.
-                subtitle: title == 'Parcels' && held.isNotEmpty
-                    ? _parcelSubtitle(held.length, codFloat)
-                    : service.subtitle,
-                leading: Hero(
-                  tag: 'esoko-service-${service.title}',
-                  child: EsokoQuickActionIcon(icon: service.icon),
-                ),
-                onTap: () => Navigator.of(context).push(
-                  MaterialPageRoute(
-                    builder: (_) => EsokoServiceScaffold(
-                      title: service.appBar,
-                      icon: service.icon,
-                      heroTag: 'esoko-service-${service.title}',
-                      child: service.screen,
+        const EsokoSubHeader('Services'),
+        const SizedBox(height: EsokoSpacing.s3),
+        GridView(
+          shrinkWrap: true,
+          physics: const NeverScrollableScrollPhysics(),
+          padding: EdgeInsets.zero,
+          // mainAxisExtent, not childAspectRatio: the tile's content is
+          // a fixed 40px icon plus one line of label, so the height it
+          // needs is a constant. An aspect ratio makes that height a
+          // function of the *width* instead, which on a narrower phone
+          // silently shrinks the cell until the icon no longer fits —
+          // exactly how this overflowed by 16px the first time. The
+          // label is Flexible inside the tile, so a large text scale
+          // ellipsises rather than bursting this budget.
+          gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+            crossAxisCount: 4,
+            mainAxisSpacing: EsokoSpacing.s3,
+            crossAxisSpacing: EsokoSpacing.s3,
+            mainAxisExtent: 96,
+          ),
+          children: [
+            for (var i = 0; i < order.length; i++)
+              if (_services[order[i]] case final service?)
+                EsokoStagger(
+                  index: i,
+                  child: EsokoServiceTile(
+                    label: service.title,
+                    icon: service.icon,
+                    heroTag: 'esoko-service-${service.title}',
+                    // Parcels is the one tile with live state worth
+                    // seeing before the tap: a courier mid-round wants
+                    // the custody count, and the grid has no subtitle
+                    // left to put it in.
+                    badge: order[i] == 'Parcels' && held.isNotEmpty
+                        ? '${held.length}'
+                        : null,
+                    onTap: () => Navigator.of(context).push(
+                      MaterialPageRoute(
+                        builder: (_) => EsokoServiceScaffold(
+                          title: service.appBar,
+                          icon: service.icon,
+                          heroTag: 'esoko-service-${service.title}',
+                          child: service.screen,
+                        ),
+                      ),
                     ),
                   ),
                 ),
-              ),
-            ),
-            const SizedBox(height: EsokoSpacing.s3),
           ],
+        ),
       ],
+    );
+  }
+
+  /// The deadline cards for "Needs you today", most urgent first.
+  ///
+  /// Every signal here comes from a provider some other screen already
+  /// watches — no new endpoint, per the proposal. All of them are read
+  /// best-effort through `valueOrNull`: the hub renders immediately and
+  /// grows these cards as each resolves, rather than holding the whole
+  /// screen behind three more round trips.
+  ///
+  /// Capped at three. This is a summary, not an inbox — a hub that can
+  /// scroll is a hub nobody reads the bottom of.
+  List<Widget> _attention(WidgetRef ref, {required bool signedIn}) {
+    if (!signedIn) return const [];
+    final out = <Widget>[];
+
+    final bills = ref.watch(myBillsProvider).valueOrNull ?? const <BillRow>[];
+    final due = bills.where((b) => b.overdue || b.dueSoon).toList()
+      ..sort((a, b) => a.daysUntilDue.compareTo(b.daysUntilDue));
+    for (final b in due) {
+      out.add(
+        EsokoAttentionCard(
+          when: b.overdue
+              ? '${-b.daysUntilDue} ${-b.daysUntilDue == 1 ? 'day' : 'days'} overdue'
+              : b.daysUntilDue == 0
+                  ? 'Due today'
+                  : 'Due in ${b.daysUntilDue} ${b.daysUntilDue == 1 ? 'day' : 'days'}',
+          title: b.label,
+          detail: b.amountKes == null ? null : 'KES ${b.amountKes}',
+          accent: b.overdue ? EsokoColors.red : EsokoColors.amber,
+          progress: b.isFunding ? b.fundingProgress : null,
+          onTap: () => _openService(ref, 'Bills'),
+        ),
+      );
+    }
+
+    final sent = ref.watch(myParcelsProvider).valueOrNull ?? const <ParcelRow>[];
+    for (final p in sent.where((p) => _inFlight.contains(p.status))) {
+      out.add(
+        EsokoAttentionCard(
+          when: parcelStatusLabel(p.status),
+          title: p.code,
+          detail: '${p.originLabel} → ${p.destinationLabel}',
+          accent: EsokoColors.green,
+          onTap: () => _openService(ref, 'Parcels'),
+        ),
+      );
+    }
+
+    return out.take(3).toList();
+  }
+
+  /// Pushes a service by its key in [_services] — the same
+  /// [EsokoServiceScaffold] wrap a grid tap does, so an attention card
+  /// and its tile land in the identical place.
+  static void _openService(WidgetRef ref, String key) {
+    final service = _services[key];
+    if (service == null) return;
+    final context = ref.context;
+    Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (_) => EsokoServiceScaffold(
+          title: service.appBar,
+          icon: service.icon,
+          heroTag: 'esoko-service-${service.title}',
+          child: service.screen,
+        ),
+      ),
     );
   }
 }
