@@ -72,7 +72,7 @@ void main() {
       expect(tester.takeException(), isNull);
 
       // The regression this guards: Points and History used to live at
-      // the bottom of this exact screen (see profile_screen.dart's old
+      // the bottom of this exact screen (see the old profile_screen's
       // history/_pointsProvider) — they moved out to Money/Activity,
       // and neither should ever reappear here.
       await tester.tap(find.text('Account'));
@@ -80,6 +80,15 @@ void main() {
       expect(find.text('Account'), findsWidgets);
       expect(find.textContaining('points'), findsNothing);
       expect(find.text('History'), findsNothing);
+
+      // Doors, not a scroll. Each of these opens a screen of its own;
+      // the QR code and PIN form that used to be stacked inline here
+      // should no longer be on this screen at all.
+      expect(find.text('Your details'), findsOneWidget);
+      expect(find.text('Security'), findsOneWidget);
+      expect(find.text('Your payment QR'), findsNothing);
+      expect(find.text('New PIN'), findsNothing);
+
       // Sign out sits at the bottom of the Account scroll — same
       // viewport-only element building as the Chama tile above.
       await _scrollTo(tester, 'Sign out');

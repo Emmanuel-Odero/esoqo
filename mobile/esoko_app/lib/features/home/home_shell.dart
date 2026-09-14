@@ -4,12 +4,12 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../core/auth/active_role.dart';
 import '../../core/theme/esoko_tokens.dart';
 import '../../core/widgets/widgets.dart';
+import '../account/account_screen.dart';
 import '../activity/activity_screen.dart';
 import '../money/money_screen.dart';
 import '../scan/scan_sheet.dart';
 import 'home_hub_screen.dart';
 import 'org_duty_switcher_screen.dart';
-import 'profile_screen.dart';
 
 /// The app's frame: four destinations, and Scan as the action it
 /// actually is.
