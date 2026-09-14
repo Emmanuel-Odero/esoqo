@@ -5,6 +5,7 @@ import '../../core/money/money.dart';
 import '../../core/theme/esoko_tokens.dart';
 import '../../core/widgets/widgets.dart';
 import '../parcels/courier_earnings_screen.dart';
+import '../parcels/parcel_models.dart' show CourierEarningsView;
 import '../parcels/parcels_hub_screen.dart' show codHoldingProvider;
 import '../vouchers/voucher_models.dart';
 import '../vouchers/voucher_providers.dart';
@@ -59,59 +60,106 @@ class MoneyScreen extends ConsumerWidget {
                     "What's yours across Esoko — vouchers, points, and any cash you're carrying for someone else.",
               ),
               const SizedBox(height: EsokoSpacing.s5),
-              EsokoAsyncView(
-                value: loyalty,
-                isEmpty: (_) => false,
-                onRetry: () => ref.invalidate(myLoyaltyProvider),
-                data: (context, summary) => _WalletHero(
-                  summary: summary,
-                  voucherTotal: _voucherTotal(vouchers),
-                  voucherCount: vouchers.valueOrNull?.length ?? 0,
-                ),
+              // The headline is what you hold, in navy — the
+                  // proposal's wallet hero. Navy rather than the green
+                  // primaryContainer this first shipped with: a balance
+                  // is a statement of record, not an action you're
+                  // being invited to take, and green is the colour of
+                  // the latter (SCREEN_CONVENTIONS.md Rule 3).
+              _WalletHero(
+                voucherTotal: _voucherTotal(vouchers),
+                voucherCount: vouchers.valueOrNull?.length ?? 0,
+                loyalty: loyalty.valueOrNull,
               ),
               const SizedBox(height: EsokoSpacing.s3),
+
+              // Two figures worth seeing without a tap, side by side.
+              // Points sits here rather than in the hero because it is
+              // a different kind of money — earned, not loaded — and
+              // the hero should answer one question, not two.
+              _StatRow(
+                loyalty: loyalty.valueOrNull,
+                earnings: earnings.valueOrNull,
+              ),
 
               // Somebody else's money in this person's pocket — never
               // folded into the hero above, so it can never be mistaken
               // for money that's theirs to spend. See
               // SCREEN_CONVENTIONS.md Rule 3: amber, not green.
-              if (cod.valueOrNull?.amountKes.isPositive ?? false)
-                Padding(
-                  padding: const EdgeInsets.only(bottom: EsokoSpacing.s3),
-                  child: EsokoInlineNotice(
-                    color: EsokoColors.amber,
-                    icon: EsokoIconName.truck,
-                    message:
-                        'Carrying KES ${cod.value!.amountKes.format()} for '
-                        '${cod.value!.parcelCount} ${cod.value!.parcelCount == 1 ? 'parcel' : 'parcels'} — hand it over when you settle up.',
-                  ),
+              if (cod.valueOrNull case final h? when h.amountKes.isPositive) ...[
+                const SizedBox(height: EsokoSpacing.s3),
+                EsokoAttentionCard(
+                  when: 'Carrying for others',
+                  title: 'KES ${h.amountKes.format()}',
+                  detail:
+                      '${h.parcelCount} ${h.parcelCount == 1 ? 'parcel' : 'parcels'} · hand it over when you settle up',
+                  accent: EsokoColors.amber,
                 ),
+              ],
 
               // Only somebody who has actually delivered something
               // sees this — the same "render nothing until it's real"
               // rule the payment-plans section already follows.
               if (earnings.valueOrNull case final e?
                   when e.earnings.deliveredTotal > 0 ||
-                      e.earnings.unpaidParcels > 0)
-                Padding(
-                  padding: const EdgeInsets.only(bottom: EsokoSpacing.s3),
-                  child: EsokoListTile(
-                    title: 'Your courier earnings',
-                    subtitle: e.earnings.unpaidKes.isPositive
-                        ? 'KES ${e.earnings.unpaidKes.format()} waiting to be paid'
-                        : 'KES ${e.earnings.paidKes.format()} paid so far',
-                    icon: Icons.local_shipping_outlined,
-                    iconColor: EsokoColors.green,
-                    iconBackground: EsokoColors.greenTint,
-                    onTap: () => Navigator.of(context).push(
-                      MaterialPageRoute(
-                        builder: (_) => const CourierEarningsScreen(),
-                      ),
+                      e.earnings.unpaidParcels > 0) ...[
+                const SizedBox(height: EsokoSpacing.s5),
+                const EsokoSubHeader('Your earnings'),
+                const SizedBox(height: EsokoSpacing.s3),
+                EsokoListTile(
+                  title: e.earnings.unpaidKes.isPositive
+                      ? 'KES ${e.earnings.unpaidKes.format()} waiting to be paid'
+                      : 'KES ${e.earnings.paidKes.format()} paid so far',
+                  subtitle: '${e.earnings.deliveredTotal} '
+                      '${e.earnings.deliveredTotal == 1 ? 'delivery' : 'deliveries'} · see the statement',
+                  icon: Icons.local_shipping_outlined,
+                  iconColor: EsokoColors.green,
+                  iconBackground: EsokoColors.greenTint,
+                  onTap: () => Navigator.of(context).push(
+                    MaterialPageRoute(
+                      builder: (_) => const CourierEarningsScreen(),
                     ),
                   ),
                 ),
+              ],
 
-              const SizedBox(height: EsokoSpacing.s2),
+              const SizedBox(height: EsokoSpacing.s5),
+              const EsokoSubHeader('Your cards'),
+              const SizedBox(height: EsokoSpacing.s3),
+              EsokoAsyncView(
+                value: vouchers,
+                isEmpty: (list) => list.isEmpty,
+                emptyMessage:
+                    'No vouchers yet — a fare card, a shopping card, or one '
+                    'somebody gifted you all show up here.',
+                emptyIcon: Icons.wallet_outlined,
+                onRetry: () => ref.invalidate(myVouchersProvider),
+                data: (context, list) => Column(
+                  children: [
+                    for (var i = 0; i < list.length; i++)
+                      Padding(
+                        padding: const EdgeInsets.only(bottom: EsokoSpacing.s2),
+                        child: EsokoStagger(
+                          index: i,
+                          child: EsokoListTile(
+                            title: list[i].label,
+                            subtitle:
+                                'KES ${list[i].balanceKes.format()} · ${_purposeLabel(list[i].purpose)}',
+                            icon: Icons.wallet_outlined,
+                            trailing: list[i].status == 'ACTIVE'
+                                ? null
+                                : EsokoStatusPill(
+                                    label: list[i].status,
+                                    color: EsokoColors.amber,
+                                  ),
+                          ),
+                        ),
+                      ),
+                  ],
+                ),
+              ),
+
+              const SizedBox(height: EsokoSpacing.s3),
               EsokoButton.secondary(
                 label: 'Manage your vouchers',
                 icon: Icons.wallet_outlined,
@@ -137,58 +185,147 @@ class MoneyScreen extends ConsumerWidget {
     if (list == null || list.isEmpty) return Money.zero;
     return Money.sum(list.map((v) => v.balanceKes));
   }
+
+  /// The wire purpose (FARE, RENT, SHOPPING, GENERAL) as something a
+  /// person would say. GENERAL becomes "Any shop" rather than the
+  /// literal word, which tells somebody nothing about what the card
+  /// can actually buy.
+  static String _purposeLabel(String purpose) => switch (purpose) {
+        'FARE' => 'Fare',
+        'RENT' => 'Rent',
+        'SHOPPING' => 'Shopping',
+        _ => 'Any shop',
+      };
 }
 
 class _WalletHero extends StatelessWidget {
   const _WalletHero({
-    required this.summary,
     required this.voucherTotal,
     required this.voucherCount,
+    this.loyalty,
   });
 
-  final LoyaltySummary summary;
   final Money voucherTotal;
   final int voucherCount;
 
+  /// Null while the loyalty call is still in flight — the hero draws
+  /// its voucher half immediately and fills this line in when it
+  /// lands, rather than holding the whole card behind a second round
+  /// trip.
+  final LoyaltySummary? loyalty;
+
   @override
   Widget build(BuildContext context) {
-    final scheme = Theme.of(context).colorScheme;
     return EsokoCard(
-      color: scheme.primaryContainer,
+      color: EsokoColors.navy,
       padding: const EdgeInsets.all(EsokoSpacing.s5),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text('Vouchers', style: Theme.of(context).textTheme.bodySmall),
+          Text(
+            'Vouchers',
+            style: TextStyle(
+              color: Colors.white.withValues(alpha: 0.72),
+              fontSize: 12.5,
+              fontWeight: FontWeight.w600,
+            ),
+          ),
           const SizedBox(height: EsokoSpacing.s1),
           Text(
             'KES ${voucherTotal.format()}',
-            style: EsokoTypography.mono(fontSize: 26, fontWeight: FontWeight.w800),
+            style: EsokoTypography.mono(
+              fontSize: 30,
+              fontWeight: FontWeight.w800,
+              color: Colors.white,
+            ),
           ),
           Text(
             voucherCount == 0
                 ? 'No vouchers yet'
                 : '$voucherCount ${voucherCount == 1 ? 'card' : 'cards'}',
+            style: TextStyle(
+              color: Colors.white.withValues(alpha: 0.72),
+              fontSize: 12.5,
+            ),
           ),
-          const Divider(height: EsokoSpacing.s6),
-          Row(
-            children: [
-              Icon(Icons.stars_rounded, color: scheme.primary),
-              const SizedBox(width: EsokoSpacing.s2),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      '${summary.totalPoints} points',
-                      style: Theme.of(context).textTheme.titleMedium,
-                    ),
-                    Text('≈ KES ${summary.kesEquiv} · 10 pts = KES 1'),
-                  ],
-                ),
-              ),
-            ],
+        ],
+      ),
+    );
+  }
+}
+
+/// The two figures that sit beside each other under the hero — points
+/// you have earned, and money you are owed. Both render as a dash
+/// rather than a zero while their provider is still resolving: "—"
+/// reads as "not known yet", where "KES 0" reads as a fact, and the
+/// wrong fact about somebody's money is worse than no fact.
+class _StatRow extends StatelessWidget {
+  const _StatRow({this.loyalty, this.earnings});
+
+  final LoyaltySummary? loyalty;
+  final CourierEarningsView? earnings;
+
+  @override
+  Widget build(BuildContext context) {
+    final owed = earnings?.earnings.unpaidKes;
+    // IntrinsicHeight so the two cards match height whichever has the
+    // longer detail line — `stretch` alone would resolve to infinity
+    // here, because a ListView child has no bounded height to stretch
+    // to. Same fix, same reason, as EsokoAttentionCard's own edge.
+    return IntrinsicHeight(
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Expanded(
+            child: _Stat(
+              label: 'Points',
+              value: loyalty == null ? '—' : '${loyalty!.totalPoints}',
+              detail: loyalty == null ? null : '10 pts = KES 1',
+            ),
           ),
+          const SizedBox(width: EsokoSpacing.s3),
+          Expanded(
+            child: _Stat(
+              label: 'Owed to you',
+              value: owed == null ? '—' : 'KES ${owed.format()}',
+              detail: owed == null ? null : 'from deliveries',
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _Stat extends StatelessWidget {
+  const _Stat({required this.label, required this.value, this.detail});
+
+  final String label;
+  final String value;
+  final String? detail;
+
+  @override
+  Widget build(BuildContext context) {
+    final muted = Theme.of(context).textTheme.bodySmall?.color;
+    return EsokoCard(
+      padding: const EdgeInsets.all(EsokoSpacing.s4),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Text(label, style: TextStyle(fontSize: 12, color: muted)),
+          const SizedBox(height: 2),
+          Text(
+            value,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: EsokoTypography.mono(
+              fontSize: 17,
+              fontWeight: FontWeight.w800,
+            ),
+          ),
+          if (detail != null)
+            Text(detail!, style: TextStyle(fontSize: 11, color: muted)),
         ],
       ),
     );
