@@ -138,16 +138,17 @@ void main() {
       // non-empty and the hero must render — a figure, not a spinner
       // and not nothing.
       //
-      // Deliberately not asserting an exact group count: seed runs
-      // before ensureDemoGroup existed left some dev databases with
-      // several identically-named chamas for Faith (CreateOwnGroup
-      // mints a fresh Organisation per call). The seed no longer adds
-      // to that, but an existing local DB still carries them, and the
-      // hero is correct either way — it sums whatever the server
-      // returns.
+      // Exactly one group, which doubles as a canary for the seed bug
+      // this uncovered: before ensureDemoGroup, every `go run
+      // ./cmd/seed` gave Faith another identically-named chama
+      // (CreateOwnGroup mints a fresh Organisation per call), and a
+      // dev database that had been seeded five times showed five. If
+      // this assertion starts reporting more than one group, the seed
+      // has regressed to duplicating rather than reusing — re-seeding
+      // will not fix it, the extra rows have to go.
       expect(find.text('Across your groups'), findsOneWidget);
       expect(find.textContaining('KES '), findsWidgets);
-      expect(find.textContaining('group'), findsWidgets);
+      expect(find.text('1 group'), findsOneWidget);
       // GroupSummary.displayName prefers knownAs over officialName,
       // so the tiles read "Kilimani Chama", not the registered name.
       expect(find.text('Kilimani Chama'), findsWidgets);
