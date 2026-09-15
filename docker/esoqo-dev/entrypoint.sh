@@ -1,5 +1,5 @@
 #!/bin/sh
-# esoko-dev entrypoint — installs deps only when actually needed, then
+# esoqo-dev entrypoint — installs deps only when actually needed, then
 # hands off to `pnpm dev`.
 #
 # Why this exists: docker-compose.yml bind-mounts the whole repo into
