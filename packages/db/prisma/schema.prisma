@@ -3287,6 +3287,16 @@ model Parcel {
   /// dispute is the customer's word against the courier's.
   intakePhotoUrl String?
   intakePhotoAt  DateTime?
+
+  /// Staff physically confirming custody — separate from booking
+  /// itself, which only ever describes a parcel nobody has necessarily
+  /// touched yet (a self-service form submission, or a clerk typing a
+  /// walk-in's details before the box is even on the counter). Gates
+  /// the sender/receiver SMS: neither hears anything until this is
+  /// set. Timestamp plus a person, same "who and when" reasoning
+  /// contentsDeclaredAt already follows here.
+  intakeConfirmedAt        DateTime?
+  intakeConfirmedByStaffId String?   @db.Uuid
   /// Copied from the matched ParcelPricingRule at booking time so a
   /// later admin price-rule edit never reshuffles an in-flight parcel.
   transportMode ParcelTransportMode?

@@ -142,22 +142,43 @@ func (s *Server) handleBookParcel(c *gin.Context) {
 	// it themselves. It also now reaches the receiver automatically by
 	// SMS at pickup (see notify.ParcelInTransitToYou), but showing it
 	// here lets the sender relay it proactively too.
+	// No SMS here, even for PayAtCounter landing straight in BOOKED —
+	// see dbx.ConfirmParcelIntake's own comment. Submitting the form,
+	// whether a sender does it themselves or a clerk types a walk-in's
+	// details in, doesn't prove anyone has the box in hand yet; only a
+	// staff member explicitly confirming intake does, and only that
+	// moment texts either party.
 	status := "DRAFT_PENDING_PAYMENT"
 	if req.PayAtCounter {
-		// dbx.BookParcel lands this straight in BOOKED (see
-		// BookParcelInput.PayAtCounter) — a counter booking is already
-		// physically in the building with nothing left to price or pay
-		// online, so waiting for a later status change to say anything
-		// would leave both parties hearing nothing about a parcel that's
-		// already checked in and ready to move. Not sendParcelPaymentConfirmedSms:
-		// that helper no-ops without a priceKes, which PayAtCounter never sets.
 		status = "BOOKED"
-		_ = authsvc.SendSms(req.SenderMsisdn,
-			notify.ParcelCounterBooked(code, req.ReceiverName, req.DestinationLabel), "PARCEL_COUNTER_BOOKED")
-		_ = authsvc.SendSms(req.ReceiverMsisdn,
-			notify.ParcelBookedToYou(code, req.SenderName, req.OriginLabel), "PARCEL_BOOKED_TO_YOU")
 	}
 	c.JSON(http.StatusOK, gin.H{"parcelId": parcelID, "code": code, "deliveryCode": deliveryCode, "status": status})
+}
+
+// handleConfirmParcelIntake — POST /v1/parcels/:code/confirm-intake.
+// Staff-only: the clerk/handler's explicit "the box is physically
+// here" moment (see dbx.ConfirmParcelIntake's own comment on why this
+// is separate from booking). This is the only thing that sends the
+// sender and receiver their first SMS about this parcel.
+func (s *Server) handleConfirmParcelIntake(c *gin.Context) {
+	ctx := ctxFromGin(c)
+	if !authsvc.Can(ctx, "parcels.assign", nil) {
+		writeError(c, http.StatusForbidden, "FORBIDDEN", "Not permitted to confirm parcel intake")
+		return
+	}
+	code := c.Param("code")
+	result, err := dbx.ConfirmParcelIntake(c.Request.Context(), s.Pool, code, ctx.ActorID)
+	if err != nil {
+		writeParcelError(c, err)
+		return
+	}
+	_ = authsvc.SendSms(result.SenderMsisdn,
+		notify.ParcelIntakeConfirmed(code, result.CarrierOrgName, result.OriginLabel, result.ReceiverName, result.ReceiverMsisdn),
+		"PARCEL_INTAKE_CONFIRMED")
+	_ = authsvc.SendSms(result.ReceiverMsisdn,
+		notify.ParcelIntakeConfirmedToReceiver(code, result.SenderName, result.CarrierOrgName),
+		"PARCEL_INTAKE_CONFIRMED_TO_RECEIVER")
+	c.JSON(http.StatusOK, gin.H{"ok": true})
 }
 
 // handleGetParcelPricing — GET /v1/parcels/pricing?parcelType=. Public

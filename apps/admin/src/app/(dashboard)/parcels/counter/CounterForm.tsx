@@ -7,8 +7,8 @@ import { Icon } from '@esoqo/ui';
 import { useAnnounce } from '@esoqo/a11y';
 import { extractParcelCode } from '@esoqo/domain';
 import {
-  actionAttachParcelLabelInfo, actionCounterBookParcel, actionGetParcelLabelInfo,
-  actionSearchCounterParties,
+  actionAttachParcelLabelInfo, actionConfirmParcelIntake, actionCounterBookParcel,
+  actionGetParcelLabelInfo, actionSearchCounterParties,
   type CounterBookingInput, type CounterParty,
   type ParcelLabelInfoInput, type ParcelPricingOption,
 } from '../actions';
@@ -56,6 +56,9 @@ export function CounterForm({
   const [error, setError] = useState<string | null>(null);
   const [done, setDone] = useState<{ code: string; kind: 'booked' | 'held' | 'queued' } | null>(null);
   const [busy, setBusy] = useState(false);
+  const [intakeConfirmed, setIntakeConfirmed] = useState(false);
+  const [confirmingIntake, setConfirmingIntake] = useState(false);
+  const [confirmError, setConfirmError] = useState<string | null>(null);
 
   const [senderName, setSenderName] = useState('');
   const [senderMsisdn, setSenderMsisdn] = useState('');
@@ -187,6 +190,8 @@ export function CounterForm({
       setBusy(false);
       if (!res.ok) { setError(res.error); return; }
       setDone({ code: res.code, kind: 'booked' });
+      setIntakeConfirmed(false);
+      setConfirmError(null);
       announce(`Booked ${res.code}`, 'assertive');
     }).catch(async () => {
       // The network went away mid-submit. A counter cannot answer that
@@ -222,11 +227,35 @@ export function CounterForm({
         </p>
         <p className="sub" style={{ margin: 0 }}>
           {done.kind === 'booked'
-            ? 'Booked and checked in — sender and receiver have been texted.'
+            ? intakeConfirmed
+              ? 'Confirmed — sender and receiver have been texted.'
+              : 'Booked. Nobody has been texted yet — confirm the box is actually here to notify sender and receiver.'
             : done.kind === 'queued'
               ? 'No connection. This will be sent automatically the moment you are back online — the label is already on the box, so nothing is lost.'
               : 'No booking yet — anyone who scans this code now sees what it is.'}
         </p>
+        {done.kind === 'booked' && !intakeConfirmed && (
+          <div style={{ marginTop: 12 }}>
+            <button
+              type="button"
+              className="btn btn-p btn-sm"
+              disabled={confirmingIntake}
+              onClick={() => {
+                setConfirmingIntake(true);
+                setConfirmError(null);
+                void actionConfirmParcelIntake(done.code).then((res) => {
+                  setConfirmingIntake(false);
+                  if (!res.ok) { setConfirmError(res.error); return; }
+                  setIntakeConfirmed(true);
+                  announce('Confirmed received — sender and receiver texted', 'assertive');
+                });
+              }}
+            >
+              {confirmingIntake ? 'Confirming…' : 'Confirm the box is here'}
+            </button>
+            {confirmError && <p className="sub" style={{ color: 'var(--red)', margin: '6px 0 0' }}>{confirmError}</p>}
+          </div>
+        )}
         <div style={{ display: 'flex', gap: 8, justifyContent: 'center', marginTop: 16, flexWrap: 'wrap' }}>
           {/* The counter's real loop is one customer after another, so
               the prominent action is "next", not "go look at what you

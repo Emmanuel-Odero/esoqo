@@ -6,6 +6,7 @@ import { useAnnounce } from '@esoqo/a11y';
 import {
   actionAssignParcelCollector, actionSearchCollectors, actionCancelParcel, actionMarkParcelRefunded,
   actionGetParcelHandoffs, actionFlagParcelException, actionClearParcelException, actionUpdateParcelDetails,
+  actionConfirmParcelIntake,
   type CollectorLite, type HandoffRow,
 } from './actions';
 import type { AdminParcelRow } from './ParcelsTable';
@@ -88,6 +89,9 @@ export function ParcelDetailModal({
           {canManage && (
             <>
               <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', margin: '18px 0' }}>
+                {canAssign && parcel.Status === 'BOOKED' && !parcel.IntakeConfirmedAt && (
+                  <ConfirmIntakeButton code={parcel.Code} />
+                )}
                 {canEdit && EDITABLE.has(parcel.Status) && (
                   <button className="btn btn-o btn-sm" onClick={() => setPanel(panel === 'edit' ? null : 'edit')}>
                     Edit details
@@ -481,6 +485,25 @@ function FlagPanel({ parcelId, onDone }: { parcelId: string; onDone: () => void 
       </button>
       <ActionError error={error} />
     </Panel>
+  );
+}
+
+function ConfirmIntakeButton({ code }: { code: string }) {
+  const [pending, startTransition] = useTransition();
+  const [error, setError] = useState<string | null>(null);
+  const announce = useAnnounce();
+  return (
+    <span>
+      <button className="btn btn-p btn-sm" disabled={pending}
+        onClick={() => startTransition(async () => {
+          const result = await actionConfirmParcelIntake(code);
+          if (!result.ok) setError(result.error);
+          else announce('Confirmed received — sender and receiver texted', 'assertive');
+        })}>
+        <Icon name="check-circle" size={13} />{pending ? 'Confirming…' : 'Confirm received'}
+      </button>
+      <ActionError error={error} />
+    </span>
   );
 }
 

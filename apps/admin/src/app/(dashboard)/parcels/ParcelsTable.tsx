@@ -33,6 +33,10 @@ export interface AdminParcelRow {
   // All null on an Esoqo-operated parcel — see Parcel.parcelOrgId.
   ParcelOrgID: string | null; ParcelOrgName: string | null;
   PlatformFeeKes: string | null; OrgEarningsKes: string | null;
+  // Null until staff explicitly confirms physical custody — gates the
+  // sender/receiver SMS, and this row's own "Confirm received" action.
+  // See dbx.ConfirmParcelIntake.
+  IntakeConfirmedAt: string | null;
 }
 
 const FLAGGABLE = new Set(['PICKED_UP', 'IN_TRANSIT']);

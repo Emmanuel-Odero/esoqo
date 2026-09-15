@@ -30,6 +30,24 @@ export async function actionSearchCollectors(q: string): Promise<CollectorLite[]
   return collectors ?? [];
 }
 
+/**
+ * A clerk/handler's explicit "the box is physically here" moment —
+ * the gate on the sender's and receiver's very first SMS about this
+ * parcel. Booking it (self-service or a clerk typing a walk-in's
+ * details in) never sends anything on its own; only this does. See
+ * dbx.ConfirmParcelIntake's own comment for why.
+ */
+export async function actionConfirmParcelIntake(code: string): Promise<Result> {
+  try {
+    await requireStaff();
+    await adminGo(`/v1/parcels/${code}/confirm-intake`, { method: 'POST' });
+    revalidatePath('/parcels');
+    return { ok: true };
+  } catch (e) {
+    return { ok: false, error: e instanceof Error ? e.message : 'Could not confirm that parcel was received' };
+  }
+}
+
 export async function actionAssignParcelCollector(
   parcelId: string,
   input: { collectorPartyId: string; scheduledAt: string; note?: string },
