@@ -1,7 +1,7 @@
 'use client';
 
 import type { RefObject } from 'react';
-import { Icon } from '@esoko/ui';
+import { Icon } from '@esoqo/ui';
 import type { Form } from '../form';
 
 /** Step 4 — the only screen with anything genuinely required: confirm the
@@ -161,7 +161,7 @@ export function Finish({
       </div>
 
       <fieldset className="optin" style={{ border: '1px solid var(--line)' }}>
-        <legend className="h4"><Icon name="message" size={13} /> What should Esoko send you?</legend>
+        <legend className="h4"><Icon name="message" size={13} /> What should Esoqo send you?</legend>
         <label>
           <input type="checkbox" checked={f.wantsPriceSms}
             onChange={(e) => set('wantsPriceSms', e.target.checked)} />
@@ -185,7 +185,7 @@ export function Finish({
       </fieldset>
 
       <p className="hint">
-        By joining you agree to Esoko&rsquo;s terms of membership and privacy notice.
+        By joining you agree to Esoqo&rsquo;s terms of membership and privacy notice.
         Nothing about you goes to a bank, buyer or agency unless you allow it, each time.
       </p>
     </>

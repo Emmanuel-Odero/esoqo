@@ -4,8 +4,8 @@ import { useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import type { Route } from 'next';
-import { Icon, type IconName } from '@esoko/ui';
-import { useAnnounce } from '@esoko/a11y';
+import { Icon, type IconName } from '@esoqo/ui';
+import { useAnnounce } from '@esoqo/a11y';
 
 export interface NavItem {
   href: Route;
@@ -104,10 +104,14 @@ export function ShellNav({ items, more }: { items: NavItem[]; more: NavItem[] })
               </Link>
             ))}
             <div className="sheet-sep" role="separator" />
-            <a href="/signout" className="sheet-row danger">
-              <span className="icbox"><Icon name="close" size={17} /></span>
-              <span>Sign out</span>
-            </a>
+            {/* A form, not a link: signing out changes state, so it must
+                not be reachable by GET (see the route's own comment). */}
+            <form action="/signout" method="post">
+              <button type="submit" className="sheet-row danger">
+                <span className="icbox"><Icon name="close" size={17} /></span>
+                <span>Sign out</span>
+              </button>
+            </form>
             <p className="hint" style={{ margin: '14px 6px 0' }}>
               Signed out devices stop seeing your record immediately. Your PIN never leaves your
               handset.

@@ -1,12 +1,12 @@
-import { Icon } from '@esoko/ui';
+import { Icon } from '@esoqo/ui';
 
 /**
  * Closing band — one honest pointer for the minority of visitors who
  * meant to register a community group or MSME with CECF, not open an
- * Esoko account directly. Replaces the old CecfPartnershipBand, which
+ * Esoqo account directly. Replaces the old CecfPartnershipBand, which
  * fetched CECF's live logo and framed this page as CECF's own front
  * door — no longer true now that CECF runs its own registration at
- * childeldercare.test and this page is esoko's.
+ * childeldercare.test and this page is esoqo's.
  */
 export function JoinCecfCrossLink() {
   const cecfUrl = process.env.NEXT_PUBLIC_CECF_URL || 'http://childeldercare.test';
@@ -20,7 +20,7 @@ export function JoinCecfCrossLink() {
           <p>
             The Child &amp; Elder Care Foundation runs its own registration for chamas,
             self-help groups, CBOs and MSMEs, on their own site — free, and separate
-            from an Esoko account.
+            from an Esoqo account.
           </p>
           <a className="join-nav-btn cecf" href={cecfUrl} target="_blank" rel="noopener noreferrer">
             Visit CECF <Icon name="chevron-right" size={14} />

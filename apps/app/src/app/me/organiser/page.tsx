@@ -1,8 +1,8 @@
 import Link from 'next/link';
 import { cookies } from 'next/headers';
-import { Icon } from '@esoko/ui';
-import { getMyRecord } from '@esoko/db';
-import { SESSION_COOKIE } from '@esoko/auth';
+import { Icon } from '@esoqo/ui';
+import { getMyRecord } from '@esoqo/db';
+import { SESSION_COOKIE } from '@esoqo/auth';
 import { requireSubject } from '@/lib/session';
 import { goUrl } from '@/lib/ticketing';
 import { CreateOrgForm } from './CreateOrgForm';
@@ -43,7 +43,7 @@ export default async function MyOrganiser() {
     <>
       <div className="mehead">
         <h1>Sell tickets</h1>
-        <p>Run an event company, tour operator, or transport company on Esoko.</p>
+        <p>Run an event company, tour operator, or transport company on Esoqo.</p>
       </div>
 
       {orgs.length > 0 && (

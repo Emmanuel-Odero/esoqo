@@ -4,7 +4,8 @@ import { useState, useTransition } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import type { Route } from 'next';
 import Link from 'next/link';
-import { Icon } from '@esoko/ui';
+import { Icon } from '@esoqo/ui';
+import { safeRedirect } from '@esoqo/domain';
 import { actionSignIn } from './actions';
 
 export function SignInForm() {
@@ -21,7 +22,11 @@ export function SignInForm() {
     startTransition(async () => {
       const result = await actionSignIn({ identifier, pin });
       if (!result.ok) { setError(result.error); setField(result.field); return; }
-      const next = params.get('next') || result.data.next;
+      // safeRedirect confines this to in-app paths and origins we
+      // publish. Without it, `next` is an arbitrary URL navigated to
+      // immediately after a genuine PIN entry — the setup for a
+      // convincing "confirm your PIN" page on an attacker's host.
+      const next = safeRedirect(params.get('next') || result.data.next, window.location.origin);
       // `next` can point off this origin now that ticket booking
       // (apps/web:3000) sends buyers here to sign in and back —
       // router.push tries an RSC soft-navigation first, which the
@@ -54,7 +59,7 @@ export function SignInForm() {
           autoComplete="current-password" value={pin} onChange={(e) => setPin(e.target.value)}
           aria-invalid={field === 'pin'}
         />
-        <p className="hint">Four to six digits. Esoko will never ask you for this by call or SMS.</p>
+        <p className="hint">Four to six digits. Esoqo will never ask you for this by call or SMS.</p>
       </div>
 
       {error && (

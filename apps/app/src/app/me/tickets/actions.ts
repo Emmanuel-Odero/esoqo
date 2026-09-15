@@ -1,7 +1,8 @@
 'use server';
 import { revalidatePath } from 'next/cache';
 import { cookies } from 'next/headers';
-import { SESSION_COOKIE } from '@esoko/auth';
+import { SESSION_COOKIE } from '@esoqo/auth';
+import { payBookingBalanceSchema } from '@esoqo/domain';
 import { requireSubject } from '@/lib/session';
 import { goUrl } from '@/lib/ticketing';
 
@@ -49,12 +50,18 @@ export async function actionRetryBookingPayment(bookingId: string) {
 
 /** Pays a portion (or the balance) of an open "lipia pole pole" plan
  *  from My tickets via core-go (POST /v1/bookings/:id/balance). */
-export async function actionPayBookingBalance(bookingId: string, amountKes: number) {
+export async function actionPayBookingBalance(bookingId: unknown, amountKes: unknown) {
+  // unknown, not string/number: the annotations are compile-time only
+  // and this is a public endpoint. payBookingBalanceSchema already
+  // existed for exactly this shape — it was simply never applied here,
+  // so both the amount and the booking id arrived unchecked.
+  const parsed = payBookingBalanceSchema.safeParse({ bookingId, amountKes });
+  if (!parsed.success) return { ok: false as const, error: parsed.error.issues[0]?.message ?? 'Check the amount.' };
   try {
     await requireSubject();
     const res = await authedGo<{ status: string; paymentError?: string }>(
-      `/v1/bookings/${bookingId}/balance`,
-      { amountKes },
+      `/v1/bookings/${parsed.data.bookingId}/balance`,
+      { amountKes: parsed.data.amountKes },
     );
     if (res.paymentError) return { ok: false as const, error: FALLBACK };
     revalidatePath('/me/tickets');

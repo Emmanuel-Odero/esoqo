@@ -7,9 +7,9 @@ import { JoinCecfCrossLink } from './JoinCecfCrossLink';
 import './join.css';
 
 export const metadata: Metadata = {
-  title: 'Join Esoko',
+  title: 'Join Esoqo',
   description:
-    'Bring your group, MSME or yourself onto Esoko, free — market prices, payments and receipts, and a record you can trade with.',
+    'Bring your group, MSME or yourself onto Esoqo, free — market prices, payments and receipts, and a record you can trade with.',
 };
 
 export default function JoinPage() {
@@ -29,7 +29,7 @@ export default function JoinPage() {
                 Tell us about yourself
               </h2>
               <p style={{ color: 'var(--jn-ink-2)', margin: '4px 0 0' }}>
-                Five questions, no documents. Your record flows straight into Esoko&rsquo;s tools.
+                Five questions, no documents. Your record flows straight into Esoqo&rsquo;s tools.
               </p>
             </div>
           </div>

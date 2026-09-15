@@ -1,5 +1,5 @@
 {
-  "name": "@esoko/app",
+  "name": "@esoqo/app",
   "version": "0.1.0",
   "private": true,
   "scripts": {
@@ -14,17 +14,17 @@
     "next": "^16.2.7",
     "react": "^19.2.0",
     "react-dom": "^19.2.0",
-    "@esoko/db": "workspace:*",
-    "@esoko/domain": "workspace:*",
-    "@esoko/auth": "workspace:*",
-    "@esoko/payments": "workspace:*",
-    "@esoko/ui": "workspace:*",
-    "@esoko/a11y": "workspace:*",
+    "@esoqo/db": "workspace:*",
+    "@esoqo/domain": "workspace:*",
+    "@esoqo/auth": "workspace:*",
+    "@esoqo/payments": "workspace:*",
+    "@esoqo/ui": "workspace:*",
+    "@esoqo/a11y": "workspace:*",
     "server-only": "^0.0.1",
     "zod": "^3.24.1"
   },
   "devDependencies": {
-    "@esoko/config": "workspace:*",
+    "@esoqo/config": "workspace:*",
     "typescript": "^5.7.2",
     "@types/react": "^19.0.2",
     "@types/node": "^22.10.2",

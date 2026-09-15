@@ -2,7 +2,7 @@
 const nextConfig = {
   reactStrictMode: true,
   poweredByHeader: false,
-  transpilePackages: ['@esoko/ui', '@esoko/a11y', '@esoko/domain'],
+  transpilePackages: ['@esoqo/ui', '@esoqo/a11y', '@esoqo/domain'],
   typedRoutes: true,
 
   // Documents up to 10MB (packages/db/src/storage.ts MAX_BYTES) are posted

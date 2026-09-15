@@ -1,8 +1,8 @@
 'use client';
 
 import { useEffect, useState, useTransition } from 'react';
-import { Icon } from '@esoko/ui';
-import { useAnnounce } from '@esoko/a11y';
+import { Icon } from '@esoqo/ui';
+import { useAnnounce } from '@esoqo/a11y';
 import { actionSetPrefs } from './actions';
 
 type Prefs = {
@@ -82,7 +82,7 @@ export function PrefsPanel({ initial }: { initial: Prefs }) {
         </p>
         <p className="hint" style={{ margin: 0 }}>
           This paragraph uses the settings above. If it is comfortable to read here, it will be
-          comfortable everywhere in Esoko.
+          comfortable everywhere in Esoqo.
         </p>
       </div>
     </>

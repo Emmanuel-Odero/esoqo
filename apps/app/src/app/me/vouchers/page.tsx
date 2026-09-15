@@ -1,5 +1,5 @@
 import { cookies } from 'next/headers';
-import { SESSION_COOKIE } from '@esoko/auth';
+import { SESSION_COOKIE } from '@esoqo/auth';
 import { goFetch } from '@/lib/ticketing';
 import { VoucherClient } from './VoucherClient';
 
@@ -7,7 +7,9 @@ export const dynamic = 'force-dynamic';
 
 type Voucher = {
   id: string; label: string; purpose: string; status: string;
-  shortCode: string; qrPayload: string; balancePoints: number; balanceKes: number;
+  shortCode: string; qrPayload: string; balancePoints: number;
+  // Decimal string from core-go — see @esoqo/domain's money module.
+  balanceKes: string;
 };
 
 async function load(token: string) {

@@ -1,8 +1,8 @@
 'use server';
 import { revalidatePath } from 'next/cache';
 import { cookies } from 'next/headers';
-import { createTicketOrgSchema } from '@esoko/domain';
-import { SESSION_COOKIE } from '@esoko/auth';
+import { createTicketOrgSchema } from '@esoqo/domain';
+import { SESSION_COOKIE } from '@esoqo/auth';
 import { requireSubject } from '@/lib/session';
 import { goUrl } from '@/lib/ticketing';
 

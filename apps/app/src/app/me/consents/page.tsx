@@ -1,4 +1,4 @@
-import { listMyConsents } from '@esoko/db';
+import { listMyConsents } from '@esoqo/db';
 import { requireSubject } from '@/lib/session';
 import { ConsentList } from './ConsentList';
 

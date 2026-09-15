@@ -1,5 +1,5 @@
-import { Icon } from '@esoko/ui';
-import { getMyRecord, PAYMENT_APPROVAL_THRESHOLD } from '@esoko/db';
+import { Icon } from '@esoqo/ui';
+import { getMyRecord, PAYMENT_APPROVAL_THRESHOLD } from '@esoqo/db';
 import { requireSubject } from '@/lib/session';
 
 export const dynamic = 'force-dynamic';
@@ -28,7 +28,7 @@ export default async function MyPayments() {
             <span className="ico"><Icon name="coins" size={22} /></span>
             <h2 style={{ marginBottom: 7 }}>Nothing recorded</h2>
             <p style={{ margin: 0 }}>
-              You have not told Esoko about a payment. Nothing is blocked — you can pay whenever
+              You have not told Esoqo about a payment. Nothing is blocked — you can pay whenever
               you are ready and enter the code then.
             </p>
           </div>
@@ -84,7 +84,7 @@ export default async function MyPayments() {
           <div className="note n-red" style={{ marginTop: 14 }}>
             <div>
               <p>
-                Esoko could not match this reference to a payment. That is often a mistyped code
+                Esoqo could not match this reference to a payment. That is often a mistyped code
                 rather than anything wrong. Call <strong className="mono">0709 000 000</strong> and
                 someone will check it with you.
               </p>

@@ -1,7 +1,7 @@
 'use client';
 import { useState, useTransition } from 'react';
-import { Icon, SelectWithOther, isSelectWithOtherComplete } from '@esoko/ui';
-import { useAnnounce } from '@esoko/a11y';
+import { Icon, SelectWithOther, isSelectWithOtherComplete } from '@esoqo/ui';
+import { useAnnounce } from '@esoqo/a11y';
 import { actionInviteMember, actionSetMemberRole, actionRemoveMember } from '../actions';
 
 export interface MemberRow {
@@ -70,13 +70,13 @@ function InviteForm({ orgId }: { orgId: string }) {
           <label className="lab" htmlFor="inv-email">Email address</label>
           <input className="inp" id="inv-email" type="email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="jane@example.com" />
           <p className="hint">
-            Esoko accounts sign in with a phone number — they'll need one added before they can
+            Esoqo accounts sign in with a phone number — they'll need one added before they can
             actually sign in. This just gets word to them in the meantime.
           </p>
         </div>
       )}
       <div className="fld">
-        <label className="lab" htmlFor="inv-name">Name (only needed if they're new to Esoko)</label>
+        <label className="lab" htmlFor="inv-name">Name (only needed if they're new to Esoqo)</label>
         <input className="inp" id="inv-name" value={officialName} onChange={(e) => setOfficialName(e.target.value)} placeholder="Jane Wanjiru" />
       </div>
       <SelectWithOther

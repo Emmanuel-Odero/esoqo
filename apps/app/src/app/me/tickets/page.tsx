@@ -1,6 +1,6 @@
 import { cookies } from 'next/headers';
-import { Icon } from '@esoko/ui';
-import { SESSION_COOKIE } from '@esoko/auth';
+import { Icon } from '@esoqo/ui';
+import { SESSION_COOKIE } from '@esoqo/auth';
 import { requireSubject } from '@/lib/session';
 import { goUrl, type GoMyBooking } from '@/lib/ticketing';
 import { RetryPaymentButton } from './RetryPaymentButton';
