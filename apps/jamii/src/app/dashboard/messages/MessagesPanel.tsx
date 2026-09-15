@@ -2,7 +2,7 @@
 
 import { useState, useTransition } from 'react';
 import { useRouter } from 'next/navigation';
-import type { listJamiiContactMessages } from '@esoko/db';
+import type { listJamiiContactMessages } from '@esoqo/db';
 import { actionMarkMessageRead, actionArchiveMessage } from '../actions';
 
 type Message = Awaited<ReturnType<typeof listJamiiContactMessages>>[number];

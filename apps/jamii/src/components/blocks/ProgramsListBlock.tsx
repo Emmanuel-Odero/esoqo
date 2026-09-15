@@ -1,4 +1,4 @@
-import { Icon, type IconName } from '@esoko/ui';
+import { Icon, type IconName } from '@esoqo/ui';
 import { RichText } from '../RichText';
 import type { BlockProps } from './types';
 

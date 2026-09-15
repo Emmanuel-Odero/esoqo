@@ -1,5 +1,5 @@
 import Link from 'next/link';
-import { listActiveMediaAssets } from '@esoko/db';
+import { listActiveMediaAssets } from '@esoqo/db';
 import { OrgSectionShell, loadOrgOr404 } from '@/components/OrgSectionShell';
 import { getOrgLinkMode, orgHref } from '@/lib/org-links';
 import { MediaPlaceholder } from '@/components/placeholders/patterns';

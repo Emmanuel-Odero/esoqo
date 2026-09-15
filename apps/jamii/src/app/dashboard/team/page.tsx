@@ -1,4 +1,4 @@
-import { listTeamMembers } from '@esoko/db';
+import { listTeamMembers } from '@esoqo/db';
 import { requireMyPage } from '@/lib/session';
 import { TeamPanel } from './TeamPanel';
 

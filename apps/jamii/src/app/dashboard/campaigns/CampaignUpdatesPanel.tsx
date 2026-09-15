@@ -61,7 +61,7 @@ export function CampaignUpdatesPanel({
             <div key={u.id} style={{ marginBottom: 14, paddingBottom: 14, borderBottom: '1px dashed var(--paper-line)' }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', gap: 10 }}>
                 <b>{u.title}</b>
-                <span style={{ fontSize: '.72rem', color: '#8a8368', fontFamily: 'ui-monospace, monospace' }}>
+                <span style={{ fontSize: '.72rem', color: '#8a8368', fontFamily: 'var(--font-mono)' }}>
                   {u.postedAt.toLocaleDateString('en-KE', { day: '2-digit', month: 'short', year: 'numeric' })}
                 </span>
               </div>

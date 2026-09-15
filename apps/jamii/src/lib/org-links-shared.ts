@@ -3,7 +3,7 @@ import type { Route } from 'next';
 /**
  * Pure, DB-free — safe for Client Components (OrgTopNav) to import
  * directly. Kept here rather than in lib/data.ts because that module
- * pulls in @esoko/db, which drags Node-only code (storage.ts's
+ * pulls in @esoqo/db, which drags Node-only code (storage.ts's
  * node:fs) into the client bundle the moment anything imports from it
  * client-side.
  */
@@ -65,7 +65,7 @@ export function orgHref(mode: OrgLinkMode, path = ''): Route {
  * middleware.ts only ever rewrites a custom-domain request into
  * /o/{slug}/... — routes outside that tree (/dashboard, /signin, /start,
  * ...) simply 404 there on purpose, so a visitor on a group's own
- * domain can never wander onto Esoko's own sign-in or another org's
+ * domain can never wander onto Esoqo's own sign-in or another org's
  * dashboard by guessing a path. Anything that must cross back to those
  * routes (e.g. "Manage this page") needs a real absolute link to the
  * primary domain instead of a root-relative one.
@@ -80,7 +80,7 @@ export function crossToPrimaryHref(mode: OrgLinkMode, path: string): string {
 }
 
 /**
- * The shape listJamiiNavItemsPublic (@esoko/db) resolves — just enough
+ * The shape listJamiiNavItemsPublic (@esoqo/db) resolves — just enough
  * to render a link, no Prisma types crossing into these Client
  * Components. "Home" is never one of these; see JamiiNavItem's own
  * doc comment and resolveNavLinks below.

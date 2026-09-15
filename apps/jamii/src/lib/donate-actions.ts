@@ -3,10 +3,10 @@
 import {
   createDonation, attachDonationCheckoutRequestId, confirmDonationPayment, getDonation,
   type ConfirmDonationResult,
-} from '@esoko/db';
-import { donateSchema, donorThankYouSms, adminDonationAlertSms } from '@esoko/domain';
-import { initiateStkPush, MpesaError } from '@esoko/payments';
-import { sendSms } from '@esoko/auth/sms';
+} from '@esoqo/db';
+import { donateSchema, donorThankYouSms, adminDonationAlertSms } from '@esoqo/domain';
+import { initiateStkPush, MpesaError } from '@esoqo/payments';
+import { sendSms } from '@esoqo/auth/sms';
 import { getCtx } from '@/lib/session';
 
 export type ActionResult<T> = { ok: true; data: T } | { ok: false; error: string };

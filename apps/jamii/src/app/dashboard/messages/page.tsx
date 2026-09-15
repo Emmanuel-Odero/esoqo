@@ -1,4 +1,4 @@
-import { listJamiiContactMessages } from '@esoko/db';
+import { listJamiiContactMessages } from '@esoqo/db';
 import { requireMyPage } from '@/lib/session';
 import { MessagesPanel } from './MessagesPanel';
 

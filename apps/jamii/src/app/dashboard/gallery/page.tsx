@@ -1,4 +1,4 @@
-import { getJamiiPageForManagement } from '@esoko/db';
+import { getJamiiPageForManagement } from '@esoqo/db';
 import { requireMyPage } from '@/lib/session';
 import { GalleryManager } from './GalleryManager';
 

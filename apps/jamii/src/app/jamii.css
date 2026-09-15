@@ -24,12 +24,19 @@
      the primary domain's own placeholders (e.g. an empty Gallery) use
      CECF's own stamp red, same as everything else there. */
   --wl-accent: var(--stamp);
+  /* next/font declares these on <html> (layout.tsx); remap the semantic
+     tokens onto them so the primary domain uses the brand type. The
+     whitelabel override (custom-domain pages) re-declares these same
+     variables on .wl-theme, which still wins where it applies. */
+  --font-body: var(--font-plex-sans), system-ui, -apple-system, sans-serif;
+  --font-display: var(--font-outfit), system-ui, sans-serif;
+  --font-mono: var(--font-plex-mono), ui-monospace, SFMono-Regular, monospace;
 }
 * { box-sizing: border-box }
 html { scroll-behavior: smooth }
 body {
   margin: 0; background: var(--paper); color: var(--ink-text);
-  font-family: system-ui, -apple-system, 'Segoe UI', sans-serif;
+  font-family: var(--font-body);
   -webkit-font-smoothing: antialiased;
 }
 @media (prefers-reduced-motion: reduce) {
@@ -37,7 +44,7 @@ body {
   * { animation-duration: .001ms !important; transition-duration: .001ms !important }
 }
 h1, h2, h3, h4 { font-weight: 800; letter-spacing: .1px; line-height: 1.1; margin: 0 }
-.mono { font-family: ui-monospace, 'SFMono-Regular', Menlo, monospace; font-variant-numeric: tabular-nums }
+.mono { font-family: var(--font-mono); font-variant-numeric: tabular-nums }
 a { color: inherit; text-decoration: none }
 button { font-family: inherit; cursor: pointer }
 :focus-visible { outline: 3px solid var(--marigold); outline-offset: 2px }
@@ -70,9 +77,9 @@ header.topnav { position: sticky; top: 0; z-index: 40; background: var(--ink); c
 
 /* ── cards / pills / kicker ──────────────────────────────── */
 .card { background: var(--paper-lt); border: 1.5px solid var(--ink); border-radius: var(--radius); box-shadow: var(--shadow-sm) }
-.kick { display: inline-flex; align-items: center; gap: 7px; font-family: ui-monospace, monospace; font-size: .75rem; letter-spacing: 1.5px; text-transform: uppercase; color: var(--stamp); font-weight: 700 }
+.kick { display: inline-flex; align-items: center; gap: 7px; font-family: var(--font-mono); font-size: .75rem; letter-spacing: 1.5px; text-transform: uppercase; color: var(--stamp); font-weight: 700 }
 .kick::before { content: ""; width: 16px; height: 2px; background: var(--stamp) }
-.pill { display: inline-block; padding: 4px 11px; border-radius: 100px; font-size: .75rem; font-weight: 700; font-family: ui-monospace, monospace }
+.pill { display: inline-block; padding: 4px 11px; border-radius: 100px; font-size: .75rem; font-weight: 700; font-family: var(--font-mono) }
 .pill-county { background: var(--ink); color: #fff }
 .pill-cause { background: #fff; border: 1.3px solid var(--ink); color: var(--ink) }
 /* Anchor variant of .pill-cause — an org's own site link, in the same
@@ -82,7 +89,7 @@ a.pill-link:hover { background: var(--ledger); color: #fff }
 /* .oh-meta already has its own flex `gap`, so the margin above would
    double up there — cancel it in that one context. */
 .oh-meta a.pill-link { margin-left: 0 }
-.stampmark { display: inline-flex; align-items: center; gap: 5px; border: 2px solid var(--stamp); border-radius: 100px; padding: 3px 10px 3px 6px; color: var(--stamp); font-family: ui-monospace, monospace; font-weight: 700; font-size: .68rem; letter-spacing: .6px; text-transform: uppercase }
+.stampmark { display: inline-flex; align-items: center; gap: 5px; border: 2px solid var(--stamp); border-radius: 100px; padding: 3px 10px 3px 6px; color: var(--stamp); font-family: var(--font-mono); font-weight: 700; font-size: .68rem; letter-spacing: .6px; text-transform: uppercase }
 
 /* ── ledger bar ──────────────────────────────────────────── */
 .ledgerbar { height: 14px; background: var(--paper-lt); border: 1.5px solid var(--ink); border-radius: 8px; overflow: hidden }
@@ -99,7 +106,7 @@ a.pill-link:hover { background: var(--ledger); color: #fff }
 .statband .wrap { display: flex; gap: 0; flex-wrap: wrap }
 .statband .st { flex: 1 1 180px; padding: 6px 22px; border-left: 1px solid rgba(255, 255, 255, .18) }
 .statband .st:first-child { border-left: 0 }
-.statband .st b { display: block; font-family: ui-monospace, monospace; font-size: 1.5rem; color: var(--marigold) }
+.statband .st b { display: block; font-family: var(--font-mono); font-size: 1.5rem; color: var(--marigold) }
 .statband .st span { font-size: .8rem; color: #B9C2D6 }
 
 /* ── discover filters + grid ─────────────────────────────── */
@@ -118,9 +125,9 @@ a.pill-link:hover { background: var(--ledger); color: #fff }
 .oc-mission { font-size: .92rem; color: #4B4636; line-height: 1.5 }
 .oc-campaign { background: var(--paper); border: 1px dashed var(--paper-line); border-radius: 10px; padding: 13px 14px }
 .oc-campaign .ocn { font-size: .82rem; font-weight: 700; color: var(--ink); margin-bottom: 8px }
-.oc-campaign .meta { display: flex; justify-content: space-between; margin-top: 7px; font-family: ui-monospace, monospace; font-size: .74rem; color: #6b6552 }
+.oc-campaign .meta { display: flex; justify-content: space-between; margin-top: 7px; font-family: var(--font-mono); font-size: .74rem; color: #6b6552 }
 .oc-foot { display: flex; justify-content: space-between; align-items: center }
-.verified-inline { display: inline-flex; align-items: center; gap: 4px; font-family: ui-monospace, monospace; font-size: .7rem; color: var(--stamp); font-weight: 700 }
+.verified-inline { display: inline-flex; align-items: center; gap: 4px; font-family: var(--font-mono); font-size: .7rem; color: var(--stamp); font-weight: 700 }
 .emptystate { padding: 60px 20px; text-align: center; color: #6b6552 }
 
 /* ── org page ────────────────────────────────────────────── */
@@ -193,9 +200,9 @@ a.pill-link:hover { background: var(--ledger); color: #fff }
 .accitem { border: 1px solid var(--paper-line); border-radius: 10px; margin-bottom: 10px; background: var(--paper-lt); overflow: hidden }
 .acchead { width: 100%; display: flex; align-items: center; gap: 12px; padding: 14px 16px; background: none; border: 0; text-align: left; color: var(--stamp) }
 .acchead .acctitle { flex: 1; font-size: .92rem; font-weight: 700; color: var(--ink) }
-.acchead .accplus { font-family: ui-monospace, monospace; color: var(--stamp); font-size: 1.05rem }
+.acchead .accplus { font-family: var(--font-mono); color: var(--stamp); font-size: 1.05rem }
 .accbody-inner { padding: 0 16px 16px; font-size: .86rem; color: #4B4636; line-height: 1.6 }
-.acc-camp .pc-row { display: flex; justify-content: space-between; font-family: ui-monospace, monospace; font-size: .78rem; color: #6b6552; margin-top: 8px }
+.acc-camp .pc-row { display: flex; justify-content: space-between; font-family: var(--font-mono); font-size: .78rem; color: #6b6552; margin-top: 8px }
 
 .gallerygrid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px }
 .gph-photo { aspect-ratio: 1; border-radius: 10px; border: 1.5px solid var(--ink); overflow: hidden; position: relative; padding: 0; background: var(--paper-lt) }
@@ -203,7 +210,7 @@ a.pill-link:hover { background: var(--ledger); color: #fff }
 
 .leadgrid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 14px }
 .leadcard { padding: 16px 14px; text-align: center }
-.leadcard .la { width: 50px; height: 50px; border-radius: 50%; margin: 0 auto 10px; background: var(--ink); color: var(--marigold); display: flex; align-items: center; justify-content: center; font-family: ui-monospace, monospace; font-weight: 700 }
+.leadcard .la { width: 50px; height: 50px; border-radius: 50%; margin: 0 auto 10px; background: var(--ink); color: var(--marigold); display: flex; align-items: center; justify-content: center; font-family: var(--font-mono); font-weight: 700 }
 .leadcard h4 { font-size: .9rem; color: var(--ink); margin-bottom: 3px }
 .leadcard span { font-size: .76rem; color: #6b6552 }
 
@@ -217,19 +224,19 @@ a.pill-link:hover { background: var(--ledger); color: #fff }
 .postcard .pc-img { height: 130px; background: var(--ink) }
 .postcard .pc-img img { width: 100%; height: 100%; object-fit: cover }
 .postcard .pc-body { padding: 14px 15px }
-.postcard .pc-date { font-family: ui-monospace, monospace; font-size: .68rem; color: var(--stamp); font-weight: 700 }
+.postcard .pc-date { font-family: var(--font-mono); font-size: .68rem; color: var(--stamp); font-weight: 700 }
 .postcard h4 { font-size: .92rem; color: var(--ink); margin: 6px 0 5px; line-height: 1.3 }
 .postcard p { margin: 0; font-size: .8rem; color: #6b6552; line-height: 1.5 }
 
 .contactlist { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 11px; font-size: .92rem }
 .contactlist li { display: flex; gap: 10px }
-.contactlist b { font-family: ui-monospace, monospace; font-size: .72rem; text-transform: uppercase; letter-spacing: .6px; color: #6b6552; width: 82px; flex: 0 0 auto }
+.contactlist b { font-family: var(--font-mono); font-size: .72rem; text-transform: uppercase; letter-spacing: .6px; color: #6b6552; width: 82px; flex: 0 0 auto }
 
 .sidebar .card { padding: 22px; margin-bottom: 18px }
 .sidebar h3 { font-size: 1rem; color: var(--ink); margin-bottom: 14px }
 .statrow { display: flex; justify-content: space-between; padding: 9px 0; border-top: 1px dashed var(--paper-line); font-size: .88rem }
 .statrow:first-of-type { border-top: 0 }
-.statrow b { font-family: ui-monospace, monospace; color: var(--ink) }
+.statrow b { font-family: var(--font-mono); color: var(--ink) }
 
 /* ── campaign ────────────────────────────────────────────── */
 .campherowrap { background: var(--ink); padding: 32px 0 0 }
@@ -244,13 +251,13 @@ a.pill-link:hover { background: var(--ledger); color: #fff }
 .camplayout { display: grid; grid-template-columns: 1.55fr .85fr; gap: 34px; padding: 32px 0 70px; align-items: start }
 .ledgerpanel { background: var(--paper-lt); border: 1.5px solid var(--ink); border-radius: var(--radius); padding: 24px; box-shadow: var(--shadow); margin-top: -90px; position: relative; z-index: 2 }
 .ledgerpanel .amt-row { display: flex; align-items: baseline; gap: 8px; flex-wrap: wrap }
-.ledgerpanel .amt-row .raised { font-family: ui-monospace, monospace; font-size: 2rem; font-weight: 800; color: var(--ledger) }
+.ledgerpanel .amt-row .raised { font-family: var(--font-mono); font-size: 2rem; font-weight: 800; color: var(--ledger) }
 .ledgerpanel .amt-row .goal { font-size: .92rem; color: #6b6552 }
 .ledgerpanel .ledgerbar { margin: 14px 0 16px }
-.ledgerpanel .lp-meta { display: flex; justify-content: space-between; font-family: ui-monospace, monospace; font-size: .8rem; color: #6b6552; margin-bottom: 18px }
+.ledgerpanel .lp-meta { display: flex; justify-content: space-between; font-family: var(--font-mono); font-size: .8rem; color: #6b6552; margin-bottom: 18px }
 
 .updatecard { padding: 18px; margin-bottom: 14px }
-.updatecard .udate { font-family: ui-monospace, monospace; font-size: .74rem; color: var(--stamp); font-weight: 700; margin-bottom: 6px }
+.updatecard .udate { font-family: var(--font-mono); font-size: .74rem; color: var(--stamp); font-weight: 700; margin-bottom: 6px }
 .updatecard h4 { font-size: .98rem; color: var(--ink); margin-bottom: 6px }
 .updatecard p { margin: 0; font-size: .9rem; color: #4B4636; line-height: 1.6 }
 
@@ -258,8 +265,8 @@ a.pill-link:hover { background: var(--ledger); color: #fff }
 .receiptwall li { display: flex; justify-content: space-between; align-items: center; padding: 12px 0; border-top: 1px dashed var(--paper-line); font-size: .87rem }
 .receiptwall li:first-child { border-top: 0 }
 .rw-who { display: flex; align-items: center; gap: 9px }
-.rw-avatar { width: 30px; height: 30px; border-radius: 50%; background: var(--ink); color: var(--marigold); font-family: ui-monospace, monospace; font-size: .68rem; font-weight: 700; display: flex; align-items: center; justify-content: center }
-.rw-amt { font-family: ui-monospace, monospace; font-weight: 700; color: var(--ledger) }
+.rw-avatar { width: 30px; height: 30px; border-radius: 50%; background: var(--ink); color: var(--marigold); font-family: var(--font-mono); font-size: .68rem; font-weight: 700; display: flex; align-items: center; justify-content: center }
+.rw-amt { font-family: var(--font-mono); font-weight: 700; color: var(--ledger) }
 .rw-time { font-size: .74rem; color: #8a8368 }
 /* A donation CampaignLiveStats' poll just found — briefly highlighted
  * so it reads as "just now", not merely a different number after a
@@ -277,7 +284,7 @@ a.pill-link:hover { background: var(--ledger); color: #fff }
 .modal h3 { font-size: 1.15rem; color: var(--ink); margin-bottom: 6px }
 .modal p.sub { font-size: .87rem; color: #6b6552; margin: 0 0 20px }
 .amtgrid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 9px; margin-bottom: 16px }
-.amtchip { padding: 12px 6px; text-align: center; border: 1.5px solid var(--ink); border-radius: 9px; font-family: ui-monospace, monospace; font-weight: 700; font-size: .9rem; background: var(--white) }
+.amtchip { padding: 12px 6px; text-align: center; border: 1.5px solid var(--ink); border-radius: 9px; font-family: var(--font-mono); font-weight: 700; font-size: .9rem; background: var(--white) }
 .amtchip[aria-pressed="true"] { background: var(--ink); color: #fff }
 .field { margin-bottom: 16px }
 .field label { display: block; font-size: .8rem; font-weight: 700; color: var(--ink); margin-bottom: 7px }
@@ -301,7 +308,7 @@ a.pill-link:hover { background: var(--ledger); color: #fff }
 .mpesabadge { display: flex; align-items: center; gap: 9px; background: var(--ledger-lt); border: 1px solid var(--ledger); border-radius: 9px; padding: 10px 13px; font-size: .8rem; color: var(--ledger); font-weight: 700; margin-bottom: 18px }
 .spinner { width: 40px; height: 40px; border-radius: 50%; border: 4px solid var(--paper-line); border-top-color: var(--stamp); margin: 8px auto 18px; animation: jamii-spin 1s linear infinite }
 @keyframes jamii-spin { to { transform: rotate(360deg) } }
-.receiptbox { background: var(--white); border: 1.5px dashed var(--paper-line); border-radius: 10px; padding: 16px; text-align: left; font-family: ui-monospace, monospace; font-size: .82rem; color: #4B4636; margin-bottom: 18px }
+.receiptbox { background: var(--white); border: 1.5px dashed var(--paper-line); border-radius: 10px; padding: 16px; text-align: left; font-family: var(--font-mono); font-size: .82rem; color: #4B4636; margin-bottom: 18px }
 .receiptbox .rline { display: flex; justify-content: space-between; padding: 5px 0 }
 .receiptbox .rline.total { border-top: 1.5px dashed var(--paper-line); margin-top: 6px; padding-top: 10px; font-weight: 700; color: var(--ink) }
 .successwrap { text-align: center }
@@ -317,7 +324,7 @@ a.pill-link:hover { background: var(--ledger); color: #fff }
 .radiogroup { display: grid; grid-template-columns: 1fr 1fr; gap: 10px }
 .radiochip { border: 1.5px solid var(--paper-line); border-radius: 10px; padding: 13px 14px; font-size: .86rem; font-weight: 700; color: var(--ink); background: var(--white); text-align: left }
 .radiochip[aria-pressed="true"] { border-color: var(--ink); background: var(--paper) }
-.urlpreview { font-family: ui-monospace, monospace; font-size: .85rem; background: var(--paper); border: 1px dashed var(--paper-line); border-radius: 8px; padding: 11px 13px; margin-top: 8px; color: #4B4636 }
+.urlpreview { font-family: var(--font-mono); font-size: .85rem; background: var(--paper); border: 1px dashed var(--paper-line); border-radius: 8px; padding: 11px 13px; margin-top: 8px; color: #4B4636 }
 .urlpreview b { color: var(--stamp) }
 
 /* ── auth / contact ──────────────────────────────────────── */
@@ -379,7 +386,7 @@ a.pill-link:hover { background: var(--ledger); color: #fff }
 .statcards { display: grid; grid-template-columns: repeat(4, 1fr); gap: 16px; margin-bottom: 26px }
 .statcard { padding: 18px }
 .statcard .sc-label { font-size: .74rem; color: #8a8368; text-transform: uppercase; letter-spacing: .5px; font-weight: 700 }
-.statcard .sc-val { font-family: ui-monospace, monospace; font-size: 1.5rem; color: var(--ink); margin-top: 8px }
+.statcard .sc-val { font-family: var(--font-mono); font-size: 1.5rem; color: var(--ink); margin-top: 8px }
 
 table.dtable { width: 100%; border-collapse: collapse; font-size: .87rem }
 table.dtable th { text-align: left; font-size: .72rem; text-transform: uppercase; letter-spacing: .4px; color: #6b6552; padding: 10px 12px; border-bottom: 1px solid var(--paper-line) }
@@ -393,7 +400,7 @@ table.dtable td { padding: 13px 12px; border-bottom: 1px solid var(--paper-line)
 .role-pill.role-CONTRIBUTOR { background: #FBEEDB; color: var(--marigold); border-color: var(--marigold) }
 .teammember { display: flex; align-items: center; gap: 12px; padding: 12px 0; border-top: 1px dashed var(--paper-line) }
 .teammember:first-child { border-top: 0 }
-.tm-avatar { width: 36px; height: 36px; border-radius: 50%; background: var(--ink); color: var(--marigold); font-family: ui-monospace, monospace; font-size: .72rem; font-weight: 700; display: flex; align-items: center; justify-content: center; flex: 0 0 auto }
+.tm-avatar { width: 36px; height: 36px; border-radius: 50%; background: var(--ink); color: var(--marigold); font-family: var(--font-mono); font-size: .72rem; font-weight: 700; display: flex; align-items: center; justify-content: center; flex: 0 0 auto }
 .tm-info { flex: 1; min-width: 0 }
 .tm-info b { display: block; font-size: .9rem; color: var(--ink) }
 .tm-info span { font-size: .78rem; color: #8a8368 }

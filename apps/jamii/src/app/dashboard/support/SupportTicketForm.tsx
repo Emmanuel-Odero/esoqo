@@ -2,7 +2,7 @@
 
 import { useState, useTransition } from 'react';
 import { useRouter } from 'next/navigation';
-import { SUPPORT_TICKET_CATEGORIES, SUPPORT_TICKET_CATEGORY_LABELS } from '@esoko/domain';
+import { SUPPORT_TICKET_CATEGORIES, SUPPORT_TICKET_CATEGORY_LABELS } from '@esoqo/domain';
 import { actionCreateSupportTicket } from '../actions';
 
 export function SupportTicketForm({ pageId }: { pageId: string }) {
@@ -31,7 +31,7 @@ export function SupportTicketForm({ pageId }: { pageId: string }) {
   return (
     <div className="card" style={{ padding: 22, maxWidth: 640, marginBottom: 20 }}>
       <h2 style={{ fontSize: '1.05rem', marginBottom: 4 }}>Raise a ticket</h2>
-      <p className="sub" style={{ marginBottom: 14 }}>Tell CECF/Esoko staff what went wrong — this isn&rsquo;t seen by your page&rsquo;s visitors.</p>
+      <p className="sub" style={{ marginBottom: 14 }}>Tell CECF/Esoqo staff what went wrong — this isn&rsquo;t seen by your page&rsquo;s visitors.</p>
 
       <div className="field">
         <label htmlFor="ticket-category">What&rsquo;s this about?</label>

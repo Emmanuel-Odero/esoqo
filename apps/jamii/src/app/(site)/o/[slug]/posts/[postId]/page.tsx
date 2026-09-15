@@ -1,6 +1,6 @@
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
-import { getJamiiPost } from '@esoko/db';
+import { getJamiiPost } from '@esoqo/db';
 import { OrgSectionShell, loadOrgOr404 } from '@/components/OrgSectionShell';
 import { getOrgLinkMode, orgHref } from '@/lib/org-links';
 import { RichText } from '@/components/RichText';
@@ -42,7 +42,7 @@ export default async function PostDetailPage({
           </div>
         )}
         <h2>{post.title}</h2>
-        <p style={{ fontFamily: 'ui-monospace, monospace', fontSize: '.75rem', color: '#8a8368' }}>
+        <p style={{ fontFamily: 'var(--font-mono)', fontSize: '.75rem', color: '#8a8368' }}>
           {(post.publishedAt ?? post.createdAt).toLocaleDateString('en-KE', { day: '2-digit', month: 'short', year: 'numeric' })}
           {' · '}{page.organisation.officialName}
         </p>

@@ -45,7 +45,7 @@ export function SetPinForm() {
         <div className="field">
           <label htmlFor="msisdn">Phone number</label>
           <input id="msisdn" className="mono" value={msisdn} onChange={(e) => setMsisdn(e.target.value)} inputMode="tel" />
-          <div className="hint">The number your Esoko account is registered under.</div>
+          <div className="hint">The number your Esoqo account is registered under.</div>
         </div>
         {error && <p style={{ color: 'var(--stamp)', fontSize: '.85rem', marginBottom: 16 }}>{error}</p>}
         <button type="button" className="btn btn-stamp btn-block" disabled={pending || !msisdn.trim()} onClick={requestCode}>

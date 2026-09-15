@@ -1,6 +1,6 @@
 import Link from 'next/link';
-import { listJamiiPages, getCampaignStats } from '@esoko/db';
-import { Icon } from '@esoko/ui';
+import { listJamiiPages, getCampaignStats } from '@esoqo/db';
+import { Icon } from '@esoqo/ui';
 import { DiscoverFilters } from '@/components/DiscoverFilters';
 import { isVerified, orgInitials } from '@/lib/data';
 import { orgExternalUrl } from '@/lib/org-external-url';

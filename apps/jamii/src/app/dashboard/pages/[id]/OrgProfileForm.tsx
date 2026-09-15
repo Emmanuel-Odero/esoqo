@@ -2,7 +2,7 @@
 
 import { useState, useTransition } from 'react';
 import { useRouter } from 'next/navigation';
-import { COUNTIES, JAMII_ORG_KINDS, JAMII_ORG_KIND_LABELS } from '@esoko/domain';
+import { COUNTIES, JAMII_ORG_KINDS, JAMII_ORG_KIND_LABELS } from '@esoqo/domain';
 import { actionUpdateOrgProfile } from '../../actions';
 
 type Values = {

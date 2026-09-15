@@ -1,6 +1,6 @@
 import Link from 'next/link';
-import { Icon, type IconName } from '@esoko/ui';
-import { listJamiiPrograms } from '@esoko/db';
+import { Icon, type IconName } from '@esoqo/ui';
+import { listJamiiPrograms } from '@esoqo/db';
 import { requireMyPage } from '@/lib/session';
 
 export default async function ProgramsScreen() {

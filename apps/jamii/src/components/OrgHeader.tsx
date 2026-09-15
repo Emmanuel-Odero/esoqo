@@ -1,9 +1,9 @@
 import Link from 'next/link';
-import { Icon } from '@esoko/ui';
+import { Icon } from '@esoqo/ui';
 import { isVerified, orgInitials } from '@/lib/data';
 import { orgHref, type OrgLinkMode } from '@/lib/org-links';
 import { orgExternalUrl } from '@/lib/org-external-url';
-import type { getJamiiPageBySlug } from '@esoko/db';
+import type { getJamiiPageBySlug } from '@esoqo/db';
 
 type OrgPage = NonNullable<Awaited<ReturnType<typeof getJamiiPageBySlug>>>;
 

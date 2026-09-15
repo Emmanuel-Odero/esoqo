@@ -1,6 +1,6 @@
 'use server';
 
-import { jamiiContactSchema } from '@esoko/domain';
+import { jamiiContactSchema } from '@esoqo/domain';
 
 export type ActionResult<T = void> = { ok: true; data: T } | { ok: false; error: string };
 

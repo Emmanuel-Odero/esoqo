@@ -1,6 +1,6 @@
 import Link from 'next/link';
 import { orgHref, crossToPrimaryHref, type OrgLinkMode } from '@/lib/org-links';
-import type { getJamiiPageBySlug } from '@esoko/db';
+import type { getJamiiPageBySlug } from '@esoqo/db';
 
 type OrgPage = NonNullable<Awaited<ReturnType<typeof getJamiiPageBySlug>>>;
 

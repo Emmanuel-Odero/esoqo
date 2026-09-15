@@ -1,7 +1,7 @@
 'use server';
 
-import { createJamiiPage } from '@esoko/db';
-import { startJamiiPageSchema } from '@esoko/domain';
+import { createJamiiPage } from '@esoqo/db';
+import { startJamiiPageSchema } from '@esoqo/domain';
 import { getCtx } from '@/lib/session';
 
 export type ActionResult<T> = { ok: true; data: T } | { ok: false; error: string };

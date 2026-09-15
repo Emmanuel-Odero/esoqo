@@ -1,5 +1,5 @@
 import { notFound } from 'next/navigation';
-import { getJamiiSitePageBySlug, listJamiiPageBlocksPublic } from '@esoko/db';
+import { getJamiiSitePageBySlug, listJamiiPageBlocksPublic } from '@esoqo/db';
 import { OrgSectionShell, loadOrgOr404 } from '@/components/OrgSectionShell';
 import { getOrgLinkMode } from '@/lib/org-links';
 import { BlockRenderer } from '@/components/blocks/BlockRenderer';
