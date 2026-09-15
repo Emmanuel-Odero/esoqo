@@ -118,6 +118,23 @@ func withTrack(msg, code string) string {
 	return withLink
 }
 
+// withGenericTrack is withTrack's counterpart for a message covering
+// many parcels at once (a trip dispatch summary, not one parcel's own
+// event) — points at the staff lookup page (search-by-code) rather
+// than a single /t/<code>, since there is no one code this message is
+// about. Same degrade-gracefully rule: omitted rather than truncating
+// the message into a second billed segment.
+func withGenericTrack(msg string) string {
+	if trackingBaseURL == "" {
+		return msg
+	}
+	withLink := msg + " Track: " + trackingBaseURL + "/send-parcel/track"
+	if len(withLink) > smsSegmentBudget {
+		return msg
+	}
+	return withLink
+}
+
 // ParcelStaffInviteURL — the link an admin-invited courier-company
 // staffer gets, pointing at the public tracking page's OTP staff panel
 // (see httpapi.handleRequestParcelStaffOtp's own comment on why that
@@ -319,32 +336,39 @@ func ParcelInTransitToYou(code, senderName, originLabel, deliveryCode, carrierNa
 		trunc(senderName), code, trunc(carrierName), deliveryCode), code)
 }
 
-// ParcelCounterBooked — the sender's confirmation that a PayAtCounter
-// booking is live (see dbx.BookParcelInput.PayAtCounter).
-//
-// Deliberately NOT ParcelPaymentConfirmed: that message quotes a price
-// and, when there is one, an M-Pesa receipt — neither exists yet here.
-// priceKes stays NULL until the parcel is weighed and settled in
-// person, so a text claiming a payment "landed" would be as wrong as
-// ParcelCodBooked's own comment warns against.
-func ParcelCounterBooked(code, receiverName, destinationLabel string) string {
-	return withTrack(fmt.Sprintf(
-		"Esoqo Logistics: Parcel %s to %s, %s is booked and checked in. We'll text you once it's dispatched.",
-		code, trunc(receiverName), trunc(destinationLabel)), code)
+// courierCompanyLabel — "Esoqo" for Esoqo-operated dispatch
+// (CarrierOrgName nil), the partner's own name otherwise. Every
+// intake-confirmation message names who's actually holding the
+// parcel, same "carrierName empty means us" convention
+// ParcelInTransitToYou/ParcelPickedUp already follow.
+func courierCompanyLabel(carrierOrgName *string) string {
+	if carrierOrgName == nil || *carrierOrgName == "" {
+		return "Esoqo"
+	}
+	return *carrierOrgName
 }
 
-// ParcelBookedToYou — the receiver's heads-up the moment a parcel is
-// booked PayAtCounter (see dbx.BookParcelInput.PayAtCounter): that path
-// lands straight in BOOKED with nothing left to pay online, so the
-// sender-only convention every other booking path follows (scheduled
-// pickup, COD) would leave the receiver hearing nothing until pickup —
-// sometimes hours after a parcel that's already sitting checked-in at
-// a counter. No deliveryCode here (unlike ParcelInTransitToYou): the
-// receiver doesn't need it until the parcel is actually moving.
-func ParcelBookedToYou(code, senderName, originLabel string) string {
+// ParcelIntakeConfirmed — the sender's text the moment staff confirms
+// physical custody (see dbx.ConfirmParcelIntake), not at booking:
+// a self-service submission or a clerk typing a walk-in's details in
+// both only ever describe a parcel, neither proves anyone has it in
+// hand yet. Names the receiver (and their phone) so the sender can see
+// at a glance who this is bound for, matching what BookParcel's own
+// response already showed them.
+func ParcelIntakeConfirmed(code string, carrierOrgName *string, officeLabel, receiverName, receiverMsisdn string) string {
 	return withTrack(fmt.Sprintf(
-		"Esoqo Logistics: %s has booked parcel %s for you from %s. We'll text you when it's on the way.",
-		trunc(senderName), code, trunc(originLabel)), code)
+		"Esoqo Parcel: Confirmed you submitted parcel %s at %s, %s. We'll text you when we dispatch it and when %s (%s) gets it.",
+		code, courierCompanyLabel(carrierOrgName), trunc(officeLabel), trunc(receiverName), receiverMsisdn), code)
+}
+
+// ParcelIntakeConfirmedToReceiver — the receiver's side of the same
+// confirmation. No deliveryCode here (matching the pre-existing
+// ParcelInTransitToYou split) — the receiver doesn't need it until the
+// parcel is actually moving.
+func ParcelIntakeConfirmedToReceiver(code, senderName string, carrierOrgName *string) string {
+	return withTrack(fmt.Sprintf(
+		"Esoqo Parcel: Confirmed %s has sent you parcel %s via %s. We'll text you when it's ready for collection.",
+		trunc(senderName), code, courierCompanyLabel(carrierOrgName)), code)
 }
 
 // ParcelDeliveryAttemptFailed — the receiver's side of a failed
@@ -635,9 +659,9 @@ func CourierParcelsLeftBehind(fleetNumber string, count int, sampleCodes []strin
 // genuinely needs to see, as opposed to an exception that needs one
 // accountable person.
 func CourierTripDeparted(fleetNumber string, boardedCount int) string {
-	return fmt.Sprintf(
+	return withGenericTrack(fmt.Sprintf(
 		"Esoqo Logistics: Fleet %s has left with all %d %s boarded and accounted for.",
-		fleetNumber, boardedCount, plural(boardedCount, "parcel", "parcels"))
+		fleetNumber, boardedCount, plural(boardedCount, "parcel", "parcels")))
 }
 
 // roleLabel lowercases a role string for mid-sentence use ("as

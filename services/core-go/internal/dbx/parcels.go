@@ -2145,6 +2145,12 @@ type AdminParcelRow struct {
 	ParcelOrgName  *string
 	PlatformFeeKes *string
 	OrgEarningsKes *string
+
+	// IntakeConfirmedAt — nil until staff explicitly confirms physical
+	// custody (see dbx.ConfirmParcelIntake). Gates the admin console's
+	// own "Confirm received" button, same as it gates the sender/
+	// receiver SMS: shown only while there's still something to confirm.
+	IntakeConfirmedAt *time.Time
 }
 
 // AdminParcelStats is the parcels operations dashboard's whole
@@ -2365,6 +2371,7 @@ func AdminListParcels(ctx context.Context, pool *pgxpool.Pool, p AdminParcelList
 		       a.name, a."locationHint", p."agentHeldSince",
 		       p."declaredValueKes"::text, ct.name,
 		       p."parcelOrgId"::text, po.name, p."platformFeeKes"::text, p."orgEarningsKes"::text,
+		       p."intakeConfirmedAt",
 		       count(*) OVER ()
 		FROM parcel p
 		LEFT JOIN person pr ON pr."partyId" = p."assignedCollectorPartyId"
@@ -2399,6 +2406,7 @@ func AdminListParcels(ctx context.Context, pool *pgxpool.Pool, p AdminParcelList
 			&r.AgentName, &r.AgentLocationHint, &r.AgentHeldSince,
 			&r.DeclaredValueKes, &r.CoverageTierName,
 			&r.ParcelOrgID, &r.ParcelOrgName, &r.PlatformFeeKes, &r.OrgEarningsKes,
+			&r.IntakeConfirmedAt,
 			&total); err != nil {
 			return nil, 0, err
 		}
@@ -2486,6 +2494,63 @@ func AssignParcelCollector(ctx context.Context, pool *pgxpool.Pool, parcelID, co
 		return "", "", "", "", "", "", err
 	}
 	return code, collectorName, collectorMsisdn, senderMsisdn, senderName, originLabel, nil
+}
+
+// ParcelIntakeConfirmResult — everything the confirming handler needs
+// to compose both the sender's and receiver's SMS without a second
+// round trip.
+type ParcelIntakeConfirmResult struct {
+	SenderMsisdn   string
+	SenderName     string
+	ReceiverName   string
+	ReceiverMsisdn string
+	OriginLabel    string
+	// CarrierOrgName — nil for Esoqo-operated dispatch, same convention
+	// ParcelNotifyInfo's own field follows.
+	CarrierOrgName *string
+}
+
+// ConfirmParcelIntake — a clerk/handler's explicit "the box is
+// physically here" moment, separate from BookParcel itself.
+//
+// A self-service sender submitting the form online, or a clerk typing
+// a walk-in's details in, both only ever describe a parcel — neither
+// act proves anyone at Esoqo (or a partner courier) actually has it in
+// hand. Texting either party off the back of that submission told them
+// a parcel was in the system before a single person had touched it.
+// This is the gate: only once staff at a real counter confirms custody
+// does either party hear anything (see handlers_parcels.go's caller
+// for the two SMS this unlocks).
+func ConfirmParcelIntake(ctx context.Context, pool *pgxpool.Pool, code, staffID string) (*ParcelIntakeConfirmResult, error) {
+	var v ParcelIntakeConfirmResult
+	var status string
+	var alreadyConfirmed bool
+	err := pool.QueryRow(ctx, `
+		SELECT p.status::text, p."senderMsisdn", p."senderName", p."receiverName", p."receiverMsisdn",
+		       p."originLabel", po.name, p."intakeConfirmedAt" IS NOT NULL
+		FROM parcel p
+		LEFT JOIN parcel_org po ON po.id = p."parcelOrgId"
+		WHERE p.code = $1`, code).
+		Scan(&status, &v.SenderMsisdn, &v.SenderName, &v.ReceiverName, &v.ReceiverMsisdn,
+			&v.OriginLabel, &v.CarrierOrgName, &alreadyConfirmed)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return nil, &ParcelError{"NOT_FOUND", "That parcel was not found"}
+	}
+	if err != nil {
+		return nil, err
+	}
+	if status != "BOOKED" {
+		return nil, &ParcelError{"BAD_INPUT", "Only a booked parcel can be confirmed received"}
+	}
+	if alreadyConfirmed {
+		return nil, &ParcelError{"BAD_INPUT", "This parcel's intake was already confirmed"}
+	}
+	if _, err := pool.Exec(ctx, `
+		UPDATE parcel SET "intakeConfirmedAt" = now(), "intakeConfirmedByStaffId" = $1 WHERE code = $2`,
+		staffID, code); err != nil {
+		return nil, err
+	}
+	return &v, nil
 }
 
 // CancelParcelResult tells the caller what still needs doing —
