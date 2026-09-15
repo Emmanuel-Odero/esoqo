@@ -5,7 +5,7 @@ import (
 
 	"github.com/jackc/pgx/v5/pgxpool"
 
-	"github.com/esoko/core-go/internal/authsvc"
+	"github.com/esoqo/core-go/internal/authsvc"
 )
 
 // EnsurePersonParty upserts a demo Person+Party by msisdn (same natural

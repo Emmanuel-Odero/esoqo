@@ -6,9 +6,10 @@ import (
 
 	"github.com/gin-gonic/gin"
 
-	"github.com/esoko/core-go/internal/authsvc"
-	"github.com/esoko/core-go/internal/dbx"
-	"github.com/esoko/core-go/internal/payments"
+	"github.com/esoqo/core-go/internal/authsvc"
+	"github.com/esoqo/core-go/internal/dbx"
+	"github.com/esoqo/core-go/internal/money"
+	"github.com/esoqo/core-go/internal/payments"
 )
 
 func (s *Server) handleListStores(c *gin.Context) {
@@ -173,7 +174,7 @@ func (s *Server) handleCreateOrder(c *gin.Context) {
 	if req.PaymentMethod == "MPESA_STK" {
 		stk, err := payments.InitiateStkPush(s.Cfg, payments.StkPushRequest{
 			Msisdn: req.BuyerMsisdn, AmountKES: parseKES(totalKES),
-			AccountReference: orderID[:8], Description: "Esoko order",
+			AccountReference: orderID[:8], Description: "Esoqo order",
 		})
 		if err != nil {
 			// Order exists but push failed to initiate — buyer can retry
@@ -278,7 +279,7 @@ func (s *Server) handleGetUsualProduct(c *gin.Context) {
 }
 
 // handleMarkOrderReady — POST /v1/stores/orders/:id/ready. Store-owner
-// only (see dbx.requireStoreOwner); the store's own Esoko account signs
+// only (see dbx.requireStoreOwner); the store's own Esoqo account signs
 // in the same way a buyer would, there's no separate staff login.
 func (s *Server) handleMarkOrderReady(c *gin.Context) {
 	ctx := ctxFromGin(c)
@@ -430,7 +431,7 @@ func (s *Server) handleUpdateDineInStatus(c *gin.Context) {
 }
 
 type addTipRequest struct {
-	TipKES float64 `json:"tipKes" binding:"required"`
+	TipKES money.Amount `json:"tipKes" binding:"required"`
 }
 
 // handleAddTip — POST /v1/orders/:id/tip. Guest-safe by the same "the
@@ -442,7 +443,7 @@ func (s *Server) handleAddTip(c *gin.Context) {
 		writeError(c, http.StatusBadRequest, "INVALID_REQUEST", err.Error())
 		return
 	}
-	if err := dbx.AddTip(c.Request.Context(), s.Pool, c.Param("id"), req.TipKES); err != nil {
+	if err := dbx.AddTip(c.Request.Context(), s.Pool, c.Param("id"), req.TipKES.KES()); err != nil {
 		writeOrderOrBookingError(c, err)
 		return
 	}

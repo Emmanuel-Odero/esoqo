@@ -121,7 +121,23 @@ func TestPayloadRoundTrip(t *testing.T) {
 	if vid != "voucher-uuid" || vsig != "sig-value" {
 		t.Fatalf("voucher payload round-trip failed: %q %q", vid, vsig)
 	}
-	if _, s := ParseTripPayload("esoko://v?random"); s != "" {
+	if _, s := ParseTripPayload("esoqo://v?random"); s != "" {
 		t.Fatal("cross-kind parse must fail")
+	}
+	if _, s := ParseTripPayload("esoko://v?random"); s != "" {
+		t.Fatal("cross-kind parse must fail under the legacy scheme too")
+	}
+
+	// Every QR printed before the Esoqo rename carries esoko://, and
+	// those buses and table tents are not getting reprinted — parsing
+	// must keep accepting the old spelling even though minting doesn't
+	// produce it any more.
+	lid, lsig := ParseTripPayload("esoko://t?v=1&trip=trip-uuid&sig=sig-value")
+	if lid != "trip-uuid" || lsig != "sig-value" {
+		t.Fatalf("legacy trip payload must still parse: %q %q", lid, lsig)
+	}
+	lvid, lvsig := ParseVoucherPayload("esoko://v?v=1&id=voucher-uuid&sig=sig-value")
+	if lvid != "voucher-uuid" || lvsig != "sig-value" {
+		t.Fatalf("legacy voucher payload must still parse: %q %q", lvid, lvsig)
 	}
 }

@@ -5,14 +5,15 @@ import (
 
 	"github.com/gin-gonic/gin"
 
-	"github.com/esoko/core-go/internal/dbx"
-	"github.com/esoko/core-go/internal/payments"
+	"github.com/esoqo/core-go/internal/dbx"
+	"github.com/esoqo/core-go/internal/money"
+	"github.com/esoqo/core-go/internal/payments"
 )
 
 type issueAllowanceBatchRequest struct {
-	Purpose              string  `json:"purpose" binding:"required"` // FUEL | TRAVEL
-	Label                string  `json:"label"`
-	AmountPerEmployeeKES float64 `json:"amountPerEmployeeKes" binding:"required"`
+	Purpose              string       `json:"purpose" binding:"required"` // FUEL | TRAVEL
+	Label                string       `json:"label"`
+	AmountPerEmployeeKES money.Amount `json:"amountPerEmployeeKes" binding:"required"`
 	// EmployeeMsisdns — phone numbers, not party ids: same "resolve or
 	// create a Person by msisdn" pattern gifting a single voucher
 	// already uses (see handleCreateVoucher's RecipientMsisdn), just
@@ -44,7 +45,7 @@ func (s *Server) handleIssueAllowanceBatch(c *gin.Context) {
 		}
 		employeePartyIDs = append(employeePartyIDs, partyID)
 	}
-	batchID, totalKES, err := dbx.InitiateAllowanceVoucherBatch(c.Request.Context(), s.Pool, ctx.PartyID, req.Purpose, req.Label, req.AmountPerEmployeeKES, employeePartyIDs)
+	batchID, totalKES, err := dbx.InitiateAllowanceVoucherBatch(c.Request.Context(), s.Pool, ctx.PartyID, req.Purpose, req.Label, req.AmountPerEmployeeKES.KES(), employeePartyIDs)
 	if err != nil {
 		if fe, ok := err.(*dbx.FleetError); ok {
 			writeError(c, http.StatusBadRequest, fe.Code, fe.Message)

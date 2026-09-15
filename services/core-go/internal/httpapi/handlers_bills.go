@@ -6,18 +6,19 @@ import (
 
 	"github.com/gin-gonic/gin"
 
-	"github.com/esoko/core-go/internal/dbx"
-	"github.com/esoko/core-go/internal/payments"
+	"github.com/esoqo/core-go/internal/dbx"
+	"github.com/esoqo/core-go/internal/money"
+	"github.com/esoqo/core-go/internal/payments"
 )
 
 type createBillRequest struct {
-	Label              string   `json:"label" binding:"required"`
-	Category           string   `json:"category" binding:"required"`
-	AccountRef         *string  `json:"accountRef"`
-	AmountKES          *float64 `json:"amountKes"`
-	Cycle              string   `json:"cycle" binding:"required"`     // MONTHLY | WEEKLY | ONE_TIME
-	NextDueAt          string   `json:"nextDueAt" binding:"required"` // RFC3339
-	ReminderDaysBefore int      `json:"reminderDaysBefore"`
+	Label              string        `json:"label" binding:"required"`
+	Category           string        `json:"category" binding:"required"`
+	AccountRef         *string       `json:"accountRef"`
+	AmountKES          *money.Amount `json:"amountKes"`
+	Cycle              string        `json:"cycle" binding:"required"`     // MONTHLY | WEEKLY | ONE_TIME
+	NextDueAt          string        `json:"nextDueAt" binding:"required"` // RFC3339
+	ReminderDaysBefore int           `json:"reminderDaysBefore"`
 }
 
 func (s *Server) handleCreateBill(c *gin.Context) {
@@ -35,10 +36,10 @@ func (s *Server) handleCreateBill(c *gin.Context) {
 
 	billID, err := dbx.CreateBill(c.Request.Context(), s.Pool, dbx.CreateBillInput{
 		PartyID: ctx.PartyID, Label: req.Label, Category: req.Category, AccountRef: req.AccountRef,
-		AmountKES: req.AmountKES, Cycle: req.Cycle, NextDueAt: nextDueAt, ReminderDaysBefore: req.ReminderDaysBefore,
+		AmountKES: req.AmountKES.KESPtr(), Cycle: req.Cycle, NextDueAt: nextDueAt, ReminderDaysBefore: req.ReminderDaysBefore,
 	})
 	if err != nil {
-		writeError(c, http.StatusBadRequest, "CREATE_FAILED", err.Error())
+		writeSafeError(c, http.StatusBadRequest, "CREATE_FAILED", err, "Could not create this bill")
 		return
 	}
 	c.JSON(http.StatusOK, gin.H{"billId": billID})
@@ -55,8 +56,8 @@ func (s *Server) handleListMyBills(c *gin.Context) {
 }
 
 type markBillPaidRequest struct {
-	AmountKES float64 `json:"amountKes" binding:"required"`
-	Note      *string `json:"note"`
+	AmountKES money.Amount `json:"amountKes" binding:"required"`
+	Note      *string      `json:"note"`
 }
 
 func (s *Server) handleMarkBillPaid(c *gin.Context) {
@@ -70,20 +71,20 @@ func (s *Server) handleMarkBillPaid(c *gin.Context) {
 		writeError(c, http.StatusBadRequest, "INVALID_REQUEST", err.Error())
 		return
 	}
-	if err := dbx.MarkBillPaid(c.Request.Context(), s.Pool, billID, req.AmountKES, req.Note); err != nil {
-		writeError(c, http.StatusBadRequest, "MARK_PAID_FAILED", err.Error())
+	if err := dbx.MarkBillPaid(c.Request.Context(), s.Pool, billID, req.AmountKES.KES(), req.Note); err != nil {
+		writeSafeError(c, http.StatusBadRequest, "MARK_PAID_FAILED", err, "Could not mark this bill paid")
 		return
 	}
 	c.JSON(http.StatusOK, gin.H{"ok": true})
 }
 
 type updateBillRequest struct {
-	Label          *string  `json:"label"`
-	AccountRef     *string  `json:"accountRef"`
-	AmountKES      *float64 `json:"amountKes"`
-	NextDueAt      *string  `json:"nextDueAt"`
-	TargetKES      *float64 `json:"targetKes"`
-	AutoPayEnabled *bool    `json:"autoPayEnabled"`
+	Label          *string       `json:"label"`
+	AccountRef     *string       `json:"accountRef"`
+	AmountKES      *money.Amount `json:"amountKes"`
+	NextDueAt      *string       `json:"nextDueAt"`
+	TargetKES      *money.Amount `json:"targetKes"`
+	AutoPayEnabled *bool         `json:"autoPayEnabled"`
 }
 
 func (s *Server) handleUpdateBill(c *gin.Context) {
@@ -98,8 +99,8 @@ func (s *Server) handleUpdateBill(c *gin.Context) {
 		return
 	}
 	in := dbx.UpdateBillInput{
-		Label: req.Label, AccountRef: req.AccountRef, AmountKES: req.AmountKES,
-		TargetKES: req.TargetKES, AutoPayEnabled: req.AutoPayEnabled,
+		Label: req.Label, AccountRef: req.AccountRef, AmountKES: req.AmountKES.KESPtr(),
+		TargetKES: req.TargetKES.KESPtr(), AutoPayEnabled: req.AutoPayEnabled,
 	}
 	if req.NextDueAt != nil {
 		t, err := time.Parse(time.RFC3339, *req.NextDueAt)
@@ -133,7 +134,7 @@ func (s *Server) handleArchiveBill(c *gin.Context) {
 
 // handleGetBillFunding — GET /v1/bills/:id/funding. Guest-safe (no
 // authRequired): the whole point of a shareable funding link is that
-// family/friends without an Esoko account can open it. Returns only
+// family/friends without an Esoqo account can open it. Returns only
 // the PII-minimal projection (see dbx.BillFundingSummary's own
 // comment) — never the owner's identity or accountRef.
 func (s *Server) handleGetBillFunding(c *gin.Context) {
@@ -155,14 +156,14 @@ func (s *Server) handleListBillContributions(c *gin.Context) {
 }
 
 type contributeToBillRequest struct {
-	ContributorName   string  `json:"contributorName" binding:"required"`
-	ContributorMsisdn string  `json:"contributorMsisdn" binding:"required"`
-	AmountKES         float64 `json:"amountKes" binding:"required"`
+	ContributorName   string       `json:"contributorName" binding:"required"`
+	ContributorMsisdn string       `json:"contributorMsisdn" binding:"required"`
+	AmountKES         money.Amount `json:"amountKes" binding:"required"`
 }
 
 // handleContributeToBill — POST /v1/bills/:id/contributions.
 // Guest-safe, same reasoning as handleGetBillFunding: a friend or
-// family member contributing doesn't need an Esoko account. A
+// family member contributing doesn't need an Esoqo account. A
 // signed-in contributor's partyId is still captured (from the
 // session, never trusted from the body) when present, same "guest OR
 // authenticated" pattern handleCreateOrder already uses.
@@ -178,14 +179,14 @@ func (s *Server) handleContributeToBill(c *gin.Context) {
 			contributorPartyID = &ctx.PartyID
 		}
 	}
-	contributionID, err := dbx.ContributeToBill(c.Request.Context(), s.Pool, c.Param("id"), contributorPartyID, req.ContributorName, req.AmountKES)
+	contributionID, err := dbx.ContributeToBill(c.Request.Context(), s.Pool, c.Param("id"), contributorPartyID, req.ContributorName, req.AmountKES.KES())
 	if err != nil {
 		writeBillFundingError(c, err)
 		return
 	}
 	resp := gin.H{"contributionId": contributionID, "status": "PENDING_PAYMENT"}
 	stk, err := payments.InitiateStkPush(s.Cfg, payments.StkPushRequest{
-		Msisdn: req.ContributorMsisdn, AmountKES: req.AmountKES,
+		Msisdn: req.ContributorMsisdn, AmountKES: req.AmountKES.KES(),
 		AccountReference: contributionID[:8], Description: "Bill contribution",
 	})
 	if err != nil {

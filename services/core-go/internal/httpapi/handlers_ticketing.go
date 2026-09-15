@@ -5,8 +5,8 @@ import (
 
 	"github.com/gin-gonic/gin"
 
-	"github.com/esoko/core-go/internal/dbx"
-	"github.com/esoko/core-go/internal/payments"
+	"github.com/esoqo/core-go/internal/dbx"
+	"github.com/esoqo/core-go/internal/payments"
 )
 
 func (s *Server) handleListListings(c *gin.Context) {
@@ -128,7 +128,7 @@ func (s *Server) handleCreateBooking(c *gin.Context) {
 
 	stk, err := payments.InitiateStkPush(s.Cfg, payments.StkPushRequest{
 		Msisdn: req.BuyerMsisdn, AmountKES: parseKES(totalKES),
-		AccountReference: bookingID[:8], Description: "Esoko booking",
+		AccountReference: bookingID[:8], Description: "Esoqo booking",
 	})
 	if err != nil {
 		resp["paymentError"] = err.Error()

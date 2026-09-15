@@ -17,10 +17,12 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/esoqo/core-go/internal/money"
+
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 
-	"github.com/esoko/core-go/internal/authsvc"
+	"github.com/esoqo/core-go/internal/authsvc"
 )
 
 type OrgError struct {
@@ -1373,9 +1375,9 @@ type BalanceViewJSON struct {
 	Status        string               `json:"status"`
 	BuyerName     string               `json:"buyerName"`
 	BuyerMsisdn   string               `json:"buyerMsisdn"`
-	TotalKES      float64              `json:"totalKes"`
-	AmountPaidKES float64              `json:"amountPaidKes"`
-	BalanceKES    float64              `json:"balanceKes"`
+	TotalKES      money.Amount         `json:"totalKes"`
+	AmountPaidKES money.Amount         `json:"amountPaidKes"`
+	BalanceKES    money.Amount         `json:"balanceKes"`
 	BalanceDueBy  *string              `json:"balanceDueBy"`
 	DepartAt      string               `json:"departAt"`
 	ListingTitle  string               `json:"listingTitle"`
@@ -1386,10 +1388,10 @@ type BalanceViewJSON struct {
 }
 
 type BalancePaymentJSON struct {
-	AmountKES   float64 `json:"amountKes"`
-	Kind        string  `json:"kind"`
-	Status      string  `json:"status"`
-	ConfirmedAt *string `json:"confirmedAt"`
+	AmountKES   money.Amount `json:"amountKes"`
+	Kind        string       `json:"kind"`
+	Status      string       `json:"status"`
+	ConfirmedAt *string      `json:"confirmedAt"`
 }
 
 // GetBookingBalanceView ports TS getBookingForBalancePayment — public,
@@ -1421,14 +1423,18 @@ func GetBookingBalanceView(ctx context.Context, pool *pgxpool.Pool, bookingID st
 	if err != nil {
 		return nil, err
 	}
-	total, _ := parseFloat(totalText)
-	paid, _ := parseFloat(paidText)
-	v.TotalKES = total
-	v.AmountPaidKES = paid
-	v.BalanceKES = total - paid
-	if v.BalanceKES < 0 {
-		v.BalanceKES = 0
+	// Exact cents: the balance is what a buyer is asked to pay, and
+	// `total - paid` in float is the subtraction that leaves a plan a
+	// hundredth of a cent short of settled.
+	total := money.MustParseKES(totalText)
+	paid := money.MustParseKES(paidText)
+	v.TotalKES = money.AmountOf(total)
+	v.AmountPaidKES = money.AmountOf(paid)
+	balance := total - paid
+	if balance < 0 {
+		balance = money.Zero
 	}
+	v.BalanceKES = money.AmountOf(balance)
 	if venueName != nil && *venueName != "" {
 		v.Where = venueName
 	} else if routeFrom != nil && *routeFrom != "" {
@@ -1448,7 +1454,7 @@ func GetBookingBalanceView(ctx context.Context, pool *pgxpool.Pool, bookingID st
 		if err := prows.Scan(&amountText, &p.Kind, &p.Status, &p.ConfirmedAt); err != nil {
 			return nil, err
 		}
-		p.AmountKES, _ = parseFloat(amountText)
+		p.AmountKES = money.AmountOf(money.MustParseKES(amountText))
 		v.Payments = append(v.Payments, p)
 	}
 	if v.Payments == nil {

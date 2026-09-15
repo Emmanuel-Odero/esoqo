@@ -78,7 +78,7 @@ var validVehicleTypes = map[string]bool{
 }
 
 // AdminAddCourierInput is what a staffer types in to add someone who's
-// never touched the Esoko app before — team name, contact, phone.
+// never touched the Esoqo app before — team name, contact, phone.
 type AdminAddCourierInput struct {
 	Name        string
 	Msisdn      string
@@ -95,10 +95,10 @@ type AdminAddCourierInput struct {
 // (updating the name/email to what was just entered, since an
 // admin-supplied real name is better than whatever placeholder or
 // stale value was there) rather than erroring or creating a duplicate.
-// Also mints their Esoko ID and texts them a welcome/confirmation —
+// Also mints their Esoqo ID and texts them a welcome/confirmation —
 // see notify.CourierOnboarded — so the same SMS both confirms their
 // number is right and gives them the ID to sign in with.
-func AdminAddCourier(ctx context.Context, pool *pgxpool.Pool, in AdminAddCourierInput) (courierID, partyID, esokoID string, err error) {
+func AdminAddCourier(ctx context.Context, pool *pgxpool.Pool, in AdminAddCourierInput) (courierID, partyID, esoqoID string, err error) {
 	if in.Name == "" || in.Msisdn == "" {
 		return "", "", "", &ParcelCourierError{"BAD_INPUT", "Name and phone number are required"}
 	}
@@ -115,11 +115,11 @@ func AdminAddCourier(ctx context.Context, pool *pgxpool.Pool, in AdminAddCourier
 	if err != nil {
 		return "", "", "", err
 	}
-	esokoID, err = EnsureEsokoPaymentId(ctx, pool, partyID, in.Msisdn)
+	esoqoID, err = EnsureEsoqoPaymentId(ctx, pool, partyID, in.Msisdn)
 	if err != nil {
 		return "", "", "", err
 	}
-	return courierID, partyID, esokoID, nil
+	return courierID, partyID, esoqoID, nil
 }
 
 // SetCourierStatus — the vetting/suspend/reinstate/reject action, same

@@ -8,7 +8,7 @@ import (
 
 	"github.com/jackc/pgx/v5/pgxpool"
 
-	"github.com/esoko/core-go/internal/authsvc"
+	"github.com/esoqo/core-go/internal/authsvc"
 )
 
 // SeedDemoTicketing ports seed-demo.ts — a transport company, an events
@@ -196,7 +196,7 @@ func ensureTicketOrg(ctx context.Context, pool *pgxpool.Pool, enterpriseID, name
 			"loyaltyEnabled", "loyaltyPerKes", "installmentsEnabled", "minDepositPercent", "createdAt", "updatedAt")
 		VALUES (gen_random_uuid(), $1, $2, $3, $4, 'ACTIVE', $5, $6, true, 1, true, 20, now(), now())
 		ON CONFLICT (slug) DO UPDATE SET name = $2, status = 'ACTIVE'
-		RETURNING id`, enterpriseID, name, slug, vertical, contactPhone, slug+"@example-demo.esoko").Scan(&id)
+		RETURNING id`, enterpriseID, name, slug, vertical, contactPhone, slug+"@example-demo.esoqo").Scan(&id)
 	return id, err
 }
 

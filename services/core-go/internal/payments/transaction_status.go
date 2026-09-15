@@ -8,11 +8,11 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/esoko/core-go/internal/config"
+	"github.com/esoqo/core-go/internal/config"
 )
 
 // TransactionStatus is the Daraja Transaction Status API result for an
-// M-Pesa receipt shown to a tout (external till payment, no Esoko STK).
+// M-Pesa receipt shown to a tout (external till payment, no Esoqo STK).
 // Console mode returns a canned NOT_FOUND so tests stay offline.
 type TransactionStatus struct {
 	Found       bool
@@ -54,7 +54,7 @@ func QueryTransactionStatus(cfg config.Config, receipt string) TransactionStatus
 		"IdentifierType":     "4",
 		"ResultURL":          cfg.MpesaCallbackURL,
 		"QueueTimeOutURL":    cfg.MpesaCallbackURL,
-		"Remarks":            "Esoko verify",
+		"Remarks":            "Esoqo verify",
 		"Occasion":           "verify",
 	})
 	req, _ := http.NewRequest("POST", base+"/mpesa/transactionstatus/v1/query", bytes.NewReader(body))

@@ -10,6 +10,8 @@ import (
 	"strings"
 	"time"
 
+	"github.com/esoqo/core-go/internal/money"
+
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -140,7 +142,11 @@ func OpenInstallmentPlan(ctx context.Context, pool *pgxpool.Pool, in OpenPlanInp
 	}
 	defer tx.Rollback(ctx)
 
-	total := 0.0
+	// Accumulated in exact cents: a basket total built by adding parsed
+	// float prices is the same drift that shows up in every cart loop,
+	// and this total is what the whole plan's deposit and balance are
+	// then measured against.
+	var totalCents money.Cents
 	planned := make([]PlannedLine, 0, len(in.Lines))
 	for _, line := range in.Lines {
 		var priceKESText string
@@ -166,14 +172,15 @@ func OpenInstallmentPlan(ctx context.Context, pool *pgxpool.Pool, in OpenPlanInp
 		if err != nil || scheduleListingID != listingID {
 			return nil, &InstallmentError{"NOT_FOUND", "That ticket type is not available for this departure"}
 		}
-		priceKES, err := strconv.ParseFloat(priceKESText, 64)
+		priceKES, err := money.ParseKES(priceKESText)
 		if err != nil {
 			return nil, err
 		}
-		total += priceKES
+		totalCents += priceKES
 		planned = append(planned, PlannedLine{TicketClassID: line.TicketClassID, HolderName: line.HolderName, HolderMsisdn: line.HolderMsisdn})
 	}
 
+	total := totalCents.KES()
 	deposit := math.Round(in.DepositKES)
 	minDeposit := minDepositKES(total, minDepositPercent)
 	if deposit < minDeposit {
@@ -209,7 +216,7 @@ func OpenInstallmentPlan(ctx context.Context, pool *pgxpool.Pool, in OpenPlanInp
 			gen_random_uuid(), $1, $2, $3, $4, $5, $6, 'PENDING_PAYMENT', 'MPESA_STK', $7,
 			true, 0, $8, $9, now()
 		) RETURNING id, "balanceDueBy"::text`, in.ScheduleID, in.BuyerPartyID, in.BuyerName,
-		in.BuyerMsisdn, in.BuyerEmail, ticketCustomerID, total, departAt.Format("2006-01-02 15:04:05"), string(plannedJSON)).
+		in.BuyerMsisdn, in.BuyerEmail, ticketCustomerID, totalCents.Decimal(), departAt.Format("2006-01-02 15:04:05"), string(plannedJSON)).
 		Scan(&bookingID, &balanceDueBy)
 	if err != nil {
 		return nil, err
@@ -217,7 +224,11 @@ func OpenInstallmentPlan(ctx context.Context, pool *pgxpool.Pool, in OpenPlanInp
 	err = tx.QueryRow(ctx, `
 		INSERT INTO booking_payment (id, "bookingId", "amountKes", kind, status, "createdAt")
 		VALUES (gen_random_uuid(), $1, $2, 'DEPOSIT', 'PENDING', now())
-		RETURNING id`, bookingID).Scan(&depositPaymentID)
+		// $2 is the deposit amount. It was previously missing from this
+		// argument list entirely — the statement declared two placeholders
+		// and supplied one, so pgx rejected every call and no installment
+		// plan could ever be opened.
+		RETURNING id`, bookingID, money.FromKES(deposit).Decimal()).Scan(&depositPaymentID)
 	if err != nil {
 		return nil, err
 	}
@@ -278,19 +289,27 @@ func CreateBalancePayment(ctx context.Context, pool *pgxpool.Pool, bookingID str
 		}
 	}
 
-	total, _ := strconv.ParseFloat(totalText, 64)
-	paid, _ := strconv.ParseFloat(paidText, 64)
+	// Parsed straight from the Decimal columns' ::text, never through
+	// float64. The `kind` decision below turns on an exact equality
+	// between this payment and what is left to pay, and a float
+	// subtraction that lands a hundredth of a cent off would classify a
+	// genuine final payment as an INSTALLMENT — leaving a plan that the
+	// buyer has paid in full permanently short of PAID.
+	total := money.MustParseKES(totalText)
+	paid := money.MustParseKES(paidText)
 	remaining := total - paid
-	amount := math.Round(amountKES)
+	// Installments are whole shillings (the messages below say so), so
+	// the caller's amount is rounded to KES before anything else.
+	amount := money.FromKES(math.Round(amountKES))
 	if amount > remaining {
-		return nil, &InstallmentError{"OVERPAY", fmt.Sprintf("Only KES %.0f is left to pay", remaining)}
+		return nil, &InstallmentError{"OVERPAY", fmt.Sprintf("Only KES %s is left to pay", remaining.Decimal())}
 	}
-	minEach := MinInstallmentKES
+	minEach := money.FromKES(MinInstallmentKES)
 	if remaining < minEach {
 		minEach = remaining
 	}
 	if amount < minEach {
-		return nil, &InstallmentError{"DEPOSIT_TOO_LOW", fmt.Sprintf("Each payment must be at least KES %.0f", minEach)}
+		return nil, &InstallmentError{"DEPOSIT_TOO_LOW", fmt.Sprintf("Each payment must be at least KES %s", minEach.Decimal())}
 	}
 
 	kind := "INSTALLMENT"
@@ -301,11 +320,11 @@ func CreateBalancePayment(ctx context.Context, pool *pgxpool.Pool, bookingID str
 	err = pool.QueryRow(ctx, `
 		INSERT INTO booking_payment (id, "bookingId", "amountKes", kind, status, "createdAt")
 		VALUES (gen_random_uuid(), $1, $2, $3, 'PENDING', now())
-		RETURNING id`, bookingID, amount, kind).Scan(&id)
+		RETURNING id`, bookingID, amount.Decimal(), kind).Scan(&id)
 	if err != nil {
 		return nil, err
 	}
-	return &BalancePaymentResult{ID: id, AmountKES: amount, Msisdn: buyerMsisdn}, nil
+	return &BalancePaymentResult{ID: id, AmountKES: amount.KES(), Msisdn: buyerMsisdn}, nil
 }
 
 var ErrBookingPaymentNotFound = errors.New("no booking payment for that checkout request")

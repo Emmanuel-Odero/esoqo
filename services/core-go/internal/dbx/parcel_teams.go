@@ -40,7 +40,7 @@ type CourierTeamMemberInput struct {
 // caller sends (see notify.CourierTeamMemberAdded), so a team and its
 // manager are never left in a state where the team exists but nobody
 // who's supposed to run it has heard about it yet.
-func CreateCourierTeam(ctx context.Context, pool *pgxpool.Pool, name string, manager CourierTeamMemberInput, staffID *string) (teamID, managerPartyID, esokoID string, err error) {
+func CreateCourierTeam(ctx context.Context, pool *pgxpool.Pool, name string, manager CourierTeamMemberInput, staffID *string) (teamID, managerPartyID, esoqoID string, err error) {
 	if name == "" {
 		return "", "", "", &CourierTeamError{"BAD_INPUT", "Team name is required"}
 	}
@@ -58,17 +58,17 @@ func CreateCourierTeam(ctx context.Context, pool *pgxpool.Pool, name string, man
 		return "", "", "", err
 	}
 
-	managerPartyID, esokoID, err = addCourierTeamMember(ctx, pool, teamID, manager)
+	managerPartyID, esoqoID, err = addCourierTeamMember(ctx, pool, teamID, manager)
 	if err != nil {
 		return "", "", "", err
 	}
-	return teamID, managerPartyID, esokoID, nil
+	return teamID, managerPartyID, esoqoID, nil
 }
 
 // AddCourierTeamMember adds one more person to an existing team —
 // texts them the same "you've been added" confirmation CreateCourierTeam's
 // own first member gets.
-func AddCourierTeamMember(ctx context.Context, pool *pgxpool.Pool, teamID string, in CourierTeamMemberInput) (partyID, esokoID string, err error) {
+func AddCourierTeamMember(ctx context.Context, pool *pgxpool.Pool, teamID string, in CourierTeamMemberInput) (partyID, esoqoID string, err error) {
 	var exists bool
 	if qerr := pool.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM courier_team WHERE id = $1)`, teamID).Scan(&exists); qerr != nil {
 		return "", "", qerr
@@ -85,7 +85,7 @@ func AddCourierTeamMember(ctx context.Context, pool *pgxpool.Pool, teamID string
 	return addCourierTeamMember(ctx, pool, teamID, in)
 }
 
-func addCourierTeamMember(ctx context.Context, pool *pgxpool.Pool, teamID string, in CourierTeamMemberInput) (partyID, esokoID string, err error) {
+func addCourierTeamMember(ctx context.Context, pool *pgxpool.Pool, teamID string, in CourierTeamMemberInput) (partyID, esoqoID string, err error) {
 	partyID, err = FindOrCreatePersonWithName(ctx, pool, in.Name, in.Msisdn, nil)
 	if err != nil {
 		return "", "", err
@@ -98,11 +98,11 @@ func addCourierTeamMember(ctx context.Context, pool *pgxpool.Pool, teamID string
 	if err != nil {
 		return "", "", err
 	}
-	esokoID, err = EnsureEsokoPaymentId(ctx, pool, partyID, in.Msisdn)
+	esoqoID, err = EnsureEsoqoPaymentId(ctx, pool, partyID, in.Msisdn)
 	if err != nil {
 		return "", "", err
 	}
-	return partyID, esokoID, nil
+	return partyID, esoqoID, nil
 }
 
 // UpdateCourierTeamName renames a team.
@@ -142,7 +142,7 @@ type CourierTeamMemberUpdate struct {
 // number moves the *same* Person row to a new msisdn rather than
 // creating a second one — refuses if that number already belongs to
 // someone else, the same conflict a fresh sign-up would hit.
-func UpdateCourierTeamMember(ctx context.Context, pool *pgxpool.Pool, teamID, partyID string, in CourierTeamMemberUpdate) (esokoID string, err error) {
+func UpdateCourierTeamMember(ctx context.Context, pool *pgxpool.Pool, teamID, partyID string, in CourierTeamMemberUpdate) (esoqoID string, err error) {
 	if in.Name == "" || in.Msisdn == "" {
 		return "", &CourierTeamError{"BAD_INPUT", "Name and phone number are required"}
 	}
@@ -159,7 +159,7 @@ func UpdateCourierTeamMember(ctx context.Context, pool *pgxpool.Pool, teamID, pa
 	var conflictingParty string
 	cerr := pool.QueryRow(ctx, `SELECT "partyId" FROM person WHERE msisdn = $1 AND "partyId" != $2`, in.Msisdn, partyID).Scan(&conflictingParty)
 	if cerr == nil {
-		return "", &CourierTeamError{"BAD_INPUT", "That phone number belongs to a different Esoko account already"}
+		return "", &CourierTeamError{"BAD_INPUT", "That phone number belongs to a different Esoqo account already"}
 	}
 	if !errors.Is(cerr, pgx.ErrNoRows) {
 		return "", cerr
@@ -175,11 +175,11 @@ func UpdateCourierTeamMember(ctx context.Context, pool *pgxpool.Pool, teamID, pa
 	if _, rerr := pool.Exec(ctx, `UPDATE courier_team_member SET role = $1 WHERE "teamId" = $2 AND "partyId" = $3`, role, teamID, partyID); rerr != nil {
 		return "", rerr
 	}
-	esokoID, err = EnsureEsokoPaymentId(ctx, pool, partyID, in.Msisdn)
+	esoqoID, err = EnsureEsoqoPaymentId(ctx, pool, partyID, in.Msisdn)
 	if err != nil {
 		return "", err
 	}
-	return esokoID, nil
+	return esoqoID, nil
 }
 
 // AddCourierFleet adds another vehicle to a team's roster.
@@ -355,6 +355,144 @@ func AssignParcelsToFleet(ctx context.Context, pool *pgxpool.Pool, fleetID strin
 		}
 	}
 	return tripID, assigned, nil
+}
+
+// BoardParcelOntoTrip is a handler scanning a parcel that's already
+// assigned to [tripID] (via AssignParcelsToFleet) confirming it is
+// physically on the vehicle. Distinct from that assignment on purpose:
+// assigning sets courierTripId in bulk with no proof any box actually
+// moved, which is exactly the gap CheckTripDispatched's left-behind
+// list reads. Rejects a code assigned to a *different* trip (or none
+// at all) rather than silently boarding it onto the wrong one — a
+// handler scanning from the wrong pile is a mistake worth stopping,
+// not recording. Idempotent, same "a replay is a no-op, not an error"
+// rule ScanHandoff already follows for a nervous double-scan.
+func BoardParcelOntoTrip(ctx context.Context, pool *pgxpool.Pool, code, tripID, scannedByPartyID string) (alreadyBoarded bool, err error) {
+	if scannedByPartyID == "" {
+		return false, &CourierTeamError{"FORBIDDEN", "Sign in to board a parcel"}
+	}
+	var actualTripID *string
+	var boardedAt *time.Time
+	err = pool.QueryRow(ctx, `
+		SELECT "courierTripId"::text, "courierTripBoardedAt" FROM parcel WHERE code = $1`, code).
+		Scan(&actualTripID, &boardedAt)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return false, &CourierTeamError{"NOT_FOUND", "That parcel was not found"}
+	}
+	if err != nil {
+		return false, err
+	}
+	if actualTripID == nil || *actualTripID != tripID {
+		return false, &CourierTeamError{"BAD_INPUT", "That parcel isn't assigned to this trip"}
+	}
+	if boardedAt != nil {
+		return true, nil // already boarded — replayed scan
+	}
+	_, err = pool.Exec(ctx, `
+		UPDATE parcel SET "courierTripBoardedAt" = now(), "courierTripBoardedByPartyId" = $1
+		WHERE code = $2`, scannedByPartyID, code)
+	return false, err
+}
+
+// TripDispatchResult — what CheckTripDispatched found: the trip's own
+// fleet number (for the SMS), and which assigned parcels never got a
+// boarding scan before the handler said "done checking".
+type TripDispatchResult struct {
+	FleetNumber  string
+	BoardedCount int
+	LeftBehind   []LeftBehindParcel
+	// AllMembers/Managers — the same team roster
+	// GetCourierTripCompletionInfo already resolves, split here so the
+	// handler can pick the right audience: a manager-only alert when
+	// something's actually wrong, the whole team when the run left
+	// clean (see this package's own comment on why exceptions and
+	// milestones get different reach).
+	AllMembers []CourierTeamMemberRow
+	Managers   []CourierTeamMemberRow
+}
+
+// LeftBehindParcel is one row of CheckTripDispatched's own findings —
+// enough for the dashboard to show full detail even though the SMS
+// alongside it only ever names a taster (see notify.CourierParcelsLeftBehind).
+type LeftBehindParcel struct {
+	Code             string
+	DestinationLabel string
+}
+
+// CheckTripDispatched is the explicit "I'm done scanning" moment a
+// handler triggers once every parcel they believe is on the vehicle has
+// been boarded. Idempotent (a second click just re-reports the same
+// facts, same pattern CompleteTrip already follows) — this is a
+// read-and-stamp, not a state machine with only one legal transition.
+func CheckTripDispatched(ctx context.Context, pool *pgxpool.Pool, tripID string, staffID *string) (*TripDispatchResult, error) {
+	var fleetID string
+	if err := pool.QueryRow(ctx, `SELECT "fleetId" FROM courier_trip WHERE id = $1`, tripID).Scan(&fleetID); err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, &CourierTeamError{"NOT_FOUND", "That trip was not found"}
+		}
+		return nil, err
+	}
+	var res TripDispatchResult
+	if err := pool.QueryRow(ctx, `SELECT "fleetNumber" FROM courier_fleet WHERE id = $1`, fleetID).Scan(&res.FleetNumber); err != nil {
+		return nil, err
+	}
+	if err := pool.QueryRow(ctx, `
+		SELECT count(*) FROM parcel WHERE "courierTripId" = $1 AND "courierTripBoardedAt" IS NOT NULL`, tripID).
+		Scan(&res.BoardedCount); err != nil {
+		return nil, err
+	}
+	rows, err := pool.Query(ctx, `
+		SELECT code, "destinationLabel" FROM parcel
+		WHERE "courierTripId" = $1 AND "courierTripBoardedAt" IS NULL
+		  AND status NOT IN ('DELIVERED', 'CANCELLED')
+		ORDER BY "createdAt" ASC`, tripID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var lb LeftBehindParcel
+		if err := rows.Scan(&lb.Code, &lb.DestinationLabel); err != nil {
+			return nil, err
+		}
+		res.LeftBehind = append(res.LeftBehind, lb)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	mrows, err := pool.Query(ctx, `
+		SELECT m."partyId", COALESCE(pr."knownAs", pr."officialName"), pr.msisdn, m.role, m."addedAt"
+		FROM courier_team_member m
+		JOIN courier_fleet f ON f."teamId" = m."teamId"
+		JOIN person pr ON pr."partyId" = m."partyId"
+		WHERE f.id = $1`, fleetID)
+	if err != nil {
+		return nil, err
+	}
+	defer mrows.Close()
+	for mrows.Next() {
+		var m CourierTeamMemberRow
+		if err := mrows.Scan(&m.PartyID, &m.Name, &m.Msisdn, &m.Role, &m.AddedAt); err != nil {
+			return nil, err
+		}
+		res.AllMembers = append(res.AllMembers, m)
+		if m.Role == "MANAGER" {
+			res.Managers = append(res.Managers, m)
+		}
+	}
+	if err := mrows.Err(); err != nil {
+		return nil, err
+	}
+	// Stamped every call, not just the first — a handler who checks
+	// again after boarding a straggler should see checkedAt move, the
+	// same reasoning CompleteTrip's own idempotent UPDATE follows for
+	// completedAt on a trip that's already complete (a no-op there
+	// because re-completing shouldn't re-fire the completion SMS; here
+	// there is no SMS side effect on a second call to guard against).
+	_, err = pool.Exec(ctx, `
+		UPDATE courier_trip SET "checkedAt" = now(), "checkedByStaffId" = $1 WHERE id = $2`,
+		staffID, tripID)
+	return &res, err
 }
 
 // CourierTripCompletionInfo is what the handler needs to compose and

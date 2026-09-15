@@ -6,15 +6,30 @@ package main
 import (
 	"context"
 	"log"
+	"os"
 
-	"github.com/esoko/core-go/internal/config"
-	"github.com/esoko/core-go/internal/dbx"
-	"github.com/esoko/core-go/internal/seed"
+	"github.com/esoqo/core-go/internal/config"
+	"github.com/esoqo/core-go/internal/dbx"
+	"github.com/esoqo/core-go/internal/seed"
 )
 
 func main() {
 	cfg := config.Load()
+	if err := cfg.Validate(); err != nil {
+		log.Fatalf("seed: refusing to run: %v", err)
+	}
 	ctx := context.Background()
+
+	// Everything below "reference data" plants accounts whose PIN is a
+	// known function of the phone number. LOCAL_TEST_PROD points
+	// DATABASE_URL at real infrastructure, so demo seeding is confined to
+	// development — otherwise a rehearsal run leaves sign-in-able demo
+	// identities on a live database.
+	demoAllowed := config.CurrentAppEnv() == config.AppEnvDevelopment
+	if !demoAllowed && os.Getenv("SEED_REFERENCE_ONLY") != "1" {
+		log.Fatalf("seed: APP_ENV=%s seeds demo accounts with predictable PINs; "+
+			"set SEED_REFERENCE_ONLY=1 to seed reference data only", config.CurrentAppEnv())
+	}
 
 	pool, err := dbx.NewPool(ctx, cfg.DatabaseURL)
 	if err != nil {
@@ -25,6 +40,11 @@ func main() {
 	log.Println("seeding reference data…")
 	if err := seed.SeedReferenceData(ctx, pool); err != nil {
 		log.Fatalf("seed: reference data: %v", err)
+	}
+
+	if !demoAllowed {
+		log.Println("SEED_REFERENCE_ONLY=1 — skipping all demo data.")
+		return
 	}
 
 	log.Println("seeding demo ticketing…")

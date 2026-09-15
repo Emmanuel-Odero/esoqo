@@ -184,7 +184,7 @@ func UpsertPin(ctx context.Context, pool *pgxpool.Pool, partyID, pinHash string)
 // the PIN-reset flow only ever sets a PIN for a Person that already
 // exists (they proved control of the number via OTP first); it never
 // creates one, unlike FindOrCreatePersonByMsisdn's sign-up path.
-var ErrPersonNotFound = errors.New("no Esoko account found with that number")
+var ErrPersonNotFound = errors.New("no Esoqo account found with that number")
 
 // SetSubjectPinByMsisdn — same contract as auth-credential.ts's
 // setSubjectPin: upserts UserCredential (a freshly registered Person may

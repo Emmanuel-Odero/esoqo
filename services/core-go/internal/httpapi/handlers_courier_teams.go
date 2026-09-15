@@ -5,9 +5,9 @@ import (
 
 	"github.com/gin-gonic/gin"
 
-	"github.com/esoko/core-go/internal/authsvc"
-	"github.com/esoko/core-go/internal/dbx"
-	"github.com/esoko/core-go/internal/notify"
+	"github.com/esoqo/core-go/internal/authsvc"
+	"github.com/esoqo/core-go/internal/dbx"
+	"github.com/esoqo/core-go/internal/notify"
 )
 
 // Courier teams console API — a dispatch-planning layer on top of the
@@ -57,7 +57,7 @@ func (s *Server) handleCreateCourierTeam(c *gin.Context) {
 		id := ctx.ActorID
 		staffID = &id
 	}
-	teamID, _, esokoID, err := dbx.CreateCourierTeam(c.Request.Context(), s.Pool, req.Name, dbx.CourierTeamMemberInput{
+	teamID, _, esoqoID, err := dbx.CreateCourierTeam(c.Request.Context(), s.Pool, req.Name, dbx.CourierTeamMemberInput{
 		Name: req.Manager.Name, Msisdn: req.Manager.Msisdn, Role: req.Manager.Role,
 	}, staffID)
 	if err != nil {
@@ -68,8 +68,8 @@ func (s *Server) handleCreateCourierTeam(c *gin.Context) {
 	if role == "" {
 		role = "MANAGER"
 	}
-	_ = authsvc.SendSms(req.Manager.Msisdn, notify.CourierTeamMemberAdded(req.Manager.Name, req.Name, role, esokoID), "COURIER_TEAM_ADDED")
-	c.JSON(http.StatusOK, gin.H{"teamId": teamID, "esokoId": esokoID})
+	_ = authsvc.SendSms(req.Manager.Msisdn, notify.CourierTeamMemberAdded(req.Manager.Name, req.Name, role, esoqoID), "COURIER_TEAM_ADDED")
+	c.JSON(http.StatusOK, gin.H{"teamId": teamID, "esoqoId": esoqoID})
 }
 
 // handleListCourierTeams — GET /v1/admin/parcels/courier-teams.
@@ -119,7 +119,7 @@ func (s *Server) handleAddCourierTeamMember(c *gin.Context) {
 		return
 	}
 	teamID := c.Param("id")
-	_, esokoID, err := dbx.AddCourierTeamMember(c.Request.Context(), s.Pool, teamID, dbx.CourierTeamMemberInput{
+	_, esoqoID, err := dbx.AddCourierTeamMember(c.Request.Context(), s.Pool, teamID, dbx.CourierTeamMemberInput{
 		Name: req.Name, Msisdn: req.Msisdn, Role: req.Role,
 	})
 	if err != nil {
@@ -132,9 +132,9 @@ func (s *Server) handleAddCourierTeamMember(c *gin.Context) {
 		if role == "" {
 			role = "MEMBER"
 		}
-		_ = authsvc.SendSms(req.Msisdn, notify.CourierTeamMemberAdded(req.Name, teamName, role, esokoID), "COURIER_TEAM_ADDED")
+		_ = authsvc.SendSms(req.Msisdn, notify.CourierTeamMemberAdded(req.Name, teamName, role, esoqoID), "COURIER_TEAM_ADDED")
 	}
-	c.JSON(http.StatusOK, gin.H{"esokoId": esokoID})
+	c.JSON(http.StatusOK, gin.H{"esoqoId": esoqoID})
 }
 
 type updateCourierTeamRequest struct {
@@ -180,7 +180,7 @@ func (s *Server) handleUpdateCourierTeamMember(c *gin.Context) {
 		return
 	}
 	teamID := c.Param("id")
-	esokoID, err := dbx.UpdateCourierTeamMember(c.Request.Context(), s.Pool, teamID, c.Param("partyId"), dbx.CourierTeamMemberUpdate{
+	esoqoID, err := dbx.UpdateCourierTeamMember(c.Request.Context(), s.Pool, teamID, c.Param("partyId"), dbx.CourierTeamMemberUpdate{
 		Name: req.Name, Msisdn: req.Msisdn, Role: req.Role,
 	})
 	if err != nil {
@@ -193,9 +193,9 @@ func (s *Server) handleUpdateCourierTeamMember(c *gin.Context) {
 		if role == "" {
 			role = "MEMBER"
 		}
-		_ = authsvc.SendSms(req.Msisdn, notify.CourierTeamMemberUpdated(req.Name, teamName, role, esokoID), "COURIER_TEAM_UPDATED")
+		_ = authsvc.SendSms(req.Msisdn, notify.CourierTeamMemberUpdated(req.Name, teamName, role, esoqoID), "COURIER_TEAM_UPDATED")
 	}
-	c.JSON(http.StatusOK, gin.H{"esokoId": esokoID})
+	c.JSON(http.StatusOK, gin.H{"esoqoId": esoqoID})
 }
 
 type addCourierFleetRequest struct {
@@ -281,4 +281,88 @@ func (s *Server) handleCompleteCourierTrip(c *gin.Context) {
 		}
 	}
 	c.JSON(http.StatusOK, gin.H{"ok": true})
+}
+
+type boardParcelOntoTripRequest struct {
+	Code string `json:"code" binding:"required"`
+}
+
+// handleBoardParcelOntoTrip — POST /v1/admin/parcels/trips/:id/board.
+// The scan confirmation AssignParcelsToFleet never had — see
+// dbx.BoardParcelOntoTrip's own comment on why assignment alone isn't
+// proof anything physically moved.
+func (s *Server) handleBoardParcelOntoTrip(c *gin.Context) {
+	ctx := ctxFromGin(c)
+	if err := authsvc.RequireCapability(ctx, "parcels.assign", nil); err != nil {
+		writeParcelAdminError(c, err)
+		return
+	}
+	var req boardParcelOntoTripRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		writeError(c, http.StatusBadRequest, "INVALID_REQUEST", err.Error())
+		return
+	}
+	alreadyBoarded, err := dbx.BoardParcelOntoTrip(c.Request.Context(), s.Pool, req.Code, c.Param("id"), ctx.PartyID)
+	if err != nil {
+		writeCourierTeamError(c, err)
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"boarded": true, "alreadyBoarded": alreadyBoarded})
+}
+
+// handleCheckTripDispatched — POST /v1/admin/parcels/trips/:id/checked.
+// The explicit "I'm done scanning" moment. Sends exactly one SMS:
+// CourierParcelsLeftBehind to the team's manager(s) if anything assigned
+// never got a boarding scan, or CourierTripDeparted to the whole team on
+// a clean run — never both, and never a per-parcel text to anyone,
+// which is the whole point of drawing the line here rather than on
+// every individual scan.
+func (s *Server) handleCheckTripDispatched(c *gin.Context) {
+	ctx := ctxFromGin(c)
+	if err := authsvc.RequireCapability(ctx, "parcels.assign", nil); err != nil {
+		writeParcelAdminError(c, err)
+		return
+	}
+	var staffID *string
+	if ctx.ActorID != "" {
+		id := ctx.ActorID
+		staffID = &id
+	}
+	tripID := c.Param("id")
+	result, err := dbx.CheckTripDispatched(c.Request.Context(), s.Pool, tripID, staffID)
+	if err != nil {
+		writeCourierTeamError(c, err)
+		return
+	}
+	if len(result.LeftBehind) > 0 {
+		sample := make([]string, 0, 2)
+		for _, lb := range result.LeftBehind {
+			if len(sample) == 2 {
+				break
+			}
+			sample = append(sample, lb.Code)
+		}
+		message := notify.CourierParcelsLeftBehind(result.FleetNumber, len(result.LeftBehind), sample)
+		for _, m := range result.Managers {
+			if m.Msisdn == nil || *m.Msisdn == "" {
+				continue
+			}
+			_ = authsvc.SendSms(*m.Msisdn, message, "COURIER_PARCELS_LEFT_BEHIND")
+		}
+	} else {
+		message := notify.CourierTripDeparted(result.FleetNumber, result.BoardedCount)
+		for _, m := range result.AllMembers {
+			if m.Msisdn == nil || *m.Msisdn == "" {
+				continue
+			}
+			_ = authsvc.SendSms(*m.Msisdn, message, "COURIER_TRIP_DEPARTED")
+		}
+	}
+	leftBehind := make([]gin.H, len(result.LeftBehind))
+	for i, lb := range result.LeftBehind {
+		leftBehind[i] = gin.H{"code": lb.Code, "destinationLabel": lb.DestinationLabel}
+	}
+	c.JSON(http.StatusOK, gin.H{
+		"fleetNumber": result.FleetNumber, "boardedCount": result.BoardedCount, "leftBehind": leftBehind,
+	})
 }

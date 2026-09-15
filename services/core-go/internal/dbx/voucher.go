@@ -1,4 +1,4 @@
-// Package dbx (voucher.go) is the Go data plane for Esoko voucher cards.
+// Package dbx (voucher.go) is the Go data plane for Esoqo voucher cards.
 //
 // A card is purpose-locked (FARE|RENT|SHOPPING|GENERAL) and holds points
 // where 10 pts == KES 1. Balance is always SUM(voucher_ledger_entry.points)
@@ -16,13 +16,15 @@ import (
 	"strings"
 	"time"
 
+	"github.com/esoqo/core-go/internal/money"
+
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 
-	"github.com/esoko/core-go/internal/authsvc"
-	"github.com/esoko/core-go/internal/fleetqr"
-	"github.com/esoko/core-go/internal/ledger"
-	"github.com/esoko/core-go/internal/loyalty"
+	"github.com/esoqo/core-go/internal/authsvc"
+	"github.com/esoqo/core-go/internal/fleetqr"
+	"github.com/esoqo/core-go/internal/ledger"
+	"github.com/esoqo/core-go/internal/loyalty"
 )
 
 func randSuffix() string {
@@ -60,7 +62,7 @@ type Voucher struct {
 	ShortCode       string
 	ExpiresAt       *string
 	BalancePoints   int
-	BalanceKES      float64
+	BalanceKES      money.Amount
 	CreatedAt       string
 }
 
@@ -136,7 +138,9 @@ func VoucherBalance(ctx context.Context, pool *pgxpool.Pool, voucherID string) (
 
 func scanVoucherRow(v *Voucher, bal int) {
 	v.BalancePoints = bal
-	v.BalanceKES = loyalty.KesForPoints(bal)
+	// Points convert to KES at a fixed rate; the result is what a holder
+	// is shown and spends against, so it lands on an exact cent.
+	v.BalanceKES = money.AmountFromKES(loyalty.KesForPoints(bal))
 }
 
 // GetVoucher loads a card + balance. Owner, giver, or staff with
@@ -162,7 +166,7 @@ func GetVoucher(ctx context.Context, pool *pgxpool.Pool, voucherID string) (*Vou
 }
 
 // ResolveVoucherByCode accepts uuid, shortCode (VCH-XXXXXX), qrToken, or
-// full esoko://v payload.
+// full esoqo://v payload.
 func ResolveVoucherByCode(ctx context.Context, pool *pgxpool.Pool, code string) (*Voucher, error) {
 	code = strings.TrimSpace(code)
 	if id, sig := fleetqr.ParseVoucherPayload(code); id != "" && sig != "" {
@@ -220,27 +224,41 @@ func AttachVoucherCheckoutRequestID(ctx context.Context, pool *pgxpool.Pool, vou
 	return err
 }
 
+// VoucherLoadResult — what actually happened, so the caller can decide
+// whether there is anything to tell the cardholder about. AlreadyDone
+// is the idempotent replay (a callback delivered twice): the money was
+// credited by an earlier call, and texting them again about the same
+// shillings is both a lie and a second SMS charge.
+type VoucherLoadResult struct {
+	VoucherID   string
+	CreditedKES float64
+	AlreadyDone bool
+}
+
 // ConfirmVoucherLoadByCheckoutID credits the pending M-Pesa load once,
 // posts the KES double-entry, and earns loyalty. Idempotent.
-func ConfirmVoucherLoadByCheckoutID(ctx context.Context, pool *pgxpool.Pool, checkoutID, receipt string, loyaltyEnabled bool) error {
+func ConfirmVoucherLoadByCheckoutID(ctx context.Context, pool *pgxpool.Pool, checkoutID, receipt string, loyaltyEnabled bool) (VoucherLoadResult, error) {
+	var res VoucherLoadResult
 	var voucherID string
 	if err := pool.QueryRow(ctx, `SELECT id FROM voucher_card WHERE "mpesaCheckoutRequestId" = $1`, checkoutID).Scan(&voucherID); err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
-			return ErrVoucherLoadNotFound
+			return res, ErrVoucherLoadNotFound
 		}
-		return err
+		return res, err
 	}
+	res.VoucherID = voucherID
 	var done bool
 	if err := pool.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM voucher_ledger_entry WHERE "voucherId" = $1 AND kind = 'LOAD_MPESA' AND "refId" = $2)`, voucherID, checkoutID).Scan(&done); err != nil {
-		return err
+		return res, err
 	}
 	if done {
-		return nil
+		res.AlreadyDone = true
+		return res, nil
 	}
 	var expectPoints int
 	_ = pool.QueryRow(ctx, `SELECT points FROM voucher_ledger_entry WHERE "voucherId" = $1 AND kind = 'LOAD_MPESA_PENDING' AND "refId" = $2 LIMIT 1`, voucherID, checkoutID).Scan(&expectPoints)
 	if expectPoints <= 0 {
-		return ErrVoucherLoadNotFound
+		return res, ErrVoucherLoadNotFound
 	}
 	kes := loyalty.KesForPoints(expectPoints)
 	var owner string
@@ -248,25 +266,74 @@ func ConfirmVoucherLoadByCheckoutID(ctx context.Context, pool *pgxpool.Pool, che
 
 	settlement, err := ledger.EnsureAccount(ctx, pool, nil, "SETTLEMENT", "KES")
 	if err != nil {
-		return err
+		return res, err
 	}
 	floatAcct, err := ledger.EnsureAccount(ctx, pool, nil, "VOUCHER_FLOAT", "KES")
 	if err != nil {
-		return err
+		return res, err
 	}
 	entryID, err := ledger.PostEntry(ctx, pool, "voucher-load:"+voucherID+":"+checkoutID, "Voucher load via M-Pesa "+receipt, "core-go:voucher-load:"+checkoutID,
-		[]ledger.Posting{{AccountID: settlement, AmountKES: kes}, {AccountID: floatAcct, AmountKES: -kes}})
+		[]ledger.Posting{{AccountID: settlement, AmountCents: ledger.CentsFromKES(kes)}, {AccountID: floatAcct, AmountCents: ledger.CentsFromKES(-kes)}})
 	if err != nil {
-		return err
+		return res, err
 	}
 	if _, err := pool.Exec(ctx, `INSERT INTO voucher_ledger_entry (id, "voucherId", points, "kesEquiv", kind, "refId", "journalEntryId", "createdAt") VALUES (gen_random_uuid(), $1, $2, $3, 'LOAD_MPESA', $4, $5, now())`,
 		voucherID, expectPoints, kes, checkoutID, entryID); err != nil {
-		return err
+		return res, err
 	}
 	if owner != "" {
 		_ = loyalty.EarnForSpend(ctx, pool, owner, kes, "voucher-load:"+checkoutID, loyaltyEnabled)
 	}
-	return nil
+	res.CreditedKES = kes
+	return res, nil
+}
+
+// VoucherNotifyDetail — who to tell about value landing on a card, and
+// what to call the card when telling them. GiftedByName is empty for a
+// card somebody loaded for themselves.
+type VoucherNotifyDetail struct {
+	OwnerMsisdn  string
+	Label        string
+	ShortCode    string
+	BalanceKES   float64
+	GiftedByName string
+}
+
+// GetVoucherNotifyDetail resolves everything a voucher SMS needs in one
+// query plus the derived balance. Returns nil (no error) when there is
+// no phone number on file for the owner — a card minted for someone
+// staff typed in off a list is still a card, there is just nobody to
+// text yet, and that is not a failure worth propagating.
+func GetVoucherNotifyDetail(ctx context.Context, pool *pgxpool.Pool, voucherID string) (*VoucherNotifyDetail, error) {
+	var d VoucherNotifyDetail
+	var msisdn, giftedBy *string
+	err := pool.QueryRow(ctx, `
+		SELECT owner.msisdn, vc.label, vc."shortCode",
+		       COALESCE(giver."knownAs", giver."officialName")
+		FROM voucher_card vc
+		JOIN person owner ON owner."partyId" = vc."ownerPartyId"
+		LEFT JOIN person giver ON giver."partyId" = vc."giftedByPartyId"
+		WHERE vc.id = $1`, voucherID).
+		Scan(&msisdn, &d.Label, &d.ShortCode, &giftedBy)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, err
+	}
+	if msisdn == nil || *msisdn == "" {
+		return nil, nil
+	}
+	d.OwnerMsisdn = *msisdn
+	if giftedBy != nil {
+		d.GiftedByName = *giftedBy
+	}
+	bal, err := VoucherBalance(ctx, pool, voucherID)
+	if err != nil {
+		return nil, err
+	}
+	d.BalanceKES = loyalty.KesForPoints(bal)
+	return &d, nil
 }
 
 // LoadVoucherWithLoyalty converts loyalty points 1:1 into voucher points.

@@ -1,6 +1,6 @@
 # core-go
 
-Esoko's mobile-facing REST API (Gin), for the Flutter apps (Android, iOS,
+Esoqo's mobile-facing REST API (Gin), for the Flutter apps (Android, iOS,
 Wear OS). See `docs/adr/0005-mobile-api-in-go.md` for why this exists
 alongside `services/core` (TypeScript/Fastify), and the plan this was
 scaffolded from for what comes next (groups/chamas, shopping, ticketing

@@ -1,6 +1,6 @@
 // Package seed (demo_unified_identity.go) — local dev/demo accounts for
 // the unified-crew-identity model (docs/proposals/
-// esoko-unified-crew-identity.md). There is no self-serve sign-up screen
+// esoqo-unified-crew-identity.md). There is no self-serve sign-up screen
 // in the mobile app (OTP auto-provisions on first verify, but that needs
 // a real SMS round trip) — these 20 accounts exist so a phone/PIN sign-in
 // works immediately for local testing, covering every role shape the
@@ -21,8 +21,8 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 
-	"github.com/esoko/core-go/internal/authsvc"
-	"github.com/esoko/core-go/internal/dbx"
+	"github.com/esoqo/core-go/internal/authsvc"
+	"github.com/esoqo/core-go/internal/dbx"
 )
 
 // ensureOrgStaffGrant seeds directly into org_staff_grant rather than

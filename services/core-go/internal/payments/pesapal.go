@@ -8,7 +8,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/esoko/core-go/internal/config"
+	"github.com/esoqo/core-go/internal/config"
 )
 
 const (

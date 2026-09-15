@@ -5,7 +5,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 
-	"github.com/esoko/core-go/internal/dbx"
+	"github.com/esoqo/core-go/internal/dbx"
 )
 
 // GET /v1/scan/resolve?code= — the universal scanner dispatcher, public.

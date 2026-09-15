@@ -2,14 +2,17 @@ package httpapi
 
 import (
 	"bytes"
+	"crypto/subtle"
 	"encoding/json"
+	"log"
 	"net/http"
 	"time"
 
 	"github.com/gin-gonic/gin"
 
-	"github.com/esoko/core-go/internal/dbx"
-	"github.com/esoko/core-go/internal/payments"
+	"github.com/esoqo/core-go/internal/dbx"
+	"github.com/esoqo/core-go/internal/money"
+	"github.com/esoqo/core-go/internal/payments"
 )
 
 // handleMpesaStkCallback is now the canonical Daraja target (see
@@ -22,6 +25,15 @@ import (
 // below is idempotent, so a callback seen by both services (during the
 // transition both URLs may be live) can never double-post.
 func (s *Server) handleMpesaStkCallback(c *gin.Context) {
+	if !s.callbackTokenOK(c.Param("token")) {
+		// Deliberately not 200: this is not Safaricom, so there is no
+		// retry to suppress, and a forged confirm must never be told it
+		// looked plausible.
+		log.Printf("core-go: rejected mpesa callback with bad/missing token from %s", c.ClientIP())
+		c.JSON(http.StatusNotFound, gin.H{"error": "not found"})
+		return
+	}
+
 	// Raw bytes are kept so an unowned callback can be forwarded
 	// byte-identical to the TS webhook below (signature-safe).
 	raw, err := c.GetRawData()
@@ -42,6 +54,32 @@ func (s *Server) handleMpesaStkCallback(c *gin.Context) {
 	}
 
 	ctx := c.Request.Context()
+
+	// Second control, independent of the secret path: the amount paid
+	// must match what the pending row was raised for. ErrCheckoutUnknown
+	// falls through untouched — that is the foreign-callback case the
+	// dispatch below already handles by forwarding to TS.
+	if expected, err := dbx.ExpectedAmountForCheckout(ctx, s.Pool, cb.CheckoutRequestID); err == nil {
+		if !cb.AmountPresent {
+			log.Printf("core-go: mpesa callback %s carried no Amount; refusing to confirm %.2f", cb.CheckoutRequestID, expected)
+			c.JSON(http.StatusOK, gin.H{"ok": true})
+			return
+		}
+		// Compared as exact cents. This is the check that decides whether
+		// a real M-Pesa payment is accepted as matching what was asked
+		// for, so "equal" has to mean equal: Daraja reports KES to 2dp,
+		// both sides round to the same cent, and a float tolerance here
+		// was only ever covering for the comparison's own imprecision.
+		if money.FromKES(cb.Amount) != money.FromKES(expected) {
+			log.Printf("core-go: mpesa callback %s amount mismatch (paid %.2f, expected %.2f) — not confirming",
+				cb.CheckoutRequestID, cb.Amount, expected)
+			c.JSON(http.StatusOK, gin.H{"ok": true})
+			return
+		}
+	} else if err != dbx.ErrCheckoutUnknown {
+		writeError(c, http.StatusInternalServerError, "CONFIRM_FAILED", "Could not confirm payment")
+		return
+	}
 
 	if err := dbx.ConfirmStoreOrderPaymentByCheckoutID(ctx, s.Pool, cb.CheckoutRequestID, s.Cfg.LoyaltyEarnEnabled); err == nil {
 		c.JSON(http.StatusOK, gin.H{"ok": true})
@@ -107,7 +145,15 @@ func (s *Server) handleMpesaStkCallback(c *gin.Context) {
 		return
 	}
 
-	if err := dbx.ConfirmVoucherLoadByCheckoutID(ctx, s.Pool, cb.CheckoutRequestID, cb.MpesaReceiptCode, s.Cfg.LoyaltyEarnEnabled); err == nil {
+	if load, err := dbx.ConfirmVoucherLoadByCheckoutID(ctx, s.Pool, cb.CheckoutRequestID, cb.MpesaReceiptCode, s.Cfg.LoyaltyEarnEnabled); err == nil {
+		if !load.AlreadyDone {
+			// The async half of the same event handleLoadVoucher
+			// notifies inline: a top-up whose STK push wasn't
+			// auto-confirmed inside the client's poll window used to
+			// land in silence, so the cardholder's money arrived with
+			// nothing at all to say so.
+			s.sendVoucherLoadedSms(c, load, "M-Pesa")
+		}
 		c.JSON(http.StatusOK, gin.H{"ok": true})
 		return
 	} else if err != dbx.ErrVoucherLoadNotFound {
@@ -138,6 +184,18 @@ func (s *Server) handleMpesaStkCallback(c *gin.Context) {
 		forwardToTsWebhook(s.Cfg.TsCoreWebhookURL, raw)
 	}
 	c.JSON(http.StatusOK, gin.H{"ok": true})
+}
+
+// callbackTokenOK authenticates a callback by the secret path segment
+// registered with Daraja as part of MPESA_CALLBACK_URL. When no secret
+// is configured the endpoint is only reachable in console mode (config
+// refuses to boot a real provider without one), so the unauthenticated
+// path stays usable for local development and nothing else.
+func (s *Server) callbackTokenOK(token string) bool {
+	if s.Cfg.MpesaCallbackSecret == "" {
+		return true
+	}
+	return subtle.ConstantTimeCompare([]byte(token), []byte(s.Cfg.MpesaCallbackSecret)) == 1
 }
 
 // forwardToTsWebhook hands a foreign callback to services/core,

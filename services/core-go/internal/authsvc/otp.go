@@ -14,7 +14,7 @@ import (
 
 	"github.com/redis/go-redis/v9"
 
-	"github.com/esoko/core-go/internal/notify"
+	"github.com/esoqo/core-go/internal/notify"
 )
 
 // Ported 1:1 from packages/auth/src/otp.ts. Codes are never stored, only
@@ -31,6 +31,29 @@ const (
 	OtpStepUp        OtpPurpose = "STEP_UP"
 	OtpConsentGrant  OtpPurpose = "CONSENT_GRANT"
 	OtpParcelReceipt OtpPurpose = "PARCEL_RECEIPT"
+	// OtpParcelClaim — proving you are the sender or receiver of a
+	// parcel, to be shown more than a stranger holding the same code.
+	// Its own purpose rather than reusing PARCEL_RECEIPT so that
+	// confirming you received a parcel and unlocking its details stay
+	// separate credentials: they are issued at different moments, to
+	// different people, and a code minted for one must not spend the
+	// other.
+	OtpParcelClaim OtpPurpose = "PARCEL_CLAIM"
+	// OtpParcelStaffSignIn — a courier-company staffer proving control
+	// of their own registered number on the public tracking page's
+	// hardened staff panel, instead of a shared name+PIN. Its own
+	// purpose so a code minted here can never be replayed against the
+	// PIN-reset or claim flows, same reasoning OtpParcelClaim's own
+	// comment gives.
+	OtpParcelStaffSignIn OtpPurpose = "PARCEL_STAFF_SIGNIN"
+	// OtpParcelDeliveryConfirm — an alternative to the printed delivery
+	// code at the point of hand-over: the receiver reads out a code
+	// texted to the number already on the parcel, proving they are who
+	// they say they are rather than merely someone who was handed the
+	// code by whoever had it last. Offered alongside the delivery code,
+	// never in place of the custody/status checks DeliverParcel already
+	// makes.
+	OtpParcelDeliveryConfirm OtpPurpose = "PARCEL_DELIVERY_CONFIRM"
 )
 
 const (
@@ -114,9 +137,26 @@ func (s *OtpService) IssueOtp(ctx context.Context, msisdn string, purpose OtpPur
 		}
 	}
 
+	// Reserve the spend before sending, not after: a plain GET-then-check
+	// lets every concurrent request read the same under-cap total and all
+	// pass, so the cap could be overrun by however many requests are in
+	// flight. INCRBYFLOAT returns the post-increment total atomically, so
+	// exactly one caller can be the one that crosses the line — and the
+	// reservation is released again on any path that doesn't send.
 	spendKey := "otp:spend:" + time.Now().UTC().Format("2006-01-02")
-	spent, _ := s.rdb.Get(ctx, spendKey).Float64()
-	if spent+smsCostKES > s.dailyCapKES {
+	spent, err := s.rdb.IncrByFloat(ctx, spendKey, smsCostKES).Result()
+	if err != nil {
+		return nil, err
+	}
+	s.rdb.Expire(ctx, spendKey, 48*time.Hour)
+	releaseSpend := func() { s.rdb.IncrByFloat(ctx, spendKey, -smsCostKES) }
+
+	if spent > s.dailyCapKES {
+		releaseSpend()
+		// Crossing the daily cap means someone is burning real money at
+		// ~KES 0.8 a message. Previously this only reached stdout, where
+		// nobody was watching; alertOtpSpendCap is the paging hook.
+		s.alertSpendCap(ctx, spent, msisdn, ip)
 		return nil, &OtpError{"Verification is temporarily unavailable. Please try later.", OtpSpendCap}
 	}
 
@@ -129,6 +169,7 @@ func (s *OtpService) IssueOtp(ctx context.Context, msisdn string, purpose OtpPur
 
 	n, err := rand.Int(rand.Reader, big.NewInt(1_000_000))
 	if err != nil {
+		releaseSpend()
 		return nil, err
 	}
 	code := fmt.Sprintf("%06d", n.Int64())
@@ -140,18 +181,24 @@ func (s *OtpService) IssueOtp(ctx context.Context, msisdn string, purpose OtpPur
 	pipe.Expire(ctx, k, otpTTL)
 	pipe.Incr(ctx, sendCountKey)
 	pipe.Expire(ctx, sendCountKey, time.Hour)
-	pipe.IncrByFloat(ctx, spendKey, smsCostKES)
-	pipe.Expire(ctx, spendKey, 48*time.Hour)
+	// The spend reservation was already taken above — incrementing again
+	// here would double-count every send against the cap.
 	if _, err := pipe.Exec(ctx); err != nil {
+		releaseSpend()
 		return nil, err
 	}
 
 	if SmsProvider() == "console" {
+		// Nothing was actually sent, so nothing was actually spent —
+		// otherwise a dev/console deployment would march toward a cap it
+		// can never really hit and start refusing sign-ins.
+		releaseSpend()
 		fmt.Printf("\n  ┌─ OTP ─────────────────────────────\n  │  %s\n  │  code: %s\n  │  purpose: %s\n  └───────────────────────────────────\n\n", msisdn, code, purpose)
 		return &SendResult{ExpiresAt: expiresAt, CooldownSeconds: cooldown}, nil
 	}
 
 	if err := SendSms(msisdn, notify.OtpCode(code), "otp"); err != nil {
+		releaseSpend() // provider rejected it; no message, no cost
 		return nil, err
 	}
 	return &SendResult{ExpiresAt: expiresAt, CooldownSeconds: cooldown}, nil

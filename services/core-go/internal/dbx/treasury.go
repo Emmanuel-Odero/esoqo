@@ -20,8 +20,8 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 
-	"github.com/esoko/core-go/internal/authsvc"
-	"github.com/esoko/core-go/internal/ledger"
+	"github.com/esoqo/core-go/internal/authsvc"
+	"github.com/esoqo/core-go/internal/ledger"
 )
 
 // IsOfficer mirrors treasury.ts's isOfficer.
@@ -278,10 +278,21 @@ func postContribution(ctx context.Context, tx pgx.Tx, contributionID, orgID, acc
 	if err != nil {
 		return err
 	}
-	for _, p := range []ledger.Posting{{AccountID: accountID, AmountKES: amountKES}, {AccountID: settlementID, AmountKES: -amountKES}} {
+	// Written inline rather than through ledger.PostEntry because that
+	// takes a pool and this has to land in the same transaction as the
+	// group_contribution update below. The balance check is therefore
+	// ours to make — PostEntry's does not run on this path.
+	postings := []ledger.Posting{
+		{AccountID: accountID, AmountCents: ledger.CentsFromKES(amountKES)},
+		{AccountID: settlementID, AmountCents: ledger.CentsFromKES(-amountKES)},
+	}
+	if err := ledger.ValidateBalanced(postings); err != nil {
+		return err
+	}
+	for _, p := range postings {
 		_, err = tx.Exec(ctx, `
-			INSERT INTO posting (id, "entryId", "accountId", amount) VALUES (gen_random_uuid(), $1, $2, $3)`,
-			journalEntryID, p.AccountID, p.AmountKES)
+			INSERT INTO posting (id, "entryId", "accountId", amount) VALUES (gen_random_uuid(), $1, $2, $3::numeric)`,
+			journalEntryID, p.AccountID, p.Decimal())
 		if err != nil {
 			return err
 		}
@@ -751,9 +762,18 @@ func ExecuteWithdrawalIfDue(ctx context.Context, pool *pgxpool.Pool, withdrawalI
 	if err != nil {
 		return nil, err
 	}
-	for _, p := range []ledger.Posting{{AccountID: accountID, AmountKES: -amountKES}, {AccountID: settlementID, AmountKES: amountKES}} {
-		_, err = tx.Exec(ctx, `INSERT INTO posting (id, "entryId", "accountId", amount) VALUES (gen_random_uuid(), $1, $2, $3)`,
-			journalEntryID, p.AccountID, p.AmountKES)
+	// Same inline-transaction reasoning as the contribution path above:
+	// PostEntry's balance check does not run here, so it runs here.
+	postings := []ledger.Posting{
+		{AccountID: accountID, AmountCents: ledger.CentsFromKES(-amountKES)},
+		{AccountID: settlementID, AmountCents: ledger.CentsFromKES(amountKES)},
+	}
+	if err := ledger.ValidateBalanced(postings); err != nil {
+		return nil, err
+	}
+	for _, p := range postings {
+		_, err = tx.Exec(ctx, `INSERT INTO posting (id, "entryId", "accountId", amount) VALUES (gen_random_uuid(), $1, $2, $3::numeric)`,
+			journalEntryID, p.AccountID, p.Decimal())
 		if err != nil {
 			return nil, err
 		}
@@ -940,19 +960,24 @@ type ContributionNotifyDetail struct {
 	OrgID           string
 	OrgName         string
 	ContributorName string
-	AmountKES       string
+	// AmountKES stays the raw "2500.00" text the audit payload has
+	// always carried; AmountValueKES is the same number for message
+	// composition, which formats money its own way (see notify.KES).
+	AmountKES      string
+	AmountValueKES float64
 }
 
 func GetContributionNotifyDetail(ctx context.Context, pool *pgxpool.Pool, contributionID string) (*ContributionNotifyDetail, error) {
 	var d ContributionNotifyDetail
 	err := pool.QueryRow(ctx, `
 		SELECT gc."orgId", COALESCE(o."knownAs", o."officialName"),
-		       COALESCE(pe."knownAs", pe."officialName"), gc."amountKes"::text
+		       COALESCE(pe."knownAs", pe."officialName"), gc."amountKes"::text,
+		       gc."amountKes"::float8
 		FROM group_contribution gc
 		JOIN organisation o ON o."partyId" = gc."orgId"
 		JOIN person pe ON pe."partyId" = gc."contributorId"
 		WHERE gc.id = $1`, contributionID).
-		Scan(&d.OrgID, &d.OrgName, &d.ContributorName, &d.AmountKES)
+		Scan(&d.OrgID, &d.OrgName, &d.ContributorName, &d.AmountKES, &d.AmountValueKES)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return nil, nil
 	}

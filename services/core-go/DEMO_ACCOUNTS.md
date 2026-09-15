@@ -4,7 +4,7 @@ The mobile app has no self-serve sign-up screen — `POST
 /v1/auth/verify-otp` auto-provisions a bare Party+Person on a correct
 OTP, but that needs a real SMS round trip. For local development and
 demoing the unified-crew-identity model (see `docs/proposals/
-esoko-unified-crew-identity.md`) without touching an SMS provider,
+esoqo-unified-crew-identity.md`) without touching an SMS provider,
 `go run ./cmd/seed` plants 21 phone+PIN accounts that sign in
 immediately via the normal **Sign in** screen (phone/email + PIN,
 `POST /v1/auth/sign-in`).
@@ -83,7 +83,7 @@ Kilimani Women Chama (Faith, 500003) and Demo Umoja Boda SACCO
   Nancy, Ochieng, Grace) are eligible for staff duty but start
   **switched out** — sign in, then go **Profile > Acting as** and switch
   the relevant org on. That step is always OTP-gated (docs/proposals/
-  esoko-unified-crew-identity.md); in dev the code prints to the
+  esoqo-unified-crew-identity.md); in dev the code prints to the
   `core-go` container/process logs instead of sending a real SMS:
   ```bash
   docker logs -f core-go   # or watch stdout if running `go run ./cmd/api` directly
@@ -116,7 +116,7 @@ of the unified-crew-identity accounts:
 **Reference data** (`internal/seed/reference.go`)
 | Login | PIN | Notes |
 |---|---|---|
-| ops@esoko.co.ke | printed at seed time, differs per run | Esoko ops/staff login — watch `go run ./cmd/seed`'s own output for the current PIN; change before any real deployment. |
+| ops@esoqo.co.ke | printed at seed time, differs per run | Esoqo ops/staff login — watch `go run ./cmd/seed`'s own output for the current PIN; change before any real deployment. |
 
 Also seeds 11 counties, 6 issuers, 13 markets, 20 commodities and 4
 pricing rules (edit pricing from the admin app afterwards, not by
@@ -142,7 +142,7 @@ Live Concert, Regular/VVIP).
 The org-staff PIN logins above are the **legacy AGENT credential**
 (org slug + free-text name + PIN via `/v1/ticket-staff/sign-in`) —
 still supported server-side, not reachable from the mobile app's UI
-any more (see docs/proposals/esoko-unified-crew-identity.md's AGENT
+any more (see docs/proposals/esoqo-unified-crew-identity.md's AGENT
 retirement). Use them only for testing that legacy path directly
 against the API.
 
@@ -228,7 +228,7 @@ party, so re-running never duplicates them, but it also never moves an
 existing bill's due date; delete the rows first if you want fresh ones.
 
 Esther is also the account the mobile integration tests sign in as
-(`mobile/esoko_app/integration_test/app_test.dart`), where the overdue
+(`mobile/esoqo_app/integration_test/app_test.dart`), where the overdue
 KPLC bill is asserted to sort above the due-soon DSTV one.
 
 ## On "other profile types" (hoteliers, etc.)

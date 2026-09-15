@@ -151,19 +151,39 @@ func Verify(secret, scope, id, sig string) bool {
 	return hmac.Equal(a, b)
 }
 
+// Scheme is the deep-link scheme new payloads are minted under.
+// LegacyScheme is the pre-rebrand spelling: QR codes carrying it are
+// already printed on buses, shelves and table tents, so every parser
+// below keeps accepting it. Only minting moved to the new name.
+const (
+	Scheme       = "esoqo://"
+	LegacyScheme = "esoko://"
+)
+
+// TrimScheme strips <scheme>://<path>? from a payload, accepting either
+// spelling. ok is false when the payload is not one of ours.
+func TrimScheme(payload, path string) (query string, ok bool) {
+	p := strings.TrimSpace(payload)
+	for _, prefix := range []string{Scheme + path + "?", LegacyScheme + path + "?"} {
+		if strings.HasPrefix(p, prefix) {
+			return strings.TrimPrefix(p, prefix), true
+		}
+	}
+	return "", false
+}
+
 // TripPayload builds the scan string stuck in the bus / shown on the
-// tout's phone: esoko://t?v=1&trip=<uuid>&sig=<mac>.
+// tout's phone: esoqo://t?v=1&trip=<uuid>&sig=<mac>.
 func TripPayload(tripID, sig string) string {
-	return "esoko://t?v=1&trip=" + tripID + "&sig=" + sig
+	return Scheme + "t?v=1&trip=" + tripID + "&sig=" + sig
 }
 
 // ParseTripPayload extracts trip id + sig; empty trip means not ours.
 func ParseTripPayload(payload string) (tripID, sig string) {
-	p := strings.TrimSpace(payload)
-	if !strings.HasPrefix(p, "esoko://t?") {
+	q, ok := TrimScheme(payload, "t")
+	if !ok {
 		return "", ""
 	}
-	q := strings.TrimPrefix(p, "esoko://t?")
 	for _, part := range strings.Split(q, "&") {
 		k, v, _ := strings.Cut(part, "=")
 		switch k {
@@ -176,18 +196,17 @@ func ParseTripPayload(payload string) (tripID, sig string) {
 	return tripID, sig
 }
 
-// VoucherPayload is the payer's proof: esoko://v?v=1&id=<uuid>&sig=<mac>.
+// VoucherPayload is the payer's proof: esoqo://v?v=1&id=<uuid>&sig=<mac>.
 func VoucherPayload(voucherID, sig string) string {
-	return "esoko://v?v=1&id=" + voucherID + "&sig=" + sig
+	return Scheme + "v?v=1&id=" + voucherID + "&sig=" + sig
 }
 
 // ParseVoucherPayload extracts voucher id + sig.
 func ParseVoucherPayload(payload string) (voucherID, sig string) {
-	p := strings.TrimSpace(payload)
-	if !strings.HasPrefix(p, "esoko://v?") {
+	q, ok := TrimScheme(payload, "v")
+	if !ok {
 		return "", ""
 	}
-	q := strings.TrimPrefix(p, "esoko://v?")
 	for _, part := range strings.Split(q, "&") {
 		k, v, _ := strings.Cut(part, "=")
 		switch k {
