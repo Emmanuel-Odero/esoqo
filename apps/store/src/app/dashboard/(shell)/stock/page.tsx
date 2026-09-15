@@ -1,6 +1,6 @@
 import type { Metadata } from 'next';
-import { Icon } from '@esoko/ui';
-import { listMyStores, listAllProductsForOwner, listSuppliers, listStockPurchases } from '@esoko/db';
+import { Icon } from '@esoqo/ui';
+import { listMyStores, listAllProductsForOwner, listSuppliers, listStockPurchases } from '@esoqo/db';
 import { requireSubject } from '@/lib/session';
 import { SupplierForm } from './SupplierForm';
 import { StockPurchaseForm } from './StockPurchaseForm';

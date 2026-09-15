@@ -6,8 +6,8 @@ import {
   addProductImage, deleteProductImage, reorderProductImages,
   createVariant, updateVariant, deleteVariant,
   sniff, makeStorageKey, putObject, MAX_BYTES,
-} from '@esoko/db';
-import { updateProductSchema, variantSchema } from '@esoko/domain';
+} from '@esoqo/db';
+import { updateProductSchema, variantSchema } from '@esoqo/domain';
 import { requireSubject } from '@/lib/session';
 
 export type ActionResult = { ok: true } | { ok: false; error: string };

@@ -1,6 +1,6 @@
 import type { Metadata } from 'next';
 import { redirect } from 'next/navigation';
-import { listMyStores, listStoreProducts, listCashiers, getCashierSelf, getOpenShiftForCashier, assertOwnsStore } from '@esoko/db';
+import { listMyStores, listStoreProducts, listCashiers, getCashierSelf, getOpenShiftForCashier, assertOwnsStore } from '@esoqo/db';
 import { requireStoreAccess } from '@/lib/session';
 import { PosClient } from './PosClient';
 

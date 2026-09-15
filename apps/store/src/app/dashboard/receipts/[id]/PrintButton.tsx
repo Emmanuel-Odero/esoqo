@@ -1,6 +1,6 @@
 'use client';
 
-import { Icon } from '@esoko/ui';
+import { Icon } from '@esoqo/ui';
 
 export function PrintButton() {
   return (

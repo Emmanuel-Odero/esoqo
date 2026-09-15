@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { Icon } from '@esoko/ui';
+import { Icon } from '@esoqo/ui';
 
 export function CashierSignInLink({ storeSlug }: { storeSlug: string }) {
   const [copied, setCopied] = useState(false);

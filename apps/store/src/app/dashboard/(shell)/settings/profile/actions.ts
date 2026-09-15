@@ -4,11 +4,11 @@ import { revalidatePath } from 'next/cache';
 import {
   updateStoreProfile, addStorePhoto, deleteStorePhoto, getStoreForOwner,
   sniff, makeStorageKey, putObject, MAX_BYTES, deleteObject,
-} from '@esoko/db';
+} from '@esoqo/db';
 import {
   storeIdentitySchema, storeBrandingSchema, storeCatalogSchema,
   storeShippingSchema, storePaymentsSchema,
-} from '@esoko/domain';
+} from '@esoqo/domain';
 import { requireSubject } from '@/lib/session';
 
 export type ActionResult = { ok: true; url?: string; photoId?: string } | { ok: false; error: string };

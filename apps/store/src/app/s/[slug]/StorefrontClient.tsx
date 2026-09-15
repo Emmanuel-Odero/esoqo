@@ -1,8 +1,8 @@
 'use client';
 
 import { useEffect, useMemo, useState, useTransition } from 'react';
-import { Icon, type IconName } from '@esoko/ui';
-import { PRODUCT_CATEGORIES } from '@esoko/domain';
+import { Icon, type IconName } from '@esoqo/ui';
+import { PRODUCT_CATEGORIES } from '@esoqo/domain';
 import { checkout, checkOrderStatus, myOrgMemberships } from './actions';
 
 interface Variant { id: string; label: string; priceKes: number; stockQty: number | null; availableOnOrder: boolean }
@@ -222,11 +222,11 @@ export function StorefrontClient({ store, products, fulfilmentOptions }: {
         <div className="sf-glow" aria-hidden="true" />
         <div className="sf-wrap">
           <div className="sf-hero-top">
-            <a className="sf-back" href={DISCOVER_URL}><Icon name="arrow-left" size={14} />All shops on Esoko</a>
+            <a className="sf-back" href={DISCOVER_URL}><Icon name="arrow-left" size={14} />All shops on Esoqo</a>
             <div className="sf-hero-actions">
               {origin && (
                 <a
-                  className="sf-cart-btn" href={wa(store, `Check out *${store.name}* on Esoko — ${origin}/@${store.slug}`)}
+                  className="sf-cart-btn" href={wa(store, `Check out *${store.name}* on Esoqo — ${origin}/@${store.slug}`)}
                   target="_blank" rel="noopener noreferrer" aria-label="Share this shop on WhatsApp"
                 >
                   <Icon name="send" size={19} />
@@ -246,7 +246,7 @@ export function StorefrontClient({ store, products, fulfilmentOptions }: {
                 <span className="sf-monogram" style={{ ['--sf-accent' as string]: theme.accent }}>{store.name.slice(0, 2).toUpperCase()}</span>
               )}
               <div className="sf-ident-txt">
-                <p className="sf-kicker"><span className="sf-dot" style={{ background: theme.accent }} />Esoko store</p>
+                <p className="sf-kicker"><span className="sf-dot" style={{ background: theme.accent }} />Esoqo store</p>
                 <h1>{store.name}</h1>
                 <p className="addr mono">esoko.global/@{store.slug}</p>
                 {store.tagline && <p className="sf-tagline">{store.tagline}</p>}
@@ -255,7 +255,7 @@ export function StorefrontClient({ store, products, fulfilmentOptions }: {
           </div>
           <div className="sf-trust">
             {store.verified && (
-              <span className="sf-trust-chip sf-chip-verified"><Icon name="shield-check" size={13} />Verified Esoko business</span>
+              <span className="sf-trust-chip sf-chip-verified"><Icon name="shield-check" size={13} />Verified Esoqo business</span>
             )}
             <span className="sf-trust-chip"><Icon name="phone-call" size={13} />Pay with M-Pesa{store.codEnabled ? ' or cash on delivery' : ''}</span>
             {fulfilmentOptions.length > 0 && (
@@ -321,7 +321,7 @@ export function StorefrontClient({ store, products, fulfilmentOptions }: {
               <div className="sf-about-txt">
                 {(store.verified || store.legalName || store.registrationNumber) && (
                   <div className="sf-ident-badge">
-                    {store.verified && <span className="sf-ident-ok"><Icon name="shield-check" size={13} />Verified Esoko business</span>}
+                    {store.verified && <span className="sf-ident-ok"><Icon name="shield-check" size={13} />Verified Esoqo business</span>}
                     {store.legalName && <span><Icon name="building" size={13} />{store.legalName}</span>}
                     {store.registrationNumber && <span className="mono"><Icon name="seal" size={13} />Reg. {store.registrationNumber}</span>}
                   </div>
@@ -496,7 +496,7 @@ export function StorefrontClient({ store, products, fulfilmentOptions }: {
           </div>
           <div className="sf-foot-bottom">
             <span>Payments via M-Pesa{store.codEnabled ? ' & cash on delivery' : ''}</span>
-            <a className="sf-foot-discover" href={DISCOVER_URL}>Back to all shops on Esoko</a>
+            <a className="sf-foot-discover" href={DISCOVER_URL}>Back to all shops on Esoqo</a>
           </div>
         </div>
       </footer>

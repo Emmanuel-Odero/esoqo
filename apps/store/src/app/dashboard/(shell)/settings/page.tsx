@@ -1,7 +1,7 @@
 import type { Metadata } from 'next';
 import Link from 'next/link';
-import { Icon } from '@esoko/ui';
-import { listMyStores, listFulfilmentOptions } from '@esoko/db';
+import { Icon } from '@esoqo/ui';
+import { listMyStores, listFulfilmentOptions } from '@esoqo/db';
 import { requireSubject } from '@/lib/session';
 import { SettingsForm } from './SettingsForm';
 import { FulfilmentOptionsManager } from './FulfilmentOptionsManager';

@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { Icon } from '@esoko/ui';
+import { Icon } from '@esoqo/ui';
 
 /**
  * Hamburger shown in the top bar on small screens. State lives in the
@@ -13,8 +13,8 @@ export function MobileNavToggle() {
 
   useEffect(() => {
     const onState = (e: Event) => setOpen(Boolean((e as CustomEvent<{ open: boolean }>).detail?.open));
-    window.addEventListener('esoko:nav-state', onState);
-    return () => window.removeEventListener('esoko:nav-state', onState);
+    window.addEventListener('esoqo:nav-state', onState);
+    return () => window.removeEventListener('esoqo:nav-state', onState);
   }, []);
 
   return (
@@ -24,7 +24,7 @@ export function MobileNavToggle() {
       aria-expanded={open}
       aria-controls="dash-side"
       aria-label={open ? 'Close menu' : 'Open menu'}
-      onClick={() => window.dispatchEvent(new CustomEvent('esoko:nav-toggle'))}
+      onClick={() => window.dispatchEvent(new CustomEvent('esoqo:nav-toggle'))}
     >
       <Icon name={open ? 'close' : 'menu'} size={18} />
     </button>

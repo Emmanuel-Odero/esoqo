@@ -1,13 +1,14 @@
 import 'server-only';
+import { clientIpFrom } from '@esoqo/domain';
 import { cookies, headers } from 'next/headers';
 import { redirect } from 'next/navigation';
-import { ctxFromToken, createSession, destroySession, SESSION_COOKIE } from '@esoko/auth';
-import { anonCtx, type Ctx } from '@esoko/db';
+import { ctxFromToken, createSession, destroySession, SESSION_COOKIE } from '@esoqo/auth';
+import { anonCtx, type Ctx } from '@esoqo/db';
 
 export async function getCtx(): Promise<Ctx> {
   const jar = await cookies();
   const h = await headers();
-  const ip = h.get('x-forwarded-for')?.split(',')[0]?.trim() ?? null;
+  const ip = clientIpFrom((n) => h.get(n)) ?? null;
   return (await ctxFromToken(jar.get(SESSION_COOKIE)?.value, ip)) ?? anonCtx(ip);
 }
 
@@ -33,7 +34,7 @@ const CASHIER_SESSION_TTL = 60 * 60 * 16; // a working day, generously — not 1
 export async function getCashierCtx(): Promise<Ctx | null> {
   const jar = await cookies();
   const h = await headers();
-  const ip = h.get('x-forwarded-for')?.split(',')[0]?.trim() ?? null;
+  const ip = clientIpFrom((n) => h.get(n)) ?? null;
   const token = jar.get(CASHIER_SESSION_COOKIE)?.value;
   if (!token) return null;
   const ctx = await ctxFromToken(token, ip);

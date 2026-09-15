@@ -1,8 +1,8 @@
 'use server';
 
 import { revalidatePath } from 'next/cache';
-import { recordCustomerPayment, adjustCustomerBalance, updateCustomer } from '@esoko/db';
-import { customerPaymentSchema, customerAdjustmentSchema, customerEditSchema } from '@esoko/domain';
+import { recordCustomerPayment, adjustCustomerBalance, updateCustomer } from '@esoqo/db';
+import { customerPaymentSchema, customerAdjustmentSchema, customerEditSchema } from '@esoqo/domain';
 import { requireSubject } from '@/lib/session';
 
 export type ActionResult = { ok: true } | { ok: false; error: string };
@@ -13,7 +13,7 @@ export async function payDownBalance(customerId: string, raw: unknown): Promise<
   if (!parsed.success) return { ok: false, error: parsed.error.issues[0]?.message ?? 'Check the form and try again' };
 
   try {
-    await recordCustomerPayment(ctx, customerId, parsed.data.amountKes, parsed.data.note || undefined);
+    await recordCustomerPayment(ctx, customerId, parsed.data.amountKes, parsed.data.note || undefined, parsed.data.requestId);
   } catch (e) {
     return { ok: false, error: e instanceof Error ? e.message : 'Could not record this payment' };
   }
@@ -29,7 +29,7 @@ export async function adjustBalance(customerId: string, raw: unknown): Promise<A
   if (!parsed.success) return { ok: false, error: parsed.error.issues[0]?.message ?? 'Check the form and try again' };
 
   try {
-    await adjustCustomerBalance(ctx, customerId, parsed.data.amountKes, parsed.data.note);
+    await adjustCustomerBalance(ctx, customerId, parsed.data.amountKes, parsed.data.note, parsed.data.requestId);
   } catch (e) {
     return { ok: false, error: e instanceof Error ? e.message : 'Could not adjust this balance' };
   }

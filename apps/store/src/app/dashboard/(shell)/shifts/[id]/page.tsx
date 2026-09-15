@@ -1,7 +1,7 @@
 import type { Metadata } from 'next';
 import { notFound } from 'next/navigation';
-import { Icon } from '@esoko/ui';
-import { getShiftReport } from '@esoko/db';
+import { Icon } from '@esoqo/ui';
+import { getShiftReport } from '@esoqo/db';
 import { requireSubject } from '@/lib/session';
 
 export const metadata: Metadata = { title: 'Z-report' };

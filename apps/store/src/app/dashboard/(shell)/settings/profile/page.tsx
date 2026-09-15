@@ -1,5 +1,5 @@
 import type { Metadata } from 'next';
-import { listMyStores, listStorePhotos } from '@esoko/db';
+import { listMyStores, listStorePhotos } from '@esoqo/db';
 import { requireSubject } from '@/lib/session';
 import { StoreProfileEditor } from './StoreProfileEditor';
 
