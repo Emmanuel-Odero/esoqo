@@ -313,6 +313,28 @@ export async function actionSearchEnterprises(q: string): Promise<EnterpriseLite
   return enterprises ?? [];
 }
 
+/**
+ * When the search above finds nothing — the common case for a courier
+ * company's first onboarding, since the only other way a business
+ * lands in `enterprise` is self-registering through the public /join
+ * flow, OTP and all. Staff onboarding a real company in person can
+ * register the owning business directly instead of being stuck; see
+ * dbx.CreateEnterpriseForCourierOrg's own comment.
+ */
+export async function actionCreateEnterprise(name: string): Promise<
+  { ok: true; id: string; name: string } | { ok: false; error: string }
+> {
+  try {
+    await requireStaff();
+    const res = await adminGo<{ id: string; name: string }>('/v1/admin/parcels/enterprises', {
+      method: 'POST', body: JSON.stringify({ name }),
+    });
+    return { ok: true, id: res.id, name: res.name };
+  } catch (e) {
+    return { ok: false, error: e instanceof Error ? e.message : 'Could not create that business' };
+  }
+}
+
 export async function actionCreateParcelOrg(input: ParcelOrgInput): Promise<Result> {
   try {
     await requireStaff();

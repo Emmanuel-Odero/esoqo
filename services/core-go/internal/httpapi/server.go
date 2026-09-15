@@ -412,6 +412,7 @@ func (s *Server) Router() *gin.Engine {
 		// and create the rest of the team.
 		v1.GET("/admin/parcels/orgs", s.authRequired(), s.handleAdminListParcelOrgs)
 		v1.GET("/admin/parcels/enterprises", s.authRequired(), s.handleAdminSearchEnterprises)
+		v1.POST("/admin/parcels/enterprises", s.authRequired(), s.handleAdminCreateEnterprise)
 		v1.POST("/admin/parcels/orgs", s.authRequired(), s.handleAdminCreateParcelOrg)
 		v1.POST("/admin/parcels/:id/org", s.authRequired(), s.handleAdminAssignParcelOrg)
 		v1.PATCH("/admin/parcels/orgs/:id", s.authRequired(), s.handleAdminUpdateParcelOrg)
