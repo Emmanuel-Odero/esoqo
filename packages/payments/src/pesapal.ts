@@ -25,7 +25,7 @@
  * plain-Node webhook handler.
  */
 
-import { appEnv } from '@esoko/domain';
+import { appEnv } from '@esoqo/domain';
 
 const SANDBOX_BASE = 'https://cybqa.pesapal.com/pesapalv3';
 const PRODUCTION_BASE = 'https://pay.pesapal.com/v3';

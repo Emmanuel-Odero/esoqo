@@ -3,6 +3,7 @@ import { createHmac, randomInt, timingSafeEqual } from 'node:crypto';
 import { redis } from './redis';
 import { checkRateLimit, RateLimitError } from './ratelimit';
 import { sendSms, smsProvider } from './sms';
+import { sms } from '@esoqo/domain';
 
 /**
  * One-time codes.
@@ -24,6 +25,36 @@ const DAILY_CAP_KES = Number(process.env.OTP_DAILY_SPEND_CAP_KES ?? 5000);
 const SMS_COST_KES = 0.8; // per segment — replace with the real aggregator rate
 
 export type OtpPurpose = 'REGISTRATION' | 'SIGN_IN' | 'PIN_RESET' | 'STEP_UP' | 'CONSENT_GRANT';
+
+/** What the code is *for*, in the recipient's words. */
+const PURPOSE_PHRASE: Record<OtpPurpose, string> = {
+  REGISTRATION: 'finish signing up',
+  SIGN_IN: 'sign in',
+  PIN_RESET: 'reset your PIN',
+  STEP_UP: 'confirm it is you',
+  CONSENT_GRANT: 'approve this request',
+};
+
+/**
+ * The one-time-code message.
+ *
+ * Code first: it is the only part anyone reads, most handsets surface
+ * the opening characters in the notification shade, and Android's SMS
+ * autofill looks for a code near the start.
+ *
+ * Naming the purpose is an anti-phishing measure, not decoration. A
+ * code that says "to reset your PIN" arriving at someone who was only
+ * signing in is a signal that something is wrong, and it is the only
+ * signal we can give them before they hand the code over. Banks do this
+ * for the same reason.
+ *
+ * "Esoqo will never ask you for it" stays. It is the single most
+ * valuable sentence in the message: every SMS-code fraud in this market
+ * runs through a phone call asking the victim to read it out.
+ */
+export function otpSms(code: string, purpose: OtpPurpose): string {
+  return sms`${code} is your Esoqo code to ${PURPOSE_PHRASE[purpose]}. It expires in 10 minutes. Esoqo will never ask you for it.`;
+}
 
 function hashCode(code: string, msisdn: string): string {
   return createHmac('sha256', PEPPER).update(`${msisdn}:${code}`).digest('hex');
@@ -108,7 +139,7 @@ export async function issueOtp(
     return { expiresAt, cooldownSeconds: cooldown };
   }
 
-  await sendSms(msisdn, `${code} is your Esoko code. It expires in 10 minutes. Esoko will never ask you for it.`, 'otp');
+  await sendSms(msisdn, otpSms(code, purpose), 'otp');
   return { expiresAt, cooldownSeconds: cooldown };
 }
 

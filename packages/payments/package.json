@@ -1,10 +1,10 @@
 {
-  "name": "@esoko/payments",
+  "name": "@esoqo/payments",
   "version": "0.1.0",
   "private": true,
   "main": "./src/index.ts",
   "types": "./src/index.ts",
   "scripts": { "typecheck": "tsc --noEmit" },
-  "dependencies": { "@esoko/domain": "workspace:*" },
+  "dependencies": { "@esoqo/domain": "workspace:*" },
   "devDependencies": { "typescript": "^5.7.2" }
 }

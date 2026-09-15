@@ -1,5 +1,5 @@
 {
-  "name": "@esoko/config",
+  "name": "@esoqo/config",
   "version": "0.1.0",
   "private": true,
   "files": ["eslint.base.mjs", "tsconfig.base.json", "tsconfig.next.json"],
