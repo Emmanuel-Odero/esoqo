@@ -36,7 +36,7 @@ export interface CreateOrderInput {
 
 /**
  * Public checkout. No capability required — a buyer need not be a
- * registered Esoko subject; ctx.partyId is attached when they are.
+ * registered Esoqo subject; ctx.partyId is attached when they are.
  */
 export async function createStoreOrder(ctx: Ctx, input: CreateOrderInput) {
   const store = await prisma.store.findFirst({ where: { slug: input.storeSlug, status: 'ACTIVE' } });

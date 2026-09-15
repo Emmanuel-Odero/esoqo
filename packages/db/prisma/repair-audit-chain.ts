@@ -23,7 +23,7 @@ const prisma = new PrismaClient();
  * from the start. Idempotent: rerunning after a successful repair
  * recomputes the same hashes and writes the same values.
  *
- * Run with: pnpm --filter @esoko/db repair:audit-chain
+ * Run with: pnpm --filter @esoqo/db repair:audit-chain
  */
 
 const CHAIN_SEED = process.env.AUDIT_CHAIN_SEED ?? 'esoko-genesis';

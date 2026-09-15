@@ -1,5 +1,5 @@
 // ════════════════════════════════════════════════════════════════════
-//  Esoko — domain schema
+//  Esoqo — domain schema
 //
 //  Design notes that are load-bearing, not decoration:
 //
@@ -40,6 +40,8 @@ enum PartyKind {
 /// — Registration itself is a funnel record that gets superseded, so this
 /// is the durable place admin reads "CECF Registrations" from.
 enum SourceSystem {
+  /// Still spelled ESOKO: this is a value stored in every party row, and
+  /// renaming it is a data migration, not a rebrand. The brand is Esoqo.
   ESOKO
   CECF
 }
@@ -88,29 +90,29 @@ model Party {
   /// Which front door this Party first registered through. See SourceSystem.
   sourceSystem SourceSystem @default(ESOKO)
 
-  person                 Person?
-  organisation           Organisation?
-  enterprises            Enterprise[]
-  memberships            Membership[]      @relation("MemberParty")
-  accounts               Account[]
-  attestations           Attestation[]     @relation("AttestationSubject")
-  consentsGiven          ConsentGrant[]    @relation("ConsentSubject")
-  documents              Document[]
-  registration           Registration?
-  groupJoinRegistrations Registration[]    @relation("RegistrationGroupParty")
-  bizJoinRegistrations   Registration[]    @relation("RegistrationBizParty")
-  storeOrdersAsBuyer     StoreOrder[]
-  storeCustomerLinks     StoreCustomer[]
-  donationsAsDonor       Donation[]
-  jamiiTeamMemberships   JamiiTeamMember[]
-  jamiiApplications      JamiiInterest[]
-  bookingsAsBuyer        Booking[]
-  supportTicketsRaised   SupportTicket[]
-  bills                  Bill[]
-  savedStores            SavedStore[]
-  orgStaffGrants         OrgStaffGrant[] @relation("OrgStaffGrantParty")
-  orgStaffGrantsGranted  OrgStaffGrant[] @relation("OrgStaffGrantGrantedBy")
-  orgStaffGrantsSuspended OrgStaffGrant[] @relation("OrgStaffGrantSuspendedBy")
+  person                  Person?
+  organisation            Organisation?
+  enterprises             Enterprise[]
+  memberships             Membership[]      @relation("MemberParty")
+  accounts                Account[]
+  attestations            Attestation[]     @relation("AttestationSubject")
+  consentsGiven           ConsentGrant[]    @relation("ConsentSubject")
+  documents               Document[]
+  registration            Registration?
+  groupJoinRegistrations  Registration[]    @relation("RegistrationGroupParty")
+  bizJoinRegistrations    Registration[]    @relation("RegistrationBizParty")
+  storeOrdersAsBuyer      StoreOrder[]
+  storeCustomerLinks      StoreCustomer[]
+  donationsAsDonor        Donation[]
+  jamiiTeamMemberships    JamiiTeamMember[]
+  jamiiApplications       JamiiInterest[]
+  bookingsAsBuyer         Booking[]
+  supportTicketsRaised    SupportTicket[]
+  bills                   Bill[]
+  savedStores             SavedStore[]
+  orgStaffGrants          OrgStaffGrant[]   @relation("OrgStaffGrantParty")
+  orgStaffGrantsGranted   OrgStaffGrant[]   @relation("OrgStaffGrantGrantedBy")
+  orgStaffGrantsSuspended OrgStaffGrant[]   @relation("OrgStaffGrantSuspendedBy")
 
   // ── Group treasury ──
   meetingsCalled          Meeting[]                    @relation("MeetingCalledBy")
@@ -121,7 +123,7 @@ model Party {
   contributionsIConfirmed GroupContribution[]          @relation("ContributionConfirmedBy")
   withdrawalsRequested    WithdrawalRequest[]          @relation("WithdrawalRequestedBy")
   withdrawalSignatures    WithdrawalSignature[]        @relation("WithdrawalSignerParty")
-  esokoPaymentId          EsokoPaymentId?
+  esoqoPaymentId          EsoqoPaymentId?
   creditInsightSnapshots  GroupCreditInsightSnapshot[]
 
   @@index([county, kind])
@@ -158,6 +160,13 @@ model Person {
   credential UserCredential?
 
   @@index([msisdn])
+  /// Sign-in accepts either a phone number or an email (see dbx's
+  /// findPersonByWhere on `pr.email = $1`), but only msisdn was indexed
+  /// — so every email sign-in scanned the whole person table. Indexed
+  /// rather than @unique deliberately: a uniqueness constraint added
+  /// here would fail the migration outright if any duplicate email
+  /// already exists, and that is a data-cleanup decision, not this one.
+  @@index([email])
   @@map("person")
 }
 
@@ -278,6 +287,7 @@ model Enterprise {
 
   stores            Store[]
   ticketOrgs        TicketOrg[]
+  parcelOrgs        ParcelOrg[]
   mallTenancies     MallTenancy[]      @relation("TenantEnterprise")
   storageAgreements StorageAgreement[]
 
@@ -580,10 +590,55 @@ enum AccountKind {
   /// marked paid (auto or manual). See dbx.ConfirmBillContributionByCheckoutID.
   BILL_FUNDING
   /// Single platform-pooled account (no partyId), same shape as
-  /// VOUCHER_FLOAT — parcels are an Esoko-run service, not a
+  /// VOUCHER_FLOAT — parcels are an Esoqo-run service, not a
   /// per-merchant marketplace, so there's no per-store revenue split
   /// to make. See dbx.ConfirmParcelPaymentByCheckoutID.
   PARCEL_REVENUE
+  /// One per courier party — cash-on-delivery money physically in that
+  /// rider's pocket, between collecting it at a door and handing it
+  /// over. An asset to the platform and a liability of the rider's, and
+  /// the only honest way to answer "who is holding our money right
+  /// now". Debited when a collection is recorded, credited when the
+  /// rider remits. See dbx.RecordCodCollection / RemitCod.
+  PARCEL_COD_HELD
+  /// One per seller (the parcel's sender) — goods money collected on
+  /// their behalf and not yet paid out. Credited at collection, debited
+  /// at settlement. Deliberately separate from WALLET: this is money
+  /// Esoqo owes a seller for a specific set of parcels, not a balance
+  /// they can spend, and conflating the two would let an unsettled
+  /// collection look like available funds.
+  PARCEL_COD_PAYABLE
+  /// One per gig courier — delivery fees earned and not yet paid out.
+  /// Credited when a delivery completes, debited at payout. Only ever
+  /// used for couriers working directly for Esoqo: a rider employed by
+  /// a ParcelOrg is paid by that company out of its own
+  /// Parcel.orgEarningsKes, and accruing here too would pay for the
+  /// same delivery twice. See dbx.AccrueCourierEarnings.
+  PARCEL_COURIER_PAYABLE
+  /// Platform-pooled (no partyId) — the cost side of the entry above.
+  /// The first genuine expense account in this enum: every other kind
+  /// is an asset or a revenue pool, because until couriers had to be
+  /// paid nothing here ever cost the platform money on a per-event
+  /// basis.
+  PARCEL_COURIER_COST
+  /// One per ticket org's enterprise party — what a booking is worth to
+  /// that operator, and therefore what Esoqo owes them. Replaces the
+  /// SUSPENSE placeholder ticketing.go used to post against, which its
+  /// own comment flagged as standing in for a "TICKET_REVENUE-equivalent
+  /// value". A suspense account means "not yet classified" and is
+  /// supposed to trend to zero; parking a real, permanent payable there
+  /// meant an operator's balance could not be aged or stated without
+  /// knowing which references to filter on. See
+  /// dbx.ConfirmBookingPaymentByCheckoutID.
+  TICKET_REVENUE
+  /// One per fleet operator's enterprise party — the short-route fare
+  /// equivalent of TICKET_REVENUE, and the account fleet.go's own
+  /// comment was waiting on ("until a FARE_REVENUE account kind is
+  /// migrated"). Separate from TICKET_REVENUE because one SACCO can
+  /// both sell scheduled tickets and run stage fares, and a single
+  /// account would make those two revenue streams unseparable after the
+  /// fact. See dbx.postFareLedgerEntry.
+  FARE_REVENUE
 }
 
 model Account {
@@ -625,6 +680,7 @@ model JournalEntry {
   booking           Booking?
   farePayment       FarePayment?
   voucherEntry      VoucherLedgerEntry?
+  billContribution  BillContribution?
 
   @@index([occurredAt])
   @@map("journal_entry")
@@ -1049,7 +1105,7 @@ model Product {
 
   name             String
   description      String?
-  /// One of PRODUCT_CATEGORIES in @esoko/domain. Not a DB enum — that
+  /// One of PRODUCT_CATEGORIES in @esoqo/domain. Not a DB enum — that
   /// list is edited in application code, same reasoning as `status`
   /// below: a new category should never need a migration.
   category         String?
@@ -1247,7 +1303,7 @@ enum StoreOrderPaymentMethod {
 }
 
 /// A checkout on the public storefront. The buyer need not be a
-/// registered Esoko subject — buyerParty is set only when they are.
+/// registered Esoqo subject — buyerParty is set only when they are.
 model StoreOrder {
   id           String  @id @default(uuid()) @db.Uuid
   storeId      String  @db.Uuid
@@ -1311,7 +1367,7 @@ model StoreOrder {
   rerouteFlaggedAt   DateTime?
 
   /// Set when this order came from a scanned restaurant table QR
-  /// (esoko://table?slug=...&table=...) — the actual persistence the
+  /// (esoqo://table?slug=...&table=...) — the actual persistence the
   /// universal scanner's own comment always claimed existed. Nullable:
   /// most orders (retail pickup/delivery) have no table at all.
   tableLabel   String?
@@ -1577,7 +1633,14 @@ model StoreCustomer {
 model CustomerLedgerEntry {
   id         String        @id @default(uuid()) @db.Uuid
   customerId String        @db.Uuid
-  customer   StoreCustomer @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  /// Restrict, not Cascade: these rows are financial history — what a
+  /// customer paid and what they still owe. Cascading meant deleting one
+  /// customer row silently destroyed their entire credit-book and
+  /// loyalty ledger, with the settlement postings in journal_entry left
+  /// behind referencing nothing. Nothing deletes StoreCustomer today, so
+  /// this costs nothing now and refuses the delete rather than losing
+  /// the money trail if such a path is ever added.
+  customer   StoreCustomer @relation(fields: [customerId], references: [id], onDelete: Restrict)
 
   /// SALE | PAYMENT | REFUND | ADJUSTMENT
   kind      String
@@ -1590,6 +1653,15 @@ model CustomerLedgerEntry {
   order     StoreOrder? @relation(fields: [orderId], references: [id])
   createdAt DateTime    @default(now())
 
+  /// Caller-supplied de-duplication token, one per user intent (a till
+  /// operator pressing "record payment" once). The unique index is what
+  /// actually enforces it: a double-click sends the same requestId
+  /// twice and the second insert loses, rather than quietly creating a
+  /// second ledger entry and a second settlement posting. Nullable so
+  /// existing rows and internal callers that pass nothing still work.
+  requestId String? @db.Uuid
+
+  @@unique([requestId])
   @@index([customerId, createdAt])
   @@map("customer_ledger_entry")
 }
@@ -1599,7 +1671,14 @@ model CustomerLedgerEntry {
 model LoyaltyEntry {
   id         String        @id @default(uuid()) @db.Uuid
   customerId String        @db.Uuid
-  customer   StoreCustomer @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  /// Restrict, not Cascade: these rows are financial history — what a
+  /// customer paid and what they still owe. Cascading meant deleting one
+  /// customer row silently destroyed their entire credit-book and
+  /// loyalty ledger, with the settlement postings in journal_entry left
+  /// behind referencing nothing. Nothing deletes StoreCustomer today, so
+  /// this costs nothing now and refuses the delete rather than losing
+  /// the money trail if such a path is ever added.
+  customer   StoreCustomer @relation(fields: [customerId], references: [id], onDelete: Restrict)
 
   /// Signed. Positive = earned on a sale; negative = redeemed.
   points    Int
@@ -1612,6 +1691,11 @@ model LoyaltyEntry {
   order     StoreOrder? @relation(fields: [orderId], references: [id])
   createdAt DateTime    @default(now())
 
+  /// Double-submit guard for redemptions — see the identically named
+  /// field on CustomerLedgerEntry.
+  requestId String? @db.Uuid
+
+  @@unique([requestId])
   @@index([customerId, createdAt])
   @@map("loyalty_entry")
 }
@@ -2069,7 +2153,7 @@ model JamiiPage {
   organisationId String       @id @db.Uuid
   organisation   Organisation @relation(fields: [organisationId], references: [partyId], onDelete: Cascade)
 
-  /// Public URL segment — ourjamii.esoko.../o/{slug}. Unique platform-wide.
+  /// Public URL segment — ourjamii.esoqo.../o/{slug}. Unique platform-wide.
   slug   String          @unique
   status JamiiPageStatus @default(DRAFT)
 
@@ -2271,7 +2355,7 @@ model JamiiPhoto {
 /// A message submitted through the public Contact page's form —
 /// visible only to this page's own team (dashboard "Messages" screen),
 /// never a platform-wide inbox. Deliberately not a JamiiInterest: that
-/// is "wants Our Jamii access" and is reviewed by Esoko staff; this is
+/// is "wants Our Jamii access" and is reviewed by Esoqo staff; this is
 /// a visitor writing to one specific org, reviewed only by that org's
 /// own team via requirePageAccess, the same as every other page-scoped
 /// write in jamii-page.ts.
@@ -2530,7 +2614,7 @@ model Donation {
 /// dead end they can leave their details here. Deliberately its own
 /// table rather than a Registration: a Registration implies "this is
 /// someone going through the join funnel"; this is "someone was turned
-/// away and asked to be followed up with," reviewed by Esoko staff in
+/// away and asked to be followed up with," reviewed by Esoqo staff in
 /// the admin app (see App\Support in cecf-wordpress for the analogous
 /// non-CECF-member redirect on the WordPress side, and this record's
 /// counterpart CTA on /join).
@@ -2538,7 +2622,7 @@ model Donation {
 /// grants sign-in (see hasJamiiAccess in dal/jamii-interest.ts), so
 /// every first-time Our Jamii sign-in traces back to one of these being
 /// approved, whether the applicant was a brand-new person or someone
-/// who already had a CECF/Esoko account.
+/// who already had a CECF/Esoqo account.
 model JamiiInterest {
   id     String              @id @default(uuid()) @db.Uuid
   status JamiiInterestStatus @default(NEW)
@@ -2591,7 +2675,7 @@ enum SupportTicketStatus {
 /// Party (not JamiiPage/Store/etc.) so it isn't jamii-only even though
 /// today's only UI for it lives in the Our Jamii dashboard; `pageId` is
 /// just the optional "what were you working on" context, same
-/// reasoning as JamiiContactMessage's pageId but aimed at Esoko staff
+/// reasoning as JamiiContactMessage's pageId but aimed at Esoqo staff
 /// instead of the org's own team.
 model SupportTicket {
   id String @id @default(uuid()) @db.Uuid
@@ -2624,7 +2708,7 @@ model SupportTicket {
 
 // ═══════════════════════ GROUP TREASURY ═══════════════════════
 //
-//  See docs/proposals/esoko-group-treasury-and-payment-id.md for the
+//  See docs/proposals/esoqo-group-treasury-and-payment-id.md for the
 //  reasoning behind every shape here. Load-bearing decisions:
 //
 //  · GroupContribution supports BOTH capture paths — self-declared
@@ -2856,12 +2940,12 @@ model WithdrawalSignature {
   @@map("withdrawal_signature")
 }
 
-// ─────────────────────── ESOKO PAYMENT ID ────────────────────────
+// ─────────────────────── ESOQO PAYMENT ID ────────────────────────
 
 /// A short, verified, portable payment handle — issued once a Party
 /// holds at least MSISDN_VERIFIED (see Attestation), reusing the
 /// existing trust primitive rather than inventing a new one.
-model EsokoPaymentId {
+model EsoqoPaymentId {
   partyId     String    @id @db.Uuid
   party       Party     @relation(fields: [partyId], references: [id], onDelete: Cascade)
   /// e.g. "ESK-4471-KE" — human-typeable, verified-unique.
@@ -2904,8 +2988,8 @@ model GroupCreditInsightSnapshot {
 // ─────────────────────────────── BILLS ───────────────────────────
 
 /// A personal recurring/one-off bill a Person tracks — KPLC, water,
-/// DSTV, rent, school fees. Esoko has no Safaricom B2B relationship to
-/// actually pay a third-party biller (only STK push into Esoko's own
+/// DSTV, rent, school fees. Esoqo has no Safaricom B2B relationship to
+/// actually pay a third-party biller (only STK push into Esoqo's own
 /// till), so this is deliberately track-and-remind only: nothing here
 /// moves money. See BillPayment's own comment for the "mark as paid"
 /// half of that contract.
@@ -2975,20 +3059,27 @@ enum BillContributionStatus {
 /// that model's own comment), a BillContribution is real money: it
 /// settles through the ledger exactly like a StoreOrder or
 /// GroupContribution, via M-Pesa STK. contributorPartyId is null for
-/// a guest contributor (a friend/family member without an Esoko
+/// a guest contributor (a friend/family member without an Esoqo
 /// account) — contributorName is always captured directly since the
 /// contribution card shows who gave what.
 model BillContribution {
-  id                     String                  @id @default(uuid()) @db.Uuid
-  billId                 String                  @db.Uuid
-  bill                   Bill                    @relation(fields: [billId], references: [id], onDelete: Cascade)
-  contributorPartyId     String?                 @db.Uuid
+  id                     String                 @id @default(uuid()) @db.Uuid
+  billId                 String                 @db.Uuid
+  bill                   Bill                   @relation(fields: [billId], references: [id], onDelete: Cascade)
+  contributorPartyId     String?                @db.Uuid
   contributorName        String
-  amountKes              Decimal                 @db.Decimal(12, 2)
-  status                 BillContributionStatus  @default(PENDING)
-  mpesaCheckoutRequestId String?                 @unique
-  journalEntryId         String?                 @db.Uuid
-  createdAt              DateTime                @default(now())
+  amountKes              Decimal                @db.Decimal(12, 2)
+  status                 BillContributionStatus @default(PENDING)
+  mpesaCheckoutRequestId String?                @unique
+  /// @unique + a real FK, matching every other money model in this
+  /// schema (StoreOrder, GroupContribution, Donation, Booking,
+  /// FarePayment…). Without the uniqueness this column could point two
+  /// contributions at one journal entry — i.e. book the same money
+  /// twice — and without the FK it could reference an entry that does
+  /// not exist at all.
+  journalEntryId         String?                @unique @db.Uuid
+  journalEntry           JournalEntry?          @relation(fields: [journalEntryId], references: [id])
+  createdAt              DateTime               @default(now())
 
   @@index([billId, status])
   @@map("bill_contribution")
@@ -2996,7 +3087,7 @@ model BillContribution {
 
 /// A self-reported "I paid this" log entry — never a real money
 /// movement (no JournalEntry/Posting here, unlike every other payment
-/// model in this schema), because Esoko genuinely doesn't move this
+/// model in this schema), because Esoqo genuinely doesn't move this
 /// money. Recording it is what lets nextDueAt advance for a recurring
 /// bill and gives the person their own payment history.
 model BillPayment {
@@ -3024,7 +3115,30 @@ enum ParcelStatus {
   BOOKED
   PICKED_UP
   IN_TRANSIT
+  /// A courier reached the door and could not hand the parcel over —
+  /// nobody home, wrong address, receiver refused, no delivery code.
+  /// Deliberately NOT terminal and deliberately NOT a form of
+  /// cancellation: the courier still physically holds the parcel
+  /// (currentHolderPartyId is untouched), so the next real event is
+  /// another attempt (→ IN_TRANSIT), a drop at a pickup point (→
+  /// HELD_AT_AGENT) or giving up (→ RETURNED_TO_SENDER). Before this
+  /// status existed a failed attempt had no representation at all: the
+  /// courier just kept holding it and the parcel silently aged past
+  /// slaDeadlineAt, reading as a courier failure in the admin's
+  /// overdueDeliveries KPI when it was usually a receiver-side problem.
+  /// See dbx.RecordDeliveryAttempt.
+  FAILED_DELIVERY
+  /// Sitting at a pickup point waiting for the receiver to collect it —
+  /// the agent-network leg (see ParcelAgent). Custody is the agent's,
+  /// same currentHolderPartyId mechanism every other leg uses, so a
+  /// parcel on a shelf is never "in transit with nobody".
+  HELD_AT_AGENT
   DELIVERED
+  /// The give-up path out of FAILED_DELIVERY/HELD_AT_AGENT — the parcel
+  /// physically goes back the way it came. Terminal, and distinct from
+  /// CANCELLED: the journey happened and was billed, it just ended at
+  /// the origin instead of the destination.
+  RETURNED_TO_SENDER
   /// Set only by an admin (see dbx.CancelParcel) — a draft abandoned
   /// before payment, or a paid-but-not-yet-picked-up parcel the sender
   /// asked to stop. Never reachable once a courier has scanned it into
@@ -3038,6 +3152,12 @@ enum ParcelType {
   MEDIUM
   LARGE
   HEAVY_OVERSIZE
+}
+
+/// See Parcel.originMethod's own comment.
+enum ParcelOriginMethod {
+  SCHEDULED_PICKUP
+  SELF_DROPOFF
 }
 
 enum ParcelTransportMode {
@@ -3067,12 +3187,12 @@ enum ParcelCourierStatus {
 }
 
 model Parcel {
-  id       String @id @default(uuid()) @db.Uuid
+  id           String @id @default(uuid()) @db.Uuid
   /// PKG-… — the tracking code, scanned or typed by anyone (see
   /// dbx.GetParcelStatus's guest-safe projection). The bearer
   /// credential for "check this parcel's status", same convention a
   /// pickup code already follows.
-  code     String @unique
+  code         String @unique
   /// A second, separate code — only ever shown to the sender, only
   /// ever typed by the receiver at final handoff (see
   /// dbx.DeliverParcel). Proof of receipt, same "a code the last
@@ -3103,6 +3223,26 @@ model Parcel {
   originZoneId      String? @db.Uuid
   destinationZoneId String? @db.Uuid
 
+  /// An actual dropped pin for each end, when the sender gave one.
+  ///
+  /// Roughly four in five Kenyans have no formal street address, and
+  /// addressing failure is the single largest cause of delivery failure
+  /// in this market — the industry association's own figures put wrong
+  /// or missing addresses behind the bulk of both undelivered and
+  /// delayed parcels. `originLabel`/`destinationLabel` are prose a
+  /// human reads ("opposite Sarit"); these are what a courier's maps
+  /// app can actually navigate to.
+  ///
+  /// Deliberately independent of the zone columns above, which are a
+  /// *pricing* coordinate snapped to an admin-curated hub. A pin is
+  /// where the parcel is really going, to seven decimal places. A
+  /// booking may have both, either, or neither, and the degradation is
+  /// honest all the way down: pin, then zone, then free text.
+  originLat       Decimal? @db.Decimal(10, 7)
+  originLng       Decimal? @db.Decimal(10, 7)
+  destinationLat  Decimal? @db.Decimal(10, 7)
+  destinationLng  Decimal? @db.Decimal(10, 7)
+
   /// Computed once, the moment the parcel becomes BOOKED, from the
   /// matched ParcelPricingRule.slaHours — a promise made at payment
   /// time, never silently redefined by a later admin rate-card edit
@@ -3124,6 +3264,29 @@ model Parcel {
   parcelType    ParcelType
   weightKg      Decimal?             @db.Decimal(6, 2)
   fragile       Boolean              @default(false)
+
+  /// Measured at intake, for the volumetric weight a bulky parcel is
+  /// charged on — (L × W × H) / divisor, see dbx.VolumetricKg. All
+  /// three or none: two dimensions is not a volume, and guessing the
+  /// third would attach a customer's money to a number nobody
+  /// recorded.
+  lengthCm Decimal? @db.Decimal(6, 1)
+  widthCm  Decimal? @db.Decimal(6, 1)
+  heightCm Decimal? @db.Decimal(6, 1)
+
+  /// The sender was asked about prohibited contents and said no.
+  /// A timestamp and a person rather than a boolean on purpose: six
+  /// weeks later "was this declared" is nearly useless next to "who
+  /// asked, and when".
+  contentsDeclaredAt        DateTime?
+  contentsDeclaredByStaffId String?   @db.Uuid
+
+  /// Condition when we took it in, as podPhotoUrl is condition when we
+  /// handed it over. The pair brackets our custody — a damage dispute
+  /// is settled by comparing them, and with only the second one every
+  /// dispute is the customer's word against the courier's.
+  intakePhotoUrl String?
+  intakePhotoAt  DateTime?
   /// Copied from the matched ParcelPricingRule at booking time so a
   /// later admin price-rule edit never reshuffles an in-flight parcel.
   transportMode ParcelTransportMode?
@@ -3139,13 +3302,18 @@ model Parcel {
   /// PaymentMethod already follows, minus CASH_ON_DELIVERY (a parcel's
   /// fee is the courier dispatch cost, always collected up front).
   paymentMethod            String?
-  paymentCheckoutRequestId String?
+  /// @unique for the same reason every other checkout-id column in this
+  /// schema is: one Daraja checkout confirms exactly one parcel, and the
+  /// STK webhook looks the row up by this value on every callback.
+  /// Without the index that lookup was a sequential scan of the whole
+  /// parcel table — the only one of the nine payment domains missing it.
+  paymentCheckoutRequestId String?   @unique
   /// Set only for an MPESA_STK payment, once confirmed (see
   /// dbx.ConfirmParcelPaymentByCheckoutID) — same "quote the actual
   /// transaction back to the payer" role fare_payment/booking_payment's
   /// own mpesaReceiptCode columns already play. Null for ESOKO_POINTS.
-  mpesaReceiptCode String?
-  paidAt           DateTime?
+  mpesaReceiptCode         String?
+  paidAt                   DateTime?
 
   /// Who's coming to collect it and when, set by an admin scheduling a
   /// pickup — distinct from currentHolderPartyId, which only changes
@@ -3154,10 +3322,19 @@ model Parcel {
   collectionScheduledAt    DateTime?
   collectionNote           String?
 
+  /// How this parcel is meant to reach a courier's hands in the first
+  /// place — a rider coming to the sender (the only path that existed
+  /// before walk-in stations did), or the sender bringing it in
+  /// themselves. Doesn't change what ScanHandoff does at receipt; it
+  /// only tells a station's own front desk whether to expect a rider
+  /// or a walk-in, which is exactly the fact that screen has no way to
+  /// know today.
+  originMethod ParcelOriginMethod @default(SCHEDULED_PICKUP)
+
   /// Whoever currently has the parcel in hand — null only before the
   /// first hand-off (still with the sender). Updated on every
   /// ParcelHandoff row, never edited independently of one.
-  currentHolderPartyId String? @db.Uuid
+  currentHolderPartyId String?      @db.Uuid
   status               ParcelStatus @default(DRAFT_PENDING_PAYMENT)
 
   /// Set together, only by dbx.CancelParcel. cancelledByStaffId is a
@@ -3176,7 +3353,7 @@ model Parcel {
   refundedAt        DateTime?
   refundedByStaffId String?   @db.Uuid
 
-  /// Set once by dbx.ConfirmParcelReceipt — the receiver (no Esoko
+  /// Set once by dbx.ConfirmParcelReceipt — the receiver (no Esoqo
   /// account required) proving control of their registered number via
   /// OTP after the parcel has been marked DELIVERED, then rating the
   /// condition it arrived in. Distinct from deliveredAt, which is the
@@ -3185,11 +3362,179 @@ model Parcel {
   receiptConditionRating Int?
   receiptFeedback        String?
 
+  /// Proof of delivery, captured by the courier at the moment of
+  /// drop-off (see dbx.DeliverParcel). Until these existed a delivery
+  /// dispute resolved on staff's word alone: deliveryCode proves the
+  /// receiver *knew* a code, never that the parcel physically changed
+  /// hands or where. All four are optional — an older client that
+  /// doesn't capture them still delivers fine, it just leaves a weaker
+  /// record, same graceful-degradation rule originZoneId follows.
+  ///
+  /// podReceivedByName is who actually took it, which is frequently not
+  /// receiverName (a watchman, a shop attendant, a neighbour) — the
+  /// single most useful field in a "where is my parcel" dispute and one
+  /// the code-only flow threw away entirely.
+  podPhotoUrl       String?
+  podLat            Decimal? @db.Decimal(10, 7)
+  podLng            Decimal? @db.Decimal(10, 7)
+  podReceivedByName String?
+  /// How the drop-off was authenticated: DELIVERY_CODE (the receiver
+  /// produced their code) | AGENT_COLLECTION (collected from a pickup
+  /// point, the agent verified) | STAFF_OVERRIDE (a code-less handover
+  /// an admin allowed, always paired with podReceivedByName + a photo).
+  /// Plain string, not an enum, for the same reason
+  /// CourierTeamMember.role is: this list grows by a string far more
+  /// often than it needs a migration.
+  podMethod String?
+
+  /// Failed-attempt history (see ParcelStatus.FAILED_DELIVERY and
+  /// dbx.RecordDeliveryAttempt). deliveryAttempts counts real attempts,
+  /// not scans — a courier reaching the door twice is two, a
+  /// double-scan is still one. lastAttemptReason is the courier's
+  /// reason code, carried into the SMS the receiver gets so they know
+  /// why nobody left anything.
+  deliveryAttempts  Int       @default(0)
+  lastAttemptAt     DateTime?
+  lastAttemptReason String?
+
+  /// What the sender says the contents are worth, and the coverage tier
+  /// they bought against it (see ParcelCoverageTier). Both null on a
+  /// booking with no cover — the default. coverageFeeKes is copied in
+  /// at booking time rather than recomputed from the tier, same
+  /// "freeze the promise at payment" rule transportMode/slaDeadlineAt
+  /// already follow: an admin re-pricing a tier next month must never
+  /// change what an in-flight parcel was charged or what it's owed on a
+  /// claim. `fragile` stays a separate, free flag — it's a handling
+  /// instruction, not a liability position.
+  declaredValueKes Decimal?            @db.Decimal(12, 2)
+  coverageTierId   String?             @db.Uuid
+  coverageTier     ParcelCoverageTier? @relation(fields: [coverageTierId], references: [id])
+  coverageFeeKes   Decimal?            @db.Decimal(10, 2)
+
+  /// Where the receiver collects it, when this parcel is going to a
+  /// pickup point rather than a door (see ParcelAgent). Null for a
+  /// doorstep delivery, which stays the default.
+  destinationAgentId String?      @db.Uuid
+  destinationAgent   ParcelAgent? @relation("parcelDestinationAgent", fields: [destinationAgentId], references: [id])
+  /// When it actually landed on the shelf — its own column rather than
+  /// reusing lastAttemptAt, which means something different (a failed
+  /// doorstep attempt) and is frequently null for a parcel routed to an
+  /// agent by choice rather than after a failure. This is what the
+  /// "nobody has collected this in five days" sweep counts against.
+  agentHeldSince DateTime?
+
   createdAt   DateTime  @default(now())
   deliveredAt DateTime?
 
-  handoffs ParcelHandoff[]
+  handoffs          ParcelHandoff[]
   labelStockEntries ParcelLabelStock[]
+  deliveryAttemptLog ParcelDeliveryAttempt[]
+
+  /// Cash on delivery — the social-commerce case this product could not
+  /// serve at all before: a seller ships goods, the buyer pays the
+  /// courier at the door, and Esoqo settles the goods money back to the
+  /// seller.
+  ///
+  /// codAmountKes is the GOODS value the seller is owed, never the
+  /// delivery fee — those are two different people's money and merging
+  /// them into one number is how a settlement report stops meaning
+  /// anything. What the courier actually collects at the door is
+  /// codAmountKes plus, when codCollectDeliveryFee is set, priceKes on
+  /// top (the common arrangement here, where the buyer pays for
+  /// everything on arrival).
+  ///
+  /// Null codAmountKes means an ordinary prepaid parcel, which is every
+  /// row that existed before this and still the default.
+  codAmountKes          Decimal? @db.Decimal(12, 2)
+  codCollectDeliveryFee Boolean  @default(false)
+
+  /// NOT_APPLICABLE | PENDING | COLLECTED | REMITTED | SETTLED.
+  ///
+  /// The four live states are each somebody different holding the
+  /// money: PENDING is the buyer's, COLLECTED is in the rider's pocket
+  /// (see AccountKind.PARCEL_COD_HELD), REMITTED is Esoqo's, SETTLED is
+  /// the seller's. A parcel that fails at the door stays PENDING —
+  /// nothing was collected, so nothing moved.
+  codStatus String @default("NOT_APPLICABLE")
+
+  /// What the courier actually took, which is not always what was
+  /// asked for: a buyer short of cash is a real and common outcome, and
+  /// recording the shortfall honestly is what lets somebody chase it.
+  /// The ledger always posts this figure, never codAmountKes.
+  codCollectedKes      Decimal?  @db.Decimal(12, 2)
+  codCollectedAt       DateTime?
+  codCollectedByPartyId String?  @db.Uuid
+
+  /// Which hand-over batch cleared this parcel's cash out of the
+  /// rider's pocket (see ParcelCodRemittance). Null until remitted.
+  codRemittanceId String?               @db.Uuid
+  codRemittance   ParcelCodRemittance?  @relation(fields: [codRemittanceId], references: [id])
+
+  /// When the seller was actually paid their goods money, and what was
+  /// held back for handling it (ParcelCodPolicy.handlingFeePct, frozen
+  /// at collection for the same reason every other fee on this row is).
+  codSettledAt       DateTime?
+  codHandlingFeeKes  Decimal?  @db.Decimal(10, 2)
+
+  /// What the delivering courier earned on this parcel, frozen the
+  /// moment it was delivered — the same "freeze the promise" rule every
+  /// other money column on this row follows, and for the sharpest
+  /// reason: this is what a courier invoices against.
+  ///
+  /// NULL on any parcel carried by a ParcelOrg. That company already
+  /// took orgEarningsKes and pays its own riders out of it; accruing
+  /// here as well would pay twice for one delivery. See
+  /// dbx.AccrueCourierEarnings.
+  courierEarningsKes Decimal? @db.Decimal(10, 2)
+  /// Which payout run cleared it. Null until the courier is paid.
+  courierPayoutId String?              @db.Uuid
+  courierPayout   ParcelCourierPayout? @relation(fields: [courierPayoutId], references: [id])
+
+  /// Which company is carrying this parcel. NULL means Esoqo-operated
+  /// dispatch — every parcel booked before tenancy existed, and every
+  /// one Esoqo's own couriers still carry. Set at booking from the
+  /// matched rate card, and frozen: reassigning a parcel to a different
+  /// company mid-journey would silently move money that was already
+  /// split (see platformFeeKes below).
+  parcelOrgId String?    @db.Uuid
+  parcelOrg   ParcelOrg? @relation(fields: [parcelOrgId], references: [id])
+
+  /// The revenue split, computed once at payment confirmation from
+  /// ParcelOrg.commissionPct and never recomputed — the same
+  /// freeze-the-promise rule slaDeadlineAt, transportMode and
+  /// coverageFeeKes already follow, and for the sharpest version of the
+  /// reason: these two numbers are what a company invoices against.
+  /// Both null on an Esoqo-operated parcel, where the whole price is
+  /// already Esoqo's and a split would be a fiction.
+  platformFeeKes Decimal? @db.Decimal(10, 2)
+  orgEarningsKes Decimal? @db.Decimal(10, 2)
+
+  /// The passenger trip this parcel is riding on — an actual matatu or
+  /// intercity bus, on a scheduled run, with a conductor.
+  ///
+  /// Deliberately NOT courierTripId below, which is the parcel
+  /// vertical's own CourierTrip (a courier team's dispatch round). This
+  /// is the ticketing vertical's Trip: the same vehicle passengers are
+  /// sitting in, already reporting its position through VehiclePing for
+  /// their benefit. A parcel on board inherits that position for free —
+  /// see dbx.GetParcelCourierPosition, which prefers the vehicle's ping
+  /// over the courier's when this is set.
+  ///
+  /// That reuse is the whole point: no competitor can copy "track your
+  /// parcel on the bus you ride" without first owning a vehicle network,
+  /// and Esoqo already runs one.
+  tripId         String?   @db.Uuid
+  trip           Trip?     @relation(fields: [tripId], references: [id])
+  tripBoardedAt  DateTime?
+  tripDroppedAt  DateTime?
+
+  /// Which stage on the route it comes off at. Optional — a parcel can
+  /// ride to the terminus without naming a stop — but when set it is
+  /// what the conductor is shown at each stage, which is the difference
+  /// between a parcel that gets off and one that does a return leg
+  /// nobody asked for.
+  dropStageId String?    @db.Uuid
+  dropStage   FareStage? @relation(fields: [dropStageId], references: [id])
 
   /// Which fleet trip (if any) this parcel is riding on — see
   /// CourierTrip's own comment. Independent of assignedCollectorPartyId
@@ -3197,6 +3542,17 @@ model Parcel {
   /// have either, both, or neither.
   courierTripId String?      @db.Uuid
   courierTrip   CourierTrip? @relation(fields: [courierTripId], references: [id])
+  /// Set only once a handler actually scans this parcel onto the fleet
+  /// it's assigned to (see dbx.BoardParcelOntoTrip) — distinct from
+  /// courierTripId above, which today is set by a bulk assignment with
+  /// no confirmation that the physical parcel ever left the shelf. Null
+  /// while assigned-but-unboarded is exactly the "left behind" signal
+  /// dbx.CheckTripDispatched reads at dispatch time. Named
+  /// courierTripBoardedAt (not tripBoardedAt, already taken by the bus
+  /// vertical's own Trip above) to keep the two verticals' boarding
+  /// events unambiguous even though they read almost the same.
+  courierTripBoardedAt       DateTime?
+  courierTripBoardedByPartyId String?   @db.Uuid
 
   @@index([currentHolderPartyId, status])
   @@index([senderPartyId, createdAt])
@@ -3231,12 +3587,12 @@ model CourierTeam {
 /// set of useful team roles is more likely to grow by one more string
 /// than to need a schema migration.
 model CourierTeamMember {
-  id      String   @id @default(uuid()) @db.Uuid
-  teamId  String   @db.Uuid
+  id      String      @id @default(uuid()) @db.Uuid
+  teamId  String      @db.Uuid
   team    CourierTeam @relation(fields: [teamId], references: [id], onDelete: Cascade)
-  partyId String   @db.Uuid
-  role    String   @default("MEMBER")
-  addedAt DateTime @default(now())
+  partyId String      @db.Uuid
+  role    String      @default("MEMBER")
+  addedAt DateTime    @default(now())
 
   @@unique([teamId, partyId])
   @@map("courier_team_member")
@@ -3265,13 +3621,21 @@ model CourierFleet {
 /// every member — see notify.CourierTripCompleted) and frees the
 /// fleet to start a new one.
 model CourierTrip {
-  id                  String    @id @default(uuid()) @db.Uuid
-  fleetId             String    @db.Uuid
-  fleet               CourierFleet @relation(fields: [fleetId], references: [id], onDelete: Cascade)
-  status              String    @default("IN_PROGRESS")
-  startedAt           DateTime  @default(now())
-  completedAt         DateTime?
-  completedByStaffId  String?   @db.Uuid
+  id                 String       @id @default(uuid()) @db.Uuid
+  fleetId            String       @db.Uuid
+  fleet              CourierFleet @relation(fields: [fleetId], references: [id], onDelete: Cascade)
+  status             String       @default("IN_PROGRESS")
+  startedAt          DateTime     @default(now())
+  completedAt        DateTime?
+  completedByStaffId String?      @db.Uuid
+  /// The explicit "I'm done scanning, dispatch this trip" moment — set
+  /// once by dbx.CheckTripDispatched, which is also the moment any
+  /// still-unboarded assigned parcel becomes a "left behind" fact worth
+  /// telling the team about. Distinct from completedAt, which fires on
+  /// return/delivery, not on departure — a trip is checked long before
+  /// it's complete.
+  checkedAt          DateTime?
+  checkedByStaffId   String?      @db.Uuid
 
   parcels Parcel[]
 
@@ -3297,6 +3661,35 @@ model ParcelLabelStock {
   usedByParcelId   String?   @db.Uuid
   usedByParcel     Parcel?   @relation(fields: [usedByParcelId], references: [id])
 
+  /// Who this pad was printed for. NULL means the shared Esoqo pool,
+  /// the same convention Parcel.parcelOrgId uses.
+  ///
+  /// This is what stops a partner courier spending stock printed for
+  /// another company and settling the shipment against the wrong
+  /// books. Recorded here, enforced at bind time — see BookParcel's
+  /// existingCode path, which refuses a code whose owner isn't the
+  /// company the binder is signed in to.
+  parcelOrgId        String?    @db.Uuid
+  parcelOrg          ParcelOrg? @relation(fields: [parcelOrgId], references: [id])
+  issuedToOrgStaffId String?    @db.Uuid
+  issuedAt           DateTime?
+
+  /// The minted run this came off, so a pad that walks out of a branch
+  /// can be withdrawn in one statement instead of label by label.
+  ///
+  /// NULL means "minted before batches were tracked" — not backfilled,
+  /// because the batches those labels came off are genuinely unknown
+  /// and one synthetic id would assert they were printed together.
+  batchId String? @db.Uuid
+
+  /// Withdrawn stock. Never deleted: the physical sticker still exists
+  /// on something and someone will eventually scan it, so the row has
+  /// to survive to answer "this label was withdrawn" rather than 404
+  /// and leave a real box unexplained.
+  voidedAt        DateTime?
+  voidedReason    String?
+  voidedByStaffId String?   @db.Uuid
+
   /// Structured info attached in the field the moment a handler
   /// sticks this label on a physical item, independent of (and
   /// usually well before) a real booking. All optional — a handler
@@ -3315,10 +3708,274 @@ model ParcelLabelStock {
   ownerGender           String?
   itemType              String?
   weightRangeKg         String?
+  /// Same three dimensions a real booking carries. A handler measuring
+  /// a box at a bus stage is doing the counter's job earlier and with
+  /// less of the picture — one vocabulary across both, so what's
+  /// recorded here survives into the booking rather than being
+  /// re-asked.
+  lengthCm Decimal? @db.Decimal(6, 1)
+  widthCm  Decimal? @db.Decimal(6, 1)
+  heightCm Decimal? @db.Decimal(6, 1)
   infoAttachedAt        DateTime?
   infoAttachedByStaffId String?   @db.Uuid
 
+  /// Both partial, matching the migration: "what can this company
+  /// still use" and "void this batch" only ever ask about live stock,
+  /// so spent and voided rows are dead weight in them.
+  @@index([parcelOrgId, createdAt])
+  @@index([batchId])
   @@map("parcel_label_stock")
+}
+
+/// One hand-over of collected cash, clearing a rider's pocket.
+///
+/// A batch rather than a per-parcel event because that is how the money
+/// physically moves: a rider finishes a round and hands over everything
+/// at once. Recording it parcel-by-parcel would invent a precision the
+/// cash itself doesn't have, and make reconciling a rider's float
+/// against a stack of notes far harder than it needs to be.
+///
+/// Append-only — a remittance is never edited. A miscount is corrected
+/// by recording the correction, the same convention ParcelHandoff and
+/// ParcelDeliveryAttempt already follow.
+model ParcelCodRemittance {
+  id String @id @default(uuid()) @db.Uuid
+
+  /// Whose pocket this emptied.
+  riderPartyId String @db.Uuid
+
+  /// Who took the cash: an Esoqo staff member, or a courier company's
+  /// own manager. Exactly one is set — which of the two tells you where
+  /// the money physically went, and both being null would mean nobody
+  /// is accountable for a bag of notes.
+  receivedByStaffId    String? @db.Uuid
+  receivedByOrgStaffId String? @db.Uuid
+
+  /// What was counted. Deliberately its own number rather than a sum of
+  /// the parcels below: the whole point of a reconciliation record is
+  /// that the declared total and the expected total can disagree, and a
+  /// schema that derives one from the other can never surface a short
+  /// hand-over.
+  amountKes Decimal @db.Decimal(12, 2)
+  /// The sum the parcels in this batch say it should have been, frozen
+  /// at the moment of counting.
+  expectedKes Decimal @db.Decimal(12, 2)
+  note        String?
+
+  createdAt DateTime @default(now())
+
+  parcels Parcel[]
+
+  @@index([riderPartyId, createdAt])
+  @@map("parcel_cod_remittance")
+}
+
+/// The one global, admin-editable cash-on-delivery policy — same
+/// single-row shape ParcelDistanceRate uses, and the same explicit
+/// deferral: there is deliberately no per-company or per-seller
+/// override yet. COD is the highest-risk thing in this vertical (it is
+/// the only flow where Esoqo is holding somebody else's money), so it
+/// starts as one switch an admin can see all of, rather than a matrix
+/// nobody can audit at a glance.
+model ParcelCodPolicy {
+  id      String  @id @default(uuid()) @db.Uuid
+  enabled Boolean @default(false)
+
+  /// The most goods value a single parcel may carry. A cap, not a
+  /// suggestion: this is the amount a rider can be robbed of, and the
+  /// amount Esoqo is liable for if they vanish.
+  maxAmountKes Decimal @default(20000) @db.Decimal(12, 2)
+
+  /// Esoqo's cut of the goods value for handling the cash, held back at
+  /// settlement. Distinct from the delivery fee, which the parcel's own
+  /// priceKes already covers.
+  handlingFeePct Decimal @default(2) @db.Decimal(5, 2)
+
+  updatedAt   DateTime @updatedAt
+  updatedById String?  @db.Uuid
+
+  @@map("parcel_cod_policy")
+}
+
+/// The one global, admin-editable rate a gig courier is paid per
+/// delivery — same single-row shape ParcelDistanceRate and
+/// ParcelCodPolicy already use, and the same explicit deferral: there
+/// is deliberately no per-courier or per-zone rate yet. A rate card
+/// nobody can see all of at once is a rate card nobody can audit, and
+/// courier pay is the last place to start with a matrix.
+///
+/// The two components stack: a courier earns perDeliveryKes plus
+/// pctOfPrice of what the sender paid. Either may be zero, which is how
+/// you express "flat rate only" or "commission only" without a mode
+/// flag nobody would remember the meaning of.
+model ParcelCourierTariff {
+  id             String  @id @default(uuid()) @db.Uuid
+  perDeliveryKes Decimal @default(0) @db.Decimal(10, 2)
+  pctOfPrice     Decimal @default(0) @db.Decimal(5, 2)
+
+  /// Never pay out more than the sender paid. A guard rather than a
+  /// business rule: it exists so a mistyped percentage costs Esoqo
+  /// nothing worse than its whole margin on that parcel.
+  maxPerDeliveryKes Decimal @default(2000) @db.Decimal(10, 2)
+
+  updatedAt   DateTime @updatedAt
+  updatedById String?  @db.Uuid
+
+  @@map("parcel_courier_tariff")
+}
+
+/// One payout run, clearing what a courier is owed.
+///
+/// A batch for the same reason ParcelCodRemittance is: money moves to a
+/// person in one transfer covering many parcels, and a per-parcel
+/// record would invent a precision the M-Pesa transfer itself doesn't
+/// have. Append-only — a correction is a new row, never an edit.
+model ParcelCourierPayout {
+  id             String @id @default(uuid()) @db.Uuid
+  courierPartyId String @db.Uuid
+
+  /// What was actually sent, and what the parcels said was owed. Two
+  /// columns, deliberately: a payout that disagrees with the accrual is
+  /// exactly the thing a reconciliation record has to be able to show.
+  amountKes   Decimal @db.Decimal(12, 2)
+  expectedKes Decimal @db.Decimal(12, 2)
+
+  /// Free text — an M-Pesa transaction id, a bank reference, "paid
+  /// cash at the depot". Not validated: this records what a human did,
+  /// and refusing a format they actually used would just produce blank
+  /// references.
+  reference String?
+  note      String?
+
+  paidByStaffId String?  @db.Uuid
+  createdAt     DateTime @default(now())
+
+  parcels Parcel[]
+
+  @@index([courierPartyId, createdAt])
+  @@map("parcel_courier_payout")
+}
+
+/// A courier company operating on Esoqo — a real business with its own
+/// staff, its own riders and its own rate card, as opposed to the
+/// Esoqo-run dispatch every parcel used to belong to.
+///
+/// Hangs off Enterprise exactly as Store and TicketOrg do, for the same
+/// reason: the tenant side of this platform is already "a Party runs an
+/// Enterprise, an Enterprise opens a <thing>", and a parcel company is
+/// another such thing, not a parallel merchant concept.
+///
+/// Parcel.parcelOrgId stays nullable throughout: a null means
+/// Esoqo-operated, which is every parcel booked before this model
+/// existed and every parcel Esoqo's own couriers carry now. Tenancy is
+/// additive here, never a migration of existing rows into a default
+/// org — inventing a fake "Esoqo Logistics Ltd" tenant to avoid a
+/// nullable column would put real money under a company that doesn't
+/// exist.
+model ParcelOrg {
+  id           String     @id @default(uuid()) @db.Uuid
+  enterpriseId String     @db.Uuid
+  enterprise   Enterprise @relation(fields: [enterpriseId], references: [id], onDelete: Cascade)
+
+  name String
+  /// Public, shared with staff as the sign-in URL (/parcel-co/<slug>) —
+  /// same role TicketOrg.slug plays for organiser staff.
+  slug String @unique
+
+  /// DRAFT until an admin activates it; SUSPENDED stops new bookings
+  /// being routed to it without touching parcels already in flight.
+  /// Plain string rather than an enum, same reasoning
+  /// CourierTeamMember.role follows.
+  status String @default("DRAFT")
+
+  contactPerson String?
+  contactPhone  String?
+  contactEmail  String?
+  /// M-Pesa number settlements should be paid to. Informational, same
+  /// as Store.settlementPhone and TicketOrg.settlementPhone — actual
+  /// payouts run through the ledger, not off this column.
+  settlementPhone String?
+
+  /// Esoqo's cut of every parcel this company carries, as a percent of
+  /// the paid price. Copied onto each parcel at payment time (see
+  /// Parcel.platformFeeKes) and never read live afterwards, so
+  /// renegotiating a rate next month can't rewrite what an already-paid
+  /// parcel earned.
+  ///
+  /// This one number covers both commercial readings deliberately: a
+  /// company that sets its own prices and pays Esoqo a commission, and
+  /// a company Esoqo prices for and pays a share to, are the same
+  /// arithmetic with different values — so neither needs its own
+  /// schema.
+  commissionPct Decimal @default(15) @db.Decimal(5, 2)
+
+  /// The one physical front desk a sender can walk into and hand a
+  /// parcel over in person, rather than waiting on a scheduled pickup —
+  /// same "free text + real coordinates" shape ParcelAgent already uses
+  /// for a receiver-side pickup point, mirrored here for the origin
+  /// side. One desk per company for now; a company that runs several
+  /// physical counters gets its own table when that actually comes up,
+  /// not before.
+  acceptsWalkIn Boolean  @default(false)
+  lat           Decimal? @db.Decimal(9, 6)
+  lng           Decimal? @db.Decimal(9, 6)
+  /// "Ground floor, Kenyatta Avenue, next to the post office" — what a
+  /// sender actually navigates by, same convention ParcelAgent.locationHint
+  /// and Parcel.originLabel already follow.
+  locationHint String?
+  /// Free text ("Mon-Sat 8am-6pm"), same reasoning ParcelAgent.openingHours
+  /// gives for not modelling this as a real schedule.
+  openingHours String?
+
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+  createdByStaffId String?  @db.Uuid
+
+  staff        ParcelOrgStaff[]
+  parcels      Parcel[]
+  couriers     ParcelCourier[]
+  pricingRules ParcelPricingRule[]
+  labelStock   ParcelLabelStock[]
+
+  @@index([enterpriseId])
+  @@index([status])
+  @@index([acceptsWalkIn])
+  @@map("parcel_org")
+}
+
+/// One of a parcel company's own people, signing in with a name and an
+/// org-scoped PIN rather than an Esoqo account — the exact shape
+/// TicketOrgStaff already has, because it solves the identical problem:
+/// a dispatcher or a rider needs into one company's parcels and nothing
+/// else, and issuing them a full Esoqo identity for that is both more
+/// work and more access than the job needs.
+///
+/// role drives the capability bundle (see authsvc.ParcelStaffCapabilities):
+/// MANAGER runs the company, DISPATCHER assigns work, RIDER carries
+/// parcels and closes them at the door.
+model ParcelOrgStaff {
+  id    String    @id @default(uuid()) @db.Uuid
+  orgId String    @db.Uuid
+  org   ParcelOrg @relation(fields: [orgId], references: [id], onDelete: Cascade)
+
+  name    String
+  pinHash String
+  role    String  @default("RIDER")
+  active  Boolean @default(true)
+
+  /// The Party this login acts as when it takes custody of a parcel.
+  /// Custody is always attributed to a real Party (see
+  /// Parcel.currentHolderPartyId) — a PIN login is an authentication
+  /// method, not a substitute identity, and a handoff chain pointing at
+  /// "staff row 7" rather than a person would be worthless in a dispute.
+  /// Null for office roles that never carry anything.
+  partyId String? @db.Uuid
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([orgId])
+  @@map("parcel_org_staff")
 }
 
 /// Admin-owned pricing config, one row per ParcelType — same
@@ -3328,8 +3985,21 @@ model ParcelLabelStock {
 /// same as Parcel itself: Prisma holds DDL, this table's rows are
 /// written by the admin app via Prisma, read-only from core-go).
 model ParcelPricingRule {
-  id          String     @id @default(uuid()) @db.Uuid
-  parcelType  ParcelType @unique
+  id String @id @default(uuid()) @db.Uuid
+
+  /// Which company this rate applies to. NULL is the platform default —
+  /// the row every parcel priced before tenancy existed matched, and
+  /// the fallback for any company that hasn't set its own rate for a
+  /// type. A company overrides one bracket without having to restate
+  /// the other four.
+  ///
+  /// Note the unique key below moved from `parcelType` alone to the
+  /// pair: "one row per type" was only ever true while there was one
+  /// operator.
+  parcelOrgId String?    @db.Uuid
+  parcelOrg   ParcelOrg? @relation(fields: [parcelOrgId], references: [id], onDelete: Cascade)
+
+  parcelType ParcelType
   /// Free-text display line, e.g. "0.5kg to 2.2kg" — kept alongside
   /// minWeightKg/maxWeightKg below rather than derived from them, so an
   /// admin can still write "Up to 0.5kg" instead of "0kg to 0.5kg".
@@ -3346,15 +4016,24 @@ model ParcelPricingRule {
   maxKes Decimal @db.Decimal(10, 2)
 
   /// How far below minKes a reason-backed offer may land, e.g. 5–15%.
-  bargainMinPct Decimal @db.Decimal(5, 2)
-  bargainMaxPct Decimal @db.Decimal(5, 2)
+  bargainMinPct  Decimal @db.Decimal(5, 2)
+  bargainMaxPct  Decimal @db.Decimal(5, 2)
   /// [{ "reason": "Not fragile", "extraDiscountPct": 5 }, ...] — each
   /// reason's extraDiscountPct is added on top of bargainMinPct, capped
   /// at bargainMaxPct, and is what the mobile app's "make an offer"
   /// step must show — never a free-typed number.
-  bargainReasons Json @default("[]")
+  bargainReasons Json    @default("[]")
 
   suggestedTransportMode ParcelTransportMode
+
+  /// How much cheaper this parcel type is when the receiver collects it
+  /// from a pickup point instead of having it brought to a door (see
+  /// ParcelAgent). Per-type rather than one global number because the
+  /// saving genuinely scales with size — skipping the last mile on a
+  /// heavy item saves far more than on an envelope. 0 (the default)
+  /// means agent collection costs the same as doorstep, which is a
+  /// legitimate admin choice, not an unconfigured state.
+  agentDropDiscountPct Decimal @default(0) @db.Decimal(5, 2)
 
   /// How many hours after payment this parcel type is promised
   /// delivered by — copied onto Parcel.slaDeadlineAt at BOOKED time
@@ -3368,6 +4047,7 @@ model ParcelPricingRule {
   updatedById String?    @db.Uuid
   updatedBy   StaffUser? @relation("parcelPricingRulesSet", fields: [updatedById], references: [id])
 
+  @@unique([parcelOrgId, parcelType])
   @@map("parcel_pricing_rule")
 }
 
@@ -3375,9 +4055,9 @@ model ParcelPricingRule {
 /// what creates this row (see dbx.ScanHandoff), never a direct edit to
 /// Parcel.currentHolderPartyId.
 model ParcelHandoff {
-  id       String @id @default(uuid()) @db.Uuid
-  parcelId String @db.Uuid
-  parcel   Parcel @relation(fields: [parcelId], references: [id], onDelete: Cascade)
+  id          String   @id @default(uuid()) @db.Uuid
+  parcelId    String   @db.Uuid
+  parcel      Parcel   @relation(fields: [parcelId], references: [id], onDelete: Cascade)
   /// Null on the very first pickup (meaning "from the sender"), the
   /// previous currentHolderPartyId otherwise — added so the chain of
   /// custody can actually be reconstructed (see dbx.ListParcelHandoffs)
@@ -3401,6 +4081,12 @@ model ParcelHandoff {
 model ParcelCourier {
   id      String @id @default(uuid()) @db.Uuid
   partyId String @unique @db.Uuid
+
+  /// The company this rider works for, or NULL for an independent
+  /// courier on Esoqo's own roster — the gig half of the hybrid
+  /// dispatch model, which predates tenancy and stays exactly as it was.
+  parcelOrgId String?    @db.Uuid
+  parcelOrg   ParcelOrg? @relation(fields: [parcelOrgId], references: [id], onDelete: SetNull)
 
   vehicleType ParcelTransportMode
   status      ParcelCourierStatus @default(PENDING_VETTING)
@@ -3434,7 +4120,120 @@ model ParcelZone {
 
   createdAt DateTime @default(now())
 
+  agents ParcelAgent[]
+
   @@map("parcel_zone")
+}
+
+/// A neighbourhood pickup point — a real shop that holds parcels for
+/// collection. The agent-to-agent leg is what makes a delivery cheap
+/// enough to compete in this market: a courier serving one shop that
+/// twenty receivers walk to costs a fraction of twenty doorstep runs,
+/// which is the whole basis of the dominant local competitor's pricing.
+///
+/// Deliberately a sibling of ParcelZone rather than an extension of it:
+/// a zone is a *pricing/distance* coordinate (see ParcelZone's own
+/// comment), an agent is a *place custody actually sits* — with a
+/// person, a phone, opening hours and finite shelf space. Several
+/// agents share one zone, and a zone with no agents still prices fine.
+model ParcelAgent {
+  id     String  @id @default(uuid()) @db.Uuid
+  name   String
+  /// The Party that runs the shop. Nullable because ops routinely
+  /// onboard a physical location before the owner has an Esoqo account
+  /// — until it's set, custody at this agent is attributed to the staff
+  /// member who recorded the drop (same "a real party or nobody" rule
+  /// Parcel.currentHolderPartyId already follows).
+  partyId String? @db.Uuid
+
+  zoneId String?     @db.Uuid
+  zone   ParcelZone? @relation(fields: [zoneId], references: [id])
+
+  /// Its own coordinates, not the zone's — a receiver needs to walk to
+  /// this shop, not to the zone centroid it prices against.
+  lat Decimal @db.Decimal(9, 6)
+  lng Decimal @db.Decimal(9, 6)
+
+  msisdn String
+  /// "Shop 4, Ngara Road, next to the Total station" — what someone
+  /// actually navigates by here. Same reasoning Parcel.originLabel's
+  /// free text survives alongside a zone id.
+  locationHint String
+  /// Free text ("Mon–Sat 8am–7pm, Sun closed"). Not structured hours:
+  /// a curated list of shops whose hours change with the weather is not
+  /// a scheduling system, and pretending otherwise would only produce
+  /// confidently wrong "closed now" badges.
+  openingHours String?
+
+  active Boolean @default(true)
+  /// Shelf space, in parcels. Dispatch refuses to route a parcel to an
+  /// agent already at capacity rather than discovering it at the door.
+  capacity Int @default(50)
+  /// What the receiver pays the shop on collection, if anything —
+  /// copied onto the parcel at booking time, never read live, same
+  /// freeze-the-promise rule ParcelCoverageTier follows.
+  holdingFeeKes Decimal @default(0) @db.Decimal(10, 2)
+
+  createdAt        DateTime @default(now())
+  createdByStaffId String?  @db.Uuid
+
+  destinationParcels Parcel[] @relation("parcelDestinationAgent")
+
+  @@index([zoneId, active])
+  @@map("parcel_agent")
+}
+
+/// Admin-editable cover levels a sender can buy against declared value
+/// — same "admin-owned rate card" shape ParcelPricingRule already
+/// follows. The fee is feeKes + declaredValue × feePct, and maxCoverKes
+/// caps what a claim can ever pay out regardless of what was declared
+/// (a sender declaring a million shillings on a boda parcel buys the
+/// tier's ceiling, not their own number).
+model ParcelCoverageTier {
+  id          String  @id @default(uuid()) @db.Uuid
+  name        String  @unique
+  maxCoverKes Decimal @db.Decimal(12, 2)
+  feeKes      Decimal @default(0) @db.Decimal(10, 2)
+  feePct      Decimal @default(0) @db.Decimal(5, 2)
+  active      Boolean @default(true)
+  sortOrder   Int     @default(0)
+
+  updatedAt   DateTime @updatedAt
+  updatedById String?  @db.Uuid
+
+  parcels Parcel[]
+
+  @@map("parcel_coverage_tier")
+}
+
+/// One failed doorstep attempt, append-only — the same shape and the
+/// same reasoning as ParcelHandoff: Parcel's own lastAttempt* columns
+/// are a denormalised "most recent" for list queries, and this table is
+/// the record that can actually be reconstructed. Three attempts with
+/// three different reasons is a very different conversation with a
+/// receiver than one, and the columns alone can't tell them apart.
+model ParcelDeliveryAttempt {
+  id       String @id @default(uuid()) @db.Uuid
+  parcelId String @db.Uuid
+  parcel   Parcel @relation(fields: [parcelId], references: [id], onDelete: Cascade)
+
+  /// The courier who tried — always set; an attempt with nobody
+  /// attached is not evidence of anything.
+  byPartyId String @db.Uuid
+  /// NOBODY_HOME | WRONG_ADDRESS | REFUSED | NO_DELIVERY_CODE |
+  /// UNREACHABLE | OTHER. Plain string for the same reason podMethod is.
+  reason String
+  /// Required when reason is OTHER — see the "any Other choice needs a
+  /// paired free-text field" rule this codebase follows everywhere else.
+  note String?
+
+  lat Decimal? @db.Decimal(10, 7)
+  lng Decimal? @db.Decimal(10, 7)
+
+  createdAt DateTime @default(now())
+
+  @@index([parcelId, createdAt])
+  @@map("parcel_delivery_attempt")
 }
 
 /// One global admin-editable rate — deliberately not a per-zone-pair
@@ -3443,9 +4242,9 @@ model ParcelZone {
 /// between the two zones (see dbx.HaversineKm), floored at
 /// minChargeableKm so a same-zone delivery isn't priced as free.
 model ParcelDistanceRate {
-  id             String  @id @default(uuid()) @db.Uuid
-  perKmKes       Decimal @db.Decimal(10, 2)
-  minChargeableKm Decimal @db.Decimal(6, 2) @default(1)
+  id              String  @id @default(uuid()) @db.Uuid
+  perKmKes        Decimal @db.Decimal(10, 2)
+  minChargeableKm Decimal @default(1) @db.Decimal(6, 2)
 
   updatedAt   DateTime @updatedAt
   updatedById String?  @db.Uuid
@@ -3459,12 +4258,12 @@ model ParcelDistanceRate {
 /// for the same reason: one row per ping, latest-per-courier read via
 /// DISTINCT ON, no separate "current position" column to keep in sync.
 model ParcelCourierPing {
-  id              String        @id @default(uuid()) @db.Uuid
-  courierPartyId  String        @db.Uuid
-  courier         ParcelCourier @relation(fields: [courierPartyId], references: [partyId], onDelete: Cascade)
-  lat             Decimal       @db.Decimal(10, 7)
-  lng             Decimal       @db.Decimal(10, 7)
-  at              DateTime      @default(now())
+  id             String        @id @default(uuid()) @db.Uuid
+  courierPartyId String        @db.Uuid
+  courier        ParcelCourier @relation(fields: [courierPartyId], references: [partyId], onDelete: Cascade)
+  lat            Decimal       @db.Decimal(10, 7)
+  lng            Decimal       @db.Decimal(10, 7)
+  at             DateTime      @default(now())
 
   @@index([courierPartyId, at])
   @@map("parcel_courier_ping")
@@ -3475,7 +4274,7 @@ model ParcelCourierPing {
 // SACCO) companies onboard the same way a shop does: a Party runs an
 // Enterprise, an Enterprise opens a TicketOrg — no parallel merchant
 // identity system, same reasoning as Store. See docs/proposals/
-// esoko-ticketing-platform.md for the full design brief.
+// esoqo-ticketing-platform.md for the full design brief.
 
 enum TicketVertical {
   EVENTS
@@ -3594,7 +4393,7 @@ model TicketLoyaltyEntry {
 
 /// Org-scoped staff login — same shape as Cashier, not a Party. A
 /// gate scanner on event night doesn't need (and shouldn't get) a
-/// full Esoko identity, just a PIN scoped to this one org.
+/// full Esoqo identity, just a PIN scoped to this one org.
 ///
 /// ADMIN   — everything: listings, schedules, pricing, staff, payouts.
 /// MANAGER — day-to-day ops: listings, schedules, bookings, check-in.
@@ -3632,10 +4431,10 @@ model TicketOrgStaff {
   @@map("ticket_org_staff")
 }
 
-/// Unified crew identity (docs/proposals/esoko-unified-crew-identity.md):
+/// Unified crew identity (docs/proposals/esoqo-unified-crew-identity.md):
 /// makes `party` *eligible* to act as SCANNER/MANAGER/ADMIN/CREW staff
 /// for `org`, replacing the AGENT-only TicketOrgStaff PIN login for
-/// anyone who has (or is required to have) their own Esoko account. A
+/// anyone who has (or is required to have) their own Esoqo account. A
 /// grant alone authorises nothing — every org-scoped request also needs
 /// a live org_context_activation, so requireCapability() never grants
 /// these capabilities just because the grant row says "active".
@@ -3662,11 +4461,11 @@ model OrgStaffGrant {
   role   String
   status String @default("active")
 
-  grantedBy   String @db.Uuid
-  grantedByParty Party @relation("OrgStaffGrantGrantedBy", fields: [grantedBy], references: [id], onDelete: Restrict)
+  grantedBy      String @db.Uuid
+  grantedByParty Party  @relation("OrgStaffGrantGrantedBy", fields: [grantedBy], references: [id], onDelete: Restrict)
 
-  suspendedBy      String? @db.Uuid
-  suspendedByParty Party?  @relation("OrgStaffGrantSuspendedBy", fields: [suspendedBy], references: [id], onDelete: SetNull)
+  suspendedBy      String?   @db.Uuid
+  suspendedByParty Party?    @relation("OrgStaffGrantSuspendedBy", fields: [suspendedBy], references: [id], onDelete: SetNull)
   suspendedAt      DateTime?
 
   /// Set only for role = CREW — same purpose as TicketOrgStaff's own
@@ -3963,7 +4762,7 @@ enum BookingPaymentMethod {
 }
 
 /// A checkout — mirrors StoreOrder. The buyer need not be a
-/// registered Esoko subject; buyerParty is set only when they are.
+/// registered Esoqo subject; buyerParty is set only when they are.
 model Booking {
   id         String          @id @default(uuid()) @db.Uuid
   scheduleId String          @db.Uuid
@@ -4174,6 +4973,9 @@ model FareStage {
   shortRouteId String     @db.Uuid
   shortRoute   ShortRoute @relation(fields: [shortRouteId], references: [id], onDelete: Cascade)
 
+  /// Parcels booked to come off at this stage — see Parcel.dropStageId.
+  parcelDrops Parcel[]
+
   name    String
   order   Int
   fareKes Decimal @db.Decimal(12, 2)
@@ -4220,8 +5022,8 @@ model Trip {
   shortRouteId String?     @db.Uuid
   shortRoute   ShortRoute? @relation(fields: [shortRouteId], references: [id])
 
-  status    TripStatus @default(ACTIVE)
-  startedAt DateTime   @default(now())
+  status    TripStatus     @default(ACTIVE)
+  startedAt DateTime       @default(now())
   endedAt   DateTime?
   /// Set together, only at close — see TripEndStatus and dbx.CloseTrip.
   endStatus TripEndStatus?
@@ -4236,6 +5038,9 @@ model Trip {
   pings        VehiclePing[]
   fares        FarePayment[]
   declarations CollectionDeclaration[]
+  /// Parcels riding this trip — see Parcel.tripId. A passenger trip
+  /// doubles as freight capacity that would otherwise travel empty.
+  parcels      Parcel[]
 
   @@index([orgId, status])
   @@index([vehicleId, status])
@@ -4271,23 +5076,23 @@ model FarePayment {
   stageToId   String?    @db.Uuid
   stageTo     FareStage? @relation("FareTo", fields: [stageToId], references: [id])
 
-  amountKes   Decimal           @db.Decimal(12, 2)
+  amountKes    Decimal           @db.Decimal(12, 2)
   /// MPESA_STK | CASH | VOUCHER
-  method      String
-  buyerMsisdn String?
-  buyerName   String?
-  buyerPartyId String? @db.Uuid
-  voucherId   String?  @db.Uuid
-  voucher     VoucherCard? @relation("FareVoucher", fields: [voucherId], references: [id])
-  status      FarePaymentStatus @default(PENDING)
+  method       String
+  buyerMsisdn  String?
+  buyerName    String?
+  buyerPartyId String?           @db.Uuid
+  voucherId    String?           @db.Uuid
+  voucher      VoucherCard?      @relation("FareVoucher", fields: [voucherId], references: [id])
+  status       FarePaymentStatus @default(PENDING)
 
   mpesaCheckoutRequestId String?       @unique
   mpesaReceiptCode       String?
   journalEntryId         String?       @unique @db.Uuid
   journalEntry           JournalEntry? @relation(fields: [journalEntryId], references: [id])
 
-  createdAt   DateTime  @default(now())
-  confirmedAt DateTime?
+  createdAt     DateTime           @default(now())
+  confirmedAt   DateTime?
   verifications FareVerification[]
 
   @@index([tripId, status])
@@ -4375,7 +5180,7 @@ model SmsSpend {
   @@map("sms_spend")
 }
 
-// ── Esoko voucher cards + unified loyalty + fare verification ──
+// ── Esoqo voucher cards + unified loyalty + fare verification ──
 // Go (services/core-go) is the sole writer; Prisma holds DDL only.
 
 enum VoucherPurpose {
@@ -4398,20 +5203,20 @@ enum VoucherStatus {
 }
 
 model VoucherCard {
-  id                   String        @id @default(uuid()) @db.Uuid
-  ownerPartyId         String        @db.Uuid
-  giftedByPartyId      String?       @db.Uuid
-  label                String        @default("Voucher")
-  purpose              VoucherPurpose @default(GENERAL)
-  status               VoucherStatus  @default(ACTIVE)
-  qrToken              String        @unique
-  shortCode            String        @unique
-  expiresAt            DateTime?
-  mpesaCheckoutRequestId String?     @unique
-  createdAt            DateTime      @default(now())
-  updatedAt            DateTime      @updatedAt
-  entries              VoucherLedgerEntry[]
-  fares                FarePayment[] @relation("FareVoucher")
+  id                     String               @id @default(uuid()) @db.Uuid
+  ownerPartyId           String               @db.Uuid
+  giftedByPartyId        String?              @db.Uuid
+  label                  String               @default("Voucher")
+  purpose                VoucherPurpose       @default(GENERAL)
+  status                 VoucherStatus        @default(ACTIVE)
+  qrToken                String               @unique
+  shortCode              String               @unique
+  expiresAt              DateTime?
+  mpesaCheckoutRequestId String?              @unique
+  createdAt              DateTime             @default(now())
+  updatedAt              DateTime             @updatedAt
+  entries                VoucherLedgerEntry[]
+  fares                  FarePayment[]        @relation("FareVoucher")
 
   @@index([ownerPartyId, status])
   @@map("voucher_card")
@@ -4444,16 +5249,16 @@ model VoucherBatch {
 }
 
 model VoucherLedgerEntry {
-  id             String       @id @default(uuid()) @db.Uuid
-  voucherId      String       @db.Uuid
-  voucher        VoucherCard  @relation(fields: [voucherId], references: [id], onDelete: Cascade)
+  id             String        @id @default(uuid()) @db.Uuid
+  voucherId      String        @db.Uuid
+  voucher        VoucherCard   @relation(fields: [voucherId], references: [id], onDelete: Cascade)
   points         Int
-  kesEquiv       Decimal      @db.Decimal(12, 2)
+  kesEquiv       Decimal       @db.Decimal(12, 2)
   kind           String
   refId          String?
-  journalEntryId String?      @unique @db.Uuid
+  journalEntryId String?       @unique @db.Uuid
   journalEntry   JournalEntry? @relation(fields: [journalEntryId], references: [id])
-  createdAt      DateTime     @default(now())
+  createdAt      DateTime      @default(now())
 
   @@index([voucherId, createdAt])
   @@map("voucher_ledger_entry")

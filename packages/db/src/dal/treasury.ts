@@ -4,14 +4,14 @@ import { prisma } from '../client';
 import { requireCapability, systemCtx, type Ctx } from '../capabilities';
 import { recordAudit } from '../audit';
 import type {
-  ApprovalDecision, AttendanceMethod, MemberRole, PaymentMethod, Prisma,
+  ApprovalDecision, AttendanceMethod, GroupContribution, MemberRole, PaymentMethod, Prisma,
 } from '@prisma/client';
 
 /**
  * Group treasury — contributions, meetings/attendance, and the
  * scheduled multisig withdrawal flow.
  *
- * See docs/proposals/esoko-group-treasury-and-payment-id.md for why
+ * See docs/proposals/esoqo-group-treasury-and-payment-id.md for why
  * every shape here is the way it is. The short version:
  *
  *   · A contribution declaration is not money, same rule as
@@ -427,13 +427,19 @@ async function postContribution(
  * control, since confirming money-in carries far less risk than
  * approving money-out.
  */
-export async function confirmContribution(ctx: Ctx, contributionId: string) {
+export async function confirmContribution(
+  ctx: Ctx, contributionId: string,
+): Promise<{ contribution: GroupContribution; alreadyConfirmed: boolean }> {
   requireCapability(ctx, 'treasury.confirm', { partyId: ctx.partyId });
 
   return prisma.$transaction(async (tx) => {
     const contribution = await tx.groupContribution.findUnique({ where: { id: contributionId } });
     if (!contribution) throw new TreasuryError('Contribution not found', 'NOT_FOUND');
-    if (contribution.status === 'CONFIRMED') return contribution;
+    // Idempotent, and it says so: a caller that texts the whole group on
+    // confirmation needs to know the difference between "this just
+    // happened" and "a stale button was tapped twice", the same way the
+    // Go API's ConfirmContribution returns alreadyConfirmed.
+    if (contribution.status === 'CONFIRMED') return { contribution, alreadyConfirmed: true };
     if (contribution.status === 'REJECTED' || contribution.status === 'WAIVED') {
       throw new TreasuryError('This contribution has already been settled', 'ALREADY_SETTLED');
     }
@@ -446,7 +452,7 @@ export async function confirmContribution(ctx: Ctx, contributionId: string) {
       action: 'treasury.contribution.confirmed', targetType: 'group_contribution', targetId: contributionId,
       payload: { orgId: contribution.orgId, amountKes: Number(contribution.amountKes) },
     }, tx as never);
-    return updated;
+    return { contribution: updated, alreadyConfirmed: false };
   });
 }
 
@@ -496,15 +502,85 @@ export async function listContributions(ctx: Ctx, orgId: string, take = 30) {
   });
 }
 
-/** Derived, never stored — the running total is the sum of the group's own postings. */
-export async function getGroupBalance(ctx: Ctx, orgId: string): Promise<number> {
-  requireCapability(ctx, 'treasury.read', { partyId: ctx.partyId });
-  await assertActiveMember(orgId, ctx.partyId!);
-
+async function groupBalanceKes(orgId: string): Promise<number> {
   const account = await prisma.account.findFirst({ where: { partyId: orgId, kind: 'GROUP_SAVINGS' } });
   if (!account) return 0;
   const sum = await prisma.posting.aggregate({ where: { accountId: account.id }, _sum: { amount: true } });
   return Number(sum._sum.amount ?? 0);
+}
+
+/** Derived, never stored — the running total is the sum of the group's own postings. */
+export async function getGroupBalance(ctx: Ctx, orgId: string): Promise<number> {
+  requireCapability(ctx, 'treasury.read', { partyId: ctx.partyId });
+  await assertActiveMember(orgId, ctx.partyId!);
+  return groupBalanceKes(orgId);
+}
+
+/* ── notification support ──────────────────────────────────────────
+ *
+ * Everything a caller needs to compose and address the two contribution
+ * texts (see contributionDeclaredSms/contributionConfirmedSms in
+ * @esoqo/domain). The sending itself happens in the Server Action on
+ * top — @esoqo/db cannot import @esoqo/auth, the dependency runs the
+ * other way — which is the same split inviteMember already uses.
+ *
+ * Not ctx-gated, same precedent as findStalledGroups in dal/group-alerts.ts:
+ * these are only ever called immediately after a capability-checked
+ * write, by the caller that just performed it, to address a message
+ * about that very write. Gating them again would mean an officer
+ * confirming a contribution has to also hold treasury.read on a group
+ * they just proved officership of.
+ */
+
+export interface ContributionNotifyDetail {
+  orgId: string;
+  orgName: string;
+  contributorName: string;
+  contributorMsisdn: string | null;
+  amountKes: number;
+  /** Short handle quoted in both texts so a member can match the two. */
+  reference: string;
+  newBalanceKes: number;
+}
+
+export async function getContributionNotifyDetail(
+  contributionId: string,
+): Promise<ContributionNotifyDetail | null> {
+  const c = await prisma.groupContribution.findUnique({
+    where: { id: contributionId },
+    select: {
+      id: true, orgId: true, amountKes: true,
+      org: { select: { officialName: true, knownAs: true } },
+      contributor: { select: { person: { select: { officialName: true, knownAs: true, msisdn: true } } } },
+    },
+  });
+  if (!c) return null;
+  const person = c.contributor.person;
+  return {
+    orgId: c.orgId,
+    orgName: c.org.knownAs || c.org.officialName,
+    contributorName: person?.knownAs || person?.officialName || 'a member',
+    contributorMsisdn: person?.msisdn ?? null,
+    amountKes: Number(c.amountKes),
+    // Same first-8-of-the-id handle the Go API quotes (see
+    // notifyContributionConfirmed in handlers_treasury.go), so the two
+    // surfaces produce a reference a member can match across both.
+    reference: c.id.slice(0, 8),
+    newBalanceKes: await groupBalanceKes(c.orgId),
+  };
+}
+
+/** Active members' phone numbers, for the confirmed-contribution
+ *  fan-out. A member with no number on file is simply skipped — they're
+ *  still a member, there is just nothing to send to. */
+export async function activeMemberMsisdns(orgId: string): Promise<string[]> {
+  const members = await prisma.membership.findMany({
+    where: { orgId, exitedAt: null, status: 'ACTIVE' },
+    select: { person: { select: { person: { select: { msisdn: true } } } } },
+  });
+  return members
+    .map((m) => m.person.person?.msisdn)
+    .filter((n): n is string => Boolean(n));
 }
 
 /* ── scheduled multisig withdrawal ───────────────────────── */

@@ -7,7 +7,7 @@ import type { JamiiInterestStatus, PartyKind } from '@prisma/client';
  * Applications for Our Jamii access (apps/jamii).
  *
  * Our Jamii isn't open sign-up — every first sign-in, whether the
- * applicant already has a CECF/Esoko Person record or not, has to trace
+ * applicant already has a CECF/Esoqo Person record or not, has to trace
  * back to one of these being approved (status CONVERTED). See
  * hasJamiiAccess below, which is what apps/jamii's sign-in and set-PIN
  * actions actually check.
@@ -57,12 +57,12 @@ export async function findJamiiApplicant(
  * before an OTP is ever sent for a PIN — not just at first sign-up — so
  * it holds regardless of where the underlying PIN was set (apps/jamii's
  * own set-PIN screen, or CECF's separate join funnel in apps/app; the
- * credential itself is one shared Esoko identity, see UserCredential).
+ * credential itself is one shared Esoqo identity, see UserCredential).
  *
  * Two ways in: a CONVERTED application (this file), or being on a
  * page's team already — inviting someone (dal/jamii-team.ts) or
  * founding a page (createJamiiPage, which seeds the founder as an ADMIN
- * team member) is itself a vetting act, by an org admin or Esoko staff,
+ * team member) is itself a vetting act, by an org admin or Esoqo staff,
  * so it isn't made to duplicate through a second application.
  *
  * Same "no requireCapability" reasoning as findJamiiApplicant — this

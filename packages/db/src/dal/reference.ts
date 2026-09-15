@@ -101,7 +101,7 @@ export async function verifyCertificate(_ctx: Ctx, code: string): Promise<Verify
     claimType: att.claimType.replace(/_/g, ' ').toLowerCase()
       .replace(/^\w/, (c) => c.toUpperCase()),
     holder: att.revokedAt ? '[withheld]' : holder,
-    issuer: att.issuer?.name ?? 'Esoko',
+    issuer: att.issuer?.name ?? 'Esoqo',
     issuedOn: att.issuedAt.toLocaleDateString('en-KE', { day: 'numeric', month: 'long', year: 'numeric' }),
     validUntil: att.expiresAt
       ? att.expiresAt.toLocaleDateString('en-KE', { day: 'numeric', month: 'long', year: 'numeric' })

@@ -8,10 +8,10 @@ import { createDocument } from './documents';
 import {
   sniff, makeStorageKey, safeName, sha256, putObject, MAX_BYTES,
 } from '../storage';
-import type { CecfMember, CecfDocumentUpload } from '@esoko/domain';
+import type { CecfMember, CecfDocumentUpload } from '@esoqo/domain';
 
 /**
- * Orchestration for the CECF WordPress → esoko ingestion facade
+ * Orchestration for the CECF WordPress → esoqo ingestion facade
  * (services/core's /api/cecf/* routes). See
  * docs/proposals/cecf-wordpress-registration.md.
  *
@@ -62,7 +62,7 @@ export function cecfRegistrantOrgRole(registrantRole: string): string {
  * group) settle it, same as any self-serve invite.
  *
  * Best-effort per member: one malformed row (e.g. a clashing phone
- * number already on Esoko) is logged and skipped rather than aborting
+ * number already on Esoqo) is logged and skipped rather than aborting
  * the whole roster — the registration and the group both already exist
  * by the time this runs, so a partial roster is far better than losing
  * the group entirely over one bad row.

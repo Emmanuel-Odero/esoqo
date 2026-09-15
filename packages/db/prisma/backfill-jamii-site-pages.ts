@@ -15,7 +15,7 @@ const prisma = new PrismaClient();
  * Idempotent: a page that already has a SYSTEM_HOME row is skipped
  * entirely, so reruns (e.g. after a fresh seed) are harmless.
  *
- * Run with: pnpm --filter @esoko/db backfill:jamii-site-pages
+ * Run with: pnpm --filter @esoqo/db backfill:jamii-site-pages
  */
 
 /** kind, slug, title/label — label matches ORG_NAV_SECTIONS/

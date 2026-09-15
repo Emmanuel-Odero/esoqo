@@ -38,7 +38,7 @@ export interface Ctx {
   ticketOrgId?: string | null;
   ip?: string | null;
   /**
-   * Marks a Ctx built by @esoko/auth from a verified session.
+   * Marks a Ctx built by @esoqo/auth from a verified session.
    * Never settable from a request header — that is exactly the
    * CVE-2025-29927 shape.
    */
@@ -190,7 +190,7 @@ export const CAPABILITY_CATALOGUE = [
     ['treasury.withdraw.request', 'Propose a scheduled withdrawal'],
     ['treasury.withdraw.sign', 'Sign (approve or reject) a proposed withdrawal'],
     ['treasury.policy.write', "Set a group's signer list and treasury policy"],
-    ['paymentid.issue', 'Activate an Esoko Payment ID'],
+    ['paymentid.issue', 'Activate an Esoqo Payment ID'],
     ['portfolio.read', "View a member's derived credit-insight snapshot"],
   ]},
   { group: 'Stores & commerce', items: [

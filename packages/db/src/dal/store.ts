@@ -214,7 +214,7 @@ export async function getStoreBySlug(_ctx: Ctx, slug: string) {
       photos: { orderBy: { position: 'asc' } },
       // Owner trust facts shown on the storefront — the registered
       // business flag (Enterprise.isRegistered) drives the "Verified
-      // Esoko business" badge; county comes from the owner's Party.
+      // Esoqo business" badge; county comes from the owner's Party.
       enterprise: { select: { isRegistered: true, party: { select: { county: true } } } },
     },
   });
