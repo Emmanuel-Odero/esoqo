@@ -1,16 +1,16 @@
 import 'package:flutter/material.dart';
 
-import '../theme/esoko_tokens.dart';
-import 'esoko_button.dart';
-import 'esoko_status_badge.dart';
+import '../theme/esoqo_tokens.dart';
+import 'esoqo_button.dart';
+import 'esoqo_status_badge.dart';
 
 /// Full-screen flow result — spinning/waiting, success or failure — for the
 /// payment-style flows (checkout, ticket booking, contribution). Replaces
 /// three hand-rolled `badge + title + message + button` blocks (~150 lines)
 /// that each re-decided icon sizes, gaps and copy shape. Waiting and failed
 /// states are announced via live regions.
-class EsokoResultView extends StatelessWidget {
-  const EsokoResultView.waiting({
+class EsoqoResultView extends StatelessWidget {
+  const EsoqoResultView.waiting({
     super.key,
     required this.title,
     required this.message,
@@ -18,14 +18,14 @@ class EsokoResultView extends StatelessWidget {
     this.waitingIcon = Icons.phone_android_rounded,
   }) : _kind = _Kind.waiting,
        successIcon = Icons.check_rounded,
-       badgeColor = EsokoColors.blue,
+       badgeColor = EsoqoColors.blue,
        primaryLabel = null,
        onPrimary = null,
        secondaryLabel = null,
        onSecondary = null,
        errorMessage = null;
 
-  const EsokoResultView.success({
+  const EsoqoResultView.success({
     super.key,
     required this.title,
     required this.message,
@@ -33,14 +33,14 @@ class EsokoResultView extends StatelessWidget {
     required this.primaryLabel,
     required this.onPrimary,
     this.successIcon = Icons.check_rounded,
-    this.badgeColor = EsokoColors.green,
+    this.badgeColor = EsoqoColors.green,
   }) : _kind = _Kind.success,
        waitingIcon = Icons.check_rounded,
        secondaryLabel = null,
        onSecondary = null,
        errorMessage = null;
 
-  const EsokoResultView.failure({
+  const EsoqoResultView.failure({
     super.key,
     this.errorMessage,
     required this.primaryLabel,
@@ -53,7 +53,7 @@ class EsokoResultView extends StatelessWidget {
        amountKes = null,
        waitingIcon = Icons.priority_high_rounded,
        successIcon = Icons.priority_high_rounded,
-       badgeColor = EsokoColors.red;
+       badgeColor = EsoqoColors.red;
 
   final _Kind _kind;
   final String? title;
@@ -78,32 +78,44 @@ class EsokoResultView extends StatelessWidget {
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
-          EsokoStatusBadge(
+          EsoqoStatusBadge(
             icon: _kind == _Kind.success ? successIcon : waitingIcon,
             color: badgeColor,
             spinning: _kind == _Kind.waiting,
           ),
-          const SizedBox(height: EsokoSpacing.s4),
+          const SizedBox(height: EsoqoSpacing.s4),
           if (title != null)
             Text(title!, style: Theme.of(context).textTheme.headlineSmall, textAlign: TextAlign.center),
           if (message != null) ...[
-            const SizedBox(height: EsokoSpacing.s2),
-            Text(message!, textAlign: TextAlign.center, style: TextStyle(color: muted)),
+            const SizedBox(height: EsoqoSpacing.s2),
+            Text(
+              message!,
+              textAlign: TextAlign.center,
+              style: Theme.of(context).textTheme.bodyMedium!.copyWith(
+                color: muted,
+              ),
+            ),
           ],
           if (errorMessage != null)
             Text(errorMessage!, textAlign: TextAlign.center),
           if (amountKes != null) ...[
-            const SizedBox(height: EsokoSpacing.s4),
+            const SizedBox(height: EsoqoSpacing.s4),
             Text(
               'KES $amountKes',
-              style: TextStyle(color: scheme.primary, fontWeight: FontWeight.bold, fontSize: 18),
+              // An amount is data: mono, tabular figures — not the
+              // ambient body face at an arbitrary 18/bold.
+              style: EsoqoTypography.mono(
+                fontSize: EsoqoTypeScale.cardTitle,
+                fontWeight: FontWeight.w700,
+                color: scheme.primary,
+              ),
             ),
           ],
           if (primaryLabel != null) ...[
-            const SizedBox(height: EsokoSpacing.s6),
-            EsokoButton.primary(expand: false, label: primaryLabel!, onPressed: onPrimary),
+            const SizedBox(height: EsoqoSpacing.s6),
+            EsoqoButton.primary(expand: false, label: primaryLabel!, onPressed: onPrimary),
             if (secondaryLabel != null) ...[
-              const SizedBox(height: EsokoSpacing.s3),
+              const SizedBox(height: EsoqoSpacing.s3),
               OutlinedButton(onPressed: onSecondary, child: Text(secondaryLabel!)),
             ],
           ],

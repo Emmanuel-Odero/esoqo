@@ -1,4 +1,4 @@
-# Esoko mobile architecture
+# Esoqo mobile architecture
 
 Feature-first + Riverpod. This file is the convention, not a suggestion —
 every feature follows it so the app stays uniformly testable and the UI
@@ -30,8 +30,8 @@ shape when a feature gets its polish pass.
    (`storesProvider`, `nearbyStoresProvider(query)`) and delegates to the
    repository. Memory for a screen is dropped when the screen is.
 3. **UI state is explicit, not boolean soup.** Async lifecycle
-   (loading/data/empty/error) goes through `EsokoAsyncView` /
-   `EsokoSliverAsyncView`, which never wipe on-screen data on refetch.
+   (loading/data/empty/error) goes through `EsoqoAsyncView` /
+   `EsoqoSliverAsyncView`, which never wipe on-screen data on refetch.
    Multi-step flows (checkout, fare pay) use a small private `_Stage`
    enum with one widget per stage — never a bare `isLoading` flag
    driving the whole screen.
@@ -40,21 +40,21 @@ shape when a feature gets its polish pass.
 
 - **Targeted rebuilds.** Watch providers as low in the tree as possible;
    never `ref.watch` at a scroll-view root for state that changes per
-   keystroke. Search fields debounce (`EsokoSearchField(debounce: …)`).
+   keystroke. Search fields debounce (`EsoqoSearchField(debounce: …)`).
 - **Transitions, not snaps.** State changes cross-fade (`AnimatedSwitcher`
-   inside the async views); list items enter staggered (`EsokoStagger`,
-   capped delay); press feedback is haptic + scale (`EsokoHaptics`,
-   `EsokoCard`, `EsokoLoadingButton`).
+   inside the async views); list items enter staggered (`EsoqoStagger`,
+   capped delay); press feedback is haptic + scale (`EsoqoHaptics`,
+   `EsoqoCard`, `EsoqoLoadingButton`).
 - **Reduced motion is a first-class state.** Every shared animation checks
    `MediaQuery.disableAnimationsOf` and renders its end state statically.
-- **Brand motion only.** Durations/curves come from `EsokoMotion`, shadows
-   from `EsokoShadows`, spacing from `EsokoSpacing` — never ad-hoc values.
-- **Tablet-decent by default.** Screen bodies get `EsokoAdaptiveBody`
+- **Brand motion only.** Durations/curves come from `EsoqoMotion`, shadows
+   from `EsoqoShadows`, spacing from `EsoqoSpacing` — never ad-hoc values.
+- **Tablet-decent by default.** Screen bodies get `EsoqoAdaptiveBody`
    (840 max-width) so phone layouts don't stretch on large windows.
 
 ## Brand identity (non-negotiable)
 
-Colour semantics from `EsokoColors`, in lockstep with web `tokens.css`:
+Colour semantics from `EsoqoColors`, in lockstep with web `tokens.css`:
 navy = authority · green = you and yours (primary action) · blue =
 institutions · red = attention only. Outfit everywhere. If a design
 needs a new colour, it goes in tokens first — never inline.

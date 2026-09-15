@@ -6,7 +6,7 @@ import 'package:geolocator/geolocator.dart';
 import 'package:mobile_scanner/mobile_scanner.dart';
 
 import '../../core/api/api_exception.dart';
-import '../../core/theme/esoko_tokens.dart';
+import '../../core/theme/esoqo_tokens.dart';
 import '../../core/widgets/widgets.dart';
 import 'book_parcel_screen.dart';
 import 'complete_delivery_screen.dart';
@@ -60,15 +60,15 @@ final availableJobsProvider = FutureProvider.autoDispose<List<AvailableJob>>(
 /// aren't signed in anyway — they track and confirm receipt through
 /// the public code/OTP flow this app also serves guests through (see
 /// requestReceiptOtp/confirmReceipt below), so this is a real gap only
-/// for the minority who both hold an Esoko account and are the
+/// for the minority who both hold an Esoqo account and are the
 /// receiver. Needs a receiverMsisdn-matching query before it can be a
 /// tab rather than a stub.
 ///
-/// The Sent/Holding toggle is an [EsokoSegmentedToggle] pill above an
+/// The Sent/Holding toggle is an [EsoqoSegmentedToggle] pill above an
 /// `IndexedStack` — it used to visually collide with the first list
 /// item below it (see SCREEN_CONVENTIONS.md), which turned out to be a
 /// report-vs-paint size mismatch in the toggle's own `ButtonStyle`, not
-/// a structural problem with this layout — see esoko_segmented_toggle
+/// a structural problem with this layout — see esoqo_segmented_toggle
 /// .dart's doc comment for the actual fix (`minimumSize`, not
 /// `visualDensity`). A `TabBar`-in-app-bar version was tried as a fix
 /// but the pill toggle is the preferred look, so this stayed as-is.
@@ -251,7 +251,7 @@ class _ParcelsHubScreenState extends ConsumerState<ParcelsHubScreen> {
     final sent = ref.watch(myParcelsProvider);
     final held = ref.watch(heldParcelsProvider);
     final jobs = ref.watch(availableJobsProvider);
-    // Bar-less Scaffold — reached only via the Home hub's EsokoServiceScaffold
+    // Bar-less Scaffold — reached only via the Home hub's EsoqoServiceScaffold
     // wrapper, which already supplies the navy app bar (see
     // TransportScreen's identical comment). Keeping Scaffold here
     // (rather than a bare Column) is what lets the FAB below still
@@ -262,12 +262,12 @@ class _ParcelsHubScreenState extends ConsumerState<ParcelsHubScreen> {
           children: [
             Padding(
               padding: const EdgeInsets.fromLTRB(
-                EsokoSpacing.s4,
-                EsokoSpacing.s4,
-                EsokoSpacing.s4,
-                EsokoSpacing.s2,
+                EsoqoSpacing.s4,
+                EsoqoSpacing.s4,
+                EsoqoSpacing.s4,
+                EsoqoSpacing.s2,
               ),
-              child: EsokoSegmentedToggle<int>(
+              child: EsoqoSegmentedToggle<int>(
                 selected: _tab,
                 onChanged: (v) => setState(() => _tab = v),
                 options: const [(0, 'Sending'), (1, 'Holding'), (2, 'Nearby')],
@@ -279,24 +279,24 @@ class _ParcelsHubScreenState extends ConsumerState<ParcelsHubScreen> {
                 children: [
                   RefreshIndicator(
                     onRefresh: () async => ref.invalidate(myParcelsProvider),
-                    child: EsokoAsyncView(
+                    child: EsoqoAsyncView(
                       value: sent,
                       isEmpty: (l) => l.isEmpty,
                       emptyMessage: 'No parcels sent yet.',
                       emptyIcon: Icons.local_shipping_outlined,
                       onRetry: () => ref.invalidate(myParcelsProvider),
                       data: (context, list) => ListView.separated(
-                        padding: const EdgeInsets.all(EsokoSpacing.s4),
+                        padding: const EdgeInsets.all(EsoqoSpacing.s4),
                         itemCount: list.length,
                         separatorBuilder: (_, _) =>
-                            const SizedBox(height: EsokoSpacing.s2),
+                            const SizedBox(height: EsoqoSpacing.s2),
                         itemBuilder: (context, i) {
                           final p = list[i];
                           // parcelStatusLabel, never the raw enum — this
                           // list used to render "PKG-X · IN_TRANSIT"
                           // while the detail screen one tap away showed
                           // a written sentence about the same parcel.
-                          return EsokoListTile(
+                          return EsoqoListTile(
                             title: '${p.originLabel} → ${p.destinationLabel}',
                             subtitle: '${p.code} · '
                                 '${parcelStatusLabel(p.status)} · '
@@ -318,18 +318,18 @@ class _ParcelsHubScreenState extends ConsumerState<ParcelsHubScreen> {
                   Column(
                     children: [
                       Padding(
-                        padding: const EdgeInsets.all(EsokoSpacing.s4),
+                        padding: const EdgeInsets.all(EsoqoSpacing.s4),
                         child: Row(
                           children: [
                             Expanded(
-                              child: EsokoField.code(
+                              child: EsoqoField.code(
                                 controller: _acceptCodeController,
                                 label: 'Accept a parcel',
                                 hint: 'PKG-XXXXXXX',
                                 onSubmitted: (_) => _acceptParcel(),
                               ),
                             ),
-                            const SizedBox(width: EsokoSpacing.s2),
+                            const SizedBox(width: EsoqoSpacing.s2),
                             // Scanning belongs here more than anywhere:
                             // taking custody is the single most repeated
                             // action a courier performs, and it was the
@@ -349,7 +349,7 @@ class _ParcelsHubScreenState extends ConsumerState<ParcelsHubScreen> {
                                     : 'Scan a parcel',
                               ),
                             ),
-                            const SizedBox(width: EsokoSpacing.s2),
+                            const SizedBox(width: EsoqoSpacing.s2),
                             // Fixed width, not a bare Row child — an
                             // IndexedStack (unlike the TabBarView this
                             // screen used to use) lays out *every* tab
@@ -368,7 +368,7 @@ class _ParcelsHubScreenState extends ConsumerState<ParcelsHubScreen> {
                             // look cut off).
                             SizedBox(
                               width: 96,
-                              child: EsokoButton.primary(
+                              child: EsoqoButton.primary(
                                 expand: false,
                                 label: 'Accept',
                                 loading: _acceptBusy,
@@ -387,12 +387,12 @@ class _ParcelsHubScreenState extends ConsumerState<ParcelsHubScreen> {
                       if (_scanningAccept)
                         Padding(
                           padding: const EdgeInsets.fromLTRB(
-                            EsokoSpacing.s4, 0, EsokoSpacing.s4, EsokoSpacing.s4,
+                            EsoqoSpacing.s4, 0, EsoqoSpacing.s4, EsoqoSpacing.s4,
                           ),
                           child: SizedBox(
                             height: 200,
                             child: ClipRRect(
-                              borderRadius: BorderRadius.circular(EsokoRadius.md),
+                              borderRadius: BorderRadius.circular(EsoqoRadius.md),
                               child: MobileScanner(
                                 onDetect: (cap) {
                                   final v = cap.barcodes.firstOrNull?.rawValue;
@@ -412,7 +412,7 @@ class _ParcelsHubScreenState extends ConsumerState<ParcelsHubScreen> {
                         child: RefreshIndicator(
                           onRefresh: () async =>
                               ref.invalidate(heldParcelsProvider),
-                          child: EsokoAsyncView(
+                          child: EsoqoAsyncView(
                             value: held,
                             isEmpty: (l) => l.isEmpty,
                             emptyMessage: 'Not holding any parcels right now.',
@@ -420,11 +420,11 @@ class _ParcelsHubScreenState extends ConsumerState<ParcelsHubScreen> {
                             onRetry: () => ref.invalidate(heldParcelsProvider),
                             data: (context, list) => ListView.separated(
                               padding: const EdgeInsets.symmetric(
-                                horizontal: EsokoSpacing.s4,
+                                horizontal: EsoqoSpacing.s4,
                               ),
                               itemCount: list.length,
                               separatorBuilder: (_, _) =>
-                                  const SizedBox(height: EsokoSpacing.s2),
+                                  const SizedBox(height: EsoqoSpacing.s2),
                               itemBuilder: (context, i) {
                                 final p = list[i];
                                 // Attempt count leads the subtitle when
@@ -441,7 +441,7 @@ class _ParcelsHubScreenState extends ConsumerState<ParcelsHubScreen> {
                                         '${p.deliveryAttempts == 1 ? 'try' : 'tries'} · '
                                         'to ${p.receiverName}'
                                     : 'to ${p.receiverName}';
-                                return EsokoListTile(
+                                return EsoqoListTile(
                                   title:
                                       '${p.originLabel} → ${p.destinationLabel}',
                                   // The amount to collect leads, ahead

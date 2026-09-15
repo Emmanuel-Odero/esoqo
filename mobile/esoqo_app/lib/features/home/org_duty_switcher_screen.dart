@@ -5,7 +5,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/api/api_exception.dart';
 import '../../core/auth/org_context_state.dart';
-import '../../core/theme/esoko_tokens.dart';
+import '../../core/theme/esoqo_tokens.dart';
 import '../../core/widgets/widgets.dart';
 import '../fleet/crew_shift_screen.dart';
 
@@ -22,7 +22,7 @@ Future<void> showHatsQuickSwitchSheet(BuildContext context) {
   );
 }
 
-/// The "which hat am I wearing" entry point — a plain Esoko account
+/// The "which hat am I wearing" entry point — a plain Esoqo account
 /// (person + gear, `Icons.manage_accounts`) wherever an account switch
 /// should be reachable — the Home app bar, and CrewShiftScreen (staying
 /// on duty must never mean losing the way back to other roles).
@@ -47,7 +47,7 @@ class HatsIconButton extends ConsumerWidget {
     return IconButton(
       icon: const Icon(Icons.manage_accounts_outlined),
       tooltip: state.active != null ? 'Switched to: ${state.active!.orgName}' : 'Switch to…',
-      color: color ?? (state.active != null ? EsokoColors.blue2 : Colors.white),
+      color: color ?? (state.active != null ? EsoqoColors.blue2 : Colors.white),
       onPressed: () => showHatsQuickSwitchSheet(context),
     );
   }
@@ -62,7 +62,7 @@ class OrgDutySwitcherScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: const EsokoAppBar(title: 'Switch to'),
+      appBar: const EsoqoAppBar(title: 'Switch to'),
       body: const SafeArea(child: _HatsList()),
     );
   }
@@ -80,17 +80,17 @@ class _HatsSheet extends StatelessWidget {
       expand: false,
       builder: (context, scrollController) => Column(
         children: [
-          const SizedBox(height: EsokoSpacing.s2),
+          const SizedBox(height: EsoqoSpacing.s2),
           Container(
             width: 40,
             height: 4,
             decoration: BoxDecoration(
-              color: EsokoColors.line,
-              borderRadius: BorderRadius.circular(EsokoRadius.pill),
+              color: EsoqoColors.line,
+              borderRadius: BorderRadius.circular(EsoqoRadius.pill),
             ),
           ),
           Padding(
-            padding: const EdgeInsets.all(EsokoSpacing.s4),
+            padding: const EdgeInsets.all(EsoqoSpacing.s4),
             child: Text('Switch to', style: Theme.of(context).textTheme.titleMedium),
           ),
           Expanded(child: _HatsList(scrollController: scrollController)),
@@ -110,7 +110,7 @@ class _HatsSheet extends StatelessWidget {
 /// tap physically cannot register.
 enum _RowStatus { idle, active, suspended, requesting }
 
-/// The "Personal Esoko account" + role rows. Three real bugs fixed
+/// The "Personal Esoqo account" + role rows. Three real bugs fixed
 /// here, on top of the wording/labelling change:
 ///
 /// 1. An earlier version hid the whole list behind `state.loading`, so
@@ -196,24 +196,24 @@ class _HatsListState extends ConsumerState<_HatsList> {
         absorbing: busy,
         child: ListView(
           controller: widget.scrollController,
-          padding: const EdgeInsets.all(EsokoSpacing.s4),
+          padding: const EdgeInsets.all(EsoqoSpacing.s4),
           children: [
-            const EsokoSectionHeader(title: 'Current'),
+            const EsoqoSectionHeader(title: 'Current'),
             _personalAccountTile(state),
-            const SizedBox(height: EsokoSpacing.s4),
+            const SizedBox(height: EsoqoSpacing.s4),
             if (state.error != null)
-              EsokoFormError(message: state.error!)
+              EsoqoFormError(message: state.error!)
             else if (state.loading && state.grants.isEmpty)
               const Padding(
-                padding: EdgeInsets.symmetric(vertical: EsokoSpacing.s4),
+                padding: EdgeInsets.symmetric(vertical: EsoqoSpacing.s4),
                 child: Center(child: CircularProgressIndicator()),
               )
             else if (state.grants.isNotEmpty) ...[
-              const EsokoSectionHeader(title: 'Roles'),
+              const EsoqoSectionHeader(title: 'Roles'),
               for (final grant in state.grants) _grantTile(context, grant),
             ] else
-              const EsokoEmptyState(
-                message: 'No other roles yet — an organisation admin adds you once you have an Esoko account.',
+              const EsoqoEmptyState(
+                message: 'No other roles yet — an organisation admin adds you once you have an Esoqo account.',
               ),
           ],
         ),
@@ -221,20 +221,20 @@ class _HatsListState extends ConsumerState<_HatsList> {
     );
   }
 
-  /// "Personal Esoko account" — the default identity, always available,
+  /// "Personal Esoqo account" — the default identity, always available,
   /// clearly marked as the active one whenever no org context is
-  /// switched on. Naming it "Personal Esoko account" instead of the
+  /// switched on. Naming it "Personal Esoqo account" instead of the
   /// bare pronoun "You" is deliberate: next to a list of named
   /// organisations, "You" reads as a placeholder that got left in,
-  /// while "Personal Esoko account" reads as one option among several,
+  /// while "Personal Esoqo account" reads as one option among several,
   /// consistently named the same way the others are.
   Widget _personalAccountTile(OrgContextState state) {
     final isActive = state.active == null;
-    return EsokoListTile(
-      title: 'Personal Esoko account',
+    return EsoqoListTile(
+      title: 'Personal Esoqo account',
       subtitle: isActive ? 'Currently active' : 'Your own account — always available',
       icon: Icons.person,
-      trailing: isActive ? const Icon(Icons.check_circle, color: EsokoColors.green) : null,
+      trailing: isActive ? const Icon(Icons.check_circle, color: EsoqoColors.green) : null,
       // Free, instant, no OTP — this only changes which context is
       // *displayed*; the org's own activation (if any) keeps running in
       // the background for its full TTL. See switchToPersonal's own
@@ -256,18 +256,18 @@ class _HatsListState extends ConsumerState<_HatsList> {
                 : _RowStatus.idle;
 
     return Padding(
-      padding: const EdgeInsets.only(bottom: EsokoSpacing.s2),
+      padding: const EdgeInsets.only(bottom: EsoqoSpacing.s2),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          EsokoListTile(
+          EsoqoListTile(
             title: grant.orgName,
             subtitle: grant.suspended ? 'Suspended — contact your organisation\'s admin' : grant.role,
             icon: Icons.badge_outlined,
             // Blue, not green — SCREEN_CONVENTIONS.md: this row is about
             // an organisation, not the signed-in person's own record.
-            iconColor: EsokoColors.blue,
-            iconBackground: EsokoColors.blueTint,
+            iconColor: EsoqoColors.blue,
+            iconBackground: EsoqoColors.blueTint,
             // A full button used to sit in `trailing` — ListTile can't
             // size an unconstrained button next to a long subtitle and
             // throws "Trailing widget consumes the entire tile width"
@@ -276,8 +276,8 @@ class _HatsListState extends ConsumerState<_HatsList> {
             trailing: switch (status) {
               _RowStatus.requesting =>
                 const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2)),
-              _RowStatus.suspended => const EsokoStatusPill(label: 'Suspended', color: Colors.red),
-              _RowStatus.active => const Icon(Icons.check_circle, color: EsokoColors.green),
+              _RowStatus.suspended => const EsoqoStatusPill(label: 'Suspended', color: Colors.red),
+              _RowStatus.active => const Icon(Icons.check_circle, color: EsoqoColors.green),
               _RowStatus.idle => const Icon(Icons.chevron_right, size: 20),
             },
             onTap: status == _RowStatus.suspended || status == _RowStatus.requesting
@@ -285,12 +285,12 @@ class _HatsListState extends ConsumerState<_HatsList> {
                 : (status == _RowStatus.active ? () => _switchToPersonal() : () => _switchIn(grant)),
           ),
           if (status == _RowStatus.requesting) ...[
-            const SizedBox(height: EsokoSpacing.s1),
+            const SizedBox(height: EsoqoSpacing.s1),
             Padding(
-              padding: const EdgeInsets.only(left: EsokoSpacing.s4),
+              padding: const EdgeInsets.only(left: EsoqoSpacing.s4),
               child: Text(
                 _requestIsSlow ? 'Still working on it — this is taking longer than usual…' : 'Working on it…',
-                style: TextStyle(fontSize: 12, color: Theme.of(context).textTheme.bodySmall?.color),
+                style: TextStyle(fontSize: EsoqoTypeScale.labelSmall, color: Theme.of(context).textTheme.bodySmall?.color),
               ),
             ),
           ],
@@ -319,7 +319,7 @@ class _HatsListState extends ConsumerState<_HatsList> {
   Future<void> _switchToPersonal() async {
     await ref.read(orgContextControllerProvider.notifier).switchToPersonal();
     if (!mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Switched to Personal Esoko account')));
+    ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Switched to Personal Esoqo account')));
   }
 
   /// Tries to resume a still-live activation first — the actual fix for
@@ -362,7 +362,7 @@ class _HatsListState extends ConsumerState<_HatsList> {
   /// no message shown at all.
   String _describe(Object e) => switch (e) {
         ApiException e => e.message,
-        _ => 'Could not reach Esoko. Check your connection and try again.',
+        _ => 'Could not reach Esoqo. Check your connection and try again.',
       };
 }
 
@@ -420,10 +420,10 @@ class _OtpStepState extends ConsumerState<_OtpStep> {
   Widget build(BuildContext context) {
     return SingleChildScrollView(
       padding: EdgeInsets.only(
-        left: EsokoSpacing.s4,
-        right: EsokoSpacing.s4,
-        top: EsokoSpacing.s4,
-        bottom: MediaQuery.of(context).viewInsets.bottom + EsokoSpacing.s4,
+        left: EsoqoSpacing.s4,
+        right: EsoqoSpacing.s4,
+        top: EsoqoSpacing.s4,
+        bottom: MediaQuery.of(context).viewInsets.bottom + EsoqoSpacing.s4,
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -439,17 +439,17 @@ class _OtpStepState extends ConsumerState<_OtpStep> {
               ),
             ],
           ),
-          const SizedBox(height: EsokoSpacing.s2),
+          const SizedBox(height: EsoqoSpacing.s2),
           Text('Enter the code we sent you to switch to ${widget.orgName}.'),
-          const SizedBox(height: EsokoSpacing.s4),
-          EsokoField.otp(
+          const SizedBox(height: EsoqoSpacing.s4),
+          EsoqoField.otp(
             controller: _codeController,
             label: '6-digit code',
             onSubmitted: (_) => _verify(),
           ),
-          if (_error != null) EsokoFormError(message: _error!),
-          const SizedBox(height: EsokoSpacing.s4),
-          EsokoButton.primary(expand: false, label: 'Verify', loading: _loading, onPressed: _verify),
+          if (_error != null) EsoqoFormError(message: _error!),
+          const SizedBox(height: EsoqoSpacing.s4),
+          EsoqoButton.primary(expand: false, label: 'Verify', loading: _loading, onPressed: _verify),
         ],
       ),
     );

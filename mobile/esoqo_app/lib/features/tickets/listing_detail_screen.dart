@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import '../../core/theme/esoko_tokens.dart';
+import '../../core/theme/esoqo_tokens.dart';
 import '../../core/widgets/widgets.dart';
 import 'schedule_booking_screen.dart';
 import 'ticket_style.dart';
@@ -21,7 +21,7 @@ class ListingDetailScreen extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final listing = ref.watch(listingDetailProvider(listingId));
     return Scaffold(
-      body: EsokoAsyncView(
+      body: EsoqoAsyncView(
         value: listing,
         onRetry: () => ref.invalidate(listingDetailProvider(listingId)),
         data: (context, l) {
@@ -42,8 +42,8 @@ class ListingDetailScreen extends ConsumerWidget {
                     title: Text(
                       l.title,
                       style: const TextStyle(
-                        fontSize: 15,
-                        fontWeight: FontWeight.w800,
+                        fontSize: EsoqoTypeScale.subTitle,
+                        fontWeight: FontWeight.w700,
                         color: Colors.white,
                       ),
                     ),
@@ -91,7 +91,7 @@ class ListingDetailScreen extends ConsumerWidget {
                   ),
                 ),
                 SliverPadding(
-                  padding: const EdgeInsets.all(EsokoSpacing.s4),
+                  padding: const EdgeInsets.all(EsoqoSpacing.s4),
                   sliver: SliverList(
                     delegate: SliverChildListDelegate([
                       if (l.venueOrRouteLabel != null)
@@ -121,7 +121,7 @@ class ListingDetailScreen extends ConsumerWidget {
                           ],
                         ),
                       if (l.description != null) ...[
-                        const SizedBox(height: EsokoSpacing.s3),
+                        const SizedBox(height: EsoqoSpacing.s3),
                         Text(
                           l.description!,
                           style: TextStyle(
@@ -130,26 +130,26 @@ class ListingDetailScreen extends ConsumerWidget {
                           ),
                         ),
                       ],
-                      const SizedBox(height: EsokoSpacing.s6),
-                      const EsokoSubHeader('Ticket types'),
-                      const SizedBox(height: EsokoSpacing.s3),
+                      const SizedBox(height: EsoqoSpacing.s6),
+                      const EsoqoSubHeader('Ticket types'),
+                      const SizedBox(height: EsoqoSpacing.s3),
                       for (var i = 0; i < l.ticketClasses.length; i++)
-                        EsokoStagger(
+                        EsoqoStagger(
                           index: i,
                           child: _TicketClassCard(
                             ticketClass: l.ticketClasses[i],
                             accent: style.gradient.last,
                           ),
                         ),
-                      const SizedBox(height: EsokoSpacing.s6),
-                      EsokoSubHeader(
+                      const SizedBox(height: EsoqoSpacing.s6),
+                      EsoqoSubHeader(
                         l.isTransport
                             ? 'Departures · ${l.schedules.length}'
                             : 'Showtimes · ${l.schedules.length}',
                       ),
-                      const SizedBox(height: EsokoSpacing.s3),
+                      const SizedBox(height: EsoqoSpacing.s3),
                       if (l.schedules.isEmpty)
-                        const EsokoEmptyState(
+                        const EsoqoEmptyState(
                           icon: Icons.event_busy_outlined,
                           message: 'No upcoming dates — check back soon.',
                         )
@@ -158,7 +158,7 @@ class ListingDetailScreen extends ConsumerWidget {
                         // entrance cascades down the whole screen, not per
                         // section.
                         for (var j = 0; j < l.schedules.length; j++)
-                          EsokoStagger(
+                          EsoqoStagger(
                             index: l.ticketClasses.length + j,
                             child: _ScheduleTile(
                               schedule: l.schedules[j],
@@ -195,8 +195,8 @@ class _TicketClassCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Padding(
-      padding: const EdgeInsets.only(bottom: EsokoSpacing.s3),
-      child: EsokoListTile(
+      padding: const EdgeInsets.only(bottom: EsoqoSpacing.s3),
+      child: EsoqoListTile(
         title: ticketClass.name,
         subtitle: ticketClass.amenities.isEmpty
             ? null
@@ -206,7 +206,7 @@ class _TicketClassCard extends StatelessWidget {
             : Icons.groups_outlined,
         iconColor: accent,
         iconBackground: accent.withValues(alpha: 0.12),
-        trailing: EsokoAmountText(ticketClass.priceKes, fontSize: 14),
+        trailing: EsoqoAmountText(ticketClass.priceKes, fontSize: EsoqoTypeScale.label),
       ),
     );
   }
@@ -227,8 +227,8 @@ class _ScheduleTile extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Padding(
-      padding: const EdgeInsets.only(bottom: EsokoSpacing.s2),
-      child: EsokoListTile(
+      padding: const EdgeInsets.only(bottom: EsoqoSpacing.s2),
+      child: EsoqoListTile(
         title: schedule.departAt,
         subtitle: schedule.gateInfo,
         icon: icon,

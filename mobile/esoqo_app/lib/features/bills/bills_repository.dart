@@ -50,7 +50,7 @@ class BillsRepository {
     return res['billId'] as String;
   }
 
-  /// POST /v1/me/bills/:id/pay — records "I paid this outside Esoko";
+  /// POST /v1/me/bills/:id/pay — records "I paid this outside Esoqo";
   /// it never initiates or moves money.
   Future<void> markPaid(String id, double amountKes) {
     return _api.post('/v1/me/bills/$id/pay', {'amountKes': amountKes});

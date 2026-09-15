@@ -5,8 +5,8 @@ import 'package:flutter/material.dart';
 /// between checkout_screen.dart and schedule_booking_screen.dart before
 /// this, one copy per checkout flow. A `spinning` ring around the badge
 /// signals an in-progress wait (e.g. "complete payment on your phone").
-class EsokoStatusBadge extends StatelessWidget {
-  const EsokoStatusBadge({super.key, required this.icon, required this.color, this.spinning = false});
+class EsoqoStatusBadge extends StatelessWidget {
+  const EsoqoStatusBadge({super.key, required this.icon, required this.color, this.spinning = false});
 
   final IconData icon;
   final Color color;

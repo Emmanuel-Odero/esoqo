@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/api/api_exception.dart';
-import '../../core/theme/esoko_tokens.dart';
+import '../../core/theme/esoqo_tokens.dart';
 import '../../core/widgets/widgets.dart';
 import 'bill_models.dart';
 import 'bills_repository.dart';
@@ -19,7 +19,7 @@ final billContributionsProvider = FutureProvider.autoDispose
 
 /// A bill's own funding page — guest-safe (see dbx.GetBillFundingSummary),
 /// so this is the screen a shared link opens for family/friends without
-/// an Esoko account, same as the owner sees it. "Chip in" is the one
+/// an Esoqo account, same as the owner sees it. "Chip in" is the one
 /// action here; everything else about the bill (accountRef, owner) is
 /// deliberately absent, per the PII-minimal rule.
 class BillFundingScreen extends ConsumerWidget {
@@ -37,42 +37,42 @@ class BillFundingScreen extends ConsumerWidget {
     }
 
     return Scaffold(
-      appBar: const EsokoAppBar(title: 'Help fund this bill'),
+      appBar: const EsoqoAppBar(title: 'Help fund this bill'),
       body: SafeArea(
         child: RefreshIndicator(
           onRefresh: refreshAll,
-          child: EsokoAsyncView(
+          child: EsoqoAsyncView(
             value: summary,
             onRetry: () => ref.invalidate(billFundingProvider(billId)),
             data: (context, s) => Center(
               child: ConstrainedBox(
                 constraints: const BoxConstraints(maxWidth: 480),
                 child: ListView(
-                  padding: const EdgeInsets.all(EsokoSpacing.s5),
+                  padding: const EdgeInsets.all(EsoqoSpacing.s5),
                   children: [
                     Text(s.label, style: Theme.of(context).textTheme.headlineSmall),
-                    const SizedBox(height: EsokoSpacing.s1),
+                    const SizedBox(height: EsoqoSpacing.s1),
                     Text(
                       s.funded ? 'Fully funded' : 'KES ${s.raisedKes} of KES ${s.targetKes}',
                       style: TextStyle(color: Theme.of(context).textTheme.bodySmall?.color),
                     ),
-                    const SizedBox(height: EsokoSpacing.s3),
+                    const SizedBox(height: EsoqoSpacing.s3),
                     ClipRRect(
-                      borderRadius: BorderRadius.circular(EsokoRadius.pill),
+                      borderRadius: BorderRadius.circular(EsoqoRadius.pill),
                       child: LinearProgressIndicator(
                         value: s.progress,
                         minHeight: 10,
                         backgroundColor: Theme.of(context).colorScheme.primary.withValues(alpha: 0.12),
                       ),
                     ),
-                    const SizedBox(height: EsokoSpacing.s2),
+                    const SizedBox(height: EsoqoSpacing.s2),
                     Text(
                       '${s.contributorsCount} contributor${s.contributorsCount == 1 ? '' : 's'}',
-                      style: TextStyle(color: Theme.of(context).textTheme.bodySmall?.color, fontSize: 12),
+                      style: TextStyle(color: Theme.of(context).textTheme.bodySmall?.color, fontSize: EsoqoTypeScale.labelSmall),
                     ),
-                    const SizedBox(height: EsokoSpacing.s5),
+                    const SizedBox(height: EsoqoSpacing.s5),
                     if (!s.funded)
-                      EsokoButton.primary(
+                      EsoqoButton.primary(
                         expand: false,
                         label: 'Chip in',
                         loading: false,
@@ -83,26 +83,26 @@ class BillFundingScreen extends ConsumerWidget {
                           if (done == true) refreshAll();
                         },
                       ),
-                    const SizedBox(height: EsokoSpacing.s6),
-                    EsokoSubHeader('Who\'s chipped in'),
-                    const SizedBox(height: EsokoSpacing.s2),
+                    const SizedBox(height: EsoqoSpacing.s6),
+                    EsoqoSubHeader('Who\'s chipped in'),
+                    const SizedBox(height: EsoqoSpacing.s2),
                     contributions.when(
                       data: (list) => list.isEmpty
-                          ? const EsokoEmptyState(
+                          ? const EsoqoEmptyState(
                               icon: Icons.volunteer_activism_outlined,
                               message: 'No contributions yet — be the first.',
                             )
                           : Column(
                               children: [
                                 for (final c in list)
-                                  EsokoListTile(
+                                  EsoqoListTile(
                                     title: c.contributorName,
                                     subtitle: 'KES ${c.amountKes}',
                                     icon: Icons.favorite_outline,
                                   ),
                               ],
                             ),
-                      loading: () => const EsokoSkeletonCard(leading: false),
+                      loading: () => const EsoqoSkeletonCard(leading: false),
                       error: (_, _) => const SizedBox.shrink(),
                     ),
                   ],
@@ -170,36 +170,36 @@ class _ContributeScreenState extends ConsumerState<_ContributeScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: const EsokoAppBar(title: 'Chip in'),
+      appBar: const EsoqoAppBar(title: 'Chip in'),
       body: SafeArea(
         child: Center(
           child: ConstrainedBox(
             constraints: const BoxConstraints(maxWidth: 480),
             child: Padding(
-              padding: const EdgeInsets.all(EsokoSpacing.s5),
+              padding: const EdgeInsets.all(EsoqoSpacing.s5),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
-                  EsokoField.name(
+                  EsoqoField.name(
                     controller: _nameController,
                     label: 'Your name',
                   ),
-                  const SizedBox(height: EsokoSpacing.s3),
-                  EsokoField.phone(
+                  const SizedBox(height: EsoqoSpacing.s3),
+                  EsoqoField.phone(
                     controller: _msisdnController,
                     label: 'M-Pesa number',
                     textInputAction: TextInputAction.next,
                   ),
-                  const SizedBox(height: EsokoSpacing.s3),
-                  EsokoField.amount(
+                  const SizedBox(height: EsoqoSpacing.s3),
+                  EsoqoField.amount(
                     controller: _amountController,
                   ),
                   if (_error != null) ...[
-                    const SizedBox(height: EsokoSpacing.s3),
-                    EsokoFormError(message: _error!),
+                    const SizedBox(height: EsoqoSpacing.s3),
+                    EsoqoFormError(message: _error!),
                   ],
-                  const SizedBox(height: EsokoSpacing.s4),
-                  EsokoButton.primary(
+                  const SizedBox(height: EsoqoSpacing.s4),
+                  EsoqoButton.primary(
                     expand: false,
                     label: 'Pay with M-Pesa',
                     loading: _busy,

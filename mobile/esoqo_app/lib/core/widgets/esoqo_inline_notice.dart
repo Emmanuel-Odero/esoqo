@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 
-import '../theme/esoko_tokens.dart';
-import 'esoko_icon.dart';
+import '../theme/esoqo_tokens.dart';
+import 'esoqo_icon.dart';
 
 /// A tinted icon+text banner for an inline caution/info note (a claim
 /// that needs confirming, a broadcast that needs quorum, a slow-network
@@ -25,18 +25,18 @@ import 'esoko_icon.dart';
 ///    lightness (near-navy on the light wash, near-white on the dark
 ///    one), not the semantic colour — a paragraph needs to read as
 ///    *text*, not as a coloured accent competing with it for attention.
-class EsokoInlineNotice extends StatelessWidget {
-  const EsokoInlineNotice({
+class EsoqoInlineNotice extends StatelessWidget {
+  const EsoqoInlineNotice({
     super.key,
     required this.message,
     required this.icon,
-    this.color = EsokoColors.amber,
+    this.color = EsoqoColors.amber,
   });
 
   final String message;
-  final EsokoIconName icon;
+  final EsoqoIconName icon;
 
-  /// The semantic accent — EsokoColors.amber for caution (the default),
+  /// The semantic accent — EsoqoColors.amber for caution (the default),
   /// .blue for a neutral info note, .red for a warning.
   final Color color;
 
@@ -44,24 +44,24 @@ class EsokoInlineNotice extends StatelessWidget {
   Widget build(BuildContext context) {
     final dark = Theme.of(context).brightness == Brightness.dark;
     final background = color.withValues(alpha: dark ? 0.18 : 0.10);
-    final textColor = dark
-        ? Colors.white.withValues(alpha: 0.82)
-        : EsokoColors.text2;
+    final textColor = dark ? EsoqoColors.textOnDark2 : EsoqoColors.text2;
     return Container(
-      padding: const EdgeInsets.all(EsokoSpacing.s3),
+      padding: const EdgeInsets.all(EsoqoSpacing.s3),
       decoration: BoxDecoration(
         color: background,
-        borderRadius: BorderRadius.circular(EsokoRadius.md),
+        borderRadius: BorderRadius.circular(EsoqoRadius.md),
       ),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          EsokoIcon(icon, color: color, size: 18),
-          const SizedBox(width: EsokoSpacing.s2),
+          EsoqoIcon(icon, color: color, size: 18),
+          const SizedBox(width: EsoqoSpacing.s2),
           Expanded(
             child: Text(
               message,
-              style: TextStyle(color: textColor, fontSize: 12, height: 1.4),
+              style: Theme.of(context).textTheme.bodySmall!.copyWith(
+                color: textColor,
+              ),
             ),
           ),
         ],

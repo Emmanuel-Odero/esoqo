@@ -4,11 +4,11 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
-import 'package:esoko_app/core/auth/active_role.dart';
-import 'package:esoko_app/core/theme/esoko_theme.dart';
-import 'package:esoko_app/core/theme/esoko_tokens.dart';
-import 'package:esoko_app/core/widgets/esoko_haptics.dart';
-import 'package:esoko_app/core/widgets/esoko_role_lead.dart';
+import 'package:esoqo_app/core/auth/active_role.dart';
+import 'package:esoqo_app/core/theme/esoqo_theme.dart';
+import 'package:esoqo_app/core/theme/esoqo_tokens.dart';
+import 'package:esoqo_app/core/widgets/esoqo_haptics.dart';
+import 'package:esoqo_app/core/widgets/esoqo_role_lead.dart';
 
 Future<void> _pump(
   WidgetTester tester,
@@ -19,12 +19,12 @@ Future<void> _pump(
 }) {
   return tester.pumpWidget(
     MaterialApp(
-      theme: EsokoTheme.light(),
+      theme: EsoqoTheme.light(),
       home: Scaffold(
-        body: EsokoRoleLead(
+        body: EsoqoRoleLead(
           role: role,
           displayName: 'Wanjiku',
-          esokoId: 'ESK-4821-KE',
+          esoqoId: 'ESK-4821-KE',
           detail: detail,
           primaryLabel: primaryLabel,
           onPrimary: onPrimary,
@@ -40,7 +40,7 @@ Color _leadColour(WidgetTester tester) {
   final container = tester.widget<Container>(
     find
         .descendant(
-          of: find.byType(EsokoRoleLead),
+          of: find.byType(EsoqoRoleLead),
           matching: find.byType(Container),
         )
         .first,
@@ -50,24 +50,24 @@ Color _leadColour(WidgetTester tester) {
 }
 
 void main() {
-  setUpAll(() => EsokoHaptics.enabled = false);
+  setUpAll(() => EsoqoHaptics.enabled = false);
 
-  testWidgets('personal greets by name and shows the Esoko id', (tester) async {
+  testWidgets('personal greets by name and shows the Esoqo id', (tester) async {
     await _pump(
       tester,
-      const ActiveRole(role: EsokoRole.personal),
+      const ActiveRole(role: EsoqoRole.personal),
     );
     expect(find.text('Hello,'), findsOneWidget);
     expect(find.text('Wanjiku'), findsOneWidget);
     expect(find.text('ESK-4821-KE'), findsOneWidget);
-    expect(_leadColour(tester), EsokoColors.navy);
+    expect(_leadColour(tester), EsoqoColors.navy);
   });
 
   testWidgets('an org role says what you are acting as, not your name',
       (tester) async {
     await _pump(
       tester,
-      const ActiveRole(role: EsokoRole.crew, orgName: 'Super Metro'),
+      const ActiveRole(role: EsoqoRole.crew, orgName: 'Super Metro'),
     );
     expect(find.text('Acting as'), findsOneWidget);
     expect(find.text('Super Metro'), findsOneWidget);
@@ -77,11 +77,11 @@ void main() {
   });
 
   testWidgets('institutional roles are blue, per Rule 3', (tester) async {
-    for (final role in [EsokoRole.crew, EsokoRole.scanner, EsokoRole.manager]) {
+    for (final role in [EsoqoRole.crew, EsoqoRole.scanner, EsoqoRole.manager]) {
       await _pump(tester, ActiveRole(role: role, orgName: 'Super Metro'));
       expect(
         _leadColour(tester),
-        EsokoColors.blue,
+        EsoqoColors.blue,
         reason: '$role acts for an institution, so it must read blue',
       );
     }
@@ -91,9 +91,9 @@ void main() {
       (tester) async {
     await _pump(
       tester,
-      const ActiveRole(role: EsokoRole.courier, heldParcels: 3),
+      const ActiveRole(role: EsoqoRole.courier, heldParcels: 3),
     );
-    expect(_leadColour(tester), EsokoColors.amber);
+    expect(_leadColour(tester), EsoqoColors.amber);
   });
 
   testWidgets('carrying cash is stated on the card, before any tap',
@@ -101,7 +101,7 @@ void main() {
     await _pump(
       tester,
       const ActiveRole(
-        role: EsokoRole.courier,
+        role: EsoqoRole.courier,
         heldParcels: 3,
         holdingCash: true,
       ),
@@ -115,7 +115,7 @@ void main() {
     var tapped = false;
     await _pump(
       tester,
-      const ActiveRole(role: EsokoRole.courier, heldParcels: 2),
+      const ActiveRole(role: EsoqoRole.courier, heldParcels: 2),
       primaryLabel: 'My parcels',
       onPrimary: () => tapped = true,
     );
@@ -125,7 +125,7 @@ void main() {
 
   testWidgets('no action means no button rather than a dead one',
       (tester) async {
-    await _pump(tester, const ActiveRole(role: EsokoRole.personal));
+    await _pump(tester, const ActiveRole(role: EsoqoRole.personal));
     expect(find.byType(InkWell), findsNothing);
   });
 
@@ -137,7 +137,7 @@ void main() {
     final handle = tester.ensureSemantics();
     await _pump(
       tester,
-      const ActiveRole(role: EsokoRole.crew, orgName: 'Super Metro'),
+      const ActiveRole(role: EsoqoRole.crew, orgName: 'Super Metro'),
     );
     expect(
       find.bySemanticsLabel(
@@ -159,13 +159,13 @@ void main() {
 
     await tester.pumpWidget(
       MaterialApp(
-        theme: EsokoTheme.light(),
+        theme: EsoqoTheme.light(),
         home: MediaQuery(
           data: const MediaQueryData(textScaler: TextScaler.linear(2.0)),
           child: Scaffold(
-            body: EsokoRoleLead(
+            body: EsoqoRoleLead(
               role: const ActiveRole(
-                role: EsokoRole.courier,
+                role: EsoqoRole.courier,
                 heldParcels: 3,
                 holdingCash: true,
               ),

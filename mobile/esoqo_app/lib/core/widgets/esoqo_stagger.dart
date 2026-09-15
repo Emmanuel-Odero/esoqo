@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 
-import '../theme/esoko_tokens.dart';
+import '../theme/esoqo_tokens.dart';
 
 /// Staggered list entrance — wrap each item built by a `ListView`/`Column`
 /// in one of these with its [index] and items fade+rise in sequence
@@ -11,8 +11,8 @@ import '../theme/esoko_tokens.dart';
 /// Respects reduced motion by rendering the child with no animation at
 /// all. One controller per item, each disposed with its own State, so
 /// this stays cheap even in long lists.
-class EsokoStagger extends StatefulWidget {
-  const EsokoStagger({
+class EsoqoStagger extends StatefulWidget {
+  const EsoqoStagger({
     super.key,
     required this.index,
     required this.child,
@@ -26,14 +26,14 @@ class EsokoStagger extends StatefulWidget {
   final Duration maxDelay;
 
   @override
-  State<EsokoStagger> createState() => _EsokoStaggerState();
+  State<EsoqoStagger> createState() => _EsoqoStaggerState();
 }
 
-class _EsokoStaggerState extends State<EsokoStagger>
+class _EsoqoStaggerState extends State<EsoqoStagger>
     with SingleTickerProviderStateMixin {
   late final AnimationController _controller = AnimationController(
     vsync: this,
-    duration: EsokoMotion.slow,
+    duration: EsoqoMotion.slow,
   );
 
   @override
@@ -66,7 +66,7 @@ class _EsokoStaggerState extends State<EsokoStagger>
   Widget build(BuildContext context) {
     final curved = CurvedAnimation(
       parent: _controller,
-      curve: EsokoMotion.easeOut,
+      curve: EsoqoMotion.easeOut,
     );
     return FadeTransition(
       opacity: curved,

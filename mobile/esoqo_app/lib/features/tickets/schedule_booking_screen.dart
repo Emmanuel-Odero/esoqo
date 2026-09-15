@@ -6,7 +6,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../core/api/api_exception.dart';
 import '../../core/auth/auth_controller.dart';
 import '../../core/auth/auth_state.dart';
-import '../../core/theme/esoko_tokens.dart';
+import '../../core/theme/esoqo_tokens.dart';
 import '../../core/widgets/widgets.dart';
 import 'ticketing_models.dart';
 import 'ticketing_repository.dart';
@@ -224,19 +224,19 @@ class _ScheduleBookingScreenState extends ConsumerState<ScheduleBookingScreen> {
   Widget build(BuildContext context) {
     final reduced = MediaQuery.disableAnimationsOf(context);
     return Scaffold(
-      appBar: EsokoAppBar(title: widget.listingTitle),
+      appBar: EsoqoAppBar(title: widget.listingTitle),
       body: SafeArea(
         child: Center(
           child: ConstrainedBox(
             constraints: const BoxConstraints(maxWidth: 480),
             child: Padding(
-              padding: const EdgeInsets.all(EsokoSpacing.s5),
+              padding: const EdgeInsets.all(EsoqoSpacing.s5),
               // Same contract as checkout: the stage machine
               // cross-fades, money never visually jumps.
               child: AnimatedSwitcher(
-                duration: reduced ? Duration.zero : EsokoMotion.medium,
-                switchInCurve: EsokoMotion.easeOut,
-                switchOutCurve: EsokoMotion.easeOut,
+                duration: reduced ? Duration.zero : EsoqoMotion.medium,
+                switchInCurve: EsoqoMotion.easeOut,
+                switchOutCurve: EsoqoMotion.easeOut,
                 child: KeyedSubtree(key: ValueKey(_stage), child: _body()),
               ),
             ),
@@ -253,20 +253,20 @@ class _ScheduleBookingScreenState extends ConsumerState<ScheduleBookingScreen> {
       case _Stage.details:
         return _detailsStage();
       case _Stage.waiting:
-        return EsokoResultView.waiting(
+        return EsoqoResultView.waiting(
           title: 'Complete payment on your phone',
           message: 'Enter your M-Pesa PIN when the prompt arrives.',
           amountKes: _totalKes,
         );
       case _Stage.done:
-        return EsokoResultView.success(
+        return EsoqoResultView.success(
           title: 'Booking confirmed',
           message: 'Find your ticket QR any time under Tickets → Your tickets.',
           primaryLabel: 'Done',
           onPrimary: () => Navigator.of(context).popUntil((r) => r.isFirst),
         );
       case _Stage.depositDone:
-        return EsokoResultView.success(
+        return EsoqoResultView.success(
           title: 'Deposit received',
           message:
               'Your seat isn\'t issued yet — pay the rest any time before departure under Tickets → Your tickets, and your ticket QR appears the moment the balance clears.',
@@ -274,7 +274,7 @@ class _ScheduleBookingScreenState extends ConsumerState<ScheduleBookingScreen> {
           onPrimary: () => Navigator.of(context).popUntil((r) => r.isFirst),
         );
       case _Stage.failed:
-        return EsokoResultView.failure(
+        return EsoqoResultView.failure(
           errorMessage: _error ?? 'Something went wrong',
           primaryLabel: 'Start over',
           onPrimary: () => setState(() => _stage = _Stage.pick),
@@ -291,13 +291,13 @@ class _ScheduleBookingScreenState extends ConsumerState<ScheduleBookingScreen> {
           'Choose a ticket type',
           style: Theme.of(context).textTheme.titleMedium,
         ),
-        const SizedBox(height: EsokoSpacing.s3),
+        const SizedBox(height: EsoqoSpacing.s3),
         for (final c in widget.ticketClasses)
           TicketClassOption(
             ticketClass: c,
             selected: tc?.id == c.id,
             onTap: () {
-              EsokoHaptics.tap();
+              EsoqoHaptics.tap();
               setState(() {
                 _selectedClass = c;
                 _selectedSeatId = null;
@@ -305,23 +305,23 @@ class _ScheduleBookingScreenState extends ConsumerState<ScheduleBookingScreen> {
             },
           ),
         if (tc != null && tc.seated) ...[
-          const SizedBox(height: EsokoSpacing.s4),
+          const SizedBox(height: EsoqoSpacing.s4),
           Text('Choose a seat', style: Theme.of(context).textTheme.titleMedium),
-          const SizedBox(height: EsokoSpacing.s3),
+          const SizedBox(height: EsoqoSpacing.s3),
           _seatPicker(tc.id),
         ] else if (tc != null) ...[
-          const SizedBox(height: EsokoSpacing.s4),
+          const SizedBox(height: EsoqoSpacing.s4),
           Text('Quantity', style: Theme.of(context).textTheme.titleMedium),
-          const SizedBox(height: EsokoSpacing.s2),
+          const SizedBox(height: EsoqoSpacing.s2),
           Center(
-            child: EsokoStepper(
+            child: EsoqoStepper(
               value: _quantity,
               onChanged: (v) => setState(() => _quantity = v),
             ),
           ),
         ],
-        const SizedBox(height: EsokoSpacing.s5),
-        EsokoButton.primary(
+        const SizedBox(height: EsoqoSpacing.s5),
+        EsoqoButton.primary(
           label: 'Continue',
           expand: false,
           onPressed: tc == null || (tc.seated && _selectedSeatId == null)
@@ -360,14 +360,14 @@ class _ScheduleBookingScreenState extends ConsumerState<ScheduleBookingScreen> {
         return Column(
           children: [
             Container(
-              padding: const EdgeInsets.all(EsokoSpacing.s4),
+              padding: const EdgeInsets.all(EsoqoSpacing.s4),
               decoration: BoxDecoration(
-                // Theme's own surface tone, not the fixed EsokoColors.
+                // Theme's own surface tone, not the fixed EsoqoColors.
                 // paper — that pastel stayed light-mode-white even in
                 // dark mode, sticking out as a bright panel.
                 color: Theme.of(context).colorScheme.surfaceContainerHighest,
-                borderRadius: BorderRadius.circular(EsokoRadius.lg),
-                border: Border.all(color: EsokoColors.line),
+                borderRadius: BorderRadius.circular(EsoqoRadius.lg),
+                border: Border.all(color: EsoqoColors.line),
               ),
               child: Column(
                 children: [
@@ -377,10 +377,10 @@ class _ScheduleBookingScreenState extends ConsumerState<ScheduleBookingScreen> {
                   Container(
                     width: 72,
                     padding: const EdgeInsets.symmetric(
-                      vertical: EsokoSpacing.s2,
+                      vertical: EsoqoSpacing.s2,
                     ),
                     decoration: BoxDecoration(
-                      color: EsokoColors.line,
+                      color: EsoqoColors.line,
                       borderRadius: const BorderRadius.vertical(
                         top: Radius.circular(20),
                       ),
@@ -395,7 +395,7 @@ class _ScheduleBookingScreenState extends ConsumerState<ScheduleBookingScreen> {
                         Text(
                           'FRONT',
                           style: TextStyle(
-                            fontSize: 9,
+                            fontSize: EsoqoTypeScale.micro,
                             letterSpacing: 2,
                             color: Theme.of(context).textTheme.bodySmall?.color,
                           ),
@@ -403,7 +403,7 @@ class _ScheduleBookingScreenState extends ConsumerState<ScheduleBookingScreen> {
                       ],
                     ),
                   ),
-                  const SizedBox(height: EsokoSpacing.s4),
+                  const SizedBox(height: EsoqoSpacing.s4),
                   for (final r in rows) ...[
                     Row(
                       mainAxisAlignment: MainAxisAlignment.center,
@@ -413,7 +413,7 @@ class _ScheduleBookingScreenState extends ConsumerState<ScheduleBookingScreen> {
                           child: Text(
                             '$r',
                             style: TextStyle(
-                              fontSize: 10,
+                              fontSize: EsoqoTypeScale.micro,
                               color: Theme.of(context)
                                   .textTheme
                                   .bodySmall
@@ -422,13 +422,13 @@ class _ScheduleBookingScreenState extends ConsumerState<ScheduleBookingScreen> {
                             textAlign: TextAlign.center,
                           ),
                         ),
-                        const SizedBox(width: EsokoSpacing.s2),
+                        const SizedBox(width: EsoqoSpacing.s2),
                         for (final seat in byRow[r]!) ...[
                           SeatButton(
                             seat: seat,
                             selected: _selectedSeatId == seat.id,
                             onTap: () {
-                              EsokoHaptics.tap();
+                              EsoqoHaptics.tap();
                               setState(() => _selectedSeatId = seat.id);
                             },
                           ),
@@ -436,40 +436,40 @@ class _ScheduleBookingScreenState extends ConsumerState<ScheduleBookingScreen> {
                           // column, before the first right-side column.
                           if (leftCols.contains(seat.column) &&
                               byRow[r]!.indexOf(seat) == leftCols.length - 1)
-                            const SizedBox(width: EsokoSpacing.s5)
+                            const SizedBox(width: EsoqoSpacing.s5)
                           else
-                            const SizedBox(width: EsokoSpacing.s2),
+                            const SizedBox(width: EsoqoSpacing.s2),
                         ],
                       ],
                     ),
-                    const SizedBox(height: EsokoSpacing.s2),
+                    const SizedBox(height: EsoqoSpacing.s2),
                   ],
                 ],
               ),
             ),
-            const SizedBox(height: EsokoSpacing.s3),
+            const SizedBox(height: EsoqoSpacing.s3),
             Row(
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
-                _seatLegend(EsokoColors.line, 'Taken'),
-                const SizedBox(width: EsokoSpacing.s4),
+                _seatLegend(EsoqoColors.line, 'Taken'),
+                const SizedBox(width: EsoqoSpacing.s4),
                 _seatLegend(
                   Theme.of(context).colorScheme.surfaceContainerHighest,
                   'Available',
                   outline: true,
                 ),
-                const SizedBox(width: EsokoSpacing.s4),
-                _seatLegend(EsokoColors.green, 'Selected'),
+                const SizedBox(width: EsoqoSpacing.s4),
+                _seatLegend(EsoqoColors.green, 'Selected'),
               ],
             ),
           ],
         );
       },
       loading: () => const Padding(
-        padding: EdgeInsets.all(EsokoSpacing.s1),
-        child: EsokoSkeletonCard(lines: 4),
+        padding: EdgeInsets.all(EsoqoSpacing.s1),
+        child: EsoqoSkeletonCard(lines: 4),
       ),
-      error: (e, _) => EsokoFormError(
+      error: (e, _) => EsoqoFormError(
         message: e is ApiException ? e.message : 'Could not load seats.',
       ),
     );
@@ -486,7 +486,7 @@ class _ScheduleBookingScreenState extends ConsumerState<ScheduleBookingScreen> {
             color: color,
             borderRadius: BorderRadius.circular(4),
             border: outline
-                ? Border.all(color: EsokoColors.line, width: 1.5)
+                ? Border.all(color: EsoqoColors.line, width: 1.5)
                 : null,
           ),
         ),
@@ -494,7 +494,7 @@ class _ScheduleBookingScreenState extends ConsumerState<ScheduleBookingScreen> {
         Text(
           label,
           style: TextStyle(
-            fontSize: 11,
+            fontSize: EsoqoTypeScale.micro,
             color: Theme.of(context).textTheme.bodySmall?.color,
           ),
         ),
@@ -514,7 +514,7 @@ class _ScheduleBookingScreenState extends ConsumerState<ScheduleBookingScreen> {
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         if (canInstallment) ...[
-          EsokoSegmentedToggle<bool>(
+          EsoqoSegmentedToggle<bool>(
             selected: _payInInstallments,
             onChanged: (v) => setState(() => _payInInstallments = v),
             options: const [
@@ -528,24 +528,24 @@ class _ScheduleBookingScreenState extends ConsumerState<ScheduleBookingScreen> {
           Text(
             'Total KES ${total.toStringAsFixed(0)} — pay what you can today, the rest any time before departure.',
             style: TextStyle(
-              fontSize: 12.5,
+              fontSize: EsoqoTypeScale.meta,
               color: Theme.of(context).textTheme.bodySmall?.color,
             ),
           ),
           const SizedBox(height: 12),
-          EsokoField.amount(
+          EsoqoField.amount(
             controller: _depositController,
             label: 'Paying today',
           ),
         ] else ...[
-          EsokoSegmentedToggle<String>(
+          EsoqoSegmentedToggle<String>(
             selected: _method,
             onChanged: (m) => setState(() => _method = m),
             options: const [('MPESA_STK', 'M-Pesa'), ('VOUCHER', 'Voucher')],
           ),
           if (_method == 'VOUCHER') ...[
             const SizedBox(height: 12),
-            EsokoField.code(
+            EsoqoField.code(
               controller: _voucherCodeController,
               label: 'Voucher code',
               hint: 'e.g. VCH-XXXXXX',
@@ -554,10 +554,10 @@ class _ScheduleBookingScreenState extends ConsumerState<ScheduleBookingScreen> {
         ],
         if (_error != null) ...[
           const SizedBox(height: 12),
-          EsokoFormError(message: _error!),
+          EsoqoFormError(message: _error!),
         ],
         const SizedBox(height: 12),
-        EsokoPayerFields(
+        EsoqoPayerFields(
           nameController: _nameController,
           msisdnController: _msisdnController,
           payLabel: _payInInstallments

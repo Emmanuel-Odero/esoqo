@@ -1,6 +1,6 @@
-# esoko_app
+# esoqo_app
 
-Esoko's Flutter client — Android, iOS, and (once the Android toolchain is
+Esoqo's Flutter client — Android, iOS, and (once the Android toolchain is
 set up — see below) a Wear OS companion. Talks to `services/core-go`
 (see `docs/adr/0005-mobile-api-in-go.md`), never to the TypeScript apps
 directly.
@@ -10,9 +10,9 @@ directly.
 ```
 lib/
   core/
-    theme/     — EsokoColors/EsokoSpacing/EsokoRadius, ported from
+    theme/     — EsoqoColors/EsoqoSpacing/EsoqoRadius, ported from
                  packages/ui/src/tokens.css (same source of truth as the
-                 web apps — kept in sync by hand, see esoko_tokens.dart's
+                 web apps — kept in sync by hand, see esoqo_tokens.dart's
                  own note on why there's no shared build step)
     api/       — ApiClient (Dio wrapper around core-go's /v1/* REST
                  surface), ApiConfig (base URL resolution per platform),
@@ -46,7 +46,7 @@ rather than showing fabricated chama balances, products or bookings.
 ## Running it
 
 ```bash
-cd mobile/esoko_app
+cd mobile/esoqo_app
 flutter pub get
 
 # core-go must be reachable — either:

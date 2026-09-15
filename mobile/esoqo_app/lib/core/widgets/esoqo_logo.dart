@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 
-/// The real Esoko logo — the red shopping-cart "e" + green "soko"
-/// wordmark, as shipped in assets/branding/esoko-full-logo-clean.png
+/// The real Esoqo logo — the red shopping-cart "e" + green "soko"
+/// wordmark, as shipped in assets/branding/esoqo-full-logo-clean.png
 /// (the same file already used for the native splash screen, see
 /// pubspec.yaml's flutter_native_splash config). This replaces an
 /// earlier hand-drawn CustomPainter approximation (a minimalist navy
@@ -13,8 +13,8 @@ import 'package:flutter/material.dart';
 /// variant to switch between — the red/green reads fine against every
 /// background this lockup appears on (navy app bar, paper/dark
 /// scaffold), the same way it already did on the splash screen.
-class EsokoBrandLockup extends StatelessWidget {
-  const EsokoBrandLockup({
+class EsoqoBrandLockup extends StatelessWidget {
+  const EsoqoBrandLockup({
     super.key,
     this.size = 30,
     this.mainAxisAlignment = MainAxisAlignment.start,
@@ -31,10 +31,10 @@ class EsokoBrandLockup extends StatelessWidget {
       mainAxisAlignment: mainAxisAlignment,
       children: [
         Image.asset(
-          'assets/branding/esoko-full-logo-clean.png',
+          'assets/branding/esoqo-full-logo-clean.png',
           height: size,
           fit: BoxFit.contain,
-          semanticLabel: 'Esoko',
+          semanticLabel: 'Esoqo',
         ),
       ],
     );

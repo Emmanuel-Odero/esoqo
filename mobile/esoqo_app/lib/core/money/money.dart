@@ -210,7 +210,7 @@ class Money implements Comparable<Money> {
   // ---------------------------------------------------------------
 
   /// Digits only, grouped, no currency prefix — feed this to
-  /// [EsokoAmountText], which owns the `KES ` prefix and the mono
+  /// [EsoqoAmountText], which owns the `KES ` prefix and the mono
   /// treatment.
   ///
   /// Cents are shown only when they are non-zero. Kenyan prices are

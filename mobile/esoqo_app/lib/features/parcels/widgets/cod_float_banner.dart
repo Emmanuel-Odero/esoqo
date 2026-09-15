@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import '../../../core/theme/esoko_tokens.dart';
+import '../../../core/theme/esoqo_tokens.dart';
 import '../../../core/widgets/widgets.dart';
 import '../parcels_hub_screen.dart';
 
@@ -17,11 +17,11 @@ class CodFloatBanner extends ConsumerWidget {
         if (!h.amountKes.isPositive) return const SizedBox.shrink();
         return Padding(
           padding: const EdgeInsets.fromLTRB(
-            EsokoSpacing.s4, 0, EsokoSpacing.s4, EsokoSpacing.s3,
+            EsoqoSpacing.s4, 0, EsoqoSpacing.s4, EsoqoSpacing.s3,
           ),
-          child: EsokoInlineNotice(
-            color: EsokoColors.navy,
-            icon: EsokoIconName.coins,
+          child: EsoqoInlineNotice(
+            color: EsoqoColors.navy,
+            icon: EsoqoIconName.coins,
             message: 'You are holding KES ${h.amountKes.format()} '
                 'from ${h.parcelCount} '
                 '${h.parcelCount == 1 ? 'parcel' : 'parcels'}. '

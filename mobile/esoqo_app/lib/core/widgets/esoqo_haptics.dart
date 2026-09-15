@@ -1,14 +1,14 @@
 import 'package:flutter/services.dart';
 
 /// One-line haptic accents for the design system's press moments —
-/// [EsokoCard] taps and [EsokoButton] presses call these so
+/// [EsoqoCard] taps and [EsoqoButton] presses call these so
 /// screens never reach for `HapticFeedback` directly and every tap
 /// feels the same weight across the app.
 ///
 /// The single [enabled] switch exists for widget tests (haptics throw
 /// outside a platform channel host) and for anyone who wants a global
 /// off-ramp later; production code leaves it on.
-abstract final class EsokoHaptics {
+abstract final class EsoqoHaptics {
   static bool enabled = true;
 
   /// Light tick for selecting/navigating (card taps, toggles).

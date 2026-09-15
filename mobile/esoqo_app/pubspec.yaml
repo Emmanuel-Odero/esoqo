@@ -1,4 +1,4 @@
-name: esoko_app
+name: esoqo_app
 description: "A new Flutter project."
 # The following line prevents the package from being accidentally published to
 # pub.dev using `flutter pub publish`. This is preferred for private packages.
@@ -65,7 +65,7 @@ dependencies:
   network_info_plus: ^6.1.0
   quick_actions: ^1.1.0
   # Renders the branded 24px stroke-icon set (ported from
-  # packages/ui/src/Icon.tsx, see assets/icons/ + EsokoIcon) — no emoji,
+  # packages/ui/src/Icon.tsx, see assets/icons/ + EsoqoIcon) — no emoji,
   # no generic Cupertino/Material glyphs, matching web's icon language.
   flutter_svg: ^2.0.17
   # Camera capture for proof-of-delivery photos. image_picker rather
@@ -157,7 +157,7 @@ flutter:
 
   # The Outfit display typeface — the same one tokens.css uses for
   # --font-display on web — bundled so mobile matches the web's brand
-  # voice (see EsokoTypography). This is a single variable-weight TTF
+  # voice (see EsoqoTypography). This is a single variable-weight TTF
   # (Thin–Black); the duplicate entries below let Flutter resolve each
   # FontWeight against the same file instead of metric-synthesizing it.
   fonts:
@@ -199,20 +199,20 @@ flutter:
         - asset: assets/fonts/IBMPlexMono-SemiBold.ttf
           weight: 600
 
-# App icon — the green Esoko mark (assets/branding/esoko-app-icon.png).
+# App icon — the green Esoqo mark (assets/branding/esoqo-app-icon.png).
 # iOS/Android launcher icons are generated from a full-bleed, alpha-free
-# copy (esoko-app-icon-flat.png) because Apple rejects alpha; the Android
+# copy (esoqo-app-icon-flat.png) because Apple rejects alpha; the Android
 # adaptive icon layers the original rounded design over the same green.
 # Regenerate after editing the artwork with: dart run flutter_launcher_icons
 flutter_launcher_icons:
   android: true
   ios: true
-  image_path: "assets/branding/esoko-app-icon-flat.png"
+  image_path: "assets/branding/esoqo-app-icon-flat.png"
   # Android adaptive icon: green background, mark-only foreground with
   # generous padding so it survives circular/squircle/square launcher
   # masks without clipping.
   adaptive_icon_background: "#02B026"
-  adaptive_icon_foreground: "assets/branding/esoko-app-icon.png"
+  adaptive_icon_foreground: "assets/branding/esoqo-app-icon.png"
   remove_alpha_ios: true
   web:
     generate: true
@@ -223,12 +223,12 @@ flutter_launcher_icons:
 # Native launch screen shown before the Flutter engine/first frame is
 # ready — this is the actual "before app opens" loader, distinct from
 # any in-app splash widget. The logo is the red-mark + green-wordmark
-# lockup (esoko-full-logo-clean.png, chroma-keyed off its #212121 mock
+# lockup (esoqo-full-logo-clean.png, chroma-keyed off its #212121 mock
 # canvas) sitting on the navy brand color, matching the dark mock it
 # was designed on. Regenerate with: dart run flutter_native_splash:create
 flutter_native_splash:
   color: "#0A2E4D"
-  image: assets/branding/esoko-full-logo-clean.png
+  image: assets/branding/esoqo-full-logo-clean.png
   android_12:
     color: "#0A2E4D"
-    image: assets/branding/esoko-full-logo-clean.png
+    image: assets/branding/esoqo-full-logo-clean.png

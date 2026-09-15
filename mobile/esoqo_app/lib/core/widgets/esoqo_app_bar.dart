@@ -7,18 +7,18 @@ import 'package:flutter/material.dart';
 /// its own titleTextStyle — fell back to Material's default titleLarge:
 /// regular weight, normal tracking, generic. It read as "not this
 /// app's voice" next to everything else's deliberately bold, tight
-/// headings (EsokoSectionHeader and friends).
+/// headings (EsoqoSectionHeader and friends).
 ///
-/// The actual fix is EsokoTheme's own titleTextStyle (see
-/// esoko_theme.dart's `_headline` helper, porting tokens.css's h1/h2/h3
+/// The actual fix is EsoqoTheme's own titleTextStyle (see
+/// esoqo_theme.dart's `_headline` helper, porting tokens.css's h1/h2/h3
 /// rule: bold, tight tracking) — every AppBar picks that up
-/// automatically now, this component included. EsokoAppBar exists so
+/// automatically now, this component included. EsoqoAppBar exists so
 /// there's one deliberate, named call site for "this is a screen
 /// title" instead of a bare AppBar screens reach for by habit, and one
 /// place to grow from later (a subtitle, a consistent action-icon
 /// treatment) without another sweep through every screen.
-class EsokoAppBar extends StatelessWidget implements PreferredSizeWidget {
-  const EsokoAppBar({
+class EsoqoAppBar extends StatelessWidget implements PreferredSizeWidget {
+  const EsoqoAppBar({
     super.key,
     required this.title,
     this.titleWidget,

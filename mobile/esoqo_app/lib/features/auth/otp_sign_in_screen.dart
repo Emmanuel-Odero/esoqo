@@ -3,7 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/api/api_exception.dart';
 import '../../core/auth/auth_controller.dart';
-import '../../core/theme/esoko_tokens.dart';
+import '../../core/theme/esoqo_tokens.dart';
 import '../../core/widgets/widgets.dart';
 
 enum _Step { phone, code, setPin }
@@ -98,15 +98,15 @@ class _OtpSignInScreenState extends ConsumerState<OtpSignInScreen> {
 
   @override
   Widget build(BuildContext context) {
-    return EsokoAuthScaffold(
+    return EsoqoAuthScaffold(
       title: 'Sign in with a code',
       subtitle: 'We\'ll text you a one-time code — no PIN needed.',
       onBack: () => Navigator.of(context).pop(),
       children: [
         ..._stepFields(),
-        if (_error != null) EsokoFormError(message: _error!),
-        const SizedBox(height: EsokoSpacing.s4),
-        EsokoButton.primary(
+        if (_error != null) EsoqoFormError(message: _error!),
+        const SizedBox(height: EsoqoSpacing.s4),
+        EsoqoButton.primary(
           expand: false,
           label: _primaryLabel,
           loading: _loading,
@@ -124,7 +124,7 @@ class _OtpSignInScreenState extends ConsumerState<OtpSignInScreen> {
         // sentence just restating "type your phone number" once you
         // can already see the phone number field would be noise.
         return [
-          EsokoField.phone(
+          EsoqoField.phone(
             controller: _msisdnController,
             onSubmitted: (_) => _requestCode(),
           ),
@@ -132,8 +132,8 @@ class _OtpSignInScreenState extends ConsumerState<OtpSignInScreen> {
       case _Step.code:
         return [
           Text('Enter the code sent to ${_msisdnController.text.trim()}.'),
-          const SizedBox(height: EsokoSpacing.s4),
-          EsokoField.otp(
+          const SizedBox(height: EsoqoSpacing.s4),
+          EsoqoField.otp(
             controller: _codeController,
             onSubmitted: (_) => _verifyCode(),
           ),
@@ -143,8 +143,8 @@ class _OtpSignInScreenState extends ConsumerState<OtpSignInScreen> {
           const Text(
             'You\'re signed in. Set a PIN now for faster sign-in next time.',
           ),
-          const SizedBox(height: EsokoSpacing.s4),
-          EsokoField.pin(
+          const SizedBox(height: EsoqoSpacing.s4),
+          EsoqoField.pin(
             controller: _pinController,
             label: 'New PIN',
             helper: '4 to 6 digits',

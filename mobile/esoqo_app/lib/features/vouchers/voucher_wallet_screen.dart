@@ -3,7 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:qr_flutter/qr_flutter.dart';
 
 import '../../core/api/api_exception.dart';
-import '../../core/theme/esoko_tokens.dart';
+import '../../core/theme/esoqo_tokens.dart';
 import '../../core/widgets/widgets.dart';
 import 'allowance_batch_screen.dart';
 import 'voucher_models.dart';
@@ -42,7 +42,7 @@ class _VoucherWalletScreenState extends ConsumerState<VoucherWalletScreen> {
       _loading = true;
       _msg = null;
     });
-    EsokoHaptics.tap();
+    EsoqoHaptics.tap();
     try {
       await ref
           .read(vouchersRepositoryProvider)
@@ -66,7 +66,7 @@ class _VoucherWalletScreenState extends ConsumerState<VoucherWalletScreen> {
       if (mounted) setState(() => _msg = e.message);
     } catch (e) {
       if (mounted) {
-        setState(() => _msg = 'Could not reach Esoko. Check your connection.');
+        setState(() => _msg = 'Could not reach Esoqo. Check your connection.');
       }
     } finally {
       if (mounted) setState(() => _loading = false);
@@ -78,7 +78,7 @@ class _VoucherWalletScreenState extends ConsumerState<VoucherWalletScreen> {
     final loyalty = ref.watch(myLoyaltyProvider);
     final vouchers = ref.watch(myVouchersProvider);
     return Scaffold(
-      appBar: EsokoAppBar(
+      appBar: EsoqoAppBar(
         title: 'Vouchers',
         actions: [
           IconButton(
@@ -95,28 +95,28 @@ class _VoucherWalletScreenState extends ConsumerState<VoucherWalletScreen> {
           child: ConstrainedBox(
             constraints: const BoxConstraints(maxWidth: 560),
             child: ListView(
-              padding: const EdgeInsets.all(EsokoSpacing.s4),
+              padding: const EdgeInsets.all(EsoqoSpacing.s4),
               children: [
-                EsokoAsyncView(
+                EsoqoAsyncView(
                   value: loyalty,
                   isEmpty: (_) => false,
                   emptyMessage: '',
                   emptyIcon: Icons.stars_outlined,
                   onRetry: () => ref.invalidate(myLoyaltyProvider),
-                  data: (context, m) => EsokoCard(
-                    padding: const EdgeInsets.all(EsokoSpacing.s4),
+                  data: (context, m) => EsoqoCard(
+                    padding: const EdgeInsets.all(EsoqoSpacing.s4),
                     child: Text(
                       'Loyalty: ${m.totalPoints} pts ≈ KES ${m.kesEquiv}\n10 pts = KES 1 · earn 10% of every spend.',
                       style: Theme.of(context).textTheme.titleMedium,
                     ),
                   ),
                 ),
-                const SizedBox(height: EsokoSpacing.s4),
-                const EsokoSectionHeader(
+                const SizedBox(height: EsoqoSpacing.s4),
+                const EsoqoSectionHeader(
                   title: 'New voucher',
                   subtitle: 'Purpose-locked. Gift via phone number.',
                 ),
-                EsokoDropdown<String>(
+                EsoqoDropdown<String>(
                   label: 'Purpose',
                   initialValue: _purpose,
                   items: const ['FARE', 'RENT', 'SHOPPING', 'GENERAL']
@@ -124,25 +124,25 @@ class _VoucherWalletScreenState extends ConsumerState<VoucherWalletScreen> {
                       .toList(),
                   onChanged: (v) => setState(() => _purpose = v ?? 'FARE'),
                 ),
-                const SizedBox(height: EsokoSpacing.s3),
-                EsokoField.text(
+                const SizedBox(height: EsoqoSpacing.s3),
+                EsoqoField.text(
                   controller: _label,
                   label: 'Label',
                   hint: 'e.g. School run',
                   icon: Icons.label_outlined,
                 ),
-                const SizedBox(height: EsokoSpacing.s3),
-                EsokoField.amount(
+                const SizedBox(height: EsoqoSpacing.s3),
+                EsoqoField.amount(
                   controller: _amount,
                   hint: 'e.g. 200',
                 ),
-                const SizedBox(height: EsokoSpacing.s3),
-                EsokoField.phone(
+                const SizedBox(height: EsoqoSpacing.s3),
+                EsoqoField.phone(
                   controller: _recipient,
                   label: 'Gift to (optional)',
                 ),
-                const SizedBox(height: EsokoSpacing.s3),
-                EsokoDropdown<String>(
+                const SizedBox(height: EsoqoSpacing.s3),
+                EsoqoDropdown<String>(
                   label: 'Load with',
                   initialValue: _loadMethod,
                   items: const ['MPESA_STK', 'LOYALTY']
@@ -158,8 +158,8 @@ class _VoucherWalletScreenState extends ConsumerState<VoucherWalletScreen> {
                   onChanged: (v) =>
                       setState(() => _loadMethod = v ?? 'MPESA_STK'),
                 ),
-                const SizedBox(height: EsokoSpacing.s3),
-                EsokoButton.primary(
+                const SizedBox(height: EsoqoSpacing.s3),
+                EsoqoButton.primary(
                   expand: false,
                   label: 'Create voucher',
                   icon: Icons.add_circle_outline,
@@ -167,7 +167,7 @@ class _VoucherWalletScreenState extends ConsumerState<VoucherWalletScreen> {
                   onPressed: _create,
                 ),
                 if (_msg != null) ...[
-                  const SizedBox(height: EsokoSpacing.s2),
+                  const SizedBox(height: EsoqoSpacing.s2),
                   Text(
                     _msg!,
                     style: TextStyle(
@@ -175,12 +175,12 @@ class _VoucherWalletScreenState extends ConsumerState<VoucherWalletScreen> {
                     ),
                   ),
                 ],
-                const SizedBox(height: EsokoSpacing.s5),
-                const EsokoSectionHeader(
+                const SizedBox(height: EsoqoSpacing.s5),
+                const EsoqoSectionHeader(
                   title: 'Your cards',
                   subtitle: 'Show QR to pay or be verified.',
                 ),
-                EsokoAsyncView(
+                EsoqoAsyncView(
                   value: vouchers,
                   isEmpty: (l) => l.isEmpty,
                   emptyMessage: 'No vouchers yet.',
@@ -189,7 +189,7 @@ class _VoucherWalletScreenState extends ConsumerState<VoucherWalletScreen> {
                   data: (context, list) => Column(
                     children: [
                       for (var i = 0; i < list.length; i++)
-                        EsokoStagger(index: i, child: _card(context, list[i])),
+                        EsoqoStagger(index: i, child: _card(context, list[i])),
                     ],
                   ),
                 ),
@@ -202,7 +202,7 @@ class _VoucherWalletScreenState extends ConsumerState<VoucherWalletScreen> {
   }
 
   Widget _card(BuildContext context, VoucherCard v) {
-    return EsokoCard(
+    return EsoqoCard(
       padding: EdgeInsets.zero,
       child: ExpansionTile(
         leading: const Icon(Icons.wallet_outlined),

@@ -1,13 +1,13 @@
 import 'package:flutter/material.dart';
 
-import '../theme/esoko_tokens.dart';
-import 'esoko_logo.dart';
+import '../theme/esoqo_tokens.dart';
+import 'esoqo_logo.dart';
 
 /// The one screen shell for every auth-flow screen — sign in, sign in
 /// with a code, reset your PIN. Before this, only `SignInScreen` had a
 /// deliberate look (a big centred logo, a headline); the OTP and
 /// forgot-PIN screens each hand-rolled their own `Scaffold` around a
-/// navy `EsokoAppBar` instead, so stepping from "Sign in" into "Sign in
+/// navy `EsoqoAppBar` instead, so stepping from "Sign in" into "Sign in
 /// with a code" read as leaving the app rather than continuing the
 /// same flow.
 ///
@@ -29,8 +29,8 @@ import 'esoko_logo.dart';
 /// [onBack] is left null on the flow's own entry point (plain
 /// `SignInScreen` has nowhere to go back to); every screen reached by
 /// pushing on top of it passes `Navigator.of(context).pop`.
-class EsokoAuthScaffold extends StatelessWidget {
-  const EsokoAuthScaffold({
+class EsoqoAuthScaffold extends StatelessWidget {
+  const EsoqoAuthScaffold({
     super.key,
     required this.title,
     required this.subtitle,
@@ -53,10 +53,10 @@ class EsokoAuthScaffold extends StatelessWidget {
             constraints: const BoxConstraints(maxWidth: 420),
             child: SingleChildScrollView(
               padding: const EdgeInsets.fromLTRB(
-                EsokoSpacing.s6,
-                EsokoSpacing.s3,
-                EsokoSpacing.s6,
-                EsokoSpacing.s6,
+                EsoqoSpacing.s6,
+                EsoqoSpacing.s3,
+                EsoqoSpacing.s6,
+                EsoqoSpacing.s6,
               ),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -103,17 +103,17 @@ class _Header extends StatelessWidget {
               visualDensity: VisualDensity.compact,
             ),
           ),
-          const SizedBox(height: EsokoSpacing.s4),
+          const SizedBox(height: EsoqoSpacing.s4),
         ],
-        const EsokoBrandLockup(
+        const EsoqoBrandLockup(
           size: 44,
           mainAxisAlignment: MainAxisAlignment.center,
         ),
-        const SizedBox(height: EsokoSpacing.s5),
+        const SizedBox(height: EsoqoSpacing.s5),
         Text(title, style: Theme.of(context).textTheme.headlineMedium),
-        const SizedBox(height: EsokoSpacing.s2),
+        const SizedBox(height: EsoqoSpacing.s2),
         Text(subtitle),
-        const SizedBox(height: EsokoSpacing.s6),
+        const SizedBox(height: EsoqoSpacing.s6),
       ],
     );
   }

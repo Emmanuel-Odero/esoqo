@@ -1,4 +1,4 @@
-/// Esoko's design tokens, ported from packages/ui/src/tokens.css — the
+/// Esoqo's design tokens, ported from packages/ui/src/tokens.css — the
 /// same single source of truth the web apps use. Colour semantics are a
 /// rule, not a preference, and hold across every surface:
 ///
@@ -15,7 +15,7 @@ library;
 
 import 'package:flutter/material.dart';
 
-abstract final class EsokoColors {
+abstract final class EsoqoColors {
   static const navy = Color(0xFF0A2E4D);
   static const navy2 = Color(0xFF123F65);
   static const navy3 = Color(0xFF1B527E);
@@ -37,9 +37,26 @@ abstract final class EsokoColors {
   static const paper = Color(0xFFF4F7FA);
   static const line = Color(0xFFDCE5EC);
 
+  // Ink. The brand's text colours are *navy-rooted*, never neutral black:
+  // #12283A is the same hue family as `navy`, so body copy sits in the
+  // same voice as the chrome above it. Material's own
+  // `ColorScheme.fromSeed` derives `onSurface`/`onSurfaceVariant` from
+  // the green seed, which lands on a near-black with an olive cast
+  // (~#191C19 / ~#44483D) — that is where the app's "black text that
+  // looks out of place" came from. EsoqoTheme overrides the scheme and
+  // the whole TextTheme with these instead; nothing should read text
+  // colour off a raw Material default.
   static const text = Color(0xFF12283A);
   static const text2 = Color(0xFF57718A);
   static const text3 = Color(0xFF5A7695);
+
+  /// Dark-mode ink — the same navy-rooted relationship inverted: a
+  /// near-white with a cool cast rather than pure #FFFFFF (which glares
+  /// against `darkSurface`), and a muted step that stays legible at
+  /// small sizes without dropping to pure grey.
+  static const textOnDark = Color(0xFFE8EFF5);
+  static const textOnDark2 = Color(0xFFA3B6C8);
+  static const textOnDark3 = Color(0xFF8299AE);
 
   // Dark-mode surface — tokens.css doesn't define one for the web apps
   // (light-only today), so this is new: a navy-rooted dark surface that
@@ -47,10 +64,21 @@ abstract final class EsokoColors {
   // "authority" association survives into dark mode.
   static const darkSurface = Color(0xFF0D1B29);
   static const darkSurface2 = Color(0xFF13293F);
+
+  // Category/ticket gradient accents — decorative, mobile-only;
+  // no per-category gradients exist on the web (storefront uses a
+  // single store-level accent). These are locked with tokens.css.
+  static const greenLight = Color(0xFF2E9E5B);
+  static const amberLight = Color(0xFFE0A233);
+  static const amberDeep = Color(0xFFB9790F);
+  static const pink = Color(0xFFC65DA6);
+  static const pinkDark = Color(0xFF8E3D77);
+  static const purple = Color(0xFF7C3D8E);
+  static const amberWarm = Color(0xFFB8781A);
 }
 
 /// 4px grid — --sp-1..--sp-9 in tokens.css.
-abstract final class EsokoSpacing {
+abstract final class EsoqoSpacing {
   static const s1 = 4.0;
   static const s2 = 8.0;
   static const s3 = 12.0;
@@ -63,7 +91,7 @@ abstract final class EsokoSpacing {
 }
 
 /// --r-xs..--r-2xl in tokens.css.
-abstract final class EsokoRadius {
+abstract final class EsoqoRadius {
   static const xs = 6.0;
   static const sm = 8.0;
   static const md = 10.0;
@@ -79,7 +107,7 @@ abstract final class EsokoRadius {
 /// body *and* prices), which is why numbers and copy read flatter here
 /// than on web. All three are now bundled (see pubspec.yaml) so the
 /// same voice split applies on mobile.
-abstract final class EsokoFonts {
+abstract final class EsoqoFonts {
   /// Display typeface — tokens.css's --font-display. Headings, section
   /// titles, anywhere the brand's bold/tight voice belongs.
   static const display = 'Outfit';
@@ -96,30 +124,129 @@ abstract final class EsokoFonts {
   static const mono = 'IBMPlexMono';
 }
 
+/// The type *scale* — the sizes this app is allowed to set.
+///
+/// Before this existed, screens picked font sizes by eye: the codebase
+/// held 12, 12.5, 11, 11.5, 13, 13.5, 14, 14.5, 10, 10.5, 9 … twenty-odd
+/// distinct sizes with no relationship between them, which is why two
+/// adjacent cards could disagree about what "small print" means. These
+/// eleven steps cover every real role; `EsoqoTheme` maps them onto
+/// Material's `TextTheme` so the common cases need no explicit size at
+/// all (`Theme.of(context).textTheme.bodySmall` *is* `meta`).
+///
+/// Roles, from the app's own vocabulary rather than Material's:
+///
+///   hero/pageTitle/sectionTitle · display voice (Outfit), a screen or
+///       block is being named
+///   cardTitle/subTitle          · display voice, an item is being named
+///   body/bodyLead/meta          · reading voice (IBM Plex Sans)
+///   label/labelSmall/micro      · UI furniture — chips, pills, tabs
+abstract final class EsoqoTypeScale {
+  static const hero = 30.0;
+  static const pageTitle = 26.0;
+  static const sectionTitle = 22.0;
+  static const cardTitle = 18.0;
+  static const subTitle = 16.0;
+
+  static const bodyLead = 16.0;
+  static const body = 14.5;
+  static const meta = 12.5;
+
+  static const label = 14.0;
+  static const labelSmall = 12.0;
+  static const micro = 11.0;
+}
+
 /// tokens.css's h1/h2/h3 rule: `font-weight:800; letter-spacing:-.028em;
 /// line-height:1.1` — carried onto the bundled Outfit display typeface.
-abstract final class EsokoTypography {
+abstract final class EsoqoTypography {
   static const headlineWeight = FontWeight.w800;
   static const headlineHeight = 1.1;
+
+  /// Reading line-height. Web's --line-height is 1.62 for a desktop
+  /// measure; a phone column is narrower, so 1.5 keeps the same airy
+  /// read without stretching short lines into a ladder.
+  static const bodyHeight = 1.5;
+
+  /// Line-height for `meta`-sized secondary copy — slightly tighter, so
+  /// a two-line caption under a title still reads as one block.
+  static const metaHeight = 1.4;
+
+  /// UI furniture (chips, pills, tab labels) is set in the body face at
+  /// w600 with a touch of positive tracking: small, dense, all-caps-ish
+  /// text needs the opposite treatment from a headline, which is why
+  /// borrowing the headline's negative tracking made pills look cramped.
+  static const labelWeight = FontWeight.w600;
+  static const labelTrackingEm = 0.012;
   // -.028em — a fraction of the style's own font size, not a fixed
   // pixel value, so it tightens proportionally at every text scale
-  // (see EsokoTheme's own headline() helper, which multiplies this by
+  // (see EsoqoTheme's own headline() helper, which multiplies this by
   // each TextStyle's fontSize).
   static const headlineTrackingEm = -0.028;
 
-  /// Money/ID/code text — EsokoFonts.mono at a given size+weight, tabular
+  /// The uppercase kicker above a heading ("TODAY", "READY FOR PICKUP",
+  /// a section's eyebrow). Every place that wanted one invented its own
+  /// — 11/w700/ls 1.4 in EsoqoSectionHeader, micro/w700/ls 0.6 in
+  /// EsoqoAttentionCard, and several more in between — so the same
+  /// device read as a different device on each screen.
+  ///
+  /// Uppercase text needs *positive* tracking (the opposite of the
+  /// headline rule): capitals have no ascender/descender rhythm to
+  /// separate them, so set tight they close into a block. 0.11em is
+  /// enough to open them without spelling the word out letter by letter.
+  static TextStyle eyebrow({
+    required Color color,
+    double fontSize = EsoqoTypeScale.micro,
+  }) => TextStyle(
+    fontFamily: EsoqoFonts.display,
+    fontSize: fontSize,
+    fontWeight: FontWeight.w700,
+    color: color,
+    height: 1.2,
+    letterSpacing: fontSize * 0.11,
+  );
+
+  /// A code a person reads aloud, types into another device, or checks
+  /// against a printed label — a ticket code, a pickup code, an Esoqo
+  /// ID. Same mono face as [mono], but deliberately *tracked out*: these
+  /// are read character-by-character rather than as a word, and the
+  /// extra gap is what stops "8B" from being copied down as "BB".
+  ///
+  /// Call sites were each bolting `.copyWith(letterSpacing: 1)` — or 2,
+  /// depending on the screen — onto [mono] to get this. The tracking now
+  /// scales with the size instead of being a fixed pixel value, so a
+  /// 30pt pickup code and a 15pt ticket code are spaced alike.
+  static TextStyle code({
+    double fontSize = EsoqoTypeScale.bodyLead - 1,
+    FontWeight fontWeight = FontWeight.w600,
+    Color? color,
+  }) => mono(
+    fontSize: fontSize,
+    fontWeight: fontWeight,
+    color: color,
+  ).copyWith(letterSpacing: fontSize * 0.07);
+
+  /// Money/ID/code text — EsoqoFonts.mono at a given size+weight, tabular
   /// figures on so digit columns align (KES amounts, ESK-Ids, ticket
   /// codes). Use this instead of the ambient body/display font any time
   /// the text is a number a user will double-check against cash in hand.
   static TextStyle mono({
-    double fontSize = 15,
+    double fontSize = EsoqoTypeScale.bodyLead - 1,
     FontWeight fontWeight = FontWeight.w500,
     Color? color,
     double? height,
   }) => TextStyle(
-    fontFamily: EsokoFonts.mono,
+    fontFamily: EsoqoFonts.mono,
     fontSize: fontSize,
-    fontWeight: fontWeight,
+    // Clamped, because pubspec.yaml bundles IBM Plex Mono at 400/500/600
+    // only. Callers asking for w700/w800 (several did — an amount "must"
+    // look heavy) got Flutter's nearest-weight fallback instead, so two
+    // amounts written as w700 and w800 rendered identically while a
+    // third at w600 looked the same again: a weight distinction that
+    // existed in the source and not on screen. Ask for what's bundled.
+    fontWeight: fontWeight.value > FontWeight.w600.value
+        ? FontWeight.w600
+        : fontWeight,
     color: color,
     height: height,
     fontFeatures: const [FontFeature.tabularFigures()],
@@ -129,7 +256,7 @@ abstract final class EsokoTypography {
 /// Motion tokens — ported from tokens.css's --dur-* / --ease-out so the
 /// product's transitions stay consistent with web (and with the
 /// prefers-reduced-motion story). Use these, never ad-hoc durations.
-abstract final class EsokoMotion {
+abstract final class EsoqoMotion {
   static const fast = Duration(milliseconds: 120);
   static const medium = Duration(milliseconds: 200);
   static const slow = Duration(milliseconds: 320);
@@ -148,7 +275,7 @@ abstract final class EsokoMotion {
 /// Shadow + elevation tokens, ported from tokens.css's --sh-* / --e-*.
 /// These give interactive/raised surfaces their "floats above the page"
 /// depth while keeping dense shadows out of the brand's quiet voice.
-abstract final class EsokoShadows {
+abstract final class EsoqoShadows {
   /// --sh-s: resting state for interactive cards.
   static const card = [
     BoxShadow(color: Color(0x0D0A2E4D), blurRadius: 2, offset: Offset(0, 1)),

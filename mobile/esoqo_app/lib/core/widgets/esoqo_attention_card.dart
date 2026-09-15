@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 
-import '../theme/esoko_tokens.dart';
-import 'esoko_card.dart';
+import '../theme/esoqo_tokens.dart';
+import 'esoqo_card.dart';
 
 /// A thing that wants something from you, with a deadline attached.
 ///
@@ -20,13 +20,14 @@ import 'esoko_card.dart';
 /// soon, red when it's already late. It colours the eyebrow and a
 /// left edge rather than the whole card, so a column of these still
 /// reads as a list rather than a stack of warning banners.
-class EsokoAttentionCard extends StatelessWidget {
-  const EsokoAttentionCard({
+class EsoqoAttentionCard extends StatelessWidget {
+  const EsoqoAttentionCard({
     super.key,
     required this.when,
     required this.title,
     this.detail,
-    this.accent = EsokoColors.amber,
+    this.amountKes,
+    this.accent = EsoqoColors.amber,
     this.progress,
     this.onTap,
   });
@@ -37,6 +38,18 @@ class EsokoAttentionCard extends StatelessWidget {
 
   final String title;
   final String? detail;
+
+  /// An amount this card is about — "1450.00", without the unit.
+  ///
+  /// Separate from [detail] because it is *data*, not prose: it renders
+  /// in the mono face with tabular figures, per EsoqoTypography.mono's
+  /// own rule that every KES figure a person checks against cash in
+  /// hand must have its digits line up. Callers used to pass
+  /// `detail: 'KES ${b.amountKes}'`, which put the one number on the
+  /// card into the reading face alongside route descriptions and
+  /// addresses — three overdue bills in a column with no digit
+  /// alignment between them.
+  final String? amountKes;
 
   /// Semantic, not decorative — see the class doc.
   final Color accent;
@@ -52,14 +65,13 @@ class EsokoAttentionCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final dark = Theme.of(context).brightness == Brightness.dark;
-    // Same alpha-wash approach as EsokoInlineNotice, for the same
+    // Same alpha-wash approach as EsoqoInlineNotice, for the same
     // reason: a fixed pastel reads as a light rectangle glued onto a
     // dark screen. Blending the accent over whatever surface is
     // actually behind it keeps this a tinted patch of *this* screen.
     final wash = accent.withValues(alpha: dark ? 0.16 : 0.09);
-    final muted = Theme.of(context).textTheme.bodySmall?.color;
 
-    return EsokoCard(
+    return EsoqoCard(
       padding: EdgeInsets.zero,
       color: wash,
       onTap: onTap,
@@ -79,36 +91,42 @@ class EsokoAttentionCard extends StatelessWidget {
             Container(width: 3, color: accent),
             Expanded(
               child: Padding(
-                padding: const EdgeInsets.all(EsokoSpacing.s4),
+                padding: const EdgeInsets.all(EsoqoSpacing.s4),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   mainAxisSize: MainAxisSize.min,
                   children: [
                     Text(
                       when.toUpperCase(),
-                      style: TextStyle(
-                        color: accent,
-                        fontSize: 10.5,
-                        fontWeight: FontWeight.w700,
-                        letterSpacing: 0.6,
-                      ),
+                      style: EsoqoTypography.eyebrow(color: accent),
                     ),
-                    const SizedBox(height: EsokoSpacing.s1),
+                    const SizedBox(height: EsoqoSpacing.s1),
                     Text(
                       title,
                       style: Theme.of(context).textTheme.titleMedium,
                     ),
+                    if (amountKes != null) ...[
+                      const SizedBox(height: 2),
+                      Text(
+                        'KES $amountKes',
+                        style: EsoqoTypography.mono(
+                          fontSize: EsoqoTypeScale.body,
+                          fontWeight: FontWeight.w600,
+                          color: accent,
+                        ),
+                      ),
+                    ],
                     if (detail != null) ...[
                       const SizedBox(height: 2),
                       Text(
                         detail!,
-                        style: TextStyle(fontSize: 12.5, color: muted),
+                        style: Theme.of(context).textTheme.bodySmall,
                       ),
                     ],
                     if (progress != null) ...[
-                      const SizedBox(height: EsokoSpacing.s2),
+                      const SizedBox(height: EsoqoSpacing.s2),
                       ClipRRect(
-                        borderRadius: BorderRadius.circular(EsokoRadius.pill),
+                        borderRadius: BorderRadius.circular(EsoqoRadius.pill),
                         child: LinearProgressIndicator(
                           value: progress!.clamp(0, 1),
                           minHeight: 5,

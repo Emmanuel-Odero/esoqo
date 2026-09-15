@@ -3,7 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/api/api_exception.dart';
 import '../../core/auth/auth_controller.dart';
-import '../../core/theme/esoko_tokens.dart';
+import '../../core/theme/esoqo_tokens.dart';
 import '../../core/widgets/widgets.dart';
 
 enum _Step { phone, resetPin }
@@ -77,13 +77,13 @@ class _ForgotPinScreenState extends ConsumerState<ForgotPinScreen> {
 
   @override
   Widget build(BuildContext context) {
-    return EsokoAuthScaffold(
+    return EsoqoAuthScaffold(
       title: 'Reset your PIN',
       subtitle: 'We\'ll text a code to confirm it\'s you.',
       onBack: () => Navigator.of(context).pop(),
       children: [
         if (_step == _Step.phone) ...[
-          EsokoField.phone(
+          EsoqoField.phone(
             controller: _msisdnController,
             onSubmitted: (_) => _requestCode(),
           ),
@@ -91,10 +91,10 @@ class _ForgotPinScreenState extends ConsumerState<ForgotPinScreen> {
           Text(
             'Enter the code sent to ${_msisdnController.text.trim()} and choose a new PIN.',
           ),
-          const SizedBox(height: EsokoSpacing.s4),
-          EsokoField.otp(controller: _codeController),
-          const SizedBox(height: EsokoSpacing.s3),
-          EsokoField.pin(
+          const SizedBox(height: EsoqoSpacing.s4),
+          EsoqoField.otp(controller: _codeController),
+          const SizedBox(height: EsoqoSpacing.s3),
+          EsoqoField.pin(
             controller: _pinController,
             label: 'New PIN',
             helper: '4 to 6 digits',
@@ -102,9 +102,9 @@ class _ForgotPinScreenState extends ConsumerState<ForgotPinScreen> {
             onSubmitted: (_) => _resetPin(),
           ),
         ],
-        if (_error != null) EsokoFormError(message: _error!),
-        const SizedBox(height: EsokoSpacing.s4),
-        EsokoButton.primary(
+        if (_error != null) EsoqoFormError(message: _error!),
+        const SizedBox(height: EsoqoSpacing.s4),
+        EsoqoButton.primary(
           expand: false,
           label: _step == _Step.phone ? 'Send code' : 'Save new PIN',
           loading: _loading,

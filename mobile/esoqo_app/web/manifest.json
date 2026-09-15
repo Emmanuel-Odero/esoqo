@@ -1,6 +1,6 @@
 {
-    "name": "esoko_app",
-    "short_name": "esoko_app",
+    "name": "Esoqo",
+    "short_name": "Esoqo",
     "start_url": ".",
     "display": "standalone",
     "background_color": "#0A2E4D",

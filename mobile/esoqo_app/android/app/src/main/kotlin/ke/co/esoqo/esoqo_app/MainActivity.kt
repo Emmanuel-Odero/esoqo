@@ -1,4 +1,4 @@
-package ke.co.esoko.esoko_app
+package ke.co.esoqo.esoqo_app
 
 import io.flutter.embedding.android.FlutterActivity
 

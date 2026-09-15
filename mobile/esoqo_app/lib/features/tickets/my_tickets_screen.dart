@@ -3,7 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:qr_flutter/qr_flutter.dart';
 
 import '../../core/api/api_exception.dart';
-import '../../core/theme/esoko_tokens.dart';
+import '../../core/theme/esoqo_tokens.dart';
 import '../../core/widgets/widgets.dart';
 import 'ticketing_models.dart';
 import 'ticketing_repository.dart';
@@ -44,7 +44,7 @@ class YourTicketsBody extends ConsumerWidget {
     final tickets = ref.watch(myTicketsProvider);
     return RefreshIndicator(
       onRefresh: () async => _refreshAll(ref),
-      child: EsokoAsyncView(
+      child: EsoqoAsyncView(
         value: tickets,
         isEmpty: (list) => list.isEmpty,
         emptyMessage: 'No tickets yet.',
@@ -54,13 +54,13 @@ class YourTicketsBody extends ConsumerWidget {
           child: ConstrainedBox(
             constraints: const BoxConstraints(maxWidth: 840),
             child: ListView(
-              padding: const EdgeInsets.all(EsokoSpacing.s4),
+              padding: const EdgeInsets.all(EsoqoSpacing.s4),
               children: [
                 const _TodaysJourneySection(),
                 _PaymentPlansSection(onChanged: () => _refreshAll(ref)),
                 for (var i = 0; i < list.length; i++) ...[
-                  if (i > 0) const SizedBox(height: EsokoSpacing.s5),
-                  EsokoStagger(index: i, child: _TicketStub(ticket: list[i])),
+                  if (i > 0) const SizedBox(height: EsoqoSpacing.s5),
+                  EsoqoStagger(index: i, child: _TicketStub(ticket: list[i])),
                 ],
               ],
             ),
@@ -104,20 +104,20 @@ class _TodaysJourneySection extends ConsumerWidget {
     if (today.isEmpty) return const SizedBox.shrink();
 
     return Padding(
-      padding: const EdgeInsets.only(bottom: EsokoSpacing.s5),
+      padding: const EdgeInsets.only(bottom: EsoqoSpacing.s5),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          const EsokoSubHeader("Today's journey"),
-          const SizedBox(height: EsokoSpacing.s2),
+          const EsoqoSubHeader("Today's journey"),
+          const SizedBox(height: EsoqoSpacing.s2),
           for (var i = 0; i < today.length; i++)
             Padding(
-              padding: const EdgeInsets.only(bottom: EsokoSpacing.s3),
-              child: EsokoAttentionCard(
+              padding: const EdgeInsets.only(bottom: EsoqoSpacing.s3),
+              child: EsoqoAttentionCard(
                 when: _departureWhen(today[i].departAt, now),
                 title: '${today[i].routeFrom} → ${today[i].routeTo}',
                 detail: today[i].orgName,
-                accent: EsokoColors.green,
+                accent: EsoqoColors.green,
               ),
             ),
         ],
@@ -153,16 +153,16 @@ class _PaymentPlansSection extends ConsumerWidget {
     final openPlans = bookings.valueOrNull?.where((b) => b.isOpenPlan).toList();
     if (openPlans == null || openPlans.isEmpty) return const SizedBox.shrink();
     return Padding(
-      padding: const EdgeInsets.only(bottom: EsokoSpacing.s5),
+      padding: const EdgeInsets.only(bottom: EsoqoSpacing.s5),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          const EsokoSubHeader('Payment plans'),
-          const SizedBox(height: EsokoSpacing.s2),
+          const EsoqoSubHeader('Payment plans'),
+          const SizedBox(height: EsoqoSpacing.s2),
           for (var i = 0; i < openPlans.length; i++)
             Padding(
-              padding: const EdgeInsets.only(bottom: EsokoSpacing.s3),
-              child: EsokoStagger(
+              padding: const EdgeInsets.only(bottom: EsoqoSpacing.s3),
+              child: EsoqoStagger(
                 index: i,
                 child: _InstallmentPlanCard(
                   booking: openPlans[i],
@@ -228,33 +228,33 @@ class _InstallmentPlanCardState extends ConsumerState<_InstallmentPlanCard> {
     final scheme = Theme.of(context).colorScheme;
     final muted = Theme.of(context).textTheme.bodySmall?.color;
     final balance = b.totalKesValue - b.paidKesValue;
-    return EsokoCard(
+    return EsoqoCard(
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Text(b.listingTitle, style: Theme.of(context).textTheme.titleMedium),
-          Text(b.where, style: TextStyle(color: muted, fontSize: 12.5)),
-          const SizedBox(height: EsokoSpacing.s3),
+          Text(b.where, style: Theme.of(context).textTheme.bodySmall),
+          const SizedBox(height: EsoqoSpacing.s3),
           ClipRRect(
-            borderRadius: BorderRadius.circular(EsokoRadius.pill),
+            borderRadius: BorderRadius.circular(EsoqoRadius.pill),
             child: LinearProgressIndicator(
               value: b.progress,
               minHeight: 8,
-              backgroundColor: EsokoColors.line,
+              backgroundColor: EsoqoColors.line,
               valueColor: AlwaysStoppedAnimation(scheme.primary),
             ),
           ),
-          const SizedBox(height: EsokoSpacing.s2),
+          const SizedBox(height: EsoqoSpacing.s2),
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
               Text(
                 'KES ${b.amountPaidKes} of ${b.totalKes} paid',
-                style: TextStyle(fontSize: 12.5, color: muted, fontWeight: FontWeight.w600),
+                style: TextStyle(fontSize: EsoqoTypeScale.meta, color: muted, fontWeight: FontWeight.w600),
               ),
               Text(
                 'KES ${balance.toStringAsFixed(0)} left',
-                style: TextStyle(fontSize: 12.5, color: scheme.primary, fontWeight: FontWeight.w700),
+                style: TextStyle(fontSize: EsoqoTypeScale.meta, color: scheme.primary, fontWeight: FontWeight.w700),
               ),
             ],
           ),
@@ -262,19 +262,19 @@ class _InstallmentPlanCardState extends ConsumerState<_InstallmentPlanCard> {
             const SizedBox(height: 4),
             Text(
               'Due by ${b.balanceDueBy}',
-              style: TextStyle(fontSize: 11.5, color: muted),
+              style: TextStyle(fontSize: EsoqoTypeScale.micro, color: muted),
             ),
           ],
-          const SizedBox(height: EsokoSpacing.s3),
-          EsokoButton.primary(
+          const SizedBox(height: EsoqoSpacing.s3),
+          EsoqoButton.primary(
             expand: false,
             label: 'Pay towards balance',
             loading: _busy,
             onPressed: _payBalance,
           ),
           if (_notice != null) ...[
-            const SizedBox(height: EsokoSpacing.s2),
-            Text(_notice!, style: TextStyle(fontSize: 12.5, color: muted)),
+            const SizedBox(height: EsoqoSpacing.s2),
+            Text(_notice!, style: Theme.of(context).textTheme.bodySmall),
           ],
         ],
       ),
@@ -289,25 +289,25 @@ class _TicketStub extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final valid = ticket.status == 'VALID';
-    // EsokoColors.text — not .text3, which is a medium-lightness grey
+    // EsoqoColors.text — not .text3, which is a medium-lightness grey
     // that gave the white stub-head text (below) under 2.2:1 contrast
     // once a ticket expired, in *both* themes (this band is deliberately
     // always dark, like a real boarding-pass stub, so the fix isn't
     // brightness-conditional — .text3 was just too light a colour for a
     // white-on-top background to begin with).
-    final accent = valid ? EsokoColors.navy : EsokoColors.text;
+    final accent = valid ? EsoqoColors.navy : EsoqoColors.text;
 
     return Material(
       elevation: 2,
       shadowColor: Colors.black.withValues(alpha: 0.15),
-      borderRadius: BorderRadius.circular(EsokoRadius.lg),
+      borderRadius: BorderRadius.circular(EsoqoRadius.lg),
       clipBehavior: Clip.antiAlias,
       child: Column(
         children: [
           // Stub head — ticket-class + status, on a navy band like a
           // real boarding pass/admission ticket.
           Container(
-            padding: const EdgeInsets.all(EsokoSpacing.s4),
+            padding: const EdgeInsets.all(EsoqoSpacing.s4),
             color: accent,
             child: Row(
               children: [
@@ -316,14 +316,14 @@ class _TicketStub extends StatelessWidget {
                   color: Colors.white.withValues(alpha: 0.85),
                   size: 20,
                 ),
-                const SizedBox(width: EsokoSpacing.s2),
+                const SizedBox(width: EsoqoSpacing.s2),
                 Expanded(
                   child: Text(
                     ticket.className,
                     style: const TextStyle(
                       color: Colors.white,
                       fontWeight: FontWeight.w700,
-                      fontSize: 15,
+                      fontSize: EsoqoTypeScale.subTitle,
                     ),
                   ),
                 ),
@@ -334,16 +334,11 @@ class _TicketStub extends StatelessWidget {
                   ),
                   decoration: BoxDecoration(
                     color: Colors.white.withValues(alpha: 0.16),
-                    borderRadius: BorderRadius.circular(EsokoRadius.pill),
+                    borderRadius: BorderRadius.circular(EsoqoRadius.pill),
                   ),
                   child: Text(
                     ticket.status,
-                    style: const TextStyle(
-                      color: Colors.white,
-                      fontSize: 10,
-                      fontWeight: FontWeight.w800,
-                      letterSpacing: 0.4,
-                    ),
+                    style: EsoqoTypography.eyebrow(color: Colors.white),
                   ),
                 ),
               ],
@@ -354,16 +349,16 @@ class _TicketStub extends StatelessWidget {
           Container(
             color: Theme.of(context).cardColor,
             padding: const EdgeInsets.fromLTRB(
-              EsokoSpacing.s5,
-              EsokoSpacing.s5,
-              EsokoSpacing.s5,
-              EsokoSpacing.s4,
+              EsoqoSpacing.s5,
+              EsoqoSpacing.s5,
+              EsoqoSpacing.s5,
+              EsoqoSpacing.s4,
             ),
             child: Column(
               children: [
                 if (ticket.seatLabel != null)
                   Padding(
-                    padding: const EdgeInsets.only(bottom: EsokoSpacing.s3),
+                    padding: const EdgeInsets.only(bottom: EsoqoSpacing.s3),
                     child: Row(
                       mainAxisAlignment: MainAxisAlignment.center,
                       children: [
@@ -390,10 +385,10 @@ class _TicketStub extends StatelessWidget {
                       ? 'Ticket QR code for ${ticket.className}, code ${ticket.code}'
                       : 'Expired ticket for ${ticket.className}',
                   child: Container(
-                    padding: const EdgeInsets.all(EsokoSpacing.s3),
+                    padding: const EdgeInsets.all(EsoqoSpacing.s3),
                     decoration: BoxDecoration(
-                      border: Border.all(color: EsokoColors.line),
-                      borderRadius: BorderRadius.circular(EsokoRadius.md),
+                      border: Border.all(color: EsoqoColors.line),
+                      borderRadius: BorderRadius.circular(EsoqoRadius.md),
                     ),
                     child: valid
                         ? QrImageView(
@@ -407,22 +402,18 @@ class _TicketStub extends StatelessWidget {
                             child: Icon(
                               Icons.block_flipped,
                               size: 48,
-                              color: EsokoColors.line,
+                              color: EsoqoColors.line,
                             ),
                           ),
                   ),
                 ),
-                const SizedBox(height: EsokoSpacing.s3),
+                const SizedBox(height: EsoqoSpacing.s3),
                 SelectableText(
                   ticket.code,
-                  style: const TextStyle(
-                    fontFamily: 'monospace',
-                    fontWeight: FontWeight.w700,
-                    letterSpacing: 1,
-                  ),
+                  style: EsoqoTypography.code(),
                 ),
-                const SizedBox(height: EsokoSpacing.s1),
-                EsokoAmountText(ticket.priceKes, fontSize: 14),
+                const SizedBox(height: EsoqoSpacing.s1),
+                EsoqoAmountText(ticket.priceKes, fontSize: EsoqoTypeScale.label),
               ],
             ),
           ),

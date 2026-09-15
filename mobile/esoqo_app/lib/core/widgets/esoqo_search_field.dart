@@ -2,7 +2,7 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 
-import 'esoko_field.dart';
+import 'esoqo_field.dart';
 
 /// Search input with a conditional clear button — the shared shape for the
 /// store directory and group-joining searches. `onChanged` receives trimmed
@@ -13,8 +13,8 @@ import 'esoko_field.dart';
 /// refetch — without it every keystroke rebuilds the parent and re-fires
 /// the provider, which is both chattery and janky. The clear button
 /// always emits immediately, never debounced.
-class EsokoSearchField extends StatefulWidget {
-  const EsokoSearchField({
+class EsoqoSearchField extends StatefulWidget {
+  const EsoqoSearchField({
     super.key,
     required this.controller,
     required this.hint,
@@ -32,10 +32,10 @@ class EsokoSearchField extends StatefulWidget {
   final Duration? debounce;
 
   @override
-  State<EsokoSearchField> createState() => _EsokoSearchFieldState();
+  State<EsoqoSearchField> createState() => _EsoqoSearchFieldState();
 }
 
-class _EsokoSearchFieldState extends State<EsokoSearchField> {
+class _EsoqoSearchFieldState extends State<EsoqoSearchField> {
   Timer? _debounceTimer;
 
   @override
@@ -56,7 +56,7 @@ class _EsokoSearchFieldState extends State<EsokoSearchField> {
 
   @override
   Widget build(BuildContext context) {
-    return EsokoField.search(
+    return EsoqoField.search(
       controller: widget.controller,
       label: widget.label ?? 'Search',
       hint: widget.hint,

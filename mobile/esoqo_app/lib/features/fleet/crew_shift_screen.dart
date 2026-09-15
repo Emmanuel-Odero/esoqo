@@ -5,7 +5,7 @@ import '../../core/api/api_exception.dart';
 import '../../core/auth/auth_controller.dart';
 import '../../core/auth/auth_state.dart';
 import '../../core/auth/org_context_state.dart';
-import '../../core/theme/esoko_tokens.dart';
+import '../../core/theme/esoqo_tokens.dart';
 import '../../core/widgets/widgets.dart';
 import '../home/org_duty_switcher_screen.dart';
 import '../scan/scan_sheet.dart';
@@ -37,16 +37,16 @@ class CrewShiftScreen extends ConsumerWidget {
       // Blue while on duty, same tint the Home app bar picks up — the
       // bar itself says "you're in an org context" here too, not just
       // the fact of being on this screen at all.
-      appBar: EsokoAppBar(
+      appBar: EsoqoAppBar(
         title: profile?.displayName ?? 'Your shift',
-        backgroundColor: active != null ? EsokoColors.blue : null,
+        backgroundColor: active != null ? EsoqoColors.blue : null,
         actions: [
           // The switcher stays reachable even mid-shift — being on duty
           // must never mean losing the way to other roles, which
           // "End duty" replacing it outright used to do.
           const HatsIconButton(color: Colors.white),
           if (active != null) _EndDutyButton(orgId: active.orgId),
-          const SizedBox(width: EsokoSpacing.s2),
+          const SizedBox(width: EsoqoSpacing.s2),
         ],
       ),
       body: SafeArea(
@@ -56,10 +56,10 @@ class CrewShiftScreen extends ConsumerWidget {
             child: ConstrainedBox(
               constraints: const BoxConstraints(maxWidth: 560),
               child: ListView(
-                padding: const EdgeInsets.all(EsokoSpacing.s4),
+                padding: const EdgeInsets.all(EsoqoSpacing.s4),
                 children: [
                   if (active == null || !active.isCrew)
-                    const EsokoEmptyState(
+                    const EsoqoEmptyState(
                       message: 'Not on CREW duty right now — switch it on from Profile > Acting as.',
                       icon: Icons.badge_outlined,
                     )
@@ -89,21 +89,21 @@ class _EndDutyButton extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     return Padding(
-      padding: const EdgeInsets.only(left: EsokoSpacing.s1),
+      padding: const EdgeInsets.only(left: EsoqoSpacing.s1),
       child: Material(
         color: Colors.white.withValues(alpha: 0.16),
-        borderRadius: BorderRadius.circular(EsokoRadius.pill),
+        borderRadius: BorderRadius.circular(EsoqoRadius.pill),
         child: InkWell(
-          borderRadius: BorderRadius.circular(EsokoRadius.pill),
+          borderRadius: BorderRadius.circular(EsoqoRadius.pill),
           onTap: () => _confirmEndDuty(context, ref),
           child: const Padding(
-            padding: EdgeInsets.symmetric(horizontal: EsokoSpacing.s3, vertical: EsokoSpacing.s2),
+            padding: EdgeInsets.symmetric(horizontal: EsoqoSpacing.s3, vertical: EsoqoSpacing.s2),
             child: Row(
               mainAxisSize: MainAxisSize.min,
               children: [
                 Icon(Icons.logout, size: 16, color: Colors.white),
                 SizedBox(width: 6),
-                Text('End duty', style: TextStyle(color: Colors.white, fontWeight: FontWeight.w700, fontSize: 13)),
+                Text('End duty', style: TextStyle(color: Colors.white, fontWeight: FontWeight.w700, fontSize: EsoqoTypeScale.label)),
               ],
             ),
           ),
@@ -139,7 +139,7 @@ class _Shift extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final trip = ref.watch(myActiveTripProvider);
-    return EsokoAsyncView(
+    return EsoqoAsyncView(
       value: trip,
       isEmpty: (t) => t == null,
       emptyMessage:
@@ -224,7 +224,7 @@ class _ShiftBodyState extends ConsumerState<_ShiftBody> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        EsokoCard(
+        EsoqoCard(
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
@@ -238,11 +238,11 @@ class _ShiftBodyState extends ConsumerState<_ShiftBody> {
             ],
           ),
         ),
-        const SizedBox(height: EsokoSpacing.s4),
-        EsokoSectionHeader(title: 'This shift', subtitle: 'Fares confirmed vs cash counted.'),
-        const SizedBox(height: EsokoSpacing.s2),
+        const SizedBox(height: EsoqoSpacing.s4),
+        EsoqoSectionHeader(title: 'This shift', subtitle: 'Fares confirmed vs cash counted.'),
+        const SizedBox(height: EsoqoSpacing.s2),
         summary.when(
-          data: (s) => EsokoCard(
+          data: (s) => EsoqoCard(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
@@ -250,26 +250,26 @@ class _ShiftBodyState extends ConsumerState<_ShiftBody> {
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
                     const Text('M-Pesa confirmed'),
-                    EsokoAmountText(s.mpesaConfirmedKes, fontSize: 16),
+                    EsoqoAmountText(s.mpesaConfirmedKes, fontSize: EsoqoTypeScale.subTitle),
                   ],
                 ),
                 Row(
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
                     const Text('Cash fares'),
-                    EsokoAmountText(s.cashFaresKes, fontSize: 16),
+                    EsoqoAmountText(s.cashFaresKes, fontSize: EsoqoTypeScale.subTitle),
                   ],
                 ),
                 Row(
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
                     const Text('Cash declared'),
-                    EsokoAmountText(s.declaredCashKes, fontSize: 16),
+                    EsoqoAmountText(s.declaredCashKes, fontSize: EsoqoTypeScale.subTitle),
                   ],
                 ),
                 if (s.hasVariance) ...[
-                  const SizedBox(height: EsokoSpacing.s2),
-                  EsokoStatusPill(
+                  const SizedBox(height: EsoqoSpacing.s2),
+                  EsoqoStatusPill(
                     label: 'Variance KES ${s.cashVarianceKes}',
                     color: Theme.of(context).colorScheme.error,
                     icon: Icons.error_outline,
@@ -279,18 +279,18 @@ class _ShiftBodyState extends ConsumerState<_ShiftBody> {
             ),
           ),
           loading: () => const Center(child: CircularProgressIndicator()),
-          error: (_, _) => const EsokoFormError(message: 'Could not load the tally.'),
+          error: (_, _) => const EsoqoFormError(message: 'Could not load the tally.'),
         ),
-        const SizedBox(height: EsokoSpacing.s4),
-        EsokoButton.primary(
+        const SizedBox(height: EsoqoSpacing.s4),
+        EsoqoButton.primary(
           expand: false,
           label: 'Declare cash counted',
           icon: Icons.payments_outlined,
           loading: _busy,
           onPressed: _declareCash,
         ),
-        const SizedBox(height: EsokoSpacing.s3),
-        EsokoButton.primary(
+        const SizedBox(height: EsoqoSpacing.s3),
+        EsoqoButton.primary(
           expand: false,
           label: 'Verify a fare',
           icon: Icons.verified_outlined,
@@ -300,24 +300,24 @@ class _ShiftBodyState extends ConsumerState<_ShiftBody> {
             ),
           ),
         ),
-        const SizedBox(height: EsokoSpacing.s3),
-        EsokoButton.primary(
+        const SizedBox(height: EsoqoSpacing.s3),
+        EsoqoButton.primary(
           expand: false,
           label: 'Scan a passenger receipt',
           icon: Icons.qr_code_scanner_outlined,
           onPressed: () => showScanSheet(context),
         ),
-        const SizedBox(height: EsokoSpacing.s5),
+        const SizedBox(height: EsoqoSpacing.s5),
         // Gated by showEndShiftDialog, which collects the note and end
         // status — so no second confirmation here.
-        EsokoButton.destructiveGated(
+        EsoqoButton.destructiveGated(
           label: 'End shift',
           icon: Icons.flag_outlined,
           loading: _busy,
           onPressed: _endShift,
         ),
         if (_notice != null) ...[
-          const SizedBox(height: EsokoSpacing.s3),
+          const SizedBox(height: EsoqoSpacing.s3),
           Text(_notice!, textAlign: TextAlign.center),
         ],
       ],
@@ -348,9 +348,9 @@ Future<EndShiftResult?> showEndShiftDialog(BuildContext context) {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             const Text('How\'s the vehicle?'),
-            const SizedBox(height: EsokoSpacing.s2),
+            const SizedBox(height: EsoqoSpacing.s2),
             Wrap(
-              spacing: EsokoSpacing.s2,
+              spacing: EsoqoSpacing.s2,
               children: [
                 for (final option in const [
                   ('OK', 'OK'),
@@ -364,7 +364,7 @@ Future<EndShiftResult?> showEndShiftDialog(BuildContext context) {
                   ),
               ],
             ),
-            const SizedBox(height: EsokoSpacing.s4),
+            const SizedBox(height: EsoqoSpacing.s4),
             TextField(
               controller: noteController,
               decoration: const InputDecoration(labelText: 'Note (optional)'),

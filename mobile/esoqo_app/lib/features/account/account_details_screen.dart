@@ -6,13 +6,13 @@ import 'package:qr_flutter/qr_flutter.dart';
 import '../../core/api/api_exception.dart';
 import '../../core/auth/auth_controller.dart';
 import '../../core/auth/auth_state.dart';
-import '../../core/theme/esoko_tokens.dart';
+import '../../core/theme/esoqo_tokens.dart';
 import '../../core/widgets/widgets.dart';
 
 /// Who you are, and the code other people scan to pay you.
 ///
 /// Split out of the old one-scroll Account screen: identity and the
-/// payment QR are the two things that answer "who am I on Esoko", and
+/// payment QR are the two things that answer "who am I on Esoqo", and
 /// they belong behind one door rather than stacked above a PIN form
 /// somebody visits twice a year.
 class AccountDetailsScreen extends ConsumerStatefulWidget {
@@ -65,45 +65,45 @@ class _AccountDetailsScreenState extends ConsumerState<AccountDetailsScreen> {
     final auth = ref.watch(authControllerProvider);
     if (auth is! AuthSignedIn) {
       return const Scaffold(
-        appBar: EsokoAppBar(title: 'Your details'),
+        appBar: EsoqoAppBar(title: 'Your details'),
         body: Padding(
-          padding: EdgeInsets.all(EsokoSpacing.s5),
-          child: EsokoSkeletonList(count: 3),
+          padding: EdgeInsets.all(EsoqoSpacing.s5),
+          child: EsoqoSkeletonList(count: 3),
         ),
       );
     }
     final profile = auth.profile;
 
     return Scaffold(
-      appBar: const EsokoAppBar(title: 'Your details'),
+      appBar: const EsoqoAppBar(title: 'Your details'),
       body: SafeArea(
         child: Center(
           child: ConstrainedBox(
             constraints: const BoxConstraints(maxWidth: 840),
             child: ListView(
-              padding: const EdgeInsets.all(EsokoSpacing.s6),
+              padding: const EdgeInsets.all(EsoqoSpacing.s6),
               children: [
-                EsokoCard(
-                  padding: const EdgeInsets.all(EsokoSpacing.s5),
+                EsoqoCard(
+                  padding: const EdgeInsets.all(EsoqoSpacing.s5),
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       _row('Name', profile.displayName, context),
                       if (profile.msisdn != null)
                         _row('Phone', profile.msisdn!, context),
-                      if (profile.esokoId != null)
+                      if (profile.esoqoId != null)
                         _row(
-                          'Esoko ID',
-                          profile.esokoId!,
+                          'Esoqo ID',
+                          profile.esoqoId!,
                           context,
                           mono: true,
                           copyable: true,
                         )
                       else
-                        _row('Esoko ID', 'Preparing…', context),
-                      const SizedBox(height: EsokoSpacing.s3),
+                        _row('Esoqo ID', 'Preparing…', context),
+                      const SizedBox(height: EsoqoSpacing.s3),
                       if (_editing) ...[
-                        EsokoField.name(
+                        EsoqoField.name(
                           controller: _nameController,
                           label: 'What people call you',
                           hint: profile.displayName,
@@ -111,14 +111,14 @@ class _AccountDetailsScreenState extends ConsumerState<AccountDetailsScreen> {
                           onSubmitted: (_) => _save(),
                         ),
                         if (_error != null) ...[
-                          const SizedBox(height: EsokoSpacing.s2),
-                          EsokoFormError(message: _error!),
+                          const SizedBox(height: EsoqoSpacing.s2),
+                          EsoqoFormError(message: _error!),
                         ],
-                        const SizedBox(height: EsokoSpacing.s3),
+                        const SizedBox(height: EsoqoSpacing.s3),
                         Row(
                           children: [
                             Expanded(
-                              child: EsokoButton.primary(
+                              child: EsoqoButton.primary(
                                 expand: false,
                                 label: 'Save name',
                                 icon: Icons.check_outlined,
@@ -126,8 +126,8 @@ class _AccountDetailsScreenState extends ConsumerState<AccountDetailsScreen> {
                                 onPressed: _save,
                               ),
                             ),
-                            const SizedBox(width: EsokoSpacing.s2),
-                            EsokoButton.tertiary(
+                            const SizedBox(width: EsoqoSpacing.s2),
+                            EsoqoButton.tertiary(
                               label: 'Cancel',
                               onPressed: _saving
                                   ? null
@@ -139,7 +139,7 @@ class _AccountDetailsScreenState extends ConsumerState<AccountDetailsScreen> {
                           ],
                         ),
                       ] else
-                        EsokoButton.secondary(
+                        EsoqoButton.secondary(
                           label: 'Edit name',
                           icon: Icons.edit_outlined,
                           expand: false,
@@ -151,9 +151,9 @@ class _AccountDetailsScreenState extends ConsumerState<AccountDetailsScreen> {
                     ],
                   ),
                 ),
-                const SizedBox(height: EsokoSpacing.s4),
-                EsokoCard(
-                  padding: const EdgeInsets.all(EsokoSpacing.s5),
+                const SizedBox(height: EsoqoSpacing.s4),
+                EsoqoCard(
+                  padding: const EdgeInsets.all(EsoqoSpacing.s5),
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
@@ -161,15 +161,15 @@ class _AccountDetailsScreenState extends ConsumerState<AccountDetailsScreen> {
                         'Your payment QR',
                         style: Theme.of(context).textTheme.titleMedium,
                       ),
-                      const SizedBox(height: EsokoSpacing.s2),
+                      const SizedBox(height: EsoqoSpacing.s2),
                       const Text(
                         'Show this when paying at a shop or to another person.',
                       ),
-                      if (profile.esokoId != null) ...[
-                        const SizedBox(height: EsokoSpacing.s4),
+                      if (profile.esoqoId != null) ...[
+                        const SizedBox(height: EsoqoSpacing.s4),
                         Center(
                           child: Container(
-                            padding: const EdgeInsets.all(EsokoSpacing.s3),
+                            padding: const EdgeInsets.all(EsoqoSpacing.s3),
                             decoration: BoxDecoration(
                               // Deliberately always white, in both
                               // themes. A QR needs a white backing for
@@ -179,38 +179,34 @@ class _AccountDetailsScreenState extends ConsumerState<AccountDetailsScreen> {
                               // read this code.
                               color: Colors.white,
                               borderRadius:
-                                  BorderRadius.circular(EsokoRadius.md),
-                              border: Border.all(color: EsokoColors.line),
+                                  BorderRadius.circular(EsoqoRadius.md),
+                              border: Border.all(color: EsoqoColors.line),
                             ),
                             child:
-                                QrImageView(data: profile.esokoId!, size: 200),
+                                QrImageView(data: profile.esoqoId!, size: 200),
                           ),
                         ),
-                        const SizedBox(height: EsokoSpacing.s3),
+                        const SizedBox(height: EsoqoSpacing.s3),
                         Center(
                           child: Text(
-                            profile.esokoId!,
-                            style: const TextStyle(
-                              fontFamily: 'monospace',
-                              fontWeight: FontWeight.w700,
-                              letterSpacing: 1,
-                            ),
+                            profile.esoqoId!,
+                            style: EsoqoTypography.code(),
                           ),
                         ),
-                        const SizedBox(height: EsokoSpacing.s2),
+                        const SizedBox(height: EsoqoSpacing.s2),
                         Center(
-                          child: EsokoButton.secondary(
+                          child: EsoqoButton.secondary(
                             label: 'Copy code',
                             icon: Icons.copy_outlined,
                             expand: false,
                             onPressed: () {
                               Clipboard.setData(
-                                ClipboardData(text: profile.esokoId!),
+                                ClipboardData(text: profile.esoqoId!),
                               );
                               ScaffoldMessenger.of(context).showSnackBar(
                                 const SnackBar(
                                   content: Text(
-                                    'Esoko ID copied — share or type it anywhere',
+                                    'Esoqo ID copied — share or type it anywhere',
                                   ),
                                 ),
                               );
@@ -218,7 +214,7 @@ class _AccountDetailsScreenState extends ConsumerState<AccountDetailsScreen> {
                           ),
                         ),
                       ] else ...[
-                        const SizedBox(height: EsokoSpacing.s3),
+                        const SizedBox(height: EsoqoSpacing.s3),
                         Center(
                           child: Text(
                             'Preparing your payment code…',
@@ -248,12 +244,12 @@ class _AccountDetailsScreenState extends ConsumerState<AccountDetailsScreen> {
     bool copyable = false,
   }) {
     return Padding(
-      padding: const EdgeInsets.symmetric(vertical: EsokoSpacing.s2),
+      padding: const EdgeInsets.symmetric(vertical: EsoqoSpacing.s2),
       child: Row(
         children: [
           SizedBox(
             width: 90,
-            // Theme-derived, not the fixed EsokoColors.text2 — this
+            // Theme-derived, not the fixed EsoqoColors.text2 — this
             // card's surface flips between light and dark with the
             // theme.
             child: Text(
@@ -266,17 +262,17 @@ class _AccountDetailsScreenState extends ConsumerState<AccountDetailsScreen> {
           Expanded(
             child: Text(
               value,
-              style: TextStyle(fontFamily: mono ? 'monospace' : null),
+              style: mono ? EsoqoTypography.mono() : null,
             ),
           ),
           if (copyable)
             IconButton(
               icon: const Icon(Icons.copy_outlined, size: 18),
-              tooltip: 'Copy Esoko ID',
+              tooltip: 'Copy Esoqo ID',
               onPressed: () {
                 Clipboard.setData(ClipboardData(text: value));
                 ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(content: Text('Esoko ID copied')),
+                  const SnackBar(content: Text('Esoqo ID copied')),
                 );
               },
             ),

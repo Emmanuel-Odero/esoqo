@@ -13,10 +13,10 @@ import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 /// PIN login (AGENT, via /v1/ticket-staff/sign-in) that was mutually
 /// exclusive with a SUBJECT session on the same device. It's retired
 /// from this app: per company policy every crew member holds their own
-/// Esoko account, so org-staff duty is now a SUBJECT session
+/// Esoqo account, so org-staff duty is now a SUBJECT session
 /// *additionally* carrying a live, OTP-activated org context (see
 /// [writeOrgContext] below and docs/proposals/
-/// esoko-unified-crew-identity.md) rather than a whole second credential
+/// esoqo-unified-crew-identity.md) rather than a whole second credential
 /// and a second, device-locking session kind. core-go's AGENT session
 /// type and `/v1/ticket-staff/sign-in` endpoint still exist server-side
 /// (unmigrated staff, other clients) — this app just no longer creates
@@ -45,7 +45,7 @@ class TokenStore {
   /// core/auth/org_context_state.dart) — an *overlay* on top of the one
   /// subject session, not a competing session kind: it never touches
   /// [_key], and clearing it never signs the person out. Stored so
-  /// [ApiClient] can attach `X-Esoko-Org-Context` without an extra round
+  /// [ApiClient] can attach `X-Esoqo-Org-Context` without an extra round
   /// trip, and so the switcher survives a cold start; the only thing
   /// that actually authorises anything is core-go's own live
   /// Redis+Postgres check on every request, never this cache.

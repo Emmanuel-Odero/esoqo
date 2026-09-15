@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import '../../core/theme/esoko_tokens.dart';
+import '../../core/theme/esoqo_tokens.dart';
 import '../../core/widgets/widgets.dart';
 import '../home/profile_repository.dart';
 import '../shopping/order_detail_screen.dart';
@@ -29,18 +29,18 @@ class ActivityScreen extends ConsumerWidget {
           constraints: const BoxConstraints(maxWidth: 840),
           child: ListView(
             padding: const EdgeInsets.fromLTRB(
-              EsokoSpacing.s6,
-              EsokoSpacing.s4,
-              EsokoSpacing.s6,
-              EsokoSpacing.s9 + EsokoSpacing.s6,
+              EsoqoSpacing.s6,
+              EsoqoSpacing.s4,
+              EsoqoSpacing.s6,
+              EsoqoSpacing.s9 + EsoqoSpacing.s6,
             ),
             children: [
-              EsokoSectionHeader(
+              EsoqoSectionHeader(
                 title: 'Activity',
                 subtitle: 'Every order and booking you\'ve made, in one place.',
               ),
-              const SizedBox(height: EsokoSpacing.s5),
-              EsokoAsyncView(
+              const SizedBox(height: EsoqoSpacing.s5),
+              EsoqoAsyncView(
                 value: history,
                 isEmpty: (items) => items.isEmpty,
                 emptyMessage: 'No orders or bookings yet.',
@@ -49,7 +49,7 @@ class ActivityScreen extends ConsumerWidget {
                 data: (context, items) => Column(
                   children: [
                     for (var i = 0; i < items.length; i++)
-                      EsokoStagger(
+                      EsoqoStagger(
                         index: i,
                         child: _historyTile(context, items[i]),
                       ),
@@ -73,8 +73,8 @@ class ActivityScreen extends ConsumerWidget {
     // for now.
     final tappable = item.kind == 'order';
     return Padding(
-      padding: const EdgeInsets.only(bottom: EsokoSpacing.s2),
-      child: EsokoListTile(
+      padding: const EdgeInsets.only(bottom: EsoqoSpacing.s2),
+      child: EsoqoListTile(
         title: item.title,
         subtitle:
             '${item.status} · ${_formatDate(item.occurredAt)} · KES ${item.totalKes}',

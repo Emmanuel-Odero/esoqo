@@ -34,7 +34,7 @@ final routerProvider = Provider<GoRouter>((ref) {
 
       // There used to be a second branch here for an AGENT (crew PIN)
       // session that locked the whole device to /crew-shift — retired
-      // (docs/proposals/esoko-unified-crew-identity.md): every crew
+      // (docs/proposals/esoqo-unified-crew-identity.md): every crew
       // member is a SUBJECT now, and CREW duty is just another org
       // context they can switch on from inside the app (Profile >
       // Acting as) without losing access to the rest of it. /crew-shift
@@ -50,7 +50,7 @@ final routerProvider = Provider<GoRouter>((ref) {
       GoRoute(path: '/crew-shift', builder: (context, state) => const CrewShiftScreen()),
       GoRoute(path: '/home', builder: (context, state) => const HomeShell()),
       GoRoute(path: '/org-duty', builder: (context, state) => const OrgDutySwitcherScreen()),
-      // Deep targets for the app-icon quick actions (long-press Esoko
+      // Deep targets for the app-icon quick actions (long-press Esoqo
       // icon → scan). Auth redirect still applies: signed-out users land
       // on sign-in first. /scan is the universal dispatcher (bus, shelf,
       // table, voucher, receipt); the older single-purpose routes stay

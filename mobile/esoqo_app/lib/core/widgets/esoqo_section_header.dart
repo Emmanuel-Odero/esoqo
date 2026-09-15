@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 
-import '../theme/esoko_tokens.dart';
+import '../theme/esoqo_tokens.dart';
 
 /// The "Title" + subtitle heading atop nearly every list screen —
 /// same headlineSmall + text2-coloured subtitle pairing every screen
@@ -9,8 +9,8 @@ import '../theme/esoko_tokens.dart';
 /// An optional [kicker] renders the web PageHeader's brand moment — a
 /// green 3px rule + small caps label (see tokens.css `.ui-kicker`) —
 /// giving a screen an intentional, quiet "above the title" marker.
-class EsokoSectionHeader extends StatelessWidget {
-  const EsokoSectionHeader({
+class EsoqoSectionHeader extends StatelessWidget {
+  const EsoqoSectionHeader({
     super.key,
     required this.title,
     this.subtitle,
@@ -35,29 +35,23 @@ class EsokoSectionHeader extends StatelessWidget {
                 width: 20,
                 height: 3,
                 decoration: BoxDecoration(
-                  color: EsokoColors.green,
+                  color: EsoqoColors.green,
                   borderRadius: BorderRadius.circular(2),
                 ),
               ),
-              const SizedBox(width: EsokoSpacing.s2),
+              const SizedBox(width: EsoqoSpacing.s2),
               Text(
                 kicker!.toUpperCase(),
-                style: TextStyle(
-                  color: EsokoColors.green,
-                  fontFamily: EsokoFonts.display,
-                  fontSize: 11,
-                  fontWeight: FontWeight.w700,
-                  letterSpacing: 1.4,
-                ),
+                style: EsoqoTypography.eyebrow(color: EsoqoColors.green),
               ),
             ],
           ),
-          const SizedBox(height: EsokoSpacing.s2),
+          const SizedBox(height: EsoqoSpacing.s2),
         ],
         Text(title, style: theme.textTheme.headlineSmall),
         if (subtitle != null) ...[
-          const SizedBox(height: EsokoSpacing.s1),
-          // Theme-derived, not the fixed EsokoColors.text2 — this
+          const SizedBox(height: EsoqoSpacing.s1),
+          // Theme-derived, not the fixed EsoqoColors.text2 — this
           // heading sits atop nearly every list screen's scaffold
           // background, which flips between paper and darkSurface.
           Text(

@@ -1,13 +1,13 @@
 import 'package:flutter/material.dart';
 
-import '../theme/esoko_tokens.dart';
+import '../theme/esoqo_tokens.dart';
 
 /// Pill quantity stepper — minus, value, plus. Replaces the duplicated
 /// `Container(line, pill) + Row(IconButton − / value / IconButton +)`
 /// in product detail and ticket booking. Both steppers enforce a minimum
 /// of 1 and 44px touch targets via IconButton sizing.
-class EsokoStepper extends StatelessWidget {
-  const EsokoStepper({
+class EsoqoStepper extends StatelessWidget {
+  const EsoqoStepper({
     super.key,
     required this.value,
     required this.onChanged,
@@ -26,8 +26,8 @@ class EsokoStepper extends StatelessWidget {
     final cap = max;
     return Container(
       decoration: BoxDecoration(
-        border: Border.all(color: EsokoColors.line),
-        borderRadius: BorderRadius.circular(EsokoRadius.pill),
+        border: Border.all(color: EsoqoColors.line),
+        borderRadius: BorderRadius.circular(EsoqoRadius.pill),
       ),
       child: Row(
         mainAxisSize: MainAxisSize.min,

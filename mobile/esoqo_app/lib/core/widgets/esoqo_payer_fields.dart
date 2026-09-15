@@ -1,15 +1,15 @@
 import 'package:flutter/material.dart';
 
-import '../theme/esoko_tokens.dart';
-import 'esoko_field.dart';
-import 'esoko_button.dart';
+import '../theme/esoqo_tokens.dart';
+import 'esoqo_field.dart';
+import 'esoqo_button.dart';
 
 /// Buyer identity + M-Pesa pay button — the exact block duplicated verbatim
 /// between shopping checkout and ticket booking (`Your name` + `M-Pesa
 /// phone` fields, then a `Pay with M-Pesa` button). One owner for labels,
 /// hints, autofill and focus order from now on.
-class EsokoPayerFields extends StatelessWidget {
-  const EsokoPayerFields({
+class EsoqoPayerFields extends StatelessWidget {
+  const EsoqoPayerFields({
     super.key,
     required this.nameController,
     required this.msisdnController,
@@ -29,18 +29,18 @@ class EsokoPayerFields extends StatelessWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        EsokoField.name(
+        EsoqoField.name(
           controller: nameController,
           label: 'Your name',
         ),
-        const SizedBox(height: EsokoSpacing.s3),
-        EsokoField.phone(
+        const SizedBox(height: EsoqoSpacing.s3),
+        EsoqoField.phone(
           controller: msisdnController,
           label: 'M-Pesa phone number',
           onSubmitted: (_) => onPay(),
         ),
-        const SizedBox(height: EsokoSpacing.s5),
-        EsokoButton.primary(
+        const SizedBox(height: EsoqoSpacing.s5),
+        EsoqoButton.primary(
           expand: false,
           label: payLabel,
           icon: Icons.lock_outline,

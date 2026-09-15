@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/money/money.dart';
-import '../../core/theme/esoko_tokens.dart';
+import '../../core/theme/esoqo_tokens.dart';
 import '../../core/widgets/widgets.dart';
 import 'create_group_screen.dart';
 import 'group_detail_screen.dart';
@@ -25,7 +25,7 @@ class MyGroupsScreen extends ConsumerWidget {
     return Scaffold(
       body: RefreshIndicator(
         onRefresh: () async => ref.invalidate(myGroupsProvider),
-        child: EsokoAsyncView(
+        child: EsoqoAsyncView(
           value: groups,
           onRetry: () => ref.invalidate(myGroupsProvider),
           data: (context, list) => Center(
@@ -36,30 +36,30 @@ class MyGroupsScreen extends ConsumerWidget {
                   SliverToBoxAdapter(
                     child: Padding(
                       padding: const EdgeInsets.fromLTRB(
-                        EsokoSpacing.s5,
-                        EsokoSpacing.s5,
-                        EsokoSpacing.s5,
-                        EsokoSpacing.s2,
+                        EsoqoSpacing.s5,
+                        EsoqoSpacing.s5,
+                        EsoqoSpacing.s5,
+                        EsoqoSpacing.s2,
                       ),
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          EsokoPageLead(
+                          EsoqoPageLead(
                             'Chamas, table banking and welfare groups you belong to.',
                           ),
                           if (list.isNotEmpty) ...[
-                            const SizedBox(height: EsokoSpacing.s4),
+                            const SizedBox(height: EsoqoSpacing.s4),
                             _ChamaHero(groups: list),
                             for (final g in list.where(
                               (g) => g.pendingSignatures > 0,
                             )) ...[
-                              const SizedBox(height: EsokoSpacing.s3),
-                              EsokoAttentionCard(
+                              const SizedBox(height: EsoqoSpacing.s3),
+                              EsoqoAttentionCard(
                                 when: g.pendingSignatures == 1
                                     ? 'Your signature is needed'
                                     : '${g.pendingSignatures} withdrawals need your signature',
                                 title: g.displayName,
-                                accent: EsokoColors.amber,
+                                accent: EsoqoColors.amber,
                                 onTap: () => Navigator.of(context).push(
                                   MaterialPageRoute(
                                     builder: (_) =>
@@ -69,13 +69,13 @@ class MyGroupsScreen extends ConsumerWidget {
                               ),
                             ],
                           ],
-                          const SizedBox(height: EsokoSpacing.s4),
+                          const SizedBox(height: EsoqoSpacing.s4),
                           Row(
                             children: [
                               Expanded(
-                                child: EsokoButton.secondary(
+                                child: EsoqoButton.secondary(
                                   label: 'Join a group',
-                                  esokoIcon: EsokoIconName.search,
+                                  esoqoIcon: EsoqoIconName.search,
                                   onPressed: () => Navigator.of(context).push(
                                     MaterialPageRoute(
                                       builder: (_) => const JoinGroupScreen(),
@@ -83,11 +83,11 @@ class MyGroupsScreen extends ConsumerWidget {
                                   ),
                                 ),
                               ),
-                              const SizedBox(width: EsokoSpacing.s3),
+                              const SizedBox(width: EsoqoSpacing.s3),
                               Expanded(
-                                child: EsokoButton.primary(
+                                child: EsoqoButton.primary(
                                   label: 'Start a group',
-                                  esokoIcon: EsokoIconName.plus,
+                                  esoqoIcon: EsoqoIconName.plus,
                                   onPressed: () => Navigator.of(context).push(
                                     MaterialPageRoute(
                                       builder: (_) => const CreateGroupScreen(),
@@ -103,28 +103,28 @@ class MyGroupsScreen extends ConsumerWidget {
                   ),
                   if (list.isEmpty)
                     const SliverToBoxAdapter(
-                      child: EsokoEmptyState(
-                        esokoIcon: EsokoIconName.users,
+                      child: EsoqoEmptyState(
+                        esoqoIcon: EsoqoIconName.users,
                         message: 'No groups yet — start or join one above.',
                       ),
                     )
                   else
                     SliverPadding(
                       padding: const EdgeInsets.fromLTRB(
-                        EsokoSpacing.s4,
-                        EsokoSpacing.s2,
-                        EsokoSpacing.s4,
-                        EsokoSpacing.s6,
+                        EsoqoSpacing.s4,
+                        EsoqoSpacing.s2,
+                        EsoqoSpacing.s4,
+                        EsoqoSpacing.s6,
                       ),
                       sliver: SliverList.separated(
                         itemCount: list.length,
                         separatorBuilder: (_, _) =>
-                            const SizedBox(height: EsokoSpacing.s3),
+                            const SizedBox(height: EsoqoSpacing.s3),
                         itemBuilder: (context, i) {
                           final g = list[i];
-                          return EsokoStagger(
+                          return EsoqoStagger(
                             index: i,
-                            child: EsokoListTile(
+                            child: EsoqoListTile(
                               title: g.displayName,
                               subtitle:
                                   '${_titleCase(g.kind)} · ${g.memberCount} member${g.memberCount == 1 ? '' : 's'}',
@@ -189,9 +189,9 @@ class _ChamaHero extends StatelessWidget {
     final total = Money.sum(
       groups.map((g) => Money.fromJson(g.balanceKes) ?? Money.zero),
     );
-    return EsokoCard(
-      color: EsokoColors.navy,
-      padding: const EdgeInsets.all(EsokoSpacing.s5),
+    return EsoqoCard(
+      color: EsoqoColors.navy,
+      padding: const EdgeInsets.all(EsoqoSpacing.s5),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -199,16 +199,16 @@ class _ChamaHero extends StatelessWidget {
             'Across your groups',
             style: TextStyle(
               color: Colors.white.withValues(alpha: 0.72),
-              fontSize: 12.5,
+              fontSize: EsoqoTypeScale.meta,
               fontWeight: FontWeight.w600,
             ),
           ),
-          const SizedBox(height: EsokoSpacing.s1),
+          const SizedBox(height: EsoqoSpacing.s1),
           Text(
             'KES ${total.format()}',
-            style: EsokoTypography.mono(
-              fontSize: 30,
-              fontWeight: FontWeight.w800,
+            style: EsoqoTypography.mono(
+              fontSize: EsoqoTypeScale.hero,
+              fontWeight: FontWeight.w700,
               color: Colors.white,
             ),
           ),
@@ -216,7 +216,7 @@ class _ChamaHero extends StatelessWidget {
             '${groups.length} ${groups.length == 1 ? 'group' : 'groups'}',
             style: TextStyle(
               color: Colors.white.withValues(alpha: 0.72),
-              fontSize: 12.5,
+              fontSize: EsoqoTypeScale.meta,
             ),
           ),
         ],

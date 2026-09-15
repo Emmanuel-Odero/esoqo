@@ -3,7 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/api/api_exception.dart';
 import '../../core/money/money.dart';
-import '../../core/theme/esoko_tokens.dart';
+import '../../core/theme/esoqo_tokens.dart';
 import '../../core/widgets/widgets.dart';
 import 'parcel_models.dart';
 import 'parcel_payment_screen.dart';
@@ -94,12 +94,12 @@ class _ParcelPricingScreenState extends ConsumerState<ParcelPricingScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: const EsokoAppBar(title: 'Choose a price'),
+      appBar: const EsoqoAppBar(title: 'Choose a price'),
       body: SafeArea(
         child: _loading
             ? const Center(child: CircularProgressIndicator())
             : _pricing == null
-                ? EsokoErrorView(
+                ? EsoqoErrorView(
                     message: _error ?? 'Could not load pricing',
                     onRetry: _load,
                   )
@@ -107,17 +107,17 @@ class _ParcelPricingScreenState extends ConsumerState<ParcelPricingScreen> {
                     child: ConstrainedBox(
                       constraints: const BoxConstraints(maxWidth: 480),
                       child: ListView(
-                        padding: const EdgeInsets.all(EsokoSpacing.s5),
+                        padding: const EdgeInsets.all(EsoqoSpacing.s5),
                         children: [
-                          EsokoSubHeader('Standard price'),
+                          EsoqoSubHeader('Standard price'),
                           if (_pricing!.distanceKm != null) ...[
-                            const SizedBox(height: EsokoSpacing.s1),
+                            const SizedBox(height: EsoqoSpacing.s1),
                             Text(
                               '${_pricing!.distanceKm!.toStringAsFixed(1)} km between the zones you picked — added to the price below.',
                               style: Theme.of(context).textTheme.bodySmall,
                             ),
                           ],
-                          const SizedBox(height: EsokoSpacing.s2),
+                          const SizedBox(height: EsoqoSpacing.s2),
                           _priceOption(
                             title: 'Standard',
                             subtitle:
@@ -127,17 +127,17 @@ class _ParcelPricingScreenState extends ConsumerState<ParcelPricingScreen> {
                             onTap: () => setState(() => _selectedReason = null),
                           ),
                           if (_pricing!.bargainReasons.isNotEmpty) ...[
-                            const SizedBox(height: EsokoSpacing.s5),
-                            EsokoSubHeader('Make an offer'),
-                            const SizedBox(height: EsokoSpacing.s2),
+                            const SizedBox(height: EsoqoSpacing.s5),
+                            EsoqoSubHeader('Make an offer'),
+                            const SizedBox(height: EsoqoSpacing.s2),
                             Text(
                               'Pick a reason that applies — the price adjusts accordingly.',
                               style: Theme.of(context).textTheme.bodySmall,
                             ),
-                            const SizedBox(height: EsokoSpacing.s2),
+                            const SizedBox(height: EsoqoSpacing.s2),
                             for (final reason in _pricing!.bargainReasons)
                               Padding(
-                                padding: const EdgeInsets.only(bottom: EsokoSpacing.s2),
+                                padding: const EdgeInsets.only(bottom: EsoqoSpacing.s2),
                                 child: _priceOption(
                                   title: reason.reason,
                                   subtitle: 'Negotiable — ${reason.extraDiscountPct.toStringAsFixed(0)}% off the usual minimum',
@@ -148,11 +148,11 @@ class _ParcelPricingScreenState extends ConsumerState<ParcelPricingScreen> {
                               ),
                           ],
                           if (_error != null) ...[
-                            const SizedBox(height: EsokoSpacing.s3),
-                            EsokoFormError(message: _error!),
+                            const SizedBox(height: EsoqoSpacing.s3),
+                            EsoqoFormError(message: _error!),
                           ],
-                          const SizedBox(height: EsokoSpacing.s5),
-                          EsokoButton.primary(
+                          const SizedBox(height: EsoqoSpacing.s5),
+                          EsoqoButton.primary(
                             expand: false,
                             label: 'Continue to payment',
                             loading: _submitting,
@@ -169,8 +169,8 @@ class _ParcelPricingScreenState extends ConsumerState<ParcelPricingScreen> {
   // Same selection-card shape schedule_booking_screen.dart's
   // _TicketClassCard uses for "pick one of several priced options" —
   // a theme-derived alpha wash of scheme.primary (not a fixed pastel,
-  // which only reads right in light mode), EsokoColors.line border,
-  // EsokoRadius.lg corners, and the check-circle/circle-outlined
+  // which only reads right in light mode), EsoqoColors.line border,
+  // EsoqoRadius.lg corners, and the check-circle/circle-outlined
   // selection glyph every other picker in the app uses. Kept local
   // (not lifted into a shared widget) since it's parcel-pricing
   // specific — title/subtitle/price, not a ticket class.
@@ -188,15 +188,15 @@ class _ParcelPricingScreenState extends ConsumerState<ParcelPricingScreen> {
       color: selected
           ? scheme.primary.withValues(alpha: isDark ? 0.20 : 0.12)
           : Theme.of(context).cardColor,
-      borderRadius: BorderRadius.circular(EsokoRadius.lg),
+      borderRadius: BorderRadius.circular(EsoqoRadius.lg),
       clipBehavior: Clip.antiAlias,
       child: InkWell(
         onTap: onTap,
         child: Container(
-          padding: const EdgeInsets.all(EsokoSpacing.s3),
+          padding: const EdgeInsets.all(EsoqoSpacing.s3),
           decoration: BoxDecoration(
             border: Border.all(
-              color: selected ? scheme.primary : EsokoColors.line,
+              color: selected ? scheme.primary : EsoqoColors.line,
               width: selected ? 1.5 : 1,
             ),
           ),
@@ -207,20 +207,20 @@ class _ParcelPricingScreenState extends ConsumerState<ParcelPricingScreen> {
                 color: selected ? scheme.primary : muted,
                 size: 22,
               ),
-              const SizedBox(width: EsokoSpacing.s3),
+              const SizedBox(width: EsoqoSpacing.s3),
               Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(title, style: const TextStyle(fontWeight: FontWeight.w700)),
                     const SizedBox(height: 2),
-                    Text(subtitle, style: TextStyle(fontSize: 12, color: muted)),
+                    Text(subtitle, style: Theme.of(context).textTheme.bodySmall),
                   ],
                 ),
               ),
               Text(
                 'KES ${priceKes.format()}',
-                style: EsokoTypography.mono(fontWeight: FontWeight.w800, color: scheme.primary),
+                style: EsoqoTypography.mono(fontWeight: FontWeight.w700, color: scheme.primary),
               ),
             ],
           ),

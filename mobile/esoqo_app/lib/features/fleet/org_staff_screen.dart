@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/api/api_exception.dart';
-import '../../core/theme/esoko_tokens.dart';
+import '../../core/theme/esoqo_tokens.dart';
 import '../../core/widgets/widgets.dart';
 import 'fleet_models.dart';
 import 'fleet_providers.dart';
@@ -10,7 +10,7 @@ import 'fleet_repository.dart';
 
 /// Manager console for who can act as staff for this org — the
 /// unified-crew-identity roster (docs/proposals/
-/// esoko-unified-crew-identity.md). Every row is a real Esoko account
+/// esoqo-unified-crew-identity.md). Every row is a real Esoqo account
 /// (there is no account-less onboarding path here, by design), granted
 /// SCANNER, MANAGER, ADMIN or CREW duty. Suspending kills that person's
 /// live activated session immediately, server-side — this screen shows
@@ -25,7 +25,7 @@ class OrgStaffScreen extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     return Scaffold(
-      appBar: EsokoAppBar(
+      appBar: EsoqoAppBar(
         title: 'Staff · $orgName',
         actions: [
           IconButton(
@@ -51,17 +51,17 @@ class OrgStaffScreen extends ConsumerWidget {
 
   Widget _roster(BuildContext context, WidgetRef ref) {
     final grants = ref.watch(orgStaffGrantsProvider(orgId));
-    return EsokoAsyncView(
+    return EsoqoAsyncView(
       value: grants,
       isEmpty: (list) => list.isEmpty,
-      emptyMessage: 'No staff added yet — everyone needs their own Esoko account first.',
+      emptyMessage: 'No staff added yet — everyone needs their own Esoqo account first.',
       emptyIcon: Icons.badge_outlined,
       onRetry: () => ref.invalidate(orgStaffGrantsProvider(orgId)),
       data: (context, list) => ListView(
-        padding: const EdgeInsets.all(EsokoSpacing.s4),
+        padding: const EdgeInsets.all(EsoqoSpacing.s4),
         children: [
           for (var i = 0; i < list.length; i++)
-            EsokoStagger(
+            EsoqoStagger(
               index: i,
               child: _grantTile(context, ref, list[i]),
             ),
@@ -72,23 +72,23 @@ class OrgStaffScreen extends ConsumerWidget {
 
   Widget _grantTile(BuildContext context, WidgetRef ref, OrgStaffGrant grant) {
     return Padding(
-      padding: const EdgeInsets.only(bottom: EsokoSpacing.s2),
-      child: EsokoListTile(
+      padding: const EdgeInsets.only(bottom: EsoqoSpacing.s2),
+      child: EsoqoListTile(
         title: grant.partyName,
         subtitle: [grant.role, if (grant.msisdn != null) grant.msisdn!].join(' · '),
         icon: Icons.person_outline,
         // Blue, not green — SCREEN_CONVENTIONS.md: a staff roster row is
         // institution-scoped, not the signed-in person's own record.
-        iconColor: EsokoColors.blue,
-        iconBackground: EsokoColors.blueTint,
+        iconColor: EsoqoColors.blue,
+        iconBackground: EsoqoColors.blueTint,
         trailing: Row(
           mainAxisSize: MainAxisSize.min,
           children: [
-            EsokoStatusPill(
+            EsoqoStatusPill(
               label: grant.suspended ? 'Suspended' : 'Active',
-              color: grant.suspended ? Colors.red : EsokoColors.green,
+              color: grant.suspended ? Colors.red : EsoqoColors.green,
             ),
-            const SizedBox(width: EsokoSpacing.s2),
+            const SizedBox(width: EsoqoSpacing.s2),
             PopupMenuButton<String>(
               onSelected: (action) => _onAction(context, ref, grant, action),
               itemBuilder: (context) => [
@@ -194,7 +194,7 @@ class _AddStaffDialogState extends ConsumerState<_AddStaffDialog> {
       if (mounted) Navigator.of(context).pop();
     } on ApiException catch (e) {
       // NO_ACCOUNT arrives here with core-go's own copy — "that number
-      // doesn't have an Esoko account yet" — surfaced verbatim rather
+      // doesn't have an Esoqo account yet" — surfaced verbatim rather
       // than reworded, since it's already the exact actionable message.
       setState(() => _error = e.message);
     } finally {
@@ -212,13 +212,13 @@ class _AddStaffDialogState extends ConsumerState<_AddStaffDialog> {
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            const Text('They need their own Esoko account already — look them up by phone number.'),
-            const SizedBox(height: EsokoSpacing.s3),
-            EsokoField.phone(
+            const Text('They need their own Esoqo account already — look them up by phone number.'),
+            const SizedBox(height: EsoqoSpacing.s3),
+            EsoqoField.phone(
               controller: _msisdnController,
             ),
-            const SizedBox(height: EsokoSpacing.s3),
-            EsokoDropdown<String>(
+            const SizedBox(height: EsoqoSpacing.s3),
+            EsoqoDropdown<String>(
               label: 'Role',
               initialValue: _role,
               items: const [
@@ -230,9 +230,9 @@ class _AddStaffDialogState extends ConsumerState<_AddStaffDialog> {
               onChanged: (v) => setState(() => _role = v ?? 'SCANNER'),
             ),
             if (_role == 'CREW') ...[
-              const SizedBox(height: EsokoSpacing.s3),
+              const SizedBox(height: EsoqoSpacing.s3),
               crew.when(
-                data: (list) => EsokoDropdown<String>(
+                data: (list) => EsoqoDropdown<String>(
                   label: 'Linked crew member (optional)',
                   initialValue: _crewMemberId,
                   items: [
@@ -242,27 +242,27 @@ class _AddStaffDialogState extends ConsumerState<_AddStaffDialog> {
                   onChanged: (v) => setState(() => _crewMemberId = v),
                 ),
                 loading: () => const Padding(
-                  padding: EdgeInsets.symmetric(vertical: EsokoSpacing.s3),
-                  child: EsokoSkeleton(height: 44, radius: EsokoRadius.md),
+                  padding: EdgeInsets.symmetric(vertical: EsoqoSpacing.s3),
+                  child: EsoqoSkeleton(height: 44, radius: EsoqoRadius.md),
                 ),
                 error: (_, _) => const Text('Could not load crew members.'),
               ),
-              const SizedBox(height: EsokoSpacing.s1),
+              const SizedBox(height: EsoqoSpacing.s1),
               const Text(
                 'Without a link they can still declare cash but can\'t close a trip.',
-                style: TextStyle(fontSize: 12),
+                style: TextStyle(fontSize: EsoqoTypeScale.labelSmall),
               ),
             ],
             if (_error != null) ...[
-              const SizedBox(height: EsokoSpacing.s3),
-              EsokoFormError(message: _error!),
+              const SizedBox(height: EsoqoSpacing.s3),
+              EsoqoFormError(message: _error!),
             ],
           ],
         ),
       ),
       actions: [
         TextButton(onPressed: _saving ? null : () => Navigator.of(context).pop(), child: const Text('Cancel')),
-        EsokoButton.primary(expand: false, label: 'Add', loading: _saving, onPressed: _save),
+        EsoqoButton.primary(expand: false, label: 'Add', loading: _saving, onPressed: _save),
       ],
     );
   }

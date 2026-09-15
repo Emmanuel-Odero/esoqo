@@ -7,7 +7,7 @@
 // Money back to a double.
 import 'package:flutter_test/flutter_test.dart';
 
-import 'package:esoko_app/core/money/money.dart';
+import 'package:esoqo_app/core/money/money.dart';
 
 void main() {
   group('parsing the two wire formats', () {

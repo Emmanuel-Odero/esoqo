@@ -3,7 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../core/auth/auth_controller.dart';
 import '../core/auth/auth_state.dart';
-import '../core/theme/esoko_tokens.dart';
+import '../core/theme/esoqo_tokens.dart';
 
 /// The glanceable home screen once signed in — real identity (from
 /// GET /v1/me, same as the phone app's Record tab), honest about having
@@ -14,7 +14,7 @@ import '../core/theme/esoko_tokens.dart';
 class WatchHome extends ConsumerWidget {
   const WatchHome({super.key, required this.profile});
 
-  final EsokoProfile profile;
+  final EsoqoProfile profile;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -22,12 +22,12 @@ class WatchHome extends ConsumerWidget {
       body: SafeArea(
         child: Center(
           child: Padding(
-            padding: const EdgeInsets.all(EsokoSpacing.s3),
+            padding: const EdgeInsets.all(EsoqoSpacing.s3),
             child: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
-                const Icon(Icons.check_circle, color: EsokoColors.green2, size: 28),
-                const SizedBox(height: EsokoSpacing.s2),
+                const Icon(Icons.check_circle, color: EsoqoColors.green2, size: 28),
+                const SizedBox(height: EsoqoSpacing.s2),
                 Text(
                   profile.displayName,
                   style: Theme.of(context).textTheme.titleSmall,
@@ -35,15 +35,15 @@ class WatchHome extends ConsumerWidget {
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                 ),
-                const SizedBox(height: EsokoSpacing.s1),
+                const SizedBox(height: EsoqoSpacing.s1),
                 Text(
                   'Signed in',
-                  style: TextStyle(color: EsokoColors.text3, fontSize: 11),
+                  style: TextStyle(color: EsoqoColors.text3, fontSize: EsoqoTypeScale.micro),
                 ),
-                const SizedBox(height: EsokoSpacing.s3),
+                const SizedBox(height: EsoqoSpacing.s3),
                 TextButton(
                   onPressed: () => ref.read(authControllerProvider.notifier).signOut(),
-                  child: const Text('Sign out', style: TextStyle(fontSize: 11)),
+                  child: const Text('Sign out', style: TextStyle(fontSize: EsoqoTypeScale.micro)),
                 ),
               ],
             ),

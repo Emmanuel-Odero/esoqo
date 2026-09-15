@@ -116,7 +116,7 @@ class OrgContextState {
 }
 
 /// One controller for the "am I also on duty somewhere" switcher — see
-/// docs/proposals/esoko-unified-crew-identity.md. Every activation is
+/// docs/proposals/esoqo-unified-crew-identity.md. Every activation is
 /// OTP-gated (no PIN fast path, by design: an unlocked phone alone must
 /// never be enough to also act as staff), and every deactivation/expiry
 /// requires OTP again next time, suspension or not.

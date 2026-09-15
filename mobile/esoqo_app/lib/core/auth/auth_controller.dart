@@ -40,7 +40,7 @@ class AuthController extends Notifier<AuthState> {
     }
     try {
       final me = await _api.get('/v1/me');
-      state = AuthSignedIn(EsokoProfile.fromJson(me));
+      state = AuthSignedIn(EsoqoProfile.fromJson(me));
     } on ApiException {
       await TokenStore.instance.clear();
       state = const AuthSignedOut();
@@ -90,7 +90,7 @@ class AuthController extends Notifier<AuthState> {
   /// so the greeting and capabilities reflect the change immediately.
   Future<void> refreshProfile() async {
     final me = await _api.get('/v1/me');
-    state = AuthSignedIn(EsokoProfile.fromJson(me));
+    state = AuthSignedIn(EsoqoProfile.fromJson(me));
   }
 
   /// Edits the caller's display name — PATCH /v1/me — then refreshes.
@@ -113,7 +113,7 @@ class AuthController extends Notifier<AuthState> {
   Future<void> _completeSignIn(String token) async {
     await TokenStore.instance.write(token);
     final me = await _api.get('/v1/me');
-    state = AuthSignedIn(EsokoProfile.fromJson(me));
+    state = AuthSignedIn(EsoqoProfile.fromJson(me));
   }
 }
 

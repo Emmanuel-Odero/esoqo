@@ -3,7 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import '../../core/api/api_exception.dart';
-import '../../core/theme/esoko_tokens.dart';
+import '../../core/theme/esoqo_tokens.dart';
 import '../../core/widgets/widgets.dart';
 import 'fleet_models.dart';
 import 'fleet_providers.dart';
@@ -23,7 +23,7 @@ class OrgFleetScreen extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     return Scaffold(
-      appBar: EsokoAppBar(title: orgName),
+      appBar: EsoqoAppBar(title: orgName),
       body: SafeArea(
         child: RefreshIndicator(
           onRefresh: () async {
@@ -36,36 +36,36 @@ class OrgFleetScreen extends ConsumerWidget {
             child: ConstrainedBox(
               constraints: const BoxConstraints(maxWidth: 840),
               child: ListView(
-                padding: const EdgeInsets.all(EsokoSpacing.s4),
+                padding: const EdgeInsets.all(EsoqoSpacing.s4),
                 children: [
-                  EsokoSectionHeader(
+                  EsoqoSectionHeader(
                     title: 'On duty now',
                     subtitle: 'Vehicle, driver and tout per trip.',
                   ),
-                  const SizedBox(height: EsokoSpacing.s2),
+                  const SizedBox(height: EsoqoSpacing.s2),
                   _trips(context, ref),
-                  const SizedBox(height: EsokoSpacing.s5),
-                  EsokoSectionHeader(
+                  const SizedBox(height: EsoqoSpacing.s5),
+                  EsoqoSectionHeader(
                     title: 'Where are my vehicles?',
                     subtitle: 'Latest position per bus.',
                   ),
-                  const SizedBox(height: EsokoSpacing.s2),
+                  const SizedBox(height: EsoqoSpacing.s2),
                   _positions(ref),
-                  const SizedBox(height: EsokoSpacing.s5),
-                  EsokoSectionHeader(title: 'Fleet', subtitle: 'Registered vehicles.'),
-                  const SizedBox(height: EsokoSpacing.s2),
+                  const SizedBox(height: EsoqoSpacing.s5),
+                  EsoqoSectionHeader(title: 'Fleet', subtitle: 'Registered vehicles.'),
+                  const SizedBox(height: EsoqoSpacing.s2),
                   _vehicles(ref),
-                  const SizedBox(height: EsokoSpacing.s5),
-                  EsokoSectionHeader(title: 'Crew', subtitle: 'Drivers and touts.'),
-                  const SizedBox(height: EsokoSpacing.s2),
+                  const SizedBox(height: EsoqoSpacing.s5),
+                  EsoqoSectionHeader(title: 'Crew', subtitle: 'Drivers and touts.'),
+                  const SizedBox(height: EsoqoSpacing.s2),
                   _crew(ref),
-                  const SizedBox(height: EsokoSpacing.s5),
-                  EsokoListTile(
+                  const SizedBox(height: EsoqoSpacing.s5),
+                  EsoqoListTile(
                     title: 'Staff & duty roles',
                     subtitle: 'Who can act as scanner, manager or crew for this org — suspend or reinstate access.',
                     icon: Icons.badge_outlined,
-                    iconColor: EsokoColors.blue,
-                    iconBackground: EsokoColors.blueTint,
+                    iconColor: EsoqoColors.blue,
+                    iconBackground: EsoqoColors.blueTint,
                     onTap: () => Navigator.of(context).push(
                       MaterialPageRoute(builder: (_) => OrgStaffScreen(orgId: orgId, orgName: orgName)),
                     ),
@@ -81,7 +81,7 @@ class OrgFleetScreen extends ConsumerWidget {
 
   Widget _trips(BuildContext context, WidgetRef ref) {
     final trips = ref.watch(orgTripsProvider(orgId));
-    return EsokoAsyncView(
+    return EsoqoAsyncView(
       value: trips,
       isEmpty: (list) => list.isEmpty,
       emptyMessage: 'No trips yet.',
@@ -90,9 +90,9 @@ class OrgFleetScreen extends ConsumerWidget {
       data: (context, list) => Column(
         children: [
           for (var i = 0; i < list.length; i++)
-            EsokoStagger(
+            EsoqoStagger(
               index: i,
-              child: EsokoListTile(
+              child: EsoqoListTile(
                 title: '${list[i].vehiclePlate} · ${list[i].status}',
                 subtitle: list[i].crewLabel,
                 leading: const Icon(Icons.directions_bus_outlined),
@@ -110,7 +110,7 @@ class OrgFleetScreen extends ConsumerWidget {
 
   Widget _positions(WidgetRef ref) {
     final positions = ref.watch(positionsProvider(orgId));
-    return EsokoAsyncView(
+    return EsoqoAsyncView(
       value: positions,
       isEmpty: (list) => list.isEmpty,
       emptyMessage: 'No positions yet — crew phones report as trips move.',
@@ -119,9 +119,9 @@ class OrgFleetScreen extends ConsumerWidget {
       data: (context, list) => Column(
         children: [
           for (var i = 0; i < list.length; i++)
-            EsokoStagger(
+            EsoqoStagger(
               index: i,
-              child: EsokoListTile(
+              child: EsoqoListTile(
                 title: list[i].vehiclePlate,
                 subtitle: '${list[i].lat}, ${list[i].lng} · ${list[i].at}',
                 leading: const Icon(Icons.location_on_outlined),
@@ -138,7 +138,7 @@ class OrgFleetScreen extends ConsumerWidget {
 
   Widget _vehicles(WidgetRef ref) {
     final vehicles = ref.watch(vehiclesProvider(orgId));
-    return EsokoAsyncView(
+    return EsoqoAsyncView(
       value: vehicles,
       isEmpty: (list) => list.isEmpty,
       emptyMessage: 'No vehicles registered.',
@@ -147,9 +147,9 @@ class OrgFleetScreen extends ConsumerWidget {
       data: (context, list) => Column(
         children: [
           for (var i = 0; i < list.length; i++)
-            EsokoStagger(
+            EsoqoStagger(
               index: i,
-              child: EsokoListTile(
+              child: EsoqoListTile(
                 title: list[i].plateNo,
                 subtitle: [
                   if (list[i].label != null) list[i].label!,
@@ -167,7 +167,7 @@ class OrgFleetScreen extends ConsumerWidget {
 
   Widget _crew(WidgetRef ref) {
     final crew = ref.watch(crewProvider(orgId));
-    return EsokoAsyncView(
+    return EsoqoAsyncView(
       value: crew,
       isEmpty: (list) => list.isEmpty,
       emptyMessage: 'No crew onboarded.',
@@ -176,9 +176,9 @@ class OrgFleetScreen extends ConsumerWidget {
       data: (context, list) => Column(
         children: [
           for (var i = 0; i < list.length; i++)
-            EsokoStagger(
+            EsoqoStagger(
               index: i,
-              child: EsokoListTile(
+              child: EsoqoListTile(
                 title: list[i].name,
                 subtitle: '${list[i].role}${list[i].active ? '' : ' · inactive'}',
                 leading: const Icon(Icons.badge_outlined),
@@ -262,33 +262,33 @@ class _TripDetailScreenState extends ConsumerState<TripDetailScreen> {
     final summary = ref.watch(collectionsProvider(trip.id));
     final crew = ref.watch(crewProvider(widget.orgId));
     return Scaffold(
-      appBar: EsokoAppBar(title: trip.vehiclePlate),
+      appBar: EsoqoAppBar(title: trip.vehiclePlate),
       body: SafeArea(
         child: ListView(
-          padding: const EdgeInsets.all(EsokoSpacing.s4),
+          padding: const EdgeInsets.all(EsoqoSpacing.s4),
           children: [
             Text(trip.crewLabel),
-            const SizedBox(height: EsokoSpacing.s2),
+            const SizedBox(height: EsoqoSpacing.s2),
             Text('Status: ${trip.status} · Started ${trip.startedAt}'),
-            const SizedBox(height: EsokoSpacing.s4),
-            EsokoSectionHeader(
+            const SizedBox(height: EsoqoSpacing.s4),
+            EsoqoSectionHeader(
               title: 'Collections',
               subtitle: 'Declared cash vs M-Pesa prompts.',
             ),
-            const SizedBox(height: EsokoSpacing.s2),
-            EsokoAsyncView(
+            const SizedBox(height: EsoqoSpacing.s2),
+            EsoqoAsyncView(
               value: summary,
               onRetry: () => ref.invalidate(collectionsProvider(trip.id)),
               data: (context, s) => _summaryCard(s),
             ),
-            const SizedBox(height: EsokoSpacing.s5),
-            EsokoSectionHeader(
+            const SizedBox(height: EsoqoSpacing.s5),
+            EsoqoSectionHeader(
               title: 'Declare cash',
               subtitle: 'What the tout counted on this trip.',
             ),
-            const SizedBox(height: EsokoSpacing.s2),
+            const SizedBox(height: EsoqoSpacing.s2),
             crew.when(
-              data: (list) => EsokoDropdown<String>(
+              data: (list) => EsoqoDropdown<String>(
                 label: 'Crew member',
                 initialValue: _crewId,
                 items: [
@@ -298,19 +298,19 @@ class _TripDetailScreenState extends ConsumerState<TripDetailScreen> {
                 onChanged: (v) => setState(() => _crewId = v),
               ),
               loading: () => const Padding(
-                padding: EdgeInsets.symmetric(vertical: EsokoSpacing.s3),
-                child: EsokoSkeleton(height: 44, radius: EsokoRadius.md),
+                padding: EdgeInsets.symmetric(vertical: EsoqoSpacing.s3),
+                child: EsoqoSkeleton(height: 44, radius: EsoqoRadius.md),
               ),
               error: (_, _) => const Text('Could not load crew.'),
             ),
-            const SizedBox(height: EsokoSpacing.s3),
-            EsokoField.amount(
+            const SizedBox(height: EsoqoSpacing.s3),
+            EsoqoField.amount(
               controller: _amountController,
               label: 'Cash counted',
               hint: 'e.g. 4500',
             ),
-            const SizedBox(height: EsokoSpacing.s3),
-            EsokoButton.primary(
+            const SizedBox(height: EsoqoSpacing.s3),
+            EsoqoButton.primary(
               expand: false,
               label: 'Record declaration',
               icon: Icons.check_outlined,
@@ -318,12 +318,12 @@ class _TripDetailScreenState extends ConsumerState<TripDetailScreen> {
               onPressed: _declare,
             ),
             if (_notice != null) ...[
-              const SizedBox(height: EsokoSpacing.s2),
+              const SizedBox(height: EsoqoSpacing.s2),
               Text(_notice!),
             ],
             if (trip.active) ...[
-              const SizedBox(height: EsokoSpacing.s5),
-              EsokoButton.destructive(
+              const SizedBox(height: EsoqoSpacing.s5),
+              EsoqoButton.destructive(
                 label: 'Close trip',
                 confirm: 'Closing a trip ends it for everyone on board and '
                     'cannot be undone. Close it now?',
@@ -339,8 +339,8 @@ class _TripDetailScreenState extends ConsumerState<TripDetailScreen> {
   }
 
   Widget _summaryCard(CollectionsSummary s) {
-    return EsokoCard(
-      padding: const EdgeInsets.all(EsokoSpacing.s4),
+    return EsoqoCard(
+      padding: const EdgeInsets.all(EsoqoSpacing.s4),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
@@ -370,7 +370,7 @@ class _TripDetailScreenState extends ConsumerState<TripDetailScreen> {
             value,
             style: TextStyle(
               fontWeight: FontWeight.w700,
-              color: highlight ? EsokoColors.red : null,
+              color: highlight ? EsoqoColors.red : null,
             ),
           ),
         ],

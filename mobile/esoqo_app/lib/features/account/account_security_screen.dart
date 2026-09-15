@@ -3,7 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/api/api_exception.dart';
 import '../../core/auth/auth_controller.dart';
-import '../../core/theme/esoko_tokens.dart';
+import '../../core/theme/esoqo_tokens.dart';
 import '../../core/widgets/widgets.dart';
 
 /// The PIN you sign in with.
@@ -70,50 +70,50 @@ class _AccountSecurityScreenState extends ConsumerState<AccountSecurityScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: const EsokoAppBar(title: 'Security'),
+      appBar: const EsoqoAppBar(title: 'Security'),
       body: SafeArea(
         child: Center(
           child: ConstrainedBox(
             constraints: const BoxConstraints(maxWidth: 560),
             child: ListView(
-              padding: const EdgeInsets.all(EsokoSpacing.s6),
+              padding: const EdgeInsets.all(EsoqoSpacing.s6),
               children: [
-                EsokoSectionHeader(
+                EsoqoSectionHeader(
                   title: 'Change your PIN',
                   subtitle:
                       'The PIN you sign in with. Four to six digits, and never '
                       'one somebody could guess from your phone number.',
                 ),
-                const SizedBox(height: EsokoSpacing.s5),
-                EsokoField.pin(
+                const SizedBox(height: EsoqoSpacing.s5),
+                EsoqoField.pin(
                   controller: _pinController,
                   label: 'New PIN',
                   helper: '4 to 6 digits',
                   autofill: PinAutofill.create,
                   textInputAction: TextInputAction.next,
                 ),
-                const SizedBox(height: EsokoSpacing.s3),
+                const SizedBox(height: EsoqoSpacing.s3),
                 // No autofill on the repeat: filling it from the
                 // keychain would defeat the point of asking twice.
-                EsokoField.pin(
+                EsoqoField.pin(
                   controller: _pinConfirmController,
                   label: 'Repeat new PIN',
                   onSubmitted: (_) => _save(),
                 ),
                 if (_error != null) ...[
-                  const SizedBox(height: EsokoSpacing.s3),
-                  EsokoFormError(message: _error!),
+                  const SizedBox(height: EsoqoSpacing.s3),
+                  EsoqoFormError(message: _error!),
                 ],
                 if (_done != null) ...[
-                  const SizedBox(height: EsokoSpacing.s3),
-                  EsokoInlineNotice(
-                    color: EsokoColors.green,
-                    icon: EsokoIconName.check,
+                  const SizedBox(height: EsoqoSpacing.s3),
+                  EsoqoInlineNotice(
+                    color: EsoqoColors.green,
+                    icon: EsoqoIconName.check,
                     message: _done!,
                   ),
                 ],
-                const SizedBox(height: EsokoSpacing.s5),
-                EsokoButton.primary(
+                const SizedBox(height: EsoqoSpacing.s5),
+                EsoqoButton.primary(
                   expand: false,
                   label: 'Change PIN',
                   icon: Icons.lock_outline,

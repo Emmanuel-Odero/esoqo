@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/api/api_exception.dart';
-import '../../core/theme/esoko_tokens.dart';
+import '../../core/theme/esoqo_tokens.dart';
 import '../../core/widgets/widgets.dart';
 import 'groups_repository.dart';
 
@@ -56,27 +56,27 @@ class _CreateGroupScreenState extends ConsumerState<CreateGroupScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: const EsokoAppBar(title: 'Start a group'),
+      appBar: const EsoqoAppBar(title: 'Start a group'),
       body: SafeArea(
         child: Center(
           child: ConstrainedBox(
             constraints: const BoxConstraints(maxWidth: 420),
             child: SingleChildScrollView(
-              padding: const EdgeInsets.all(EsokoSpacing.s6),
+              padding: const EdgeInsets.all(EsoqoSpacing.s6),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
                   Text(
                     "You'll be the group's chairperson and its first signer.",
-                    // Theme-derived, not the fixed EsokoColors.text2 —
+                    // Theme-derived, not the fixed EsoqoColors.text2 —
                     // this sits on the scaffold background, which
                     // switches between paper and darkSurface.
                     style: TextStyle(
                       color: Theme.of(context).textTheme.bodySmall?.color,
                     ),
                   ),
-                  const SizedBox(height: EsokoSpacing.s5),
-                  EsokoDropdown<String>(
+                  const SizedBox(height: EsoqoSpacing.s5),
+                  EsoqoDropdown<String>(
                     label: 'Kind of group',
                     initialValue: _kind,
                     items: [
@@ -85,21 +85,21 @@ class _CreateGroupScreenState extends ConsumerState<CreateGroupScreen> {
                     ],
                     onChanged: (v) => setState(() => _kind = v ?? _kind),
                   ),
-                  const SizedBox(height: EsokoSpacing.s3),
-                  EsokoField.text(
+                  const SizedBox(height: EsoqoSpacing.s3),
+                  EsoqoField.text(
                     controller: _nameController,
                     label: 'Group name',
                   ),
-                  const SizedBox(height: EsokoSpacing.s3),
-                  EsokoField.quantity(
+                  const SizedBox(height: EsoqoSpacing.s3),
+                  EsoqoField.quantity(
                     controller: _countyController,
                     label: 'County code',
                     helper: 'e.g. 047 for Nairobi',
                     onSubmitted: (_) => _create(),
                   ),
-                  if (_error != null) EsokoFormError(message: _error!),
-                  const SizedBox(height: EsokoSpacing.s5),
-                  EsokoButton.primary(
+                  if (_error != null) EsoqoFormError(message: _error!),
+                  const SizedBox(height: EsoqoSpacing.s5),
+                  EsoqoButton.primary(
                     expand: false,
                     label: 'Create group',
                     loading: _loading,

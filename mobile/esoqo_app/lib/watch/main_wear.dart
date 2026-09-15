@@ -17,24 +17,24 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../core/auth/auth_controller.dart';
 import '../core/auth/auth_state.dart';
-import '../core/theme/esoko_theme.dart';
+import '../core/theme/esoqo_theme.dart';
 import 'watch_home.dart';
 import 'watch_sign_in.dart';
 
 void main() {
-  runApp(const ProviderScope(child: EsokoWatchApp()));
+  runApp(const ProviderScope(child: EsoqoWatchApp()));
 }
 
-class EsokoWatchApp extends ConsumerWidget {
-  const EsokoWatchApp({super.key});
+class EsoqoWatchApp extends ConsumerWidget {
+  const EsoqoWatchApp({super.key});
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final auth = ref.watch(authControllerProvider);
     return MaterialApp(
-      title: 'Esoko',
+      title: 'Esoqo',
       debugShowCheckedModeBanner: false,
-      theme: EsokoTheme.dark(), // dark by default — watch faces favour it (battery + legibility)
+      theme: EsoqoTheme.dark(), // dark by default — watch faces favour it (battery + legibility)
       home: switch (auth) {
         AuthUnknown() => const Scaffold(body: Center(child: CircularProgressIndicator())),
         AuthSignedOut() => const WatchSignIn(),

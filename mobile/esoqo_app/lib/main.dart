@@ -5,26 +5,26 @@ import 'package:quick_actions/quick_actions.dart';
 import 'core/auth/auth_controller.dart';
 import 'core/auth/auth_state.dart';
 import 'core/router.dart';
-import 'core/theme/esoko_theme.dart';
+import 'core/theme/esoqo_theme.dart';
 
 void main() {
-  runApp(const ProviderScope(child: EsokoApp()));
+  runApp(const ProviderScope(child: EsoqoApp()));
 }
 
-class EsokoApp extends ConsumerStatefulWidget {
-  const EsokoApp({super.key});
+class EsoqoApp extends ConsumerStatefulWidget {
+  const EsoqoApp({super.key});
 
   @override
-  ConsumerState<EsokoApp> createState() => _EsokoAppState();
+  ConsumerState<EsoqoApp> createState() => _EsoqoAppState();
 }
 
-class _EsokoAppState extends ConsumerState<EsokoApp> {
+class _EsoqoAppState extends ConsumerState<EsoqoApp> {
   final _quickActions = const QuickActions();
 
   @override
   void initState() {
     super.initState();
-    // App-icon quick actions (long-press Esoko on the home screen):
+    // App-icon quick actions (long-press Esoqo on the home screen):
     // scanner entry points without opening the app first. Signed-out
     // taps fall through the router's auth redirect to sign-in.
     _quickActions.setShortcutItems(const [
@@ -53,10 +53,10 @@ class _EsokoAppState extends ConsumerState<EsokoApp> {
   Widget build(BuildContext context) {
     final router = ref.watch(routerProvider);
     return MaterialApp.router(
-      title: 'Esoko',
+      title: 'Esoqo',
       debugShowCheckedModeBanner: false,
-      theme: EsokoTheme.light(),
-      darkTheme: EsokoTheme.dark(),
+      theme: EsoqoTheme.light(),
+      darkTheme: EsoqoTheme.dark(),
       // Explicit, not left to MaterialApp's own default (which happens
       // to also be .system) — this is the one line that actually wires
       // "follow the phone's appearance setting" together with the two

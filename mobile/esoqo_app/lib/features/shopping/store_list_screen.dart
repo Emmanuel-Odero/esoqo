@@ -4,7 +4,7 @@ import 'package:geolocator/geolocator.dart';
 
 import '../../core/auth/auth_controller.dart';
 import '../../core/auth/auth_state.dart';
-import '../../core/theme/esoko_tokens.dart';
+import '../../core/theme/esoqo_tokens.dart';
 import '../../core/widgets/widgets.dart';
 import 'category_style.dart';
 import 'gradient_thumb.dart';
@@ -149,13 +149,13 @@ class _StoreListScreenState extends ConsumerState<StoreListScreen> {
               SliverToBoxAdapter(
                 child: Padding(
                   padding: const EdgeInsets.fromLTRB(
-                    EsokoSpacing.s5,
-                    EsokoSpacing.s5,
-                    EsokoSpacing.s5,
-                    EsokoSpacing.s2,
+                    EsoqoSpacing.s5,
+                    EsoqoSpacing.s5,
+                    EsoqoSpacing.s5,
+                    EsoqoSpacing.s2,
                   ),
-                  child: EsokoPageLead(
-                    'Shop from home, then collect once it\'s ready — or browse goods, produce and services from stores across Esoko.',
+                  child: EsoqoPageLead(
+                    'Shop from home, then collect once it\'s ready — or browse goods, produce and services from stores across Esoqo.',
                   ),
                 ),
               ),
@@ -166,20 +166,20 @@ class _StoreListScreenState extends ConsumerState<StoreListScreen> {
               SliverToBoxAdapter(
                 child: Padding(
                   padding: const EdgeInsets.symmetric(
-                    horizontal: EsokoSpacing.s5,
+                    horizontal: EsoqoSpacing.s5,
                   ),
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      EsokoSearchField(
+                      EsoqoSearchField(
                         controller: _searchController,
                         hint: 'Search by neighbourhood or store — "Kilimani"',
                         debounce: const Duration(milliseconds: 350),
                         onChanged: (v) => setState(() => _query = v.trim()),
                       ),
-                      const SizedBox(height: EsokoSpacing.s3),
+                      const SizedBox(height: EsoqoSpacing.s3),
                       Wrap(
-                        spacing: EsokoSpacing.s2,
+                        spacing: EsoqoSpacing.s2,
                         crossAxisAlignment: WrapCrossAlignment.center,
                         children: [
                           ChoiceChip(
@@ -215,7 +215,7 @@ class _StoreListScreenState extends ConsumerState<StoreListScreen> {
                             Text(
                               'Sorted by distance',
                               style: TextStyle(
-                                fontSize: 12,
+                                fontSize: EsoqoTypeScale.labelSmall,
                                 color: Theme.of(context)
                                     .textTheme
                                     .bodySmall
@@ -225,16 +225,16 @@ class _StoreListScreenState extends ConsumerState<StoreListScreen> {
                         ],
                       ),
                       if (_locationError != null)
-                        EsokoFormError(message: _locationError!),
+                        EsoqoFormError(message: _locationError!),
                     ],
                   ),
                 ),
               ),
               const SliverToBoxAdapter(
-                child: SizedBox(height: EsokoSpacing.s2),
+                child: SizedBox(height: EsoqoSpacing.s2),
               ),
               if (_searching)
-                EsokoSliverAsyncView(
+                EsoqoSliverAsyncView(
                   value: nearby,
                   isEmpty: (list) => list.isEmpty,
                   emptyMessage: 'No stores match — try a different search.',
@@ -243,7 +243,7 @@ class _StoreListScreenState extends ConsumerState<StoreListScreen> {
                   data: (context, list) => [_storeListSliver(list)],
                 )
               else
-                EsokoSliverAsyncView(
+                EsoqoSliverAsyncView(
                   value: plain,
                   isEmpty: (list) => list.isEmpty,
                   emptyMessage: 'No stores are open yet.',
@@ -252,7 +252,7 @@ class _StoreListScreenState extends ConsumerState<StoreListScreen> {
                   data: (context, list) => [_storeListSliver(list)],
                 ),
               const SliverToBoxAdapter(
-                child: SizedBox(height: EsokoSpacing.s6),
+                child: SizedBox(height: EsoqoSpacing.s6),
               ),
             ],
           ),
@@ -264,15 +264,15 @@ class _StoreListScreenState extends ConsumerState<StoreListScreen> {
   Widget _storeListSliver(List<StoreSummary> list) {
     return SliverPadding(
       padding: const EdgeInsets.fromLTRB(
-        EsokoSpacing.s4,
-        EsokoSpacing.s2,
-        EsokoSpacing.s4,
-        EsokoSpacing.s2,
+        EsoqoSpacing.s4,
+        EsoqoSpacing.s2,
+        EsoqoSpacing.s4,
+        EsoqoSpacing.s2,
       ),
       sliver: SliverList.separated(
         itemCount: list.length,
-        separatorBuilder: (_, _) => const SizedBox(height: EsokoSpacing.s3),
-        itemBuilder: (context, i) => EsokoStagger(
+        separatorBuilder: (_, _) => const SizedBox(height: EsoqoSpacing.s3),
+        itemBuilder: (context, i) => EsoqoStagger(
           index: i,
           child: _StoreCard(store: list[i]),
         ),
@@ -291,7 +291,7 @@ class _StoreCard extends StatelessWidget {
     final distance = store is NearbyStore
         ? (store as NearbyStore).distanceKm
         : null;
-    return EsokoCard(
+    return EsoqoCard(
       onTap: () => Navigator.of(context).push(
         MaterialPageRoute(builder: (_) => StoreDetailScreen(slug: store.slug)),
       ),
@@ -307,13 +307,13 @@ class _StoreCard extends StatelessWidget {
                 height: 64,
                 child: GradientThumb(
                   category: store.primaryCategory,
-                  borderRadius: BorderRadius.circular(EsokoRadius.md),
+                  borderRadius: BorderRadius.circular(EsoqoRadius.md),
                   iconSize: 28,
                 ),
               ),
             ),
           ),
-          const SizedBox(width: EsokoSpacing.s4),
+          const SizedBox(width: EsoqoSpacing.s4),
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
@@ -322,10 +322,10 @@ class _StoreCard extends StatelessWidget {
                   store.name,
                   style: const TextStyle(
                     fontWeight: FontWeight.w700,
-                    fontSize: 16,
+                    fontSize: EsoqoTypeScale.subTitle,
                   ),
                 ),
-                const SizedBox(height: EsokoSpacing.s1),
+                const SizedBox(height: EsoqoSpacing.s1),
                 if (store.neighborhood != null || distance != null)
                   Text(
                     [
@@ -336,7 +336,7 @@ class _StoreCard extends StatelessWidget {
                     overflow: TextOverflow.ellipsis,
                     style: TextStyle(
                       color: Theme.of(context).textTheme.bodySmall?.color,
-                      fontSize: 12,
+                      fontSize: EsoqoTypeScale.labelSmall,
                     ),
                   )
                 else if (store.tagline != null)
@@ -348,9 +348,9 @@ class _StoreCard extends StatelessWidget {
                       color: Theme.of(context).textTheme.bodySmall?.color,
                     ),
                   ),
-                const SizedBox(height: EsokoSpacing.s2),
+                const SizedBox(height: EsoqoSpacing.s2),
                 if (store.primaryCategory != null)
-                  EsokoStatusPill(
+                  EsoqoStatusPill(
                     label: store.primaryCategory!,
                     color: style.gradient.last,
                     icon: style.icon,
@@ -394,28 +394,29 @@ class _ReadyForPickupSection extends ConsumerWidget {
 
     return Padding(
       padding: const EdgeInsets.fromLTRB(
-        EsokoSpacing.s5,
+        EsoqoSpacing.s5,
         0,
-        EsokoSpacing.s5,
-        EsokoSpacing.s4,
+        EsoqoSpacing.s5,
+        EsoqoSpacing.s4,
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const EsokoSubHeader('Ready for pickup'),
-          const SizedBox(height: EsokoSpacing.s2),
+          const EsoqoSubHeader('Ready for pickup'),
+          const SizedBox(height: EsoqoSpacing.s2),
           for (var i = 0; i < ready.length; i++)
             Padding(
-              padding: const EdgeInsets.only(bottom: EsokoSpacing.s3),
-              child: EsokoStagger(
+              padding: const EdgeInsets.only(bottom: EsoqoSpacing.s3),
+              child: EsoqoStagger(
                 index: i,
-                child: EsokoAttentionCard(
+                child: EsoqoAttentionCard(
                   when: ready[i].pickupCode == null
                       ? 'Ready now'
                       : 'Code ${ready[i].pickupCode}',
                   title: ready[i].storeName,
-                  detail: 'KES ${ready[i].totalKes} · tap to show the code',
-                  accent: EsokoColors.green,
+                  amountKes: ready[i].totalKes,
+                  detail: 'Tap to show the code',
+                  accent: EsoqoColors.green,
                   onTap: () => Navigator.of(context).push(
                     MaterialPageRoute(
                       builder: (_) => OrderDetailScreen(orderId: ready[i].id),
@@ -444,20 +445,20 @@ class _MySpotsSection extends ConsumerWidget {
     if (list == null || list.isEmpty) return const SizedBox.shrink();
     return Padding(
       padding: const EdgeInsets.fromLTRB(
-        EsokoSpacing.s5,
+        EsoqoSpacing.s5,
         0,
-        EsokoSpacing.s5,
-        EsokoSpacing.s4,
+        EsoqoSpacing.s5,
+        EsoqoSpacing.s4,
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const EsokoSubHeader('Your spots'),
-          const SizedBox(height: EsokoSpacing.s2),
+          const EsoqoSubHeader('Your spots'),
+          const SizedBox(height: EsoqoSpacing.s2),
           for (var i = 0; i < list.length; i++)
             Padding(
-              padding: const EdgeInsets.only(bottom: EsokoSpacing.s3),
-              child: EsokoStagger(index: i, child: _StoreCard(store: list[i])),
+              padding: const EdgeInsets.only(bottom: EsoqoSpacing.s3),
+              child: EsoqoStagger(index: i, child: _StoreCard(store: list[i])),
             ),
         ],
       ),

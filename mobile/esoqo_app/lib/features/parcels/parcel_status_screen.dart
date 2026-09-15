@@ -6,7 +6,7 @@ import 'package:url_launcher/url_launcher.dart';
 import '../../core/auth/auth_controller.dart';
 import '../../core/auth/auth_state.dart';
 import '../../core/money/money.dart';
-import '../../core/theme/esoko_tokens.dart';
+import '../../core/theme/esoqo_tokens.dart';
 import '../../core/widgets/widgets.dart';
 import 'parcel_label_screen.dart';
 import 'parcel_models.dart';
@@ -45,9 +45,9 @@ class ParcelStatusScreen extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final status = ref.watch(parcelStatusProvider(code));
     return Scaffold(
-      appBar: const EsokoAppBar(title: 'Track parcel'),
+      appBar: const EsoqoAppBar(title: 'Track parcel'),
       body: SafeArea(
-        child: EsokoAsyncView(
+        child: EsoqoAsyncView(
           value: status,
           isEmpty: (v) => v == null,
           emptyMessage: 'That parcel code was not found.',
@@ -57,15 +57,15 @@ class ParcelStatusScreen extends ConsumerWidget {
             child: ConstrainedBox(
               constraints: const BoxConstraints(maxWidth: 480),
               child: ListView(
-                padding: const EdgeInsets.all(EsokoSpacing.s5),
+                padding: const EdgeInsets.all(EsoqoSpacing.s5),
                 children: [
                   Row(
                     children: [
                       Expanded(
                         child: Text(
                           s!.code,
-                          style: EsokoTypography.mono(
-                            fontSize: 16,
+                          style: EsoqoTypography.mono(
+                            fontSize: EsoqoTypeScale.subTitle,
                             fontWeight: FontWeight.w700,
                           ),
                         ),
@@ -78,7 +78,7 @@ class ParcelStatusScreen extends ConsumerWidget {
                       ),
                     ],
                   ),
-                  const SizedBox(height: EsokoSpacing.s4),
+                  const SizedBox(height: EsoqoSpacing.s4),
                   // A pre-printed, not-yet-booked label (see
                   // dbx.ParcelLabelStock) has no real route yet —
                   // originLabel/destinationLabel come back blank, so
@@ -86,7 +86,7 @@ class ParcelStatusScreen extends ConsumerWidget {
                   // " → " with nothing on either side.
                   if (!s.preLabel) ...[
                     Text('${s.originLabel} → ${s.destinationLabel}'),
-                    const SizedBox(height: EsokoSpacing.s2),
+                    const SizedBox(height: EsoqoSpacing.s2),
                   ],
                   // Real, per-status copy — never a bare enum label —
                   // same "who/what/next step" tone the SMS pair this
@@ -101,11 +101,11 @@ class ParcelStatusScreen extends ConsumerWidget {
                   // tracking screen exists to answer — it just had no
                   // way through to this page before.
                   if (parcelEtaText(s) != null) ...[
-                    const SizedBox(height: EsokoSpacing.s2),
+                    const SizedBox(height: EsoqoSpacing.s2),
                     Row(
                       children: [
                         const Icon(Icons.schedule_outlined, size: 16),
-                        const SizedBox(width: EsokoSpacing.s1),
+                        const SizedBox(width: EsoqoSpacing.s1),
                         Expanded(
                           child: Text(
                             parcelEtaText(s)!,
@@ -119,12 +119,12 @@ class ParcelStatusScreen extends ConsumerWidget {
                   // the receiver's next action is a walk to a specific
                   // door, so the address, hours and phone travel with it.
                   if (s.agent != null) ...[
-                    const SizedBox(height: EsokoSpacing.s4),
+                    const SizedBox(height: EsoqoSpacing.s4),
                     _AgentCard(agent: s.agent!),
                   ],
-                  const SizedBox(height: EsokoSpacing.s5),
+                  const SizedBox(height: EsoqoSpacing.s5),
                   if (s.status == 'DRAFT_PENDING_PAYMENT')
-                    EsokoButton.primary(
+                    EsoqoButton.primary(
                       expand: false,
                       label: s.priceKes == null
                           ? 'Complete payment'
@@ -172,7 +172,7 @@ class ParcelStatusScreen extends ConsumerWidget {
                     // the same would be true, and more misleading, for a
                     // parcel that genuinely travelled and then failed at
                     // the door. They get a card that says what happened.
-                    EsokoCard(
+                    EsoqoCard(
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
@@ -181,7 +181,7 @@ class ParcelStatusScreen extends ConsumerWidget {
                             style: const TextStyle(fontWeight: FontWeight.w700),
                           ),
                           if (s.status == 'FAILED_DELIVERY') ...[
-                            const SizedBox(height: EsokoSpacing.s1),
+                            const SizedBox(height: EsoqoSpacing.s1),
                             Text(
                               '${s.deliveryAttempts} '
                               '${s.deliveryAttempts == 1 ? 'attempt' : 'attempts'} so far'
@@ -190,7 +190,7 @@ class ParcelStatusScreen extends ConsumerWidget {
                             ),
                           ],
                           if (s.cancelledAt != null) ...[
-                            const SizedBox(height: EsokoSpacing.s1),
+                            const SizedBox(height: EsoqoSpacing.s1),
                             Text(
                               'on ${parcelHumanTime(s.cancelledAt)}',
                               style: Theme.of(context).textTheme.bodySmall,
@@ -207,7 +207,7 @@ class ParcelStatusScreen extends ConsumerWidget {
                     // would just show every stage permanently
                     // unreached, reading as "stuck" rather than
                     // "hasn't started".
-                    EsokoCard(
+                    EsoqoCard(
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
@@ -215,7 +215,7 @@ class ParcelStatusScreen extends ConsumerWidget {
                             'Pre-printed label',
                             style: TextStyle(fontWeight: FontWeight.w700),
                           ),
-                          const SizedBox(height: EsokoSpacing.s1),
+                          const SizedBox(height: EsoqoSpacing.s1),
                           if (s.preLabelInfo == null)
                             Text(
                               'Not yet attached to a shipment.',
@@ -258,8 +258,8 @@ class ParcelStatusScreen extends ConsumerWidget {
                     // says delivered but I never got it" from an
                     // argument into a question with an answer.
                     if (s.podReceivedByName != null) ...[
-                      const SizedBox(height: EsokoSpacing.s4),
-                      EsokoCard(
+                      const SizedBox(height: EsoqoSpacing.s4),
+                      EsoqoCard(
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
@@ -267,7 +267,7 @@ class ParcelStatusScreen extends ConsumerWidget {
                               'Proof of delivery',
                               style: TextStyle(fontWeight: FontWeight.w700),
                             ),
-                            const SizedBox(height: EsokoSpacing.s1),
+                            const SizedBox(height: EsoqoSpacing.s1),
                             Text(
                               'Received by ${s.podReceivedByName}'
                               '${s.podMethod == 'AGENT_COLLECTION' ? ' at the pickup point' : ''}',
@@ -276,14 +276,14 @@ class ParcelStatusScreen extends ConsumerWidget {
                         ),
                       ),
                     ],
-                    const SizedBox(height: EsokoSpacing.s4),
+                    const SizedBox(height: EsoqoSpacing.s4),
                     if (s.receiptConfirmedAt != null)
                       Text(
                         'Receipt confirmed ${parcelHumanTime(s.receiptConfirmedAt)}',
                         style: Theme.of(context).textTheme.bodySmall,
                       )
                     else
-                      EsokoButton.secondary(
+                      EsoqoButton.secondary(
                         label: 'Confirm you received this parcel',
                         onPressed: () async {
                           final confirmed = await Navigator.of(context).push<bool>(
@@ -299,7 +299,7 @@ class ParcelStatusScreen extends ConsumerWidget {
                       ),
                   ],
                   if (ref.watch(authControllerProvider) is AuthSignedIn) ...[
-                    const SizedBox(height: EsokoSpacing.s5),
+                    const SizedBox(height: EsoqoSpacing.s5),
                     _HandoffHistorySection(code: code),
                     // Scanning a parcel used to mean "click through to
                     // Print label just to see who it's for" — this
@@ -310,8 +310,8 @@ class ParcelStatusScreen extends ConsumerWidget {
                     // button both already rely on) right on the scan
                     // result itself.
                     _LabelInfoSection(code: s.code),
-                    const SizedBox(height: EsokoSpacing.s4),
-                    EsokoButton.secondary(
+                    const SizedBox(height: EsoqoSpacing.s4),
+                    EsoqoButton.secondary(
                       label: 'Print label',
                       icon: Icons.qr_code_2_outlined,
                       onPressed: () => Navigator.of(context).push(
@@ -322,8 +322,8 @@ class ParcelStatusScreen extends ConsumerWidget {
                     ),
                   ],
                   if (deliveryCode != null) ...[
-                    const SizedBox(height: EsokoSpacing.s5),
-                    EsokoCard(
+                    const SizedBox(height: EsoqoSpacing.s5),
+                    EsoqoCard(
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
@@ -331,12 +331,12 @@ class ParcelStatusScreen extends ConsumerWidget {
                             'Delivery code — give this to the receiver only',
                             style: TextStyle(fontWeight: FontWeight.w700),
                           ),
-                          const SizedBox(height: EsokoSpacing.s2),
+                          const SizedBox(height: EsoqoSpacing.s2),
                           Text(
                             deliveryCode!,
-                            style: EsokoTypography.mono(
-                              fontSize: 20,
-                              fontWeight: FontWeight.w800,
+                            style: EsoqoTypography.mono(
+                              fontSize: EsoqoTypeScale.cardTitle,
+                              fontWeight: FontWeight.w700,
                             ),
                           ),
                         ],
@@ -353,13 +353,13 @@ class ParcelStatusScreen extends ConsumerWidget {
   }
 
   Widget _labelInfoRow(String label, String value) => Padding(
-    padding: const EdgeInsets.only(top: EsokoSpacing.s1),
+    padding: const EdgeInsets.only(top: EsoqoSpacing.s1),
     child: Row(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         SizedBox(
           width: 90,
-          child: Text(label, style: const TextStyle(color: EsokoColors.line)),
+          child: Text(label, style: const TextStyle(color: EsoqoColors.line)),
         ),
         Expanded(child: Text(value)),
       ],
@@ -388,9 +388,9 @@ class ParcelStatusScreen extends ConsumerWidget {
               Container(width: 2, height: 28, color: color?.withValues(alpha: 0.3)),
           ],
         ),
-        const SizedBox(width: EsokoSpacing.s3),
+        const SizedBox(width: EsoqoSpacing.s3),
         Padding(
-          padding: const EdgeInsets.only(bottom: EsokoSpacing.s3),
+          padding: const EdgeInsets.only(bottom: EsoqoSpacing.s3),
           child: Text(stage.$2, style: TextStyle(color: color, fontWeight: FontWeight.w600)),
         ),
       ],
@@ -411,12 +411,12 @@ class _AgentCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final small = Theme.of(context).textTheme.bodySmall;
-    return EsokoCard(
+    return EsoqoCard(
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Text('Collect from', style: small),
-          const SizedBox(height: EsokoSpacing.s1),
+          const SizedBox(height: EsoqoSpacing.s1),
           Text(agent.name, style: const TextStyle(fontWeight: FontWeight.w700)),
           Text(agent.locationHint, style: small),
           if (agent.openingHours != null)
@@ -427,21 +427,21 @@ class _AgentCard extends StatelessWidget {
               'payable at the shop',
               style: small,
             ),
-          const SizedBox(height: EsokoSpacing.s2),
+          const SizedBox(height: EsoqoSpacing.s2),
           Row(
             children: [
               if (agent.msisdn.isNotEmpty)
                 Expanded(
-                  child: EsokoButton.secondary(
+                  child: EsoqoButton.secondary(
                     label: 'Call',
                     icon: Icons.phone_outlined,
                     onPressed: () =>
                         launchUrl(Uri.parse('tel:${agent.msisdn}')),
                   ),
                 ),
-              if (agent.msisdn.isNotEmpty) const SizedBox(width: EsokoSpacing.s2),
+              if (agent.msisdn.isNotEmpty) const SizedBox(width: EsoqoSpacing.s2),
               Expanded(
-                child: EsokoButton.secondary(
+                child: EsoqoButton.secondary(
                   label: 'Directions',
                   icon: Icons.map_outlined,
                   onPressed: () => launchUrl(
@@ -480,7 +480,7 @@ class _HandoffHistorySection extends ConsumerWidget {
       error: (_, _) => const SizedBox.shrink(),
       data: (rows) {
         if (rows == null || rows.isEmpty) return const SizedBox.shrink();
-        return EsokoCard(
+        return EsoqoCard(
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
@@ -488,10 +488,10 @@ class _HandoffHistorySection extends ConsumerWidget {
                 'Handling history',
                 style: TextStyle(fontWeight: FontWeight.w700),
               ),
-              const SizedBox(height: EsokoSpacing.s2),
+              const SizedBox(height: EsoqoSpacing.s2),
               for (final h in rows)
                 Padding(
-                  padding: const EdgeInsets.only(bottom: EsokoSpacing.s1),
+                  padding: const EdgeInsets.only(bottom: EsoqoSpacing.s1),
                   child: Text(
                     '${h.fromName ?? 'Sender'} → ${h.toName} — '
                     '${parcelHumanTime(h.createdAt)}',
@@ -526,13 +526,13 @@ class _LabelInfoSection extends ConsumerWidget {
       loading: () => const SizedBox.shrink(),
       error: (_, _) => const SizedBox.shrink(),
       data: (l) => Padding(
-        padding: const EdgeInsets.only(top: EsokoSpacing.s4),
-        child: EsokoCard(
+        padding: const EdgeInsets.only(top: EsoqoSpacing.s4),
+        child: EsoqoCard(
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               const Text('Handling info', style: TextStyle(fontWeight: FontWeight.w700)),
-              const SizedBox(height: EsokoSpacing.s2),
+              const SizedBox(height: EsoqoSpacing.s2),
               Text('${parcelTypeLabel(l.parcelType)}'
                   '${l.weightKg != null ? ' · ${l.weightKg!.toStringAsFixed(1)} kg' : ''}'),
               Text('Receiver: ${l.receiverName}'
@@ -543,8 +543,8 @@ class _LabelInfoSection extends ConsumerWidget {
               // free-text label alone forces and what this market's
               // delivery-failure rate is largely made of.
               if (l.hasDestinationPin) ...[
-                const SizedBox(height: EsokoSpacing.s2),
-                EsokoButton.secondary(
+                const SizedBox(height: EsoqoSpacing.s2),
+                EsoqoButton.secondary(
                   label: 'Navigate to the drop-off',
                   icon: Icons.navigation_outlined,
                   onPressed: () => launchUrl(

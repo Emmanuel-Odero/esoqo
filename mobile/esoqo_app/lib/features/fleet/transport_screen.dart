@@ -4,7 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../core/auth/auth_controller.dart';
 import '../../core/auth/auth_state.dart';
 import '../../core/auth/scan_access.dart';
-import '../../core/theme/esoko_tokens.dart';
+import '../../core/theme/esoqo_tokens.dart';
 import '../../core/widgets/widgets.dart';
 import '../scan/universal_scan_screen.dart';
 import 'fare_pay_screen.dart';
@@ -38,7 +38,7 @@ class TransportScreen extends ConsumerWidget {
     final runsOrg = ref.watch(myOrgsProvider).valueOrNull?.isNotEmpty ?? false;
 
     // Bar-less Scaffold: the Home hub wraps this screen in its own
-    // Scaffold + EsokoAppBar (like ListingListScreen/MyGroupsScreen) —
+    // Scaffold + EsoqoAppBar (like ListingListScreen/MyGroupsScreen) —
     // an appBar here would stack a second header under the hub's.
     return Scaffold(
       body: SafeArea(
@@ -46,16 +46,16 @@ class TransportScreen extends ConsumerWidget {
           child: ConstrainedBox(
             constraints: const BoxConstraints(maxWidth: 840),
             child: ListView(
-              padding: const EdgeInsets.all(EsokoSpacing.s4),
+              padding: const EdgeInsets.all(EsoqoSpacing.s4),
               children: [
-                const EsokoPageLead('Pay bus fare, or run your fleet.'),
-                const SizedBox(height: EsokoSpacing.s4),
+                const EsoqoPageLead('Pay bus fare, or run your fleet.'),
+                const SizedBox(height: EsoqoSpacing.s4),
                 // The proposal's scan-to-board hero: of the three things
                 // this screen can do, this is the one that happens
                 // standing inside a moving matatu with one hand free,
                 // so it gets the card everything else in the app leads
                 // with rather than a row identical to "Verify fare".
-                EsokoStagger(
+                EsoqoStagger(
                   index: 0,
                   child: _ScanToBoardHero(
                     onTap: () => Navigator.of(context).push(
@@ -65,14 +65,14 @@ class TransportScreen extends ConsumerWidget {
                     ),
                   ),
                 ),
-                const SizedBox(height: EsokoSpacing.s4),
-                EsokoStagger(
+                const SizedBox(height: EsoqoSpacing.s4),
+                EsoqoStagger(
                   index: 1,
-                  child: EsokoListTile(
+                  child: EsoqoListTile(
                     title: 'Pay bus fare',
                     subtitle:
                         'Pick a bus on the road and pay by M-Pesa or voucher.',
-                    leading: const EsokoQuickActionIcon(
+                    leading: const EsoqoQuickActionIcon(
                       icon: Icons.payments_outlined,
                     ),
                     onTap: () => Navigator.of(context).push(
@@ -81,12 +81,12 @@ class TransportScreen extends ConsumerWidget {
                   ),
                 ),
                 if (crew)
-                  EsokoStagger(
+                  EsoqoStagger(
                     index: 2,
-                    child: EsokoListTile(
+                    child: EsoqoListTile(
                       title: 'Verify fare (crew)',
                       subtitle: 'Scan passenger receipt or M-Pesa code.',
-                      leading: const EsokoQuickActionIcon(
+                      leading: const EsoqoQuickActionIcon(
                         icon: Icons.verified_outlined,
                       ),
                       onTap: () => Navigator.of(context).push(
@@ -96,17 +96,17 @@ class TransportScreen extends ConsumerWidget {
                       ),
                     ),
                   ),
-                // Vouchers moved to the Money tab — a fare card is
+                // Vouchers moved to the Wallet tab — a fare card is
                 // money, not a bus, and it belongs with the other
                 // things that are yours rather than filed under
                 // whichever service happened to spend it first.
                 if (runsOrg) ...[
-                  const SizedBox(height: EsokoSpacing.s5),
-                  EsokoSectionHeader(
+                  const SizedBox(height: EsoqoSpacing.s5),
+                  EsoqoSectionHeader(
                     title: 'Your companies',
                     subtitle: 'Fleets you run.',
                   ),
-                  const SizedBox(height: EsokoSpacing.s2),
+                  const SizedBox(height: EsoqoSpacing.s2),
                   _orgs(ref),
                 ],
               ],
@@ -119,7 +119,7 @@ class TransportScreen extends ConsumerWidget {
 
   Widget _orgs(WidgetRef ref) {
     final orgs = ref.watch(myOrgsProvider);
-    return EsokoAsyncView(
+    return EsoqoAsyncView(
       value: orgs,
       isEmpty: (list) => list.isEmpty,
       emptyMessage: 'No transport companies on your account yet.',
@@ -128,12 +128,12 @@ class TransportScreen extends ConsumerWidget {
       data: (context, list) => Column(
         children: [
           for (var i = 0; i < list.length; i++)
-            EsokoStagger(
+            EsoqoStagger(
               index: 3 + i,
-              child: EsokoListTile(
+              child: EsoqoListTile(
                 title: list[i].name,
                 subtitle: list[i].status,
-                leading: const EsokoQuickActionIcon(
+                leading: const EsoqoQuickActionIcon(
                   icon: Icons.directions_bus_outlined,
                 ),
                 onTap: () => Navigator.of(context).push(
@@ -154,7 +154,7 @@ class TransportScreen extends ConsumerWidget {
 
 /// The full-card, one-tap version of "Scan to board" — navy, per
 /// SCREEN_CONVENTIONS.md Rule 3 (this is the person's own action, not
-/// an institution's), matching the wallet/identity heroes Money and
+/// an institution's), matching the wallet/identity heroes Wallet and
 /// Account already lead with. The whole card is tappable, not just the
 /// button beneath the icon, since a thumb reaching for a bus door
 /// shouldn't need to land on a precise target.
@@ -164,9 +164,9 @@ class _ScanToBoardHero extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return EsokoCard(
-      color: EsokoColors.navy,
-      padding: const EdgeInsets.all(EsokoSpacing.s5),
+    return EsoqoCard(
+      color: EsoqoColors.navy,
+      padding: const EdgeInsets.all(EsoqoSpacing.s5),
       onTap: onTap,
       child: Row(
         children: [
@@ -175,7 +175,7 @@ class _ScanToBoardHero extends StatelessWidget {
             height: 56,
             decoration: BoxDecoration(
               color: Colors.white.withValues(alpha: 0.16),
-              borderRadius: BorderRadius.circular(EsokoRadius.lg),
+              borderRadius: BorderRadius.circular(EsoqoRadius.lg),
             ),
             alignment: Alignment.center,
             child: const Icon(
@@ -184,7 +184,7 @@ class _ScanToBoardHero extends StatelessWidget {
               size: 28,
             ),
           ),
-          const SizedBox(width: EsokoSpacing.s4),
+          const SizedBox(width: EsoqoSpacing.s4),
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
@@ -193,17 +193,21 @@ class _ScanToBoardHero extends StatelessWidget {
                   'Scan to board',
                   style: TextStyle(
                     color: Colors.white,
-                    fontFamily: EsokoFonts.display,
-                    fontSize: 19,
-                    fontWeight: FontWeight.w800,
+                    fontFamily: EsoqoFonts.display,
+                    fontSize: EsoqoTypeScale.cardTitle,
+                    fontWeight: FontWeight.w700,
+                    height: EsoqoTypography.headlineHeight,
+                    letterSpacing:
+                        EsoqoTypeScale.cardTitle *
+                        EsoqoTypography.headlineTrackingEm,
                   ),
                 ),
                 const SizedBox(height: 2),
                 Text(
-                  'Scan the Esoko code inside the matatu to pay.',
+                  'Scan the Esoqo code inside the matatu to pay.',
                   style: TextStyle(
                     color: Colors.white.withValues(alpha: 0.8),
-                    fontSize: 12.5,
+                    fontSize: EsoqoTypeScale.meta,
                   ),
                 ),
               ],

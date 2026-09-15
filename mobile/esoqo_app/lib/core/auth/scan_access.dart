@@ -11,7 +11,7 @@ import 'auth_state.dart';
 /// self-checkout, restaurant tables — resolving is public, paying uses
 /// the payer's own wallet/STK.
 /// Crew level: verify any fare.
-bool canVerifyFare(EsokoProfile? profile) {
+bool canVerifyFare(EsoqoProfile? profile) {
   if (profile == null) return false;
   return profile.has('fare.verify') || profile.has('ticketorg.read');
 }

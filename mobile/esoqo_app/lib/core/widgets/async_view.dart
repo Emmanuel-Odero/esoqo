@@ -2,11 +2,11 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../api/api_exception.dart';
-import '../theme/esoko_tokens.dart';
-import 'esoko_empty_state.dart';
-import 'esoko_error_view.dart';
-import 'esoko_icon.dart';
-import 'esoko_skeleton.dart';
+import '../theme/esoqo_tokens.dart';
+import 'esoqo_empty_state.dart';
+import 'esoqo_error_view.dart';
+import 'esoqo_icon.dart';
+import 'esoqo_skeleton.dart';
 
 /// The shared shape for "a screen watching one FutureProvider" — every
 /// screen used to write its own `provider.when(loading: ..., error:
@@ -15,22 +15,22 @@ import 'esoko_skeleton.dart';
 /// that block, written once:
 ///
 /// - No data yet, still loading → a centred spinner.
-/// - No data yet, failed → a retry-capable EsokoErrorView.
+/// - No data yet, failed → a retry-capable EsoqoErrorView.
 /// - Data present (even mid-refresh, e.g. after a pull-to-refresh
 ///   invalidate) → always the data builder. A refetch never wipes what
 ///   was already on screen — that flash-to-spinner is what makes a
 ///   refresh feel like a full reload, so this widget deliberately
 ///   never lets isLoading override an existing value.
-/// - Data present but empty → EsokoEmptyState, via isEmpty/emptyMessage.
-class EsokoAsyncView<T> extends StatelessWidget {
-  const EsokoAsyncView({
+/// - Data present but empty → EsoqoEmptyState, via isEmpty/emptyMessage.
+class EsoqoAsyncView<T> extends StatelessWidget {
+  const EsoqoAsyncView({
     super.key,
     required this.value,
     required this.data,
     this.isEmpty,
     this.emptyMessage,
     this.emptyIcon = Icons.inbox_outlined,
-    this.emptyEsokoIcon,
+    this.emptyEsoqoIcon,
     this.onRetry,
   });
 
@@ -39,12 +39,12 @@ class EsokoAsyncView<T> extends StatelessWidget {
   final bool Function(T data)? isEmpty;
   final String? emptyMessage;
 
-  /// Legacy Material glyph — prefer [emptyEsokoIcon] for anything new.
+  /// Legacy Material glyph — prefer [emptyEsoqoIcon] for anything new.
   final IconData emptyIcon;
 
-  /// Branded 24px stroke icon (see EsokoIcon) for the empty state. Takes
+  /// Branded 24px stroke icon (see EsoqoIcon) for the empty state. Takes
   /// precedence over [emptyIcon] when both are given.
-  final EsokoIconName? emptyEsokoIcon;
+  final EsoqoIconName? emptyEsoqoIcon;
   final VoidCallback? onRetry;
 
   @override
@@ -55,10 +55,10 @@ class EsokoAsyncView<T> extends StatelessWidget {
       final v = value.requireValue;
       if (isEmpty != null && emptyMessage != null && isEmpty!(v)) {
         state = 'empty';
-        child = EsokoEmptyState(
+        child = EsoqoEmptyState(
           message: emptyMessage!,
           icon: emptyIcon,
-          esokoIcon: emptyEsokoIcon,
+          esoqoIcon: emptyEsoqoIcon,
         );
       } else {
         state = 'data';
@@ -70,10 +70,10 @@ class EsokoAsyncView<T> extends StatelessWidget {
           ? error.message
           : 'Something went wrong. Pull to retry.';
       state = 'error';
-      child = EsokoErrorView(message: message, onRetry: onRetry);
+      child = EsoqoErrorView(message: message, onRetry: onRetry);
     } else {
       state = 'loading';
-      child = const EsokoSkeletonList();
+      child = const EsoqoSkeletonList();
     }
     // Cross-fade between lifecycle states (skeleton → data, data →
     // error) instead of snapping — the transition itself is part of the
@@ -81,9 +81,9 @@ class EsokoAsyncView<T> extends StatelessWidget {
     // and skipped entirely under reduced motion.
     final reduced = MediaQuery.disableAnimationsOf(context);
     return AnimatedSwitcher(
-      duration: reduced ? Duration.zero : EsokoMotion.medium,
-      switchInCurve: EsokoMotion.easeOut,
-      switchOutCurve: EsokoMotion.easeOut,
+      duration: reduced ? Duration.zero : EsoqoMotion.medium,
+      switchInCurve: EsoqoMotion.easeOut,
+      switchOutCurve: EsoqoMotion.easeOut,
       child: KeyedSubtree(key: ValueKey(state), child: child),
     );
   }

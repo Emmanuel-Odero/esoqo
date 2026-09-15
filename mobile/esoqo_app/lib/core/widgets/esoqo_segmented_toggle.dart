@@ -4,7 +4,7 @@ import 'package:flutter/material.dart';
 /// Material's SegmentedButton so every hand-rolled copy shares one call
 /// site and one button style, instead of each screen re-deciding the
 /// SegmentedButton styling itself. Started life as
-/// "EsokoPaymentMethodToggle" (M-Pesa / Voucher / Cash, still its
+/// "EsoqoPaymentMethodToggle" (M-Pesa / Voucher / Cash, still its
 /// biggest use) but the shape is generic — any "pick exactly one of a
 /// few options" toggle (Parcels' Sent/Holding included) — so it's named
 /// for what it does now, not just its original call site.
@@ -29,8 +29,8 @@ import 'package:flutter/material.dart';
 /// if `SegmentedButton`'s internal paint ever again disagrees with what
 /// it reports for layout, this widget's own box is the true, enforced
 /// boundary, and nothing can paint past it into whatever sits below.
-class EsokoSegmentedToggle<T> extends StatelessWidget {
-  const EsokoSegmentedToggle({
+class EsoqoSegmentedToggle<T> extends StatelessWidget {
+  const EsoqoSegmentedToggle({
     super.key,
     required this.selected,
     required this.onChanged,

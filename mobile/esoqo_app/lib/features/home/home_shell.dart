@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/auth/active_role.dart';
-import '../../core/theme/esoko_tokens.dart';
+import '../../core/theme/esoqo_tokens.dart';
 import '../../core/widgets/widgets.dart';
 import '../account/account_screen.dart';
 import '../activity/activity_screen.dart';
@@ -21,7 +21,7 @@ import 'org_duty_switcher_screen.dart';
 /// that didn't fit Home, points and order history included. Neither
 /// was reachable except by scrolling to the bottom of one long list,
 /// which is another way of saying neither had a destination at all.
-/// Money and Activity are the two questions that kept getting asked of
+/// Wallet and Activity are the two questions that kept getting asked of
 /// this app with no screen that answered them — "what's mine" and
 /// "what happened" — so they're real tabs now, not sections.
 ///
@@ -42,7 +42,7 @@ import 'org_duty_switcher_screen.dart';
 /// org is visible in the frame and not only inside one card — navy for
 /// your own account, blue for an institution you are acting for, amber
 /// while you are carrying somebody's parcels. Only the Home tab wears
-/// it: Money, Activity and Account are about the person, not the hat
+/// it: Wallet, Activity and Account are about the person, not the hat
 /// they're wearing, so tinting them would say something untrue.
 class HomeShell extends ConsumerStatefulWidget {
   const HomeShell({super.key});
@@ -61,7 +61,7 @@ class _HomeShellState extends ConsumerState<HomeShell> {
     AccountScreen(),
   ];
 
-  static const _titles = ['Home', 'Money', 'Activity', 'Account'];
+  static const _titles = ['Home', 'Wallet', 'Activity', 'Account'];
 
   @override
   Widget build(BuildContext context) {
@@ -71,13 +71,13 @@ class _HomeShellState extends ConsumerState<HomeShell> {
     final Color? barColour = !onHome
         ? null
         : switch (role.role) {
-            EsokoRole.personal => null,
-            EsokoRole.courier => EsokoColors.amber,
-            _ => EsokoColors.blue,
+            EsoqoRole.personal => null,
+            EsoqoRole.courier => EsoqoColors.amber,
+            _ => EsoqoColors.blue,
           };
 
     return Scaffold(
-      appBar: EsokoAppBar(
+      appBar: EsoqoAppBar(
         title: _titles[_index],
         backgroundColor: barColour,
         titleWidget: onHome
@@ -85,19 +85,19 @@ class _HomeShellState extends ConsumerState<HomeShell> {
                 // Default size (30) reads too small against this app
                 // bar's own 19px title style elsewhere — this is the
                 // one place the brand mark itself is the "title".
-                ? const EsokoBrandLockup(size: 40)
+                ? const EsoqoBrandLockup(size: 40)
                 : Text(
                     role.title,
                     overflow: TextOverflow.ellipsis,
                     style: const TextStyle(
                       color: Colors.white,
                       fontWeight: FontWeight.w700,
-                      fontSize: 17,
+                      fontSize: EsoqoTypeScale.subTitle,
                     ),
                   ))
             : null,
         actions: onHome
-            ? const [HatsIconButton(), SizedBox(width: EsokoSpacing.s2)]
+            ? const [HatsIconButton(), SizedBox(width: EsoqoSpacing.s2)]
             : null,
       ),
       body: SafeArea(
@@ -128,7 +128,7 @@ class _HomeShellState extends ConsumerState<HomeShell> {
             _NavItem(
               icon: Icons.account_balance_wallet_outlined,
               activeIcon: Icons.account_balance_wallet_rounded,
-              label: 'Money',
+              label: 'Wallet',
               selected: _index == 1,
               onTap: () => setState(() => _index = 1),
             ),
@@ -189,7 +189,7 @@ class _NavItem extends StatelessWidget {
         label: label,
         child: InkWell(
           onTap: onTap,
-          borderRadius: BorderRadius.circular(EsokoRadius.md),
+          borderRadius: BorderRadius.circular(EsoqoRadius.md),
           child: Container(
             constraints: const BoxConstraints(minHeight: 48),
             alignment: Alignment.center,
@@ -198,11 +198,19 @@ class _NavItem extends StatelessWidget {
               children: [
                 Icon(selected ? activeIcon : icon, size: 22, color: colour),
                 const SizedBox(height: 2),
+                // The label voice, not a bare TextStyle. A bare one
+                // merges with the ambient DefaultTextStyle and so
+                // inherits *body* line-height (1.5) — which at 12pt is
+                // 18pt tall and overflowed this 40pt-capped Column by
+                // exactly 2px. Destination labels are furniture: the
+                // label style's 1.2 is both correct typographically and
+                // the reason this fits.
                 Text(
                   label,
-                  style: TextStyle(
-                    fontSize: 11.5,
-                    fontWeight: selected ? FontWeight.w700 : FontWeight.w500,
+                  style: Theme.of(context).textTheme.labelMedium!.copyWith(
+                    fontWeight: selected
+                        ? FontWeight.w700
+                        : EsoqoTypography.labelWeight,
                     color: colour,
                   ),
                 ),

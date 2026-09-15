@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:geolocator/geolocator.dart';
 
-import '../../../core/theme/esoko_tokens.dart';
+import '../../../core/theme/esoqo_tokens.dart';
 import '../../../core/widgets/widgets.dart';
 import '../parcel_models.dart';
 
@@ -38,26 +38,26 @@ class NearbyJobsTab extends StatelessWidget {
     if (position == null) {
       return Center(
         child: Padding(
-          padding: const EdgeInsets.all(EsokoSpacing.s5),
+          padding: const EdgeInsets.all(EsoqoSpacing.s5),
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
               const Icon(Icons.near_me_outlined, size: 40),
-              const SizedBox(height: EsokoSpacing.s3),
+              const SizedBox(height: EsoqoSpacing.s3),
               const Text(
                 'Share your location to see jobs near you.',
                 textAlign: TextAlign.center,
               ),
-              const SizedBox(height: EsokoSpacing.s3),
-              EsokoButton.primary(
+              const SizedBox(height: EsoqoSpacing.s3),
+              EsoqoButton.primary(
                 expand: false,
                 label: 'Use current location',
                 loading: locating,
                 onPressed: onUseLocation,
               ),
               if (locationError != null) ...[
-                const SizedBox(height: EsokoSpacing.s2),
-                EsokoFormError(message: locationError!),
+                const SizedBox(height: EsoqoSpacing.s2),
+                EsoqoFormError(message: locationError!),
               ],
             ],
           ),
@@ -68,9 +68,9 @@ class NearbyJobsTab extends StatelessWidget {
       children: [
         Padding(
           padding: const EdgeInsets.fromLTRB(
-            EsokoSpacing.s4, EsokoSpacing.s3, EsokoSpacing.s4, 0,
+            EsoqoSpacing.s4, EsoqoSpacing.s3, EsoqoSpacing.s4, 0,
           ),
-          child: EsokoButton.secondary(
+          child: EsoqoButton.secondary(
             label: 'Your earnings',
             icon: Icons.payments_outlined,
             onPressed: onOpenEarnings,
@@ -82,15 +82,15 @@ class NearbyJobsTab extends StatelessWidget {
   }
 
   Widget _jobsList() {
-    return EsokoAsyncView(
+    return EsoqoAsyncView(
       value: jobs,
       isEmpty: (l) => l.isEmpty,
       emptyMessage: 'No jobs nearby right now.',
       emptyIcon: Icons.local_shipping_outlined,
       data: (context, list) => ListView.separated(
-        padding: const EdgeInsets.all(EsokoSpacing.s4),
+        padding: const EdgeInsets.all(EsoqoSpacing.s4),
         itemCount: list.length,
-        separatorBuilder: (_, _) => const SizedBox(height: EsokoSpacing.s2),
+        separatorBuilder: (_, _) => const SizedBox(height: EsoqoSpacing.s2),
         itemBuilder: (context, i) {
           final job = list[i];
           final subtitle = [
@@ -98,13 +98,13 @@ class NearbyJobsTab extends StatelessWidget {
             if (job.distanceKm != null) '${job.distanceKm!.toStringAsFixed(1)} km away',
             if (job.priceKes != null) 'KES ${double.tryParse(job.priceKes!)?.toStringAsFixed(0) ?? job.priceKes}',
           ].join(' · ');
-          return EsokoListTile(
+          return EsoqoListTile(
             title: '${job.originLabel} → ${job.destinationLabel}',
             subtitle: subtitle,
             icon: Icons.local_shipping_outlined,
             trailing: SizedBox(
               width: 84,
-              child: EsokoButton.primary(
+              child: EsoqoButton.primary(
                 expand: false,
                 label: 'Claim',
                 loading: claimingCode == job.code,

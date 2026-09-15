@@ -3,7 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/auth/auth_controller.dart';
 import '../../core/auth/auth_state.dart';
-import '../../core/theme/esoko_tokens.dart';
+import '../../core/theme/esoqo_tokens.dart';
 import '../../core/widgets/widgets.dart';
 import 'contribute_screen.dart';
 import 'group_models.dart';
@@ -65,7 +65,7 @@ class GroupDetailScreen extends ConsumerWidget {
 
     final groupName = group.valueOrNull?.displayName;
     return Scaffold(
-      appBar: EsokoAppBar(
+      appBar: EsoqoAppBar(
         title: groupName ?? 'Group',
         titleWidget: groupName == null
             ? null
@@ -87,14 +87,14 @@ class GroupDetailScreen extends ConsumerWidget {
                             ? '?'
                             : groupName.substring(0, 1).toUpperCase(),
                         style: TextStyle(
-                          fontSize: 12,
+                          fontSize: EsoqoTypeScale.labelSmall,
                           color: Theme.of(context).colorScheme.primary,
                           fontWeight: FontWeight.w700,
                         ),
                       ),
                     ),
                   ),
-                  const SizedBox(width: EsokoSpacing.s2),
+                  const SizedBox(width: EsoqoSpacing.s2),
                   Expanded(
                     child: Text(groupName, overflow: TextOverflow.ellipsis),
                   ),
@@ -103,36 +103,36 @@ class GroupDetailScreen extends ConsumerWidget {
       ),
       body: RefreshIndicator(
         onRefresh: () async => _refreshAll(ref),
-        child: EsokoAsyncView(
+        child: EsoqoAsyncView(
           value: group,
           onRetry: () => ref.invalidate(groupDetailProvider(groupId)),
           data: (context, g) => Center(
             child: ConstrainedBox(
               constraints: const BoxConstraints(maxWidth: 840),
               child: ListView(
-                padding: const EdgeInsets.all(EsokoSpacing.s4),
+                padding: const EdgeInsets.all(EsoqoSpacing.s4),
                 children: [
-                  EsokoAmountHeader(
+                  EsoqoAmountHeader(
                     label: 'Group balance',
                     trailing: balance.when(
                       data: (b) =>
-                          EsokoAmountText(b.toStringAsFixed(2), fontSize: 26),
+                          EsoqoAmountText(b.toStringAsFixed(2), fontSize: EsoqoTypeScale.pageTitle),
                       loading: () => const SizedBox(
                         width: 96,
                         height: 28,
-                        child: EsokoSkeleton(radius: EsokoRadius.sm),
+                        child: EsoqoSkeleton(radius: EsoqoRadius.sm),
                       ),
                       error: (e, _) =>
-                          const EsokoFormError(message: 'Balance unavailable'),
+                          const EsoqoFormError(message: 'Balance unavailable'),
                     ),
                   ),
-                  const SizedBox(height: EsokoSpacing.s4),
+                  const SizedBox(height: EsoqoSpacing.s4),
                   Row(
                     children: [
                       Expanded(
-                        child: EsokoButton.primary(
+                        child: EsoqoButton.primary(
                           label: 'Contribute',
-                          esokoIcon: EsokoIconName.coins,
+                          esoqoIcon: EsoqoIconName.coins,
                           onPressed: () async {
                             await Navigator.of(context).push(
                               MaterialPageRoute(
@@ -145,11 +145,11 @@ class GroupDetailScreen extends ConsumerWidget {
                         ),
                       ),
                       if (isOfficer) ...[
-                        const SizedBox(width: EsokoSpacing.s3),
+                        const SizedBox(width: EsoqoSpacing.s3),
                         Expanded(
-                          child: EsokoButton.secondary(
+                          child: EsoqoButton.secondary(
                             label: 'Withdraw',
-                            esokoIcon: EsokoIconName.send,
+                            esoqoIcon: EsoqoIconName.send,
                             onPressed: () async {
                               await Navigator.of(context).push(
                                 MaterialPageRoute(
@@ -164,10 +164,10 @@ class GroupDetailScreen extends ConsumerWidget {
                       ],
                     ],
                   ),
-                  const SizedBox(height: EsokoSpacing.s6),
-                  const EsokoSubHeader('Timeline'),
-                  const SizedBox(height: EsokoSpacing.s2),
-                  EsokoAsyncView(
+                  const SizedBox(height: EsoqoSpacing.s6),
+                  const EsoqoSubHeader('Timeline'),
+                  const SizedBox(height: EsoqoSpacing.s2),
+                  EsoqoAsyncView(
                     value: timeline,
                     isEmpty: (list) => list.isEmpty,
                     emptyMessage:
@@ -178,7 +178,7 @@ class GroupDetailScreen extends ConsumerWidget {
                     data: (context, list) => Column(
                       children: [
                         for (var i = 0; i < list.length; i++)
-                          EsokoStagger(
+                          EsoqoStagger(
                             index: i,
                             child: _TimelineTile(entry: list[i]),
                           ),
@@ -186,30 +186,30 @@ class GroupDetailScreen extends ConsumerWidget {
                     ),
                   ),
 
-                  const SizedBox(height: EsokoSpacing.s6),
-                  const EsokoSubHeader('Members'),
-                  const SizedBox(height: EsokoSpacing.s2),
+                  const SizedBox(height: EsoqoSpacing.s6),
+                  const EsoqoSubHeader('Members'),
+                  const SizedBox(height: EsoqoSpacing.s2),
                   for (var m = 0; m < g.members.length; m++)
-                    EsokoStagger(
+                    EsoqoStagger(
                       index: m,
                       child: _MemberTile(member: g.members[m]),
                     ),
 
-                  const SizedBox(height: EsokoSpacing.s6),
-                  const EsokoSubHeader('Withdrawals'),
-                  const SizedBox(height: EsokoSpacing.s2),
-                  EsokoAsyncView(
+                  const SizedBox(height: EsoqoSpacing.s6),
+                  const EsoqoSubHeader('Withdrawals'),
+                  const SizedBox(height: EsoqoSpacing.s2),
+                  EsoqoAsyncView(
                     value: withdrawals,
                     isEmpty: (list) => list.isEmpty,
                     emptyMessage: 'No withdrawals yet.',
                     emptyIcon: Icons.outbox_outlined,
-                    emptyEsokoIcon: EsokoIconName.send,
+                    emptyEsoqoIcon: EsoqoIconName.send,
                     onRetry: () =>
                         ref.invalidate(groupWithdrawalsProvider(groupId)),
                     data: (context, list) => Column(
                       children: [
                         for (var i = 0; i < list.length; i++)
-                          EsokoStagger(
+                          EsoqoStagger(
                             index: i,
                             child: _WithdrawalTile(
                               withdrawal: list[i],
@@ -229,21 +229,21 @@ class GroupDetailScreen extends ConsumerWidget {
                     ),
                   ),
 
-                  const SizedBox(height: EsokoSpacing.s6),
-                  const EsokoSubHeader('Contribution history'),
-                  const SizedBox(height: EsokoSpacing.s2),
-                  EsokoAsyncView(
+                  const SizedBox(height: EsoqoSpacing.s6),
+                  const EsoqoSubHeader('Contribution history'),
+                  const SizedBox(height: EsoqoSpacing.s2),
+                  EsoqoAsyncView(
                     value: contributions,
                     isEmpty: (list) => list.isEmpty,
                     emptyMessage: 'No contributions yet.',
                     emptyIcon: Icons.savings_outlined,
-                    emptyEsokoIcon: EsokoIconName.coins,
+                    emptyEsoqoIcon: EsoqoIconName.coins,
                     onRetry: () =>
                         ref.invalidate(groupContributionsProvider(groupId)),
                     data: (context, list) => Column(
                       children: [
                         for (var i = 0; i < list.length; i++)
-                          EsokoStagger(
+                          EsoqoStagger(
                             index: i,
                             child: _ContributionTile(contribution: list[i]),
                           ),
@@ -267,16 +267,16 @@ class _MemberTile extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Padding(
-      padding: const EdgeInsets.only(bottom: EsokoSpacing.s2),
-      child: EsokoListTile(
+      padding: const EdgeInsets.only(bottom: EsoqoSpacing.s2),
+      child: EsoqoListTile(
         title: member.name,
         subtitle: member.roleLabel,
-        esokoIcon: member.isOfficer ? EsokoIconName.shield : EsokoIconName.user,
+        esoqoIcon: member.isOfficer ? EsoqoIconName.shield : EsoqoIconName.user,
         trailing: member.status == 'PENDING'
-            ? const EsokoStatusPill(
+            ? const EsoqoStatusPill(
                 label: 'Pending',
-                color: EsokoColors.amber,
-                esokoIcon: EsokoIconName.clock,
+                color: EsoqoColors.amber,
+                esoqoIcon: EsoqoIconName.clock,
               )
             : null,
       ),
@@ -298,16 +298,16 @@ class _WithdrawalTile extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
-    // Pulled from the theme, not hardcoded: this tile sits on EsokoCard's
+    // Pulled from the theme, not hardcoded: this tile sits on EsoqoCard's
     // surface, which is white in light mode and darkSurface2 in dark —
-    // a fixed EsokoColors.text2 (tuned for the light one) loses contrast
+    // a fixed EsoqoColors.text2 (tuned for the light one) loses contrast
     // against the dark one. bodySmall's colour is Material3-derived per
     // brightness, so it stays legible on either.
     final muted = Theme.of(context).textTheme.bodySmall?.color;
     final (statusColor, statusIcon) = switch (withdrawal.status) {
-      'EXECUTED' => (scheme.primary, EsokoIconName.checkCircle),
-      'REJECTED' || 'EXPIRED' => (scheme.error, EsokoIconName.ban),
-      _ => (EsokoColors.amber, EsokoIconName.clock),
+      'EXECUTED' => (scheme.primary, EsoqoIconName.checkCircle),
+      'REJECTED' || 'EXPIRED' => (scheme.error, EsoqoIconName.ban),
+      _ => (EsoqoColors.amber, EsoqoIconName.clock),
     };
     final quorumDone = withdrawal.requiredSigners == 0
         ? 1.0
@@ -316,8 +316,8 @@ class _WithdrawalTile extends StatelessWidget {
             1.0,
           );
     return Padding(
-      padding: const EdgeInsets.only(bottom: EsokoSpacing.s2),
-      child: EsokoCard(
+      padding: const EdgeInsets.only(bottom: EsoqoSpacing.s2),
+      child: EsoqoCard(
         onTap: onTap,
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
@@ -327,52 +327,52 @@ class _WithdrawalTile extends StatelessWidget {
                 CircleAvatar(
                   radius: 18,
                   backgroundColor: scheme.primaryContainer,
-                  child: EsokoIcon(
-                    EsokoIconName.send,
+                  child: EsoqoIcon(
+                    EsoqoIconName.send,
                     color: statusColor,
                     size: 18,
                   ),
                 ),
-                const SizedBox(width: EsokoSpacing.s3),
+                const SizedBox(width: EsoqoSpacing.s3),
                 Expanded(
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      EsokoAmountText(withdrawal.amountKes, fontSize: 15),
+                      EsoqoAmountText(withdrawal.amountKes, fontSize: EsoqoTypeScale.subTitle),
                       Text(
                         withdrawal.purpose,
-                        style: TextStyle(color: muted, fontSize: 12.5),
+                        style: Theme.of(context).textTheme.bodySmall,
                       ),
                     ],
                   ),
                 ),
-                EsokoStatusPill(
+                EsoqoStatusPill(
                   label: withdrawal.status,
                   color: statusColor,
-                  esokoIcon: statusIcon,
+                  esoqoIcon: statusIcon,
                 ),
               ],
             ),
-            const SizedBox(height: EsokoSpacing.s3),
+            const SizedBox(height: EsoqoSpacing.s3),
             Row(
               children: [
                 Expanded(
                   child: ClipRRect(
-                    borderRadius: BorderRadius.circular(EsokoRadius.pill),
+                    borderRadius: BorderRadius.circular(EsoqoRadius.pill),
                     child: LinearProgressIndicator(
                       value: quorumDone,
                       minHeight: 6,
-                      backgroundColor: EsokoColors.line,
+                      backgroundColor: EsoqoColors.line,
                       valueColor: AlwaysStoppedAnimation(statusColor),
                     ),
                   ),
                 ),
-                const SizedBox(width: EsokoSpacing.s2),
+                const SizedBox(width: EsoqoSpacing.s2),
                 Text(
                   '${withdrawal.approveCount}/${withdrawal.requiredSigners} signed',
                   style: TextStyle(
                     color: muted,
-                    fontSize: 11.5,
+                    fontSize: EsoqoTypeScale.micro,
                     fontWeight: FontWeight.w600,
                   ),
                 ),
@@ -398,17 +398,17 @@ class _TimelineTile extends StatelessWidget {
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
     final (color, icon) = switch (entry.kind) {
-      'posted' => (scheme.primary, EsokoIconName.checkCircle),
-      'rejected' => (scheme.error, EsokoIconName.ban),
-      'requested' => (EsokoColors.amber, EsokoIconName.clock),
-      _ => (Theme.of(context).textTheme.bodySmall?.color ?? scheme.outline, EsokoIconName.info),
+      'posted' => (scheme.primary, EsoqoIconName.checkCircle),
+      'rejected' => (scheme.error, EsoqoIconName.ban),
+      'requested' => (EsoqoColors.amber, EsoqoIconName.clock),
+      _ => (Theme.of(context).textTheme.bodySmall?.color ?? scheme.outline, EsoqoIconName.info),
     };
     return Padding(
-      padding: const EdgeInsets.only(bottom: EsokoSpacing.s2),
-      child: EsokoListTile(
+      padding: const EdgeInsets.only(bottom: EsoqoSpacing.s2),
+      child: EsoqoListTile(
         title: entry.line,
         subtitle: entry.occurredAt,
-        esokoIcon: icon,
+        esoqoIcon: icon,
         iconColor: color,
       ),
     );
@@ -422,22 +422,22 @@ class _ContributionTile extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final confirmed = contribution.status == 'CONFIRMED';
-    final statusColor = confirmed ? EsokoColors.green : EsokoColors.amber;
+    final statusColor = confirmed ? EsoqoColors.green : EsoqoColors.amber;
     return Padding(
-      padding: const EdgeInsets.only(bottom: EsokoSpacing.s2),
-      child: EsokoListTile(
+      padding: const EdgeInsets.only(bottom: EsoqoSpacing.s2),
+      child: EsoqoListTile(
         title:
             '${contribution.contributorName} · KES ${contribution.amountKes}',
         subtitle: confirmed
             ? 'Confirmed by an officer'
             : 'Awaiting officer confirmation',
-        esokoIcon: EsokoIconName.coins,
-        trailing: EsokoStatusPill(
+        esoqoIcon: EsoqoIconName.coins,
+        trailing: EsoqoStatusPill(
           label: confirmed ? 'Confirmed' : 'Pending',
           color: statusColor,
-          esokoIcon: confirmed
-              ? EsokoIconName.checkCircle
-              : EsokoIconName.clock,
+          esoqoIcon: confirmed
+              ? EsoqoIconName.checkCircle
+              : EsoqoIconName.clock,
         ),
       ),
     );

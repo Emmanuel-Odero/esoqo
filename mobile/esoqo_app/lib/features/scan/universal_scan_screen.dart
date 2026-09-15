@@ -7,7 +7,7 @@ import '../../core/api/api_exception.dart';
 import '../../core/auth/auth_controller.dart';
 import '../../core/auth/auth_state.dart';
 import '../../core/auth/scan_access.dart';
-import '../../core/theme/esoko_tokens.dart';
+import '../../core/theme/esoqo_tokens.dart';
 import '../../core/widgets/widgets.dart';
 import '../fleet/fare_pay_screen.dart';
 import '../fleet/verify_fare_screen.dart';
@@ -18,7 +18,7 @@ import '../shopping/store_detail_screen.dart';
 import '../vouchers/voucher_wallet_screen.dart';
 import 'scan_repository.dart';
 
-/// One scanner for every Esoko code. GET /v1/scan/resolve sniffs the
+/// One scanner for every Esoqo code. GET /v1/scan/resolve sniffs the
 /// kind (trip, voucher, fare, product, store, table, ticket, order,
 /// party, certificate, parcel) plus an `action` hint, and this screen
 /// routes to the matching flow — matatu boarding, mall self-checkout
@@ -134,7 +134,7 @@ class _UniversalScanScreenState extends ConsumerState<UniversalScanScreen> {
       default:
         setState(
           () => _error =
-              'Not an Esoko code — try a bus QR, shelf barcode, or table code.',
+              'Not an Esoqo code — try a bus QR, shelf barcode, or table code.',
         );
     }
   }
@@ -160,19 +160,19 @@ class _UniversalScanScreenState extends ConsumerState<UniversalScanScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: const EsokoAppBar(title: 'Scan'),
+      appBar: const EsoqoAppBar(title: 'Scan'),
       bottomNavigationBar: _basketMode ? const SelfCheckoutBasketBar() : null,
       body: SafeArea(
         child: Center(
           child: ConstrainedBox(
             constraints: const BoxConstraints(maxWidth: 560),
             child: ListView(
-              padding: const EdgeInsets.all(EsokoSpacing.s4),
+              padding: const EdgeInsets.all(EsoqoSpacing.s4),
               children: [
-                const EsokoPageLead(
+                const EsoqoPageLead(
                   'Bus QR, shelf barcode, ticket, voucher, or payment card — one scanner.',
                 ),
-                const SizedBox(height: EsokoSpacing.s3),
+                const SizedBox(height: EsoqoSpacing.s3),
                 SwitchListTile.adaptive(
                   contentPadding: EdgeInsets.zero,
                   title: const Text('Self-checkout basket'),
@@ -182,11 +182,11 @@ class _UniversalScanScreenState extends ConsumerState<UniversalScanScreen> {
                   value: _basketMode,
                   onChanged: (v) => setState(() => _basketMode = v),
                 ),
-                const SizedBox(height: EsokoSpacing.s1),
+                const SizedBox(height: EsoqoSpacing.s1),
                 SizedBox(
                   height: 260,
                   child: ClipRRect(
-                    borderRadius: BorderRadius.circular(EsokoRadius.md),
+                    borderRadius: BorderRadius.circular(EsoqoRadius.md),
                     child: MobileScanner(
                       onDetect: (cap) {
                         final v = cap.barcodes.firstOrNull?.rawValue;
@@ -197,30 +197,30 @@ class _UniversalScanScreenState extends ConsumerState<UniversalScanScreen> {
                             error.errorDetails?.message ??
                             'Camera could not start (${error.errorCode.name}).';
                         if (kDebugMode) {
-                          debugPrint('esoko/scan: MobileScanner error: $message');
+                          debugPrint('esoqo/scan: MobileScanner error: $message');
                         }
                         return Center(
                           child: Padding(
-                            padding: const EdgeInsets.all(EsokoSpacing.s3),
-                            child: EsokoFormError(message: message),
+                            padding: const EdgeInsets.all(EsoqoSpacing.s3),
+                            child: EsoqoFormError(message: message),
                           ),
                         );
                       },
                     ),
                   ),
                 ),
-                const SizedBox(height: EsokoSpacing.s4),
+                const SizedBox(height: EsoqoSpacing.s4),
                 Row(
                   children: [
                     Expanded(
-                      child: EsokoField.code(
+                      child: EsoqoField.code(
                         controller: _code,
                         label: 'Code',
                         hint: 'BUS- · VCH- · TKT- · PKP- · ESK-',
                         onSubmitted: _resolve,
                       ),
                     ),
-                    const SizedBox(width: EsokoSpacing.s2),
+                    const SizedBox(width: EsoqoSpacing.s2),
                     // Fixed width, not a bare Row child — un-widthed,
                     // FilledButton's internal ButtonStyleButton throws
                     // "BoxConstraints forces an infinite width" in a
@@ -228,7 +228,7 @@ class _UniversalScanScreenState extends ConsumerState<UniversalScanScreen> {
                     // on this exact bug).
                     SizedBox(
                       width: 72,
-                      child: EsokoButton.primary(
+                      child: EsoqoButton.primary(
                         expand: false,
                         label: 'Go',
                         loading: _busy,
@@ -238,11 +238,11 @@ class _UniversalScanScreenState extends ConsumerState<UniversalScanScreen> {
                   ],
                 ),
                 if (_error != null) ...[
-                  const SizedBox(height: EsokoSpacing.s3),
-                  EsokoFormError(message: _error!),
+                  const SizedBox(height: EsoqoSpacing.s3),
+                  EsoqoFormError(message: _error!),
                 ],
                 if (_result != null) ...[
-                  const SizedBox(height: EsokoSpacing.s3),
+                  const SizedBox(height: EsoqoSpacing.s3),
                   _resultCard(context, _result!),
                 ],
               ],
@@ -271,7 +271,7 @@ class _UniversalScanScreenState extends ConsumerState<UniversalScanScreen> {
   }
 
   Widget _fareProof(BuildContext context, ScanFareProof f) {
-    return EsokoCard(
+    return EsoqoCard(
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -289,7 +289,7 @@ class _UniversalScanScreenState extends ConsumerState<UniversalScanScreen> {
 
   Widget _ticketCard(BuildContext context, ScanTicketInfo t) {
     final valid = t.status == 'VALID';
-    return EsokoCard(
+    return EsoqoCard(
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -315,7 +315,7 @@ class _UniversalScanScreenState extends ConsumerState<UniversalScanScreen> {
               'Seat ${t.seatLabel}',
               style: const TextStyle(fontWeight: FontWeight.w600),
             ),
-          const SizedBox(height: EsokoSpacing.s2),
+          const SizedBox(height: EsoqoSpacing.s2),
           Text(
             'KES ${t.priceKes}',
             style: TextStyle(
@@ -323,21 +323,17 @@ class _UniversalScanScreenState extends ConsumerState<UniversalScanScreen> {
               fontWeight: FontWeight.w700,
             ),
           ),
-          const SizedBox(height: EsokoSpacing.s2),
+          const SizedBox(height: EsoqoSpacing.s2),
           Text(
             t.code,
-            style: const TextStyle(
-              fontFamily: 'monospace',
-              fontWeight: FontWeight.w700,
-              letterSpacing: 1,
-            ),
+            style: EsoqoTypography.code(),
           ),
           const SizedBox(height: 4),
           Text(
             'Gate check-in happens at the event.',
             style: TextStyle(
               color: Theme.of(context).textTheme.bodySmall?.color,
-              fontSize: 12,
+              fontSize: EsoqoTypeScale.labelSmall,
             ),
           ),
         ],
@@ -353,7 +349,7 @@ class _UniversalScanScreenState extends ConsumerState<UniversalScanScreen> {
         : done
         ? 'Collected'
         : o.status;
-    return EsokoCard(
+    return EsoqoCard(
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -378,17 +374,13 @@ class _UniversalScanScreenState extends ConsumerState<UniversalScanScreen> {
             ),
           ),
           if (o.readyAt != null && !done) ...[
-            const SizedBox(height: EsokoSpacing.s2),
+            const SizedBox(height: EsoqoSpacing.s2),
             Text('Ready ${_formatDate(o.readyAt!)}'),
           ],
-          const SizedBox(height: EsokoSpacing.s2),
+          const SizedBox(height: EsoqoSpacing.s2),
           Text(
             o.pickupCode,
-            style: const TextStyle(
-              fontFamily: 'monospace',
-              fontWeight: FontWeight.w700,
-              letterSpacing: 1,
-            ),
+            style: EsoqoTypography.code(),
           ),
         ],
       ),
@@ -396,18 +388,18 @@ class _UniversalScanScreenState extends ConsumerState<UniversalScanScreen> {
   }
 
   Widget _partyCard(BuildContext context, ScanPartyInfo p) {
-    return EsokoCard(
+    return EsoqoCard(
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Row(
             children: [
-              EsokoQuickActionIcon(
+              EsoqoQuickActionIcon(
                 icon: p.organisation
                     ? Icons.storefront_outlined
                     : Icons.person_outline,
               ),
-              const SizedBox(width: EsokoSpacing.s2),
+              const SizedBox(width: EsoqoSpacing.s2),
               Expanded(
                 child: Text(
                   p.displayName,
@@ -416,28 +408,24 @@ class _UniversalScanScreenState extends ConsumerState<UniversalScanScreen> {
               ),
             ],
           ),
-          const SizedBox(height: EsokoSpacing.s2),
+          const SizedBox(height: EsoqoSpacing.s2),
           Text(
-            p.esokoId,
-            style: const TextStyle(
-              fontFamily: 'monospace',
-              fontWeight: FontWeight.w700,
-              letterSpacing: 1,
-            ),
+            p.esoqoId,
+            style: EsoqoTypography.code(),
           ),
-          const SizedBox(height: EsokoSpacing.s2),
+          const SizedBox(height: EsoqoSpacing.s2),
           _statusPill(
             context,
-            p.verified ? 'Verified on Esoko' : 'Not yet verified',
+            p.verified ? 'Verified on Esoqo' : 'Not yet verified',
             ok: p.verified,
             warn: !p.verified,
           ),
-          const SizedBox(height: EsokoSpacing.s2),
+          const SizedBox(height: EsoqoSpacing.s2),
           Text(
             'Payment card — paying them is a phone tap away.',
             style: TextStyle(
               color: Theme.of(context).textTheme.bodySmall?.color,
-              fontSize: 12,
+              fontSize: EsoqoTypeScale.labelSmall,
             ),
           ),
         ],
@@ -447,19 +435,19 @@ class _UniversalScanScreenState extends ConsumerState<UniversalScanScreen> {
 
   Widget _certCard(BuildContext context, ScanCertInfo c) {
     if (!c.found) {
-      return EsokoCard(
+      return EsoqoCard(
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             _statusPill(context, 'Not found', ok: false),
-            const SizedBox(height: EsokoSpacing.s2),
+            const SizedBox(height: EsoqoSpacing.s2),
             Text(
-              'This is not a certificate Esoko issued.',
+              'This is not a certificate Esoqo issued.',
               style: Theme.of(context).textTheme.titleMedium,
             ),
             const SizedBox(height: 4),
             Text(
-              'Type the code again, or check it at esoko.co.ke/verify.',
+              'Type the code again, or check it at esoqo.co.ke/verify.',
               style: TextStyle(
                 color: Theme.of(context).textTheme.bodySmall?.color,
               ),
@@ -470,7 +458,7 @@ class _UniversalScanScreenState extends ConsumerState<UniversalScanScreen> {
     }
     final ok = c.status == 'valid';
     final warn = c.status == 'expiring';
-    return EsokoCard(
+    return EsoqoCard(
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -489,17 +477,17 @@ class _UniversalScanScreenState extends ConsumerState<UniversalScanScreen> {
           Text('Held by ${c.holder}'),
           Text('Issued by ${c.issuer}'),
           if (c.issuedOn.isNotEmpty) ...[
-            const SizedBox(height: EsokoSpacing.s1),
+            const SizedBox(height: EsoqoSpacing.s1),
             Text('Issued ${_formatDate(c.issuedOn)}'),
           ],
           if (c.validUntil != null)
             Text('Valid until ${_formatDate(c.validUntil!)}'),
-          const SizedBox(height: EsokoSpacing.s2),
+          const SizedBox(height: EsoqoSpacing.s2),
           Text(
-            'Verified directly from Esoko — no account needed.',
+            'Verified directly from Esoqo — no account needed.',
             style: TextStyle(
               color: Theme.of(context).textTheme.bodySmall?.color,
-              fontSize: 12,
+              fontSize: EsoqoTypeScale.labelSmall,
             ),
           ),
         ],
@@ -514,19 +502,19 @@ class _UniversalScanScreenState extends ConsumerState<UniversalScanScreen> {
     bool warn = false,
   }) {
     final scheme = Theme.of(context).colorScheme;
-    // EsokoColors.amber, not Material's generic Colors.amber/orange —
+    // EsoqoColors.amber, not Material's generic Colors.amber/orange —
     // brand colour, and one that (like scheme.primary/.error here) reads
     // fine as text on its own low-alpha wash in both themes. The old
     // Colors.orange.shade900 was picked for contrast against a *light*
     // amber background specifically and went dark-on-dark the moment
     // that background alpha-blended over a dark surface instead.
     final bg = warn
-        ? EsokoColors.amber.withValues(alpha: 0.14)
+        ? EsoqoColors.amber.withValues(alpha: 0.14)
         : ok
         ? scheme.primary.withValues(alpha: 0.14)
         : scheme.error.withValues(alpha: 0.12);
     final fg = warn
-        ? EsokoColors.amber
+        ? EsoqoColors.amber
         : ok
         ? scheme.primary
         : scheme.error;
@@ -534,15 +522,15 @@ class _UniversalScanScreenState extends ConsumerState<UniversalScanScreen> {
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
       decoration: BoxDecoration(
         color: bg,
-        borderRadius: BorderRadius.circular(EsokoRadius.pill),
+        borderRadius: BorderRadius.circular(EsoqoRadius.pill),
       ),
       child: Text(
         label,
         style: TextStyle(
           color: fg,
-          fontSize: 11,
-          fontWeight: FontWeight.w800,
-          letterSpacing: 0.3,
+          fontSize: EsoqoTypeScale.micro,
+          fontWeight: EsoqoTypography.labelWeight,
+          letterSpacing: EsoqoTypeScale.micro * EsoqoTypography.labelTrackingEm,
         ),
       ),
     );

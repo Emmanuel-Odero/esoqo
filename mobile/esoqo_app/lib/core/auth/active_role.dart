@@ -20,7 +20,7 @@ import 'scan_access.dart';
 /// (see `scan_access.dart` — this is navigation, never a boundary).
 /// A role is an answer to "what is this person in the middle of", and
 /// it decides what the app leads with.
-enum EsokoRole {
+enum EsoqoRole {
   /// No org context, nothing in hand. Browsing services.
   personal,
 
@@ -49,7 +49,7 @@ class ActiveRole {
     this.holdingCash = false,
   });
 
-  final EsokoRole role;
+  final EsoqoRole role;
 
   /// Set when the role came from an org grant — what the app bar and
   /// the home lead say the person is acting as.
@@ -61,33 +61,33 @@ class ActiveRole {
   /// Whether any of somebody else's cash-on-delivery money is on them.
   final bool holdingCash;
 
-  bool get isPersonal => role == EsokoRole.personal;
+  bool get isPersonal => role == EsoqoRole.personal;
 
   /// True while acting on an organisation's behalf — the condition for
   /// institutional (blue) chrome, per SCREEN_CONVENTIONS.md Rule 3.
   bool get isInstitutional =>
-      role == EsokoRole.crew ||
-      role == EsokoRole.scanner ||
-      role == EsokoRole.manager;
+      role == EsoqoRole.crew ||
+      role == EsoqoRole.scanner ||
+      role == EsoqoRole.manager;
 
   /// What the home screen leads with. Short enough for an app bar.
   String get title => switch (role) {
-        EsokoRole.personal => 'Home',
-        EsokoRole.courier => 'Your round',
-        EsokoRole.crew => orgName ?? 'On duty',
-        EsokoRole.scanner => orgName ?? 'Checking in',
-        EsokoRole.manager => orgName ?? 'Your company',
+        EsoqoRole.personal => 'Home',
+        EsoqoRole.courier => 'Your round',
+        EsoqoRole.crew => orgName ?? 'On duty',
+        EsoqoRole.scanner => orgName ?? 'Checking in',
+        EsoqoRole.manager => orgName ?? 'Your company',
       };
 
   /// One line under the title saying why this role is showing.
   String get because => switch (role) {
-        EsokoRole.personal => 'Everything Esoko does, in one place.',
-        EsokoRole.courier => holdingCash
+        EsoqoRole.personal => 'Everything Esoqo does, in one place.',
+        EsoqoRole.courier => holdingCash
             ? 'Parcels in your hands, and cash to hand in.'
             : 'Parcels in your hands.',
-        EsokoRole.crew => 'Collecting fares and declaring cash.',
-        EsokoRole.scanner => 'Checking people in.',
-        EsokoRole.manager => 'Today’s takings, staff and fleet.',
+        EsoqoRole.crew => 'Collecting fares and declaring cash.',
+        EsoqoRole.scanner => 'Checking people in.',
+        EsoqoRole.manager => 'Today’s takings, staff and fleet.',
       };
 }
 
@@ -113,7 +113,7 @@ ActiveRole resolveActiveRole({
 
   if (heldParcels > 0) {
     return ActiveRole(
-      role: EsokoRole.courier,
+      role: EsoqoRole.courier,
       orgName: active?.orgName,
       heldParcels: heldParcels,
       holdingCash: holdingCash,
@@ -122,14 +122,14 @@ ActiveRole resolveActiveRole({
 
   if (active != null) {
     final role = switch (active.role) {
-      'CREW' => EsokoRole.crew,
-      'SCANNER' => EsokoRole.scanner,
-      'MANAGER' || 'ADMIN' => EsokoRole.manager,
+      'CREW' => EsoqoRole.crew,
+      'SCANNER' => EsoqoRole.scanner,
+      'MANAGER' || 'ADMIN' => EsoqoRole.manager,
       // An unknown grant still means "acting as an org" — fall back to
       // the least-privileged surface rather than dropping the person
       // silently back to Personal, which would look like the switch
       // failed.
-      _ => EsokoRole.scanner,
+      _ => EsoqoRole.scanner,
     };
     return ActiveRole(
       role: role,
@@ -143,10 +143,10 @@ ActiveRole resolveActiveRole({
   // holding `fare.verify` is on a vehicle whether or not they used the
   // switcher (see scan_access.dart).
   if (canVerifyFare(profile)) {
-    return ActiveRole(role: EsokoRole.crew, holdingCash: holdingCash);
+    return ActiveRole(role: EsoqoRole.crew, holdingCash: holdingCash);
   }
 
-  return ActiveRole(role: EsokoRole.personal, holdingCash: holdingCash);
+  return ActiveRole(role: EsoqoRole.personal, holdingCash: holdingCash);
 }
 
 /// The role with no custody signals — enough for chrome (app bar tint,

@@ -4,7 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../core/api/api_exception.dart';
 import '../../core/auth/auth_controller.dart';
 import '../../core/auth/auth_state.dart';
-import '../../core/theme/esoko_tokens.dart';
+import '../../core/theme/esoqo_tokens.dart';
 import '../../core/widgets/widgets.dart';
 import 'vouchers_repository.dart';
 
@@ -115,19 +115,19 @@ class _AllowanceBatchScreenState extends ConsumerState<AllowanceBatchScreen> {
   Widget build(BuildContext context) {
     final batches = ref.watch(voucherBatchesProvider);
     return Scaffold(
-      appBar: const EsokoAppBar(title: 'Employee allowances'),
+      appBar: const EsoqoAppBar(title: 'Employee allowances'),
       body: SafeArea(
         child: Center(
           child: ConstrainedBox(
             constraints: const BoxConstraints(maxWidth: 560),
             child: ListView(
-              padding: const EdgeInsets.all(EsokoSpacing.s5),
+              padding: const EdgeInsets.all(EsoqoSpacing.s5),
               children: [
-                const EsokoPageLead(
+                const EsoqoPageLead(
                   'One payment, one voucher per employee — spendable on fare or fuel, nowhere else.',
                 ),
-                const SizedBox(height: EsokoSpacing.s4),
-                EsokoDropdown<String>(
+                const SizedBox(height: EsoqoSpacing.s4),
+                EsoqoDropdown<String>(
                   label: 'Purpose',
                   initialValue: _purpose,
                   items: [
@@ -136,35 +136,35 @@ class _AllowanceBatchScreenState extends ConsumerState<AllowanceBatchScreen> {
                   ],
                   onChanged: (v) => setState(() => _purpose = v ?? _purpose),
                 ),
-                const SizedBox(height: EsokoSpacing.s3),
-                EsokoField.text(
+                const SizedBox(height: EsoqoSpacing.s3),
+                EsoqoField.text(
                   controller: _labelController,
                   label: 'Label (optional)',
                   hint: 'e.g. September fuel allowance',
                 ),
-                const SizedBox(height: EsokoSpacing.s3),
-                EsokoField.amount(
+                const SizedBox(height: EsoqoSpacing.s3),
+                EsoqoField.amount(
                   controller: _amountController,
                   label: 'Amount per employee',
                 ),
-                const SizedBox(height: EsokoSpacing.s3),
-                EsokoField.phone(
+                const SizedBox(height: EsoqoSpacing.s3),
+                EsoqoField.phone(
                   controller: _employerMsisdnController,
                   label: 'Pay from (your M-Pesa number)',
                 ),
-                const SizedBox(height: EsokoSpacing.s4),
-                EsokoSubHeader('Employees'),
-                const SizedBox(height: EsokoSpacing.s2),
+                const SizedBox(height: EsoqoSpacing.s4),
+                EsoqoSubHeader('Employees'),
+                const SizedBox(height: EsoqoSpacing.s2),
                 Row(
                   children: [
                     Expanded(
-                      child: EsokoField.phone(
+                      child: EsoqoField.phone(
                         controller: _employeeMsisdnController,
                         label: 'Employee phone number',
                         onSubmitted: (_) => _addEmployee(),
                       ),
                     ),
-                    const SizedBox(width: EsokoSpacing.s2),
+                    const SizedBox(width: EsoqoSpacing.s2),
                     IconButton.filled(
                       onPressed: _addEmployee,
                       icon: const Icon(Icons.add),
@@ -172,7 +172,7 @@ class _AllowanceBatchScreenState extends ConsumerState<AllowanceBatchScreen> {
                   ],
                 ),
                 if (_employeeMsisdns.isNotEmpty) ...[
-                  const SizedBox(height: EsokoSpacing.s2),
+                  const SizedBox(height: EsoqoSpacing.s2),
                   Wrap(
                     spacing: 8,
                     runSpacing: 8,
@@ -187,37 +187,37 @@ class _AllowanceBatchScreenState extends ConsumerState<AllowanceBatchScreen> {
                   ),
                 ],
                 if (_error != null) ...[
-                  const SizedBox(height: EsokoSpacing.s3),
-                  EsokoFormError(message: _error!),
+                  const SizedBox(height: EsoqoSpacing.s3),
+                  EsoqoFormError(message: _error!),
                 ],
                 if (_resultStatus != null) ...[
-                  const SizedBox(height: EsokoSpacing.s3),
-                  EsokoInlineNotice(
+                  const SizedBox(height: EsoqoSpacing.s3),
+                  EsoqoInlineNotice(
                     message: _resultStatus!,
-                    icon: EsokoIconName.checkCircle,
-                    color: EsokoColors.blue,
+                    icon: EsoqoIconName.checkCircle,
+                    color: EsoqoColors.blue,
                   ),
                 ],
-                const SizedBox(height: EsokoSpacing.s4),
-                EsokoButton.primary(
+                const SizedBox(height: EsoqoSpacing.s4),
+                EsoqoButton.primary(
                   expand: false,
                   label: 'Issue allowance batch',
                   loading: _busy,
                   onPressed: _issue,
                 ),
-                const SizedBox(height: EsokoSpacing.s7),
-                EsokoSubHeader('Past batches'),
-                const SizedBox(height: EsokoSpacing.s2),
+                const SizedBox(height: EsoqoSpacing.s7),
+                EsoqoSubHeader('Past batches'),
+                const SizedBox(height: EsoqoSpacing.s2),
                 batches.when(
                   data: (list) => list.isEmpty
-                      ? const EsokoEmptyState(
+                      ? const EsoqoEmptyState(
                           icon: Icons.local_gas_station_outlined,
                           message: 'No batches issued yet.',
                         )
                       : Column(
                           children: [
                             for (final b in list)
-                              EsokoListTile(
+                              EsoqoListTile(
                                 title: b.label,
                                 subtitle:
                                     '${b.purpose} · ${b.issuedCount}/${b.employeeCount} issued · KES ${b.amountPerEmployeeKes} each',
@@ -225,7 +225,7 @@ class _AllowanceBatchScreenState extends ConsumerState<AllowanceBatchScreen> {
                               ),
                           ],
                         ),
-                  loading: () => const EsokoSkeletonCard(leading: false),
+                  loading: () => const EsoqoSkeletonCard(leading: false),
                   error: (_, _) => const SizedBox.shrink(),
                 ),
               ],

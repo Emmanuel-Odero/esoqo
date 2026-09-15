@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 
-import '../../../core/theme/esoko_tokens.dart';
+import '../../../core/theme/esoqo_tokens.dart';
 import '../ticketing_models.dart';
 
 class TicketClassOption extends StatelessWidget {
@@ -20,22 +20,22 @@ class TicketClassOption extends StatelessWidget {
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final muted = Theme.of(context).textTheme.bodySmall?.color;
     return Material(
-      // Alpha wash of primary, not the fixed EsokoColors.greenTint — see
+      // Alpha wash of primary, not the fixed EsoqoColors.greenTint — see
       // the identical fix in order_detail_screen's timeline/pickup-code
       // card: a fixed pastel only reads right on a light surface.
       color: selected
           ? scheme.primary.withValues(alpha: isDark ? 0.20 : 0.12)
           : Theme.of(context).cardColor,
-      borderRadius: BorderRadius.circular(EsokoRadius.lg),
+      borderRadius: BorderRadius.circular(EsoqoRadius.lg),
       clipBehavior: Clip.antiAlias,
       child: InkWell(
         onTap: onTap,
         child: Container(
-          margin: const EdgeInsets.only(bottom: EsokoSpacing.s2),
-          padding: const EdgeInsets.all(EsokoSpacing.s3),
+          margin: const EdgeInsets.only(bottom: EsoqoSpacing.s2),
+          padding: const EdgeInsets.all(EsoqoSpacing.s3),
           decoration: BoxDecoration(
             border: Border.all(
-              color: selected ? scheme.primary : EsokoColors.line,
+              color: selected ? scheme.primary : EsoqoColors.line,
               width: selected ? 1.5 : 1,
             ),
           ),
@@ -46,7 +46,7 @@ class TicketClassOption extends StatelessWidget {
                 color: selected ? scheme.primary : muted,
                 size: 22,
               ),
-              const SizedBox(width: EsokoSpacing.s3),
+              const SizedBox(width: EsoqoSpacing.s3),
               Icon(
                 ticketClass.seated
                     ? Icons.event_seat_outlined
@@ -54,7 +54,7 @@ class TicketClassOption extends StatelessWidget {
                 color: muted,
                 size: 18,
               ),
-              const SizedBox(width: EsokoSpacing.s2),
+              const SizedBox(width: EsoqoSpacing.s2),
               Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
@@ -66,7 +66,7 @@ class TicketClassOption extends StatelessWidget {
                     if (ticketClass.amenities.isNotEmpty)
                       Text(
                         ticketClass.amenities.join(' · '),
-                        style: TextStyle(fontSize: 11, color: muted),
+                        style: TextStyle(fontSize: EsoqoTypeScale.micro, color: muted),
                       ),
                   ],
                 ),
@@ -75,7 +75,7 @@ class TicketClassOption extends StatelessWidget {
                 'KES ${ticketClass.priceKes}',
                 style: TextStyle(
                   color: scheme.primary,
-                  fontWeight: FontWeight.w800,
+                  fontWeight: FontWeight.w700,
                 ),
               ),
             ],

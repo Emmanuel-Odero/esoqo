@@ -2,13 +2,13 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/api/api_exception.dart';
-import '../../core/theme/esoko_tokens.dart';
+import '../../core/theme/esoqo_tokens.dart';
 import '../../core/widgets/widgets.dart';
 import 'parcels_repository.dart';
 
 enum _Step { requestCode, verify, done }
 
-/// The receiver's own "I got it" confirmation — no Esoko account
+/// The receiver's own "I got it" confirmation — no Esoqo account
 /// needed, only proof of control of the number already on the parcel
 /// (see dbx.RequestParcelReceiptOtp). Two steps: send a code to the
 /// masked number the server already has on file (never one typed
@@ -88,18 +88,18 @@ class _ParcelReceiptConfirmationScreenState
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: const EsokoAppBar(title: 'Confirm receipt'),
+      appBar: const EsoqoAppBar(title: 'Confirm receipt'),
       body: SafeArea(
         child: Center(
           child: ConstrainedBox(
             constraints: const BoxConstraints(maxWidth: 480),
             child: ListView(
-              padding: const EdgeInsets.all(EsokoSpacing.s5),
+              padding: const EdgeInsets.all(EsoqoSpacing.s5),
               children: [
                 ..._stepContent(),
                 if (_error != null) ...[
-                  const SizedBox(height: EsokoSpacing.s3),
-                  EsokoFormError(message: _error!),
+                  const SizedBox(height: EsoqoSpacing.s3),
+                  EsoqoFormError(message: _error!),
                 ],
               ],
             ),
@@ -117,8 +117,8 @@ class _ParcelReceiptConfirmationScreenState
             "Confirming lets the sender know their parcel arrived safely — "
             "we'll text a code to the phone number on file for this delivery.",
           ),
-          const SizedBox(height: EsokoSpacing.s5),
-          EsokoButton.primary(
+          const SizedBox(height: EsoqoSpacing.s5),
+          EsoqoButton.primary(
             expand: false,
             label: 'Send code',
             loading: _loading,
@@ -128,30 +128,30 @@ class _ParcelReceiptConfirmationScreenState
       case _Step.verify:
         return [
           Text('Enter the code sent to ${_maskedMsisdn ?? 'your number'}.'),
-          const SizedBox(height: EsokoSpacing.s4),
-          EsokoField.otp(
+          const SizedBox(height: EsoqoSpacing.s4),
+          EsoqoField.otp(
             controller: _otpController,
             label: '6-digit code',
             autofocus: false,
           ),
-          const SizedBox(height: EsokoSpacing.s4),
+          const SizedBox(height: EsoqoSpacing.s4),
           const Text(
             'How did it arrive?',
             style: TextStyle(fontWeight: FontWeight.w700),
           ),
-          const SizedBox(height: EsokoSpacing.s2),
-          EsokoStarRating(
+          const SizedBox(height: EsoqoSpacing.s2),
+          EsoqoStarRating(
             value: _rating,
             onChanged: (v) => setState(() => _rating = v),
           ),
-          const SizedBox(height: EsokoSpacing.s4),
+          const SizedBox(height: EsoqoSpacing.s4),
           TextField(
             controller: _feedbackController,
             maxLines: 3,
             decoration: const InputDecoration(labelText: 'Feedback (optional)'),
           ),
-          const SizedBox(height: EsokoSpacing.s5),
-          EsokoButton.primary(
+          const SizedBox(height: EsoqoSpacing.s5),
+          EsoqoButton.primary(
             expand: false,
             label: 'Confirm receipt',
             loading: _loading,
@@ -160,7 +160,7 @@ class _ParcelReceiptConfirmationScreenState
         ];
       case _Step.done:
         return [
-          EsokoResultView.success(
+          EsoqoResultView.success(
             title: 'Thanks!',
             message: "We've let the sender know you got it.",
             primaryLabel: 'Done',

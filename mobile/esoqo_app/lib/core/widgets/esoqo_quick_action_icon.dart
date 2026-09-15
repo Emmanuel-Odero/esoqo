@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 
-import '../theme/esoko_tokens.dart';
+import '../theme/esoqo_tokens.dart';
 
 /// The 44×44 "quick action" icon tile — primaryContainer background,
 /// primary icon, medium radius. Found hand-rolled three times over
@@ -8,8 +8,8 @@ import '../theme/esoko_tokens.dart';
 /// home_hub_screen._ServiceIcon) with the same Container + BoxDecoration
 /// block before this; this standardises how a tappable service/sheet row
 /// leading icon is drawn.
-class EsokoQuickActionIcon extends StatelessWidget {
-  const EsokoQuickActionIcon({super.key, required this.icon, this.size = 44});
+class EsoqoQuickActionIcon extends StatelessWidget {
+  const EsoqoQuickActionIcon({super.key, required this.icon, this.size = 44});
 
   final IconData icon;
   final double size;
@@ -22,7 +22,7 @@ class EsokoQuickActionIcon extends StatelessWidget {
       height: size,
       decoration: BoxDecoration(
         color: scheme.primaryContainer,
-        borderRadius: BorderRadius.circular(EsokoRadius.md),
+        borderRadius: BorderRadius.circular(EsoqoRadius.md),
       ),
       child: Icon(icon, color: scheme.primary, size: size * 0.5),
     );

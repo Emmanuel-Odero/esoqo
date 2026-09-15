@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import '../../core/theme/esoko_tokens.dart';
+import '../../core/theme/esoqo_tokens.dart';
 import '../../core/widgets/widgets.dart';
 import 'checkout_screen.dart';
 import 'gradient_thumb.dart';
@@ -54,7 +54,7 @@ class _ProductDetailScreenState extends ConsumerState<ProductDetailScreen> {
           ),
         ),
       ),
-      body: EsokoAsyncView(
+      body: EsoqoAsyncView(
         value: product,
         onRetry: () => ref.invalidate(productDetailProvider(widget.productId)),
         data: (context, p) => Stack(
@@ -80,7 +80,7 @@ class _ProductDetailScreenState extends ConsumerState<ProductDetailScreen> {
                     ),
                   ),
                   Padding(
-                    padding: const EdgeInsets.all(EsokoSpacing.s5),
+                    padding: const EdgeInsets.all(EsoqoSpacing.s5),
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
@@ -123,28 +123,28 @@ class _ProductDetailScreenState extends ConsumerState<ProductDetailScreen> {
                               ),
                             ),
                             if (p.isService)
-                              const EsokoStatusPill(
+                              const EsoqoStatusPill(
                                 label: 'SERVICE',
-                                color: EsokoColors.blue,
+                                color: EsoqoColors.blue,
                               ),
                           ],
                         ),
-                        const SizedBox(height: EsokoSpacing.s3),
-                        EsokoAmountText(
+                        const SizedBox(height: EsoqoSpacing.s3),
+                        EsoqoAmountText(
                           '${p.priceKes}${p.unit != null ? ' / ${p.unit}' : ''}',
-                          fontSize: 26,
+                          fontSize: EsoqoTypeScale.pageTitle,
                         ),
                         if (!p.isService) ...[
-                          const SizedBox(height: EsokoSpacing.s2),
+                          const SizedBox(height: EsoqoSpacing.s2),
                           _StockLine(product: p),
                         ],
                         if (p.description != null) ...[
-                          const SizedBox(height: EsokoSpacing.s4),
+                          const SizedBox(height: EsoqoSpacing.s4),
                           Text(
                             'About',
                             style: Theme.of(context).textTheme.titleSmall,
                           ),
-                          const SizedBox(height: EsokoSpacing.s2),
+                          const SizedBox(height: EsoqoSpacing.s2),
                           Text(
                             p.description!,
                             style: TextStyle(
@@ -157,21 +157,21 @@ class _ProductDetailScreenState extends ConsumerState<ProductDetailScreen> {
                           ),
                         ],
                         if (p.variants.isNotEmpty) ...[
-                          const SizedBox(height: EsokoSpacing.s5),
+                          const SizedBox(height: EsoqoSpacing.s5),
                           Text(
                             'Choose an option',
                             style: Theme.of(context).textTheme.titleSmall,
                           ),
-                          const SizedBox(height: EsokoSpacing.s2),
+                          const SizedBox(height: EsoqoSpacing.s2),
                           Wrap(
-                            spacing: EsokoSpacing.s2,
+                            spacing: EsoqoSpacing.s2,
                             children: [
                               for (final v in p.variants)
                                 ChoiceChip(
                                   label: Text('${v.label} — KES ${v.priceKes}'),
                                   selected: _selectedVariantId == v.id,
                                   onSelected: (_) {
-                                    EsokoHaptics.tap();
+                                    EsoqoHaptics.tap();
                                     setState(() => _selectedVariantId = v.id);
                                   },
                                 ),
@@ -179,13 +179,13 @@ class _ProductDetailScreenState extends ConsumerState<ProductDetailScreen> {
                           ),
                         ],
                         if (!p.isService && !_isOutOfStock(p)) ...[
-                          const SizedBox(height: EsokoSpacing.s5),
+                          const SizedBox(height: EsoqoSpacing.s5),
                           Text(
                             'Quantity',
                             style: Theme.of(context).textTheme.titleSmall,
                           ),
-                          const SizedBox(height: EsokoSpacing.s2),
-                          EsokoStepper(
+                          const SizedBox(height: EsoqoSpacing.s2),
+                          EsoqoStepper(
                             value: _quantity,
                             onChanged: (v) => setState(() => _quantity = v),
                           ),
@@ -256,7 +256,7 @@ class _StockLine extends StatelessWidget {
         'Out of stock',
         scheme.error,
       ),
-      final q when q <= 5 => ('Only $q left', EsokoColors.amber),
+      final q when q <= 5 => ('Only $q left', EsoqoColors.amber),
       _ => ('In stock', muted),
     };
     return Row(
@@ -307,10 +307,10 @@ class _BuyBar extends StatelessWidget {
         top: false,
         child: Padding(
           padding: const EdgeInsets.fromLTRB(
-            EsokoSpacing.s5,
-            EsokoSpacing.s3,
-            EsokoSpacing.s5,
-            EsokoSpacing.s3,
+            EsoqoSpacing.s5,
+            EsoqoSpacing.s3,
+            EsoqoSpacing.s5,
+            EsoqoSpacing.s3,
           ),
           child: Row(
             children: [
@@ -320,18 +320,18 @@ class _BuyBar extends StatelessWidget {
                   Text(
                     'Total',
                     style: TextStyle(
-                      fontSize: 11,
+                      fontSize: EsoqoTypeScale.micro,
                       color: Theme.of(context).textTheme.bodySmall?.color,
                     ),
                   ),
-                  EsokoAmountText(
+                  EsoqoAmountText(
                     totalLabel.replaceFirst('KES ', ''),
-                    fontSize: 16,
+                    fontSize: EsoqoTypeScale.subTitle,
                   ),
                 ],
               ),
               const Spacer(),
-              EsokoButton.primary(
+              EsoqoButton.primary(
                 label: buttonLabel,
                 expand: false,
                 onPressed: enabled ? onBuy : null,

@@ -4,7 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../core/auth/auth_controller.dart';
 import '../../core/auth/auth_state.dart';
 import '../../core/auth/org_context_state.dart';
-import '../../core/theme/esoko_tokens.dart';
+import '../../core/theme/esoqo_tokens.dart';
 import '../../core/widgets/widgets.dart';
 import '../fleet/fleet_providers.dart';
 import 'account_businesses_screen.dart';
@@ -39,8 +39,8 @@ class AccountScreen extends ConsumerWidget {
     final auth = ref.watch(authControllerProvider);
     if (auth is! AuthSignedIn) {
       return const Padding(
-        padding: EdgeInsets.all(EsokoSpacing.s5),
-        child: EsokoSkeletonList(count: 4),
+        padding: EdgeInsets.all(EsoqoSpacing.s5),
+        child: EsoqoSkeletonList(count: 4),
       );
     }
     final profile = auth.profile;
@@ -59,18 +59,18 @@ class AccountScreen extends ConsumerWidget {
           constraints: const BoxConstraints(maxWidth: 840),
           child: ListView(
             padding: const EdgeInsets.fromLTRB(
-              EsokoSpacing.s6,
-              EsokoSpacing.s4,
-              EsokoSpacing.s6,
-              EsokoSpacing.s9 + EsokoSpacing.s6,
+              EsoqoSpacing.s6,
+              EsoqoSpacing.s4,
+              EsoqoSpacing.s6,
+              EsoqoSpacing.s9 + EsoqoSpacing.s6,
             ),
             children: [
               // Who you are, stated once at the top rather than made a
               // door of its own — a person opening Account should see
               // whose account it is without a tap.
-              EsokoCard(
-                color: EsokoColors.navy,
-                padding: const EdgeInsets.all(EsokoSpacing.s5),
+              EsoqoCard(
+                color: EsoqoColors.navy,
+                padding: const EdgeInsets.all(EsoqoSpacing.s5),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
@@ -78,9 +78,13 @@ class AccountScreen extends ConsumerWidget {
                       profile.displayName,
                       style: const TextStyle(
                         color: Colors.white,
-                        fontFamily: EsokoFonts.display,
-                        fontSize: 20,
-                        fontWeight: FontWeight.w800,
+                        fontFamily: EsoqoFonts.display,
+                        fontSize: EsoqoTypeScale.cardTitle,
+                        fontWeight: FontWeight.w700,
+                        height: EsoqoTypography.headlineHeight,
+                        letterSpacing:
+                            EsoqoTypeScale.cardTitle *
+                            EsoqoTypography.headlineTrackingEm,
                       ),
                     ),
                     if (profile.msisdn != null) ...[
@@ -89,16 +93,16 @@ class AccountScreen extends ConsumerWidget {
                         profile.msisdn!,
                         style: TextStyle(
                           color: Colors.white.withValues(alpha: 0.72),
-                          fontSize: 13,
+                          fontSize: EsoqoTypeScale.meta,
                         ),
                       ),
                     ],
-                    if (profile.esokoId != null) ...[
-                      const SizedBox(height: EsokoSpacing.s2),
+                    if (profile.esoqoId != null) ...[
+                      const SizedBox(height: EsoqoSpacing.s2),
                       Text(
-                        profile.esokoId!,
-                        style: EsokoTypography.mono(
-                          fontSize: 12.5,
+                        profile.esoqoId!,
+                        style: EsoqoTypography.mono(
+                          fontSize: EsoqoTypeScale.meta,
                           color: Colors.white.withValues(alpha: 0.72),
                         ),
                       ),
@@ -106,7 +110,7 @@ class AccountScreen extends ConsumerWidget {
                   ],
                 ),
               ),
-              const SizedBox(height: EsokoSpacing.s5),
+              const SizedBox(height: EsoqoSpacing.s5),
 
               _door(
                 context,
@@ -132,8 +136,8 @@ class AccountScreen extends ConsumerWidget {
                   institutional: true,
                 ),
 
-              const SizedBox(height: EsokoSpacing.s5),
-              EsokoButton.secondary(
+              const SizedBox(height: EsoqoSpacing.s5),
+              EsoqoButton.secondary(
                 label: 'Sign out',
                 onPressed: () =>
                     ref.read(authControllerProvider.notifier).signOut(),
@@ -154,16 +158,16 @@ class AccountScreen extends ConsumerWidget {
     bool institutional = false,
   }) {
     return Padding(
-      padding: const EdgeInsets.only(bottom: EsokoSpacing.s2),
-      child: EsokoListTile(
+      padding: const EdgeInsets.only(bottom: EsoqoSpacing.s2),
+      child: EsoqoListTile(
         title: title,
         subtitle: subtitle,
         icon: icon,
         // Blue for a door into something an organisation owns, per
         // SCREEN_CONVENTIONS.md Rule 3 — the same distinction the
         // tiles behind it already draw.
-        iconColor: institutional ? EsokoColors.blue : null,
-        iconBackground: institutional ? EsokoColors.blueTint : null,
+        iconColor: institutional ? EsoqoColors.blue : null,
+        iconBackground: institutional ? EsoqoColors.blueTint : null,
         trailing: const Icon(Icons.chevron_right, size: 20),
         onTap: () => Navigator.of(context).push(
           MaterialPageRoute(builder: (_) => screen),

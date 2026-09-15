@@ -8,7 +8,7 @@ import 'package:mobile_scanner/mobile_scanner.dart';
 
 import '../../core/api/api_exception.dart';
 import '../../core/money/money.dart';
-import '../../core/theme/esoko_tokens.dart';
+import '../../core/theme/esoqo_tokens.dart';
 import '../../core/widgets/widgets.dart';
 import 'parcel_models.dart';
 import 'parcels_repository.dart';
@@ -240,13 +240,13 @@ class _CompleteDeliveryScreenState extends ConsumerState<CompleteDeliveryScreen>
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: EsokoAppBar(title: widget.parcel.code),
+      appBar: EsoqoAppBar(title: widget.parcel.code),
       body: SafeArea(
         child: Center(
           child: ConstrainedBox(
             constraints: const BoxConstraints(maxWidth: 480),
             child: ListView(
-              padding: const EdgeInsets.all(EsokoSpacing.s4),
+              padding: const EdgeInsets.all(EsoqoSpacing.s4),
               children: [
                 Text(
                   'To ${widget.parcel.receiverName}',
@@ -257,19 +257,19 @@ class _CompleteDeliveryScreenState extends ConsumerState<CompleteDeliveryScreen>
                   style: Theme.of(context).textTheme.bodySmall,
                 ),
                 if (widget.parcel.deliveryAttempts > 0) ...[
-                  const SizedBox(height: EsokoSpacing.s3),
-                  EsokoInlineNotice(
-                    color: EsokoColors.amber,
-                    icon: EsokoIconName.alertTriangle,
+                  const SizedBox(height: EsoqoSpacing.s3),
+                  EsoqoInlineNotice(
+                    color: EsoqoColors.amber,
+                    icon: EsoqoIconName.alertTriangle,
                     message: widget.parcel.deliveryAttempts == 1
                         ? 'This is the second attempt at this parcel.'
                         : 'Already tried ${widget.parcel.deliveryAttempts} times. '
                             'After three, it goes back to the sender.',
                   ),
                 ],
-                const SizedBox(height: EsokoSpacing.s4),
+                const SizedBox(height: EsoqoSpacing.s4),
 
-                EsokoSegmentedToggle<_Outcome>(
+                EsoqoSegmentedToggle<_Outcome>(
                   selected: _outcome,
                   onChanged: (v) => setState(() {
                     _outcome = v;
@@ -281,18 +281,18 @@ class _CompleteDeliveryScreenState extends ConsumerState<CompleteDeliveryScreen>
                     (_Outcome.leftAtAgent, 'Left at shop'),
                   ],
                 ),
-                const SizedBox(height: EsokoSpacing.s4),
+                const SizedBox(height: EsoqoSpacing.s4),
 
                 if (_outcome == _Outcome.delivered) ..._deliveredFields(context),
                 if (_outcome == _Outcome.failed) ..._failedFields(context),
                 if (_outcome == _Outcome.leftAtAgent) ..._agentFields(context),
 
                 if (_error != null) ...[
-                  const SizedBox(height: EsokoSpacing.s3),
-                  EsokoFormError(message: _error!),
+                  const SizedBox(height: EsoqoSpacing.s3),
+                  EsoqoFormError(message: _error!),
                 ],
-                const SizedBox(height: EsokoSpacing.s5),
-                EsokoButton.primary(
+                const SizedBox(height: EsoqoSpacing.s5),
+                EsoqoButton.primary(
                   expand: false,
                   label: _submitLabel,
                   loading: _busy,
@@ -321,15 +321,15 @@ class _CompleteDeliveryScreenState extends ConsumerState<CompleteDeliveryScreen>
     final goods = parcel.codAmountKes ?? Money.zero;
     final fee = parcel.codDeliveryFeeKes;
     return [
-      EsokoCard(
+      EsoqoCard(
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Text('Collect from the buyer', style: small),
-            const SizedBox(height: EsokoSpacing.s1),
+            const SizedBox(height: EsoqoSpacing.s1),
             Text(
               'KES ${parcel.codExpectedKes.format()}',
-              style: EsokoTypography.mono(fontSize: 26, fontWeight: FontWeight.w800),
+              style: EsoqoTypography.mono(fontSize: EsoqoTypeScale.pageTitle, fontWeight: FontWeight.w700),
             ),
             Text(
               fee.isPositive
@@ -338,8 +338,8 @@ class _CompleteDeliveryScreenState extends ConsumerState<CompleteDeliveryScreen>
                   : 'For the goods. Delivery was already paid.',
               style: small,
             ),
-            const SizedBox(height: EsokoSpacing.s3),
-            EsokoField.amount(
+            const SizedBox(height: EsoqoSpacing.s3),
+            EsoqoField.amount(
               controller: _codCollected,
               label: 'What did they actually pay?',
               onChanged: (_) => setState(() {}),
@@ -358,10 +358,10 @@ class _CompleteDeliveryScreenState extends ConsumerState<CompleteDeliveryScreen>
               // With exact cents, "not short" is exactly `!isPositive`.
               if (!short.isPositive) return const SizedBox.shrink();
               return Padding(
-                padding: const EdgeInsets.only(top: EsokoSpacing.s2),
-                child: EsokoInlineNotice(
-                  color: EsokoColors.amber,
-                  icon: EsokoIconName.alertTriangle,
+                padding: const EdgeInsets.only(top: EsoqoSpacing.s2),
+                child: EsoqoInlineNotice(
+                  color: EsoqoColors.amber,
+                  icon: EsoqoIconName.alertTriangle,
                   // .format() keeps the cents when there are cents: a
                   // one-cent shortfall used to render "KES 0 short"
                   // through toStringAsFixed(0).
@@ -374,7 +374,7 @@ class _CompleteDeliveryScreenState extends ConsumerState<CompleteDeliveryScreen>
           ],
         ),
       ),
-      const SizedBox(height: EsokoSpacing.s4),
+      const SizedBox(height: EsoqoSpacing.s4),
     ];
   }
 
@@ -387,13 +387,13 @@ class _CompleteDeliveryScreenState extends ConsumerState<CompleteDeliveryScreen>
         Row(
           children: [
             Expanded(
-              child: EsokoField.code(
+              child: EsoqoField.code(
                 controller: _deliveryCode,
                 label: _atAgent ? 'Delivery code (optional)' : 'Delivery code',
                 hint: _atAgent ? 'Or just note who collected it' : 'Ask the receiver',
               ),
             ),
-            const SizedBox(width: EsokoSpacing.s2),
+            const SizedBox(width: EsoqoSpacing.s2),
             SizedBox(
               width: 56,
               child: IconButton.filledTonal(
@@ -405,11 +405,11 @@ class _CompleteDeliveryScreenState extends ConsumerState<CompleteDeliveryScreen>
           ],
         ),
         if (_scanning) ...[
-          const SizedBox(height: EsokoSpacing.s3),
+          const SizedBox(height: EsoqoSpacing.s3),
           SizedBox(
             height: 220,
             child: ClipRRect(
-              borderRadius: BorderRadius.circular(EsokoRadius.md),
+              borderRadius: BorderRadius.circular(EsoqoRadius.md),
               child: MobileScanner(
                 onDetect: (cap) {
                   final v = cap.barcodes.firstOrNull?.rawValue;
@@ -423,15 +423,15 @@ class _CompleteDeliveryScreenState extends ConsumerState<CompleteDeliveryScreen>
             ),
           ),
         ],
-        const SizedBox(height: EsokoSpacing.s3),
-        EsokoField.name(
+        const SizedBox(height: EsoqoSpacing.s3),
+        EsoqoField.name(
           controller: _receivedBy,
           label: 'Who received it?',
           hint: 'e.g. the watchman, a neighbour',
         ),
-        const SizedBox(height: EsokoSpacing.s3),
+        const SizedBox(height: EsoqoSpacing.s3),
         _photoField(context),
-        const SizedBox(height: EsokoSpacing.s2),
+        const SizedBox(height: EsoqoSpacing.s2),
         _locationNote(context),
       ];
 
@@ -440,7 +440,7 @@ class _CompleteDeliveryScreenState extends ConsumerState<CompleteDeliveryScreen>
           'The receiver gets a text explaining why, so pick the closest reason.',
           style: Theme.of(context).textTheme.bodySmall,
         ),
-        const SizedBox(height: EsokoSpacing.s3),
+        const SizedBox(height: EsoqoSpacing.s3),
         DropdownButtonFormField<String>(
           initialValue: _attemptReason,
           isExpanded: true,
@@ -458,30 +458,30 @@ class _CompleteDeliveryScreenState extends ConsumerState<CompleteDeliveryScreen>
         // rule every other Other choice in this app follows, and here
         // the note is literally what the receiver reads in their SMS.
         if (_attemptReason == 'OTHER') ...[
-          const SizedBox(height: EsokoSpacing.s3),
-          EsokoField.text(
+          const SizedBox(height: EsoqoSpacing.s3),
+          EsoqoField.text(
             controller: _attemptNote,
             label: 'Say what happened',
             hint: 'e.g. the gate was locked',
           ),
         ],
-        const SizedBox(height: EsokoSpacing.s3),
-        EsokoInlineNotice(
-          color: EsokoColors.navy,
-          icon: EsokoIconName.info,
+        const SizedBox(height: EsoqoSpacing.s3),
+        EsoqoInlineNotice(
+          color: EsoqoColors.navy,
+          icon: EsoqoIconName.info,
           message: 'You keep the parcel. It stays in your Holding list so you '
               'can try again or leave it at a shop.',
         ),
-        const SizedBox(height: EsokoSpacing.s2),
+        const SizedBox(height: EsoqoSpacing.s2),
         _locationNote(context),
       ];
 
   List<Widget> _agentFields(BuildContext context) {
     if (_agents.isEmpty) {
       return [
-        EsokoInlineNotice(
-          color: EsokoColors.amber,
-          icon: EsokoIconName.alertTriangle,
+        EsoqoInlineNotice(
+          color: EsoqoColors.amber,
+          icon: EsoqoIconName.alertTriangle,
           message: 'No pickup points are available right now.',
         ),
       ];
@@ -493,7 +493,7 @@ class _CompleteDeliveryScreenState extends ConsumerState<CompleteDeliveryScreen>
         "it's open.",
         style: Theme.of(context).textTheme.bodySmall,
       ),
-      const SizedBox(height: EsokoSpacing.s3),
+      const SizedBox(height: EsoqoSpacing.s3),
       DropdownButtonFormField<String>(
         initialValue: _agentId,
         isExpanded: true,
@@ -512,8 +512,8 @@ class _CompleteDeliveryScreenState extends ConsumerState<CompleteDeliveryScreen>
         onChanged: (v) => setState(() => _agentId = v),
       ),
       if (chosen != null) ...[
-        const SizedBox(height: EsokoSpacing.s3),
-        EsokoCard(
+        const SizedBox(height: EsoqoSpacing.s3),
+        EsoqoCard(
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
@@ -534,7 +534,7 @@ class _CompleteDeliveryScreenState extends ConsumerState<CompleteDeliveryScreen>
   }
 
   Widget _photoField(BuildContext context) {
-    return EsokoCard(
+    return EsoqoCard(
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -545,7 +545,7 @@ class _CompleteDeliveryScreenState extends ConsumerState<CompleteDeliveryScreen>
               ),
               SizedBox(
                 width: 120,
-                child: EsokoButton.secondary(
+                child: EsoqoButton.secondary(
                   label: _photo == null ? 'Take' : 'Retake',
                   icon: Icons.photo_camera_outlined,
                   expand: false,
@@ -554,7 +554,7 @@ class _CompleteDeliveryScreenState extends ConsumerState<CompleteDeliveryScreen>
               ),
             ],
           ),
-          const SizedBox(height: EsokoSpacing.s1),
+          const SizedBox(height: EsoqoSpacing.s1),
           Text(
             _photo == null
                 ? 'Optional, but it settles any argument later.'
@@ -562,9 +562,9 @@ class _CompleteDeliveryScreenState extends ConsumerState<CompleteDeliveryScreen>
             style: Theme.of(context).textTheme.bodySmall,
           ),
           if (_photoBytes != null) ...[
-            const SizedBox(height: EsokoSpacing.s2),
+            const SizedBox(height: EsoqoSpacing.s2),
             ClipRRect(
-              borderRadius: BorderRadius.circular(EsokoRadius.sm),
+              borderRadius: BorderRadius.circular(EsoqoRadius.sm),
               child: Image.memory(
                 _photoBytes!,
                 height: 140,

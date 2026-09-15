@@ -51,7 +51,7 @@ class ApiClient {
       if (orgContextRaw != null) {
         try {
           final orgId = (jsonDecode(orgContextRaw) as Map<String, dynamic>)['orgId'] as String?;
-          if (orgId != null) options.headers['X-Esoko-Org-Context'] = orgId;
+          if (orgId != null) options.headers['X-Esoqo-Org-Context'] = orgId;
         } catch (_) {
           // Malformed cache — ignore, just send the request without it.
         }
@@ -76,7 +76,7 @@ class ApiClient {
   /// is the user's network topology, and it has no business in a
   /// shipped app's logs where anything reading device logs can see it.
   static void _trace(String message) {
-    if (kDebugMode) debugPrint('esoko/api: $message');
+    if (kDebugMode) debugPrint('esoqo/api: $message');
   }
 
   /// Resolves the real base URL once, before the first request. Dio's
@@ -177,7 +177,7 @@ class ApiClient {
   /// run to a couple hundred entries (a whole /24 sweep, see
   /// ApiConfig._physicalIosCandidates), which used to get dumped
   /// verbatim into the NETWORK_ERROR message and blow out any layout
-  /// that rendered it (EsokoErrorView included). Callers still get the
+  /// that rendered it (EsoqoErrorView included). Callers still get the
   /// count for debugging; only the first few hosts are spelled out.
   String get _triedSummary {
     const shown = 4;
@@ -232,7 +232,7 @@ class ApiClient {
         code: 'NETWORK_ERROR',
         message: e.message != null
             ? '${e.message} Tried $_triedSummary.'
-            : 'Could not reach Esoko. Check your connection.',
+            : 'Could not reach Esoqo. Check your connection.',
       );
     }
 

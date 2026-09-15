@@ -6,7 +6,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../core/api/api_exception.dart';
 import '../../core/auth/auth_controller.dart';
 import '../../core/auth/auth_state.dart';
-import '../../core/theme/esoko_tokens.dart';
+import '../../core/theme/esoqo_tokens.dart';
 import '../../core/widgets/widgets.dart';
 import 'stores_repository.dart';
 
@@ -143,20 +143,20 @@ class _CheckoutScreenState extends ConsumerState<CheckoutScreen> {
   Widget build(BuildContext context) {
     final reduced = MediaQuery.disableAnimationsOf(context);
     return Scaffold(
-      appBar: const EsokoAppBar(title: 'Checkout'),
+      appBar: const EsoqoAppBar(title: 'Checkout'),
       body: SafeArea(
         child: Center(
           child: ConstrainedBox(
             constraints: const BoxConstraints(maxWidth: 420),
             child: Padding(
-              padding: const EdgeInsets.all(EsokoSpacing.s6),
+              padding: const EdgeInsets.all(EsoqoSpacing.s6),
               // The stage machine cross-fades (form → skeleton →
               // waiting → result) instead of snapping — money moving
               // should never visually jump.
               child: AnimatedSwitcher(
-                duration: reduced ? Duration.zero : EsokoMotion.medium,
-                switchInCurve: EsokoMotion.easeOut,
-                switchOutCurve: EsokoMotion.easeOut,
+                duration: reduced ? Duration.zero : EsoqoMotion.medium,
+                switchInCurve: EsoqoMotion.easeOut,
+                switchOutCurve: EsoqoMotion.easeOut,
                 child: KeyedSubtree(
                   key: ValueKey(_stage),
                   child: _body(),
@@ -176,8 +176,8 @@ class _CheckoutScreenState extends ConsumerState<CheckoutScreen> {
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
             _orderSummary(),
-            const SizedBox(height: EsokoSpacing.s4),
-            EsokoSegmentedToggle<String>(
+            const SizedBox(height: EsoqoSpacing.s4),
+            EsoqoSegmentedToggle<String>(
               selected: _method,
               onChanged: (m) => setState(() => _method = m),
               options: const [
@@ -186,15 +186,15 @@ class _CheckoutScreenState extends ConsumerState<CheckoutScreen> {
               ],
             ),
             if (_method == 'VOUCHER') ...[
-              const SizedBox(height: EsokoSpacing.s3),
-              EsokoField.code(
+              const SizedBox(height: EsoqoSpacing.s3),
+              EsoqoField.code(
                 controller: _voucherCodeController,
                 label: 'Voucher code',
                 hint: 'e.g. VCH-XXXXXX',
               ),
             ],
-            const SizedBox(height: EsokoSpacing.s4),
-            EsokoPayerFields(
+            const SizedBox(height: EsoqoSpacing.s4),
+            EsoqoPayerFields(
               nameController: _nameController,
               msisdnController: _msisdnController,
               payLabel: _method == 'VOUCHER' ? 'Pay with voucher' : 'Pay with M-Pesa',
@@ -204,24 +204,24 @@ class _CheckoutScreenState extends ConsumerState<CheckoutScreen> {
         );
       case _Stage.placing:
         return const Padding(
-          padding: EdgeInsets.all(EsokoSpacing.s6),
-          child: EsokoSkeletonCard(leading: false),
+          padding: EdgeInsets.all(EsoqoSpacing.s6),
+          child: EsoqoSkeletonCard(leading: false),
         );
       case _Stage.waiting:
-        return EsokoResultView.waiting(
+        return EsoqoResultView.waiting(
           title: 'Complete payment on your phone',
           message: 'Enter your M-Pesa PIN when the prompt arrives.',
           amountKes: _totalKes,
         );
       case _Stage.done:
-        return EsokoResultView.success(
+        return EsoqoResultView.success(
           title: 'Order placed',
           message: 'Find it any time in Settings → History.',
           primaryLabel: 'Done',
           onPrimary: () => Navigator.of(context).popUntil((r) => r.isFirst),
         );
       case _Stage.failed:
-        return EsokoResultView.failure(
+        return EsoqoResultView.failure(
           errorMessage: _error ?? 'Something went wrong',
           primaryLabel: 'Try again',
           onPrimary: () => setState(() => _stage = _Stage.form),
@@ -231,7 +231,7 @@ class _CheckoutScreenState extends ConsumerState<CheckoutScreen> {
 
   Widget _orderSummary() {
     final scheme = Theme.of(context).colorScheme;
-    return EsokoListTile(
+    return EsoqoListTile(
       title: widget.productLabel,
       leading: CircleAvatar(
         radius: 20,
@@ -240,7 +240,7 @@ class _CheckoutScreenState extends ConsumerState<CheckoutScreen> {
           '${widget.quantity}',
           style: TextStyle(
             color: scheme.primary,
-            fontWeight: FontWeight.w800,
+            fontWeight: FontWeight.w700,
           ),
         ),
       ),

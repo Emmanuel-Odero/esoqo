@@ -3,7 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../core/api/api_exception.dart';
 import '../core/auth/auth_controller.dart';
-import '../core/theme/esoko_tokens.dart';
+import '../core/theme/esoqo_tokens.dart';
 
 enum _Step { phone, code }
 
@@ -67,16 +67,16 @@ class _WatchSignInState extends ConsumerState<WatchSignIn> {
     return Scaffold(
       body: SafeArea(
         child: Padding(
-          padding: const EdgeInsets.all(EsokoSpacing.s3),
+          padding: const EdgeInsets.all(EsoqoSpacing.s3),
           child: Column(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
               Text(
-                'Esoko',
+                'Esoqo',
                 style: Theme.of(context).textTheme.titleMedium,
                 textAlign: TextAlign.center,
               ),
-              const SizedBox(height: EsokoSpacing.s3),
+              const SizedBox(height: EsoqoSpacing.s3),
               if (_step == _Step.phone)
                 TextField(
                   controller: _msisdnController,
@@ -94,14 +94,14 @@ class _WatchSignInState extends ConsumerState<WatchSignIn> {
                 ),
               if (_error != null)
                 Padding(
-                  padding: const EdgeInsets.only(top: EsokoSpacing.s2),
+                  padding: const EdgeInsets.only(top: EsoqoSpacing.s2),
                   child: Text(
                     _error!,
-                    style: TextStyle(color: EsokoColors.red, fontSize: 11),
+                    style: TextStyle(color: EsoqoColors.red, fontSize: EsoqoTypeScale.micro),
                     textAlign: TextAlign.center,
                   ),
                 ),
-              const SizedBox(height: EsokoSpacing.s2),
+              const SizedBox(height: EsoqoSpacing.s2),
               SizedBox(
                 width: double.infinity,
                 child: FilledButton(

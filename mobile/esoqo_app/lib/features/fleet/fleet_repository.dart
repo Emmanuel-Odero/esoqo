@@ -66,7 +66,7 @@ class FleetRepository {
   }
 
   /// GET /v1/ticketorgs/:id/staff-grants — the unified-crew-identity
-  /// roster (docs/proposals/esoko-unified-crew-identity.md): every
+  /// roster (docs/proposals/esoqo-unified-crew-identity.md): every
   /// Party who can act as staff for this org, and their live
   /// active/suspended status.
   Future<List<OrgStaffGrant>> staffGrants(String orgId) async {
@@ -78,7 +78,7 @@ class FleetRepository {
   }
 
   /// POST /v1/ticketorgs/:id/staff-grants — onboards a crew member who
-  /// already holds an Esoko account (looked up by phone number). 404s
+  /// already holds an Esoqo account (looked up by phone number). 404s
   /// with NO_ACCOUNT if they don't — there is no account-less path, by
   /// design (see the proposal's "crew must have accounts" decision).
   Future<void> createStaffGrant({
@@ -125,7 +125,7 @@ class FleetRepository {
     return CollectionsSummary.fromJson(summary ?? const {});
   }
 
-  /// GET /v1/trips/resolve — turn a scanned code (esoko://t?... or
+  /// GET /v1/trips/resolve — turn a scanned code (esoqo://t?... or
   /// BUS-XXXXXX) into a payable trip. The resolve payload uses
   /// lowercase keys (unlike the Go-struct shapes above), so the stage
   /// mapping lives here, not scattered across the two callers

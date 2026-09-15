@@ -125,7 +125,7 @@ class CrewMember {
 }
 
 /// One row on the org's staff roster — GET /v1/ticketorgs/:id/staff-grants
-/// (docs/proposals/esoko-unified-crew-identity.md). Distinct from
+/// (docs/proposals/esoqo-unified-crew-identity.md). Distinct from
 /// [CrewMember]: a staff grant is a *person's account's* permission to
 /// act as SCANNER/MANAGER/ADMIN/CREW for this org; a CrewMember is the
 /// driver/conductor roster entry a CREW grant may (or may not yet) be

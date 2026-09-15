@@ -1,11 +1,11 @@
 import 'package:flutter/material.dart';
 
-import '../theme/esoko_tokens.dart';
-import 'esoko_haptics.dart';
+import '../theme/esoqo_tokens.dart';
+import 'esoqo_haptics.dart';
 
 /// The one tappable/non-tappable card shape for a list-item summary
 /// across the app — a thin wrapper around the theme's own Card (see
-/// EsokoTheme's cardTheme: 0 elevation, EsokoRadius.lg, a line-colour
+/// EsoqoTheme's cardTheme: 0 elevation, EsoqoRadius.lg, a line-colour
 /// border) so it always inherits that styling rather than a screen
 /// re-deciding its own border/elevation/radius.
 ///
@@ -14,12 +14,12 @@ import 'esoko_haptics.dart';
 /// pressed, and a soft "lift" (translate up + deeper shadow) on release
 /// before settling back — echoing web's `.btn:active` / `.card` shadow
 /// language without being loud.
-class EsokoCard extends StatefulWidget {
-  const EsokoCard({
+class EsoqoCard extends StatefulWidget {
+  const EsoqoCard({
     super.key,
     required this.child,
     this.onTap,
-    this.padding = const EdgeInsets.all(EsokoSpacing.s3),
+    this.padding = const EdgeInsets.all(EsoqoSpacing.s3),
     this.color,
   });
 
@@ -32,15 +32,15 @@ class EsokoCard extends StatefulWidget {
   final Color? color;
 
   @override
-  State<EsokoCard> createState() => _EsokoCardState();
+  State<EsoqoCard> createState() => _EsoqoCardState();
 }
 
-class _EsokoCardState extends State<EsokoCard>
+class _EsoqoCardState extends State<EsoqoCard>
     with SingleTickerProviderStateMixin {
   late final AnimationController _controller = AnimationController(
     vsync: this,
-    duration: EsokoMotion.medium,
-    reverseDuration: EsokoMotion.medium,
+    duration: EsoqoMotion.medium,
+    reverseDuration: EsoqoMotion.medium,
   );
 
   // 0 = resting · 0.5 = pressed (scaled down) · 1 = released (lifted).
@@ -61,12 +61,12 @@ class _EsokoCardState extends State<EsokoCard>
     if (mounted) {
       if (pressed) {
         _settleGeneration++;
-        _controller.animateTo(0.5, curve: EsokoMotion.easeOut);
+        _controller.animateTo(0.5, curve: EsoqoMotion.easeOut);
       } else {
         // Released: lift briefly, then settle back to rest.
         final generation = ++_settleGeneration;
-        _controller.animateTo(1.0, curve: EsokoMotion.easeOut);
-        Future<void>.delayed(EsokoMotion.slow, () {
+        _controller.animateTo(1.0, curve: EsoqoMotion.easeOut);
+        Future<void>.delayed(EsoqoMotion.slow, () {
           if (mounted && generation == _settleGeneration) {
             _controller.reverse();
           }
@@ -90,7 +90,7 @@ class _EsokoCardState extends State<EsokoCard>
     final shape = cardTheme.shape as RoundedRectangleBorder?;
     final borderRadius =
         (shape?.borderRadius as BorderRadius?) ??
-        BorderRadius.circular(EsokoRadius.lg);
+        BorderRadius.circular(EsoqoRadius.lg);
     final baseColor =
         widget.color ??
         cardTheme.color ??
@@ -100,8 +100,8 @@ class _EsokoCardState extends State<EsokoCard>
       animation: _controller,
       builder: (context, child) {
         final shadow = _liftCurve <= 0.0
-            ? EsokoShadows.card
-            : EsokoShadows.lifted;
+            ? EsoqoShadows.card
+            : EsoqoShadows.lifted;
 
         final card = Card(
           elevation: 0,
@@ -109,7 +109,7 @@ class _EsokoCardState extends State<EsokoCard>
           clipBehavior: Clip.antiAlias,
           shape: RoundedRectangleBorder(
             borderRadius: borderRadius,
-            side: BorderSide(color: EsokoColors.line),
+            side: BorderSide(color: EsoqoColors.line),
           ),
           child: widget.onTap == null
               ? Padding(padding: widget.padding, child: widget.child)
@@ -117,7 +117,7 @@ class _EsokoCardState extends State<EsokoCard>
                     borderRadius: borderRadius,
                     onHighlightChanged: _onHighlightChanged,
                     onTap: () {
-                      EsokoHaptics.tap();
+                      EsoqoHaptics.tap();
                       widget.onTap!();
                     },
                   child: Padding(padding: widget.padding, child: widget.child),

@@ -2,18 +2,18 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../api/api_exception.dart';
-import '../theme/esoko_tokens.dart';
-import 'esoko_empty_state.dart';
-import 'esoko_error_view.dart';
-import 'esoko_skeleton.dart';
+import '../theme/esoqo_tokens.dart';
+import 'esoqo_empty_state.dart';
+import 'esoqo_error_view.dart';
+import 'esoqo_skeleton.dart';
 
-/// EsokoAsyncView for slivers — the same never-wipe-data contract (data
-/// wins over loading, empty gets EsokoEmptyState, errors get
-/// EsokoErrorView with retry), but returning slivers so CustomScrollView
+/// EsoqoAsyncView for slivers — the same never-wipe-data contract (data
+/// wins over loading, empty gets EsoqoEmptyState, errors get
+/// EsoqoErrorView with retry), but returning slivers so CustomScrollView
 /// screens stop hand-rolling `.when` blocks that each forgot a different
 /// state (silent `SizedBox.shrink` errors, bare spinners, layout shift).
-class EsokoSliverAsyncView<T> extends StatelessWidget {
-  const EsokoSliverAsyncView({
+class EsoqoSliverAsyncView<T> extends StatelessWidget {
+  const EsoqoSliverAsyncView({
     super.key,
     required this.value,
     required this.data,
@@ -35,19 +35,19 @@ class EsokoSliverAsyncView<T> extends StatelessWidget {
     if (value.hasValue) {
       final v = value.requireValue;
       if (isEmpty != null && emptyMessage != null && isEmpty!(v)) {
-        return SliverToBoxAdapter(child: EsokoEmptyState(message: emptyMessage!, icon: emptyIcon));
+        return SliverToBoxAdapter(child: EsoqoEmptyState(message: emptyMessage!, icon: emptyIcon));
       }
       return SliverMainAxisGroup(slivers: data(context, v));
     }
     if (value.hasError) {
       final error = value.error;
       final message = error is ApiException ? error.message : 'Something went wrong. Pull to retry.';
-      return SliverToBoxAdapter(child: EsokoErrorView(message: message, onRetry: onRetry));
+      return SliverToBoxAdapter(child: EsoqoErrorView(message: message, onRetry: onRetry));
     }
     return SliverToBoxAdapter(
       child: Padding(
-        padding: const EdgeInsets.all(EsokoSpacing.s6),
-        child: EsokoSkeletonList(),
+        padding: const EdgeInsets.all(EsoqoSpacing.s6),
+        child: EsoqoSkeletonList(),
       ),
     );
   }

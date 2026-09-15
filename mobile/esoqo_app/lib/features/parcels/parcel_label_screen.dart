@@ -8,7 +8,7 @@ import 'package:pdf/widgets.dart' as pw;
 import 'package:printing/printing.dart';
 import 'package:qr_flutter/qr_flutter.dart';
 
-import '../../core/theme/esoko_tokens.dart';
+import '../../core/theme/esoqo_tokens.dart';
 import '../../core/widgets/widgets.dart';
 import 'parcel_models.dart';
 import 'parcels_repository.dart';
@@ -31,7 +31,7 @@ final parcelLabelProvider = FutureProvider.autoDispose
 /// to a signed-in user — the server is the real gate (GET
 /// /v1/parcels/:code/label 403s for anyone not holding/assigned to
 /// this parcel or without parcels.read), so an unauthorized visitor
-/// here just sees the same denial EsokoAsyncView already renders for
+/// here just sees the same denial EsoqoAsyncView already renders for
 /// any other ApiException.
 class ParcelLabelScreen extends ConsumerWidget {
   const ParcelLabelScreen({super.key, required this.code});
@@ -41,7 +41,7 @@ class ParcelLabelScreen extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final label = ref.watch(parcelLabelProvider(code));
     return Scaffold(
-      appBar: EsokoAppBar(
+      appBar: EsoqoAppBar(
         title: 'Parcel label',
         actions: [
           if (label.hasValue)
@@ -53,18 +53,18 @@ class ParcelLabelScreen extends ConsumerWidget {
         ],
       ),
       body: SafeArea(
-        child: EsokoAsyncView(
+        child: EsoqoAsyncView(
           value: label,
           onRetry: () => ref.invalidate(parcelLabelProvider(code)),
           data: (context, l) => Center(
             child: ConstrainedBox(
               constraints: const BoxConstraints(maxWidth: 480),
               child: ListView(
-                padding: const EdgeInsets.all(EsokoSpacing.s5),
+                padding: const EdgeInsets.all(EsoqoSpacing.s5),
                 children: [
-                  EsokoCard(child: _LabelContent(code: l.code)),
-                  const SizedBox(height: EsokoSpacing.s5),
-                  EsokoButton.primary(
+                  EsoqoCard(child: _LabelContent(code: l.code)),
+                  const SizedBox(height: EsoqoSpacing.s5),
+                  EsoqoButton.primary(
                     label: 'Print label',
                     icon: Icons.print_outlined,
                     expand: false,
@@ -104,32 +104,32 @@ class _LabelContent extends StatelessWidget {
         Text(
           code,
           textAlign: TextAlign.center,
-          style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 22),
+          style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 22),
         ),
-        const SizedBox(height: EsokoSpacing.s4),
+        const SizedBox(height: EsoqoSpacing.s4),
         Semantics(
           label: 'QR code for parcel $code',
           child: Center(
             child: Container(
-              padding: const EdgeInsets.all(EsokoSpacing.s3),
+              padding: const EdgeInsets.all(EsoqoSpacing.s3),
               decoration: BoxDecoration(
-                border: Border.all(color: EsokoColors.line),
-                borderRadius: BorderRadius.circular(EsokoRadius.md),
+                border: Border.all(color: EsoqoColors.line),
+                borderRadius: BorderRadius.circular(EsoqoRadius.md),
               ),
               child: QrImageView(data: code, size: 140, backgroundColor: Colors.white),
             ),
           ),
         ),
-        const SizedBox(height: EsokoSpacing.s4),
+        const SizedBox(height: EsoqoSpacing.s4),
         Semantics(
           label: 'Barcode for parcel $code',
           child: Container(
             height: 64,
-            padding: const EdgeInsets.symmetric(horizontal: EsokoSpacing.s3),
+            padding: const EdgeInsets.symmetric(horizontal: EsoqoSpacing.s3),
             decoration: BoxDecoration(
               color: Colors.white,
-              border: Border.all(color: EsokoColors.line),
-              borderRadius: BorderRadius.circular(EsokoRadius.md),
+              border: Border.all(color: EsoqoColors.line),
+              borderRadius: BorderRadius.circular(EsoqoRadius.md),
             ),
             child: BarcodeWidget(
               barcode: Barcode.code128(),

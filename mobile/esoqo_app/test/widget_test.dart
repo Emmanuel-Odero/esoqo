@@ -6,7 +6,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 
-import 'package:esoko_app/main.dart';
+import 'package:esoqo_app/main.dart';
 
 void main() {
   // flutter_secure_storage talks to a platform channel with no
@@ -33,7 +33,7 @@ void main() {
   });
 
   testWidgets('boots to the sign-in screen', (WidgetTester tester) async {
-    await tester.pumpWidget(const ProviderScope(child: EsokoApp()));
+    await tester.pumpWidget(const ProviderScope(child: EsoqoApp()));
     await tester.pumpAndSettle();
     expect(find.text('Sign in'), findsWidgets);
   });

@@ -6,7 +6,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../core/api/api_exception.dart';
 import '../../core/auth/auth_controller.dart';
 import '../../core/auth/auth_state.dart';
-import '../../core/theme/esoko_tokens.dart';
+import '../../core/theme/esoqo_tokens.dart';
 import '../../core/widgets/widgets.dart';
 import 'fleet_models.dart';
 import 'fleet_providers.dart';
@@ -31,7 +31,7 @@ class FarePayScreen extends ConsumerStatefulWidget {
   final String resolvedTripId;
   final String resolvedPlate;
 
-  /// Raw scanned payload (esoko://t?... or BUS-XXXXXX) — sent back as
+  /// Raw scanned payload (esoqo://t?... or BUS-XXXXXX) — sent back as
   /// tripQrCode so Go re-verifies the HMAC instead of trusting tripId.
   final String tripQrCode;
 
@@ -203,19 +203,19 @@ class _FarePayScreenState extends ConsumerState<FarePayScreen> {
   Widget build(BuildContext context) {
     final reduced = MediaQuery.disableAnimationsOf(context);
     return Scaffold(
-      appBar: const EsokoAppBar(title: 'Pay bus fare'),
+      appBar: const EsoqoAppBar(title: 'Pay bus fare'),
       body: SafeArea(
         child: Center(
           child: ConstrainedBox(
             constraints: const BoxConstraints(maxWidth: 480),
             child: Padding(
-              padding: const EdgeInsets.all(EsokoSpacing.s5),
+              padding: const EdgeInsets.all(EsoqoSpacing.s5),
               // Same contract as the other money flows: the stage
               // machine cross-fades, money never visually jumps.
               child: AnimatedSwitcher(
-                duration: reduced ? Duration.zero : EsokoMotion.medium,
-                switchInCurve: EsokoMotion.easeOut,
-                switchOutCurve: EsokoMotion.easeOut,
+                duration: reduced ? Duration.zero : EsoqoMotion.medium,
+                switchInCurve: EsoqoMotion.easeOut,
+                switchOutCurve: EsoqoMotion.easeOut,
                 child: KeyedSubtree(key: ValueKey(_stageState), child: _body()),
               ),
             ),
@@ -228,20 +228,20 @@ class _FarePayScreenState extends ConsumerState<FarePayScreen> {
   Widget _body() {
     switch (_stageState) {
       case _Stage.waiting:
-        return EsokoResultView.waiting(
+        return EsoqoResultView.waiting(
           title: 'Complete payment on your phone',
           message: 'Enter your M-Pesa PIN when the prompt arrives.',
           amountKes: _totalKes,
         );
       case _Stage.done:
-        return EsokoResultView.success(
+        return EsoqoResultView.success(
           title: 'Fare paid',
           message: 'Show this screen to the tout when boarding.',
           primaryLabel: 'Done',
           onPrimary: () => Navigator.of(context).popUntil((r) => r.isFirst),
         );
       case _Stage.failed:
-        return EsokoResultView.failure(
+        return EsoqoResultView.failure(
           errorMessage: _error ?? 'Something went wrong',
           primaryLabel: 'Start over',
           onPrimary: () => setState(() => _stageState = _Stage.trips),
@@ -256,19 +256,19 @@ class _FarePayScreenState extends ConsumerState<FarePayScreen> {
     return ListView(
       shrinkWrap: true,
       children: [
-        const EsokoPageLead('Pick a bus on your route, then pay by M-Pesa.'),
-        const SizedBox(height: EsokoSpacing.s4),
+        const EsoqoPageLead('Pick a bus on your route, then pay by M-Pesa.'),
+        const SizedBox(height: EsoqoSpacing.s4),
         Row(
           children: [
             Expanded(
-              child: EsokoField.search(
+              child: EsoqoField.search(
                 controller: _slugController,
                 label: 'Company code',
                 hint: 'e.g. demo-rapid-coach',
                 onSubmitted: (_) => _loadTrips(),
               ),
             ),
-            const SizedBox(width: EsokoSpacing.s2),
+            const SizedBox(width: EsoqoSpacing.s2),
             IconButton.filled(
               onPressed: _loadTrips,
               icon: const Icon(Icons.search),
@@ -276,7 +276,7 @@ class _FarePayScreenState extends ConsumerState<FarePayScreen> {
             ),
           ],
         ),
-        const SizedBox(height: EsokoSpacing.s4),
+        const SizedBox(height: EsoqoSpacing.s4),
         if (_slug.isEmpty)
           const Text(
             'Enter a transport company code above to see its buses on the road right now.',
@@ -284,14 +284,14 @@ class _FarePayScreenState extends ConsumerState<FarePayScreen> {
         else
           _tripList(),
         if (_trip != null) ...[
-          const SizedBox(height: EsokoSpacing.s5),
+          const SizedBox(height: EsoqoSpacing.s5),
           Text(
             'Pay for ${_trip!.vehiclePlate}',
             style: Theme.of(context).textTheme.titleMedium,
           ),
-          const SizedBox(height: EsokoSpacing.s3),
+          const SizedBox(height: EsoqoSpacing.s3),
           if (_trip!.stages.isNotEmpty)
-            EsokoDropdown<FareStage>(
+            EsoqoDropdown<FareStage>(
               label: 'Where to?',
               initialValue: _stage,
               items: [
@@ -303,14 +303,14 @@ class _FarePayScreenState extends ConsumerState<FarePayScreen> {
               ],
               onChanged: (s) => setState(() => _stage = s),
             ),
-          const SizedBox(height: EsokoSpacing.s3),
-          EsokoSegmentedToggle<String>(
+          const SizedBox(height: EsoqoSpacing.s3),
+          EsoqoSegmentedToggle<String>(
             selected: _method,
             onChanged: (m) => setState(() => _method = m),
             options: const [('MPESA_STK', 'M-Pesa'), ('VOUCHER', 'Voucher')],
           ),
-          const SizedBox(height: EsokoSpacing.s3),
-          EsokoPayerFields(
+          const SizedBox(height: EsoqoSpacing.s3),
+          EsoqoPayerFields(
             nameController: _nameController,
             msisdnController: _msisdnController,
             payLabel: _stage == null
@@ -325,7 +325,7 @@ class _FarePayScreenState extends ConsumerState<FarePayScreen> {
 
   Widget _tripList() {
     final trips = ref.watch(activeTripsProvider(_slug));
-    return EsokoAsyncView(
+    return EsoqoAsyncView(
       value: trips,
       isEmpty: (list) => list.isEmpty,
       emptyMessage: 'No buses on the road for this company right now.',
@@ -334,13 +334,13 @@ class _FarePayScreenState extends ConsumerState<FarePayScreen> {
       data: (context, list) => Column(
         children: [
           for (var i = 0; i < list.length; i++)
-            EsokoStagger(
+            EsoqoStagger(
               index: i,
               child: _TripTile(
                 trip: list[i],
                 selected: _trip?.tripId == list[i].tripId,
                 onTap: () {
-                  EsokoHaptics.tap();
+                  EsoqoHaptics.tap();
                   setState(() {
                     _trip = list[i];
                     _stage = list[i].stages.isNotEmpty
@@ -374,13 +374,13 @@ class _TripTile extends StatelessWidget {
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
     final isDark = Theme.of(context).brightness == Brightness.dark;
-    return EsokoListTile(
+    return EsoqoListTile(
       title: trip.vehiclePlate,
       subtitle: trip.routeName ?? 'On duty',
       icon: Icons.directions_bus_outlined,
       iconColor: selected ? scheme.primary : null,
       // An alpha wash of the theme's own primary, not the fixed
-      // EsokoColors.greenTint — that pastel only ever read right as a
+      // EsoqoColors.greenTint — that pastel only ever read right as a
       // *light* highlight; in dark mode it was a light patch glued onto
       // an otherwise-dark row.
       iconBackground: selected

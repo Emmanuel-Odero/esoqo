@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/api/api_exception.dart';
-import '../../core/theme/esoko_tokens.dart';
+import '../../core/theme/esoqo_tokens.dart';
 import '../../core/widgets/widgets.dart';
 import '../fleet/fleet_repository.dart';
 import 'parcel_models.dart';
@@ -11,7 +11,7 @@ import 'parcels_repository.dart';
 /// A conductor putting a parcel they're already holding onto their bus.
 ///
 /// This is the whole "send it on the bus you ride" idea at the point of
-/// use. Esoko already runs the vehicle, already knows where it is
+/// use. Esoqo already runs the vehicle, already knows where it is
 /// (VehiclePing, reported for the passengers sitting in it), and
 /// already has a conductor on board who scans things for a living. The
 /// parcel inherits the bus's live position for free — no new device, no
@@ -85,7 +85,7 @@ class _LoadOnBusScreenState extends ConsumerState<LoadOnBusScreen> {
   Widget build(BuildContext context) {
     final small = Theme.of(context).textTheme.bodySmall;
     return Scaffold(
-      appBar: const EsokoAppBar(title: 'Load on the bus'),
+      appBar: const EsoqoAppBar(title: 'Load on the bus'),
       body: SafeArea(
         child: Center(
           child: ConstrainedBox(
@@ -93,41 +93,41 @@ class _LoadOnBusScreenState extends ConsumerState<LoadOnBusScreen> {
             child: _loading
                 ? const Center(child: CircularProgressIndicator())
                 : ListView(
-                    padding: const EdgeInsets.all(EsokoSpacing.s5),
+                    padding: const EdgeInsets.all(EsoqoSpacing.s5),
                     children: [
                       Text(
                         widget.parcel.code,
-                        style: EsokoTypography.mono(
-                          fontSize: 18,
-                          fontWeight: FontWeight.w800,
+                        style: EsoqoTypography.mono(
+                          fontSize: EsoqoTypeScale.cardTitle,
+                          fontWeight: FontWeight.w700,
                         ),
                       ),
                       Text('To ${widget.parcel.receiverName}', style: small),
                       Text(widget.parcel.destinationLabel, style: small),
-                      const SizedBox(height: EsokoSpacing.s5),
+                      const SizedBox(height: EsoqoSpacing.s5),
 
                       if (_myTrip == null) ...[
                         // The honest failure: this action only exists for
                         // someone crewing a live trip, and saying so beats
                         // a generic error nobody can act on.
-                        EsokoInlineNotice(
-                          color: EsokoColors.amber,
-                          icon: EsokoIconName.alertTriangle,
+                        EsoqoInlineNotice(
+                          color: EsoqoColors.amber,
+                          icon: EsoqoIconName.alertTriangle,
                           message: "You aren't on a running trip right now. "
                               'Start your trip in Transport first, then load parcels onto it.',
                         ),
                       ] else ...[
-                        EsokoCard(
+                        EsoqoCard(
                           child: Column(
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
                               Text('Your bus', style: small),
-                              const SizedBox(height: EsokoSpacing.s1),
+                              const SizedBox(height: EsoqoSpacing.s1),
                               Text(
                                 _myTrip!.vehiclePlate,
-                                style: EsokoTypography.mono(
-                                  fontSize: 22,
-                                  fontWeight: FontWeight.w800,
+                                style: EsoqoTypography.mono(
+                                  fontSize: EsoqoTypeScale.sectionTitle,
+                                  fontWeight: FontWeight.w700,
                                 ),
                               ),
                               if (_myTrip!.routeName != null)
@@ -135,7 +135,7 @@ class _LoadOnBusScreenState extends ConsumerState<LoadOnBusScreen> {
                             ],
                           ),
                         ),
-                        const SizedBox(height: EsokoSpacing.s4),
+                        const SizedBox(height: EsoqoSpacing.s4),
 
                         if (_stages.isEmpty)
                           Text(
@@ -149,7 +149,7 @@ class _LoadOnBusScreenState extends ConsumerState<LoadOnBusScreen> {
                             'rides to the last stop.',
                             style: small,
                           ),
-                          const SizedBox(height: EsokoSpacing.s2),
+                          const SizedBox(height: EsoqoSpacing.s2),
                           DropdownButtonFormField<String?>(
                             initialValue: _dropStageId,
                             isExpanded: true,
@@ -172,10 +172,10 @@ class _LoadOnBusScreenState extends ConsumerState<LoadOnBusScreen> {
                           ),
                         ],
 
-                        const SizedBox(height: EsokoSpacing.s4),
-                        EsokoInlineNotice(
-                          color: EsokoColors.navy,
-                          icon: EsokoIconName.info,
+                        const SizedBox(height: EsoqoSpacing.s4),
+                        EsoqoInlineNotice(
+                          color: EsoqoColors.navy,
+                          icon: EsoqoIconName.info,
                           message: 'The sender and receiver both get a text with '
                               'the plate number, and can watch the bus move on '
                               'the tracking page.',
@@ -183,12 +183,12 @@ class _LoadOnBusScreenState extends ConsumerState<LoadOnBusScreen> {
                       ],
 
                       if (_error != null) ...[
-                        const SizedBox(height: EsokoSpacing.s3),
-                        EsokoFormError(message: _error!),
+                        const SizedBox(height: EsoqoSpacing.s3),
+                        EsoqoFormError(message: _error!),
                       ],
-                      const SizedBox(height: EsokoSpacing.s5),
+                      const SizedBox(height: EsoqoSpacing.s5),
                       if (_myTrip != null)
-                        EsokoButton.primary(
+                        EsoqoButton.primary(
                           expand: false,
                           label: 'Load onto ${_myTrip!.vehiclePlate}',
                           loading: _busy,

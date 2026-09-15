@@ -1,22 +1,22 @@
 import 'package:flutter/material.dart';
 
-import 'esoko_card.dart';
-import 'esoko_icon.dart';
+import 'esoqo_card.dart';
+import 'esoqo_icon.dart';
 
 /// The one list-row shape for tappable/informational summaries — avatar or
 /// icon leading, title + subtitle, trailing widget or chevron. Replaces ~10
 /// hand-rolled `Card + ListTile` variants (groups, history, bills, stores,
 /// tickets) that each re-decided circle colours, margins and chevrons.
-/// Built on EsokoCard so the theme's border/radius/ripple always apply.
-class EsokoListTile extends StatelessWidget {
-  const EsokoListTile({
+/// Built on EsoqoCard so the theme's border/radius/ripple always apply.
+class EsoqoListTile extends StatelessWidget {
+  const EsoqoListTile({
     super.key,
     required this.title,
     this.subtitle,
     this.leading,
     this.initial,
     this.icon,
-    this.esokoIcon,
+    this.esoqoIcon,
     this.iconColor,
     this.iconBackground,
     this.trailing,
@@ -25,8 +25,8 @@ class EsokoListTile extends StatelessWidget {
          leading != null ||
              initial != null ||
              icon != null ||
-             esokoIcon != null,
-         'Provide leading, initial, icon or esokoIcon',
+             esoqoIcon != null,
+         'Provide leading, initial, icon or esoqoIcon',
        );
 
   final String title;
@@ -34,15 +34,15 @@ class EsokoListTile extends StatelessWidget {
   final Widget? leading;
   final String? initial;
 
-  /// Legacy Material glyph — prefer [esokoIcon] (the branded stroke set)
+  /// Legacy Material glyph — prefer [esoqoIcon] (the branded stroke set)
   /// for anything new; this stays for the many call sites not migrated
   /// yet so this widget keeps working for both during the rollout.
   final IconData? icon;
 
-  /// Branded 24px stroke icon (see EsokoIcon) — the preferred leading
+  /// Branded 24px stroke icon (see EsoqoIcon) — the preferred leading
   /// glyph for anything redesigned after this pass. Takes precedence
   /// over [icon] when both are given.
-  final EsokoIconName? esokoIcon;
+  final EsoqoIconName? esoqoIcon;
   final Color? iconColor;
   final Color? iconBackground;
   final Widget? trailing;
@@ -66,15 +66,15 @@ class EsokoListTile extends StatelessWidget {
                     fontWeight: FontWeight.w700,
                   ),
                 )
-              : esokoIcon != null
-              ? EsokoIcon(
-                  esokoIcon!,
+              : esoqoIcon != null
+              ? EsoqoIcon(
+                  esoqoIcon!,
                   color: iconColor ?? scheme.primary,
                   size: 20,
                 )
               : Icon(icon, color: iconColor ?? scheme.primary, size: 20),
         );
-    return EsokoCard(
+    return EsoqoCard(
       onTap: onTap,
       padding: EdgeInsets.zero,
       child: ListTile(
@@ -87,8 +87,8 @@ class EsokoListTile extends StatelessWidget {
             trailing ??
             (onTap == null
                 ? null
-                : EsokoIcon(
-                    EsokoIconName.chevronRight,
+                : EsoqoIcon(
+                    EsoqoIconName.chevronRight,
                     color: muted,
                     size: 20,
                   )),

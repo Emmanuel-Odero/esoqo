@@ -18,22 +18,22 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:integration_test/integration_test.dart';
 
-import 'package:esoko_app/core/storage/token_store.dart';
-import 'package:esoko_app/main.dart';
+import 'package:esoqo_app/core/storage/token_store.dart';
+import 'package:esoqo_app/main.dart';
 
 void main() {
   IntegrationTestWidgetsFlutterBinding.ensureInitialized();
 
   group('sign-in and the four-destination shell', () {
     testWidgets(
-      'signing in as a plain subject reaches Home with Home/Money/Activity/Account',
+      'signing in as a plain subject reaches Home with Home/Wallet/Activity/Account',
       (tester) async {
         await _bootSignedOut(tester);
         await _signIn(tester, identifier: esther.phone, pin: esther.pin);
 
         // The shell's four bottom-nav destinations, per home_shell.dart.
         expect(find.text('Home'), findsWidgets);
-        expect(find.text('Money'), findsOneWidget);
+        expect(find.text('Wallet'), findsOneWidget);
         expect(find.text('Activity'), findsOneWidget);
         expect(find.text('Account'), findsOneWidget);
 
@@ -60,15 +60,15 @@ void main() {
       },
     );
 
-    testWidgets('Money, Activity and Account tabs render without throwing', (
+    testWidgets('Wallet, Activity and Account tabs render without throwing', (
       tester,
     ) async {
       await _bootSignedOut(tester);
       await _signIn(tester, identifier: esther.phone, pin: esther.pin);
 
-      await tester.tap(find.text('Money'));
+      await tester.tap(find.text('Wallet'));
       await tester.pumpAndSettle(const Duration(seconds: 2));
-      expect(find.text('Money'), findsWidgets);
+      expect(find.text('Wallet'), findsWidgets);
       expect(tester.takeException(), isNull);
 
       await tester.tap(find.text('Activity'));
@@ -288,7 +288,7 @@ const faith = _DemoAccount('+254700500003', '500003');
 /// than a UI flow that can itself fail for reasons under test.
 Future<void> _bootSignedOut(WidgetTester tester) async {
   await TokenStore.instance.clear();
-  await tester.pumpWidget(const ProviderScope(child: EsokoApp()));
+  await tester.pumpWidget(const ProviderScope(child: EsoqoApp()));
   await tester.pumpAndSettle(const Duration(seconds: 3));
   expect(
     _atSignIn(tester),
@@ -338,7 +338,7 @@ Future<void> _signIn(
 /// scrollable entirely) is covering it. A tile that stops right at the
 /// list's own bottom padding can still hit-test against the FAB
 /// instead of itself — this is the on-device bug home_hub_screen.dart's
-/// padding fix (the `EsokoSpacing.s9 + EsokoSpacing.s6` bottom inset)
+/// padding fix (the `EsoqoSpacing.s9 + EsoqoSpacing.s6` bottom inset)
 /// addressed for a person scrolling by hand; `dragUntilVisible`'s
 /// "any part on screen" definition of visible doesn't get the benefit
 /// of that fix, so this nudges further once the naive scroll stops.
@@ -372,10 +372,28 @@ Future<void> _scrollToAndTap(WidgetTester tester, String text) async {
   // screen-fixed position, outside the scrollable entirely — a tile
   // that stops inside that band still hit-tests against the FAB. The
   // bottom ~140pt of an iPhone-class screen is that chrome.
-  if (find.text(text).evaluate().isNotEmpty &&
-      tester.getCenter(find.text(text)).dy > 700) {
+  //
+  // Nudged in a loop rather than once, and checked against the *real*
+  // viewport height rather than a literal 700. A single fixed nudge
+  // silently encodes how tall Home's content happened to be the day it
+  // was written: the typography pass (brand ink + a 1.5 reading
+  // line-height, see EsoqoTheme) made every card a few points taller,
+  // the last tile stopped 2pt lower than before, and this stopped
+  // clearing the chrome — a test failure that said nothing about the
+  // screen, which scrolls to the tile and hit-tests it correctly. Loop
+  // until it's actually clear, or until the list stops moving.
+  final chromeTop = tester.view.physicalSize.height /
+          tester.view.devicePixelRatio -
+      140;
+  for (var i = 0; i < 6; i++) {
+    if (find.text(text).evaluate().isEmpty) break;
+    if (tester.getCenter(find.text(text)).dy <= chromeTop) break;
+    final before = tester.getCenter(find.text(text)).dy;
     await tester.drag(find.byType(Scrollable).first, const Offset(0, -120));
     await tester.pumpAndSettle();
+    if (find.text(text).evaluate().isEmpty) break;
+    // The list bottomed out — dragging further just bounces.
+    if ((tester.getCenter(find.text(text)).dy - before).abs() < 1) break;
   }
 
   await tester.tap(find.text(text));

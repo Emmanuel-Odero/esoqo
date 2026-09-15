@@ -6,7 +6,7 @@ import '../../core/api/api_exception.dart';
 import '../../core/auth/auth_controller.dart';
 import '../../core/auth/auth_state.dart';
 import '../../core/auth/scan_access.dart';
-import '../../core/theme/esoko_tokens.dart';
+import '../../core/theme/esoqo_tokens.dart';
 import '../../core/widgets/widgets.dart';
 import 'fleet_repository.dart';
 
@@ -54,9 +54,9 @@ class _VerifyFareScreenState extends ConsumerState<VerifyFareScreen> {
   Color _color(String s, BuildContext c) {
     final cs = Theme.of(c).colorScheme;
     return switch (s) {
-      'VALID' => EsokoColors.green,
+      'VALID' => EsoqoColors.green,
       'EXPIRED' || 'FAILED' || 'NOT_FOUND' => cs.error,
-      _ => EsokoColors.amber,
+      _ => EsoqoColors.amber,
     };
   }
 
@@ -75,28 +75,28 @@ class _VerifyFareScreenState extends ConsumerState<VerifyFareScreen> {
     // attached, no separate agent-session check needed any more.
     final crew = canVerifyFare(profile);
     return Scaffold(
-      appBar: const EsokoAppBar(title: 'Verify fare'),
+      appBar: const EsoqoAppBar(title: 'Verify fare'),
       body: SafeArea(
         child: ListView(
-          padding: const EdgeInsets.all(EsokoSpacing.s4),
+          padding: const EdgeInsets.all(EsoqoSpacing.s4),
           children: [
             if (!crew)
-              const EsokoCard(
+              const EsoqoCard(
                 child: Padding(
-                  padding: EdgeInsets.all(EsokoSpacing.s4),
+                  padding: EdgeInsets.all(EsoqoSpacing.s4),
                   child: Text(
                     'Crew feature — switch on staff duty (Profile > Acting as) to verify any fare. You can still check your own receipts here.',
                   ),
                 ),
               ),
-            const EsokoPageLead(
+            const EsoqoPageLead(
               'Scan the passenger receipt or type the M-Pesa code.',
             ),
-            const SizedBox(height: EsokoSpacing.s4),
+            const SizedBox(height: EsoqoSpacing.s4),
             SizedBox(
               height: 220,
               child: ClipRRect(
-                borderRadius: BorderRadius.circular(EsokoRadius.md),
+                borderRadius: BorderRadius.circular(EsoqoRadius.md),
                 child: MobileScanner(
                   onDetect: (cap) {
                     final raw = cap.barcodes.firstOrNull?.rawValue;
@@ -105,24 +105,24 @@ class _VerifyFareScreenState extends ConsumerState<VerifyFareScreen> {
                 ),
               ),
             ),
-            const SizedBox(height: EsokoSpacing.s4),
+            const SizedBox(height: EsoqoSpacing.s4),
             Row(
               children: [
                 Expanded(
-                  child: EsokoField.code(
+                  child: EsoqoField.code(
                     controller: _code,
                     label: 'Receipt / M-Pesa code',
                     hint: 'e.g. QHX7AB12CD',
                     onSubmitted: _verify,
                   ),
                 ),
-                const SizedBox(width: EsokoSpacing.s2),
+                const SizedBox(width: EsoqoSpacing.s2),
                 // Fixed width, not a bare Row child — see
                 // parcels_hub_screen.dart's comment on the "BoxConstraints
                 // forces an infinite width" FilledButton-in-a-Row bug.
                 SizedBox(
                   width: 96,
-                  child: EsokoButton.primary(
+                  child: EsoqoButton.primary(
                     expand: false,
                     label: 'Verify',
                     loading: _busy,
@@ -132,25 +132,25 @@ class _VerifyFareScreenState extends ConsumerState<VerifyFareScreen> {
               ],
             ),
             if (_error != null) ...[
-              const SizedBox(height: EsokoSpacing.s3),
-              EsokoFormError(message: _error!),
+              const SizedBox(height: EsoqoSpacing.s3),
+              EsoqoFormError(message: _error!),
             ],
             if (v != null) ...[
-              const SizedBox(height: EsokoSpacing.s4),
+              const SizedBox(height: EsoqoSpacing.s4),
               // Successive scans cross-fade between verdicts instead of
               // snapping — the tout reads VALID vs EXPIRED at a glance.
               AnimatedSwitcher(
-                duration: reduced ? Duration.zero : EsokoMotion.medium,
-                switchInCurve: EsokoMotion.easeOut,
-                switchOutCurve: EsokoMotion.easeOut,
+                duration: reduced ? Duration.zero : EsoqoMotion.medium,
+                switchInCurve: EsoqoMotion.easeOut,
+                switchOutCurve: EsoqoMotion.easeOut,
                 child: KeyedSubtree(
                   key: ValueKey(v['status']),
-                  child: EsokoCard(
+                  child: EsoqoCard(
                 color: _color(
                   (v['status'] as String?) ?? '',
                   context,
                 ).withValues(alpha: 0.10),
-                padding: const EdgeInsets.all(EsokoSpacing.s4),
+                padding: const EdgeInsets.all(EsoqoSpacing.s4),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [

@@ -6,7 +6,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../core/api/api_exception.dart';
 import '../../core/auth/auth_controller.dart';
 import '../../core/auth/auth_state.dart';
-import '../../core/theme/esoko_tokens.dart';
+import '../../core/theme/esoqo_tokens.dart';
 import '../../core/widgets/widgets.dart';
 import 'order_detail_screen.dart';
 import 'shopping_models.dart';
@@ -71,13 +71,13 @@ class TableCartBar extends ConsumerWidget {
       total += price * entry.value;
     }
     return SafeArea(
-      minimum: const EdgeInsets.all(EsokoSpacing.s4),
+      minimum: const EdgeInsets.all(EsoqoSpacing.s4),
       child: Material(
         elevation: 4,
-        borderRadius: BorderRadius.circular(EsokoRadius.pill),
+        borderRadius: BorderRadius.circular(EsoqoRadius.pill),
         color: Theme.of(context).colorScheme.primary,
         child: InkWell(
-          borderRadius: BorderRadius.circular(EsokoRadius.pill),
+          borderRadius: BorderRadius.circular(EsoqoRadius.pill),
           onTap: () => Navigator.of(context).push(
             MaterialPageRoute(
               builder: (_) => TableOrderReviewScreen(
@@ -89,8 +89,8 @@ class TableCartBar extends ConsumerWidget {
           ),
           child: Padding(
             padding: const EdgeInsets.symmetric(
-              horizontal: EsokoSpacing.s5,
-              vertical: EsokoSpacing.s3,
+              horizontal: EsoqoSpacing.s5,
+              vertical: EsoqoSpacing.s3,
             ),
             child: Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -108,7 +108,7 @@ class TableCartBar extends ConsumerWidget {
                       'KES ${total.toStringAsFixed(0)}',
                       style: const TextStyle(
                         color: Colors.white,
-                        fontWeight: FontWeight.w800,
+                        fontWeight: FontWeight.w700,
                       ),
                     ),
                     const SizedBox(width: 6),
@@ -241,31 +241,31 @@ class _TableOrderReviewScreenState extends ConsumerState<TableOrderReviewScreen>
     final byId = {for (final p in widget.products) p.id: p};
     final reduced = MediaQuery.disableAnimationsOf(context);
     return Scaffold(
-      appBar: EsokoAppBar(title: 'Table ${widget.tableLabel}'),
+      appBar: EsoqoAppBar(title: 'Table ${widget.tableLabel}'),
       body: SafeArea(
         child: Center(
           child: ConstrainedBox(
             constraints: const BoxConstraints(maxWidth: 480),
             child: Padding(
-              padding: const EdgeInsets.all(EsokoSpacing.s5),
+              padding: const EdgeInsets.all(EsoqoSpacing.s5),
               child: AnimatedSwitcher(
-                duration: reduced ? Duration.zero : EsokoMotion.medium,
-                switchInCurve: EsokoMotion.easeOut,
-                switchOutCurve: EsokoMotion.easeOut,
+                duration: reduced ? Duration.zero : EsoqoMotion.medium,
+                switchInCurve: EsoqoMotion.easeOut,
+                switchOutCurve: EsoqoMotion.easeOut,
                 child: KeyedSubtree(
                   key: ValueKey(_stage),
                   child: switch (_stage) {
                     _Stage.review => _reviewStage(cart, byId),
                     _Stage.placing => const Padding(
-                        padding: EdgeInsets.all(EsokoSpacing.s6),
-                        child: EsokoSkeletonCard(leading: false),
+                        padding: EdgeInsets.all(EsoqoSpacing.s6),
+                        child: EsoqoSkeletonCard(leading: false),
                       ),
-                    _Stage.waiting => EsokoResultView.waiting(
+                    _Stage.waiting => EsoqoResultView.waiting(
                         title: 'Complete payment on your phone',
                         message: 'Enter your M-Pesa PIN when the prompt arrives.',
                         amountKes: _totalKes,
                       ),
-                    _Stage.done => EsokoResultView.success(
+                    _Stage.done => EsoqoResultView.success(
                         title: 'Sent to the kitchen',
                         message: 'Table ${widget.tableLabel} — we\'ll bring it over once it\'s ready.',
                         primaryLabel: 'Track this order',
@@ -282,7 +282,7 @@ class _TableOrderReviewScreenState extends ConsumerState<TableOrderReviewScreen>
                           );
                         },
                       ),
-                    _Stage.failed => EsokoResultView.failure(
+                    _Stage.failed => EsoqoResultView.failure(
                         errorMessage: _error ?? 'Something went wrong',
                         primaryLabel: 'Try again',
                         onPrimary: () => setState(() => _stage = _Stage.review),
@@ -304,7 +304,7 @@ class _TableOrderReviewScreenState extends ConsumerState<TableOrderReviewScreen>
         for (final entry in cart.entries)
           if (byId[entry.key] case final p?)
             Padding(
-              padding: const EdgeInsets.only(bottom: EsokoSpacing.s3),
+              padding: const EdgeInsets.only(bottom: EsoqoSpacing.s3),
               child: Row(
                 children: [
                   Expanded(
@@ -312,11 +312,11 @@ class _TableOrderReviewScreenState extends ConsumerState<TableOrderReviewScreen>
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         Text(p.name, style: const TextStyle(fontWeight: FontWeight.w600)),
-                        EsokoAmountText(p.priceKes, fontSize: 13),
+                        EsoqoAmountText(p.priceKes, fontSize: EsoqoTypeScale.meta),
                       ],
                     ),
                   ),
-                  EsokoStepper(
+                  EsoqoStepper(
                     value: entry.value,
                     min: 0,
                     onChanged: (v) => ref
@@ -326,12 +326,12 @@ class _TableOrderReviewScreenState extends ConsumerState<TableOrderReviewScreen>
                 ],
               ),
             ),
-        const SizedBox(height: EsokoSpacing.s3),
+        const SizedBox(height: EsoqoSpacing.s3),
         if (_error != null) ...[
-          EsokoFormError(message: _error!),
-          const SizedBox(height: EsokoSpacing.s3),
+          EsoqoFormError(message: _error!),
+          const SizedBox(height: EsoqoSpacing.s3),
         ],
-        EsokoPayerFields(
+        EsoqoPayerFields(
           nameController: _nameController,
           msisdnController: _msisdnController,
           payLabel: 'Send to kitchen · pay with M-Pesa',

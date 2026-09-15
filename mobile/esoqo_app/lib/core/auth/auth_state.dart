@@ -1,18 +1,18 @@
 /// A signed-in person's own view of themselves — mirrors GET /v1/me's
 /// response shape (see services/core-go/internal/httpapi/handlers_auth.go).
-class EsokoProfile {
-  const EsokoProfile({
+class EsoqoProfile {
+  const EsoqoProfile({
     required this.partyId,
-    this.esokoId,
+    this.esoqoId,
     required this.officialName,
     this.knownAs,
     this.msisdn,
     required this.capabilities,
   });
 
-  factory EsokoProfile.fromJson(Map<String, dynamic> json) => EsokoProfile(
+  factory EsoqoProfile.fromJson(Map<String, dynamic> json) => EsoqoProfile(
         partyId: json['partyId'] as String,
-        esokoId: json['esokoId'] as String?,
+        esoqoId: json['esoqoId'] as String?,
         officialName: json['officialName'] as String,
         knownAs: json['knownAs'] as String?,
         msisdn: json['msisdn'] as String?,
@@ -21,10 +21,10 @@ class EsokoProfile {
 
   final String partyId;
   /// The short, human-typeable "ESK-####-KE" code — see
-  /// dbx.EnsureEsokoPaymentId. What the UI should actually show; partyId
+  /// dbx.EnsureEsoqoPaymentId. What the UI should actually show; partyId
   /// (a raw UUID) is an internal identifier, not something a person
   /// should ever need to read or type.
-  final String? esokoId;
+  final String? esoqoId;
   final String officialName;
   final String? knownAs;
   final String? msisdn;
@@ -55,5 +55,5 @@ class AuthSignedOut extends AuthState {
 
 class AuthSignedIn extends AuthState {
   const AuthSignedIn(this.profile);
-  final EsokoProfile profile;
+  final EsoqoProfile profile;
 }

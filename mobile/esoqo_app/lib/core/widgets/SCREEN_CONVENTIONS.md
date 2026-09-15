@@ -2,8 +2,8 @@
 
 Read this before adding a new screen or a new wrapper. It exists
 because of a real bug: `ParcelsHubScreen` built its own
-`Scaffold(appBar: EsokoAppBar(...))` while also being reached through
-`EsokoServiceScaffold`, which *already* renders a `Scaffold` + navy
+`Scaffold(appBar: EsoqoAppBar(...))` while also being reached through
+`EsoqoServiceScaffold`, which *already* renders a `Scaffold` + navy
 `AppBar` around whatever it's given. Result: two stacked navy bars,
 the title repeated, two back chevrons — visible proof a convention that
 only lived in one file's doc comment doesn't survive a second author
@@ -11,7 +11,7 @@ adding a sixth destination eight months later.
 
 ## Rule 1 — a screen reached through a wrapper never builds its own app bar
 
-`EsokoServiceScaffold` (Home hub's five-then-six service tiles) and any
+`EsoqoServiceScaffold` (Home hub's five-then-six service tiles) and any
 future "pushed inside a chrome-providing wrapper" pattern owns the
 `Scaffold` + `AppBar` for its destination. The screen it wraps:
 
@@ -20,7 +20,7 @@ future "pushed inside a chrome-providing wrapper" pattern owns the
 - **Must not** set that Scaffold's `appBar`. Leave it `null`.
 
 ```dart
-// Correct — bar-less, wrapped by EsokoServiceScaffold from the hub tile.
+// Correct — bar-less, wrapped by EsoqoServiceScaffold from the hub tile.
 return Scaffold(
   body: SafeArea(child: ...),
   floatingActionButton: ...,
@@ -28,7 +28,7 @@ return Scaffold(
 
 // Wrong — a second AppBar stacks under the wrapper's.
 return Scaffold(
-  appBar: const EsokoAppBar(title: 'Parcels'),
+  appBar: const EsoqoAppBar(title: 'Parcels'),
   body: ...,
 );
 ```
@@ -47,7 +47,7 @@ first place.
 
 ## Rule 3 — colour is semantic, not decorative
 
-`EsokoColors`' own doc comment states the rule; screens routinely
+`EsoqoColors`' own doc comment states the rule; screens routinely
 don't follow it because "green" is also the Material `ColorScheme`'s
 `primary`, so it's the path of least resistance for anything that
 needs *a* colour:
@@ -59,7 +59,7 @@ needs *a* colour:
 | `blue` | institutions | someone else's org/company/listing — anything that belongs to an org, not to the signed-in person |
 | `red` | attention only | errors, suspended/frozen states, safety notices — never a passive label |
 
-Before reaching for `scheme.primary`/`EsokoColors.green` by default, ask
+Before reaching for `scheme.primary`/`EsoqoColors.green` by default, ask
 whose thing this is. A store/ticket-org/fleet-company's own profile
 header, an "Acting as" org context, a staff roster row — all
 **institutions**, not **yours**, even when the signed-in person owns
@@ -69,7 +69,7 @@ looking at.
 
 ## Rule 4 — never put an unconstrained button in `ListTile.trailing`
 
-`ListTile` (and `EsokoListTile`, which wraps it) cannot size a
+`ListTile` (and `EsoqoListTile`, which wraps it) cannot size a
 `FilledButton`/`OutlinedButton`/`TextButton` in `trailing` once the
 title/subtitle get long enough — it throws "Trailing widget consumes
 the entire tile width" at layout time. This is not a crash you'll
@@ -82,7 +82,7 @@ has shipped twice (`org_duty_switcher_screen.dart`'s grant tiles,
 
 - **Prefer** relying on `onTap` for the action and using `trailing`
   only for a small, intrinsically-sized status indicator (an
-  `EsokoStatusPill`, an `Icon`, nothing) — this was the actual fix both
+  `EsoqoStatusPill`, an `Icon`, nothing) — this was the actual fix both
   times, since the button was always redundant with `onTap` anyway.
 - If a `trailing` button is genuinely necessary (no suitable `onTap`),
   wrap it in `SizedBox(width: <fixed>, child: ...)` so `ListTile` never

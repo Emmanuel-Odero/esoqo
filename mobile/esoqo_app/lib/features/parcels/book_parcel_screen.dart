@@ -8,7 +8,7 @@ import '../../core/api/api_exception.dart';
 import '../../core/auth/auth_controller.dart';
 import '../../core/auth/auth_state.dart';
 import '../../core/money/money.dart';
-import '../../core/theme/esoko_tokens.dart';
+import '../../core/theme/esoqo_tokens.dart';
 import '../../core/widgets/widgets.dart';
 import 'parcel_models.dart';
 import 'parcel_payment_screen.dart';
@@ -363,7 +363,7 @@ class _BookParcelScreenState extends ConsumerState<BookParcelScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: EsokoAppBar(
+      appBar: EsoqoAppBar(
         title: _step == _Step.what ? 'Send a parcel' : 'Who is it for?',
       ),
       body: SafeArea(
@@ -371,7 +371,7 @@ class _BookParcelScreenState extends ConsumerState<BookParcelScreen> {
           child: ConstrainedBox(
             constraints: const BoxConstraints(maxWidth: 480),
             child: ListView(
-              padding: const EdgeInsets.all(EsokoSpacing.s5),
+              padding: const EdgeInsets.all(EsoqoSpacing.s5),
               children: _step == _Step.what
                   ? _whatFields(context)
                   : _whoFields(context),
@@ -385,22 +385,22 @@ class _BookParcelScreenState extends ConsumerState<BookParcelScreen> {
   List<Widget> _whatFields(BuildContext context) {
     final small = Theme.of(context).textTheme.bodySmall;
     return [
-      EsokoSubHeader('Route'),
-      const SizedBox(height: EsokoSpacing.s2),
-      EsokoField.text(
+      EsoqoSubHeader('Route'),
+      const SizedBox(height: EsoqoSpacing.s2),
+      EsoqoField.text(
         controller: _origin,
         label: 'Picking up from',
         hint: 'e.g. Westlands, opposite Sarit',
         icon: Icons.trip_origin,
       ),
-      const SizedBox(height: EsokoSpacing.s3),
-      EsokoField.text(
+      const SizedBox(height: EsoqoSpacing.s3),
+      EsoqoField.text(
         controller: _destination,
         label: 'Delivering to',
         hint: 'e.g. Kisumu, Milimani estate',
         icon: Icons.place_outlined,
       ),
-      const SizedBox(height: EsokoSpacing.s3),
+      const SizedBox(height: EsoqoSpacing.s3),
       // Roughly four in five Kenyans have no formal street address, and
       // addressing failure is this market's biggest cause of delivery
       // failure. A pin is what the courier's maps app can actually
@@ -408,13 +408,13 @@ class _BookParcelScreenState extends ConsumerState<BookParcelScreen> {
       // Both are kept — neither replaces the other.
       _originPinField(context),
       if (_zones.isNotEmpty) ...[
-        const SizedBox(height: EsokoSpacing.s3),
+        const SizedBox(height: EsoqoSpacing.s3),
         Text(
           'Pick the nearest hub on each end for a distance-aware price '
           'instead of the flat rate.',
           style: small,
         ),
-        const SizedBox(height: EsokoSpacing.s2),
+        const SizedBox(height: EsoqoSpacing.s2),
         _zoneField(
           label: 'Origin hub',
           value: _originZoneId,
@@ -423,7 +423,7 @@ class _BookParcelScreenState extends ConsumerState<BookParcelScreen> {
             _scheduleQuote();
           }),
         ),
-        const SizedBox(height: EsokoSpacing.s3),
+        const SizedBox(height: EsoqoSpacing.s3),
         _zoneField(
           label: 'Destination hub',
           value: _destinationZoneId,
@@ -434,14 +434,14 @@ class _BookParcelScreenState extends ConsumerState<BookParcelScreen> {
         ),
       ],
 
-      const SizedBox(height: EsokoSpacing.s5),
-      EsokoSubHeader('Parcel details'),
-      const SizedBox(height: EsokoSpacing.s2),
+      const SizedBox(height: EsoqoSpacing.s5),
+      EsoqoSubHeader('Parcel details'),
+      const SizedBox(height: EsoqoSpacing.s2),
       Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Expanded(
-            child: EsokoField.measure(
+            child: EsoqoField.measure(
               controller: _weight,
               label: 'Weight (optional)',
               unit: 'kg',
@@ -449,14 +449,14 @@ class _BookParcelScreenState extends ConsumerState<BookParcelScreen> {
               icon: Icons.scale_outlined,
             ),
           ),
-          const SizedBox(width: EsokoSpacing.s3),
+          const SizedBox(width: EsoqoSpacing.s3),
           // Fixed width, not a bare Row child — an un-widthed
-          // EsokoSegmentedToggle throws "BoxConstraints forces an
+          // EsoqoSegmentedToggle throws "BoxConstraints forces an
           // infinite width" next to an Expanded sibling (see
           // SCREEN_CONVENTIONS.md).
           SizedBox(
             width: 96,
-            child: EsokoSegmentedToggle<String>(
+            child: EsoqoSegmentedToggle<String>(
               selected: _weightUnit,
               onChanged: (u) => setState(() {
                 _weightUnit = u;
@@ -468,12 +468,12 @@ class _BookParcelScreenState extends ConsumerState<BookParcelScreen> {
         ],
       ),
       if (_weightKg != null && !_pricingLoading) ...[
-        const SizedBox(height: EsokoSpacing.s2),
+        const SizedBox(height: EsoqoSpacing.s2),
         Text('Matched to ${parcelTypeLabel(_parcelType)}.', style: small),
       ],
-      const SizedBox(height: EsokoSpacing.s3),
+      const SizedBox(height: EsoqoSpacing.s3),
       _parcelTypeField(),
-      const SizedBox(height: EsokoSpacing.s2),
+      const SizedBox(height: EsoqoSpacing.s2),
       SwitchListTile.adaptive(
         contentPadding: EdgeInsets.zero,
         title: const Text('Fragile'),
@@ -485,9 +485,9 @@ class _BookParcelScreenState extends ConsumerState<BookParcelScreen> {
       // Agent collection is what makes this competitive on price, so
       // the saving is stated at the point of choosing.
       if (_agents.isNotEmpty) ...[
-        const SizedBox(height: EsokoSpacing.s4),
-        EsokoSubHeader('How should it be delivered?'),
-        const SizedBox(height: EsokoSpacing.s2),
+        const SizedBox(height: EsoqoSpacing.s4),
+        EsoqoSubHeader('How should it be delivered?'),
+        const SizedBox(height: EsoqoSpacing.s2),
         _choiceCard(
           selected: !_collectFromAgent,
           title: 'To the door',
@@ -498,7 +498,7 @@ class _BookParcelScreenState extends ConsumerState<BookParcelScreen> {
             _scheduleQuote();
           }),
         ),
-        const SizedBox(height: EsokoSpacing.s2),
+        const SizedBox(height: EsoqoSpacing.s2),
         _choiceCard(
           selected: _collectFromAgent,
           title: 'Collect from a pickup point',
@@ -512,7 +512,7 @@ class _BookParcelScreenState extends ConsumerState<BookParcelScreen> {
           }),
         ),
         if (_collectFromAgent) ...[
-          const SizedBox(height: EsokoSpacing.s3),
+          const SizedBox(height: EsoqoSpacing.s3),
           DropdownButtonFormField<String>(
             initialValue: _destinationAgentId,
             isExpanded: true,
@@ -534,11 +534,11 @@ class _BookParcelScreenState extends ConsumerState<BookParcelScreen> {
             }),
           ),
           if (_chosenAgent?.openingHours != null) ...[
-            const SizedBox(height: EsokoSpacing.s1),
+            const SizedBox(height: EsoqoSpacing.s1),
             Text('Open ${_chosenAgent!.openingHours}', style: small),
           ],
           if ((_chosenAgent?.holdingFeeKes ?? Money.zero).isPositive) ...[
-            const SizedBox(height: EsokoSpacing.s1),
+            const SizedBox(height: EsoqoSpacing.s1),
             Text(
               'The receiver pays KES '
               '${_chosenAgent!.holdingFeeKes.format()} at the shop.',
@@ -552,16 +552,16 @@ class _BookParcelScreenState extends ConsumerState<BookParcelScreen> {
       // never has to dismiss anything; a sender shipping something
       // valuable doesn't find out afterwards that nobody carried the risk.
       if (_tiers.isNotEmpty) ...[
-        const SizedBox(height: EsokoSpacing.s4),
-        EsokoSubHeader('Cover (optional)'),
-        const SizedBox(height: EsokoSpacing.s2),
-        EsokoField.amount(
+        const SizedBox(height: EsoqoSpacing.s4),
+        EsoqoSubHeader('Cover (optional)'),
+        const SizedBox(height: EsoqoSpacing.s2),
+        EsoqoField.amount(
           controller: _declaredValue,
           label: 'What are the contents worth?',
           hint: 'e.g. 8000',
         ),
         if (_declaredValueKes != null) ...[
-          const SizedBox(height: EsokoSpacing.s2),
+          const SizedBox(height: EsoqoSpacing.s2),
           _choiceCard(
             selected: _coverageTierId == null,
             title: 'No cover',
@@ -573,7 +573,7 @@ class _BookParcelScreenState extends ConsumerState<BookParcelScreen> {
             }),
           ),
           for (final t in _tiers) ...[
-            const SizedBox(height: EsokoSpacing.s2),
+            const SizedBox(height: EsoqoSpacing.s2),
             _choiceCard(
               selected: _coverageTierId == t.id,
               title: t.name,
@@ -597,9 +597,9 @@ class _BookParcelScreenState extends ConsumerState<BookParcelScreen> {
       // lets a sender name a price, so it belongs where the sender is
       // deciding — not on a screen after they have already committed.
       if ((_quote?.bargainReasons.isNotEmpty ?? false)) ...[
-        const SizedBox(height: EsokoSpacing.s4),
-        EsokoSubHeader('Make an offer'),
-        const SizedBox(height: EsokoSpacing.s2),
+        const SizedBox(height: EsoqoSpacing.s4),
+        EsoqoSubHeader('Make an offer'),
+        const SizedBox(height: EsoqoSpacing.s2),
         _choiceCard(
           selected: _selectedReason == null,
           title: 'Standard price',
@@ -608,7 +608,7 @@ class _BookParcelScreenState extends ConsumerState<BookParcelScreen> {
           onTap: () => setState(() => _selectedReason = null),
         ),
         for (final r in _quote!.bargainReasons) ...[
-          const SizedBox(height: EsokoSpacing.s2),
+          const SizedBox(height: EsoqoSpacing.s2),
           _choiceCard(
             selected: _selectedReason?.reason == r.reason,
             title: r.reason,
@@ -619,27 +619,27 @@ class _BookParcelScreenState extends ConsumerState<BookParcelScreen> {
         ],
       ],
 
-      const SizedBox(height: EsokoSpacing.s4),
-      EsokoField.text(
+      const SizedBox(height: EsoqoSpacing.s4),
+      EsoqoField.text(
         controller: _notes,
         label: 'Notes for the courier (optional)',
         hint: 'e.g. Call on arrival',
       ),
-      const SizedBox(height: EsokoSpacing.s3),
-      EsokoField.code(
+      const SizedBox(height: EsoqoSpacing.s3),
+      EsoqoField.code(
         controller: _existingCode,
         label: 'Pre-printed label code (optional)',
         hint: 'e.g. PKG-T7HZ967 — already on the parcel?',
       ),
 
-      const SizedBox(height: EsokoSpacing.s5),
+      const SizedBox(height: EsoqoSpacing.s5),
       _priceSummary(context),
       if (_error != null) ...[
-        const SizedBox(height: EsokoSpacing.s3),
-        EsokoFormError(message: _error!),
+        const SizedBox(height: EsoqoSpacing.s3),
+        EsoqoFormError(message: _error!),
       ],
-      const SizedBox(height: EsokoSpacing.s4),
-      EsokoButton.primary(
+      const SizedBox(height: EsoqoSpacing.s4),
+      EsoqoButton.primary(
         expand: false,
         label: 'Continue',
         loading: _quoteLoading && _quote == null,
@@ -652,56 +652,56 @@ class _BookParcelScreenState extends ConsumerState<BookParcelScreen> {
     final small = Theme.of(context).textTheme.bodySmall;
     return [
       _priceSummary(context),
-      const SizedBox(height: EsokoSpacing.s5),
-      EsokoSubHeader('Sender'),
-      const SizedBox(height: EsokoSpacing.s2),
-      EsokoField.name(
+      const SizedBox(height: EsoqoSpacing.s5),
+      EsoqoSubHeader('Sender'),
+      const SizedBox(height: EsoqoSpacing.s2),
+      EsoqoField.name(
         controller: _senderName,
         label: 'Your name',
       ),
-      const SizedBox(height: EsokoSpacing.s3),
-      EsokoField.phone(
+      const SizedBox(height: EsoqoSpacing.s3),
+      EsoqoField.phone(
         controller: _senderMsisdn,
         label: 'Your phone',
         textInputAction: TextInputAction.next,
       ),
-      const SizedBox(height: EsokoSpacing.s5),
-      EsokoSubHeader('Receiver'),
-      const SizedBox(height: EsokoSpacing.s2),
-      EsokoField.name(
+      const SizedBox(height: EsoqoSpacing.s5),
+      EsoqoSubHeader('Receiver'),
+      const SizedBox(height: EsoqoSpacing.s2),
+      EsoqoField.name(
         controller: _receiverName,
         label: 'Their name',
       ),
-      const SizedBox(height: EsokoSpacing.s3),
-      EsokoField.phone(
+      const SizedBox(height: EsoqoSpacing.s3),
+      EsoqoField.phone(
         controller: _receiverMsisdn,
         label: 'Their phone',
       ),
-      const SizedBox(height: EsokoSpacing.s2),
+      const SizedBox(height: EsoqoSpacing.s2),
       Text(
         'We text the receiver their delivery code and a tracking link, so '
         'make sure this number is right.',
         style: small,
       ),
       if (_error != null) ...[
-        const SizedBox(height: EsokoSpacing.s3),
-        EsokoFormError(message: _error!),
+        const SizedBox(height: EsoqoSpacing.s3),
+        EsoqoFormError(message: _error!),
       ],
-      const SizedBox(height: EsokoSpacing.s5),
-      EsokoButton.primary(
+      const SizedBox(height: EsoqoSpacing.s5),
+      EsoqoButton.primary(
         expand: false,
         label: 'Pay KES ${_payableKes.format()}',
         loading: _busy,
         onPressed: _bookAndPay,
       ),
-      const SizedBox(height: EsokoSpacing.s2),
+      const SizedBox(height: EsoqoSpacing.s2),
       Center(
-        child: EsokoButton.tertiary(
+        child: EsoqoButton.tertiary(
           label: 'Back to the price',
           onPressed: _busy ? null : () => setState(() => _step = _Step.what),
         ),
       ),
-      const SizedBox(height: EsokoSpacing.s2),
+      const SizedBox(height: EsoqoSpacing.s2),
       Text(
         'Nothing is booked until this payment goes through.',
         style: small,
@@ -716,14 +716,14 @@ class _BookParcelScreenState extends ConsumerState<BookParcelScreen> {
     final small = Theme.of(context).textTheme.bodySmall;
     final quote = _quote;
     if (quote == null) {
-      return EsokoCard(
+      return EsoqoCard(
         child: Text(
           _quoteLoading ? 'Working out a price…' : 'Fill in the route for a price.',
           style: small,
         ),
       );
     }
-    return EsokoCard(
+    return EsoqoCard(
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -735,15 +735,15 @@ class _BookParcelScreenState extends ConsumerState<BookParcelScreen> {
                 opacity: _quoteLoading ? 0.5 : 1,
                 child: Text(
                   'KES ${_payableKes.format()}',
-                  style: EsokoTypography.mono(
-                    fontSize: 22,
-                    fontWeight: FontWeight.w800,
+                  style: EsoqoTypography.mono(
+                    fontSize: EsoqoTypeScale.sectionTitle,
+                    fontWeight: FontWeight.w700,
                   ),
                 ),
               ),
             ],
           ),
-          const SizedBox(height: EsokoSpacing.s1),
+          const SizedBox(height: EsoqoSpacing.s1),
           Text(quote.weightLabel, style: small),
           if (quote.distanceKm != null)
             Text('${quote.distanceKm!.toStringAsFixed(1)} km between the hubs',
@@ -773,13 +773,13 @@ class _BookParcelScreenState extends ConsumerState<BookParcelScreen> {
     final scheme = Theme.of(context).colorScheme;
     return InkWell(
       onTap: onTap,
-      borderRadius: BorderRadius.circular(EsokoRadius.md),
+      borderRadius: BorderRadius.circular(EsoqoRadius.md),
       child: Container(
-        padding: const EdgeInsets.all(EsokoSpacing.s3),
+        padding: const EdgeInsets.all(EsoqoSpacing.s3),
         decoration: BoxDecoration(
-          borderRadius: BorderRadius.circular(EsokoRadius.md),
+          borderRadius: BorderRadius.circular(EsoqoRadius.md),
           border: Border.all(
-            color: selected ? scheme.primary : EsokoColors.line,
+            color: selected ? scheme.primary : EsoqoColors.line,
             width: selected ? 1.5 : 1,
           ),
         ),
@@ -788,9 +788,9 @@ class _BookParcelScreenState extends ConsumerState<BookParcelScreen> {
             Icon(
               selected ? Icons.check_circle : Icons.circle_outlined,
               size: 20,
-              color: selected ? scheme.primary : EsokoColors.line,
+              color: selected ? scheme.primary : EsoqoColors.line,
             ),
-            const SizedBox(width: EsokoSpacing.s3),
+            const SizedBox(width: EsoqoSpacing.s3),
             Expanded(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
@@ -801,10 +801,10 @@ class _BookParcelScreenState extends ConsumerState<BookParcelScreen> {
               ),
             ),
             if (trailing != null) ...[
-              const SizedBox(width: EsokoSpacing.s2),
+              const SizedBox(width: EsoqoSpacing.s2),
               Text(
                 trailing,
-                style: EsokoTypography.mono(fontWeight: FontWeight.w800),
+                style: EsoqoTypography.mono(fontWeight: FontWeight.w700),
               ),
             ],
           ],
@@ -821,11 +821,11 @@ class _BookParcelScreenState extends ConsumerState<BookParcelScreen> {
   Widget _originPinField(BuildContext context) {
     final small = Theme.of(context).textTheme.bodySmall;
     if (_originPin != null) {
-      return EsokoCard(
+      return EsoqoCard(
         child: Row(
           children: [
             const Icon(Icons.my_location, size: 18),
-            const SizedBox(width: EsokoSpacing.s2),
+            const SizedBox(width: EsoqoSpacing.s2),
             Expanded(
               child: Text(
                 'Pickup pinned — the courier can navigate straight to it.',
@@ -834,7 +834,7 @@ class _BookParcelScreenState extends ConsumerState<BookParcelScreen> {
             ),
             SizedBox(
               width: 72,
-              child: EsokoButton.tertiary(
+              child: EsoqoButton.tertiary(
                 label: 'Clear',
                 onPressed: () => setState(() => _originPin = null),
               ),
@@ -846,21 +846,21 @@ class _BookParcelScreenState extends ConsumerState<BookParcelScreen> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        EsokoButton.secondary(
+        EsoqoButton.secondary(
           label: _pinning ? 'Getting your location…' : 'Pin this pickup spot',
           icon: Icons.my_location,
           expand: false,
           loading: _pinning,
           onPressed: _pinOrigin,
         ),
-        const SizedBox(height: EsokoSpacing.s1),
+        const SizedBox(height: EsoqoSpacing.s1),
         Text(
           'Optional, but it is the difference between a courier finding '
           'you and phoning for directions.',
           style: small,
         ),
         if (_pinError != null) ...[
-          const SizedBox(height: EsokoSpacing.s1),
+          const SizedBox(height: EsoqoSpacing.s1),
           Text(_pinError!, style: small),
         ],
       ],
@@ -923,14 +923,13 @@ class _BookParcelScreenState extends ConsumerState<BookParcelScreen> {
   }
 
   /// A `DropdownButtonFormField` built by hand rather than through
-  /// [EsokoDropdown] — that shared widget takes an `initialValue`
+  /// [EsoqoDropdown] — that shared widget takes an `initialValue`
   /// (uncontrolled, form-field style) that can't be moved
   /// programmatically once built, and weight-driven auto-selection
   /// needs exactly that. The `key: ValueKey(_parcelType)` is what makes
   /// it work: changing the key forces Flutter to treat a weight-driven
   /// change as a brand new field instance and pick up the new value.
   Widget _parcelTypeField() {
-    final muted = Theme.of(context).textTheme.bodySmall?.color;
     ParcelPricing? pricingFor(String type) {
       for (final p in _pricing) {
         if (p.parcelType == type) return p;
@@ -954,7 +953,7 @@ class _BookParcelScreenState extends ConsumerState<BookParcelScreen> {
           DropdownMenuItem(
             value: t.$1,
             child: Padding(
-              padding: const EdgeInsets.symmetric(vertical: EsokoSpacing.s1),
+              padding: const EdgeInsets.symmetric(vertical: EsoqoSpacing.s1),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 mainAxisSize: MainAxisSize.min,
@@ -965,7 +964,7 @@ class _BookParcelScreenState extends ConsumerState<BookParcelScreen> {
                     if (p == null) return const SizedBox.shrink();
                     return Text(
                       '${p.weightLabel} · KES ${p.minKes.format()}–${p.maxKes.format()}',
-                      style: TextStyle(fontSize: 12, color: muted),
+                      style: Theme.of(context).textTheme.bodySmall,
                     );
                   }),
                 ],

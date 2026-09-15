@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 
-import '../../core/theme/esoko_tokens.dart';
+import '../../core/theme/esoqo_tokens.dart';
 
 /// Visual identity per product/store category — an icon and a gradient,
 /// since the seeded demo catalogue has no real photography yet (see
@@ -12,19 +12,19 @@ class CategoryStyle {
   final IconData icon;
   final List<Color> gradient;
 
-  static const _fallback = CategoryStyle(Icons.storefront_rounded, [EsokoColors.navy2, EsokoColors.navy]);
+  static const _fallback = CategoryStyle(Icons.storefront_rounded, [EsoqoColors.navy2, EsoqoColors.navy]);
 
   static const _byKeyword = <String, CategoryStyle>{
-    'vegetable': CategoryStyle(Icons.eco_rounded, [Color(0xFF2E9E5B), Color(0xFF12794A)]),
-    'fruit': CategoryStyle(Icons.local_grocery_store_rounded, [Color(0xFFE0A233), Color(0xFFB9790F)]),
-    'produce': CategoryStyle(Icons.agriculture_rounded, [Color(0xFF2E9E5B), Color(0xFF12794A)]),
-    'hardware': CategoryStyle(Icons.hardware_rounded, [Color(0xFF5A7695), Color(0xFF1B527E)]),
-    'construction': CategoryStyle(Icons.construction_rounded, [Color(0xFF5A7695), Color(0xFF1B527E)]),
-    'building': CategoryStyle(Icons.foundation_rounded, [Color(0xFF5A7695), Color(0xFF1B527E)]),
-    'tool': CategoryStyle(Icons.build_rounded, [Color(0xFF5A7695), Color(0xFF1B527E)]),
-    'agriculture': CategoryStyle(Icons.grass_rounded, [Color(0xFF2E9E5B), Color(0xFF12794A)]),
-    'service': CategoryStyle(Icons.design_services_rounded, [Color(0xFF3F8AC4), Color(0xFF0F5C9E)]),
-    'cloth': CategoryStyle(Icons.checkroom_rounded, [Color(0xFFC65DA6), Color(0xFF8E3D77)]),
+    'vegetable': CategoryStyle(Icons.eco_rounded, [EsoqoColors.greenLight, EsoqoColors.green]),
+    'fruit': CategoryStyle(Icons.local_grocery_store_rounded, [EsoqoColors.amberLight, EsoqoColors.amberDeep]),
+    'produce': CategoryStyle(Icons.agriculture_rounded, [EsoqoColors.greenLight, EsoqoColors.green]),
+    'hardware': CategoryStyle(Icons.hardware_rounded, [EsoqoColors.text3, EsoqoColors.navy3]),
+    'construction': CategoryStyle(Icons.construction_rounded, [EsoqoColors.text3, EsoqoColors.navy3]),
+    'building': CategoryStyle(Icons.foundation_rounded, [EsoqoColors.text3, EsoqoColors.navy3]),
+    'tool': CategoryStyle(Icons.build_rounded, [EsoqoColors.text3, EsoqoColors.navy3]),
+    'agriculture': CategoryStyle(Icons.grass_rounded, [EsoqoColors.greenLight, EsoqoColors.green]),
+    'service': CategoryStyle(Icons.design_services_rounded, [EsoqoColors.blue2, EsoqoColors.blue]),
+    'cloth': CategoryStyle(Icons.checkroom_rounded, [EsoqoColors.pink, EsoqoColors.pinkDark]),
   };
 
   static CategoryStyle forCategory(String? category) {

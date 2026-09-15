@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/api/api_exception.dart';
-import '../../core/theme/esoko_tokens.dart';
+import '../../core/theme/esoqo_tokens.dart';
 import '../../core/widgets/widgets.dart';
 import 'shopping_models.dart';
 import 'stores_repository.dart';
@@ -49,7 +49,7 @@ class TableBoardScreen extends ConsumerWidget {
               autofocus: true,
               decoration: const InputDecoration(labelText: 'Name'),
             ),
-            const SizedBox(height: EsokoSpacing.s3),
+            const SizedBox(height: EsoqoSpacing.s3),
             TextField(
               controller: pinController,
               keyboardType: TextInputType.number,
@@ -98,7 +98,7 @@ class TableBoardScreen extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final orders = ref.watch(tableOrdersProvider(slug));
     return Scaffold(
-      appBar: EsokoAppBar(
+      appBar: EsoqoAppBar(
         title: 'Table board',
         actions: [
           IconButton(
@@ -110,7 +110,7 @@ class TableBoardScreen extends ConsumerWidget {
       ),
       body: RefreshIndicator(
         onRefresh: () async => _refreshAll(ref),
-        child: EsokoAsyncView(
+        child: EsoqoAsyncView(
           value: orders,
           isEmpty: (list) => list.isEmpty,
           emptyMessage: 'No tables in progress right now.',
@@ -120,10 +120,10 @@ class TableBoardScreen extends ConsumerWidget {
             child: ConstrainedBox(
               constraints: const BoxConstraints(maxWidth: 640),
               child: ListView.separated(
-                padding: const EdgeInsets.all(EsokoSpacing.s4),
+                padding: const EdgeInsets.all(EsoqoSpacing.s4),
                 itemCount: list.length,
-                separatorBuilder: (_, _) => const SizedBox(height: EsokoSpacing.s3),
-                itemBuilder: (context, i) => EsokoStagger(
+                separatorBuilder: (_, _) => const SizedBox(height: EsoqoSpacing.s3),
+                itemBuilder: (context, i) => EsoqoStagger(
                   index: i,
                   child: _TableOrderCard(
                     slug: slug,
@@ -185,18 +185,18 @@ class _TableOrderCardState extends ConsumerState<_TableOrderCard> {
           mainAxisSize: MainAxisSize.min,
           children: [
             const Padding(
-              padding: EdgeInsets.symmetric(horizontal: EsokoSpacing.s4),
-              child: EsokoSubHeader('Assign waiter'),
+              padding: EdgeInsets.symmetric(horizontal: EsoqoSpacing.s4),
+              child: EsoqoSubHeader('Assign waiter'),
             ),
-            const SizedBox(height: EsokoSpacing.s2),
+            const SizedBox(height: EsoqoSpacing.s2),
             if (cashiers.isEmpty)
               Padding(
-                padding: const EdgeInsets.all(EsokoSpacing.s5),
+                padding: const EdgeInsets.all(EsoqoSpacing.s5),
                 child: Column(
                   children: [
                     const Text('No staff added yet.'),
-                    const SizedBox(height: EsokoSpacing.s3),
-                    EsokoButton.secondary(
+                    const SizedBox(height: EsoqoSpacing.s3),
+                    EsoqoButton.secondary(
                       label: 'Add staff from the app bar',
                       expand: false,
                       onPressed: () => Navigator.of(context).pop(),
@@ -205,13 +205,13 @@ class _TableOrderCardState extends ConsumerState<_TableOrderCard> {
                 ),
               ),
             for (final cashier in cashiers)
-              EsokoListTile(
+              EsoqoListTile(
                 title: cashier.name,
                 subtitle: cashier.role,
                 icon: Icons.person_outline,
                 onTap: () => Navigator.of(context).pop(cashier),
               ),
-            const SizedBox(height: EsokoSpacing.s3),
+            const SizedBox(height: EsoqoSpacing.s3),
           ],
         ),
       ),
@@ -246,14 +246,14 @@ class _TableOrderCardState extends ConsumerState<_TableOrderCard> {
     final o = widget.order;
     final scheme = Theme.of(context).colorScheme;
     final (color, icon) = switch (o.dineInStatus) {
-      'ORDERED' => (EsokoColors.amber, Icons.receipt_long_outlined),
+      'ORDERED' => (EsoqoColors.amber, Icons.receipt_long_outlined),
       'PREPARING' => (scheme.primary, Icons.soup_kitchen_outlined),
       'SERVED' => (scheme.primary, Icons.room_service_outlined),
-      'PAYING' => (EsokoColors.amber, Icons.payments_outlined),
+      'PAYING' => (EsoqoColors.amber, Icons.payments_outlined),
       _ => (scheme.outline, Icons.check_circle_outline),
     };
     final next = _nextStatus(o.dineInStatus);
-    return EsokoCard(
+    return EsoqoCard(
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -265,12 +265,12 @@ class _TableOrderCardState extends ConsumerState<_TableOrderCard> {
                   style: Theme.of(context).textTheme.titleMedium,
                 ),
               ),
-              EsokoStatusPill(label: o.dineInStatus, color: color, icon: icon),
+              EsoqoStatusPill(label: o.dineInStatus, color: color, icon: icon),
             ],
           ),
           const SizedBox(height: 4),
-          EsokoAmountText(o.totalKes, fontSize: 15),
-          const SizedBox(height: EsokoSpacing.s2),
+          EsoqoAmountText(o.totalKes, fontSize: EsoqoTypeScale.subTitle),
+          const SizedBox(height: EsoqoSpacing.s2),
           InkWell(
             onTap: _busy ? null : _pickWaiter,
             child: Row(
@@ -284,7 +284,7 @@ class _TableOrderCardState extends ConsumerState<_TableOrderCard> {
                 Text(
                   o.waiterName ?? 'Tap to assign a waiter',
                   style: TextStyle(
-                    fontSize: 12.5,
+                    fontSize: EsoqoTypeScale.meta,
                     color: Theme.of(context).textTheme.bodySmall?.color,
                     decoration: TextDecoration.underline,
                   ),
@@ -293,12 +293,12 @@ class _TableOrderCardState extends ConsumerState<_TableOrderCard> {
             ),
           ),
           if (_error != null) ...[
-            const SizedBox(height: EsokoSpacing.s2),
-            EsokoFormError(message: _error!),
+            const SizedBox(height: EsoqoSpacing.s2),
+            EsoqoFormError(message: _error!),
           ],
           if (next != null) ...[
-            const SizedBox(height: EsokoSpacing.s3),
-            EsokoButton.primary(
+            const SizedBox(height: EsoqoSpacing.s3),
+            EsoqoButton.primary(
               expand: false,
               label: 'Mark as ${next.toLowerCase()}',
               loading: _busy,

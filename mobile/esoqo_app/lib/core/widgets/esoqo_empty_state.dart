@@ -1,35 +1,35 @@
 import 'package:flutter/material.dart';
 
-import '../theme/esoko_tokens.dart';
-import 'esoko_icon.dart';
+import '../theme/esoqo_tokens.dart';
+import 'esoqo_icon.dart';
 
 /// Shared "nothing here yet" treatment — a dashed-border tile with an
 /// icon in a white box, matching web's `.empty` / `.empty-ic` (tokens.css:
 /// dashed --line border on paper, icon in a white 48px rounded tile).
 /// Every screen with an empty list used to write its own version of this;
 /// this is that shape, promoted and reused everywhere.
-class EsokoEmptyState extends StatelessWidget {
-  const EsokoEmptyState({
+class EsoqoEmptyState extends StatelessWidget {
+  const EsoqoEmptyState({
     super.key,
     required this.message,
     this.icon = Icons.inbox_outlined,
-    this.esokoIcon,
+    this.esoqoIcon,
     this.action,
   });
 
   final String message;
 
-  /// Legacy Material glyph — prefer [esokoIcon] for anything new.
+  /// Legacy Material glyph — prefer [esoqoIcon] for anything new.
   final IconData icon;
 
-  /// Branded 24px stroke icon (see EsokoIcon). Takes precedence over
+  /// Branded 24px stroke icon (see EsoqoIcon). Takes precedence over
   /// [icon] when both are given.
-  final EsokoIconName? esokoIcon;
+  final EsoqoIconName? esoqoIcon;
   final Widget? action;
 
   @override
   Widget build(BuildContext context) {
-    // EsokoColors.text2/.text3 are tuned for light-mode paper — fixed
+    // EsoqoColors.text2/.text3 are tuned for light-mode paper — fixed
     // hex values that don't re-derive for a dark surface. The theme's
     // own bodyMedium/bodySmall colours do (Material3's ColorScheme
     // computes a properly-contrasting muted tone per brightness), so
@@ -38,7 +38,7 @@ class EsokoEmptyState extends StatelessWidget {
     final iconColor = theme.textTheme.bodyMedium?.color?.withValues(alpha: 0.7);
     final textColor = theme.textTheme.bodySmall?.color;
     return Padding(
-      padding: const EdgeInsets.all(EsokoSpacing.s6),
+      padding: const EdgeInsets.all(EsoqoSpacing.s6),
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
@@ -47,23 +47,25 @@ class EsokoEmptyState extends StatelessWidget {
             height: 48,
             decoration: BoxDecoration(
               color: theme.cardTheme.color ?? Colors.white,
-              borderRadius: BorderRadius.circular(EsokoRadius.lg),
-              border: Border.all(color: EsokoColors.line),
+              borderRadius: BorderRadius.circular(EsoqoRadius.lg),
+              border: Border.all(color: EsoqoColors.line),
             ),
             child: Center(
-              child: esokoIcon != null
-                  ? EsokoIcon(esokoIcon!, size: 22, color: iconColor)
+              child: esoqoIcon != null
+                  ? EsoqoIcon(esoqoIcon!, size: 22, color: iconColor)
                   : Icon(icon, size: 22, color: iconColor),
             ),
           ),
-          const SizedBox(height: EsokoSpacing.s4),
+          const SizedBox(height: EsoqoSpacing.s4),
           Text(
             message,
             textAlign: TextAlign.center,
-            style: TextStyle(color: textColor, fontSize: 14.5, height: 1.45),
+            style: Theme.of(context).textTheme.bodyMedium!.copyWith(
+              color: textColor,
+            ),
           ),
           if (action != null) ...[
-            const SizedBox(height: EsokoSpacing.s4),
+            const SizedBox(height: EsoqoSpacing.s4),
             action!,
           ],
         ],

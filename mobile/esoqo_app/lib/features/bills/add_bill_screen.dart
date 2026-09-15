@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/api/api_exception.dart';
-import '../../core/theme/esoko_tokens.dart';
+import '../../core/theme/esoqo_tokens.dart';
 import '../../core/widgets/widgets.dart';
 import 'bill_models.dart';
 import 'bills_repository.dart';
@@ -82,23 +82,23 @@ class _AddBillScreenState extends ConsumerState<AddBillScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: const EsokoAppBar(title: 'Add a bill'),
+      appBar: const EsoqoAppBar(title: 'Add a bill'),
       body: SafeArea(
         child: Center(
           child: ConstrainedBox(
             constraints: const BoxConstraints(maxWidth: 420),
             child: SingleChildScrollView(
-              padding: const EdgeInsets.all(EsokoSpacing.s6),
+              padding: const EdgeInsets.all(EsoqoSpacing.s6),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
-                  EsokoField.text(
+                  EsoqoField.text(
                     controller: _labelController,
                     label: 'Name',
                     hint: 'e.g. KPLC — home',
                   ),
-                  const SizedBox(height: EsokoSpacing.s3),
-                  EsokoDropdown<String>(
+                  const SizedBox(height: EsoqoSpacing.s3),
+                  EsoqoDropdown<String>(
                     label: 'Category',
                     initialValue: _category,
                     items: [
@@ -108,19 +108,19 @@ class _AddBillScreenState extends ConsumerState<AddBillScreen> {
                     onChanged: (v) =>
                         setState(() => _category = v ?? _category),
                   ),
-                  const SizedBox(height: EsokoSpacing.s3),
-                  EsokoField.text(
+                  const SizedBox(height: EsoqoSpacing.s3),
+                  EsoqoField.text(
                     controller: _accountRefController,
                     label: 'Account / meter number (optional)',
                   ),
-                  const SizedBox(height: EsokoSpacing.s3),
-                  EsokoField.amount(
+                  const SizedBox(height: EsoqoSpacing.s3),
+                  EsoqoField.amount(
                     controller: _amountController,
                     label: 'Usual amount (optional)',
                     hint: 'Leave blank if it varies',
                   ),
-                  const SizedBox(height: EsokoSpacing.s3),
-                  EsokoDropdown<String>(
+                  const SizedBox(height: EsoqoSpacing.s3),
+                  EsoqoDropdown<String>(
                     label: 'Repeats',
                     initialValue: _cycle,
                     items: [
@@ -129,7 +129,7 @@ class _AddBillScreenState extends ConsumerState<AddBillScreen> {
                     ],
                     onChanged: (v) => setState(() => _cycle = v ?? _cycle),
                   ),
-                  const SizedBox(height: EsokoSpacing.s3),
+                  const SizedBox(height: EsoqoSpacing.s3),
                   ListTile(
                     contentPadding: EdgeInsets.zero,
                     title: const Text('Next due date'),
@@ -139,7 +139,7 @@ class _AddBillScreenState extends ConsumerState<AddBillScreen> {
                     trailing: const Icon(Icons.calendar_today_outlined),
                     onTap: _pickDate,
                   ),
-                  const SizedBox(height: EsokoSpacing.s3),
+                  const SizedBox(height: EsoqoSpacing.s3),
                   SwitchListTile.adaptive(
                     contentPadding: EdgeInsets.zero,
                     title: const Text('Let family or friends help pay'),
@@ -150,12 +150,12 @@ class _AddBillScreenState extends ConsumerState<AddBillScreen> {
                     onChanged: (v) => setState(() => _fundingEnabled = v),
                   ),
                   if (_fundingEnabled) ...[
-                    const SizedBox(height: EsokoSpacing.s3),
-                    EsokoField.amount(
+                    const SizedBox(height: EsoqoSpacing.s3),
+                    EsoqoField.amount(
                       controller: _targetController,
                       label: 'Target amount',
                     ),
-                    const SizedBox(height: EsokoSpacing.s2),
+                    const SizedBox(height: EsoqoSpacing.s2),
                     SwitchListTile.adaptive(
                       contentPadding: EdgeInsets.zero,
                       title: const Text('Auto mark paid once fully funded'),
@@ -163,9 +163,9 @@ class _AddBillScreenState extends ConsumerState<AddBillScreen> {
                       onChanged: (v) => setState(() => _autoPayEnabled = v),
                     ),
                   ],
-                  if (_error != null) EsokoFormError(message: _error!),
-                  const SizedBox(height: EsokoSpacing.s5),
-                  EsokoButton.primary(
+                  if (_error != null) EsoqoFormError(message: _error!),
+                  const SizedBox(height: EsoqoSpacing.s5),
+                  EsoqoButton.primary(
                     expand: false,
                     label: 'Save bill',
                     loading: _loading,

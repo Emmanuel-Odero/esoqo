@@ -4,7 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import '../../core/api/api_exception.dart';
-import '../../core/theme/esoko_tokens.dart';
+import '../../core/theme/esoqo_tokens.dart';
 import '../../core/widgets/widgets.dart';
 import 'shopping_models.dart';
 import 'stores_repository.dart';
@@ -27,9 +27,9 @@ class OrderDetailScreen extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final order = ref.watch(orderDetailProvider(orderId));
     return Scaffold(
-      appBar: const EsokoAppBar(title: 'Order'),
+      appBar: const EsoqoAppBar(title: 'Order'),
       body: SafeArea(
-        child: EsokoAsyncView(
+        child: EsoqoAsyncView(
           value: order,
           onRetry: () => ref.invalidate(orderDetailProvider(orderId)),
           data: (context, o) => _body(context, ref, o),
@@ -45,9 +45,9 @@ class OrderDetailScreen extends ConsumerWidget {
     return RefreshIndicator(
       onRefresh: () async => ref.invalidate(orderDetailProvider(orderId)),
       child: ListView(
-        padding: const EdgeInsets.all(EsokoSpacing.s5),
+        padding: const EdgeInsets.all(EsoqoSpacing.s5),
         children: [
-          EsokoAdaptiveBody(
+          EsoqoAdaptiveBody(
             padding: EdgeInsets.zero,
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
@@ -56,14 +56,14 @@ class OrderDetailScreen extends ConsumerWidget {
                   o.storeName,
                   style: Theme.of(context).textTheme.headlineSmall,
                 ),
-                const SizedBox(height: EsokoSpacing.s1),
+                const SizedBox(height: EsoqoSpacing.s1),
                 Text(
                   'KES ${o.totalKes} · placed ${_formatDate(o.createdAt)}',
                   style: TextStyle(
                     color: Theme.of(context).textTheme.bodySmall?.color,
                   ),
                 ),
-                const SizedBox(height: EsokoSpacing.s6),
+                const SizedBox(height: EsoqoSpacing.s6),
                 if (o.isDineIn)
                   _dineInStatus(context, ref, o)
                 else if (o.isPickup)
@@ -73,11 +73,11 @@ class OrderDetailScreen extends ConsumerWidget {
                 if (o.isPickup &&
                     (o.status == 'READY_FOR_PICKUP' ||
                         o.status == 'FULFILLED')) ...[
-                  const SizedBox(height: EsokoSpacing.s6),
+                  const SizedBox(height: EsoqoSpacing.s6),
                   _pickupCodeCard(context, o),
                 ],
                 if (o.isPickup && o.storeNeighborhood != null) ...[
-                  const SizedBox(height: EsokoSpacing.s5),
+                  const SizedBox(height: EsoqoSpacing.s5),
                   _directionsCard(context, o),
                 ],
               ],
@@ -89,7 +89,7 @@ class OrderDetailScreen extends ConsumerWidget {
   }
 
   Widget _cancelled(BuildContext context, OrderStatus o) {
-    return const EsokoEmptyState(
+    return const EsoqoEmptyState(
       icon: Icons.cancel_outlined,
       message: 'This order was cancelled.',
     );
@@ -146,7 +146,7 @@ class OrderDetailScreen extends ConsumerWidget {
               height: 32,
               decoration: BoxDecoration(
                 // Alpha wash of primary / the theme's own surface, not
-                // fixed EsokoColors.greenTint/.paper — those two were
+                // fixed EsoqoColors.greenTint/.paper — those two were
                 // both tuned for a light scaffold and stuck out as
                 // bright patches once the background flipped dark.
                 color: reached
@@ -154,7 +154,7 @@ class OrderDetailScreen extends ConsumerWidget {
                     : Theme.of(context).colorScheme.surfaceContainerHighest,
                 shape: BoxShape.circle,
                 border: Border.all(
-                  color: color ?? EsokoColors.line,
+                  color: color ?? EsoqoColors.line,
                   width: 1.5,
                 ),
               ),
@@ -164,13 +164,13 @@ class OrderDetailScreen extends ConsumerWidget {
               Container(
                 width: 2,
                 height: 32,
-                color: reached ? scheme.primary : EsokoColors.line,
+                color: reached ? scheme.primary : EsoqoColors.line,
               ),
           ],
         ),
-        const SizedBox(width: EsokoSpacing.s3),
+        const SizedBox(width: EsoqoSpacing.s3),
         Padding(
-          padding: const EdgeInsets.only(top: EsokoSpacing.s2),
+          padding: const EdgeInsets.only(top: EsoqoSpacing.s2),
           child: Text(
             stage.label,
             style: TextStyle(
@@ -203,9 +203,9 @@ class OrderDetailScreen extends ConsumerWidget {
       children: [
         Text(
           'Table ${o.tableLabel}',
-          style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 16),
+          style: const TextStyle(fontWeight: FontWeight.w700, fontSize: EsoqoTypeScale.subTitle),
         ),
-        const SizedBox(height: EsokoSpacing.s4),
+        const SizedBox(height: EsoqoSpacing.s4),
         for (var i = 0; i < _dineInStages.length; i++)
           _timelineRow(
             context,
@@ -214,7 +214,7 @@ class OrderDetailScreen extends ConsumerWidget {
             isLast: i == _dineInStages.length - 1,
           ),
         if (canTip) ...[
-          const SizedBox(height: EsokoSpacing.s4),
+          const SizedBox(height: EsoqoSpacing.s4),
           _TipButton(orderId: o.id, existingTipKes: o.tipKes),
         ],
       ],
@@ -234,7 +234,7 @@ class OrderDetailScreen extends ConsumerWidget {
           Icons.local_shipping_outlined,
           color: Theme.of(context).textTheme.bodySmall?.color,
         ),
-        const SizedBox(width: EsokoSpacing.s3),
+        const SizedBox(width: EsoqoSpacing.s3),
         Text(label, style: const TextStyle(fontWeight: FontWeight.w700)),
       ],
     );
@@ -247,15 +247,15 @@ class OrderDetailScreen extends ConsumerWidget {
     final muted = Theme.of(context).textTheme.bodySmall?.color;
     return Container(
       width: double.infinity,
-      padding: const EdgeInsets.all(EsokoSpacing.s5),
+      padding: const EdgeInsets.all(EsoqoSpacing.s5),
       decoration: BoxDecoration(
         // Alpha wash of primary / the theme's own surface, not fixed
-        // EsokoColors.greenTint/.paper (see _timelineRow's identical fix).
+        // EsoqoColors.greenTint/.paper (see _timelineRow's identical fix).
         color: ready
             ? scheme.primary.withValues(alpha: isDark ? 0.20 : 0.12)
             : scheme.surfaceContainerHighest,
-        borderRadius: BorderRadius.circular(EsokoRadius.lg),
-        border: Border.all(color: ready ? scheme.primary : EsokoColors.line),
+        borderRadius: BorderRadius.circular(EsoqoRadius.lg),
+        border: Border.all(color: ready ? scheme.primary : EsoqoColors.line),
       ),
       child: Column(
         children: [
@@ -264,12 +264,12 @@ class OrderDetailScreen extends ConsumerWidget {
                 ? 'Your order is ready — show this code at the counter'
                 : 'Collected with code',
             textAlign: TextAlign.center,
-            style: TextStyle(color: muted, fontSize: 13),
+            style: TextStyle(color: muted, fontSize: EsoqoTypeScale.meta),
           ),
-          const SizedBox(height: EsokoSpacing.s3),
+          const SizedBox(height: EsoqoSpacing.s3),
           GestureDetector(
             onTap: () {
-              EsokoHaptics.confirm();
+              EsoqoHaptics.confirm();
               Clipboard.setData(ClipboardData(text: o.pickupCode ?? ''));
               ScaffoldMessenger.of(context).showSnackBar(
                 const SnackBar(content: Text('Pickup code copied')),
@@ -280,14 +280,9 @@ class OrderDetailScreen extends ConsumerWidget {
               children: [
                 Text(
                   o.pickupCode ?? '',
-                  style: const TextStyle(
-                    fontFamily: 'monospace',
-                    fontSize: 28,
-                    fontWeight: FontWeight.w800,
-                    letterSpacing: 2,
-                  ),
+                  style: EsoqoTypography.code(fontSize: EsoqoTypeScale.hero),
                 ),
-                const SizedBox(width: EsokoSpacing.s2),
+                const SizedBox(width: EsoqoSpacing.s2),
                 Icon(Icons.copy_outlined, size: 18, color: muted),
               ],
             ),
@@ -302,12 +297,12 @@ class OrderDetailScreen extends ConsumerWidget {
     return Row(
       children: [
         Icon(Icons.place_outlined, color: muted),
-        const SizedBox(width: EsokoSpacing.s3),
+        const SizedBox(width: EsoqoSpacing.s3),
         Expanded(
           child: Text(o.storeNeighborhood!, style: TextStyle(color: muted)),
         ),
         if (o.storeLatitude != null && o.storeLongitude != null)
-          EsokoButton.tertiary(
+          EsoqoButton.tertiary(
             label: 'Directions',
             icon: Icons.directions_outlined,
             onPressed: () =>
@@ -382,13 +377,13 @@ class _TipButtonState extends ConsumerState<_TipButton> {
     if (_tipKes != null) {
       return Row(
         children: [
-          const Icon(Icons.volunteer_activism_outlined, size: 18, color: EsokoColors.green),
+          const Icon(Icons.volunteer_activism_outlined, size: 18, color: EsoqoColors.green),
           const SizedBox(width: 8),
           Text('KES $_tipKes tip added — thank you', style: const TextStyle(fontWeight: FontWeight.w600)),
         ],
       );
     }
-    return EsokoButton.secondary(
+    return EsoqoButton.secondary(
       label: 'Add a tip',
       icon: Icons.volunteer_activism_outlined,
       loading: _busy,

@@ -1,4 +1,4 @@
-/// Esoko's icon system — ported from packages/ui/src/Icon.tsx: 63 stroke
+/// Esoqo's icon system — ported from packages/ui/src/Icon.tsx: 63 stroke
 /// icons on a 24px grid, generated 1:1 from that file's SVG symbols into
 /// assets/icons/*.svg (see the redesign notes; regenerate with the same
 /// extraction script if packages/ui/src/Icon.tsx changes).
@@ -15,7 +15,7 @@ import 'package:flutter_svg/flutter_svg.dart';
 
 /// One entry per file in assets/icons/ — keep in sync with
 /// packages/ui/src/Icon.tsx's IconName union.
-enum EsokoIconName {
+enum EsoqoIconName {
   alertCircle('alert-circle'),
   alertTriangle('alert-triangle'),
   arrowLeft('arrow-left'),
@@ -80,16 +80,16 @@ enum EsokoIconName {
   wheat('wheat'),
   wifiOff('wifi-off');
 
-  const EsokoIconName(this.asset);
+  const EsoqoIconName(this.asset);
   final String asset;
 }
 
-/// Renders one [EsokoIconName] at [size], tinted [color] (defaults to the
+/// Renders one [EsoqoIconName] at [size], tinted [color] (defaults to the
 /// ambient [IconTheme], same convention as [Icon]). Decorative by default
 /// — pass [semanticLabel] only on the rare icon that stands completely
 /// alone with no adjacent text.
-class EsokoIcon extends StatelessWidget {
-  const EsokoIcon(
+class EsoqoIcon extends StatelessWidget {
+  const EsoqoIcon(
     this.name, {
     super.key,
     this.size,
@@ -97,7 +97,7 @@ class EsokoIcon extends StatelessWidget {
     this.semanticLabel,
   });
 
-  final EsokoIconName name;
+  final EsoqoIconName name;
   final double? size;
   final Color? color;
   final String? semanticLabel;
@@ -106,7 +106,8 @@ class EsokoIcon extends StatelessWidget {
   Widget build(BuildContext context) {
     final iconTheme = IconTheme.of(context);
     final resolvedSize = size ?? iconTheme.size ?? 24;
-    final resolvedColor = color ?? iconTheme.color ?? Colors.black;
+    final resolvedColor =
+        color ?? iconTheme.color ?? Theme.of(context).colorScheme.onSurface;
     return SvgPicture.asset(
       'assets/icons/${name.asset}.svg',
       width: resolvedSize,

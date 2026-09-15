@@ -81,7 +81,7 @@ urgency-within-bucket sort. The comparator itself is a one-line
 needs a demo account seeded with more than one Overdue or Due-soon
 bill, and none in `DEMO_ACCOUNTS.md` currently is. Add one there, then
 extend the `Bills` group in `app_test.dart` to assert tile order
-(`tester.widgetList(find.byType(EsokoListTile))` in the rendered
+(`tester.widgetList(find.byType(EsoqoListTile))` in the rendered
 sequence) before trusting this on a new account.
 
 ## Seeded accounts used here

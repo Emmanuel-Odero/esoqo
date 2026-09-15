@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 
-import '../theme/esoko_tokens.dart';
+import '../theme/esoqo_tokens.dart';
 
 /// A live, present-tense PIN entry — used wherever core-go re-verifies
 /// a PIN at the moment of the call (see SignWithdrawal's own "never a
@@ -21,7 +21,7 @@ Future<String?> showPinPromptDialog(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           if (message != null) ...[
-            // Theme-derived, not the fixed EsokoColors.text2 — the
+            // Theme-derived, not the fixed EsoqoColors.text2 — the
             // AlertDialog's surface flips between light and dark with
             // the theme.
             Text(
@@ -30,7 +30,7 @@ Future<String?> showPinPromptDialog(
                 color: Theme.of(context).textTheme.bodySmall?.color,
               ),
             ),
-            const SizedBox(height: EsokoSpacing.s4),
+            const SizedBox(height: EsoqoSpacing.s4),
           ],
           TextField(
             controller: controller,

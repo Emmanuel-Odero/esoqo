@@ -6,7 +6,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../core/api/api_exception.dart';
 import '../../core/auth/auth_controller.dart';
 import '../../core/auth/auth_state.dart';
-import '../../core/theme/esoko_tokens.dart';
+import '../../core/theme/esoqo_tokens.dart';
 import '../../core/widgets/widgets.dart';
 import 'stores_repository.dart';
 
@@ -113,20 +113,20 @@ class SelfCheckoutBasketBar extends ConsumerWidget {
     final basket = ref.watch(selfCheckoutBasketProvider);
     if (basket.isEmpty) return const SizedBox.shrink();
     return SafeArea(
-      minimum: const EdgeInsets.all(EsokoSpacing.s4),
+      minimum: const EdgeInsets.all(EsoqoSpacing.s4),
       child: Material(
         elevation: 4,
-        borderRadius: BorderRadius.circular(EsokoRadius.pill),
+        borderRadius: BorderRadius.circular(EsoqoRadius.pill),
         color: Theme.of(context).colorScheme.primary,
         child: InkWell(
-          borderRadius: BorderRadius.circular(EsokoRadius.pill),
+          borderRadius: BorderRadius.circular(EsoqoRadius.pill),
           onTap: () => Navigator.of(context).push(
             MaterialPageRoute(builder: (_) => const SelfCheckoutReviewScreen()),
           ),
           child: Padding(
             padding: const EdgeInsets.symmetric(
-              horizontal: EsokoSpacing.s5,
-              vertical: EsokoSpacing.s3,
+              horizontal: EsoqoSpacing.s5,
+              vertical: EsoqoSpacing.s3,
             ),
             child: Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -144,7 +144,7 @@ class SelfCheckoutBasketBar extends ConsumerWidget {
                       'KES ${basket.totalKes.toStringAsFixed(0)}',
                       style: const TextStyle(
                         color: Colors.white,
-                        fontWeight: FontWeight.w800,
+                        fontWeight: FontWeight.w700,
                       ),
                     ),
                     const SizedBox(width: 6),
@@ -287,31 +287,31 @@ class _SelfCheckoutReviewScreenState
     final basket = ref.watch(selfCheckoutBasketProvider);
     final reduced = MediaQuery.disableAnimationsOf(context);
     return Scaffold(
-      appBar: const EsokoAppBar(title: 'Self-checkout'),
+      appBar: const EsoqoAppBar(title: 'Self-checkout'),
       body: SafeArea(
         child: Center(
           child: ConstrainedBox(
             constraints: const BoxConstraints(maxWidth: 480),
             child: Padding(
-              padding: const EdgeInsets.all(EsokoSpacing.s5),
+              padding: const EdgeInsets.all(EsoqoSpacing.s5),
               child: AnimatedSwitcher(
-                duration: reduced ? Duration.zero : EsokoMotion.medium,
-                switchInCurve: EsokoMotion.easeOut,
-                switchOutCurve: EsokoMotion.easeOut,
+                duration: reduced ? Duration.zero : EsoqoMotion.medium,
+                switchInCurve: EsoqoMotion.easeOut,
+                switchOutCurve: EsoqoMotion.easeOut,
                 child: KeyedSubtree(
                   key: ValueKey(_stage),
                   child: switch (_stage) {
                     _Stage.review => _reviewStage(basket),
                     _Stage.placing => const Padding(
-                        padding: EdgeInsets.all(EsokoSpacing.s6),
-                        child: EsokoSkeletonCard(leading: false),
+                        padding: EdgeInsets.all(EsoqoSpacing.s6),
+                        child: EsoqoSkeletonCard(leading: false),
                       ),
-                    _Stage.waiting => EsokoResultView.waiting(
+                    _Stage.waiting => EsoqoResultView.waiting(
                         title: 'Complete payment on your phone',
                         message: 'Enter your M-Pesa PIN when the prompt arrives.',
                         amountKes: _totalKes,
                       ),
-                    _Stage.done => EsokoResultView.success(
+                    _Stage.done => EsoqoResultView.success(
                         title: 'Paid — you\'re free to go',
                         message: _exitCode == null
                             ? 'Show this order at the exit if asked.'
@@ -320,7 +320,7 @@ class _SelfCheckoutReviewScreenState
                         onPrimary: () =>
                             Navigator.of(context).popUntil((r) => r.isFirst),
                       ),
-                    _Stage.failed => EsokoResultView.failure(
+                    _Stage.failed => EsoqoResultView.failure(
                         errorMessage: _error ?? 'Something went wrong',
                         primaryLabel: 'Try again',
                         onPrimary: () => setState(() => _stage = _Stage.review),
@@ -341,7 +341,7 @@ class _SelfCheckoutReviewScreenState
       children: [
         for (final entry in basket.lines.entries)
           Padding(
-            padding: const EdgeInsets.only(bottom: EsokoSpacing.s3),
+            padding: const EdgeInsets.only(bottom: EsoqoSpacing.s3),
             child: Row(
               children: [
                 Expanded(
@@ -349,11 +349,11 @@ class _SelfCheckoutReviewScreenState
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Text(entry.value.name, style: const TextStyle(fontWeight: FontWeight.w600)),
-                      EsokoAmountText(entry.value.priceKes, fontSize: 13),
+                      EsoqoAmountText(entry.value.priceKes, fontSize: EsoqoTypeScale.meta),
                     ],
                   ),
                 ),
-                EsokoStepper(
+                EsoqoStepper(
                   value: entry.value.quantity,
                   min: 0,
                   onChanged: (v) => ref
@@ -363,12 +363,12 @@ class _SelfCheckoutReviewScreenState
               ],
             ),
           ),
-        const SizedBox(height: EsokoSpacing.s3),
+        const SizedBox(height: EsoqoSpacing.s3),
         if (_error != null) ...[
-          EsokoFormError(message: _error!),
-          const SizedBox(height: EsokoSpacing.s3),
+          EsoqoFormError(message: _error!),
+          const SizedBox(height: EsoqoSpacing.s3),
         ],
-        EsokoPayerFields(
+        EsoqoPayerFields(
           nameController: _nameController,
           msisdnController: _msisdnController,
           payLabel: 'Pay · KES ${basket.totalKes.toStringAsFixed(0)}',
@@ -434,23 +434,23 @@ class _SelfCheckoutGuardScreenState
     final scheme = Theme.of(context).colorScheme;
     final result = _result;
     return Scaffold(
-      appBar: const EsokoAppBar(title: 'Exit check'),
+      appBar: const EsoqoAppBar(title: 'Exit check'),
       body: SafeArea(
         child: Center(
           child: ConstrainedBox(
             constraints: const BoxConstraints(maxWidth: 480),
             child: Padding(
-              padding: const EdgeInsets.all(EsokoSpacing.s5),
+              padding: const EdgeInsets.all(EsoqoSpacing.s5),
               child: Column(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
                   if (result != null)
                     Container(
                       width: double.infinity,
-                      padding: const EdgeInsets.all(EsokoSpacing.s6),
+                      padding: const EdgeInsets.all(EsoqoSpacing.s6),
                       decoration: BoxDecoration(
                         color: scheme.primary.withValues(alpha: 0.12),
-                        borderRadius: BorderRadius.circular(EsokoRadius.lg),
+                        borderRadius: BorderRadius.circular(EsoqoRadius.lg),
                         border: Border.all(color: scheme.primary, width: 2),
                       ),
                       child: Column(
@@ -460,7 +460,7 @@ class _SelfCheckoutGuardScreenState
                             color: scheme.primary,
                             size: 64,
                           ),
-                          const SizedBox(height: EsokoSpacing.s3),
+                          const SizedBox(height: EsoqoSpacing.s3),
                           Text(
                             result.alreadyExited
                                 ? 'Already checked out'
@@ -468,7 +468,7 @@ class _SelfCheckoutGuardScreenState
                             style: Theme.of(context).textTheme.headlineSmall,
                             textAlign: TextAlign.center,
                           ),
-                          const SizedBox(height: EsokoSpacing.s2),
+                          const SizedBox(height: EsoqoSpacing.s2),
                           Text(
                             '${result.itemCount} item${result.itemCount == 1 ? '' : 's'} · KES ${result.totalKes}',
                           ),
@@ -478,10 +478,10 @@ class _SelfCheckoutGuardScreenState
                   else if (_error != null)
                     Container(
                       width: double.infinity,
-                      padding: const EdgeInsets.all(EsokoSpacing.s6),
+                      padding: const EdgeInsets.all(EsoqoSpacing.s6),
                       decoration: BoxDecoration(
                         color: scheme.error.withValues(alpha: 0.12),
-                        borderRadius: BorderRadius.circular(EsokoRadius.lg),
+                        borderRadius: BorderRadius.circular(EsoqoRadius.lg),
                         border: Border.all(color: scheme.error, width: 2),
                       ),
                       child: Column(
@@ -491,7 +491,7 @@ class _SelfCheckoutGuardScreenState
                             color: scheme.error,
                             size: 64,
                           ),
-                          const SizedBox(height: EsokoSpacing.s3),
+                          const SizedBox(height: EsoqoSpacing.s3),
                           Text(
                             _error!,
                             style: Theme.of(context).textTheme.headlineSmall,
@@ -500,15 +500,15 @@ class _SelfCheckoutGuardScreenState
                         ],
                       ),
                     ),
-                  const SizedBox(height: EsokoSpacing.s6),
-                  EsokoField.code(
+                  const SizedBox(height: EsoqoSpacing.s6),
+                  EsoqoField.code(
                     controller: _codeController,
                     label: 'Exit code',
                     hint: 'PKP-XXXXXX',
                     onSubmitted: _check,
                   ),
-                  const SizedBox(height: EsokoSpacing.s3),
-                  EsokoButton.primary(
+                  const SizedBox(height: EsoqoSpacing.s3),
+                  EsoqoButton.primary(
                     expand: false,
                     label: 'Check',
                     loading: _busy,

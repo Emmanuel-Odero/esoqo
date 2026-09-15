@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/api/api_exception.dart';
-import '../../core/theme/esoko_tokens.dart';
+import '../../core/theme/esoqo_tokens.dart';
 import '../../core/widgets/widgets.dart';
 import 'group_models.dart';
 import 'groups_repository.dart';
@@ -57,45 +57,45 @@ class _JoinGroupScreenState extends ConsumerState<JoinGroupScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: const EsokoAppBar(title: 'Join a group'),
+      appBar: const EsoqoAppBar(title: 'Join a group'),
       body: SafeArea(
         child: Center(
           child: ConstrainedBox(
             constraints: const BoxConstraints(maxWidth: 560),
             child: Padding(
-              padding: const EdgeInsets.all(EsokoSpacing.s5),
+              padding: const EdgeInsets.all(EsoqoSpacing.s5),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
-                  EsokoSearchField(
+                  EsoqoSearchField(
                     controller: _queryController,
                     label: 'Search by group name',
                     hint: 'Type to search groups',
                     debounce: const Duration(milliseconds: 350),
                     onChanged: _search,
                   ),
-                  if (_error != null) EsokoFormError(message: _error!),
-                  const SizedBox(height: EsokoSpacing.s4),
+                  if (_error != null) EsoqoFormError(message: _error!),
+                  const SizedBox(height: EsoqoSpacing.s4),
                   if (_searching)
                     const SizedBox(
-                      height: EsokoSpacing.s6,
-                      child: EsokoSkeletonList(count: 3),
+                      height: EsoqoSpacing.s6,
+                      child: EsoqoSkeletonList(count: 3),
                     ),
                   Expanded(
                     child: ListView.separated(
                       itemCount: _results.length,
                       separatorBuilder: (_, _) =>
-                          const SizedBox(height: EsokoSpacing.s2),
+                          const SizedBox(height: EsoqoSpacing.s2),
                       itemBuilder: (context, i) {
                         final g = _results[i];
-                        return EsokoStagger(
+                        return EsoqoStagger(
                           index: i,
-                          child: EsokoListTile(
+                          child: EsoqoListTile(
                             title: g.displayName,
                             subtitle: g.county,
                             trailing: _joiningId == g.id
-                                ? const EsokoSkeleton(width: 44, height: 14)
-                                : EsokoButton.tertiary(
+                                ? const EsoqoSkeleton(width: 44, height: 14)
+                                : EsoqoButton.tertiary(
                                     label: 'Join',
                                     onPressed: () => _join(g),
                                   ),

@@ -4,7 +4,7 @@ import 'package:url_launcher/url_launcher.dart';
 
 import '../../core/auth/auth_controller.dart';
 import '../../core/auth/auth_state.dart';
-import '../../core/theme/esoko_tokens.dart';
+import '../../core/theme/esoqo_tokens.dart';
 import '../../core/widgets/widgets.dart';
 import 'category_style.dart';
 import 'gradient_thumb.dart';
@@ -65,7 +65,7 @@ class StoreDetailScreen extends ConsumerWidget {
               tableLabel: tableLabel!,
               products: products.valueOrNull ?? const [],
             ),
-      body: EsokoAsyncView(
+      body: EsoqoAsyncView(
         value: store,
         onRetry: () => ref.invalidate(storeDetailProvider(slug)),
         data: (context, s) {
@@ -110,8 +110,8 @@ class StoreDetailScreen extends ConsumerWidget {
                     title: Text(
                       s.name,
                       style: const TextStyle(
-                        fontSize: 16,
-                        fontWeight: FontWeight.w800,
+                        fontSize: EsoqoTypeScale.subTitle,
+                        fontWeight: FontWeight.w700,
                         color: Colors.white,
                       ),
                     ),
@@ -145,15 +145,15 @@ class StoreDetailScreen extends ConsumerWidget {
                   ),
                 ),
                 SliverPadding(
-                  padding: const EdgeInsets.all(EsokoSpacing.s4),
+                  padding: const EdgeInsets.all(EsoqoSpacing.s4),
                   sliver: SliverList(
                     delegate: SliverChildListDelegate([
                       if (tableLabel != null && tableLabel!.isNotEmpty)
                         Padding(
                           padding: const EdgeInsets.only(
-                            bottom: EsokoSpacing.s3,
+                            bottom: EsoqoSpacing.s3,
                           ),
-                          child: EsokoCard(
+                          child: EsoqoCard(
                             child: Row(
                               children: [
                                 const Icon(Icons.table_restaurant_outlined),
@@ -176,8 +176,8 @@ class StoreDetailScreen extends ConsumerWidget {
                           // clip at the screen edge (the cut-off "Y" in the
                           // store-hero screenshot). Muted + wrapping instead.
                           padding: const EdgeInsets.only(
-                            bottom: EsokoSpacing.s2,
-                            right: EsokoSpacing.s2,
+                            bottom: EsoqoSpacing.s2,
+                            right: EsoqoSpacing.s2,
                           ),
                           child: Text(
                             s.tagline!,
@@ -192,7 +192,7 @@ class StoreDetailScreen extends ConsumerWidget {
                       if (s.neighborhood != null)
                         Padding(
                           padding: const EdgeInsets.only(
-                            bottom: EsokoSpacing.s2,
+                            bottom: EsoqoSpacing.s2,
                           ),
                           child: Row(
                             children: [
@@ -220,29 +220,29 @@ class StoreDetailScreen extends ConsumerWidget {
                           ),
                         ),
                       Wrap(
-                        spacing: EsokoSpacing.s2,
-                        runSpacing: EsokoSpacing.s2,
+                        spacing: EsoqoSpacing.s2,
+                        runSpacing: EsoqoSpacing.s2,
                         children: [
                           if (s.primaryCategory != null)
-                            EsokoStatusPill(
+                            EsoqoStatusPill(
                               icon: Icons.sell_outlined,
                               label: s.primaryCategory!,
                               color: style.gradient.last,
                             ),
-                          EsokoStatusPill(
+                          EsoqoStatusPill(
                             icon: s.codEnabled
                                 ? Icons.local_shipping_outlined
                                 : Icons.phone_iphone_outlined,
                             label: s.codEnabled
                                 ? 'Cash on delivery'
                                 : 'Pay on order',
-                            color: EsokoColors.blue,
+                            color: EsoqoColors.blue,
                           ),
                         ],
                       ),
                       if (s.contactPhone != null) ...[
-                        const SizedBox(height: EsokoSpacing.s4),
-                        EsokoListTile(
+                        const SizedBox(height: EsoqoSpacing.s4),
+                        EsoqoListTile(
                           title: s.contactPhone!,
                           subtitle: 'Call the store',
                           icon: Icons.phone_outlined,
@@ -253,7 +253,7 @@ class StoreDetailScreen extends ConsumerWidget {
                         ),
                       ],
                       if (s.aboutUs != null) ...[
-                        const SizedBox(height: EsokoSpacing.s4),
+                        const SizedBox(height: EsoqoSpacing.s4),
                         Text(
                           s.aboutUs!,
                           style: TextStyle(
@@ -266,7 +266,7 @@ class StoreDetailScreen extends ConsumerWidget {
                             ? const SizedBox.shrink()
                             : Padding(
                                 padding: const EdgeInsets.only(
-                                  top: EsokoSpacing.s4,
+                                  top: EsoqoSpacing.s4,
                                 ),
                                 child: _UsualProductCard(
                                   usual: u,
@@ -282,8 +282,8 @@ class StoreDetailScreen extends ConsumerWidget {
                         loading: () => const SizedBox.shrink(),
                         error: (_, _) => const SizedBox.shrink(),
                       ),
-                      const SizedBox(height: EsokoSpacing.s6),
-                      EsokoAsyncView(
+                      const SizedBox(height: EsoqoSpacing.s6),
+                      EsoqoAsyncView(
                         value: products,
                         isEmpty: (list) => list.isEmpty,
                         emptyMessage: 'No products listed yet.',
@@ -293,8 +293,8 @@ class StoreDetailScreen extends ConsumerWidget {
                         data: (context, list) => Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            EsokoSubHeader('Products · ${list.length}'),
-                            const SizedBox(height: EsokoSpacing.s3),
+                            EsoqoSubHeader('Products · ${list.length}'),
+                            const SizedBox(height: EsoqoSpacing.s3),
                             GridView.count(
                               shrinkWrap: true,
                               physics: const NeverScrollableScrollPhysics(),
@@ -304,12 +304,12 @@ class StoreDetailScreen extends ConsumerWidget {
                                   MediaQuery.sizeOf(context).width > 700
                                   ? 3
                                   : 2,
-                              mainAxisSpacing: EsokoSpacing.s3,
-                              crossAxisSpacing: EsokoSpacing.s3,
+                              mainAxisSpacing: EsoqoSpacing.s3,
+                              crossAxisSpacing: EsoqoSpacing.s3,
                               childAspectRatio: 0.72,
                               children: [
                                 for (var i = 0; i < list.length; i++)
-                                  EsokoStagger(
+                                  EsoqoStagger(
                                     index: i,
                                     child: _ProductCard(
                                       product: list[i],
@@ -383,7 +383,7 @@ class _SaveStoreButtonState extends ConsumerState<_SaveStoreButton> {
     return IconButton(
       onPressed: _busy ? null : () => _toggle(isSaved),
       icon: Icon(isSaved ? Icons.star_rounded : Icons.star_border_rounded),
-      color: isSaved ? EsokoColors.amber : Colors.white,
+      color: isSaved ? EsoqoColors.amber : Colors.white,
       tooltip: isSaved ? 'Remove from Your spots' : 'Save to Your spots',
     );
   }
@@ -400,7 +400,7 @@ class _UsualProductCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return EsokoCard(
+    return EsoqoCard(
       onTap: onTap,
       child: Row(
         children: [
@@ -408,25 +408,20 @@ class _UsualProductCard extends StatelessWidget {
             width: 40,
             height: 40,
             decoration: BoxDecoration(
-              color: EsokoColors.greenTint,
-              borderRadius: BorderRadius.circular(EsokoRadius.md),
+              color: EsoqoColors.greenTint,
+              borderRadius: BorderRadius.circular(EsoqoRadius.md),
             ),
             alignment: Alignment.center,
-            child: const Icon(Icons.replay_rounded, color: EsokoColors.green),
+            child: const Icon(Icons.replay_rounded, color: EsoqoColors.green),
           ),
-          const SizedBox(width: EsokoSpacing.s3),
+          const SizedBox(width: EsoqoSpacing.s3),
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  'Your usual',
-                  style: TextStyle(
-                    fontSize: 11.5,
-                    fontWeight: FontWeight.w700,
-                    color: EsokoColors.green,
-                    letterSpacing: 0.3,
-                  ),
+                  'YOUR USUAL',
+                  style: EsoqoTypography.eyebrow(color: EsoqoColors.green),
                 ),
                 Text(
                   usual.name,
@@ -435,8 +430,8 @@ class _UsualProductCard extends StatelessWidget {
               ],
             ),
           ),
-          EsokoAmountText(usual.priceKes, fontSize: 14),
-          const SizedBox(width: EsokoSpacing.s1),
+          EsoqoAmountText(usual.priceKes, fontSize: EsoqoTypeScale.label),
+          const SizedBox(width: EsoqoSpacing.s1),
           const Icon(Icons.chevron_right_rounded),
         ],
       ),
@@ -460,7 +455,7 @@ class _ProductCard extends StatelessWidget {
     return Semantics(
       button: true,
       label: '${product.name}, KES ${product.priceKes}',
-      child: EsokoCard(
+      child: EsoqoCard(
         onTap: onTap,
         padding: EdgeInsets.zero,
         child: Column(
@@ -481,12 +476,12 @@ class _ProductCard extends StatelessWidget {
                     ),
                   ),
                   if (product.isService)
-                    // Deliberately not EsokoStatusPill — this overlays a
+                    // Deliberately not EsoqoStatusPill — this overlays a
                     // photo/gradient thumb, so it needs a guaranteed-opaque
                     // background for contrast, not a tinted-alpha pill.
                     Positioned(
-                      top: EsokoSpacing.s2,
-                      left: EsokoSpacing.s2,
+                      top: EsoqoSpacing.s2,
+                      left: EsoqoSpacing.s2,
                       child: Container(
                         padding: const EdgeInsets.symmetric(
                           horizontal: 8,
@@ -494,19 +489,16 @@ class _ProductCard extends StatelessWidget {
                         ),
                         decoration: BoxDecoration(
                           color: Colors.white.withValues(alpha: 0.92),
-                          borderRadius: BorderRadius.circular(EsokoRadius.pill),
+                          borderRadius: BorderRadius.circular(EsoqoRadius.pill),
                         ),
                         // Explicit dark colour, not the ambient default
                         // — that default flips to near-white in dark
                         // mode, which would sit on this *always-white*
                         // pill (see the comment above) as white-on-white.
-                        child: const Text(
+                        child: Text(
                           'SERVICE',
-                          style: TextStyle(
-                            fontSize: 9,
-                            fontWeight: FontWeight.w800,
-                            letterSpacing: 0.4,
-                            color: EsokoColors.navy,
+                          style: EsoqoTypography.eyebrow(
+                            color: EsoqoColors.navy,
                           ),
                         ),
                       ),
@@ -515,7 +507,7 @@ class _ProductCard extends StatelessWidget {
               ),
             ),
             Padding(
-              padding: const EdgeInsets.all(EsokoSpacing.s3),
+              padding: const EdgeInsets.all(EsoqoSpacing.s3),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
@@ -532,7 +524,7 @@ class _ProductCard extends StatelessWidget {
                       if (onQuickAdd != null)
                         InkWell(
                           onTap: onQuickAdd,
-                          borderRadius: BorderRadius.circular(EsokoRadius.pill),
+                          borderRadius: BorderRadius.circular(EsoqoRadius.pill),
                           child: Container(
                             width: 22,
                             height: 22,
@@ -550,15 +542,15 @@ class _ProductCard extends StatelessWidget {
                         ),
                     ],
                   ),
-                  const SizedBox(height: EsokoSpacing.s1),
-                  EsokoAmountText(product.priceKes, fontSize: 14),
+                  const SizedBox(height: EsoqoSpacing.s1),
+                  EsoqoAmountText(product.priceKes, fontSize: EsoqoTypeScale.label),
                   if (!product.isService && product.stockQty != null)
                     Padding(
                       padding: const EdgeInsets.only(top: 2),
                       child: Text(
                         '${product.stockQty} in stock',
                         style: TextStyle(
-                          fontSize: 11,
+                          fontSize: EsoqoTypeScale.micro,
                           color: Theme.of(context).textTheme.bodySmall?.color,
                         ),
                       ),

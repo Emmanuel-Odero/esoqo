@@ -7,7 +7,7 @@ import '../../core/auth/auth_state.dart';
 import '../../core/auth/org_context_state.dart';
 import '../../core/auth/scan_access.dart';
 import '../../core/money/money.dart';
-import '../../core/theme/esoko_tokens.dart';
+import '../../core/theme/esoqo_tokens.dart';
 import '../../core/widgets/widgets.dart';
 import '../bills/bill_models.dart';
 import '../bills/bills_list_screen.dart';
@@ -23,7 +23,7 @@ import '../tickets/listing_list_screen.dart';
 /// The one place for the services — Shopping, Tickets, Transport,
 /// Chama, Bills and Parcels all live here instead of competing for
 /// bottom-nav slots. Each tile pushes its existing list screen inside
-/// an [EsokoServiceScaffold] so the destination keeps a proper title
+/// an [EsoqoServiceScaffold] so the destination keeps a proper title
 /// and back button, with the service icon hero-flying from the tile
 /// into the app bar.
 class HomeHubScreen extends ConsumerWidget {
@@ -92,7 +92,7 @@ class HomeHubScreen extends ConsumerWidget {
   /// (crew > runs-a-company > group member > plain subject default).
   /// A live, OTP-activated org-staff context (see core/auth/
   /// org_context_state.dart and docs/proposals/
-  /// esoko-unified-crew-identity.md) is folded into the same "crew" tier
+  /// esoqo-unified-crew-identity.md) is folded into the same "crew" tier
   /// at the call site — someone switched on for a shift is exactly as
   /// time-pressured as an AGENT crew session, regardless of which
   /// mechanism granted it.
@@ -169,7 +169,7 @@ class HomeHubScreen extends ConsumerWidget {
   /// chip.
   static String? _leadDetail(ActiveRole role, Money codFloat) {
     return switch (role.role) {
-      EsokoRole.courier => codFloat.isPositive
+      EsoqoRole.courier => codFloat.isPositive
           ? '${role.heldParcels} in hand · KES ${codFloat.format()} to hand in'
           : '${role.heldParcels} in hand',
       _ => null,
@@ -178,28 +178,28 @@ class HomeHubScreen extends ConsumerWidget {
 
   /// The one action this role most likely opened the app for.
   static String _leadPrimaryLabel(ActiveRole role) => switch (role.role) {
-        EsokoRole.personal => 'Scan anything',
-        EsokoRole.courier => 'Your parcels',
-        EsokoRole.crew => 'Verify a fare',
-        EsokoRole.scanner => 'Scan a ticket',
-        EsokoRole.manager => 'Today’s takings',
+        EsoqoRole.personal => 'Scan anything',
+        EsoqoRole.courier => 'Your parcels',
+        EsoqoRole.crew => 'Verify a fare',
+        EsoqoRole.scanner => 'Scan a ticket',
+        EsoqoRole.manager => 'Today’s takings',
       };
 
   static void _onLeadPrimary(BuildContext context, ActiveRole role) {
     switch (role.role) {
-      case EsokoRole.personal:
-      case EsokoRole.scanner:
-      case EsokoRole.crew:
+      case EsoqoRole.personal:
+      case EsoqoRole.scanner:
+      case EsoqoRole.crew:
         // All three land on the scanner: it is the dispatcher that
         // already routes a bus QR, a ticket, a shelf tag or a receipt to
         // the right screen (see UniversalScanScreen), so the role only
         // needs to change the words, not the destination.
         showScanSheet(context);
-      case EsokoRole.courier:
+      case EsoqoRole.courier:
         Navigator.of(context).push(
           MaterialPageRoute(builder: (_) => const ParcelsHubScreen()),
         );
-      case EsokoRole.manager:
+      case EsoqoRole.manager:
         Navigator.of(context).push(
           MaterialPageRoute(builder: (_) => const TransportScreen()),
         );
@@ -267,23 +267,23 @@ class HomeHubScreen extends ConsumerWidget {
       // FAB's overhang plus the same s6 breathing room every other
       // edge gets.
       padding: const EdgeInsets.fromLTRB(
-        EsokoSpacing.s6,
-        EsokoSpacing.s4,
-        EsokoSpacing.s6,
-        EsokoSpacing.s9 + EsokoSpacing.s6,
+        EsoqoSpacing.s6,
+        EsoqoSpacing.s4,
+        EsoqoSpacing.s6,
+        EsoqoSpacing.s9 + EsoqoSpacing.s6,
       ),
       children: [
         // One card that changes with who you are, instead of the same
         // greeting plus the same scan prompt for everybody.
-        EsokoRoleLead(
+        EsoqoRoleLead(
           role: role,
           displayName: name ?? 'Welcome back',
-          esokoId: profile?.esokoId,
+          esoqoId: profile?.esoqoId,
           detail: _leadDetail(role, codFloat),
           primaryLabel: _leadPrimaryLabel(role),
           onPrimary: () => _onLeadPrimary(context, role),
-          secondaryLabel: role.role == EsokoRole.courier ? 'Scan' : null,
-          onSecondary: role.role == EsokoRole.courier
+          secondaryLabel: role.role == EsoqoRole.courier ? 'Scan' : null,
+          onSecondary: role.role == EsoqoRole.courier
               ? () => showScanSheet(context)
               : null,
         ),
@@ -294,18 +294,18 @@ class HomeHubScreen extends ConsumerWidget {
         // all when there's nothing pressing, rather than an empty
         // "Nothing to do" card that everyone learns to scroll past.
         if (attention.isNotEmpty) ...[
-          const SizedBox(height: EsokoSpacing.s5),
-          const EsokoSubHeader('Needs you today'),
-          const SizedBox(height: EsokoSpacing.s3),
+          const SizedBox(height: EsoqoSpacing.s5),
+          const EsoqoSubHeader('Needs you today'),
+          const SizedBox(height: EsoqoSpacing.s3),
           for (var i = 0; i < attention.length; i++) ...[
-            EsokoStagger(index: i, child: attention[i]),
-            const SizedBox(height: EsokoSpacing.s3),
+            EsoqoStagger(index: i, child: attention[i]),
+            const SizedBox(height: EsoqoSpacing.s3),
           ],
         ],
 
-        const SizedBox(height: EsokoSpacing.s4),
-        const EsokoSubHeader('Services'),
-        const SizedBox(height: EsokoSpacing.s3),
+        const SizedBox(height: EsoqoSpacing.s4),
+        const EsoqoSubHeader('Services'),
+        const SizedBox(height: EsoqoSpacing.s3),
         GridView(
           shrinkWrap: true,
           physics: const NeverScrollableScrollPhysics(),
@@ -320,19 +320,19 @@ class HomeHubScreen extends ConsumerWidget {
           // ellipsises rather than bursting this budget.
           gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
             crossAxisCount: 4,
-            mainAxisSpacing: EsokoSpacing.s3,
-            crossAxisSpacing: EsokoSpacing.s3,
+            mainAxisSpacing: EsoqoSpacing.s3,
+            crossAxisSpacing: EsoqoSpacing.s3,
             mainAxisExtent: 96,
           ),
           children: [
             for (var i = 0; i < order.length; i++)
               if (_services[order[i]] case final service?)
-                EsokoStagger(
+                EsoqoStagger(
                   index: i,
-                  child: EsokoServiceTile(
+                  child: EsoqoServiceTile(
                     label: service.title,
                     icon: service.icon,
-                    heroTag: 'esoko-service-${service.title}',
+                    heroTag: 'esoqo-service-${service.title}',
                     // Parcels is the one tile with live state worth
                     // seeing before the tap: a courier mid-round wants
                     // the custody count, and the grid has no subtitle
@@ -342,10 +342,10 @@ class HomeHubScreen extends ConsumerWidget {
                         : null,
                     onTap: () => Navigator.of(context).push(
                       MaterialPageRoute(
-                        builder: (_) => EsokoServiceScaffold(
+                        builder: (_) => EsoqoServiceScaffold(
                           title: service.appBar,
                           icon: service.icon,
-                          heroTag: 'esoko-service-${service.title}',
+                          heroTag: 'esoqo-service-${service.title}',
                           child: service.screen,
                         ),
                       ),
@@ -377,15 +377,15 @@ class HomeHubScreen extends ConsumerWidget {
       ..sort((a, b) => a.daysUntilDue.compareTo(b.daysUntilDue));
     for (final b in due) {
       out.add(
-        EsokoAttentionCard(
+        EsoqoAttentionCard(
           when: b.overdue
               ? '${-b.daysUntilDue} ${-b.daysUntilDue == 1 ? 'day' : 'days'} overdue'
               : b.daysUntilDue == 0
                   ? 'Due today'
                   : 'Due in ${b.daysUntilDue} ${b.daysUntilDue == 1 ? 'day' : 'days'}',
           title: b.label,
-          detail: b.amountKes == null ? null : 'KES ${b.amountKes}',
-          accent: b.overdue ? EsokoColors.red : EsokoColors.amber,
+          amountKes: b.amountKes,
+          accent: b.overdue ? EsoqoColors.red : EsoqoColors.amber,
           progress: b.isFunding ? b.fundingProgress : null,
           onTap: () => _openService(ref, 'Bills'),
         ),
@@ -395,11 +395,11 @@ class HomeHubScreen extends ConsumerWidget {
     final sent = ref.watch(myParcelsProvider).valueOrNull ?? const <ParcelRow>[];
     for (final p in sent.where((p) => _inFlight.contains(p.status))) {
       out.add(
-        EsokoAttentionCard(
+        EsoqoAttentionCard(
           when: parcelStatusLabel(p.status),
           title: p.code,
           detail: '${p.originLabel} → ${p.destinationLabel}',
-          accent: EsokoColors.green,
+          accent: EsoqoColors.green,
           onTap: () => _openService(ref, 'Parcels'),
         ),
       );
@@ -409,7 +409,7 @@ class HomeHubScreen extends ConsumerWidget {
   }
 
   /// Pushes a service by its key in [_services] — the same
-  /// [EsokoServiceScaffold] wrap a grid tap does, so an attention card
+  /// [EsoqoServiceScaffold] wrap a grid tap does, so an attention card
   /// and its tile land in the identical place.
   static void _openService(WidgetRef ref, String key) {
     final service = _services[key];
@@ -417,10 +417,10 @@ class HomeHubScreen extends ConsumerWidget {
     final context = ref.context;
     Navigator.of(context).push(
       MaterialPageRoute(
-        builder: (_) => EsokoServiceScaffold(
+        builder: (_) => EsoqoServiceScaffold(
           title: service.appBar,
           icon: service.icon,
-          heroTag: 'esoko-service-${service.title}',
+          heroTag: 'esoqo-service-${service.title}',
           child: service.screen,
         ),
       ),

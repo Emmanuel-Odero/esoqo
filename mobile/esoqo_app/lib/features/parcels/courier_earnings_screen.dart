@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import '../../core/theme/esoko_tokens.dart';
+import '../../core/theme/esoqo_tokens.dart';
 import '../../core/widgets/widgets.dart';
 import 'parcel_models.dart';
 import 'parcels_repository.dart';
@@ -29,11 +29,11 @@ class CourierEarningsScreen extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final view = ref.watch(courierEarningsProvider);
     return Scaffold(
-      appBar: const EsokoAppBar(title: 'Your earnings'),
+      appBar: const EsoqoAppBar(title: 'Your earnings'),
       body: SafeArea(
         child: RefreshIndicator(
           onRefresh: () async => ref.invalidate(courierEarningsProvider),
-          child: EsokoAsyncView(
+          child: EsoqoAsyncView(
             value: view,
             isEmpty: (v) => v.earnings.deliveredTotal == 0,
             emptyMessage: "You haven't earned on a delivery yet.\n"
@@ -61,23 +61,23 @@ class _Body extends StatelessWidget {
       child: ConstrainedBox(
         constraints: const BoxConstraints(maxWidth: 480),
         child: ListView(
-          padding: const EdgeInsets.all(EsokoSpacing.s5),
+          padding: const EdgeInsets.all(EsoqoSpacing.s5),
           children: [
             // The headline is what's owed, not what's been earned all
             // time: a courier opens this to find out what is coming to
             // them, and burying that under a lifetime total would be
             // answering a question nobody asked.
-            EsokoCard(
+            EsoqoCard(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text('Waiting to be paid', style: small),
-                  const SizedBox(height: EsokoSpacing.s1),
+                  const SizedBox(height: EsoqoSpacing.s1),
                   Text(
                     'KES ${e.unpaidKes.format()}',
-                    style: EsokoTypography.mono(
-                      fontSize: 30,
-                      fontWeight: FontWeight.w800,
+                    style: EsoqoTypography.mono(
+                      fontSize: EsoqoTypeScale.hero,
+                      fontWeight: FontWeight.w700,
                     ),
                   ),
                   Text(
@@ -88,20 +88,20 @@ class _Body extends StatelessWidget {
                 ],
               ),
             ),
-            const SizedBox(height: EsokoSpacing.s3),
+            const SizedBox(height: EsoqoSpacing.s3),
 
             Row(
               children: [
                 Expanded(
-                  child: EsokoCard(
+                  child: EsoqoCard(
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         Text('Today', style: small),
                         Text(
                           'KES ${e.earnedTodayKes.format()}',
-                          style: EsokoTypography.mono(
-                            fontSize: 18,
+                          style: EsoqoTypography.mono(
+                            fontSize: EsoqoTypeScale.cardTitle,
                             fontWeight: FontWeight.w700,
                           ),
                         ),
@@ -109,17 +109,17 @@ class _Body extends StatelessWidget {
                     ),
                   ),
                 ),
-                const SizedBox(width: EsokoSpacing.s3),
+                const SizedBox(width: EsoqoSpacing.s3),
                 Expanded(
-                  child: EsokoCard(
+                  child: EsoqoCard(
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         Text('Paid so far', style: small),
                         Text(
                           'KES ${e.paidKes.format()}',
-                          style: EsokoTypography.mono(
-                            fontSize: 18,
+                          style: EsoqoTypography.mono(
+                            fontSize: EsoqoTypeScale.cardTitle,
                             fontWeight: FontWeight.w700,
                           ),
                         ),
@@ -130,21 +130,21 @@ class _Body extends StatelessWidget {
               ],
             ),
 
-            const SizedBox(height: EsokoSpacing.s3),
+            const SizedBox(height: EsoqoSpacing.s3),
             // The rate, in plain language. "Why is this 300?" is the
             // first question anybody asks about their own pay, and a
             // screen that can't answer it invites a phone call.
-            EsokoInlineNotice(
-              color: EsokoColors.navy,
-              icon: EsokoIconName.info,
+            EsoqoInlineNotice(
+              color: EsoqoColors.navy,
+              icon: EsoqoIconName.info,
               message: view.tariff.describe,
             ),
 
-            const SizedBox(height: EsokoSpacing.s5),
-            EsokoSubHeader('Your deliveries'),
-            const SizedBox(height: EsokoSpacing.s2),
+            const SizedBox(height: EsoqoSpacing.s5),
+            EsoqoSubHeader('Your deliveries'),
+            const SizedBox(height: EsoqoSpacing.s2),
             for (final d in view.deliveries)
-              EsokoListTile(
+              EsoqoListTile(
                 title: '${d.code} · KES ${d.earnedKes.format()}',
                 subtitle: '${d.destinationLabel} · ${parcelHumanTime(d.deliveredAt)}',
                 icon: d.paid

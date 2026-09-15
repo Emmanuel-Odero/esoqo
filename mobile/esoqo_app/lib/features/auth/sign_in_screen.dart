@@ -4,7 +4,7 @@ import 'package:go_router/go_router.dart';
 
 import '../../core/api/api_exception.dart';
 import '../../core/auth/auth_controller.dart';
-import '../../core/theme/esoko_tokens.dart';
+import '../../core/theme/esoqo_tokens.dart';
 import '../../core/widgets/widgets.dart';
 
 /// Phone-or-email + PIN — the returning-user path, mirroring
@@ -53,37 +53,37 @@ class _SignInScreenState extends ConsumerState<SignInScreen> {
 
   @override
   Widget build(BuildContext context) {
-    return EsokoAuthScaffold(
+    return EsoqoAuthScaffold(
       title: 'Sign in',
-      subtitle: 'Your Esoko record, groups, shopping and tickets in one place.',
+      subtitle: 'Your Esoqo record, groups, shopping and tickets in one place.',
       children: [
-        EsokoField.identifier(controller: _identifierController),
-        const SizedBox(height: EsokoSpacing.s4),
-        EsokoField.pin(
+        EsoqoField.identifier(controller: _identifierController),
+        const SizedBox(height: EsoqoSpacing.s4),
+        EsoqoField.pin(
           controller: _pinController,
           autofill: PinAutofill.signIn,
           onSubmitted: (_) => _submit(),
         ),
-        if (_error != null) EsokoFormError(message: _error!),
-        const SizedBox(height: EsokoSpacing.s4),
-        EsokoButton.primary(
+        if (_error != null) EsoqoFormError(message: _error!),
+        const SizedBox(height: EsoqoSpacing.s4),
+        EsoqoButton.primary(
           expand: false,
           label: 'Sign in',
           loading: _loading,
           onPressed: _submit,
         ),
-        const SizedBox(height: EsokoSpacing.s3),
-        EsokoButton.tertiary(
+        const SizedBox(height: EsoqoSpacing.s3),
+        EsoqoButton.tertiary(
           label: 'Forgot your PIN?',
           onPressed: () => context.push('/forgot-pin'),
         ),
-        EsokoButton.tertiary(
+        EsoqoButton.tertiary(
           label: 'Sign in with a code instead',
           onPressed: () => context.push('/sign-in/otp'),
         ),
         // No pre-login "sign in as crew" path any more — every crew
-        // member has their own Esoko account (docs/proposals/
-        // esoko-unified-crew-identity.md); duty for an organisation is
+        // member has their own Esoqo account (docs/proposals/
+        // esoqo-unified-crew-identity.md); duty for an organisation is
         // switched on from inside the app, via Profile > Acting as,
         // after signing in as yourself. See core/auth/org_context_state.dart.
       ],

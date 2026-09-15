@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 
-import '../theme/esoko_tokens.dart';
+import '../theme/esoqo_tokens.dart';
 
 /// A shimmering placeholder bar — the Flutter port of web's
 /// `.skel`/`.skel-card` (tokens.css `--line` fill + the same diagonal
@@ -10,12 +10,12 @@ import '../theme/esoko_tokens.dart';
 ///
 /// Respects `MediaQuery.disableAnimations` (reduced motion) by showing a
 /// static bar with no sweep.
-class EsokoSkeleton extends StatefulWidget {
-  const EsokoSkeleton({
+class EsoqoSkeleton extends StatefulWidget {
+  const EsoqoSkeleton({
     super.key,
     this.width,
     this.height = 14,
-    this.radius = EsokoRadius.xs,
+    this.radius = EsoqoRadius.xs,
     this.brightness,
   });
 
@@ -25,14 +25,14 @@ class EsokoSkeleton extends StatefulWidget {
   final Brightness? brightness;
 
   @override
-  State<EsokoSkeleton> createState() => _EsokoSkeletonState();
+  State<EsoqoSkeleton> createState() => _EsoqoSkeletonState();
 }
 
-class _EsokoSkeletonState extends State<EsokoSkeleton>
+class _EsoqoSkeletonState extends State<EsoqoSkeleton>
     with SingleTickerProviderStateMixin {
   late final AnimationController _controller = AnimationController(
     vsync: this,
-    duration: EsokoMotion.shimmer,
+    duration: EsoqoMotion.shimmer,
   )..repeat();
 
   @override
@@ -44,9 +44,9 @@ class _EsokoSkeletonState extends State<EsokoSkeleton>
   @override
   Widget build(BuildContext context) {
     final isDark = (widget.brightness ?? Theme.of(context).brightness) == Brightness.dark;
-    final base = isDark ? EsokoColors.darkSurface2 : EsokoColors.line;
+    final base = isDark ? EsoqoColors.darkSurface2 : EsoqoColors.line;
     final highlight = isDark
-        ? EsokoColors.navy3.withValues(alpha: 0.5)
+        ? EsoqoColors.navy3.withValues(alpha: 0.5)
         : Colors.white.withValues(alpha: 0.7);
     final reduced = MediaQuery.disableAnimationsOf(context);
 
@@ -86,11 +86,11 @@ class _EsokoSkeletonState extends State<EsokoSkeleton>
   }
 }
 
-/// A skeleton shaped like one EsokoCard — web's `.skel-card`: a title
+/// A skeleton shaped like one EsoqoCard — web's `.skel-card`: a title
 /// bar plus a few full/part-width lines, so a list or detail screen's
 /// "loading card" mirrors its final shape.
-class EsokoSkeletonCard extends StatelessWidget {
-  const EsokoSkeletonCard({super.key, this.lines = 3, this.leading = true});
+class EsoqoSkeletonCard extends StatelessWidget {
+  const EsoqoSkeletonCard({super.key, this.lines = 3, this.leading = true});
 
   final int lines;
   final bool leading;
@@ -98,11 +98,11 @@ class EsokoSkeletonCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
-      padding: const EdgeInsets.all(EsokoSpacing.s4),
+      padding: const EdgeInsets.all(EsoqoSpacing.s4),
       decoration: BoxDecoration(
         color: Theme.of(context).cardTheme.color,
-        borderRadius: BorderRadius.circular(EsokoRadius.lg),
-        border: Border.all(color: EsokoColors.line),
+        borderRadius: BorderRadius.circular(EsoqoRadius.lg),
+        border: Border.all(color: EsoqoColors.line),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -110,17 +110,17 @@ class EsokoSkeletonCard extends StatelessWidget {
           Row(
             children: [
               if (leading) ...[
-                const EsokoSkeleton(width: 44, height: 44, radius: EsokoRadius.md),
-                const SizedBox(width: EsokoSpacing.s3),
+                const EsoqoSkeleton(width: 44, height: 44, radius: EsoqoRadius.md),
+                const SizedBox(width: EsoqoSpacing.s3),
               ],
-              Expanded(child: EsokoSkeleton(width: 220, height: 16)),
+              Expanded(child: EsoqoSkeleton(width: 220, height: 16)),
             ],
           ),
-          const SizedBox(height: EsokoSpacing.s3),
+          const SizedBox(height: EsoqoSpacing.s3),
           for (var i = 0; i < lines; i++)
             Padding(
-              padding: const EdgeInsets.only(top: EsokoSpacing.s2),
-              child: EsokoSkeleton(width: i == lines - 1 ? 140 : double.infinity, height: 12),
+              padding: const EdgeInsets.only(top: EsoqoSpacing.s2),
+              child: EsoqoSkeleton(width: i == lines - 1 ? 140 : double.infinity, height: 12),
             ),
         ],
       ),
@@ -128,16 +128,16 @@ class EsokoSkeletonCard extends StatelessWidget {
   }
 }
 
-/// A convenience list of [EsokoSkeletonCard]s for list-screen first-load.
-class EsokoSkeletonList extends StatelessWidget {
-  const EsokoSkeletonList({super.key, this.count = 4});
+/// A convenience list of [EsoqoSkeletonCard]s for list-screen first-load.
+class EsoqoSkeletonList extends StatelessWidget {
+  const EsoqoSkeletonList({super.key, this.count = 4});
 
   final int count;
 
   @override
   Widget build(BuildContext context) {
     return ListView.separated(
-      padding: const EdgeInsets.all(EsokoSpacing.s6),
+      padding: const EdgeInsets.all(EsoqoSpacing.s6),
       physics: const NeverScrollableScrollPhysics(),
       // Sizes to its own content. Without this the ListView tries to
       // expand to fill, and in any unbounded parent — a Column, a
@@ -149,8 +149,8 @@ class EsokoSkeletonList extends StatelessWidget {
       // SCREEN_CONVENTIONS.md Rule 4 for the same failure mode).
       shrinkWrap: true,
       itemCount: count,
-      separatorBuilder: (_, _) => const SizedBox(height: EsokoSpacing.s3),
-      itemBuilder: (_, _) => const EsokoSkeletonCard(),
+      separatorBuilder: (_, _) => const SizedBox(height: EsoqoSpacing.s3),
+      itemBuilder: (_, _) => const EsoqoSkeletonCard(),
     );
   }
 }

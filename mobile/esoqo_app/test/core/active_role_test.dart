@@ -4,12 +4,12 @@
 // otherwise live only in the order of a few if-statements.
 import 'package:flutter_test/flutter_test.dart';
 
-import 'package:esoko_app/core/auth/active_role.dart';
-import 'package:esoko_app/core/auth/auth_state.dart';
-import 'package:esoko_app/core/auth/org_context_state.dart';
+import 'package:esoqo_app/core/auth/active_role.dart';
+import 'package:esoqo_app/core/auth/auth_state.dart';
+import 'package:esoqo_app/core/auth/org_context_state.dart';
 
 AuthState _signedIn({List<String> capabilities = const []}) => AuthSignedIn(
-      EsokoProfile(
+      EsoqoProfile(
         partyId: 'p1',
         officialName: 'Wanjiku',
         capabilities: capabilities,
@@ -28,7 +28,7 @@ void main() {
         auth: _signedIn(),
         orgContext: const OrgContextState(),
       );
-      expect(r.role, EsokoRole.personal);
+      expect(r.role, EsoqoRole.personal);
       expect(r.isPersonal, isTrue);
       expect(r.isInstitutional, isFalse);
       expect(r.orgName, isNull);
@@ -39,7 +39,7 @@ void main() {
         auth: const AuthSignedOut(),
         orgContext: const OrgContextState(),
       );
-      expect(r.role, EsokoRole.personal);
+      expect(r.role, EsoqoRole.personal);
     });
   });
 
@@ -49,7 +49,7 @@ void main() {
         auth: _signedIn(),
         orgContext: _duty('CREW'),
       );
-      expect(r.role, EsokoRole.crew);
+      expect(r.role, EsoqoRole.crew);
       expect(r.orgName, 'Super Metro');
       expect(r.title, 'Super Metro');
       expect(r.isInstitutional, isTrue);
@@ -58,7 +58,7 @@ void main() {
     test('SCANNER', () {
       expect(
         resolveActiveRole(auth: _signedIn(), orgContext: _duty('SCANNER')).role,
-        EsokoRole.scanner,
+        EsoqoRole.scanner,
       );
     });
 
@@ -66,7 +66,7 @@ void main() {
       for (final grant in ['MANAGER', 'ADMIN']) {
         expect(
           resolveActiveRole(auth: _signedIn(), orgContext: _duty(grant)).role,
-          EsokoRole.manager,
+          EsoqoRole.manager,
           reason: '$grant should land on the company surface',
         );
       }
@@ -92,7 +92,7 @@ void main() {
         auth: _signedIn(capabilities: ['fare.verify']),
         orgContext: const OrgContextState(),
       );
-      expect(r.role, EsokoRole.crew);
+      expect(r.role, EsoqoRole.crew);
     });
 
     // scan_access.dart's rule: owner-scoped grants are not crew. Every
@@ -103,7 +103,7 @@ void main() {
         auth: _signedIn(capabilities: ['fare.read:own', 'fleet.write:own']),
         orgContext: const OrgContextState(),
       );
-      expect(r.role, EsokoRole.personal);
+      expect(r.role, EsoqoRole.personal);
     });
   });
 
@@ -114,7 +114,7 @@ void main() {
         orgContext: _duty('MANAGER'),
         heldParcels: 3,
       );
-      expect(r.role, EsokoRole.courier);
+      expect(r.role, EsoqoRole.courier);
       expect(r.heldParcels, 3);
       // The org is still named — the person has not stopped being a
       // manager, the app has just decided what to lead with.
@@ -128,7 +128,7 @@ void main() {
           orgContext: _duty('CREW'),
           heldParcels: 1,
         ).role,
-        EsokoRole.courier,
+        EsoqoRole.courier,
       );
     });
 
@@ -139,7 +139,7 @@ void main() {
           orgContext: const OrgContextState(),
           heldParcels: 0,
         ).role,
-        EsokoRole.personal,
+        EsoqoRole.personal,
       );
     });
   });
@@ -190,7 +190,7 @@ void main() {
         auth: _signedIn(capabilities: ['fare.verify']),
         orgContext: const OrgContextState(),
       );
-      expect(r.role, EsokoRole.crew);
+      expect(r.role, EsoqoRole.crew);
       expect(r.orgName, isNull);
       expect(r.title, 'On duty');
     });

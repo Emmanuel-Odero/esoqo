@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/api/api_exception.dart';
-import '../../core/theme/esoko_tokens.dart';
+import '../../core/theme/esoqo_tokens.dart';
 import '../../core/widgets/widgets.dart';
 import 'group_models.dart';
 import 'groups_repository.dart';
@@ -42,7 +42,7 @@ class _WithdrawalDetailScreenState
       _signing = true;
       _error = null;
     });
-    EsokoHaptics.tap();
+    EsoqoHaptics.tap();
     try {
       await ref
           .read(groupsRepositoryProvider)
@@ -63,22 +63,22 @@ class _WithdrawalDetailScreenState
   Widget build(BuildContext context) {
     final withdrawal = ref.watch(withdrawalDetailProvider(widget.withdrawalId));
     return Scaffold(
-      appBar: const EsokoAppBar(title: 'Withdrawal'),
-      body: EsokoAsyncView(
+      appBar: const EsoqoAppBar(title: 'Withdrawal'),
+      body: EsoqoAsyncView(
         value: withdrawal,
         onRetry: () =>
             ref.invalidate(withdrawalDetailProvider(widget.withdrawalId)),
         data: (context, w) {
           final scheme = Theme.of(context).colorScheme;
-          // Theme-derived, not a fixed EsokoColors.text2 — this screen's
+          // Theme-derived, not a fixed EsoqoColors.text2 — this screen's
           // body sits directly on the scaffold background, which is
-          // EsokoColors.paper in light mode and darkSurface in dark; a
+          // EsoqoColors.paper in light mode and darkSurface in dark; a
           // hardcoded light-tuned grey loses contrast on the latter.
           final muted = Theme.of(context).textTheme.bodySmall?.color;
           final (statusColor, statusIcon) = switch (w.status) {
-            'EXECUTED' => (scheme.primary, EsokoIconName.checkCircle),
-            'REJECTED' || 'EXPIRED' => (scheme.error, EsokoIconName.ban),
-            _ => (EsokoColors.amber, EsokoIconName.clock),
+            'EXECUTED' => (scheme.primary, EsoqoIconName.checkCircle),
+            'REJECTED' || 'EXPIRED' => (scheme.error, EsoqoIconName.ban),
+            _ => (EsoqoColors.amber, EsoqoIconName.clock),
           };
           final quorumDone = w.requiredSigners == 0
               ? 1.0
@@ -87,33 +87,33 @@ class _WithdrawalDetailScreenState
             child: ConstrainedBox(
               constraints: const BoxConstraints(maxWidth: 840),
               child: ListView(
-                padding: const EdgeInsets.all(EsokoSpacing.s5),
+                padding: const EdgeInsets.all(EsoqoSpacing.s5),
                 children: [
-                  EsokoAmountHeader(
+                  EsoqoAmountHeader(
                     label: 'Withdrawal',
                     amountKes: w.amountKes,
                     detail: '${w.purpose}\nto ${w.payeeName}',
-                    trailing: EsokoStatusPill(
+                    trailing: EsoqoStatusPill(
                       label: w.status,
                       color: statusColor,
-                      esokoIcon: statusIcon,
+                      esoqoIcon: statusIcon,
                     ),
                   ),
-                  const SizedBox(height: EsokoSpacing.s5),
+                  const SizedBox(height: EsoqoSpacing.s5),
                   if (w.status == 'PENDING_SIGNATURES') ...[
                     Row(
                       children: [
-                        EsokoIcon(EsokoIconName.clock, size: 16, color: muted),
+                        EsoqoIcon(EsoqoIconName.clock, size: 16, color: muted),
                         const SizedBox(width: 6),
                         Expanded(
                           child: Text(
                             'Can execute from ${_formatDate(w.standbyOpensAt)}, once ${w.requiredSigners} signer${w.requiredSigners == 1 ? '' : 's'} approve.',
-                            style: TextStyle(color: muted, fontSize: 12),
+                            style: Theme.of(context).textTheme.bodySmall,
                           ),
                         ),
                       ],
                     ),
-                    const SizedBox(height: EsokoSpacing.s4),
+                    const SizedBox(height: EsoqoSpacing.s4),
                   ],
                   Row(
                     children: [
@@ -123,42 +123,42 @@ class _WithdrawalDetailScreenState
                       ),
                     ],
                   ),
-                  const SizedBox(height: EsokoSpacing.s2),
+                  const SizedBox(height: EsoqoSpacing.s2),
                   ClipRRect(
-                    borderRadius: BorderRadius.circular(EsokoRadius.pill),
+                    borderRadius: BorderRadius.circular(EsoqoRadius.pill),
                     child: LinearProgressIndicator(
                       value: quorumDone,
                       minHeight: 6,
-                      backgroundColor: EsokoColors.line,
+                      backgroundColor: EsoqoColors.line,
                       valueColor: AlwaysStoppedAnimation(statusColor),
                     ),
                   ),
-                  const SizedBox(height: EsokoSpacing.s4),
+                  const SizedBox(height: EsoqoSpacing.s4),
                   for (var i = 0; i < w.signatures.length; i++)
-                    EsokoStagger(
+                    EsoqoStagger(
                       index: i,
                       child: _SignatureTile(signature: w.signatures[i]),
                     ),
-                  if (_error != null) EsokoFormError(message: _error!),
+                  if (_error != null) EsoqoFormError(message: _error!),
                   if (w.canSign) ...[
-                    const SizedBox(height: EsokoSpacing.s5),
+                    const SizedBox(height: EsoqoSpacing.s5),
                     Row(
                       children: [
                         Expanded(
                           // Gated by the PIN prompt _sign() opens, so the
                           // button must not ask a second time.
-                          child: EsokoButton.destructiveGated(
+                          child: EsoqoButton.destructiveGated(
                             label: 'Reject',
                             loading: _signing,
                             onPressed: () => _sign('REJECT'),
                           ),
                         ),
-                        const SizedBox(width: EsokoSpacing.s3),
+                        const SizedBox(width: EsoqoSpacing.s3),
                         Expanded(
                           // Institutional, not primary: signing this is
                           // an act of the group, not of you — the
-                          // example EsokoButtonRole itself cites.
-                          child: EsokoButton.institutional(
+                          // example EsoqoButtonRole itself cites.
+                          child: EsoqoButton.institutional(
                             label: 'Approve',
                             loading: _signing,
                             onPressed: () => _sign('APPROVE'),
@@ -189,8 +189,8 @@ class _SignatureTile extends StatelessWidget {
     final scheme = Theme.of(context).colorScheme;
     final approved = signature.decision == 'APPROVE';
     return Padding(
-      padding: const EdgeInsets.only(bottom: EsokoSpacing.s2),
-      child: EsokoListTile(
+      padding: const EdgeInsets.only(bottom: EsoqoSpacing.s2),
+      child: EsoqoListTile(
         title: signature.signerName,
         subtitle:
             signature.decision +

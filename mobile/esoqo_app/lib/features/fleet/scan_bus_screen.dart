@@ -3,12 +3,12 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:mobile_scanner/mobile_scanner.dart';
 
 import '../../core/api/api_exception.dart';
-import '../../core/theme/esoko_tokens.dart';
+import '../../core/theme/esoqo_tokens.dart';
 import '../../core/widgets/widgets.dart';
 import 'fare_pay_screen.dart';
 import 'fleet_repository.dart';
 
-/// Scan a bus boarding QR (esoko://t?...) or type BUS-XXXXXX.
+/// Scan a bus boarding QR (esoqo://t?...) or type BUS-XXXXXX.
 /// Thin UI: resolves via GET /v1/trips/resolve, then pushes FarePayScreen.
 class ScanBusScreen extends ConsumerStatefulWidget {
   const ScanBusScreen({super.key});
@@ -56,7 +56,7 @@ class _ScanBusScreenState extends ConsumerState<ScanBusScreen> {
     } on ApiException catch (e) {
       setState(() => _error = e.message);
     } catch (_) {
-      setState(() => _error = 'Could not reach Esoko. Check your connection.');
+      setState(() => _error = 'Could not reach Esoqo. Check your connection.');
     } finally {
       if (mounted) setState(() => _busy = false);
     }
@@ -65,19 +65,19 @@ class _ScanBusScreenState extends ConsumerState<ScanBusScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: const EsokoAppBar(title: 'Scan bus QR'),
+      appBar: const EsoqoAppBar(title: 'Scan bus QR'),
       body: SafeArea(
         child: ListView(
-          padding: const EdgeInsets.all(EsokoSpacing.s4),
+          padding: const EdgeInsets.all(EsoqoSpacing.s4),
           children: [
-            const EsokoPageLead(
+            const EsoqoPageLead(
               'Point at the QR inside the matatu, or type the BUS code.',
             ),
-            const SizedBox(height: EsokoSpacing.s4),
+            const SizedBox(height: EsoqoSpacing.s4),
             SizedBox(
               height: 280,
               child: ClipRRect(
-                borderRadius: BorderRadius.circular(EsokoRadius.md),
+                borderRadius: BorderRadius.circular(EsoqoRadius.md),
                 child: MobileScanner(
                   onDetect: (cap) {
                     final v = cap.barcodes.firstOrNull?.rawValue;
@@ -86,17 +86,17 @@ class _ScanBusScreenState extends ConsumerState<ScanBusScreen> {
                 ),
               ),
             ),
-            const SizedBox(height: EsokoSpacing.s4),
-            EsokoField.code(
+            const SizedBox(height: EsoqoSpacing.s4),
+            EsoqoField.code(
               controller: _code,
               label: 'Bus code',
               hint: 'e.g. BUS-4F8K2Q',
               onSubmitted: _resolve,
             ),
-            const SizedBox(height: EsokoSpacing.s3),
+            const SizedBox(height: EsoqoSpacing.s3),
             SizedBox(
-              height: EsokoSpacing.s7,
-              child: EsokoButton.primary(
+              height: EsoqoSpacing.s7,
+              child: EsoqoButton.primary(
                 expand: false,
                 label: 'Find bus',
                 loading: _busy,
@@ -104,8 +104,8 @@ class _ScanBusScreenState extends ConsumerState<ScanBusScreen> {
               ),
             ),
             if (_error != null) ...[
-              const SizedBox(height: EsokoSpacing.s3),
-              EsokoFormError(message: _error!),
+              const SizedBox(height: EsoqoSpacing.s3),
+              EsoqoFormError(message: _error!),
             ],
           ],
         ),

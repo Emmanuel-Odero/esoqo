@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/api/api_exception.dart';
-import '../../core/theme/esoko_tokens.dart';
+import '../../core/theme/esoqo_tokens.dart';
 import '../../core/widgets/widgets.dart';
 import 'add_bill_screen.dart';
 import 'bill_funding_screen.dart';
@@ -26,7 +26,7 @@ class BillsListScreen extends ConsumerWidget {
     return Scaffold(
       body: RefreshIndicator(
         onRefresh: () async => ref.invalidate(myBillsProvider),
-        child: EsokoAsyncView(
+        child: EsoqoAsyncView(
           value: bills,
           onRetry: () => ref.invalidate(myBillsProvider),
           data: (context, list) {
@@ -61,10 +61,10 @@ class BillsListScreen extends ConsumerWidget {
                       SliverToBoxAdapter(
                         child: Padding(
                           padding: const EdgeInsets.fromLTRB(
-                            EsokoSpacing.s5,
-                            EsokoSpacing.s5,
-                            EsokoSpacing.s5,
-                            EsokoSpacing.s2,
+                            EsoqoSpacing.s5,
+                            EsoqoSpacing.s5,
+                            EsoqoSpacing.s5,
+                            EsoqoSpacing.s2,
                           ),
                           child: _DueSoonTotal(
                             bills: [...overdue, ...dueSoon],
@@ -76,44 +76,44 @@ class BillsListScreen extends ConsumerWidget {
                       SliverToBoxAdapter(
                         child: Padding(
                           padding: const EdgeInsets.fromLTRB(
-                            EsokoSpacing.s5,
-                            EsokoSpacing.s5,
-                            EsokoSpacing.s5,
-                            EsokoSpacing.s2,
+                            EsoqoSpacing.s5,
+                            EsoqoSpacing.s5,
+                            EsoqoSpacing.s5,
+                            EsoqoSpacing.s2,
                           ),
-                          child: EsokoPageLead(
+                          child: EsoqoPageLead(
                             'Track what you owe and when — a reminder here, not a payment. Pay however you already do, then mark it paid.',
                           ),
                         ),
                       ),
                     if (list.isEmpty)
                       const SliverToBoxAdapter(
-                        child: EsokoEmptyState(
+                        child: EsoqoEmptyState(
                           icon: Icons.receipt_long_outlined,
                           message: 'No bills tracked yet.',
                         ),
                       )
                     else ...[
                       if (overdue.isNotEmpty)
-                        _section(context, 'Overdue', overdue, EsokoColors.red),
+                        _section(context, 'Overdue', overdue, EsoqoColors.red),
                       if (dueSoon.isNotEmpty)
                         _section(
                           context,
                           'Due soon',
                           dueSoon,
-                          EsokoColors.amber,
+                          EsoqoColors.amber,
                         ),
                       if (upcoming.isNotEmpty)
                         // No accent colour — "Upcoming" isn't a status
                         // like Overdue/Due soon, so it gets the
                         // heading's normal (theme-adaptive) colour
-                        // instead of a fixed EsokoColors.text2, which
+                        // instead of a fixed EsoqoColors.text2, which
                         // only had readable contrast against a dark
                         // background, not light paper.
                         _section(context, 'Upcoming', upcoming, null),
                     ],
                     const SliverToBoxAdapter(
-                      child: SizedBox(height: EsokoSpacing.s9),
+                      child: SizedBox(height: EsoqoSpacing.s9),
                     ),
                   ],
                 ),
@@ -145,20 +145,20 @@ class BillsListScreen extends ConsumerWidget {
         SliverToBoxAdapter(
           child: Padding(
             padding: const EdgeInsets.fromLTRB(
-              EsokoSpacing.s5,
-              EsokoSpacing.s4,
-              EsokoSpacing.s5,
-              EsokoSpacing.s2,
+              EsoqoSpacing.s5,
+              EsoqoSpacing.s4,
+              EsoqoSpacing.s5,
+              EsoqoSpacing.s2,
             ),
-            child: EsokoSubHeader(title, color: accent),
+            child: EsoqoSubHeader(title, color: accent),
           ),
         ),
         SliverPadding(
-          padding: const EdgeInsets.symmetric(horizontal: EsokoSpacing.s4),
+          padding: const EdgeInsets.symmetric(horizontal: EsoqoSpacing.s4),
           sliver: SliverList.separated(
             itemCount: bills.length,
-            separatorBuilder: (_, _) => const SizedBox(height: EsokoSpacing.s2),
-            itemBuilder: (context, i) => EsokoStagger(
+            separatorBuilder: (_, _) => const SizedBox(height: EsoqoSpacing.s2),
+            itemBuilder: (context, i) => EsoqoStagger(
               index: i,
               child: _BillCard(bill: bills[i]),
             ),
@@ -183,7 +183,7 @@ class _BillCardState extends ConsumerState<_BillCard> {
   Future<void> _markPaid() async {
     final amount = double.tryParse(widget.bill.amountKes ?? '') ?? 0;
     setState(() => _paying = true);
-    EsokoHaptics.tap();
+    EsoqoHaptics.tap();
     try {
       await ref.read(billsRepositoryProvider).markPaid(widget.bill.id, amount);
       ref.invalidate(myBillsProvider);
@@ -216,14 +216,14 @@ class _BillCardState extends ConsumerState<_BillCard> {
         ? 'Due today'
         : 'Due in ${b.daysUntilDue} day${b.daysUntilDue == 1 ? '' : 's'}';
 
-    final tile = EsokoListTile(
+    final tile = EsoqoListTile(
       title: b.label,
       subtitle:
           '$dueLabel${b.amountKes != null ? ' · KES ${b.amountKes}' : ''}${b.accountRef != null ? ' · Ref ${b.accountRef}' : ''}',
       icon: _categoryIcon(b.category),
       trailing: _paying
-          ? const EsokoSkeleton(width: 64, height: 14)
-          : EsokoButton.tertiary(label: 'Mark paid', onPressed: _markPaid),
+          ? const EsoqoSkeleton(width: 64, height: 14)
+          : EsoqoButton.tertiary(label: 'Mark paid', onPressed: _markPaid),
       onTap: b.isFunding
           ? () => Navigator.of(context).push(
                 MaterialPageRoute(
@@ -243,7 +243,7 @@ class _BillCardState extends ConsumerState<_BillCard> {
         Padding(
           padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
           child: ClipRRect(
-            borderRadius: BorderRadius.circular(EsokoRadius.pill),
+            borderRadius: BorderRadius.circular(EsoqoRadius.pill),
             child: LinearProgressIndicator(
               value: b.fundingProgress,
               minHeight: 6,
@@ -288,12 +288,12 @@ class _DueSoonTotal extends StatelessWidget {
       }
     }
 
-    final accent = anyOverdue ? EsokoColors.red : EsokoColors.amber;
+    final accent = anyOverdue ? EsoqoColors.red : EsoqoColors.amber;
     final count = bills.length;
 
-    return EsokoCard(
-      color: EsokoColors.navy,
-      padding: const EdgeInsets.all(EsokoSpacing.s5),
+    return EsoqoCard(
+      color: EsoqoColors.navy,
+      padding: const EdgeInsets.all(EsoqoSpacing.s5),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -304,23 +304,23 @@ class _DueSoonTotal extends StatelessWidget {
                 height: 8,
                 decoration: BoxDecoration(color: accent, shape: BoxShape.circle),
               ),
-              const SizedBox(width: EsokoSpacing.s2),
+              const SizedBox(width: EsoqoSpacing.s2),
               Text(
                 anyOverdue ? 'Overdue and due soon' : 'Due soon',
                 style: TextStyle(
                   color: Colors.white.withValues(alpha: 0.72),
-                  fontSize: 12.5,
+                  fontSize: EsoqoTypeScale.meta,
                   fontWeight: FontWeight.w600,
                 ),
               ),
             ],
           ),
-          const SizedBox(height: EsokoSpacing.s2),
+          const SizedBox(height: EsoqoSpacing.s2),
           Text(
             'KES ${total.toStringAsFixed(0)}',
-            style: EsokoTypography.mono(
-              fontSize: 30,
-              fontWeight: FontWeight.w800,
+            style: EsoqoTypography.mono(
+              fontSize: EsoqoTypeScale.hero,
+              fontWeight: FontWeight.w700,
               color: Colors.white,
             ),
           ),
@@ -330,7 +330,7 @@ class _DueSoonTotal extends StatelessWidget {
                 : '$count ${count == 1 ? 'bill' : 'bills'} · $unpriced with no amount set',
             style: TextStyle(
               color: Colors.white.withValues(alpha: 0.72),
-              fontSize: 12.5,
+              fontSize: EsoqoTypeScale.meta,
             ),
           ),
         ],

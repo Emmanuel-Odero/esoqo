@@ -96,20 +96,20 @@ class ScanOrderInfo {
 /// register is pointing their camera at, before any money moves.
 class ScanPartyInfo {
   ScanPartyInfo({
-    required this.esokoId,
+    required this.esoqoId,
     required this.displayName,
     required this.verified,
     required this.organisation,
   });
 
   factory ScanPartyInfo.fromJson(Map<String, dynamic> json) => ScanPartyInfo(
-    esokoId: json['esokoId'] as String? ?? '',
-    displayName: json['displayName'] as String? ?? 'Esoko member',
+    esoqoId: json['esoqoId'] as String? ?? '',
+    displayName: json['displayName'] as String? ?? 'Esoqo member',
     verified: json['verified'] as bool? ?? false,
     organisation: json['organisation'] as bool? ?? false,
   );
 
-  final String esokoId;
+  final String esoqoId;
   final String displayName;
   final bool verified;
   final bool organisation;
@@ -133,7 +133,7 @@ class ScanCertInfo {
     status: json['status'] as String? ?? 'expired',
     claimType: json['claimType'] as String? ?? '',
     holder: json['holder'] as String? ?? '',
-    issuer: json['issuer'] as String? ?? 'Esoko',
+    issuer: json['issuer'] as String? ?? 'Esoqo',
     issuedOn: json['issuedOn'] as String? ?? '',
     validUntil: json['validUntil'] as String?,
   );

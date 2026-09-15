@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 
-import '../../../core/theme/esoko_tokens.dart';
+import '../../../core/theme/esoqo_tokens.dart';
 import '../ticketing_models.dart';
 
 class SeatButton extends StatelessWidget {
@@ -20,9 +20,9 @@ class SeatButton extends StatelessWidget {
     // Available seats sit on the scheme surface, never a hardcoded
     // white — the seat map stays legible in dark mode.
     final Color bg = taken
-        ? EsokoColors.line
+        ? EsoqoColors.line
         : (selected
-              ? EsokoColors.green
+              ? EsoqoColors.green
               : Theme.of(context).colorScheme.surface);
     final muted = Theme.of(context).textTheme.bodySmall?.color;
     final Color? fg = taken
@@ -33,15 +33,15 @@ class SeatButton extends StatelessWidget {
       height: 36,
       child: Material(
         color: bg,
-        borderRadius: BorderRadius.circular(EsokoRadius.sm),
+        borderRadius: BorderRadius.circular(EsoqoRadius.sm),
         child: InkWell(
           onTap: taken ? null : onTap,
-          borderRadius: BorderRadius.circular(EsokoRadius.sm),
+          borderRadius: BorderRadius.circular(EsoqoRadius.sm),
           child: Container(
             decoration: BoxDecoration(
-              borderRadius: BorderRadius.circular(EsokoRadius.sm),
+              borderRadius: BorderRadius.circular(EsoqoRadius.sm),
               border: Border.all(
-                color: selected ? EsokoColors.green : EsokoColors.line,
+                color: selected ? EsoqoColors.green : EsoqoColors.line,
               ),
             ),
             child: Column(
@@ -50,8 +50,10 @@ class SeatButton extends StatelessWidget {
                 Icon(Icons.event_seat, size: 14, color: fg),
                 Text(
                   seat.label,
-                  style: TextStyle(
-                    fontSize: 9,
+                  // Label voice: this is a 36pt cell holding an icon
+                  // and a seat number, so the body face's reading
+                  // line-height is height it cannot spare.
+                  style: Theme.of(context).textTheme.labelSmall!.copyWith(
                     fontWeight: FontWeight.w700,
                     color: fg,
                   ),

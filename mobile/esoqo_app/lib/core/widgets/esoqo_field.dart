@@ -1,17 +1,17 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
-import '../theme/esoko_tokens.dart';
+import '../theme/esoqo_tokens.dart';
 
 /// Which autofill behaviour a PIN field should have — see
-/// [EsokoField.pin].
+/// [EsoqoField.pin].
 enum PinAutofill { none, signIn, create }
 
 /// Every text input in the app, named for what it collects.
 ///
 /// ## Why there is no unnamed constructor
 ///
-/// `EsokoFormField` — which this replaced — took `keyboardType`,
+/// `EsoqoFormField` — which this replaced — took `keyboardType`,
 /// `textCapitalization`, `maxLength` and `autofillHints` as optional
 /// parameters, which meant every call site re-decided them. The audit
 /// found what that costs:
@@ -36,8 +36,8 @@ enum PinAutofill { none, signIn, create }
 /// not, it belongs in the constructor.
 ///
 /// See docs/proposals/mobile-component-system.md.
-class EsokoField extends StatelessWidget {
-  const EsokoField._({
+class EsoqoField extends StatelessWidget {
+  const EsoqoField._({
     super.key,
     required this.label,
     required this.keyboardType,
@@ -70,7 +70,7 @@ class EsokoField extends StatelessWidget {
   /// The prefix is an affix rather than part of the label because that
   /// is what let five screens drift to "Amount (KES)", "Amount KES" and
   /// "Amount per employee, KES". The currency is not the label's job.
-  factory EsokoField.amount({
+  factory EsoqoField.amount({
     Key? key,
     TextEditingController? controller,
     String label = 'Amount',
@@ -82,7 +82,7 @@ class EsokoField extends StatelessWidget {
     TextInputAction? textInputAction,
     ValueChanged<String>? onChanged,
     ValueChanged<String>? onSubmitted,
-  }) => EsokoField._(
+  }) => EsoqoField._(
     key: key,
     controller: controller,
     label: label,
@@ -105,7 +105,7 @@ class EsokoField extends StatelessWidget {
   /// formatter that keeps it to the characters a number can contain.
   ///
   /// One label and one hint, because six screens had three of each.
-  factory EsokoField.phone({
+  factory EsoqoField.phone({
     Key? key,
     TextEditingController? controller,
     String label = 'Phone number',
@@ -116,7 +116,7 @@ class EsokoField extends StatelessWidget {
     TextInputAction? textInputAction,
     ValueChanged<String>? onChanged,
     ValueChanged<String>? onSubmitted,
-  }) => EsokoField._(
+  }) => EsoqoField._(
     key: key,
     controller: controller,
     label: label,
@@ -151,7 +151,7 @@ class EsokoField extends StatelessWidget {
   ///   * [PinAutofill.none] — a re-confirmation, or a step-up prompt
   ///     inside an already-open session. Filling that from the keychain
   ///     defeats the reason it is being asked for at all.
-  factory EsokoField.pin({
+  factory EsoqoField.pin({
     Key? key,
     TextEditingController? controller,
     String label = 'PIN',
@@ -163,7 +163,7 @@ class EsokoField extends StatelessWidget {
     TextInputAction? textInputAction,
     ValueChanged<String>? onChanged,
     ValueChanged<String>? onSubmitted,
-  }) => EsokoField._(
+  }) => EsoqoField._(
     key: key,
     controller: controller,
     label: label,
@@ -194,14 +194,14 @@ class EsokoField extends StatelessWidget {
   /// `emailAddress`, and no formatter may run because there is no one
   /// shape to enforce. Naming it stops the next person reaching for
   /// `.phone()` here and quietly locking out email sign-in.
-  factory EsokoField.identifier({
+  factory EsoqoField.identifier({
     Key? key,
     TextEditingController? controller,
     String label = 'Phone number or email',
     String? errorText,
     bool enabled = true,
     ValueChanged<String>? onSubmitted,
-  }) => EsokoField._(
+  }) => EsoqoField._(
     key: key,
     controller: controller,
     label: label,
@@ -221,7 +221,7 @@ class EsokoField extends StatelessWidget {
   /// above the keyboard and Android autofills it, so nobody has to leave
   /// the app to read their own message. It was wired nowhere before
   /// this, which cost every signing-in person a manual re-type.
-  factory EsokoField.otp({
+  factory EsoqoField.otp({
     Key? key,
     TextEditingController? controller,
     String label = 'Code',
@@ -231,7 +231,7 @@ class EsokoField extends StatelessWidget {
     bool autofocus = true,
     ValueChanged<String>? onChanged,
     ValueChanged<String>? onSubmitted,
-  }) => EsokoField._(
+  }) => EsoqoField._(
     key: key,
     controller: controller,
     label: label,
@@ -255,7 +255,7 @@ class EsokoField extends StatelessWidget {
   /// ESK-… payment id. Upper-cased because these are always upper case
   /// on a label, and a lower-case keyboard makes somebody reach for
   /// shift on every character.
-  factory EsokoField.code({
+  factory EsoqoField.code({
     Key? key,
     TextEditingController? controller,
     String label = 'Code',
@@ -268,7 +268,7 @@ class EsokoField extends StatelessWidget {
     int? maxLength,
     ValueChanged<String>? onChanged,
     ValueChanged<String>? onSubmitted,
-  }) => EsokoField._(
+  }) => EsoqoField._(
     key: key,
     controller: controller,
     label: label,
@@ -290,7 +290,7 @@ class EsokoField extends StatelessWidget {
   );
 
   /// A person's name.
-  factory EsokoField.name({
+  factory EsoqoField.name({
     Key? key,
     TextEditingController? controller,
     String label = 'Name',
@@ -302,7 +302,7 @@ class EsokoField extends StatelessWidget {
     TextInputAction? textInputAction,
     ValueChanged<String>? onChanged,
     ValueChanged<String>? onSubmitted,
-  }) => EsokoField._(
+  }) => EsoqoField._(
     key: key,
     controller: controller,
     label: label,
@@ -321,7 +321,7 @@ class EsokoField extends StatelessWidget {
   );
 
   /// Free text — a note, an address, a description.
-  factory EsokoField.text({
+  factory EsoqoField.text({
     Key? key,
     TextEditingController? controller,
     required String label,
@@ -336,7 +336,7 @@ class EsokoField extends StatelessWidget {
     TextInputAction? textInputAction,
     ValueChanged<String>? onChanged,
     ValueChanged<String>? onSubmitted,
-  }) => EsokoField._(
+  }) => EsoqoField._(
     key: key,
     controller: controller,
     label: label,
@@ -360,7 +360,7 @@ class EsokoField extends StatelessWidget {
   /// keyboard and a digits-and-one-dot formatter like [amount], but the
   /// affix is the unit rather than a currency, because the number is not
   /// money and must not pick up money's `KES`.
-  factory EsokoField.measure({
+  factory EsoqoField.measure({
     Key? key,
     TextEditingController? controller,
     required String label,
@@ -373,7 +373,7 @@ class EsokoField extends StatelessWidget {
     TextInputAction? textInputAction,
     ValueChanged<String>? onChanged,
     ValueChanged<String>? onSubmitted,
-  }) => EsokoField._(
+  }) => EsoqoField._(
     key: key,
     controller: controller,
     label: label,
@@ -394,7 +394,7 @@ class EsokoField extends StatelessWidget {
   /// A search box. Search keyboard action and the magnifier, so a list
   /// filter never has to re-decide either; [suffixIcon] is where the
   /// clear affordance goes.
-  factory EsokoField.search({
+  factory EsoqoField.search({
     Key? key,
     TextEditingController? controller,
     String label = 'Search',
@@ -404,7 +404,7 @@ class EsokoField extends StatelessWidget {
     bool autofocus = false,
     ValueChanged<String>? onChanged,
     ValueChanged<String>? onSubmitted,
-  }) => EsokoField._(
+  }) => EsoqoField._(
     key: key,
     controller: controller,
     label: label,
@@ -420,7 +420,7 @@ class EsokoField extends StatelessWidget {
   );
 
   /// A whole-number quantity — seats, parcels, capacity. Not money.
-  factory EsokoField.quantity({
+  factory EsoqoField.quantity({
     Key? key,
     TextEditingController? controller,
     required String label,
@@ -429,7 +429,7 @@ class EsokoField extends StatelessWidget {
     bool enabled = true,
     ValueChanged<String>? onChanged,
     ValueChanged<String>? onSubmitted,
-  }) => EsokoField._(
+  }) => EsoqoField._(
     key: key,
     controller: controller,
     label: label,
@@ -483,7 +483,7 @@ class EsokoField extends StatelessWidget {
       autofocus: autofocus,
       onChanged: onChanged,
       onSubmitted: onSubmitted,
-      style: mono ? EsokoTypography.mono(fontSize: 16) : null,
+      style: mono ? EsoqoTypography.mono(fontSize: EsoqoTypeScale.subTitle) : null,
       decoration: InputDecoration(
         labelText: label,
         hintText: hint,
@@ -492,16 +492,16 @@ class EsokoField extends StatelessWidget {
         prefixText: prefixText,
         prefixStyle: prefixText == null
             ? null
-            : EsokoTypography.mono(
-                fontSize: 16,
+            : EsoqoTypography.mono(
+                fontSize: EsoqoTypeScale.subTitle,
                 color: Theme.of(context).colorScheme.onSurfaceVariant,
               ),
         prefixIcon: icon == null ? null : Icon(icon),
         suffixText: suffixText,
         suffixStyle: suffixText == null
             ? null
-            : EsokoTypography.mono(
-                fontSize: 16,
+            : EsoqoTypography.mono(
+                fontSize: EsoqoTypeScale.subTitle,
                 color: Theme.of(context).colorScheme.onSurfaceVariant,
               ),
         suffixIcon: suffixIcon,

@@ -7,13 +7,13 @@ import '../../core/api/api_exception.dart';
 import '../../core/auth/auth_controller.dart';
 import '../../core/auth/auth_state.dart';
 import '../../core/money/money.dart';
-import '../../core/theme/esoko_tokens.dart';
+import '../../core/theme/esoqo_tokens.dart';
 import '../../core/widgets/widgets.dart';
 import 'parcels_repository.dart';
 
 enum _Stage { form, paying, waiting, done, failed }
 
-/// The last step of booking a parcel — pay with Esoko points (settles
+/// The last step of booking a parcel — pay with Esoqo points (settles
 /// inline) or M-Pesa (STK push, then poll). Same stage-machine shape
 /// checkout_screen.dart uses for the identical reason: money moving
 /// should cross-fade, never snap.
@@ -133,17 +133,17 @@ class _ParcelPaymentScreenState extends ConsumerState<ParcelPaymentScreen> {
   Widget build(BuildContext context) {
     final reduced = MediaQuery.disableAnimationsOf(context);
     return Scaffold(
-      appBar: const EsokoAppBar(title: 'Pay for parcel'),
+      appBar: const EsoqoAppBar(title: 'Pay for parcel'),
       body: SafeArea(
         child: Center(
           child: ConstrainedBox(
             constraints: const BoxConstraints(maxWidth: 420),
             child: Padding(
-              padding: const EdgeInsets.all(EsokoSpacing.s6),
+              padding: const EdgeInsets.all(EsoqoSpacing.s6),
               child: AnimatedSwitcher(
-                duration: reduced ? Duration.zero : EsokoMotion.medium,
-                switchInCurve: EsokoMotion.easeOut,
-                switchOutCurve: EsokoMotion.easeOut,
+                duration: reduced ? Duration.zero : EsoqoMotion.medium,
+                switchInCurve: EsoqoMotion.easeOut,
+                switchOutCurve: EsoqoMotion.easeOut,
                 child: KeyedSubtree(key: ValueKey(_stage), child: _body()),
               ),
             ),
@@ -161,23 +161,23 @@ class _ParcelPaymentScreenState extends ConsumerState<ParcelPaymentScreen> {
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
             Text('Total', style: Theme.of(context).textTheme.bodySmall),
-            EsokoAmountText(widget.priceKes.format(), fontSize: 28),
-            const SizedBox(height: EsokoSpacing.s4),
-            EsokoSegmentedToggle<String>(
+            EsoqoAmountText(widget.priceKes.format(), fontSize: EsoqoTypeScale.hero),
+            const SizedBox(height: EsoqoSpacing.s4),
+            EsoqoSegmentedToggle<String>(
               selected: _method,
               onChanged: (m) => setState(() => _method = m),
               options: [
-                if (signedIn) ('ESOKO_POINTS', 'Esoko Points'),
+                if (signedIn) ('ESOKO_POINTS', 'Esoqo Points'),
                 ('MPESA_STK', 'M-Pesa'),
               ],
             ),
             if (_method == 'MPESA_STK') ...[
-              const SizedBox(height: EsokoSpacing.s3),
+              const SizedBox(height: EsoqoSpacing.s3),
               if (_myMsisdn != null && _myMsisdn!.isNotEmpty) ...[
                 // "Other" always ships with its own free-text field
                 // right below it — never a choice that silently expects
                 // typing somewhere else.
-                EsokoSegmentedToggle<String>(
+                EsoqoSegmentedToggle<String>(
                   selected: _numberSource,
                   onChanged: (v) => setState(() {
                     _numberSource = v;
@@ -188,26 +188,26 @@ class _ParcelPaymentScreenState extends ConsumerState<ParcelPaymentScreen> {
                     ('OTHER', 'Another number'),
                   ],
                 ),
-                const SizedBox(height: EsokoSpacing.s3),
+                const SizedBox(height: EsoqoSpacing.s3),
               ],
               if (_numberSource == 'MY' && _myMsisdn != null && _myMsisdn!.isNotEmpty)
-                EsokoListTile(
+                EsoqoListTile(
                   title: 'STK prompt goes to',
                   subtitle: _myMsisdn,
                   icon: Icons.phone_iphone_outlined,
                 )
               else
-                EsokoField.phone(
+                EsoqoField.phone(
                   controller: _msisdnController,
                   label: 'M-Pesa phone number',
                 ),
             ],
             if (_error != null) ...[
-              const SizedBox(height: EsokoSpacing.s3),
-              EsokoFormError(message: _error!),
+              const SizedBox(height: EsoqoSpacing.s3),
+              EsoqoFormError(message: _error!),
             ],
-            const SizedBox(height: EsokoSpacing.s4),
-            EsokoButton.primary(
+            const SizedBox(height: EsoqoSpacing.s4),
+            EsoqoButton.primary(
               expand: false,
               label: _method == 'ESOKO_POINTS' ? 'Pay with points' : 'Pay with M-Pesa',
               onPressed: _pay,
@@ -216,24 +216,24 @@ class _ParcelPaymentScreenState extends ConsumerState<ParcelPaymentScreen> {
         );
       case _Stage.paying:
         return const Padding(
-          padding: EdgeInsets.all(EsokoSpacing.s6),
-          child: EsokoSkeletonCard(leading: false),
+          padding: EdgeInsets.all(EsoqoSpacing.s6),
+          child: EsoqoSkeletonCard(leading: false),
         );
       case _Stage.waiting:
-        return EsokoResultView.waiting(
+        return EsoqoResultView.waiting(
           title: 'Complete payment on your phone',
           message: 'Enter your M-Pesa PIN when the prompt arrives.',
           amountKes: widget.priceKes.format(),
         );
       case _Stage.done:
-        return EsokoResultView.success(
+        return EsoqoResultView.success(
           title: 'Parcel booked',
           message: "We'll text you the moment it's picked up.",
           primaryLabel: 'Done',
           onPrimary: () => Navigator.of(context).pop(widget.code),
         );
       case _Stage.failed:
-        return EsokoResultView.failure(
+        return EsoqoResultView.failure(
           errorMessage: _error ?? 'Something went wrong',
           primaryLabel: 'Try again',
           onPrimary: () => setState(() => _stage = _Stage.form),

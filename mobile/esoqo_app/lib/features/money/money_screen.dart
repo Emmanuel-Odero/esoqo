@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/money/money.dart';
-import '../../core/theme/esoko_tokens.dart';
+import '../../core/theme/esoqo_tokens.dart';
 import '../../core/widgets/widgets.dart';
 import '../parcels/courier_earnings_screen.dart';
 import '../parcels/parcel_models.dart' show CourierEarningsView;
@@ -48,18 +48,18 @@ class MoneyScreen extends ConsumerWidget {
           constraints: const BoxConstraints(maxWidth: 840),
           child: ListView(
             padding: const EdgeInsets.fromLTRB(
-              EsokoSpacing.s6,
-              EsokoSpacing.s4,
-              EsokoSpacing.s6,
-              EsokoSpacing.s9 + EsokoSpacing.s6,
+              EsoqoSpacing.s6,
+              EsoqoSpacing.s4,
+              EsoqoSpacing.s6,
+              EsoqoSpacing.s9 + EsoqoSpacing.s6,
             ),
             children: [
-              EsokoSectionHeader(
-                title: 'Money',
+              EsoqoSectionHeader(
+                title: 'Wallet',
                 subtitle:
-                    "What's yours across Esoko — vouchers, points, and any cash you're carrying for someone else.",
+                    "What's yours across Esoqo — vouchers, points, and any cash you're carrying for someone else.",
               ),
-              const SizedBox(height: EsokoSpacing.s5),
+              const SizedBox(height: EsoqoSpacing.s5),
               // The headline is what you hold, in navy — the
                   // proposal's wallet hero. Navy rather than the green
                   // primaryContainer this first shipped with: a balance
@@ -71,7 +71,7 @@ class MoneyScreen extends ConsumerWidget {
                 voucherCount: vouchers.valueOrNull?.length ?? 0,
                 loyalty: loyalty.valueOrNull,
               ),
-              const SizedBox(height: EsokoSpacing.s3),
+              const SizedBox(height: EsoqoSpacing.s3),
 
               // Two figures worth seeing without a tap, side by side.
               // Points sits here rather than in the hero because it is
@@ -87,13 +87,13 @@ class MoneyScreen extends ConsumerWidget {
               // for money that's theirs to spend. See
               // SCREEN_CONVENTIONS.md Rule 3: amber, not green.
               if (cod.valueOrNull case final h? when h.amountKes.isPositive) ...[
-                const SizedBox(height: EsokoSpacing.s3),
-                EsokoAttentionCard(
+                const SizedBox(height: EsoqoSpacing.s3),
+                EsoqoAttentionCard(
                   when: 'Carrying for others',
                   title: 'KES ${h.amountKes.format()}',
                   detail:
                       '${h.parcelCount} ${h.parcelCount == 1 ? 'parcel' : 'parcels'} · hand it over when you settle up',
-                  accent: EsokoColors.amber,
+                  accent: EsoqoColors.amber,
                 ),
               ],
 
@@ -103,18 +103,18 @@ class MoneyScreen extends ConsumerWidget {
               if (earnings.valueOrNull case final e?
                   when e.earnings.deliveredTotal > 0 ||
                       e.earnings.unpaidParcels > 0) ...[
-                const SizedBox(height: EsokoSpacing.s5),
-                const EsokoSubHeader('Your earnings'),
-                const SizedBox(height: EsokoSpacing.s3),
-                EsokoListTile(
+                const SizedBox(height: EsoqoSpacing.s5),
+                const EsoqoSubHeader('Your earnings'),
+                const SizedBox(height: EsoqoSpacing.s3),
+                EsoqoListTile(
                   title: e.earnings.unpaidKes.isPositive
                       ? 'KES ${e.earnings.unpaidKes.format()} waiting to be paid'
                       : 'KES ${e.earnings.paidKes.format()} paid so far',
                   subtitle: '${e.earnings.deliveredTotal} '
                       '${e.earnings.deliveredTotal == 1 ? 'delivery' : 'deliveries'} · see the statement',
                   icon: Icons.local_shipping_outlined,
-                  iconColor: EsokoColors.green,
-                  iconBackground: EsokoColors.greenTint,
+                  iconColor: EsoqoColors.green,
+                  iconBackground: EsoqoColors.greenTint,
                   onTap: () => Navigator.of(context).push(
                     MaterialPageRoute(
                       builder: (_) => const CourierEarningsScreen(),
@@ -123,10 +123,10 @@ class MoneyScreen extends ConsumerWidget {
                 ),
               ],
 
-              const SizedBox(height: EsokoSpacing.s5),
-              const EsokoSubHeader('Your cards'),
-              const SizedBox(height: EsokoSpacing.s3),
-              EsokoAsyncView(
+              const SizedBox(height: EsoqoSpacing.s5),
+              const EsoqoSubHeader('Your cards'),
+              const SizedBox(height: EsoqoSpacing.s3),
+              EsoqoAsyncView(
                 value: vouchers,
                 isEmpty: (list) => list.isEmpty,
                 emptyMessage:
@@ -138,19 +138,19 @@ class MoneyScreen extends ConsumerWidget {
                   children: [
                     for (var i = 0; i < list.length; i++)
                       Padding(
-                        padding: const EdgeInsets.only(bottom: EsokoSpacing.s2),
-                        child: EsokoStagger(
+                        padding: const EdgeInsets.only(bottom: EsoqoSpacing.s2),
+                        child: EsoqoStagger(
                           index: i,
-                          child: EsokoListTile(
+                          child: EsoqoListTile(
                             title: list[i].label,
                             subtitle:
                                 'KES ${list[i].balanceKes.format()} · ${_purposeLabel(list[i].purpose)}',
                             icon: Icons.wallet_outlined,
                             trailing: list[i].status == 'ACTIVE'
                                 ? null
-                                : EsokoStatusPill(
+                                : EsoqoStatusPill(
                                     label: list[i].status,
-                                    color: EsokoColors.amber,
+                                    color: EsoqoColors.amber,
                                   ),
                           ),
                         ),
@@ -159,8 +159,8 @@ class MoneyScreen extends ConsumerWidget {
                 ),
               ),
 
-              const SizedBox(height: EsokoSpacing.s3),
-              EsokoButton.secondary(
+              const SizedBox(height: EsoqoSpacing.s3),
+              EsoqoButton.secondary(
                 label: 'Manage your vouchers',
                 icon: Icons.wallet_outlined,
                 onPressed: () => Navigator.of(context).push(
@@ -216,9 +216,9 @@ class _WalletHero extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return EsokoCard(
-      color: EsokoColors.navy,
-      padding: const EdgeInsets.all(EsokoSpacing.s5),
+    return EsoqoCard(
+      color: EsoqoColors.navy,
+      padding: const EdgeInsets.all(EsoqoSpacing.s5),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -226,16 +226,16 @@ class _WalletHero extends StatelessWidget {
             'Vouchers',
             style: TextStyle(
               color: Colors.white.withValues(alpha: 0.72),
-              fontSize: 12.5,
+              fontSize: EsoqoTypeScale.meta,
               fontWeight: FontWeight.w600,
             ),
           ),
-          const SizedBox(height: EsokoSpacing.s1),
+          const SizedBox(height: EsoqoSpacing.s1),
           Text(
             'KES ${voucherTotal.format()}',
-            style: EsokoTypography.mono(
-              fontSize: 30,
-              fontWeight: FontWeight.w800,
+            style: EsoqoTypography.mono(
+              fontSize: EsoqoTypeScale.hero,
+              fontWeight: FontWeight.w700,
               color: Colors.white,
             ),
           ),
@@ -245,7 +245,7 @@ class _WalletHero extends StatelessWidget {
                 : '$voucherCount ${voucherCount == 1 ? 'card' : 'cards'}',
             style: TextStyle(
               color: Colors.white.withValues(alpha: 0.72),
-              fontSize: 12.5,
+              fontSize: EsoqoTypeScale.meta,
             ),
           ),
         ],
@@ -271,7 +271,7 @@ class _StatRow extends StatelessWidget {
     // IntrinsicHeight so the two cards match height whichever has the
     // longer detail line — `stretch` alone would resolve to infinity
     // here, because a ListView child has no bounded height to stretch
-    // to. Same fix, same reason, as EsokoAttentionCard's own edge.
+    // to. Same fix, same reason, as EsoqoAttentionCard's own edge.
     return IntrinsicHeight(
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -283,7 +283,7 @@ class _StatRow extends StatelessWidget {
               detail: loyalty == null ? null : '10 pts = KES 1',
             ),
           ),
-          const SizedBox(width: EsokoSpacing.s3),
+          const SizedBox(width: EsoqoSpacing.s3),
           Expanded(
             child: _Stat(
               label: 'Owed to you',
@@ -307,25 +307,25 @@ class _Stat extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final muted = Theme.of(context).textTheme.bodySmall?.color;
-    return EsokoCard(
-      padding: const EdgeInsets.all(EsokoSpacing.s4),
+    return EsoqoCard(
+      padding: const EdgeInsets.all(EsoqoSpacing.s4),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         mainAxisSize: MainAxisSize.min,
         children: [
-          Text(label, style: TextStyle(fontSize: 12, color: muted)),
+          Text(label, style: Theme.of(context).textTheme.bodySmall),
           const SizedBox(height: 2),
           Text(
             value,
             maxLines: 1,
             overflow: TextOverflow.ellipsis,
-            style: EsokoTypography.mono(
-              fontSize: 17,
-              fontWeight: FontWeight.w800,
+            style: EsoqoTypography.mono(
+              fontSize: EsoqoTypeScale.subTitle,
+              fontWeight: FontWeight.w700,
             ),
           ),
           if (detail != null)
-            Text(detail!, style: TextStyle(fontSize: 11, color: muted)),
+            Text(detail!, style: TextStyle(fontSize: EsoqoTypeScale.micro, color: muted)),
         ],
       ),
     );
