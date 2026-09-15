@@ -7,8 +7,8 @@ import (
 
 	"github.com/gin-gonic/gin"
 
-	"github.com/esoko/core-go/internal/authsvc"
-	"github.com/esoko/core-go/internal/dbx"
+	"github.com/esoqo/core-go/internal/authsvc"
+	"github.com/esoqo/core-go/internal/dbx"
 )
 
 // ── POST /v1/auth/otp ──────────────────────────────────────────────
@@ -115,7 +115,7 @@ func (s *Server) handleSignIn(c *gin.Context) {
 	}
 
 	if person != nil && person.FrozenAt != nil {
-		writeError(c, http.StatusForbidden, "ACCOUNT_FROZEN", "This account is frozen. Contact Esoko to unfreeze it.")
+		writeError(c, http.StatusForbidden, "ACCOUNT_FROZEN", "This account is frozen. Contact Esoqo to unfreeze it.")
 		return
 	}
 
@@ -195,7 +195,7 @@ func (s *Server) handleResetPin(c *gin.Context) {
 	partyID, err := dbx.SetSubjectPinByMsisdn(c.Request.Context(), s.Pool, req.Msisdn, hash)
 	if err != nil {
 		if err == dbx.ErrPersonNotFound {
-			writeError(c, http.StatusNotFound, "NOT_FOUND", "No Esoko account found with that number")
+			writeError(c, http.StatusNotFound, "NOT_FOUND", "No Esoqo account found with that number")
 			return
 		}
 		writeError(c, http.StatusInternalServerError, "SET_PIN_FAILED", "Could not save PIN")
@@ -270,22 +270,22 @@ func (s *Server) handleMe(c *gin.Context) {
 		return
 	}
 
-	// Lazily provisions a short "ESK-####-KE" Esoko ID the first time a
+	// Lazily provisions a short "ESK-####-KE" Esoqo ID the first time a
 	// profile is fetched — every account gets one, without a separate
 	// "activate" step, since core-go already verified the phone via OTP
-	// before this session existed. See dbx.EnsureEsokoPaymentId.
-	var esokoID string
+	// before this session existed. See dbx.EnsureEsoqoPaymentId.
+	var esoqoID string
 	if profile.Msisdn != nil {
-		esokoID, err = dbx.EnsureEsokoPaymentId(c.Request.Context(), s.Pool, profile.PartyID, *profile.Msisdn)
+		esoqoID, err = dbx.EnsureEsoqoPaymentId(c.Request.Context(), s.Pool, profile.PartyID, *profile.Msisdn)
 		if err != nil {
-			writeError(c, http.StatusInternalServerError, "PAYMENT_ID_FAILED", "Could not prepare your Esoko ID")
+			writeError(c, http.StatusInternalServerError, "PAYMENT_ID_FAILED", "Could not prepare your Esoqo ID")
 			return
 		}
 	}
 
 	c.JSON(http.StatusOK, gin.H{
 		"partyId":      profile.PartyID,
-		"esokoId":      esokoID,
+		"esoqoId":      esoqoID,
 		"officialName": profile.OfficialName,
 		"knownAs":      profile.KnownAs,
 		"msisdn":       profile.Msisdn,

@@ -1,7 +1,7 @@
 'use client';
 import { useState } from 'react';
-import { Icon } from '@esoko/ui';
-import { useAnnounce } from '@esoko/a11y';
+import { Icon } from '@esoqo/ui';
+import { useAnnounce } from '@esoqo/a11y';
 
 export interface CountyRow {
   code: string; name: string;
@@ -41,7 +41,7 @@ export function CountyPicker({ counties }: { counties: CountyRow[] }) {
           <div className="grid g4" style={{ marginBottom: 22 }}>
             {([
               ['users', 'Population', current.population ?? '—'],
-              ['pin', 'Esoko field officer', current.hasFieldOfficer ? 'Working here' : 'Not yet'],
+              ['pin', 'Esoqo field officer', current.hasFieldOfficer ? 'Working here' : 'Not yet'],
               ['tag', 'Daily market prices', current.pricesLive ? 'Collected' : 'Not yet'],
               ['calendar', 'Market days', current.pricesLive ? 'See prices page' : '—'],
             ] as const).map(([icon, label, value]) => (
@@ -65,7 +65,7 @@ export function CountyPicker({ counties }: { counties: CountyRow[] }) {
             </p>
             <p className="sub" style={{ marginTop: 12, marginBottom: 0 }}>
               If you work for {current.name} County and can confirm the current schedule, write to{' '}
-              <strong style={{ color: 'var(--navy)' }}>counties@esoko.co.ke</strong>.
+              <strong style={{ color: 'var(--navy)' }}>counties@esoqo.co.ke</strong>.
             </p>
           </div>
         </div>

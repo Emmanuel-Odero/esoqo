@@ -2,8 +2,8 @@
 
 import { Fragment, useState, useTransition } from 'react';
 import { useRouter } from 'next/navigation';
-import { Icon } from '@esoko/ui';
-import { SUPPORT_TICKET_CATEGORY_LABELS, SUPPORT_TICKET_STATUS_LABELS, SUPPORT_TICKET_STATUSES } from '@esoko/domain';
+import { Icon } from '@esoqo/ui';
+import { SUPPORT_TICKET_CATEGORY_LABELS, SUPPORT_TICKET_STATUS_LABELS, SUPPORT_TICKET_STATUSES } from '@esoqo/domain';
 import { actionUpdateTicketStatus } from './actions';
 
 interface Row {

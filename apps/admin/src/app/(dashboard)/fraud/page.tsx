@@ -1,5 +1,5 @@
 import { notFound } from 'next/navigation';
-import { AuthorisationError } from '@esoko/db';
+import { AuthorisationError } from '@esoqo/db';
 import { requireStaff } from '@/lib/session';
 import { adminGo } from '@/lib/go-ticketing';
 

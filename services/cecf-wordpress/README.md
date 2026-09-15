@@ -10,7 +10,7 @@ database-table level (`wp_2_posts`, `wp_3_posts`, ...), which is what real
 WP Multisite already gives you.
 
 The Sage theme (`web/app/themes/cecf-sage`) is a **real pnpm workspace
-package** (`@esoko/cecf-sage-theme`) — it shares this repo's
+package** (`@esoqo/cecf-sage-theme`) — it shares this repo's
 `pnpm-lock.yaml`, pnpm store, and Turbo build cache with every Node app here.
 That's why the Dockerfile's build context is the **repo root**, not this
 folder — the theme-build stage needs the workspace files to resolve.
@@ -54,8 +54,8 @@ production deploy can't silently install with a guessable admin account.
 To work on just the theme without the PHP stack:
 
 ```sh
-pnpm --filter @esoko/cecf-sage-theme dev     # Vite dev server
-pnpm --filter @esoko/cecf-sage-theme build
+pnpm --filter @esoqo/cecf-sage-theme dev     # Vite dev server
+pnpm --filter @esoqo/cecf-sage-theme build
 ```
 
 ## Deployment (Render)
@@ -73,7 +73,7 @@ Two blueprint entries in the root `render.yaml`, not a separate blueprint:
 `cecf-mariadb`'s internal address. `DB_PASSWORD` / `MARIADB_PASSWORD` are
 each `sync: false` and must be set to the **same value** in the Render
 dashboard for both services — the same manual-duplication pattern already
-used for `SESSION_SECRET` etc. across `esoko-web`/`esoko-app`/`esoko-admin`.
+used for `SESSION_SECRET` etc. across `esoqo-web`/`esoqo-app`/`esoqo-admin`.
 
 ## Open follow-ups (deliberately not yet decided in code)
 

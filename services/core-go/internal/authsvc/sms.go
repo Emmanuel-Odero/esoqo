@@ -20,9 +20,10 @@ import (
 // via Celcom" doesn't require editing SMS_PROVIDER itself (and can't
 // accidentally leak into a real deployment — it only overrides when
 // explicitly set):
-//   SMS_TEST_ENV=local → force "mock" (localhost:8026 catcher)
-//   SMS_TEST_ENV=CELO  → force "celcom" (real gateway)
-//   unset              → fall through to SMS_PROVIDER as before
+//
+//	SMS_TEST_ENV=local → force "mock" (localhost:8026 catcher)
+//	SMS_TEST_ENV=CELO  → force "celcom" (real gateway)
+//	unset              → fall through to SMS_PROVIDER as before
 func SmsProvider() string {
 	switch strings.ToLower(os.Getenv("SMS_TEST_ENV")) {
 	case "local":
@@ -47,6 +48,16 @@ func SmsProvider() string {
 // sends). Any other provider value is a no-op error — never falls
 // through to dialing a live gateway by accident.
 func SendSms(msisdn, message, purpose string) error {
+	// Only OTP used to be budgeted, which left every other sender —
+	// store receipts, donation thank-yous, courier and parcel updates,
+	// group-alert fan-outs — able to spend without limit. They are all
+	// triggerable often enough to matter, and a fan-out bug costs the
+	// same per message as an attack does. One global daily ceiling sits
+	// under all of them; see smsBudget.
+	if err := chargeSmsBudget(purpose); err != nil {
+		return err
+	}
+
 	switch SmsProvider() {
 	case "console":
 		fmt.Printf("\n  ┌─ SMS (console) ────────────────────\n  │  %s\n  │  %s\n  │  purpose: %s\n  └───────────────────────────────────\n\n", msisdn, message, purpose)
@@ -58,7 +69,7 @@ func SendSms(msisdn, message, purpose string) error {
 		}
 		senderID := os.Getenv("SMS_SENDER_ID")
 		if senderID == "" {
-			senderID = "ESOKO"
+			senderID = "ESOQO"
 		}
 		// Param names match packages/auth/src/sms.ts's 'mock' branch —
 		// the mock-smtp image reads "mobiles" as the recipient, not "to";

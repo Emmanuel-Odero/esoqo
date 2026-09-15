@@ -1,8 +1,8 @@
 'use server';
 
 import { headers } from 'next/headers';
-import { submitJamiiContactMessage, JAMII_CONTACT_CREATE, type Ctx } from '@esoko/db';
-import { jamiiContactMessageSchema } from '@esoko/domain';
+import { submitJamiiContactMessage, JAMII_CONTACT_CREATE, type Ctx } from '@esoqo/db';
+import { jamiiContactMessageSchema, clientIpFrom } from '@esoqo/domain';
 
 export type ActionResult<T = void> =
   | { ok: true; data: T }
@@ -10,7 +10,7 @@ export type ActionResult<T = void> =
 
 async function clientIp(): Promise<string> {
   const h = await headers();
-  return h.get('x-forwarded-for')?.split(',')[0]?.trim() ?? 'unknown';
+  return clientIpFrom((n) => h.get(n)) ?? 'unknown';
 }
 
 /** Anonymous by design, same shape as the "apply" flow's anonApplyCtx

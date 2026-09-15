@@ -4,12 +4,12 @@ import { revalidatePath } from 'next/cache';
 import {
   sniff, makeStorageKey, putObject, deleteObject, MAX_BYTES,
   getJamiiPageForManagement, updateJamiiPage, addJamiiPhoto, removeJamiiPhoto,
-} from '@esoko/db';
-// Its own subpath, not the main '@esoko/db' entry — see that package's
+} from '@esoqo/db';
+// Its own subpath, not the main '@esoqo/db' entry — see that package's
 // index.ts for why (sharp, a native binary addon, would otherwise land
 // in every app's Server Component graph just for importing anything
-// else from @esoko/db).
-import { compressImage } from '@esoko/db/image-compression';
+// else from @esoqo/db).
+import { compressImage } from '@esoqo/db/image-compression';
 import { requireSubject } from '@/lib/session';
 
 export type UploadResult = { ok: true; url: string; photoId?: string } | { ok: false; error: string };

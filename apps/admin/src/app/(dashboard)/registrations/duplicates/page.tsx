@@ -1,7 +1,7 @@
 import Link from 'next/link';
-import { Icon } from '@esoko/ui';
-import { findProbableDuplicates, listRegistrations } from '@esoko/db';
-import { maskMsisdn } from '@esoko/domain';
+import { Icon } from '@esoqo/ui';
+import { findProbableDuplicates, listRegistrations } from '@esoqo/db';
+import { maskMsisdn } from '@esoqo/domain';
 import { requireStaff } from '@/lib/session';
 
 export const dynamic = 'force-dynamic';

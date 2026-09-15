@@ -1,7 +1,7 @@
 import type { Metadata } from 'next';
 import Link from 'next/link';
-import { Icon } from '@esoko/ui';
-import { listMyStores, listShifts } from '@esoko/db';
+import { Icon } from '@esoqo/ui';
+import { listMyStores, listShifts } from '@esoqo/db';
 import { requireSubject } from '@/lib/session';
 
 export const metadata: Metadata = { title: 'Shifts' };

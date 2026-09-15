@@ -27,7 +27,7 @@ Five layers, and `proxy.ts` is not one of the load-bearing ones.
 5. Hash-chained audit log
 
 Enforcement is mechanical, not cultural: `no-restricted-imports` in
-`@esoko/config` forbids importing `@prisma/client` outside
+`@esoqo/config` forbids importing `@prisma/client` outside
 `packages/db`, and CI fails on violation. A rule in a document is
 advisory; a rule in CI is enforced — which matters more than usual here
 because much of the code is written with AI assistance, and a model does

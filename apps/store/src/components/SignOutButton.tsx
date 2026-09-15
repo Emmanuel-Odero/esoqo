@@ -1,7 +1,7 @@
 'use client';
 
 import { useTransition } from 'react';
-import { Icon } from '@esoko/ui';
+import { Icon } from '@esoqo/ui';
 import { signOut } from '@/app/dashboard/(shell)/signout/actions';
 
 export function SignOutButton() {

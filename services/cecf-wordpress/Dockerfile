@@ -2,7 +2,7 @@
 #  CECF WordPress (Bedrock + Sage) — production image
 #
 #  Build context is the REPO ROOT, not this folder — the Sage theme
-#  is a real pnpm workspace package (@esoko/cecf-sage-theme) and this
+#  is a real pnpm workspace package (@esoqo/cecf-sage-theme) and this
 #  build reuses the monorepo's pnpm-lock.yaml / pnpm store, same as
 #  every other Node package here. Build with:
 #
@@ -22,14 +22,14 @@ COPY services/cecf-wordpress/web/app/themes/cecf-sage/package.json \
 
 # Only fetch the theme package's slice of the workspace graph.
 RUN corepack prepare pnpm@$(node -pe "require('./package.json').packageManager.split('@')[1]") --activate \
-    && pnpm install --filter @esoko/cecf-sage-theme --frozen-lockfile
+    && pnpm install --filter @esoqo/cecf-sage-theme --frozen-lockfile
 
 COPY services/cecf-wordpress/web/app/themes/cecf-sage \
      services/cecf-wordpress/web/app/themes/cecf-sage
 
 ARG APP_URL=https://childeldercare.foundation
 ENV APP_URL=${APP_URL}
-RUN pnpm --filter @esoko/cecf-sage-theme build
+RUN pnpm --filter @esoqo/cecf-sage-theme build
 
 # ── Stage 2: Composer dependencies (Bedrock root + Sage theme) ──
 FROM composer:2 AS vendor

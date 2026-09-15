@@ -7,6 +7,8 @@ import (
 	"encoding/base64"
 	"encoding/hex"
 	"encoding/json"
+	"os"
+	"strconv"
 	"time"
 
 	"github.com/redis/go-redis/v9"
@@ -21,15 +23,46 @@ import (
 
 const SessionTTL = 14 * 24 * time.Hour
 
+// SessionIdleTTL bounds how long a session survives without being used,
+// inside the absolute SessionTTL above.
+//
+// 14 days of absolute life with no idle bound meant a phone left in a
+// matatu, or a shared till device nobody signed out of, stayed a valid
+// credential for a fortnight. Seven days is deliberately generous — this
+// is a mobile-first product where a fortnightly user is normal, and the
+// goal is to expire genuinely abandoned sessions, not to log people out
+// mid-task. Override with SESSION_IDLE_TTL_HOURS.
+var SessionIdleTTL = idleTTLFromEnv()
+
+func idleTTLFromEnv() time.Duration {
+	if raw := os.Getenv("SESSION_IDLE_TTL_HOURS"); raw != "" {
+		if h, err := strconv.Atoi(raw); err == nil && h > 0 {
+			return time.Duration(h) * time.Hour
+		}
+	}
+	return 7 * 24 * time.Hour
+}
+
 type SessionData struct {
-	ActorType    ActorType `json:"actorType"`
-	ActorID      string    `json:"actorId"`
-	PartyID      string    `json:"partyId,omitempty"`
-	OrgID        string    `json:"orgId,omitempty"`
-	StoreID      string    `json:"storeId,omitempty"`
-	TicketOrgID  string    `json:"ticketOrgId,omitempty"`
-	Capabilities []string  `json:"capabilities"`
-	IssuedAt     int64     `json:"issuedAt"`
+	ActorType   ActorType `json:"actorType"`
+	ActorID     string    `json:"actorId"`
+	PartyID     string    `json:"partyId,omitempty"`
+	OrgID       string    `json:"orgId,omitempty"`
+	StoreID     string    `json:"storeId,omitempty"`
+	TicketOrgID string    `json:"ticketOrgId,omitempty"`
+	// ParcelOrgID scopes an AGENT session to one courier company, the
+	// exact role TicketOrgID plays for organiser staff. Set only by
+	// parcel-company PIN sign-in; empty everywhere else.
+	ParcelOrgID  string   `json:"parcelOrgId,omitempty"`
+	Capabilities []string `json:"capabilities"`
+	IssuedAt     int64    `json:"issuedAt"`
+
+	// ExpiresAt is the absolute end of life, carried in the payload so
+	// that refreshing the idle window (which rewrites the Redis TTL)
+	// cannot extend a session indefinitely. Zero for sessions issued
+	// before this field existed — those keep the old behaviour of
+	// expiring purely on the Redis TTL.
+	ExpiresAt int64 `json:"expiresAt,omitempty"`
 }
 
 func hashToken(t string) string {
@@ -57,15 +90,26 @@ func (s *SessionService) CreateSession(ctx context.Context, data SessionData, tt
 	}
 	token := base64.RawURLEncoding.EncodeToString(tokenBytes)
 
-	data.IssuedAt = time.Now().UnixMilli()
+	now := time.Now()
+	data.IssuedAt = now.UnixMilli()
+	data.ExpiresAt = now.Add(ttl).UnixMilli()
 	payload, err := json.Marshal(data)
 	if err != nil {
 		return "", err
 	}
 
+	// The Redis key expires on the idle window, not the absolute TTL —
+	// ReadSession slides it forward on each use, and ExpiresAt in the
+	// payload is what stops that sliding forever. A session unused for
+	// SessionIdleTTL simply disappears.
+	redisTTL := ttl
+	if SessionIdleTTL < redisTTL {
+		redisTTL = SessionIdleTTL
+	}
+
 	h := hashToken(token)
 	pipe := s.rdb.TxPipeline()
-	pipe.Set(ctx, "sess:"+h, payload, ttl)
+	pipe.Set(ctx, "sess:"+h, payload, redisTTL)
 	if data.ActorID != "" {
 		pipe.SAdd(ctx, "sess:actor:"+data.ActorID, h)
 	}
@@ -90,7 +134,34 @@ func (s *SessionService) ReadSession(ctx context.Context, token string) (*Sessio
 	if err := json.Unmarshal([]byte(raw), &data); err != nil {
 		return nil, nil
 	}
+
+	// Absolute expiry wins over the sliding Redis TTL. Without this
+	// check, a session touched once a day would live forever.
+	if data.ExpiresAt > 0 && time.Now().UnixMilli() >= data.ExpiresAt {
+		s.rdb.Del(ctx, "sess:"+hashToken(token))
+		return nil, nil
+	}
+
+	// Slide the idle window forward. Best-effort: a failure here costs
+	// the user an early sign-out, never wrongly extends anything.
+	if remaining := remainingLife(data); remaining > 0 {
+		s.rdb.Expire(ctx, "sess:"+hashToken(token), remaining)
+	}
+
 	return &data, nil
+}
+
+// remainingLife is how long this session may still live: the idle
+// window, clipped to whatever is left of its absolute lifetime.
+func remainingLife(data SessionData) time.Duration {
+	ttl := SessionIdleTTL
+	if data.ExpiresAt > 0 {
+		untilAbsolute := time.Until(time.UnixMilli(data.ExpiresAt))
+		if untilAbsolute < ttl {
+			ttl = untilAbsolute
+		}
+	}
+	return ttl
 }
 
 func (s *SessionService) DestroySession(ctx context.Context, token string) error {
@@ -151,7 +222,9 @@ func (s *SessionService) CtxFromToken(ctx context.Context, token, ip string) (*C
 		OrgID:        data.OrgID,
 		StoreID:      data.StoreID,
 		TicketOrgID:  data.TicketOrgID,
+		ParcelOrgID:  data.ParcelOrgID,
 		IP:           ip,
 		Verified:     true,
+		ExpiresAt:    data.ExpiresAt,
 	}, nil
 }

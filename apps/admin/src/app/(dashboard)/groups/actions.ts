@@ -7,8 +7,10 @@ import {
   sniff, makeStorageKey, safeName, sha256, putObject, MAX_BYTES,
   getPartyByMsisdn, addTenant, endTenancy, setMallSlug, listTenants,
   createStorageAgreement, endStorageAgreement, listStorageAgreements, billStoragePeriod,
-} from '@esoko/db';
-import { toSafeErrorMessage } from '@esoko/domain';
+  type MemberAddedNotice,
+} from '@esoqo/db';
+import { sendSms, sendEmail } from '@esoqo/auth';
+import { toSafeErrorMessage, groupInviteSms } from '@esoqo/domain';
 import { requireStaff } from '@/lib/session';
 
 export type Result = { ok: true } | { ok: false; error: string };
@@ -28,12 +30,42 @@ export async function actionSearchPeople(orgPartyId: string, q: string) {
   }));
 }
 
+/**
+ * Tells someone they've been put in a group, in whichever channel we
+ * actually have for them.
+ *
+ * Best-effort on purpose, exactly as actionInviteMember in apps/app
+ * treats its own send: the membership row is the source of truth, and a
+ * staffer should not see "that didn't save" because an SMS gateway was
+ * briefly down. A member added with no phone and no email on file
+ * (`notice.notify === null`) is the documented normal case for a paper
+ * roster — there is simply nobody to tell yet.
+ */
+async function tellThemTheyWereAdded(notice: MemberAddedNotice) {
+  if (!notice.notify) return;
+  try {
+    if (notice.notify.channel === 'sms') {
+      await sendSms(notice.notify.to, groupInviteSms(notice.orgName, { joinFeeKes: notice.joinFeeKes }), 'group-invite');
+    } else {
+      await sendEmail(
+        notice.notify.to, `You've been added to ${notice.orgName} on Esoqo`,
+        `You've been added to ${notice.orgName} on Esoqo.\n\n`
+        + 'Esoqo accounts sign in with a phone number, not this email — once one is added to your record '
+        + '(ask whoever added you, or add it yourself once you have an account), you can sign in and set a PIN.',
+      );
+    }
+  } catch (e) {
+    console.error('[groups] member-added notification failed', e);
+  }
+}
+
 export async function actionAddMember(
   orgPartyId: string, personPartyId: string, role: MemberRole, customRole?: string,
 ): Promise<Result> {
   try {
     const ctx = await requireStaff();
-    await addMember(ctx, orgPartyId, personPartyId, role, customRole);
+    const notice = await addMember(ctx, orgPartyId, personPartyId, role, customRole);
+    await tellThemTheyWereAdded(notice);
     revalidatePath('/groups');
     return { ok: true };
   } catch (e) { return fail(e); }
@@ -45,7 +77,8 @@ export async function actionAddNewMember(
   try {
     const ctx = await requireStaff();
     if (!officialName.trim()) return { ok: false, error: 'Enter a name' };
-    await addNewMember(ctx, orgPartyId, { officialName, msisdn: msisdn || undefined }, role, customRole);
+    const notice = await addNewMember(ctx, orgPartyId, { officialName, msisdn: msisdn || undefined }, role, customRole);
+    await tellThemTheyWereAdded(notice);
     revalidatePath('/groups');
     return { ok: true };
   } catch (e) { return fail(e); }
@@ -163,7 +196,7 @@ export async function actionFindTenantByPhone(msisdn: string) {
   const ctx = await requireStaff();
   if (!msisdn.trim()) return { ok: false as const, error: 'Enter a phone number' };
   const party = await getPartyByMsisdn(ctx, msisdn.trim());
-  if (!party) return { ok: false as const, error: 'No one on Esoko has that number' };
+  if (!party) return { ok: false as const, error: 'No one on Esoqo has that number' };
   const enterprises = party.enterprises.map((e) => ({ id: e.id, workRaw: e.workRaw }));
   if (enterprises.length === 0) return { ok: false as const, error: 'That person has no business on file yet' };
   return { ok: true as const, enterprises };

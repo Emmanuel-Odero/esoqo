@@ -8,8 +8,8 @@ export function Logo({ inverse = false }: { inverse?: boolean }) {
           <path d="M 38 62 L 8 45" />
         </g>
       </svg>
-      <span className="w">soko</span>
-      <span className="sr-only">Esoko home</span>
+      <span className="w">soqo</span>
+      <span className="sr-only">Esoqo home</span>
     </span>
   );
 }

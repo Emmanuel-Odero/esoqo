@@ -5,9 +5,9 @@ import (
 
 	"github.com/gin-gonic/gin"
 
-	"github.com/esoko/core-go/internal/authsvc"
-	"github.com/esoko/core-go/internal/dbx"
-	"github.com/esoko/core-go/internal/payments"
+	"github.com/esoqo/core-go/internal/authsvc"
+	"github.com/esoqo/core-go/internal/dbx"
+	"github.com/esoqo/core-go/internal/payments"
 )
 
 type verifyFareRequest struct {
@@ -53,7 +53,7 @@ func (s *Server) handleVerifyFare(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"verification": out})
 }
 
-// GET /v1/trips/resolve?code=esoko://t?... or BUS-XXXXXX — public trip card.
+// GET /v1/trips/resolve?code=esoqo://t?... or BUS-XXXXXX — public trip card.
 func (s *Server) handleResolveTrip(c *gin.Context) {
 	code := c.Query("code")
 	if code == "" {

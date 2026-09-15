@@ -1,10 +1,13 @@
 'use client';
+import { displayKES } from '@esoqo/domain';
 import { useState, useTransition } from 'react';
 import { actionCreateVoucher, actionLoadVoucher } from './actions';
 
 type Voucher = {
   id: string; label: string; purpose: string; status: string;
-  shortCode: string; qrPayload: string; balancePoints: number; balanceKes: number;
+  shortCode: string; qrPayload: string; balancePoints: number;
+  // Decimal string from core-go — see @esoqo/domain's money module.
+  balanceKes: string;
 };
 
 export function VoucherClient({ initial }: { initial: Voucher[] }) {
@@ -51,7 +54,7 @@ export function VoucherClient({ initial }: { initial: Voucher[] }) {
         {initial.map((v) => (
           <div key={v.id} style={{ borderTop: '1px solid var(--line)', padding: '10px 0' }}>
             <strong>{v.label} · {v.purpose}</strong>
-            <p className="mono">{v.shortCode} · {v.balancePoints} pts ≈ KES {v.balanceKes} · {v.status}</p>
+            <p className="mono">{v.shortCode} · {v.balancePoints} pts ≈ KES {displayKES(v.balanceKes)} · {v.status}</p>
             <TopUp id={v.id} />
           </div>
         ))}

@@ -1,5 +1,5 @@
 import Link from 'next/link';
-import { getJamiiPageForManagement, getCampaignStats } from '@esoko/db';
+import { getJamiiPageForManagement, getCampaignStats } from '@esoqo/db';
 import { requireMyPage } from '@/lib/session';
 import { PublishButton } from './PublishButton';
 

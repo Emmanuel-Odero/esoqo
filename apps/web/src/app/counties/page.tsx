@@ -1,11 +1,11 @@
 import type { Metadata } from 'next';
-import { Icon } from '@esoko/ui';
-import { anonCtx, listCounties } from '@esoko/db';
+import { Icon } from '@esoqo/ui';
+import { anonCtx, listCounties } from '@esoqo/db';
 import { CountyPicker } from './CountyPicker';
 
 export const metadata: Metadata = {
   title: 'County requirements',
-  description: 'Permits, licences, fees and offices for Kenyan counties where Esoko works.',
+  description: 'Permits, licences, fees and offices for Kenyan counties where Esoqo works.',
 };
 export const dynamic = 'force-dynamic';
 
@@ -19,8 +19,8 @@ export default async function CountiesPage() {
           <p className="kicker">Counties</p>
           <h1>What your county asks of you, and where to go</h1>
           <p className="lead">
-            Permits, licences, fees, issuing offices and market days — for the counties where Esoko
-            field officers work today. Your Esoko record works in all 47 counties whether or not
+            Permits, licences, fees, issuing offices and market days — for the counties where Esoqo
+            field officers work today. Your Esoqo record works in all 47 counties whether or not
             yours is listed here.
           </p>
         </div>
@@ -46,9 +46,9 @@ export default async function CountiesPage() {
 
           <div className="grid g3" style={{ marginTop: 36 }}>
             {([
-              ['phone', 'b', 'Not your county?', 'Esoko works in all 47. You can join, hold your record, keep your papers and run your group’s money by dialling from anywhere. Field officers and daily prices are being added county by county.'],
-              ['alert-circle', 'a', 'A fee here is wrong', 'Tell us and we will check it with the county before changing it. Dial *483*77# and choose 7, or write to counties@esoko.co.ke with the office and the date you were charged.'],
-              ['gov', 'g', 'For county governments', 'If you are a county revenue or trade officer and want your county’s current rates published here accurately, write to counties@esoko.co.ke.'],
+              ['phone', 'b', 'Not your county?', 'Esoqo works in all 47. You can join, hold your record, keep your papers and run your group’s money by dialling from anywhere. Field officers and daily prices are being added county by county.'],
+              ['alert-circle', 'a', 'A fee here is wrong', 'Tell us and we will check it with the county before changing it. Dial *483*77# and choose 7, or write to counties@esoqo.co.ke with the office and the date you were charged.'],
+              ['gov', 'g', 'For county governments', 'If you are a county revenue or trade officer and want your county’s current rates published here accurately, write to counties@esoqo.co.ke.'],
             ] as const).map(([icon, tone, title, body]) => (
               <div className="card" key={title}>
                 <span className={`icbox icbox-${tone}`} style={{ marginBottom: 13 }}>

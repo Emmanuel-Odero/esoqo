@@ -11,15 +11,14 @@ import {
   getRegistration,
   type Ctx,
   type UpdateRegistrationInput,
-} from '@esoko/db';
-import { issueOtp, verifyOtp, OtpError } from '@esoko/auth';
+} from '@esoqo/db';
+import { issueOtp, verifyOtp, OtpError } from '@esoqo/auth';
 import {
   step2Schema, step3Schema, step4Schema, step5Schema,
   groupDetailsSchema, groupMembershipCheckSchema,
   bizStandingSchema, bizDetailsSchema, bizFinancialsSchema,
   requestOtpSchema, verifyOtpSchema, completeRegistrationSchema,
-  resolveSegment, toSafeErrorMessage,
-} from '@esoko/domain';
+  resolveSegment, toSafeErrorMessage, clientIpFrom } from '@esoqo/domain';
 import { grantRegistrationOwnership, ownsRegistration } from './ownership';
 
 /**
@@ -42,7 +41,7 @@ export type ActionResult<T = void> =
 
 async function requestCtx(): Promise<Ctx> {
   const h = await headers();
-  const ip = h.get('x-forwarded-for')?.split(',')[0]?.trim() ?? null;
+  const ip = clientIpFrom((n) => h.get(n)) ?? null;
   // Anonymous registration is a deliberate, narrow grant: create and edit
   // one's own in-flight registration, nothing else.
   return {
@@ -82,7 +81,7 @@ function fail(e: unknown): ActionResult<never> {
       e,
       "We couldn't save that just now — nothing else you've entered was lost. "
         + 'Try again in a moment. If it keeps happening, dial *483*77# and choose 7, '
-        + 'or write to malalamiko@esoko.co.ke.',
+        + 'or write to malalamiko@esoqo.co.ke.',
     ),
   };
 }
@@ -353,14 +352,14 @@ export async function actionComplete(
 /* ── work search (server-resolved, so client and server agree) ── */
 
 export async function actionSearchWork(query: string) {
-  const { searchSegments } = await import('@esoko/domain');
+  const { searchSegments } = await import('@esoqo/domain');
   return searchSegments(query, 4).map((s) => ({ key: s.key, name: s.name, papers: s.papers }));
 }
 
 /* ── group search (public, name/county only) ───────────────────── */
 
 export async function actionSearchGroups(query: string) {
-  const { searchGroupsPublic } = await import('@esoko/db');
+  const { searchGroupsPublic } = await import('@esoqo/db');
   const ctx = await requestCtx();
   return searchGroupsPublic(ctx, query);
 }
@@ -368,7 +367,7 @@ export async function actionSearchGroups(query: string) {
 /* ── business search (public, name/county only) ──────────────────── */
 
 export async function actionSearchBusinesses(query: string) {
-  const { searchBusinessesPublic } = await import('@esoko/db');
+  const { searchBusinessesPublic } = await import('@esoqo/db');
   const ctx = await requestCtx();
   return searchBusinessesPublic(ctx, query);
 }
@@ -380,7 +379,7 @@ export async function actionCheckGroupMembership(
 ): Promise<ActionResult<{ matched: boolean }>> {
   try {
     const v = groupMembershipCheckSchema.parse(raw);
-    const { checkGroupMembership } = await import('@esoko/db');
+    const { checkGroupMembership } = await import('@esoqo/db');
     const ctx = await requestCtx();
     const result = await checkGroupMembership(ctx, v.groupPartyId, {
       name: v.name || undefined,

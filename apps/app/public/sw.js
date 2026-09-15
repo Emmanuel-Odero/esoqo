@@ -1,4 +1,4 @@
-/* Esoko service worker — hand-rolled, dependency-free.
+/* Esoqo service worker — hand-rolled, dependency-free.
  * Runs in the worker global scope, not the page — ESLint's no-undef
  * doesn't know the worker globals, so it is disabled here.
  *
@@ -15,7 +15,7 @@
  * Version everything through CACHE_VERSION so an app update cleanly
  * replaces the lot on activate.
  */
-const CACHE_VERSION = 'esoko-2026-08-14-v1';
+const CACHE_VERSION = 'esoqo-2026-08-14-v1';
 const STATIC_CACHE = `${CACHE_VERSION}-static`;
 const NAV_CACHE = `${CACHE_VERSION}-nav`;
 const OFFLINE_URL = '/offline';

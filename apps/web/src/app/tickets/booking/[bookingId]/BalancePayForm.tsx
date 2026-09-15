@@ -1,8 +1,9 @@
 'use client';
+import { displayKES, formatKES, toCentsOrZero } from '@esoqo/domain';
 import { useRouter } from 'next/navigation';
 import { useEffect, useState, useTransition } from 'react';
-import { Icon } from '@esoko/ui';
-import { useAnnounce } from '@esoko/a11y';
+import { Icon } from '@esoqo/ui';
+import { useAnnounce } from '@esoqo/a11y';
 import { actionPayBookingBalance, actionCheckBookingStatus } from '../../[slug]/actions';
 
 /** The amount field + M-Pesa prompt for one balance payment. Console
@@ -10,9 +11,10 @@ import { actionPayBookingBalance, actionCheckBookingStatus } from '../../[slug]/
  *  progress; against real Daraja it polls until the callback lands. */
 export function BalancePayForm(
   { bookingId, balanceKes, msisdn, dueStr }:
-  { bookingId: string; balanceKes: number; msisdn: string; dueStr: string | null },
+  // balanceKes is a decimal string from core-go.
+  { bookingId: string; balanceKes: string; msisdn: string; dueStr: string | null },
 ) {
-  const [amount, setAmount] = useState(String(balanceKes));
+  const [amount, setAmount] = useState(formatKES(toCentsOrZero(balanceKes), { alwaysCents: true }));
   const [stage, setStage] = useState<'form' | 'waiting'>('form');
   const [error, setError] = useState<string | null>(null);
   const [pending, start] = useTransition();
@@ -35,11 +37,15 @@ export function BalancePayForm(
   function pay() {
     setError(null);
     if (amountNum <= 0) { setError('Enter an amount'); return; }
-    if (amountNum > balanceKes) { setError(`Only KES ${balanceKes.toLocaleString('en-KE')} is left to pay`); return; }
+    // Compared in cents: paying exactly the remaining balance must be
+    // accepted, and a float comparison is what rejects it by a hair.
+    if (toCentsOrZero(amount) > toCentsOrZero(balanceKes)) {
+      setError(`Only KES ${displayKES(balanceKes)} is left to pay`); return;
+    }
     start(async () => {
       const r = await actionPayBookingBalance({ bookingId, amountKes: amountNum });
       if (!r.ok) { setError(r.error); announce(r.error, 'assertive'); return; }
-      if (r.data.status === 'PAID' || r.data.balanceKes !== balanceKes) {
+      if (r.data.status === 'PAID' || toCentsOrZero(r.data.balanceKes) !== toCentsOrZero(balanceKes)) {
         router.refresh();
       } else {
         setStage('waiting');
@@ -72,7 +78,7 @@ export function BalancePayForm(
       </div>
       {dueStr && (
         <p className="sub" style={{ margin: '8px 0 0', fontSize: '.8rem' }}>
-          Balance of KES {balanceKes.toLocaleString('en-KE')} due by {dueStr}.
+          Balance of KES {displayKES(balanceKes)} due by {dueStr}.
         </p>
       )}
       {error && (

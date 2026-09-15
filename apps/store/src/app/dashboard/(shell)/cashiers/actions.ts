@@ -1,9 +1,9 @@
 'use server';
 
 import { revalidatePath } from 'next/cache';
-import { createCashier, setCashierActive } from '@esoko/db';
-import { createCashierSchema } from '@esoko/domain';
-import { hashPin, isWeakPin } from '@esoko/auth';
+import { createCashier, setCashierActive } from '@esoqo/db';
+import { createCashierSchema } from '@esoqo/domain';
+import { hashPin, isWeakPin } from '@esoqo/auth';
 import { requireSubject } from '@/lib/session';
 
 export type ActionResult = { ok: true } | { ok: false; error: string };

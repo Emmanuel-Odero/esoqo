@@ -1,8 +1,8 @@
 'use server';
 
 import { cookies, headers } from 'next/headers';
-import { SESSION_COOKIE, checkRateLimit, RateLimitError } from '@esoko/auth';
-import { signInSchema, requestPinCodeSchema, setPinSchema } from '@esoko/domain';
+import { SESSION_COOKIE, checkRateLimit, RateLimitError } from '@esoqo/auth';
+import { signInSchema, requestPinCodeSchema, setPinSchema, clientIpFrom } from '@esoqo/domain';
 
 export type ActionResult<T = void> =
   | { ok: true; data: T }
@@ -10,7 +10,7 @@ export type ActionResult<T = void> =
 
 async function clientIp(): Promise<string> {
   const h = await headers();
-  return h.get('x-forwarded-for')?.split(',')[0]?.trim() ?? 'unknown';
+  return clientIpFrom((n) => h.get(n)) ?? 'unknown';
 }
 
 const CORE_GO_URL = process.env.CORE_GO_API_URL ?? 'http://localhost:4100';

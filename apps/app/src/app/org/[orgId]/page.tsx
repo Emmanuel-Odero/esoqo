@@ -1,7 +1,7 @@
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
-import { Icon, type IconName } from '@esoko/ui';
-import { AuthorisationError } from '@esoko/db';
+import { Icon, type IconName } from '@esoqo/ui';
+import { AuthorisationError } from '@esoqo/db';
 import { requireOrgAccess } from '@/lib/session';
 import { canOrg, orgGo, orgForCan, type GoOrg, type GoListing, type GoOrgBooking } from '@/lib/ticketing';
 

@@ -8,17 +8,17 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 
-	"github.com/esoko/core-go/internal/fleetqr"
+	"github.com/esoqo/core-go/internal/fleetqr"
 )
 
-// EnsureEsokoPaymentId ports packages/db/src/dal/payment-id.ts's
-// issueEsokoPaymentId, minus the capability check (core-go already knows
+// EnsureEsoqoPaymentId ports packages/db/src/dal/payment-id.ts's
+// issueEsoqoPaymentId, minus the capability check (core-go already knows
 // this is the signed-in person's own party — see handleMe) — plus the
 // MSISDN_VERIFIED Attestation packages/db/src/dal/registration.ts
 // creates alongside a freshly-verified Person, since core-go's own
 // sign-up flow (FindOrCreatePersonByMsisdn) doesn't write one yet.
 // Idempotent: returns the existing code if one's already issued.
-func EnsureEsokoPaymentId(ctx context.Context, pool *pgxpool.Pool, partyID, msisdn string) (string, error) {
+func EnsureEsoqoPaymentId(ctx context.Context, pool *pgxpool.Pool, partyID, msisdn string) (string, error) {
 	var existing string
 	err := pool.QueryRow(ctx, `SELECT code FROM esoko_payment_id WHERE "partyId" = $1`, partyID).Scan(&existing)
 	if err == nil {
@@ -63,7 +63,7 @@ func generatePaymentIdCode() (string, error) {
 // ensureMsisdnVerifiedAttestation mirrors registration.ts's exact
 // insert shape (claimValue: {msisdn}, method: 'API', issuedAt: the
 // verification time) — idempotent via an existence check first, since
-// unlike EsokoPaymentId's code, Attestation has no unique constraint to
+// unlike EsoqoPaymentId's code, Attestation has no unique constraint to
 // upsert against.
 func ensureMsisdnVerifiedAttestation(ctx context.Context, pool *pgxpool.Pool, partyID, msisdn string) error {
 	var exists bool
@@ -89,10 +89,10 @@ func ensureMsisdnVerifiedAttestation(ctx context.Context, pool *pgxpool.Pool, pa
 	return err
 }
 
-// GetEsokoPaymentId — read-only lookup, no side effects (used where
+// GetEsoqoPaymentId — read-only lookup, no side effects (used where
 // callers must not accidentally provision one — e.g. a future
 // staff-facing read).
-func GetEsokoPaymentId(ctx context.Context, pool *pgxpool.Pool, partyID string) (*string, error) {
+func GetEsoqoPaymentId(ctx context.Context, pool *pgxpool.Pool, partyID string) (*string, error) {
 	var code string
 	err := pool.QueryRow(ctx, `SELECT code FROM esoko_payment_id WHERE "partyId" = $1`, partyID).Scan(&code)
 	if errors.Is(err, pgx.ErrNoRows) {

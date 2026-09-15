@@ -1,6 +1,6 @@
 import { notFound } from 'next/navigation';
-import { Icon } from '@esoko/ui';
-import { AuthorisationError } from '@esoko/db';
+import { Icon } from '@esoqo/ui';
+import { AuthorisationError } from '@esoqo/db';
 import { requireOrgAccess } from '@/lib/session';
 import { orgGo, type GoOrg, type GoStaff } from '@/lib/ticketing';
 import { StaffForm } from './StaffForm';
@@ -35,7 +35,7 @@ export default async function OrgStaff({ params }: { params: Promise<{ orgId: st
           <p>
             <Icon name="info" size={14} /> Staff sign in on their own device at{' '}
             <strong className="mono">{signInUrl}</strong> with their name and the PIN you set below —
-            never their own Esoko account.
+            never their own Esoqo account.
           </p>
         </div>
       </div>

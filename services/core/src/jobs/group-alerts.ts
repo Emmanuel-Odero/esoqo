@@ -1,7 +1,7 @@
 import type { FastifyBaseLogger } from 'fastify';
-import { findStalledGroups } from '@esoko/db';
-import { contributionGapSms } from '@esoko/domain';
-import { sendSms } from '@esoko/auth/sms';
+import { findStalledGroups } from '@esoqo/db';
+import { contributionGapSms } from '@esoqo/domain';
+import { sendSms } from '@esoqo/auth/sms';
 
 /**
  * The contribution-gap digest — the SMS counterpart to a dashboard, for

@@ -13,6 +13,8 @@ import (
 	"math"
 	"strconv"
 
+	"github.com/esoqo/core-go/internal/money"
+
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
@@ -122,8 +124,8 @@ func UpdateParcelZone(ctx context.Context, pool *pgxpool.Pool, id, name string, 
 // (see model ParcelDistanceRate's own comment on why it's not a
 // per-zone-pair matrix).
 type ParcelDistanceRateView struct {
-	PerKmKes        float64 `json:"perKmKes"`
-	MinChargeableKm float64 `json:"minChargeableKm"`
+	PerKmKes        money.Amount `json:"perKmKes"`
+	MinChargeableKm float64      `json:"minChargeableKm"`
 }
 
 // GetParcelDistanceRate — nil when no admin has configured one yet,
@@ -141,9 +143,7 @@ func GetParcelDistanceRate(ctx context.Context, pool *pgxpool.Pool) (*ParcelDist
 	if err != nil {
 		return nil, err
 	}
-	if v.PerKmKes, err = parseFloatOrZero(perKmText); err != nil {
-		return nil, err
-	}
+	v.PerKmKes = money.AmountOf(money.MustParseKES(perKmText))
 	if v.MinChargeableKm, err = parseFloatOrZero(minKmText); err != nil {
 		return nil, err
 	}
@@ -188,5 +188,8 @@ func DistanceSurchargeKes(ctx context.Context, pool *pgxpool.Pool, originZoneID,
 	if chargeableKm < rate.MinChargeableKm {
 		chargeableKm = rate.MinChargeableKm
 	}
-	return chargeableKm * rate.PerKmKes, distanceKm, nil
+	// Rate x distance in exact cents — see money.Cents.Scale. The result
+	// is a surcharge that lands in a Decimal(12,2) column, so the cent it
+	// rounds to is decided here rather than by the float product.
+	return rate.PerKmKes.Cents().Scale(chargeableKm).KES(), distanceKm, nil
 }

@@ -1,9 +1,9 @@
 'use server';
 
 import { revalidatePath } from 'next/cache';
-import { getCashierPinHash, getOpenShiftForCashier, openShift, closeShift, getShiftReport } from '@esoko/db';
-import { cashierPinSchema, openShiftSchema, closeShiftSchema } from '@esoko/domain';
-import { verifyPin } from '@esoko/auth';
+import { getCashierPinHash, getOpenShiftForCashier, openShift, closeShift, getShiftReport } from '@esoqo/db';
+import { cashierPinSchema, openShiftSchema, closeShiftSchema } from '@esoqo/domain';
+import { verifyPin } from '@esoqo/auth';
 import { requireSubject, requireStoreAccess } from '@/lib/session';
 
 export type ActionResult<T = undefined> = { ok: true; data: T } | { ok: false; error: string };

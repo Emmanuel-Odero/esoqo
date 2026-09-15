@@ -1,8 +1,8 @@
 'use client';
 import { useEffect, useMemo, useState, useTransition } from 'react';
-import { Icon } from '@esoko/ui';
-import { useAnnounce } from '@esoko/a11y';
-import { columnsForPattern, minDepositKes, INSTALLMENT_MIN_LEAD_HOURS } from '@esoko/domain';
+import { Icon } from '@esoqo/ui';
+import { useAnnounce } from '@esoqo/a11y';
+import { columnsForPattern, minDepositKes, INSTALLMENT_MIN_LEAD_HOURS } from '@esoqo/domain';
 import { actionCreateBooking, actionListAvailableSeats, actionListScheduleSeats, actionCheckBookingStatus } from './actions';
 
 const APP_URL = process.env.NEXT_PUBLIC_APP_URL ?? 'http://localhost:3001';

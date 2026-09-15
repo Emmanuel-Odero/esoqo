@@ -8,16 +8,16 @@ import {
   completeCecfRegistration, uploadCecfDocument, cecfRegistrantOrgRole,
   searchGroupsPublic,
   type Ctx,
-} from '@esoko/db';
-import { initiateStkPush, MpesaError, initiatePesapalOrder, PesapalError } from '@esoko/payments';
-import { cecfIngestSchema, cecfDocumentUploadSchema, cecfMemberSchema, msisdnSchema } from '@esoko/domain';
+} from '@esoqo/db';
+import { initiateStkPush, MpesaError, initiatePesapalOrder, PesapalError } from '@esoqo/payments';
+import { cecfIngestSchema, cecfDocumentUploadSchema, cecfMemberSchema, msisdnSchema } from '@esoqo/domain';
 import { z } from 'zod';
 
 /**
  * The authenticated facade the CECF WordPress site's PHP backend calls —
  * see docs/proposals/cecf-wordpress-registration.md. WordPress never
  * talks to Daraja, Pesapal or the database directly; it talks to this,
- * which is a thin proxy over the *same* @esoko/db functions
+ * which is a thin proxy over the *same* @esoqo/db functions
  * apps/app/join's Server Actions already call. The one thing every route
  * here adds over those Server Actions is HMAC service authentication —
  * there is no browser session to trust, so a shared secret stands in for

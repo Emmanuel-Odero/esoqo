@@ -25,7 +25,7 @@ export default async function ParcelCouriersPage({ searchParams }: { searchParam
         <div>
           <h1>Couriers</h1>
           <p>
-            The vetted, formal courier role — distinct from any signed-in Esoko user. A courier only
+            The vetted, formal courier role — distinct from any signed-in Esoqo user. A courier only
             shows up in the assign panel or the claim-a-job flow once they&apos;re Active here.
           </p>
         </div>

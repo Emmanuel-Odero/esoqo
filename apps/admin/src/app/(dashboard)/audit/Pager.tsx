@@ -1,6 +1,6 @@
 import Link from 'next/link';
 import type { Route } from 'next';
-import { Icon } from '@esoko/ui';
+import { Icon } from '@esoqo/ui';
 
 export interface PagerFilters { action?: string; actorType?: string; from?: string; to?: string }
 

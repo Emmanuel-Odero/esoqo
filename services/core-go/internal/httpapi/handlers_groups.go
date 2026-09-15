@@ -5,7 +5,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 
-	"github.com/esoko/core-go/internal/dbx"
+	"github.com/esoqo/core-go/internal/dbx"
 )
 
 type createGroupRequest struct {
@@ -24,7 +24,7 @@ func (s *Server) handleCreateGroup(c *gin.Context) {
 	}
 	orgID, err := dbx.CreateOwnGroup(c.Request.Context(), s.Pool, ctx.PartyID, req.OrgKind, req.OfficialName, req.KnownAs, req.County)
 	if err != nil {
-		writeError(c, http.StatusBadRequest, "CREATE_FAILED", err.Error())
+		writeSafeError(c, http.StatusBadRequest, "CREATE_FAILED", err, "Could not create this group")
 		return
 	}
 	c.JSON(http.StatusOK, gin.H{"groupId": orgID})
@@ -35,7 +35,7 @@ func (s *Server) handleJoinGroup(c *gin.Context) {
 	status, err := dbx.JoinGroup(c.Request.Context(), s.Pool, ctx.PartyID, c.Param("id"))
 	if err != nil {
 		if err == dbx.ErrAlreadyMember {
-			writeError(c, http.StatusConflict, "ALREADY_MEMBER", err.Error())
+			writeSafeError(c, http.StatusConflict, "ALREADY_MEMBER", err, "You are already a member of this group")
 			return
 		}
 		writeError(c, http.StatusInternalServerError, "JOIN_FAILED", "Could not join that group")

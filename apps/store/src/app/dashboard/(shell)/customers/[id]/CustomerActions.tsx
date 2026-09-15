@@ -2,7 +2,7 @@
 
 import { useState, useTransition } from 'react';
 import { useRouter } from 'next/navigation';
-import { Icon } from '@esoko/ui';
+import { Icon } from '@esoqo/ui';
 import { payDownBalance, adjustBalance, editCustomer } from '../actions';
 
 type Tab = 'pay' | 'adjust' | 'edit';
@@ -18,13 +18,21 @@ export function CustomerActions({ customerId, balanceKes, name, notes }: {
   const [error, setError] = useState<string | null>(null);
   const [pending, startTransition] = useTransition();
   const router = useRouter();
+  // One token per intent, held across retries: if a submit failed but
+  // the write actually landed (a timeout on a slow till connection),
+  // resending the same token dedupes instead of paying twice. Rotated
+  // only once an attempt has succeeded — see reset().
+  const [requestId, setRequestId] = useState(() => crypto.randomUUID());
 
-  function reset() { setTab(null); setAmount(''); setNote(''); setError(null); }
+  function reset() {
+    setTab(null); setAmount(''); setNote(''); setError(null);
+    setRequestId(crypto.randomUUID());
+  }
 
   function submitPay() {
     setError(null);
     startTransition(async () => {
-      const result = await payDownBalance(customerId, { amountKes: Number(amount), note });
+      const result = await payDownBalance(customerId, { amountKes: Number(amount), note, requestId });
       if (!result.ok) { setError(result.error); return; }
       reset(); router.refresh();
     });
@@ -33,7 +41,7 @@ export function CustomerActions({ customerId, balanceKes, name, notes }: {
   function submitAdjust() {
     setError(null);
     startTransition(async () => {
-      const result = await adjustBalance(customerId, { amountKes: Number(amount), note });
+      const result = await adjustBalance(customerId, { amountKes: Number(amount), note, requestId });
       if (!result.ok) { setError(result.error); return; }
       reset(); router.refresh();
     });

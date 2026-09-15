@@ -1,0 +1,216 @@
+import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+
+import '../../core/api/api_exception.dart';
+import '../../core/theme/esoqo_tokens.dart';
+import '../../core/widgets/widgets.dart';
+import 'bill_models.dart';
+import 'bills_repository.dart';
+
+final billFundingProvider = FutureProvider.autoDispose
+    .family<BillFundingSummary, String>(
+      (ref, billId) => ref.watch(billsRepositoryProvider).funding(billId),
+    );
+
+final billContributionsProvider = FutureProvider.autoDispose
+    .family<List<BillContributionRow>, String>(
+      (ref, billId) => ref.watch(billsRepositoryProvider).contributions(billId),
+    );
+
+/// A bill's own funding page — guest-safe (see dbx.GetBillFundingSummary),
+/// so this is the screen a shared link opens for family/friends without
+/// an Esoqo account, same as the owner sees it. "Chip in" is the one
+/// action here; everything else about the bill (accountRef, owner) is
+/// deliberately absent, per the PII-minimal rule.
+class BillFundingScreen extends ConsumerWidget {
+  const BillFundingScreen({super.key, required this.billId});
+  final String billId;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final summary = ref.watch(billFundingProvider(billId));
+    final contributions = ref.watch(billContributionsProvider(billId));
+
+    Future<void> refreshAll() async {
+      ref.invalidate(billFundingProvider(billId));
+      ref.invalidate(billContributionsProvider(billId));
+    }
+
+    return Scaffold(
+      appBar: const EsoqoAppBar(title: 'Help fund this bill'),
+      body: SafeArea(
+        child: RefreshIndicator(
+          onRefresh: refreshAll,
+          child: EsoqoAsyncView(
+            value: summary,
+            onRetry: () => ref.invalidate(billFundingProvider(billId)),
+            data: (context, s) => Center(
+              child: ConstrainedBox(
+                constraints: const BoxConstraints(maxWidth: 480),
+                child: ListView(
+                  padding: const EdgeInsets.all(EsoqoSpacing.s5),
+                  children: [
+                    Text(s.label, style: Theme.of(context).textTheme.headlineSmall),
+                    const SizedBox(height: EsoqoSpacing.s1),
+                    Text(
+                      s.funded ? 'Fully funded' : 'KES ${s.raisedKes} of KES ${s.targetKes}',
+                      style: TextStyle(color: Theme.of(context).textTheme.bodySmall?.color),
+                    ),
+                    const SizedBox(height: EsoqoSpacing.s3),
+                    ClipRRect(
+                      borderRadius: BorderRadius.circular(EsoqoRadius.pill),
+                      child: LinearProgressIndicator(
+                        value: s.progress,
+                        minHeight: 10,
+                        backgroundColor: Theme.of(context).colorScheme.primary.withValues(alpha: 0.12),
+                      ),
+                    ),
+                    const SizedBox(height: EsoqoSpacing.s2),
+                    Text(
+                      '${s.contributorsCount} contributor${s.contributorsCount == 1 ? '' : 's'}',
+                      style: TextStyle(color: Theme.of(context).textTheme.bodySmall?.color, fontSize: EsoqoTypeScale.labelSmall),
+                    ),
+                    const SizedBox(height: EsoqoSpacing.s5),
+                    if (!s.funded)
+                      EsoqoButton.primary(
+                        expand: false,
+                        label: 'Chip in',
+                        loading: false,
+                        onPressed: () async {
+                          final done = await Navigator.of(context).push<bool>(
+                            MaterialPageRoute(builder: (_) => _ContributeScreen(billId: billId)),
+                          );
+                          if (done == true) refreshAll();
+                        },
+                      ),
+                    const SizedBox(height: EsoqoSpacing.s6),
+                    EsoqoSubHeader('Who\'s chipped in'),
+                    const SizedBox(height: EsoqoSpacing.s2),
+                    contributions.when(
+                      data: (list) => list.isEmpty
+                          ? const EsoqoEmptyState(
+                              icon: Icons.volunteer_activism_outlined,
+                              message: 'No contributions yet — be the first.',
+                            )
+                          : Column(
+                              children: [
+                                for (final c in list)
+                                  EsoqoListTile(
+                                    title: c.contributorName,
+                                    subtitle: 'KES ${c.amountKes}',
+                                    icon: Icons.favorite_outline,
+                                  ),
+                              ],
+                            ),
+                      loading: () => const EsoqoSkeletonCard(leading: false),
+                      error: (_, _) => const SizedBox.shrink(),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _ContributeScreen extends ConsumerStatefulWidget {
+  const _ContributeScreen({required this.billId});
+  final String billId;
+
+  @override
+  ConsumerState<_ContributeScreen> createState() => _ContributeScreenState();
+}
+
+class _ContributeScreenState extends ConsumerState<_ContributeScreen> {
+  final _nameController = TextEditingController();
+  final _msisdnController = TextEditingController();
+  final _amountController = TextEditingController();
+  bool _busy = false;
+  String? _error;
+
+  @override
+  void dispose() {
+    _nameController.dispose();
+    _msisdnController.dispose();
+    _amountController.dispose();
+    super.dispose();
+  }
+
+  Future<void> _send() async {
+    final amount = double.tryParse(_amountController.text.trim());
+    if (_nameController.text.trim().isEmpty ||
+        _msisdnController.text.trim().isEmpty ||
+        amount == null ||
+        amount <= 0) {
+      setState(() => _error = 'Enter your name, M-Pesa number, and an amount.');
+      return;
+    }
+    setState(() {
+      _busy = true;
+      _error = null;
+    });
+    try {
+      await ref.read(billsRepositoryProvider).contribute(
+            billId: widget.billId,
+            contributorName: _nameController.text.trim(),
+            contributorMsisdn: _msisdnController.text.trim(),
+            amountKes: amount,
+          );
+      if (mounted) Navigator.of(context).pop(true);
+    } on ApiException catch (e) {
+      setState(() => _error = e.message);
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: const EsoqoAppBar(title: 'Chip in'),
+      body: SafeArea(
+        child: Center(
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 480),
+            child: Padding(
+              padding: const EdgeInsets.all(EsoqoSpacing.s5),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  EsoqoField.name(
+                    controller: _nameController,
+                    label: 'Your name',
+                  ),
+                  const SizedBox(height: EsoqoSpacing.s3),
+                  EsoqoField.phone(
+                    controller: _msisdnController,
+                    label: 'M-Pesa number',
+                    textInputAction: TextInputAction.next,
+                  ),
+                  const SizedBox(height: EsoqoSpacing.s3),
+                  EsoqoField.amount(
+                    controller: _amountController,
+                  ),
+                  if (_error != null) ...[
+                    const SizedBox(height: EsoqoSpacing.s3),
+                    EsoqoFormError(message: _error!),
+                  ],
+                  const SizedBox(height: EsoqoSpacing.s4),
+                  EsoqoButton.primary(
+                    expand: false,
+                    label: 'Pay with M-Pesa',
+                    loading: _busy,
+                    onPressed: _send,
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}

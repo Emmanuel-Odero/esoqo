@@ -1,7 +1,7 @@
 import type { Metadata } from 'next';
 import { TrackParcelForm } from './TrackParcelForm';
 
-export const metadata: Metadata = { title: 'Track a parcel — Esoko' };
+export const metadata: Metadata = { title: 'Track a parcel — Esoqo' };
 
 /** Guest-safe by design — GET /v1/parcels/:code/status takes no auth,
  *  same convention a pickup code follows (see handleGetParcelStatus's

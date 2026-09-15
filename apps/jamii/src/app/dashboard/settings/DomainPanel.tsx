@@ -42,7 +42,7 @@ const STATUS_COPY: Record<DomainInfo['status'], { label: string; tone: string }>
   VERIFYING: { label: 'Checking your records…', tone: '#a06a1f' },
   ACTIVE: { label: 'Live', tone: '#2f7a3d' },
   FAILED: { label: 'Verification failed', tone: 'var(--stamp)' },
-  SUSPENDED: { label: 'Suspended by Esoko', tone: 'var(--stamp)' },
+  SUSPENDED: { label: 'Suspended by Esoqo', tone: 'var(--stamp)' },
 };
 
 /**
@@ -146,7 +146,7 @@ export function DomainPanel({ pageId, initial }: { pageId: string; initial: Doma
                   </tr>
                   <tr>
                     <td style={{ padding: '4px 8px 4px 0', color: '#6b6552' }}>TXT</td>
-                    <td style={{ padding: '4px 8px' }}>{`_esoko-verify.${domain.hostname}`}</td>
+                    <td style={{ padding: '4px 8px' }}>{`_esoqo-verify.${domain.hostname}`}</td>
                     <td style={{ padding: '4px 0', wordBreak: 'break-all' }}>{domain.verificationToken}</td>
                   </tr>
                 </tbody>
@@ -163,7 +163,7 @@ export function DomainPanel({ pageId, initial }: { pageId: string; initial: Doma
 
           {domain.status === 'SUSPENDED' && (
             <p style={{ fontSize: '.83rem', color: 'var(--stamp)', margin: '0 0 12px' }}>
-              Esoko support suspended this domain. Contact support to resolve it.
+              Esoqo support suspended this domain. Contact support to resolve it.
             </p>
           )}
 

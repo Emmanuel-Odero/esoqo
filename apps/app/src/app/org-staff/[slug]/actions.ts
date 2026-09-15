@@ -2,9 +2,9 @@
 
 import { headers } from 'next/headers';
 import { redirect } from 'next/navigation';
-import { TICKETING_STAFF_CAPABILITIES, type TicketingStaffRole } from '@esoko/db';
-import { ticketOrgStaffSignInSchema } from '@esoko/domain';
-import { checkRateLimit, RateLimitError } from '@esoko/auth';
+import { TICKETING_STAFF_CAPABILITIES, type TicketingStaffRole } from '@esoqo/db';
+import { ticketOrgStaffSignInSchema, clientIpFrom } from '@esoqo/domain';
+import { checkRateLimit, RateLimitError } from '@esoqo/auth';
 import { createTicketStaffSession } from '@/lib/session';
 import { goUrl } from '@/lib/ticketing';
 
@@ -28,7 +28,7 @@ export async function ticketStaffSignIn(orgSlug: string, raw: unknown): Promise<
   if (!parsed.success) return { ok: false, error: parsed.error.issues[0]?.message ?? 'Check the form and try again' };
 
   const h = await headers();
-  const ip = h.get('x-forwarded-for')?.split(',')[0]?.trim() ?? 'unknown';
+  const ip = clientIpFrom((n) => h.get(n)) ?? 'unknown';
   const nameKey = parsed.data.name.trim().toLowerCase();
 
   try {

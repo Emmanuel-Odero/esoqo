@@ -1,5 +1,5 @@
 {
-  "name": "@esoko/a11y",
+  "name": "@esoqo/a11y",
   "version": "0.1.0",
   "private": true,
   "main": "./src/index.ts",

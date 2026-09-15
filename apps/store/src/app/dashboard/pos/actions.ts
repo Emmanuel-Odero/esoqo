@@ -1,7 +1,7 @@
 'use server';
 
-import { recordPosSale, PosSaleError } from '@esoko/db';
-import { posSaleSchema, type PosSaleFormInput } from '@esoko/domain';
+import { recordPosSale, PosSaleError } from '@esoqo/db';
+import { posSaleSchema, type PosSaleFormInput } from '@esoqo/domain';
 import { requireStoreAccess } from '@/lib/session';
 
 export async function syncPosSale(storeId: string, raw: PosSaleFormInput) {

@@ -4,9 +4,9 @@ import { useEffect, useRef, useState, useTransition } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import type { Route } from 'next';
-import { Icon, type IconName, SelectWithOther } from '@esoko/ui';
-import { formatMsisdn } from '@esoko/domain';
-import { useAnnounce } from '@esoko/a11y';
+import { Icon, type IconName, SelectWithOther } from '@esoqo/ui';
+import { formatMsisdn } from '@esoqo/domain';
+import { useAnnounce } from '@esoqo/a11y';
 import {
   actionSearchPeople, actionAddMember, actionAddNewMember, actionUpdateMemberPhone,
   actionSetRole, actionRemoveMember,
@@ -740,7 +740,7 @@ function AddMember({ group, onClose }: { group: Group; onClose: () => void }) {
           {mode === 'search' ? (
             <>
               <p className="sub" style={{ marginBottom: 14 }}>
-                Search people already on Esoko.
+                Search people already on Esoqo.
               </p>
 
               <div className="srch" style={{ marginBottom: 12 }}>
@@ -804,7 +804,7 @@ function AddMember({ group, onClose }: { group: Group; onClose: () => void }) {
           ) : (
             <>
               <p className="sub" style={{ marginBottom: 14 }}>
-                For someone not on Esoko yet — a name is enough to add them as a member. Phone is
+                For someone not on Esoqo yet — a name is enough to add them as a member. Phone is
                 optional; without one they can't log in, dial in or get SMS until it's added later.
               </p>
 

@@ -1,4 +1,4 @@
-import { listJamiiNavItemsForDashboard, listJamiiSitePagesForDashboard } from '@esoko/db';
+import { listJamiiNavItemsForDashboard, listJamiiSitePagesForDashboard } from '@esoqo/db';
 import { requireMyPage } from '@/lib/session';
 import { NavEditor } from './NavEditor';
 

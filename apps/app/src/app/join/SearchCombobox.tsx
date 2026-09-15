@@ -1,7 +1,7 @@
 'use client';
 
 import type { ReactNode } from 'react';
-import { Icon, type IconName } from '@esoko/ui';
+import { Icon, type IconName } from '@esoqo/ui';
 
 /**
  * The debounced search-as-you-type input used across /join — what work

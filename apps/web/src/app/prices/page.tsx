@@ -1,6 +1,6 @@
 import type { Metadata } from 'next';
-import { Icon } from '@esoko/ui';
-import { anonCtx, listPricesForDate, listMissingQuotes } from '@esoko/db';
+import { Icon } from '@esoqo/ui';
+import { anonCtx, listPricesForDate, listMissingQuotes } from '@esoqo/db';
 import { PriceTable } from './PriceTable';
 
 export const metadata: Metadata = {
@@ -43,7 +43,7 @@ export default async function PricesPage() {
           <h1>What things are selling for this morning</h1>
           <p className="lead">
             Collected each morning by market committees, county officers, cooperatives and traders
-            in the markets Esoko works in. Free to read, no account needed, and the same figures you
+            in the markets Esoqo works in. Free to read, no account needed, and the same figures you
             get by dialling <strong style={{ color: '#fff' }}>*483*77#</strong>.
           </p>
         </div>

@@ -1,6 +1,6 @@
 import { notFound } from 'next/navigation';
-import { Icon } from '@esoko/ui';
-import { AuthorisationError } from '@esoko/db';
+import { Icon } from '@esoqo/ui';
+import { AuthorisationError } from '@esoqo/db';
 import { requireOrgAccess } from '@/lib/session';
 import { orgGo, type GoOrgBooking } from '@/lib/ticketing';
 

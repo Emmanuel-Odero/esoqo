@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
-<title>esoko USSD — Ticket Booking Demo</title>
+<title>esoqo USSD — Ticket Booking Demo</title>
 <style>
   :root{
     --bg:#0d1117; --panel:#161b22; --ink:#e6edf3; --muted:#8b949e;
@@ -118,12 +118,12 @@
 </style>
 </head>
 <body>
-  <h1>esoko · USSD Ticket Booking</h1>
+  <h1>esoqo · USSD Ticket Booking</h1>
   <p class="lead">A feature-phone-style USSD journey mocked on a smartphone. Dial
     <code>*384*77#</code> to book a bus ticket end to end — no data, no app. Includes
     <strong>Lipia pole pole</strong>: book a future trip with a deposit and clear the
     balance in M-Pesa top-ups before you travel. Menu maps to the same
-    schedules / ticket classes / installment plan / M-Pesa STK flow as the esoko web booking page.</p>
+    schedules / ticket classes / installment plan / M-Pesa STK flow as the esoqo web booking page.</p>
 
   <div class="stage">
     <div class="phone">
@@ -136,7 +136,7 @@
 
     <div class="log">
       <h3>Session steps</h3>
-      <p class="hint">USSD is stateless per request — esoko keeps the cart in a
+      <p class="hint">USSD is stateless per request — esoqo keeps the cart in a
         short-lived session keyed by MSISDN + session ID. Each screen below is one request/response.</p>
       <ul class="steps" id="steps"></ul>
       <div class="controls">
@@ -146,7 +146,7 @@
     </div>
   </div>
 
-  <p class="foot">Demo only — no real USSD gateway or payment. In esoko, the "real M-Pesa prompt"
+  <p class="foot">Demo only — no real USSD gateway or payment. In esoqo, the "real M-Pesa prompt"
     is the same STK push the web checkout fires: console mode auto-confirms locally, and a deployed
     environment with <code>MPESA_PROVIDER=sandbox</code> (or <code>production</code>) rings the
     actual phone, with the booking staying PENDING / PART-PAID until Safaricom's callback lands.</p>
@@ -234,8 +234,8 @@
 
     lang: function(){
       return {
-        step:1, head:"esoko Tickets",
-        body:"Welcome to esoko\n1. English\n2. Kiswahili",
+        step:1, head:"esoqo Tickets",
+        body:"Welcome to esoqo\n1. English\n2. Kiswahili",
         placeholder:"Reply 1 or 2",
         validate:function(v){ return v==="1"||v==="2"; },
         onSend:function(){ go("menu"); }
@@ -244,7 +244,7 @@
 
     menu: function(){
       return {
-        step:2, head:"esoko Tickets",
+        step:2, head:"esoqo Tickets",
         body:"1. Book a bus ticket\n2. Pay trip balance (lipia pole pole)\n3. My tickets\n0. Exit",
         placeholder:"Reply with a number",
         validate:function(v){ return v==="1"||v==="2"; },
@@ -367,7 +367,7 @@
       var payNow = installment ? s.deposit : lineTotal();
       return {
         step:11, head:"M-PESA",
-        body:"Enter M-PESA PIN to pay " + money(payNow) + " to\nESOKO TICKETS for " + REF + ".",
+        body:"Enter M-PESA PIN to pay " + money(payNow) + " to\nESOQO TICKETS for " + REF + ".",
         placeholder:"••••", password:true, sendLabel:"OK",
         validate:function(v){ return /^\d{4}$/.test(v); },
         onSend:function(){ go("sending"); }
@@ -431,7 +431,7 @@
     balPin: function(){
       return {
         step:6, head:"M-PESA",
-        body:"Enter M-PESA PIN to pay " + money(s.pendingPay) + " to\nESOKO TICKETS for " + REF + ".",
+        body:"Enter M-PESA PIN to pay " + money(s.pendingPay) + " to\nESOQO TICKETS for " + REF + ".",
         placeholder:"••••", password:true, sendLabel:"OK",
         validate:function(v){ return /^\d{4}$/.test(v); },
         onSend:function(){ go("balSending"); }
@@ -537,21 +537,21 @@
     if (def.balance){
       bubbles +=
         '<div class="bubble mpesa"><span class="from">MPESA</span>' +
-          receipt + ' Confirmed. ' + money(s.pendingPay||0) + ' paid to ESOKO TICKETS on ' + todayStr() +
+          receipt + ' Confirmed. ' + money(s.pendingPay||0) + ' paid to ESOQO TICKETS on ' + todayStr() +
           '. New M-PESA balance is KES 3,050.00.</div>';
       if (owed <= 0){
         bubbles +=
-          '<div class="bubble"><span class="from">ESOKO</span>' +
+          '<div class="bubble"><span class="from">ESOQO</span>' +
             'Booking ' + REF + ' PAID IN FULL ✅\n' +
             LISTING.route + '\n' + (s.schedule ? s.schedule.label : '') + '\n' +
             (s.cls ? s.cls.name : '') + ' · ' + seat + '\n' +
             'Boarding pass + QR: esoko.africa/t/' + REF + '\n' +
             'Show this SMS or the QR at the gate. Safe travels!</div>' +
-          '<div class="bubble"><span class="from">ESOKO</span>' +
-            'You earned ' + (s.qty*15) + ' esoko loyalty points. Balance: ' + (s.qty*15 + 40) + ' pts.</div>';
+          '<div class="bubble"><span class="from">ESOQO</span>' +
+            'You earned ' + (s.qty*15) + ' esoqo loyalty points. Balance: ' + (s.qty*15 + 40) + ' pts.</div>';
       } else {
         bubbles +=
-          '<div class="bubble"><span class="from">ESOKO</span>' +
+          '<div class="bubble"><span class="from">ESOQO</span>' +
             'Payment received for ' + REF + '. Paid ' + money(paid) + ' of ' + money(total) + '.\n' +
             'Balance ' + money(owed) + ' due before ' + (s.schedule ? s.schedule.depart : 'the trip') + '.\n' +
             'Dial *384*77# › Pay trip balance to top up.</div>';
@@ -562,11 +562,11 @@
       var payNow = installment ? s.deposit : total;
       bubbles +=
         '<div class="bubble mpesa"><span class="from">MPESA</span>' +
-          receipt + ' Confirmed. ' + money(payNow) + ' paid to ESOKO TICKETS on ' + todayStr() +
+          receipt + ' Confirmed. ' + money(payNow) + ' paid to ESOQO TICKETS on ' + todayStr() +
           '. New M-PESA balance is KES 4,120.00.</div>';
       if (installment){
         bubbles +=
-          '<div class="bubble"><span class="from">ESOKO</span>' +
+          '<div class="bubble"><span class="from">ESOQO</span>' +
             'Deposit received for ' + REF + ' 🚌\n' +
             LISTING.route + ' · ' + (s.schedule ? s.schedule.label : '') + '\n' +
             (s.cls ? s.cls.name : '') + ' · ' + seat + '\n' +
@@ -576,14 +576,14 @@
             'Your ticket is issued once the balance is cleared.</div>';
       } else {
         bubbles +=
-          '<div class="bubble"><span class="from">ESOKO</span>' +
+          '<div class="bubble"><span class="from">ESOQO</span>' +
             'Booking ' + REF + ' CONFIRMED ✅\n' +
             LISTING.route + '\n' + (s.schedule ? s.schedule.label : '') + '\n' +
             (s.cls ? s.cls.name : '') + ' · ' + seat + '\n' +
             'Boarding pass + QR: esoko.africa/t/' + REF + '\n' +
             'Show this SMS or the QR at the gate. Safe travels!</div>' +
-          '<div class="bubble"><span class="from">ESOKO</span>' +
-            'You earned ' + (s.qty*15) + ' esoko loyalty points. Balance: ' + (s.qty*15 + 40) + ' pts.</div>';
+          '<div class="bubble"><span class="from">ESOQO</span>' +
+            'You earned ' + (s.qty*15) + ' esoqo loyalty points. Balance: ' + (s.qty*15 + 40) + ' pts.</div>';
       }
     }
 

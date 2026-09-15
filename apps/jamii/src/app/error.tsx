@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect } from 'react';
-import { Notice } from '@esoko/ui';
+import { Notice } from '@esoqo/ui';
 
 export default function Error({ error, reset }: { error: Error & { digest?: string }; reset: () => void }) {
   useEffect(() => { console.error(error); }, [error]);

@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, type RefObject } from 'react';
-import { Icon } from '@esoko/ui';
+import { Icon } from '@esoqo/ui';
 import { DocumentStep, PaymentStep } from '../Steps';
 import { GroupPicker } from '../GroupPicker';
 import { BusinessPicker } from '../BusinessPicker';

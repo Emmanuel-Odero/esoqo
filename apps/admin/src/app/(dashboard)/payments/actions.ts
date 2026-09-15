@@ -1,6 +1,6 @@
 'use server';
 import { revalidatePath } from 'next/cache';
-import { signPaymentApproval, waivePayment, PaymentError } from '@esoko/db';
+import { signPaymentApproval, waivePayment, PaymentError } from '@esoqo/db';
 import { requireStaff } from '@/lib/session';
 
 export type Result = { ok: true } | { ok: false; error: string };

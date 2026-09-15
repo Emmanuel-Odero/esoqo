@@ -1,2 +1,2 @@
-import base from '@esoko/config/eslint.base.mjs';
+import base from '@esoqo/config/eslint.base.mjs';
 export default base;

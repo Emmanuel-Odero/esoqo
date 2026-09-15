@@ -6,8 +6,8 @@ import {
   declarePayment, deferPayment,
   sniff, makeStorageKey, safeName, sha256, putObject, MAX_BYTES,
   type Ctx,
-} from '@esoko/db';
-import { toSafeErrorMessage } from '@esoko/domain';
+} from '@esoqo/db';
+import { toSafeErrorMessage, clientIpFrom } from '@esoqo/domain';
 import { ownsRegistration } from './ownership';
 
 /**
@@ -16,7 +16,7 @@ import { ownsRegistration } from './ownership';
  * Upload is the largest attack surface here, so nothing about the file is
  * trusted: the declared MIME is ignored in favour of magic bytes, the
  * filename never becomes a path, and the size is checked before a byte
- * touches storage. All of that lives in @esoko/db/storage — this action
+ * touches storage. All of that lives in @esoqo/db/storage — this action
  * only marshals.
  */
 
@@ -26,7 +26,7 @@ async function joinCtx(): Promise<Ctx> {
     actorType: 'SYSTEM',
     actorId: null,
     capabilities: ['registration.write', 'registration.read', 'document.read'],
-    ip: h.get('x-forwarded-for')?.split(',')[0]?.trim() ?? null,
+    ip: clientIpFrom((n) => h.get(n)) ?? null,
     __verified: true,
   };
 }

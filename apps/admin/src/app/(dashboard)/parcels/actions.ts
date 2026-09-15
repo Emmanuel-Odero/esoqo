@@ -1,7 +1,7 @@
 'use server';
 
 import { revalidatePath } from 'next/cache';
-import { updateParcelPricingRule, type UpdateParcelPricingRuleInput } from '@esoko/db';
+import { updateParcelPricingRule, type UpdateParcelPricingRuleInput } from '@esoqo/db';
 import { requireStaff } from '@/lib/session';
 import { adminGo } from '@/lib/go-ticketing';
 
@@ -41,6 +41,36 @@ export async function actionAssignParcelCollector(
     return { ok: true };
   } catch (e) {
     return { ok: false, error: e instanceof Error ? e.message : 'Could not schedule that collection' };
+  }
+}
+
+export interface BulkAssignOutcome {
+  assigned: { parcelId: string; code: string }[];
+  failed: { parcelId: string; error: string }[];
+}
+
+/**
+ * Assign one collector to a whole selection — a rider's morning round
+ * in one action instead of eight trips through the modal.
+ *
+ * Partial success is a normal outcome, not an error: each assignment
+ * texts a sender and a courier the moment it lands, and those can't be
+ * recalled, so core-go reports what it managed rather than pretending a
+ * batch is atomic. The caller must show both halves.
+ */
+export async function actionBulkAssignParcels(
+  parcelIds: string[],
+  input: { collectorPartyId: string; scheduledAt: string; note?: string },
+): Promise<{ ok: true; result: BulkAssignOutcome } | { ok: false; error: string }> {
+  try {
+    await requireStaff();
+    const result = await adminGo<BulkAssignOutcome>('/v1/admin/parcels/bulk-assign', {
+      method: 'POST', body: JSON.stringify({ parcelIds, ...input }),
+    });
+    revalidatePath('/parcels');
+    return { ok: true, result };
+  } catch (e) {
+    return { ok: false, error: e instanceof Error ? e.message : 'Could not assign those parcels' };
   }
 }
 
@@ -147,6 +177,28 @@ export async function actionOnboardCourier(partyId: string, vehicleType: string)
   }
 }
 
+// The "just add them" path for a courier team member who's never
+// signed up on their own — unlike actionOnboardCourier (which turns an
+// *existing* Party, found by search, into a courier), this creates the
+// account too, straight from name/phone/vehicle. core-go texts the new
+// courier their Esoqo ID the moment the account exists — see
+// notify.CourierOnboarded — so this doubles as phone-number
+// confirmation: if the text never lands, the number was wrong.
+export async function actionAddCourierTeamMember(input: {
+  name: string; msisdn: string; email?: string; vehicleType: string;
+}): Promise<{ ok: true; esoqoId: string } | { ok: false; error: string }> {
+  try {
+    await requireStaff();
+    const { esoqoId } = await adminGo<{ esoqoId: string }>('/v1/admin/parcels/courier-team', {
+      method: 'POST', body: JSON.stringify(input),
+    });
+    revalidatePath('/parcels/couriers');
+    return { ok: true, esoqoId };
+  } catch (e) {
+    return { ok: false, error: e instanceof Error ? e.message : 'Could not add that courier' };
+  }
+}
+
 export async function actionSetCourierStatus(courierId: string, status: string, note?: string): Promise<Result> {
   try {
     await requireStaff();
@@ -199,7 +251,337 @@ export async function actionUpdateParcelZone(id: string, name: string, lat: numb
   }
 }
 
-export interface ParcelDistanceRate { perKmKes: number; minChargeableKm: number }
+/** A courier company operating on Esoqo. commissionPct is Esoqo's cut
+ *  of every parcel it carries — copied onto each parcel at payment time
+ *  and never read live, so renegotiating a rate can't rewrite what an
+ *  already-paid parcel earned. */
+export interface ParcelOrg {
+  id: string; enterpriseId: string; name: string; slug: string; status: string;
+  contactPerson: string | null; contactPhone: string | null; contactEmail: string | null;
+  settlementPhone: string | null; commissionPct: number;
+  /** The one physical front desk a sender can walk into — see the
+   *  schema's own comment on ParcelOrg.acceptsWalkIn. */
+  acceptsWalkIn: boolean; lat: number | null; lng: number | null;
+  locationHint: string | null; openingHours: string | null;
+}
+
+export interface ParcelOrgInput {
+  enterpriseId?: string; name: string; slug: string; status: string;
+  contactPerson?: string | null; contactPhone?: string | null;
+  contactEmail?: string | null; settlementPhone?: string | null;
+  commissionPct: number;
+  acceptsWalkIn: boolean; lat?: number | null; lng?: number | null;
+  locationHint?: string | null; openingHours?: string | null;
+}
+
+export interface EnterpriseLite { id: string; name: string; partyId: string; msisdn: string | null }
+
+export async function actionListParcelOrgs(): Promise<ParcelOrg[]> {
+  await requireStaff();
+  const { orgs } = await adminGo<{ orgs: ParcelOrg[] | null }>('/v1/admin/parcels/orgs');
+  return orgs ?? [];
+}
+
+/** A courier company hangs off an Enterprise exactly as a Store and a
+ *  TicketOrg do, so onboarding one means naming the business that runs
+ *  it. A blank query returns nothing — this is a picker, not a list of
+ *  every business on the platform. */
+export async function actionSearchEnterprises(q: string): Promise<EnterpriseLite[]> {
+  await requireStaff();
+  if (!q.trim()) return [];
+  const { enterprises } = await adminGo<{ enterprises: EnterpriseLite[] | null }>(
+    `/v1/admin/parcels/enterprises?q=${encodeURIComponent(q)}`,
+  );
+  return enterprises ?? [];
+}
+
+export async function actionCreateParcelOrg(input: ParcelOrgInput): Promise<Result> {
+  try {
+    await requireStaff();
+    await adminGo('/v1/admin/parcels/orgs', { method: 'POST', body: JSON.stringify(input) });
+    revalidatePath('/parcels/companies');
+    return { ok: true };
+  } catch (e) {
+    return { ok: false, error: e instanceof Error ? e.message : 'Could not create that company' };
+  }
+}
+
+export async function actionUpdateParcelOrg(id: string, input: ParcelOrgInput): Promise<Result> {
+  try {
+    await requireStaff();
+    await adminGo(`/v1/admin/parcels/orgs/${id}`, { method: 'PATCH', body: JSON.stringify(input) });
+    revalidatePath('/parcels/companies');
+    return { ok: true };
+  } catch (e) {
+    return { ok: false, error: e instanceof Error ? e.message : 'Could not update that company' };
+  }
+}
+
+export interface ParcelOrgStaffRow {
+  id: string; orgId: string; name: string; role: string; active: boolean; partyId: string | null;
+}
+
+export async function actionListParcelOrgStaff(orgId: string): Promise<ParcelOrgStaffRow[]> {
+  await requireStaff();
+  const { staff } = await adminGo<{ staff: ParcelOrgStaffRow[] | null }>(
+    `/v1/admin/parcels/orgs/${orgId}/staff`,
+  );
+  return staff ?? [];
+}
+
+/** Seeds a company's first manager so somebody there can sign in and
+ *  create the rest of the team themselves — the handover point between
+ *  Esoqo onboarding a tenant and that tenant running itself.
+ *
+ *  Two ways in: a PIN for the dedicated company portal, or an msisdn to
+ *  invite the person by OTP instead — core-go resolves/creates their
+ *  Party and texts them a sign-in link when msisdn is given, so `pin`
+ *  and `msisdn` are alternatives, not both required. */
+export async function actionCreateParcelOrgManager(
+  orgId: string,
+  input: { name: string; role: string; pin?: string; msisdn?: string; partyId?: string | null },
+): Promise<Result> {
+  try {
+    await requireStaff();
+    await adminGo(`/v1/admin/parcels/orgs/${orgId}/staff`, {
+      method: 'POST',
+      body: JSON.stringify({ ...input, partyId: input.partyId || null, active: true }),
+    });
+    revalidatePath('/parcels/companies');
+    return { ok: true };
+  } catch (e) {
+    return { ok: false, error: e instanceof Error ? e.message : 'Could not add that person' };
+  }
+}
+
+/** Hands a parcel to a courier company, or ('' ) takes it back to
+ *  Esoqo-operated dispatch. Refused once the parcel is paid for — the
+ *  revenue split is frozen against whoever was carrying it then. */
+export async function actionAssignParcelOrg(parcelId: string, parcelOrgId: string): Promise<Result> {
+  try {
+    await requireStaff();
+    await adminGo(`/v1/admin/parcels/${parcelId}/org`, {
+      method: 'POST', body: JSON.stringify({ parcelOrgId }),
+    });
+    revalidatePath('/parcels');
+    return { ok: true };
+  } catch (e) {
+    return { ok: false, error: e instanceof Error ? e.message : 'Could not reassign that parcel' };
+  }
+}
+
+// ── Courier earnings and payouts ─────────────────────────────────────
+
+/** The one global rate a gig courier is paid. The two components stack:
+ *  a flat amount per delivery plus a percentage of the delivery fee.
+ *  Either may be zero. */
+export interface CourierTariff {
+  // Money is decimal strings; pctOfPrice is a rate, so it stays a number.
+  perDeliveryKes: string; pctOfPrice: number; maxPerDeliveryKes: string;
+}
+
+export async function actionGetCourierTariff(): Promise<CourierTariff> {
+  await requireStaff();
+  return adminGo<CourierTariff>('/v1/admin/parcels/couriers/tariff');
+}
+
+export async function actionSetCourierTariff(input: CourierTariff): Promise<Result> {
+  try {
+    await requireStaff();
+    await adminGo('/v1/admin/parcels/couriers/tariff', { method: 'POST', body: JSON.stringify(input) });
+    revalidatePath('/parcels/payouts');
+    return { ok: true };
+  } catch (e) {
+    return { ok: false, error: e instanceof Error ? e.message : 'Could not save that rate' };
+  }
+}
+
+export interface CourierOwed {
+  courierPartyId: string; name: string; msisdn: string | null;
+  // owedKes is a decimal string — see @esoqo/domain's money module.
+  parcelCount: number; owedKes: string;
+}
+
+export async function actionListCouriersOwed(): Promise<CourierOwed[]> {
+  await requireStaff();
+  const { couriers } = await adminGo<{ couriers: CourierOwed[] | null }>(
+    '/v1/admin/parcels/couriers/owed',
+  );
+  return couriers ?? [];
+}
+
+/** Paying a courier. amountKes is what was actually sent, which the
+ *  record keeps alongside what the deliveries said was owed — a part
+ *  payment or an agreed deduction is exactly what those two columns
+ *  exist to show. */
+export async function actionPayCourier(
+  courierPartyId: string, amountKes: string, reference?: string, note?: string,
+): Promise<{ ok: true; expectedKes: string; shortfallKes: string } | { ok: false; error: string }> {
+  try {
+    await requireStaff();
+    const res = await adminGo<{ expectedKes: string; shortfallKes: string }>(
+      '/v1/admin/parcels/couriers/payout',
+      {
+        method: 'POST',
+        body: JSON.stringify({
+          courierPartyId, amountKes,
+          reference: reference || null, note: note || null,
+        }),
+      },
+    );
+    revalidatePath('/parcels/payouts');
+    return { ok: true, expectedKes: res.expectedKes, shortfallKes: res.shortfallKes };
+  } catch (e) {
+    return { ok: false, error: e instanceof Error ? e.message : 'Could not record that payout' };
+  }
+}
+
+// ── Cash on delivery ─────────────────────────────────────────────────
+
+export interface CodPolicy { enabled: boolean; maxAmountKes: string; handlingFeePct: number }
+
+export async function actionGetCodPolicy(): Promise<CodPolicy> {
+  await requireStaff();
+  return adminGo<CodPolicy>('/v1/admin/parcels/cod/policy');
+}
+
+export async function actionSetCodPolicy(input: CodPolicy): Promise<Result> {
+  try {
+    await requireStaff();
+    await adminGo('/v1/admin/parcels/cod/policy', { method: 'POST', body: JSON.stringify(input) });
+    revalidatePath('/parcels/cod');
+    return { ok: true };
+  } catch (e) {
+    return { ok: false, error: e instanceof Error ? e.message : 'Could not save those settings' };
+  }
+}
+
+/** One seller waiting to be paid. `readyKes` is the portion a rider has
+ *  actually handed in — money still in a pocket is owed but not yet
+ *  Esoqo's to pay out, and showing one number for both would invite
+ *  paying out cash nobody has counted. */
+export interface SellerOwedCod {
+  senderPartyId: string; senderName: string; senderMsisdn: string;
+  // goodsKes/readyKes are decimal strings — see @esoqo/domain's money module.
+  parcelCount: number; goodsKes: string; readyKes: string;
+}
+
+export async function actionListSellersOwedCod(): Promise<SellerOwedCod[]> {
+  await requireStaff();
+  const { sellers } = await adminGo<{ sellers: SellerOwedCod[] | null }>('/v1/admin/parcels/cod/sellers');
+  return sellers ?? [];
+}
+
+export async function actionSettleSellerCod(senderPartyId: string): Promise<Result> {
+  try {
+    await requireStaff();
+    await adminGo('/v1/admin/parcels/cod/settle', {
+      method: 'POST', body: JSON.stringify({ senderPartyId }),
+    });
+    revalidatePath('/parcels/cod');
+    return { ok: true };
+  } catch (e) {
+    return { ok: false, error: e instanceof Error ? e.message : 'Could not settle that seller' };
+  }
+}
+
+/** Counting a rider's cash in. amountKes is what was actually counted,
+ *  which the server compares against what the parcels say it should
+ *  have been — a short hand-over is the whole reason the record exists. */
+export async function actionRemitCod(
+  riderPartyId: string, amountKes: number, note?: string,
+): Promise<{ ok: true; expectedKes: string; shortfallKes: string } | { ok: false; error: string }> {
+  try {
+    await requireStaff();
+    const res = await adminGo<{ expectedKes: string; shortfallKes: string }>(
+      '/v1/admin/parcels/cod/remit',
+      { method: 'POST', body: JSON.stringify({ riderPartyId, amountKes, note: note || null }) },
+    );
+    revalidatePath('/parcels/cod');
+    return { ok: true, expectedKes: res.expectedKes, shortfallKes: res.shortfallKes };
+  } catch (e) {
+    return { ok: false, error: e instanceof Error ? e.message : 'Could not record that hand-over' };
+  }
+}
+
+/** A neighbourhood pickup point — the agent-network leg. See Go's
+ *  parcel_agents.go for why agent-to-agent is the only leg cheap enough
+ *  to compete on price in this market. */
+export interface ParcelAgent {
+  id: string; name: string; partyId: string | null;
+  zoneId: string | null; zoneName: string | null;
+  lat: number; lng: number; msisdn: string; locationHint: string;
+  openingHours: string | null; active: boolean;
+  capacity: number; holdingFeeKes: string; parcelsHeld: number;
+}
+
+export interface ParcelAgentInput {
+  name: string; zoneId?: string | null; lat: number; lng: number;
+  msisdn: string; locationHint: string; openingHours?: string | null;
+  capacity: number; holdingFeeKes: string; active: boolean;
+}
+
+export async function actionListParcelAgents(): Promise<ParcelAgent[]> {
+  await requireStaff();
+  // Inactive shops included, unlike the public list — the whole point
+  // of the admin view is seeing the ones that are switched off.
+  const { agents } = await adminGo<{ agents: ParcelAgent[] | null }>('/v1/admin/parcels/agents');
+  return agents ?? [];
+}
+
+export async function actionCreateParcelAgent(input: ParcelAgentInput): Promise<Result> {
+  try {
+    await requireStaff();
+    await adminGo('/v1/admin/parcels/agents', { method: 'POST', body: JSON.stringify(input) });
+    revalidatePath('/parcels/pricing');
+    return { ok: true };
+  } catch (e) {
+    return { ok: false, error: e instanceof Error ? e.message : 'Could not create that pickup point' };
+  }
+}
+
+export async function actionUpdateParcelAgent(id: string, input: ParcelAgentInput): Promise<Result> {
+  try {
+    await requireStaff();
+    await adminGo(`/v1/admin/parcels/agents/${id}`, { method: 'PATCH', body: JSON.stringify(input) });
+    revalidatePath('/parcels/pricing');
+    return { ok: true };
+  } catch (e) {
+    return { ok: false, error: e instanceof Error ? e.message : 'Could not update that pickup point' };
+  }
+}
+
+/** One cover level. The fee a sender pays is feeKes + declaredValue ×
+ *  feePct, and maxCoverKes caps what a claim can ever pay out. */
+export interface ParcelCoverageTier {
+  id: string; name: string;
+  // Decimal strings from core-go; feePct is a rate, so it stays a number.
+  maxCoverKes: string; feeKes: string;
+  feePct: number; active: boolean; sortOrder: number;
+}
+
+export async function actionListCoverageTiers(): Promise<ParcelCoverageTier[]> {
+  await requireStaff();
+  const { tiers } = await adminGo<{ tiers: ParcelCoverageTier[] | null }>('/v1/admin/parcels/coverage');
+  return tiers ?? [];
+}
+
+/** Upsert by name, matching the server — the rate card is a small named
+ *  set an admin edits in place, not a growing collection. */
+export async function actionSaveCoverageTier(
+  input: Omit<ParcelCoverageTier, 'id'>,
+): Promise<Result> {
+  try {
+    await requireStaff();
+    await adminGo('/v1/admin/parcels/coverage', { method: 'POST', body: JSON.stringify(input) });
+    revalidatePath('/parcels/pricing');
+    return { ok: true };
+  } catch (e) {
+    return { ok: false, error: e instanceof Error ? e.message : 'Could not save that cover level' };
+  }
+}
+
+export interface ParcelDistanceRate { perKmKes: string; minChargeableKm: number }
 
 export async function actionGetDistanceRate(): Promise<ParcelDistanceRate | null> {
   await requireStaff();
@@ -215,6 +597,487 @@ export async function actionSetDistanceRate(perKmKes: number, minChargeableKm: n
     return { ok: true };
   } catch (e) {
     return { ok: false, error: e instanceof Error ? e.message : 'Could not save the distance rate' };
+  }
+}
+
+// ── Pre-printed label stock ──
+// A pool of blank PKG-… codes minted ahead of any booking — print a
+// batch, stick them on envelopes/boxes in advance, then a booking's
+// existingCode binds one to a real shipment the moment it's needed.
+// See dbx.ParcelLabelStock's own comment for the full rationale.
+
+export interface ParcelLabelStockRow {
+  code: string; createdAt: string;
+  /** The truncated MAC core-go computed for this code, printed in the
+   *  QR as k=. Empty on nothing — every listed label gets one — but the
+   *  printer degrades gracefully if it ever is. */
+  sig?: string;
+}
+
+/**
+ * Mint a pad. `parcelOrgId` is who it's printed for — omitted mints
+ * into the shared Esoqo pool, which is every label to date.
+ *
+ * Ownership is recorded here and enforced at bind time: core-go's
+ * BookParcel refuses a code whose owning company isn't the one the
+ * binder is signed in to. That's the induction check the freight
+ * industry has always used on pre-numbered waybill pads — printing is
+ * not a commitment, presenting the label against a shipment is.
+ */
+export async function actionGenerateParcelLabels(
+  count: number, parcelOrgId?: string,
+): Promise<{ ok: true; codes: string[]; batchId: string } | { ok: false; error: string }> {
+  try {
+    await requireStaff();
+    const { codes, batchId } = await adminGo<{ codes: string[] | null; batchId: string }>(
+      '/v1/admin/parcels/labels/generate',
+      { method: 'POST', body: JSON.stringify({ count, parcelOrgId: parcelOrgId || undefined }) },
+    );
+    revalidatePath('/parcels/labels');
+    return { ok: true, codes: codes ?? [], batchId };
+  } catch (e) {
+    return { ok: false, error: e instanceof Error ? e.message : 'Could not generate labels' };
+  }
+}
+
+export async function actionListParcelLabelStock(parcelOrgId?: string): Promise<ParcelLabelStockRow[]> {
+  await requireStaff();
+  const params = new URLSearchParams({ limit: '200' });
+  if (parcelOrgId) params.set('parcelOrgId', parcelOrgId);
+  const { labels } = await adminGo<{ labels: ParcelLabelStockRow[] | null }>(`/v1/admin/parcels/labels?${params}`);
+  return labels ?? [];
+}
+
+export interface TripManifestRow {
+  code: string; receiverName: string; receiverMsisdn: string;
+  destinationLabel: string;
+  dropStageName: string | null; dropStageOrder: number | null;
+  codAmountKes: string | null; codStatus: string;
+}
+
+/**
+ * What is in the vehicle, in the order it comes off.
+ *
+ * The endpoint behind this has existed the whole time and no web
+ * surface ever called it, so a driver left the depot without a signed
+ * list of what they were carrying. Paper matters here for a reason the
+ * app cannot cover: a signature survives a dispute six weeks later,
+ * when the phone that recorded everything has been replaced.
+ */
+export async function actionGetTripManifest(tripId: string): Promise<TripManifestRow[]> {
+  await requireStaff();
+  const { parcels } = await adminGo<{ parcels: TripManifestRow[] | null }>(
+    `/v1/admin/parcels/trips/${encodeURIComponent(tripId)}/manifest`,
+  );
+  return parcels ?? [];
+}
+
+export interface ParcelLabelRegisterRow {
+  code: string; createdAt: string; state: string;
+  itemDescription: string | null; destination: string | null; ownerName: string | null;
+  infoAttachedAt: string | null; usedAt: string | null;
+  voidedAt: string | null; voidedReason: string | null;
+  batchId: string | null; orgName: string | null;
+}
+
+/**
+ * Every label, in whatever state it has reached.
+ *
+ * The listing this replaces only ever showed never-touched stock, so
+ * filling a label in made it disappear from the product — a handler
+ * could record what a box was and where it was going, and no screen
+ * would show it again.
+ */
+export async function actionListParcelLabelRegister(
+  state: string, parcelOrgId?: string,
+): Promise<{ labels: ParcelLabelRegisterRow[]; counts: Record<string, number> }> {
+  await requireStaff();
+  const params = new URLSearchParams({ state });
+  if (parcelOrgId) params.set('parcelOrgId', parcelOrgId);
+  const res = await adminGo<{ labels: ParcelLabelRegisterRow[] | null; counts: Record<string, number> }>(
+    `/v1/admin/parcels/labels/register?${params}`,
+  );
+  return { labels: res.labels ?? [], counts: res.counts ?? {} };
+}
+
+export interface ParcelLabelBatchRow {
+  batchId: string; createdAt: string;
+  parcelOrgId: string | null; orgName: string | null;
+  total: number; live: number; used: number; voided: number;
+  voidedReason: string | null;
+}
+
+export async function actionListParcelLabelBatches(parcelOrgId?: string): Promise<ParcelLabelBatchRow[]> {
+  await requireStaff();
+  const params = new URLSearchParams();
+  if (parcelOrgId) params.set('parcelOrgId', parcelOrgId);
+  const { batches } = await adminGo<{ batches: ParcelLabelBatchRow[] | null }>(
+    `/v1/admin/parcels/labels/batches?${params}`,
+  );
+  return batches ?? [];
+}
+
+/**
+ * Withdraw every still-usable label in a batch — the "a pad walked out
+ * of the branch" button.
+ *
+ * Already-spent codes are deliberately left alone: each is bound to a
+ * real parcel somewhere in the world being delivered, and retro-voiding
+ * its label would invalidate the tracking code on a box in transit to
+ * punish a theft that happened after it shipped.
+ */
+export async function actionVoidParcelLabelBatch(
+  batchId: string, reason: string, parcelOrgId?: string,
+): Promise<{ ok: true; voided: number } | { ok: false; error: string }> {
+  try {
+    await requireStaff();
+    const { voided } = await adminGo<{ voided: number }>(
+      `/v1/admin/parcels/labels/batches/${encodeURIComponent(batchId)}/void`,
+      { method: 'POST', body: JSON.stringify({ reason, parcelOrgId: parcelOrgId || undefined }) },
+    );
+    revalidatePath('/parcels/labels');
+    return { ok: true, voided };
+  } catch (e) {
+    return { ok: false, error: e instanceof Error ? e.message : 'Could not withdraw that batch' };
+  }
+}
+
+// Structured info attached to a pre-printed label — item, destination,
+// owner name/contact/gender, item type, weight range — the moment it's
+// actually stuck on a physical item, independent of (and usually well
+// before) a real booking. core-go's GET /v1/parcels/:code/status then
+// surfaces this same info to anyone who scans/tracks the code, on the
+// web track page and the mobile app's scan flow alike (see
+// dbx.GetParcelStatus's own comment on the fallback). Every field but
+// itemDescription is optional — a handler might only know the item
+// and destination at first.
+export interface ParcelLabelInfoInput {
+  itemDescription: string;
+  destination?: string;
+  ownerName?: string;
+  ownerContact?: string;
+  ownerGender?: string;
+  itemType?: string;
+  weightRangeKg?: string;
+  lengthCm?: number;
+  widthCm?: number;
+  heightCm?: number;
+}
+
+/**
+ * Book a parcel from the counter.
+ *
+ * The admin console could do everything to a parcel except create one:
+ * 48 actions for assigning, cancelling, refunding and flagging, and no
+ * way to take one in over a desk. `POST /v1/parcels` existed the whole
+ * time but was only ever reached from the customer web flow.
+ *
+ * Goes through the same endpoint that flow uses rather than a private
+ * admin one, so a counter booking and a self-service booking are the
+ * same kind of object with the same validation. What differs is only
+ * what the session proves: the staff bearer is what lets this bind
+ * owned label stock and attest the contents declaration.
+ */
+export interface CounterBookingInput {
+  senderName: string; senderMsisdn: string;
+  receiverName: string; receiverMsisdn: string;
+  originLabel: string; destinationLabel: string;
+  parcelType: string; weightKg?: number;
+  lengthCm?: number; widthCm?: number; heightCm?: number;
+  declaredValueKes?: number; coverageTierId?: string;
+  contentsDeclared: boolean;
+  existingCode?: string;
+  notes?: string;
+  fragile?: boolean;
+}
+
+export async function actionCounterBookParcel(
+  input: CounterBookingInput,
+): Promise<{ ok: true; code: string; parcelId: string } | { ok: false; error: string }> {
+  try {
+    await requireStaff();
+    // payAtCounter: true — a counter booking has a customer standing at
+    // the desk settling in person, right now. Without this the parcel
+    // was landing in DRAFT_PENDING_PAYMENT and just sitting there:
+    // nobody was ever routed through SetParcelPrice/Pay to finish it, so
+    // it never became a real, actionable BOOKED parcel and neither party
+    // was ever texted. See dbx.BookParcelInput.PayAtCounter.
+    const res = await adminGo<{ parcelId: string; code: string }>('/v1/parcels', {
+      method: 'POST', body: JSON.stringify({ ...input, payAtCounter: true }),
+    });
+    revalidatePath('/parcels');
+    revalidatePath('/parcels/labels');
+    return { ok: true, code: res.code, parcelId: res.parcelId };
+  } catch (e) {
+    return { ok: false, error: e instanceof Error ? e.message : 'Could not book that parcel' };
+  }
+}
+
+export interface CounterParty {
+  name: string; msisdn: string; lastLabel: string; lastSeen: string; shipments: number;
+}
+
+/**
+ * Somebody this network has shipped to or from before.
+ *
+ * A market trader ships to the same six shops every week, and retyping
+ * a name and number they gave you on Tuesday is the slowest part of a
+ * counter transaction. Backed by past parcels rather than a saved-
+ * addresses table — every parcel already records both parties, so an
+ * address book would be a second copy of facts we hold, needing a dual
+ * write and starting empty for every customer already in the system.
+ */
+export async function actionSearchCounterParties(q: string): Promise<CounterParty[]> {
+  await requireStaff();
+  if (q.trim().length < 3) return [];
+  const { parties } = await adminGo<{ parties: CounterParty[] | null }>(
+    `/v1/admin/parcels/parties?q=${encodeURIComponent(q.trim())}`,
+  );
+  return parties ?? [];
+}
+
+export interface ParcelPricingOption {
+  parcelType: string; weightLabel: string;
+  minWeightKg: number; maxWeightKg: number;
+  minKes: string; maxKes: string;
+}
+
+/** Every weight bracket, so the counter can match a measured weight to
+ *  its bracket without a round trip per keystroke. */
+export async function actionListParcelPricing(): Promise<ParcelPricingOption[]> {
+  await requireStaff();
+  const res = await adminGo<{ pricing: ParcelPricingOption[] | null }>('/v1/parcels/pricing');
+  return res.pricing ?? [];
+}
+
+// ── Scanning ──
+
+/**
+ * Where should a scanned code take an operator?
+ *
+ * Deliberately built on the public GET /v1/parcels/:code/status rather
+ * than a new admin endpoint, because that projection already answers
+ * exactly this question: it resolves a booked parcel *and* falls back
+ * to pre-printed label stock (see dbx.GetParcelStatus's own comment on
+ * the fallback), which is the whole distinction the scan box needs.
+ * A blank label and a booked parcel are the two things a handler
+ * scans, and one lookup already tells them apart.
+ *
+ * The projection is guest-safe, so nothing here widens what admin can
+ * see — this is a routing decision, and the destination pages do their
+ * own capability checks as they always have.
+ */
+export type ScanDestination =
+  | { kind: 'parcel'; code: string }
+  | { kind: 'label'; code: string }
+  | { kind: 'unknown' };
+
+export async function actionResolveScannedCode(code: string): Promise<ScanDestination> {
+  await requireStaff();
+  const normalised = code.trim().toUpperCase();
+  if (!normalised) return { kind: 'unknown' };
+  try {
+    const status = await adminGo<{ code: string; preLabel?: boolean }>(
+      `/v1/parcels/${encodeURIComponent(normalised)}/status`,
+    );
+    // preLabel means the code resolved against parcel_label_stock
+    // rather than a real booking — a blank or filled-in label, whose
+    // useful destination is the attach form, not the parcels ledger.
+    return { kind: status.preLabel ? 'label' : 'parcel', code: status.code };
+  } catch {
+    return { kind: 'unknown' };
+  }
+}
+
+// The read half. An edit form MUST call this before it saves: the
+// POST below overwrites rather than merges, so a form that opens
+// blank and re-submits every field erases whatever it didn't load.
+//
+// Three outcomes worth keeping distinct at the call site — `info: null`
+// is a real but still-blank label (the ordinary first-attach case, not
+// an error), while a thrown error is a code that isn't stock at all or
+// is already bound to a booking.
+export async function actionGetParcelLabelInfo(
+  code: string,
+): Promise<{ ok: true; info: ParcelLabelInfoInput | null } | { ok: false; error: string }> {
+  try {
+    await requireStaff();
+    const { info } = await adminGo<{ info: ParcelLabelInfoInput | null }>(
+      `/v1/admin/parcels/labels/info/${encodeURIComponent(code)}`,
+    );
+    return { ok: true, info: info ?? null };
+  } catch (e) {
+    return { ok: false, error: e instanceof Error ? e.message : 'Could not load that label' };
+  }
+}
+
+export async function actionAttachParcelLabelInfo(code: string, info: ParcelLabelInfoInput): Promise<Result> {
+  try {
+    await requireStaff();
+    await adminGo(`/v1/admin/parcels/labels/info/${encodeURIComponent(code)}`, {
+      method: 'POST', body: JSON.stringify(info),
+    });
+    revalidatePath('/parcels/labels');
+    return { ok: true };
+  } catch (e) {
+    return { ok: false, error: e instanceof Error ? e.message : 'Could not attach that info' };
+  }
+}
+
+// ── Courier teams ──
+// A dispatch-planning layer on top of the individual-courier role
+// above: a team (manager + roster) owns one or more fleets (a
+// physical vehicle, its own fleet number), each fleet running trips —
+// a batch of parcels handed to it, from dispatch until a staffer
+// marks it back. See dbx's parcel_teams.go for the full rationale.
+
+export interface CourierTeamRow {
+  ID: string; Name: string; ManagerName: string | null;
+  MemberCount: number; FleetCount: number; CreatedAt: string;
+}
+
+export interface CourierTeamMemberRow { PartyID: string; Name: string; Msisdn: string | null; Role: string; AddedAt: string }
+export interface CourierFleetRow { ID: string; FleetNumber: string; VehicleType: string; OpenTripID: string | null; AssignedOpen: number }
+
+export async function actionListCourierTeams(): Promise<CourierTeamRow[]> {
+  await requireStaff();
+  const { teams } = await adminGo<{ teams: CourierTeamRow[] | null }>('/v1/admin/parcels/courier-teams');
+  return teams ?? [];
+}
+
+export async function actionGetCourierTeam(teamId: string): Promise<{ name: string; members: CourierTeamMemberRow[]; fleets: CourierFleetRow[] } | null> {
+  try {
+    await requireStaff();
+    const res = await adminGo<{ name: string; members: CourierTeamMemberRow[] | null; fleets: CourierFleetRow[] | null }>(`/v1/admin/parcels/courier-teams/${teamId}`);
+    return { name: res.name, members: res.members ?? [], fleets: res.fleets ?? [] };
+  } catch {
+    return null;
+  }
+}
+
+export async function actionCreateCourierTeam(input: {
+  name: string; manager: { name: string; msisdn: string; role?: string };
+}): Promise<{ ok: true; teamId: string } | { ok: false; error: string }> {
+  try {
+    await requireStaff();
+    const { teamId } = await adminGo<{ teamId: string }>('/v1/admin/parcels/courier-teams', {
+      method: 'POST', body: JSON.stringify(input),
+    });
+    revalidatePath('/parcels/teams');
+    return { ok: true, teamId };
+  } catch (e) {
+    return { ok: false, error: e instanceof Error ? e.message : 'Could not create that team' };
+  }
+}
+
+export async function actionAddTeamRosterMember(teamId: string, input: { name: string; msisdn: string; role?: string }): Promise<Result> {
+  try {
+    await requireStaff();
+    await adminGo(`/v1/admin/parcels/courier-teams/${teamId}/members`, { method: 'POST', body: JSON.stringify(input) });
+    revalidatePath(`/parcels/teams/${teamId}`);
+    return { ok: true };
+  } catch (e) {
+    return { ok: false, error: e instanceof Error ? e.message : 'Could not add that member' };
+  }
+}
+
+export async function actionRenameCourierTeam(teamId: string, name: string): Promise<Result> {
+  try {
+    await requireStaff();
+    await adminGo(`/v1/admin/parcels/courier-teams/${teamId}`, { method: 'PATCH', body: JSON.stringify({ name }) });
+    revalidatePath(`/parcels/teams/${teamId}`);
+    revalidatePath('/parcels/teams');
+    return { ok: true };
+  } catch (e) {
+    return { ok: false, error: e instanceof Error ? e.message : 'Could not rename that team' };
+  }
+}
+
+// Corrects a roster entry — texts the member on their (possibly new)
+// number the moment it's saved, same as adding them does; see
+// notify.CourierTeamMemberUpdated.
+export async function actionUpdateTeamRosterMember(
+  teamId: string, partyId: string, input: { name: string; msisdn: string; role?: string },
+): Promise<Result> {
+  try {
+    await requireStaff();
+    await adminGo(`/v1/admin/parcels/courier-teams/${teamId}/members/${partyId}`, { method: 'PATCH', body: JSON.stringify(input) });
+    revalidatePath(`/parcels/teams/${teamId}`);
+    return { ok: true };
+  } catch (e) {
+    return { ok: false, error: e instanceof Error ? e.message : 'Could not update that member' };
+  }
+}
+
+export async function actionAddCourierFleet(teamId: string, input: { fleetNumber: string; vehicleType: string }): Promise<Result> {
+  try {
+    await requireStaff();
+    await adminGo(`/v1/admin/parcels/courier-teams/${teamId}/fleets`, { method: 'POST', body: JSON.stringify(input) });
+    revalidatePath(`/parcels/teams/${teamId}`);
+    return { ok: true };
+  } catch (e) {
+    return { ok: false, error: e instanceof Error ? e.message : 'Could not add that fleet' };
+  }
+}
+
+export async function actionAssignParcelsToFleet(fleetId: string, codes: string[]): Promise<{ ok: true; assigned: string[] } | { ok: false; error: string }> {
+  try {
+    await requireStaff();
+    const { assigned } = await adminGo<{ assigned: string[] | null }>(`/v1/admin/parcels/fleets/${fleetId}/assign`, {
+      method: 'POST', body: JSON.stringify({ codes }),
+    });
+    revalidatePath('/parcels/teams', 'layout');
+    return { ok: true, assigned: assigned ?? [] };
+  } catch (e) {
+    return { ok: false, error: e instanceof Error ? e.message : 'Could not assign those parcels' };
+  }
+}
+
+export async function actionCompleteCourierTrip(tripId: string): Promise<Result> {
+  try {
+    await requireStaff();
+    await adminGo(`/v1/admin/parcels/trips/${tripId}/complete`, { method: 'POST' });
+    revalidatePath('/parcels/teams', 'layout');
+    return { ok: true };
+  } catch (e) {
+    return { ok: false, error: e instanceof Error ? e.message : 'Could not complete that trip' };
+  }
+}
+
+/** A handler scanning one already-assigned parcel onto the vehicle —
+ *  the confirmation dbx.AssignParcelsToFleet's own bulk write never
+ *  gave, and exactly what dbx.CheckTripDispatched reads to tell a
+ *  boarded parcel apart from a left-behind one. */
+export async function actionBoardParcelOntoTrip(tripId: string, code: string): Promise<Result> {
+  try {
+    await requireStaff();
+    await adminGo(`/v1/admin/parcels/trips/${tripId}/board`, {
+      method: 'POST', body: JSON.stringify({ code }),
+    });
+    revalidatePath('/parcels/teams', 'layout');
+    return { ok: true };
+  } catch (e) {
+    return { ok: false, error: e instanceof Error ? e.message : 'Could not board that parcel' };
+  }
+}
+
+export interface LeftBehindParcelRow { code: string; destinationLabel: string }
+
+/** The explicit "I'm done scanning" moment — see this endpoint's own
+ *  handler comment on why exactly one SMS fires from this call, never
+ *  a text per parcel. */
+export async function actionCheckTripDispatched(
+  tripId: string,
+): Promise<{ ok: true; boardedCount: number; leftBehind: LeftBehindParcelRow[] } | { ok: false; error: string }> {
+  try {
+    await requireStaff();
+    const res = await adminGo<{ boardedCount: number; leftBehind: LeftBehindParcelRow[] | null }>(
+      `/v1/admin/parcels/trips/${tripId}/checked`, { method: 'POST' },
+    );
+    revalidatePath('/parcels/teams', 'layout');
+    return { ok: true, boardedCount: res.boardedCount, leftBehind: res.leftBehind ?? [] };
+  } catch (e) {
+    return { ok: false, error: e instanceof Error ? e.message : 'Could not check this trip as dispatched' };
   }
 }
 

@@ -37,20 +37,20 @@ class PageUrl
         // CTA site-wide can go straight to the working local form. Falls
         // through to the normal seeded-page lookup below — except for the
         // one operational escape hatch: setting CECF_LOCAL_REGISTRATION_
-        // ENABLED=false sends every CTA back to esoko's own /join without
+        // ENABLED=false sends every CTA back to esoqo's own /join without
         // a deploy, if the local flow ever needs pulling in a hurry.
         if ($key === 'apply' && env('CECF_LOCAL_REGISTRATION_ENABLED', true) === false) {
-            return self::esokoJoinUrl();
+            return self::esoqoJoinUrl();
         }
 
         // "Our Jamii" (pages/jamii.json) is a real local page introducing
         // the product, but the product itself — browsing a group's own live
-        // page, or a group's own dashboard — only ever exists on Esoko's
+        // page, or a group's own dashboard — only ever exists on Esoqo's
         // Our Jamii app, never on this WordPress site. Every "page": "jamii"
         // CTA goes straight there, unconditionally (unlike "apply" above,
         // there is no local equivalent to fall back to).
         if ($key === 'jamii') {
-            return self::esokoJamiiUrl();
+            return self::esoqoJamiiUrl();
         }
 
         $url = self::map()[$key] ?? null;
@@ -58,17 +58,17 @@ class PageUrl
         return $url && $anchor ? "{$url}#{$anchor}" : $url;
     }
 
-    public static function esokoJoinUrl(): string
+    public static function esoqoJoinUrl(): string
     {
-        return env('ESOKO_JOIN_URL', 'http://localhost:3001/join');
+        return env('ESOQO_JOIN_URL', 'http://localhost:3001/join');
     }
 
-    public static function esokoJamiiUrl(): string
+    public static function esoqoJamiiUrl(): string
     {
         // apps/jamii's own (site)/page.tsx — the "discover" listing of
         // every published Our Jamii page — lives at the app's root, not a
         // /discover path segment.
-        return env('ESOKO_JAMII_URL', 'http://localhost:3004/');
+        return env('ESOQO_JAMII_URL', 'http://localhost:3004/');
     }
 
     /**

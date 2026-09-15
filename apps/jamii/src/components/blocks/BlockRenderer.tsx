@@ -1,4 +1,4 @@
-import type { JamiiBlockType } from '@esoko/db';
+import type { JamiiBlockType } from '@esoqo/db';
 import { StatsTickerBlock } from './StatsTickerBlock';
 import { ExploreGridBlock } from './ExploreGridBlock';
 import { ActiveCampaignBlock } from './ActiveCampaignBlock';
@@ -29,7 +29,7 @@ export interface HomeBlock {
 
 /** One switch, one place — dispatches a JamiiPageBlock row to its
  *  visual component. `data`'s actual shape is validated server-side at
- *  write time by jamiiBlockDataSchema (@esoko/domain); this only casts
+ *  write time by jamiiBlockDataSchema (@esoqo/domain); this only casts
  *  it back to the matching shape per `type`, same trust boundary every
  *  other already-persisted-and-trusted read in this app relies on. */
 export function BlockRenderer({ block, page, mode }: { block: HomeBlock; page: OrgPage; mode: OrgLinkMode }) {

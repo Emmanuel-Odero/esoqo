@@ -1,6 +1,7 @@
+import { displayKES, toCentsOrZero } from '@esoqo/domain';
 import type { Metadata } from 'next';
 import { notFound } from 'next/navigation';
-import { Icon } from '@esoko/ui';
+import { Icon } from '@esoqo/ui';
 import { BalancePayForm } from './BalancePayForm';
 
 const CORE_GO_URL = process.env.CORE_GO_API_URL ?? 'http://localhost:4100';
@@ -13,15 +14,17 @@ interface GoBalanceView {
   status: string;
   buyerName: string;
   buyerMsisdn: string;
-  totalKes: number;
-  amountPaidKes: number;
-  balanceKes: number;
+  // Decimal strings from core-go.
+  totalKes: string;
+  amountPaidKes: string;
+  balanceKes: string;
   balanceDueBy: string | null;
   departAt: string;
   listingTitle: string;
   orgName: string;
   where: string | null;
-  payments: { amountKes: number; kind: string; status: string; confirmedAt: string | null }[];
+  // amountKes is a decimal string from core-go — parse with toCents.
+  payments: { amountKes: string; kind: string; status: string; confirmedAt: string | null }[];
 }
 
 /**
@@ -42,7 +45,11 @@ export default async function BookingBalancePage({ params }: { params: Promise<{
     .catch(() => null);
   if (!b) notFound();
 
-  const paidPct = b.totalKes > 0 ? Math.min(100, Math.round((b.amountPaidKes / b.totalKes) * 100)) : 0;
+  // Percentages are computed from exact cents, so a plan paid in full
+  // reads 100 rather than 99 on a rounding hair.
+  const totalCents = toCentsOrZero(b.totalKes);
+  const paidCents = toCentsOrZero(b.amountPaidKes);
+  const paidPct = totalCents > 0 ? Math.min(100, Math.round((paidCents / totalCents) * 100)) : 0;
   const dueStr = b.balanceDueBy
     ? new Date(b.balanceDueBy).toLocaleString('en-KE', { timeZone: 'Africa/Nairobi' })
     : null;
@@ -76,7 +83,7 @@ export default async function BookingBalancePage({ params }: { params: Promise<{
           <div className="row" style={{ justifyContent: 'space-between', marginBottom: 6 }}>
             <span className="sub">Paid</span>
             <span className="mono" style={{ fontWeight: 700 }}>
-              KES {b.amountPaidKes.toLocaleString('en-KE')} / {b.totalKes.toLocaleString('en-KE')}
+              KES {displayKES(b.amountPaidKes)} / {displayKES(b.totalKes)}
             </span>
           </div>
           <div style={{ height: 8, borderRadius: 999, background: 'var(--line)', overflow: 'hidden', marginBottom: 14 }}>
@@ -109,7 +116,7 @@ export default async function BookingBalancePage({ params }: { params: Promise<{
                     {p.kind === 'DEPOSIT' ? 'Deposit' : p.kind === 'BALANCE' ? 'Final payment' : 'Top-up'}
                     {p.confirmedAt ? ` · ${new Date(p.confirmedAt).toLocaleDateString('en-KE')}` : ''}
                   </span>
-                  <span className="mono">KES {p.amountKes.toLocaleString('en-KE')}</span>
+                  <span className="mono">KES {displayKES(p.amountKes)}</span>
                 </div>
               ))}
             </div>

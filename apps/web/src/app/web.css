@@ -185,7 +185,15 @@ footer a:hover { color:#fff }
   justify-content:space-between; gap:16px; flex-wrap:wrap; font-size:.8rem }
 
 @media(max-width:1024px){ .hero-g{grid-template-columns:1fr;gap:36px} .g4{grid-template-columns:repeat(2,1fr)} }
-@media(max-width:900px){
+/* 1180px, not 900px: the 9-link nav plus logo and Sign in/Join free
+   need ~1066px of clear width before they'll fit on one row without
+   wrapping (measured via the actual rendered links, not guessed) —
+   900px left a dead zone (roughly 900-1066px, which covers iPad
+   landscape and plenty of laptop windows) where the desktop nav was
+   still shown, didn't fit, and wrapped mid-link with no overflow
+   handling, clipping/covering items instead of just breaking to a new
+   line. The hamburger now takes over comfortably before that happens. */
+@media(max-width:1180px){
   .hdnav,.hd .row{display:none}
   .hd-menu-btn{display:inline-flex}
   .hd-drawer-wrap{display:block; position:fixed; inset:64px 0 0 0; z-index:95}

@@ -1,5 +1,5 @@
 import Link from 'next/link';
-import { listJamiiSitePagesForDashboard } from '@esoko/db';
+import { listJamiiSitePagesForDashboard } from '@esoqo/db';
 import { requireMyPage } from '@/lib/session';
 import { NewPageForm } from './NewPageForm';
 

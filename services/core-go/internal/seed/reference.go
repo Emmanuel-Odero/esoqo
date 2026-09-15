@@ -6,12 +6,15 @@ package seed
 
 import (
 	"context"
+	"crypto/rand"
 	"fmt"
+	"math/big"
 	"os"
 
 	"github.com/jackc/pgx/v5/pgxpool"
 
-	"github.com/esoko/core-go/internal/authsvc"
+	"github.com/esoqo/core-go/internal/authsvc"
+	"github.com/esoqo/core-go/internal/config"
 )
 
 type countyRow struct {
@@ -153,11 +156,27 @@ func SeedReferenceData(ctx context.Context, pool *pgxpool.Pool) error {
 	}
 	fmt.Printf("  pricing rules: %d (edit these from the admin app, not by re-seeding)\n", len(pricingRules))
 
+	// The wildcard-capability ops account. There is deliberately no PIN
+	// fallback: a published constant here is a standing super-admin on
+	// whatever database this happens to point at, and ON CONFLICT DO
+	// NOTHING means it would never be rotated by a later re-seed either.
+	// Outside development the caller must supply one.
 	pin := os.Getenv("SEED_ADMIN_PIN")
-	if pin == "" {
-		pin = "482915"
-	}
 	pinHash := os.Getenv("SEED_ADMIN_HASH")
+	generated := false
+	if pin == "" && pinHash == "" {
+		if config.CurrentAppEnv() != config.AppEnvDevelopment {
+			return fmt.Errorf(
+				"refusing to seed the ops super-admin under APP_ENV=%s without SEED_ADMIN_PIN or SEED_ADMIN_HASH",
+				config.CurrentAppEnv())
+		}
+		var err error
+		pin, err = randomNumericPin(6)
+		if err != nil {
+			return fmt.Errorf("generating admin PIN: %w", err)
+		}
+		generated = true
+	}
 	if pinHash == "" {
 		var err error
 		pinHash, err = authsvc.HashPin(pin)
@@ -167,12 +186,32 @@ func SeedReferenceData(ctx context.Context, pool *pgxpool.Pool) error {
 	}
 	_, err := pool.Exec(ctx, `
 		INSERT INTO staff_user (id, email, name, "pinHash", capabilities, "createdAt", "updatedAt")
-		VALUES (gen_random_uuid(), 'ops@esoko.co.ke', 'Operations', $1, ARRAY['*'], now(), now())
+		VALUES (gen_random_uuid(), 'ops@esoqo.co.ke', 'Operations', $1, ARRAY['*'], now(), now())
 		ON CONFLICT (email) DO NOTHING`, pinHash)
 	if err != nil {
 		return fmt.Errorf("ops staff user: %w", err)
 	}
-	fmt.Printf("  staff: ops@esoko.co.ke  (PIN %s — change before any deployment)\n", pin)
+	if generated {
+		// Only ever a PIN this process just generated for a local dev DB;
+		// a caller-supplied one is never echoed back to the terminal.
+		fmt.Printf("  staff: ops@esoqo.co.ke  (generated dev PIN %s — not reused on re-seed)\n", pin)
+	} else {
+		fmt.Printf("  staff: ops@esoqo.co.ke  (PIN from SEED_ADMIN_PIN/SEED_ADMIN_HASH)\n")
+	}
 
 	return nil
+}
+
+// randomNumericPin returns a cryptographically random numeric PIN, used
+// only to keep local dev zero-config now that the constant is gone.
+func randomNumericPin(digits int) (string, error) {
+	out := make([]byte, digits)
+	for i := range out {
+		n, err := rand.Int(rand.Reader, big.NewInt(10))
+		if err != nil {
+			return "", err
+		}
+		out[i] = byte('0' + n.Int64())
+	}
+	return string(out), nil
 }

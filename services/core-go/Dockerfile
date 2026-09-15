@@ -1,4 +1,4 @@
-# services/core-go — Esoko's mobile REST API (Gin). Built as a static
+# services/core-go — Esoqo's mobile REST API (Gin). Built as a static
 # binary so the runtime image carries no Go toolchain, matching the
 # minimal-footprint reasoning in docs/adr/0004-language-allocation.md.
 

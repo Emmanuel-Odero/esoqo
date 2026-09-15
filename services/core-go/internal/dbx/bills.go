@@ -17,7 +17,7 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 
-	"github.com/esoko/core-go/internal/ledger"
+	"github.com/esoqo/core-go/internal/ledger"
 )
 
 type CreateBillInput struct {
@@ -386,7 +386,7 @@ func ConfirmBillContributionByCheckoutID(ctx context.Context, pool *pgxpool.Pool
 		return "", false, err
 	}
 	entryID, err := ledger.PostEntry(ctx, pool, "bill-contribution:"+id, "Bill contribution from "+contributorName, "core-go:bill-contribution:"+checkoutRequestID,
-		[]ledger.Posting{{AccountID: settlement, AmountKES: amountKES}, {AccountID: funding, AmountKES: -amountKES}})
+		[]ledger.Posting{{AccountID: settlement, AmountCents: ledger.CentsFromKES(amountKES)}, {AccountID: funding, AmountCents: ledger.CentsFromKES(-amountKES)}})
 	if err != nil {
 		return "", false, err
 	}

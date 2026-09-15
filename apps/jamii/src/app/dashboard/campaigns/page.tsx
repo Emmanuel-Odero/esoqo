@@ -1,5 +1,5 @@
 import Link from 'next/link';
-import { listCampaigns, getCampaignStats } from '@esoko/db';
+import { listCampaigns, getCampaignStats } from '@esoqo/db';
 import { requireMyPage } from '@/lib/session';
 
 export default async function CampaignsScreen() {

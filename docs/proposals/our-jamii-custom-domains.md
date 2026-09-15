@@ -25,7 +25,7 @@ changes — a verified `JamiiDomain` just changes how the page is *reached*.
   real DNS lookup, so the whole flow is testable with no Cloudflare account and
   no owned domain.
 - Ownership is proven two independent ways before a domain ever goes `ACTIVE`:
-  Cloudflare's own hostname verification, and a separate `_esoko-verify.<host>`
+  Cloudflare's own hostname verification, and a separate `_esoqo-verify.<host>`
   TXT record we generate and check ourselves.
 - Routing — `apps/jamii/src/middleware.ts` resolves the `Host` header against
   verified, `ACTIVE` domains only, and rewrites to `/o/{slug}/...`
@@ -74,8 +74,8 @@ flow runs against your local Postgres alone.
 
 2. **Run the core service and the jamii app**:
    ```
-   pnpm --filter @esoko/core-service dev   # :4000
-   pnpm --filter @esoko/jamii dev          # :3004
+   pnpm --filter @esoqo/core-service dev   # :4000
+   pnpm --filter @esoqo/jamii dev          # :3004
    ```
 
 3. **Request a domain** from a signed-in page ADMIN in the jamii dashboard

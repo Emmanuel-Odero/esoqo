@@ -1,7 +1,7 @@
 import 'server-only';
 import { createHash, randomBytes } from 'node:crypto';
 import { redis } from './redis';
-import { ROLE_PRESETS, type Capability, type Ctx, type RoleName } from '@esoko/db';
+import { ROLE_PRESETS, type Capability, type Ctx, type RoleName } from '@esoqo/db';
 
 /**
  * Opaque server-side sessions.
@@ -15,6 +15,9 @@ import { ROLE_PRESETS, type Capability, type Ctx, type RoleName } from '@esoko/d
  */
 
 const TTL = 60 * 60 * 24 * 14; // 14 days
+// Still 'esoko_session' after the Esoqo rename: renaming a session
+// cookie signs out every logged-in person on the deploy that ships it.
+// The brand is Esoqo; this string is a key into live browser state.
 export const SESSION_COOKIE = 'esoko_session';
 
 export interface SessionData {
@@ -23,10 +26,10 @@ export interface SessionData {
   partyId?: string;
   orgId?: string;
   /** Set for an AGENT session scoped to one store — a cashier or
-   *  manager signed in at the till. See @esoko/db's Ctx.storeId. */
+   *  manager signed in at the till. See @esoqo/db's Ctx.storeId. */
   storeId?: string;
   /** Set for an AGENT session scoped to one ticketing org — an admin,
-   *  manager or gate scanner. See @esoko/db's Ctx.ticketOrgId. */
+   *  manager or gate scanner. See @esoqo/db's Ctx.ticketOrgId. */
   ticketOrgId?: string;
   capabilities: Capability[];
   issuedAt: number;

@@ -4,12 +4,12 @@
  * with CECF instead. Scoped under .join-scope so these tokens never leak
  * into shared classes (.wrap, .qcard, .btn, ...) that other routes in
  * this app — /signin, /me — also depend on. The join wizard itself
- * (JoinFlow) keeps its existing esoko-token styling untouched.
+ * (JoinFlow) keeps its existing esoqo-token styling untouched.
  *
  * This used to be CECF-branded (join-cecf.css) — this flow was CECF's
- * own front door. It now belongs to esoko alone (CECF runs its own
+ * own front door. It now belongs to esoqo alone (CECF runs its own
  * registration on childeldercare.test), so every colour and font here
- * is esoko's own from packages/ui/src/tokens.css, not a bespoke palette.
+ * is esoqo's own from packages/ui/src/tokens.css, not a bespoke palette.
  */
 .join-scope {
   --jn-accent: #9A6105;      /* --amber, tokens.css */
@@ -253,13 +253,13 @@
 }
 
 /* Done card: a pop-in that respects reduced motion. */
-.join-scope .donecard { animation: esoko-done-pop .45s cubic-bezier(.2, .8, .3, 1.2); }
-.join-scope .donecard .icbox { animation: esoko-check-pop .5s .1s cubic-bezier(.2, .8, .3, 1.3) both; }
-@keyframes esoko-done-pop {
+.join-scope .donecard { animation: esoqo-done-pop .45s cubic-bezier(.2, .8, .3, 1.2); }
+.join-scope .donecard .icbox { animation: esoqo-check-pop .5s .1s cubic-bezier(.2, .8, .3, 1.3) both; }
+@keyframes esoqo-done-pop {
   from { opacity: 0; transform: translateY(6px) scale(.985); }
   to { opacity: 1; transform: none; }
 }
-@keyframes esoko-check-pop {
+@keyframes esoqo-check-pop {
   from { transform: scale(.5); opacity: 0; }
   to { transform: scale(1); opacity: 1; }
 }

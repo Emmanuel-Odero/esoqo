@@ -5,9 +5,9 @@ import { z } from 'zod';
 import {
   attachRegistrationCheckoutRequestId, confirmRegistrationPaymentByCheckoutId,
   getRegistration, getRegistrationDetail, type Ctx,
-} from '@esoko/db';
-import { initiateStkPush, MpesaError } from '@esoko/payments';
-import { msisdnSchema, toSafeErrorMessage } from '@esoko/domain';
+} from '@esoqo/db';
+import { initiateStkPush, MpesaError } from '@esoqo/payments';
+import { msisdnSchema, toSafeErrorMessage, clientIpFrom } from '@esoqo/domain';
 import { ownsRegistration } from './ownership';
 
 /**
@@ -27,7 +27,7 @@ async function joinCtx(): Promise<Ctx> {
     actorType: 'SYSTEM',
     actorId: null,
     capabilities: ['registration.write', 'registration.read'],
-    ip: h.get('x-forwarded-for')?.split(',')[0]?.trim() ?? null,
+    ip: clientIpFrom((n) => h.get(n)) ?? null,
     __verified: true,
   };
 }
@@ -56,10 +56,10 @@ export async function actionInitiateStkPush(raw: unknown): Promise<StkResult> {
       amountKes: v.amountKes,
       // Daraja truncates AccountReference to 12 chars and TransactionDesc
       // to 13 (see initiateDarajaStkPush) — both are sized to fit exactly,
-      // so "ESOKO" is guaranteed to show on the phone prompt rather than
+      // so "ESOQO" is guaranteed to show on the phone prompt rather than
       // getting cut off along with whatever followed it.
-      accountReference: `ESOKO${v.registrationId.slice(0, 7)}`,
-      description: 'Esoko Reg Fee',
+      accountReference: `ESOQO${v.registrationId.slice(0, 7)}`,
+      description: 'Esoqo Reg Fee',
     });
 
     await attachRegistrationCheckoutRequestId(ctx, v.registrationId, push.checkoutRequestId, v.amountKes, v.msisdn);

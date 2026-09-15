@@ -1,5 +1,5 @@
 'use server';
-import { anonCtx, verifyCertificate, type VerifyResult } from '@esoko/db';
+import { anonCtx, verifyCertificate, type VerifyResult } from '@esoqo/db';
 
 export type { VerifyResult };
 

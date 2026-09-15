@@ -1,5 +1,5 @@
 'use server';
-import { verifyFareSchema } from '@esoko/domain';
+import { verifyFareSchema } from '@esoqo/domain';
 import { requireOrgAccess } from '@/lib/session';
 import { orgGo } from '@/lib/ticketing';
 

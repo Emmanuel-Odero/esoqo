@@ -1,4 +1,4 @@
-import { getObject } from '@esoko/db';
+import { getObject } from '@esoqo/db';
 
 /**
  * Public image serving — product photos, unlike KYC documents, are
@@ -6,7 +6,7 @@ import { getObject } from '@esoko/db';
  * no auth check (contrast apps/app's document route, which does). It
  * still never serves raw off a bucket domain: storageKey stays opaque
  * and this is the only thing that resolves it to bytes, on both the R2
- * and local-disk storage providers alike (see @esoko/db's storage.ts).
+ * and local-disk storage providers alike (see @esoqo/db's storage.ts).
  */
 
 const EXT_TO_MIME: Record<string, string> = {

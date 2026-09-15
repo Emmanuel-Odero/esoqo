@@ -2,12 +2,12 @@
 const nextConfig = {
   reactStrictMode: true,
   poweredByHeader: false,
-  transpilePackages: ['@esoko/ui', '@esoko/a11y', '@esoko/domain', '@esoko/payments'],
+  transpilePackages: ['@esoqo/ui', '@esoqo/a11y', '@esoqo/domain', '@esoqo/payments'],
   typedRoutes: true,
 
   /**
    * sharp (packages/db/src/image-compression.ts, imported via
-   * '@esoko/db/image-compression' by the upload Server Actions) is a
+   * '@esoqo/db/image-compression' by the upload Server Actions) is a
    * native binary addon — Turbopack/webpack can't bundle a compiled
    * .node file into a Server Component/Action bundle the way it does
    * plain JS, and the build fails with "Module not found: Can't

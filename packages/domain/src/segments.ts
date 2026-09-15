@@ -149,7 +149,7 @@ export interface SegmentMatch {
 
 /**
  * Always affirms. An unlisted trade returns `segment: null` with the raw
- * text preserved, and the caller shows "Esoko is for you too".
+ * text preserved, and the caller shows "Esoqo is for you too".
  */
 export function searchSegments(query: string, limit = 4): Segment[] {
   const t = query.trim().toLowerCase();

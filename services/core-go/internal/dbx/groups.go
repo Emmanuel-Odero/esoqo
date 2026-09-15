@@ -21,6 +21,15 @@ type GroupSummary struct {
 	Kind         string
 	County       string
 	MemberCount  int
+	// BalanceKES and PendingSignatures — the two figures the mobile
+	// Chama hub's hero card needs. Computed inline here rather than
+	// left to the per-group family providers (groupBalance/
+	// pendingWithdrawals) the detail screen already watches, because
+	// a list of N groups fetching both per row is an N+1 the hub
+	// itself would trigger on open; SearchGroupsPublic's callers never
+	// need either, so both are zero there.
+	BalanceKES        string
+	PendingSignatures int
 }
 
 // CreateOwnGroup mirrors createOwnGroup — the founder is seeded as
@@ -192,11 +201,52 @@ func GetGroup(ctx context.Context, pool *pgxpool.Pool, orgID string) (*GroupDeta
 }
 
 // ListMyGroups — every group this person actively (or pending-ly)
-// belongs to, newest membership first.
+// belongs to, newest membership first. Balance and pending-signature
+// count ride along as correlated subqueries rather than a second
+// round trip per group:
+//
+//   - balance mirrors GetGroupBalance exactly (sum of GROUP_SAVINGS
+//     postings) — derived, never stored, same as that function.
+//   - pendingSignatures mirrors GetEffectiveSignerIds' own fallback
+//     (explicit group_signer rows if any exist, else the officer
+//     roles) intersected with withdrawal_request rows this person
+//     hasn't signed yet. Kept in sync by hand with that Go function
+//     since there's no single source both can share across a SQL/Go
+//     boundary — if the signer-eligibility rule changes there, it
+//     has to change here too.
 func ListMyGroups(ctx context.Context, pool *pgxpool.Pool, personID string) ([]GroupSummary, error) {
 	rows, err := pool.Query(ctx, `
 		SELECT o."partyId", o."officialName", o."knownAs", o.kind::text, p.county,
-		       (SELECT count(*) FROM membership m2 WHERE m2."orgId" = o."partyId" AND m2."exitedAt" IS NULL)
+		       (SELECT count(*) FROM membership m2 WHERE m2."orgId" = o."partyId" AND m2."exitedAt" IS NULL),
+		       COALESCE((
+		         SELECT SUM(pst.amount)::text FROM posting pst
+		         JOIN account a ON a.id = pst."accountId"
+		         WHERE a."partyId" = o."partyId" AND a.kind = 'GROUP_SAVINGS'
+		       ), '0'),
+		       (SELECT count(*) FROM withdrawal_request wr
+		        WHERE wr."orgId" = o."partyId" AND wr.status = 'PENDING_SIGNATURES'
+		          AND NOT EXISTS (
+		            SELECT 1 FROM withdrawal_signature ws
+		            WHERE ws."withdrawalId" = wr.id AND ws."signerId" = $1
+		          )
+		          AND (
+		            EXISTS (
+		              SELECT 1 FROM group_signer gs
+		              WHERE gs."orgId" = o."partyId" AND gs."removedAt" IS NULL AND gs."personId" = $1
+		            )
+		            OR (
+		              NOT EXISTS (
+		                SELECT 1 FROM group_signer gs2
+		                WHERE gs2."orgId" = o."partyId" AND gs2."removedAt" IS NULL
+		              )
+		              AND EXISTS (
+		                SELECT 1 FROM membership m3
+		                WHERE m3."orgId" = o."partyId" AND m3."personId" = $1 AND m3."exitedAt" IS NULL
+		                  AND m3.role IN ('CHAIRPERSON', 'TREASURER', 'SECRETARY')
+		              )
+		            )
+		          )
+		       )
 		FROM membership m
 		JOIN organisation o ON o."partyId" = m."orgId"
 		JOIN party p ON p.id = o."partyId"
@@ -209,7 +259,8 @@ func ListMyGroups(ctx context.Context, pool *pgxpool.Pool, personID string) ([]G
 	var out []GroupSummary
 	for rows.Next() {
 		var g GroupSummary
-		if err := rows.Scan(&g.ID, &g.OfficialName, &g.KnownAs, &g.Kind, &g.County, &g.MemberCount); err != nil {
+		if err := rows.Scan(&g.ID, &g.OfficialName, &g.KnownAs, &g.Kind, &g.County, &g.MemberCount,
+			&g.BalanceKES, &g.PendingSignatures); err != nil {
 			return nil, err
 		}
 		out = append(out, g)

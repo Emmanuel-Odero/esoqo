@@ -1,7 +1,7 @@
 /* ══════════════════════════════════════════════════════════════
-   Esoko app surfaces — base chrome shared by every route.
+   Esoqo app surfaces — base chrome shared by every route.
 
-   Tokens live in @esoko/ui (colour semantics, spacing, radius,
+   Tokens live in @esoqo/ui (colour semantics, spacing, radius,
    elevation, motion, focus). This file is the app's handwritten
    presentation for the wizard surfaces (/join, /signin, /offline)
    and the shared primitives the /me dashboard builds on (me.css).
@@ -171,7 +171,7 @@ button, a, input, select, textarea {
    overlay from scrolling the page behind it. */
 .scrim { overscroll-behavior:contain }
 
-/* Esoko lock wordmark (Logos, offline page, app bar). */
+/* Esoqo lock wordmark (Logos, offline page, app bar). */
 .lock { display:inline-flex; align-items:center; gap:.06em; background:none; border:0; padding:0;
   cursor:pointer; font-size:26px; line-height:1; color:var(--red) }
 .lock .w { font-family:var(--font-display); font-weight:800; letter-spacing:-.045em;

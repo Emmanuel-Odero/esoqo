@@ -1,7 +1,7 @@
 'use client';
 
 import { createContext, useContext, useEffect, useRef, useState } from 'react';
-import { Icon } from '@esoko/ui';
+import { Icon } from '@esoqo/ui';
 import { CampaignDonateButton } from './CampaignDonateButton';
 import { actionGetCampaignLiveStats, type CampaignLiveStats as LiveStats } from '@/lib/campaign-live-actions';
 

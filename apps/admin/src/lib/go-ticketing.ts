@@ -1,6 +1,6 @@
 import { cookies } from 'next/headers';
-import { SESSION_COOKIE } from '@esoko/auth';
-import { AuthorisationError } from '@esoko/db';
+import { SESSION_COOKIE } from '@esoqo/auth';
+import { AuthorisationError } from '@esoqo/db';
 
 /**
  * Admin → core-go client for the ticketing surface. Forwards the staff

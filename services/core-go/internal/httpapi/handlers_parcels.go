@@ -5,14 +5,17 @@ import (
 	"log"
 	"net/http"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/gin-gonic/gin"
 
-	"github.com/esoko/core-go/internal/authsvc"
-	"github.com/esoko/core-go/internal/dbx"
-	"github.com/esoko/core-go/internal/notify"
-	"github.com/esoko/core-go/internal/payments"
+	"github.com/esoqo/core-go/internal/authsvc"
+	"github.com/esoqo/core-go/internal/dbx"
+	"github.com/esoqo/core-go/internal/fleetqr"
+	"github.com/esoqo/core-go/internal/money"
+	"github.com/esoqo/core-go/internal/notify"
+	"github.com/esoqo/core-go/internal/payments"
 )
 
 type bookParcelRequest struct {
@@ -28,6 +31,54 @@ type bookParcelRequest struct {
 	Fragile           bool     `json:"fragile"`
 	OriginZoneID      *string  `json:"originZoneId"`
 	DestinationZoneID *string  `json:"destinationZoneId"`
+	// ExistingCode — a code already printed and stuck on the physical
+	// parcel ahead of time (see dbx.ParcelLabelStock). Optional; when
+	// omitted BookParcel mints a fresh code as before.
+	ExistingCode *string `json:"existingCode"`
+
+	// DestinationAgentID — the pickup point the receiver collects from
+	// instead of a doorstep delivery, which earns the rate card's
+	// agentDropDiscountPct. Optional; nil keeps the doorstep default.
+	DestinationAgentID *string `json:"destinationAgentId"`
+	// DeclaredValueKes/CoverageTierID — declared contents value and the
+	// cover bought against it. Validated together by dbx.BookParcel.
+	DeclaredValueKes *money.Amount `json:"declaredValueKes"`
+	CoverageTierID   *string       `json:"coverageTierId"`
+	// ParcelOrgID — the courier company the sender chose to carry this,
+	// when the booking surface offers a choice. Omitted means
+	// Esoqo-operated dispatch on the platform rate card, which is how
+	// every booking worked before tenancy and still the default; a
+	// parcel can also be handed to a company later (see
+	// handleAdminAssignParcelOrg).
+	ParcelOrgID *string `json:"parcelOrgId"`
+	// OriginMethod — "SCHEDULED_PICKUP" (default) or "SELF_DROPOFF", when
+	// the booking surface offers a walk-in choice (see
+	// GET /v1/parcels/stations). Empty means the historical default.
+	OriginMethod string `json:"originMethod"`
+	// PayAtCounter — see dbx.BookParcelInput's own comment. No online
+	// price or payment for this booking; settled in person, whichever
+	// origin method it was booked with.
+	PayAtCounter bool `json:"payAtCounter"`
+
+	// LengthCm/WidthCm/HeightCm — measured at a counter, for the
+	// volumetric weight a bulky parcel is charged on. All three or none.
+	LengthCm *float64 `json:"lengthCm"`
+	WidthCm  *float64 `json:"widthCm"`
+	HeightCm *float64 `json:"heightCm"`
+	// ContentsDeclared — the clerk asked about prohibited contents and
+	// the sender said no. Only honoured for a staff session: a
+	// self-service booking cannot attest that a person asked a
+	// question, and a declaration nobody made is worse than none at all.
+	ContentsDeclared bool `json:"contentsDeclared"`
+
+	// A dropped pin for either end. ~80% of Kenyans have no formal
+	// address and addressing failure is this market's largest cause of
+	// delivery failure — a pin is what a courier's maps app can actually
+	// route to, where the free-text label is prose a human reads.
+	OriginLat      *float64 `json:"originLat"`
+	OriginLng      *float64 `json:"originLng"`
+	DestinationLat *float64 `json:"destinationLat"`
+	DestinationLng *float64 `json:"destinationLng"`
 }
 
 // handleBookParcel — POST /v1/parcels. Guest-or-authenticated, same
@@ -42,9 +93,29 @@ func (s *Server) handleBookParcel(c *gin.Context) {
 		return
 	}
 	var senderPartyID *string
+	// Binder identity comes from the session, never the body — see
+	// BookParcelInput.BinderOrgID on why req.ParcelOrgID cannot gate
+	// anything. A guest booking leaves both nil, which can only bind
+	// unowned stock.
+	var binderOrgID *string
+	var binderIsPlatformStaff bool
+	// Only a real staff session can attest that somebody asked the
+	// prohibited-contents question — see the request field's comment.
+	var contentsDeclaredByStaffID *string
 	if token := bearerToken(c); token != "" {
-		if ctx, _ := s.Session.CtxFromToken(c.Request.Context(), token, clientIP(c)); ctx != nil && ctx.PartyID != "" {
-			senderPartyID = &ctx.PartyID
+		if ctx, _ := s.Session.CtxFromToken(c.Request.Context(), token, clientIP(c)); ctx != nil {
+			if ctx.PartyID != "" {
+				senderPartyID = &ctx.PartyID
+			}
+			if ctx.ParcelOrgID != "" {
+				orgID := ctx.ParcelOrgID
+				binderOrgID = &orgID
+			}
+			binderIsPlatformStaff = authsvc.Can(*ctx, "parcels.assign", nil)
+			if req.ContentsDeclared && ctx.ActorID != "" {
+				id := ctx.ActorID
+				contentsDeclaredByStaffID = &id
+			}
 		}
 	}
 	parcelID, code, deliveryCode, err := dbx.BookParcel(c.Request.Context(), s.Pool, dbx.BookParcelInput{
@@ -53,6 +124,13 @@ func (s *Server) handleBookParcel(c *gin.Context) {
 		OriginLabel: req.OriginLabel, DestinationLabel: req.DestinationLabel, Notes: req.Notes,
 		ParcelType: req.ParcelType, WeightKg: req.WeightKg, Fragile: req.Fragile,
 		OriginZoneID: req.OriginZoneID, DestinationZoneID: req.DestinationZoneID,
+		ExistingCode:       req.ExistingCode,
+		DestinationAgentID: req.DestinationAgentID,
+		DeclaredValueKes:   req.DeclaredValueKes.KESPtr(), CoverageTierID: req.CoverageTierID,
+		ParcelOrgID: req.ParcelOrgID, OriginMethod: req.OriginMethod, PayAtCounter: req.PayAtCounter,
+		BinderOrgID: binderOrgID, BinderIsPlatformStaff: binderIsPlatformStaff,
+		LengthCm: req.LengthCm, WidthCm: req.WidthCm, HeightCm: req.HeightCm,
+		ContentsDeclaredByStaffID: contentsDeclaredByStaffID,
 	})
 	if err != nil {
 		writeParcelError(c, err)
@@ -64,7 +142,22 @@ func (s *Server) handleBookParcel(c *gin.Context) {
 	// it themselves. It also now reaches the receiver automatically by
 	// SMS at pickup (see notify.ParcelInTransitToYou), but showing it
 	// here lets the sender relay it proactively too.
-	c.JSON(http.StatusOK, gin.H{"parcelId": parcelID, "code": code, "deliveryCode": deliveryCode, "status": "DRAFT_PENDING_PAYMENT"})
+	status := "DRAFT_PENDING_PAYMENT"
+	if req.PayAtCounter {
+		// dbx.BookParcel lands this straight in BOOKED (see
+		// BookParcelInput.PayAtCounter) — a counter booking is already
+		// physically in the building with nothing left to price or pay
+		// online, so waiting for a later status change to say anything
+		// would leave both parties hearing nothing about a parcel that's
+		// already checked in and ready to move. Not sendParcelPaymentConfirmedSms:
+		// that helper no-ops without a priceKes, which PayAtCounter never sets.
+		status = "BOOKED"
+		_ = authsvc.SendSms(req.SenderMsisdn,
+			notify.ParcelCounterBooked(code, req.ReceiverName, req.DestinationLabel), "PARCEL_COUNTER_BOOKED")
+		_ = authsvc.SendSms(req.ReceiverMsisdn,
+			notify.ParcelBookedToYou(code, req.SenderName, req.OriginLabel), "PARCEL_BOOKED_TO_YOU")
+	}
+	c.JSON(http.StatusOK, gin.H{"parcelId": parcelID, "code": code, "deliveryCode": deliveryCode, "status": status})
 }
 
 // handleGetParcelPricing — GET /v1/parcels/pricing?parcelType=. Public
@@ -76,48 +169,78 @@ func (s *Server) handleBookParcel(c *gin.Context) {
 // trip per keystroke.
 func (s *Server) handleGetParcelPricing(c *gin.Context) {
 	if parcelType := c.Query("parcelType"); parcelType != "" {
-		pricing, err := dbx.GetParcelPricing(c.Request.Context(), s.Pool, parcelType)
-		if err != nil {
-			writeError(c, http.StatusInternalServerError, "GET_FAILED", "Could not load pricing")
-			return
-		}
-		if pricing == nil {
-			writeError(c, http.StatusNotFound, "NOT_FOUND", "That parcel type is not priced")
-			return
-		}
-		// originZoneId/destinationZoneId are optional query params — when
-		// both are given (the booking form's zone picker, before a
-		// parcel even exists yet, hence not going through
-		// dbx.SetParcelPrice), fold the distance surcharge into the
-		// returned band so the sender sees the real price up front
-		// instead of being surprised at the pricing-confirmation step.
-		var originZoneID, destinationZoneID *string
+		// Every optional modifier is a query param so this stays a pure,
+		// cacheable read that a booking form can call on every edit —
+		// which is the whole point: the sender now sees a real price
+		// while filling the form in, instead of a DRAFT_PENDING_PAYMENT
+		// row being written to the database just to find out what
+		// something costs. That old ordering is what produced the
+		// abandoned-draft backlog the admin console has a KPI for.
+		var originZoneID, destinationZoneID, parcelOrgID *string
 		if v := c.Query("originZoneId"); v != "" {
 			originZoneID = &v
 		}
 		if v := c.Query("destinationZoneId"); v != "" {
 			destinationZoneID = &v
 		}
-		if originZoneID != nil && destinationZoneID != nil {
-			surcharge, distanceKm, err := dbx.DistanceSurchargeKes(c.Request.Context(), s.Pool, originZoneID, destinationZoneID)
-			if err == nil {
-				pricing.MinKes += surcharge
-				pricing.MaxKes += surcharge
-				c.JSON(http.StatusOK, gin.H{
-					"parcelType": pricing.ParcelType, "weightLabel": pricing.WeightLabel,
-					"minWeightKg": pricing.MinWeightKg, "maxWeightKg": pricing.MaxWeightKg,
-					"minKes": pricing.MinKes, "maxKes": pricing.MaxKes,
-					"bargainMinPct": pricing.BargainMinPct, "bargainMaxPct": pricing.BargainMaxPct,
-					"bargainReasons": pricing.BargainReasons, "suggestedTransportMode": pricing.SuggestedTransportMode,
-					"distanceKm": distanceKm,
-				})
-				return
+		// Which courier company's rate card to quote against. Absent
+		// means Esoqo-operated dispatch and the platform default — the
+		// behaviour every caller had before tenancy existed.
+		if v := c.Query("parcelOrgId"); v != "" {
+			parcelOrgID = &v
+		}
+
+		// Cover is quoted here rather than assumed zero so the number on
+		// the form is the number the server will later accept — see
+		// dbx.ParcelPriceBand's own comment on why one derivation is the
+		// point.
+		coverageFeeKes := 0.0
+		var coverageTier *dbx.ParcelCoverageTier
+		declaredValue, _ := money.ParseKES(c.Query("declaredValueKes"))
+		if tierID := c.Query("coverageTierId"); tierID != "" && declaredValue.IsPositive() {
+			tier, terr := dbx.GetCoverageTier(c.Request.Context(), s.Pool, tierID)
+			if terr == nil && tier != nil && tier.Active {
+				coverageTier = tier
+				coverageFeeKes = tier.CoverageFee(declaredValue).KES()
 			}
 		}
-		c.JSON(http.StatusOK, pricing)
+
+		pricing, distanceKm, err := dbx.ParcelPriceBand(c.Request.Context(), s.Pool, dbx.PriceBandInput{
+			ParcelType:          parcelType,
+			OriginZoneID:        originZoneID,
+			DestinationZoneID:   destinationZoneID,
+			HasDestinationAgent: c.Query("destinationAgentId") != "",
+			CoverageFeeKes:      coverageFeeKes,
+			ParcelOrgID:         parcelOrgID,
+		})
+		if err != nil {
+			writeParcelError(c, err)
+			return
+		}
+
+		resp := gin.H{
+			"parcelType": pricing.ParcelType, "weightLabel": pricing.WeightLabel,
+			"minWeightKg": pricing.MinWeightKg, "maxWeightKg": pricing.MaxWeightKg,
+			"minKes": pricing.MinKes, "maxKes": pricing.MaxKes,
+			"bargainMinPct": pricing.BargainMinPct, "bargainMaxPct": pricing.BargainMaxPct,
+			"bargainReasons": pricing.BargainReasons, "suggestedTransportMode": pricing.SuggestedTransportMode,
+			"agentDropDiscountPct": pricing.AgentDropDiscountPct,
+			"coverageFeeKes":       money.AmountFromKES(coverageFeeKes),
+		}
+		if originZoneID != nil && destinationZoneID != nil {
+			resp["distanceKm"] = distanceKm
+		}
+		if coverageTier != nil {
+			resp["coveredAmountKes"] = money.AmountOf(coverageTier.CoveredAmount(declaredValue))
+		}
+		c.JSON(http.StatusOK, resp)
 		return
 	}
-	all, err := dbx.ListParcelPricing(c.Request.Context(), s.Pool)
+	var listOrgID *string
+	if v := c.Query("parcelOrgId"); v != "" {
+		listOrgID = &v
+	}
+	all, err := dbx.ListParcelPricing(c.Request.Context(), s.Pool, listOrgID)
 	if err != nil {
 		writeError(c, http.StatusInternalServerError, "GET_FAILED", "Could not load pricing")
 		return
@@ -138,8 +261,8 @@ func (s *Server) handleListParcelZones(c *gin.Context) {
 }
 
 type setParcelPriceRequest struct {
-	PriceKes      float64 `json:"priceKes" binding:"required"`
-	BargainReason *string `json:"bargainReason"`
+	PriceKes      money.Amount `json:"priceKes" binding:"required"`
+	BargainReason *string      `json:"bargainReason"`
 }
 
 // handleSetParcelPrice — POST /v1/parcels/:code/price. The client's
@@ -151,11 +274,11 @@ func (s *Server) handleSetParcelPrice(c *gin.Context) {
 		writeError(c, http.StatusBadRequest, "INVALID_REQUEST", err.Error())
 		return
 	}
-	if err := dbx.SetParcelPrice(c.Request.Context(), s.Pool, c.Param("code"), req.PriceKes, req.BargainReason); err != nil {
+	if err := dbx.SetParcelPrice(c.Request.Context(), s.Pool, c.Param("code"), req.PriceKes.KES(), req.BargainReason); err != nil {
 		writeParcelError(c, err)
 		return
 	}
-	c.JSON(http.StatusOK, gin.H{"priceKes": req.PriceKes})
+	c.JSON(http.StatusOK, gin.H{"priceKes": req.PriceKes.KES()})
 }
 
 type payParcelRequest struct {
@@ -179,7 +302,7 @@ func (s *Server) handlePayParcel(c *gin.Context) {
 	if req.PaymentMethod == "ESOKO_POINTS" {
 		ctx := ctxFromGin(c)
 		if ctx.PartyID == "" {
-			writeError(c, http.StatusUnauthorized, "SIGN_IN_REQUIRED", "Sign in to pay with Esoko points")
+			writeError(c, http.StatusUnauthorized, "SIGN_IN_REQUIRED", "Sign in to pay with Esoqo points")
 			return
 		}
 		if err := dbx.PayParcelWithPoints(c.Request.Context(), s.Pool, code, ctx.PartyID); err != nil {
@@ -215,7 +338,7 @@ func (s *Server) handlePayParcel(c *gin.Context) {
 
 	stk, err := payments.InitiateStkPush(s.Cfg, payments.StkPushRequest{
 		Msisdn: req.Msisdn, AmountKES: priceKes,
-		AccountReference: code, Description: "Esoko parcel delivery",
+		AccountReference: code, Description: "Esoqo parcel delivery",
 	})
 	if err != nil {
 		// A bad phone number is the sender's own mistake and safe (and
@@ -236,7 +359,11 @@ func (s *Server) handlePayParcel(c *gin.Context) {
 		writeError(c, http.StatusInternalServerError, "PAY_FAILED", "Could not start payment")
 		return
 	}
-	resp := gin.H{"status": "DRAFT_PENDING_PAYMENT", "checkoutRequestId": stk.CheckoutRequestID}
+	// CheckoutRequestID is deliberately not echoed: it is the lookup key
+	// the STK webhook confirms against, so handing it to the caller turns
+	// a payer into someone who knows another party's confirm handle.
+	// Clients poll by parcel code instead (no consumer ever read it).
+	resp := gin.H{"status": "DRAFT_PENDING_PAYMENT"}
 	if stk.AutoConfirmed {
 		if _, justConfirmed, err := dbx.ConfirmParcelPaymentByCheckoutID(c.Request.Context(), s.Pool, stk.CheckoutRequestID, stk.MpesaReceiptCode, s.Cfg.LoyaltyEarnEnabled); err == nil {
 			resp["status"] = "BOOKED"
@@ -284,7 +411,82 @@ func (s *Server) handleGetParcelStatus(c *gin.Context) {
 		writeError(c, http.StatusNotFound, "NOT_FOUND", "That parcel was not found")
 		return
 	}
+	// Was the label this was scanned from genuinely ours?
+	//
+	// Three states, not a boolean, and the middle one is the reason:
+	// absent means the caller typed the code by hand or scanned a label
+	// printed before signing existed, which is ordinary and must not be
+	// shown as a forgery. Only a k= that was presented and did not match
+	// earns that.
+	if k := c.Query("k"); k != "" {
+		orgID, batchID, ferr := dbx.LabelSigFields(c.Request.Context(), s.Pool, c.Param("code"))
+		if ferr == nil {
+			if fleetqr.VerifyLabel(s.Cfg.FleetQrSecret, status.Code, orgID, batchID, k) {
+				status.LabelVerdict = "genuine"
+			} else {
+				status.LabelVerdict = "forged"
+			}
+		}
+	} else {
+		status.LabelVerdict = "unverified"
+	}
 	c.JSON(http.StatusOK, status)
+}
+
+// handleGetPartyParcelActivity — GET /v1/me/parcel-activity. One
+// endpoint behind the generic "any signed-in party" gate, not two
+// session-specific ones — a customer, an admin staffer and a parcel-org
+// staffer all resolve to the same ctx.PartyID, and "parcels you've
+// sent, are receiving, or are currently holding" means the same thing
+// for all three. Backs the guest tracking page's signed-in staff panel
+// (see /send-parcel/track) as much as any customer's own "my parcels" view.
+func (s *Server) handleGetPartyParcelActivity(c *gin.Context) {
+	ctx := ctxFromGin(c)
+	if ctx.PartyID == "" {
+		writeError(c, http.StatusForbidden, "DENIED", "Sign in to see your parcels")
+		return
+	}
+	rows, err := dbx.ListPartyParcelActivity(c.Request.Context(), s.Pool, ctx.PartyID, 50)
+	if err != nil {
+		writeError(c, http.StatusInternalServerError, "LIST_FAILED", "Could not load your parcels")
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"parcels": rows})
+}
+
+// handleGetParcelLabel — GET /v1/parcels/:code/label. Auth required.
+// Backs the print-a-label flow: a handler/courier currently holding or
+// assigned to the parcel, or org staff with the "parcels.read"
+// capability (dispatch/ops), can pull the label projection — everyone
+// else gets DENIED, same as an admin route would, even though this
+// lives under /v1/parcels rather than /v1/admin/parcels (couriers
+// don't have admin capabilities to check against, only custody).
+func (s *Server) handleGetParcelLabel(c *gin.Context) {
+	ctx := ctxFromGin(c)
+	code := c.Param("code")
+	authorized := authsvc.RequireCapability(ctx, "parcels.read", nil) == nil
+	if !authorized {
+		isHandler, err := dbx.IsParcelHandler(c.Request.Context(), s.Pool, code, ctx.PartyID)
+		if err != nil {
+			writeError(c, http.StatusInternalServerError, "GET_FAILED", "Could not load that parcel")
+			return
+		}
+		authorized = isHandler
+	}
+	if !authorized {
+		writeError(c, http.StatusForbidden, "DENIED", "You don't have this parcel in your custody")
+		return
+	}
+	label, err := dbx.GetParcelLabel(c.Request.Context(), s.Pool, code)
+	if err != nil {
+		writeError(c, http.StatusInternalServerError, "GET_FAILED", "Could not load that parcel")
+		return
+	}
+	if label == nil {
+		writeError(c, http.StatusNotFound, "NOT_FOUND", "That parcel was not found")
+		return
+	}
+	c.JSON(http.StatusOK, label)
 }
 
 // handleScanParcelHandoff — POST /v1/parcels/:code/handoff. Auth
@@ -311,7 +513,11 @@ func (s *Server) handleScanParcelHandoff(c *gin.Context) {
 				_ = authsvc.SendSms(info.SenderMsisdn, notify.ParcelPickedUp(code, info.DestinationLabel, courierName), "PARCEL_PICKED_UP")
 			}
 			if info.ReceiverMsisdn != "" {
-				_ = authsvc.SendSms(info.ReceiverMsisdn, notify.ParcelInTransitToYou(code, info.SenderName, info.OriginLabel, info.DeliveryCode), "PARCEL_PICKED_UP")
+				var carrierName string
+				if info.CarrierOrgName != nil {
+					carrierName = *info.CarrierOrgName
+				}
+				_ = authsvc.SendSms(info.ReceiverMsisdn, notify.ParcelInTransitToYou(code, info.SenderName, info.OriginLabel, info.DeliveryCode, carrierName), "PARCEL_PICKED_UP")
 			}
 		}
 	}
@@ -319,13 +525,51 @@ func (s *Server) handleScanParcelHandoff(c *gin.Context) {
 }
 
 type deliverParcelRequest struct {
-	DeliveryCode string `json:"deliveryCode" binding:"required"`
+	// No longer `binding:"required"` — a parcel being collected from a
+	// pickup point, or handed over under a staff override, legitimately
+	// has no code to quote (see dbx.DeliverParcel's own switch). The
+	// empty case is validated there, where the parcel's status is known,
+	// rather than here where it isn't.
+	DeliveryCode string `json:"deliveryCode"`
+
+	// OtpCode — the alternative to DeliveryCode: a code the receiver
+	// just read out, texted to the parcel's own receiverMsisdn a moment
+	// earlier (see handleRequestParcelDeliveryOtp). Verified here,
+	// server-side, against that same stored number before dbx ever sees
+	// it — see dbx.DeliverParcel's own comment on why it only ever
+	// receives the yes/no fact, never the raw code.
+	OtpCode string `json:"otpCode"`
+
+	// Proof of delivery, captured at the door. PhotoKey is what
+	// handleUploadPodPhoto handed back — a storage key, never a URL the
+	// client composed.
+	PhotoKey       *string  `json:"photoKey"`
+	Lat            *float64 `json:"lat"`
+	Lng            *float64 `json:"lng"`
+	ReceivedByName *string  `json:"receivedByName"`
+
+	// CodCollectedKes — what the courier actually took at the door, for
+	// a cash-on-delivery parcel. Required for one: handing over goods
+	// without recording the money is the failure mode COD has to be
+	// built to prevent, so the delivery is refused without it.
+	// Still a pointer: nil means "the courier reported no collection at
+	// all", which is a different fact from collecting zero, and the
+	// needsCod check below turns on exactly that distinction. Binds from
+	// a number or a decimal string (see money.Amount).
+	CodCollectedKes *money.Amount `json:"codCollectedKes"`
 }
 
 // handleDeliverParcel — POST /v1/parcels/:code/deliver. Auth required
 // — only the parcel's current holder can close the chain (see
 // dbx.DeliverParcel). Sends the delivery SMS to both parties once the
 // drop-off is confirmed.
+//
+// The code-less override is resolved here, from the caller's
+// capability, and passed to dbx as a decided boolean. It is never read
+// off the request body: a client that could assert "no code needed"
+// would be asserting its own authorization, and the delivery code is
+// the only thing standing between a tracking number and someone else's
+// parcel.
 func (s *Server) handleDeliverParcel(c *gin.Context) {
 	var req deliverParcelRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
@@ -334,9 +578,67 @@ func (s *Server) handleDeliverParcel(c *gin.Context) {
 	}
 	ctx := ctxFromGin(c)
 	code := c.Param("code")
-	if err := dbx.DeliverParcel(c.Request.Context(), s.Pool, code, req.DeliveryCode, ctx.PartyID); err != nil {
+	allowCodeless := authsvc.RequireCapability(ctx, "parcels.override", nil) == nil
+	proof := dbx.DeliverProof{
+		PhotoURL:       req.PhotoKey,
+		Lat:            req.Lat,
+		Lng:            req.Lng,
+		ReceivedByName: req.ReceivedByName,
+	}
+	// Resolved here, server-side, against the parcel's own
+	// receiverMsisdn — never the raw code trusted straight into dbx.
+	// See dbx.DeliverParcel's own comment on why this arrives there as
+	// a plain bool. Only attempted when there's no delivery code to try
+	// first — dbx.DeliverParcel checks the code before otpVerified, so
+	// a bogus OTP alongside a genuinely correct code must never refuse
+	// a delivery the code alone would have allowed.
+	var otpVerified bool
+	if strings.TrimSpace(req.DeliveryCode) == "" && strings.TrimSpace(req.OtpCode) != "" {
+		var overr error
+		otpVerified, overr = dbx.VerifyParcelDeliveryOtp(c.Request.Context(), s.Pool, s.OTP, code, req.OtpCode)
+		if overr != nil {
+			writeParcelError(c, overr)
+			return
+		}
+		if !otpVerified {
+			writeError(c, http.StatusUnauthorized, "WRONG_CODE", "That code is not right")
+			return
+		}
+	}
+	// Checked BEFORE delivering, so a COD parcel can never be closed out
+	// with the money left unrecorded — and reported here rather than
+	// after the hand-over, when it would be too late to act on.
+	needsCod, err := dbx.ParcelNeedsCodCollection(c.Request.Context(), s.Pool, code)
+	if err != nil {
+		writeError(c, http.StatusInternalServerError, "DELIVER_FAILED", "Could not load that parcel")
+		return
+	}
+	if needsCod && req.CodCollectedKes == nil {
+		writeError(c, http.StatusBadRequest, "COD_REQUIRED", "Record what the buyer paid before completing this delivery")
+		return
+	}
+
+	if err := dbx.DeliverParcel(c.Request.Context(), s.Pool, code, req.DeliveryCode, ctx.PartyID, proof, allowCodeless, otpVerified); err != nil {
 		writeParcelError(c, err)
 		return
+	}
+
+	// After the hand-over, never before: a wrong delivery code must not
+	// be able to book a collection for goods that never changed hands.
+	var codResult *dbx.CodCollectionResult
+	if needsCod {
+		codResult, err = s.collectCodOnDelivery(c, code, req.CodCollectedKes, ctx.PartyID)
+		if err != nil {
+			// The parcel IS delivered at this point — reporting a flat
+			// failure would tell the courier to try again on a parcel
+			// that's already gone. Say exactly what's outstanding and
+			// point at the endpoint that fixes it.
+			log.Printf("parcel %s delivered but COD collection failed: %v", code, err)
+			writeError(c, http.StatusConflict, "COD_NOT_RECORDED",
+				"Delivered, but the payment wasn't recorded. Record it again from the parcel.")
+			return
+		}
+		s.notifyCodCollected(c, code, codResult)
 	}
 	if info, ierr := dbx.GetParcelNotifyInfo(c.Request.Context(), s.Pool, code); ierr == nil && info != nil {
 		deliveredAt := time.Now()
@@ -350,7 +652,25 @@ func (s *Server) handleDeliverParcel(c *gin.Context) {
 			_ = authsvc.SendSms(info.ReceiverMsisdn, notify.ParcelReceived(code, info.SenderName, deliveredAt), "PARCEL_DELIVERED")
 		}
 	}
-	c.JSON(http.StatusOK, gin.H{"status": "DELIVERED"})
+	resp := gin.H{"status": "DELIVERED"}
+	if codResult != nil {
+		resp["cod"] = codResult
+	}
+	c.JSON(http.StatusOK, resp)
+}
+
+// handleRequestParcelDeliveryOtp — POST /v1/parcels/:code/deliver/request-otp.
+// Auth required — only someone actually at the hand-over (holding the
+// parcel, or staff with read access) should be triggering a text to
+// the receiver's phone. See dbx.RequestParcelDeliveryOtp's own comment.
+func (s *Server) handleRequestParcelDeliveryOtp(c *gin.Context) {
+	code := c.Param("code")
+	masked, err := dbx.RequestParcelDeliveryOtp(c.Request.Context(), s.Pool, s.OTP, code, clientIP(c))
+	if err != nil {
+		writeParcelError(c, err)
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"maskedMsisdn": masked})
 }
 
 func (s *Server) handleListMyParcels(c *gin.Context) {
@@ -377,7 +697,7 @@ func (s *Server) handleListHeldParcels(c *gin.Context) {
 }
 
 // handleRequestParcelReceiptOtp — POST /v1/parcels/:code/receipt/otp.
-// Public — no Esoko account needed, only proof of control of the
+// Public — no Esoqo account needed, only proof of control of the
 // number already on the parcel (see dbx.RequestParcelReceiptOtp; the
 // OTP always goes to that stored receiverMsisdn, never one the client
 // supplies).

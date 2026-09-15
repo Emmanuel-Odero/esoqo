@@ -3,7 +3,7 @@ import { revalidatePath } from 'next/cache';
 import {
   createListingSchema, createVenueSchema, createRouteSchema,
   createTicketClassSchema, createScheduleSchema, saveSeatMapSchema,
-} from '@esoko/domain';
+} from '@esoqo/domain';
 import { requireOrgAccess } from '@/lib/session';
 import { orgGo } from '@/lib/ticketing';
 

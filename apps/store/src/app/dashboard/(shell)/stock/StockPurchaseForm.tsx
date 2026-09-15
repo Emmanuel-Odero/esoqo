@@ -2,7 +2,7 @@
 
 import { useState, useTransition } from 'react';
 import { useRouter } from 'next/navigation';
-import { Icon } from '@esoko/ui';
+import { Icon } from '@esoqo/ui';
 import { addStockPurchase } from './actions';
 
 interface Product { id: string; name: string }

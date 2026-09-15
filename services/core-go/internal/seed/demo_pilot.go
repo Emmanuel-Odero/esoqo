@@ -6,7 +6,7 @@ import (
 
 	"github.com/jackc/pgx/v5/pgxpool"
 
-	"github.com/esoko/core-go/internal/authsvc"
+	"github.com/esoqo/core-go/internal/authsvc"
 )
 
 // SeedPilotData plants the one-SACCO pilot kit the pilot-check script

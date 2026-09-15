@@ -1,5 +1,5 @@
-import { Icon } from '@esoko/ui';
-import { listDocuments, getDocumentStats, DOCUMENT_KINDS } from '@esoko/db';
+import { Icon } from '@esoqo/ui';
+import { listDocuments, getDocumentStats, DOCUMENT_KINDS } from '@esoqo/db';
 import { requireStaff } from '@/lib/session';
 import { DonutChart } from '@/components/charts';
 import { DocumentGrid } from './DocumentGrid';

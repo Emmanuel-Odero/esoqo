@@ -1,8 +1,8 @@
 'use server';
 import { revalidatePath } from 'next/cache';
-import { setCapabilities, applyRolePreset, setStaffActive, createStaff, type RoleName } from '@esoko/db';
-import { hashPin, generateTempPin } from '@esoko/auth';
-import { toSafeErrorMessage } from '@esoko/domain';
+import { setCapabilities, applyRolePreset, setStaffActive, createStaff, type RoleName } from '@esoqo/db';
+import { hashPin, generateTempPin } from '@esoqo/auth';
+import { toSafeErrorMessage } from '@esoqo/domain';
 import { requireStaff } from '@/lib/session';
 
 export type Result = { ok: true; data?: unknown } | { ok: false; error: string };

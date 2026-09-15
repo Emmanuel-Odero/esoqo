@@ -1,7 +1,7 @@
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
-import { Icon } from '@esoko/ui';
-import { can, AuthorisationError } from '@esoko/db';
+import { Icon } from '@esoqo/ui';
+import { can, AuthorisationError } from '@esoqo/db';
 import { requireStaff } from '@/lib/session';
 import { adminGo, adminOrgForCan, type GoConsoleOrg, type GoStaffRow, type GoBookingRow } from '@/lib/go-ticketing';
 import { OrgStaffPanel } from './OrgStaffPanel';

@@ -1,4 +1,4 @@
-import { appEnv } from '@esoko/domain';
+import { appEnv } from '@esoqo/domain';
 
 /**
  * "Does this org have their own site, and where does it live?" — one

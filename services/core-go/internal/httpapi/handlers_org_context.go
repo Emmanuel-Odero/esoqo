@@ -1,5 +1,5 @@
 // Package httpapi (handlers_org_context.go) — unified crew identity
-// (docs/proposals/esoko-unified-crew-identity.md). Two surfaces:
+// (docs/proposals/esoqo-unified-crew-identity.md). Two surfaces:
 //
 //   - org-context/*    — a signed-in SUBJECT switching org-staff duty
 //     on/off for themselves, always OTP-gated.
@@ -12,8 +12,8 @@ import (
 
 	"github.com/gin-gonic/gin"
 
-	"github.com/esoko/core-go/internal/authsvc"
-	"github.com/esoko/core-go/internal/dbx"
+	"github.com/esoqo/core-go/internal/authsvc"
+	"github.com/esoqo/core-go/internal/dbx"
 )
 
 // ── POST /v1/org-context/activate/request (authenticated) ──────────
@@ -184,9 +184,9 @@ type createStaffGrantRequest struct {
 	CrewMemberID *string `json:"crewMemberId"`
 }
 
-// handleCreateOrgStaffGrant — deliberately requires an existing Esoko
+// handleCreateOrgStaffGrant — deliberately requires an existing Esoqo
 // account (found by msisdn) rather than provisioning one: "every crew
-// member has used Esoko" is a product decision, not just a technical
+// member has used Esoqo" is a product decision, not just a technical
 // default, so there is no account-less onboarding path here at all.
 func (s *Server) handleCreateOrgStaffGrant(c *gin.Context) {
 	ctx := ctxFromGin(c)
@@ -204,7 +204,7 @@ func (s *Server) handleCreateOrgStaffGrant(c *gin.Context) {
 	}
 	if person == nil {
 		writeError(c, http.StatusNotFound, "NO_ACCOUNT",
-			"That number doesn't have an Esoko account yet. Crew need their own account before they can be added as staff.")
+			"That number doesn't have an Esoqo account yet. Crew need their own account before they can be added as staff.")
 		return
 	}
 

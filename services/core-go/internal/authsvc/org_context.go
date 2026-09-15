@@ -8,11 +8,11 @@ import (
 	"github.com/redis/go-redis/v9"
 )
 
-// Package doc: docs/proposals/esoko-unified-crew-identity.md.
+// Package doc: docs/proposals/esoqo-unified-crew-identity.md.
 //
 // OrgContextService is the live, OTP-gated switch a SUBJECT flips to
 // briefly also hold org-staff (SCANNER/MANAGER/ADMIN/CREW) capabilities
-// for one org — the thing that lets a crew member's own Esoko account
+// for one org — the thing that lets a crew member's own Esoqo account
 // carry both "myself" and "on duty for Acme Tours" without a second
 // login, while keeping the two separated by an explicit re-verification
 // step. Deliberately Redis-backed and TTL-bound like SessionService, not

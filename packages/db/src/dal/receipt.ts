@@ -91,7 +91,10 @@ export async function issueReceipt(ctx: Ctx, storeId: string, input: IssueReceip
     action: 'receipt.issued', targetType: 'receipt', targetId: receipt.id,
     payload: { storeId, saleId: input.saleId, orderId: input.orderId, channel: input.channel },
   });
-  return receipt;
+  // storeName rides along because the SMS copy leads with it (see
+  // domain/store-notify.ts) and the caller composing that message would
+  // otherwise have to re-fetch the store this function already loaded.
+  return { ...receipt, storeName: store.name };
 }
 
 export async function listReceiptsForSale(ctx: Ctx, storeId: string, saleId: string) {

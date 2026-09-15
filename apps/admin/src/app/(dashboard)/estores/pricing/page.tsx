@@ -1,5 +1,5 @@
-import { Icon } from '@esoko/ui';
-import { listPricingRules } from '@esoko/db';
+import { Icon } from '@esoqo/ui';
+import { listPricingRules } from '@esoqo/db';
 import { requireStaff } from '@/lib/session';
 import { PricingRulesEditor } from './PricingRulesEditor';
 

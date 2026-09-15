@@ -73,6 +73,55 @@ func OnboardCourier(ctx context.Context, pool *pgxpool.Pool, partyID, vehicleTyp
 	return courierID, err
 }
 
+var validVehicleTypes = map[string]bool{
+	"BODA": true, "TUKTUK": true, "VAN": true, "TRUCK": true, "BICYCLE": true, "ON_FOOT": true,
+}
+
+// AdminAddCourierInput is what a staffer types in to add someone who's
+// never touched the Esoqo app before — team name, contact, phone.
+type AdminAddCourierInput struct {
+	Name        string
+	Msisdn      string
+	Email       *string
+	VehicleType string
+}
+
+// AdminAddCourier is the "just add them" path: unlike OnboardCourier
+// (which turns an *existing* Party into a courier — the search-first
+// flow the assign panel already uses), this creates the Party+Person
+// too, straight from the name/phone/vehicle a staffer types in for a
+// courier team member who's never signed up. Idempotent on phone
+// number — a msisdn that already has a Person on file reuses it
+// (updating the name/email to what was just entered, since an
+// admin-supplied real name is better than whatever placeholder or
+// stale value was there) rather than erroring or creating a duplicate.
+// Also mints their Esoqo ID and texts them a welcome/confirmation —
+// see notify.CourierOnboarded — so the same SMS both confirms their
+// number is right and gives them the ID to sign in with.
+func AdminAddCourier(ctx context.Context, pool *pgxpool.Pool, in AdminAddCourierInput) (courierID, partyID, esoqoID string, err error) {
+	if in.Name == "" || in.Msisdn == "" {
+		return "", "", "", &ParcelCourierError{"BAD_INPUT", "Name and phone number are required"}
+	}
+	if !validVehicleTypes[in.VehicleType] {
+		return "", "", "", &ParcelCourierError{"BAD_INPUT", "Choose a valid vehicle type"}
+	}
+
+	partyID, err = FindOrCreatePersonWithName(ctx, pool, in.Name, in.Msisdn, in.Email)
+	if err != nil {
+		return "", "", "", err
+	}
+
+	courierID, err = OnboardCourier(ctx, pool, partyID, in.VehicleType)
+	if err != nil {
+		return "", "", "", err
+	}
+	esoqoID, err = EnsureEsoqoPaymentId(ctx, pool, partyID, in.Msisdn)
+	if err != nil {
+		return "", "", "", err
+	}
+	return courierID, partyID, esoqoID, nil
+}
+
 // SetCourierStatus — the vetting/suspend/reinstate/reject action, same
 // "a staffer flips a status, we timestamp the transition" shape
 // dbx.CancelParcel already follows for cancelledAt. activatedAt is set

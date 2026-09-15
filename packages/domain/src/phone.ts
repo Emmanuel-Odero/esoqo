@@ -3,7 +3,7 @@ import { z } from 'zod';
 /**
  * Kenyan MSISDN handling.
  *
- * Identity in Esoko is the phone number, so normalising it correctly is
+ * Identity in Esoqo is the phone number, so normalising it correctly is
  * a correctness requirement, not a convenience. Everything is stored in
  * E.164 (+2547XXXXXXXX). Accepts the four forms people actually type.
  */

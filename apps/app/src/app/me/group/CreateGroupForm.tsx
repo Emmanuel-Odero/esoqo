@@ -1,9 +1,9 @@
 'use client';
 import { useState, useTransition } from 'react';
 import { useRouter } from 'next/navigation';
-import { COUNTIES } from '@esoko/domain';
-import { Icon, SelectWithOther, isSelectWithOtherComplete } from '@esoko/ui';
-import { useAnnounce } from '@esoko/a11y';
+import { COUNTIES } from '@esoqo/domain';
+import { Icon, SelectWithOther, isSelectWithOtherComplete } from '@esoqo/ui';
+import { useAnnounce } from '@esoqo/a11y';
 import { actionCreateOwnGroup } from './actions';
 
 export function CreateGroupForm({ kindOptions }: { kindOptions: readonly (readonly [string, string])[] }) {

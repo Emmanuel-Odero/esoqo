@@ -55,8 +55,28 @@ export async function updateParcelPricingRule(ctx: Ctx, parcelType: string, inpu
     throw new Error('SLA hours must be positive, or left blank for no SLA');
   }
 
+  // parcelType alone stopped being unique when rate cards became
+  // per-company: the constraint is now (parcelOrgId, parcelType), and a
+  // bare `where: { parcelType }` only typechecked because of an `as
+  // never` cast that outlived the schema it was written against.
+  //
+  // This function edits the *platform* card — the one every parcel is
+  // priced against unless a courier company has its own tariff, which
+  // is set elsewhere (see setCourierTariff). So it scopes to the rows
+  // with no owning company. Resolved to an id first rather than
+  // expressed as a compound-unique lookup because Prisma cannot match
+  // NULL through a compound unique, and NULL is precisely the platform
+  // card's identity here.
+  const platformRule = await prisma.parcelPricingRule.findFirst({
+    where: { parcelType: parcelType as never, parcelOrgId: null },
+    select: { id: true },
+  });
+  if (!platformRule) {
+    throw new Error(`No platform rate card exists for ${parcelType}`);
+  }
+
   const rule = await prisma.parcelPricingRule.update({
-    where: { parcelType: parcelType as never },
+    where: { id: platformRule.id },
     data: {
       weightLabel: input.weightLabel,
       minWeightKg: input.minWeightKg,

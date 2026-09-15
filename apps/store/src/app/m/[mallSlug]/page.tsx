@@ -1,7 +1,7 @@
 import type { Metadata } from 'next';
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
-import { getMallBySlug } from '@esoko/db';
+import { getMallBySlug } from '@esoqo/db';
 import { getCtx } from '@/lib/session';
 
 export const dynamic = 'force-dynamic';

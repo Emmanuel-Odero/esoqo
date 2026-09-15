@@ -1,5 +1,5 @@
 import type { Metadata } from 'next';
-import { Icon, Logo } from '@esoko/ui';
+import { Icon, Logo } from '@esoqo/ui';
 import { SignInForm } from './SignInForm';
 
 export const metadata: Metadata = { title: 'Sign in' };
@@ -12,7 +12,7 @@ export default function SignIn() {
         <Logo />
       </header>
       <div className="auth-card">
-        <p className="kicker">Your Esoko record</p>
+        <p className="kicker">Your Esoqo record</p>
         <h1>Sign in</h1>
         <p className="lead" style={{ marginTop: 6 }}>
           Good to see you — your phone number or email, and your PIN.

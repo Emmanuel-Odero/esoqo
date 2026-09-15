@@ -1,5 +1,5 @@
-import { Icon } from '@esoko/ui';
-import { listAuditEvents, getAuditActionCounts, verifyChain } from '@esoko/db';
+import { Icon } from '@esoqo/ui';
+import { listAuditEvents, getAuditActionCounts, verifyChain } from '@esoqo/db';
 import { requireStaff } from '@/lib/session';
 import { RankedBarChart } from '@/components/charts';
 import { AuditFilters } from './AuditFilters';
@@ -51,7 +51,7 @@ export default async function AuditPage({
         <Icon name={chain.ok ? 'shield-check' : 'alert-triangle'} size={18} />
         {chain.ok
           ? `Chain verified end to end — ${chain.checked.toLocaleString()} events, no gaps or alterations`
-          : `CHAIN BROKEN at event ${chain.brokenAtId} (${chain.brokenAtTime?.toISOString()}). Every report after this point is suspect. Run "pnpm --filter @esoko/db repair:audit-chain" if this is a known hashing-algorithm fix, otherwise treat this as a real incident.`}
+          : `CHAIN BROKEN at event ${chain.brokenAtId} (${chain.brokenAtTime?.toISOString()}). Every report after this point is suspect. Run "pnpm --filter @esoqo/db repair:audit-chain" if this is a known hashing-algorithm fix, otherwise treat this as a real incident.`}
       </div>
 
       <AuditFilters action={sp.action ?? ''} actorType={sp.actorType ?? ''} from={sp.from ?? ''} to={sp.to ?? ''} />

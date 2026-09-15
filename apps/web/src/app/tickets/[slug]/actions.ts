@@ -1,7 +1,7 @@
 'use server';
 import { cookies } from 'next/headers';
-import { createBookingSchema, payBookingBalanceSchema, type CreateBookingInput } from '@esoko/domain';
-import { SESSION_COOKIE } from '@esoko/auth';
+import { createBookingSchema, payBookingBalanceSchema, type CreateBookingInput } from '@esoqo/domain';
+import { SESSION_COOKIE } from '@esoqo/auth';
 
 const WEB_URL = process.env.NEXT_PUBLIC_WEB_URL ?? 'http://localhost:3000';
 // Same convention as apps/app sign-in: server-side Go calls use the

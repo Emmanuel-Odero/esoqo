@@ -28,8 +28,15 @@ type Ctx struct {
 	OrgID        string
 	StoreID      string
 	TicketOrgID  string
+	ParcelOrgID  string
 	IP           string
 	Verified     bool
+	// ExpiresAt — unix millis this session's own TTL runs out, carried
+	// straight through from SessionData so a client-facing "your
+	// session expires in Xh Ym" countdown never has to be derived
+	// separately from the same fact the server already enforces. Zero
+	// for a session minted before this field existed.
+	ExpiresAt int64
 }
 
 // AuthorisationError mirrors the TS AuthorisationError (HTTP 403).
@@ -137,7 +144,7 @@ const (
 // via Ctx.TicketOrgID for AGENT sessions (crew, managers); owners hold
 // the same names with the :own qualifier (enterprise party match, same
 // as ticketorg.write:own). Kept as plain strings so the admin UI and
-// mobile gating (EsokoProfile.has) render from one catalogue.
+// mobile gating (EsoqoProfile.has) render from one catalogue.
 const (
 	CapFleetRead         = "fleet.read"
 	CapFleetWrite        = "fleet.write"
@@ -196,6 +203,47 @@ var TicketingStaffCapabilities = map[string][]string{
 	// restricted to the caller's own trip; ownership is the trip match
 	// at declare time, not the read), so this isn't a new precedent.
 	"CREW": {CapCollectionDeclare, CapCollectionRead, CapVehicleTrack, CapFareRead, CapFareVerify, CapTripCloseOwn, "ticketorg.read"},
+}
+
+// ParcelOrgCapabilities — the courier-company grants. Org-scoped via
+// Ctx.ParcelOrgID for AGENT sessions, exactly as the ticketing grants
+// above are via Ctx.TicketOrgID.
+//
+// Deliberately a separate vocabulary from the parcels.* names the Esoqo
+// admin console uses (parcels.read, parcels.assign, parcels.cancel…).
+// Those mean "across every parcel on the platform"; these mean "within
+// this one company". Sharing the strings would make a dispatcher at one
+// courier firm indistinguishable, at the capability layer, from Esoqo
+// ops staff — and the whole point of tenancy is that they are not.
+const (
+	CapParcelOrgRead     = "parcelorg.read"
+	CapParcelOrgWrite    = "parcelorg.write"
+	CapParcelOrgStaff    = "parcelorgstaff.write"
+	CapParcelOrgDispatch = "parcelorg.dispatch"
+	// CapParcelOrgCarry — take custody, record an attempt, drop at an
+	// agent, close at the door. The rider bundle's whole content.
+	CapParcelOrgCarry    = "parcelorg.carry"
+	CapParcelOrgEarnings = "parcelorg.earnings"
+)
+
+// ParcelStaffCapabilities — one bundle per role a parcel company issues
+// a PIN for. An AGENT session's list IS the grant (same contract
+// TicketingStaffCapabilities documents): scoping is the ParcelOrgID
+// match, not a qualifier on the name.
+//
+// RIDER is deliberately the narrowest thing that still does the job: a
+// rider needs to carry parcels and close them, and needs to read the
+// company's parcels to find the one in their hand — but has no business
+// reassigning work or seeing what the company earned.
+var ParcelStaffCapabilities = map[string][]string{
+	"RIDER": {CapParcelOrgRead, CapParcelOrgCarry},
+	"DISPATCHER": {
+		CapParcelOrgRead, CapParcelOrgCarry, CapParcelOrgDispatch,
+	},
+	"MANAGER": {
+		CapParcelOrgRead, CapParcelOrgCarry, CapParcelOrgDispatch,
+		CapParcelOrgWrite, CapParcelOrgStaff, CapParcelOrgEarnings,
+	},
 }
 
 // RolePresets — convenience bundles only; the model is the capability list

@@ -4,9 +4,9 @@ import { requireCapability, type Ctx } from '../capabilities';
 import { recordAudit } from '../audit';
 
 /**
- * Esoko Payment ID and the derived Group Credit Insight snapshot.
+ * Esoqo Payment ID and the derived Group Credit Insight snapshot.
  *
- * See docs/proposals/esoko-group-treasury-and-payment-id.md §5 and the
+ * See docs/proposals/esoqo-group-treasury-and-payment-id.md §5 and the
  * GroupCreditInsightSnapshot model doc comment for the reasoning. Two
  * rules that matter:
  *
@@ -30,11 +30,11 @@ function generateCode(): string {
 
 /** Issues a Payment ID once the subject holds MSISDN_VERIFIED — the
  *  same verification the sign-in/registration flow already produces. */
-export async function issueEsokoPaymentId(ctx: Ctx) {
+export async function issueEsoqoPaymentId(ctx: Ctx) {
   requireCapability(ctx, 'paymentid.issue', { partyId: ctx.partyId });
   if (!ctx.partyId) throw new Error('Sign in required');
 
-  const existing = await prisma.esokoPaymentId.findUnique({ where: { partyId: ctx.partyId } });
+  const existing = await prisma.esoqoPaymentId.findUnique({ where: { partyId: ctx.partyId } });
   if (existing) return existing;
 
   const verified = await prisma.attestation.findFirst({
@@ -48,10 +48,10 @@ export async function issueEsokoPaymentId(ctx: Ctx) {
   // once on the rare clash rather than looping indefinitely.
   for (let attempt = 0; attempt < 3; attempt++) {
     const code = generateCode();
-    const clash = await prisma.esokoPaymentId.findUnique({ where: { code } });
+    const clash = await prisma.esoqoPaymentId.findUnique({ where: { code } });
     if (clash) continue;
 
-    const issued = await prisma.esokoPaymentId.create({ data: { partyId: ctx.partyId, code } });
+    const issued = await prisma.esoqoPaymentId.create({ data: { partyId: ctx.partyId, code } });
     await recordAudit(ctx, {
       action: 'paymentid.issued', targetType: 'esoko_payment_id', targetId: ctx.partyId,
       payload: { code },
@@ -64,7 +64,7 @@ export async function issueEsokoPaymentId(ctx: Ctx) {
 export async function getMyPaymentId(ctx: Ctx) {
   if (!ctx.partyId) return null;
   requireCapability(ctx, 'entity.read', { partyId: ctx.partyId });
-  return prisma.esokoPaymentId.findUnique({ where: { partyId: ctx.partyId } });
+  return prisma.esoqoPaymentId.findUnique({ where: { partyId: ctx.partyId } });
 }
 
 /* ── Group Credit Insight snapshot (v1) ──────────────────────

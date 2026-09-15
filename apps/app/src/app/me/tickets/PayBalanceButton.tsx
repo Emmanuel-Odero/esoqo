@@ -1,7 +1,7 @@
 'use client';
 import { useState, useTransition } from 'react';
-import { Icon } from '@esoko/ui';
-import { useAnnounce } from '@esoko/a11y';
+import { Icon } from '@esoqo/ui';
+import { useAnnounce } from '@esoqo/a11y';
 import { actionPayBookingBalance } from './actions';
 
 /** Amount field + M-Pesa prompt for one balance top-up on a "lipia

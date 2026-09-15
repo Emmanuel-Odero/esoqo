@@ -1,4 +1,4 @@
-import { listMyGroupMembers, AuthorisationError } from '@esoko/db';
+import { listMyGroupMembers, AuthorisationError } from '@esoqo/db';
 import { requireMyPage } from '@/lib/session';
 import { LeadershipRoster } from './LeadershipRoster';
 
@@ -37,7 +37,7 @@ export default async function LeadershipScreen() {
         <div className="card" style={{ padding: 22, color: '#6b6552' }}>
           You can edit your website content, but changing who holds which office is only open to
           this group&rsquo;s own members — and only Chairperson, Treasurer or Secretary may make the
-          change. Ask one of them, or manage membership from your Esoko account&rsquo;s Group page.
+          change. Ask one of them, or manage membership from your Esoqo account&rsquo;s Group page.
         </div>
       ) : (
         <LeadershipRoster members={members} />

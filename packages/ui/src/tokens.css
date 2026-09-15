@@ -1,5 +1,5 @@
 /* ══════════════════════════════════════════════════════════════
-   Esoko design tokens — the single source of truth.
+   Esoqo design tokens — the single source of truth.
 
    Colour SEMANTICS, which are a rule and not a preference:
      navy  = authority      · headers, footers, institutional bands
@@ -15,6 +15,11 @@
   --amber:#9A6105; --amber-t:#FDF4E3;
   --paper:#F4F7FA; --line:#DCE5EC;
   --tx:#12283A; --tx-2:#57718A; --tx-3:#5A7695;
+
+  /* Category/ticket gradient accents — mobile-only decorative palette.
+     No per-category gradients exist on the web today. */
+  --green-light:#2E9E5B; --amber-light:#E0A233; --amber-deep:#B9790F;
+  --pink:#C65DA6; --pink-dark:#8E3D77; --purple:#7C3D8E; --amber-warm:#B8781A;
 
   --w:1160px;
 

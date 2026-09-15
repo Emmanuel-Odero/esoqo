@@ -1,21 +1,33 @@
-import { Icon } from '@esoko/ui';
-import { listParcelPricingRules } from '@esoko/db';
+import { Icon } from '@esoqo/ui';
+import { listParcelPricingRules } from '@esoqo/db';
 import { requireStaff } from '@/lib/session';
 import { ParcelPricingEditor } from './ParcelPricingEditor';
 import { ZonesEditor } from './ZonesEditor';
+import { AgentsEditor } from './AgentsEditor';
+import { CoverageEditor } from './CoverageEditor';
 import { PricingTabs } from './PricingTabs';
-import { actionListParcelZones, actionGetDistanceRate } from '../actions';
+import {
+  actionListParcelZones, actionGetDistanceRate,
+  actionListParcelAgents, actionListCoverageTiers,
+} from '../actions';
 
 export const dynamic = 'force-dynamic';
 
 export default async function ParcelPricingPage() {
   const ctx = await requireStaff();
   const canEdit = ctx.capabilities.includes('*') || ctx.capabilities.includes('parcel_pricing.write');
+  // Pickup points and cover levels are gated on parcels.edit rather
+  // than parcel_pricing.write — they're operational settings (which
+  // shops are taking parcels today) as much as pricing ones, and
+  // core-go enforces that same split on the routes behind them.
+  const canEditOps = ctx.capabilities.includes('*') || ctx.capabilities.includes('parcels.edit');
 
-  const [rules, zones, distanceRate] = await Promise.all([
+  const [rules, zones, distanceRate, agents, coverageTiers] = await Promise.all([
     listParcelPricingRules(ctx),
     actionListParcelZones(),
     actionGetDistanceRate(),
+    actionListParcelAgents(),
+    actionListCoverageTiers(),
   ]);
 
   return (
@@ -40,8 +52,11 @@ export default async function ParcelPricingPage() {
         </div>
       )}
 
-      <PricingTabs
-        rateCard={
+      <PricingTabs tabs={[
+        {
+          id: 'rate',
+          label: 'Rate card',
+          content: (
           <ParcelPricingEditor
             rules={rules.map((r) => ({
               parcelType: r.parcelType,
@@ -59,18 +74,51 @@ export default async function ParcelPricingPage() {
             }))}
             canEdit={canEdit}
           />
-        }
-        zones={
-          <>
-            <p className="sub" style={{ marginBottom: 16 }}>
-              Admin-curated hubs with coordinates — the pricing/dispatch signal free-text origin
-              and destination never were. A booking with both zones set gets the rate below added
-              on top of its weight-bracket price, by the straight-line distance between them.
-            </p>
-            <ZonesEditor zones={zones} distanceRate={distanceRate} canEdit={canEdit} />
-          </>
-        }
-      />
+          ),
+        },
+        {
+          id: 'zones',
+          label: 'Zones & distance pricing',
+          content: (
+            <>
+              <p className="sub" style={{ marginBottom: 16 }}>
+                Admin-curated hubs with coordinates — the pricing/dispatch signal free-text origin
+                and destination never were. A booking with both zones set gets the rate below added
+                on top of its weight-bracket price, by the straight-line distance between them.
+              </p>
+              <ZonesEditor zones={zones} distanceRate={distanceRate} canEdit={canEdit} />
+            </>
+          ),
+        },
+        {
+          id: 'agents',
+          label: 'Pickup points',
+          content: (
+            <>
+              <p className="sub" style={{ marginBottom: 16 }}>
+                Real shops that hold parcels for collection. One courier run serving a shop that
+                twenty receivers walk to costs a fraction of twenty doorstep runs — which is why
+                agent collection is priced below doorstep (set the discount per parcel type on the
+                rate card) and why shelf capacity is enforced at booking and at drop-off.
+              </p>
+              <AgentsEditor agents={agents} zones={zones} canEdit={canEditOps} />
+            </>
+          ),
+        },
+        {
+          id: 'coverage',
+          label: 'Cover levels',
+          content: (
+            <>
+              <p className="sub" style={{ marginBottom: 16 }}>
+                What a sender can buy against the declared value of their contents. Optional at
+                booking and off by default.
+              </p>
+              <CoverageEditor tiers={coverageTiers} canEdit={canEditOps} />
+            </>
+          ),
+        },
+      ]} />
     </>
   );
 }

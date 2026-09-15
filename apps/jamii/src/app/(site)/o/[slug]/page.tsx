@@ -1,5 +1,5 @@
 import { redirect } from 'next/navigation';
-import { listJamiiNavItemsPublic } from '@esoko/db';
+import { listJamiiNavItemsPublic } from '@esoqo/db';
 import { getOrgLinkMode, orgHref } from '@/lib/org-links';
 import { resolveNavLinks } from '@/lib/org-links-shared';
 import { loadOrgOr404 } from '@/components/OrgSectionShell';

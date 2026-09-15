@@ -1,8 +1,8 @@
 'use client';
 import { useState, useTransition } from 'react';
 import { useRouter } from 'next/navigation';
-import { Icon } from '@esoko/ui';
-import { useAnnounce } from '@esoko/a11y';
+import { Icon } from '@esoqo/ui';
+import { useAnnounce } from '@esoqo/a11y';
 import { actionCreateListing } from './actions';
 
 interface Option { id: string; label: string }

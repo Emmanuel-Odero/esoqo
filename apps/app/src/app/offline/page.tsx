@@ -1,5 +1,5 @@
 import type { Metadata } from 'next';
-import { Icon, Logo } from '@esoko/ui';
+import { Icon, Logo } from '@esoqo/ui';
 
 export const metadata: Metadata = {
   title: 'Offline',
@@ -21,7 +21,7 @@ export default function OfflinePage() {
       <h1>You are offline</h1>
       <p>
         The last pages you visited are still here — reopen them and nothing is lost. What changed
-        on Esoko while you were away will come back when the connection does.
+        on Esoqo while you were away will come back when the connection does.
       </p>
       <p className="hint" style={{ margin: '4px 0 0' }}>
         From any number you have registered, you can also dial{' '}

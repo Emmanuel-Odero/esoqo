@@ -33,7 +33,7 @@
  * Next.js server-component bundling context.
  */
 
-import { appEnv } from '@esoko/domain';
+import { appEnv } from '@esoqo/domain';
 
 const SANDBOX_BASE = 'https://sandbox.safaricom.co.ke';
 const PRODUCTION_BASE = 'https://api.safaricom.co.ke';

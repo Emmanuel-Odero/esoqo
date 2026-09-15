@@ -10,7 +10,7 @@ apps are Dart, so no request/response schema can be shared with `packages/domain
 which language answers the HTTP call. The schema-sharing argument for TypeScript is therefore
 neutral for this component, not a reason for it.
 
-Esoko now needs a mobile-facing REST API (Android/iOS/Wear OS, Flutter) for three domains:
+Esoqo now needs a mobile-facing REST API (Android/iOS/Wear OS, Flutter) for three domains:
 groups/chamas, shopping/store, ticketing. None of the existing services expose HTTP endpoints
 for these — `apps/app`/`apps/store` call `packages/db` DAL functions directly from Next.js
 Server Actions.

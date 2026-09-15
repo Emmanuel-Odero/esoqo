@@ -1,10 +1,10 @@
 import { notFound } from 'next/navigation';
 import Link from 'next/link';
 import type { Route } from 'next';
-import { Icon } from '@esoko/ui';
+import { Icon } from '@esoqo/ui';
 import {
   getMyRecord, getGroupBalance, listContributions, listWithdrawals, getTreasuryPolicy,
-} from '@esoko/db';
+} from '@esoqo/db';
 import { requireSubject } from '@/lib/session';
 import { ContributionForm } from './ContributionForm';
 import { ContributionsList } from './ContributionsList';
