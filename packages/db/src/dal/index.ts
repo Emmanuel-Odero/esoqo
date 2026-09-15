@@ -3,7 +3,7 @@
  *
  * EVERY read and write passes through here. No component, Server Action,
  * route handler or service may import the Prisma client directly — the
- * ESLint rule in @esoko/config enforces it and CI fails on violation.
+ * ESLint rule in @esoqo/config enforces it and CI fails on violation.
  * See ADR-0003.
  */
 export * from './registration';

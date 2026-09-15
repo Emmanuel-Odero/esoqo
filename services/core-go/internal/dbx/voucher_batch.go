@@ -17,8 +17,9 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 
-	"github.com/esoko/core-go/internal/fleetqr"
-	"github.com/esoko/core-go/internal/ledger"
+	"github.com/esoqo/core-go/internal/fleetqr"
+	"github.com/esoqo/core-go/internal/ledger"
+	"github.com/esoqo/core-go/internal/money"
 )
 
 var allowancePurposes = map[string]bool{"FUEL": true, "TRAVEL": true}
@@ -110,7 +111,7 @@ func ConfirmVoucherBatchByCheckoutID(ctx context.Context, pool *pgxpool.Pool, ch
 		return "", false, err
 	}
 	totalKES := amountPerEmployee * float64(len(employeePartyIDs))
-	pointsPerEmployee := int(amountPerEmployee*10 + 0.5)
+	pointsPerEmployee := money.FromKES(amountPerEmployee).Points()
 
 	settlement, err := ledger.EnsureAccount(ctx, pool, nil, "SETTLEMENT", "KES")
 	if err != nil {
@@ -127,7 +128,7 @@ func ConfirmVoucherBatchByCheckoutID(ctx context.Context, pool *pgxpool.Pool, ch
 	// writes are the ledger's permanent record of the money moving;
 	// nothing further needs to reference the entry id by name.
 	if _, err := ledger.PostEntry(ctx, pool, "voucher-batch:"+id, "Allowance voucher batch "+label+" via M-Pesa "+mpesaReceipt, "core-go:voucher-batch:"+checkoutRequestID,
-		[]ledger.Posting{{AccountID: settlement, AmountKES: totalKES}, {AccountID: floatAcct, AmountKES: -totalKES}}); err != nil {
+		[]ledger.Posting{{AccountID: settlement, AmountCents: ledger.CentsFromKES(totalKES)}, {AccountID: floatAcct, AmountCents: ledger.CentsFromKES(-totalKES)}}); err != nil {
 		return "", false, err
 	}
 

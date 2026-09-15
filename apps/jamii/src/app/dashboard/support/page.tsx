@@ -1,5 +1,5 @@
-import { listMySupportTickets } from '@esoko/db';
-import { SUPPORT_TICKET_CATEGORY_LABELS, SUPPORT_TICKET_STATUS_LABELS } from '@esoko/domain';
+import { listMySupportTickets } from '@esoqo/db';
+import { SUPPORT_TICKET_CATEGORY_LABELS, SUPPORT_TICKET_STATUS_LABELS } from '@esoqo/domain';
 import { requireMyPage } from '@/lib/session';
 import { SupportTicketForm } from './SupportTicketForm';
 

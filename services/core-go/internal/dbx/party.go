@@ -109,6 +109,56 @@ func FindOrCreatePersonByMsisdn(ctx context.Context, pool *pgxpool.Pool, msisdn 
 	return partyID, nil
 }
 
+// FindOrCreatePersonWithName is FindOrCreatePersonByMsisdn's sibling
+// for an admin-driven "just add them" flow (see AdminAddCourier,
+// CreateCourierTeam) that already has a real name in hand — unlike
+// FindOrCreatePersonByMsisdn (used right after OTP verification, where
+// only the number is known and the name falls back to the msisdn
+// itself as a placeholder), this always sets the given name, and
+// updates it on an existing Person too (an admin-supplied real name
+// is better than whatever placeholder or stale value was on file).
+// email is optional and merged the same way — never overwritten with
+// nothing.
+func FindOrCreatePersonWithName(ctx context.Context, pool *pgxpool.Pool, name, msisdn string, email *string) (partyID string, err error) {
+	existing, ferr := FindPersonByMsisdn(ctx, pool, msisdn)
+	if ferr != nil {
+		return "", ferr
+	}
+	if existing != nil {
+		if _, uerr := pool.Exec(ctx, `
+			UPDATE person SET "officialName" = $1, email = COALESCE($2, email) WHERE "partyId" = $3`,
+			name, email, existing.PartyID); uerr != nil {
+			return "", uerr
+		}
+		return existing.PartyID, nil
+	}
+
+	tx, terr := pool.Begin(ctx)
+	if terr != nil {
+		return "", terr
+	}
+	defer func() { _ = tx.Rollback(ctx) }()
+	// county 'Unknown' — same known gap FindOrCreatePersonByMsisdn's own
+	// comment documents: a required, non-nullable Party column this
+	// admin-add flow doesn't collect either, left for a later
+	// profile-completion step.
+	if qerr := tx.QueryRow(ctx, `
+		INSERT INTO party (id, kind, county, "sourceSystem", "updatedAt")
+		VALUES (gen_random_uuid(), 'PERSON', 'Unknown', 'ESOKO', now())
+		RETURNING id`).Scan(&partyID); qerr != nil {
+		return "", qerr
+	}
+	if _, ierr := tx.Exec(ctx, `
+		INSERT INTO person ("partyId", "officialName", msisdn, email, "msisdnVerifiedAt")
+		VALUES ($1, $2, $3, $4, now())`, partyID, name, msisdn, email); ierr != nil {
+		return "", ierr
+	}
+	if cerr := tx.Commit(ctx); cerr != nil {
+		return "", cerr
+	}
+	return partyID, nil
+}
+
 func MarkMsisdnVerified(ctx context.Context, pool *pgxpool.Pool, partyID string) error {
 	_, err := pool.Exec(ctx, `UPDATE person SET "msisdnVerifiedAt" = now() WHERE "partyId" = $1`, partyID)
 	return err
@@ -134,7 +184,7 @@ func UpsertPin(ctx context.Context, pool *pgxpool.Pool, partyID, pinHash string)
 // the PIN-reset flow only ever sets a PIN for a Person that already
 // exists (they proved control of the number via OTP first); it never
 // creates one, unlike FindOrCreatePersonByMsisdn's sign-up path.
-var ErrPersonNotFound = errors.New("no Esoko account found with that number")
+var ErrPersonNotFound = errors.New("no Esoqo account found with that number")
 
 // SetSubjectPinByMsisdn — same contract as auth-credential.ts's
 // setSubjectPin: upserts UserCredential (a freshly registered Person may

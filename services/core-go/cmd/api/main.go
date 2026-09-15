@@ -1,4 +1,4 @@
-// Command api runs core-go, Esoko's mobile-facing REST API. See
+// Command api runs core-go, Esoqo's mobile-facing REST API. See
 // docs/adr/0005-mobile-api-in-go.md for why this exists alongside
 // services/core (TypeScript), and the phased plan it was scaffolded from.
 package main
@@ -13,14 +13,19 @@ import (
 
 	"github.com/jackc/pgx/v5/pgxpool"
 
-	"github.com/esoko/core-go/internal/config"
-	"github.com/esoko/core-go/internal/dbx"
-	"github.com/esoko/core-go/internal/httpapi"
-	"github.com/esoko/core-go/internal/redisclient"
+	"github.com/esoqo/core-go/internal/authsvc"
+	"github.com/esoqo/core-go/internal/config"
+	"github.com/esoqo/core-go/internal/dbx"
+	"github.com/esoqo/core-go/internal/httpapi"
+	"github.com/esoqo/core-go/internal/notify"
+	"github.com/esoqo/core-go/internal/redisclient"
 )
 
 func main() {
 	cfg := config.Load()
+	if err := cfg.Validate(); err != nil {
+		log.Fatalf("core-go: refusing to start: %v", err)
+	}
 
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer stop()
@@ -36,6 +41,16 @@ func main() {
 		log.Fatalf("core-go: could not connect to redis: %v", err)
 	}
 	defer rdb.Close()
+
+	// Puts every SMS sender, not just OTP, under one daily ceiling.
+	authsvc.SetSmsBudgetRedis(rdb)
+
+	// Every parcel notification appends a tracking link built from this.
+	// Process-wide configuration rather than a parameter threaded
+	// through every composer — see notify.SetTrackingBaseURL. Unset is
+	// valid and simply omits the link, which is what keeps a
+	// misconfigured deploy from texting people a broken URL.
+	notify.SetTrackingBaseURL(cfg.PublicTrackingBaseURL)
 
 	server := httpapi.NewServer(cfg, pool, rdb)
 	httpServer := &http.Server{

@@ -47,11 +47,11 @@ export * from './capabilities';
 export type { VerifyResult } from './dal/reference';
 export * from './storage';
 // compressImage deliberately does NOT get re-exported here — every app
-// in the monorepo imports something from '@esoko/db' (the main entry
+// in the monorepo imports something from '@esoqo/db' (the main entry
 // this file is), so re-exporting it here would put sharp (a native
 // binary addon) in every one of those apps' Server Component/Action
 // build graphs, not just apps/jamii's. Import it from the dedicated
-// '@esoko/db/image-compression' subpath instead — see that file's own
+// '@esoqo/db/image-compression' subpath instead — see that file's own
 // header, and apps/jamii's next.config.mjs's serverExternalPackages
 // entry, which is still needed for the one app that actually does.
 export type { MemberRole, OrgKind } from '@prisma/client';

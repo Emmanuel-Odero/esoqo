@@ -1,7 +1,7 @@
 'use server';
 import { revalidatePath } from 'next/cache';
-import { reviewJamiiInterest, approveJamiiInterest, type JamiiInterestStatus } from '@esoko/db';
-import { toSafeErrorMessage } from '@esoko/domain';
+import { reviewJamiiInterest, approveJamiiInterest, type JamiiInterestStatus } from '@esoqo/db';
+import { toSafeErrorMessage } from '@esoqo/domain';
 import { requireStaff } from '@/lib/session';
 
 export type Result = { ok: true } | { ok: false; error: string };
@@ -22,7 +22,7 @@ export async function actionReviewInterest(
 
 /** Approves an application and grants Our Jamii access — for a brand-new
  *  applicant this also creates their Person record, see
- *  @esoko/db's approveJamiiInterest. */
+ *  @esoqo/db's approveJamiiInterest. */
 export async function actionApproveInterest(id: string): Promise<Result> {
   try {
     const ctx = await requireStaff();

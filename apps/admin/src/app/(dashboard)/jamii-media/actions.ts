@@ -1,7 +1,7 @@
 'use server';
 import { revalidatePath } from 'next/cache';
-import { setMediaAssetActive, updateMediaAssetLabel } from '@esoko/db';
-import { toSafeErrorMessage } from '@esoko/domain';
+import { setMediaAssetActive, updateMediaAssetLabel } from '@esoqo/db';
+import { toSafeErrorMessage } from '@esoqo/domain';
 import { requireStaff } from '@/lib/session';
 
 export type Result = { ok: true } | { ok: false; error: string };

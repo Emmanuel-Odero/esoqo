@@ -1,7 +1,7 @@
 'use client';
 
 import { useState } from 'react';
-import { Icon, type IconName } from '@esoko/ui';
+import { Icon, type IconName } from '@esoqo/ui';
 
 export function Accordion({
   items, defaultOpen = 0,
@@ -20,7 +20,7 @@ export function Accordion({
               aria-expanded={isOpen}
               onClick={() => setOpen(isOpen ? null : i)}
             >
-              {/* item.icon is an @esoko/ui IconName (see
+              {/* item.icon is an @esoqo/ui IconName (see
                   JAMII_PROGRAM_ICONS) — never emoji/free text. */}
               {item.icon && <Icon name={item.icon as IconName} size={17} />}
               <span className="acctitle">{item.title}</span>

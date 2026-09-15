@@ -79,7 +79,7 @@ export class SetPinError extends Error {
  */
 export async function setSubjectPin(msisdn: string, pinHash: string): Promise<{ partyId: string }> {
   const person = await prisma.person.findUnique({ where: { msisdn } });
-  if (!person) throw new SetPinError('No Esoko account found with that number', 'NOT_FOUND');
+  if (!person) throw new SetPinError('No Esoqo account found with that number', 'NOT_FOUND');
 
   await prisma.userCredential.upsert({
     where: { personId: person.partyId },

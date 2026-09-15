@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useTransition } from 'react';
-import { COUNTIES } from '@esoko/domain';
+import { COUNTIES } from '@esoqo/domain';
 import { actionCheckApplicant, actionSubmitApplication } from './actions';
 
 type Step = 'identifier' | 'matched' | 'new' | 'done';
@@ -12,7 +12,7 @@ type Step = 'identifier' | 'matched' | 'new' | 'done';
  * match short-circuits straight to a one-click confirmation instead of
  * the full form, since we already have their details on file. Either
  * way this only ever creates a JamiiInterest — access itself is granted
- * by staff review, see @esoko/db's approveJamiiInterest.
+ * by staff review, see @esoqo/db's approveJamiiInterest.
  */
 export function ApplyForm({ initialIdentifier = '' }: { initialIdentifier?: string }) {
   const [step, setStep] = useState<Step>('identifier');
@@ -71,7 +71,7 @@ export function ApplyForm({ initialIdentifier = '' }: { initialIdentifier?: stri
       <div className="card" style={{ padding: 16, background: 'var(--ledger-lt)' }} role="status">
         <strong style={{ display: 'block', marginBottom: 6 }}>Application received</strong>
         <p style={{ margin: 0, fontSize: '.9rem' }}>
-          A CECF or Esoko team member will review it. Once approved, come back and{' '}
+          A CECF or Esoqo team member will review it. Once approved, come back and{' '}
           <a href="/signin/set-pin" style={{ color: 'var(--stamp)', fontWeight: 700 }}>set your PIN</a>{' '}
           to sign in.
         </p>

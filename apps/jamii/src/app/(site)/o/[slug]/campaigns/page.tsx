@@ -1,5 +1,5 @@
 import Link from 'next/link';
-import { getCampaignStats } from '@esoko/db';
+import { getCampaignStats } from '@esoqo/db';
 import { OrgSectionShell, loadOrgOr404 } from '@/components/OrgSectionShell';
 import { getOrgLinkMode, orgHref } from '@/lib/org-links';
 import { buildOrgMetadata } from '@/lib/seo';

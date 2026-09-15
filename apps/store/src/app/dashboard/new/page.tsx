@@ -1,5 +1,5 @@
 import type { Metadata } from 'next';
-import { getMyRecord, listPricingRules } from '@esoko/db';
+import { getMyRecord, listPricingRules } from '@esoqo/db';
 import { requireSubject } from '@/lib/session';
 import { StoreWizard } from './StoreWizard';
 
@@ -21,7 +21,7 @@ export default async function NewStorePage() {
           <div>
             <strong style={{ display: 'block', marginBottom: 4 }}>No business on your account yet</strong>
             <p>
-              A store belongs to a business already on your Esoko record. Add one from your
+              A store belongs to a business already on your Esoqo record. Add one from your
               record before opening a store.
             </p>
           </div>

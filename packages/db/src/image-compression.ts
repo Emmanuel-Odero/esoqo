@@ -11,7 +11,7 @@ import sharp from 'sharp';
  * reachable from middleware.ts, and a native addon has no such bundle
  * to produce). Keeping compressImage here means sharp is only ever
  * pulled in by whatever actually calls this function directly (e.g.
- * apps/jamii's upload-actions.ts, importing from '@esoko/db' — see
+ * apps/jamii's upload-actions.ts, importing from '@esoqo/db' — see
  * index.ts's explicit re-export below), never by anything reachable
  * from the DAL-only barrel.
  */

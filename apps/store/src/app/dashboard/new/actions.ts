@@ -1,8 +1,8 @@
 'use server';
 
 import { redirect } from 'next/navigation';
-import { createStore } from '@esoko/db';
-import { createStoreSchema } from '@esoko/domain';
+import { createStore } from '@esoqo/db';
+import { createStoreSchema } from '@esoqo/domain';
 import { requireSubject } from '@/lib/session';
 
 export type ActionResult<T = void> =

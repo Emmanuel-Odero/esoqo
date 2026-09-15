@@ -1,6 +1,6 @@
 import type { Metadata } from 'next';
 import { notFound } from 'next/navigation';
-import { getReceipt } from '@esoko/db';
+import { getReceipt } from '@esoqo/db';
 import { requireSubject } from '@/lib/session';
 import { PrintButton } from './PrintButton';
 
@@ -61,7 +61,7 @@ export default async function ReceiptPage({ params }: { params: Promise<{ id: st
           </div>
         )}
         <div style={{ textAlign: 'center', marginTop: 14, fontSize: '.72rem', color: 'var(--tx-3)' }}>
-          Powered by Esoko
+          Powered by Esoqo
         </div>
       </div>
     </div>

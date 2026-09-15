@@ -1,12 +1,12 @@
 import { cookies } from 'next/headers';
-import { ctxFromToken, SESSION_COOKIE } from '@esoko/auth';
-import { AuthorisationError } from '@esoko/db';
+import { ctxFromToken, SESSION_COOKIE } from '@esoqo/auth';
+import { AuthorisationError } from '@esoqo/db';
 import { TICKET_STAFF_SESSION_COOKIE } from './session';
 
 /**
  * Nav- and page-gating for the /org/[orgId] console. UX only — Go
  * (services/core-go, dbx.AssertOwnsOrg) is the enforcement boundary
- * (ADR-0003). `can`/`matches` live here (not imported from @esoko/db)
+ * (ADR-0003). `can`/`matches` live here (not imported from @esoqo/db)
  * so the only thing this module takes from the DB package is the
  * error class and capability type — no Prisma, no DAL.
  */

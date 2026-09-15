@@ -1,5 +1,5 @@
-import { Icon } from '@esoko/ui';
-import { listMediaAssetsForStaff } from '@esoko/db';
+import { Icon } from '@esoqo/ui';
+import { listMediaAssetsForStaff } from '@esoqo/db';
 import { requireStaff } from '@/lib/session';
 import { RankedBarChart } from '@/components/charts';
 import { MediaLibraryTable } from './MediaLibraryTable';
@@ -8,7 +8,7 @@ export const dynamic = 'force-dynamic';
 
 /**
  * The platform-wide "no photo yet" placeholder library — see
- * @esoko/db's JamiiMediaAsset. Every custom-domain page with no cover
+ * @esoqo/db's JamiiMediaAsset. Every custom-domain page with no cover
  * photo, gallery upload or post image falls back to one of these,
  * picked automatically per page/post; this screen is where staff
  * curate which patterns are on offer, their labels and their order.

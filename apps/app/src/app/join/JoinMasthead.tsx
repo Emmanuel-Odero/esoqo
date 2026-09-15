@@ -1,10 +1,10 @@
-import { Icon } from '@esoko/ui';
+import { Icon } from '@esoqo/ui';
 
 /**
- * "This is Esoko, and here's what your membership carries." Replaces
+ * "This is Esoqo, and here's what your membership carries." Replaces
  * the earlier CECF-led masthead — that framing made sense while this
  * page was CECF's own front door; now CECF runs its own registration
- * on childeldercare.test, and this page is esoko's own membership: a
+ * on childeldercare.test, and this page is esoqo's own membership: a
  * record you can trade with — prices, payments, receipts.
  */
 export function JoinMasthead() {
@@ -18,13 +18,13 @@ export function JoinMasthead() {
             </span>
             <Icon name="check-circle" size={13} className="join-emblem-mark mark-l" />
           </span>
-          <p className="join-kicker">An Esoko membership</p>
+          <p className="join-kicker">An Esoqo membership</p>
         </div>
 
-        <h1>Join Esoko. Get counted, get the tools.</h1>
+        <h1>Join Esoqo. Get counted, get the tools.</h1>
         <p className="join-lede">
           One record for who you are and what you do — a trader, a group, an MSME.
-          It opens Esoko&rsquo;s tools straight away: market prices, payments and
+          It opens Esoqo&rsquo;s tools straight away: market prices, payments and
           receipts, and a history you can put in front of a bank or a buyer.
         </p>
 

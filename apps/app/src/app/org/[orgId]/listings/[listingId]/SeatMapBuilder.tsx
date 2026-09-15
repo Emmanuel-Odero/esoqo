@@ -1,8 +1,8 @@
 'use client';
 import { useMemo, useState, useTransition } from 'react';
-import { Icon } from '@esoko/ui';
-import { useAnnounce } from '@esoko/a11y';
-import { SEAT_MAP_PATTERNS, columnsForPattern, type SeatMapPattern } from '@esoko/domain';
+import { Icon } from '@esoqo/ui';
+import { useAnnounce } from '@esoqo/a11y';
+import { SEAT_MAP_PATTERNS, columnsForPattern, type SeatMapPattern } from '@esoqo/domain';
 import { actionSaveSeatMap } from '../actions';
 
 interface TicketClassOption { id: string; name: string; priceKes: number }

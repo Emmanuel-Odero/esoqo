@@ -7,11 +7,12 @@ import (
 
 	"github.com/gin-gonic/gin"
 
-	"github.com/esoko/core-go/internal/audit"
-	"github.com/esoko/core-go/internal/authsvc"
-	"github.com/esoko/core-go/internal/dbx"
-	"github.com/esoko/core-go/internal/notify"
-	"github.com/esoko/core-go/internal/payments"
+	"github.com/esoqo/core-go/internal/audit"
+	"github.com/esoqo/core-go/internal/authsvc"
+	"github.com/esoqo/core-go/internal/dbx"
+	"github.com/esoqo/core-go/internal/money"
+	"github.com/esoqo/core-go/internal/notify"
+	"github.com/esoqo/core-go/internal/payments"
 )
 
 // recordTreasuryAudit — every treasury audit row is targetType "group",
@@ -60,8 +61,10 @@ func (s *Server) notifyContributionConfirmed(c *gin.Context, contributionID stri
 	}
 	balance, err := dbx.GetGroupBalance(ctx, s.Pool, detail.OrgID)
 	balanceText := "?"
+	var newBalance *float64
 	if err == nil {
 		balanceText = fmt.Sprintf("%.2f", balance)
+		newBalance = &balance
 	}
 	s.recordTreasuryAudit(c, "treasury.contribution.confirmed", detail.OrgID, map[string]interface{}{
 		"contributionId":  contributionID,
@@ -74,7 +77,7 @@ func (s *Server) notifyContributionConfirmed(c *gin.Context, contributionID stri
 	if err != nil {
 		return
 	}
-	message := notify.ContributionConfirmed(detail.AmountKES, detail.ContributorName, detail.OrgName, balanceText, contributionID[:8])
+	message := notify.ContributionConfirmed(detail.AmountValueKES, detail.ContributorName, detail.OrgName, newBalance, contributionID[:8])
 	for _, m := range members {
 		if m.Msisdn == nil || *m.Msisdn == "" {
 			continue
@@ -93,10 +96,10 @@ func (s *Server) handleGetTreasuryPolicy(c *gin.Context) {
 }
 
 type declareContributionRequest struct {
-	AmountKES float64 `json:"amountKes" binding:"required"`
-	Method    *string `json:"method"`
-	Reference *string `json:"reference"`
-	Note      *string `json:"note"`
+	AmountKES money.Amount `json:"amountKes" binding:"required"`
+	Method    *string      `json:"method"`
+	Reference *string      `json:"reference"`
+	Note      *string      `json:"note"`
 }
 
 func (s *Server) handleDeclareContribution(c *gin.Context) {
@@ -107,18 +110,23 @@ func (s *Server) handleDeclareContribution(c *gin.Context) {
 		return
 	}
 	orgID := c.Param("id")
-	contributionID, err := dbx.DeclareContribution(c.Request.Context(), s.Pool, orgID, ctx.PartyID, req.AmountKES, req.Method, req.Reference, req.Note)
+	contributionID, err := dbx.DeclareContribution(c.Request.Context(), s.Pool, orgID, ctx.PartyID, req.AmountKES.KES(), req.Method, req.Reference, req.Note)
 	if err != nil {
 		writeTreasuryError(c, err)
 		return
 	}
 
+	profile, _ := dbx.GetPersonProfile(c.Request.Context(), s.Pool, ctx.PartyID)
 	contributorName := ctx.PartyID
-	if profile, _ := dbx.GetPersonProfile(c.Request.Context(), s.Pool, ctx.PartyID); profile != nil {
+	var contributorMsisdn string
+	if profile != nil {
 		if profile.KnownAs != nil && *profile.KnownAs != "" {
 			contributorName = *profile.KnownAs
 		} else {
 			contributorName = profile.OfficialName
+		}
+		if profile.Msisdn != nil {
+			contributorMsisdn = *profile.Msisdn
 		}
 	}
 	method := "DECLARED"
@@ -128,7 +136,7 @@ func (s *Server) handleDeclareContribution(c *gin.Context) {
 	s.recordTreasuryAudit(c, "treasury.contribution.declared", orgID, map[string]interface{}{
 		"contributionId":  contributionID,
 		"contributorName": contributorName,
-		"amountKes":       fmt.Sprintf("%.2f", req.AmountKES),
+		"amountKes":       fmt.Sprintf("%.2f", req.AmountKES.KES()),
 		"method":          method,
 	})
 
@@ -138,13 +146,9 @@ func (s *Server) handleDeclareContribution(c *gin.Context) {
 	// officer's manual confirm — same convenience the checkout flows
 	// elsewhere in the app already give.
 	if req.Method != nil && *req.Method == "MPESA" {
-		var msisdn string
-		if profile, _ := dbx.GetPersonProfile(c.Request.Context(), s.Pool, ctx.PartyID); profile != nil && profile.Msisdn != nil {
-			msisdn = *profile.Msisdn
-		}
-		if msisdn != "" {
+		if contributorMsisdn != "" {
 			stk, err := payments.InitiateStkPush(s.Cfg, payments.StkPushRequest{
-				Msisdn: msisdn, AmountKES: req.AmountKES, AccountReference: contributionID[:8], Description: "Chama contribution",
+				Msisdn: contributorMsisdn, AmountKES: req.AmountKES.KES(), AccountReference: contributionID[:8], Description: "Chama contribution",
 			})
 			if err == nil {
 				_ = dbx.AttachContributionCheckoutRequestID(c.Request.Context(), s.Pool, contributionID, stk.CheckoutRequestID)
@@ -160,6 +164,22 @@ func (s *Server) handleDeclareContribution(c *gin.Context) {
 			}
 		}
 	}
+
+	// Everyone else on the treasury member list gets told once this is
+	// CONFIRMED (see notifyContributionConfirmed) — but the person who
+	// just declared it hears nothing at all until an officer gets
+	// around to confirming, which could be a while for a cash/manual
+	// declaration. This closes that gap: an immediate, contributor-only
+	// "got it, pending" text. Skipped when the MPESA path above already
+	// auto-confirmed within this same request — that already sent the
+	// full CONFIRMED broadcast, which the contributor receives too as
+	// an active member, so this would just be a redundant second text.
+	if resp["status"] == "DECLARED" && contributorMsisdn != "" {
+		_ = authsvc.SendSms(contributorMsisdn,
+			notify.ContributionDeclared(req.AmountKES.KES(), method, contributionID[:8]),
+			"TREASURY_CONTRIBUTION")
+	}
+
 	c.JSON(http.StatusOK, resp)
 }
 
@@ -196,11 +216,11 @@ func (s *Server) handleGetGroupBalance(c *gin.Context) {
 }
 
 type requestWithdrawalRequest struct {
-	AmountKES   float64 `json:"amountKes" binding:"required"`
-	Purpose     string  `json:"purpose" binding:"required"`
-	PayeeName   string  `json:"payeeName" binding:"required"`
-	PayeeMsisdn *string `json:"payeeMsisdn"`
-	MeetingID   *string `json:"meetingId"`
+	AmountKES   money.Amount `json:"amountKes" binding:"required"`
+	Purpose     string       `json:"purpose" binding:"required"`
+	PayeeName   string       `json:"payeeName" binding:"required"`
+	PayeeMsisdn *string      `json:"payeeMsisdn"`
+	MeetingID   *string      `json:"meetingId"`
 }
 
 func (s *Server) handleRequestWithdrawal(c *gin.Context) {
@@ -212,7 +232,7 @@ func (s *Server) handleRequestWithdrawal(c *gin.Context) {
 	}
 	orgID := c.Param("id")
 	withdrawalID, err := dbx.RequestWithdrawal(c.Request.Context(), s.Pool, dbx.RequestWithdrawalInput{
-		OrgID: orgID, RequestedBy: ctx.PartyID, AmountKES: req.AmountKES,
+		OrgID: orgID, RequestedBy: ctx.PartyID, AmountKES: req.AmountKES.KES(),
 		Purpose: req.Purpose, PayeeName: req.PayeeName, PayeeMsisdn: req.PayeeMsisdn, MeetingID: req.MeetingID,
 	}, s.Cfg.SessionSecret)
 	if err != nil {
@@ -221,7 +241,7 @@ func (s *Server) handleRequestWithdrawal(c *gin.Context) {
 	}
 	s.recordTreasuryAudit(c, "treasury.withdrawal.requested", orgID, map[string]interface{}{
 		"withdrawalId": withdrawalID,
-		"amountKes":    fmt.Sprintf("%.2f", req.AmountKES),
+		"amountKes":    fmt.Sprintf("%.2f", req.AmountKES.KES()),
 		"purpose":      req.Purpose,
 		"payeeName":    req.PayeeName,
 	})
@@ -378,8 +398,8 @@ func writeTreasuryError(c *gin.Context, err error) {
 		return
 	}
 	if err == dbx.ErrNotActiveMember {
-		writeError(c, http.StatusForbidden, "NOT_A_MEMBER", err.Error())
+		writeSafeError(c, http.StatusForbidden, "NOT_A_MEMBER", err, "You are not an active member of this group")
 		return
 	}
-	writeError(c, http.StatusBadRequest, "REQUEST_FAILED", err.Error())
+	writeSafeError(c, http.StatusBadRequest, "REQUEST_FAILED", err, "Could not complete that request")
 }

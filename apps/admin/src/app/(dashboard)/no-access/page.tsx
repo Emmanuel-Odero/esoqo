@@ -1,4 +1,4 @@
-import { Icon } from '@esoko/ui';
+import { Icon } from '@esoqo/ui';
 import { requireStaff } from '@/lib/session';
 
 export const dynamic = 'force-dynamic';

@@ -25,9 +25,10 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 
-	"github.com/esoko/core-go/internal/authsvc"
-	"github.com/esoko/core-go/internal/ledger"
-	"github.com/esoko/core-go/internal/loyalty"
+	"github.com/esoqo/core-go/internal/authsvc"
+	"github.com/esoqo/core-go/internal/ledger"
+	"github.com/esoqo/core-go/internal/loyalty"
+	"github.com/esoqo/core-go/internal/money"
 )
 
 func randomTokenSuffix() string {
@@ -90,7 +91,7 @@ func AssertOwnsOrg(ctx context.Context, pool *pgxpool.Pool, c authsvc.Ctx, orgID
 	}
 	// SUBJECT with a live, OTP-activated org-staff context for this exact
 	// org (see authsvc.OrgContextService / docs/proposals/
-	// esoko-unified-crew-identity.md): the middleware layer only ever
+	// esoqo-unified-crew-identity.md): the middleware layer only ever
 	// merges in the unqualified TicketingStaffCapabilities bundle when
 	// ctx.TicketOrgID is set, so this check is the same exact-match shape
 	// as the AGENT branch above — never a fallback that widens access,
@@ -492,7 +493,7 @@ func CloseTrip(ctx context.Context, pool *pgxpool.Pool, c authsvc.Ctx, tripID st
 			return managerErr
 		}
 		// Two ways a CREW bundle can be held here: an AGENT PIN session
-		// (legacy — see docs/proposals/esoko-unified-crew-identity.md),
+		// (legacy — see docs/proposals/esoqo-unified-crew-identity.md),
 		// or a SUBJECT with a live, OTP-activated CREW context for this
 		// exact org. Each resolves its crewMemberId link from a
 		// different table; which one applies is decided by ActorType,
@@ -785,7 +786,7 @@ func CreateFare(ctx context.Context, pool *pgxpool.Pool, c authsvc.Ctx, in Creat
 		if err != nil {
 			return nil, err
 		}
-		points := int(amount*10 + 0.5)
+		points := money.FromKES(amount).Points()
 		// FUEL/TRAVEL also accepted here — an employer-issued commute
 		// allowance is spent the same way a self-bought FARE voucher is
 		// (see dbx.IssueAllowanceVoucherBatch).
@@ -868,15 +869,18 @@ func postFareLedgerEntry(ctx context.Context, pool *pgxpool.Pool, enterprisePart
 	if err != nil {
 		return "", err
 	}
-	// Same SUSPENSE placeholder as ConfirmBookingPaymentByCheckoutID until
-	// a FARE_REVENUE account kind is migrated — flagged, not silent.
-	revenueAcct, err := ledger.EnsureAccount(ctx, pool, &enterprisePartyID, "SUSPENSE", "KES")
+	// FARE_REVENUE, kept distinct from TICKET_REVENUE because one SACCO
+	// can both sell scheduled tickets and run stage fares, and a shared
+	// account would make those two streams unseparable after the fact.
+	// Previously the SUSPENSE placeholder this comment used to be
+	// waiting on — see migration 20260913000000.
+	revenueAcct, err := ledger.EnsureAccount(ctx, pool, &enterprisePartyID, "FARE_REVENUE", "KES")
 	if err != nil {
 		return "", err
 	}
 	return ledger.PostEntry(ctx, pool,
 		"fare:"+fareID, "Short-route fare payment", "core-go:fare:"+fareID,
-		[]ledger.Posting{{AccountID: settlementAcct, AmountKES: total}, {AccountID: revenueAcct, AmountKES: -total}})
+		[]ledger.Posting{{AccountID: settlementAcct, AmountCents: ledger.CentsFromKES(total)}, {AccountID: revenueAcct, AmountCents: ledger.CentsFromKES(-total)}})
 }
 
 func GetFare(ctx context.Context, pool *pgxpool.Pool, fareID string) (*Fare, error) {

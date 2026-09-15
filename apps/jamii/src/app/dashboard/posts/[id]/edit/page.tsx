@@ -1,5 +1,5 @@
 import { notFound } from 'next/navigation';
-import { getJamiiPostForManagement } from '@esoko/db';
+import { getJamiiPostForManagement } from '@esoqo/db';
 import { requireMyPage } from '@/lib/session';
 import { PostForm } from '../../new/PostForm';
 

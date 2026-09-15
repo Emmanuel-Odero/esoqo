@@ -2,9 +2,9 @@
 
 import {
   createStoreOrder, attachCheckoutRequestId, confirmStoreOrderPayment, getOrder, getMyRecord,
-} from '@esoko/db';
-import { checkoutSchema } from '@esoko/domain';
-import { initiateStkPush, MpesaError } from '@esoko/payments';
+} from '@esoqo/db';
+import { checkoutSchema } from '@esoqo/domain';
+import { initiateStkPush, MpesaError } from '@esoqo/payments';
 import { getCtx } from '@/lib/session';
 
 export type ActionResult<T> = { ok: true; data: T } | { ok: false; error: string };
@@ -31,7 +31,7 @@ export async function checkout(raw: unknown): Promise<ActionResult<{ orderId: st
   // DAL call so its StoreOrderPaymentMethod type (pre-regen) never sees
   // the new variant.
   if (parsed.data.paymentMethod === 'VOUCHER') {
-    return { ok: false, error: 'Voucher checkout runs in the Esoko app for now — pick M-Pesa here.' };
+    return { ok: false, error: 'Voucher checkout runs in the Esoqo app for now — pick M-Pesa here.' };
   }
 
   const ctx = await getCtx();

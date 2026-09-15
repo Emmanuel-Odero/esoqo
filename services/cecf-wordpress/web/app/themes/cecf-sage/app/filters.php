@@ -37,7 +37,7 @@ add_action('template_redirect', function () {
     $key = get_post_meta(get_queried_object_id(), PageSeeder::KEY_META, true);
 
     if ($key === 'apply') {
-        wp_redirect(PageUrl::esokoJoinUrl(), 302);
+        wp_redirect(PageUrl::esoqoJoinUrl(), 302);
         exit;
     }
 });

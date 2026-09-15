@@ -3,9 +3,9 @@
 import { useCallback, useEffect, useRef, useState, useTransition } from 'react';
 import Link from 'next/link';
 import type { Route } from 'next';
-import { Icon } from '@esoko/ui';
-import { useAnnounce } from '@esoko/a11y';
-import { maskMsisdn } from '@esoko/domain';
+import { Icon } from '@esoqo/ui';
+import { useAnnounce } from '@esoqo/a11y';
+import { maskMsisdn } from '@esoqo/domain';
 import {
   actionGetDetail, actionEdit, actionVoid, actionRestore,
   actionRecordPayment, actionAmendPayment, actionAssignUserPin,
@@ -159,7 +159,7 @@ export function RegistrationTable({
           <select className="inp" name="source" aria-label="Filter by source" defaultValue={source ?? ''}>
             <option value="">Any source</option>
             <option value="CECF">CECF registrations</option>
-            <option value="ESOKO">Esoko app registrations</option>
+            <option value="ESOKO">Esoqo app registrations</option>
           </select>
           <button className="btn btn-o" type="submit"><Icon name="filter" size={15} />Filter</button>
         </form>

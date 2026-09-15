@@ -5,10 +5,10 @@ import {
   IBM_Plex_Sans,
   Outfit,
 } from 'next/font/google';
-import { RouteAnnouncer, SkipLinks, LiveRegion } from '@esoko/a11y';
-import { IconSprite } from '@esoko/ui';
-import '@esoko/ui/tokens.css';
-import '@esoko/ui/ui.css';
+import { RouteAnnouncer, SkipLinks, LiveRegion } from '@esoqo/a11y';
+import { IconSprite } from '@esoqo/ui';
+import '@esoqo/ui/tokens.css';
+import '@esoqo/ui/ui.css';
 import './app.css';
 import { ServiceWorkerRegister } from '@/components/ServiceWorkerRegister';
 import { ConnectivityBanner } from '@/components/ConnectivityBanner';
@@ -52,7 +52,7 @@ const atkinson = Atkinson_Hyperlegible({
 });
 
 export const metadata: Metadata = {
-  title: { default: 'Esoko', template: '%s · Esoko' },
+  title: { default: 'Esoqo', template: '%s · Esoqo' },
   description:
     'Registrations, permits, licences and trading records for Kenya\u2019s traders, groups and businesses.',
   robots: { index: false }, // the app surface is not for search engines
@@ -64,7 +64,7 @@ export const metadata: Metadata = {
   appleWebApp: {
     capable: true,
     statusBarStyle: 'default',
-    title: 'Esoko',
+    title: 'Esoqo',
   },
   formatDetection: {
     telephone: false, // phone numbers are data here, not dial links

@@ -4,6 +4,7 @@ import { useState, useTransition } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import type { Route } from 'next';
 import Link from 'next/link';
+import { safeRedirect } from '@esoqo/domain';
 import { actionSignIn } from './actions';
 
 export function SignInForm() {
@@ -19,7 +20,10 @@ export function SignInForm() {
     startTransition(async () => {
       const result = await actionSignIn({ identifier, pin });
       if (!result.ok) { setError(result.error); return; }
-      router.push((params.get('next') || result.data.next) as Route);
+      // safeRedirect, not the raw param: router.push follows an absolute
+      // external URL, so this was an open redirect straight after a
+      // genuine PIN entry.
+      router.push(safeRedirect(params.get('next') || result.data.next, window.location.origin) as Route);
       router.refresh();
     });
   }
@@ -35,7 +39,7 @@ export function SignInForm() {
         <label htmlFor="pin">PIN</label>
         <input id="pin" className="mono" type="password" maxLength={6} inputMode="numeric"
           autoComplete="current-password" value={pin} onChange={(e) => setPin(e.target.value)} />
-        <div className="hint">Four to six digits. Esoko will never ask you for this by call or SMS.</div>
+        <div className="hint">Four to six digits. Esoqo will never ask you for this by call or SMS.</div>
       </div>
       {error && <p className="field-err" style={{ color: 'var(--stamp)', fontSize: '.85rem', marginBottom: 16 }}>{error}</p>}
       <button type="button" className="btn btn-stamp btn-block" disabled={pending || !identifier.trim() || !pin.trim()} onClick={submit}>

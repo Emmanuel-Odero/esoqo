@@ -1,6 +1,6 @@
 import { notFound } from 'next/navigation';
-import { Icon } from '@esoko/ui';
-import { type AmenityTag } from '@esoko/domain';
+import { Icon } from '@esoqo/ui';
+import { type AmenityTag } from '@esoqo/domain';
 import { requireOrgAccess } from '@/lib/session';
 import { canOrg, orgGo, orgForCan, type GoOrg, type GoListing, type GoSeatMap } from '@/lib/ticketing';
 import { TicketClassForm } from './TicketClassForm';

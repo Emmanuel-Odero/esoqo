@@ -1,6 +1,6 @@
 'use server';
 import { revalidatePath } from 'next/cache';
-import { createTicketOrgStaffSchema } from '@esoko/domain';
+import { createTicketOrgStaffSchema } from '@esoqo/domain';
 import { requireOrgAccess } from '@/lib/session';
 import { orgGo } from '@/lib/ticketing';
 

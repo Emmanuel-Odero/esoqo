@@ -1,13 +1,15 @@
 package httpapi
 
 import (
+	"log"
 	"net/http"
 
 	"github.com/gin-gonic/gin"
 
-	"github.com/esoko/core-go/internal/authsvc"
-	"github.com/esoko/core-go/internal/dbx"
-	"github.com/esoko/core-go/internal/payments"
+	"github.com/esoqo/core-go/internal/authsvc"
+	"github.com/esoqo/core-go/internal/dbx"
+	"github.com/esoqo/core-go/internal/money"
+	"github.com/esoqo/core-go/internal/payments"
 )
 
 // Organiser console API — every route below requires a session and
@@ -201,12 +203,12 @@ func (s *Server) handlePublishListing(c *gin.Context) {
 }
 
 type createTicketClassRequest struct {
-	Name        string   `json:"name" binding:"required"`
-	PriceKES    float64  `json:"priceKes" binding:"required"`
-	Capacity    int      `json:"capacity" binding:"required"`
-	Seated      bool     `json:"seated"`
-	Amenities   []string `json:"amenities"`
-	AmenityNote *string  `json:"amenityNote"`
+	Name        string       `json:"name" binding:"required"`
+	PriceKES    money.Amount `json:"priceKes" binding:"required"`
+	Capacity    int          `json:"capacity" binding:"required"`
+	Seated      bool         `json:"seated"`
+	Amenities   []string     `json:"amenities"`
+	AmenityNote *string      `json:"amenityNote"`
 }
 
 func (s *Server) handleCreateTicketClass(c *gin.Context) {
@@ -216,7 +218,7 @@ func (s *Server) handleCreateTicketClass(c *gin.Context) {
 		return
 	}
 	tc, err := dbx.CreateTicketClass(c.Request.Context(), s.Pool, ctxFromGin(c), c.Param("id"),
-		req.Name, req.PriceKES, req.Capacity, req.Seated, req.Amenities, req.AmenityNote)
+		req.Name, req.PriceKES.KES(), req.Capacity, req.Seated, req.Amenities, req.AmenityNote)
 	if err != nil {
 		writeOrgError(c, err)
 		return
@@ -282,8 +284,8 @@ func (s *Server) handleGetSeatMap(c *gin.Context) {
 }
 
 type createAddonRequest struct {
-	Name     string  `json:"name" binding:"required"`
-	PriceKES float64 `json:"priceKes" binding:"required"`
+	Name     string       `json:"name" binding:"required"`
+	PriceKES money.Amount `json:"priceKes" binding:"required"`
 }
 
 func (s *Server) handleCreateAddon(c *gin.Context) {
@@ -292,7 +294,7 @@ func (s *Server) handleCreateAddon(c *gin.Context) {
 		writeError(c, http.StatusBadRequest, "INVALID_REQUEST", err.Error())
 		return
 	}
-	addon, err := dbx.CreateAddon(c.Request.Context(), s.Pool, ctxFromGin(c), c.Param("id"), req.Name, req.PriceKES)
+	addon, err := dbx.CreateAddon(c.Request.Context(), s.Pool, ctxFromGin(c), c.Param("id"), req.Name, req.PriceKES.KES())
 	if err != nil {
 		writeOrgError(c, err)
 		return
@@ -360,9 +362,23 @@ func (s *Server) handleSetOrgStaffActive(c *gin.Context) {
 		writeError(c, http.StatusBadRequest, "INVALID_REQUEST", err.Error())
 		return
 	}
-	if err := dbx.SetTicketOrgStaffActive(c.Request.Context(), s.Pool, ctxFromGin(c), c.Param("id"), req.Active); err != nil {
+	staffID := c.Param("id")
+	if err := dbx.SetTicketOrgStaffActive(c.Request.Context(), s.Pool, ctxFromGin(c), staffID, req.Active); err != nil {
 		writeOrgError(c, err)
 		return
+	}
+	if !req.Active {
+		// Deactivating only flipped a column: STAFF/AGENT capabilities are
+		// frozen into the session at sign-in (see SessionService's own
+		// note), so a revoked till operator kept scanning and selling
+		// until their session expired on its own — up to 12 hours.
+		// Revocation has to be an event, not something the next request
+		// happens to notice.
+		if n, err := s.Session.DestroyAllSessions(c.Request.Context(), staffID); err != nil {
+			log.Printf("core-go: deactivated staff %s but could not end their sessions: %v", staffID, err)
+		} else if n > 0 {
+			log.Printf("core-go: deactivated staff %s, ended %d session(s)", staffID, n)
+		}
 	}
 	c.JSON(http.StatusOK, gin.H{"ok": true})
 }
@@ -416,7 +432,7 @@ func (s *Server) handleRetryBookingPayment(c *gin.Context) {
 	resp := gin.H{"status": "PENDING_PAYMENT"}
 	stk, err := payments.InitiateStkPush(s.Cfg, payments.StkPushRequest{
 		Msisdn: msisdn, AmountKES: parseKES(totalKES),
-		AccountReference: c.Param("id")[:8], Description: "Esoko ticket",
+		AccountReference: c.Param("id")[:8], Description: "Esoqo ticket",
 	})
 	if err != nil {
 		resp["paymentError"] = err.Error()

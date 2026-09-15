@@ -1,6 +1,6 @@
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
-import { listJamiiNavItemsPublic } from '@esoko/db';
+import { listJamiiNavItemsPublic } from '@esoqo/db';
 import { loadCampaign, loadCampaignExtras, isVerified } from '@/lib/data';
 import { getOrgLinkMode, orgHref } from '@/lib/org-links';
 import { resolveNavLinks } from '@/lib/org-links-shared';

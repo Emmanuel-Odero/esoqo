@@ -1,4 +1,4 @@
-import { Icon } from '@esoko/ui';
+import { Icon } from '@esoqo/ui';
 import { requireStaff } from '@/lib/session';
 import { DonutChart } from '@/components/charts';
 import { OrgTable } from './OrgTable';
@@ -36,7 +36,7 @@ export default async function TicketingPage({
         <div>
           <h1>Ticketing — organisers</h1>
           <p>
-            Event companies, tour operators and transport companies selling through Esoko. Add their
+            Event companies, tour operators and transport companies selling through Esoqo. Add their
             first ticket sellers and gate staff here while you&rsquo;re onboarding them — day-to-day
             staffing stays with the organiser&rsquo;s own team afterwards.
           </p>

@@ -158,7 +158,7 @@ Config::define('CONCATENATE_SCRIPTS', false);
 
 /**
  * Media storage — Cloudflare R2, same account/bucket-naming scheme as
- * the rest of esoko (see packages/db/src/storage.ts's own header for
+ * the rest of esoqo (see packages/db/src/storage.ts's own header for
  * the sibling Node-side config). Backed by humanmade/s3-uploads
  * (web/app/plugins/s3-uploads, composer.json) — its stream wrapper
  * makes every core upload path (wp_handle_upload, thumbnail/srcset

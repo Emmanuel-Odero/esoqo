@@ -1,4 +1,4 @@
-import { getDisplayPrefs } from '@esoko/db';
+import { getDisplayPrefs } from '@esoqo/db';
 import { requireSubject } from '@/lib/session';
 import { PrefsPanel } from './PrefsPanel';
 

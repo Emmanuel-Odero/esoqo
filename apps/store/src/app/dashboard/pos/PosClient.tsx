@@ -1,7 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useState } from 'react';
-import { Icon } from '@esoko/ui';
+import { Icon } from '@esoqo/ui';
 import { syncPosSale } from './actions';
 import { issueSaleReceipt } from './receipt-actions';
 import { CashierBar, type CashierSession } from './CashierBar';

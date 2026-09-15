@@ -1,6 +1,6 @@
 import type { Metadata } from 'next';
 import { notFound } from 'next/navigation';
-import { getProductForOwner } from '@esoko/db';
+import { getProductForOwner } from '@esoqo/db';
 import { requireSubject } from '@/lib/session';
 import { ProductEditForm } from './ProductEditForm';
 import { ImageManager } from './ImageManager';

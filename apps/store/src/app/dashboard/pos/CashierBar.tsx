@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { Icon } from '@esoko/ui';
+import { Icon } from '@esoqo/ui';
 import { checkInCashier, startShift, endShift } from '../(shell)/shifts/actions';
 import { cashierSignOut } from '@/app/signin/cashier/[slug]/actions';
 

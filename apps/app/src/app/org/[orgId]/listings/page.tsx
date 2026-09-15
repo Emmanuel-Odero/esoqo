@@ -1,6 +1,6 @@
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
-import { Icon } from '@esoko/ui';
+import { Icon } from '@esoqo/ui';
 import { requireOrgAccess } from '@/lib/session';
 import { canOrg, orgGo, orgForCan, type GoOrg, type GoListing, type GoVenue, type GoRoute } from '@/lib/ticketing';
 import { CreateListingForm } from './CreateListingForm';

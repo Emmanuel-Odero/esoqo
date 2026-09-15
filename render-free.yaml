@@ -1,5 +1,5 @@
 # ════════════════════════════════════════════════════════════════
-#  Esoko — Render Blueprint, FREE TIER
+#  Esoqo — Render Blueprint, FREE TIER
 #
 #  A separate blueprint from render.yaml (the paid one), not a flag
 #  on it — free and paid differ in more than `plan:`. This one:
@@ -25,7 +25,7 @@
 #
 #  Run migrations manually after first deploy (same as render.yaml):
 #      DATABASE_URL="<neon-direct-url>" DIRECT_DATABASE_URL="<neon-direct-url>" \
-#      pnpm --filter @esoko/db exec prisma migrate deploy
+#      pnpm --filter @esoqo/db exec prisma migrate deploy
 # ════════════════════════════════════════════════════════════════
 
 services:
@@ -36,8 +36,8 @@ services:
     plan: free
     repo: https://github.com/Emmanuel-Odero/esoko-254.git
     branch: render
-    buildCommand: npm install -g pnpm@9.12.0 && NODE_ENV=development pnpm install && pnpm --filter @esoko/db generate && pnpm --filter @esoko/core-service build
-    startCommand: pnpm --filter @esoko/core-service start
+    buildCommand: npm install -g pnpm@9.12.0 && NODE_ENV=development pnpm install && pnpm --filter @esoqo/db generate && pnpm --filter @esoqo/core-service build
+    startCommand: pnpm --filter @esoqo/core-service start
     healthCheckPath: /health
     envVars:
       - key: NODE_ENV
@@ -67,7 +67,7 @@ services:
       - key: SMS_USERNAME
         sync: false
       - key: SMS_SENDER_ID
-        value: ESOKO
+        value: ESOQO
       - key: SEED_ADMIN_PIN
         sync: false
       - key: SEED_ADMIN_HASH
@@ -80,8 +80,8 @@ services:
     plan: free
     repo: https://github.com/Emmanuel-Odero/esoko-254.git
     branch: render
-    buildCommand: npm install -g pnpm@9.12.0 && NODE_ENV=development pnpm install && pnpm --filter @esoko/db generate && pnpm --filter @esoko/web build
-    startCommand: pnpm --filter @esoko/web start
+    buildCommand: npm install -g pnpm@9.12.0 && NODE_ENV=development pnpm install && pnpm --filter @esoqo/db generate && pnpm --filter @esoqo/web build
+    startCommand: pnpm --filter @esoqo/web start
     healthCheckPath: /help
     envVars:
       - key: NODE_ENV
@@ -118,8 +118,8 @@ services:
     plan: free
     repo: https://github.com/Emmanuel-Odero/esoko-254.git
     branch: render
-    buildCommand: npm install -g pnpm@9.12.0 && NODE_ENV=development pnpm install && pnpm --filter @esoko/db generate && pnpm --filter @esoko/app build
-    startCommand: pnpm --filter @esoko/app start
+    buildCommand: npm install -g pnpm@9.12.0 && NODE_ENV=development pnpm install && pnpm --filter @esoqo/db generate && pnpm --filter @esoqo/app build
+    startCommand: pnpm --filter @esoqo/app start
     healthCheckPath: /api/health
     envVars:
       - key: NODE_ENV
@@ -162,8 +162,8 @@ services:
     plan: free
     repo: https://github.com/Emmanuel-Odero/esoko-254.git
     branch: render
-    buildCommand: npm install -g pnpm@9.12.0 && NODE_ENV=development pnpm install && pnpm --filter @esoko/db generate && pnpm --filter @esoko/admin build
-    startCommand: pnpm --filter @esoko/admin start
+    buildCommand: npm install -g pnpm@9.12.0 && NODE_ENV=development pnpm install && pnpm --filter @esoqo/db generate && pnpm --filter @esoqo/admin build
+    startCommand: pnpm --filter @esoqo/admin start
     healthCheckPath: /signin
     envVars:
       - key: NODE_ENV
@@ -206,8 +206,8 @@ services:
     plan: free
     repo: https://github.com/Emmanuel-Odero/esoko-254.git
     branch: render
-    buildCommand: npm install -g pnpm@9.12.0 && NODE_ENV=development pnpm install && pnpm --filter @esoko/db generate && pnpm --filter @esoko/store build
-    startCommand: pnpm --filter @esoko/store start
+    buildCommand: npm install -g pnpm@9.12.0 && NODE_ENV=development pnpm install && pnpm --filter @esoqo/db generate && pnpm --filter @esoqo/store build
+    startCommand: pnpm --filter @esoqo/store start
     healthCheckPath: /signin
     envVars:
       - key: NODE_ENV
@@ -250,8 +250,8 @@ services:
     plan: free
     repo: https://github.com/Emmanuel-Odero/esoko-254.git
     branch: render
-    buildCommand: npm install -g pnpm@9.12.0 && NODE_ENV=development pnpm install && pnpm --filter @esoko/db generate && pnpm --filter @esoko/jamii build
-    startCommand: pnpm --filter @esoko/jamii start
+    buildCommand: npm install -g pnpm@9.12.0 && NODE_ENV=development pnpm install && pnpm --filter @esoqo/db generate && pnpm --filter @esoqo/jamii build
+    startCommand: pnpm --filter @esoqo/jamii start
     envVars:
       - key: NODE_ENV
         value: production

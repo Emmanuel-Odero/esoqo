@@ -3,8 +3,8 @@
 import { headers } from 'next/headers';
 import {
   findJamiiApplicant, getApplicantContactDetails, createJamiiInterest, JAMII_INTEREST_CREATE, type Ctx,
-} from '@esoko/db';
-import { jamiiApplicantCheckSchema, jamiiInterestSchema } from '@esoko/domain';
+} from '@esoqo/db';
+import { jamiiApplicantCheckSchema, jamiiInterestSchema, clientIpFrom } from '@esoqo/domain';
 
 export type ActionResult<T = void> =
   | { ok: true; data: T }
@@ -12,7 +12,7 @@ export type ActionResult<T = void> =
 
 async function clientIp(): Promise<string> {
   const h = await headers();
-  return h.get('x-forwarded-for')?.split(',')[0]?.trim() ?? 'unknown';
+  return clientIpFrom((n) => h.get(n)) ?? 'unknown';
 }
 
 /** Anonymous by design, same shape as apps/app/src/app/join/actions.ts's

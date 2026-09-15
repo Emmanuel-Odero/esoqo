@@ -2,8 +2,8 @@
 
 import { useState, useTransition } from 'react';
 import { useRouter } from 'next/navigation';
-import { COUNTIES } from '@esoko/domain';
-import { JAMII_ORG_KINDS, JAMII_ORG_KIND_LABELS } from '@esoko/domain';
+import { COUNTIES } from '@esoqo/domain';
+import { JAMII_ORG_KINDS, JAMII_ORG_KIND_LABELS } from '@esoqo/domain';
 import { actionStartJamiiPage } from './actions';
 
 function slugify(name: string): string {

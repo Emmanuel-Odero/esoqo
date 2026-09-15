@@ -1,8 +1,8 @@
 'use client';
 
 import { useRef, useState } from 'react';
-import { Icon, SelectWithOther } from '@esoko/ui';
-import { BUSINESS_TYPES, searchSegments } from '@esoko/domain';
+import { Icon, SelectWithOther } from '@esoqo/ui';
+import { BUSINESS_TYPES, searchSegments } from '@esoqo/domain';
 import { actionSearchBusinesses } from './actions';
 import { SearchCombobox } from './SearchCombobox';
 import type { Form } from './form';

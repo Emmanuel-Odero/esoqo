@@ -1,4 +1,4 @@
-# Deploying Esoko on free tiers
+# Deploying Esoqo on free tiers
 
 A separate track from `Deploy_Render.md` (the paid one), not a cheaper
 version of it. Free-tier hosting has real constraints that change the
@@ -10,7 +10,7 @@ demo, or review deployment.
 
 ## What's in scope, what isn't
 
-**In scope** — the six Node services that make up the Esoko product:
+**In scope** — the six Node services that make up the Esoqo product:
 `esoko-core` (Fastify), `esoko-web`, `esoko-app`, `esoko-admin`,
 `esoko-store`, `esoko-jamii` (all Next.js).
 
@@ -94,7 +94,7 @@ Then run migrations once, from your own machine, against Neon's direct URL:
 ```sh
 DATABASE_URL="<neon-direct-url>" \
 DIRECT_DATABASE_URL="<neon-direct-url>" \
-pnpm --filter @esoko/db exec prisma migrate deploy
+pnpm --filter @esoqo/db exec prisma migrate deploy
 ```
 
 ---

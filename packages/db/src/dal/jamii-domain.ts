@@ -3,7 +3,7 @@ import { prisma } from '../client';
 import { requireCapability, type Ctx } from '../capabilities';
 import { recordAudit } from '../audit';
 import { requirePageAccess } from './jamii-page';
-import { jamiiDomainHostnameSchema, JAMII_RESERVED_DOMAIN_SUFFIXES } from '@esoko/domain';
+import { jamiiDomainHostnameSchema, JAMII_RESERVED_DOMAIN_SUFFIXES } from '@esoqo/domain';
 import type { JamiiDomainStatus, Prisma } from '@prisma/client';
 
 /**
@@ -71,7 +71,7 @@ export async function requestJamiiDomain(ctx: Ctx, pageId: string, hostnameInput
         throw new JamiiDomainError('This page already has a domain — remove it before linking another', 'ALREADY_LINKED');
       }
       if (existingForPage.status === 'SUSPENDED') {
-        throw new JamiiDomainError('This page’s domain was suspended — contact Esoko support', 'ALREADY_LINKED');
+        throw new JamiiDomainError('This page’s domain was suspended — contact Esoqo support', 'ALREADY_LINKED');
       }
       const sinceLastRequest = Date.now() - existingForPage.updatedAt.getTime();
       if (existingForPage.hostname === hostname && sinceLastRequest < REQUEST_COOLDOWN_MS) {

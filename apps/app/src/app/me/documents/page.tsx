@@ -1,5 +1,5 @@
-import { Icon, type IconName } from '@esoko/ui';
-import { getMyRecord } from '@esoko/db';
+import { Icon, type IconName } from '@esoqo/ui';
+import { getMyRecord } from '@esoqo/db';
 import { requireSubject } from '@/lib/session';
 
 export const dynamic = 'force-dynamic';
@@ -26,7 +26,7 @@ export default async function MyDocuments() {
     <>
       <div className="mehead">
         <h1>Your documents</h1>
-        <p>Papers you have given Esoko. Only staff reviewing your record can open them.</p>
+        <p>Papers you have given Esoqo. Only staff reviewing your record can open them.</p>
       </div>
 
       {docs.length === 0 ? (

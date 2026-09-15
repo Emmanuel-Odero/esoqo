@@ -6,8 +6,8 @@ import { assertOwnsStore } from './store';
 /**
  * Cashiers.
  *
- * PIN hashing lives in @esoko/auth (Argon2id, packages/auth/src/pin.ts)
- * — not here. @esoko/auth depends on @esoko/db, so this package can't
+ * PIN hashing lives in @esoqo/auth (Argon2id, packages/auth/src/pin.ts)
+ * — not here. @esoqo/auth depends on @esoqo/db, so this package can't
  * depend back on it without a cycle. Every function below takes an
  * already-hashed pinHash and never sees a raw PIN; the Server Action
  * layer (which already depends on both packages) hashes/verifies at the

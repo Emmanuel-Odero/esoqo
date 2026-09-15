@@ -1,6 +1,6 @@
 import type { Metadata } from 'next';
 import { SetPinForm } from './SetPinForm';
-import { Icon } from '@esoko/ui';
+import { Icon } from '@esoqo/ui';
 
 export const metadata: Metadata = { title: 'Set your PIN' };
 

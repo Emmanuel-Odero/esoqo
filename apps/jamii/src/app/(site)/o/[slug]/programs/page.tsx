@@ -3,7 +3,7 @@ import { getOrgLinkMode } from '@/lib/org-links';
 import { Accordion } from '@/components/Accordion';
 import { OrgDonateBand } from '@/components/OrgDonateBand';
 import { RichText } from '@/components/RichText';
-import { Icon, type IconName } from '@esoko/ui';
+import { Icon, type IconName } from '@esoqo/ui';
 import { buildOrgMetadata } from '@/lib/seo';
 
 export const dynamic = 'force-dynamic';

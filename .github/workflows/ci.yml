@@ -16,10 +16,10 @@ jobs:
         image: postgres:16-alpine
         env:
           POSTGRES_USER: esoko
-          POSTGRES_PASSWORD: esoko_ci
+          POSTGRES_PASSWORD: esoqo_ci
           POSTGRES_DB: esoko_test
         options: >-
-          --health-cmd "pg_isready -U esoko"
+          --health-cmd "pg_isready -U esoqo"
           --health-interval 5s --health-timeout 3s --health-retries 12
         ports: ["5432:5432"]
       redis:
@@ -30,8 +30,8 @@ jobs:
         ports: ["6379:6379"]
 
     env:
-      DATABASE_URL: postgresql://esoko:esoko_ci@localhost:5432/esoko_test
-      DIRECT_DATABASE_URL: postgresql://esoko:esoko_ci@localhost:5432/esoko_test
+      DATABASE_URL: postgresql://esoqo:esoqo_ci@localhost:5432/esoqo_test
+      DIRECT_DATABASE_URL: postgresql://esoqo:esoqo_ci@localhost:5432/esoqo_test
       REDIS_URL: redis://localhost:6379
       SESSION_SECRET: ci_only_0000000000000000000000000000000000000000000000000000
       OTP_PEPPER: ci_only_1111111111111111111111111111111111111111111111111111
@@ -47,7 +47,7 @@ jobs:
 
       - run: pnpm install --frozen-lockfile
       - run: pnpm db:generate
-      - run: pnpm --filter @esoko/db migrate:deploy
+      - run: pnpm --filter @esoqo/db migrate:deploy
 
       # Architectural rules are lint rules — this step is where
       # "authorisation lives in the DAL" stops being a document.
@@ -61,7 +61,7 @@ jobs:
         run: pnpm test
 
       - name: Audit chain integrity
-        run: pnpm --filter @esoko/db audit:verify
+        run: pnpm --filter @esoqo/db audit:verify
 
       - name: Accessibility (axe on every route)
         run: |

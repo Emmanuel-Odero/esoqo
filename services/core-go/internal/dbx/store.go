@@ -1,7 +1,7 @@
 // Package dbx (store.go) ports the buyer-facing slice of
 // packages/db/src/dal/store.ts, product.ts and store-order.ts — public
 // browse + checkout, plus the pickup-order lifecycle a store owner
-// drives from their own Esoko account (MarkOrderReadyForPickup,
+// drives from their own Esoqo account (MarkOrderReadyForPickup,
 // ConfirmOrderCollected — see requireStoreOwner's own comment for why
 // that's a real, if v1-simplified, authorization check rather than a
 // new staff-PIN subsystem). PoS/reporting/catalogue-management
@@ -21,8 +21,9 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 
-	"github.com/esoko/core-go/internal/ledger"
-	"github.com/esoko/core-go/internal/loyalty"
+	"github.com/esoqo/core-go/internal/ledger"
+	"github.com/esoqo/core-go/internal/loyalty"
+	"github.com/esoqo/core-go/internal/money"
 )
 
 func earnUnifiedLoyalty(ctx context.Context, pool *pgxpool.Pool, partyID string, kes float64, ref string, enabled bool) error {
@@ -520,11 +521,11 @@ func SettleStoreOrderVoucher(ctx context.Context, pool *pgxpool.Pool, orderID, v
 		return err
 	}
 	entryID, err := ledger.PostEntry(ctx, pool, "store-order:"+orderID, "Store order voucher payment", "core-go:store-order:"+orderID,
-		[]ledger.Posting{{AccountID: settlement, AmountKES: total}, {AccountID: revenue, AmountKES: -total}})
+		[]ledger.Posting{{AccountID: settlement, AmountCents: ledger.CentsFromKES(total)}, {AccountID: revenue, AmountCents: ledger.CentsFromKES(-total)}})
 	if err != nil {
 		return err
 	}
-	if err := SpendVoucher(ctx, pool, voucherID, "SHOPPING", int(total*10+0.5), "store-order:"+orderID, entryID); err != nil {
+	if err := SpendVoucher(ctx, pool, voucherID, "SHOPPING", money.FromKES(total).Points(), "store-order:"+orderID, entryID); err != nil {
 		_, _ = pool.Exec(ctx, `UPDATE store_order SET status = 'CANCELLED' WHERE id = $1`, orderID)
 		if _, ok := err.(*FleetError); ok {
 			return &OrderError{"VOUCHER_FAILED", err.Error()}
@@ -595,7 +596,7 @@ func ConfirmStoreOrderPaymentByCheckoutID(ctx context.Context, pool *pgxpool.Poo
 	}
 	journalEntryID, err := ledger.PostEntry(ctx, pool,
 		"store-order:"+orderID, "Store order payment", "core-go:store-order:"+orderID,
-		[]ledger.Posting{{AccountID: settlementAcct, AmountKES: totalKES}, {AccountID: revenueAcct, AmountKES: -totalKES}})
+		[]ledger.Posting{{AccountID: settlementAcct, AmountCents: ledger.CentsFromKES(totalKES)}, {AccountID: revenueAcct, AmountCents: ledger.CentsFromKES(-totalKES)}})
 	if err != nil {
 		return err
 	}
@@ -778,7 +779,7 @@ func ListOrdersForParty(ctx context.Context, pool *pgxpool.Pool, partyID string)
 // requireStoreOwner is the shared authorization check for both pickup
 // management actions below. core-go has no separate staff-PIN login
 // (Cashier/TicketOrgStaff are TS-only POS concepts) — a store's own
-// Esoko account, the same one it would use to buy something, is who's
+// Esoqo account, the same one it would use to buy something, is who's
 // allowed to manage that store's pickup orders. Mirrors the
 // groups/treasury "officer" check: same signed-in-party pattern, no
 // new auth subsystem. Returns the store id and a FORBIDDEN OrderError

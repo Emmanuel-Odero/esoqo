@@ -12,3 +12,7 @@ export {
 } from './SelectWithOther';
 export { Notice } from './Notice';
 export { Logo } from './Logo';
+export {
+  PrintableLabel, PrintStyles, trackingUrlFor,
+  LABEL_WIDTH_MM, LABEL_HEIGHT_MM, LABEL_GAP_MM,
+} from './ParcelLabel';

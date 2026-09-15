@@ -1,5 +1,5 @@
 import { cache } from 'react';
-import { getJamiiPageBySlug, getCampaignBySlug, getCampaignStats, listRecentDonations } from '@esoko/db';
+import { getJamiiPageBySlug, getCampaignBySlug, getCampaignStats, listRecentDonations } from '@esoqo/db';
 
 export { isVerified, orgInitials } from './org-links-shared';
 

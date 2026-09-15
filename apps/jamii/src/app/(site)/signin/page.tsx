@@ -13,7 +13,7 @@ export default function SignInPage() {
       </h1>
       <div className="card">
         <p style={{ fontSize: '.86rem', color: '#6b6552', marginBottom: 20 }}>
-          Same credentials as the rest of Esoko — the phone number or email your organisation registered with.
+          Same credentials as the rest of Esoqo — the phone number or email your organisation registered with.
         </p>
         <SignInForm />
       </div>

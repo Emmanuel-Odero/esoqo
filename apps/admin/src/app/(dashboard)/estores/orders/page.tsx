@@ -1,5 +1,5 @@
-import { Icon } from '@esoko/ui';
-import { listAllOrdersForStaff } from '@esoko/db';
+import { Icon } from '@esoqo/ui';
+import { listAllOrdersForStaff } from '@esoqo/db';
 import { requireStaff } from '@/lib/session';
 import { DonutChart } from '@/components/charts';
 import { OrderDesk } from './OrderDesk';

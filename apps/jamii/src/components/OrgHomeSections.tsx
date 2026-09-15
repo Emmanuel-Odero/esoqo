@@ -1,4 +1,4 @@
-import { getJamiiSitePageByKind, listJamiiPageBlocksPublic } from '@esoko/db';
+import { getJamiiSitePageByKind, listJamiiPageBlocksPublic } from '@esoqo/db';
 import type { OrgLinkMode } from '@/lib/org-links-shared';
 import { StatsTickerBlock } from './blocks/StatsTickerBlock';
 import { ExploreGridBlock } from './blocks/ExploreGridBlock';

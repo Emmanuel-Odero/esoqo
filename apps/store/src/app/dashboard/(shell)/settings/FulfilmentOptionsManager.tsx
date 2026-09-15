@@ -2,7 +2,7 @@
 
 import { useState, useTransition } from 'react';
 import { useRouter } from 'next/navigation';
-import { Icon } from '@esoko/ui';
+import { Icon } from '@esoqo/ui';
 import { addFulfilmentOption, toggleFulfilmentOption } from './actions';
 
 interface Option { id: string; kind: string; label: string; feeKes: number; active: boolean }

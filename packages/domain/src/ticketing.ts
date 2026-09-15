@@ -3,7 +3,7 @@ import { msisdnSchema } from './phone';
 
 /** ONE definition of every ticketing input, shared by the client form
  *  and the Server Action's boundary validation. See
- *  docs/proposals/esoko-ticketing-platform.md. */
+ *  docs/proposals/esoqo-ticketing-platform.md. */
 
 const kesSchema = z.coerce.number().positive('Enter an amount above zero').max(10_000_000);
 const nameSchema = z.string().trim().min(2, 'Enter a name').max(120);
@@ -182,3 +182,20 @@ export const createVoucherSchema = z.object({
   loadMethod: z.enum(['MPESA_STK', 'LOYALTY']).optional(),
 });
 export type CreateVoucherInput = z.infer<typeof createVoucherSchema>;
+
+/**
+ * Top-up of an existing voucher. A Server Action is a public HTTP
+ * endpoint, not an internal function call — its arguments are as
+ * attacker-controlled as any request body, so an amount arriving here
+ * must be bounded at the edge rather than trusted because the UI only
+ * ever sends sensible values.
+ *
+ * The finite() guard matters as much as the range: JSON carries
+ * Infinity and NaN through some parsers, and both slip past a bare
+ * positive() check.
+ */
+export const loadVoucherSchema = z.object({
+  amountKes: kesSchema,
+  method: z.enum(['MPESA_STK', 'LOYALTY']),
+});
+export type LoadVoucherInput = z.infer<typeof loadVoucherSchema>;

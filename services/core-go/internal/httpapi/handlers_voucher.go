@@ -7,20 +7,23 @@ import (
 
 	"github.com/gin-gonic/gin"
 
-	"github.com/esoko/core-go/internal/dbx"
-	"github.com/esoko/core-go/internal/fleetqr"
-	"github.com/esoko/core-go/internal/loyalty"
-	"github.com/esoko/core-go/internal/payments"
+	"github.com/esoqo/core-go/internal/authsvc"
+	"github.com/esoqo/core-go/internal/dbx"
+	"github.com/esoqo/core-go/internal/fleetqr"
+	"github.com/esoqo/core-go/internal/loyalty"
+	"github.com/esoqo/core-go/internal/money"
+	"github.com/esoqo/core-go/internal/notify"
+	"github.com/esoqo/core-go/internal/payments"
 )
 
 type createVoucherRequest struct {
-	Label           string  `json:"label"`
-	Purpose         string  `json:"purpose"`
-	AmountKES       float64 `json:"amountKes"`
-	RecipientMsisdn string  `json:"recipientMsisdn"`
-	LoadMethod      string  `json:"loadMethod"`
-	BuyerMsisdn     string  `json:"buyerMsisdn"`
-	ExpiresInDays   *int    `json:"expiresInDays"`
+	Label           string       `json:"label"`
+	Purpose         string       `json:"purpose"`
+	AmountKES       money.Amount `json:"amountKes"`
+	RecipientMsisdn string       `json:"recipientMsisdn"`
+	LoadMethod      string       `json:"loadMethod"`
+	BuyerMsisdn     string       `json:"buyerMsisdn"`
+	ExpiresInDays   *int         `json:"expiresInDays"`
 }
 
 func voucherToJSON(v *dbx.Voucher, qrSecret string) gin.H {
@@ -32,6 +35,40 @@ func voucherToJSON(v *dbx.Voucher, qrSecret string) gin.H {
 		"ownerPartyId": v.OwnerPartyID, "giftedByPartyId": v.GiftedByPartyID,
 		"expiresAt": v.ExpiresAt, "createdAt": v.CreatedAt,
 	}
+}
+
+// sendVoucherLoadedSms — "value landed on your card", best-effort.
+//
+// Every path that credits a card funnels through here rather than
+// composing its own text: there are four of them (create-with-load,
+// top-up, the loyalty conversions, and the async M-Pesa callback) and
+// a cardholder must not be able to tell which one ran. Silent when
+// there's no phone on file for the owner — see GetVoucherNotifyDetail.
+func (s *Server) sendVoucherLoadedSms(c *gin.Context, load dbx.VoucherLoadResult, method string) {
+	if load.VoucherID == "" || load.CreditedKES <= 0 {
+		return
+	}
+	s.sendVoucherCreditedSms(c, load.VoucherID, load.CreditedKES, method)
+}
+
+// sendVoucherCreditedSms is the same send for callers that already know
+// the card and the amount without a VoucherLoadResult to hand (the
+// loyalty paths, which never touch M-Pesa at all).
+//
+// A gifted card gets the gift wording instead on its very first credit:
+// somebody who did not buy the card and may not know Esoqo needs to be
+// told who sent it, not handed a balance update for a card they have
+// never heard of.
+func (s *Server) sendVoucherCreditedSms(c *gin.Context, voucherID string, amountKES float64, method string) {
+	detail, err := dbx.GetVoucherNotifyDetail(c.Request.Context(), s.Pool, voucherID)
+	if err != nil || detail == nil {
+		return
+	}
+	msg := notify.VoucherLoaded(amountKES, detail.Label, detail.ShortCode, detail.BalanceKES, method)
+	if detail.GiftedByName != "" && detail.BalanceKES <= amountKES {
+		msg = notify.VoucherGifted(amountKES, detail.GiftedByName, detail.Label, detail.ShortCode)
+	}
+	_ = authsvc.SendSms(detail.OwnerMsisdn, msg, "VOUCHER_LOADED")
 }
 
 // POST /v1/vouchers — create card, optionally load via M-Pesa STK or loyalty.
@@ -80,7 +117,7 @@ func (s *Server) handleCreateVoucher(c *gin.Context) {
 	resp := voucherToJSON(v, s.Cfg.FleetQrSecret)
 
 	loadMethod := strings.ToUpper(strings.TrimSpace(req.LoadMethod))
-	if req.AmountKES > 0 && loadMethod != "LOYALTY" {
+	if req.AmountKES.KES() > 0 && loadMethod != "LOYALTY" {
 		msisdn := strings.TrimSpace(req.BuyerMsisdn)
 		if msisdn == "" {
 			// Fall back to own profile msisdn.
@@ -93,9 +130,9 @@ func (s *Server) handleCreateVoucher(c *gin.Context) {
 			c.JSON(http.StatusCreated, gin.H{"voucher": resp})
 			return
 		}
-		points := loyalty.PointsForKES(req.AmountKES)
+		points := loyalty.PointsForKES(req.AmountKES.KES())
 		stk, err := payments.InitiateStkPush(s.Cfg, payments.StkPushRequest{
-			Msisdn: msisdn, AmountKES: req.AmountKES,
+			Msisdn: msisdn, AmountKES: req.AmountKES.KES(),
 			AccountReference: v.ShortCode, Description: "Voucher load",
 		})
 		if err != nil {
@@ -106,7 +143,8 @@ func (s *Server) handleCreateVoucher(c *gin.Context) {
 		_ = dbx.AttachVoucherCheckoutRequestID(c.Request.Context(), s.Pool, v.ID, stk.CheckoutRequestID, points)
 		resp["checkoutRequestId"] = stk.CheckoutRequestID
 		if stk.AutoConfirmed {
-			_ = dbx.ConfirmVoucherLoadByCheckoutID(c.Request.Context(), s.Pool, stk.CheckoutRequestID, stk.MpesaReceiptCode, s.Cfg.LoyaltyEarnEnabled)
+			load, _ := dbx.ConfirmVoucherLoadByCheckoutID(c.Request.Context(), s.Pool, stk.CheckoutRequestID, stk.MpesaReceiptCode, s.Cfg.LoyaltyEarnEnabled)
+			s.sendVoucherLoadedSms(c, load, "M-Pesa")
 			if refreshed, _ := dbx.GetVoucher(c.Request.Context(), s.Pool, v.ID); refreshed != nil {
 				resp = voucherToJSON(refreshed, s.Cfg.FleetQrSecret)
 				resp["status"] = "LOADED"
@@ -114,21 +152,22 @@ func (s *Server) handleCreateVoucher(c *gin.Context) {
 		} else {
 			resp["status"] = "PENDING_LOAD"
 		}
-	} else if loadMethod == "LOYALTY" && req.AmountKES > 0 {
-		points := loyalty.PointsForKES(req.AmountKES)
+	} else if loadMethod == "LOYALTY" && req.AmountKES.KES() > 0 {
+		points := loyalty.PointsForKES(req.AmountKES.KES())
 		if refreshed, err := dbx.LoadVoucherWithLoyalty(c.Request.Context(), s.Pool, ctx, v.ID, points); err != nil {
 			resp["paymentError"] = err.Error()
 		} else {
 			resp = voucherToJSON(refreshed, s.Cfg.FleetQrSecret)
+			s.sendVoucherCreditedSms(c, v.ID, req.AmountKES.KES(), "points")
 		}
 	}
 	c.JSON(http.StatusCreated, gin.H{"voucher": resp})
 }
 
 type loadVoucherRequest struct {
-	AmountKES   float64 `json:"amountKes" binding:"required"`
-	Method      string  `json:"method" binding:"required"`
-	BuyerMsisdn string  `json:"buyerMsisdn"`
+	AmountKES   money.Amount `json:"amountKes" binding:"required"`
+	Method      string       `json:"method" binding:"required"`
+	BuyerMsisdn string       `json:"buyerMsisdn"`
 }
 
 // POST /v1/vouchers/:id/load — top up via M-Pesa or loyalty.
@@ -150,11 +189,12 @@ func (s *Server) handleLoadVoucher(c *gin.Context) {
 	}
 	method := strings.ToUpper(req.Method)
 	if method == "LOYALTY" {
-		refreshed, err := dbx.LoadVoucherWithLoyalty(c.Request.Context(), s.Pool, ctx, v.ID, loyalty.PointsForKES(req.AmountKES))
+		refreshed, err := dbx.LoadVoucherWithLoyalty(c.Request.Context(), s.Pool, ctx, v.ID, loyalty.PointsForKES(req.AmountKES.KES()))
 		if err != nil {
 			writeFleetError(c, err)
 			return
 		}
+		s.sendVoucherCreditedSms(c, v.ID, req.AmountKES.KES(), "points")
 		c.JSON(http.StatusOK, gin.H{"voucher": voucherToJSON(refreshed, s.Cfg.FleetQrSecret)})
 		return
 	}
@@ -165,17 +205,18 @@ func (s *Server) handleLoadVoucher(c *gin.Context) {
 		}
 	}
 	stk, err := payments.InitiateStkPush(s.Cfg, payments.StkPushRequest{
-		Msisdn: msisdn, AmountKES: req.AmountKES,
+		Msisdn: msisdn, AmountKES: req.AmountKES.KES(),
 		AccountReference: v.ShortCode, Description: "Voucher load",
 	})
 	if err != nil {
-		writeError(c, http.StatusBadRequest, "PAYMENT_FAILED", err.Error())
+		writeSafeError(c, http.StatusBadRequest, "PAYMENT_FAILED", err, "Could not start the M-Pesa payment")
 		return
 	}
-	_ = dbx.AttachVoucherCheckoutRequestID(c.Request.Context(), s.Pool, v.ID, stk.CheckoutRequestID, loyalty.PointsForKES(req.AmountKES))
+	_ = dbx.AttachVoucherCheckoutRequestID(c.Request.Context(), s.Pool, v.ID, stk.CheckoutRequestID, loyalty.PointsForKES(req.AmountKES.KES()))
 	resp := gin.H{"checkoutRequestId": stk.CheckoutRequestID, "status": "PENDING_LOAD"}
 	if stk.AutoConfirmed {
-		_ = dbx.ConfirmVoucherLoadByCheckoutID(c.Request.Context(), s.Pool, stk.CheckoutRequestID, stk.MpesaReceiptCode, s.Cfg.LoyaltyEarnEnabled)
+		load, _ := dbx.ConfirmVoucherLoadByCheckoutID(c.Request.Context(), s.Pool, stk.CheckoutRequestID, stk.MpesaReceiptCode, s.Cfg.LoyaltyEarnEnabled)
+		s.sendVoucherLoadedSms(c, load, "M-Pesa")
 		resp["status"] = "LOADED"
 	}
 	c.JSON(http.StatusOK, resp)

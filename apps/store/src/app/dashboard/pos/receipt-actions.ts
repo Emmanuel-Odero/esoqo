@@ -1,16 +1,15 @@
 'use server';
 
-import { issueReceipt, ReceiptError } from '@esoko/db';
-import { sendSms } from '@esoko/auth';
+import { issueReceipt, ReceiptError } from '@esoqo/db';
+import { sendSms } from '@esoqo/auth';
+import { saleReceiptSms } from '@esoqo/domain';
 import { requireStoreAccess } from '@/lib/session';
 
 export type ActionResult = { ok: true; receiptId: string } | { ok: false; error: string };
 
-const kes = (n: number) => 'KES ' + n.toLocaleString('en-KE');
-
 /**
  * Issues a receipt and, for an SMS copy, actually sends it. The DAL only
- * writes the Receipt row — @esoko/db can't depend on @esoko/auth (which
+ * writes the Receipt row — @esoqo/db can't depend on @esoqo/auth (which
  * depends back on it), so the send itself happens here, the one place
  * that already has both.
  */
@@ -23,8 +22,13 @@ export async function issueSaleReceipt(
     const receipt = await issueReceipt(ctx, storeId, input);
 
     if (input.channel === 'SMS' && input.sentTo) {
-      const message = `Receipt ${receipt.receiptNo} — ${kes(Number(receipt.totalKes))}${receipt.etimsSerial ? ` — eTIMS ${receipt.etimsSerial}` : ''}. Thank you for shopping with us.`;
-      await sendSms(input.sentTo, message);
+      const message = saleReceiptSms({
+        storeName: receipt.storeName,
+        receiptNo: receipt.receiptNo,
+        totalKes: Number(receipt.totalKes),
+        etimsSerial: receipt.etimsSerial,
+      });
+      await sendSms(input.sentTo, message, 'sale-receipt');
     }
 
     return { ok: true, receiptId: receipt.id };

@@ -1,6 +1,6 @@
 'use server';
 import { revalidatePath } from 'next/cache';
-import { setDisplayPrefs, type DisplayPrefs } from '@esoko/db';
+import { setDisplayPrefs, type DisplayPrefs } from '@esoqo/db';
 import { requireSubject } from '@/lib/session';
 
 export async function actionSetPrefs(prefs: DisplayPrefs) {

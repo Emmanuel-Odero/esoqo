@@ -9,7 +9,7 @@
     {
       "type": "prose",
       "body": [
-        "Our Jamii is built and run by Esoko, CECF's digital-platform partner for registration and formalisation. It is not a separate signup — every group that comes through CECF's registration already has an Esoko account, and Our Jamii is switched on from the same one."
+        "Our Jamii is built and run by Esoqo, CECF's digital-platform partner for registration and formalisation. It is not a separate signup — every group that comes through CECF's registration already has an Esoqo account, and Our Jamii is switched on from the same one."
       ]
     },
     {
@@ -43,7 +43,7 @@
       "heading": "Built on the same registration you already did",
       "prose": [
         "There is nothing extra to fill in. The name, leadership and location CECF captured when your group registered is what your Our Jamii page starts from — your team only ever adds to it, never re-enters it.",
-        "Every donation your page receives is posted to the same ledger and receipt system Esoko already uses for registration fees and group contributions, so a gift to your campaign is accounted for exactly as carefully as any other money moving through your group's account."
+        "Every donation your page receives is posted to the same ledger and receipt system Esoqo already uses for registration fees and group contributions, so a gift to your campaign is accounted for exactly as carefully as any other money moving through your group's account."
       ],
       "media": {
         "type": "illustration",
@@ -54,7 +54,7 @@
     {
       "type": "note",
       "variant": "info",
-      "body": "<strong>Free for every CECF-registered group and MSME.</strong> There is no separate charge to have a page or to run a campaign — Esoko&#039;s own transaction fees apply only to money actually raised, the same standard M-Pesa charges you would pay collecting the same money any other way."
+      "body": "<strong>Free for every CECF-registered group and MSME.</strong> There is no separate charge to have a page or to run a campaign — Esoqo&#039;s own transaction fees apply only to money actually raised, the same standard M-Pesa charges you would pay collecting the same money any other way."
     },
     {
       "type": "ctaBand",

@@ -1,7 +1,7 @@
 /* ══════════════════════════════════════════════════════════════
-   Esoko shared UI — canonical primitives.
+   Esoqo shared UI — canonical primitives.
    Single source of truth for .btn .card .inp .note .pill .tbl etc.
-   Apps should import '@esoko/ui/ui.css' after tokens.css and treat
+   Apps should import '@esoqo/ui/ui.css' after tokens.css and treat
    their local app.css as page-specific overrides only.
    ══════════════════════════════════════════════════════════════ */
 

@@ -1,8 +1,8 @@
 'use client';
 
 import { useEffect, useRef, useState, useTransition } from 'react';
-import { Icon, type IconName } from '@esoko/ui';
-import { useAnnounce } from '@esoko/a11y';
+import { Icon, type IconName } from '@esoqo/ui';
+import { useAnnounce } from '@esoqo/a11y';
 import {
   actionUpload, actionListDocuments, actionRemoveDocument,
   actionDeclarePayment, actionDeferPayment,
@@ -480,7 +480,7 @@ export function PaymentStep({
               onChange={(e) => setMethod(e.target.value as 'MPESA')}>
               <option value="MPESA">M-Pesa</option>
               <option value="BANK_TRANSFER">Bank transfer</option>
-              <option value="CASH_TO_AGENT">Cash to an Esoko officer</option>
+              <option value="CASH_TO_AGENT">Cash to an Esoqo officer</option>
             </select>
           </div>
 

@@ -7,13 +7,15 @@ import type { Ctx } from './capabilities';
  *
  * Each row's hash covers the previous row's hash plus a canonical
  * serialisation of this row. Altering or deleting any row breaks every
- * hash after it, and `pnpm --filter @esoko/db audit:verify` will name
+ * hash after it, and `pnpm --filter @esoqo/db audit:verify` will name
  * the first broken link.
  *
  * This exists because a regulator will eventually ask, and because
  * "trust us, we log things" is not an answer.
  */
 
+// Pre-rename spelling, deliberately: every hash already in the chain
+// was computed from this seed, so changing it invalidates the lot.
 const CHAIN_SEED = process.env.AUDIT_CHAIN_SEED ?? 'esoko-genesis';
 
 /**

@@ -1,8 +1,8 @@
 'use server';
 import { revalidatePath } from 'next/cache';
 import { cookies } from 'next/headers';
-import { SESSION_COOKIE } from '@esoko/auth';
-import { createVoucherSchema } from '@esoko/domain';
+import { SESSION_COOKIE } from '@esoqo/auth';
+import { createVoucherSchema, loadVoucherSchema } from '@esoqo/domain';
 import { goFetch } from '@/lib/ticketing';
 
 async function token() {
@@ -22,10 +22,14 @@ export async function actionCreateVoucher(raw: unknown) {
   }
 }
 
-export async function actionLoadVoucher(id: string, raw: { amountKes: number; method: string }) {
+export async function actionLoadVoucher(id: string, raw: unknown) {
+  // Typed as unknown, not {amountKes:number}: the TypeScript annotation
+  // is erased at runtime and this entry point is reachable by anyone.
+  const parsed = loadVoucherSchema.safeParse(raw);
+  if (!parsed.success) return { ok: false as const, error: parsed.error.issues[0]?.message ?? 'Check the amount.' };
   try {
     const t = await token();
-    await goFetch(`/v1/vouchers/${id}/load`, t, { method: 'POST', body: JSON.stringify(raw) });
+    await goFetch(`/v1/vouchers/${id}/load`, t, { method: 'POST', body: JSON.stringify(parsed.data) });
     revalidatePath('/me/vouchers');
     return { ok: true as const };
   } catch (e) {

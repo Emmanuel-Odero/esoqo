@@ -4,11 +4,11 @@ import { headers } from 'next/headers';
 import {
   findSubjectCredential, recordSignInSuccess, recordSignInFailure, setSubjectPin, SetPinError,
   acceptPendingInvites, hasJamiiAccess,
-} from '@esoko/db';
+} from '@esoqo/db';
 import {
   verifyPin, hashPin, isWeakPin, issueOtp, verifyOtp, OtpError, checkRateLimit, RateLimitError,
-} from '@esoko/auth';
-import { signInSchema, requestPinCodeSchema, setPinSchema } from '@esoko/domain';
+} from '@esoqo/auth';
+import { signInSchema, requestPinCodeSchema, setPinSchema, clientIpFrom } from '@esoqo/domain';
 import { startSession } from '@/lib/session';
 
 export type ActionResult<T = void> = {
@@ -20,7 +20,7 @@ export type ActionResult<T = void> = {
    *  `matched`). The UI sends either case to /apply instead of a
    *  generic retry. */
   notMember?: boolean;
-  /** Only meaningful alongside notMember: true — an existing CECF/Esoko
+  /** Only meaningful alongside notMember: true — an existing CECF/Esoqo
    *  Person was found, just not yet approved for Our Jamii, so /apply
    *  can skip straight to the lightweight "we found you" confirmation
    *  instead of the full application form. */
@@ -29,16 +29,16 @@ export type ActionResult<T = void> = {
 
 async function clientIp(): Promise<string> {
   const h = await headers();
-  return h.get('x-forwarded-for')?.split(',')[0]?.trim() ?? 'unknown';
+  return clientIpFrom((n) => h.get(n)) ?? 'unknown';
 }
 
 /**
- * Phone OR email + PIN — same credentials as the rest of Esoko. A
+ * Phone OR email + PIN — same credentials as the rest of Esoqo. A
  * PUBLIC HTTP ENDPOINT wearing a function signature, mirroring
  * apps/store's actionSignIn exactly.
  *
  * hasJamiiAccess is checked here too, not just before an OTP is issued
- * — the PIN itself is one shared Esoko credential (see UserCredential),
+ * — the PIN itself is one shared Esoqo credential (see UserCredential),
  * so someone could have set it through CECF's own join funnel in
  * apps/app without ever going through /apply. A correct PIN alone must
  * never be enough to reach the Our Jamii dashboard.

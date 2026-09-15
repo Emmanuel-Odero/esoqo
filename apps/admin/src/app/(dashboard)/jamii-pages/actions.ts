@@ -4,8 +4,8 @@ import {
   moderateJamiiPage, issueOrgPageVerification, revokeOrgPageVerification, type JamiiPageStatus,
   inviteTeamMember, removeTeamMember, listTeamMembers, type JamiiTeamRole,
   suspendJamiiDomain, reinstateJamiiDomain, staffRemoveJamiiDomain,
-} from '@esoko/db';
-import { toSafeErrorMessage } from '@esoko/domain';
+} from '@esoqo/db';
+import { toSafeErrorMessage } from '@esoqo/domain';
 import { requireStaff } from '@/lib/session';
 
 export type Result = { ok: true } | { ok: false; error: string };

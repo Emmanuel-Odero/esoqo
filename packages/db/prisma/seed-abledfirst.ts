@@ -15,7 +15,7 @@ const prisma = new PrismaClient();
  * invented — see docs/proposals/our-jamii-custom-domains.md.
  *
  * Idempotent: reruns delete and recreate this org's page by slug, so
- * `pnpm --filter @esoko/db seed:abledfirst` is safe to run more than
+ * `pnpm --filter @esoqo/db seed:abledfirst` is safe to run more than
  * once while iterating on the homepage template.
  */
 
@@ -29,7 +29,7 @@ const ABOUT_US = [
   'Everything we run is designed with the people it serves, not for them. Members sit on our programme committees, self-advocates lead our community forums, and no project is signed off without the voices of the people it affects. "Nothing about us, without us" is not a slogan we borrowed — it is how our programmes are built.',
 ].join('\n\n');
 
-// icon values are @esoko/ui IconNames (see JAMII_PROGRAM_ICONS in
+// icon values are @esoqo/ui IconNames (see JAMII_PROGRAM_ICONS in
 // packages/domain/src/jamii.ts) — never emoji, per that package's
 // product-wide rule.
 const PROGRAMS: { title: string; body: string; icon: string }[] = [

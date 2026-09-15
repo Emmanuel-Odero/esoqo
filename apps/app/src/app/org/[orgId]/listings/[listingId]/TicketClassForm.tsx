@@ -1,8 +1,8 @@
 'use client';
 import { useState, useTransition } from 'react';
-import { Icon } from '@esoko/ui';
-import { useAnnounce } from '@esoko/a11y';
-import { AMENITY_TAGS, type AmenityTag } from '@esoko/domain';
+import { Icon } from '@esoqo/ui';
+import { useAnnounce } from '@esoqo/a11y';
+import { AMENITY_TAGS, type AmenityTag } from '@esoqo/domain';
 import { actionCreateTicketClass } from '../actions';
 
 const AMENITY_LABELS: Record<AmenityTag, string> = {

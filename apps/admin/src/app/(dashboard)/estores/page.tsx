@@ -1,7 +1,7 @@
 import Link from 'next/link';
 import type { Route } from 'next';
-import { Icon } from '@esoko/ui';
-import { getEstoreOverview } from '@esoko/db';
+import { Icon } from '@esoqo/ui';
+import { getEstoreOverview } from '@esoqo/db';
 import { requireStaff } from '@/lib/session';
 import { DailyBarChart, DonutChart, RankedBarChart } from '@/components/charts';
 

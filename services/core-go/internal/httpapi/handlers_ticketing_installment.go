@@ -5,8 +5,9 @@ import (
 
 	"github.com/gin-gonic/gin"
 
-	"github.com/esoko/core-go/internal/dbx"
-	"github.com/esoko/core-go/internal/payments"
+	"github.com/esoqo/core-go/internal/dbx"
+	"github.com/esoqo/core-go/internal/money"
+	"github.com/esoqo/core-go/internal/payments"
 )
 
 // ── POST /v1/bookings/installment ────────────────────────────────
@@ -17,11 +18,11 @@ import (
 // POST /v1/bookings).
 
 type openPlanRequest struct {
-	ScheduleID  string  `json:"scheduleId" binding:"required"`
-	BuyerName   string  `json:"buyerName" binding:"required"`
-	BuyerMsisdn string  `json:"buyerMsisdn" binding:"required"`
-	BuyerEmail  *string `json:"buyerEmail"`
-	DepositKES  float64 `json:"depositKes" binding:"required"`
+	ScheduleID  string       `json:"scheduleId" binding:"required"`
+	BuyerName   string       `json:"buyerName" binding:"required"`
+	BuyerMsisdn string       `json:"buyerMsisdn" binding:"required"`
+	BuyerEmail  *string      `json:"buyerEmail"`
+	DepositKES  money.Amount `json:"depositKes" binding:"required"`
 	Lines       []struct {
 		TicketClassID string  `json:"ticketClassId" binding:"required"`
 		HolderName    *string `json:"holderName"`
@@ -44,7 +45,7 @@ func (s *Server) handleOpenInstallmentPlan(c *gin.Context) {
 	plan, err := dbx.OpenInstallmentPlan(c.Request.Context(), s.Pool, dbx.OpenPlanInput{
 		ScheduleID: req.ScheduleID, BuyerPartyID: optionalBuyerPartyID(c, s),
 		BuyerName: req.BuyerName, BuyerMsisdn: req.BuyerMsisdn, BuyerEmail: req.BuyerEmail,
-		Lines: lines, DepositKES: req.DepositKES,
+		Lines: lines, DepositKES: req.DepositKES.KES(),
 	})
 	if err != nil {
 		writeInstallmentError(c, err)
@@ -85,7 +86,7 @@ func (s *Server) handleOpenInstallmentPlan(c *gin.Context) {
 // secret (no bearer needed).
 
 type payBalanceRequest struct {
-	AmountKES float64 `json:"amountKes" binding:"required"`
+	AmountKES money.Amount `json:"amountKes" binding:"required"`
 }
 
 func (s *Server) handlePayBookingBalance(c *gin.Context) {
@@ -96,7 +97,7 @@ func (s *Server) handlePayBookingBalance(c *gin.Context) {
 	}
 
 	bookingID := c.Param("id")
-	payment, err := dbx.CreateBalancePayment(c.Request.Context(), s.Pool, bookingID, optionalBuyerPartyID(c, s), req.AmountKES)
+	payment, err := dbx.CreateBalancePayment(c.Request.Context(), s.Pool, bookingID, optionalBuyerPartyID(c, s), req.AmountKES.KES())
 	if err != nil {
 		writeInstallmentError(c, err)
 		return

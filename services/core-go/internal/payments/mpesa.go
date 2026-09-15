@@ -14,9 +14,10 @@ import (
 	"math/big"
 	"net/http"
 	"regexp"
+	"strconv"
 	"time"
 
-	"github.com/esoko/core-go/internal/config"
+	"github.com/esoqo/core-go/internal/config"
 )
 
 const (
@@ -230,6 +231,15 @@ type StkCallbackResult struct {
 	Succeeded         bool
 	ResultDescription string
 	MpesaReceiptCode  string
+
+	// Amount and PayerMsisdn come from CallbackMetadata on a successful
+	// push. Daraja signs nothing, so these are the only payload fields
+	// that can be cross-checked against what we asked the payer for —
+	// see dbx.VerifyCallbackAmount's callers. AmountPresent distinguishes
+	// "Daraja omitted Amount" from a genuine zero.
+	Amount        float64
+	AmountPresent bool
+	PayerMsisdn   string
 }
 
 // ParseStkCallback is a pure parser — no side effects, matches
@@ -248,7 +258,9 @@ func ParseStkCallback(body map[string]interface{}) *StkCallbackResult {
 		return nil
 	}
 
-	var receipt string
+	var receipt, payer string
+	var amount float64
+	var amountPresent bool
 	if meta, ok := cb["CallbackMetadata"].(map[string]interface{}); ok {
 		if items, ok := meta["Item"].([]interface{}); ok {
 			for _, it := range items {
@@ -256,9 +268,29 @@ func ParseStkCallback(body map[string]interface{}) *StkCallbackResult {
 				if !ok {
 					continue
 				}
-				if item["Name"] == "MpesaReceiptNumber" {
+				switch item["Name"] {
+				case "MpesaReceiptNumber":
 					if v, ok := item["Value"].(string); ok {
 						receipt = v
+					}
+				case "Amount":
+					// Daraja sends this as a JSON number, but sandbox has
+					// been seen to quote it — accept both rather than
+					// silently losing the only amount we can verify.
+					switch v := item["Value"].(type) {
+					case float64:
+						amount, amountPresent = v, true
+					case string:
+						if f, err := strconv.ParseFloat(v, 64); err == nil {
+							amount, amountPresent = f, true
+						}
+					}
+				case "PhoneNumber":
+					switch v := item["Value"].(type) {
+					case string:
+						payer = v
+					case float64:
+						payer = strconv.FormatFloat(v, 'f', -1, 64)
 					}
 				}
 			}
@@ -273,5 +305,8 @@ func ParseStkCallback(body map[string]interface{}) *StkCallbackResult {
 		Succeeded:         resultCode == 0,
 		ResultDescription: resultDesc,
 		MpesaReceiptCode:  receipt,
+		Amount:            amount,
+		AmountPresent:     amountPresent,
+		PayerMsisdn:       payer,
 	}
 }

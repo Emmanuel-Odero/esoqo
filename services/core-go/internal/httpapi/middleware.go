@@ -6,19 +6,19 @@ import (
 
 	"github.com/gin-gonic/gin"
 
-	"github.com/esoko/core-go/internal/authsvc"
-	"github.com/esoko/core-go/internal/dbx"
+	"github.com/esoqo/core-go/internal/authsvc"
+	"github.com/esoqo/core-go/internal/dbx"
 )
 
 // orgContextHeader — a SUBJECT that has activated staff duty for one org
 // (see authsvc.OrgContextService / docs/proposals/
-// esoko-unified-crew-identity.md) sends this on org-scoped requests to
+// esoqo-unified-crew-identity.md) sends this on org-scoped requests to
 // say which org they mean to act for. Absence just means "acting as
 // myself" — it is never required, and never trusted on its own; see the
 // live re-check below.
-const orgContextHeader = "X-Esoko-Org-Context"
+const orgContextHeader = "X-Esoqo-Org-Context"
 
-const ctxKey = "esoko_ctx"
+const ctxKey = "esoqo_ctx"
 
 // authRequired is the mobile equivalent of ctxFromToken in
 // packages/auth/src/session.ts: the only place a Ctx is built from a

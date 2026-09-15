@@ -1,10 +1,10 @@
 import Link from 'next/link';
-import { Icon } from '@esoko/ui';
+import { Icon } from '@esoqo/ui';
 import {
   getJamiiPageCounts, getCampaignCountsForStaff, getDonationTotalsForStaff,
   getSupportTicketCountsForStaff, listJamiiInterests, getSiteVisitLeaderboard,
   getSiteVisitDomainSplit, getDonorRepeatRate, can,
-} from '@esoko/db';
+} from '@esoqo/db';
 import { requireStaff } from '@/lib/session';
 import { DonutChart, RankedBarChart } from '@/components/charts';
 

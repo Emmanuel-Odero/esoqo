@@ -1,5 +1,5 @@
 import { notFound } from 'next/navigation';
-import { listJamiiNavItemsPublic } from '@esoko/db';
+import { listJamiiNavItemsPublic } from '@esoqo/db';
 import { OrgHeader } from './OrgHeader';
 import { OrgSubnav } from './OrgSubnav';
 import { OrgSidebar } from './OrgSidebar';

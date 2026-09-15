@@ -1,4 +1,4 @@
-import { listActiveMediaAssets } from '@esoko/db';
+import { listActiveMediaAssets } from '@esoqo/db';
 import { OrgSectionShell, loadOrgOr404 } from '@/components/OrgSectionShell';
 import { MediaPlaceholder } from '@/components/placeholders/patterns';
 import { getOrgLinkMode } from '@/lib/org-links';

@@ -1,6 +1,6 @@
 import Link from 'next/link';
-import { Icon } from '@esoko/ui';
-import { getGroup, getGroupAnalytics, listDocumentsForParty } from '@esoko/db';
+import { Icon } from '@esoqo/ui';
+import { getGroup, getGroupAnalytics, listDocumentsForParty } from '@esoqo/db';
 import { requireStaff } from '@/lib/session';
 import { RankedBarChart } from '@/components/charts';
 import { actionListTenants, actionListStorageAgreements } from '../actions';

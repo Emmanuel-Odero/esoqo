@@ -1,7 +1,7 @@
 import type { Metadata } from 'next';
 import { notFound } from 'next/navigation';
-import { Icon } from '@esoko/ui';
-import { getMyRecord } from '@esoko/db';
+import { Icon } from '@esoqo/ui';
+import { getMyRecord } from '@esoqo/db';
 import { getCtx } from '@/lib/session';
 import { BookingForm } from './BookingForm';
 

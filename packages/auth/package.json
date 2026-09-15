@@ -1,5 +1,5 @@
 {
-  "name": "@esoko/auth",
+  "name": "@esoqo/auth",
   "version": "0.1.0",
   "private": true,
   "main": "./src/index.ts",
@@ -13,8 +13,8 @@
     "@node-rs/argon2": "^2.0.2",
     "ioredis": "^5.4.2",
     "nodemailer": "^6.9.16",
-    "@esoko/db": "workspace:*",
-    "@esoko/domain": "workspace:*"
+    "@esoqo/db": "workspace:*",
+    "@esoqo/domain": "workspace:*"
   },
   "devDependencies": { "@types/nodemailer": "^6.4.17", "typescript": "^5.7.2" }
 }

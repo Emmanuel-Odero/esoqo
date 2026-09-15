@@ -1,0 +1,43 @@
+/// Barrel for the shared component library — see each file's own doc
+/// comment for what duplicated pattern it replaces.
+library;
+
+export 'async_view.dart';
+export 'esoqo_amount_dialog.dart';
+export 'esoqo_amount_text.dart';
+export 'esoqo_app_bar.dart';
+export 'esoqo_adaptive_body.dart';
+export 'esoqo_attention_card.dart';
+export 'esoqo_auth_scaffold.dart';
+export 'esoqo_button.dart';
+export 'esoqo_card.dart';
+export 'esoqo_detail_header.dart';
+export 'esoqo_dropdown.dart';
+export 'esoqo_empty_state.dart';
+export 'esoqo_error_view.dart';
+export 'esoqo_form_error.dart';
+export 'esoqo_field.dart';
+export 'esoqo_haptics.dart';
+export 'esoqo_icon.dart';
+export 'esoqo_inline_notice.dart';
+export 'esoqo_list_tile.dart';
+export 'esoqo_logo.dart';
+export 'esoqo_page_lead.dart';
+export 'esoqo_payer_fields.dart';
+export 'esoqo_quick_action_icon.dart';
+export 'esoqo_result_view.dart';
+export 'esoqo_role_lead.dart';
+export 'esoqo_search_field.dart';
+export 'esoqo_section_header.dart';
+export 'esoqo_segmented_toggle.dart';
+export 'esoqo_service_scaffold.dart';
+export 'esoqo_service_tile.dart';
+export 'esoqo_skeleton.dart';
+export 'esoqo_sliver_async_view.dart';
+export 'esoqo_stagger.dart';
+export 'esoqo_star_rating.dart';
+export 'esoqo_status_badge.dart';
+export 'esoqo_status_pill.dart';
+export 'esoqo_stepper.dart';
+export 'esoqo_sub_header.dart';
+export 'pin_prompt_dialog.dart';

@@ -1,4 +1,4 @@
-import { listDonationsForPage } from '@esoko/db';
+import { listDonationsForPage } from '@esoqo/db';
 import { requireMyPage } from '@/lib/session';
 
 export default async function DonorsScreen() {

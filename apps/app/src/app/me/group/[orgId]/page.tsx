@@ -1,8 +1,8 @@
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import type { Route } from 'next';
-import { Icon } from '@esoko/ui';
-import { getMyRecord, getGroupBalance, listMyGroupMembers } from '@esoko/db';
+import { Icon } from '@esoqo/ui';
+import { getMyRecord, getGroupBalance, listMyGroupMembers } from '@esoqo/db';
 import { requireSubject } from '@/lib/session';
 import { MembersPanel, type MemberRow } from './MembersPanel';
 

@@ -1,9 +1,9 @@
-import { Icon } from '@esoko/ui';
+import { Icon } from '@esoqo/ui';
 
 /**
- * The "why join" column, for esoko's own membership. Previously
+ * The "why join" column, for esoqo's own membership. Previously
  * reframed around a CECF-led page ("CECF is who you join"); this flow
- * is esoko's own registration now, so the copy speaks for esoko
+ * is esoqo's own registration now, so the copy speaks for esoqo
  * directly rather than the toolkit behind someone else's membership.
  */
 export function WhyJoin() {
@@ -12,7 +12,7 @@ export function WhyJoin() {
       <p className="join-hero-eyebrow">Your membership carries</p>
       <h2 id="why-join-h">A record you can trade with</h2>
       <p className="lede">
-        One registration — for yourself, your group or your business — opens Esoko&rsquo;s
+        One registration — for yourself, your group or your business — opens Esoqo&rsquo;s
         tools straight away: market prices, payments and receipts, and a history that
         works for you with a bank or a buyer.
       </p>

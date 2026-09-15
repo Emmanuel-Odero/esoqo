@@ -14,7 +14,7 @@ const prisma = new PrismaClient();
  * Idempotent: a value that's already HTML (starts with a tag after
  * trimming) is left untouched, so reruns are harmless.
  *
- * Run with: pnpm --filter @esoko/db backfill:rich-text
+ * Run with: pnpm --filter @esoqo/db backfill:rich-text
  */
 
 function looksLikeHtml(value: string): boolean {

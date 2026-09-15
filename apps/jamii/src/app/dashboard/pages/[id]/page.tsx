@@ -3,7 +3,7 @@ import Link from 'next/link';
 import type { Route } from 'next';
 import {
   getJamiiPageForManagement, getJamiiSitePageForDashboard, listJamiiPageBlocksForDashboard,
-} from '@esoko/db';
+} from '@esoqo/db';
 import { requireMyPage } from '@/lib/session';
 import { BlockEditor } from '../../_pages/BlockEditor';
 import { PageMetaForm } from './PageMetaForm';

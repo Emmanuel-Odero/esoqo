@@ -1,4 +1,4 @@
-import type { JamiiBlockType } from '@esoko/db';
+import type { JamiiBlockType } from '@esoqo/db';
 
 export interface EditableBlock {
   id?: string;

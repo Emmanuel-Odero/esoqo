@@ -1,8 +1,8 @@
 'use client';
 
 import type { RefObject } from 'react';
-import { Icon } from '@esoko/ui';
-import { COUNTIES, LIVE_COUNTIES } from '@esoko/domain';
+import { Icon } from '@esoqo/ui';
+import { COUNTIES, LIVE_COUNTIES } from '@esoqo/domain';
 import { SearchCombobox } from '../SearchCombobox';
 import { normaliseMsisdnLive, type Form } from '../form';
 

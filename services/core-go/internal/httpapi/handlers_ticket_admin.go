@@ -6,7 +6,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 
-	"github.com/esoko/core-go/internal/dbx"
+	"github.com/esoqo/core-go/internal/dbx"
 )
 
 // Platform oversight — STAFF sessions (admin cookie forwarded as

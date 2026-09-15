@@ -1,6 +1,6 @@
 import Link from 'next/link';
 import type { Route } from 'next';
-import { Icon, type IconName } from '@esoko/ui';
+import { Icon, type IconName } from '@esoqo/ui';
 
 /** Sub-nav for one organiser's console — Overview plus whichever
  *  management tabs the signed-in staff member can act on. Mirrors the

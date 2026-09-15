@@ -1,8 +1,8 @@
 'use client';
 
 import { useCallback, useEffect, useRef, useState, useTransition } from 'react';
-import { Icon } from '@esoko/ui';
-import { useAnnounce, VisuallyHidden } from '@esoko/a11y';
+import { Icon } from '@esoqo/ui';
+import { useAnnounce, VisuallyHidden } from '@esoqo/a11y';
 import {
   actionStart, actionSaveNames, actionSaveContact, actionSaveWork,
   actionSaveStanding, actionComplete,
@@ -228,7 +228,7 @@ export function JoinFlow() {
           wantsExpirySms: f.wantsExpirySms,
           acceptedTerms: true,
         });
-        handle(r, () => { setDone(true); announce('Registration sent. Welcome to Esoko.', 'assertive'); });
+        handle(r, () => { setDone(true); announce('Registration sent. Welcome to Esoqo.', 'assertive'); });
       });
     }
   }
@@ -286,7 +286,7 @@ export function JoinFlow() {
         <span className="icbox" style={{ background: 'var(--green-t)', color: 'var(--green)', width: 52, height: 52, borderRadius: 13 }}>
           <Icon name="check-circle" size={28} />
         </span>
-        <h2 className="qh" style={{ marginTop: 18 }}>Welcome to Esoko</h2>
+        <h2 className="qh" style={{ marginTop: 18 }}>Welcome to Esoqo</h2>
         <p className="qs">
           Your membership is in — your tools are ready. Nothing else moves unless you say so.
         </p>
@@ -330,7 +330,7 @@ export function JoinFlow() {
           conversation about what you need to see and what you require.
         </p>
         <p className="hint">
-          Write to <strong style={{ color: 'var(--navy)' }}>partners@esoko.co.ke</strong>, or see
+          Write to <strong style={{ color: 'var(--navy)' }}>partners@esoqo.co.ke</strong>, or see
           the institutions page for who is already connected and what each requires.
         </p>
         <div className="nav">
@@ -345,9 +345,9 @@ export function JoinFlow() {
   return (
     <>
       {/* One-line reassurance above the card on narrow screens — desktop
-          shows the "why Esoko" hero beside the form instead. */}
+          shows the "why Esoqo" hero beside the form instead. */}
       <p className="jtrust">
-        <span>An Esoko membership</span><span className="jt" aria-hidden="true">·</span>
+        <span>An Esoqo membership</span><span className="jt" aria-hidden="true">·</span>
         <span>Free — and it stays free</span><span className="jt" aria-hidden="true">·</span>
         <span>Shared only when you say so</span>
       </p>
@@ -480,7 +480,7 @@ export function JoinFlow() {
         <span className="icbox" style={{ background: 'var(--green-t)', color: 'var(--green)', marginBottom: 12 }}>
           <Icon name="keypad" size={21} />
         </span>
-        <h3 style={{ marginBottom: 8 }}>Or join Esoko without the internet</h3>
+        <h3 style={{ marginBottom: 8 }}>Or join Esoqo without the internet</h3>
         <p style={{ fontSize: '.93rem', color: 'var(--tx-2)', margin: 0 }}>
           Dial <strong className="mono" style={{ color: 'var(--navy)' }}>*483*77#</strong> from the
           handset you want to register and answer the same questions. No identity

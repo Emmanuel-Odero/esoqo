@@ -2,8 +2,8 @@
 
 import { useState, useTransition } from 'react';
 import { useRouter } from 'next/navigation';
-import { Icon, type IconName } from '@esoko/ui';
-import { JAMII_PROGRAM_ICONS } from '@esoko/domain';
+import { Icon, type IconName } from '@esoqo/ui';
+import { JAMII_PROGRAM_ICONS } from '@esoqo/domain';
 import { RichTextEditor } from '@/components/RichTextEditor';
 import { actionCreateProgram, actionUpdateProgram, actionDeleteProgram } from '../actions';
 

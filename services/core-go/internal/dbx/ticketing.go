@@ -14,9 +14,10 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 
-	"github.com/esoko/core-go/internal/fleetqr"
-	"github.com/esoko/core-go/internal/ledger"
-	"github.com/esoko/core-go/internal/loyalty"
+	"github.com/esoqo/core-go/internal/fleetqr"
+	"github.com/esoqo/core-go/internal/ledger"
+	"github.com/esoqo/core-go/internal/loyalty"
+	"github.com/esoqo/core-go/internal/money"
 )
 
 func earnUnifiedLoyaltyTicket(ctx context.Context, pool *pgxpool.Pool, partyID string, kes float64, ref string) error {
@@ -532,16 +533,16 @@ func settleBookingVoucher(ctx context.Context, pool *pgxpool.Pool, bookingID, vo
 	if err != nil {
 		return err
 	}
-	revenue, err := ledger.EnsureAccount(ctx, pool, &orgEnterpriseParty, "SUSPENSE", "KES")
+	revenue, err := ledger.EnsureAccount(ctx, pool, &orgEnterpriseParty, "TICKET_REVENUE", "KES")
 	if err != nil {
 		return err
 	}
 	entryID, err := ledger.PostEntry(ctx, pool, "booking:"+bookingID, "Ticket booking voucher payment", "core-go:booking:"+bookingID,
-		[]ledger.Posting{{AccountID: settlement, AmountKES: total}, {AccountID: revenue, AmountKES: -total}})
+		[]ledger.Posting{{AccountID: settlement, AmountCents: ledger.CentsFromKES(total)}, {AccountID: revenue, AmountCents: ledger.CentsFromKES(-total)}})
 	if err != nil {
 		return err
 	}
-	if err := SpendVoucher(ctx, pool, voucherID, "GENERAL", int(total*10+0.5), "booking:"+bookingID, entryID); err != nil {
+	if err := SpendVoucher(ctx, pool, voucherID, "GENERAL", money.FromKES(total).Points(), "booking:"+bookingID, entryID); err != nil {
 		if _, ok := err.(*FleetError); ok {
 			return &BookingError{"VOUCHER_FAILED", err.Error()}
 		}
@@ -556,7 +557,7 @@ func settleBookingVoucher(ctx context.Context, pool *pgxpool.Pool, bookingID, vo
 }
 
 func generateTicketCode() (string, error) {
-	// Same unambiguous alphabet + unbiased sampling as every other Esoko
+	// Same unambiguous alphabet + unbiased sampling as every other Esoqo
 	// short code (see fleetqr). Space is 31^10 ≈ 8×10^14 and ticket.code
 	// is @unique, so collisions are not worth a retry loop — a clash
 	// would fail the whole booking transaction, which is vanishingly
@@ -577,12 +578,13 @@ var ErrBookingNotFound = errors.New("no booking for that checkout request")
 // plain (non-installment) path: idempotent on checkoutRequestId, posts
 // to the ledger, earns ticket loyalty if the org has it enabled.
 //
-// AccountKind has no TICKET_REVENUE-equivalent value yet (only
-// STORE_REVENUE/WAREHOUSE_REVENUE exist for commerce) — this posts
-// against SUSPENSE, keyed to the ticket org's enterprise party, as an
-// honest placeholder rather than inventing a schema value core-go can't
-// migrate on its own. Flagged, not silent — see the plan this shipped
-// from.
+// Posts to TICKET_REVENUE, keyed to the ticket org's enterprise party.
+// This used to post against SUSPENSE as a flagged placeholder, because
+// AccountKind had no ticketing equivalent of
+// STORE_REVENUE/WAREHOUSE_REVENUE. It does now (migration
+// 20260913000000), and the balances that accumulated in SUSPENSE were
+// moved across by a reclassification entry rather than an UPDATE — see
+// migration 20260913000100 and docs/proposals/money-representation.md.
 func ConfirmBookingPaymentByCheckoutID(ctx context.Context, pool *pgxpool.Pool, checkoutRequestID string, loyaltyEnabled bool) error {
 	var bookingID, status, totalKESText, ticketCustomerID, buyerParty string
 	err := pool.QueryRow(ctx, `
@@ -621,13 +623,13 @@ func ConfirmBookingPaymentByCheckoutID(ctx context.Context, pool *pgxpool.Pool, 
 	if err != nil {
 		return err
 	}
-	revenueAcct, err := ledger.EnsureAccount(ctx, pool, &orgEnterprisePartyID, "SUSPENSE", "KES")
+	revenueAcct, err := ledger.EnsureAccount(ctx, pool, &orgEnterprisePartyID, "TICKET_REVENUE", "KES")
 	if err != nil {
 		return err
 	}
 	journalEntryID, err := ledger.PostEntry(ctx, pool,
 		"booking:"+bookingID, "Ticket booking payment", "core-go:booking:"+bookingID,
-		[]ledger.Posting{{AccountID: settlementAcct, AmountKES: totalKES}, {AccountID: revenueAcct, AmountKES: -totalKES}})
+		[]ledger.Posting{{AccountID: settlementAcct, AmountCents: ledger.CentsFromKES(totalKES)}, {AccountID: revenueAcct, AmountCents: ledger.CentsFromKES(-totalKES)}})
 	if err != nil {
 		return err
 	}

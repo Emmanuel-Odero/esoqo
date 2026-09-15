@@ -13,7 +13,7 @@ export interface InviteTeamMemberInput {
 /**
  * Invites someone to manage a page. If their email already belongs to a
  * registered Person, the row links immediately (`acceptedAt` set) — no
- * separate invite-acceptance flow needed for someone already on Esoko.
+ * separate invite-acceptance flow needed for someone already on Esoqo.
  * Otherwise it sits pending (personId null) until they register with
  * that email and the invite is claimed — see acceptPendingInvites.
  */

@@ -1,5 +1,5 @@
-import { Icon } from '@esoko/ui';
-import { listJamiiPagesForStaff, getJamiiPageCounts, listJamiiDomainsForStaff } from '@esoko/db';
+import { Icon } from '@esoqo/ui';
+import { listJamiiPagesForStaff, getJamiiPageCounts, listJamiiDomainsForStaff } from '@esoqo/db';
 import { requireStaff } from '@/lib/session';
 import { DonutChart } from '@/components/charts';
 import { PageTable } from './PageTable';
@@ -9,7 +9,7 @@ export const dynamic = 'force-dynamic';
 /**
  * Every Our Jamii community page, any status — the counterpart to
  * apps/jamii's self-service dashboard (which only ever shows a person
- * their own pages). See @esoko/db's listJamiiPagesForStaff.
+ * their own pages). See @esoqo/db's listJamiiPagesForStaff.
  */
 export default async function JamiiPagesPage({
   searchParams,

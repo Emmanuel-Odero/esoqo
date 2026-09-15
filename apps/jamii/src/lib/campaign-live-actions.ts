@@ -1,6 +1,6 @@
 'use server';
 
-import { getCampaignStats, listRecentDonations } from '@esoko/db';
+import { getCampaignStats, listRecentDonations } from '@esoqo/db';
 
 export interface CampaignLiveStats {
   raisedKes: number;

@@ -3,7 +3,7 @@ import type { FastifyBaseLogger, FastifyInstance, FastifyRequest, FastifyReply }
 import {
   listDomainsNeedingReconciliation, markDomainVerifying, markDomainActive,
   markDomainFailed, touchDomainCheck, finaliseRemovedDomain,
-} from '@esoko/db';
+} from '@esoqo/db';
 import {
   createCustomHostname, getCustomHostnameStatus, deleteCustomHostname, verifyOwnershipTxt, CloudflareError,
 } from '../lib/cloudflare-saas';

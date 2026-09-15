@@ -2,7 +2,7 @@
 const nextConfig = {
   reactStrictMode: true,
   poweredByHeader: false,
-  transpilePackages: ['@esoko/ui', '@esoko/a11y', '@esoko/domain', '@esoko/payments'],
+  transpilePackages: ['@esoqo/ui', '@esoqo/a11y', '@esoqo/domain', '@esoqo/payments'],
   typedRoutes: true,
 
   /**

@@ -405,7 +405,7 @@ export async function updateJamiiPhotoCaption(ctx: Ctx, pageId: string, photoId:
 /* ═══════════════════════════ staff / admin ═══════════════════════════
  *
  * Everything above this line answers "what can the page's own team do".
- * These answer "what can Esoko staff, looking across every page, do" —
+ * These answer "what can Esoqo staff, looking across every page, do" —
  * the admin app's Our Jamii > Pages screen. Same split as store.ts's
  * getStoreDetailForStaff vs. the enterprise-owner dashboard functions.
  */

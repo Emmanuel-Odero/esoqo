@@ -1,8 +1,8 @@
 'use server';
 
 import { revalidatePath } from 'next/cache';
-import { createSupplier, recordStockPurchase } from '@esoko/db';
-import { supplierSchema, stockPurchaseSchema } from '@esoko/domain';
+import { createSupplier, recordStockPurchase } from '@esoqo/db';
+import { supplierSchema, stockPurchaseSchema } from '@esoqo/domain';
 import { requireSubject } from '@/lib/session';
 
 export type ActionResult = { ok: true } | { ok: false; error: string };

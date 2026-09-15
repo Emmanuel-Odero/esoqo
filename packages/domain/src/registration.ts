@@ -77,7 +77,7 @@ export const step5Schema = z.object({
 /* ── group search-before-create ── */
 
 /** Every OrgKind, kept in sync by hand with the Prisma enum and with
- *  @esoko/db's GROUP_KINDS label map — domain intentionally has no
+ *  @esoqo/db's GROUP_KINDS label map — domain intentionally has no
  *  dependency on db, so this is the one place outside the schema/DAL
  *  itself that needs to change if a kind is ever added or renamed. */
 export const ORG_KINDS = [

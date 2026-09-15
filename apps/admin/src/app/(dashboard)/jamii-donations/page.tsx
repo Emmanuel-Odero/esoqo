@@ -1,6 +1,6 @@
-import { Icon } from '@esoko/ui';
-import { listDonationsForStaff, getDonationTotalsForStaff } from '@esoko/db';
-import { maskMsisdn } from '@esoko/domain';
+import { Icon } from '@esoqo/ui';
+import { listDonationsForStaff, getDonationTotalsForStaff } from '@esoqo/db';
+import { maskMsisdn } from '@esoqo/domain';
 import { requireStaff } from '@/lib/session';
 import { DonutChart } from '@/components/charts';
 import { DonationTable } from './DonationTable';
@@ -9,7 +9,7 @@ export const dynamic = 'force-dynamic';
 
 /** Read-only oversight — money on Our Jamii moves through the same
  *  M-Pesa STK + balanced-ledger path as everywhere else on the
- *  platform (see @esoko/db's confirmDonationPayment); nothing here
+ *  platform (see @esoqo/db's confirmDonationPayment); nothing here
  *  writes to a donation directly. */
 export default async function JamiiDonationsPage({
   searchParams,

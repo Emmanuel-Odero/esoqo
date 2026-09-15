@@ -6,13 +6,15 @@ import (
 	"strings"
 	"time"
 
+	"github.com/esoqo/core-go/internal/money"
+
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 
-	"github.com/esoko/core-go/internal/fleetqr"
+	"github.com/esoqo/core-go/internal/fleetqr"
 )
 
-// Scan kinds — one dispatcher for every physical code in the Esoko
+// Scan kinds — one dispatcher for every physical code in the Esoqo
 // world: bus boarding QRs, product barcodes (mall self-checkout), table
 // QRs (restaurant order-from-table), vouchers, fare receipts, event
 // tickets, store pickup codes, payment ids and printed certificate
@@ -154,12 +156,12 @@ var shortCodePrefixes = []struct {
 
 // VoucherPublic is the card anyone holding the QR may see.
 type VoucherPublic struct {
-	ShortCode     string  `json:"shortCode"`
-	Label         string  `json:"label"`
-	Purpose       string  `json:"purpose"`
-	Status        string  `json:"status"`
-	BalancePoints int     `json:"balancePoints"`
-	BalanceKES    float64 `json:"balanceKes"`
+	ShortCode     string       `json:"shortCode"`
+	Label         string       `json:"label"`
+	Purpose       string       `json:"purpose"`
+	Status        string       `json:"status"`
+	BalancePoints int          `json:"balancePoints"`
+	BalanceKES    money.Amount `json:"balanceKes"`
 }
 
 // ProductHit resolves a scanned SKU/EAN to a buyable product.
@@ -172,7 +174,7 @@ type ProductHit struct {
 	StoreName string  `json:"storeName"`
 }
 
-// StoreHit resolves a store QR (esoko://s) or slug.
+// StoreHit resolves a store QR (esoqo://s) or slug.
 type StoreHit struct {
 	Slug string `json:"slug"`
 	Name string `json:"name"`
@@ -213,14 +215,14 @@ type OrderHit struct {
 	ReadyAt    *string `json:"readyAt"`
 }
 
-// PartyHit resolves an Esoko Payment ID (ESK-…-KE): the public handle
+// PartyHit resolves an Esoqo Payment ID (ESK-…-KE): the public handle
 // card — what a peer or a same-store register sees when the card's QR
 // is pointed at them, before any payment happens.
 type PartyHit struct {
-	EsokoID     string `json:"esokoId"`
-	DisplayName string `json:"displayName"`
-	Verified    bool   `json:"verified"`
-	Organisation bool  `json:"organisation"`
+	EsoqoID      string `json:"esoqoId"`
+	DisplayName  string `json:"displayName"`
+	Verified     bool   `json:"verified"`
+	Organisation bool   `json:"organisation"`
 }
 
 // CertificateHit mirrors the public /verify page's VerifyResult (see
@@ -236,11 +238,12 @@ type CertificateHit struct {
 	ValidUntil *string `json:"validUntil"`
 }
 
-// ResolveScan sniffs one raw code and dispatches: esoko:// scheme first
+// ResolveScan sniffs one raw code and dispatches: esoqo:// scheme first
+// (or the legacy esoko:// spelling still on printed codes)
 // (signed trip/voucher payloads, table/store/product links), then the
 // registered short-code prefixes, then SKU/fare/certificate. Unknown
 // input answers unknown — never an error — so the scanner UI can say
-// "not an Esoko code" instead of failing.
+// "not an Esoqo code" instead of failing.
 func ResolveScan(ctx context.Context, pool *pgxpool.Pool, raw, qrSecret string, ttlMin int) (*ScanHit, error) {
 	code := strings.TrimSpace(raw)
 	if code == "" {
@@ -248,7 +251,7 @@ func ResolveScan(ctx context.Context, pool *pgxpool.Pool, raw, qrSecret string, 
 	}
 
 	// Signed trip boarding payload.
-	if strings.HasPrefix(code, "esoko://t?") {
+	if _, ok := fleetqr.TrimScheme(code, "t"); ok {
 		if trip, err := ResolveTripQr(ctx, pool, code, qrSecret); err == nil {
 			return hit(ScanKindTrip, trip), nil
 		}
@@ -258,16 +261,15 @@ func ResolveScan(ctx context.Context, pool *pgxpool.Pool, raw, qrSecret string, 
 	}
 
 	// Voucher payload → public card (open wallet).
-	if strings.HasPrefix(code, "esoko://v?") {
+	if _, ok := fleetqr.TrimScheme(code, "v"); ok {
 		if v, err := resolveVoucherPublic(ctx, pool, code); err == nil {
 			return hit(ScanKindVoucher, v), nil
 		}
 		return unknownHit(), nil
 	}
 
-	// Table QR: esoko://table?store=<slug>&table=<label>.
-	if strings.HasPrefix(code, "esoko://table?") {
-		q := strings.TrimPrefix(code, "esoko://table?")
+	// Table QR: esoqo://table?store=<slug>&table=<label>.
+	if q, ok := fleetqr.TrimScheme(code, "table"); ok {
 		params := map[string]string{}
 		for _, part := range strings.Split(q, "&") {
 			k, v, _ := strings.Cut(part, "=")
@@ -282,9 +284,8 @@ func ResolveScan(ctx context.Context, pool *pgxpool.Pool, raw, qrSecret string, 
 		return unknownHit(), nil
 	}
 
-	// Store QR: esoko://s?slug= (or a bare slug).
-	if strings.HasPrefix(code, "esoko://s?") {
-		q := strings.TrimPrefix(code, "esoko://s?")
+	// Store QR: esoqo://s?slug= (or a bare slug).
+	if q, ok := fleetqr.TrimScheme(code, "s"); ok {
 		for _, part := range strings.Split(q, "&") {
 			if k, v, _ := strings.Cut(part, "="); k == "slug" && v != "" {
 				var name string
@@ -296,9 +297,8 @@ func ResolveScan(ctx context.Context, pool *pgxpool.Pool, raw, qrSecret string, 
 		return unknownHit(), nil
 	}
 
-	// Product QR: esoko://p?id=<product uuid>.
-	if strings.HasPrefix(code, "esoko://p?") {
-		q := strings.TrimPrefix(code, "esoko://p?")
+	// Product QR: esoqo://p?id=<product uuid>.
+	if q, ok := fleetqr.TrimScheme(code, "p"); ok {
 		for _, part := range strings.Split(q, "&") {
 			if k, v, _ := strings.Cut(part, "="); k == "id" && v != "" {
 				if ph, err := productByID(ctx, pool, v); err == nil && ph != nil {
@@ -311,7 +311,7 @@ func ResolveScan(ctx context.Context, pool *pgxpool.Pool, raw, qrSecret string, 
 
 	// Registered short-code prefixes — the namespace table, not a chain
 	// of ifs. A typed/printed code that starts with one of ours and does
-	// not resolve is a typo or a retired code, never another Esoko kind,
+	// not resolve is a typo or a retired code, never another Esoqo kind,
 	// so a failed match here means unknown, full stop.
 	upper := strings.ToUpper(code)
 	for _, reg := range shortCodePrefixes {
@@ -473,7 +473,7 @@ func ResolvePartyByPaymentID(ctx context.Context, pool *pgxpool.Pool, code strin
 	var h PartyHit
 	err := pool.QueryRow(ctx, `
 		SELECT p.code,
-		       COALESCE(pe."knownAs", pe."officialName", 'Esoko member'),
+		       COALESCE(pe."knownAs", pe."officialName", 'Esoqo member'),
 		       EXISTS (
 		         SELECT 1 FROM attestation a
 		         WHERE a."subjectId" = pa.id
@@ -486,7 +486,7 @@ func ResolvePartyByPaymentID(ctx context.Context, pool *pgxpool.Pool, code strin
 		LEFT JOIN person pe ON pe."partyId" = pa.id
 		WHERE p.code = $1
 		LIMIT 1`, strings.ToUpper(strings.TrimSpace(code))).
-		Scan(&h.EsokoID, &h.DisplayName, &h.Verified, &h.Organisation)
+		Scan(&h.EsoqoID, &h.DisplayName, &h.Verified, &h.Organisation)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return nil, nil
 	}
@@ -541,7 +541,7 @@ func ResolveCertificateByCode(ctx context.Context, pool *pgxpool.Pool, code stri
 	if issuerName != nil && *issuerName != "" {
 		h.Issuer = *issuerName
 	} else {
-		h.Issuer = "Esoko"
+		h.Issuer = "Esoqo"
 	}
 
 	// Holder: prefer what the person actually goes by, then official

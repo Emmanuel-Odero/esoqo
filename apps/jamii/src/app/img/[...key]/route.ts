@@ -1,4 +1,4 @@
-import { getObject } from '@esoko/db';
+import { getObject } from '@esoqo/db';
 
 /**
  * Public image serving — logos, cover photos and gallery images are

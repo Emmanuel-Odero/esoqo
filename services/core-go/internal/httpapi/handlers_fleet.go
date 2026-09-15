@@ -2,15 +2,17 @@ package httpapi
 
 import (
 	"net/http"
+	"strings"
 	"time"
 
 	"github.com/gin-gonic/gin"
 
-	"github.com/esoko/core-go/internal/audit"
-	"github.com/esoko/core-go/internal/authsvc"
-	"github.com/esoko/core-go/internal/dbx"
-	"github.com/esoko/core-go/internal/fleetqr"
-	"github.com/esoko/core-go/internal/payments"
+	"github.com/esoqo/core-go/internal/audit"
+	"github.com/esoqo/core-go/internal/authsvc"
+	"github.com/esoqo/core-go/internal/dbx"
+	"github.com/esoqo/core-go/internal/fleetqr"
+	"github.com/esoqo/core-go/internal/money"
+	"github.com/esoqo/core-go/internal/payments"
 )
 
 func tripQrPayload(secret, tripID string) string {
@@ -64,6 +66,17 @@ func (s *Server) handleTicketStaffSignIn(c *gin.Context) {
 		writeError(c, http.StatusBadRequest, "INVALID_REQUEST", err.Error())
 		return
 	}
+	// Staff PINs are short and the org slug and name are both public
+	// enough to enumerate, so without a per-subject counter this endpoint
+	// accepted unlimited guesses at a named till operator.
+	subject := strings.ToLower(req.OrgSlug + ":" + req.Name)
+	if s.StaffLockout.Locked(c.Request.Context(), subject) {
+		// Same message as a wrong PIN: saying "locked" would confirm the
+		// org/name pair exists.
+		writeError(c, http.StatusUnauthorized, "INVALID_CREDENTIALS", "Wrong organisation, name or PIN")
+		return
+	}
+
 	staff, err := dbx.FindTicketStaffForSignIn(c.Request.Context(), s.Pool, req.OrgSlug, req.Name)
 	if err != nil {
 		writeError(c, http.StatusInternalServerError, "SIGN_IN_FAILED", "Could not sign in")
@@ -74,9 +87,11 @@ func (s *Server) handleTicketStaffSignIn(c *gin.Context) {
 		storedHash = staff.PinHash
 	}
 	if staff == nil || !staff.Active || !authsvc.VerifyPin(req.Pin, storedHash) {
+		s.StaffLockout.RecordFailure(c.Request.Context(), subject)
 		writeError(c, http.StatusUnauthorized, "INVALID_CREDENTIALS", "Wrong organisation, name or PIN")
 		return
 	}
+	s.StaffLockout.Clear(c.Request.Context(), subject)
 	caps, ok := authsvc.TicketingStaffCapabilities[staff.Role]
 	if !ok {
 		caps = authsvc.TicketingStaffCapabilities["SCANNER"]
@@ -209,8 +224,8 @@ type createShortRouteRequest struct {
 	OrgID  string `json:"orgId" binding:"required"`
 	Name   string `json:"name" binding:"required"`
 	Stages []struct {
-		Name    string  `json:"name" binding:"required"`
-		FareKES float64 `json:"fareKes" binding:"required"`
+		Name    string       `json:"name" binding:"required"`
+		FareKES money.Amount `json:"fareKes" binding:"required"`
 	} `json:"stages" binding:"required"`
 }
 
@@ -222,7 +237,7 @@ func (s *Server) handleCreateShortRoute(c *gin.Context) {
 	}
 	stages := make([]dbx.StageInput, len(req.Stages))
 	for i, st := range req.Stages {
-		stages[i] = dbx.StageInput{Name: st.Name, FareKES: st.FareKES}
+		stages[i] = dbx.StageInput{Name: st.Name, FareKES: st.FareKES.KES()}
 	}
 	route, err := dbx.CreateShortRoute(c.Request.Context(), s.Pool, ctxFromGin(c), req.OrgID, req.Name, stages)
 	if err != nil {
@@ -351,15 +366,15 @@ func (s *Server) handleLatestPositions(c *gin.Context) {
 // ── fares ────────────────────────────────────────────────────────
 
 type createFareRequest struct {
-	TripID      string  `json:"tripId"`
-	TripQrCode  string  `json:"tripQrCode"`
-	StageFromID *string `json:"stageFromId"`
-	StageToID   *string `json:"stageToId"`
-	AmountKES   float64 `json:"amountKes"`
-	Method      string  `json:"method" binding:"required"`
-	BuyerMsisdn *string `json:"buyerMsisdn"`
-	BuyerName   *string `json:"buyerName"`
-	VoucherID   *string `json:"voucherId"`
+	TripID      string       `json:"tripId"`
+	TripQrCode  string       `json:"tripQrCode"`
+	StageFromID *string      `json:"stageFromId"`
+	StageToID   *string      `json:"stageToId"`
+	AmountKES   money.Amount `json:"amountKes"`
+	Method      string       `json:"method" binding:"required"`
+	BuyerMsisdn *string      `json:"buyerMsisdn"`
+	BuyerName   *string      `json:"buyerName"`
+	VoucherID   *string      `json:"voucherId"`
 }
 
 func (s *Server) handleCreateFare(c *gin.Context) {
@@ -395,7 +410,7 @@ func (s *Server) handleCreateFare(c *gin.Context) {
 	}
 	fare, err := dbx.CreateFare(c.Request.Context(), s.Pool, ctx, dbx.CreateFareInput{
 		TripID: tripID, StageFromID: req.StageFromID, StageToID: req.StageToID,
-		AmountKES: req.AmountKES, Method: req.Method, BuyerMsisdn: req.BuyerMsisdn,
+		AmountKES: req.AmountKES.KES(), Method: req.Method, BuyerMsisdn: req.BuyerMsisdn,
 		BuyerName: req.BuyerName, BuyerPartyID: buyerParty, VoucherID: req.VoucherID,
 	})
 	if err != nil {
@@ -422,15 +437,15 @@ func (s *Server) handleCreateFare(c *gin.Context) {
 		}
 		stk, err := payments.InitiateStkPush(s.Cfg, payments.StkPushRequest{
 			Msisdn: msisdn, AmountKES: parseKES(fare.AmountKES),
-			AccountReference: fare.ID[:8], Description: "Esoko fare",
+			AccountReference: fare.ID[:8], Description: "Esoqo fare",
 		})
 		if err != nil {
 			resp["paymentError"] = err.Error()
 			c.JSON(http.StatusOK, resp)
 			return
 		}
+		// Not echoed — see handlePayParcel's note on the same field.
 		_ = dbx.AttachFareCheckoutRequestID(c.Request.Context(), s.Pool, fare.ID, stk.CheckoutRequestID)
-		resp["checkoutRequestId"] = stk.CheckoutRequestID
 		if stk.AutoConfirmed {
 			_ = dbx.ConfirmFarePaymentByCheckoutID(c.Request.Context(), s.Pool, stk.CheckoutRequestID, "", s.Cfg.LoyaltyEarnEnabled)
 			resp["status"] = "CONFIRMED"
@@ -455,8 +470,8 @@ func (s *Server) handleGetFare(c *gin.Context) {
 // ── declarations ─────────────────────────────────────────────────
 
 type declareRequest struct {
-	CrewID          string  `json:"crewId" binding:"required"`
-	DeclaredCashKES float64 `json:"declaredCashKes"`
+	CrewID          string       `json:"crewId" binding:"required"`
+	DeclaredCashKES money.Amount `json:"declaredCashKes"`
 }
 
 func (s *Server) handleDeclare(c *gin.Context) {
@@ -465,11 +480,11 @@ func (s *Server) handleDeclare(c *gin.Context) {
 		writeError(c, http.StatusBadRequest, "INVALID_REQUEST", err.Error())
 		return
 	}
-	if err := dbx.DeclareCollection(c.Request.Context(), s.Pool, ctxFromGin(c), c.Param("id"), req.CrewID, req.DeclaredCashKES); err != nil {
+	if err := dbx.DeclareCollection(c.Request.Context(), s.Pool, ctxFromGin(c), c.Param("id"), req.CrewID, req.DeclaredCashKES.KES()); err != nil {
 		writeFleetError(c, err)
 		return
 	}
-	s.recordFleetAudit(c, "fleet.collection.declared", "trip", c.Param("id"), map[string]interface{}{"crewId": req.CrewID, "declaredCashKes": req.DeclaredCashKES})
+	s.recordFleetAudit(c, "fleet.collection.declared", "trip", c.Param("id"), map[string]interface{}{"crewId": req.CrewID, "declaredCashKes": req.DeclaredCashKES.KES()})
 	c.JSON(http.StatusOK, gin.H{"ok": true})
 }
 

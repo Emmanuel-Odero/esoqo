@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useRef } from 'react';
-import { Icon } from '@esoko/ui';
+import { Icon } from '@esoqo/ui';
 
 /**
  * Shared dashboard building blocks — extends the existing .kpi/.card/.tbl
@@ -10,7 +10,7 @@ import { Icon } from '@esoko/ui';
  * a delta pill, a canvas sparkline, a ranked bar list (feature adoption,
  * revenue by source), a stacked bar (payment-method split), a
  * severity-striped "needs attention" list, and a two-up split metric
- * (GMV vs Esoko's own take — see dal/platform-revenue.ts's own header
+ * (GMV vs Esoqo's own take — see dal/platform-revenue.ts's own header
  * for why those are never blended into one number).
  */
 
@@ -160,10 +160,10 @@ export function SplitPair({
       <div>
         <span className="sl">Gross volume (GMV)</span>
         <span className="sn">KES {Math.round(gmvKes).toLocaleString('en-KE')}</span>
-        <span className="sd">Everything moving through Esoko — giving, treasury, commerce, fees, ticketing.</span>
+        <span className="sd">Everything moving through Esoqo — giving, treasury, commerce, fees, ticketing.</span>
       </div>
       <div>
-        <span className="sl">Esoko&rsquo;s own take</span>
+        <span className="sl">Esoqo&rsquo;s own take</span>
         <span className="sn" style={{ color: 'var(--green)' }}>KES {Math.round(takeKes).toLocaleString('en-KE')}</span>
         <span className="sd">Commission earned on store commerce only, today — see the note on this metric below.</span>
       </div>

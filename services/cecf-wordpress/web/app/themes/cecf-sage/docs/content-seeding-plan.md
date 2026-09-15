@@ -512,7 +512,7 @@ separately: `composer.json` has no Meta Box dependency, no PHP calls
   but canvas-rendered fields wouldn't have picked up any styling at all
   without this.
 
-Verified: `pnpm --filter @esoko/cecf-sage-theme build` compiles clean
+Verified: `pnpm --filter @esoqo/cecf-sage-theme build` compiles clean
 (9 modules, no warnings beyond the pre-existing pnpm workspace ones).
 
 ## 10. Pass 7 — true inline (WYSIWYG) editing for the highest-traffic types (2026-08-23)
@@ -654,7 +654,7 @@ section order.
   screen) hands this the same `window.cecfSectionSchema`/etc. globals.
 - Each page's panel also carries its own permalink (`get_permalink()`,
   deliberately not `App\Support\PageUrl::resolve()` — that has a special
-  case sending the "jamii" key to Esoko's *external* product site, the
+  case sending the "jamii" key to Esoqo's *external* product site, the
   wrong URL for "where does this page's own editor point the preview
   iframe") in a small `window.cecfPagePanelUrls` map, and
   `customizer-controls.jsx` binds each panel's `expanded` state to

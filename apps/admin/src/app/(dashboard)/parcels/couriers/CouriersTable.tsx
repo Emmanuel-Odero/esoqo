@@ -1,10 +1,10 @@
 'use client';
 
 import { Fragment, useEffect, useState, useTransition } from 'react';
-import { Icon } from '@esoko/ui';
+import { Icon } from '@esoqo/ui';
 import {
   actionOnboardCourier, actionSearchOnboardCandidates, actionSetCourierStatus, actionGetCourierPerformance,
-  type ParcelCourierRow, type CollectorLite, type CourierPerformance,
+  actionAddCourierTeamMember, type ParcelCourierRow, type CollectorLite, type CourierPerformance,
 } from '../actions';
 
 const VEHICLE_TYPES = ['BODA', 'BICYCLE', 'TUKTUK', 'VAN', 'TRUCK', 'ON_FOOT'];
@@ -13,6 +13,7 @@ export function CouriersTable({
   couriers, statusLabel, canManage,
 }: { couriers: ParcelCourierRow[]; statusLabel: Record<string, string>; canManage: boolean }) {
   const [onboarding, setOnboarding] = useState(false);
+  const [adding, setAdding] = useState(false);
   const [statusFor, setStatusFor] = useState<string | null>(null);
   const [perfFor, setPerfFor] = useState<string | null>(null);
 
@@ -20,10 +21,16 @@ export function CouriersTable({
     <div className="card" style={{ padding: 0 }}>
       {canManage && (
         <div style={{ padding: 16, borderBottom: '1px solid var(--line)' }}>
-          <button className="btn btn-p btn-sm" onClick={() => setOnboarding((v) => !v)}>
-            {onboarding ? 'Close' : 'Onboard a courier'}
-          </button>
+          <div style={{ display: 'flex', gap: 8 }}>
+            <button className="btn btn-p btn-sm" onClick={() => { setOnboarding((v) => !v); setAdding(false); }}>
+              {onboarding ? 'Close' : 'Onboard a courier'}
+            </button>
+            <button className="btn btn-o btn-sm" onClick={() => { setAdding((v) => !v); setOnboarding(false); }}>
+              {adding ? 'Close' : 'Add courier team member'}
+            </button>
+          </div>
           {onboarding && <OnboardPanel onClose={() => setOnboarding(false)} />}
+          {adding && <AddCourierPanel onClose={() => setAdding(false)} />}
         </div>
       )}
       <table className="tbl">
@@ -138,6 +145,86 @@ function OnboardPanel({ onClose }: { onClose: () => void }) {
       </label>
       <div style={{ display: 'flex', gap: 8 }}>
         <button className="btn btn-p btn-sm" onClick={submit} disabled={pending}>{pending ? 'Onboarding…' : 'Onboard'}</button>
+      </div>
+      {error && (
+        <p role="alert" style={{ color: 'var(--red)', fontSize: '.85rem', display: 'flex', gap: 6, alignItems: 'center' }}>
+          <Icon name="alert-circle" size={14} />{error}
+        </p>
+      )}
+    </div>
+  );
+}
+
+const FIELD: React.CSSProperties = { display: 'block', padding: '6px 8px', border: '1.5px solid var(--line)', borderRadius: 6, marginTop: 2 };
+
+// The "just add them" path — a real courier team member who's never
+// touched the Esoqo app, entered straight from name/phone/vehicle
+// instead of searching for an existing account (see OnboardPanel
+// above, which stays the right tool for someone already in the
+// system). core-go texts them their Esoqo ID the moment this succeeds
+// — see actionAddCourierTeamMember's own comment — so a wrong number
+// here shows up as "they never got the text", not silently.
+function AddCourierPanel({ onClose }: { onClose: () => void }) {
+  const [name, setName] = useState('');
+  const [msisdn, setMsisdn] = useState('');
+  const [email, setEmail] = useState('');
+  const [vehicleType, setVehicleType] = useState('BODA');
+  const [error, setError] = useState<string | null>(null);
+  const [savedEsoqoId, setSavedEsoqoId] = useState<string | null>(null);
+  const [pending, startTransition] = useTransition();
+
+  function submit() {
+    if (!name.trim() || !msisdn.trim()) {
+      setError('Name and phone number are both required.');
+      return;
+    }
+    setError(null);
+    startTransition(async () => {
+      const result = await actionAddCourierTeamMember({
+        name: name.trim(), msisdn: msisdn.trim(), email: email.trim() || undefined, vehicleType,
+      });
+      if (!result.ok) { setError(result.error); return; }
+      setSavedEsoqoId(result.esoqoId);
+    });
+  }
+
+  if (savedEsoqoId) {
+    return (
+      <div style={{ marginTop: 12, display: 'flex', flexDirection: 'column', gap: 8 }}>
+        <p style={{ margin: 0 }}>
+          <Icon name="check-circle" size={15} /> Added — Esoqo ID <strong className="mono">{savedEsoqoId}</strong>,
+          texted to {msisdn} for confirmation.
+        </p>
+        <div><button className="btn btn-o btn-sm" onClick={onClose}>Close</button></div>
+      </div>
+    );
+  }
+
+  return (
+    <div style={{ marginTop: 12, display: 'flex', flexDirection: 'column', gap: 10, maxWidth: 420 }}>
+      <label className="sub">Name of team member
+        <input value={name} onChange={(e) => setName(e.target.value)} style={{ ...FIELD, width: '100%' }} />
+      </label>
+      <div style={{ display: 'flex', gap: 10 }}>
+        <label className="sub" style={{ flex: 1 }}>Phone number
+          <input value={msisdn} onChange={(e) => setMsisdn(e.target.value)} placeholder="+2547XXXXXXXX"
+            style={{ ...FIELD, width: '100%' }} />
+        </label>
+        <label className="sub" style={{ flex: 1 }}>Contact (email, optional)
+          <input value={email} onChange={(e) => setEmail(e.target.value)} style={{ ...FIELD, width: '100%' }} />
+        </label>
+      </div>
+      <label className="sub">Vehicle
+        <select value={vehicleType} onChange={(e) => setVehicleType(e.target.value)} style={FIELD}>
+          {VEHICLE_TYPES.map((v) => <option key={v} value={v}>{v.replace(/_/g, ' ')}</option>)}
+        </select>
+      </label>
+      <p className="sub" style={{ margin: 0 }}>
+        They&apos;ll be texted a confirmation with their Esoqo ID — that same text is how you&apos;ll know
+        the phone number is right.
+      </p>
+      <div style={{ display: 'flex', gap: 8 }}>
+        <button className="btn btn-p btn-sm" onClick={submit} disabled={pending}>{pending ? 'Adding…' : 'Add & send confirmation'}</button>
       </div>
       {error && (
         <p role="alert" style={{ color: 'var(--red)', fontSize: '.85rem', display: 'flex', gap: 6, alignItems: 'center' }}>

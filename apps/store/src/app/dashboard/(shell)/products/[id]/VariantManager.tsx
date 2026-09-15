@@ -2,7 +2,7 @@
 
 import { useState, useTransition } from 'react';
 import { useRouter } from 'next/navigation';
-import { Icon } from '@esoko/ui';
+import { Icon } from '@esoqo/ui';
 import { addVariant, removeVariant } from './actions';
 
 interface Variant { id: string; label: string; priceKes: number; costKes: number | null; stockQty: number | null; sku: string | null }

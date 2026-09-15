@@ -1,7 +1,7 @@
 import Link from 'next/link';
 import type { Route } from 'next';
-import { Icon } from '@esoko/ui';
-import { listStoreOwnersForStaff } from '@esoko/db';
+import { Icon } from '@esoqo/ui';
+import { listStoreOwnersForStaff } from '@esoqo/db';
 import { requireStaff } from '@/lib/session';
 
 export const dynamic = 'force-dynamic';
@@ -21,7 +21,7 @@ export default async function TradersPage({
         <div>
           <h1>Users &amp; traders</h1>
           <p>
-            Everyone already selling on Esoko — a business only shows up here once it has opened
+            Everyone already selling on Esoqo — a business only shows up here once it has opened
             at least one store. Having a business on file isn't the same as having gone live.
           </p>
         </div>
@@ -54,7 +54,7 @@ export default async function TradersPage({
           <div className="empty">
             <span className="ico"><Icon name="user" size={22} /></span>
             <h3>No traders yet</h3>
-            <p style={{ margin: 0 }}>Nobody has opened a store on Esoko yet.</p>
+            <p style={{ margin: 0 }}>Nobody has opened a store on Esoqo yet.</p>
           </div>
         ) : (
           <table className="tbl">

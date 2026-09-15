@@ -1,5 +1,5 @@
 // Package dbx (org_staff_grant.go) — unified crew identity
-// (docs/proposals/esoko-unified-crew-identity.md). A grant makes a real
+// (docs/proposals/esoqo-unified-crew-identity.md). A grant makes a real
 // Party *eligible* to act as SCANNER/MANAGER/ADMIN/CREW staff for one
 // TicketOrg; it never authorises anything by itself — every org-scoped
 // request also needs a live authsvc.OrgContextService activation, and
@@ -16,7 +16,7 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 
-	"github.com/esoko/core-go/internal/authsvc"
+	"github.com/esoqo/core-go/internal/authsvc"
 )
 
 var (
@@ -48,7 +48,7 @@ type OrgStaffGrant struct {
 }
 
 // CreateOrgStaffGrant — org owner/admin-staff onboards a crew member who
-// already holds an Esoko account (partyID resolved by the caller via
+// already holds an Esoqo account (partyID resolved by the caller via
 // FindPersonByMsisdn first; there is no account-less path by design, see
 // the proposal's "crew must have accounts" decision). Upserts on
 // (orgId, partyId): re-granting a previously suspended person reinstates
