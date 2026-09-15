@@ -46,5 +46,8 @@ export async function signIn(_prev: unknown, data: FormData): Promise<SignInResu
     maxAge: 60 * 60 * 24 * 14,
   });
 
-  redirect('/');
+  // A fresh invite (or an admin-forced reset) leaves this true — the
+  // temp PIN the invite email carried gets them signed in, but not
+  // past this, until they've actually chosen their own.
+  redirect(staff.mustChangePin ? '/set-pin' : '/');
 }

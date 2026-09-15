@@ -19,6 +19,7 @@ export interface StaffCredentialLookup {
   failedAttempts: number;
   lockedUntil: Date | null;
   capabilities: string[];
+  mustChangePin: boolean;
 }
 
 const LOCKOUT_THRESHOLD = 5;
@@ -35,10 +36,36 @@ export async function findStaffCredential(email: string): Promise<StaffCredentia
     where: { email: email.trim().toLowerCase() },
     select: {
       id: true, pinHash: true, active: true, suspendedAt: true,
-      failedAttempts: true, lockedUntil: true, capabilities: true,
+      failedAttempts: true, lockedUntil: true, capabilities: true, mustChangePin: true,
     },
   });
   return staff;
+}
+
+/**
+ * A signed-in staffer's own current PIN hash, to verify against before
+ * accepting a new one — see changeStaffPin's own comment on why a
+ * session cookie alone isn't proof enough.
+ */
+export async function getOwnPinHash(staffId: string): Promise<string | null> {
+  const staff = await prisma.staffUser.findUnique({ where: { id: staffId }, select: { pinHash: true } });
+  return staff?.pinHash ?? null;
+}
+
+/**
+ * A signed-in staffer setting their own PIN — the temp one an invite
+ * email carried (see actionCreateStaff), or a voluntary change anytime
+ * after. The caller must already have verified the plaintext current
+ * PIN against getOwnPinHash's result (via @esoqo/auth's verifyPin) —
+ * this function only ever writes the new hash, it does not itself
+ * check anything, since PIN hashes are salted and so never equal-
+ * comparable in SQL.
+ */
+export async function changeStaffPin(staffId: string, newPinHash: string): Promise<void> {
+  await prisma.staffUser.update({
+    where: { id: staffId },
+    data: { pinHash: newPinHash, mustChangePin: false },
+  });
 }
 
 export async function recordStaffSignInSuccess(staffId: string): Promise<void> {

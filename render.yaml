@@ -239,6 +239,24 @@ services:
         value: https://esoko-web.onrender.com
       - key: NEXT_PUBLIC_APP_URL
         value: https://esoko-app-lvqp.onrender.com
+      # See packages/auth/src/email.ts's own comment: unset means
+      # "console" in production — actions.ts's group-invite email
+      # (tellThemTheyWereAdded's sendEmail branch) silently never
+      # reaches anyone until these are set to a real provider.
+      - key: EMAIL_PROVIDER
+        sync: false
+      - key: SMTP_HOST
+        sync: false
+      - key: SMTP_PORT
+        sync: false
+      - key: SMTP_SECURE
+        sync: false
+      - key: SMTP_USER
+        sync: false
+      - key: SMTP_PASSWORD
+        sync: false
+      - key: EMAIL_FROM
+        sync: false
       - key: CORE_API_URL
         value: https://esoko-core.onrender.com
       - key: CORE_GO_API_URL
@@ -321,6 +339,29 @@ services:
         value: https://esoko-web.onrender.com
       - key: NEXT_PUBLIC_APP_URL
         value: https://esoko-app-lvqp.onrender.com
+      # Self-reference — the staff-invite email (actions.ts's
+      # actionCreateStaff) needs an absolute sign-in link, since it's
+      # read outside any request context that could infer the host.
+      - key: NEXT_PUBLIC_ADMIN_URL
+        value: https://esoko-admin.onrender.com
+      # See packages/auth/src/email.ts's own comment: unset means
+      # "console" in production, which prints instead of sending — the
+      # staff-invite email (and group-invite email) silently never
+      # reaches anyone until these are set to a real provider.
+      - key: EMAIL_PROVIDER
+        sync: false
+      - key: SMTP_HOST
+        sync: false
+      - key: SMTP_PORT
+        sync: false
+      - key: SMTP_SECURE
+        sync: false
+      - key: SMTP_USER
+        sync: false
+      - key: SMTP_PASSWORD
+        sync: false
+      - key: EMAIL_FROM
+        sync: false
       - key: CORE_API_URL
         value: https://esoko-core.onrender.com
       # Every /parcels page (list, counter, labels, live dispatch) calls
