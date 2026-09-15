@@ -20,12 +20,23 @@ function goMessage(json: GoErrorBody | null, fallback: string): string {
 }
 
 async function goFetch<T>(path: string, init?: RequestInit): Promise<T> {
-  const res = await fetch(`${CORE_GO_URL}${path}`, {
-    ...init,
-    headers: { 'Content-Type': 'application/json', ...init?.headers },
-    cache: 'no-store',
-    signal: AbortSignal.timeout(15000),
-  });
+  let res: Response;
+  try {
+    res = await fetch(`${CORE_GO_URL}${path}`, {
+      ...init,
+      headers: { 'Content-Type': 'application/json', ...init?.headers },
+      cache: 'no-store',
+      signal: AbortSignal.timeout(15000),
+    });
+  } catch {
+    // fetch() itself throwing (DNS/connection failure, timeout) means
+    // core-go was never reached — its raw error message is Node/undici
+    // internals ("fetch failed"), not something a sender should see.
+    // Every caller's catch block does `e instanceof Error ? e.message :
+    // UNAVAILABLE`, which would otherwise surface that raw string
+    // verbatim instead of the friendly one it exists for.
+    throw new Error(UNAVAILABLE);
+  }
   const json = (await res.json().catch(() => null)) as (T & GoErrorBody) | null;
   if (!res.ok || !json) throw new Error(goMessage(json, UNAVAILABLE));
   return json as T;
