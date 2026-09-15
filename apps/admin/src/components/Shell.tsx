@@ -222,9 +222,9 @@ export function DashboardShell({
                 "door they cannot open" this file's NAV comment warns
                 about. */}
             {allowed(capabilities, 'parcels.read') && <ScanBox />}
-            <span className="avatar" aria-hidden="true">
+            <Link href={'/set-pin' as Route} className="avatar" title="Change your PIN">
               {(actorId ?? 'OP').slice(0, 2).toUpperCase()}
-            </span>
+            </Link>
             <span className="sr-only">Signed in</span>
           </div>
         </header>
