@@ -120,7 +120,15 @@ services:
       - key: MPESA_CALLBACK_SECRET
         sync: false   # trailing path segment of esoko-app's MPESA_CALLBACK_URL; required once MPESA_PROVIDER leaves console
       - key: SMS_PROVIDER
-        value: console
+        value: celcom
+      - key: CELCOM_API_KEY
+        sync: false   # isms.celcomafrica.com bulk SMS credentials — parcel lifecycle texts
+      - key: CELCOM_PARTNER_ID
+        sync: false
+      - key: CELCOM_SHORTCODE
+        sync: false
+      - key: SMS_SENDER_ID
+        value: ESOQO
       - key: MPESA_PROVIDER
         value: console
       - key: PESAPAL_PROVIDER
