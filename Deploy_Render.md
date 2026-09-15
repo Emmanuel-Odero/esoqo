@@ -1,6 +1,6 @@
-# Deploying Esoko to Render
+# Deploying Esoqo to Render
 
-This guide covers deploying all Esoko services to [Render](https://render.com).
+This guide covers deploying all Esoqo services to [Render](https://render.com).
 Unlike Vercel, Render runs **long-lived Node processes**, so the Fastify core
 service and `ioredis` Redis client work without modification.
 
@@ -12,10 +12,10 @@ service and `ioredis` Redis client work without modification.
 ┌──────────────────────────────────────────────────────────┐
 │   Render Web Services                                    │
 │                                                          │
-│   esoko-web     (esoko.co.ke)       Next.js SSR app      │
-│   esoko-app     (app.esoko.co.ke)   Next.js SSR app      │
-│   esoko-admin   (ops.esoko.co.ke)   Next.js SSR app      │
-│   esoko-core    (core.esoko.co.ke)  Fastify API           │
+│   esoko-web     (esoqo.co.ke)       Next.js SSR app      │
+│   esoko-app     (app.esoqo.co.ke)   Next.js SSR app      │
+│   esoko-admin   (ops.esoqo.co.ke)   Next.js SSR app      │
+│   esoko-core    (core.esoqo.co.ke)  Fastify API           │
 │                                                          │
 │   All four share:                                        │
 │   ─ Render Managed PostgreSQL                            │
@@ -68,9 +68,9 @@ Create `services/pgbouncer/Dockerfile`:
 FROM edoburu/pgbouncer:latest
 ENV DB_HOST=<your-render-postgres-internal-host>
 ENV DB_PORT=5432
-ENV DB_USER=esoko
+ENV DB_USER=esoqo
 ENV DB_PASSWORD=<password>
-ENV DB_NAME=esoko
+ENV DB_NAME=esoqo
 ENV POOL_MODE=transaction
 ENV MAX_CLIENT_CONN=200
 ENV DEFAULT_POOL_SIZE=20
@@ -87,12 +87,12 @@ on port 5432). Then use the PgBouncer service's internal hostname in `DATABASE_U
 
 ```
 # Direct connection (recommended for Render without PgBouncer)
-DATABASE_URL="postgresql://esoko_user:password@dpg-xxxx.render.com:5432/esoko"
-DIRECT_DATABASE_URL="postgresql://esoko_user:password@dpg-xxxx.render.com:5432/esoko"
+DATABASE_URL="postgresql://esoqo_user:password@dpg-xxxx.render.com:5432/esoqo"
+DIRECT_DATABASE_URL="postgresql://esoqo_user:password@dpg-xxxx.render.com:5432/esoqo"
 
 # Via PgBouncer sidecar (if deployed)
-DATABASE_URL="postgresql://esoko:password@pgbouncer:5432/esoko?pgbouncer=true&connection_limit=10"
-DIRECT_DATABASE_URL="postgresql://esoko:password@postgres:5432/esoko"
+DATABASE_URL="postgresql://esoqo:password@pgbouncer:5432/esoqo?pgbouncer=true&connection_limit=10"
+DIRECT_DATABASE_URL="postgresql://esoqo:password@postgres:5432/esoqo"
 ```
 
 ---
@@ -134,8 +134,8 @@ The core service runs as a **Web Service** on Render.
 3. **Name**: `esoko-core`
 4. **Root Directory**: `services/core`
 5. **Runtime**: `Node`
-6. **Build Command**: `pnpm install && pnpm --filter @esoko/core-service build`
-7. **Start Command**: `pnpm --filter @esoko/core-service start`
+6. **Build Command**: `pnpm install && pnpm --filter @esoqo/core-service build`
+7. **Start Command**: `pnpm --filter @esoqo/core-service start`
 8. **Plan**: Starter or higher
 9. **Advanced** → Add environment variables (see §5)
 
@@ -203,7 +203,7 @@ Set these in each Render service's **Environment Variables** section (or via
 | `SMS_PROVIDER` | `africastalking` (production) |
 | `SMS_API_KEY` | From Africa's Talking |
 | `SMS_USERNAME` | From Africa's Talking |
-| `SMS_SENDER_ID` | `ESOKO` |
+| `SMS_SENDER_ID` | `ESOQO` |
 | `OTP_RATE_LIMIT_PER_HOUR` | `5` |
 | `OTP_DAILY_SPEND_CAP_KES` | `5000` |
 
@@ -256,7 +256,7 @@ one-off job.
 # From your local machine, targeting the Render DB
 DATABASE_URL="<render-direct-db-url>" \
 DIRECT_DATABASE_URL="<render-direct-db-url>" \
-pnpm --filter @esoko/db exec prisma migrate deploy
+pnpm --filter @esoqo/db exec prisma migrate deploy
 ```
 
 **Option B: Release command in `render.yaml`**
@@ -269,7 +269,7 @@ services:
     name: esoko-core
     # ...
     postDeploy:
-      command: pnpm --filter @esoko/db exec prisma migrate deploy
+      command: pnpm --filter @esoqo/db exec prisma migrate deploy
 ```
 
 **Option C: One-off Job (Render Cron Jobs)**
@@ -277,7 +277,7 @@ services:
 Create a Render Cron Job that runs `prisma migrate deploy` after each deploy:
 
 ```
-pnpm --filter @esoko/db exec prisma migrate deploy
+pnpm --filter @esoqo/db exec prisma migrate deploy
 ```
 
 ### 6.2 Seed the admin account
@@ -317,8 +317,8 @@ services:
     repo: https://github.com/Emmanuel-Odero/esoko-254
     branch: main
     rootDir: services/core
-    buildCommand: pnpm install && pnpm --filter @esoko/core-service build
-    startCommand: pnpm --filter @esoko/core-service start
+    buildCommand: pnpm install && pnpm --filter @esoqo/core-service build
+    startCommand: pnpm --filter @esoqo/core-service start
     healthCheckPath: /health
     envVars:
       - key: NODE_ENV
@@ -352,9 +352,9 @@ services:
       - key: SMS_USERNAME
         sync: false
       - key: SMS_SENDER_ID
-        value: ESOKO
+        value: ESOQO
     postDeploy:
-      command: pnpm --filter @esoko/db exec prisma migrate deploy
+      command: pnpm --filter @esoqo/db exec prisma migrate deploy
 
   # ───────────────────────────────────────────────────────────
   # Web — public Next.js app
@@ -481,8 +481,8 @@ services:
 # ─────────────────────────────────────────────────────────────
 databases:
   - name: esoko-db
-    databaseName: esoko
-    user: esoko
+    databaseName: esoqo
+    user: esoqo
     plan: starter
     region: frankfurt
     postgresMajorVersion: 16
@@ -537,7 +537,7 @@ Prisma Client must be generated during build. Add a `postinstall` script to
 ```
 
 This ensures `prisma generate` runs automatically after `pnpm install` in any
-service that depends on `@esoko/db`.
+service that depends on `@esoqo/db`.
 
 ### 8.3 Next.js output
 
@@ -565,10 +565,10 @@ After initial deployment, add custom domains in Render Dashboard:
 
 | Service | Domain |
 |---------|--------|
-| `esoko-web` | `esoko.co.ke` |
-| `esoko-app` | `app.esoko.co.ke` |
-| `esoko-admin` | `ops.esoko.co.ke` |
-| `esoko-core` | `api.esoko.co.ke` |
+| `esoko-web` | `esoqo.co.ke` |
+| `esoko-app` | `app.esoqo.co.ke` |
+| `esoko-admin` | `ops.esoqo.co.ke` |
+| `esoko-core` | `api.esoqo.co.ke` |
 | `cecf-wordpress` | `childeldercare.foundation` + `www.childeldercare.foundation` |
 
 Render provides the target CNAME records for DNS configuration — open the
@@ -599,7 +599,7 @@ curl https://ops-esoko.onrender.com/signin
 
 # Admin login
 open https://ops-esoko.onrender.com/signin
-# Sign in with ops@esoko.co.ke / your-seeded-pin
+# Sign in with ops@esoqo.co.ke / your-seeded-pin
 ```
 
 Check Render Dashboard logs for each service to verify clean startup.

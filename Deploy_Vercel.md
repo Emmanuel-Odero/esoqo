@@ -1,4 +1,4 @@
-# Deploying Esoko to Vercel
+# Deploying Esoqo to Vercel
 
 This guide covers deploying the three Next.js apps (`web`, `app`, `admin`) to Vercel.
 The Fastify core service must run separately — Vercel does not support long-running Node processes.
@@ -11,14 +11,14 @@ The Fastify core service must run separately — Vercel does not support long-ru
 ┌──────────────────────────────────────────────────────────┐
 │   Vercel (Serverless Functions + Edge Middleware)        │
 │                                                          │
-│   esoko-web    (esoko.co.ke)         public site         │
-│   esoko-app    (app.esoko.co.ke)    PWA surface          │
-│   esoko-admin  (ops.esoko.co.ke)    operations panel     │
+│   esoko-web    (esoqo.co.ke)         public site         │
+│   esoko-app    (app.esoqo.co.ke)    PWA surface          │
+│   esoko-admin  (ops.esoqo.co.ke)    operations panel     │
 │                                                          │
 │   All three share:                                       │
-│   ─ @esoko/db   (Prisma → PostgreSQL via PgBouncer)     │
-│   ─ @esoko/auth (Upstash Redis for sessions/OTP)        │
-│   ─ @esoko/ui, @esoko/domain, @esoko/a11y               │
+│   ─ @esoqo/db   (Prisma → PostgreSQL via PgBouncer)     │
+│   ─ @esoqo/auth (Upstash Redis for sessions/OTP)        │
+│   ─ @esoqo/ui, @esoqo/domain, @esoqo/a11y               │
 └──────────────────────────────────────────────────────────┘
 
 ┌──────────────────────────────────────────┐
@@ -52,8 +52,8 @@ Neon is the recommended Postgres provider — it ships with PgBouncer built in.
 2. Copy both connection strings from the Neon dashboard:
 
 ```
-DATABASE_URL          = postgresql://user:pass@ep-xxx.us-east-2.aws.neon.tech/esoko?pgbouncer=true&connection_limit=10
-DIRECT_DATABASE_URL   = postgresql://user:pass@ep-xxx.us-east-2.aws.neon.tech/esoko
+DATABASE_URL          = postgresql://user:pass@ep-xxx.us-east-2.aws.neon.tech/esoqo?pgbouncer=true&connection_limit=10
+DIRECT_DATABASE_URL   = postgresql://user:pass@ep-xxx.us-east-2.aws.neon.tech/esoqo
 ```
 
 The `?pgbouncer=true` query parameter tells Prisma to use PgBouncer-compatible mode
@@ -68,7 +68,7 @@ pnpm db:migrate
 Or on Vercel during build (see Build section below), run:
 
 ```sh
-pnpm --filter @esoko/db exec prisma migrate deploy
+pnpm --filter @esoqo/db exec prisma migrate deploy
 ```
 
 ### Seed the admin account
@@ -77,7 +77,7 @@ pnpm --filter @esoko/db exec prisma migrate deploy
 SEED_ADMIN_PIN="<your-admin-pin>" pnpm db:seed
 ```
 
-The seed creates `ops@esoko.co.ke` with full capabilities.
+The seed creates `ops@esoqo.co.ke` with full capabilities.
 
 ---
 
@@ -94,7 +94,7 @@ or Edge Functions. You must switch to Upstash Redis (HTTP-based).
 ### 2.2 Install the Upstash Redis client
 
 ```sh
-pnpm --filter @esoko/auth add @upstash/redis
+pnpm --filter @esoqo/auth add @upstash/redis
 ```
 
 ### 2.3 Update the Redis client — `packages/auth/src/redis.ts`
@@ -105,14 +105,14 @@ Replace the ioredis-based client with Upstash:
 import 'server-only';
 import { Redis } from '@upstash/redis';
 
-const g = globalThis as unknown as { __esokoRedis?: Redis };
+const g = globalThis as unknown as { __esoqoRedis?: Redis };
 export const redis =
-  g.__esokoRedis ??
+  g.__esoqoRedis ??
   new Redis({
     url: process.env.REDIS_URL!,
     token: process.env.REDIS_TOKEN!,
   });
-if (process.env.NODE_ENV !== 'production') g.__esokoRedis = redis;
+if (process.env.NODE_ENV !== 'production') g.__esoqoRedis = redis;
 ```
 
 ### 2.4 Add `REDIS_TOKEN` to turbo.json
@@ -143,8 +143,8 @@ a platform that supports long-running Node processes:
 
 1. Create a new Railway project from your GitHub repo
 2. Set root directory to `services/core`
-3. Build command: `pnpm install && pnpm --filter @esoko/core-service build`
-4. Start command: `pnpm --filter @esoko/core-service start`
+3. Build command: `pnpm install && pnpm --filter @esoqo/core-service build`
+4. Start command: `pnpm --filter @esoqo/core-service start`
 5. Add the same env vars (minus Next.js public vars)
 
 ### Option B: Fly.io
@@ -156,8 +156,8 @@ a platform that supports long-running Node processes:
 
 1. Create a new Web Service
 2. Point to `services/core`
-3. Build command: `pnpm install && pnpm --filter @esoko/core-service build`
-4. Start command: `pnpm --filter @esoko/core-service start`
+3. Build command: `pnpm install && pnpm --filter @esoqo/core-service build`
+4. Start command: `pnpm --filter @esoqo/core-service start`
 
 ### Core service env vars
 
@@ -183,9 +183,9 @@ Each Next.js app deploys as a separate Vercel project. Create three projects:
 
 | Project | Domain | Source directory |
 |---------|--------|-----------------|
-| `esoko-web` | `esoko.co.ke` | `apps/web` |
-| `esoko-app` | `app.esoko.co.ke` | `apps/app` |
-| `esoko-admin` | `ops.esoko.co.ke` | `apps/admin` |
+| `esoko-web` | `esoqo.co.ke` | `apps/web` |
+| `esoko-app` | `app.esoqo.co.ke` | `apps/app` |
+| `esoko-admin` | `ops.esoqo.co.ke` | `apps/admin` |
 
 ### 4.1 Create `vercel.json` per app
 
@@ -196,7 +196,7 @@ Each app needs its own `vercel.json`:
 ```json
 {
   "framework": "nextjs",
-  "buildCommand": "cd ../.. && pnpm build --filter=@esoko/web",
+  "buildCommand": "cd ../.. && pnpm build --filter=@esoqo/web",
   "installCommand": "cd ../.. && pnpm install",
   "outputDirectory": ".next",
   "regions": ["iad1"]
@@ -238,7 +238,7 @@ If `postinstall` is undesirable, add `prisma generate` to the build pipeline in
 ```json
 {
   "tasks": {
-    "@esoko/db#build": {
+    "@esoqo/db#build": {
       "outputs": ["node_modules/.prisma/**"],
       "cache": false
     }
@@ -282,18 +282,18 @@ Set these in each Vercel project's dashboard (Settings → Environment Variables
 | `SMS_PROVIDER` | `console` (dev) or `africastalking` (prod) |
 | `SMS_API_KEY` | From Africa's Talking |
 | `SMS_USERNAME` | From Africa's Talking |
-| `SMS_SENDER_ID` | `ESOKO` |
-| `NEXT_PUBLIC_APP_URL` | `https://app.esoko.co.ke` |
-| `NEXT_PUBLIC_WEB_URL` | `https://esoko.co.ke` |
-| `CORE_API_URL` | `https://core.esoko.co.ke` (or Railway URL) |
+| `SMS_SENDER_ID` | `ESOQO` |
+| `NEXT_PUBLIC_APP_URL` | `https://app.esoqo.co.ke` |
+| `NEXT_PUBLIC_WEB_URL` | `https://esoqo.co.ke` |
+| `CORE_API_URL` | `https://core.esoqo.co.ke` (or Railway URL) |
 | `SEED_ADMIN_PIN` | Admin PIN for seeding |
 
 **Additional for `esoko-admin` only:**
 
 | Variable | Value |
 |----------|-------|
-| `NEXT_PUBLIC_APP_URL` | `https://app.esoko.co.ke` |
-| `NEXT_PUBLIC_WEB_URL` | `https://esoko.co.ke` |
+| `NEXT_PUBLIC_APP_URL` | `https://app.esoqo.co.ke` |
+| `NEXT_PUBLIC_WEB_URL` | `https://esoqo.co.ke` |
 
 ### 4.6 Node.js version
 
@@ -385,7 +385,7 @@ pnpm build
 # Run migrations against the production database
 DATABASE_URL="<production-direct-url>" \
 DIRECT_DATABASE_URL="<production-direct-url>" \
-pnpm --filter @esoko/db exec prisma migrate deploy
+pnpm --filter @esoqo/db exec prisma migrate deploy
 ```
 
 ### 7.3 Seed the admin account
@@ -425,9 +425,9 @@ After the initial deploy succeeds, add custom domains in Vercel:
 
 | Project | Domain |
 |---------|--------|
-| esoko-web | `esoko.co.ke` |
-| esoko-app | `app.esoko.co.ke` |
-| esoko-admin | `ops.esoko.co.ke` |
+| esoko-web | `esoqo.co.ke` |
+| esoko-app | `app.esoqo.co.ke` |
+| esoko-admin | `ops.esoqo.co.ke` |
 
 Update DNS — Vercel will provide the target records.
 
@@ -438,8 +438,8 @@ Use Vercel's environment variable scoping:
 | Variable | Preview | Production |
 |----------|---------|------------|
 | `DATABASE_URL` | Neon branch DB | Production DB |
-| `NEXT_PUBLIC_WEB_URL` | `https://preview-web.vercel.app` | `https://esoko.co.ke` |
-| `NEXT_PUBLIC_APP_URL` | `https://preview-app.vercel.app` | `https://app.esoko.co.ke` |
+| `NEXT_PUBLIC_WEB_URL` | `https://preview-web.vercel.app` | `https://esoqo.co.ke` |
+| `NEXT_PUBLIC_APP_URL` | `https://preview-app.vercel.app` | `https://app.esoqo.co.ke` |
 | `CORE_API_URL` | Staging core URL | Production core URL |
 
 ---
@@ -449,22 +449,22 @@ Use Vercel's environment variable scoping:
 ### 8.1 Health check
 
 ```sh
-curl https://esoko.co.ke/help
+curl https://esoqo.co.ke/help
 # Should return the help page
 
-curl https://ops.esoko.co.ke
+curl https://ops.esoqo.co.ke
 # Should redirect to sign-in page
 ```
 
 ### 8.2 Admin login
 
-1. Navigate to `https://ops.esoko.co.ke/signin`
-2. Sign in with `ops@esoko.co.ke` and the PIN you set during seeding
+1. Navigate to `https://ops.esoqo.co.ke/signin`
+2. Sign in with `ops@esoqo.co.ke` and the PIN you set during seeding
 3. Verify the dashboard loads with staff list, registration stats, etc.
 
 ### 8.3 Verify Redis connectivity
 
-Trigger an OTP request (sign-in flow on `app.esoko.co.ke/signin`). Check Upstash
+Trigger an OTP request (sign-in flow on `app.esoqo.co.ke/signin`). Check Upstash
 dashboard for the OTP state keys appearing in Redis.
 
 ### 8.4 Verify core service connectivity
@@ -478,11 +478,11 @@ curl https://<core-service-url>/health
 
 ## 9. Troubleshooting
 
-### Build fails with "Cannot find module '@esoko/db'"
+### Build fails with "Cannot find module '@esoqo/db'"
 
 Ensure `transpilePackages` in `next.config.mjs` includes all workspace dependencies.
-The current config includes `@esoko/ui`, `@esoko/a11y`, `@esoko/domain`. If other
-packages are needed (e.g., `@esoko/db`, `@esoko/auth`), add them.
+The current config includes `@esoqo/ui`, `@esoqo/a11y`, `@esoqo/domain`. If other
+packages are needed (e.g., `@esoqo/db`, `@esoqo/auth`), add them.
 
 ### Prisma Client not found during build
 
