@@ -31,17 +31,13 @@ async function goFetch<T>(path: string, init?: RequestInit): Promise<T> {
   return json as T;
 }
 
-export interface BargainReasonView { reason: string; extraDiscountPct: number }
+/** The standard rate card's weight brackets — used only to match a
+ *  typed weight to a parcel type and to show its weightLabel (e.g.
+ *  "0.5kg to 2.2kg") next to each type. No price from this is ever
+ *  quoted or rendered: see SendParcelForm's own comment on why every
+ *  booking here is PAY_AT_COUNTER, settled in person. */
 export interface ParcelPricingView {
   parcelType: string; weightLabel: string; minWeightKg: number; maxWeightKg: number;
-  // Decimal strings from core-go.
-  minKes: string; maxKes: string; bargainMinPct: number; bargainMaxPct: number;
-  bargainReasons: BargainReasonView[]; suggestedTransportMode: string;
-  agentDropDiscountPct?: number;
-  // Decimal strings, same as the coverage-tier endpoint — parse with
-  // toCents from @esoqo/domain.
-  coverageFeeKes?: string;
-  coveredAmountKes?: string;
 }
 export interface ParcelZoneView { id: string; name: string; lat: number; lng: number; active: boolean }
 
@@ -54,19 +50,6 @@ export interface ParcelAgentView {
   openingHours: string | null; active: boolean;
   capacity: number; holdingFeeKes: string; parcelsHeld: number;
   distanceKm?: number;
-}
-
-/** One cover level, quoted against a declared value by the server so
- *  the client never re-implements the fee formula. */
-export interface CoverageTierView {
-  id: string; name: string;
-  // Decimal strings from core-go; feePct is a rate, so it stays a number.
-  maxCoverKes: string; feeKes: string; feePct: number;
-  active: boolean; sortOrder: number;
-  // Decimal strings — core-go emits money as "254.15" on this endpoint
-  // (see docs/proposals/money-representation.md). Parse with toCents from
-  // @esoqo/domain; never Number() or arithmetic directly.
-  feeForValueKes: string; coveredAmountKes: string; capsDeclaredAmount: boolean;
 }
 
 export async function actionListParcelAgents(): Promise<ParcelAgentView[]> {
@@ -95,19 +78,6 @@ export async function actionListWalkInStations(): Promise<WalkInStationView[]> {
   }
 }
 
-/** Quotes every tier against `declaredValueKes`. Passing 0 still
- *  returns the tiers (with zero fees) so the form can show what cover
- *  is available before the sender has typed a value. */
-export async function actionListCoverageTiers(declaredValueKes: number): Promise<CoverageTierView[]> {
-  try {
-    const params = new URLSearchParams({ declaredValueKes: String(declaredValueKes || 0) });
-    const { tiers } = await goFetch<{ tiers: CoverageTierView[] | null }>(`/v1/parcels/coverage?${params}`);
-    return tiers ?? [];
-  } catch {
-    return [];
-  }
-}
-
 /** Every parcel type's price band at once — same one-call shape the
  *  mobile booking form uses to match a typed weight to a bracket
  *  client-side, without a round trip per keystroke. */
@@ -129,92 +99,6 @@ export async function actionListParcelZones(): Promise<ParcelZoneView[]> {
   }
 }
 
-export interface QuoteParcelPriceInput {
-  parcelType: string;
-  originZoneId?: string;
-  destinationZoneId?: string;
-  /** Set when the receiver will collect from a pickup point — earns the
-   *  rate card's agent-drop discount. */
-  destinationAgentId?: string;
-  declaredValueKes?: number;
-  coverageTierId?: string;
-}
-
-/** The live quote the booking form calls on every meaningful edit.
- *
- *  This is now a pure read — it does NOT create anything. The form used
- *  to write a DRAFT_PENDING_PAYMENT row just to find out what a parcel
- *  cost, which is why "Get a price" wrote to the database and why the
- *  admin console has a stale-draft KPI and a sweeper for the backlog it
- *  produced. Price comes first now; a booking is only written when the
- *  sender actually commits.
- *
- *  Every modifier (zones, agent, cover) goes to the server rather than
- *  being applied client-side, so the number shown here is the number
- *  SetParcelPrice will independently re-derive and accept — see
- *  dbx.ParcelPriceBand. */
-export async function actionQuoteParcelPrice(
-  input: QuoteParcelPriceInput,
-): Promise<{ ok: true; data: ParcelPricingView & { distanceKm?: number } } | { ok: false; error: string }> {
-  const params = new URLSearchParams({ parcelType: input.parcelType });
-  if (input.originZoneId) params.set('originZoneId', input.originZoneId);
-  if (input.destinationZoneId) params.set('destinationZoneId', input.destinationZoneId);
-  if (input.destinationAgentId) params.set('destinationAgentId', input.destinationAgentId);
-  if (input.declaredValueKes && input.coverageTierId) {
-    params.set('declaredValueKes', String(input.declaredValueKes));
-    params.set('coverageTierId', input.coverageTierId);
-  }
-  try {
-    const data = await goFetch<ParcelPricingView & { distanceKm?: number }>(`/v1/parcels/pricing?${params.toString()}`);
-    return { ok: true, data };
-  } catch (e) {
-    return { ok: false, error: e instanceof Error ? e.message : UNAVAILABLE };
-  }
-}
-
-/** The platform's cash-on-delivery settings. Public so a booking form
- *  knows whether to offer COD at all and what cap to enforce before the
- *  server re-enforces it. handlingFeePct is deliberately exposed: it
- *  comes out of what a seller is paid, and a seller learning that after
- *  their first settlement rather than before their first booking is the
- *  kind of surprise that loses an account. */
-export interface CodPolicyView {
-  enabled: boolean;
-  maxAmountKes: string;
-  handlingFeePct: number;
-}
-
-export async function actionGetCodPolicy(): Promise<CodPolicyView> {
-  try {
-    return await goFetch<CodPolicyView>('/v1/parcels/cod-policy');
-  } catch {
-    // Unreachable settings mean no COD offered, never COD offered on a
-    // guess — this decides whether somebody's money rides on a doorstep.
-    return { enabled: false, maxAmountKes: '0.00', handlingFeePct: 0 };
-  }
-}
-
-/** Attaches what the buyer owes to a draft, then confirms the booking
- *  without any payment — for COD the money arrives at the door, so
- *  there is no STK push to wait on. */
-export async function actionBookParcelCod(
-  code: string, codAmountKes: number,
-): Promise<{ ok: true } | { ok: false; error: string }> {
-  try {
-    await goFetch(`/v1/parcels/${encodeURIComponent(code)}/cod`, {
-      method: 'POST',
-      // The buyer covers delivery too — the arrangement this market
-      // actually runs on, and the only one the server will confirm a
-      // booking for without a prepaid fee.
-      body: JSON.stringify({ codAmountKes, codCollectDeliveryFee: true }),
-    });
-    await goFetch(`/v1/parcels/${encodeURIComponent(code)}/cod/confirm`, { method: 'POST' });
-    return { ok: true };
-  } catch (e) {
-    return { ok: false, error: e instanceof Error ? e.message : UNAVAILABLE };
-  }
-}
-
 export interface BookParcelInput {
   senderName: string; senderMsisdn: string;
   receiverName: string; receiverMsisdn: string;
@@ -222,25 +106,27 @@ export interface BookParcelInput {
   parcelType: string; weightKg?: number; fragile: boolean; notes?: string;
   originZoneId?: string; destinationZoneId?: string;
   destinationAgentId?: string;
-  declaredValueKes?: number; coverageTierId?: string;
   // originMethod/parcelOrgId — set together when the sender picks "I'm
   // dropping this off myself" over a scheduled pickup (see
   // WalkInStationView). Omitted keeps the historical SCHEDULED_PICKUP
   // default.
   originMethod?: 'SCHEDULED_PICKUP' | 'SELF_DROPOFF';
   parcelOrgId?: string;
-  // payAtCounter — the pilot's walk-in path: no price is quoted or
-  // charged online; the parcel lands straight in BOOKED and the fee is
-  // settled in person at the counter. Only valid alongside
-  // originMethod SELF_DROPOFF (core-go refuses it otherwise).
+  // payAtCounter — no price is quoted or charged online for this
+  // booking; it lands straight in BOOKED and the fee is settled in
+  // person, with the agent or the courier. SendParcelForm always sends
+  // true — see dbx.BookParcelInput.PayAtCounter's own comment for why
+  // this is no longer restricted to a walk-in drop-off.
   payAtCounter?: boolean;
 }
 
-/** Creates the DRAFT_PENDING_PAYMENT booking. deliveryCode is returned
- *  once, here — a guest sender has no session to revisit later (unlike
- *  the mobile app's "Sent" tab), so this is their only chance to see it
- *  themselves. It also now reaches the receiver automatically by SMS
- *  once a courier picks the parcel up. */
+/** Creates the booking — always PAY_AT_COUNTER from this form (see
+ *  BookParcelInput.payAtCounter), so it lands straight in BOOKED rather
+ *  than DRAFT_PENDING_PAYMENT; there is no price/pay step after this
+ *  call. deliveryCode is returned once, here — a guest sender has no
+ *  session to revisit later (unlike the mobile app's "Sent" tab), so
+ *  this is their only chance to see it themselves. It also now reaches
+ *  the receiver automatically by SMS once a courier picks the parcel up. */
 export async function actionBookParcel(
   input: BookParcelInput,
 ): Promise<{ ok: true; code: string; deliveryCode: string } | { ok: false; error: string }> {
@@ -258,8 +144,6 @@ export async function actionBookParcel(
         notes: input.notes?.trim() || null,
         originZoneId: input.originZoneId ?? null, destinationZoneId: input.destinationZoneId ?? null,
         destinationAgentId: input.destinationAgentId ?? null,
-        declaredValueKes: input.declaredValueKes ?? null,
-        coverageTierId: input.coverageTierId ?? null,
         originMethod: input.originMethod ?? null,
         parcelOrgId: input.parcelOrgId ?? null,
         payAtCounter: input.payAtCounter ?? false,
@@ -268,39 +152,6 @@ export async function actionBookParcel(
     return { ok: true, code: json.code, deliveryCode: json.deliveryCode };
   } catch (e) {
     return { ok: false, error: e instanceof Error ? e.message : UNAVAILABLE };
-  }
-}
-
-export async function actionSetParcelPrice(
-  code: string, priceKes: string, bargainReason?: string,
-): Promise<{ ok: true } | { ok: false; error: string }> {
-  try {
-    await goFetch(`/v1/parcels/${encodeURIComponent(code)}/price`, {
-      method: 'POST',
-      body: JSON.stringify({ priceKes, bargainReason: bargainReason ?? null }),
-    });
-    return { ok: true };
-  } catch (e) {
-    return { ok: false, error: e instanceof Error ? e.message : UNAVAILABLE };
-  }
-}
-
-/** Starts the M-Pesa STK push. In console/sandbox test mode the push
- *  can auto-confirm inline (status comes back BOOKED already); against
- *  real Daraja it stays DRAFT_PENDING_PAYMENT until the webhook lands,
- *  and the form polls actionCheckParcelStatus the same way ticket
- *  checkout does. */
-export async function actionPayParcel(
-  code: string, msisdn: string,
-): Promise<{ ok: true; status: string } | { ok: false; error: string }> {
-  try {
-    const json = await goFetch<{ status: string }>(`/v1/parcels/${encodeURIComponent(code)}/pay`, {
-      method: 'POST',
-      body: JSON.stringify({ paymentMethod: 'MPESA_STK', msisdn: msisdn.trim() }),
-    });
-    return { ok: true, status: json.status };
-  } catch (e) {
-    return { ok: false, error: e instanceof Error ? e.message : 'Could not start the M-Pesa payment' };
   }
 }
 

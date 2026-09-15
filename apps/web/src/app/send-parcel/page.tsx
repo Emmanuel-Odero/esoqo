@@ -1,7 +1,7 @@
 import type { Metadata } from 'next';
 import { Icon } from '@esoqo/ui';
 import {
-  actionGetCodPolicy, actionListParcelAgents, actionListParcelPricing, actionListParcelZones,
+  actionListParcelAgents, actionListParcelPricing, actionListParcelZones,
   actionListWalkInStations,
 } from './actions';
 import { SendParcelForm } from './SendParcelForm';
@@ -9,7 +9,7 @@ import { TrackParcelForm } from './track/TrackParcelForm';
 
 export const metadata: Metadata = {
   title: 'Send a parcel — Esoqo',
-  description: 'Get a real price by weight and destination, pay by M-Pesa, and track it by handoff — no account needed.',
+  description: 'Enter your shipping details online — the fee is settled in person, with the agent or courier, not here.',
 };
 export const dynamic = 'force-dynamic';
 
@@ -22,13 +22,19 @@ export const dynamic = 'force-dynamic';
  * handleBookParcel/handleGetParcelPricing/handleGetParcelStatus's own
  * comments in services/core-go) — this page is the first thing that
  * actually calls them without a session.
+ *
+ * No price or online payment anywhere on this page — every booking
+ * lands as PAY_AT_COUNTER (see dbx.BookParcelInput's own comment) and
+ * is settled in person, with the agent at a station or the courier on
+ * pickup. `pricing` is still fetched, but only for its weight brackets
+ * (matching a typed weight to a parcel type) and label text — no KES
+ * figure from it is ever rendered.
  */
 export default async function SendParcelPage() {
-  const [pricing, zones, agents, codPolicy, stations] = await Promise.all([
+  const [pricing, zones, agents, stations] = await Promise.all([
     actionListParcelPricing(),
     actionListParcelZones(),
     actionListParcelAgents(),
-    actionGetCodPolicy(),
     actionListWalkInStations(),
   ]);
 
@@ -39,8 +45,8 @@ export default async function SendParcelPage() {
           <p className="kicker">Parcels</p>
           <h1>Send a parcel</h1>
           <p className="lead">
-            A real price by weight and destination before you pay — not a number haggled at the
-            matatu stage. No account needed; just your details and the receiver's.
+            Tell us what you&apos;re sending and where it&apos;s going — the fee is settled in person,
+            with the agent or courier. No account needed; just your details and the receiver&apos;s.
           </p>
         </div>
       </section>
@@ -51,7 +57,7 @@ export default async function SendParcelPage() {
             <div className="card">
               <span className="icbox icbox-g" style={{ marginBottom: 10 }}><Icon name="truck" size={18} /></span>
               <p style={{ margin: 0, fontSize: '.86rem', color: 'var(--tx-2)' }}>
-                Priced by weight and destination, shown before you pay.
+                The fee is settled in person — with the agent or the courier, not online.
               </p>
             </div>
             <div className="card">
@@ -68,7 +74,7 @@ export default async function SendParcelPage() {
             </div>
           </div>
 
-          <SendParcelForm pricing={pricing} zones={zones} agents={agents} codPolicy={codPolicy} stations={stations} />
+          <SendParcelForm pricing={pricing} zones={zones} agents={agents} stations={stations} />
         </div>
       </section>
 

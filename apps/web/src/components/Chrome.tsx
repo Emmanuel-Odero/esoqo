@@ -52,39 +52,52 @@ export function Header() {
   }, [open ]);
 
   return (
-    <header>
-      <div className="wrap">
-        <div className="hd">
-          <Link href="/" aria-label="Esoqo home"><Logo /></Link>
-          <nav className="hdnav" id="nav" aria-label="Main">
-            {NAV.map(([href, label]) => {
-              // /counties also covers /counties/[slug] — a nested page is
-              // still "on" that section, not off the map entirely.
-              const active = path === href || path.startsWith(`${href}/`);
-              return (
-                <Link key={href} href={href} aria-current={active ? 'page' : undefined}>
-                  {label}
-                </Link>
-              );
-            })}
-          </nav>
-          <div className="row">
-            <a className="btn btn-o btn-sm" href={`${APP}/signin`}>Sign in</a>
-            <a className="btn btn-p btn-sm" href={`${APP}/join`}>
-              <Icon name="arrow-right" size={15} />Join free
-            </a>
+    <>
+      {/* The drawer below is deliberately NOT nested inside this
+          <header>. header has backdrop-filter (for the sticky blur),
+          and backdrop-filter — like filter/transform/perspective —
+          establishes a new containing block for any position:fixed
+          descendant (CSS Containing Block spec, ¶ backdrop-filter). A
+          fixed-position drawer nested inside it resolves its inset
+          against the header's own ~64px box instead of the viewport,
+          collapsing to zero height — which is exactly why the mobile
+          menu used to render but never visibly open. Keeping it a
+          sibling here, still inside <body>, gives it the viewport as
+          its containing block like any ordinary fixed element. */}
+      <header>
+        <div className="wrap">
+          <div className="hd">
+            <Link href="/" aria-label="Esoqo home"><Logo /></Link>
+            <nav className="hdnav" id="nav" aria-label="Main">
+              {NAV.map(([href, label]) => {
+                // /counties also covers /counties/[slug] — a nested page is
+                // still "on" that section, not off the map entirely.
+                const active = path === href || path.startsWith(`${href}/`);
+                return (
+                  <Link key={href} href={href} aria-current={active ? 'page' : undefined}>
+                    {label}
+                  </Link>
+                );
+              })}
+            </nav>
+            <div className="row">
+              <a className="btn btn-o btn-sm" href={`${APP}/signin`}>Sign in</a>
+              <a className="btn btn-p btn-sm" href={`${APP}/join`}>
+                <Icon name="arrow-right" size={15} />Join free
+              </a>
+            </div>
+            <button
+              className="hd-menu-btn"
+              aria-expanded={open}
+              aria-controls="mobile-nav"
+              aria-label={open ? 'Close menu' : 'Open menu'}
+              onClick={() => setOpen((v) => !v)}
+            >
+              <Icon name={open ? 'close' : 'menu'} size={22} />
+            </button>
           </div>
-          <button
-            className="hd-menu-btn"
-            aria-expanded={open}
-            aria-controls="mobile-nav"
-            aria-label={open ? 'Close menu' : 'Open menu'}
-            onClick={() => setOpen((v) => !v)}
-          >
-            <Icon name={open ? 'close' : 'menu'} size={22} />
-          </button>
         </div>
-      </div>
+      </header>
       {open && (
         <div className="hd-drawer-wrap">
           <button className="hd-scrim" aria-label="Close menu" onClick={() => setOpen(false)} tabIndex={-1} />
@@ -106,7 +119,7 @@ export function Header() {
           </nav>
         </div>
       )}
-    </header>
+    </>
   );
 }
 

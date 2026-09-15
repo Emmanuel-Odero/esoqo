@@ -1,15 +1,11 @@
 'use client';
-import {
-  ZERO_CENTS, displayKES, formatKES, percentOfCents, subCents, toCentsOrZero, toWire,
-  type Cents,
-} from '@esoqo/domain';
-import { useCallback, useEffect, useMemo, useRef, useState, useTransition } from 'react';
+import { toCentsOrZero } from '@esoqo/domain';
+import { useEffect, useMemo, useState, useTransition } from 'react';
 import { Icon } from '@esoqo/ui';
 import {
-  actionBookParcel, actionSetParcelPrice, actionPayParcel, actionCheckParcelStatus,
-  actionQuoteParcelPrice, actionListCoverageTiers, actionBookParcelCod,
-  type ParcelPricingView, type ParcelZoneView, type BargainReasonView,
-  type ParcelAgentView, type CoverageTierView, type CodPolicyView, type WalkInStationView,
+  actionBookParcel,
+  type ParcelPricingView, type ParcelZoneView,
+  type ParcelAgentView, type WalkInStationView,
 } from './actions';
 
 /** The 5 brackets from the standard rate card — id is the wire value
@@ -25,31 +21,28 @@ const PARCEL_TYPES = [
 ] as const;
 
 /**
- * Booking a parcel, priced before anything is written.
+ * Booking a parcel — no price shown or charged anywhere on this page.
  *
- * The order of these stages is the point. This form used to create a
- * DRAFT_PENDING_PAYMENT row the moment you asked what something cost —
- * a button labelled "Get a price" that wrote to the database — which is
- * where the admin console's stale-draft KPI and its nightly sweeper
- * came from. Now `quote` is a pure read that re-runs as the sender
- * edits, `details` collects the people, and exactly one commit at the
- * end books, prices and charges.
- *
- * That also fixes the thing underneath it: the sender no longer types
- * eight PII fields before finding out whether they can afford this.
+ * Every booking lands as PAY_AT_COUNTER (see dbx.BookParcelInput's own
+ * comment): the sender enters what's being sent and where, we book it
+ * and hand back a tracking code, and the fee itself is settled in
+ * person — with the agent at a station for a walk-in drop-off, or with
+ * the courier on pickup otherwise. This form used to quote a live
+ * price, run a bargain engine and take an M-Pesa payment inline; all
+ * of that is gone until pricing online is actually sorted, not merely
+ * hidden — there is no quote request anywhere in this file.
  */
-type Stage = 'quote' | 'details' | 'waiting' | 'success';
+type Stage = 'details' | 'contact' | 'success';
 
 const fieldStyle: React.CSSProperties = {
   width: '100%', padding: '10px 14px', border: '1.5px solid var(--line)', borderRadius: 8, fontSize: '.95rem',
 };
 
 export function SendParcelForm(
-  { pricing, zones, agents, codPolicy, stations }:
+  { pricing, zones, agents, stations }:
   {
     pricing: ParcelPricingView[]; zones: ParcelZoneView[];
-    agents: ParcelAgentView[]; codPolicy: CodPolicyView;
-    stations: WalkInStationView[];
+    agents: ParcelAgentView[]; stations: WalkInStationView[];
   },
 ) {
   // ── What's being sent, and where ────────────────────────────────────
@@ -71,22 +64,15 @@ export function SendParcelForm(
     () => stations.find((s) => s.id === dropoffStationId) ?? null,
     [stations, dropoffStationId],
   );
-  // Pilot behaviour: a walk-in drop-off never sees a price or pays
-  // online here — the fee is settled in person at the counter, and the
-  // only thing this flow still owes the sender digitally is a tracking
-  // code and, later, an SMS once the station actually has the parcel in
-  // hand (see /parcel-org/receive). Every price/cover/COD/M-Pesa block
-  // below is gated on this being false.
   const isSelfDropoff = originMethod === 'SELF_DROPOFF';
 
   // ── How it gets there ───────────────────────────────────────────────
   const [deliveryMode, setDeliveryMode] = useState<'DOORSTEP' | 'AGENT'>('DOORSTEP');
   const [destinationAgentId, setDestinationAgentId] = useState('');
-
-  // ── Cover ───────────────────────────────────────────────────────────
-  const [declaredValue, setDeclaredValue] = useState('');
-  const [coverageTierId, setCoverageTierId] = useState('');
-  const [tiers, setTiers] = useState<CoverageTierView[]>([]);
+  const chosenAgent = useMemo(
+    () => agents.find((a) => a.id === destinationAgentId) ?? null,
+    [agents, destinationAgentId],
+  );
 
   // ── Who ─────────────────────────────────────────────────────────────
   const [senderName, setSenderName] = useState('');
@@ -94,37 +80,20 @@ export function SendParcelForm(
   const [receiverName, setReceiverName] = useState('');
   const [receiverMsisdn, setReceiverMsisdn] = useState('');
   const [notes, setNotes] = useState('');
-  const [payMsisdn, setPayMsisdn] = useState('');
 
-  // ── Cash on delivery ────────────────────────────────────────────────
-  // Off by default. A seller who wants it is making a deliberate choice
-  // about who holds their money; nobody should end up on COD by not
-  // reading a pre-ticked box.
-  const [useCod, setUseCod] = useState(false);
-  const [codAmount, setCodAmount] = useState('');
-  const codAmountNum = Number(codAmount) || 0;
-
-  const [stage, setStage] = useState<Stage>('quote');
+  const [stage, setStage] = useState<Stage>('details');
   const [error, setError] = useState<string | null>(null);
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
   const [pending, start] = useTransition();
 
-  const [quote, setQuote] = useState<(ParcelPricingView & { distanceKm?: number }) | null>(null);
-  const [quoteLoading, setQuoteLoading] = useState(false);
-  const [selectedReason, setSelectedReason] = useState<BargainReasonView | null>(null);
-
   const [code, setCode] = useState<string | null>(null);
   const [deliveryCode, setDeliveryCode] = useState<string | null>(null);
-  const [finalPriceKes, setFinalPriceKes] = useState<number | null>(null);
-
-  const declaredValueNum = Number(declaredValue) || 0;
-  const chosenAgent = useMemo(
-    () => agents.find((a) => a.id === destinationAgentId) ?? null,
-    [agents, destinationAgentId],
-  );
 
   // Typing a weight auto-picks the matching bracket, same as the mobile
   // booking form — leaving it blank falls back to the type picked by hand.
+  // `pricing` is used only for this weight-to-bracket match and the
+  // weightLabel shown next to each type below — no KES figure from it
+  // is ever rendered on this page.
   useEffect(() => {
     const w = Number(weightKg);
     if (!weightKg || Number.isNaN(w)) return;
@@ -132,116 +101,27 @@ export function SendParcelForm(
     if (match) setParcelType(match.parcelType);
   }, [weightKg, pricing]);
 
-  // Cover options are re-quoted whenever the declared value changes —
-  // the server owns the fee formula (see handleListCoverageTiers), so
-  // the fee shown beside each tier is the fee that will actually be
-  // charged rather than a number this component worked out itself.
-  useEffect(() => {
-    let cancelled = false;
-    const t = setTimeout(async () => {
-      const fetched = await actionListCoverageTiers(declaredValueNum);
-      if (!cancelled) setTiers(fetched);
-    }, 300);
-    return () => { cancelled = true; clearTimeout(t); };
-  }, [declaredValueNum]);
-
-  // The live quote. Debounced because it re-runs on every edit to a
-  // zone, agent, type or declared value; `seq` guards against a slow
-  // earlier request landing after a fast later one and showing a price
-  // for inputs the sender has already moved on from.
-  const seq = useRef(0);
-  const refreshQuote = useCallback(() => {
-    const mine = ++seq.current;
-    setQuoteLoading(true);
-    void (async () => {
-      const res = await actionQuoteParcelPrice({
-        parcelType,
-        originZoneId: originZoneId || undefined,
-        destinationZoneId: destinationZoneId || undefined,
-        destinationAgentId: deliveryMode === 'AGENT' ? (destinationAgentId || undefined) : undefined,
-        declaredValueKes: declaredValueNum || undefined,
-        coverageTierId: coverageTierId || undefined,
-      });
-      if (mine !== seq.current) return;
-      setQuoteLoading(false);
-      if (res.ok) {
-        setQuote(res.data);
-        setError(null);
-      } else {
-        setQuote(null);
-        setError(res.error);
-      }
-    })();
-  }, [parcelType, originZoneId, destinationZoneId, deliveryMode, destinationAgentId, declaredValueNum, coverageTierId]);
-
-  useEffect(() => {
-    const t = setTimeout(refreshQuote, 250);
-    return () => clearTimeout(t);
-  }, [refreshQuote]);
-
-  // Poll while a real Daraja callback is in flight — console/sandbox
-  // auto-confirm never reaches 'waiting' at all. Same shape as ticket
-  // checkout's poll.
-  useEffect(() => {
-    if (stage !== 'waiting' || !code) return;
-    const t = setInterval(async () => {
-      const res = await actionCheckParcelStatus(code);
-      if (res && res.status !== 'DRAFT_PENDING_PAYMENT') setStage('success');
-    }, 4000);
-    return () => clearInterval(t);
-  }, [stage, code]);
-
-  // Exact cents. `base.minKes * (1 - pct / 100)` is the same expression
-  // that drifted on the Go and Dart sides — 51 at 5% gives
-  // 48.449999999999996, not 48.45 — and this is the price the sender is
-  // then charged. Deriving the discount and subtracting it keeps the
-  // result on a cent.
-  function priceForReason(base: ParcelPricingView, reason: BargainReasonView): Cents {
-    let pct = base.bargainMinPct + reason.extraDiscountPct;
-    if (pct > base.bargainMaxPct) pct = base.bargainMaxPct;
-    const min = toCentsOrZero(base.minKes);
-    return subCents(min, percentOfCents(min, pct));
-  }
-
-  const payableKes: Cents = quote
-    ? (selectedReason ? priceForReason(quote, selectedReason) : toCentsOrZero(quote.minKes))
-    : ZERO_CENTS;
-
-  function goToDetails() {
+  function goToContact() {
     const errs: Record<string, string> = {};
     if (!originLabel.trim()) errs.origin = 'Where is it being collected from?';
     if (!destinationLabel.trim()) errs.destination = 'Where is it going?';
     if (deliveryMode === 'AGENT' && !destinationAgentId) errs.agent = 'Choose a pickup point';
     if (originMethod === 'SELF_DROPOFF' && !dropoffStationId) errs.station = 'Choose which station you’re dropping this off at';
-    if (declaredValueNum > 0 && !coverageTierId) errs.cover = 'Pick a cover level, or clear the value';
-    if (coverageTierId && declaredValueNum <= 0) errs.value = 'Say what the contents are worth';
-    if (useCod && codAmountNum <= 0) errs.cod = 'Say what your buyer owes for the goods';
-    // Compared in cents on both sides: a COD amount exactly equal to the
-    // cap must be accepted, and a float comparison against the policy
-    // ceiling is the kind of thing that rejects it by a hair.
-    if (useCod && toCentsOrZero(codAmount) > toCentsOrZero(codPolicy.maxAmountKes)) {
-      errs.cod = `The most we'll collect on one parcel is KES ${displayKES(codPolicy.maxAmountKes)}`;
-    }
     setFieldErrors(errs);
     if (Object.keys(errs).length > 0) return;
-    setPayMsisdn(senderMsisdn);
-    setStage('details');
+    setStage('contact');
   }
 
-  /**
-   * The one and only write. Books, prices and charges in sequence — so
-   * a sender who changes their mind at the quote stage leaves nothing
-   * behind, which is the entire reason this form was restructured.
-   */
-  function bookAndPay() {
+  /** The one and only write. No price is quoted or charged — the fee is
+   *  settled in person, so this books the parcel and stops. */
+  function submitBooking() {
     const errs: Record<string, string> = {};
     if (!senderName.trim()) errs.senderName = 'We need your name';
     if (!senderMsisdn.trim()) errs.senderMsisdn = 'We need your phone number';
     if (!receiverName.trim()) errs.receiverName = "We need the receiver's name";
     if (!receiverMsisdn.trim()) errs.receiverMsisdn = "We need the receiver's phone number";
-    if (!isSelfDropoff && !useCod && !payMsisdn.trim()) errs.payMsisdn = 'Which number is paying?';
     setFieldErrors(errs);
-    if (Object.keys(errs).length > 0 || (!isSelfDropoff && !quote)) return;
+    if (Object.keys(errs).length > 0) return;
 
     setError(null);
     start(async () => {
@@ -252,53 +132,28 @@ export function SendParcelForm(
         originZoneId: originZoneId || undefined,
         destinationZoneId: destinationZoneId || undefined,
         destinationAgentId: deliveryMode === 'AGENT' ? (destinationAgentId || undefined) : undefined,
-        declaredValueKes: isSelfDropoff ? undefined : (declaredValueNum || undefined),
-        coverageTierId: isSelfDropoff ? undefined : (coverageTierId || undefined),
         originMethod,
         parcelOrgId: isSelfDropoff ? dropoffStationId : undefined,
-        payAtCounter: isSelfDropoff,
+        // No price is quoted or charged online for any booking here —
+        // see dbx.BookParcelInput.PayAtCounter's own comment. A walk-in
+        // drop-off settles at the station, a scheduled pickup settles
+        // with the courier.
+        payAtCounter: true,
       });
       if (!booked.ok) { setError(booked.error); return; }
       setCode(booked.code);
       setDeliveryCode(booked.deliveryCode);
-
-      // Pilot walk-in: no price to set, nothing to charge — the fee is
-      // settled in person at the counter, and the booking already
-      // landed as BOOKED (see dbx.BookParcelInput.PayAtCounter).
-      if (isSelfDropoff) {
-        setStage('success');
-        return;
-      }
-
-      // Sent as an exact decimal string; core-go's money.Amount binding
-      // takes either shape.
-      const priced = await actionSetParcelPrice(booked.code, toWire(payableKes), selectedReason?.reason);
-      if (!priced.ok) { setError(priced.error); return; }
-
-      setFinalPriceKes(payableKes);
-
-      // COD skips payment entirely — the money arrives at the door, so
-      // there is no STK push to start and nothing to poll for.
-      if (useCod) {
-        const cod = await actionBookParcelCod(booked.code, codAmountNum);
-        if (!cod.ok) { setError(cod.error); return; }
-        setStage('success');
-        return;
-      }
-
-      const paid = await actionPayParcel(booked.code, payMsisdn);
-      if (!paid.ok) { setError(paid.error); return; }
-      setStage(paid.status === 'BOOKED' ? 'success' : 'waiting');
+      setStage('success');
     });
   }
 
-  // ── Terminal stages ─────────────────────────────────────────────────
+  // ── Terminal stage ──────────────────────────────────────────────────
 
   if (stage === 'success') {
     return (
       <div className="card" style={{ textAlign: 'center' }}>
         <span className="icbox icbox-g" style={{ margin: '0 auto 14px' }}><Icon name="check-circle" size={22} /></span>
-        <h3 style={{ marginBottom: 6 }}>{isSelfDropoff ? 'Drop-off submitted' : useCod ? 'Booking confirmed' : 'Payment received'}</h3>
+        <h3 style={{ marginBottom: 6 }}>{isSelfDropoff ? 'Drop-off submitted' : 'Booking confirmed'}</h3>
         {isSelfDropoff ? (
           // Deliberately no code shown here, and none sent — a tracking
           // number and a delivery code are only issued once the station
@@ -320,7 +175,6 @@ export function SendParcelForm(
           <>
             <p className="sub" style={{ margin: '0 0 18px' }}>
               Parcel <span className="mono" style={{ fontWeight: 700 }}>{code}</span>
-              {finalPriceKes != null && <> · KES {Math.round(finalPriceKes).toLocaleString('en-KE')}</>}
             </p>
             <div style={{ textAlign: 'left', border: '1px solid var(--line)', borderRadius: 10, padding: 14, marginBottom: 14 }}>
               <p className="sub" style={{ margin: '0 0 4px', fontSize: '.8rem' }}>Delivery code — for your receiver</p>
@@ -329,6 +183,9 @@ export function SendParcelForm(
                 {`We text this to ${receiverName} once a courier picks it up — they give it to the courier to receive the parcel. You can also pass it on yourself if you'd rather.`}
               </p>
             </div>
+            <p className="sub" style={{ fontSize: '.85rem', marginBottom: 14 }}>
+              Nothing to pay online — settle the fee with the courier when they collect it.
+            </p>
             {chosenAgent && (
               <p className="sub" style={{ fontSize: '.85rem', marginBottom: 14 }}>
                 {receiverName} collects it from <strong>{chosenAgent.name}</strong> — {chosenAgent.locationHint}.
@@ -347,48 +204,27 @@ export function SendParcelForm(
     );
   }
 
-  if (stage === 'waiting') {
-    return (
-      <div className="card" style={{ textAlign: 'center' }}>
-        <span className="icbox icbox-b" style={{ margin: '0 auto 14px' }}><Icon name="phone-call" size={22} /></span>
-        <h3 style={{ marginBottom: 6 }}>Check your phone</h3>
-        <p className="sub" style={{ margin: 0 }}>
-          Enter your M-Pesa PIN on the prompt sent to {payMsisdn}. This page updates on its own.
-        </p>
-      </div>
-    );
-  }
-
   // ── Stage 2: who ────────────────────────────────────────────────────
 
-  if (stage === 'details') {
+  if (stage === 'contact') {
     return (
       <div className="card">
         <button type="button" className="btn btn-o btn-sm" style={{ marginBottom: 16 }}
-          onClick={() => setStage('quote')}>
+          onClick={() => setStage('details')}>
           <Icon name="arrow-left" size={14} />Back
         </button>
 
-        {/* No price to show or confirm here for a walk-in drop-off — see
-            isSelfDropoff's own comment. The counter prices and collects
-            the fee in person once the parcel is actually in hand. */}
-        {isSelfDropoff ? (
-          <p className="sub" style={{ margin: '0 0 16px', fontSize: '.85rem' }}>
-            Dropping off at <strong>{chosenStation?.name}</strong> — {chosenStation?.locationHint}.
-            The fee is settled there, not here.
-          </p>
-        ) : (
-          <PriceSummary
-            payableKes={payableKes} quote={quote} agent={chosenAgent}
-            selectedReason={selectedReason} compact
-          />
-        )}
+        <p className="sub" style={{ margin: '0 0 16px', fontSize: '.85rem' }}>
+          {isSelfDropoff
+            ? <>Dropping off at <strong>{chosenStation?.name}</strong> — {chosenStation?.locationHint}. The fee is settled there, not here.</>
+            : 'The fee is settled with the courier who collects it, not here.'}
+        </p>
 
         <h3 style={{ margin: '20px 0 16px' }}>Your details</h3>
         <FormRow>
           <Field id="sd-name" label="Your name" value={senderName} onChange={setSenderName} error={fieldErrors.senderName} />
           <Field id="sd-msisdn" label="Your phone" value={senderMsisdn} error={fieldErrors.senderMsisdn}
-            onChange={(v) => { setSenderMsisdn(v); if (!payMsisdn) setPayMsisdn(v); }} placeholder="+2547XXXXXXXX" />
+            onChange={setSenderMsisdn} placeholder="+2547XXXXXXXX" />
         </FormRow>
 
         <h3 style={{ margin: '20px 0 16px' }}>Receiver&apos;s details</h3>
@@ -409,46 +245,28 @@ export function SendParcelForm(
             value={notes} onChange={(e) => setNotes(e.target.value)} placeholder="e.g. Call on arrival, gate 3" />
         </div>
 
-        {/* Nothing to pay now on a COD booking, or on a walk-in drop-off
-            — asking for an M-Pesa number here would suggest otherwise
-            in either case. */}
-        {!useCod && !isSelfDropoff && (
-          <div style={{ marginTop: 18, borderTop: '1px solid var(--line)', paddingTop: 16 }}>
-            <Field id="pay-msisdn" label="M-Pesa number to pay from" value={payMsisdn}
-              onChange={setPayMsisdn} placeholder="+2547XXXXXXXX" error={fieldErrors.payMsisdn} />
-          </div>
-        )}
-
         {error && <ErrorLine message={error} />}
 
         <button type="button" className="btn btn-p" style={{ width: '100%', marginTop: 18 }}
-          disabled={pending || (!isSelfDropoff && !quote)} onClick={bookAndPay}>
-          {pending
-            ? 'Starting…'
-            : isSelfDropoff
-              ? 'Submit — pay at the counter'
-              : useCod
-                ? 'Confirm booking'
-                : `Pay KES ${formatKES(payableKes)} with M-Pesa`}
+          disabled={pending} onClick={submitBooking}>
+          {pending ? 'Submitting…' : isSelfDropoff ? 'Submit — pay at the counter' : 'Confirm booking'}
         </button>
         <p className="sub" style={{ margin: '8px 0 0', fontSize: '.78rem', textAlign: 'center' }}>
           {isSelfDropoff
-            ? "Nothing to pay online — settle the fee at the counter when you drop this off."
-            : useCod
-              ? 'Nothing to pay now — your buyer pays the rider on delivery.'
-              : 'Nothing is booked until this payment goes through.'}
+            ? 'Nothing to pay online — settle the fee at the counter when you drop this off.'
+            : 'Nothing to pay online — settle the fee with the courier when they collect it.'}
         </p>
       </div>
     );
   }
 
-  // ── Stage 1: what, where, how much ──────────────────────────────────
+  // ── Stage 1: what and where ──────────────────────────────────────────
 
   return (
     <div className="card">
       <h3 style={{ marginBottom: 4 }}>What are you sending?</h3>
       <p className="sub" style={{ margin: '0 0 16px', fontSize: '.85rem' }}>
-        The price updates as you go. We only ask for names and numbers once you&apos;re happy with it.
+        The fee is settled in person, with the agent or courier — we just need the shipping details.
       </p>
 
       <FormRow>
@@ -487,7 +305,7 @@ export function SendParcelForm(
             <ZoneField id="dest-zone" label="Nearest hub to delivery" value={destinationZoneId} onChange={setDestinationZoneId} zones={zones} />
           </FormRow>
           <p className="sub" style={{ margin: '4px 0 0', fontSize: '.78rem' }}>
-            Picking hubs on both sides gives a distance-based price instead of the flat rate.
+            Helps us route this through the nearest hub on each side.
           </p>
         </>
       )}
@@ -534,9 +352,9 @@ export function SendParcelForm(
         </>
       )}
 
-      {/* The cheap leg, offered as a real choice rather than buried.
-          Agent collection is what makes this competitive on price, so
-          the saving is stated in shillings at the point of choosing. */}
+      {/* The cheap leg, offered as a real choice rather than buried —
+          no percentage or price shown, since nothing on this page is
+          priced; just what each option actually means for the receiver. */}
       {agents.length > 0 && (
         <>
           <h3 style={{ margin: '22px 0 12px' }}>How should it be delivered?</h3>
@@ -551,11 +369,7 @@ export function SendParcelForm(
               selected={deliveryMode === 'AGENT'}
               onClick={() => setDeliveryMode('AGENT')}
               title="Collect from a pickup point"
-              subtitle={
-                quote?.agentDropDiscountPct
-                  ? `The receiver picks it up from a nearby shop — ${Math.round(quote.agentDropDiscountPct)}% cheaper.`
-                  : 'The receiver picks it up from a nearby shop.'
-              }
+              subtitle="The receiver picks it up from a nearby shop instead."
             />
           </div>
           {deliveryMode === 'AGENT' && (
@@ -567,7 +381,7 @@ export function SendParcelForm(
                 {agents.map((a) => (
                   <option key={a.id} value={a.id}>
                     {a.name} — {a.locationHint}
-                    {toCentsOrZero(a.holdingFeeKes) > 0 ? ` (KES ${displayKES(a.holdingFeeKes)} on collection)` : ''}
+                    {toCentsOrZero(a.holdingFeeKes) > 0 ? ' (a holding fee applies on collection)' : ''}
                   </option>
                 ))}
               </select>
@@ -582,210 +396,16 @@ export function SendParcelForm(
         </>
       )}
 
-      {/* Cover. Optional and off by default — a sender who doesn't want
-          it should never have to dismiss anything, and a sender sending
-          something valuable should not have to discover afterwards that
-          nobody was carrying the risk. */}
-      {tiers.length > 0 && !isSelfDropoff && (
-        <>
-          <h3 style={{ margin: '22px 0 4px' }}>Cover (optional)</h3>
-          <p className="sub" style={{ margin: '0 0 12px', fontSize: '.85rem' }}>
-            Tell us what the contents are worth and we&apos;ll cover them if something goes wrong.
-          </p>
-          <Field id="declared-value" label="What are the contents worth? (KES)" value={declaredValue}
-            onChange={(v) => {
-              const next = v.replace(/[^\d]/g, '');
-              setDeclaredValue(next);
-              if (!next) setCoverageTierId('');
-            }}
-            placeholder="e.g. 8000" error={fieldErrors.value} />
-          {declaredValueNum > 0 && (
-            <div style={{ display: 'grid', gap: 8, marginTop: 12 }}>
-              <ChoiceCard
-                selected={!coverageTierId}
-                onClick={() => setCoverageTierId('')}
-                title="No cover"
-                subtitle="Standard care, no payout if something goes wrong."
-                trailing="KES 0"
-              />
-              {tiers.map((t) => (
-                <ChoiceCard
-                  key={t.id}
-                  selected={coverageTierId === t.id}
-                  onClick={() => setCoverageTierId(t.id)}
-                  title={t.name}
-                  subtitle={
-                    t.capsDeclaredAmount
-                      ? `Covers up to KES ${displayKES(t.coveredAmountKes)} of the KES ${declaredValueNum.toLocaleString('en-KE')} you declared`
-                      : `Covers the full KES ${displayKES(t.coveredAmountKes)}`
-                  }
-                  trailing={toCentsOrZero(t.feeForValueKes) > 0 ? `+KES ${displayKES(t.feeForValueKes)}` : 'Free'}
-                />
-              ))}
-              {fieldErrors.cover && <ErrorLine message={fieldErrors.cover} />}
-            </div>
-          )}
-        </>
-      )}
-
-      {/* Cash on delivery — the arrangement social-commerce sellers
-          actually run on, and the reason they pick one courier over
-          another. Offered only when an admin has switched it on. */}
-      {codPolicy.enabled && !isSelfDropoff && (
-        <>
-          <h3 style={{ margin: '22px 0 4px' }}>How do you get paid?</h3>
-          <div style={{ display: 'grid', gap: 8, marginTop: 12 }}>
-            <ChoiceCard
-              selected={!useCod}
-              onClick={() => { setUseCod(false); setCodAmount(''); }}
-              title="Your buyer has already paid you"
-              subtitle="You pay the delivery fee now and we take it from there."
-            />
-            <ChoiceCard
-              selected={useCod}
-              onClick={() => setUseCod(true)}
-              title="Collect cash from my buyer on delivery"
-              subtitle="The rider collects the goods money and the delivery fee at the door. We settle the goods money to you."
-            />
-          </div>
-          {useCod && (
-            <div style={{ marginTop: 12 }}>
-              <Field
-                id="cod-amount"
-                label="What does your buyer owe you for the goods? (KES)"
-                value={codAmount}
-                onChange={(v) => setCodAmount(v.replace(/[^\d]/g, ''))}
-                placeholder="e.g. 2500"
-                error={fieldErrors.cod}
-              />
-              {codAmountNum > 0 && quote && (
-                <div style={{ marginTop: 10, border: '1px solid var(--line)', borderRadius: 10, padding: 12 }}>
-                  {/* Every number a seller needs to decide, before they
-                      decide — not discovered at settlement. */}
-                  <Row label="Your buyer pays the rider"
-                    value={`KES ${Math.round(codAmountNum + payableKes).toLocaleString('en-KE')}`} />
-                  <Row label="Delivery fee (kept by Esoqo)"
-                    value={`KES ${Math.round(payableKes).toLocaleString('en-KE')}`} />
-                  <Row label={`Handling fee (${codPolicy.handlingFeePct}%)`}
-                    value={`KES ${Math.round(codAmountNum * codPolicy.handlingFeePct / 100).toLocaleString('en-KE')}`} />
-                  <Row
-                    label="You receive"
-                    strong
-                    value={`KES ${Math.round(codAmountNum - codAmountNum * codPolicy.handlingFeePct / 100).toLocaleString('en-KE')}`}
-                  />
-                  <p className="sub" style={{ margin: '8px 0 0', fontSize: '.78rem' }}>
-                    We text you when your buyer pays, and again when the money is sent to you.
-                  </p>
-                </div>
-              )}
-            </div>
-          )}
-        </>
-      )}
-
-      {/* The bargain engine — kept, and moved forward. No competitor in
-          this market lets a sender name a price, so it belongs where
-          the sender is deciding, not on a screen after they've committed. */}
-      {!isSelfDropoff && quote && quote.bargainReasons.length > 0 && (
-        <>
-          <h3 style={{ margin: '22px 0 4px' }}>Make an offer</h3>
-          <p className="sub" style={{ margin: '0 0 12px', fontSize: '.85rem' }}>
-            Tell us something that makes this parcel easier to carry and pay less for it.
-          </p>
-          <div style={{ display: 'grid', gap: 8 }}>
-            <ChoiceCard
-              selected={selectedReason === null}
-              onClick={() => setSelectedReason(null)}
-              title="Standard price"
-              subtitle={`${quote.weightLabel} · usually KES ${displayKES(quote.minKes)}–${displayKES(quote.maxKes)}`}
-              trailing={`KES ${displayKES(quote.minKes)}`}
-            />
-            {quote.bargainReasons.map((r) => (
-              <ChoiceCard
-                key={r.reason}
-                selected={selectedReason?.reason === r.reason}
-                onClick={() => setSelectedReason(r)}
-                title={r.reason}
-                subtitle={`${Math.round(r.extraDiscountPct)}% off the usual minimum`}
-                trailing={`KES ${Math.round(priceForReason(quote, r))}`}
-              />
-            ))}
-          </div>
-        </>
-      )}
-
-      {/* No price to show for a walk-in drop-off — see isSelfDropoff's
-          own comment. Nothing here is hidden from the sender; there is
-          simply nothing priced yet to show them. */}
-      {isSelfDropoff ? (
-        <p className="sub" style={{ margin: '22px 0 0', fontSize: '.85rem', borderTop: '1px solid var(--line)', paddingTop: 16 }}>
-          No price to show here — {chosenStation?.name ?? 'the station'} weighs it and takes payment
-          when you drop it off.
-        </p>
-      ) : (
-        <div style={{ marginTop: 22, borderTop: '1px solid var(--line)', paddingTop: 16 }}>
-          <PriceSummary
-            payableKes={payableKes} quote={quote} agent={chosenAgent}
-            selectedReason={selectedReason} loading={quoteLoading}
-          />
-        </div>
-      )}
+      <p className="sub" style={{ margin: '22px 0 0', fontSize: '.85rem', borderTop: '1px solid var(--line)', paddingTop: 16 }}>
+        Nothing to pay here — the fee is worked out and settled in person, with the agent or courier.
+      </p>
 
       {error && <ErrorLine message={error} />}
 
       <button type="button" className="btn btn-p" style={{ width: '100%', marginTop: 16 }}
-        disabled={isSelfDropoff ? !dropoffStationId : (!quote || quoteLoading)} onClick={goToDetails}>
+        disabled={isSelfDropoff && !dropoffStationId} onClick={goToContact}>
         Continue
       </button>
-    </div>
-  );
-}
-
-/** The running total, broken down. Shown on both stages so the number
- *  never changes shape between deciding and paying. */
-function PriceSummary(
-  { payableKes, quote, agent, selectedReason, loading, compact }:
-  {
-    payableKes: number; quote: (ParcelPricingView & { distanceKm?: number }) | null;
-    agent: ParcelAgentView | null; selectedReason: BargainReasonView | null;
-    loading?: boolean; compact?: boolean;
-  },
-) {
-  if (!quote) {
-    return <p className="sub" style={{ margin: 0 }}>{loading ? 'Working out a price…' : 'Fill in the details above for a price.'}</p>;
-  }
-  return (
-    <div>
-      <div className="row" style={{ justifyContent: 'space-between', alignItems: 'baseline' }}>
-        <span className="sub">{compact ? 'You pay' : 'Total to pay now'}</span>
-        <span className="mono" style={{ fontSize: compact ? '1.1rem' : '1.5rem', fontWeight: 800, opacity: loading ? 0.5 : 1 }}>
-          KES {Math.round(payableKes).toLocaleString('en-KE')}
-        </span>
-      </div>
-      <ul className="sub" style={{ margin: '8px 0 0', padding: 0, listStyle: 'none', fontSize: '.8rem', display: 'grid', gap: 3 }}>
-        <li>{quote.weightLabel}</li>
-        {quote.distanceKm != null && <li>{quote.distanceKm.toFixed(1)} km between the hubs you picked</li>}
-        {agent && <li>Collected from {agent.name}{quote.agentDropDiscountPct ? ` — ${Math.round(quote.agentDropDiscountPct)}% off for pickup` : ''}</li>}
-        {toCentsOrZero(quote.coverageFeeKes) > 0 ? <li>Includes KES {displayKES(quote.coverageFeeKes)} cover</li> : null}
-        {selectedReason && <li>Your offer: {selectedReason.reason}</li>}
-      </ul>
-      {agent && toCentsOrZero(agent.holdingFeeKes) > 0 && (
-        <p className="sub" style={{ margin: '8px 0 0', fontSize: '.78rem' }}>
-          The receiver pays KES {displayKES(agent.holdingFeeKes)} to the shop on collection.
-        </p>
-      )}
-    </div>
-  );
-}
-
-/** One line of a money breakdown. Its own component because the COD
- *  panel's whole job is showing a seller every number before they
- *  commit, and a breakdown that doesn't line up reads as evasive. */
-function Row({ label, value, strong }: { label: string; value: string; strong?: boolean }) {
-  return (
-    <div className="row" style={{ justifyContent: 'space-between', gap: 12, marginTop: 4 }}>
-      <span className="sub" style={{ fontSize: '.82rem' }}>{label}</span>
-      <span className="mono" style={{ fontWeight: strong ? 800 : 500, fontSize: '.85rem' }}>{value}</span>
     </div>
   );
 }
@@ -830,12 +450,11 @@ function ZoneField(
   );
 }
 
-/** One selectable option card — delivery mode, cover level, price
- *  offer. Same shape in all three places so a choice always looks like
- *  a choice. */
+/** One selectable option card — delivery mode, origin method. Same
+ *  shape in both places so a choice always looks like a choice. */
 function ChoiceCard(
-  { title, subtitle, trailing, selected, onClick }:
-  { title: string; subtitle: string; trailing?: string; selected: boolean; onClick: () => void },
+  { title, subtitle, selected, onClick }:
+  { title: string; subtitle: string; selected: boolean; onClick: () => void },
 ) {
   return (
     <button type="button" onClick={onClick} aria-pressed={selected} style={{
@@ -851,7 +470,6 @@ function ChoiceCard(
         <strong style={{ display: 'block', fontSize: '.92rem' }}>{title}</strong>
         <span className="sub" style={{ fontSize: '.78rem' }}>{subtitle}</span>
       </span>
-      {trailing && <span className="mono" style={{ fontWeight: 800, whiteSpace: 'nowrap' }}>{trailing}</span>}
     </button>
   );
 }
