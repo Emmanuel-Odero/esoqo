@@ -313,13 +313,25 @@ type EnterpriseLite struct {
 	Msisdn  *string `json:"msisdn"`
 }
 
+// SearchEnterprises — was querying e.name, a column that has never
+// existed on "enterprise" (it only ever had workRaw — the free-text
+// occupation someone typed at registration, like "carpentry", never a
+// business name). Every call errored, which is why this search always
+// came back empty regardless of what was typed. The display name a
+// courier-company onboarding admin actually wants is the owning
+// party's real name: the org's knownAs/officialName when the party is
+// an Organisation, the person's knownAs/officialName when it's an
+// individual proprietor — workRaw only as a last-resort fallback if
+// somehow neither is set.
 func SearchEnterprises(ctx context.Context, pool *pgxpool.Pool, q string) ([]EnterpriseLite, error) {
 	rows, err := pool.Query(ctx, `
-		SELECT e.id, e.name, e."partyId", pr.msisdn
+		SELECT e.id, COALESCE(org."knownAs", org."officialName", pr."knownAs", pr."officialName", e."workRaw"),
+		       e."partyId", pr.msisdn
 		FROM enterprise e
+		LEFT JOIN organisation org ON org."partyId" = e."partyId"
 		LEFT JOIN person pr ON pr."partyId" = e."partyId"
-		WHERE e.name ILIKE '%'||$1||'%'
-		ORDER BY e.name ASC
+		WHERE COALESCE(org."knownAs", org."officialName", pr."knownAs", pr."officialName", e."workRaw") ILIKE '%'||$1||'%'
+		ORDER BY 2 ASC
 		LIMIT 20`, q)
 	if err != nil {
 		return nil, err
@@ -334,6 +346,58 @@ func SearchEnterprises(ctx context.Context, pool *pgxpool.Pool, q string) ([]Ent
 		out = append(out, e)
 	}
 	return out, rows.Err()
+}
+
+// CreateEnterpriseForCourierOrg — an admin onboarding a courier company
+// creates the owning business record directly, no OTP.
+//
+// Every other path into `enterprise` runs through completeRegistration
+// (packages/db/src/dal/registration.ts), gated on the registrant
+// verifying their own phone via /join — appropriate for a self-serve
+// signup, but the admin console had no way to satisfy it at all: the
+// "Which business runs it?" picker could only ever find a business
+// that had separately, successfully self-registered first, with
+// nothing surfaced when (as is the common case for a courier company's
+// first onboarding) none has. This is staff vouching for a real
+// business they're onboarding in person — the same trust boundary
+// FindOrCreatePersonWithName already uses for admin-invited courier
+// staff, mirrored here: party, then the typed record, in one
+// transaction. isRegistered/hasKraPin are left at their honest
+// false/default — nobody has actually verified paperwork here, unlike
+// the seed's EnsureEnterprise, which is fake data and can claim both.
+func CreateEnterpriseForCourierOrg(ctx context.Context, pool *pgxpool.Pool, businessName string) (enterpriseID string, err error) {
+	name := strings.TrimSpace(businessName)
+	if name == "" {
+		return "", &ParcelError{"BAD_INPUT", "Give the business a name"}
+	}
+	tx, terr := pool.Begin(ctx)
+	if terr != nil {
+		return "", terr
+	}
+	defer func() { _ = tx.Rollback(ctx) }()
+
+	var partyID string
+	if qerr := tx.QueryRow(ctx, `
+		INSERT INTO party (id, kind, county, "sourceSystem", "updatedAt")
+		VALUES (gen_random_uuid(), 'ORGANISATION', 'Unknown', 'ESOKO', now())
+		RETURNING id`).Scan(&partyID); qerr != nil {
+		return "", qerr
+	}
+	if _, ierr := tx.Exec(ctx, `
+		INSERT INTO organisation ("partyId", kind, "officialName")
+		VALUES ($1, 'BUSINESS', $2)`, partyID, name); ierr != nil {
+		return "", ierr
+	}
+	if qerr := tx.QueryRow(ctx, `
+		INSERT INTO enterprise (id, "partyId", "workRaw", "createdAt")
+		VALUES (gen_random_uuid(), $1, 'Courier / parcel delivery', now())
+		RETURNING id`, partyID).Scan(&enterpriseID); qerr != nil {
+		return "", qerr
+	}
+	if cerr := tx.Commit(ctx); cerr != nil {
+		return "", cerr
+	}
+	return enterpriseID, nil
 }
 
 // ── Staff ────────────────────────────────────────────────────────────

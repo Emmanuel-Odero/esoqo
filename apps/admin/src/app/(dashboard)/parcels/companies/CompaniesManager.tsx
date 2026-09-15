@@ -3,7 +3,7 @@
 import { useId, useState, useTransition } from 'react';
 import { Icon } from '@esoqo/ui';
 import {
-  actionCreateParcelOrg, actionUpdateParcelOrg, actionSearchEnterprises,
+  actionCreateParcelOrg, actionUpdateParcelOrg, actionSearchEnterprises, actionCreateEnterprise,
   actionListParcelOrgStaff, actionCreateParcelOrgManager,
   type ParcelOrg, type ParcelOrgInput, type EnterpriseLite, type ParcelOrgStaffRow,
 } from '../actions';
@@ -229,7 +229,12 @@ function OrgForm({
   const [enterpriseId, setEnterpriseId] = useState(initial?.enterpriseId ?? '');
   const [entQuery, setEntQuery] = useState('');
   const [entResults, setEntResults] = useState<EnterpriseLite[]>([]);
+  const [entSearched, setEntSearched] = useState(false);
   const [entName, setEntName] = useState('');
+  const [creatingEnt, setCreatingEnt] = useState(false);
+  const [newEntName, setNewEntName] = useState('');
+  const [entError, setEntError] = useState<string | null>(null);
+  const [entPending, startEntTransition] = useTransition();
   const [acceptsWalkIn, setAcceptsWalkIn] = useState(initial?.acceptsWalkIn ?? false);
   const [locationHint, setLocationHint] = useState(initial?.locationHint ?? '');
   const [openingHours, setOpeningHours] = useState(initial?.openingHours ?? '');
@@ -239,14 +244,28 @@ function OrgForm({
   const [pending, startTransition] = useTransition();
   const ids = {
     name: useId(), slug: useId(), status: useId(), commission: useId(),
-    person: useId(), phone: useId(), settlement: useId(), ent: useId(),
+    person: useId(), phone: useId(), settlement: useId(), ent: useId(), newEnt: useId(),
     walkIn: useId(), location: useId(), hours: useId(),
   };
 
   function searchEnterprises(q: string) {
     setEntQuery(q);
+    setEntSearched(false);
     if (!q.trim()) { setEntResults([]); return; }
-    void actionSearchEnterprises(q).then(setEntResults);
+    void actionSearchEnterprises(q).then((results) => { setEntResults(results); setEntSearched(true); });
+  }
+
+  function createBusiness() {
+    setEntError(null);
+    startEntTransition(async () => {
+      const result = await actionCreateEnterprise(newEntName);
+      if (!result.ok) { setEntError(result.error); return; }
+      setEnterpriseId(result.id);
+      setEntName(result.name);
+      setCreatingEnt(false);
+      setNewEntName('');
+      setEntResults([]);
+    });
   }
 
   function save() {
@@ -287,7 +306,14 @@ function OrgForm({
           </label>
           <input id={ids.ent} style={inputStyle} value={entName || entQuery}
             placeholder="Search registered businesses"
+            disabled={!!enterpriseId}
             onChange={(e) => { setEntName(''); setEnterpriseId(''); searchEnterprises(e.target.value); }} />
+          {enterpriseId && (
+            <button type="button" className="btn btn-o btn-sm" style={{ marginTop: 6 }}
+              onClick={() => { setEnterpriseId(''); setEntName(''); setEntQuery(''); setEntResults([]); setEntSearched(false); }}>
+              Change
+            </button>
+          )}
           {!enterpriseId && entResults.length > 0 && (
             <ul style={{ listStyle: 'none', margin: '6px 0 0', padding: 0, border: '1px solid var(--line)', borderRadius: 6 }}>
               {entResults.map((ent) => (
@@ -301,8 +327,44 @@ function OrgForm({
               ))}
             </ul>
           )}
+          {/* The common case: this business has never registered
+              anywhere else on the platform, so the search above comes
+              back empty. Rather than dead-ending here (which is the
+              whole reason this form was "the hardest of them all" —
+              the only other way an Enterprise gets created is the
+              public /join flow, OTP and all), staff can register it
+              on the spot. */}
+          {!enterpriseId && entSearched && entResults.length === 0 && entQuery.trim() && !creatingEnt && (
+            <button type="button" className="btn btn-o btn-sm" style={{ marginTop: 6 }}
+              onClick={() => { setCreatingEnt(true); setNewEntName(entQuery.trim()); }}>
+              <Icon name="plus" size={13} />No match — register &quot;{entQuery.trim()}&quot; as a new business
+            </button>
+          )}
+          {creatingEnt && (
+            <div style={{ marginTop: 8, padding: 10, border: '1px solid var(--line)', borderRadius: 6, display: 'grid', gap: 8 }}>
+              <label className="sub" htmlFor={ids.newEnt} style={{ display: 'block' }}>
+                Business&apos;s registered name
+              </label>
+              <input id={ids.newEnt} style={inputStyle} value={newEntName}
+                onChange={(e) => setNewEntName(e.target.value)} />
+              <div className="row" style={{ gap: 8 }}>
+                <button type="button" className="btn btn-p btn-sm" disabled={entPending || !newEntName.trim()}
+                  onClick={createBusiness}>
+                  {entPending ? 'Registering…' : 'Register business'}
+                </button>
+                <button type="button" className="btn btn-o btn-sm" disabled={entPending}
+                  onClick={() => { setCreatingEnt(false); setEntError(null); }}>
+                  Cancel
+                </button>
+              </div>
+              {entError && (
+                <p role="alert" style={{ color: 'var(--red)', fontSize: '.85rem', margin: 0 }}>{entError}</p>
+              )}
+            </div>
+          )}
           <span className="sub" style={{ fontSize: '.78rem' }}>
-            A courier company hangs off an Enterprise, the same way a shop and a ticket organiser do.
+            A courier company hangs off a business record on the platform, the same way a shop and a
+            ticket organiser do — search for one that&apos;s already registered, or register it now.
           </span>
         </div>
       )}

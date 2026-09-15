@@ -667,6 +667,34 @@ func (s *Server) handleAdminSearchEnterprises(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"enterprises": list})
 }
 
+type createEnterpriseRequest struct {
+	Name string `json:"name" binding:"required"`
+}
+
+// handleAdminCreateEnterprise — POST /v1/admin/parcels/enterprises. The
+// other half of handleAdminSearchEnterprises: when no existing business
+// matches, staff onboarding a courier company can register the owning
+// business on the spot instead of being stuck (see
+// dbx.CreateEnterpriseForCourierOrg's own comment on why the search
+// alone was previously a dead end).
+func (s *Server) handleAdminCreateEnterprise(c *gin.Context) {
+	if err := authsvc.RequireCapability(ctxFromGin(c), "parcels.edit", nil); err != nil {
+		writeError(c, http.StatusForbidden, "DENIED", "You can't edit parcel settings")
+		return
+	}
+	var req createEnterpriseRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		writeError(c, http.StatusBadRequest, "INVALID_REQUEST", err.Error())
+		return
+	}
+	id, err := dbx.CreateEnterpriseForCourierOrg(c.Request.Context(), s.Pool, req.Name)
+	if err != nil {
+		writeParcelError(c, err)
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"id": id, "name": strings.TrimSpace(req.Name)})
+}
+
 func (s *Server) handleAdminListParcelOrgStaff(c *gin.Context) {
 	if err := authsvc.RequireCapability(ctxFromGin(c), "parcels.read", nil); err != nil {
 		writeError(c, http.StatusForbidden, "DENIED", "You don't have access to parcels")
