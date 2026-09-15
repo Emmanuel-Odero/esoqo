@@ -3,7 +3,7 @@ import { msisdnSchema } from './phone';
 import { countySchema, joinableGroupKindSchema, businessTypeKeySchema } from './registration';
 
 /**
- * The WordPress → esoko payload contract for CECF registrations.
+ * The WordPress → esoqo payload contract for CECF registrations.
  *
  * This is the one shape both services/core's /api/cecf/* facade and the
  * CECF WordPress site's PHP client agree on — see
@@ -30,7 +30,7 @@ export const cecfDocumentKindSchema = z.enum([
 ]);
 
 /** File bytes travel as base64 — WP's PHP already has them in hand by the
- *  time it calls this endpoint, and there is no browser-to-esoko hop to
+ *  time it calls this endpoint, and there is no browser-to-esoqo hop to
  *  keep multipart for. */
 export const cecfDocumentUploadSchema = z.object({
   kind: cecfDocumentKindSchema,

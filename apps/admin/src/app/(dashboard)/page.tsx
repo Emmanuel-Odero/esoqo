@@ -1,12 +1,15 @@
-import { Icon } from '@esoko/ui';
+import type { Route } from 'next';
+import { redirect } from 'next/navigation';
+import { Icon } from '@esoqo/ui';
 import {
   getOverview, getFunnel, getStepFunnel, getByCounty, getBySegment,
   getOptInRates, getUssdChoiceSplit, verifyChain, getDailyCompletions,
   getFeatureAdoption, getPlatformRevenueSplit, getDonationTotalsForStaff,
   getSupportTicketCountsForStaff, getSiteVisitLeaderboard, getSiteVisitDomainSplit,
   getSmsSpendSummary, getDonorRepeatRate, can,
-} from '@esoko/db';
+} from '@esoqo/db';
 import { requireStaff } from '@/lib/session';
+import { firstAccessibleRoute } from '@/lib/nav-routes';
 import { AttentionList, SplitPair, type AttentionItem } from '@/components/dash';
 import { MiniTrend, RankedBarChart, DonutChart, Gauge } from '@/components/charts';
 
@@ -20,7 +23,7 @@ const WINDOWS = [['7', '7 days'], ['30', '30 days'], ['90', '90 days']] as const
  * Registration funnel metrics are the original journey-map work —
  * "total registered" is deliberately not the headline, completion rate
  * and the step funnel are what tell you whether onboarding actually
- * works. Everything from "GMV vs Esoko's take" down is the cross-domain
+ * works. Everything from "GMV vs Esoqo's take" down is the cross-domain
  * layer: the same story for the five other revenue-bearing domains,
  * rendered with real charts (Recharts) instead of the div/canvas
  * approximations this page used before — a gauge for completion rate,
@@ -34,6 +37,17 @@ export default async function OverviewPage({
   searchParams,
 }: { searchParams: Promise<{ days?: string }> }) {
   const ctx = await requireStaff();
+  // This whole page is the cross-domain report surface — every panel
+  // on it reads through report.read one way or another, despite the
+  // file's own older doc comment implying finer-grained gating. A
+  // narrowly-scoped account (parcels ops, a single-store cashier's
+  // login, ...) never has that capability, so send it straight to the
+  // first section it actually can open instead of hard-crashing on
+  // the default landing page — same "don't dead-end a valid sign-in"
+  // fix as the parcel payment button's dead "Choose a price" state.
+  if (!can(ctx, 'report.read')) {
+    redirect((firstAccessibleRoute(ctx.capabilities) ?? '/no-access') as Route);
+  }
   const sp = await searchParams;
   const days = [7, 30, 90].includes(Number(sp.days)) ? Number(sp.days) : 30;
 
@@ -123,7 +137,7 @@ export default async function OverviewPage({
           : `AUDIT CHAIN BROKEN at event ${chain.brokenAtId}. Investigate before trusting any report.`}
       </div>
 
-      <SplitPair gmvKes={revenue.gmvKes} takeKes={revenue.esokoTakeKes} />
+      <SplitPair gmvKes={revenue.gmvKes} takeKes={revenue.esoqoTakeKes} />
 
       <div className="kpis">
         <div className="kpi g">

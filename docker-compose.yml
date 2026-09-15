@@ -1,4 +1,4 @@
-name: esoko
+name: esoqo
 
 services:
   # ─────────────────────────────────────────────────────────────
@@ -7,7 +7,7 @@ services:
   # ─────────────────────────────────────────────────────────────
   postgres:
     image: postgres:16-alpine
-    container_name: esoko-postgres
+    container_name: esoqo-postgres
     restart: unless-stopped
     environment:
       POSTGRES_USER: esoko
@@ -21,7 +21,7 @@ services:
       - pgdata:/var/lib/postgresql/data
       - ./docker/postgres/init:/docker-entrypoint-initdb.d:ro
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U esoko -d esoko"]
+      test: ["CMD-SHELL", "pg_isready -U esoqo -d esoqo"]
       interval: 5s
       timeout: 3s
       retries: 12
@@ -33,7 +33,7 @@ services:
   # ─────────────────────────────────────────────────────────────
   pgbouncer:
     image: edoburu/pgbouncer:latest
-    container_name: esoko-pgbouncer
+    container_name: esoqo-pgbouncer
     restart: unless-stopped
     depends_on:
       postgres:
@@ -65,7 +65,7 @@ services:
   # ─────────────────────────────────────────────────────────────
   redis:
     image: redis:7-alpine
-    container_name: esoko-redis
+    container_name: esoqo-redis
     restart: unless-stopped
     command: redis-server --appendonly yes --maxmemory 384mb --maxmemory-policy noeviction
     ports:
@@ -84,7 +84,7 @@ services:
   # ─────────────────────────────────────────────────────────────
   mailhog:
     image: mailhog/mailhog:v1.0.1
-    container_name: esoko-mailhog
+    container_name: esoqo-mailhog
     restart: unless-stopped
     ports:
       - "1025:1025"
@@ -102,7 +102,7 @@ services:
   # ─────────────────────────────────────────────────────────────
   mock-sms:
     image: mosipqa/mock-smtp:latest
-    container_name: esoko-mock-sms
+    container_name: esoqo-mock-sms
     restart: unless-stopped
     environment:
       SERVER_HOST: "0.0.0.0"
@@ -125,7 +125,7 @@ services:
   # ─────────────────────────────────────────────────────────────
   adminer:
     image: adminer:4.8.1-standalone
-    container_name: esoko-adminer
+    container_name: esoqo-adminer
     restart: unless-stopped
     depends_on:
       postgres:
@@ -141,32 +141,32 @@ services:
   # ─────────────────────────────────────────────────────────────
   nginx:
     image: nginx:alpine
-    container_name: esoko-nginx
+    container_name: esoqo-nginx
     restart: unless-stopped
     ports:
       - "80:80"
     volumes:
       - ./docker/nginx/default.conf:/etc/nginx/conf.d/default.conf:ro
     depends_on:
-      esoko-dev:
+      esoqo-dev:
         condition: service_started
 
   # ─────────────────────────────────────────────────────────────
   # Dev — runs all Next.js apps + core service via turbo.
   # Hot-reload with poll-based file watching for Docker compat.
   # ─────────────────────────────────────────────────────────────
-  esoko-dev:
+  esoqo-dev:
     build:
       context: .
       dockerfile: Dockerfile.dev
-    container_name: esoko-dev
+    container_name: esoqo-dev
     restart: unless-stopped
     # .:/app below bind-mounts the whole repo for hot-reload, which would
     # also overlay every workspace's node_modules with whatever's on the
     # HOST (empty, or full of macOS binaries that can't run here). Each
     # workspace member gets its own named volume so its node_modules is
     # never touched by the bind mount and survives container restarts —
-    # see docker/esoko-dev/entrypoint.sh for the install-once logic this
+    # see docker/esoqo-dev/entrypoint.sh for the install-once logic this
     # enables.
     #
     # Each Next.js app's .next also gets its own named volume, same
@@ -178,7 +178,7 @@ services:
     # directory") and the dev server 500s on every request until the cache
     # is wiped. Off the bind mount, onto the container's own filesystem,
     # it doesn't corrupt.
-    entrypoint: ["/app/docker/esoko-dev/entrypoint.sh"]
+    entrypoint: ["/app/docker/esoqo-dev/entrypoint.sh"]
     ports:
       - "3000:3000"
       - "3001:3001"
@@ -193,6 +193,12 @@ services:
       DIRECT_DATABASE_URL: postgresql://esoko:esoko_dev_only@postgres:5432/esoko
       REDIS_URL: redis://redis:6379
       CORE_API_URL: http://localhost:4000
+      CORE_GO_API_URL: http://core-go:4100
+      # localhost/127.0.0.1 are jamii's own baked-in defaults (see
+      # apps/jamii/src/middleware.ts) — jamii.esoko.test is the extra dev
+      # hostname nginx fronts it on (docker/nginx/default.conf), added
+      # rather than replacing the defaults so :3004 direct still works too.
+      JAMII_PRIMARY_HOSTS: "jamii.esoko.test,ourjamii.co.ke,localhost,127.0.0.1"
       NODE_ENV: development
       SMS_MOCK_URL: http://mock-sms:8080
       SMTP_HOST: mailhog
@@ -220,6 +226,66 @@ services:
       - next_cache_admin:/app/apps/admin/.next
       - next_cache_store:/app/apps/store/.next
       - next_cache_jamii:/app/apps/jamii/.next
+    depends_on:
+      postgres:
+        condition: service_healthy
+      pgbouncer:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      core-go:
+        condition: service_started
+
+  # ─────────────────────────────────────────────────────────────
+  # core-go — the mobile REST API (Go/Gin). See
+  # docs/adr/0005-mobile-api-in-go.md. Own port (4100, not 4000 —
+  # services/core keeps that) so both can run side by side while the
+  # mobile-relevant domains migrate over.
+  # ─────────────────────────────────────────────────────────────
+  core-go:
+    build:
+      context: .
+      dockerfile: services/core-go/Dockerfile
+    container_name: core-go
+    restart: unless-stopped
+    ports:
+      - "4100:4100"
+    environment:
+      APP_ENV: "${APP_ENV:-development}"
+      PORT: "4100"
+      # pgx (unlike Prisma's client) sends query params straight through as
+      # Postgres startup parameters, so Prisma-specific hints like
+      # pgbouncer=true/connection_limit — which pgbouncer itself rejects —
+      # can't be reused verbatim from the TS services' DATABASE_URL.
+      DATABASE_URL: postgresql://esoko:esoko_dev_only@pgbouncer:5432/esoko?sslmode=disable
+      REDIS_URL: redis://redis:6379
+      SMS_PROVIDER: "${SMS_PROVIDER:-console}"
+      SMS_TEST_ENV: "${SMS_TEST_ENV:-}"
+      SMS_MOCK_URL: http://mock-sms:8080
+      CELCOM_API_KEY: "${CELCOM_API_KEY:-}"
+      CELCOM_PARTNER_ID: "${CELCOM_PARTNER_ID:-}"
+      CELCOM_SHORTCODE: "${CELCOM_SHORTCODE:-}"
+      OTP_PEPPER: "${OTP_PEPPER:-dev-pepper-change-me}"
+      # Default (5/hour/msisdn) is a production anti-SMS-pumping guard,
+      # not something local dev should ever hit — the same demo number
+      # gets OTP'd repeatedly across sign-in, PIN reset, and every
+      # org-context activation test in one afternoon. Loosened here
+      # only; production still gets the real default via this same env
+      # var if left unset there.
+      OTP_RATE_LIMIT_PER_HOUR: "${OTP_RATE_LIMIT_PER_HOUR:-200}"
+      SESSION_SECRET: "${SESSION_SECRET:-dev-session-secret-change-me}"
+      AUDIT_CHAIN_SEED: "${AUDIT_CHAIN_SEED:-esoqo-genesis}"
+      MPESA_PROVIDER: "${MPESA_PROVIDER:-console}"
+      MPESA_CONSUMER_KEY: "${MPESA_CONSUMER_KEY:-}"
+      MPESA_CONSUMER_SECRET: "${MPESA_CONSUMER_SECRET:-}"
+      MPESA_SHORTCODE: "${MPESA_SHORTCODE:-}"
+      MPESA_PASSKEY: "${MPESA_PASSKEY:-}"
+      MPESA_CALLBACK_URL: "${MPESA_CALLBACK_URL:-}"
+      MPESA_CALLBACK_SECRET: "${MPESA_CALLBACK_SECRET:-}"
+      PESAPAL_PROVIDER: "${PESAPAL_PROVIDER:-console}"
+      # Strangler bridge: Daraja callbacks Go doesn't own yet
+      # (registration/donation) are forwarded byte-identical to TS core.
+      TS_CORE_WEBHOOK_URL: http://esoqo-dev:4000
     depends_on:
       postgres:
         condition: service_healthy
@@ -284,20 +350,20 @@ services:
       WP_ADMIN_EMAIL: dev@childeldercare.test
       REDIS_URL: redis://redis:6379/1
       # Where "Register"/"Apply" CTAs — and /apply/ itself — send people;
-      # see App\Support\PageUrl::esokoJoinUrl(). localhost:3001 is the host
+      # see App\Support\PageUrl::esoqoJoinUrl(). localhost:3001 is the host
       # port apps/app's dev server binds to, reachable from this container
-      # via the host's loopback (see also docker-compose's esoko-dev service).
-      ESOKO_JOIN_URL: http://localhost:3001/join
+      # via the host's loopback (see also docker-compose's esoqo-dev service).
+      ESOQO_JOIN_URL: http://localhost:3001/join
       # Where every "page": "jamii" CTA sends people (pages/jamii.json,
       # the Programs/nav item introducing the product) — see
-      # App\Support\PageUrl::esokoJamiiUrl(). Same host-loopback reasoning
-      # as ESOKO_JOIN_URL above; 3004 is apps/jamii's own dev port.
-      ESOKO_JAMII_URL: http://localhost:3004/
+      # App\Support\PageUrl::esoqoJamiiUrl(). Same host-loopback reasoning
+      # as ESOQO_JOIN_URL above; 3004 is apps/jamii's own dev port.
+      ESOQO_JAMII_URL: http://localhost:3004/
       # services/core's authenticated /api/cecf/* facade — see
-      # App\Support\CecfApiClient. esoko-dev is the esoko stack's own
+      # App\Support\CecfApiClient. esoqo-dev is the esoqo stack's own
       # compose service name, reachable on the same docker network;
-      # CECF_SERVICE_SECRET must match esoko-dev's own env exactly.
-      ESOKO_CORE_API_URL: http://esoko-dev:4000
+      # CECF_SERVICE_SECRET must match esoqo-dev's own env exactly.
+      ESOQO_CORE_API_URL: http://esoqo-dev:4000
       CECF_SERVICE_SECRET: dev-cecf-secret-local-only
       AUTH_KEY: dev
       SECURE_AUTH_KEY: dev

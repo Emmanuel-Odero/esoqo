@@ -1,8 +1,8 @@
 'use client';
 
 import { useState, useTransition } from 'react';
-import { Icon } from '@esoko/ui';
-import { useAnnounce } from '@esoko/a11y';
+import { Icon } from '@esoqo/ui';
+import { useAnnounce } from '@esoqo/a11y';
 import { actionSetCapabilities, actionApplyPreset, actionSetActive, actionCreateStaff } from './actions';
 
 interface Staff {
@@ -216,6 +216,7 @@ function CreateStaff({ presets, onClose }: { presets: string[]; onClose: () => v
   const [email, setEmail] = useState('');
   const [role, setRole] = useState('VIEWER');
   const [tempPin, setTempPin] = useState<string | null>(null);
+  const [emailed, setEmailed] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [pending, start] = useTransition();
 
@@ -223,8 +224,13 @@ function CreateStaff({ presets, onClose }: { presets: string[]; onClose: () => v
     setError(null);
     start(async () => {
       const r = await actionCreateStaff({ name, email, rolePreset: role });
-      if (r.ok) setTempPin((r.data as { tempPin: string }).tempPin);
-      else setError(r.error);
+      if (r.ok) {
+        const data = r.data as { tempPin: string; emailed: boolean };
+        setTempPin(data.tempPin);
+        setEmailed(data.emailed);
+      } else {
+        setError(r.error);
+      }
     });
   }
 
@@ -243,14 +249,21 @@ function CreateStaff({ presets, onClose }: { presets: string[]; onClose: () => v
               <p className="pill p-ok" style={{ padding: '10px 13px', marginBottom: 16 }}>
                 <Icon name="check-circle" size={14} />Account created
               </p>
-              <p>
-                Give <strong>{name}</strong> this temporary PIN. It is shown once and never stored
-                in readable form — they must change it at first sign-in.
-              </p>
+              {emailed ? (
+                <p>
+                  Sent <strong>{email}</strong> the sign-in link and this temporary PIN. They must
+                  choose their own PIN the moment they sign in — they can&apos;t do anything else first.
+                </p>
+              ) : (
+                <p className="pill p-bad" style={{ padding: '10px 13px' }} role="alert">
+                  <Icon name="alert-circle" size={14} />
+                  Couldn&apos;t email {email} — hand this PIN to <strong>{name}</strong> directly instead.
+                </p>
+              )}
               <p className="mono" style={{ fontSize: '2rem', letterSpacing: '.4em', textAlign: 'center', padding: '18px 0', background: 'var(--paper)', borderRadius: 10, margin: '14px 0' }}>
                 {tempPin}
               </p>
-              <p className="sub">Do not send this by SMS or email. Hand it over in person or by phone.</p>
+              <p className="sub">Shown once and never stored in readable form. Don&apos;t send it anywhere else.</p>
             </>
           ) : (
             <>

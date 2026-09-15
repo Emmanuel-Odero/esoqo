@@ -1,14 +1,8 @@
 'use server';
 
 import { cookies, headers } from 'next/headers';
-import {
-  findSubjectCredential, recordSignInSuccess, recordSignInFailure, setSubjectPin, SetPinError,
-} from '@esoko/db';
-import {
-  verifyPin, hashPin, isWeakPin, createSession, capabilitiesForRole, SESSION_COOKIE,
-  issueOtp, verifyOtp, OtpError, checkRateLimit, RateLimitError,
-} from '@esoko/auth';
-import { signInSchema, requestPinCodeSchema, setPinSchema } from '@esoko/domain';
+import { SESSION_COOKIE, checkRateLimit, RateLimitError } from '@esoqo/auth';
+import { signInSchema, requestPinCodeSchema, setPinSchema, clientIpFrom } from '@esoqo/domain';
 
 export type ActionResult<T = void> =
   | { ok: true; data: T }
@@ -16,16 +10,45 @@ export type ActionResult<T = void> =
 
 async function clientIp(): Promise<string> {
   const h = await headers();
-  return h.get('x-forwarded-for')?.split(',')[0]?.trim() ?? 'unknown';
+  return clientIpFrom((n) => h.get(n)) ?? 'unknown';
 }
 
-async function startSession(partyId: string) {
-  const token = await createSession({
-    actorType: 'SUBJECT',
-    actorId: partyId,
-    partyId,
-    capabilities: capabilitiesForRole('SUBJECT'),
+const CORE_GO_URL = process.env.CORE_GO_API_URL ?? 'http://localhost:4100';
+
+/**
+ * Subject OTP/PIN/session now live in services/core-go — see
+ * docs/adr/0005-mobile-api-in-go.md — so this app, apps/store and the
+ * mobile client all share one implementation instead of each carrying
+ * their own copy of findSubjectCredential/recordSignInSuccess/
+ * recordSignInFailure/setSubjectPin (packages/db/src/dal/auth-credential.ts)
+ * and issueOtp/verifyOtp for the PIN_RESET purpose (packages/auth/src/otp.ts).
+ * Session *validation* is unchanged (packages/auth/src/session.ts's
+ * ctxFromToken, via apps/app/src/lib/session.ts) — core-go writes to the
+ * same Redis, in the same format, so nothing downstream of sign-in needed
+ * to change.
+ */
+async function coreGoFetch<T>(path: string, body: unknown): Promise<
+  { ok: true; data: T } | { ok: false; status: number; code: string; message: string }
+> {
+  const res = await fetch(`${CORE_GO_URL}${path}`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+    cache: 'no-store',
   });
+  const json = await res.json().catch(() => ({}));
+  if (!res.ok) {
+    return {
+      ok: false,
+      status: res.status,
+      code: json?.error?.code ?? 'UNKNOWN',
+      message: json?.error?.message ?? 'Something went wrong',
+    };
+  }
+  return { ok: true, data: json as T };
+}
+
+async function startSessionFromToken(token: string) {
   const jar = await cookies();
   jar.set(SESSION_COOKIE, token, {
     httpOnly: true,
@@ -41,7 +64,9 @@ async function startSession(partyId: string) {
  * signature — validated at the boundary, rate-limited per IP, and every
  * failure path is deliberately generic ("No account, or PIN not set")
  * so a wrong guess can't be used to enumerate which numbers are
- * registered.
+ * registered. The credential check itself, and the anti-enumeration
+ * DUMMY_PIN_HASH comparison, now happen in core-go — see
+ * internal/httpapi/handlers_auth.go's handleSignIn.
  */
 export async function actionSignIn(raw: unknown): Promise<ActionResult<{ next: string }>> {
   const parsed = signInSchema.safeParse(raw);
@@ -55,27 +80,13 @@ export async function actionSignIn(raw: unknown): Promise<ActionResult<{ next: s
     throw e;
   }
 
-  const cred = await findSubjectCredential(identifier);
-  if (!cred || !cred.pinHash) {
-    return {
-      ok: false,
-      error: 'No account found, or a PIN has not been set yet. Use "Set your PIN" below.',
-      field: 'identifier',
-    };
-  }
-  if (cred.frozenAt) return { ok: false, error: 'This account is frozen. Contact Esoko to unfreeze it.' };
-  if (cred.lockedUntil && cred.lockedUntil > new Date()) {
-    return { ok: false, error: 'Too many wrong PINs. Try again in a few minutes.' };
+  const result = await coreGoFetch<{ token: string }>('/v1/auth/sign-in', { identifier, pin });
+  if (!result.ok) {
+    if (result.code === 'ACCOUNT_FROZEN') return { ok: false, error: result.message };
+    return { ok: false, error: result.message, field: 'identifier' };
   }
 
-  const valid = await verifyPin(pin, cred.pinHash);
-  if (!valid) {
-    await recordSignInFailure(cred.partyId);
-    return { ok: false, error: 'Incorrect PIN.', field: 'pin' };
-  }
-
-  await recordSignInSuccess(cred.partyId);
-  await startSession(cred.partyId);
+  await startSessionFromToken(result.data.token);
   return { ok: true, data: { next: '/me' } };
 }
 
@@ -87,13 +98,9 @@ export async function actionRequestPinCode(raw: unknown): Promise<ActionResult> 
   const parsed = requestPinCodeSchema.safeParse(raw);
   if (!parsed.success) return { ok: false, error: parsed.error.issues[0]?.message ?? 'Enter a valid number' };
 
-  try {
-    await issueOtp(parsed.data.msisdn, 'PIN_RESET', await clientIp());
-    return { ok: true, data: undefined };
-  } catch (e) {
-    if (e instanceof OtpError) return { ok: false, error: e.message };
-    throw e;
-  }
+  const result = await coreGoFetch('/v1/auth/otp', { msisdn: parsed.data.msisdn, purpose: 'PIN_RESET' });
+  if (!result.ok) return { ok: false, error: result.message };
+  return { ok: true, data: undefined };
 }
 
 /** Step 2 — verifies the code, sets the PIN, and signs the subject straight in. */
@@ -102,24 +109,13 @@ export async function actionSetPin(raw: unknown): Promise<ActionResult<{ next: s
   if (!parsed.success) return { ok: false, error: parsed.error.issues[0]?.message ?? 'Check your details' };
   const { msisdn, code, pin } = parsed.data;
 
-  if (isWeakPin(pin)) {
-    return { ok: false, error: 'Choose a less predictable PIN — not 1234, 0000 or a run of digits.', field: 'pin' };
+  const result = await coreGoFetch<{ token: string }>('/v1/auth/pin/reset', { msisdn, code, pin });
+  if (!result.ok) {
+    const field = result.code === 'WRONG_CODE' || result.code === 'EXPIRED' || result.code === 'TOO_MANY_ATTEMPTS'
+      ? 'code' : result.code === 'WEAK_PIN' ? 'pin' : undefined;
+    return { ok: false, error: result.message, field };
   }
 
-  try {
-    await verifyOtp(msisdn, 'PIN_RESET', code);
-  } catch (e) {
-    if (e instanceof OtpError) return { ok: false, error: e.message, field: 'code' };
-    throw e;
-  }
-
-  try {
-    const pinHash = await hashPin(pin);
-    const { partyId } = await setSubjectPin(msisdn, pinHash);
-    await startSession(partyId);
-    return { ok: true, data: { next: '/me' } };
-  } catch (e) {
-    if (e instanceof SetPinError) return { ok: false, error: e.message };
-    throw e;
-  }
+  await startSessionFromToken(result.data.token);
+  return { ok: true, data: { next: '/me' } };
 }

@@ -5,7 +5,7 @@ import type { SupportTicketCategory, SupportTicketStatus } from '@prisma/client'
 
 /**
  * "Report an issue" — see SupportTicket's own doc comment in
- * schema.prisma. Self-serve (any signed-in Party), reviewed by Esoko
+ * schema.prisma. Self-serve (any signed-in Party), reviewed by Esoqo
  * staff holding `support-ticket.manage`.
  */
 

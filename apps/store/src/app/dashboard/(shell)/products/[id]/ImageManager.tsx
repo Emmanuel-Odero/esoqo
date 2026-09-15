@@ -2,7 +2,7 @@
 
 import { useRef, useState, useTransition } from 'react';
 import { useRouter } from 'next/navigation';
-import { Icon } from '@esoko/ui';
+import { Icon } from '@esoqo/ui';
 import { uploadProductImage, removeProductImage, reorderImages } from './actions';
 
 interface Img { id: string; url: string; position: number }

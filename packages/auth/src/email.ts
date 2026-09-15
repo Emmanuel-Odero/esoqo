@@ -1,6 +1,6 @@
 import 'server-only';
 import nodemailer, { type Transporter } from 'nodemailer';
-import { appEnv } from '@esoko/domain';
+import { appEnv } from '@esoqo/domain';
 
 /**
  * Resolves the email provider for this run mode — same three-tier
@@ -60,7 +60,7 @@ export async function sendEmail(to: string, subject: string, text: string): Prom
 
   try {
     await getTransporter(provider).sendMail({
-      from: process.env.EMAIL_FROM ?? 'Esoko <no-reply@esoko.co.ke>',
+      from: process.env.EMAIL_FROM ?? 'Esoqo <no-reply@esoqo.co.ke>',
       to, subject, text,
     });
   } catch (e) {

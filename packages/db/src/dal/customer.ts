@@ -31,20 +31,50 @@ export class CustomerError extends Error {
  * that lets it place an order at all, the same reasoning as that
  * function's own "no capability required" comment.
  */
-export async function findOrCreateCustomer(storeId: string, msisdn: string, name?: string | null) {
+/**
+ * Resolves or creates the customer record a sale/order attaches to.
+ *
+ * When `partyId` is given (an org buying on account, see
+ * createStoreOrder's `buyingOrgId`), identity resolves by
+ * `(storeId, partyId)` first — a stable identity across whichever member
+ * of the org happens to place the order — falling back to the existing
+ * `(storeId, msisdn)` lookup only if no org-linked row exists yet.
+ * Every existing anonymous-consumer call site (no partyId) is
+ * unaffected — same behaviour as before.
+ */
+export async function findOrCreateCustomer(
+  storeId: string, msisdn: string, name?: string | null, partyId?: string | null,
+) {
   const trimmed = msisdn.trim();
   if (!trimmed) throw new CustomerError('A phone number is required', 'BAD_INPUT');
+
+  if (partyId) {
+    const existingByParty = await prisma.storeCustomer.findFirst({ where: { storeId, partyId } });
+    if (existingByParty) {
+      if (name && !existingByParty.name) {
+        return prisma.storeCustomer.update({ where: { id: existingByParty.id }, data: { name } });
+      }
+      return existingByParty;
+    }
+  }
 
   const existing = await prisma.storeCustomer.findUnique({ where: { storeId_msisdn: { storeId, msisdn: trimmed } } });
   if (existing) {
     // A name arriving later (e.g. POS didn't have one, checkout did) is
-    // worth keeping — but never overwrite a name already on file.
-    if (name && !existing.name) {
-      return prisma.storeCustomer.update({ where: { id: existing.id }, data: { name } });
+    // worth keeping — but never overwrite a name already on file. An
+    // org buyer placing their first order through an already-known phone
+    // number gets linked here too, rather than spawning a second row.
+    if ((name && !existing.name) || (partyId && !existing.partyId)) {
+      return prisma.storeCustomer.update({
+        where: { id: existing.id },
+        data: { name: name && !existing.name ? name : undefined, partyId: partyId ?? undefined },
+      });
     }
     return existing;
   }
-  return prisma.storeCustomer.create({ data: { storeId, msisdn: trimmed, name: name || null } });
+  return prisma.storeCustomer.create({
+    data: { storeId, msisdn: trimmed, name: name || null, partyId: partyId || null },
+  });
 }
 
 function balanceOf(entries: { amountKes: Prisma.Decimal }[]) {
@@ -58,13 +88,20 @@ export async function listCustomers(ctx: Ctx, storeId: string) {
   await assertOwnsStore(ctx, storeId, 'customer.read');
   const customers = await prisma.storeCustomer.findMany({
     where: { storeId },
-    include: { ledger: { select: { amountKes: true } }, loyalty: { select: { points: true } } },
+    include: {
+      ledger: { select: { amountKes: true } }, loyalty: { select: { points: true } },
+      party: { include: { organisation: { select: { officialName: true, knownAs: true } } } },
+    },
     orderBy: { updatedAt: 'desc' },
   });
   return customers.map((c) => ({
     id: c.id, storeId: c.storeId, msisdn: c.msisdn, name: c.name, notes: c.notes,
     createdAt: c.createdAt, updatedAt: c.updatedAt,
     balanceKes: balanceOf(c.ledger), points: pointsOf(c.loyalty),
+    // Set only for an org buying on account — see findOrCreateCustomer.
+    orgName: c.party?.organisation?.knownAs || c.party?.organisation?.officialName || null,
+    creditLimitKes: c.creditLimitKes ? Number(c.creditLimitKes) : null,
+    creditTermsDays: c.creditTermsDays,
   }));
 }
 
@@ -77,12 +114,16 @@ export async function listDebts(ctx: Ctx, storeId: string) {
   await assertOwnsStore(ctx, storeId, 'customer.read');
   const customers = await prisma.storeCustomer.findMany({
     where: { storeId },
-    include: { ledger: { orderBy: { createdAt: 'asc' }, select: { kind: true, amountKes: true, createdAt: true } } },
+    include: {
+      ledger: { orderBy: { createdAt: 'asc' }, select: { kind: true, amountKes: true, createdAt: true } },
+      party: { include: { organisation: { select: { officialName: true, knownAs: true } } } },
+    },
   });
 
   return customers
     .map((c) => ({
       id: c.id, name: c.name, msisdn: c.msisdn,
+      orgName: c.party?.organisation?.knownAs || c.party?.organisation?.officialName || null,
       balanceKes: balanceOf(c.ledger),
       owingSinceAt: c.ledger.find((e) => e.kind === 'SALE')?.createdAt ?? null,
     }))
@@ -113,6 +154,23 @@ export async function updateCustomer(ctx: Ctx, customerId: string, patch: { name
 }
 
 /**
+ * Look up a prior write carrying this de-duplication token.
+ *
+ * Returns null when no token was supplied, which keeps every existing
+ * internal caller on exactly the old behaviour — the guard only engages
+ * for callers that opt in by passing one.
+ */
+async function findLedgerEntryByRequestId(requestId: string | undefined) {
+  if (!requestId) return null;
+  return prisma.customerLedgerEntry.findUnique({ where: { requestId } });
+}
+
+async function findLoyaltyEntryByRequestId(requestId: string | undefined) {
+  if (!requestId) return null;
+  return prisma.loyaltyEntry.findUnique({ where: { requestId } });
+}
+
+/**
  * A customer paying down what they owe — cash (or till) actually
  * arriving now, unlike the ON_ACCOUNT sale that created the debt. Posts
  * both sides: the credit-book entry (their balance drops) and the
@@ -120,15 +178,30 @@ export async function updateCustomer(ctx: Ctx, customerId: string, patch: { name
  * money now, platform fee included, the same as any other settled
  * sale) — see postStoreSale.
  */
-export async function recordCustomerPayment(ctx: Ctx, customerId: string, amountKes: number, note?: string) {
+export async function recordCustomerPayment(ctx: Ctx, customerId: string, amountKes: number, note?: string, requestId?: string) {
   if (amountKes <= 0) throw new CustomerError('Enter an amount above zero', 'BAD_INPUT');
   const customer = await prisma.storeCustomer.findUnique({ where: { id: customerId }, include: { store: { include: { enterprise: true } } } });
   if (!customer) throw new CustomerError('Customer not found', 'NOT_FOUND');
   await assertOwnsStore(ctx, customer.storeId, 'customer.write');
 
-  const entry = await prisma.customerLedgerEntry.create({
-    data: { customerId, kind: 'PAYMENT', amountKes: -amountKes, note: note?.trim() || null },
-  });
+  // One token per press of "record payment". Losing the race here means
+  // the money was already booked by the first click, so return that
+  // entry rather than erroring at a till operator who did nothing wrong.
+  const existing = await findLedgerEntryByRequestId(requestId);
+  if (existing) return existing;
+
+  let entry;
+  try {
+    entry = await prisma.customerLedgerEntry.create({
+      data: { customerId, kind: 'PAYMENT', amountKes: -amountKes, note: note?.trim() || null, requestId: requestId ?? null },
+    });
+  } catch (e) {
+    // Two clicks genuinely concurrent: the loser reads back the winner's
+    // row instead of posting a second settlement.
+    const won = await findLedgerEntryByRequestId(requestId);
+    if (won) return won;
+    throw e;
+  }
 
   await postStoreSale({
     storeOwnerPartyId: customer.store.enterprise.partyId,
@@ -148,15 +221,25 @@ export async function recordCustomerPayment(ctx: Ctx, customerId: string, amount
 /** A manual correction to what a customer owes — writing off a bad debt,
  *  fixing a data-entry mistake. Always visible on the ledger, never a
  *  silent balance edit. */
-export async function adjustCustomerBalance(ctx: Ctx, customerId: string, amountKes: number, note: string) {
+export async function adjustCustomerBalance(ctx: Ctx, customerId: string, amountKes: number, note: string, requestId?: string) {
   if (!note.trim()) throw new CustomerError('Say why you are adjusting this balance', 'BAD_INPUT');
   const customer = await prisma.storeCustomer.findUnique({ where: { id: customerId } });
   if (!customer) throw new CustomerError('Customer not found', 'NOT_FOUND');
   await assertOwnsStore(ctx, customer.storeId, 'customer.write');
 
-  const entry = await prisma.customerLedgerEntry.create({
-    data: { customerId, kind: 'ADJUSTMENT', amountKes, note: note.trim() },
-  });
+  const already = await findLedgerEntryByRequestId(requestId);
+  if (already) return already;
+
+  let entry;
+  try {
+    entry = await prisma.customerLedgerEntry.create({
+      data: { customerId, kind: 'ADJUSTMENT', amountKes, note: note.trim(), requestId: requestId ?? null },
+    });
+  } catch (e) {
+    const won = await findLedgerEntryByRequestId(requestId);
+    if (won) return won;
+    throw e;
+  }
   await recordAudit(ctx, { action: 'customer.balance_adjusted', targetType: 'store_customer', targetId: customerId, payload: { amountKes, note } });
   return entry;
 }
@@ -170,18 +253,28 @@ export async function chargeCustomerForSale(customerId: string, saleId: string, 
   });
 }
 
-export async function redeemLoyalty(ctx: Ctx, customerId: string, points: number, note?: string) {
+export async function redeemLoyalty(ctx: Ctx, customerId: string, points: number, note?: string, requestId?: string) {
   if (points <= 0) throw new CustomerError('Enter points above zero', 'BAD_INPUT');
   const customer = await prisma.storeCustomer.findUnique({ where: { id: customerId } });
   if (!customer) throw new CustomerError('Customer not found', 'NOT_FOUND');
   await assertOwnsStore(ctx, customer.storeId, 'customer.write');
 
+  const already = await findLoyaltyEntryByRequestId(requestId);
+  if (already) return already;
+
   const { points: balance } = await getCustomerDetail(ctx, customerId);
   if (points > balance) throw new CustomerError(`This customer only has ${balance} points`, 'BAD_INPUT');
 
-  const entry = await prisma.loyaltyEntry.create({
-    data: { customerId, points: -points, kind: 'REDEEM', note: note?.trim() || null },
-  });
+  let entry;
+  try {
+    entry = await prisma.loyaltyEntry.create({
+      data: { customerId, points: -points, kind: 'REDEEM', note: note?.trim() || null, requestId: requestId ?? null },
+    });
+  } catch (e) {
+    const won = await findLoyaltyEntryByRequestId(requestId);
+    if (won) return won;
+    throw e;
+  }
   await recordAudit(ctx, { action: 'customer.loyalty_redeemed', targetType: 'store_customer', targetId: customerId, payload: { points } });
   return entry;
 }

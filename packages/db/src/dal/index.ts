@@ -3,7 +3,7 @@
  *
  * EVERY read and write passes through here. No component, Server Action,
  * route handler or service may import the Prisma client directly — the
- * ESLint rule in @esoko/config enforces it and CI fails on violation.
+ * ESLint rule in @esoqo/config enforces it and CI fails on violation.
  * See ADR-0003.
  */
 export * from './registration';
@@ -32,6 +32,7 @@ export * from './cashier';
 export * from './shift';
 export * from './receipt';
 export * from './pricing';
+export * from './parcel-pricing';
 export * from './auth-credential';
 export * from './jamii-page';
 export * from './jamii-page-block';
@@ -50,5 +51,10 @@ export * from './donation';
 export * from './attestation';
 export * from './treasury';
 export * from './payment-id';
-export * from './ticketing';
+// Ticketing reads/writes (ticketing, seat-map, ticket-customer, addon)
+// moved to services/core-go — see dbx/ticket_orgs.go, ticketing.go,
+// ticketing_installment.go and fleet.go. This barrel intentionally no
+// longer re-exports them; the Next.js console calls Go over HTTP.
 export * from './cecf-ingest';
+export * from './mall';
+export * from './warehouse';

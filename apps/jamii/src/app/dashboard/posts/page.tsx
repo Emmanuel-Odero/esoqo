@@ -1,5 +1,5 @@
 import Link from 'next/link';
-import { listJamiiPostsForOwner } from '@esoko/db';
+import { listJamiiPostsForOwner } from '@esoqo/db';
 import { requireMyPage } from '@/lib/session';
 
 export default async function PostsScreen() {

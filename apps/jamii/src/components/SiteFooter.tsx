@@ -1,4 +1,4 @@
-import { Logo } from '@esoko/ui';
+import { Logo } from '@esoqo/ui';
 
 export function SiteFooter() {
   return (

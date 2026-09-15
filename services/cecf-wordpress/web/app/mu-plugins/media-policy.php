@@ -20,7 +20,7 @@
  *      than uploading the file itself; nothing here blocks that, only
  *      direct video *file* uploads.
  *   3. Compress every image on the way in — mirrors packages/db/src/
- *      storage.ts's compressImage() on the Node side of esoko, same
+ *      storage.ts's compressImage() on the Node side of esoqo, same
  *      reasoning: recompressing PDFs/docs generically isn't safe, but
  *      photos are almost always camera-resolution originals nobody
  *      will ever view at full size on a page.

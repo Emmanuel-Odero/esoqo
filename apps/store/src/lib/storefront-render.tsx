@@ -1,6 +1,6 @@
 import type { Metadata } from 'next';
 import { notFound } from 'next/navigation';
-import { getStoreBySlug } from '@esoko/db';
+import { getStoreBySlug } from '@esoqo/db';
 import { getCtx } from '@/lib/session';
 import { StorefrontClient } from '@/app/s/[slug]/StorefrontClient';
 

@@ -1,8 +1,8 @@
 'use client';
 import { useMemo, useState } from 'react';
-import { Icon } from '@esoko/ui';
-import { useAnnounce } from '@esoko/a11y';
-import { PRODUCT_CATEGORIES } from '@esoko/domain';
+import { Icon } from '@esoqo/ui';
+import { useAnnounce } from '@esoqo/a11y';
+import { PRODUCT_CATEGORIES } from '@esoqo/domain';
 
 export interface StoreRow {
   slug: string;
@@ -117,7 +117,7 @@ export function StoreBrowser({ stores }: { stores: StoreRow[] }) {
               </p>
               {s.verified && (
                 <p className="sub" style={{ margin: '8px 0 0', fontSize: '.78rem', fontWeight: 700, color: 'var(--green)' }}>
-                  <Icon name="shield-check" size={13} style={{ verticalAlign: '-2px', marginRight: 4 }} />Verified Esoko business
+                  <Icon name="shield-check" size={13} style={{ verticalAlign: '-2px', marginRight: 4 }} />Verified Esoqo business
                 </p>
               )}
             </a>

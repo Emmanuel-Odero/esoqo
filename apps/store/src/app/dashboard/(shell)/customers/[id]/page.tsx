@@ -1,7 +1,7 @@
 import type { Metadata } from 'next';
 import { notFound } from 'next/navigation';
-import { Icon } from '@esoko/ui';
-import { getCustomerDetail } from '@esoko/db';
+import { Icon } from '@esoqo/ui';
+import { getCustomerDetail } from '@esoqo/db';
 import { requireSubject } from '@/lib/session';
 import { CustomerActions } from './CustomerActions';
 

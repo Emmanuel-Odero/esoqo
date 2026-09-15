@@ -1,7 +1,7 @@
 'use client';
 import { useMemo, useState } from 'react';
-import { Icon } from '@esoko/ui';
-import { useAnnounce } from '@esoko/a11y';
+import { Icon } from '@esoqo/ui';
+import { useAnnounce } from '@esoqo/a11y';
 
 export interface ListingRow {
   slug: string;

@@ -1,5 +1,5 @@
 import { PrismaClient } from '@prisma/client';
-import { appEnv } from '@esoko/domain';
+import { appEnv } from '@esoqo/domain';
 
 /**
  * Run-mode database selection.
@@ -27,7 +27,7 @@ const LOCAL_DB_HOSTS = ['localhost', '127.0.0.1', '::1', 'pgbouncer', 'postgres'
  * the reason the Data Access Layer cannot be quietly bypassed by a
  * future contributor who is in a hurry.
  */
-const globalForPrisma = globalThis as unknown as { __esokoPrisma?: PrismaClient };
+const globalForPrisma = globalThis as unknown as { __esoqoPrisma?: PrismaClient };
 
 selectDatabaseUrl();
 
@@ -46,7 +46,7 @@ if (appEnv() === 'development') {
 }
 
 export const prisma =
-  globalForPrisma.__esokoPrisma ??
+  globalForPrisma.__esoqoPrisma ??
   new PrismaClient({
     log:
       process.env.NODE_ENV === 'development'
@@ -54,6 +54,6 @@ export const prisma =
         : ['error'],
   });
 
-if (process.env.NODE_ENV !== 'production') globalForPrisma.__esokoPrisma = prisma;
+if (process.env.NODE_ENV !== 'production') globalForPrisma.__esoqoPrisma = prisma;
 
 export type { Prisma } from '@prisma/client';

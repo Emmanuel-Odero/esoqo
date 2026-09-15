@@ -1,7 +1,7 @@
 'use server';
 
 import { revalidatePath } from 'next/cache';
-import { fulfilStoreOrder, confirmStoreOrderCod } from '@esoko/db';
+import { fulfilStoreOrder, confirmStoreOrderCod } from '@esoqo/db';
 import { requireSubject } from '@/lib/session';
 
 export async function markFulfilled(orderId: string) {

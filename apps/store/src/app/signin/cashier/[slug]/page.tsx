@@ -1,7 +1,7 @@
 import type { Metadata } from 'next';
 import { notFound } from 'next/navigation';
-import { Icon } from '@esoko/ui';
-import { getStoreBySlug, anonCtx } from '@esoko/db';
+import { Icon } from '@esoqo/ui';
+import { getStoreBySlug, anonCtx } from '@esoqo/db';
 import { CashierSignInForm } from './CashierSignInForm';
 
 export const dynamic = 'force-dynamic';
@@ -30,7 +30,7 @@ export default async function CashierSignInPage({ params }: { params: Promise<{ 
         <div className="auth-card">
           <div className="brand">
             <span className="brand-icon"><Icon name="shop" size={18} /></span>
-            <span className="brand-text">Esoko<span>.store</span></span>
+            <span className="brand-text">Esoqo<span>.store</span></span>
           </div>
           <div className="form-header">
             <h1>Cashier sign in</h1>

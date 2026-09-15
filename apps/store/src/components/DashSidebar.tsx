@@ -4,7 +4,7 @@ import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import type { Route } from 'next';
 import { usePathname } from 'next/navigation';
-import { Icon, type IconName } from '@esoko/ui';
+import { Icon, type IconName } from '@esoqo/ui';
 
 const NAV: [string, IconName, string][] = [
   ['/dashboard', 'chart', 'Overview'],
@@ -28,10 +28,10 @@ export function DashSidebar({ store }: { store: { name: string; slug: string } |
   useEffect(() => {
     const onToggle = () => setOpen((v) => !v);
     const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') setOpen(false); };
-    window.addEventListener('esoko:nav-toggle', onToggle);
+    window.addEventListener('esoqo:nav-toggle', onToggle);
     window.addEventListener('keydown', onKey);
     return () => {
-      window.removeEventListener('esoko:nav-toggle', onToggle);
+      window.removeEventListener('esoqo:nav-toggle', onToggle);
       window.removeEventListener('keydown', onKey);
     };
   }, []);
@@ -39,7 +39,7 @@ export function DashSidebar({ store }: { store: { name: string; slug: string } |
   useEffect(() => { setOpen(false); }, [path]);
 
   useEffect(() => {
-    window.dispatchEvent(new CustomEvent('esoko:nav-state', { detail: { open } }));
+    window.dispatchEvent(new CustomEvent('esoqo:nav-state', { detail: { open } }));
   }, [open]);
 
   useEffect(() => {

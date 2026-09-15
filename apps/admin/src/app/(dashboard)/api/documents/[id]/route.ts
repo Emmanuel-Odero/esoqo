@@ -1,5 +1,5 @@
 import { NextResponse, type NextRequest } from 'next/server';
-import { getDocument, getObject } from '@esoko/db';
+import { getDocument, getObject } from '@esoqo/db';
 import { getCtx } from '@/lib/session';
 
 /**

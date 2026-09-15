@@ -1,5 +1,5 @@
 /* ══════════════════════════════════════════════════════════════
-   Esoko dashboard — /me and every page beneath it.
+   Esoqo dashboard — /me and every page beneath it.
 
    The record behaves like a document, but the shell behaves like a
    dashboard: a muted paper canvas so every card reads as an object
@@ -7,7 +7,7 @@
    stacked bars), a KPI row on the home screen, and restrained type —
    700-weight, document-sized headlines, not display-scale clamour.
 
-   All colour/spacing/radius/motion values come from @esoko/ui tokens.
+   All colour/spacing/radius/motion values come from @esoqo/ui tokens.
    ══════════════════════════════════════════════════════════════ */
 
 .me { min-height:100dvh; background:var(--paper); padding-bottom:calc(76px + var(--safe-b)) }

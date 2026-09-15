@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, type RefObject } from 'react';
-import { Icon, SelectWithOther } from '@esoko/ui';
+import { Icon, SelectWithOther } from '@esoqo/ui';
 import type { Form } from '../form';
 
 // Plain words as both value and label — that's what Form['orgRole']

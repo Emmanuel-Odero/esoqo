@@ -3,7 +3,7 @@
 import { useState, useTransition } from 'react';
 import Link from 'next/link';
 import type { Route } from 'next';
-import { Icon } from '@esoko/ui';
+import { Icon } from '@esoqo/ui';
 import { actionModerateOrg } from './actions';
 
 interface OrgRow {

@@ -4,7 +4,8 @@ import { useState, useTransition } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import type { Route } from 'next';
 import Link from 'next/link';
-import { Icon } from '@esoko/ui';
+import { Icon } from '@esoqo/ui';
+import { safeRedirect } from '@esoqo/domain';
 import { actionSignIn } from './actions';
 
 export function SignInForm() {
@@ -21,7 +22,10 @@ export function SignInForm() {
     startTransition(async () => {
       const result = await actionSignIn({ identifier, pin });
       if (!result.ok) { setError(result.error); setField(result.field); return; }
-      router.push((params.get('next') || result.data.next) as Route);
+      // safeRedirect, not the raw param: router.push follows an absolute
+      // external URL, so this was an open redirect straight after a
+      // genuine PIN entry.
+      router.push(safeRedirect(params.get('next') || result.data.next, window.location.origin) as Route);
       router.refresh();
     });
   }
@@ -44,7 +48,7 @@ export function SignInForm() {
           autoComplete="current-password" value={pin} onChange={(e) => setPin(e.target.value)}
           aria-invalid={field === 'pin'}
         />
-        <p className="hint">Four to six digits. Esoko will never ask you for this by call or SMS.</p>
+        <p className="hint">Four to six digits. Esoqo will never ask you for this by call or SMS.</p>
       </div>
 
       {error && (

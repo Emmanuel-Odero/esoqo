@@ -1,7 +1,7 @@
 'use client';
 
 import { useRef } from 'react';
-import { Icon } from '@esoko/ui';
+import { Icon } from '@esoqo/ui';
 
 /** A click-to-upload image picker with a thumbnail preview. Shared by
  *  the logo/cover pickers in Settings and the cover picker on the post

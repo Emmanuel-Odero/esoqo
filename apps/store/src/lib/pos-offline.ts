@@ -8,6 +8,8 @@
  * twice from a flaky connection is never double-counted.
  */
 
+// Keeps its pre-rename name: an IndexedDB rename orphans whatever
+// unsynced sales a cashier's browser is still holding.
 const DB_NAME = 'esoko-pos-outbox';
 const STORE = 'queued-sales';
 

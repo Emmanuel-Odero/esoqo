@@ -8,9 +8,9 @@ import { requireCapability, type Ctx } from '../capabilities';
  * dal/store.ts's own StoreOrderPaymentMethod/PosPaymentMethod split).
  *
  * Deliberately reports two different numbers, never blended:
- *   gmvKes      — everything that moved through Esoko. Proves the
+ *   gmvKes      — everything that moved through Esoqo. Proves the
  *                 platform matters.
- *   esokoTakeKes — Esoko's own commission, which today is earned ONLY
+ *   esoqoTakeKes — Esoqo's own commission, which today is earned ONLY
  *                 on store commerce (PricingRule PLATFORM_FEE_PCT, same
  *                 rule getEstoreOverview already reads). Donations,
  *                 chama contributions and registration fees pass
@@ -21,7 +21,7 @@ type MethodBucket = 'MPESA' | 'CASH' | 'CARD' | 'OTHER';
 
 export interface PlatformRevenueSplit {
   gmvKes: number;
-  esokoTakeKes: number;
+  esoqoTakeKes: number;
   byMethod: Record<MethodBucket, number>;
   bySource: {
     storeCommerce: number;
@@ -88,7 +88,7 @@ export async function getPlatformRevenueSplit(ctx: Ctx, days = 30): Promise<Plat
 
   return {
     gmvKes: storeCommerce + ourJamiiGiving + chamaTreasury + registrations + ticketing,
-    esokoTakeKes: storeCommerce * (platformFeePct / 100),
+    esoqoTakeKes: storeCommerce * (platformFeePct / 100),
     byMethod,
     bySource: { storeCommerce, ourJamiiGiving, chamaTreasury, registrations, ticketing },
   };

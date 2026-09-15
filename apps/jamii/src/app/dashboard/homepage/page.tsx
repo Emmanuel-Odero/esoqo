@@ -1,4 +1,4 @@
-import { getJamiiPageForManagement, getJamiiSitePageByKind, listJamiiPageBlocksForDashboard } from '@esoko/db';
+import { getJamiiPageForManagement, getJamiiSitePageByKind, listJamiiPageBlocksForDashboard } from '@esoqo/db';
 import { requireMyPage } from '@/lib/session';
 import { BlockEditor } from '../_pages/BlockEditor';
 import { DEFAULT_BLOCKS } from '../_pages/default-blocks';

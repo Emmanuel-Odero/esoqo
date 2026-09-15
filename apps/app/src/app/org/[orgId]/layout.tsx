@@ -1,13 +1,12 @@
 import type { Metadata } from 'next';
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
-import { Icon, Logo, type IconName } from '@esoko/ui';
-import { getTicketOrg } from '@esoko/db';
+import { Icon, Logo, type IconName } from '@esoqo/ui';
 import { requireOrgAccess } from '@/lib/session';
-import { canOrg } from '@/lib/ticketing';
+import { canOrg, orgGo, orgForCan, type GoOrg } from '@/lib/ticketing';
 import '@/app/me/me.css';
 
-export const metadata: Metadata = { title: { default: 'Organiser console', template: '%s · Esoko' } };
+export const metadata: Metadata = { title: { default: 'Organiser console', template: '%s · Esoqo' } };
 
 /**
  * The org console — /org/[orgId] and everything beneath it.
@@ -28,7 +27,9 @@ export default async function OrgLayout(
   const { orgId } = await params;
   const { kind, ctx } = await requireOrgAccess(orgId);
 
-  const org = await getTicketOrg(ctx, orgId).catch(() => null);
+  const org = await orgGo<{ org: GoOrg }>(orgId, `/v1/ticketorgs/${orgId}`)
+    .then((r) => orgForCan(r.org))
+    .catch(() => null);
   if (!org) notFound();
 
   const tabs: { href: string; icon: IconName; label: string; show: boolean }[] = [
@@ -66,9 +67,11 @@ export default async function OrgLayout(
               <Icon name="arrow-left" size={15} />Your organisers
             </Link>
           ) : (
-            <a href="/org-staff/signout" className="btn btn-o btn-sm">
-              <Icon name="close" size={15} />Sign out
-            </a>
+            <form action="/org-staff/signout" method="post">
+              <button type="submit" className="btn btn-o btn-sm">
+                <Icon name="close" size={15} />Sign out
+              </button>
+            </form>
           )}
         </div>
       </header>

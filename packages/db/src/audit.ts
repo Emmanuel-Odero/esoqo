@@ -7,13 +7,15 @@ import type { Ctx } from './capabilities';
  *
  * Each row's hash covers the previous row's hash plus a canonical
  * serialisation of this row. Altering or deleting any row breaks every
- * hash after it, and `pnpm --filter @esoko/db audit:verify` will name
+ * hash after it, and `pnpm --filter @esoqo/db audit:verify` will name
  * the first broken link.
  *
  * This exists because a regulator will eventually ask, and because
  * "trust us, we log things" is not an answer.
  */
 
+// Pre-rename spelling, deliberately: every hash already in the chain
+// was computed from this seed, so changing it invalidates the lot.
 const CHAIN_SEED = process.env.AUDIT_CHAIN_SEED ?? 'esoko-genesis';
 
 /**
@@ -108,11 +110,36 @@ export interface ChainResult {
   brokenAtTime?: Date;
 }
 
-/** Walks the whole chain. Run it in CI and before any audit response. */
-export async function verifyChain(batchSize = 1000): Promise<ChainResult> {
-  let cursor: bigint | undefined;
-  let expectedPrev = createHash('sha256').update(CHAIN_SEED).digest('hex');
-  let checked = 0;
+// verifyChain originally walked the ENTIRE audit_event table from
+// genesis on every call — fine for its documented use (CI, "before any
+// audit response"), wrong for apps/admin's Overview page, which is
+// force-dynamic and was calling it fresh on every single visit. With
+// audit_event growing on every meaningful action (this file's own
+// header comment), that made Overview get slower, for every admin, on
+// every load, forever — the dominant cause of the dashboard "taking
+// forever" to load.
+//
+// Since the chain is append-only, a module-level cache of the last
+// verified (id, hash) lets a repeat call resume from there instead of
+// re-scanning from genesis: an unchanged chain costs one query
+// returning zero rows, not a full walk. The trade-off, stated
+// explicitly: a row that was already checked and cached could in
+// theory be tampered with afterwards without this process noticing
+// until it restarts (a fresh CHAIN_CACHE) or someone passes
+// `bypassCache`. `pnpm --filter @esoqo/db audit:verify` runs as its
+// own short-lived process (see package.json) and so always starts
+// with an empty cache — it remains the ground-truth full check.
+let chainCache: { lastId: bigint; lastHash: string; checked: number } | null = null;
+
+/** Walks the chain from the last cached checkpoint (or genesis, the
+ *  first time / after a break). Run the standalone script, not this,
+ *  when you need a guarantee no cached row was tampered with since. */
+export async function verifyChain(batchSize = 1000, opts: { bypassCache?: boolean } = {}): Promise<ChainResult> {
+  if (opts.bypassCache) chainCache = null;
+
+  let cursor = chainCache?.lastId;
+  let expectedPrev = chainCache?.lastHash ?? createHash('sha256').update(CHAIN_SEED).digest('hex');
+  let checked = chainCache?.checked ?? 0;
 
   for (;;) {
     const rows = await prisma.auditEvent.findMany({
@@ -124,6 +151,9 @@ export async function verifyChain(batchSize = 1000): Promise<ChainResult> {
 
     for (const r of rows) {
       if (r.prevHash !== expectedPrev) {
+        // Not cached as a valid resume point — a break should keep
+        // showing broken (and get re-checked from genesis) until fixed.
+        chainCache = null;
         return { ok: false, checked, brokenAtId: String(r.id), brokenAtTime: r.occurredAt };
       }
       const recomputed = link(r.prevHash, {
@@ -137,6 +167,7 @@ export async function verifyChain(batchSize = 1000): Promise<ChainResult> {
         ip: r.ip,
       });
       if (recomputed !== r.hash) {
+        chainCache = null;
         return { ok: false, checked, brokenAtId: String(r.id), brokenAtTime: r.occurredAt };
       }
       expectedPrev = r.hash;
@@ -145,5 +176,6 @@ export async function verifyChain(batchSize = 1000): Promise<ChainResult> {
     cursor = rows[rows.length - 1]!.id;
   }
 
+  if (cursor) chainCache = { lastId: cursor, lastHash: expectedPrev, checked };
   return { ok: true, checked };
 }

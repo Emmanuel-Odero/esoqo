@@ -15,7 +15,7 @@ const prisma = new PrismaClient();
  * person's own Membership to an org with the matching name — and links it.
  *
  * Idempotent: only touches rows where the link is still null.
- * Run with: pnpm --filter @esoko/db backfill:registration-org-links
+ * Run with: pnpm --filter @esoqo/db backfill:registration-org-links
  */
 async function main() {
   const orphanedGroups = await prisma.registration.findMany({

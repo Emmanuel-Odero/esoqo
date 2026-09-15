@@ -4,7 +4,7 @@ import { msisdnSchema } from './phone';
 
 /** ONE definition of every group-treasury input, shared by the client
  *  form and the Server Action's boundary validation. See
- *  docs/proposals/esoko-group-treasury-and-payment-id.md. */
+ *  docs/proposals/esoqo-group-treasury-and-payment-id.md. */
 
 const pinSchema = z.string().trim().regex(/^\d{4,6}$/, 'PIN must be 4 to 6 digits');
 const kesSchema = z.coerce.number().positive('Enter an amount above zero').max(10_000_000);
@@ -92,7 +92,7 @@ export type SetTreasuryPolicyInput = z.infer<typeof setTreasuryPolicySchema>;
 /** /me/group's "invite a member" form — an officer inviting someone by
  *  phone or email (at least one required — see the refine below).
  *  officialName is only required when that contact isn't already on
- *  Esoko — see inviteMember in dal/groups.ts. */
+ *  Esoqo — see inviteMember in dal/groups.ts. */
 export const inviteMemberSchema = z.object({
   orgId: z.string().uuid(),
   msisdn: msisdnSchema.optional().or(z.literal('')),

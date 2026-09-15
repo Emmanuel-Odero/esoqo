@@ -77,7 +77,7 @@ export const step5Schema = z.object({
 /* ── group search-before-create ── */
 
 /** Every OrgKind, kept in sync by hand with the Prisma enum and with
- *  @esoko/db's GROUP_KINDS label map — domain intentionally has no
+ *  @esoqo/db's GROUP_KINDS label map — domain intentionally has no
  *  dependency on db, so this is the one place outside the schema/DAL
  *  itself that needs to change if a kind is ever added or renamed. */
 export const ORG_KINDS = [
@@ -157,11 +157,18 @@ export const bizStandingSchema = z
   });
 export type BizStanding = z.infer<typeof bizStandingSchema>;
 
+/** What kind of business this is, commerce-wise — parallel to bizType
+ *  (legal structure), not a replacement for it. Defaults to BUSINESS when
+ *  skipped, so every existing registrant is unaffected. */
+export const bizOrgKindSchema = z.enum(['BUSINESS', 'SUPPLIER', 'WHOLESALER', 'WAREHOUSE', 'MALL']);
+export type BizOrgKind = z.infer<typeof bizOrgKindSchema>;
+
 /** Only asked once the live search (by name or registration number) came
  *  up empty and the joiner chose to register a new business. */
 export const bizDetailsSchema = z
   .object({
     bizName: z.string().trim().min(2, 'Enter the business name').max(160),
+    bizOrgKind: bizOrgKindSchema.optional(),
     bizSector: z.string().trim().max(60).optional().or(z.literal('')),
     bizType: businessTypeKeySchema,
     bizTypeOther: z.string().trim().max(80).optional().or(z.literal('')),

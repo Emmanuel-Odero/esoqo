@@ -6,8 +6,8 @@ import {
   suspendProduct, reinstateProduct, addProductStaffNote, getProductForStaff,
   flagOrderForReroute, clearRerouteFlag, findRerouteCandidates, reassignOrder,
   createCashier, setCashierActive,
-} from '@esoko/db';
-import { hashPin } from '@esoko/auth';
+} from '@esoqo/db';
+import { hashPin } from '@esoqo/auth';
 import { requireStaff } from '@/lib/session';
 
 export type Result = { ok: true } | { ok: false; error: string };

@@ -1,8 +1,8 @@
 'use server';
 
 import { revalidatePath } from 'next/cache';
-import { updateStore, createFulfilmentOption, setFulfilmentOptionActive } from '@esoko/db';
-import { fulfilmentOptionSchema } from '@esoko/domain';
+import { updateStore, createFulfilmentOption, setFulfilmentOptionActive } from '@esoqo/db';
+import { fulfilmentOptionSchema } from '@esoqo/domain';
 import { requireSubject } from '@/lib/session';
 
 export type ActionResult = { ok: true } | { ok: false; error: string };

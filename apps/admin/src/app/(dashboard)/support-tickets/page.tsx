@@ -1,5 +1,5 @@
-import { Icon } from '@esoko/ui';
-import { listSupportTicketsForStaff, getSupportTicketCountsForStaff } from '@esoko/db';
+import { Icon } from '@esoqo/ui';
+import { listSupportTicketsForStaff, getSupportTicketCountsForStaff } from '@esoqo/db';
 import { requireStaff } from '@/lib/session';
 import { DonutChart } from '@/components/charts';
 import { SupportTicketsTable } from './SupportTicketsTable';

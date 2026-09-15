@@ -4,12 +4,12 @@
 // and `server-only` throws unconditionally outside a Next.js
 // server-component bundling context. Same reasoning as
 // packages/payments/src/mpesa.ts's own header comment.
-import { appEnv } from '@esoko/domain';
-// Deliberately '@esoko/db' (the DAL barrel export), not a deeper
+import { appEnv, gsmSafe, smsSegments, smsEncoding, smsUnits } from '@esoqo/domain';
+// Deliberately '@esoqo/db' (the DAL barrel export), not a deeper
 // subpath — recordSmsSpend carries no server-only marker of its own, so
 // nothing new is added to the "can't run under plain tsx" list this
 // header already tracks.
-import { recordSmsSpend } from '@esoko/db';
+import { recordSmsSpend } from '@esoqo/db';
 
 /**
  * Resolves the SMS provider for this run mode (see packages/domain/src/env.ts):
@@ -43,8 +43,25 @@ export function smsProvider(): string {
  * live request from a dev box. OTP keeps its own console short-circuit
  * (it carries the dev code), so it never reaches here in console mode.
  */
-export async function sendSms(to: string, message: string, purpose = 'unspecified'): Promise<void> {
+export async function sendSms(to: string, rawMessage: string, purpose = 'unspecified'): Promise<void> {
   const provider = smsProvider();
+
+  // Last line of defence on encoding. Copy composed with @esoqo/domain's
+  // `sms` tagged template is already GSM-7, but this catches the caller
+  // who hand-rolls a template literal and the user-supplied field that
+  // arrives carrying a curly apostrophe. One non-GSM character drops the
+  // segment size from 160 to 70 — see packages/domain/src/sms.ts.
+  const message = gsmSafe(rawMessage);
+  const segments = smsSegments(message);
+  if (segments > 1) {
+    // Not thrown: a long message is worse than a short one, but far
+    // better than a notification that never arrives. Loud enough to
+    // find in logs, quiet enough not to break a donation flow.
+    console.warn(
+      `[SMS] ${purpose} is ${segments} segments (${smsUnits(message)} ${smsEncoding(message)} units) `
+      + `— billed ${segments}x and may arrive out of order. Trim the copy or clamp its variable fields.`,
+    );
+  }
 
   if (provider === 'console') {
     console.log(`\n  ┌─ SMS (console) ─────────────────────\n  │  to: ${to}\n  │  ${message}\n  └───────────────────────────────────\n`);
@@ -59,7 +76,7 @@ export async function sendSms(to: string, message: string, purpose = 'unspecifie
     const base = process.env.SMS_MOCK_URL ?? 'http://mock-sms:8080';
     const url = new URL('/sendsms', base);
     url.searchParams.set('mobiles', to);
-    url.searchParams.set('sender', process.env.SMS_SENDER_ID ?? 'ESOKO');
+    url.searchParams.set('sender', process.env.SMS_SENDER_ID ?? 'ESOQO');
     url.searchParams.set('message', message);
 
     let res: Response;
@@ -95,7 +112,7 @@ export async function sendSms(to: string, message: string, purpose = 'unspecifie
         username,
         to,
         message,
-        from: process.env.SMS_SENDER_ID ?? 'ESOKO',
+        from: process.env.SMS_SENDER_ID ?? 'ESOQO',
       }),
     });
   } catch (e) {

@@ -1,5 +1,5 @@
 import { redirect } from 'next/navigation';
-import { listMyStores } from '@esoko/db';
+import { listMyStores } from '@esoqo/db';
 import { requireSubject } from '@/lib/session';
 import { DashSidebar } from '@/components/DashSidebar';
 import { MobileNavToggle } from '@/components/MobileNavToggle';

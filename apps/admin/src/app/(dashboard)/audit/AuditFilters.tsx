@@ -1,4 +1,4 @@
-import { Icon } from '@esoko/ui';
+import { Icon } from '@esoqo/ui';
 
 const ACTOR_TYPES = [
   ['', 'All actors'], ['STAFF', 'Staff'], ['SUBJECT', 'Subject'],

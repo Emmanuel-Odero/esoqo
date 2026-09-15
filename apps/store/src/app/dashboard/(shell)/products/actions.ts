@@ -1,8 +1,8 @@
 'use server';
 
 import { revalidatePath } from 'next/cache';
-import { createProduct, createVariant, setProductVisibility, recordStockPurchase } from '@esoko/db';
-import { createProductWithVariantsSchema } from '@esoko/domain';
+import { createProduct, createVariant, setProductVisibility, recordStockPurchase } from '@esoqo/db';
+import { createProductWithVariantsSchema } from '@esoqo/domain';
 import { requireSubject } from '@/lib/session';
 
 export type ActionResult = { ok: true; productId: string } | { ok: false; error: string };

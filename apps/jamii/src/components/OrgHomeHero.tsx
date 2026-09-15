@@ -1,10 +1,10 @@
 import Link from 'next/link';
-import { listActiveMediaAssets } from '@esoko/db';
+import { listActiveMediaAssets } from '@esoqo/db';
 import { orgHref, isVerified, type OrgLinkMode } from '@/lib/org-links-shared';
 import { pickMediaAsset } from '@/lib/media';
 import { splitHeroHeadline } from '@/lib/whitelabel-headline';
 import { MediaPlaceholder, PATTERNS, isPatternKey } from './placeholders/patterns';
-import type { getJamiiPageBySlug } from '@esoko/db';
+import type { getJamiiPageBySlug } from '@esoqo/db';
 
 type OrgPage = NonNullable<Awaited<ReturnType<typeof getJamiiPageBySlug>>>;
 

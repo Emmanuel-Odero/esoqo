@@ -1,5 +1,5 @@
 import { notFound } from 'next/navigation';
-import { getJamiiProgram } from '@esoko/db';
+import { getJamiiProgram } from '@esoqo/db';
 import { requireMyPage } from '@/lib/session';
 import { ProgramForm } from '../../ProgramForm';
 

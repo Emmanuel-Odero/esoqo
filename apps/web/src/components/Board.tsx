@@ -1,6 +1,6 @@
-import { Icon } from '@esoko/ui';
-import { VisuallyHidden } from '@esoko/a11y';
-import { spellMoney } from '@esoko/a11y';
+import { Icon } from '@esoqo/ui';
+import { VisuallyHidden } from '@esoqo/a11y';
+import { spellMoney } from '@esoqo/a11y';
 
 export interface Quote {
   commodity: string; unit: string; market: string; county: string;

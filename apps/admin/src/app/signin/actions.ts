@@ -2,8 +2,8 @@
 
 import { cookies } from 'next/headers';
 import { redirect } from 'next/navigation';
-import { findStaffCredential, recordStaffSignInSuccess, recordStaffSignInFailure } from '@esoko/db';
-import { verifyPin, createSession, SESSION_COOKIE } from '@esoko/auth';
+import { findStaffCredential, recordStaffSignInSuccess, recordStaffSignInFailure } from '@esoqo/db';
+import { verifyPin, createSession, SESSION_COOKIE } from '@esoqo/auth';
 
 export type SignInResult =
   | { ok: true }
@@ -46,5 +46,8 @@ export async function signIn(_prev: unknown, data: FormData): Promise<SignInResu
     maxAge: 60 * 60 * 24 * 14,
   });
 
-  redirect('/');
+  // A fresh invite (or an admin-forced reset) leaves this true — the
+  // temp PIN the invite email carried gets them signed in, but not
+  // past this, until they've actually chosen their own.
+  redirect(staff.mustChangePin ? '/set-pin' : '/');
 }

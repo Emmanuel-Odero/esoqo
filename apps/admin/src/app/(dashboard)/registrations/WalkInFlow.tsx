@@ -1,8 +1,8 @@
 'use client';
 
 import { useState, useTransition } from 'react';
-import { Icon, SelectWithOther } from '@esoko/ui';
-import { useAnnounce } from '@esoko/a11y';
+import { Icon, SelectWithOther } from '@esoqo/ui';
+import { useAnnounce } from '@esoqo/a11y';
 import { actionCreateWalkIn } from './actions';
 
 type Step = 'joining' | 'personal' | 'contact' | 'work' | 'standing' | 'preferences' | 'review';
@@ -299,7 +299,7 @@ function PersonalStep({ f, update }: { f: FormData; update: (k: keyof FormData, 
 function ContactStep({ f, update, counties }: { f: FormData; update: (k: keyof FormData, v: string | boolean) => void; counties: string[] }) {
   return (
     <div>
-      <p className="sub" style={{ marginBottom: 16 }}>How to reach them. The phone number is their primary identifier on Esoko.</p>
+      <p className="sub" style={{ marginBottom: 16 }}>How to reach them. The phone number is their primary identifier on Esoqo.</p>
 
       <div style={{ marginBottom: 14 }}>
         <label className="sub" htmlFor="wi-msisdn" style={{ display: 'block', marginBottom: 6 }}>Phone number *</label>
@@ -420,7 +420,7 @@ function PreferencesStep({ f, update }: { f: FormData; update: (k: keyof FormDat
   return (
     <div>
       <p className="sub" style={{ marginBottom: 16 }}>
-        What would they like Esoko to send them?
+        What would they like Esoqo to send them?
       </p>
 
       <div style={{ display: 'flex', flexDirection: 'column', gap: 10, marginBottom: 20 }}>

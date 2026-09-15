@@ -1,7 +1,7 @@
 'use server';
 import { revalidatePath } from 'next/cache';
-import { revokeConsent } from '@esoko/db';
-import { toSafeErrorMessage } from '@esoko/domain';
+import { revokeConsent } from '@esoqo/db';
+import { toSafeErrorMessage } from '@esoqo/domain';
 import { requireSubject } from '@/lib/session';
 
 /** Never blocked, never questioned. The DPA makes this a right. */

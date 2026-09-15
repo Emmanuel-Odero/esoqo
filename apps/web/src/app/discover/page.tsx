@@ -1,11 +1,11 @@
 import type { Metadata } from 'next';
-import { Icon } from '@esoko/ui';
-import { anonCtx, listPublicStores } from '@esoko/db';
+import { Icon } from '@esoqo/ui';
+import { anonCtx, listPublicStores } from '@esoqo/db';
 import { StoreBrowser } from './StoreBrowser';
 
 export const metadata: Metadata = {
   title: 'Discover stores',
-  description: 'Shops and traders selling on Esoko — browse by county or search for what you need.',
+  description: 'Shops and traders selling on Esoqo — browse by county or search for what you need.',
 };
 export const dynamic = 'force-dynamic';
 
@@ -19,9 +19,9 @@ export default async function DiscoverPage() {
       <section className="phead">
         <div className="wrap">
           <p className="kicker">Discover</p>
-          <h1>Shops and traders on Esoko</h1>
+          <h1>Shops and traders on Esoqo</h1>
           <p className="lead">
-            Every store here belongs to a real, registered Esoko business. Buy directly, pay by
+            Every store here belongs to a real, registered Esoqo business. Buy directly, pay by
             M-Pesa, and know who you&apos;re buying from.
           </p>
         </div>
@@ -33,7 +33,7 @@ export default async function DiscoverPage() {
             <div className="note n-blue">
               <span className="icbox icbox-b icbox-sm"><Icon name="info" size={16} /></span>
               <p>
-                No stores are open yet. Traders open theirs from their Esoko account — once they
+                No stores are open yet. Traders open theirs from their Esoqo account — once they
                 do, it appears here automatically.
               </p>
             </div>

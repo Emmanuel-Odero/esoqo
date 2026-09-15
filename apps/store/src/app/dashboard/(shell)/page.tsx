@@ -1,6 +1,6 @@
 import type { Metadata } from 'next';
-import { Icon } from '@esoko/ui';
-import { listMyStores, listStoreOrders, listPosSales, listAllProductsForOwner } from '@esoko/db';
+import { Icon } from '@esoqo/ui';
+import { listMyStores, listStoreOrders, listPosSales, listAllProductsForOwner } from '@esoqo/db';
 import { requireSubject } from '@/lib/session';
 
 export const metadata: Metadata = { title: 'Dashboard' };

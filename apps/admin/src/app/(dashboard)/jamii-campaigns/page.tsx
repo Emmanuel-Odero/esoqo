@@ -1,5 +1,5 @@
-import { Icon } from '@esoko/ui';
-import { listCampaignsForStaff, getCampaignCountsForStaff } from '@esoko/db';
+import { Icon } from '@esoqo/ui';
+import { listCampaignsForStaff, getCampaignCountsForStaff } from '@esoqo/db';
 import { requireStaff } from '@/lib/session';
 import { DonutChart } from '@/components/charts';
 import { CampaignTable } from './CampaignTable';

@@ -1,8 +1,8 @@
 'use client';
 
 import { useState, useTransition } from 'react';
-import { Icon } from '@esoko/ui';
-import { useAnnounce } from '@esoko/a11y';
+import { Icon } from '@esoqo/ui';
+import { useAnnounce } from '@esoqo/a11y';
 import { actionAddOrgStaff, actionSetOrgStaffActive } from '../actions';
 
 interface StaffRow { id: string; name: string; role: string; active: boolean }
@@ -45,7 +45,7 @@ export function OrgStaffPanel({ orgId, staff }: { orgId: string; staff: StaffRow
         <div>
           <p>
             <Icon name="info" size={14} /> Staff you add here sign in on their own device with their
-            name and this PIN — never their own Esoko account. Hand the PIN over in person or by
+            name and this PIN — never their own Esoqo account. Hand the PIN over in person or by
             phone, never by SMS or email.
           </p>
         </div>

@@ -2,8 +2,8 @@
 
 import { useState, useTransition } from 'react';
 import { useRouter } from 'next/navigation';
-import { Icon } from '@esoko/ui';
-import { PRODUCT_CATEGORIES } from '@esoko/domain';
+import { Icon } from '@esoqo/ui';
+import { PRODUCT_CATEGORIES } from '@esoqo/domain';
 import { saveProduct, removeProduct } from './actions';
 import { UnitPicker } from '../UnitPicker';
 

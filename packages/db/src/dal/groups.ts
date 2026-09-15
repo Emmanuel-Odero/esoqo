@@ -1,7 +1,7 @@
 import { prisma } from '../client';
 import { requireCapability, AuthorisationError, type Ctx } from '../capabilities';
 import { recordAudit } from '../audit';
-import { normaliseMsisdn } from '@esoko/domain';
+import { normaliseMsisdn } from '@esoqo/domain';
 import type { MemberRole, OrgKind } from '@prisma/client';
 
 /** Group membership management — both the admin side (staff, unqualified
@@ -31,15 +31,50 @@ async function requireGroupOfficer(ctx: Ctx, orgId: string) {
   if (!m) throw new AuthorisationError('membership.write', ctx);
 }
 
+/** The group's one-off join fee in KES, 0 when it charges none. Also
+ *  what the "you've been added" SMS needs in order to say why a new
+ *  member is PENDING rather than in. */
+async function groupJoinFeeKes(orgId: string): Promise<number> {
+  const policy = await prisma.groupTreasuryPolicy.findUnique({
+    where: { orgId }, select: { joinFeeKes: true },
+  });
+  return policy?.joinFeeKes ? Number(policy.joinFeeKes) : 0;
+}
+
 /** PENDING when the group charges a join fee — see joinFeeKes on
  *  GroupTreasuryPolicy and createJoinFeePayment in dal/treasury.ts,
  *  which activates the membership once that fee is confirmed. ACTIVE
  *  immediately for a free group, same as before joinFeeKes existed. */
 async function resolveJoinStatus(orgId: string): Promise<'PENDING' | 'ACTIVE'> {
-  const policy = await prisma.groupTreasuryPolicy.findUnique({
-    where: { orgId }, select: { joinFeeKes: true },
+  return (await groupJoinFeeKes(orgId)) > 0 ? 'PENDING' : 'ACTIVE';
+}
+
+/**
+ * What a caller needs in order to tell someone they've been added to a
+ * group. Every add path below returns this rather than sending anything
+ * itself: @esoqo/db can't import @esoqo/auth's sendSms (the dependency
+ * runs the other way), so the Server Action on top does the sending.
+ * See actionInviteMember in apps/app/src/app/me/group/actions.ts.
+ *
+ * `notify` is null when there is nothing to send to — a paper-roster
+ * member added without a phone number is still a member, they just
+ * can't be texted until someone fills the number in.
+ */
+export interface MemberAddedNotice {
+  notify: { channel: 'sms'; to: string } | { channel: 'email'; to: string } | null;
+  orgName: string;
+  /** > 0 when this membership starts PENDING behind a join fee. */
+  joinFeeKes: number;
+}
+
+async function groupNotifyContext(orgPartyId: string): Promise<{ orgName: string; joinFeeKes: number }> {
+  const org = await prisma.organisation.findUniqueOrThrow({
+    where: { partyId: orgPartyId }, select: { officialName: true, knownAs: true },
   });
-  return policy?.joinFeeKes && Number(policy.joinFeeKes) > 0 ? 'PENDING' : 'ACTIVE';
+  return {
+    orgName: org.knownAs || org.officialName,
+    joinFeeKes: await groupJoinFeeKes(orgPartyId),
+  };
 }
 
 export const GROUP_KINDS = [
@@ -189,11 +224,12 @@ export async function createOwnGroup(
   return party;
 }
 
-export async function listGroups(ctx: Ctx, f: { search?: string; county?: string } = {}) {
+export async function listGroups(ctx: Ctx, f: { search?: string; county?: string; kind?: OrgKind } = {}) {
   requireCapability(ctx, 'party.read', { county: f.county });
   return prisma.organisation.findMany({
     where: {
       ...(f.county ? { party: { county: f.county } } : {}),
+      ...(f.kind ? { kind: f.kind } : {}),
       ...(f.search
         ? { officialName: { contains: f.search, mode: 'insensitive' as const } }
         : {}),
@@ -254,11 +290,15 @@ function resolveCustomRole(role: MemberRole, customRole?: string): string | null
 }
 
 /** Add an existing person to a group. Idempotent — re-adding someone who
- *  left reinstates them rather than creating a second membership. */
+ *  left reinstates them rather than creating a second membership.
+ *
+ *  Returns the notice the caller should send them (see MemberAddedNotice):
+ *  being added to a group that handles your money is not something to
+ *  learn about by chance the next time you happen to open the app. */
 export async function addMember(
   ctx: Ctx, orgPartyId: string, personPartyId: string,
   role: MemberRole = 'MEMBER', customRole?: string,
-) {
+): Promise<{ membership: Awaited<ReturnType<typeof prisma.membership.create>> } & MemberAddedNotice> {
   await requireGroupOfficer(ctx, orgPartyId);
   const resolvedCustomRole = resolveCustomRole(role, customRole);
 
@@ -282,7 +322,21 @@ export async function addMember(
     targetType: 'membership', targetId: m.id,
     payload: { orgPartyId, personPartyId, role, customRole: resolvedCustomRole },
   });
-  return m;
+
+  const person = await prisma.person.findUnique({
+    where: { partyId: personPartyId }, select: { msisdn: true, email: true },
+  });
+  const { orgName, joinFeeKes } = await groupNotifyContext(orgPartyId);
+  return {
+    membership: m,
+    orgName,
+    joinFeeKes: m.status === 'PENDING' ? joinFeeKes : 0,
+    notify: person?.msisdn
+      ? { channel: 'sms', to: person.msisdn }
+      : person?.email
+        ? { channel: 'email', to: person.email }
+        : null,
+  };
 }
 
 /**
@@ -295,14 +349,14 @@ export async function addMember(
  * The phone is normalised to E.164 and validated with the same rules as
  * every other number in the product, so a typo can never strand a member
  * on a number they can't verify or sign in with. If the number already
- * belongs to someone on Esoko, staff are told to search for them instead
+ * belongs to someone on Esoqo, staff are told to search for them instead
  * of duplicating a person.
  */
 export async function addNewMember(
   ctx: Ctx, orgPartyId: string,
   input: { officialName: string; msisdn?: string },
   role: MemberRole = 'MEMBER', customRole?: string,
-) {
+): Promise<{ membership: Awaited<ReturnType<typeof prisma.membership.create>> } & MemberAddedNotice> {
   // Staff-only, deliberately — this creates a full member immediately
   // with no accept step, which is right for a paper roster staff can
   // vouch for but too much trust to hand a group's own officers. Their
@@ -323,7 +377,7 @@ export async function addNewMember(
       throw new Error('That does not look like a Kenyan mobile number — try the format 07XX XXX XXX');
     }
     const clash = await prisma.person.findUnique({ where: { msisdn } });
-    if (clash) throw new Error('Someone is already on Esoko with that phone number — search for them instead');
+    if (clash) throw new Error('Someone is already on Esoqo with that phone number — search for them instead');
   }
 
   const org = await prisma.organisation.findUniqueOrThrow({
@@ -331,7 +385,7 @@ export async function addNewMember(
   });
   const status = await resolveJoinStatus(orgPartyId);
 
-  return prisma.$transaction(async (tx) => {
+  const membership = await prisma.$transaction(async (tx) => {
     const party = await tx.party.create({
       data: {
         kind: 'PERSON', county: org.party.county,
@@ -347,24 +401,38 @@ export async function addNewMember(
     }, tx as never);
     return m;
   });
+
+  const { orgName, joinFeeKes } = await groupNotifyContext(orgPartyId);
+  return {
+    membership,
+    orgName,
+    joinFeeKes: status === 'PENDING' ? joinFeeKes : 0,
+    // No phone on file is the documented normal case here, not a
+    // failure — this path exists precisely for roster members who
+    // don't have one yet.
+    notify: msisdn ? { channel: 'sms' as const, to: msisdn } : null,
+  };
 }
 
 export interface InviteMemberResult {
   membership: Awaited<ReturnType<typeof prisma.membership.create>>;
-  /** What to actually notify the invitee with — @esoko/db can't import
-   *  @esoko/auth's sendSms/sendEmail (it's the other way around:
+  /** What to actually notify the invitee with — @esoqo/db can't import
+   *  @esoqo/auth's sendSms/sendEmail (it's the other way around:
    *  auth depends on db), so the Server Action calling inviteMember is
    *  the one that sends this. See actionInviteMember in
-   *  apps/app/src/app/me/group/actions.ts. */
+   *  apps/app/src/app/me/group/actions.ts. Never null here: an invite
+   *  with neither phone nor email is rejected before this is built. */
   notify: { channel: 'sms'; to: string } | { channel: 'email'; to: string };
   orgName: string;
+  /** > 0 when the invitee lands PENDING behind a join fee. */
+  joinFeeKes: number;
 }
 
 /**
  * Self-serve invite — a group's own officer inviting someone by phone
  * or email, the /me/group counterpart to addMember/addNewMember above.
  * Unlike addNewMember it never errors when the contact already belongs
- * to someone on Esoko — it just adds that existing person, the way an
+ * to someone on Esoqo — it just adds that existing person, the way an
  * officer inviting a friend expects. A brand-new contact gets a new
  * Person the same way addNewMember does — with only whichever of
  * msisdn/email was actually given, same "pending until someone fills
@@ -406,6 +474,9 @@ export async function inviteMember(
   const notify: InviteMemberResult['notify'] = msisdn ? { channel: 'sms', to: msisdn } : { channel: 'email', to: email! };
 
   const status = await resolveJoinStatus(orgPartyId);
+  // Only read the fee when it's actually going to gate them — a free
+  // group has no number worth putting in the message.
+  const joinFeeKes = status === 'PENDING' ? await groupJoinFeeKes(orgPartyId) : 0;
   const existingPerson = await prisma.person.findFirst({
     where: msisdn ? { msisdn } : { email: email! },
   });
@@ -426,11 +497,11 @@ export async function inviteMember(
       targetType: 'membership', targetId: m.id,
       payload: { orgPartyId, personId: existingPerson.partyId, role, status },
     });
-    return { membership: m, notify, orgName };
+    return { membership: m, notify, orgName, joinFeeKes };
   }
 
   const officialName = input.officialName?.trim();
-  if (!officialName) throw new Error('Enter their name — that contact is not on Esoko yet');
+  if (!officialName) throw new Error('Enter their name — that contact is not on Esoqo yet');
 
   const membership = await prisma.$transaction(async (tx) => {
     const party = await tx.party.create({
@@ -445,7 +516,7 @@ export async function inviteMember(
     }, tx as never);
     return m;
   });
-  return { membership, notify, orgName };
+  return { membership, notify, orgName, joinFeeKes };
 }
 
 export async function setMemberRole(
@@ -490,7 +561,7 @@ export async function removeMember(ctx: Ctx, membershipId: string, reason: strin
  * their own handset and their membership shows up.
  *
  * Guarded like addNewMember (party.write), and the new number must be a
- * valid Kenyan mobile that no other person on Esoko already has. Clearing
+ * valid Kenyan mobile that no other person on Esoqo already has. Clearing
  * msisdnVerifiedAt is deliberate: a staff-typed number has not been
  * verified by the member through an OTP flow.
  */
@@ -511,7 +582,7 @@ export async function updateMemberPhone(ctx: Ctx, membershipId: string, raw: str
   const clash = await prisma.person.findFirst({
     where: { msisdn, partyId: { not: membership.personId } },
   });
-  if (clash) throw new Error('Someone else is already on Esoko with that number');
+  if (clash) throw new Error('Someone else is already on Esoqo with that number');
 
   const person = await prisma.person.update({
     where: { partyId: membership.personId },
@@ -574,7 +645,7 @@ export async function searchGroupsPublic(ctx: Ctx, q: string, county?: string) {
 /** Public business search for the anonymous join flow's business path —
  *  the same search-before-create mechanism as groups, scoped to
  *  OrgKind.BUSINESS, so a joiner can't accidentally register a business
- *  that's already on Esoko under a slightly different spelling. */
+ *  that's already on Esoqo under a slightly different spelling. */
 export async function searchBusinessesPublic(ctx: Ctx, q: string, county?: string) {
   return searchOrganisationsPublic(ctx, q, { kinds: ['BUSINESS'], county });
 }

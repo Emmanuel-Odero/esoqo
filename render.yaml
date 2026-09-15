@@ -1,5 +1,5 @@
 # ════════════════════════════════════════════════════════════════
-#  Esoko — Render Blueprint (Infrastructure as Code)
+#  Esoqo — Render Blueprint (Infrastructure as Code)
 #
 #  Deploy: connect this repo in Render Dashboard → Blueprint
 #         or run: render blueprint apply --repo <url>
@@ -9,8 +9,10 @@
 #    pnpm workspaces require the project root to resolve correctly.
 #  · Create a Redis KV store manually in the Render Dashboard
 #    after provisioning, then set REDIS_URL on all services.
-#  · Run migrations manually after first deploy:
-#      DATABASE_URL="<url>" pnpm --filter @esoko/db exec prisma migrate deploy
+#  · Migrations run automatically: esoko-core's preDeployCommand runs
+#    `prisma migrate deploy` before each release takes traffic. Only that
+#    one service does it — see the comment there. For a first deploy on a
+#    brand-new database, nothing manual is needed.
 #
 #  · cecf-wordpress (CECF multisite) is a separate deploy of the SAME
 #    blueprint/repo — one Render service, own domain, own database —
@@ -32,8 +34,20 @@ services:
     runtime: node
     repo: https://github.com/Emmanuel-Odero/esoko-254.git
     branch: render
-    buildCommand: npm install -g pnpm@9.12.0 && NODE_ENV=development pnpm install && pnpm --filter @esoko/db generate && pnpm --filter @esoko/core-service build
-    startCommand: pnpm --filter @esoko/core-service start
+    buildCommand: npm install -g pnpm@9.12.0 && NODE_ENV=development pnpm install && pnpm --filter @esoqo/db generate && pnpm --filter @esoqo/core-service build
+    startCommand: pnpm --filter @esoqo/core-service start
+    # Migrations run here and nowhere else. preDeployCommand runs after
+    # the build and before any traffic reaches the new version, so the
+    # schema is always current before code that depends on it serves a
+    # request. Exactly one service may own this: five services racing
+    # `migrate deploy` against one database is a lock fight, and Prisma's
+    # advisory lock would fail four of them.
+    #
+    # This replaces the "run migrations manually after first deploy" note
+    # at the top of this file — which meant a deploy could go live
+    # against a schema nobody had migrated, and the health checks were
+    # too shallow to notice.
+    preDeployCommand: pnpm --filter @esoqo/db exec prisma migrate deploy
     healthCheckPath: /health
     envVars:
       - key: NODE_ENV
@@ -58,6 +72,8 @@ services:
         sync: false
       - key: AUDIT_CHAIN_SEED
         sync: false
+      - key: CECF_SERVICE_SECRET
+        sync: false   # must match CECF_SERVICE_SECRET on cecf-wordpress below — signs/verifies the WP↔core cecf/v1 <-> /api/cecf/* handshake
       - key: SMS_PROVIDER
         value: console
       - key: SMS_API_KEY
@@ -65,11 +81,79 @@ services:
       - key: SMS_USERNAME
         sync: false
       - key: SMS_SENDER_ID
-        value: ESOKO
+        value: ESOQO
       - key: SEED_ADMIN_PIN
         sync: false
       - key: SEED_ADMIN_HASH
         sync: false
+
+  # ── core-go — mobile REST API (Go/Gin). See
+  #    docs/adr/0005-mobile-api-in-go.md. Docker runtime, same shape as
+  #    cecf-wordpress below, since it has no JS build step and isn't a
+  #    pnpm workspace member. Additive alongside esoko-core, not a
+  #    replacement, until the mobile-relevant domains have migrated.
+  - type: web
+    name: esoko-core-go
+    runtime: docker
+    repo: https://github.com/Emmanuel-Odero/esoko-254.git
+    branch: render
+    dockerfilePath: ./services/core-go/Dockerfile
+    dockerContext: .
+    healthCheckPath: /health
+    envVars:
+      - key: APP_ENV
+        value: production
+      - key: DATABASE_URL
+        fromDatabase:
+          name: esoko-db
+          property: connectionString
+      - key: REDIS_URL
+        sync: false   # same Redis instance as esoko-core above — set to the same value
+      - key: SESSION_SECRET
+        sync: false   # must match esoko-core's SESSION_SECRET — sessions are read by both while both run
+      - key: OTP_PEPPER
+        sync: false   # must match esoko-core's OTP_PEPPER
+      - key: AUDIT_CHAIN_SEED
+        sync: false   # must match esoko-core's AUDIT_CHAIN_SEED — same hash chain, same seed
+      - key: FLEET_QR_SECRET
+        sync: false   # HMAC key for boarding/fare-proof/voucher QR payloads — core-go refuses to boot without it
+      - key: MPESA_CALLBACK_SECRET
+        sync: false   # trailing path segment of esoko-app's MPESA_CALLBACK_URL; required once MPESA_PROVIDER leaves console
+      - key: SMS_PROVIDER
+        value: celcom
+      - key: CELCOM_API_KEY
+        sync: false   # isms.celcomafrica.com bulk SMS credentials — parcel lifecycle texts
+      - key: CELCOM_PARTNER_ID
+        sync: false
+      - key: CELCOM_SHORTCODE
+        sync: false
+      - key: SMS_SENDER_ID
+        value: ESOQO
+      - key: MPESA_PROVIDER
+        value: console
+      - key: PESAPAL_PROVIDER
+        value: console
+      - key: CORS_ALLOWED_ORIGINS
+        sync: false   # comma-separated; only the Flutter app's web build needs this — set once that's deployed somewhere
+      - key: TS_CORE_WEBHOOK_URL
+        value: https://esoko-core.onrender.com
+      # Every parcel SMS appends "<this>/t/PKG-XXXXXX" — but only when
+      # the whole message still fits one 160-char segment, since an SMS
+      # aggregator bills per segment (see notify.withTrack). Unset is
+      # valid and simply omits the link, which is what keeps a
+      # misconfigured deploy from texting a broken URL.
+      - key: PUBLIC_TRACKING_BASE_URL
+        value: https://esoko-web.onrender.com
+      # Proof-of-delivery photos. Same bucket and the same four var
+      # names the TypeScript services use — one vocabulary, one bucket.
+      - key: R2_ACCOUNT_ID
+        sync: false
+      - key: R2_ACCESS_KEY_ID
+        sync: false
+      - key: R2_SECRET_ACCESS_KEY
+        sync: false
+      - key: R2_BUCKET
+        value: esoko
 
   # ── Web — public-facing site ───────────────────────────────
   - type: web
@@ -77,9 +161,9 @@ services:
     runtime: node
     repo: https://github.com/Emmanuel-Odero/esoko-254.git
     branch: render
-    buildCommand: npm install -g pnpm@9.12.0 && NODE_ENV=development pnpm install && pnpm --filter @esoko/db generate && pnpm --filter @esoko/web build
-    startCommand: pnpm --filter @esoko/web start
-    healthCheckPath: /help
+    buildCommand: npm install -g pnpm@9.12.0 && NODE_ENV=development pnpm install && pnpm --filter @esoqo/db generate && pnpm --filter @esoqo/web build
+    startCommand: pnpm --filter @esoqo/web start
+    healthCheckPath: /api/health   # real DB reachability check, not a page that renders regardless
     envVars:
       - key: NODE_ENV
         value: production
@@ -107,6 +191,11 @@ services:
         value: https://esoko-app-lvqp.onrender.com
       - key: CORE_API_URL
         value: https://esoko-core.onrender.com
+      # Server Actions call core-go directly (sign-in already did;
+      # ticket bookings + balance top-ups now do too) — same host Go
+      # serves the mobile API from, so web and mobile share one writer.
+      - key: CORE_GO_API_URL
+        value: https://esoko-core-go.onrender.com
 
   # ── App — authenticated PWA surface ────────────────────────
   - type: web
@@ -114,8 +203,8 @@ services:
     runtime: node
     repo: https://github.com/Emmanuel-Odero/esoko-254.git
     branch: render
-    buildCommand: npm install -g pnpm@9.12.0 && NODE_ENV=development pnpm install && pnpm --filter @esoko/db generate && pnpm --filter @esoko/app build
-    startCommand: pnpm --filter @esoko/app start
+    buildCommand: npm install -g pnpm@9.12.0 && NODE_ENV=development pnpm install && pnpm --filter @esoqo/db generate && pnpm --filter @esoqo/app build
+    startCommand: pnpm --filter @esoqo/app start
     healthCheckPath: /api/health
     envVars:
       - key: NODE_ENV
@@ -150,8 +239,28 @@ services:
         value: https://esoko-web.onrender.com
       - key: NEXT_PUBLIC_APP_URL
         value: https://esoko-app-lvqp.onrender.com
+      # See packages/auth/src/email.ts's own comment: unset means
+      # "console" in production — actions.ts's group-invite email
+      # (tellThemTheyWereAdded's sendEmail branch) silently never
+      # reaches anyone until these are set to a real provider.
+      - key: EMAIL_PROVIDER
+        sync: false
+      - key: SMTP_HOST
+        sync: false
+      - key: SMTP_PORT
+        sync: false
+      - key: SMTP_SECURE
+        sync: false
+      - key: SMTP_USER
+        sync: false
+      - key: SMTP_PASSWORD
+        sync: false
+      - key: EMAIL_FROM
+        sync: false
       - key: CORE_API_URL
         value: https://esoko-core.onrender.com
+      - key: CORE_GO_API_URL
+        value: https://esoko-core-go.onrender.com
       - key: NEXT_PUBLIC_CECF_URL
         value: https://childeldercare.foundation
       # M-Pesa STK push for CECF registration checkout (join flow), store
@@ -171,11 +280,22 @@ services:
         sync: false
       - key: MPESA_PASSKEY
         sync: false
-      # Safaricom POSTs the payment result here — must be esoko-core's
-      # public URL (not esoko-app's), since that's the service with the
-      # /webhooks/mpesa/stk-callback route.
+      # Safaricom POSTs the payment result here — core-go is the
+      # canonical target: it confirms store, booking (full + lipia pole
+      # pole), contribution and fare payments, and forwards anything it
+      # doesn't own (registration/donation) to esoko-core via
+      # TS_CORE_WEBHOOK_URL below. Every confirm on both sides is
+      # idempotent, so a callback seen twice can never double-post.
+      #
+      # The URL must end in the same value as core-go's
+      # MPESA_CALLBACK_SECRET. Daraja publishes no signature, HMAC or
+      # source-IP range, so that unguessable path segment is what
+      # separates a real callback from anyone on the internet POSTing a
+      # "payment confirmed" for a checkout id they guessed. Set both
+      # together, in the dashboard — an unauthenticated callback path
+      # plus a live provider is free money.
       - key: MPESA_CALLBACK_URL
-        value: https://esoko-core.onrender.com/webhooks/mpesa/stk-callback
+        sync: false   # https://esoko-core-go.onrender.com/webhooks/mpesa/stk-callback/<MPESA_CALLBACK_SECRET>
 
   # ── Admin — operations dashboard ──────────────────────────
   - type: web
@@ -183,9 +303,9 @@ services:
     runtime: node
     repo: https://github.com/Emmanuel-Odero/esoko-254.git
     branch: render
-    buildCommand: npm install -g pnpm@9.12.0 && NODE_ENV=development pnpm install && pnpm --filter @esoko/db generate && pnpm --filter @esoko/admin build
-    startCommand: pnpm --filter @esoko/admin start
-    healthCheckPath: /signin
+    buildCommand: npm install -g pnpm@9.12.0 && NODE_ENV=development pnpm install && pnpm --filter @esoqo/db generate && pnpm --filter @esoqo/admin build
+    startCommand: pnpm --filter @esoqo/admin start
+    healthCheckPath: /api/health   # real DB reachability check, not a page that renders regardless
     envVars:
       - key: NODE_ENV
         value: production
@@ -219,8 +339,38 @@ services:
         value: https://esoko-web.onrender.com
       - key: NEXT_PUBLIC_APP_URL
         value: https://esoko-app-lvqp.onrender.com
+      # Self-reference — the staff-invite email (actions.ts's
+      # actionCreateStaff) needs an absolute sign-in link, since it's
+      # read outside any request context that could infer the host.
+      - key: NEXT_PUBLIC_ADMIN_URL
+        value: https://esoko-admin.onrender.com
+      # See packages/auth/src/email.ts's own comment: unset means
+      # "console" in production, which prints instead of sending — the
+      # staff-invite email (and group-invite email) silently never
+      # reaches anyone until these are set to a real provider.
+      - key: EMAIL_PROVIDER
+        sync: false
+      - key: SMTP_HOST
+        sync: false
+      - key: SMTP_PORT
+        sync: false
+      - key: SMTP_SECURE
+        sync: false
+      - key: SMTP_USER
+        sync: false
+      - key: SMTP_PASSWORD
+        sync: false
+      - key: EMAIL_FROM
+        sync: false
       - key: CORE_API_URL
         value: https://esoko-core.onrender.com
+      # Every /parcels page (list, counter, labels, live dispatch) calls
+      # core-go through adminGo() (see src/lib/go-ticketing.ts), which
+      # falls back to localhost:4100 when this is unset — silently
+      # unreachable in production. Never wired in when the parcels
+      # console shipped; every parcels page 500'd until this was added.
+      - key: CORE_GO_API_URL
+        value: https://esoko-core-go.onrender.com
 
   # ── CECF WordPress — Bedrock + Sage multisite network ──────
   # One Bedrock codebase + one shared MySQL database serves every
@@ -269,6 +419,10 @@ services:
         value: "true"
       - key: MULTISITE_DOMAIN
         sync: false   # childeldercare.foundation — set by hand alongside WP_HOME/WP_SITEURL above
+      - key: ESOQO_CORE_API_URL
+        value: https://esoko-core.onrender.com   # esoko-core (Oregon) and cecf-wordpress (Frankfurt) are in different regions, so Render's private networking can't reach across them — this must be the public HTTPS URL, not an internal hostname
+      - key: CECF_SERVICE_SECRET
+        sync: false   # must match CECF_SERVICE_SECRET on esoko-core above — generate once, paste into both dashboard entries
       - key: REDIS_URL
         sync: false
       - key: R2_ACCOUNT_ID
@@ -334,8 +488,8 @@ services:
 # ─────────────────────────────────────────────────────────────
 databases:
   - name: esoko-db
-    databaseName: esoko
-    user: esoko
+    databaseName: esoqo
+    user: esoqo
     plan: basic-256mb
     region: frankfurt
     postgresMajorVersion: 16

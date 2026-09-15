@@ -2,7 +2,7 @@
 
 import { redirect } from 'next/navigation';
 import { cookies } from 'next/headers';
-import { destroySession, SESSION_COOKIE } from '@esoko/auth';
+import { destroySession, SESSION_COOKIE } from '@esoqo/auth';
 
 /** Ends the owner/subject session — destroys the Redis session and drops
  *  the esoko_session cookie, then lands back on the sign-in page. The

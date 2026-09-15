@@ -73,7 +73,7 @@ class CecfPageEditorServiceProvider extends ServiceProvider
 
             // Deliberately get_permalink($postId), not PageUrl::resolve($key)
             // — resolve() has a special case for "jamii" that sends CTAs
-            // to Esoko's external product site, not this page's own
+            // to Esoqo's external product site, not this page's own
             // local URL, since a "jamii" key names both (a CTA target
             // and a real seeded WP page, see PageUrl's own docblock).
             // This needs the latter: where the preview iframe should

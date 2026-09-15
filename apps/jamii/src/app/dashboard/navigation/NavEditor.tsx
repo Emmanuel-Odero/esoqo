@@ -10,7 +10,7 @@ import {
   SortableContext, verticalListSortingStrategy, useSortable, arrayMove, sortableKeyboardCoordinates,
 } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
-import { Icon } from '@esoko/ui';
+import { Icon } from '@esoqo/ui';
 import { actionSaveNavItems } from '../actions';
 
 export interface NavItemInput {

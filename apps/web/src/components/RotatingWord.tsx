@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState } from 'react';
 
 /**
- * The headline word — cycles through who Esoko is for, one word at a
+ * The headline word — cycles through who Esoqo is for, one word at a
  * time. Static under prefers-reduced-motion (same rule ScrollSpy
  * follows): it just shows the first word and stops there.
  */

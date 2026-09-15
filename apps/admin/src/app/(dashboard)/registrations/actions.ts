@@ -7,9 +7,9 @@ import {
   declarePayment, recordPayment, assignUserPin,
   assignPersonToGroup, setRegistrationGroupIntent, searchGroupsForStaff,
   sniff, makeStorageKey, safeName, sha256, putObject, MAX_BYTES,
-} from '@esoko/db';
-import { hashPin, generateTempPin } from '@esoko/auth';
-import { toSafeErrorMessage } from '@esoko/domain';
+} from '@esoqo/db';
+import { hashPin, generateTempPin } from '@esoqo/auth';
+import { toSafeErrorMessage } from '@esoqo/domain';
 
 type PayMethod = 'MPESA' | 'BANK_TRANSFER' | 'CASH_TO_AGENT';
 export interface PaymentInput {
@@ -240,7 +240,7 @@ export async function actionListWalkInDocuments(registrationId: string) {
 export async function actionRemoveWalkInDocument(id: string): Promise<{ ok: boolean; error?: string }> {
   try {
     const ctx = await requireStaff();
-    const { deleteDocument } = await import('@esoko/db');
+    const { deleteDocument } = await import('@esoqo/db');
     await deleteDocument(ctx, id, 'Removed by staff during walk-in');
     revalidatePath('/registrations');
     return { ok: true };

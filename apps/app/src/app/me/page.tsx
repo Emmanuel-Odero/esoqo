@@ -1,8 +1,8 @@
 import Link from 'next/link';
 import type { Route } from 'next';
-import { Icon } from '@esoko/ui';
-import { getMyRecord, getGroupBalance, listMyConsents, PAYMENT_APPROVAL_THRESHOLD } from '@esoko/db';
-import { formatMsisdn } from '@esoko/domain';
+import { Icon } from '@esoqo/ui';
+import { getMyRecord, getGroupBalance, listMyConsents, PAYMENT_APPROVAL_THRESHOLD } from '@esoqo/db';
+import { formatMsisdn } from '@esoqo/domain';
 import { requireSubject } from '@/lib/session';
 
 export const dynamic = 'force-dynamic';
@@ -19,8 +19,8 @@ export const dynamic = 'force-dynamic';
  * is the product). Every tile is a real link; nothing leads nowhere.
  */
 const CREDENTIALS: [string, string, string, string | null][] = [
-  ['MSISDN_VERIFIED', 'Phone number confirmed', 'Esoko', null],
-  ['NATIONAL_ID_CONFIRMED', 'National ID confirmed', 'Esoko', 'Needed for credit above KES 50,000'],
+  ['MSISDN_VERIFIED', 'Phone number confirmed', 'Esoqo', null],
+  ['NATIONAL_ID_CONFIRMED', 'National ID confirmed', 'Esoqo', 'Needed for credit above KES 50,000'],
   ['GROUP_REGISTERED', 'Group registered', 'Ministry of Labour', 'Opens a group bank account'],
   ['BUSINESS_REGISTERED', 'Business registered', 'Business Registration Service', 'Lets you sign contracts in your own name'],
   ['KRA_PIN', 'KRA PIN', 'Kenya Revenue Authority', 'Needed for larger facilities'],
@@ -70,10 +70,10 @@ export default async function MePage() {
   return (
     <>
       <div className="mehead">
-        <p className="kicker">Esoko dashboard</p>
+        <p className="kicker">Esoqo dashboard</p>
         <h1>Your record</h1>
         <p>
-          Everything Esoko holds about {givenName} — nobody else sees any of it unless you say so.
+          Everything Esoqo holds about {givenName} — nobody else sees any of it unless you say so.
         </p>
       </div>
 
@@ -96,9 +96,9 @@ export default async function MePage() {
           <h2>Your standing</h2>
           <p>
             {confirmed === total
-              ? 'Every paper Esoko can confirm is in place.'
+              ? 'Every paper Esoqo can confirm is in place.'
               : `${total - confirmed} ${total - confirmed === 1 ? 'paper is' : 'papers are'} still to confirm — details never
-                leave Esoko without your say.`}
+                leave Esoqo without your say.`}
           </p>
         </div>
         <Link href={primaryCta.href} className="btn btn-o btn-sm">

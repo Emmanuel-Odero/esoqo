@@ -1,4 +1,4 @@
-import { getJamiiPageForManagement, getJamiiDomain } from '@esoko/db';
+import { getJamiiPageForManagement, getJamiiDomain } from '@esoqo/db';
 import { requireMyPage } from '@/lib/session';
 import { SettingsForm } from './SettingsForm';
 import { PageAssets } from './PageAssets';

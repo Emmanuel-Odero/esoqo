@@ -1,8 +1,8 @@
 'use client';
 
 import { useRef, useState, useTransition } from 'react';
-import { Icon, type IconName, SelectWithOther } from '@esoko/ui';
-import { PRODUCT_CATEGORIES } from '@esoko/domain';
+import { Icon, type IconName, SelectWithOther } from '@esoqo/ui';
+import { PRODUCT_CATEGORIES } from '@esoqo/domain';
 import {
   saveProfileStep, uploadLogo, uploadFavicon, uploadStorePhoto, removeStorePhoto,
   type ProfileStep,

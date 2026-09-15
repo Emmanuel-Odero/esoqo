@@ -3,7 +3,8 @@ import { createContext, useContext, useEffect, useState } from 'react';
 import Link from 'next/link';
 import type { Route } from 'next';
 import { usePathname } from 'next/navigation';
-import { Icon, type IconName } from '@esoko/ui';
+import { Icon, type IconName } from '@esoqo/ui';
+import { ScanBox } from './ScanBox';
 
 /**
  * Navigation renders from CAPABILITIES, not from a role name.
@@ -32,6 +33,20 @@ const NAV: { group: string; items: [string, IconName, string, string][] }[] = [
   ]},
   { group: 'Ticketing', items: [
     ['/ticketing', 'tag', 'Organisers', 'ticketorg.read'],
+    ['/fraud', 'shield', 'Fare fraud', 'ticketorg.read'],
+    ['/vouchers', 'coins', 'Vouchers', 'ticketorg.read'],
+  ]},
+  { group: 'Parcels', items: [
+    ['/parcels', 'basket', 'Parcels', 'parcels.read'],
+    ['/parcels/counter', 'plus', 'Counter', 'parcels.assign'],
+    ['/parcels/live', 'trend-up', 'Live dispatch', 'parcels.read'],
+    ['/parcels/companies', 'building', 'Courier companies', 'parcels.read'],
+    ['/parcels/cod', 'coins', 'Cash on delivery', 'parcels.read'],
+    ['/parcels/payouts', 'bank', 'Courier payouts', 'parcels.read'],
+    ['/parcels/couriers', 'users', 'Couriers', 'parcels.couriers.manage'],
+    ['/parcels/teams', 'truck', 'Courier teams', 'parcels.couriers.manage'],
+    ['/parcels/labels', 'qr', 'Blank labels', 'parcels.assign'],
+    ['/parcels/pricing', 'coins', 'Pricing', 'parcel_pricing.write'],
   ]},
   { group: 'Our Jamii', items: [
     ['/jamii-overview', 'chart', 'Overview', 'jamii-page.read'],
@@ -140,7 +155,7 @@ export function DashboardShell({
         <div className="brand">
           <span className="brand-mark"><Icon name="chart" size={17} /></span>
           <div>
-            <strong>Esoko</strong>
+            <strong>Esoqo</strong>
             <span>Operations</span>
           </div>
           <button type="button" className="nav-close" onClick={() => setNavOpen(false)} aria-label="Close menu">
@@ -201,9 +216,15 @@ export function DashboardShell({
             {isSuper ? 'Super admin' : `${capabilities.length} permissions`}
           </div>
           <div className="tb-right">
-            <span className="avatar" aria-hidden="true">
+            {/* Gated on the same capability the parcels section is —
+                the scanner's only destinations are parcel screens, so
+                offering it to someone who can't open them would be the
+                "door they cannot open" this file's NAV comment warns
+                about. */}
+            {allowed(capabilities, 'parcels.read') && <ScanBox />}
+            <Link href={'/set-pin' as Route} className="avatar" title="Change your PIN">
               {(actorId ?? 'OP').slice(0, 2).toUpperCase()}
-            </span>
+            </Link>
             <span className="sr-only">Signed in</span>
           </div>
         </header>

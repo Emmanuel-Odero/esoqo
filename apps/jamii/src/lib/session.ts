@@ -1,14 +1,15 @@
 import 'server-only';
+import { clientIpFrom } from '@esoqo/domain';
 import { cookies, headers } from 'next/headers';
 import { redirect } from 'next/navigation';
-import { ctxFromToken, createSession, SESSION_COOKIE, capabilitiesForRole } from '@esoko/auth';
-import { anonCtx, type Ctx, listMyJamiiPages } from '@esoko/db';
+import { ctxFromToken, createSession, SESSION_COOKIE, capabilitiesForRole } from '@esoqo/auth';
+import { anonCtx, type Ctx, listMyJamiiPages } from '@esoqo/db';
 
-/** Same session mechanism as the rest of Esoko — see apps/store/src/lib/session.ts. */
+/** Same session mechanism as the rest of Esoqo — see apps/store/src/lib/session.ts. */
 export async function getCtx(): Promise<Ctx> {
   const jar = await cookies();
   const h = await headers();
-  const ip = h.get('x-forwarded-for')?.split(',')[0]?.trim() ?? null;
+  const ip = clientIpFrom((n) => h.get(n)) ?? null;
   return (await ctxFromToken(jar.get(SESSION_COOKIE)?.value, ip)) ?? anonCtx(ip);
 }
 

@@ -11,14 +11,14 @@ import {
   setMemberRole, AuthorisationError, saveJamiiPageBlocks,
   createJamiiSitePage, updateJamiiSitePage, publishJamiiSitePage, deleteJamiiSitePage,
   saveJamiiNavItems, createSupportTicket,
-} from '@esoko/db';
+} from '@esoqo/db';
 import {
   jamiiPageProfileSchema, jamiiOrgProfileSchema, jamiiFaqSchema, jamiiPostSchema, createCampaignSchema, updateCampaignSchema,
   campaignUpdateSchema,
   inviteTeamMemberSchema, requestJamiiDomainSchema, jamiiProgramSchema, setMemberRoleSchema,
   jamiiPageBlocksSchema, jamiiCreateSitePageSchema, jamiiUpdateSitePageSchema, jamiiNavItemsSchema,
   createSupportTicketSchema,
-} from '@esoko/domain';
+} from '@esoqo/domain';
 import { requireSubject } from '@/lib/session';
 
 export type ActionResult<T = void> = { ok: true; data: T } | { ok: false; error: string };

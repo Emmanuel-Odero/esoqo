@@ -1,7 +1,7 @@
 import Link from 'next/link';
-import '@esoko/ui/tokens.css';
+import '@esoqo/ui/tokens.css';
 import '../jamii.css';
-import { countNewJamiiContactMessages, listJamiiSitePagesForDashboard } from '@esoko/db';
+import { countNewJamiiContactMessages, listJamiiSitePagesForDashboard } from '@esoqo/db';
 import { requireMyPage } from '@/lib/session';
 import { DashSidebar } from '@/components/DashSidebar';
 import { SignOutButton } from '@/components/SignOutButton';

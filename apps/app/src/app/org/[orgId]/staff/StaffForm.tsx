@@ -1,7 +1,7 @@
 'use client';
 import { useState, useTransition } from 'react';
-import { Icon } from '@esoko/ui';
-import { useAnnounce } from '@esoko/a11y';
+import { Icon } from '@esoqo/ui';
+import { useAnnounce } from '@esoqo/a11y';
 import { actionCreateStaff, actionSetStaffActive } from './actions';
 
 interface StaffRow { id: string; name: string; role: string; active: boolean }
@@ -37,7 +37,7 @@ export function StaffForm({ orgId, staff }: { orgId: string; staff: StaffRow[] }
       <div className="mcard" style={{ marginBottom: 16 }}>
         <h2><Icon name="users" size={18} />Add staff</h2>
         <p style={{ color: 'var(--tx-2)', fontSize: '.9rem', margin: '0 0 14px' }}>
-          A PIN scoped to this organiser only — not their Esoko account PIN. SCANNER can only check
+          A PIN scoped to this organiser only — not their Esoqo account PIN. SCANNER can only check
           tickets in; MANAGER runs listings and bookings; ADMIN also manages staff and settings.
         </p>
         <div className="fld">

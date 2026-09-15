@@ -1,0 +1,156 @@
+/* ══════════════════════════════════════════════════════════════
+   Esoqo shared UI — canonical primitives.
+   Single source of truth for .btn .card .inp .note .pill .tbl etc.
+   Apps should import '@esoqo/ui/ui.css' after tokens.css and treat
+   their local app.css as page-specific overrides only.
+   ══════════════════════════════════════════════════════════════ */
+
+/* ── layout ── */
+.ui-wrap { max-width: var(--w); margin: 0 auto; padding: 0 22px }
+.ui-sec { padding: 72px 0 }
+.ui-lead { font-size: 1.06rem; color: var(--tx-2); max-width: 62ch }
+.ui-kicker { display: flex; align-items: center; gap: 10px; font-family: var(--font-mono);
+  font-size: .7rem; letter-spacing: .17em; text-transform: uppercase;
+  color: var(--green); margin: 0 0 14px }
+.ui-kicker::before { content: ""; width: 20px; height: 3px; background: var(--green);
+  border-radius: 2px; flex: none }
+.ui-mono { font-family: var(--font-mono); font-variant-numeric: tabular-nums }
+
+/* ── buttons (canonical: 8px radius, 46px min, scale-press) ── */
+.btn { display: inline-flex; align-items: center; justify-content: center; gap: 9px;
+  padding: 13px 24px; border-radius: var(--r-sm); font-weight: 600; font-size: .94rem;
+  border: 1.5px solid transparent; cursor: pointer; font-family: inherit;
+  min-height: 46px; line-height: 1.2; text-decoration: none; white-space: nowrap;
+  transition: background var(--dur) var(--ease-out), border-color var(--dur) var(--ease-out),
+    box-shadow var(--dur) var(--ease-out), transform 100ms var(--ease-out) }
+.btn:active:not(:disabled) { transform: scale(.97) }
+.btn-p { background: var(--green); color: #fff; border-color: var(--green);
+  box-shadow: 0 2px 8px rgba(18,121,74,.25) }
+.btn-p:hover:not(:disabled) { background: #0e6640; box-shadow: 0 4px 14px rgba(18,121,74,.35) }
+.btn-o { border-color: var(--line); color: var(--navy); background: #fff }
+.btn-o:hover:not(:disabled) { border-color: var(--navy); background: var(--paper) }
+.btn-w { border-color: rgba(255,255,255,.34); color: #fff; background: rgba(255,255,255,.08) }
+.btn-w:hover:not(:disabled) { background: rgba(255,255,255,.16) }
+.btn-d { background: var(--red); color: #fff; border-color: var(--red) }
+.btn-d:hover:not(:disabled) { background: #a81e1e }
+.btn-g { background: linear-gradient(135deg, var(--green), var(--green-2)); color: #fff;
+  border-color: transparent; box-shadow: 0 4px 16px rgba(18,121,74,.3) }
+.btn-g:hover:not(:disabled) { box-shadow: 0 6px 22px rgba(18,121,74,.4); transform: translateY(-1px) }
+.btn-sm { padding: 8px 15px; font-size: .85rem; min-height: 38px }
+.btn-lg { padding: 16px 32px; font-size: 1.02rem; min-height: 54px; border-radius: var(--r-md) }
+.btn-block { width: 100% }
+.btn:disabled { opacity: .45; cursor: not-allowed; transform: none; box-shadow: none }
+.btn:focus-visible { outline: 3px solid var(--blue-2); outline-offset: 3px }
+.btn .spin { width: 16px; height: 16px; border-radius: 50%; flex: none;
+  border: 2px solid rgba(255,255,255,.4); border-top-color: #fff;
+  animation: ui-spin .7s linear infinite }
+@keyframes ui-spin { to { transform: rotate(360deg) } }
+
+/* ── forms ── */
+.fld { margin-bottom: 18px }
+.lab { display: flex; align-items: center; gap: 6px; font-weight: 600;
+  font-size: .88rem; margin-bottom: 6px; color: var(--tx) }
+.inp { width: 100%; padding: 12px 14px; border: 1.5px solid var(--line);
+  border-radius: var(--r-sm); font-size: .97rem; font-family: inherit;
+  background: #fff; color: var(--tx); min-height: 46px;
+  transition: border-color var(--dur), box-shadow var(--dur) }
+.inp::placeholder { color: var(--tx-3) }
+.inp:focus { outline: none; border-color: var(--green);
+  box-shadow: 0 0 0 3px rgba(31,161,99,.13) }
+.inp[aria-invalid="true"] { border-color: var(--red);
+  box-shadow: 0 0 0 3px rgba(206,43,43,.12) }
+.hint { font-size: .81rem; color: var(--tx-3); margin: 5px 0 0 }
+.err { font-size: .83rem; color: var(--red); margin: 5px 0 0;
+  display: flex; align-items: center; gap: 5px }
+
+/* ── notices ── */
+.note { border-radius: var(--r-md); padding: 16px 20px; display: flex; gap: 14px;
+  align-items: flex-start; font-size: .92rem; margin-bottom: 24px }
+.note p { margin: 0 }
+.note strong { display: block; margin-bottom: 4px }
+.n-amber { background: var(--amber-t); border: 1px solid #f0ddb6 }
+.n-blue { background: var(--blue-t); border: 1px solid #c8ddec }
+.n-red { background: var(--red-t); border: 1px solid #f3d2cf }
+.n-green { background: var(--green-t); border: 1px solid #bfe0ce }
+
+/* ── cards ── */
+.card { background: #fff; border: 1px solid var(--line);
+  border-radius: 12px; padding: 20px; box-shadow: var(--sh-s);
+  transition: box-shadow var(--dur) var(--ease-out), transform var(--dur) var(--ease-out) }
+a.card:hover, .card-lift:hover { box-shadow: var(--sh-m); transform: translateY(-1px) }
+.card-pad-lg { padding: 32px }
+.card-flat { box-shadow: none }
+
+/* ── pills / badges ── */
+.pill { display: inline-flex; align-items: center; gap: 5px; padding: 3px 10px;
+  border-radius: var(--r-pill); font-size: .74rem; font-weight: 700;
+  line-height: 1.5; white-space: nowrap }
+.pill.live, .pill-green { background: var(--green-t); color: var(--green) }
+.pill.draft, .pill-amber { background: var(--amber-t); color: var(--amber) }
+.pill.paused, .pill-red { background: var(--red-t); color: var(--red) }
+.pill-blue { background: var(--blue-t); color: var(--blue) }
+.pill-navy { background: var(--navy); color: #fff }
+.pill .pdot { width: 6px; height: 6px; border-radius: 50%; background: currentColor; flex: none }
+
+/* ── tables (div-grid + native table) ── */
+.tbl { border: 1px solid var(--line); border-radius: var(--r-md);
+  overflow: hidden; background: #fff }
+.tbl .th { display: grid; padding: 12px 20px; background: var(--blue-t);
+  font-family: var(--font-mono); font-size: .67rem; letter-spacing: .12em;
+  text-transform: uppercase; color: var(--tx-2); gap: 12px }
+.tbl .tr { display: grid; padding: 14px 20px; border-top: 1px solid var(--line);
+  gap: 12px; align-items: center; font-size: .93rem }
+.tbl .tr:hover { background: var(--paper) }
+table.ui-table { width: 100%; border-collapse: collapse; font-size: .93rem }
+.ui-table th { text-align: left; padding: 12px 16px; background: var(--blue-t);
+  font-family: var(--font-mono); font-size: .67rem; letter-spacing: .12em;
+  text-transform: uppercase; color: var(--tx-2); font-weight: 500 }
+.ui-table td { padding: 14px 16px; border-top: 1px solid var(--line) }
+.ui-table tr:hover td { background: var(--paper) }
+
+/* ── skeletons (premium loading state) ── */
+.skel { position: relative; overflow: hidden; background: var(--line);
+  border-radius: 6px; min-height: 1em }
+.skel::after { content: ""; position: absolute; inset: 0;
+  background: linear-gradient(90deg, transparent, rgba(255,255,255,.7), transparent);
+  animation: ui-shimmer 1.4s infinite }
+@keyframes ui-shimmer { from { transform: translateX(-100%) } to { transform: translateX(100%) } }
+.skel-card { border: 1px solid var(--line); border-radius: 12px; padding: 20px;
+  background: #fff; display: grid; gap: 12px }
+.skel-row { display: flex; gap: 12px; align-items: center }
+
+/* ── empty states ── */
+.empty { text-align: center; padding: 56px 24px; border: 1.5px dashed var(--line);
+  border-radius: 14px; background: var(--paper) }
+.empty-ic { width: 48px; height: 48px; border-radius: 14px; display: grid;
+  place-items: center; margin: 0 auto 16px; background: #fff;
+  border: 1px solid var(--line); color: var(--tx-3) }
+.empty h3 { margin: 0 0 6px }
+.empty p { color: var(--tx-2); font-size: .9rem; margin: 0 0 18px; max-width: 44ch;
+  margin-left: auto; margin-right: auto }
+
+/* ── page header ── */
+.phead-ui { background: var(--navy); color: #fff; padding: 44px 0 40px;
+  position: relative; overflow: hidden }
+.phead-ui h1 { color: #fff; max-width: 20ch }
+.phead-ui .ui-lead { color: #bfd6e6; margin-top: 12px }
+.phead-ui .ui-kicker { color: #7fd3a8 }
+
+/* ── responsive helpers ── */
+.ui-grid { display: grid; gap: 22px }
+.ui-g2 { grid-template-columns: repeat(2,1fr) }
+.ui-g3 { grid-template-columns: repeat(3,1fr) }
+.ui-g4 { grid-template-columns: repeat(4,1fr) }
+.ui-row { display: flex; gap: 11px; flex-wrap: wrap; align-items: center }
+@media (max-width: 1024px) { .ui-g4 { grid-template-columns: repeat(2,1fr) } }
+@media (max-width: 768px) {
+  .ui-g2, .ui-g3, .ui-g4 { grid-template-columns: 1fr }
+  .ui-sec { padding: 46px 0 }
+  .tbl .th { display: none }
+  .tbl .tr { grid-template-columns: 1fr !important; gap: 5px }
+}
+@media (prefers-reduced-motion: reduce) {
+  .skel::after, .btn .spin { animation: none }
+}
+html[data-motion="reduced"] .skel::after,
+html[data-motion="reduced"] .btn .spin { animation: none }

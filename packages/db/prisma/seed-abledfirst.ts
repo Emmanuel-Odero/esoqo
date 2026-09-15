@@ -15,7 +15,7 @@ const prisma = new PrismaClient();
  * invented — see docs/proposals/our-jamii-custom-domains.md.
  *
  * Idempotent: reruns delete and recreate this org's page by slug, so
- * `pnpm --filter @esoko/db seed:abledfirst` is safe to run more than
+ * `pnpm --filter @esoqo/db seed:abledfirst` is safe to run more than
  * once while iterating on the homepage template.
  */
 
@@ -29,7 +29,7 @@ const ABOUT_US = [
   'Everything we run is designed with the people it serves, not for them. Members sit on our programme committees, self-advocates lead our community forums, and no project is signed off without the voices of the people it affects. "Nothing about us, without us" is not a slogan we borrowed — it is how our programmes are built.',
 ].join('\n\n');
 
-// icon values are @esoko/ui IconNames (see JAMII_PROGRAM_ICONS in
+// icon values are @esoqo/ui IconNames (see JAMII_PROGRAM_ICONS in
 // packages/domain/src/jamii.ts) — never emoji, per that package's
 // product-wide rule.
 const PROGRAMS: { title: string; body: string; icon: string }[] = [
@@ -204,7 +204,12 @@ async function main() {
         county: 'Nairobi',
         organisation: {
           create: {
-            kind: 'CBO',
+            // No native PBO value in OrgKind — Public Benefit
+            // Organisation is Kenya's post-2013 legal status for what
+            // used to register as an NGO, so it goes through OTHER +
+            // kindOther the same way any other free-text org kind does.
+            kind: 'OTHER',
+            kindOther: 'PBO',
             officialName: 'AbledFirst Kenya',
             tags: ['disability-inclusion', 'youth', 'community-empowerment'],
           },
@@ -230,6 +235,7 @@ async function main() {
         brandAccentThree: '#B8720F',
         themeDefaultMode: 'DARK',
         aboutUs: ABOUT_US,
+        contactPhone: '+254799850565',
         faq: FAQ,
         programs: { create: PROGRAMS.map((p, i) => ({ ...p, position: i })) },
       },
@@ -346,7 +352,8 @@ async function main() {
     });
 
     return party;
-  });
+  }, { timeout: 30_000 }); // default 5s is tight once this runs over the
+  // network against a remote (non-local) DATABASE_URL — see LOCAL_TEST_PROD.
 
   // Logo — sniffed and stored through the exact same path
   // uploadPageAsset uses, so it's indistinguishable from a real upload.

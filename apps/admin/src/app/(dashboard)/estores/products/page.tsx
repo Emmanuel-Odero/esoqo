@@ -1,6 +1,6 @@
-import { Icon } from '@esoko/ui';
-import { listProductsForStaff } from '@esoko/db';
-import { PRODUCT_CATEGORIES } from '@esoko/domain';
+import { Icon } from '@esoqo/ui';
+import { listProductsForStaff } from '@esoqo/db';
+import { PRODUCT_CATEGORIES } from '@esoqo/domain';
 import { requireStaff } from '@/lib/session';
 import { RankedBarChart } from '@/components/charts';
 import { ProductDirectory } from './ProductDirectory';

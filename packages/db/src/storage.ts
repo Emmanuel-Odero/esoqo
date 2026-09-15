@@ -1,7 +1,7 @@
 import { createHash, randomBytes } from 'node:crypto';
 import { mkdir, readFile, unlink, writeFile } from 'node:fs/promises';
 import path from 'node:path';
-import { appEnv } from '@esoko/domain';
+import { appEnv } from '@esoqo/domain';
 import {
   S3Client,
   PutObjectCommand,
@@ -45,6 +45,8 @@ if (PROVIDER !== 'r2' && PROVIDER !== 'local') {
   throw new Error(`STORAGE_PROVIDER="${PROVIDER}" is not implemented — use r2 or local`);
 }
 
+// The bucket keeps its pre-rename name — every object already uploaded
+// lives under it, and a rebrand doesn't move objects between buckets.
 const BUCKET = process.env.R2_BUCKET ?? 'esoko';
 
 // Local dev store lives on disk under <cwd>/.data/storage (gitignored).

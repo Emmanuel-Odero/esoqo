@@ -3,9 +3,9 @@
 import { headers } from 'next/headers';
 import { redirect } from 'next/navigation';
 import type { Route } from 'next';
-import { getCashierPinHashForSignIn, CASHIER_CAPABILITIES, type CashierRole } from '@esoko/db';
-import { cashierSignInSchema } from '@esoko/domain';
-import { verifyPin, checkRateLimit, RateLimitError, DUMMY_PIN_HASH } from '@esoko/auth';
+import { getCashierPinHashForSignIn, CASHIER_CAPABILITIES, type CashierRole } from '@esoqo/db';
+import { cashierSignInSchema, clientIpFrom } from '@esoqo/domain';
+import { verifyPin, checkRateLimit, RateLimitError, DUMMY_PIN_HASH } from '@esoqo/auth';
 import { createCashierSession, destroyCashierSession } from '@/lib/session';
 
 export type SignInResult = { ok: true } | { ok: false; error: string };
@@ -18,7 +18,7 @@ const BAD_CREDENTIALS = 'Name or PIN is incorrect';
 /**
  * A public, unauthenticated PIN check — the exact kind of thing that
  * gets brute-forced, so it's rate-limited per store+name AND per IP,
- * same shape as OTP's guard in @esoko/auth/otp.ts. The name isn't
+ * same shape as OTP's guard in @esoqo/auth/otp.ts. The name isn't
  * picked from a list (see the DAL doc comment) and a bad name always
  * takes the same branch, in the same time, as a bad PIN.
  */
@@ -27,7 +27,7 @@ export async function cashierSignIn(storeSlug: string, raw: unknown): Promise<Si
   if (!parsed.success) return { ok: false, error: parsed.error.issues[0]?.message ?? 'Check the form and try again' };
 
   const h = await headers();
-  const ip = h.get('x-forwarded-for')?.split(',')[0]?.trim() ?? 'unknown';
+  const ip = clientIpFrom((n) => h.get(n)) ?? 'unknown';
   const nameKey = parsed.data.name.trim().toLowerCase();
 
   try {

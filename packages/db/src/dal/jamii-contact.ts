@@ -9,7 +9,7 @@ import type { JamiiContactMessageStatus } from '@prisma/client';
  * (apps/jamii's (site)/o/[slug]/contact page) — visible only to that
  * page's own team, in their dashboard, not a platform-wide inbox. See
  * dal/jamii-interest.ts for the sibling "wants Our Jamii access" flow
- * this is deliberately not: that's reviewed by Esoko staff platform-
+ * this is deliberately not: that's reviewed by Esoqo staff platform-
  * wide; this is a visitor writing to one org, reviewed only by that
  * org's own team via requirePageAccess.
  */

@@ -1,7 +1,7 @@
 'use client';
 
 import { useState } from 'react';
-import { PRODUCT_UNITS } from '@esoko/domain';
+import { PRODUCT_UNITS } from '@esoqo/domain';
 
 const OTHER = '__other__';
 

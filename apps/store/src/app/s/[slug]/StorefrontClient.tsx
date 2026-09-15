@@ -1,9 +1,9 @@
 'use client';
 
 import { useEffect, useMemo, useState, useTransition } from 'react';
-import { Icon, type IconName } from '@esoko/ui';
-import { PRODUCT_CATEGORIES } from '@esoko/domain';
-import { checkout, checkOrderStatus } from './actions';
+import { Icon, type IconName } from '@esoqo/ui';
+import { PRODUCT_CATEGORIES } from '@esoqo/domain';
+import { checkout, checkOrderStatus, myOrgMemberships } from './actions';
 
 interface Variant { id: string; label: string; priceKes: number; stockQty: number | null; availableOnOrder: boolean }
 interface Product {
@@ -92,6 +92,15 @@ export function StorefrontClient({ store, products, fulfilmentOptions }: {
   const [deliveryAddress, setDeliveryAddress] = useState('');
   const [placedOrderId, setPlacedOrderId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  // Set only when the store has a formal warehouse relationship — see
+  // Store.dispatchWarehouseOrgId. Display-only, shown on the order
+  // confirmation; doesn't affect fulfilment logic itself.
+  const [dispatchFrom, setDispatchFrom] = useState<string | null>(null);
+  // Empty for an anonymous visitor or one with no org memberships — the
+  // common case, and the checkout defaults to "buying for myself" either
+  // way, so this never blocks or slows down a normal purchase.
+  const [myOrgs, setMyOrgs] = useState<{ id: string; name: string }[]>([]);
+  const [buyingOrgId, setBuyingOrgId] = useState<string>('');
   const [pending, startTransition] = useTransition();
   // The clickable share origin — populated only on the client, because
   // SSR has no window.location. Share buttons render once it's known, so
@@ -101,6 +110,10 @@ export function StorefrontClient({ store, products, fulfilmentOptions }: {
 
   // A shared link can carry ?p=<productId> — land the recipient straight
   // on that product's option picker instead of a scroll-and-hunt.
+  useEffect(() => {
+    myOrgMemberships().then(setMyOrgs).catch(() => setMyOrgs([]));
+  }, []);
+
   useEffect(() => {
     setOrigin(window.location.origin);
     const pId = new URLSearchParams(window.location.search).get('p');
@@ -116,7 +129,10 @@ export function StorefrontClient({ store, products, fulfilmentOptions }: {
     if (stage !== 'waiting' || !placedOrderId) return;
     const t = setInterval(async () => {
       const res = await checkOrderStatus(placedOrderId).catch(() => null);
-      if (res?.status === 'PAID' || res?.status === 'FULFILLED') setStage('success');
+      if (res?.status === 'PAID' || res?.status === 'FULFILLED') {
+        setDispatchFrom(res.dispatchFrom);
+        setStage('success');
+      }
     }, 4000);
     return () => clearInterval(t);
   }, [stage, placedOrderId]);
@@ -181,9 +197,11 @@ export function StorefrontClient({ store, products, fulfilmentOptions }: {
         collectionNotes,
         deliveryAddress,
         paymentMethod,
+        buyingOrgId: buyingOrgId || undefined,
       });
       if (!result.ok) { setError(result.error); setStage('error'); return; }
       setPlacedOrderId(result.data.orderId);
+      setDispatchFrom(result.data.dispatchFrom);
       // COD is confirmed by the merchant when the cash lands — the buyer's
       // screen is "order placed", not a payment prompt.
       setStage(result.data.status === 'PAID' || paymentMethod === 'CASH_ON_DELIVERY' ? 'success' : 'waiting');
@@ -204,11 +222,11 @@ export function StorefrontClient({ store, products, fulfilmentOptions }: {
         <div className="sf-glow" aria-hidden="true" />
         <div className="sf-wrap">
           <div className="sf-hero-top">
-            <a className="sf-back" href={DISCOVER_URL}><Icon name="arrow-left" size={14} />All shops on Esoko</a>
+            <a className="sf-back" href={DISCOVER_URL}><Icon name="arrow-left" size={14} />All shops on Esoqo</a>
             <div className="sf-hero-actions">
               {origin && (
                 <a
-                  className="sf-cart-btn" href={wa(store, `Check out *${store.name}* on Esoko — ${origin}/@${store.slug}`)}
+                  className="sf-cart-btn" href={wa(store, `Check out *${store.name}* on Esoqo — ${origin}/@${store.slug}`)}
                   target="_blank" rel="noopener noreferrer" aria-label="Share this shop on WhatsApp"
                 >
                   <Icon name="send" size={19} />
@@ -228,7 +246,7 @@ export function StorefrontClient({ store, products, fulfilmentOptions }: {
                 <span className="sf-monogram" style={{ ['--sf-accent' as string]: theme.accent }}>{store.name.slice(0, 2).toUpperCase()}</span>
               )}
               <div className="sf-ident-txt">
-                <p className="sf-kicker"><span className="sf-dot" style={{ background: theme.accent }} />Esoko store</p>
+                <p className="sf-kicker"><span className="sf-dot" style={{ background: theme.accent }} />Esoqo store</p>
                 <h1>{store.name}</h1>
                 <p className="addr mono">esoko.global/@{store.slug}</p>
                 {store.tagline && <p className="sf-tagline">{store.tagline}</p>}
@@ -237,7 +255,7 @@ export function StorefrontClient({ store, products, fulfilmentOptions }: {
           </div>
           <div className="sf-trust">
             {store.verified && (
-              <span className="sf-trust-chip sf-chip-verified"><Icon name="shield-check" size={13} />Verified Esoko business</span>
+              <span className="sf-trust-chip sf-chip-verified"><Icon name="shield-check" size={13} />Verified Esoqo business</span>
             )}
             <span className="sf-trust-chip"><Icon name="phone-call" size={13} />Pay with M-Pesa{store.codEnabled ? ' or cash on delivery' : ''}</span>
             {fulfilmentOptions.length > 0 && (
@@ -303,7 +321,7 @@ export function StorefrontClient({ store, products, fulfilmentOptions }: {
               <div className="sf-about-txt">
                 {(store.verified || store.legalName || store.registrationNumber) && (
                   <div className="sf-ident-badge">
-                    {store.verified && <span className="sf-ident-ok"><Icon name="shield-check" size={13} />Verified Esoko business</span>}
+                    {store.verified && <span className="sf-ident-ok"><Icon name="shield-check" size={13} />Verified Esoqo business</span>}
                     {store.legalName && <span><Icon name="building" size={13} />{store.legalName}</span>}
                     {store.registrationNumber && <span className="mono"><Icon name="seal" size={13} />Reg. {store.registrationNumber}</span>}
                   </div>
@@ -478,7 +496,7 @@ export function StorefrontClient({ store, products, fulfilmentOptions }: {
           </div>
           <div className="sf-foot-bottom">
             <span>Payments via M-Pesa{store.codEnabled ? ' & cash on delivery' : ''}</span>
-            <a className="sf-foot-discover" href={DISCOVER_URL}>Back to all shops on Esoko</a>
+            <a className="sf-foot-discover" href={DISCOVER_URL}>Back to all shops on Esoqo</a>
           </div>
         </div>
       </footer>
@@ -590,6 +608,17 @@ export function StorefrontClient({ store, products, fulfilmentOptions }: {
                   </div>
                 )}
 
+                {myOrgs.length > 0 && (
+                  <div className="fld">
+                    <label className="lab" htmlFor="buyingFor">Buying for</label>
+                    <select className="inp" id="buyingFor" value={buyingOrgId}
+                      onChange={(e) => setBuyingOrgId(e.target.value)}>
+                      <option value="">Myself</option>
+                      {myOrgs.map((o) => <option key={o.id} value={o.id}>{o.name}</option>)}
+                    </select>
+                  </div>
+                )}
+
                 <div className="fld">
                   <label className="lab" htmlFor="bname">Your name</label>
                   <input className="inp" id="bname" value={buyerName} onChange={(e) => setBuyerName(e.target.value)} />
@@ -638,6 +667,11 @@ export function StorefrontClient({ store, products, fulfilmentOptions }: {
                       {`${store.name} has been notified. You'll get an SMS when your order is ready.`}
                     </p>
                   </>
+                )}
+                {dispatchFrom && (
+                  <p style={{ color: 'var(--tx-3)', fontSize: '.79rem', marginTop: 10 }}>
+                    Dispatched from: {dispatchFrom}
+                  </p>
                 )}
                 <button type="button" className="btn btn-o" style={{ marginTop: 20 }} onClick={() => { setCartOpen(false); setCart({}); setDeliveryOptionId(null); setCollectionNotes(''); setDeliveryAddress(''); setPaymentMethod('MPESA_STK'); setStage('browsing'); }}>
                   Done

@@ -1,7 +1,7 @@
 'use client';
 
 import { useActionState } from 'react';
-import { Icon } from '@esoko/ui';
+import { Icon } from '@esoqo/ui';
 import { signIn } from './actions';
 
 export function SignInForm() {

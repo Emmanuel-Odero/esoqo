@@ -2,7 +2,7 @@
 
 import { useState, useTransition } from 'react';
 import { useRouter } from 'next/navigation';
-import type { MemberRole } from '@esoko/db';
+import type { MemberRole } from '@esoqo/db';
 import { actionSetMemberRole } from '../actions';
 
 const ROLE_LABEL: Record<MemberRole, string> = {

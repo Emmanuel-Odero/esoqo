@@ -3,7 +3,7 @@
 import { useState, useTransition } from 'react';
 import { useRouter } from 'next/navigation';
 import type { Route } from 'next';
-import { Icon } from '@esoko/ui';
+import { Icon } from '@esoqo/ui';
 import { actionRequestPinCode, actionSetPin } from '../actions';
 
 export function SetPinForm() {
@@ -43,7 +43,7 @@ export function SetPinForm() {
         <div className="fld">
           <label className="lab" htmlFor="msisdn"><Icon name="phone" size={15} />Phone number</label>
           <input className="inp mono" id="msisdn" value={msisdn} onChange={(e) => setMsisdn(e.target.value)} inputMode="tel" />
-          <p className="hint">The number your Esoko account is registered under.</p>
+          <p className="hint">The number your Esoqo account is registered under.</p>
         </div>
         {error && <div className="note n-red" style={{ marginBottom: 16 }}><div><p>{error}</p></div></div>}
         <button type="button" className="btn btn-g" style={{ width: '100%' }} disabled={pending || !msisdn.trim()} onClick={requestCode}>

@@ -1,9 +1,9 @@
 import type { Metadata } from 'next';
-import { listMyStores, listStoreOrders } from '@esoko/db';
+import { listMyStores, listStoreOrders } from '@esoqo/db';
 import { requireSubject } from '@/lib/session';
 import { FulfilButton } from './FulfilButton';
 import { CollectCodButton } from './CollectCodButton';
-import { Icon } from '@esoko/ui';
+import { Icon } from '@esoqo/ui';
 
 export const metadata: Metadata = { title: 'Orders' };
 export const dynamic = 'force-dynamic';

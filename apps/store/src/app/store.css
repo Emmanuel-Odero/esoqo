@@ -1,6 +1,15 @@
 /* ═══════════════════════════════════════════════════════════
-   Esoko Store — premium surface styles
+   Esoqo Store — premium surface styles
    ═══════════════════════════════════════════════════════════ */
+
+/* ── Font wiring ───────────────────────────────────────────
+   next/font declares these variables on <html> (layout.tsx). We
+   remap the semantic tokens onto them. */
+:root {
+  --font-body: var(--font-plex-sans), system-ui, -apple-system, sans-serif;
+  --font-display: var(--font-outfit), system-ui, sans-serif;
+  --font-mono: var(--font-plex-mono), ui-monospace, SFMono-Regular, monospace;
+}
 
 /* ── utilities ──────────────────────────────────────────── */
 .wrap { max-width:680px; margin:0 auto; padding:0 22px }

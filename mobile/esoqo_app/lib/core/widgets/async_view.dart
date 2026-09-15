@@ -1,0 +1,90 @@
+import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+
+import '../api/api_exception.dart';
+import '../theme/esoqo_tokens.dart';
+import 'esoqo_empty_state.dart';
+import 'esoqo_error_view.dart';
+import 'esoqo_icon.dart';
+import 'esoqo_skeleton.dart';
+
+/// The shared shape for "a screen watching one FutureProvider" — every
+/// screen used to write its own `provider.when(loading: ..., error:
+/// ..., data: ...)`, each slightly different (spinner sizing, error
+/// copy, whether an empty list got its own treatment at all). This is
+/// that block, written once:
+///
+/// - No data yet, still loading → a centred spinner.
+/// - No data yet, failed → a retry-capable EsoqoErrorView.
+/// - Data present (even mid-refresh, e.g. after a pull-to-refresh
+///   invalidate) → always the data builder. A refetch never wipes what
+///   was already on screen — that flash-to-spinner is what makes a
+///   refresh feel like a full reload, so this widget deliberately
+///   never lets isLoading override an existing value.
+/// - Data present but empty → EsoqoEmptyState, via isEmpty/emptyMessage.
+class EsoqoAsyncView<T> extends StatelessWidget {
+  const EsoqoAsyncView({
+    super.key,
+    required this.value,
+    required this.data,
+    this.isEmpty,
+    this.emptyMessage,
+    this.emptyIcon = Icons.inbox_outlined,
+    this.emptyEsoqoIcon,
+    this.onRetry,
+  });
+
+  final AsyncValue<T> value;
+  final Widget Function(BuildContext context, T data) data;
+  final bool Function(T data)? isEmpty;
+  final String? emptyMessage;
+
+  /// Legacy Material glyph — prefer [emptyEsoqoIcon] for anything new.
+  final IconData emptyIcon;
+
+  /// Branded 24px stroke icon (see EsoqoIcon) for the empty state. Takes
+  /// precedence over [emptyIcon] when both are given.
+  final EsoqoIconName? emptyEsoqoIcon;
+  final VoidCallback? onRetry;
+
+  @override
+  Widget build(BuildContext context) {
+    final Widget child;
+    final String state;
+    if (value.hasValue) {
+      final v = value.requireValue;
+      if (isEmpty != null && emptyMessage != null && isEmpty!(v)) {
+        state = 'empty';
+        child = EsoqoEmptyState(
+          message: emptyMessage!,
+          icon: emptyIcon,
+          esoqoIcon: emptyEsoqoIcon,
+        );
+      } else {
+        state = 'data';
+        child = data(context, v);
+      }
+    } else if (value.hasError) {
+      final error = value.error;
+      final message = error is ApiException
+          ? error.message
+          : 'Something went wrong. Pull to retry.';
+      state = 'error';
+      child = EsoqoErrorView(message: message, onRetry: onRetry);
+    } else {
+      state = 'loading';
+      child = const EsoqoSkeletonList();
+    }
+    // Cross-fade between lifecycle states (skeleton → data, data →
+    // error) instead of snapping — the transition itself is part of the
+    // polish. Keyed by state so a data→data refresh doesn't replay it,
+    // and skipped entirely under reduced motion.
+    final reduced = MediaQuery.disableAnimationsOf(context);
+    return AnimatedSwitcher(
+      duration: reduced ? Duration.zero : EsoqoMotion.medium,
+      switchInCurve: EsoqoMotion.easeOut,
+      switchOutCurve: EsoqoMotion.easeOut,
+      child: KeyedSubtree(key: ValueKey(state), child: child),
+    );
+  }
+}

@@ -1,9 +1,9 @@
 'use client';
 
 import { useRef, useState, useTransition } from 'react';
-import { Icon } from '@esoko/ui';
-import { useAnnounce } from '@esoko/a11y';
-import { JOINABLE_GROUP_KINDS, ORG_KINDS, SEGMENTS, searchSegments } from '@esoko/domain';
+import { Icon } from '@esoqo/ui';
+import { useAnnounce } from '@esoqo/a11y';
+import { JOINABLE_GROUP_KINDS, ORG_KINDS, SEGMENTS, searchSegments } from '@esoqo/domain';
 import { actionCheckGroupMembership, actionSearchGroups } from './actions';
 import { SearchCombobox } from './SearchCombobox';
 import type { Form } from './form';

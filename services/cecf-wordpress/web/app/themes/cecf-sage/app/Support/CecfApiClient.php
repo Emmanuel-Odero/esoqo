@@ -7,8 +7,8 @@ use Illuminate\Support\Facades\Http;
 use RuntimeException;
 
 /**
- * The one place this theme talks to esoko's `services/core` — the
- * `/api/cecf/*` facade described in esoko's own
+ * The one place this theme talks to esoqo's `services/core` — the
+ * `/api/cecf/*` facade described in esoqo's own
  * docs/proposals/cecf-wordpress-registration.md. Every call from this
  * theme's own `cecf/v1` REST routes (App\Providers\
  * CecfRegistrationServiceProvider) goes through here, never directly —
@@ -23,7 +23,7 @@ class CecfApiClient
 {
     public static function baseUrl(): string
     {
-        return rtrim((string) env('ESOKO_CORE_API_URL', 'http://localhost:4000'), '/');
+        return rtrim((string) env('ESOQO_CORE_API_URL', 'http://localhost:4000'), '/');
     }
 
     protected static function secret(): string
@@ -31,14 +31,14 @@ class CecfApiClient
         $secret = env('CECF_SERVICE_SECRET');
 
         if (! $secret) {
-            throw new RuntimeException('CECF_SERVICE_SECRET is not set — the CECF↔Esoko facade cannot be reached.');
+            throw new RuntimeException('CECF_SERVICE_SECRET is not set — the CECF↔Esoqo facade cannot be reached.');
         }
 
         return (string) $secret;
     }
 
     /**
-     * Signs the exact bytes about to be sent — esoko's own verification
+     * Signs the exact bytes about to be sent — esoqo's own verification
      * (services/core/src/routes/cecf.ts's verifyCecfSignature) checks the
      * literal request body, not a re-derived structure, specifically
      * because PHP's json_encode and Node's JSON.stringify don't always
@@ -59,7 +59,7 @@ class CecfApiClient
     public static function post(string $path, array $body): array
     {
         // json_encode([]) produces "[]", not "{}" — PHP has no distinct
-        // empty-object type. Every esoko endpoint expects a JSON object
+        // empty-object type. Every esoqo endpoint expects a JSON object
         // body (even an empty one, e.g. .../complete with no members),
         // so an empty array is cast to stdClass first.
         $json = json_encode($body === [] ? new \stdClass() : $body, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);

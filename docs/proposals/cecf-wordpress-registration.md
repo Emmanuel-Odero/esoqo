@@ -1,23 +1,23 @@
-# CECF WordPress registration → esoko
+# CECF WordPress registration → esoqo
 
 **Type** · Implementation record (design doc; spans `services/cecf-wordpress`, `services/core`,
 `packages/db`, `packages/domain`, `packages/payments`, `apps/admin`, `apps/app`)
 **Prepared** · 17 August 2026
-**Status** · Implemented (esoko side) — WordPress-side build follows
+**Status** · Implemented (esoqo side) — WordPress-side build follows
 
 ## 1 · What changed
 
 CECF's public registration (individual / group / business) moves fully onto the CECF
 WordPress site (`services/cecf-wordpress`), which was previously an unbuilt stub — its
 `registrationForm` section type had seeded copy but no Blade partial ever rendered it,
-and its `cecf_enquiry` post type had no submitter. `apps/app/join` stays esoko's own
+and its `cecf_enquiry` post type had no submitter. `apps/app/join` stays esoqo's own
 registration flow only (de-CECF-branded — see phase 4 below); it is no longer CECF's
 front door.
 
-**Both funnels write into the same esoko data model.** WordPress's PHP backend never
+**Both funnels write into the same esoqo data model.** WordPress's PHP backend never
 talks to Daraja or Pesapal directly, and never touches the database directly — it talks
 to a new authenticated REST facade in `services/core` (`/api/cecf/*`) that is a thin
-proxy over the *same* `@esoko/db` functions `apps/app/join`'s Server Actions already
+proxy over the *same* `@esoqo/db` functions `apps/app/join`'s Server Actions already
 call. No business logic is duplicated, no gateway secret ever reaches WordPress.
 
 ## 2 · Schema (`packages/db/prisma/schema.prisma`)
@@ -130,7 +130,7 @@ payment.
 
 - **`resources/js/registration.js`** now mirrors `apps/app/join`'s own `localStorage`
   resume pattern: the whole `state` object plus every named form field is written to
-  `localStorage['esoko:cecf-reg:v1']` after every step transition and field change
+  `localStorage['esoqo:cecf-reg:v1']` after every step transition and field change
   (debounced), keyed by nothing more than "this browser" — there's no account to key
   it to. On load, a saved draft shows a `.callout` prompt ("Continue where you left
   off" / "Start over") before the wizard renders; picking "Continue" repopulates the

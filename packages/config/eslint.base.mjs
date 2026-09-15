@@ -18,7 +18,7 @@ export default ts.config(
     plugins: { 'jsx-a11y': a11y, 'react-hooks': reactHooks },
     rules: {
       /* ── ARCHITECTURE ────────────────────────────────────────
-         The Data Access Layer cannot be bypassed. Only @esoko/db
+         The Data Access Layer cannot be bypassed. Only @esoqo/db
          may touch Prisma; everyone else goes through the DAL, where
          requireCapability() runs before any query.               */
       'no-restricted-imports': ['error', {
@@ -26,19 +26,19 @@ export default ts.config(
           {
             name: '@prisma/client',
             message:
-              'Do not import Prisma directly. Use @esoko/db/dal — every query must pass ' +
+              'Do not import Prisma directly. Use @esoqo/db/dal — every query must pass ' +
               'through the Data Access Layer so authorisation is checked. See ADR-0003.',
           },
           {
-            name: '@esoko/db',
+            name: '@esoqo/db',
             importNames: ['prisma'],
-            message: 'The Prisma client is internal to @esoko/db. Import a DAL function instead.',
+            message: 'The Prisma client is internal to @esoqo/db. Import a DAL function instead.',
           },
         ],
         patterns: [
           {
             group: ['**/packages/db/src/client*'],
-            message: 'Reach the database through @esoko/db/dal only.',
+            message: 'Reach the database through @esoqo/db/dal only.',
           },
         ],
       }],

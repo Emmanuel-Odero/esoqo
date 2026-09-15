@@ -1,4 +1,4 @@
-# Esoko
+# Esoqo
 
 A consented credential-and-cashflow registry for Kenya's informal economy —
 and, growing out of the same Party/Enterprise records, a small merchant
@@ -19,7 +19,7 @@ pnpm install
 pnpm stack:up            # postgres · pgbouncer · redis · mailhog · mock-sms
 pnpm db:generate
 pnpm db:migrate
-pnpm db:seed             # reference data only — no fake users
+pnpm db:seed             # reference data, plus clearly-labelled "Demo" content — see below
 pnpm dev
 ```
 
@@ -33,13 +33,28 @@ pnpm dev
 | SMS catcher (`SMS_PROVIDER=mock`) | http://localhost:8026 |
 | Database UI | `docker compose --profile tools up -d adminer` → :8080 |
 
-`pnpm db:seed` creates exactly one login — a staff account so the admin
-app is reachable on first run. Nothing else is seeded (no subjects, no
-groups, no registrations):
+`pnpm db:seed` now shells out to `services/core-go`'s Go seeder
+(`services/core-go/internal/seed` — see `docs/adr/0005-mobile-api-in-go.md`;
+`packages/db/prisma/seed.ts`/`seed-demo.ts` were retired once it covered
+the same ground). It creates the one staff login the admin app needs on
+first run, reference data (counties/issuers/markets/commodities/pricing
+rules — no fake registrations or real parties), and — folded in from
+what used to be a separate `seed:demo` step — a handful of
+clearly-"Demo"-prefixed ticket orgs, listings and stores so the mobile
+app and web walkthroughs have real content to click through:
 
 | App | Login | Credential |
 |---|---|---|
-| Operations (`:3002`) | `ops@esoko.co.ke` | PIN `482915` — or whatever `SEED_ADMIN_PIN` was set to at seed time |
+| Operations (`:3002`) | `ops@esoqo.co.ke` | PIN `482915` — or whatever `SEED_ADMIN_PIN` was set to at seed time |
+| Mobile app — buyer | `+254700200200` | PIN `200200` |
+| Mobile app — merchant | `+254700300300` | PIN `300300` |
+| Ticketing staff (Demo Scanner/Manager/Admin) | org PIN sign-in | `111111` / `222222` / `333333` |
+
+`packages/db/prisma/seed-abledfirst.ts` and `seed-media.ts` are
+untouched — Our Jamii CMS content (page-builder text, media-placeholder
+patterns), not commerce/ticketing/groups, so they're outside
+`services/core-go`'s domain. Run them the same way as before
+(`pnpm --filter @esoqo/db seed:abledfirst` / `seed:media`).
 
 Change this PIN (`SEED_ADMIN_PIN` env var before seeding, or
 `SEED_ADMIN_HASH` for a precomputed Argon2id hash) before any deployment —
@@ -61,8 +76,8 @@ it logs the prompt and auto-confirms locally instead of calling Safaricom.
 
 ## Deployed
 
-Live on Render — `esoko-web`, `esoko-app`, `esoko-admin` and `esoko-core`
-each deploy from the **`render`** branch against one shared `esoko-db`
+Live on Render — `esoqo-web`, `esoqo-app`, `esoqo-admin` and `esoqo-core`
+each deploy from the **`render`** branch against one shared `esoqo-db`
 Postgres instance. `render.yaml` is the infra-as-code definition.
 **`apps/store` has no Render service yet** — the merchant storefront and
 PoS terminal run locally (`:3003`) but aren't reachable in production
@@ -85,8 +100,8 @@ table — this has actually happened, more than once. After any migration
 lands on `render`, before trusting the deploy:
 
 ```bash
-DATABASE_URL="<production DATABASE_URL, from Render → esoko-db → Connect>" \
-  pnpm --filter @esoko/db exec prisma migrate deploy
+DATABASE_URL="<production DATABASE_URL, from Render → esoqo-db → Connect>" \
+  pnpm --filter @esoqo/db exec prisma migrate deploy
 ```
 
 Always take a backup first for anything beyond a trivial additive migration —
@@ -185,7 +200,7 @@ one who has to correct it later.
 **1 · Authorisation lives in the Data Access Layer.**
 Not in `proxy.ts`. Next.js middleware has had two distinct authorisation-bypass
 classes in sixteen months — CVE-2025-29927 and the July 2026 advisory set. The
-lint rule in `@esoko/config` forbids importing Prisma outside `packages/db`,
+lint rule in `@esoqo/config` forbids importing Prisma outside `packages/db`,
 and CI fails on violation. See ADR-0003.
 
 **2 · Balances are derived, never stored.**

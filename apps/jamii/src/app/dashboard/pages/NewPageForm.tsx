@@ -2,7 +2,7 @@
 
 import { useState, useTransition } from 'react';
 import { useRouter } from 'next/navigation';
-import { Icon } from '@esoko/ui';
+import { Icon } from '@esoqo/ui';
 import { actionCreatePage } from '../actions';
 
 /** Inline "New page" card — a title is all a page needs to exist; the

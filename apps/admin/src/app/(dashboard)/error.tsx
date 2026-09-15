@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect } from 'react';
-import { Icon } from '@esoko/ui';
+import { Icon } from '@esoqo/ui';
 
 /**
  * Catches a crash in any dashboard route and shows something a staff

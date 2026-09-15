@@ -1,7 +1,8 @@
 import 'server-only';
+import { clientIpFrom } from '@esoqo/domain';
 import { cookies, headers } from 'next/headers';
-import { ctxFromToken, SESSION_COOKIE } from '@esoko/auth';
-import { anonCtx, type Ctx } from '@esoko/db';
+import { ctxFromToken, SESSION_COOKIE } from '@esoqo/auth';
+import { anonCtx, type Ctx } from '@esoqo/db';
 import { redirect } from 'next/navigation';
 
 /**
@@ -14,7 +15,7 @@ import { redirect } from 'next/navigation';
 export async function getCtx(): Promise<Ctx> {
   const jar = await cookies();
   const h = await headers();
-  const ip = h.get('x-forwarded-for')?.split(',')[0]?.trim() ?? null;
+  const ip = clientIpFrom((n) => h.get(n)) ?? null;
   const ctx = await ctxFromToken(jar.get(SESSION_COOKIE)?.value, ip);
   return ctx ?? anonCtx(ip);
 }

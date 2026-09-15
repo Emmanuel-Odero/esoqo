@@ -1,8 +1,8 @@
 import Link from 'next/link';
-import { Icon } from '@esoko/ui';
-import { CAPABILITY_CATALOGUE, PAYMENT_APPROVAL_THRESHOLD } from '@esoko/db';
-import { mpesaProvider } from '@esoko/payments';
-import { appEnv } from '@esoko/domain';
+import { Icon } from '@esoqo/ui';
+import { CAPABILITY_CATALOGUE, PAYMENT_APPROVAL_THRESHOLD } from '@esoqo/db';
+import { mpesaProvider } from '@esoqo/payments';
+import { appEnv } from '@esoqo/domain';
 import { requireStaff } from '@/lib/session';
 
 export const dynamic = 'force-dynamic';

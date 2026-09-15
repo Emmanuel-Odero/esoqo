@@ -1,9 +1,9 @@
 import { NextResponse, type NextRequest } from 'next/server';
-// Narrower than `@esoko/db` on purpose — that barrel also re-exports
+// Narrower than `@esoqo/db` on purpose — that barrel also re-exports
 // storage.ts (S3/fs), which drags filesystem code into the middleware
 // bundle and breaks it. The DAL barrel alone is everything
 // ADR-0003 requires and nothing storage-related.
-import { resolveJamiiDomain, recordSiteVisit } from '@esoko/db/dal';
+import { resolveJamiiDomain, recordSiteVisit } from '@esoqo/db/dal';
 
 /**
  * Host-based routing for custom domains — see the "Clean URLs" section

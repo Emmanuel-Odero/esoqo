@@ -1,9 +1,8 @@
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
-import { Icon } from '@esoko/ui';
-import { getTicketOrg, listOrgListings, listOrgVenuesAndRoutes } from '@esoko/db';
+import { Icon } from '@esoqo/ui';
 import { requireOrgAccess } from '@/lib/session';
-import { canOrg } from '@/lib/ticketing';
+import { canOrg, orgGo, orgForCan, type GoOrg, type GoListing, type GoVenue, type GoRoute } from '@/lib/ticketing';
 import { CreateListingForm } from './CreateListingForm';
 
 export const dynamic = 'force-dynamic';
@@ -15,12 +14,18 @@ const STATUS_TONE: Record<string, string> = {
 export default async function OrgListings({ params }: { params: Promise<{ orgId: string }> }) {
   const { orgId } = await params;
   const { ctx } = await requireOrgAccess(orgId);
-  const org = await getTicketOrg(ctx, orgId);
+  const org = await orgGo<{ org: GoOrg }>(orgId, `/v1/ticketorgs/${orgId}`)
+    .then((r) => orgForCan(r.org))
+    .catch(() => null);
+  if (!org) notFound();
   // A SCANNER session reaches requireOrgAccess fine but holds no
   // listing.write — this tab isn't in their nav, but a direct URL visit
-  // must still be refused rather than crash on the DAL's own check.
+  // must still be refused rather than crash on the enforcement check.
   if (!canOrg(ctx, org, 'listing.write')) notFound();
-  const [listings, places] = await Promise.all([listOrgListings(ctx, orgId), listOrgVenuesAndRoutes(ctx, orgId)]);
+  const [listings, places] = await Promise.all([
+    orgGo<{ listings: GoListing[] }>(orgId, `/v1/ticketorgs/${orgId}/listings`).then((r) => r.listings),
+    orgGo<{ venues: GoVenue[]; routes: GoRoute[] }>(orgId, `/v1/ticketorgs/${orgId}/venues-routes`),
+  ]);
 
   return (
     <>

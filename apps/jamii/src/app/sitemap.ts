@@ -2,7 +2,7 @@ import type { MetadataRoute } from 'next';
 import { headers } from 'next/headers';
 import {
   listJamiiPages, getJamiiPageBySlug, listPublishedJamiiCustomPages, listPublishedJamiiCustomPagesForOrg,
-} from '@esoko/db';
+} from '@esoqo/db';
 import { primaryOrigin } from '@/lib/org-links-shared';
 
 export const dynamic = 'force-dynamic';

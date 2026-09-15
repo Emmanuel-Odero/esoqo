@@ -1,7 +1,7 @@
 import Link from 'next/link';
 import type { Route } from 'next';
-import { Icon } from '@esoko/ui';
-import { getMyRecord, GROUP_KINDS } from '@esoko/db';
+import { Icon } from '@esoqo/ui';
+import { getMyRecord, GROUP_KINDS } from '@esoqo/db';
 import { requireSubject } from '@/lib/session';
 import { CreateGroupForm } from './CreateGroupForm';
 
@@ -9,7 +9,7 @@ import { CreateGroupForm } from './CreateGroupForm';
 // too) — self-serve founding here is for chamas/table-banking/SACCOs
 // etc. only, the same set createOwnGroupSchema accepts
 // (JOINABLE_GROUP_KINDS). Resolved server-side so the client form never
-// imports @esoko/db (server-only) itself.
+// imports @esoqo/db (server-only) itself.
 const GROUP_KIND_OPTIONS = GROUP_KINDS.filter(([k]) => k !== 'BUSINESS');
 
 export const dynamic = 'force-dynamic';
@@ -38,7 +38,7 @@ export default async function MyGroups() {
         <div className="mcard" style={{ marginBottom: 16 }}>
           <div className="mempty">
             <span className="ico"><Icon name="users" size={22} /></span>
-            <h2 style={{ marginBottom: 7 }}>You are not in a group on Esoko</h2>
+            <h2 style={{ marginBottom: 7 }}>You are not in a group on Esoqo</h2>
             <p style={{ margin: 0 }}>
               If your chama is already here, its treasurer can add you. Dial *483*77# and choose 4
               to ask. Otherwise, start one below.

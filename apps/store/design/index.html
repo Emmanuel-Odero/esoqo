@@ -3,10 +3,10 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Esoko Mini-Store — design review</title>
+<title>Esoqo Mini-Store — design review</title>
 <style>
 /* ══════════════════════════════════════════════════════════════
-   Esoko design tokens — carried over unmodified from
+   Esoqo design tokens — carried over unmodified from
    packages/ui/src/tokens.css. Store-specific additions are in the
    second block below, namespaced so they never fight the core app. */
 :root {
@@ -333,7 +333,7 @@ a{color:inherit}
   <aside class="rail">
     <div class="rail-brand">
       <span class="mark"><svg class="ic" width="17" height="17" aria-hidden="true"><use href="#i-shop"/></svg></span>
-      <div><strong>Esoko Mini-Store</strong><span>Design review · Foundation phase</span></div>
+      <div><strong>Esoqo Mini-Store</strong><span>Design review · Foundation phase</span></div>
     </div>
     <nav class="rail-nav" id="railnav">
       <p class="rail-cap">Merchant</p>
@@ -343,10 +343,10 @@ a{color:inherit}
       <p class="rail-cap">Customer</p>
       <button data-view="storefront"><svg class="ic" width="16" height="16"><use href="#i-basket"/></svg>Public storefront</button>
       <button data-view="checkout"><svg class="ic" width="16" height="16"><use href="#i-coins"/></svg>M-Pesa checkout</button>
-      <p class="rail-cap">Esoko Operations</p>
+      <p class="rail-cap">Esoqo Operations</p>
       <button data-view="admin"><svg class="ic" width="16" height="16"><use href="#i-shield"/></svg>Stores &amp; pricing</button>
     </nav>
-    <p class="rail-foot"><b>Not final code</b>Static HTML/CSS/JS on Esoko's real design tokens, for direction sign-off before schema and React work begins.</p>
+    <p class="rail-foot"><b>Not final code</b>Static HTML/CSS/JS on Esoqo's real design tokens, for direction sign-off before schema and React work begins.</p>
   </aside>
 
   <main class="stage" id="stage"><!-- views injected below --></main>
@@ -384,7 +384,7 @@ const kes = (n) => 'KES ' + n.toLocaleString('en-KE');
 views.wizard = {
   eyebrow: 'Merchant · open a store',
   title: 'Store setup wizard',
-  blurb: 'Every price shown here is read live from the admin-editable Pricing rules screen — nothing is hardcoded. A merchant must already be a registered Esoko subject with a verified Enterprise before this wizard is reachable.',
+  blurb: 'Every price shown here is read live from the admin-editable Pricing rules screen — nothing is hardcoded. A merchant must already be a registered Esoqo subject with a verified Enterprise before this wizard is reachable.',
   html: `
   <div class="frame-mobile">
     <div class="wiz">
@@ -735,7 +735,7 @@ views.pos = {
 
 /* ═══════════════════════════ ADMIN ═══════════════════════════ */
 views.admin = {
-  eyebrow: 'Esoko Operations · apps/admin',
+  eyebrow: 'Esoqo Operations · apps/admin',
   title: 'Stores & pricing',
   blurb: 'Mirrors the existing (dashboard)/payments layout in apps/admin. Every price a merchant sees anywhere in the wizard reads from this table — changing a row here changes it everywhere, with a full audit trail via the existing recordAudit().',
   html: `

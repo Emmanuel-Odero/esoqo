@@ -1,5 +1,5 @@
 import Link from 'next/link';
-import { getCampaignStats } from '@esoko/db';
+import { getCampaignStats } from '@esoqo/db';
 import { orgHref } from '@/lib/org-links-shared';
 import type { BlockProps } from './types';
 

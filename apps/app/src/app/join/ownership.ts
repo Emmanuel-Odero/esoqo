@@ -12,7 +12,7 @@ import { createHmac, timingSafeEqual } from 'node:crypto';
  * who obtains another visitor's registration id (a shared device, a
  * leaked link, a support screenshot) from mutating or completing that
  * stranger's record. This cookie is the missing ownership check: signed
- * with the same HMAC pattern @esoko/db's payment-approval chain already
+ * with the same HMAC pattern @esoqo/db's payment-approval chain already
  * uses, so a guessed or copied UUID alone is not enough.
  */
 

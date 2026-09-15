@@ -1,13 +1,13 @@
 import type { Metadata } from 'next';
 import Link from 'next/link';
-import { Logo } from '@esoko/ui';
-import { getDisplayPrefs } from '@esoko/db';
+import { Logo } from '@esoqo/ui';
+import { getDisplayPrefs } from '@esoqo/db';
 import { requireSubject } from '@/lib/session';
 import { PrefsApplier } from './PrefsApplier';
 import { ShellNav, type NavItem } from './ShellNav';
 import './me.css';
 
-export const metadata: Metadata = { title: { default: 'Your record', template: '%s · Esoko' } };
+export const metadata: Metadata = { title: { default: 'Your record', template: '%s · Esoqo' } };
 
 const PRIMARY: NavItem[] = [
   { href: '/me', icon: 'user', label: 'Record' },
@@ -32,10 +32,10 @@ export default async function MeLayout({ children }: { children: React.ReactNode
       <PrefsApplier prefs={prefs} />
       <header className="appbar">
         <div className="appbar-in">
-          <Link href="/me" className="appbrand" aria-label="Esoko home">
+          <Link href="/me" className="appbrand" aria-label="Esoqo home">
             <Logo />
             <span className="appbar-name">
-              Esoko
+              Esoqo
               <small>Your record</small>
             </span>
           </Link>
