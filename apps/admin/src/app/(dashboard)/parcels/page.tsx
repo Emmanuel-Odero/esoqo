@@ -4,6 +4,7 @@ import { displayKES } from '@esoqo/domain';
 import { Icon } from '@esoqo/ui';
 import { requireStaff } from '@/lib/session';
 import { adminGo } from '@/lib/go-ticketing';
+import { LiveRefresh } from '@/components/LiveRefresh';
 import { ParcelsTable, type AdminParcelRow } from './ParcelsTable';
 
 export const dynamic = 'force-dynamic';
@@ -64,6 +65,7 @@ export default async function ParcelsPage(
 
   return (
     <>
+      <LiveRefresh />
       <div className="head">
         <div>
           <h1>Parcels</h1>

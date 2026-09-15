@@ -139,13 +139,15 @@ type BookParcelInput struct {
 	// follow.
 	OriginMethod string
 
-	// PayAtCounter — the pilot's walk-in path: no price is quoted or
-	// collected online, and the parcel lands straight in BOOKED with
-	// paymentMethod "PAY_AT_COUNTER" instead of the usual
-	// DRAFT_PENDING_PAYMENT -> SetParcelPrice -> Pay sequence. priceKes
-	// stays NULL (nobody has weighed or priced it yet — that happens
-	// physically, at the desk) and no revenue split is computed. Only
-	// valid alongside OriginMethod SELF_DROPOFF.
+	// PayAtCounter — no price is quoted or collected online for this
+	// parcel, and it lands straight in BOOKED with paymentMethod
+	// "PAY_AT_COUNTER" instead of the usual DRAFT_PENDING_PAYMENT ->
+	// SetParcelPrice -> Pay sequence. priceKes stays NULL (nobody has
+	// weighed or priced it yet — that happens physically, in person) and
+	// no revenue split is computed. Valid for either OriginMethod: a
+	// walk-in drop-off settles at the station's own counter, a scheduled
+	// pickup settles with the courier who collects it — this flag just
+	// means "not online", not "specifically at a desk".
 	PayAtCounter bool
 }
 
@@ -223,16 +225,6 @@ func BookParcel(ctx context.Context, pool *pgxpool.Pool, in BookParcelInput) (pa
 			return "", "", "", &ParcelError{"BAD_INPUT", "That station isn't taking walk-in drop-offs"}
 		}
 	}
-	// PayAtCounter — the pilot's "no online price, pay at the counter"
-	// path (see notify's own comment threads for the wider rationale):
-	// only ever a self-drop-off, since a scheduled pickup still needs
-	// the sender to have actually paid for a courier to be dispatched at
-	// all. Refused rather than silently ignored — a client that could
-	// set this on a scheduled pickup would be skipping payment for a
-	// service that costs Esoqo money to run before anyone's at a desk.
-	if in.PayAtCounter && originMethod != "SELF_DROPOFF" {
-		return "", "", "", &ParcelError{"BAD_INPUT", "Pay-at-counter only applies to a walk-in drop-off"}
-	}
 	// A pickup point that's full or switched off is refused at booking
 	// rather than discovered by a courier standing in the shop.
 	if in.DestinationAgentID != nil && *in.DestinationAgentID != "" {
@@ -257,9 +249,9 @@ func BookParcel(ctx context.Context, pool *pgxpool.Pool, in BookParcelInput) (pa
 		// PayAtCounter skips the whole DRAFT_PENDING_PAYMENT -> price ->
 		// pay sequence and lands directly in BOOKED, same slaDeadlineAt
 		// formula PayParcelWithPoints uses at its own payment-confirmation
-		// moment — a pilot walk-in still deserves an SLA clock, it just
-		// starts at booking instead of at payment because there is no
-		// separate payment step to start it from.
+		// moment — a parcel settled in person still deserves an SLA clock,
+		// it just starts at booking instead of at payment because there
+		// is no separate payment step to start it from.
 		status := "DRAFT_PENDING_PAYMENT"
 		var paymentMethod *string
 		if in.PayAtCounter {

@@ -796,8 +796,14 @@ export async function actionCounterBookParcel(
 ): Promise<{ ok: true; code: string; parcelId: string } | { ok: false; error: string }> {
   try {
     await requireStaff();
+    // payAtCounter: true — a counter booking has a customer standing at
+    // the desk settling in person, right now. Without this the parcel
+    // was landing in DRAFT_PENDING_PAYMENT and just sitting there:
+    // nobody was ever routed through SetParcelPrice/Pay to finish it, so
+    // it never became a real, actionable BOOKED parcel and neither party
+    // was ever texted. See dbx.BookParcelInput.PayAtCounter.
     const res = await adminGo<{ parcelId: string; code: string }>('/v1/parcels', {
-      method: 'POST', body: JSON.stringify(input),
+      method: 'POST', body: JSON.stringify({ ...input, payAtCounter: true }),
     });
     revalidatePath('/parcels');
     revalidatePath('/parcels/labels');

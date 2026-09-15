@@ -55,8 +55,9 @@ type bookParcelRequest struct {
 	// the booking surface offers a walk-in choice (see
 	// GET /v1/parcels/stations). Empty means the historical default.
 	OriginMethod string `json:"originMethod"`
-	// PayAtCounter — see dbx.BookParcelInput's own comment. The pilot's
-	// walk-in flow only; dbx refuses it on any other origin method.
+	// PayAtCounter — see dbx.BookParcelInput's own comment. No online
+	// price or payment for this booking; settled in person, whichever
+	// origin method it was booked with.
 	PayAtCounter bool `json:"payAtCounter"`
 
 	// LengthCm/WidthCm/HeightCm — measured at a counter, for the
@@ -141,7 +142,22 @@ func (s *Server) handleBookParcel(c *gin.Context) {
 	// it themselves. It also now reaches the receiver automatically by
 	// SMS at pickup (see notify.ParcelInTransitToYou), but showing it
 	// here lets the sender relay it proactively too.
-	c.JSON(http.StatusOK, gin.H{"parcelId": parcelID, "code": code, "deliveryCode": deliveryCode, "status": "DRAFT_PENDING_PAYMENT"})
+	status := "DRAFT_PENDING_PAYMENT"
+	if req.PayAtCounter {
+		// dbx.BookParcel lands this straight in BOOKED (see
+		// BookParcelInput.PayAtCounter) — a counter booking is already
+		// physically in the building with nothing left to price or pay
+		// online, so waiting for a later status change to say anything
+		// would leave both parties hearing nothing about a parcel that's
+		// already checked in and ready to move. Not sendParcelPaymentConfirmedSms:
+		// that helper no-ops without a priceKes, which PayAtCounter never sets.
+		status = "BOOKED"
+		_ = authsvc.SendSms(req.SenderMsisdn,
+			notify.ParcelCounterBooked(code, req.ReceiverName, req.DestinationLabel), "PARCEL_COUNTER_BOOKED")
+		_ = authsvc.SendSms(req.ReceiverMsisdn,
+			notify.ParcelBookedToYou(code, req.SenderName, req.OriginLabel), "PARCEL_BOOKED_TO_YOU")
+	}
+	c.JSON(http.StatusOK, gin.H{"parcelId": parcelID, "code": code, "deliveryCode": deliveryCode, "status": status})
 }
 
 // handleGetParcelPricing — GET /v1/parcels/pricing?parcelType=. Public

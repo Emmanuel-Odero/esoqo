@@ -1,4 +1,5 @@
 import { requireStaff } from '@/lib/session';
+import { LiveRefresh } from '@/components/LiveRefresh';
 import {
   actionListParcelLabelBatches, actionListParcelLabelRegister,
   actionListParcelLabelStock, actionListParcelOrgs,
@@ -34,6 +35,7 @@ export default async function ParcelLabelsPage(
 
   return (
     <>
+      <LiveRefresh />
       <div className="head">
         <div>
           <h1>Blank parcel labels</h1>

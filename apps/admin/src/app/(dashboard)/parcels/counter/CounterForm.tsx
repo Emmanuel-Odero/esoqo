@@ -222,7 +222,7 @@ export function CounterForm({
         </p>
         <p className="sub" style={{ margin: 0 }}>
           {done.kind === 'booked'
-            ? 'Still a draft until it is priced and paid.'
+            ? 'Booked and checked in — sender and receiver have been texted.'
             : done.kind === 'queued'
               ? 'No connection. This will be sent automatically the moment you are back online — the label is already on the box, so nothing is lost.'
               : 'No booking yet — anyone who scans this code now sees what it is.'}

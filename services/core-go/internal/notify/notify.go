@@ -319,6 +319,34 @@ func ParcelInTransitToYou(code, senderName, originLabel, deliveryCode, carrierNa
 		trunc(senderName), code, trunc(carrierName), deliveryCode), code)
 }
 
+// ParcelCounterBooked — the sender's confirmation that a PayAtCounter
+// booking is live (see dbx.BookParcelInput.PayAtCounter).
+//
+// Deliberately NOT ParcelPaymentConfirmed: that message quotes a price
+// and, when there is one, an M-Pesa receipt — neither exists yet here.
+// priceKes stays NULL until the parcel is weighed and settled in
+// person, so a text claiming a payment "landed" would be as wrong as
+// ParcelCodBooked's own comment warns against.
+func ParcelCounterBooked(code, receiverName, destinationLabel string) string {
+	return withTrack(fmt.Sprintf(
+		"Esoqo Logistics: Parcel %s to %s, %s is booked and checked in. We'll text you once it's dispatched.",
+		code, trunc(receiverName), trunc(destinationLabel)), code)
+}
+
+// ParcelBookedToYou — the receiver's heads-up the moment a parcel is
+// booked PayAtCounter (see dbx.BookParcelInput.PayAtCounter): that path
+// lands straight in BOOKED with nothing left to pay online, so the
+// sender-only convention every other booking path follows (scheduled
+// pickup, COD) would leave the receiver hearing nothing until pickup —
+// sometimes hours after a parcel that's already sitting checked-in at
+// a counter. No deliveryCode here (unlike ParcelInTransitToYou): the
+// receiver doesn't need it until the parcel is actually moving.
+func ParcelBookedToYou(code, senderName, originLabel string) string {
+	return withTrack(fmt.Sprintf(
+		"Esoqo Logistics: %s has booked parcel %s for you from %s. We'll text you when it's on the way.",
+		trunc(senderName), code, trunc(originLabel)), code)
+}
+
 // ParcelDeliveryAttemptFailed — the receiver's side of a failed
 // doorstep attempt (see dbx.RecordDeliveryAttempt). This message is the
 // entire reason FAILED_DELIVERY exists as a status: before it, a

@@ -285,6 +285,14 @@ if (jamiiDomainProvider() === 'console') {
  * for why this can run frequently without risking a duplicate text.
  */
 const DIGEST_INTERVAL_MS = 24 * 60 * 60 * 1000;
+// setInterval alone only fires *after* the first full interval elapses —
+// on a platform that restarts the process on every deploy (routine here),
+// a 24h timer can go a long time without ever completing one full run,
+// so the digest silently never sends. Idempotent by day-count match (see
+// this function's own comment), so an immediate run at boot is safe.
+runContributionGapDigest(app.log).catch((e) => {
+  app.log.error({ err: e }, 'contribution-gap digest failed');
+});
 setInterval(() => {
   runContributionGapDigest(app.log).catch((e) => {
     app.log.error({ err: e }, 'contribution-gap digest failed');
