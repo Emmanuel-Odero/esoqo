@@ -323,6 +323,13 @@ services:
         value: https://esoko-app-lvqp.onrender.com
       - key: CORE_API_URL
         value: https://esoko-core.onrender.com
+      # Every /parcels page (list, counter, labels, live dispatch) calls
+      # core-go through adminGo() (see src/lib/go-ticketing.ts), which
+      # falls back to localhost:4100 when this is unset — silently
+      # unreachable in production. Never wired in when the parcels
+      # console shipped; every parcels page 500'd until this was added.
+      - key: CORE_GO_API_URL
+        value: https://esoko-core-go.onrender.com
 
   # ── CECF WordPress — Bedrock + Sage multisite network ──────
   # One Bedrock codebase + one shared MySQL database serves every
