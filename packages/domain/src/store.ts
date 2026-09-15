@@ -313,12 +313,20 @@ export type StockPurchaseFormInput = z.infer<typeof stockPurchaseSchema>;
 export const customerPaymentSchema = z.object({
   amountKes: z.number().positive('Enter an amount above zero').max(10_000_000),
   note: z.string().trim().max(280).optional().or(z.literal('')),
+  /** One token per user intent, so a double-clicked submit records the
+   *  payment once instead of posting a second ledger entry and a second
+   *  settlement. Optional: older clients simply get the old behaviour. */
+  requestId: z.string().uuid().optional(),
 });
 export type CustomerPaymentFormInput = z.infer<typeof customerPaymentSchema>;
 
 export const customerAdjustmentSchema = z.object({
   amountKes: z.number().refine((n) => n !== 0, 'Enter a non-zero amount').refine((n) => Math.abs(n) <= 10_000_000, 'That amount looks too large'),
   note: z.string().trim().min(2, 'Say why you are adjusting this balance').max(280),
+  /** One token per user intent, so a double-clicked submit records the
+   *  payment once instead of posting a second ledger entry and a second
+   *  settlement. Optional: older clients simply get the old behaviour. */
+  requestId: z.string().uuid().optional(),
 });
 export type CustomerAdjustmentFormInput = z.infer<typeof customerAdjustmentSchema>;
 
@@ -328,7 +336,7 @@ export const customerEditSchema = z.object({
 });
 export type CustomerEditFormInput = z.infer<typeof customerEditSchema>;
 
-/** PIN validity (4–6 digits) is checked again in @esoko/auth's hashPin —
+/** PIN validity (4–6 digits) is checked again in @esoqo/auth's hashPin —
  *  this is the form-level check so a bad PIN never round-trips to the
  *  server before the cashier sees why. */
 export const createCashierSchema = z.object({
@@ -345,7 +353,7 @@ export const cashierPinSchema = z.object({
 export type CashierPinFormInput = z.infer<typeof cashierPinSchema>;
 
 /** The public sign-in form — by name, not by picking from a roster. See
- *  the doc comment on getCashierPinHashForSignIn in @esoko/db for why. */
+ *  the doc comment on getCashierPinHashForSignIn in @esoqo/db for why. */
 export const cashierSignInSchema = z.object({
   name: z.string().trim().min(1, 'Enter your name').max(80),
   pin: z.string().regex(/^\d{4,6}$/, 'Enter your PIN'),

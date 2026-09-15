@@ -21,11 +21,22 @@ export * from './donation-notify';
 // reliably resolve a name several `export *` hops deep in this barrel.
 export { donorThankYouSms, adminDonationAlertSms } from './donation-notify';
 export * from './group-alerts-notify';
-export { contributionGapSms } from './group-alerts-notify';
+export {
+  contributionGapSms, groupInviteSms,
+  contributionDeclaredSms, contributionConfirmedSms,
+} from './group-alerts-notify';
+export * from './store-notify';
+export { saleReceiptSms } from './store-notify';
+export * from './sms';
+export { sms, gsmSafe, fit, firstName, smsKes, smsSegments, smsEncoding, smsUnits } from './sms';
 export * from './rich-text';
 export * from './auth';
 export * from './treasury';
 export * from './ticketing';
+export * from './money';
 export * from './errors';
 export * from './env';
+export * from './client-ip';
+export * from './parcel-code';
+export * from './safe-redirect';
 export { appEnv, isProduction, isTestingProduction } from './env';

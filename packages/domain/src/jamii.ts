@@ -124,9 +124,9 @@ export const jamiiPostSchema = z.object({
 export type JamiiPostInput = z.infer<typeof jamiiPostSchema>;
 
 /**
- * A programme's `icon` is an @esoko/ui IconName, never free text — see
+ * A programme's `icon` is an @esoqo/ui IconName, never free text — see
  * that package's Icon.tsx header: "No emoji anywhere in this product."
- * Duplicated here as a plain string list (not imported from @esoko/ui,
+ * Duplicated here as a plain string list (not imported from @esoqo/ui,
  * which is a React component package with no business being a
  * dependency of pure validation) rather than the full IconName union;
  * this is the deliberately-curated subset that reads sensibly next to
@@ -202,7 +202,7 @@ export type JamiiContactInput = z.infer<typeof jamiiContactSchema>;
 /**
  * First step of applying for Our Jamii access: just an identifier, so
  * the form can tell someone "we already have your details" before
- * asking them to fill in anything. See @esoko/db's findJamiiApplicant.
+ * asking them to fill in anything. See @esoqo/db's findJamiiApplicant.
  */
 export const jamiiApplicantCheckSchema = z.object({
   identifier: z.string().trim().min(3, 'Enter your phone number or email'),
@@ -216,20 +216,20 @@ export type JamiiApplicantCheckInput = z.infer<typeof jamiiApplicantCheckSchema>
  * as required only when the Server Action determines it's the
  * brand-new case; see apps/jamii's actionSubmitApplication. Sign-in is
  * granted once a staff member approves this, never automatically — see
- * @esoko/db's approveJamiiInterest and the admin app's /jamii-interest
+ * @esoqo/db's approveJamiiInterest and the admin app's /jamii-interest
  * screen.
  */
 /**
  * Reserved so a group can't "link" a domain we already serve from —
- * esoko.co.ke itself, ourjamii.co.ke (this app's own primary domain),
+ * esoqo.co.ke itself, ourjamii.co.ke (this app's own primary domain),
  * or a bare subdomain of either. Checked case-insensitively against the
  * normalised hostname before it ever reaches Cloudflare.
  */
-export const JAMII_RESERVED_DOMAIN_SUFFIXES = ['esoko.co.ke', 'ourjamii.co.ke'] as const;
+export const JAMII_RESERVED_DOMAIN_SUFFIXES = ['esoqo.co.ke', 'ourjamii.co.ke'] as const;
 
 /**
  * A group's custom domain for their Our Jamii page — see
- * @esoko/db's requestJamiiDomain and apps/jamii's dashboard settings
+ * @esoqo/db's requestJamiiDomain and apps/jamii's dashboard settings
  * "Domain" panel. Deliberately strict: this is the one place a member
  * of the public types a string that later becomes a live DNS/TLS
  * target, so the shape is checked here (client + server, same schema)
@@ -265,10 +265,10 @@ export type RequestJamiiDomainInput = z.infer<typeof requestJamiiDomainSchema>;
 
 /**
  * A visitor writing to one org through its own public Contact page —
- * see @esoko/db's submitJamiiContactMessage and apps/jamii's
+ * see @esoqo/db's submitJamiiContactMessage and apps/jamii's
  * (site)/o/[slug]/contact/actions.ts. Deliberately separate from
  * jamiiInterestSchema below (that's "wants Our Jamii access", reviewed
- * platform-wide by Esoko staff); this is page-scoped and only ever
+ * platform-wide by Esoqo staff); this is page-scoped and only ever
  * read by that page's own team.
  */
 export const jamiiContactMessageSchema = z.object({
