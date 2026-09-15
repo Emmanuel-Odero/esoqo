@@ -1,10 +1,10 @@
-# Esoko Unified Crew Identity — retiring account-less AGENT sessions
+# Esoqo Unified Crew Identity — retiring account-less AGENT sessions
 
 **Status:** proposed · 2026-09-09
 
 ## Context
 
-Every SUBJECT (a person's own Esoko account) already carries one flat,
+Every SUBJECT (a person's own Esoqo account) already carries one flat,
 capability-based profile spanning every domain they've opened with
 `:own` qualifiers — store ownership, group treasury, ticketing-org
 ownership, fleet ownership, and so on (`RolePresets[RoleSubject]`,
@@ -24,7 +24,7 @@ only its scope" — with no way to also be signed in as yourself.
 This was a reasonable tradeoff when AGENT existed to let account-less
 casual staff (a tout picking up a single day's shift) work without
 setting up a personal profile. It no longer fits company strategy:
-**every crew member is expected to hold and have used their own Esoko
+**every crew member is expected to hold and have used their own Esoqo
 account** — partly so they can actually support clients on the product
 they're operating for, partly because an account-less, PIN-only
 identity is also a weaker security boundary than we want for something
@@ -34,7 +34,7 @@ check-in, order fulfillment).
 Two problems follow from collapsing AGENT into SUBJECT naively:
 
 1. **Stolen/unlocked-phone risk.** If org-staff capabilities just sat
-   on the flat `EsokoProfile.capabilities` list like `:own` grants do,
+   on the flat `EsoqoProfile.capabilities` list like `:own` grants do,
    anyone who gets past the lock screen inherits crew powers with zero
    extra friction.
 2. **No kill switch.** An org owner/manager has no way to immediately

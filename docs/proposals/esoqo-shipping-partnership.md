@@ -1,7 +1,7 @@
-# Esoko × Shipping Partner
+# Esoqo × Shipping Partner
 ### Now onboarding shipping partners
 
-**Prepared:** 11 August 2026 · Esoko Commerce
+**Prepared:** 11 August 2026 · Esoqo Commerce
 **For:** Your operations & dispatch team
 **Contact:** emmanuelodero808@gmail.com
 **What's ready:** Shipment API + a shipping-company admin console — built, tested, ready to connect
@@ -10,13 +10,13 @@
 
 ## Join a marketplace that's already trading — and start shipping to buyers who are already there
 
-Esoko already connects verified sellers to paying buyers on a tested registration, checkout and payment system. We're opening the delivery layer to shipping partners now — plug in, and every order that needs a delivery is waiting for your fleet from day one.
+Esoqo already connects verified sellers to paying buyers on a tested registration, checkout and payment system. We're opening the delivery layer to shipping partners now — plug in, and every order that needs a delivery is waiting for your fleet from day one.
 
 ---
 
 ## 1. A proven system, not a pilot idea
 
-Esoko isn't a concept we're pitching alongside you — it's a live registry and marketplace already used by traders, chamas and small businesses across Kenya. Sellers hold verified registrations, run storefronts, and take M-Pesa payment at checkout today. The one piece we're inviting a shipping partner to complete is the last mile — and we're bringing you a seller base and a payment system that are already proven, not ones you have to help us build.
+Esoqo isn't a concept we're pitching alongside you — it's a live registry and marketplace already used by traders, chamas and small businesses across Kenya. Sellers hold verified registrations, run storefronts, and take M-Pesa payment at checkout today. The one piece we're inviting a shipping partner to complete is the last mile — and we're bringing you a seller base and a payment system that are already proven, not ones you have to help us build.
 
 | | |
 |---|---|
@@ -29,7 +29,7 @@ Esoko isn't a concept we're pitching alongside you — it's a live registry and 
 
 ## 2. The opportunity waiting for you
 
-Every day, buyers complete M-Pesa checkout on Esoko storefronts — that part of the system is live, tested and trusted. The only thing standing between a paid order and a delivered one is a shipping partner plugged in at checkout. That's the open lane we're inviting you to fill — not a problem we need help solving, but proven demand ready for your fleet.
+Every day, buyers complete M-Pesa checkout on Esoqo storefronts — that part of the system is live, tested and trusted. The only thing standing between a paid order and a delivered one is a shipping partner plugged in at checkout. That's the open lane we're inviting you to fill — not a problem we need help solving, but proven demand ready for your fleet.
 
 **Today, without a connected shipping partner**
 - Orders complete, but delivery is arranged informally, seller by seller, with no record
@@ -47,7 +47,7 @@ Every day, buyers complete M-Pesa checkout on Esoko storefronts — that part of
 
 ## 3. What's ready for you — the admin console
 
-This isn't a spec we're hoping to build together. It's the same console architecture already running Esoko's own stores and PoS terminals — tested, trusted, and ready to be configured around your fleet from week one.
+This isn't a spec we're hoping to build together. It's the same console architecture already running Esoqo's own stores and PoS terminals — tested, trusted, and ready to be configured around your fleet from week one.
 
 ### Command centre
 The first screen every shift opens.
@@ -111,7 +111,7 @@ Buyers and sellers kept informed, you kept in the loop.
 
 One order, from checkout to your reconciled payout — running today:
 
-1. **Buyer** checks out on a seller's Esoko storefront. M-Pesa STK push confirms payment; delivery address and zone are captured at checkout.
+1. **Buyer** checks out on a seller's Esoqo storefront. M-Pesa STK push confirms payment; delivery address and zone are captured at checkout.
 2. **System** puts the shipment request straight into your queue. No re-typing an order by hand — package details, weight band and delivery zone arrive with it.
 3. **Dispatcher** assigns a rider or route from the command centre. Zone coverage and rider availability decide who's eligible; assignment is one tap.
 4. **Rider** collects from the seller, delivers to the buyer. Status updates at each stage — picked up, in transit, delivered — trigger SMS to both sides.
@@ -133,9 +133,9 @@ One order, from checkout to your reconciled payout — running today:
 
 ## 6. Getting connected
 
-Esoko's checkout, payment and order systems are already live in production — connecting your shipping console isn't a research project, it's wiring three things:
+Esoqo's checkout, payment and order systems are already live in production — connecting your shipping console isn't a research project, it's wiring three things:
 
-- Esoko sends a **shipment request** the moment an order needs delivery
+- Esoqo sends a **shipment request** the moment an order needs delivery
 - Your console sends a **status callback** so the buyer's order page updates in real time
 - A **daily settlement file** keeps the money side reconciled without either team touching a spreadsheet
 
@@ -147,7 +147,7 @@ We can have a pilot zone live within days of a signed agreement.
 
 Onboard your fleet and start receiving live orders.
 
-We're not asking you to help us validate an idea — Esoko's checkout and payments are already proven. Connect your dispatch team to a single pilot zone, and your riders can be picking up real, paid orders within days.
+We're not asking you to help us validate an idea — Esoqo's checkout and payments are already proven. Connect your dispatch team to a single pilot zone, and your riders can be picking up real, paid orders within days.
 
 | | |
 |---|---|
@@ -157,4 +157,4 @@ We're not asking you to help us validate an idea — Esoko's checkout and paymen
 
 ---
 
-*Esoko Commerce — a consented registry and marketplace for Kenya's informal economy. Prepared for discussion; figures illustrative pending pilot data.*
+*Esoqo Commerce — a consented registry and marketplace for Kenya's informal economy. Prepared for discussion; figures illustrative pending pilot data.*

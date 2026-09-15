@@ -1,4 +1,4 @@
-# Group Treasury (multisig chama accounts) & Esoko Payment ID
+# Group Treasury (multisig chama accounts) & Esoqo Payment ID
 
 **Type** · Research + product direction (design doc; implementation spans `packages/db`,
 `services/core`, `services/channels`, `services/ledger`, `apps/app/me`, `apps/admin`)
@@ -7,7 +7,7 @@
 
 This document covers two related asks: (1) a digital treasury for groups (contributions,
 meeting attendance, multisig/time-delayed withdrawals, SMS+dashboard notifications), and
-(2) an **Esoko Payment ID** — a portable payment identity for people and businesses that
+(2) an **Esoqo Payment ID** — a portable payment identity for people and businesses that
 doubles as the data trail for building a financial portfolio (loans, grants). It starts
 from what a chama/table-banking group actually does today, maps that onto primitives
 that already exist in `packages/db/prisma/schema.prisma`, and proposes the gaps.
@@ -56,14 +56,14 @@ pattern are proven in the codebase already, just narrower than needed.
 - **There is existing competition** — Chamasoft, MyChama.app, DigiChama, Postbank's
   M-Chama account (24/7 mobile access via agents/M-Pesa) — meaning the market is proven,
   but none of them sit inside a platform that already has verified Party identity,
-  Enterprise/Store data, and a consent framework. Esoko's differentiation is that group
+  Enterprise/Store data, and a consent framework. Esoqo's differentiation is that group
   treasury data becomes **usable elsewhere on the platform** (loan eligibility, business
   payment ID) rather than living in a silo.
   ([MyChama.app](https://mychama.app/), [Postbank M-Chama](https://postbank.co.ke/m-chama-account/))
 - **PesaLink is moving toward "PesaLink ID"** — instant transfer by phone number or
   national ID instead of account number — and M-Pesa is integrating with it. The
   direction of the entire Kenyan payments market is toward a portable ID as the payment
-  handle instead of a provider-specific account number. An Esoko Payment ID is on-trend,
+  handle instead of a provider-specific account number. An Esoqo Payment ID is on-trend,
   not speculative.
   ([TechCabal: PesaLink wants to be Kenya's payments rail](https://techcabal.com/2025/10/02/pesalink-wants-kenyas-payments-rail/),
   [Techish: M-Pesa/PesaLink integration](https://tech-ish.com/2025/01/21/m-pesa-pesalink-kenya-integration/))
@@ -177,8 +177,8 @@ model GroupTreasuryPolicy {
   contributionCycle      String?  // "weekly" | "monthly" | "custom"
 }
 
-// ── Esoko Payment ID ────────────────────────────────────────────
-model EsokoPaymentId {
+// ── Esoqo Payment ID ────────────────────────────────────────────
+model EsoqoPaymentId {
   partyId    String   @id @db.Uuid
   party      Party    @relation(fields: [partyId], references: [id])
   code       String   @unique   // e.g. "ESK-4471-KE", human-typeable
@@ -270,13 +270,13 @@ without a quorate meeting behind it," others won't.
 6. Execution fires the same "everybody gets a copy" SMS + dashboard notification as any
    other posting, closing the loop with a receipt reference.
 
-## 5 · Esoko Payment ID
+## 5 · Esoqo Payment ID
 
 A short, memorable, verified ID (`ESK-####-KE`) issued once a `Party` has at least
 `ClaimType.MSISDN_VERIFIED` (and, for businesses, ideally `BUSINESS_REGISTERED` or
 `KRA_PIN`) — reusing `Attestation`, not inventing a new verification path. It's usable
 as a payment handle for peer transactions and store checkout the way a PesaLink ID or
-till number is, but it's *Esoko's own*, portable across a person's roles on the platform
+till number is, but it's *Esoqo's own*, portable across a person's roles on the platform
 (individual wallet, business till, chama membership) rather than provider-locked.
 
 The part that answers "help them grow their financial portfolio for loans, grants" is
@@ -298,7 +298,7 @@ in Kenya's savings-group hierarchy and would recognise verified group financial 
 as underwriting signal.
 ([SASRA FAQ](https://www.sasra.go.ke/frequently-asked-questions/))
 
-**The distribution play is two-sided, and Esoko should stay the neutral protocol, not
+**The distribution play is two-sided, and Esoqo should stay the neutral protocol, not
 become a lender.** The pitch to a SASRA-regulated SACCO (e.g. a mid-tier deposit-taking
 SACCO) is verified, consent-based underwriting signal on chama members at effectively
 zero acquisition cost; the pitch to members is that group discipline they already have
@@ -309,7 +309,7 @@ DPA 2019 compliance, just a new purpose value.
 
 Two things this needs that are outside this doc's scope but are real dependencies, not
 footnotes: (1) a **data processing agreement with the partner SACCO** before any
-`GroupCreditInsightSnapshot` is disclosed — a member's `ConsentGrant` authorises Esoko to
+`GroupCreditInsightSnapshot` is disclosed — a member's `ConsentGrant` authorises Esoqo to
 share, it doesn't substitute for the receiving institution's own DPA obligations; (2) a
 **tiered disclosure model** — most lenders will want more than a 0–100 score, so design
 for two consent grains under the same `LOAN_UNDERWRITING` purpose: `SUMMARY`
@@ -366,7 +366,7 @@ of the underlying postings for a specific date range. Never default to raw-ledge
    members, as a lightweight second accountability channel that doesn't require the app.
 10. **Internal lending before external lending** — let a group's own `GROUP_SAVINGS`
     balance and a member's attendance/contribution record support member-to-member loans
-    first (same multisig approval flow, smaller scope), with the Esoko Payment ID
+    first (same multisig approval flow, smaller scope), with the Esoqo Payment ID
     portfolio (§5) as the on-ramp to external SACCO/lender credit once that history
     exists. This sequencing matches how chamas already build trust internally before
     seeking outside capital. It's also the event that unlocks v2 of

@@ -1,11 +1,11 @@
-# Shaping the Esoko estore around Kenya's & Africa's MSMEs
+# Shaping the Esoqo estore around Kenya's & Africa's MSMEs
 
 **Type** · Research + product direction (design doc; implementation lands in `apps/store`)
 **Prepared** · 11 August 2026
 **Status** · Direction agreed — P1 & P2 scoped below
 
 This document records the validated pain points of Kenyan/African micro & small businesses
-(MSMEs), the needs they imply, and the concrete changes they drive on the Esoko estore. It
+(MSMEs), the needs they imply, and the concrete changes they drive on the Esoqo estore. It
 starts from research, then maps every change to the codebase seams where it lands.
 
 ---
@@ -15,7 +15,7 @@ starts from research, then maps every change to the codebase seams where it land
 Kenya's informal economy (jua kali artisans, market vendors, boda operators, table-banking
 chamas) employs the majority of working Kenyans — jua kali alone is >80% of employment.
 Mobile is the viable commerce rail: 66M+ phone connections and 58.3% smartphone penetration
-(Momanyi, IJRVET — Nairobi jua kali study). This is exactly the population Esoko's verified
+(Momanyi, IJRVET — Nairobi jua kali study). This is exactly the population Esoqo's verified
 Party + Enterprise + Store model already targets.
 
 The estore therefore must not copy a Western marketplace playbook (inventory-heavy,
@@ -28,8 +28,8 @@ WhatsApp, on cash, on a phone with patchy signal.
 |---|---|---|---|
 | 1 | **Trust** | Buyers distrust anonymous sellers; marketplace anonymity is a stated e-commerce adoption barrier | CAK E-Commerce Draft Policy; GSMA *E-commerce in Africa* |
 | 2 | **Discovery / visibility** | Marketplaces charge commission and dilute seller visibility; social commerce is where micro-MSMEs actually win orders but stays manual | GSMA *E-commerce in Africa* |
-| 3 | **Payments & cash flow** | Cash-on-delivery preference and manual social payments wreck MSME cash flow; mobile-money rails are the norm buyers and sellers share | GSMA; Esoko already M-Pesa-native |
-| 4 | **Delivery / last mile** | The single biggest operational gap: informal, unrecorded, guessed pricing, no tracking, no proof | CAK; Esoko shipping-partner proposal "today" column |
+| 3 | **Payments & cash flow** | Cash-on-delivery preference and manual social payments wreck MSME cash flow; mobile-money rails are the norm buyers and sellers share | GSMA; Esoqo already M-Pesa-native |
+| 4 | **Delivery / last mile** | The single biggest operational gap: informal, unrecorded, guessed pricing, no tracking, no proof | CAK; Esoqo shipping-partner proposal "today" column |
 | 5 | **Working capital** | Inventory-heavy formalisation failed: Twiga (3rd layoffs, killed Series D), Copia (left Uganda), Sendy — ~$150M burned 2020–21 | ImpactAlpha, *Trouble at Twiga* (Aug 2023) |
 | 6 | **Digital skills & connectivity** | Low digital literacy, uneven infrastructure, low app adoption | CAK; GSMA; IJRVET |
 | 7 | **Fragmented regulation** | Multiple/unclear rules raise compliance cost disproportionately for micro firms | CAK E-Commerce Draft Policy |
@@ -65,7 +65,7 @@ Landing: `packages/domain/src/store.ts`, `apps/store/src/app/s/[slug]/actions.ts
 **C. Trust signals**
 The platform's trust primitive `Attestation` attaches to Parties; `Enterprise.isRegistered`
 and `Store.legalName`/`registrationNumber` (KRA PIN) are collected but never surfaced.
-- "Verified Esoko business" badge when the owning `Enterprise.isRegistered` is true.
+- "Verified Esoqo business" badge when the owning `Enterprise.isRegistered` is true.
 - Business identity block (legal name, registration no.) + county on the storefront story section.
 Landing: `storefront-render.tsx` (pass enterprise), `StorefrontClient.tsx`.
 

@@ -1,10 +1,10 @@
-# Esoko Ticketing — events, tours/travel & transport booking
+# Esoqo Ticketing — events, tours/travel & transport booking
 
 **Status:** v1 shipped · 2026-08-14
 
 ## Context
 
-Esoko wants to onboard event companies, event influencers/promoters,
+Esoqo wants to onboard event companies, event influencers/promoters,
 tour/travel operators, and transport companies (bus/coach/matatu
 SACCOs) to sell and manage tickets on the platform — alongside chamas,
 CECF members and stores that already live here. Customer and admin
@@ -141,7 +141,7 @@ Shipped since: the storefront (`/tickets`, `/tickets/[slug]`,
 `BookingForm`, and its `actions.ts`) moved from `apps/app` to
 `apps/web`, so `localhost:3001` is dashboards-only. `apps/web` already
 carried a thin `/tickets` directory (mirroring `/discover`) and its own
-`lib/session.ts` reading the same `esoko_session` cookie, so the move
+`lib/session.ts` reading the same `esoqo_session` cookie, so the move
 reused both rather than inventing a second session story.
 
 Deliberately still deferred:
