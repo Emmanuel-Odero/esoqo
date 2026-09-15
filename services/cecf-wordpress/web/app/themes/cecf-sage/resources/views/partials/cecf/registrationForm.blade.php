@@ -4,7 +4,7 @@
   App\Providers\CecfRegistrationServiceProvider's `cecf/v1` REST routes
   (resources/js/registration.js does the actual driving). Every field
   name here matches packages/domain/src/cecf-ingest.ts's cecfIngestSchema
-  on the esoko side, so nothing is renamed in transit.
+  on the esoqo side, so nothing is renamed in transit.
 
   Interaction logic lives in code (registration.js), not here — this
   partial is markup and copy only, following the same split the rest of
@@ -173,13 +173,13 @@
       {{-- ── group: fee coverage ───────────────────────────────── --}}
       <fieldset class="fstep" data-step="fee-coverage" data-for="group">
         <h2 class="fh">{{ __('How is the KES 500 registration fee paid?', 'cecf-sage') }}</h2>
-        <p class="fs">{{ __('KES 500 per member. Either the group pays it as one amount now, or each member covers their own — later, from their own Esoko account.', 'cecf-sage') }}</p>
+        <p class="fs">{{ __('KES 500 per member. Either the group pays it as one amount now, or each member covers their own — later, from their own Esoqo account.', 'cecf-sage') }}</p>
         <div class="opts" role="group" data-role="fee-coverage">
           <button type="button" class="opt" data-value="group" aria-pressed="false">
             <span><b>{{ __('The group pays as a team', 'cecf-sage') }}</b><i data-role="team-total">{{ __('One payment now, for every member', 'cecf-sage') }}</i></span>
           </button>
           <button type="button" class="opt" data-value="self" aria-pressed="false">
-            <span><b>{{ __('Each member covers their own', 'cecf-sage') }}</b><i>{{ __('You pay nothing now — members settle KES 500 each from their own Esoko account when they join', 'cecf-sage') }}</i></span>
+            <span><b>{{ __('Each member covers their own', 'cecf-sage') }}</b><i>{{ __('You pay nothing now — members settle KES 500 each from their own Esoqo account when they join', 'cecf-sage') }}</i></span>
           </button>
         </div>
       </fieldset>
@@ -315,7 +315,7 @@
           <ol>
             <li>{{ __('A field officer covering your county will be in touch within five working days.', 'cecf-sage') }}</li>
             <li>{{ __('We go through what you already have, and what is missing.', 'cecf-sage') }}</li>
-            <li>{{ __('Your own Esoko tools — prices, payments, receipts — are ready as soon as you register.', 'cecf-sage') }}</li>
+            <li>{{ __('Your own Esoqo tools — prices, payments, receipts — are ready as soon as you register.', 'cecf-sage') }}</li>
           </ol>
         </div>
       </div>

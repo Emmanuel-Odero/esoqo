@@ -5,7 +5,7 @@
  * exists in the DOM (rendered by Blade), this just shows/hides `.fstep`
  * elements, validates, and calls this site's own `cecf/v1` REST routes
  * (App\Providers\CecfRegistrationServiceProvider), which proxy to
- * esoko's services/core.
+ * esoqo's services/core.
  *
  * State lives in one object rather than re-reading the DOM everywhere,
  * because several answers (who's joining, fee coverage, payment method,
@@ -26,7 +26,7 @@
   // This key holds a full draft (state + every named field except file
   // inputs) so a reload can offer to pick up exactly where it left off,
   // same pattern apps/app/join's own JoinFlow.tsx uses browser-side.
-  const STORAGE_KEY = 'esoko:cecf-reg:v1';
+  const STORAGE_KEY = 'esoqo:cecf-reg:v1';
 
   /** @type {{
    *   who: string|null, step: number,
@@ -508,7 +508,7 @@
    * Runs once, at load, if the browser just came back from a Pesapal
    * card payment (?paid=1 — see form.dataset.returnUrl). Skips straight
    * to /complete with whatever was saved before the redirect; the actual
-   * payment confirmation already happened server-side (esoko's
+   * payment confirmation already happened server-side (esoqo's
    * /webhooks/pesapal/ipn), this is just finishing the registration.
    */
   async function resumeAfterCardPayment() {

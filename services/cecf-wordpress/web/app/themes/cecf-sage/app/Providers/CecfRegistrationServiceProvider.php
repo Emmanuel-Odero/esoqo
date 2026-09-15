@@ -14,22 +14,22 @@ use WP_REST_Response;
  * business, all three. Where CecfEnquiryServiceProvider stored a lead
  * locally in a private `cecf_enquiry` post (never actually wired to a
  * rendered form — nothing posts to it), this is the real thing: every
- * route here is a thin same-origin proxy in front of esoko's
+ * route here is a thin same-origin proxy in front of esoqo's
  * `services/core` `/api/cecf/*` facade (App\Support\CecfApiClient),
- * which is itself a thin proxy over the *same* @esoko/db functions
- * esoko's own /join Server Actions call. No business logic — validation,
+ * which is itself a thin proxy over the *same* @esoqo/db functions
+ * esoqo's own /join Server Actions call. No business logic — validation,
  * duplicate handling, the funnel→Party transaction — is duplicated here;
- * esoko's facade is the authoritative side, this just forwards and
+ * esoqo's facade is the authoritative side, this just forwards and
  * relays its response.
  *
- * The browser's own JS never sees CECF_SERVICE_SECRET or esoko's core
+ * The browser's own JS never sees CECF_SERVICE_SECRET or esoqo's core
  * URL directly — it only ever calls this site's own `cecf/v1` routes,
  * same-origin, no CORS, no secret exposure. This class holds the secret
  * server-side via CecfApiClient.
  *
  * Public, unauthenticated routes by design (a registrant has no WP
  * account) — same posture as CecfEnquiryServiceProvider's REST route.
- * Rate limiting lives on esoko's own core service (120 req/min,
+ * Rate limiting lives on esoqo's own core service (120 req/min,
  * services/core/src/index.ts), not duplicated here.
  */
 class CecfRegistrationServiceProvider extends ServiceProvider
@@ -116,7 +116,7 @@ class CecfRegistrationServiceProvider extends ServiceProvider
     }
 
     /* ── handlers — each is a thin forward, response shape mirrors
-     *    esoko's own {ok, ...} so registration.js has one error path ── */
+     *    esoqo's own {ok, ...} so registration.js has one error path ── */
 
     public function start(WP_REST_Request $request): WP_REST_Response|WP_Error
     {
@@ -161,7 +161,7 @@ class CecfRegistrationServiceProvider extends ServiceProvider
      * given registrant is stuck, not just that they're STARTED. Never
      * something the wizard should block on, so unlike every other
      * handler here this deliberately doesn't validate $body first: a
-     * malformed or missing step just gets forwarded as-is and esoko's
+     * malformed or missing step just gets forwarded as-is and esoqo's
      * own {ok:false} response comes back, which registration.js already
      * swallows (see reportProgress()'s catch-and-ignore).
      */
@@ -242,8 +242,8 @@ class CecfRegistrationServiceProvider extends ServiceProvider
     }
 
     /**
-     * Every esoko response already carries {ok: bool, ...}; this just
-     * maps esoko's own HTTP status onto the WP_REST_Response instead of
+     * Every esoqo response already carries {ok: bool, ...}; this just
+     * maps esoqo's own HTTP status onto the WP_REST_Response instead of
      * always answering 200, so the browser's fetch() error handling
      * (registration.js) can rely on response.ok the normal way.
      *
@@ -255,7 +255,7 @@ class CecfRegistrationServiceProvider extends ServiceProvider
         unset($result['_status']);
 
         if ($status === 0) {
-            $status = 502; // esoko's core service was unreachable
+            $status = 502; // esoqo's core service was unreachable
         }
 
         return new WP_REST_Response($result, $status);
