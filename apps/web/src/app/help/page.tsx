@@ -1,5 +1,5 @@
 import type { Metadata } from 'next';
-import { Icon, type IconName } from '@esoko/ui';
+import { Icon, type IconName } from '@esoqo/ui';
 import { SectionNav } from '@/components/Chrome';
 import { ScrollSpy } from '@/components/ScrollSpy';
 
@@ -32,7 +32,7 @@ const SMS: [string, string][] = [
   ['VYETI', 'Your certificates and when each expires'],
   ['RUHUSA', 'Who can currently see your record'],
   ['SIMAMA', 'Freeze your account immediately'],
-  ['STOP', 'Stop all SMS from Esoko'],
+  ['STOP', 'Stop all SMS from Esoqo'],
 ];
 
 export default function HelpPage() {
@@ -44,7 +44,7 @@ export default function HelpPage() {
       <section className="phead">
         <div className="wrap">
           <p className="kicker">Help</p>
-          <h1>Using Esoko from any phone</h1>
+          <h1>Using Esoqo from any phone</h1>
           <p className="lead">
             The complete menu, the SMS commands, and what to do if your phone is lost. Print the
             card below and keep it where you trade.
@@ -65,7 +65,7 @@ export default function HelpPage() {
             Dial <strong style={{ color: 'var(--navy)' }}>*483*77#</strong>. Press <strong>0</strong>{' '}
             to go back and <strong>00</strong> to return to the start, from anywhere in the menu.
             A session closes after two minutes — if it closes while you are part-way through, dial
-            again and Esoko puts you back where you were.
+            again and Esoqo puts you back where you were.
           </p>
 
           <div className="tbl">
@@ -93,7 +93,7 @@ export default function HelpPage() {
             <div><h2>SMS commands</h2></div>
           </div>
           <p className="lead" style={{ marginBottom: 18 }}>
-            Send any of these to <strong style={{ color: 'var(--navy)' }}>40277</strong>. Esoko
+            Send any of these to <strong style={{ color: 'var(--navy)' }}>40277</strong>. Esoqo
             never sends you a link, and will never ask you to tap one.
           </p>
           <div className="tbl">
@@ -121,8 +121,8 @@ export default function HelpPage() {
           <div className="grid g3">
             {([
               ['ban', 'r', '1 · Freeze it now', 'From any phone, send SIMAMA to 40277 with your registered number, or call 0709 000 000. Your balance is frozen straight away. Nobody can move money while it is frozen.'],
-              ['phone', 'b', '2 · Replace the line', 'Get a replacement SIM with the same number from your operator. Your Esoko record is tied to the number, not the handset.'],
-              ['lock', 'g', '3 · Set a new PIN', 'Dial *483*77# and follow the prompts. Esoko asks questions only you can answer. A field officer can help in person if that fails.'],
+              ['phone', 'b', '2 · Replace the line', 'Get a replacement SIM with the same number from your operator. Your Esoqo record is tied to the number, not the handset.'],
+              ['lock', 'g', '3 · Set a new PIN', 'Dial *483*77# and follow the prompts. Esoqo asks questions only you can answer. A field officer can help in person if that fails.'],
             ] as const).map(([icon, tone, title, body]) => (
               <div className="card" key={title} style={tone === 'r' ? { borderLeft: '4px solid var(--red)' } : undefined}>
                 <span className={`icbox icbox-${tone}`} style={{ marginBottom: 12 }}>
@@ -137,10 +137,10 @@ export default function HelpPage() {
           <div className="notice" style={{ marginTop: 20 }}>
             <span className="icbox icbox-r"><Icon name="alert-triangle" size={19} /></span>
             <div>
-              <h2>Esoko will never ask you for your PIN</h2>
+              <h2>Esoqo will never ask you for your PIN</h2>
               <p>
                 Not by call, not by SMS, not by anyone claiming to be staff or a field officer. If
-                someone asks, they are not from Esoko. Hang up and call 0709 000 000.
+                someone asks, they are not from Esoqo. Hang up and call 0709 000 000.
               </p>
             </div>
           </div>
@@ -157,8 +157,8 @@ export default function HelpPage() {
             {([
               ['phone-call', 'Call', '0709 000 000 · 8am to 6pm, Monday to Saturday'],
               ['alert-triangle', 'Report fraud', '0709 000 000 · any time'],
-              ['scales', 'Complaints', 'malalamiko@esoko.co.ke'],
-              ['shield', 'Your data', 'dpo@esoko.co.ke · reply within 14 days'],
+              ['scales', 'Complaints', 'malalamiko@esoqo.co.ke'],
+              ['shield', 'Your data', 'dpo@esoqo.co.ke · reply within 14 days'],
             ] as const).map(([icon, label, value]) => (
               <div className="tr" key={label} style={{ gridTemplateColumns: '220px 1fr' }}>
                 <strong className="ib"><Icon name={icon} size={17} />{label}</strong>
@@ -183,7 +183,7 @@ export default function HelpPage() {
           <div className="card" style={{ border: '2px solid var(--navy)' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 20, borderBottom: '2px solid var(--navy)', paddingBottom: 14, marginBottom: 16 }}>
               <div>
-                <h3 style={{ fontSize: '1.3rem' }}>ESOKO · *483*77#</h3>
+                <h3 style={{ fontSize: '1.3rem' }}>ESOQO · *483*77#</h3>
                 <p className="sub" style={{ margin: '2px 0 0', fontSize: '.87rem' }}>
                   Bei, pesa, kikundi na vyeti · simu yoyote
                 </p>
@@ -211,8 +211,8 @@ export default function HelpPage() {
               </div>
             </div>
             <p style={{ fontSize: '.83rem', margin: '16px 0 0', paddingTop: 12, borderTop: '1px solid var(--line)', color: 'var(--tx-2)' }}>
-              <strong style={{ color: 'var(--red)' }}>Esoko haitakuuliza PIN yako kamwe.</strong>{' '}
-              Esoko will never ask you for your PIN. Kujiunga ni bure · joining is free.
+              <strong style={{ color: 'var(--red)' }}>Esoqo haitakuuliza PIN yako kamwe.</strong>{' '}
+              Esoqo will never ask you for your PIN. Kujiunga ni bure · joining is free.
             </p>
           </div>
         </div>

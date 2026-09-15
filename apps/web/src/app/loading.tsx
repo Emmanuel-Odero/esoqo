@@ -1,4 +1,4 @@
-import { SkeletonCard } from '@esoko/ui';
+import { SkeletonCard } from '@esoqo/ui';
 
 export default function Loading() {
   return (

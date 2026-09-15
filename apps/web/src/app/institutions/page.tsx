@@ -1,10 +1,10 @@
 import type { Metadata } from 'next';
-import { Icon, type IconName } from '@esoko/ui';
-import { anonCtx, listIssuers } from '@esoko/db';
+import { Icon, type IconName } from '@esoqo/ui';
+import { anonCtx, listIssuers } from '@esoqo/db';
 
 export const metadata: Metadata = {
   title: 'Institutions',
-  description: 'Bodies and institutions connected to Esoko, and what each requires.',
+  description: 'Bodies and institutions connected to Esoqo, and what each requires.',
 };
 export const dynamic = 'force-dynamic';
 
@@ -23,7 +23,7 @@ export default async function InstitutionsPage() {
           <p className="kicker">Institutions</p>
           <h1>Who is connected, and what each one asks for</h1>
           <p className="lead">
-            Lenders, insurers, buyers and government bodies that work with Esoko records — what
+            Lenders, insurers, buyers and government bodies that work with Esoqo records — what
             they offer, what they require before they will consider you, and exactly what they
             would see.
           </p>
@@ -37,7 +37,7 @@ export default async function InstitutionsPage() {
             <p>
               <strong>Requirements, not approvals.</strong> Meeting what is listed here means an
               institution will consider your application. It does not mean it will be granted, and
-              Esoko does not decide.
+              Esoqo does not decide.
             </p>
           </div>
 
@@ -88,7 +88,7 @@ export default async function InstitutionsPage() {
               <p className="sub" style={{ fontSize: '.93rem', marginBottom: 12 }}>
                 If you lend, insure, buy from or license small enterprises in Kenya and want to work
                 with verified, consented records, write to{' '}
-                <strong style={{ color: 'var(--navy)' }}>partners@esoko.co.ke</strong>.
+                <strong style={{ color: 'var(--navy)' }}>partners@esoqo.co.ke</strong>.
               </p>
               <p className="sub" style={{ fontSize: '.93rem', margin: 0 }}>
                 We will ask what you need to see, what you require, and how you would send outcomes

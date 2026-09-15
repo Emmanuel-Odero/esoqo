@@ -1,7 +1,7 @@
 'use client';
 import { useState } from 'react';
-import { Icon } from '@esoko/ui';
-import { useAnnounce } from '@esoko/a11y';
+import { Icon } from '@esoqo/ui';
+import { useAnnounce } from '@esoqo/a11y';
 import { lookupCertificate, type VerifyResult } from './actions';
 
 export function VerifyForm() {
@@ -69,7 +69,7 @@ export function VerifyForm() {
             </h2>
             <p style={{ margin: 0, color: '#7A2320', fontSize: '.93rem' }}>
               Check each character and try again. If the code is correct as printed, this
-              certificate was not issued through Esoko.
+              certificate was not issued through Esoqo.
             </p>
           </div>
         )}

@@ -1,12 +1,12 @@
 import type { Metadata } from 'next';
-import { Icon } from '@esoko/ui';
+import { Icon } from '@esoqo/ui';
 import { TicketBrowser } from './TicketBrowser';
 
 const CORE_GO_URL = process.env.CORE_GO_API_URL ?? 'http://localhost:4100';
 
 export const metadata: Metadata = {
   title: 'Events & transport',
-  description: 'Events, tours and transport companies selling tickets on Esoko — browse and book directly.',
+  description: 'Events, tours and transport companies selling tickets on Esoqo — browse and book directly.',
 };
 export const dynamic = 'force-dynamic';
 
@@ -25,7 +25,7 @@ interface GoListingSummary {
 
 /**
  * The ticketing equivalent of /discover — a public directory, same job
- * for a fourth kind of Esoko business (event companies, tour operators,
+ * for a fourth kind of Esoqo business (event companies, tour operators,
  * transport companies) that /discover already does for shops. Unlike
  * /discover (which links out to apps/store for checkout), booking
  * itself also happens here — localhost:3000/tickets/[slug] — since
@@ -43,9 +43,9 @@ export default async function TicketsDirectory() {
       <section className="phead">
         <div className="wrap">
           <p className="kicker">Discover</p>
-          <h1>Events &amp; transport on Esoko</h1>
+          <h1>Events &amp; transport on Esoqo</h1>
           <p className="lead">
-            Every listing here belongs to a real, registered Esoko business — an event company,
+            Every listing here belongs to a real, registered Esoqo business — an event company,
             tour operator, or transport company. Book directly, pay by M-Pesa, and get a QR ticket
             on your account.
           </p>
@@ -58,7 +58,7 @@ export default async function TicketsDirectory() {
             <div className="note n-blue">
               <span className="icbox icbox-b icbox-sm"><Icon name="info" size={16} /></span>
               <p>
-                No events or trips are published yet. Organisers open theirs from their Esoko
+                No events or trips are published yet. Organisers open theirs from their Esoqo
                 account — once they do, it appears here automatically.
               </p>
             </div>

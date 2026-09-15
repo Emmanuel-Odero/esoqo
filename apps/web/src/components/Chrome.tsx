@@ -3,7 +3,7 @@
 import * as React from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { Icon } from '@esoko/ui';
+import { Icon } from '@esoqo/ui';
 
 /** Nav is tools, not arguments — per the page-architecture work. The
  *  logo already links home, but that's an icon-only affordance; "Home"
@@ -33,8 +33,8 @@ export function Logo({ inverse = false }: { inverse?: boolean }) {
           <path d="M 38 62 L 8 45" />
         </g>
       </svg>
-      <span className="w">soko</span>
-      <span className="sr-only">Esoko home</span>
+      <span className="w">soqo</span>
+      <span className="sr-only">Esoqo home</span>
     </span>
   );
 }
@@ -55,7 +55,7 @@ export function Header() {
     <header>
       <div className="wrap">
         <div className="hd">
-          <Link href="/" aria-label="Esoko home"><Logo /></Link>
+          <Link href="/" aria-label="Esoqo home"><Logo /></Link>
           <nav className="hdnav" id="nav" aria-label="Main">
             {NAV.map(([href, label]) => {
               // /counties also covers /counties/[slug] — a nested page is
@@ -144,14 +144,14 @@ export function Footer() {
           </div>
           <div>
             <h2>Trust</h2>
-            <Link href="/trust">Who runs Esoko</Link>
+            <Link href="/trust">Who runs Esoqo</Link>
             <Link href="/trust#data">Your data</Link>
             <Link href="/trust#fraud">Report fraud</Link>
             <Link href="/trust#complaints">Complaints</Link>
           </div>
         </div>
         <div className="fb">
-          <span>Esoko Limited · Nairobi, Kenya · Operated alongside the Child &amp; Elder Care Foundation</span>
+          <span>Esoqo Limited · Nairobi, Kenya · Operated alongside the Child &amp; Elder Care Foundation</span>
           <span className="mono">Registered data controller · ODPC/REG/[number]</span>
         </div>
       </div>

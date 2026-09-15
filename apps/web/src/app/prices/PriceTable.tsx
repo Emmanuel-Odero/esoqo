@@ -1,7 +1,7 @@
 'use client';
 import { useMemo, useState } from 'react';
-import { Icon, type IconName } from '@esoko/ui';
-import { useAnnounce } from '@esoko/a11y';
+import { Icon, type IconName } from '@esoqo/ui';
+import { useAnnounce } from '@esoqo/a11y';
 
 export interface Row {
   commodity: string; unit: string; category: string;

@@ -1,10 +1,14 @@
 import type { Metadata } from 'next';
-import { Icon } from '@esoko/ui';
-import { actionListParcelPricing, actionListParcelZones } from './actions';
+import { Icon } from '@esoqo/ui';
+import {
+  actionGetCodPolicy, actionListParcelAgents, actionListParcelPricing, actionListParcelZones,
+  actionListWalkInStations,
+} from './actions';
 import { SendParcelForm } from './SendParcelForm';
+import { TrackParcelForm } from './track/TrackParcelForm';
 
 export const metadata: Metadata = {
-  title: 'Send a parcel — Esoko',
+  title: 'Send a parcel — Esoqo',
   description: 'Get a real price by weight and destination, pay by M-Pesa, and track it by handoff — no account needed.',
 };
 export const dynamic = 'force-dynamic';
@@ -20,9 +24,12 @@ export const dynamic = 'force-dynamic';
  * actually calls them without a session.
  */
 export default async function SendParcelPage() {
-  const [pricing, zones] = await Promise.all([
+  const [pricing, zones, agents, codPolicy, stations] = await Promise.all([
     actionListParcelPricing(),
     actionListParcelZones(),
+    actionListParcelAgents(),
+    actionGetCodPolicy(),
+    actionListWalkInStations(),
   ]);
 
   return (
@@ -61,7 +68,22 @@ export default async function SendParcelPage() {
             </div>
           </div>
 
-          <SendParcelForm pricing={pricing} zones={zones} />
+          <SendParcelForm pricing={pricing} zones={zones} agents={agents} codPolicy={codPolicy} stations={stations} />
+        </div>
+      </section>
+
+      {/* Already sent one? The full tracker (code lookup, camera scan,
+          and — for signed-in station staff — the receive/scan tools)
+          lives right here too, not just at the separate /send-parcel/track
+          URL, so nobody has to leave this page to follow a parcel they
+          just booked. */}
+      <section className="sec" style={{ paddingTop: 0 }}>
+        <div className="wrap" style={{ maxWidth: 640 }}>
+          <h2 style={{ marginBottom: 4 }}>Track a parcel</h2>
+          <p className="sub" style={{ margin: '0 0 16px' }}>
+            Already have a code? Follow it here — no account needed.
+          </p>
+          <TrackParcelForm />
         </div>
       </section>
     </>
