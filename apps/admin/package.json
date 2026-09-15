@@ -1,5 +1,5 @@
 {
-  "name": "@esoko/admin",
+  "name": "@esoqo/admin",
   "version": "0.1.0",
   "private": true,
   "scripts": {
@@ -10,12 +10,12 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
-    "@esoko/a11y": "workspace:*",
-    "@esoko/auth": "workspace:*",
-    "@esoko/db": "workspace:*",
-    "@esoko/domain": "workspace:*",
-    "@esoko/payments": "workspace:*",
-    "@esoko/ui": "workspace:*",
+    "@esoqo/a11y": "workspace:*",
+    "@esoqo/auth": "workspace:*",
+    "@esoqo/db": "workspace:*",
+    "@esoqo/domain": "workspace:*",
+    "@esoqo/payments": "workspace:*",
+    "@esoqo/ui": "workspace:*",
     "jsbarcode": "^3.12.3",
     "leaflet": "^1.9.4",
     "next": "^16.2.7",
@@ -27,7 +27,7 @@
     "server-only": "^0.0.1"
   },
   "devDependencies": {
-    "@esoko/config": "workspace:*",
+    "@esoqo/config": "workspace:*",
     "@types/leaflet": "^1.9.14",
     "@types/node": "^22.10.2",
     "@types/qrcode": "^1.5.6",

@@ -1,13 +1,16 @@
 'use client';
 
 import { useState, useTransition } from 'react';
+import Link from 'next/link';
+import type { Route } from 'next';
 import { useRouter } from 'next/navigation';
-import { Icon } from '@esoko/ui';
-import { useAnnounce } from '@esoko/a11y';
+import { Icon } from '@esoqo/ui';
+import { useAnnounce } from '@esoqo/a11y';
 import {
   actionAddTeamRosterMember, actionUpdateTeamRosterMember, actionRenameCourierTeam,
   actionAddCourierFleet, actionAssignParcelsToFleet, actionCompleteCourierTrip,
-  type CourierTeamMemberRow, type CourierFleetRow,
+  actionBoardParcelOntoTrip, actionCheckTripDispatched,
+  type CourierTeamMemberRow, type CourierFleetRow, type LeftBehindParcelRow,
 } from '../../actions';
 import { RoleField } from '../RoleField';
 
@@ -249,6 +252,17 @@ function FleetCard({ fleet, canManage }: { fleet: CourierFleetRow; canManage: bo
   const router = useRouter();
   const announce = useAnnounce();
 
+  // Scan-to-board: the codes just assigned are exactly the pile a
+  // handler is about to walk out and load — checked off one at a time
+  // as each is actually scanned onto the vehicle, plus a manual entry
+  // for a code assigned in an earlier batch. boarded is reset whenever
+  // a fresh assign lands a new pile to check.
+  const [boarded, setBoarded] = useState<Set<string>>(new Set());
+  const [boardInput, setBoardInput] = useState('');
+  const [boardingCode, setBoardingCode] = useState<string | null>(null);
+  const [dispatching, startDispatching] = useTransition();
+  const [dispatchResult, setDispatchResult] = useState<{ boardedCount: number; leftBehind: LeftBehindParcelRow[] } | null>(null);
+
   function assign() {
     const list = codes.split(/[\s,]+/).map((c) => c.trim().toUpperCase()).filter(Boolean);
     if (list.length === 0) { setError('Enter at least one parcel code.'); return; }
@@ -258,7 +272,39 @@ function FleetCard({ fleet, canManage }: { fleet: CourierFleetRow; canManage: bo
       const result = await actionAssignParcelsToFleet(fleet.ID, list);
       if (!result.ok) { setError(result.error); return; }
       setAssignedResult(result.assigned);
+      setBoarded(new Set());
+      setDispatchResult(null);
       setCodes('');
+      router.refresh();
+    });
+  }
+
+  function board(code: string) {
+    if (!fleet.OpenTripID || boarded.has(code)) return;
+    setError(null);
+    setBoardingCode(code);
+    startTransition(async () => {
+      const result = await actionBoardParcelOntoTrip(fleet.OpenTripID!, code);
+      setBoardingCode(null);
+      if (!result.ok) { setError(result.error); return; }
+      setBoarded((prev) => new Set(prev).add(code));
+      setBoardInput('');
+    });
+  }
+
+  function checkDispatched() {
+    if (!fleet.OpenTripID) return;
+    setError(null);
+    startDispatching(async () => {
+      const result = await actionCheckTripDispatched(fleet.OpenTripID!);
+      if (!result.ok) { setError(result.error); return; }
+      setDispatchResult({ boardedCount: result.boardedCount, leftBehind: result.leftBehind });
+      announce(
+        result.leftBehind.length > 0
+          ? `${result.leftBehind.length} parcel${result.leftBehind.length === 1 ? '' : 's'} left behind — the manager's been texted`
+          : `Fleet ${fleet.FleetNumber} departed clean — team notified`,
+        'assertive',
+      );
       router.refresh();
     });
   }
@@ -286,10 +332,18 @@ function FleetCard({ fleet, canManage }: { fleet: CourierFleetRow; canManage: bo
       </div>
 
       {canManage && (
-        <div style={{ display: 'flex', gap: 8, marginTop: 8 }}>
+        <div style={{ display: 'flex', gap: 8, marginTop: 8, flexWrap: 'wrap' }}>
           <button className="btn btn-o btn-sm" onClick={() => setAssigning((v) => !v)}>
             {assigning ? 'Close' : 'Assign parcels'}
           </button>
+          {/* The run sheet the driver signs before leaving. Offered
+              whenever there is a loaded trip, and next to "assign"
+              because printing it is the last step of loading. */}
+          {fleet.OpenTripID && (fleet.AssignedOpen > 0) && (
+            <Link className="btn btn-o btn-sm" href={`/parcels/trips/${fleet.OpenTripID}/manifest` as Route}>
+              <Icon name="print" size={13} />Run sheet
+            </Link>
+          )}
           {fleet.OpenTripID && (fleet.AssignedOpen > 0) && (
             <button className="btn btn-p btn-sm" onClick={complete} disabled={completing}>
               {completing ? 'Completing…' : 'Mark trip complete'}
@@ -302,7 +356,7 @@ function FleetCard({ fleet, canManage }: { fleet: CourierFleetRow; canManage: bo
         <div style={{ marginTop: 10 }}>
           <textarea value={codes} onChange={(e) => setCodes(e.target.value)} rows={3}
             placeholder="PKG-XXXXXX, PKG-YYYYYY — one per line or comma-separated"
-            style={{ ...FIELD, width: '100%', fontFamily: 'monospace' }} />
+            style={{ ...FIELD, width: '100%', fontFamily: 'var(--font-mono)' }} />
           <button className="btn btn-p btn-sm" style={{ marginTop: 8 }} onClick={assign} disabled={pending}>
             {pending ? 'Assigning…' : 'Assign to this fleet'}
           </button>
@@ -314,6 +368,66 @@ function FleetCard({ fleet, canManage }: { fleet: CourierFleetRow; canManage: bo
           {assignedResult.length > 0 && `: ${assignedResult.join(', ')}`}.
         </p>
       )}
+
+      {/* Scan-to-board: check each assigned code off as it's actually
+          loaded, then "Done checking" diffs assigned against boarded —
+          see dbx.CheckTripDispatched. Only shown once there's something
+          assigned to check against. */}
+      {canManage && fleet.OpenTripID && assignedResult && assignedResult.length > 0 && !dispatchResult && (
+        <div style={{ marginTop: 12, borderTop: '1px solid var(--line)', paddingTop: 10 }}>
+          <strong style={{ display: 'block', marginBottom: 6, fontSize: '.85rem' }}>
+            Board onto the vehicle ({boarded.size}/{assignedResult.length})
+          </strong>
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginBottom: 8 }}>
+            {assignedResult.map((code) => {
+              const done = boarded.has(code);
+              return (
+                <button key={code} type="button" className={`btn btn-sm ${done ? 'btn-p' : 'btn-o'}`}
+                  disabled={done || boardingCode === code} onClick={() => board(code)}>
+                  {done ? '✓ ' : ''}{code}
+                </button>
+              );
+            })}
+          </div>
+          <div className="row" style={{ gap: 6, marginBottom: 8 }}>
+            <input className="mono" value={boardInput} placeholder="Scan/type a code from an earlier batch"
+              onChange={(e) => setBoardInput(e.target.value.toUpperCase())}
+              onKeyDown={(e) => e.key === 'Enter' && boardInput.trim() && board(boardInput.trim())}
+              style={{ ...FIELD, flex: 1, marginTop: 0 }} />
+            <button className="btn btn-o btn-sm" disabled={!boardInput.trim()} onClick={() => board(boardInput.trim())}>
+              Board
+            </button>
+          </div>
+          <button className="btn btn-p btn-sm" onClick={checkDispatched} disabled={dispatching}>
+            {dispatching ? 'Checking…' : 'Done checking — dispatch'}
+          </button>
+        </div>
+      )}
+
+      {dispatchResult && (
+        <div style={{ marginTop: 12, borderTop: '1px solid var(--line)', paddingTop: 10 }}>
+          {dispatchResult.leftBehind.length === 0 ? (
+            <p className="sub" style={{ margin: 0, color: 'var(--green)' }}>
+              All {dispatchResult.boardedCount} parcel{dispatchResult.boardedCount === 1 ? '' : 's'} boarded and dispatched — team notified.
+            </p>
+          ) : (
+            <>
+              <p className="sub" style={{ margin: '0 0 6px', color: 'var(--amber)' }}>
+                {dispatchResult.leftBehind.length} left behind — the manager's been texted.
+              </p>
+              <table className="tbl">
+                <thead><tr><th>Code</th><th>Destination</th></tr></thead>
+                <tbody>
+                  {dispatchResult.leftBehind.map((lb) => (
+                    <tr key={lb.code}><td className="mono">{lb.code}</td><td>{lb.destinationLabel}</td></tr>
+                  ))}
+                </tbody>
+              </table>
+            </>
+          )}
+        </div>
+      )}
+
       {error && (
         <p role="alert" style={{ color: 'var(--red)', fontSize: '.85rem', display: 'flex', gap: 6, alignItems: 'center', margin: '8px 0 0' }}>
           <Icon name="alert-circle" size={14} />{error}

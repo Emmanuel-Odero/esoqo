@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useTransition } from 'react';
-import { Icon } from '@esoko/ui';
+import { Icon } from '@esoqo/ui';
 import {
   actionFindTenantByPhone, actionAddTenant, actionEndTenancy, actionSetMallSlug,
 } from '../actions';

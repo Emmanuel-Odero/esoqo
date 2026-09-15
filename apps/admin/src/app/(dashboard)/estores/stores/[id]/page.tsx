@@ -1,6 +1,6 @@
 import Link from 'next/link';
-import { Icon } from '@esoko/ui';
-import { getStoreDetailForStaff, getStoreAnalyticsForStaff, listCashiers } from '@esoko/db';
+import { Icon } from '@esoqo/ui';
+import { getStoreDetailForStaff, getStoreAnalyticsForStaff, listCashiers } from '@esoqo/db';
 import { requireStaff } from '@/lib/session';
 import { StoreDetailPanel } from './StoreDetailPanel';
 import { CashiersPanel } from './CashiersPanel';

@@ -1,6 +1,6 @@
-import { Icon } from '@esoko/ui';
-import { listGroups, DOCUMENT_KINDS, GROUP_KINDS } from '@esoko/db';
-import { COUNTIES } from '@esoko/domain';
+import { Icon } from '@esoqo/ui';
+import { listGroups, DOCUMENT_KINDS, GROUP_KINDS } from '@esoqo/db';
+import { COUNTIES } from '@esoqo/domain';
 import { requireStaff } from '@/lib/session';
 import { RankedBarChart, DonutChart } from '@/components/charts';
 import { GroupManager } from './GroupManager';
@@ -65,7 +65,7 @@ export default async function GroupsPage({
             </p>
             <DonutChart size={150} centerLabel={{ value: String(groups.length), sub: 'groups' }} segments={[
               { label: 'CECF', value: groups.filter((g) => g.party.sourceSystem === 'CECF').length, color: 'var(--amber)' },
-              { label: 'Esoko app', value: groups.filter((g) => g.party.sourceSystem === 'ESOKO').length, color: 'var(--green-2)' },
+              { label: 'Esoqo app', value: groups.filter((g) => g.party.sourceSystem === 'ESOKO').length, color: 'var(--green-2)' },
             ].filter((s) => s.value > 0)} />
           </div>
         </div>

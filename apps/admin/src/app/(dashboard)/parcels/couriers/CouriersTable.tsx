@@ -1,7 +1,7 @@
 'use client';
 
 import { Fragment, useEffect, useState, useTransition } from 'react';
-import { Icon } from '@esoko/ui';
+import { Icon } from '@esoqo/ui';
 import {
   actionOnboardCourier, actionSearchOnboardCandidates, actionSetCourierStatus, actionGetCourierPerformance,
   actionAddCourierTeamMember, type ParcelCourierRow, type CollectorLite, type CourierPerformance,
@@ -158,10 +158,10 @@ function OnboardPanel({ onClose }: { onClose: () => void }) {
 const FIELD: React.CSSProperties = { display: 'block', padding: '6px 8px', border: '1.5px solid var(--line)', borderRadius: 6, marginTop: 2 };
 
 // The "just add them" path — a real courier team member who's never
-// touched the Esoko app, entered straight from name/phone/vehicle
+// touched the Esoqo app, entered straight from name/phone/vehicle
 // instead of searching for an existing account (see OnboardPanel
 // above, which stays the right tool for someone already in the
-// system). core-go texts them their Esoko ID the moment this succeeds
+// system). core-go texts them their Esoqo ID the moment this succeeds
 // — see actionAddCourierTeamMember's own comment — so a wrong number
 // here shows up as "they never got the text", not silently.
 function AddCourierPanel({ onClose }: { onClose: () => void }) {
@@ -170,7 +170,7 @@ function AddCourierPanel({ onClose }: { onClose: () => void }) {
   const [email, setEmail] = useState('');
   const [vehicleType, setVehicleType] = useState('BODA');
   const [error, setError] = useState<string | null>(null);
-  const [savedEsokoId, setSavedEsokoId] = useState<string | null>(null);
+  const [savedEsoqoId, setSavedEsoqoId] = useState<string | null>(null);
   const [pending, startTransition] = useTransition();
 
   function submit() {
@@ -184,15 +184,15 @@ function AddCourierPanel({ onClose }: { onClose: () => void }) {
         name: name.trim(), msisdn: msisdn.trim(), email: email.trim() || undefined, vehicleType,
       });
       if (!result.ok) { setError(result.error); return; }
-      setSavedEsokoId(result.esokoId);
+      setSavedEsoqoId(result.esoqoId);
     });
   }
 
-  if (savedEsokoId) {
+  if (savedEsoqoId) {
     return (
       <div style={{ marginTop: 12, display: 'flex', flexDirection: 'column', gap: 8 }}>
         <p style={{ margin: 0 }}>
-          <Icon name="check-circle" size={15} /> Added — Esoko ID <strong className="mono">{savedEsokoId}</strong>,
+          <Icon name="check-circle" size={15} /> Added — Esoqo ID <strong className="mono">{savedEsoqoId}</strong>,
           texted to {msisdn} for confirmation.
         </p>
         <div><button className="btn btn-o btn-sm" onClick={onClose}>Close</button></div>
@@ -220,7 +220,7 @@ function AddCourierPanel({ onClose }: { onClose: () => void }) {
         </select>
       </label>
       <p className="sub" style={{ margin: 0 }}>
-        They&apos;ll be texted a confirmation with their Esoko ID — that same text is how you&apos;ll know
+        They&apos;ll be texted a confirmation with their Esoqo ID — that same text is how you&apos;ll know
         the phone number is right.
       </p>
       <div style={{ display: 'flex', gap: 8 }}>

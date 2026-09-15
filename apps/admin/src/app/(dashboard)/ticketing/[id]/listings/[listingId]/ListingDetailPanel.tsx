@@ -1,8 +1,8 @@
 'use client';
 
 import { useState, useTransition } from 'react';
-import { Icon } from '@esoko/ui';
-import { useAnnounce } from '@esoko/a11y';
+import { Icon } from '@esoqo/ui';
+import { useAnnounce } from '@esoqo/a11y';
 import { actionCreateTicketClass, actionCreateSchedule } from '../../../actions';
 
 interface TicketClassRow { id: string; name: string; priceKes: number; capacity: number; seated: boolean }

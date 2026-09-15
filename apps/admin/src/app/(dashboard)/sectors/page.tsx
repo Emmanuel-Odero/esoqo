@@ -1,6 +1,6 @@
-import { Icon } from '@esoko/ui';
-import { getRegistrationSegments, getOverview } from '@esoko/db';
-import { SEGMENTS } from '@esoko/domain';
+import { Icon } from '@esoqo/ui';
+import { getRegistrationSegments, getOverview } from '@esoqo/db';
+import { SEGMENTS } from '@esoqo/domain';
 import { requireStaff } from '@/lib/session';
 import { RankedBarChart, DonutChart } from '@/components/charts';
 
@@ -24,7 +24,7 @@ export default async function SectorsPage() {
         <div>
           <h1>Sectors</h1>
           <p>
-            What people who joined said they do, matched against Esoko&rsquo;s shared trade
+            What people who joined said they do, matched against Esoqo&rsquo;s shared trade
             dictionary. Based on {overview.registrationsComplete.toLocaleString()} completed
             registrations.
           </p>

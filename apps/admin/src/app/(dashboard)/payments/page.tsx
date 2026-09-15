@@ -1,5 +1,5 @@
-import { Icon } from '@esoko/ui';
-import { listPayments, getPaymentStats, listApprovers, PAYMENT_APPROVAL_THRESHOLD } from '@esoko/db';
+import { Icon } from '@esoqo/ui';
+import { listPayments, getPaymentStats, listApprovers, PAYMENT_APPROVAL_THRESHOLD } from '@esoqo/db';
 import { requireStaff } from '@/lib/session';
 import { DonutChart } from '@/components/charts';
 import { PaymentQueue } from './PaymentQueue';

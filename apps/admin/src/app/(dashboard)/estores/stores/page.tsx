@@ -1,5 +1,5 @@
-import { Icon } from '@esoko/ui';
-import { listStoresForStaff, getStoreCounts } from '@esoko/db';
+import { Icon } from '@esoqo/ui';
+import { listStoresForStaff, getStoreCounts } from '@esoqo/db';
 import { requireStaff } from '@/lib/session';
 import { StoreDirectory } from './StoreDirectory';
 

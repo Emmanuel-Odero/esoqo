@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useTransition } from 'react';
-import { Icon } from '@esoko/ui';
+import { Icon } from '@esoqo/ui';
 import {
   actionFindStorageCustomerByPhone, actionCreateStorageAgreement,
   actionEndStorageAgreement, actionBillStoragePeriod,

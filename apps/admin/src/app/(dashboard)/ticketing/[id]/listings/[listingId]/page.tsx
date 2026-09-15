@@ -1,7 +1,7 @@
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
-import { Icon } from '@esoko/ui';
-import { can, AuthorisationError } from '@esoko/db';
+import { Icon } from '@esoqo/ui';
+import { can, AuthorisationError } from '@esoqo/db';
 import { requireStaff } from '@/lib/session';
 import { OrgTabs } from '../../OrgTabs';
 import { ListingDetailPanel } from './ListingDetailPanel';

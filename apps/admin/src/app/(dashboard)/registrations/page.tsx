@@ -1,6 +1,6 @@
-import { Icon } from '@esoko/ui';
-import { listRegistrations, getOverview, getFunnel, DOCUMENT_KINDS } from '@esoko/db';
-import { COUNTIES } from '@esoko/domain';
+import { Icon } from '@esoqo/ui';
+import { listRegistrations, getOverview, getFunnel, DOCUMENT_KINDS } from '@esoqo/db';
+import { COUNTIES } from '@esoqo/domain';
 import { requireStaff } from '@/lib/session';
 import { DonutChart, Gauge } from '@/components/charts';
 import { RegistrationTable } from './RegistrationTable';

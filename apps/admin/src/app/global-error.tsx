@@ -21,7 +21,7 @@ export default function GlobalError({
         display: 'grid', placeItems: 'center', minHeight: '100vh', margin: 0, padding: 24,
       }}>
         <div style={{ textAlign: 'center', maxWidth: 420 }}>
-          <h1 style={{ fontSize: '1.3rem', marginBottom: 8 }}>Esoko Operations is unavailable</h1>
+          <h1 style={{ fontSize: '1.3rem', marginBottom: 8 }}>Esoqo Operations is unavailable</h1>
           <p style={{ color: '#5C6F80', marginBottom: 20 }}>
             Something went wrong loading the app itself. Try again — if it persists, the team has
             been notified via the logs.

@@ -18,7 +18,7 @@ export default function SignInPage() {
               </g>
             </svg>
           </span>
-          <strong>Esoko</strong>
+          <strong>Esoqo</strong>
           <span className="si-brand-sub">Operations Dashboard</span>
         </div>
         <div className="si-brand-foot">
@@ -33,7 +33,7 @@ export default function SignInPage() {
           </div>
           <SignInForm />
           <p className="si-footnote">
-            Protected by the Esoko security framework.
+            Protected by the Esoqo security framework.
           </p>
         </div>
       </div>

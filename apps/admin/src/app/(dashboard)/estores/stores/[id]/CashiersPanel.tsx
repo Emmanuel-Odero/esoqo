@@ -1,8 +1,8 @@
 'use client';
 
 import { useState, useTransition } from 'react';
-import { Icon } from '@esoko/ui';
-import { useAnnounce } from '@esoko/a11y';
+import { Icon } from '@esoqo/ui';
+import { useAnnounce } from '@esoqo/a11y';
 import { actionAddCashier, actionSetCashierActive } from '../../actions';
 
 interface CashierRow { id: string; name: string; role: string; active: boolean }
@@ -38,7 +38,7 @@ export function CashiersPanel({ storeId, cashiers }: { storeId: string; cashiers
       <h2><Icon name="users" size={18} />Till staff</h2>
       <p style={{ color: 'var(--tx-2)', fontSize: '.9rem', margin: '0 0 14px' }}>
         Add someone on the owner&rsquo;s behalf while onboarding — a PIN scoped to this store only,
-        not their Esoko account. CASHIER can only ring up sales; MANAGER also handles stock, products
+        not their Esoqo account. CASHIER can only ring up sales; MANAGER also handles stock, products
         and orders, never store settings. Hand the PIN over in person or by phone.
       </p>
 

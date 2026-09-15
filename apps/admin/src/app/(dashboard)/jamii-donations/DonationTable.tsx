@@ -1,6 +1,6 @@
 'use client';
 
-import { Icon } from '@esoko/ui';
+import { Icon } from '@esoqo/ui';
 
 interface Row {
   id: string; status: string; donorName: string; donorMsisdn: string; anonymous: boolean;

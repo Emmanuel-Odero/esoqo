@@ -1,5 +1,5 @@
-import { Icon } from '@esoko/ui';
-import { listStaff, CAPABILITY_CATALOGUE, ROLE_PRESETS } from '@esoko/db';
+import { Icon } from '@esoqo/ui';
+import { listStaff, CAPABILITY_CATALOGUE, ROLE_PRESETS } from '@esoqo/db';
 import { requireStaff } from '@/lib/session';
 import { StaffTable } from './StaffTable';
 

@@ -1,13 +1,36 @@
 import { requireStaff } from '@/lib/session';
-import { actionListParcelLabelStock } from '../actions';
+import {
+  actionListParcelLabelBatches, actionListParcelLabelRegister,
+  actionListParcelLabelStock, actionListParcelOrgs,
+} from '../actions';
+import { BatchesPanel } from './BatchesPanel';
 import { LabelStockPanel } from './LabelStockPanel';
+import { RegisterPanel } from './RegisterPanel';
 
 export const dynamic = 'force-dynamic';
 
-export default async function ParcelLabelsPage() {
+/** `?code=` opens straight into that label's attach form — how the
+ *  topbar scanner lands here (see ScanBox), and what makes "scan the
+ *  label, write down what it's stuck on" a single gesture rather than
+ *  a scan followed by hunting for the code in a grid.
+ *
+ *  `?org=` scopes the whole page to one courier company's own pad.
+ *  Stock belongs to whoever it was printed for, and a company must not
+ *  be shown — let alone able to reprint — another's codes, so the pool,
+ *  the batches and any new mint all move together when this changes. */
+export default async function ParcelLabelsPage(
+  { searchParams }: { searchParams: Promise<{ code?: string; org?: string; state?: string }> },
+) {
   const ctx = await requireStaff();
   const canGenerate = ctx.capabilities.includes('*') || ctx.capabilities.includes('parcels.assign');
-  const unused = await actionListParcelLabelStock();
+  const { code, org, state } = await searchParams;
+  const registerState = state ?? 'blank';
+  const [unused, batches, orgs, register] = await Promise.all([
+    actionListParcelLabelStock(org),
+    actionListParcelLabelBatches(org),
+    actionListParcelOrgs(),
+    actionListParcelLabelRegister(registerState, org),
+  ]);
 
   return (
     <>
@@ -21,7 +44,15 @@ export default async function ParcelLabelsPage() {
           </p>
         </div>
       </div>
-      <LabelStockPanel canGenerate={canGenerate} unused={unused} />
+      <LabelStockPanel
+        canGenerate={canGenerate} unused={unused} openCode={code}
+        orgs={orgs} activeOrgId={org}
+      />
+      <RegisterPanel
+        labels={register.labels} counts={register.counts}
+        state={registerState} orgId={org}
+      />
+      <BatchesPanel batches={batches} />
     </>
   );
 }

@@ -1,6 +1,6 @@
 import { DashboardShell } from '@/components/Shell';
 import { getCtx } from '@/lib/session';
-import '@esoko/ui/tokens.css';
+import '@esoqo/ui/tokens.css';
 import '../admin.css';
 
 export default async function DashboardLayout({ children }: { children: React.ReactNode }) {

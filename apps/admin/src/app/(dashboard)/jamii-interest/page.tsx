@@ -1,5 +1,5 @@
-import { Icon } from '@esoko/ui';
-import { listJamiiInterests } from '@esoko/db';
+import { Icon } from '@esoqo/ui';
+import { listJamiiInterests } from '@esoqo/db';
 import { requireStaff } from '@/lib/session';
 import { DonutChart } from '@/components/charts';
 import { InterestTable } from './InterestTable';
@@ -8,7 +8,7 @@ export const dynamic = 'force-dynamic';
 
 /**
  * Applications for Our Jamii access (apps/jamii's /apply flow) — see
- * @esoko/db's createJamiiInterest for why this is its own queue rather
+ * @esoqo/db's createJamiiInterest for why this is its own queue rather
  * than folded into Registrations. Approving one is what actually grants
  * sign-in access — see approveJamiiInterest.
  */

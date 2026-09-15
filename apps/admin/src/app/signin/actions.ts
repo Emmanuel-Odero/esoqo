@@ -2,8 +2,8 @@
 
 import { cookies } from 'next/headers';
 import { redirect } from 'next/navigation';
-import { findStaffCredential, recordStaffSignInSuccess, recordStaffSignInFailure } from '@esoko/db';
-import { verifyPin, createSession, SESSION_COOKIE } from '@esoko/auth';
+import { findStaffCredential, recordStaffSignInSuccess, recordStaffSignInFailure } from '@esoqo/db';
+import { verifyPin, createSession, SESSION_COOKIE } from '@esoqo/auth';
 
 export type SignInResult =
   | { ok: true }

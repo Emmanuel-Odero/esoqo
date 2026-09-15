@@ -1,8 +1,8 @@
 'use client';
 
 import { useState, useTransition } from 'react';
-import { Icon } from '@esoko/ui';
-import { useAnnounce } from '@esoko/a11y';
+import { Icon } from '@esoqo/ui';
+import { useAnnounce } from '@esoqo/a11y';
 import { actionReviewInterest, actionApproveInterest } from './actions';
 
 interface Row {
@@ -145,7 +145,7 @@ function InterestModal({
           <p className={`pill ${row.matched ? 'p-info' : 'p-warn'}`} style={{ padding: '8px 12px', marginBottom: 14 }}>
             <Icon name={row.matched ? 'check-circle' : 'user'} size={13} />
             {row.matched
-              ? 'Already a CECF/Esoko member — approving just grants access'
+              ? 'Already a CECF/Esoqo member — approving just grants access'
               : 'New applicant — approving creates their account'}
           </p>
 

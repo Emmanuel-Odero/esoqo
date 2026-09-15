@@ -3,7 +3,7 @@
 import { useState, useTransition } from 'react';
 import { useRouter } from 'next/navigation';
 import type { Route } from 'next';
-import { Icon } from '@esoko/ui';
+import { Icon } from '@esoqo/ui';
 import { actionCreateCourierTeam } from '../actions';
 import { RoleField } from './RoleField';
 
@@ -63,7 +63,7 @@ export function CreateTeamPanel() {
           </div>
           <RoleField value={managerRole} onChange={setManagerRole} label="Manager's title" />
           <p className="sub" style={{ margin: 0 }}>
-            The manager gets a text with their Esoko ID the moment this is saved — that&apos;s also
+            The manager gets a text with their Esoqo ID the moment this is saved — that&apos;s also
             your confirmation the phone number is right.
           </p>
           <div>

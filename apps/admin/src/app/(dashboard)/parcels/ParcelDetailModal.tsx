@@ -1,8 +1,8 @@
 'use client';
 
 import { useEffect, useState, useTransition } from 'react';
-import { Icon } from '@esoko/ui';
-import { useAnnounce } from '@esoko/a11y';
+import { Icon } from '@esoqo/ui';
+import { useAnnounce } from '@esoqo/a11y';
 import {
   actionAssignParcelCollector, actionSearchCollectors, actionCancelParcel, actionMarkParcelRefunded,
   actionGetParcelHandoffs, actionFlagParcelException, actionClearParcelException, actionUpdateParcelDetails,
@@ -193,8 +193,94 @@ function DetailSections({
             {parcel.CancelledAt && <span className="sub" style={{ display: 'block' }}>{new Date(parcel.CancelledAt).toLocaleString('en-KE')}</span>}
           </Row>
         )}
+        {/* The failed-attempt record. An operator fielding a "where is
+            my parcel" call can now answer it from here instead of
+            phoning the courier — and can tell the difference between a
+            rider who is stuck and a receiver who is never in. */}
+        {parcel.DeliveryAttempts > 0 && (
+          <Row label="Delivery attempts">
+            <span className={`pill ${parcel.DeliveryAttempts >= 3 ? 'p-bad' : 'p-warn'}`}>
+              {parcel.DeliveryAttempts} {parcel.DeliveryAttempts === 1 ? 'attempt' : 'attempts'}
+            </span>
+            {parcel.LastAttemptReason && (
+              <span className="sub" style={{ display: 'block' }}>
+                Last: {parcel.LastAttemptReason.replace(/_/g, ' ').toLowerCase()}
+                {parcel.LastAttemptAt && ` · ${new Date(parcel.LastAttemptAt).toLocaleString('en-KE')}`}
+              </span>
+            )}
+            {parcel.DeliveryAttempts >= 3 && (
+              <span className="sub" style={{ display: 'block' }}>
+                Three or more — call the receiver or return it to the sender.
+              </span>
+            )}
+          </Row>
+        )}
+        {parcel.AgentName && (
+          <Row label="At pickup point">
+            {parcel.AgentName}
+            {parcel.AgentLocationHint && <span className="sub"> · {parcel.AgentLocationHint}</span>}
+            {parcel.AgentHeldSince && (
+              <span className="sub" style={{ display: 'block' }}>
+                Since {new Date(parcel.AgentHeldSince).toLocaleString('en-KE')}
+              </span>
+            )}
+          </Row>
+        )}
+        {/* Who's carrying it, and how the money splits. Absent entirely
+            for an Esoqo-operated parcel, where the whole price is
+            already Esoqo's and a "split" would be a fiction. */}
+        <Row label="Carried by">
+          {parcel.ParcelOrgName ?? <span className="sub">Esoqo dispatch</span>}
+          {parcel.OrgEarningsKes && (
+            <span className="sub" style={{ display: 'block' }}>
+              They earn KES {Number(parcel.OrgEarningsKes).toLocaleString('en-KE')}
+              {parcel.PlatformFeeKes && ` · Esoqo keeps KES ${Number(parcel.PlatformFeeKes).toLocaleString('en-KE')}`}
+            </span>
+          )}
+          {!parcel.OrgEarningsKes && parcel.ParcelOrgName && (
+            <span className="sub" style={{ display: 'block' }}>
+              Split is set when this parcel is paid for.
+            </span>
+          )}
+        </Row>
+        {parcel.DeclaredValueKes && (
+          <Row label="Declared value">
+            KES {Number(parcel.DeclaredValueKes).toLocaleString('en-KE')}
+            {parcel.CoverageTierName
+              ? <span className="sub"> · {parcel.CoverageTierName} cover</span>
+              : <span className="sub"> · no cover bought</span>}
+          </Row>
+        )}
         {parcel.Status === 'DELIVERED' && parcel.DeliveredAt && (
           <Row label="Delivered">{new Date(parcel.DeliveredAt).toLocaleString('en-KE')}</Row>
+        )}
+        {/* Proof of delivery — the record that settles a dispute
+            instead of leaving it to somebody's word. The photo is
+            served through the API's own code-gated route, never a
+            bucket URL: it's a picture of somebody's doorway. */}
+        {(parcel.PodReceivedByName || parcel.PodPhotoUrl) && (
+          <Row label="Proof of delivery">
+            {parcel.PodReceivedByName && <>Received by <strong>{parcel.PodReceivedByName}</strong></>}
+            {parcel.PodMethod && (
+              <span className="sub" style={{ display: 'block' }}>
+                {parcel.PodMethod === 'DELIVERY_CODE' && 'Confirmed with the delivery code'}
+                {parcel.PodMethod === 'AGENT_COLLECTION' && 'Collected at a pickup point'}
+                {parcel.PodMethod === 'STAFF_OVERRIDE' && 'Handed over without a code (staff override)'}
+              </span>
+            )}
+            {parcel.PodPhotoUrl && (
+              // A plain <img>, not next/image: the source is a proxied,
+              // staff-gated, per-parcel route the image optimiser can
+              // neither cache nor resize meaningfully, and routing a
+              // delivery photo through a shared optimiser cache is
+              // exactly the leak the proxy exists to prevent.
+              <img
+                src={`/api/parcel-pod/${encodeURIComponent(parcel.Code)}`}
+                alt={`Parcel ${parcel.Code} at the point of hand-over`}
+                style={{ display: 'block', marginTop: 8, maxWidth: 260, borderRadius: 8 }}
+              />
+            )}
+          </Row>
         )}
         <Row label="Handling history">
           {handoffsLoading && 'Loading…'}
@@ -349,7 +435,7 @@ function CancelPanel({ parcelId, onDone }: { parcelId: string; onDone: () => voi
   return (
     <Panel title="Cancel this parcel" tone="red">
       <p className="sub" style={{ margin: '0 0 10px' }}>
-        Esoko points are refunded automatically. An M-Pesa payment is flagged for a manual refund —
+        Esoqo points are refunded automatically. An M-Pesa payment is flagged for a manual refund —
         there is no automatic M-Pesa reversal yet.
       </p>
       <label className="sub" style={{ display: 'block', marginBottom: 10 }}>Reason (sent to the sender)
