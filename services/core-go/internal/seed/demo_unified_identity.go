@@ -785,9 +785,9 @@ func ensureDemoParcels(ctx context.Context, pool *pgxpool.Pool, esther, amina, d
 		var parcelID string
 		err = pool.QueryRow(ctx, `
 			INSERT INTO parcel (id, code, "deliveryCode", "senderPartyId", "senderName", "senderMsisdn",
-				"receiverName", "receiverMsisdn", "originLabel", "destinationLabel",
+				"receiverName", "receiverMsisdn", "originLabel", "destinationLabel", "parcelType",
 				"currentHolderPartyId", status, "createdAt", "deliveredAt")
-			VALUES (gen_random_uuid(), $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11::"ParcelStatus", now(),
+			VALUES (gen_random_uuid(), $1, $2, $3, $4, $5, $6, $7, $8, $9, 'SMALL'::"ParcelType", $10, $11::"ParcelStatus", now(),
 				CASE WHEN $12 THEN now() ELSE NULL END)
 			RETURNING id`,
 			s.code, s.deliveryCode, s.senderPartyID, s.senderName, s.senderMsisdn,
