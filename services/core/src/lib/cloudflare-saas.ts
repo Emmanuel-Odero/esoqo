@@ -2,8 +2,8 @@
  * Cloudflare for SaaS — Custom Hostnames client.
  *
  * Gated exactly the way MPESA_PROVIDER gates Daraja in
- * @esoko/payments/src/mpesa.ts and SMS_PROVIDER gates OTP delivery in
- * @esoko/auth/src/sms.ts: JAMII_DOMAIN_PROVIDER=console|cloudflare,
+ * @esoqo/payments/src/mpesa.ts and SMS_PROVIDER gates OTP delivery in
+ * @esoqo/auth/src/sms.ts: JAMII_DOMAIN_PROVIDER=console|cloudflare,
  * default `console`. Console mode never calls Cloudflare or real DNS —
  * it logs what it would have done and simulates an immediately-healthy
  * hostname, so the whole request -> reconcile -> ACTIVE -> serve flow
@@ -28,7 +28,7 @@
  */
 
 import { resolveTxt } from 'node:dns/promises';
-import { appEnv } from '@esoko/domain';
+import { appEnv } from '@esoqo/domain';
 
 const API_BASE = 'https://api.cloudflare.com/client/v4';
 
@@ -163,14 +163,25 @@ export async function deleteCustomHostname(cfHostnameId: string): Promise<void> 
  * make the whole feature untestable without owning a real domain —
  * the same reasoning MPESA_PROVIDER=console auto-confirms a payment
  * instead of waiting on a callback that will never arrive.
+ *
+ * Both record names are accepted. `_esoko-verify` is what every org
+ * that verified before the Esoqo rename published at their own
+ * registrar, and those records are not ours to re-cut — an org that
+ * already passed must not silently fail its next re-check. New setups
+ * are told to use `_esoqo-verify` (see DomainPanel).
  */
+export const VERIFY_TXT_PREFIXES = ['_esoqo-verify', '_esoko-verify'] as const;
+
 export async function verifyOwnershipTxt(hostname: string, token: string): Promise<boolean> {
   if (jamiiDomainProvider() === 'console') return true;
 
-  try {
-    const records = await resolveTxt(`_esoko-verify.${hostname}`);
-    return records.some((chunks) => chunks.join('') === token);
-  } catch {
-    return false;
+  for (const prefix of VERIFY_TXT_PREFIXES) {
+    try {
+      const records = await resolveTxt(`${prefix}.${hostname}`);
+      if (records.some((chunks) => chunks.join('') === token)) return true;
+    } catch {
+      // NXDOMAIN on one name just means try the other.
+    }
   }
+  return false;
 }

@@ -1,19 +1,21 @@
-import Fastify from 'fastify';
+import { timingSafeEqual } from 'node:crypto';
+import Fastify, { type FastifyRequest, type FastifyReply } from 'fastify';
 import helmet from '@fastify/helmet';
 import rateLimit from '@fastify/rate-limit';
 import {
+  prisma,
   verifyChain, confirmStoreOrderPayment, confirmRegistrationPaymentByCheckoutId,
   confirmRegistrationPaymentByPesapalOrderId,
   confirmDonationPayment, failDonationPayment,
   StoreOrderError, DonationError,
-} from '@esoko/db';
-import { appEnv, donorThankYouSms, adminDonationAlertSms } from '@esoko/domain';
-// Subpath import, not the '@esoko/auth' barrel — the barrel's index.ts
+} from '@esoqo/db';
+import { appEnv, donorThankYouSms, adminDonationAlertSms } from '@esoqo/domain';
+// Subpath import, not the '@esoqo/auth' barrel — the barrel's index.ts
 // also re-exports pin.ts/session.ts/redis.ts/etc., which DO carry the
 // `server-only` marker and throw outside a Next.js bundling context.
 // sms.ts itself deliberately doesn't (see its own header comment).
-import { sendSms } from '@esoko/auth/sms';
-import { parseStkCallback, parsePesapalIpn, confirmPesapalOrder } from '@esoko/payments';
+import { sendSms } from '@esoqo/auth/sms';
+import { parseStkCallback, parsePesapalIpn, confirmPesapalOrder } from '@esoqo/payments';
 import { cecfRoutes } from './routes/cecf';
 import { jamiiDomainsRoutes, runJamiiDomainReconcile } from './routes/jamii-domains';
 import { jamiiDomainProvider } from './lib/cloudflare-saas';
@@ -39,7 +41,26 @@ await app.register(rateLimit, { max: 120, timeWindow: '1 minute' });
 await app.register(cecfRoutes);
 await app.register(jamiiDomainsRoutes);
 
-app.get('/health', async () => ({ ok: true, service: 'core', ts: new Date().toISOString() }));
+/**
+ * The platform's restart probe (render.yaml's healthCheckPath). This
+ * returned 200 unconditionally, so an unreachable database, a wrong
+ * DATABASE_URL or an unmigrated schema all reported healthy while every
+ * real request 500'd — the deploy went green on a service that could not
+ * serve anything.
+ *
+ * A cheap reachability ping on purpose, not /ready's audit-chain walk:
+ * failing liveness on a data-integrity problem turns one broken audit
+ * link into a restart loop.
+ */
+app.get('/health', async (_req, reply) => {
+  try {
+    await prisma.$queryRaw`SELECT 1`;
+  } catch (e) {
+    app.log.error(e, 'health check failed: database unreachable');
+    return reply.code(503).send({ ok: false, service: 'core', reason: 'database_unreachable' });
+  }
+  return { ok: true, service: 'core', ts: new Date().toISOString() };
+});
 
 app.get('/ready', async (_req, reply) => {
   try {
@@ -71,7 +92,33 @@ app.get('/ready', async (_req, reply) => {
  * forwarded there below — Go's confirms are idempotent, so a callback
  * seen by both services can never double-post.
  */
-app.post('/webhooks/mpesa/stk-callback', async (req, reply) => {
+/**
+ * Daraja authenticates nothing — no signature, no HMAC, no documented
+ * source-IP range — so the only thing distinguishing a real callback
+ * from anyone POSTing "payment confirmed" for a guessed checkout id is
+ * that the URL carries a secret path segment only Safaricom was handed.
+ * MPESA_CALLBACK_SECRET must be the last segment of MPESA_CALLBACK_URL.
+ * Unset means console/dev, where the bare path stays reachable.
+ */
+const callbackSecret = process.env.MPESA_CALLBACK_SECRET ?? '';
+
+function callbackTokenOk(token: string | undefined): boolean {
+  if (!callbackSecret) return true;
+  if (typeof token !== 'string' || token.length !== callbackSecret.length) return false;
+  return timingSafeEqual(Buffer.from(token), Buffer.from(callbackSecret));
+}
+
+const handleStkCallback = async (
+  req: FastifyRequest<{ Params: { token?: string } }>,
+  reply: FastifyReply,
+) => {
+  const token = req.params?.token;
+  if (!callbackTokenOk(token)) {
+    // Not 200: this is not Safaricom, so there is no retry to suppress,
+    // and a forged confirm must never be told it looked plausible.
+    app.log.warn({ ip: req.ip }, 'rejected M-Pesa callback with bad/missing token');
+    return reply.code(404).send({ error: 'not found' });
+  }
   const parsed = parseStkCallback(req.body);
   if (!parsed) {
     app.log.warn({ body: req.body }, 'unrecognised M-Pesa callback shape');
@@ -143,7 +190,13 @@ app.post('/webhooks/mpesa/stk-callback', async (req, reply) => {
   // idempotent, and Safaricom must never retry a handed-off callback.
   await forwardCallbackToGo(req.body, app.log, parsed.checkoutRequestId);
   return reply.send({ ok: true });
-});
+};
+
+// Both registered, one handler: the bare path is kept so a callback
+// arriving without the secret is logged and rejected rather than 404ing
+// anonymously, and so console/dev setups keep working.
+app.post('/webhooks/mpesa/stk-callback', handleStkCallback);
+app.post('/webhooks/mpesa/stk-callback/:token', handleStkCallback);
 
 /**
  * Strangler bridge: during the TS→Go migration both webhook routes are
