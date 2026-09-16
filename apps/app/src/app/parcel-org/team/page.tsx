@@ -42,7 +42,6 @@ export default async function ParcelOrgTeamPage() {
             their own name and PIN — never a shared login.
           </p>
         </div>
-        <a className="btn btn-o btn-sm" href="/parcel-org">Back to parcels</a>
       </div>
 
       <OrgStaffManager staff={staff} />

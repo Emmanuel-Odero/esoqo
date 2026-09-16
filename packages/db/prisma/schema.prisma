@@ -3199,6 +3199,19 @@ model Parcel {
   /// person types in" shape a pickup code closes a retail order with.
   deliveryCode String
 
+  /// TCK-… — what a self-service booking actually gets back, not
+  /// `code`. A sender who typed their own parcel details in hasn't
+  /// proven anyone has the box in hand yet (see BookParcel's own
+  /// comment on why booking never sends an SMS on its own); handing
+  /// them the real tracking code at that moment would let them relay
+  /// or publish a code for a parcel nobody has actually received.
+  /// This is the number they show at the counter instead — a bearer
+  /// credential scoped to "prove you're the one who booked this," not
+  /// "track this parcel" (see handleGetParcelStatus's own pre-intake
+  /// lookup). Once intakeConfirmedAt is set, the SMS pair fires and
+  /// this number is retired from active use — `code` takes over.
+  serviceTicketNumber String @unique
+
   /// Null for a guest booking — senderName/senderMsisdn are always
   /// captured directly regardless, same "guest OR authenticated"
   /// pattern CreateStoreOrder already follows.

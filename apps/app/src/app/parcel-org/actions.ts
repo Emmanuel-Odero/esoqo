@@ -11,7 +11,11 @@ export type Result = { ok: true } | { ok: false; error: string };
  *  decide. The org is read from the session on that side, so nothing in
  *  this file ever names a company — there is no parameter a browser
  *  could edit to act on somebody else's parcels. */
-function toResult(e: unknown): Result {
+/** Always the failure variant — typed as such rather than as the wider
+ *  Result so callers returning a richer success shape (see
+ *  receiveWalkInParcel, which hands back the resolved code) can still
+ *  funnel their errors through it. */
+function toResult(e: unknown): { ok: false; error: string } {
   if (e instanceof ParcelOrgUnauthorised) {
     return { ok: false, error: 'Your shift session has expired — sign in again' };
   }
@@ -26,11 +30,53 @@ function toResult(e: unknown): Result {
  * had a collector assigned, so the one FORBIDDEN gate ScanHandoff
  * checks (a different pre-assigned collector) never fires, and the
  * genuine first BOOKED->PICKED_UP transition fires the existing
- * sender/receiver SMS pair (see notify.ParcelPickedUp/ParcelInTransitToYou).
+ * sender/receiver SMS pair (see notify.ParcelIntakeConfirmed/
+ * ParcelIntakeConfirmedToReceiver) and, for a courier company's own
+ * parcel, the team dispatch summary (notify.ParcelOrgDispatchSummary).
  */
-export async function receiveWalkInParcel(code: string): Promise<Result> {
+export async function receiveWalkInParcel(
+  reference: string,
+): Promise<{ ok: true; code: string } | { ok: false; error: string }> {
   try {
-    await parcelOrgFetch(`/v1/parcels/${encodeURIComponent(code)}/handoff`, { method: 'POST' });
+    // `reference` is whatever the sender walked in with. Pre-intake that
+    // is the service ticket number, not the tracking code — the code
+    // does not exist to the sender yet (see Parcel.serviceTicketNumber).
+    // The server resolves either and hands back the REAL code, which is
+    // what has to go on the printed label: a ticket number stuck to the
+    // box is a reference no later scan resolves.
+    const res = await parcelOrgFetch<{ status: string; code: string }>(
+      `/v1/parcels/${encodeURIComponent(reference)}/handoff`, { method: 'POST' },
+    );
+    revalidatePath('/parcel-org');
+    revalidatePath('/parcel-org/receive');
+    return { ok: true, code: res.code };
+  } catch (e) {
+    return toResult(e);
+  }
+}
+
+/**
+ * Recording the fare actually taken, in cash, for a parcel booked to be
+ * paid at the counter.
+ *
+ * This is the other half of receiving a walk-in, and it had no home at
+ * all until now: a PAY_AT_COUNTER booking lands in BOOKED with no price
+ * on it (nobody has weighed the box yet), and nothing anywhere filled
+ * that in afterwards — so every walk-in stayed permanently unpriced,
+ * with no revenue split and nothing in any report. See
+ * dbx.SettleCounterParcel.
+ *
+ * Deliberately a separate step from confirming receipt rather than one
+ * combined button: custody and payment are different facts, and a box
+ * that's physically in hand should be recorded as such even if the
+ * sender is still counting out notes.
+ */
+export async function settleCounterParcel(code: string, priceKes: number): Promise<Result> {
+  try {
+    await parcelOrgFetch(`/v1/parcels/${encodeURIComponent(code)}/settle-counter`, {
+      method: 'POST',
+      body: JSON.stringify({ priceKes }),
+    });
     revalidatePath('/parcel-org');
     revalidatePath('/parcel-org/receive');
     return { ok: true };
@@ -68,6 +114,37 @@ export async function remitRiderCod(
   } catch (e) {
     const r = toResult(e);
     return { ok: false, error: r.ok ? 'That did not work' : r.error };
+  }
+}
+
+// OrgPricingRow — mirrors dbx.ParcelPricing's JSON shape. Whatever this
+// endpoint returns for a type is exactly what a sender's own quote will
+// resolve to (see handleListMyOrgPricing's own comment) — this screen
+// never computes a preview number of its own.
+export interface OrgPricingRow {
+  parcelType: string;
+  weightLabel: string;
+  minKes: string;
+  maxKes: string;
+}
+
+export async function listOrgPricing(): Promise<OrgPricingRow[]> {
+  const { pricing } = await parcelOrgFetch<{ pricing: OrgPricingRow[] | null }>(
+    '/v1/parcel-orgs/me/pricing',
+  );
+  return pricing ?? [];
+}
+
+export async function saveOrgPricing(input: { parcelType: string; minKes: number; maxKes: number }): Promise<Result> {
+  try {
+    await parcelOrgFetch('/v1/parcel-orgs/me/pricing', {
+      method: 'POST',
+      body: JSON.stringify(input),
+    });
+    revalidatePath('/parcel-org/pricing');
+    return { ok: true };
+  } catch (e) {
+    return toResult(e);
   }
 }
 

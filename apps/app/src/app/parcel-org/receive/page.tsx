@@ -57,9 +57,6 @@ export default async function FrontDeskPage() {
             box in hand — that&apos;s what tells them it arrived and gives the receiver a tracking code.
           </p>
         </div>
-        <div className="row" style={{ gap: 8 }}>
-          <a className="btn btn-o btn-sm" href="/parcel-org">Back to parcels</a>
-        </div>
       </div>
       <FrontDeskClient waiting={waiting} />
     </>

@@ -1,7 +1,6 @@
 package httpapi
 
 import (
-	"fmt"
 	"log"
 	"net/http"
 	"strconv"
@@ -92,6 +91,12 @@ func (s *Server) handleBookParcel(c *gin.Context) {
 		writeError(c, http.StatusBadRequest, "INVALID_REQUEST", err.Error())
 		return
 	}
+	if !requireMsisdn(c, &req.SenderMsisdn, "The sender's phone number") {
+		return
+	}
+	if !requireMsisdn(c, &req.ReceiverMsisdn, "The receiver's phone number") {
+		return
+	}
 	var senderPartyID *string
 	// Binder identity comes from the session, never the body — see
 	// BookParcelInput.BinderOrgID on why req.ParcelOrgID cannot gate
@@ -102,6 +107,13 @@ func (s *Server) handleBookParcel(c *gin.Context) {
 	// Only a real staff session can attest that somebody asked the
 	// prohibited-contents question — see the request field's comment.
 	var contentsDeclaredByStaffID *string
+	// bookerAlreadyHasCustody — an authenticated staff or courier-company
+	// session booking this (a Counter walk-in, a future self-service
+	// label assignment) already has the box in hand by definition: they
+	// are the one typing its details in at a desk. Only a true guest,
+	// self-service booking has never proven that — see this handler's
+	// own response comment on why the ticket-number gate exists at all.
+	var bookerAlreadyHasCustody bool
 	if token := bearerToken(c); token != "" {
 		if ctx, _ := s.Session.CtxFromToken(c.Request.Context(), token, clientIP(c)); ctx != nil {
 			if ctx.PartyID != "" {
@@ -112,13 +124,14 @@ func (s *Server) handleBookParcel(c *gin.Context) {
 				binderOrgID = &orgID
 			}
 			binderIsPlatformStaff = authsvc.Can(*ctx, "parcels.assign", nil)
+			bookerAlreadyHasCustody = binderIsPlatformStaff || ctx.ParcelOrgID != ""
 			if req.ContentsDeclared && ctx.ActorID != "" {
 				id := ctx.ActorID
 				contentsDeclaredByStaffID = &id
 			}
 		}
 	}
-	parcelID, code, deliveryCode, err := dbx.BookParcel(c.Request.Context(), s.Pool, dbx.BookParcelInput{
+	parcelID, code, deliveryCode, serviceTicketNumber, err := dbx.BookParcel(c.Request.Context(), s.Pool, dbx.BookParcelInput{
 		SenderPartyID: senderPartyID, SenderName: req.SenderName, SenderMsisdn: req.SenderMsisdn,
 		ReceiverName: req.ReceiverName, ReceiverMsisdn: req.ReceiverMsisdn,
 		OriginLabel: req.OriginLabel, DestinationLabel: req.DestinationLabel, Notes: req.Notes,
@@ -136,49 +149,89 @@ func (s *Server) handleBookParcel(c *gin.Context) {
 		writeParcelError(c, err)
 		return
 	}
-	// deliveryCode returned here too, not just in the sender's own
-	// "Sent" list (which a guest booking, with no session, has no way
-	// to revisit) — this is the only moment a guest sender ever sees
-	// it themselves. It also now reaches the receiver automatically by
-	// SMS at pickup (see notify.ParcelInTransitToYou), but showing it
-	// here lets the sender relay it proactively too.
-	// No SMS here, even for PayAtCounter landing straight in BOOKED —
-	// see dbx.ConfirmParcelIntake's own comment. Submitting the form,
-	// whether a sender does it themselves or a clerk types a walk-in's
-	// details in, doesn't prove anyone has the box in hand yet; only a
-	// staff member explicitly confirming intake does, and only that
-	// moment texts either party.
+	// The real tracking code is withheld from a true guest booking — see
+	// Parcel.serviceTicketNumber's own schema comment. A self-service
+	// sender hasn't proven anyone has the box in hand yet; only
+	// handleScanParcelHandoff's first custody scan does, and only that
+	// moment texts either party the real code. An authenticated staff or
+	// courier-company session is different: they ARE the one physically
+	// holding the box right now (a Counter walk-in, a future self-service
+	// label assignment), so there's nothing left to protect by hiding it
+	// — see bookerAlreadyHasCustody's own comment. They still go through
+	// the same separate "confirm intake" scan afterward (unchanged here)
+	// before the SMS pair fires; this only restores their own visibility
+	// into the code they need to write on the physical parcel right away.
+	respCode := ""
+	if bookerAlreadyHasCustody {
+		respCode = code
+	}
 	status := "DRAFT_PENDING_PAYMENT"
 	if req.PayAtCounter {
 		status = "BOOKED"
 	}
-	c.JSON(http.StatusOK, gin.H{"parcelId": parcelID, "code": code, "deliveryCode": deliveryCode, "status": status})
+	c.JSON(http.StatusOK, gin.H{
+		"parcelId": parcelID, "code": respCode, "serviceTicketNumber": serviceTicketNumber,
+		"deliveryCode": deliveryCode, "status": status,
+	})
 }
 
-// handleConfirmParcelIntake — POST /v1/parcels/:code/confirm-intake.
-// Staff-only: the clerk/handler's explicit "the box is physically
-// here" moment (see dbx.ConfirmParcelIntake's own comment on why this
-// is separate from booking). This is the only thing that sends the
-// sender and receiver their first SMS about this parcel.
-func (s *Server) handleConfirmParcelIntake(c *gin.Context) {
-	ctx := ctxFromGin(c)
-	if !authsvc.Can(ctx, "parcels.assign", nil) {
-		writeError(c, http.StatusForbidden, "FORBIDDEN", "Not permitted to confirm parcel intake")
+// handleConfirmParcelIntake — retired. This duplicated
+// handleScanParcelHandoff's own "clerk confirms the box is physically
+// here" moment (see dbx.ConfirmParcelIntake, still present but unused —
+// left alone as a schema-adjacent function, not deleted) as a second,
+// never-wired-up path with its own message pair. The Front Desk UI
+// (apps/app's /parcel-org/receive) already calls the real thing:
+// POST /v1/parcels/:code/handoff, which now carries this same message
+// pair — see notify.ParcelIntakeConfirmed's own callers there.
+
+type settleCounterParcelRequest struct {
+	PriceKes float64 `json:"priceKes" binding:"required"`
+}
+
+// handleSettleCounterParcel — POST /v1/parcels/:code/settle-counter.
+// The clerk or rider recording the fare they just took in cash for a
+// PAY_AT_COUNTER parcel. See dbx.SettleCounterParcel for why this
+// endpoint had to exist at all: without it, every walk-in and every
+// pay-on-collection parcel stayed priceless and unpaid forever.
+//
+// CapParcelOrgCarry, the rider tier, deliberately — BookParcelInput's
+// own comment on PayAtCounter says a scheduled pickup "settles with the
+// courier who collects it", so gating this at the dispatcher tier would
+// lock out the person actually holding the money. It's the same tier
+// that already collects cash on delivery (see handleRecordCodCollection).
+//
+// Esoqo staff settling an Esoqo-operated counter parcel come through
+// the same endpoint with a nil org scope — the capability is the
+// narrowing there, rather than a tenancy match.
+func (s *Server) handleSettleCounterParcel(c *gin.Context) {
+	var req settleCounterParcelRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		writeError(c, http.StatusBadRequest, "INVALID_REQUEST", err.Error())
 		return
 	}
-	code := c.Param("code")
-	result, err := dbx.ConfirmParcelIntake(c.Request.Context(), s.Pool, code, ctx.ActorID)
-	if err != nil {
+	ctx := ctxFromGin(c)
+
+	var orgScope *string
+	switch {
+	case ctx.ParcelOrgID != "":
+		if err := authsvc.RequireCapability(ctx, authsvc.CapParcelOrgCarry, nil); err != nil {
+			writeError(c, http.StatusForbidden, "DENIED", "Your role doesn't allow taking payment")
+			return
+		}
+		orgID := ctx.ParcelOrgID
+		orgScope = &orgID
+	case authsvc.Can(ctx, "parcels.edit", nil):
+		// Esoqo ops — no tenancy narrowing to apply.
+	default:
+		writeError(c, http.StatusForbidden, "DENIED", "Not permitted to settle a parcel")
+		return
+	}
+
+	if err := dbx.SettleCounterParcel(c.Request.Context(), s.Pool, c.Param("code"), req.PriceKes, orgScope); err != nil {
 		writeParcelError(c, err)
 		return
 	}
-	_ = authsvc.SendSms(result.SenderMsisdn,
-		notify.ParcelIntakeConfirmed(code, result.CarrierOrgName, result.OriginLabel, result.ReceiverName, result.ReceiverMsisdn),
-		"PARCEL_INTAKE_CONFIRMED")
-	_ = authsvc.SendSms(result.ReceiverMsisdn,
-		notify.ParcelIntakeConfirmedToReceiver(code, result.SenderName, result.CarrierOrgName),
-		"PARCEL_INTAKE_CONFIRMED_TO_RECEIVER")
-	c.JSON(http.StatusOK, gin.H{"ok": true})
+	c.JSON(http.StatusOK, gin.H{"settled": true})
 }
 
 // handleGetParcelPricing — GET /v1/parcels/pricing?parcelType=. Public
@@ -318,6 +371,9 @@ func (s *Server) handlePayParcel(c *gin.Context) {
 		writeError(c, http.StatusBadRequest, "INVALID_REQUEST", err.Error())
 		return
 	}
+	if !optionalMsisdnString(c, &req.Msisdn, "That phone number") {
+		return
+	}
 	code := c.Param("code")
 
 	if req.PaymentMethod == "ESOKO_POINTS" {
@@ -330,7 +386,10 @@ func (s *Server) handlePayParcel(c *gin.Context) {
 			writeParcelError(c, err)
 			return
 		}
-		s.sendParcelPaymentConfirmedSms(c, code)
+		// No SMS here — paying (like booking) only describes a parcel;
+		// it doesn't prove anyone has it in hand. See
+		// handleScanParcelHandoff's own comment: that first physical
+		// custody scan is the only thing that texts sender or receiver.
 		c.JSON(http.StatusOK, gin.H{"status": "BOOKED", "method": "ESOKO_POINTS"})
 		return
 	}
@@ -386,37 +445,14 @@ func (s *Server) handlePayParcel(c *gin.Context) {
 	// Clients poll by parcel code instead (no consumer ever read it).
 	resp := gin.H{"status": "DRAFT_PENDING_PAYMENT"}
 	if stk.AutoConfirmed {
-		if _, justConfirmed, err := dbx.ConfirmParcelPaymentByCheckoutID(c.Request.Context(), s.Pool, stk.CheckoutRequestID, stk.MpesaReceiptCode, s.Cfg.LoyaltyEarnEnabled); err == nil {
+		// justConfirmed no longer triggers an SMS here — a cleared
+		// payment still only describes a parcel, not a courier's hand on
+		// it. See handleScanParcelHandoff's own comment.
+		if _, _, err := dbx.ConfirmParcelPaymentByCheckoutID(c.Request.Context(), s.Pool, stk.CheckoutRequestID, stk.MpesaReceiptCode, s.Cfg.LoyaltyEarnEnabled); err == nil {
 			resp["status"] = "BOOKED"
-			if justConfirmed {
-				s.sendParcelPaymentConfirmedSms(c, code)
-			}
 		}
 	}
 	c.JSON(http.StatusOK, resp)
-}
-
-// sendParcelPaymentConfirmedSms — shared by every path that turns a
-// parcel BOOKED (inline points, an auto-confirmed STK push, and the
-// async M-Pesa callback in handlers_payments_webhook.go) so the sender
-// always hears payment landed, not just "we'll text you when it's
-// picked up" days later.
-func (s *Server) sendParcelPaymentConfirmedSms(c *gin.Context, code string) {
-	info, err := dbx.GetParcelNotifyInfo(c.Request.Context(), s.Pool, code)
-	if err != nil || info == nil || info.SenderMsisdn == "" || info.PriceKes == nil {
-		return
-	}
-	priceKes, err := strconv.ParseFloat(*info.PriceKes, 64)
-	if err != nil {
-		return
-	}
-	var receiptCode string
-	if info.MpesaReceiptCode != nil {
-		receiptCode = *info.MpesaReceiptCode
-	}
-	_ = authsvc.SendSms(info.SenderMsisdn,
-		notify.ParcelPaymentConfirmed(code, fmt.Sprintf("%.0f", priceKes), info.ReceiverName, info.DestinationLabel, receiptCode),
-		"PARCEL_PAYMENT_CONFIRMED")
 }
 
 // handleGetParcelStatus — GET /v1/parcels/:code/status. Guest-safe —
@@ -430,6 +466,20 @@ func (s *Server) handleGetParcelStatus(c *gin.Context) {
 	}
 	if status == nil {
 		writeError(c, http.StatusNotFound, "NOT_FOUND", "That parcel was not found")
+		return
+	}
+	// Nothing to show yet, whichever identifier this was looked up by
+	// (see Parcel.serviceTicketNumber's own comment) — a parcel nobody
+	// has physically received doesn't have a real code, a route, or a
+	// status worth reading out to the outside world. The real code in
+	// particular must never leak here pre-intake: it's the one field
+	// this whole reduction exists to protect.
+	if status.IntakeConfirmedAt == nil {
+		c.JSON(http.StatusOK, gin.H{
+			"status": "AWAITING_INTAKE",
+			"message": "This parcel hasn't been received yet. Once a handler confirms it, " +
+				"you'll get a text with your tracking link.",
+		})
 		return
 	}
 	// Was the label this was scanned from genuinely ours?
@@ -512,37 +562,125 @@ func (s *Server) handleGetParcelLabel(c *gin.Context) {
 
 // handleScanParcelHandoff — POST /v1/parcels/:code/handoff. Auth
 // required — accepting custody needs a party to attribute it to (see
-// dbx.ScanHandoff's own comment on the authorization model). Sends the
-// pickup SMS to both sender and receiver, but only on the genuine
-// first BOOKED→PICKED_UP transition — never on a later leg or a
-// replayed scan (see dbx.ScanHandoff's wasFirstPickup).
+// dbx.ScanHandoff's own comment on the authorization model).
+//
+// This is the ONLY thing that ever texts a sender or receiver about a
+// parcel that was booked (or paid for) online. Booking, pricing and
+// paying all only describe or settle a parcel — none of them prove
+// anyone has it in hand — so none of them send anything (see
+// handleBookParcel's, handlePayParcel's and the M-Pesa webhook's own
+// comments). Only the genuine first BOOKED→PICKED_UP transition does
+// (never a later leg or a replayed scan — see dbx.ScanHandoff's
+// wasFirstPickup), whether that scan is a courier company's own front
+// desk confirming a walk-in drop-off, or a courier scanning a
+// scheduled pickup at the sender's door: both are the same "someone
+// verified they're holding it" event.
 func (s *Server) handleScanParcelHandoff(c *gin.Context) {
 	ctx := ctxFromGin(c)
 	code := c.Param("code")
-	status, wasFirstPickup, err := dbx.ScanHandoff(c.Request.Context(), s.Pool, code, ctx.PartyID)
+	// Resolved here, not asserted by the client — same shape
+	// handleDeliverParcel's own allowCodeless takes. Esoqo ops handling
+	// a parcel directly (a recovery, an exception at a hub) are carriers
+	// by capability rather than by a parcel_courier row; everyone else
+	// has to be a recognised carrier for this parcel. See
+	// dbx.canTakeParcelCustody.
+	staffOverride := authsvc.RequireCapability(ctx, "parcels.override", nil) == nil ||
+		authsvc.RequireCapability(ctx, "parcels.assign", nil) == nil
+	status, wasFirstPickup, resolvedCode, err := dbx.ScanHandoff(c.Request.Context(), s.Pool, code, ctx.PartyID, staffOverride)
 	if err != nil {
 		writeParcelError(c, err)
 		return
 	}
+	// resolvedCode, never the caller's `code`, from here down: a walk-in
+	// clerk scans the serviceTicketNumber the sender was given (the only
+	// reference that exists pre-intake), and every lookup and message
+	// below is keyed on the real code. Using the input would find no
+	// notify row at all and quietly text nobody — see dbx.ScanHandoff.
 	if wasFirstPickup {
-		if info, ierr := dbx.GetParcelNotifyInfo(c.Request.Context(), s.Pool, code); ierr == nil && info != nil {
+		if info, ierr := dbx.GetParcelNotifyInfo(c.Request.Context(), s.Pool, resolvedCode); ierr == nil && info != nil {
 			if info.SenderMsisdn != "" {
-				var courierName string
-				if info.CurrentHolderName != nil {
-					courierName = *info.CurrentHolderName
-				}
-				_ = authsvc.SendSms(info.SenderMsisdn, notify.ParcelPickedUp(code, info.DestinationLabel, courierName), "PARCEL_PICKED_UP")
+				_ = authsvc.SendSms(info.SenderMsisdn,
+					notify.ParcelIntakeConfirmed(resolvedCode, info.CarrierOrgName, info.OriginLabel, info.ReceiverName, info.ReceiverMsisdn),
+					"PARCEL_INTAKE_CONFIRMED")
 			}
 			if info.ReceiverMsisdn != "" {
-				var carrierName string
-				if info.CarrierOrgName != nil {
-					carrierName = *info.CarrierOrgName
-				}
-				_ = authsvc.SendSms(info.ReceiverMsisdn, notify.ParcelInTransitToYou(code, info.SenderName, info.OriginLabel, info.DeliveryCode, carrierName), "PARCEL_PICKED_UP")
+				// info.DeliveryCode, not a blank: this is the receiver's
+				// only message before a courier knocks, so it is the only
+				// place the delivery code can reach the person who has to
+				// produce it. See notify.ParcelIntakeConfirmedToReceiver.
+				_ = authsvc.SendSms(info.ReceiverMsisdn,
+					notify.ParcelIntakeConfirmedToReceiver(resolvedCode, info.SenderName, info.CarrierOrgName, info.DeliveryCode),
+					"PARCEL_INTAKE_CONFIRMED_TO_RECEIVER")
+			}
+			// A courier company's own team, not Esoqo-operated dispatch
+			// (nil ParcelOrgID — see that field's own comment) — there's
+			// no "team" outside a company's own roster to summarize a
+			// departure to.
+			if info.ParcelOrgID != nil {
+				s.sendOrgDispatchSummary(c, *info.ParcelOrgID, resolvedCode)
 			}
 		}
 	}
-	c.JSON(http.StatusOK, gin.H{"status": status})
+	// The real code goes back to the caller because this scan is the
+	// moment it comes into existence for the outside world (see
+	// Parcel.serviceTicketNumber). The front desk needs it to print the
+	// label that goes on the box — printing the ticket number there
+	// would put a reference on the parcel that no later scan resolves.
+	c.JSON(http.StatusOK, gin.H{"status": status, "code": resolvedCode})
+}
+
+// dispatchSummaryEvery — how many departures pass between summaries.
+// The first parcel of the day always sends (the desk wants to know the
+// day has started); after that, every Nth. Derived from the day's own
+// running count rather than kept as timer state anywhere, so it costs
+// nothing and behaves identically across however many API processes are
+// running.
+const dispatchSummaryEvery = 10
+
+// sendOrgDispatchSummary — the courier company's dispatch desk hears
+// "one of ours just left the station", with the day's running count.
+//
+// Genuinely a digest, which is what the old version only claimed to be:
+// it fired on every single first-handoff scan, to every active staff
+// member, synchronously inside the scan request. That was one text per
+// box per person — the exact per-parcel noise the message's own doc
+// comment says it isn't — and because authsvc.SendSms dials the gateway
+// inline, the courier's scan blocked on N sequential HTTP round-trips
+// before returning. Worse, every one of those messages drew against the
+// single global daily SMS ceiling shared with OTP, so a busy afternoon
+// could silently exhaust the budget that receivers' delivery codes and
+// OTPs depend on.
+//
+// Now: dispatch-capable staff only (see dbx.ListOrgDispatchDeskMsisdns),
+// on a cadence (see dispatchSummaryEvery), and off the request path
+// entirely. Best-effort and silent on any error — a summary text is a
+// courtesy to the desk, never a reason to fail a scan that already
+// succeeded.
+func (s *Server) sendOrgDispatchSummary(c *gin.Context, orgID, code string) {
+	count, err := dbx.CountOrgParcelsDispatchedToday(c.Request.Context(), s.Pool, orgID)
+	if err != nil {
+		return
+	}
+	if count != 1 && count%dispatchSummaryEvery != 0 {
+		return
+	}
+	org, err := dbx.GetParcelOrg(c.Request.Context(), s.Pool, orgID)
+	if err != nil || org == nil {
+		return
+	}
+	msisdns, err := dbx.ListOrgDispatchDeskMsisdns(c.Request.Context(), s.Pool, orgID)
+	if err != nil || len(msisdns) == 0 {
+		return
+	}
+	message := notify.ParcelOrgDispatchSummary(org.Name, code, count)
+	// Detached from the request context on purpose: the gin context is
+	// cancelled the moment the scan response is written, and these sends
+	// deliberately outlive it. Nothing downstream reads a result.
+	go func() {
+		for _, m := range msisdns {
+			_ = authsvc.SendSms(m, message, "PARCEL_ORG_DISPATCH_SUMMARY")
+		}
+	}()
 }
 
 type deliverParcelRequest struct {
@@ -872,6 +1010,12 @@ func writeParcelError(c *gin.Context, err error) {
 			status = http.StatusForbidden
 		case "INSUFFICIENT_POINTS":
 			status = http.StatusPaymentRequired
+		case "ALREADY_SETTLED", "ALREADY_DELIVERED":
+			// Conflict, not a bad request: the caller did nothing wrong,
+			// the parcel simply moved on. A clerk's till app can tell
+			// "someone already took this money" apart from "you typed a
+			// bad amount" without parsing prose.
+			status = http.StatusConflict
 		}
 		writeError(c, status, pe.Code, pe.Message)
 		return

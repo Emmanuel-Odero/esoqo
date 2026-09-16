@@ -1,7 +1,7 @@
 'use client';
 import { useCallback, useState, useTransition } from 'react';
 import { Icon } from '@esoqo/ui';
-import { actionCheckParcelStatus, type ParcelStatusView } from '../actions';
+import { actionCheckParcelStatus, type AwaitingIntakeView, type ParcelStatusView } from '../actions';
 import { ParcelStatusPanel } from '../ParcelStatusPanel';
 import { ParcelScanner } from './ParcelScanner';
 import { StaffPanel } from './StaffPanel';
@@ -18,7 +18,7 @@ const fieldStyle: React.CSSProperties = {
 
 export function TrackParcelForm() {
   const [code, setCode] = useState('');
-  const [result, setResult] = useState<ParcelStatusView | null | undefined>(undefined);
+  const [result, setResult] = useState<ParcelStatusView | AwaitingIntakeView | null | undefined>(undefined);
   const [pending, start] = useTransition();
 
   // Takes an explicit override so a scan result (which sets `code`
@@ -43,10 +43,12 @@ export function TrackParcelForm() {
   return (
     <>
     <div className="card">
-      <label className="sub" htmlFor="track-code" style={{ display: 'block', marginBottom: 6 }}>Parcel code</label>
+      <label className="sub" htmlFor="track-code" style={{ display: 'block', marginBottom: 6 }}>
+        Parcel code or service ticket number
+      </label>
       <div className="row" style={{ gap: 8 }}>
         <input id="track-code" className="mono" style={fieldStyle} value={code}
-          onChange={(e) => setCode(e.target.value)} placeholder="PKG-XXXXXX"
+          onChange={(e) => setCode(e.target.value)} placeholder="PKG-XXXXXX or TCK-XXXXXX"
           onKeyDown={(e) => e.key === 'Enter' && lookup()} />
         <button type="button" className="btn btn-p btn-sm" disabled={pending || !code.trim()} onClick={() => lookup()}>
           {pending ? 'Checking…' : 'Track'}

@@ -56,9 +56,6 @@ export default async function ParcelOrgLabelsPage(
             They are yours — no other company can book a parcel against them.
           </p>
         </div>
-        <div className="row" style={{ gap: 8 }}>
-          <a className="btn btn-o btn-sm" href="/parcel-org">Back to parcels</a>
-        </div>
       </div>
       <OrgLabelsClient
         labels={register.labels} counts={register.counts} batches={batches}

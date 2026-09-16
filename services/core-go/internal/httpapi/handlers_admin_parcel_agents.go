@@ -80,6 +80,9 @@ func (s *Server) handleAdminCreateParcelAgent(c *gin.Context) {
 		writeError(c, http.StatusBadRequest, "INVALID_REQUEST", err.Error())
 		return
 	}
+	if !requireMsisdn(c, &req.Msisdn, "The agent's phone number") {
+		return
+	}
 	var staffID *string
 	if ctx.ActorID != "" {
 		staffID = &ctx.ActorID
@@ -101,6 +104,9 @@ func (s *Server) handleAdminUpdateParcelAgent(c *gin.Context) {
 	var req parcelAgentRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
 		writeError(c, http.StatusBadRequest, "INVALID_REQUEST", err.Error())
+		return
+	}
+	if !requireMsisdn(c, &req.Msisdn, "The agent's phone number") {
 		return
 	}
 	if err := dbx.UpdateParcelAgent(c.Request.Context(), s.Pool, c.Param("id"), req.toInput(true)); err != nil {

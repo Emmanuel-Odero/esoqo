@@ -1,7 +1,7 @@
 'use client';
 import { displayKES, toCentsOrZero } from '@esoqo/domain';
 import { Icon } from '@esoqo/ui';
-import type { ParcelStatusView } from './actions';
+import type { AwaitingIntakeView, ParcelStatusView } from './actions';
 import {
   TIMELINE, etaText, humanTime, isOffTimeline, statusLabel, statusMessage, statusTone,
 } from './parcel-format';
@@ -18,7 +18,23 @@ import { TrackingMap } from './TrackingMap';
  * projection (see dbx.GetParcelStatus) — no sender or receiver names,
  * no phone numbers.
  */
-export function ParcelStatusPanel({ parcel }: { parcel: ParcelStatusView }) {
+export function ParcelStatusPanel({ parcel }: { parcel: ParcelStatusView | AwaitingIntakeView }) {
+  // No handler has confirmed physical custody yet — looked up by a
+  // service ticket number (see core-go's Parcel.serviceTicketNumber
+  // schema comment). There is genuinely nothing else on this parcel to
+  // show: no code, no route, no timeline position. Checked via `'message'
+  // in parcel`, not `status === 'AWAITING_INTAKE'` — ParcelStatusView.status
+  // is a plain string, so an equality check alone can't tell TypeScript
+  // the two shapes apart; the two interfaces' actually-different fields
+  // can. Narrows `parcel` to ParcelStatusView for everything below.
+  if ('message' in parcel) {
+    return (
+      <div className="row" style={{ gap: 10, alignItems: 'flex-start' }}>
+        <Icon name="clock" size={18} />
+        <p className="sub" style={{ margin: 0 }}>{parcel.message}</p>
+      </div>
+    );
+  }
   if (parcel.preLabel) return <PreLabelPanel parcel={parcel} />;
 
   const eta = etaText(parcel);

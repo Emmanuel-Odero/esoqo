@@ -5,6 +5,7 @@ package httpapi
 import (
 	"fmt"
 	"net"
+	"net/http"
 	"strconv"
 	"strings"
 	"sync/atomic"
@@ -17,6 +18,7 @@ import (
 
 	"github.com/esoqo/core-go/internal/authsvc"
 	"github.com/esoqo/core-go/internal/config"
+	"github.com/esoqo/core-go/internal/phone"
 	"github.com/esoqo/core-go/internal/storage"
 )
 
@@ -301,9 +303,11 @@ func (s *Server) Router() *gin.Engine {
 		v1.POST("/parcel-orgs/me/labels/batches/:id/void", s.authRequired(), s.handleOrgVoidLabelBatch)
 		v1.GET("/parcel-orgs/me/staff", s.authRequired(), s.handleListMyOrgStaff)
 		v1.POST("/parcel-orgs/me/staff", s.authRequired(), s.handleUpsertMyOrgStaff)
+		v1.GET("/parcel-orgs/me/pricing", s.authRequired(), s.handleListMyOrgPricing)
+		v1.POST("/parcel-orgs/me/pricing", s.authRequired(), s.handleUpsertMyOrgPricing)
 		v1.POST("/parcels/:code/price", s.handleSetParcelPrice)
+		v1.POST("/parcels/:code/settle-counter", s.authRequired(), s.handleSettleCounterParcel)
 		v1.POST("/parcels/:code/pay", s.rateLimit("pay:parcel", 30, time.Hour), s.handlePayParcel)
-		v1.POST("/parcels/:code/confirm-intake", s.authRequired(), s.handleConfirmParcelIntake)
 		v1.GET("/parcels/:code/status", s.handleGetParcelStatus)
 		// Public and code-gated like /status above — the live position
 		// is deliberately anonymous (see dbx.CourierPosition).
@@ -593,6 +597,56 @@ func clientIP(c *gin.Context) string {
 
 func writeError(c *gin.Context, status int, code, message string) {
 	c.JSON(status, gin.H{"error": gin.H{"code": code, "message": message}})
+}
+
+// requireMsisdn / optionalMsisdn — rewrite a just-bound request field to
+// E.164 before anything downstream sees it.
+//
+// Normalisation belongs HERE, at the boundary, rather than in each
+// client. Esoqo is a Kenya-only product and a Kenyan writes their
+// number "0712345678"; demanding "+254712345678" is asking the user to
+// know an implementation detail of our database. Doing it server-side
+// means every client — web, admin, the Flutter app, anything built
+// later — gets local-format input for free and, more importantly, that
+// no client can invent its own idea of what a phone number looks like.
+//
+// That last part is the real reason this is not merely cosmetic:
+// identity in Esoqo IS the msisdn (see the phone package), so a client
+// that posted "0712345678" raw would create a second Person for someone
+// who already exists, and send their OTP somewhere the gateway can't
+// route.
+//
+// Both report whether the handler may continue, and write the error
+// response themselves when not — same `if !ok { return }` shape the
+// capability guards in this package already use.
+func requireMsisdn(c *gin.Context, field *string, label string) bool {
+	if phone.NormaliseInPlace(field) {
+		return true
+	}
+	writeError(c, http.StatusBadRequest, "INVALID_MSISDN",
+		label+" doesn't look like a Kenyan mobile number")
+	return false
+}
+
+func optionalMsisdn(c *gin.Context, field **string, label string) bool {
+	if phone.NormaliseOptional(field) {
+		return true
+	}
+	writeError(c, http.StatusBadRequest, "INVALID_MSISDN",
+		label+" doesn't look like a Kenyan mobile number")
+	return false
+}
+
+// optionalMsisdnString — for a plain string field with no
+// binding:"required" tag, where "" genuinely means "not supplied"
+// (payParcelRequest.Msisdn is only meaningful for MPESA_STK; a
+// voucher's recipient may be filled in later). Empty passes; anything
+// actually typed still has to be a real number.
+func optionalMsisdnString(c *gin.Context, field *string, label string) bool {
+	if field == nil || strings.TrimSpace(*field) == "" {
+		return true
+	}
+	return requireMsisdn(c, field, label)
 }
 
 // parseKES parses one of this package's own "%.2f"-formatted KES

@@ -86,7 +86,7 @@ export function SendParcelForm(
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
   const [pending, start] = useTransition();
 
-  const [code, setCode] = useState<string | null>(null);
+  const [serviceTicketNumber, setServiceTicketNumber] = useState<string | null>(null);
   const [deliveryCode, setDeliveryCode] = useState<string | null>(null);
 
   // Typing a weight auto-picks the matching bracket, same as the mobile
@@ -141,7 +141,7 @@ export function SendParcelForm(
         payAtCounter: true,
       });
       if (!booked.ok) { setError(booked.error); return; }
-      setCode(booked.code);
+      setServiceTicketNumber(booked.serviceTicketNumber);
       setDeliveryCode(booked.deliveryCode);
       setStage('success');
     });
@@ -155,26 +155,40 @@ export function SendParcelForm(
         <span className="icbox icbox-g" style={{ margin: '0 auto 14px' }}><Icon name="check-circle" size={22} /></span>
         <h3 style={{ marginBottom: 6 }}>{isSelfDropoff ? 'Drop-off submitted' : 'Booking confirmed'}</h3>
         {isSelfDropoff ? (
-          // Deliberately no code shown here, and none sent — a tracking
-          // number and a delivery code are only issued once the station
-          // actually has the box in hand and says so (see the front
-          // desk's "Confirm receipt"), not the moment someone merely
-          // says they're bringing one in. Until then this is a request,
-          // not yet a trackable parcel.
+          // The row already exists as a real, BOOKED parcel the moment
+          // this call returns (dbx.BookParcel — PayAtCounter skips
+          // straight past DRAFT_PENDING_PAYMENT), and it's already on
+          // the company's own Front Desk worklist (GET
+          // /v1/parcel-orgs/me/parcels?status=BOOKED&originMethod=
+          // SELF_DROPOFF — see FrontDeskClient's "Waiting at your desk"
+          // table), keyed by the real tracking code. But this screen
+          // never learns that code (see core-go's
+          // Parcel.serviceTicketNumber schema comment) — nobody has
+          // proven they have the box in hand yet, so the ticket number
+          // is what the sender hands the clerk instead. The real code,
+          // the SMS pair and the receiver's own delivery code all wait
+          // for the clerk's actual "box in hand" scan.
           <>
             <p className="sub" style={{ margin: '0 0 14px' }}>
               {`We've told ${chosenStation?.name ?? 'the station'} to expect you.`}
             </p>
+            <div style={{ textAlign: 'left', border: '1px solid var(--line)', borderRadius: 10, padding: 14, marginBottom: 14 }}>
+              <p className="sub" style={{ margin: '0 0 4px', fontSize: '.8rem' }}>Your service ticket</p>
+              <p className="mono" style={{ margin: 0, fontSize: '1.3rem', fontWeight: 800, letterSpacing: '.06em' }}>{serviceTicketNumber}</p>
+              <p className="sub" style={{ margin: '8px 0 0', fontSize: '.82rem' }}>
+                {`Give this to the clerk at ${chosenStation?.name ?? 'the station'} — it's already waiting on their desk list, ready for them to check the box in.`}
+              </p>
+            </div>
             <div style={{ textAlign: 'left', border: '1px solid var(--line)', borderRadius: 10, padding: 14 }}>
               <p className="sub" style={{ margin: 0, fontSize: '.85rem' }}>
-                {`Nothing to pay online — settle the fee at ${chosenStation?.name ?? 'the station'} when you drop this off. Your tracking code and ${receiverName}'s delivery code are issued the moment the station confirms they have it in hand, not before — you'll both get a text then.`}
+                {`Nothing to pay online — settle the fee at ${chosenStation?.name ?? 'the station'} when you drop this off. We'll text you your real tracking link, and ${receiverName} their delivery code, the moment the clerk confirms they have it in hand.`}
               </p>
             </div>
           </>
         ) : (
           <>
             <p className="sub" style={{ margin: '0 0 18px' }}>
-              Parcel <span className="mono" style={{ fontWeight: 700 }}>{code}</span>
+              Service ticket <span className="mono" style={{ fontWeight: 700 }}>{serviceTicketNumber}</span>
             </p>
             <div style={{ textAlign: 'left', border: '1px solid var(--line)', borderRadius: 10, padding: 14, marginBottom: 14 }}>
               <p className="sub" style={{ margin: '0 0 4px', fontSize: '.8rem' }}>Delivery code — for your receiver</p>
@@ -192,11 +206,13 @@ export function SendParcelForm(
                 We&apos;ll text them the moment it lands there.
               </p>
             )}
-            {/* A plain anchor, not next/link: this is the same short
-                tracking URL the SMS carries, and it is as likely to be
-                copied or shared as it is to be clicked in place. */}
+            {/* No /t/<code> link here — the real tracking code doesn't
+                exist to this screen at all yet (see this block's own
+                comment above). We text it the moment a courier picks
+                this up; until then the service ticket number above is
+                the only thing to hold onto. */}
             <p className="sub" style={{ fontSize: '.85rem' }}>
-              Follow it any time at <a href={`/t/${code}`}>/t/{code}</a> — we text you that link too.
+              We&apos;ll text you your real tracking link the moment a courier picks this up.
             </p>
           </>
         )}

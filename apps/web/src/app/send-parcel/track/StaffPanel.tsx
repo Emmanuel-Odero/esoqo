@@ -9,7 +9,7 @@ import {
   type StaffMe, type PartyParcelActivityRow,
 } from './staff-actions';
 import { ParcelScanner } from './ParcelScanner';
-import { actionCheckParcelStatus, type ParcelStatusView } from '../actions';
+import { actionCheckParcelStatus, type AwaitingIntakeView, type ParcelStatusView } from '../actions';
 
 const ROLE_LABEL: Record<PartyParcelActivityRow['role'], string> = {
   SENT: 'You sent',
@@ -251,7 +251,7 @@ function SignedInPanel({ me, onSignedOut }: { me: StaffMe; onSignedOut: () => vo
 
 function ScanPanel() {
   const [code, setCode] = useState('');
-  const [status, setStatus] = useState<ParcelStatusView | null | undefined>(undefined);
+  const [status, setStatus] = useState<ParcelStatusView | AwaitingIntakeView | null | undefined>(undefined);
   const [deliveryCode, setDeliveryCode] = useState('');
   const [otpCode, setOtpCode] = useState('');
   const [otpSent, setOtpSent] = useState<string | null>(null);
@@ -321,7 +321,7 @@ function ScanPanel() {
     <div style={{ borderTop: '1px solid var(--line)', paddingTop: 10 }}>
       <p className="sub" style={{ margin: '0 0 6px' }}>Scan a parcel</p>
       <div className="row" style={{ gap: 8, marginBottom: 8 }}>
-        <input className="mono" value={code} placeholder="PKG-XXXXXX"
+        <input className="mono" value={code} placeholder="PKG-XXXXXX or TCK-XXXXXX"
           onChange={(e) => setCode(e.target.value.toUpperCase())}
           onKeyDown={(e) => e.key === 'Enter' && lookup(code)}
           style={{ flex: 1, padding: '8px 10px', border: '1.5px solid var(--line)', borderRadius: 6 }} />
@@ -329,7 +329,23 @@ function ScanPanel() {
       </div>
       <ParcelScanner onScan={lookup} />
 
-      {status && (
+      {status && 'message' in status && (
+        // AWAITING_INTAKE — looked up by the service ticket number a
+        // walk-in sender shows at the counter (see core-go's
+        // Parcel.serviceTicketNumber schema comment): there's no route
+        // or status to show yet, but doHandoff still works on whatever
+        // was typed above — ScanHandoff itself resolves a ticket number
+        // to the real parcel, so "Check in" is exactly the same action
+        // as it is for a real code below.
+        <div style={{ marginTop: 10 }}>
+          <p className="sub" style={{ margin: '0 0 8px' }}>{status.message}</p>
+          <button className="btn btn-p btn-sm" disabled={pending} onClick={doHandoff}>
+            {pending ? 'Working…' : 'Check in (received)'}
+          </button>
+        </div>
+      )}
+
+      {status && !('message' in status) && (
         <div style={{ marginTop: 10 }}>
           <p className="sub" style={{ margin: '0 0 8px' }}>
             {status.status} — {status.originLabel} → {status.destinationLabel}

@@ -131,6 +131,9 @@ func (s *Server) handleCreateOrder(c *gin.Context) {
 		writeError(c, http.StatusBadRequest, "INVALID_REQUEST", err.Error())
 		return
 	}
+	if !requireMsisdn(c, &req.BuyerMsisdn, "The buyer's phone number") {
+		return
+	}
 
 	items := make([]dbx.OrderItemInput, len(req.Items))
 	for i, it := range req.Items {

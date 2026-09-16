@@ -7,6 +7,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 
+	"github.com/esoqo/core-go/internal/audit"
 	"github.com/esoqo/core-go/internal/authsvc"
 	"github.com/esoqo/core-go/internal/dbx"
 	"github.com/esoqo/core-go/internal/notify"
@@ -374,6 +375,85 @@ func (s *Server) handleListMyOrgStaff(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"staff": staff})
 }
 
+// handleListMyOrgPricing — GET /v1/parcel-orgs/me/pricing. Returns
+// exactly what dbx.GetParcelPricing would resolve for this org on a real
+// booking — the company sees its own override where it's set one, the
+// platform default everywhere else — so there's no separate "preview"
+// arithmetic to drift from what a sender's quote will actually use.
+func (s *Server) handleListMyOrgPricing(c *gin.Context) {
+	orgID := s.orgCtx(c, authsvc.CapParcelOrgWrite)
+	if orgID == "" {
+		return
+	}
+	pricing, err := dbx.ListParcelPricing(c.Request.Context(), s.Pool, &orgID)
+	if err != nil {
+		writeError(c, http.StatusInternalServerError, "LIST_FAILED", "Could not load your pricing")
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"pricing": pricing})
+}
+
+type upsertOrgPricingRequest struct {
+	ParcelType string  `json:"parcelType" binding:"required"`
+	MinKes     float64 `json:"minKes" binding:"required"`
+	MaxKes     float64 `json:"maxKes" binding:"required"`
+}
+
+// handleUpsertMyOrgPricing — POST /v1/parcel-orgs/me/pricing. Manager-
+// only (see CapParcelOrgWrite's own placement in ParcelStaffCapabilities)
+// — a company's own rate is a commercial decision, the same tier as
+// hiring staff, not something a dispatcher or rider can change. orgID
+// comes from the session, same reasoning handleUpsertMyOrgStaff's own
+// comment gives: a manager cannot price another company's parcels
+// however the body is shaped.
+func (s *Server) handleUpsertMyOrgPricing(c *gin.Context) {
+	orgID := s.orgCtx(c, authsvc.CapParcelOrgWrite)
+	if orgID == "" {
+		return
+	}
+	var req upsertOrgPricingRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		writeError(c, http.StatusBadRequest, "INVALID_REQUEST", err.Error())
+		return
+	}
+	if err := dbx.UpsertOrgParcelPricingRule(c.Request.Context(), s.Pool, orgID, req.ParcelType, req.MinKes, req.MaxKes); err != nil {
+		writeParcelError(c, err)
+		return
+	}
+
+	// A rate change is a commercial act, and the row it writes is an
+	// in-place upsert that keeps no history of its own — ParcelPricingRule
+	// carries updatedById, but that column is a StaffUser FK, so a
+	// courier company's own manager has nowhere to sign. Without this
+	// there was no way to answer "who dropped our envelope rate, and
+	// when" after the fact. Best-effort, same as every other
+	// RecordAudit caller: losing the audit row must not fail the save
+	// the operator already saw succeed.
+	ctx := ctxFromGin(c)
+	var actorID, ip *string
+	if ctx.ActorID != "" {
+		id := ctx.ActorID
+		actorID = &id
+	}
+	if v := clientIP(c); v != "" {
+		ip = &v
+	}
+	targetType := "parcel_org"
+	_, _ = audit.RecordAudit(c.Request.Context(), s.Pool, s.Cfg.AuditChainSeed,
+		audit.CtxLike{ActorType: string(ctx.ActorType), ActorID: actorID, IP: ip},
+		audit.Input{
+			Action:     "parcel_org.pricing_changed",
+			TargetType: &targetType,
+			TargetID:   &orgID,
+			Payload: map[string]interface{}{
+				"parcelType": req.ParcelType,
+				"minKes":     req.MinKes,
+				"maxKes":     req.MaxKes,
+			},
+		})
+	c.JSON(http.StatusOK, gin.H{"saved": true})
+}
+
 type upsertOrgStaffRequest struct {
 	ID      *string `json:"id"`
 	Name    string  `json:"name" binding:"required"`
@@ -399,6 +479,9 @@ func (s *Server) handleUpsertMyOrgStaff(c *gin.Context) {
 	var req upsertOrgStaffRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
 		writeError(c, http.StatusBadRequest, "INVALID_REQUEST", err.Error())
+		return
+	}
+	if !optionalMsisdn(c, &req.Msisdn, "That phone number") {
 		return
 	}
 	active := true
@@ -544,6 +627,9 @@ func (s *Server) handleAdminUpsertParcelOrgStaff(c *gin.Context) {
 	var req upsertOrgStaffRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
 		writeError(c, http.StatusBadRequest, "INVALID_REQUEST", err.Error())
+		return
+	}
+	if !optionalMsisdn(c, &req.Msisdn, "That phone number") {
 		return
 	}
 	var pinHash string

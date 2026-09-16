@@ -196,6 +196,9 @@ func (s *Server) handleCreateOrgStaffGrant(c *gin.Context) {
 		writeError(c, http.StatusBadRequest, "INVALID_REQUEST", err.Error())
 		return
 	}
+	if !requireMsisdn(c, &req.Msisdn, "That phone number") {
+		return
+	}
 
 	person, err := dbx.FindPersonByMsisdn(c.Request.Context(), s.Pool, req.Msisdn)
 	if err != nil {

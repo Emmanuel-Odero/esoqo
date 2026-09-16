@@ -82,6 +82,12 @@ func (s *Server) handleCreateVoucher(c *gin.Context) {
 		writeError(c, http.StatusBadRequest, "INVALID_REQUEST", err.Error())
 		return
 	}
+	if !optionalMsisdnString(c, &req.RecipientMsisdn, "The recipient's phone number") {
+		return
+	}
+	if !optionalMsisdnString(c, &req.BuyerMsisdn, "The buyer's phone number") {
+		return
+	}
 	ctx := ctxFromGin(c)
 	if ctx.PartyID == "" {
 		writeError(c, http.StatusUnauthorized, "UNAUTHENTICATED", "Sign in required")
@@ -175,6 +181,9 @@ func (s *Server) handleLoadVoucher(c *gin.Context) {
 	var req loadVoucherRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
 		writeError(c, http.StatusBadRequest, "INVALID_REQUEST", err.Error())
+		return
+	}
+	if !optionalMsisdnString(c, &req.BuyerMsisdn, "The buyer's phone number") {
 		return
 	}
 	ctx := ctxFromGin(c)

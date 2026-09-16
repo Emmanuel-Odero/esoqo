@@ -47,6 +47,9 @@ func (s *Server) handleRequestParcelClaimOtp(c *gin.Context) {
 		writeError(c, http.StatusBadRequest, "INVALID_REQUEST", err.Error())
 		return
 	}
+	if !requireMsisdn(c, &req.Msisdn, "That phone number") {
+		return
+	}
 	if err := dbx.RequestParcelClaimOtp(
 		c.Request.Context(), s.Pool, s.OTP, c.Param("code"), req.Msisdn, clientIP(c),
 	); err != nil {
@@ -81,6 +84,9 @@ func (s *Server) handleVerifyParcelClaim(c *gin.Context) {
 	var req parcelClaimVerifyRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
 		writeError(c, http.StatusBadRequest, "INVALID_REQUEST", err.Error())
+		return
+	}
+	if !requireMsisdn(c, &req.Msisdn, "That phone number") {
 		return
 	}
 	code := c.Param("code")

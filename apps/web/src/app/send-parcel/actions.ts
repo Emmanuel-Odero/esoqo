@@ -134,18 +134,25 @@ export interface BookParcelInput {
 /** Creates the booking — always PAY_AT_COUNTER from this form (see
  *  BookParcelInput.payAtCounter), so it lands straight in BOOKED rather
  *  than DRAFT_PENDING_PAYMENT; there is no price/pay step after this
- *  call. deliveryCode is returned once, here — a guest sender has no
- *  session to revisit later (unlike the mobile app's "Sent" tab), so
- *  this is their only chance to see it themselves. It also now reaches
- *  the receiver automatically by SMS once a courier picks the parcel up. */
+ *  call.
+ *
+ *  The real tracking code is deliberately not part of this response —
+ *  see core-go's Parcel.serviceTicketNumber schema comment. Nobody has
+ *  proven they have the box in hand yet, guest or staff, so this
+ *  returns a service ticket number instead: what the sender shows at
+ *  the counter, and the only identifier that exists to them until a
+ *  handler's first custody scan reveals the real code by SMS.
+ *  deliveryCode is still returned here too, once — a guest sender has
+ *  no session to revisit later, so this is their only chance to see it
+ *  themselves and relay it proactively if they'd rather. */
 export async function actionBookParcel(
   input: BookParcelInput,
-): Promise<{ ok: true; code: string; deliveryCode: string } | { ok: false; error: string }> {
+): Promise<{ ok: true; serviceTicketNumber: string; deliveryCode: string } | { ok: false; error: string }> {
   if (!input.senderName.trim() || !input.senderMsisdn.trim()) return { ok: false, error: 'Enter your name and phone number' };
   if (!input.receiverName.trim() || !input.receiverMsisdn.trim()) return { ok: false, error: "Enter the receiver's name and phone number" };
   if (!input.originLabel.trim() || !input.destinationLabel.trim()) return { ok: false, error: 'Enter where it’s coming from and going to' };
   try {
-    const json = await goFetch<{ code: string; deliveryCode: string }>('/v1/parcels', {
+    const json = await goFetch<{ serviceTicketNumber: string; deliveryCode: string }>('/v1/parcels', {
       method: 'POST',
       body: JSON.stringify({
         senderName: input.senderName.trim(), senderMsisdn: input.senderMsisdn.trim(),
@@ -160,7 +167,7 @@ export async function actionBookParcel(
         payAtCounter: input.payAtCounter ?? false,
       }),
     });
-    return { ok: true, code: json.code, deliveryCode: json.deliveryCode };
+    return { ok: true, serviceTicketNumber: json.serviceTicketNumber, deliveryCode: json.deliveryCode };
   } catch (e) {
     return { ok: false, error: e instanceof Error ? e.message : UNAVAILABLE };
   }
@@ -186,6 +193,18 @@ export interface ParcelLabelInfo {
 export interface ParcelAgentStopView {
   name: string; msisdn: string; locationHint: string;
   openingHours: string | null; lat: number; lng: number; holdingFeeKes: string;
+}
+
+/** The reduced stub `GET /v1/parcels/:code/status` returns before any
+ *  handler has confirmed physical custody — looked up by a service
+ *  ticket number, or in principle a not-yet-revealed real code (see
+ *  core-go's Parcel.serviceTicketNumber schema comment). There is
+ *  genuinely nothing else to show yet, not a loading state, so this
+ *  stays its own small type rather than an all-optional
+ *  ParcelStatusView — the real one keeps every field it always had. */
+export interface AwaitingIntakeView {
+  status: 'AWAITING_INTAKE';
+  message: string;
 }
 
 export interface ParcelStatusView {
@@ -277,14 +296,14 @@ export async function actionGetCourierPosition(code: string): Promise<ParcelPosi
  *  "Track a parcel" lookup. */
 export async function actionCheckParcelStatus(
   code: string, k?: string,
-): Promise<ParcelStatusView | null> {
+): Promise<ParcelStatusView | AwaitingIntakeView | null> {
   try {
     // `k` is the signature printed in a scanned label's QR. Passing it
     // through is what lets core-go say whether the sticker is genuinely
     // ours; omitting it (a typed code, an SMS link) yields
     // labelVerdict: "unverified", which is not the same as a forgery.
     const qs = k ? `?k=${encodeURIComponent(k)}` : '';
-    return await goFetch<ParcelStatusView>(`/v1/parcels/${encodeURIComponent(code)}/status${qs}`);
+    return await goFetch<ParcelStatusView | AwaitingIntakeView>(`/v1/parcels/${encodeURIComponent(code)}/status${qs}`);
   } catch {
     return null;
   }

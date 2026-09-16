@@ -341,11 +341,17 @@ func ParcelInTransitToYou(code, senderName, originLabel, deliveryCode, carrierNa
 // intake-confirmation message names who's actually holding the
 // parcel, same "carrierName empty means us" convention
 // ParcelInTransitToYou/ParcelPickedUp already follow.
+//
+// trunc'd like every other caller-supplied field in this file. A
+// company name is tenant-controlled free text, so an unbounded one was
+// the single field that could push an otherwise-fine message past the
+// 160-char segment budget — silently doubling the per-message cost of
+// every notification that named that tenant.
 func courierCompanyLabel(carrierOrgName *string) string {
 	if carrierOrgName == nil || *carrierOrgName == "" {
 		return "Esoqo"
 	}
-	return *carrierOrgName
+	return trunc(*carrierOrgName)
 }
 
 // ParcelIntakeConfirmed — the sender's text the moment staff confirms
@@ -355,20 +361,75 @@ func courierCompanyLabel(carrierOrgName *string) string {
 // hand yet. Names the receiver (and their phone) so the sender can see
 // at a glance who this is bound for, matching what BookParcel's own
 // response already showed them.
+// Promises only what a code path actually delivers: the sender hears
+// again at ParcelDelivered, and nowhere in between. It used to say
+// "we'll text you when we dispatch it" as well, which was never true —
+// the dispatch scan texts the carrying company's own desk
+// (ParcelOrgDispatchSummary), never the sender.
 func ParcelIntakeConfirmed(code string, carrierOrgName *string, officeLabel, receiverName, receiverMsisdn string) string {
+	full := fmt.Sprintf(
+		"Esoqo Parcel: Confirmed you submitted parcel %s at %s, %s. We'll text you when %s (%s) gets it.",
+		code, courierCompanyLabel(carrierOrgName), trunc(officeLabel), trunc(receiverName), receiverMsisdn)
+	if len(full) <= smsSegmentBudget {
+		return withTrack(full, code)
+	}
+	// Same clause-dropping degradation ParcelInTransitToYou documents,
+	// applied to the one clause that isn't load-bearing here: the sender
+	// was physically standing in that office when they handed the box
+	// over, so naming it back to them is the least valuable thing in the
+	// sentence. Who has it and who it's going to both stay.
 	return withTrack(fmt.Sprintf(
-		"Esoqo Parcel: Confirmed you submitted parcel %s at %s, %s. We'll text you when we dispatch it and when %s (%s) gets it.",
-		code, courierCompanyLabel(carrierOrgName), trunc(officeLabel), trunc(receiverName), receiverMsisdn), code)
+		"Esoqo Parcel: Confirmed you submitted parcel %s at %s. We'll text you when %s (%s) gets it.",
+		code, courierCompanyLabel(carrierOrgName), trunc(receiverName), receiverMsisdn), code)
 }
 
 // ParcelIntakeConfirmedToReceiver — the receiver's side of the same
-// confirmation. No deliveryCode here (matching the pre-existing
-// ParcelInTransitToYou split) — the receiver doesn't need it until the
-// parcel is actually moving.
-func ParcelIntakeConfirmedToReceiver(code, senderName string, carrierOrgName *string) string {
+// confirmation, and the one message that puts deliveryCode in the hands
+// of the only person who can produce it at the door.
+//
+// It deliberately carries the code even though the parcel is only just
+// in hand, because this is now the sole SMS the receiver gets before a
+// courier knocks: the intake scan replaced ParcelInTransitToYou as the
+// first-custody trigger, and that older message was where the code used
+// to ride. Dropping it here left DeliverParcel's codeMatches branch
+// unreachable on the ordinary doorstep path — the receiver had no code
+// to give, so every delivery fell through to an OTP or a staff
+// override. Same reasoning ParcelInTransitToYou's own comment gives for
+// carrying it in the first place.
+func ParcelIntakeConfirmedToReceiver(code, senderName string, carrierOrgName *string, deliveryCode string) string {
+	// No code on file is a real state (a pre-printed label claimed
+	// before a deliveryCode was minted) — say less rather than print a
+	// blank where a code should be.
+	if deliveryCode == "" {
+		return withTrack(fmt.Sprintf(
+			"Esoqo Parcel: Confirmed %s has sent you parcel %s via %s. We'll text you when it's ready for collection.",
+			trunc(senderName), code, courierCompanyLabel(carrierOrgName)), code)
+	}
 	return withTrack(fmt.Sprintf(
-		"Esoqo Parcel: Confirmed %s has sent you parcel %s via %s. We'll text you when it's ready for collection.",
-		trunc(senderName), code, courierCompanyLabel(carrierOrgName)), code)
+		"Esoqo Parcel: %s has sent you parcel %s via %s. Give the courier code %s to receive it.",
+		trunc(senderName), code, courierCompanyLabel(carrierOrgName), deliveryCode), code)
+}
+
+// ParcelOrgDispatchSummary — sent to a courier company's dispatch desk
+// (see dbx.ListOrgDispatchDeskMsisdns) when one of their parcels leaves
+// the station: the first genuine handoff scan out of BOOKED (see
+// handleScanParcelHandoff's own wasFirstPickup gate), same trigger the
+// sender/receiver confirmation pair fires on.
+//
+// Not per-parcel noise: the caller only sends this on a cadence (see
+// httpapi's dispatchSummaryEvery), so dispatchedToday reads as "here's
+// where we are" and the desk gets a handful of messages a day rather
+// than one per box. Riders are not on the list at all — a departure
+// summary is a dispatcher's tool.
+//
+// Esoqo-operated dispatch has no equivalent — there's no "team" to
+// summarize a departure to outside a courier company's own roster,
+// which is why this is never called for a nil ParcelOrgID (see
+// ParcelNotifyInfo.ParcelOrgID's own comment).
+func ParcelOrgDispatchSummary(orgName, code string, dispatchedToday int) string {
+	return withTrack(fmt.Sprintf(
+		"Esoqo: %s dispatched from %s - %d %s sent today.",
+		code, trunc(orgName), dispatchedToday, plural(dispatchedToday, "parcel", "parcels")), code)
 }
 
 // ParcelDeliveryAttemptFailed — the receiver's side of a failed

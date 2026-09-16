@@ -52,7 +52,6 @@ export default async function ParcelOrgDashboard(
 
   const canSeeEarnings = me.capabilities.includes('parcelorg.earnings');
   const canDispatch = me.capabilities.includes('parcelorg.dispatch');
-  const canManageStaff = me.capabilities.includes('parcelorgstaff.write');
   const { stats } = me;
   const needsAttention = stats.failedDeliveries + stats.atAgent;
 
@@ -60,23 +59,11 @@ export default async function ParcelOrgDashboard(
     <>
       <div className="head">
         <div>
-          <h1>{me.org.name}</h1>
+          <h1>Parcels</h1>
           <p>
             Your parcels, your riders, your earnings.
             {me.org.status !== 'ACTIVE' && ' This company isn’t active yet — new work won’t be routed to you.'}
           </p>
-        </div>
-        <div className="row" style={{ gap: 8 }}>
-          {canDispatch && (
-            <a className="btn btn-o btn-sm" href="/parcel-org/receive">
-              Front desk{stats.awaitingDropoff > 0 ? ` (${stats.awaitingDropoff})` : ''}
-            </a>
-          )}
-          <a className="btn btn-o btn-sm" href="/parcel-org/labels">Your labels</a>
-          {canManageStaff && <a className="btn btn-o btn-sm" href="/parcel-org/team">Your team</a>}
-          <form action="/parcel-org/signout" method="post">
-            <button className="btn btn-o btn-sm" type="submit">Sign out</button>
-          </form>
         </div>
       </div>
 

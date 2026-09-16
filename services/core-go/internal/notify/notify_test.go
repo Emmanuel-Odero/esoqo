@@ -34,6 +34,10 @@ func TestParcelMessagesAreSpecificNotGeneric(t *testing.T) {
 		{"paymentConfirmedWithReceipt", ParcelPaymentConfirmed("PKG-ABC123", "585", "Faith", "Nyayo House", "TGH7X8Y9Z0"), []string{"PKG-ABC123", "585", "Faith", "Nyayo House", "TGH7X8Y9Z0"}},
 		{"paymentConfirmedPoints", ParcelPaymentConfirmed("PKG-ABC123", "585", "Faith", "Nyayo House", ""), []string{"PKG-ABC123", "585", "Faith", "Nyayo House"}},
 		{"refunded", ParcelRefunded("PKG-ABC123", "7700.00"), []string{"PKG-ABC123", "7700.00", "refund"}},
+		{"intakeConfirmed", ParcelIntakeConfirmed("PKG-ABC123", nil, "Ngara", "Faith", "+254712345678"), []string{"PKG-ABC123", "Esoqo", "Ngara", "Faith", "+254712345678"}},
+		{"intakeToReceiver", ParcelIntakeConfirmedToReceiver("PKG-ABC123", "Jane", nil, "7Y3K9Q"), []string{"PKG-ABC123", "Jane", "7Y3K9Q"}},
+		{"intakeToReceiverNoCode", ParcelIntakeConfirmedToReceiver("PKG-ABC123", "Jane", nil, ""), []string{"PKG-ABC123", "Jane"}},
+		{"dispatchSummary", ParcelOrgDispatchSummary("Dreamline", "PKG-ABC123", 10), []string{"PKG-ABC123", "Dreamline", "10 parcels"}},
 	}
 	for _, tc := range cases {
 		for _, want := range tc.want {
@@ -83,6 +87,9 @@ func TestTrackingLinkFitsOrIsOmitted(t *testing.T) {
 		"codCollected":     ParcelCodCollected("PKG-ABC123", "12000", "0", false),
 		"codShort":         ParcelCodCollected("PKG-ABC123", "12000", "3500", true),
 		"onBus":            ParcelOnBus("PKG-ABC123", "KBZ 123A", longLabel, longLabel),
+		"intakeConfirmed":  ParcelIntakeConfirmed("PKG-ABC123", &longLabel, longLabel, longLabel, "+254712345678"),
+		"intakeToReceiver": ParcelIntakeConfirmedToReceiver("PKG-ABC123", longLabel, &longLabel, "7Y3K9Q"),
+		"dispatchSummary":  ParcelOrgDispatchSummary(longLabel, "PKG-ABC123", 10),
 	}
 	for name, msg := range linked {
 		if len(msg) > 160 {
@@ -181,6 +188,54 @@ func TestParcelInTransitToYouNamesCarrier(t *testing.T) {
 	withoutCarrier := ParcelInTransitToYou("PKG-ABC123", "Jane", "CBD", "7Y3K9Q", "")
 	if strings.Contains(withoutCarrier, "via") {
 		t.Errorf("Esoqo-operated dispatch should not mention a carrier: %q", withoutCarrier)
+	}
+}
+
+// TestReceiverAlwaysGetsTheDeliveryCode — the receiver's intake message
+// is the only SMS they get before a courier knocks, so it is the only
+// place the delivery code can reach the one person DeliverParcel
+// expects to produce it.
+//
+// This regression is worth its own test because dropping the code broke
+// nothing loudly: the message still sent, still named the sender, still
+// looked right in a console log. It only surfaced at the door, as a
+// courier hitting "that delivery code doesn't match" on every single
+// parcel, because the receiver had never been told a code at all.
+func TestReceiverAlwaysGetsTheDeliveryCode(t *testing.T) {
+	carrier := "Dreamline"
+	for name, msg := range map[string]string{
+		"esoqoOperated": ParcelIntakeConfirmedToReceiver("PKG-ABC123", "Jane", nil, "7Y3K9Q"),
+		"viaCarrier":    ParcelIntakeConfirmedToReceiver("PKG-ABC123", "Jane", &carrier, "7Y3K9Q"),
+	} {
+		if !strings.Contains(msg, "7Y3K9Q") {
+			t.Errorf("%s: receiver was not given the delivery code they must hand the courier: %q", name, msg)
+		}
+	}
+
+	// The carrier is named when there is one, and "Esoqo" stands in when
+	// dispatch is our own — same convention courierCompanyLabel applies
+	// across the intake pair.
+	if msg := ParcelIntakeConfirmedToReceiver("PKG-ABC123", "Jane", &carrier, "7Y3K9Q"); !strings.Contains(msg, "Dreamline") {
+		t.Errorf("expected the carrying company to be named: %q", msg)
+	}
+
+	// No code on file is a real state, and must read as a coherent
+	// message rather than printing an empty slot where a code belongs.
+	noCode := ParcelIntakeConfirmedToReceiver("PKG-ABC123", "Jane", nil, "")
+	if strings.Contains(noCode, "code  ") || strings.HasSuffix(strings.TrimSpace(noCode), "code") {
+		t.Errorf("a missing delivery code should change the sentence, not leave a blank: %q", noCode)
+	}
+}
+
+// TestParcelIntakeConfirmedPromisesOnlyWhatWeSend — the sender's intake
+// message once said "we'll text you when we dispatch it", which no code
+// path ever did: the dispatch scan texts the carrying company's own desk
+// (ParcelOrgDispatchSummary), never the sender. The next thing a sender
+// actually hears is ParcelDelivered.
+func TestParcelIntakeConfirmedPromisesOnlyWhatWeSend(t *testing.T) {
+	msg := ParcelIntakeConfirmed("PKG-ABC123", nil, "Ngara", "Faith", "+254712345678")
+	if strings.Contains(msg, "dispatch") {
+		t.Errorf("sender is promised a dispatch SMS that nothing sends: %q", msg)
 	}
 }
 

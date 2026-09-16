@@ -230,6 +230,9 @@ func (s *Server) handleRequestWithdrawal(c *gin.Context) {
 		writeError(c, http.StatusBadRequest, "INVALID_REQUEST", err.Error())
 		return
 	}
+	if !optionalMsisdn(c, &req.PayeeMsisdn, "The payee's phone number") {
+		return
+	}
 	orgID := c.Param("id")
 	withdrawalID, err := dbx.RequestWithdrawal(c.Request.Context(), s.Pool, dbx.RequestWithdrawalInput{
 		OrgID: orgID, RequestedBy: ctx.PartyID, AmountKES: req.AmountKES.KES(),

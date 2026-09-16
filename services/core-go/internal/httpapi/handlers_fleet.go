@@ -178,6 +178,9 @@ func (s *Server) handleCreateCrew(c *gin.Context) {
 		writeError(c, http.StatusBadRequest, "INVALID_REQUEST", err.Error())
 		return
 	}
+	if !optionalMsisdn(c, &req.Msisdn, "That phone number") {
+		return
+	}
 	cr, err := dbx.CreateCrew(c.Request.Context(), s.Pool, ctxFromGin(c), req.OrgID, req.Name, req.Role, req.Msisdn)
 	if err != nil {
 		writeFleetError(c, err)
@@ -381,6 +384,9 @@ func (s *Server) handleCreateFare(c *gin.Context) {
 	var req createFareRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
 		writeError(c, http.StatusBadRequest, "INVALID_REQUEST", err.Error())
+		return
+	}
+	if !optionalMsisdn(c, &req.BuyerMsisdn, "The buyer's phone number") {
 		return
 	}
 	tripID := req.TripID

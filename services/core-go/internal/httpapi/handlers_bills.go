@@ -173,6 +173,9 @@ func (s *Server) handleContributeToBill(c *gin.Context) {
 		writeError(c, http.StatusBadRequest, "INVALID_REQUEST", err.Error())
 		return
 	}
+	if !requireMsisdn(c, &req.ContributorMsisdn, "That phone number") {
+		return
+	}
 	var contributorPartyID *string
 	if token := bearerToken(c); token != "" {
 		if ctx, _ := s.Session.CtxFromToken(c.Request.Context(), token, clientIP(c)); ctx != nil && ctx.PartyID != "" {

@@ -35,6 +35,9 @@ func (s *Server) handleIssueAllowanceBatch(c *gin.Context) {
 		writeError(c, http.StatusBadRequest, "INVALID_REQUEST", err.Error())
 		return
 	}
+	if !requireMsisdn(c, &req.EmployerMsisdn, "The employer's phone number") {
+		return
+	}
 	ctx := ctxFromGin(c)
 	employeePartyIDs := make([]string, 0, len(req.EmployeeMsisdns))
 	for _, msisdn := range req.EmployeeMsisdns {

@@ -24,6 +24,9 @@ func (s *Server) handleIssueOtp(c *gin.Context) {
 		writeError(c, http.StatusBadRequest, "INVALID_REQUEST", err.Error())
 		return
 	}
+	if !requireMsisdn(c, &req.Msisdn, "That phone number") {
+		return
+	}
 
 	result, err := s.OTP.IssueOtp(c.Request.Context(), req.Msisdn, authsvc.OtpPurpose(req.Purpose), clientIP(c))
 	if err != nil {
@@ -51,6 +54,9 @@ func (s *Server) handleVerifyOtp(c *gin.Context) {
 	var req verifyOtpRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
 		writeError(c, http.StatusBadRequest, "INVALID_REQUEST", err.Error())
+		return
+	}
+	if !requireMsisdn(c, &req.Msisdn, "That phone number") {
 		return
 	}
 
@@ -170,6 +176,9 @@ func (s *Server) handleResetPin(c *gin.Context) {
 	var req resetPinRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
 		writeError(c, http.StatusBadRequest, "INVALID_REQUEST", err.Error())
+		return
+	}
+	if !requireMsisdn(c, &req.Msisdn, "That phone number") {
 		return
 	}
 	if authsvc.IsWeakPin(req.Pin) {

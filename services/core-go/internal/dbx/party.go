@@ -8,6 +8,8 @@ import (
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
+
+	"github.com/esoqo/core-go/internal/phone"
 )
 
 // Every query below spells out camelCase column names in double quotes.
@@ -34,13 +36,24 @@ func FindPersonByMsisdn(ctx context.Context, pool *pgxpool.Pool, msisdn string) 
 	return findPersonByWhere(ctx, pool, `pr.msisdn = $1`, msisdn)
 }
 
-// FindPersonByIdentifier — phone (E.164) or email, whichever the string
-// looks like. Same "@" sniff auth-credential.ts's findSubjectCredential
-// uses, since the web sign-in form accepts either.
+// FindPersonByIdentifier — phone or email, whichever the string looks
+// like. Same "@" sniff auth-credential.ts's findSubjectCredential uses,
+// since the web sign-in form accepts either.
+//
+// The phone branch normalises before matching, because msisdn is stored
+// in E.164 and the lookup is an exact equality: someone who signs in by
+// typing the number the way they'd say it out loud ("0712345678") would
+// otherwise get "no such account" for an account that plainly exists.
+// Falls back to the raw string when normalisation fails, so a
+// non-Kenyan or legacy-format row stored before this is still reachable
+// rather than newly locked out.
 func FindPersonByIdentifier(ctx context.Context, pool *pgxpool.Pool, identifier string) (*PersonAuth, error) {
 	trimmed := strings.TrimSpace(identifier)
 	if strings.Contains(trimmed, "@") {
 		return findPersonByWhere(ctx, pool, `pr.email = $1`, strings.ToLower(trimmed))
+	}
+	if normalised, ok := phone.Normalise(trimmed); ok {
+		return findPersonByWhere(ctx, pool, `pr.msisdn = $1`, normalised)
 	}
 	return findPersonByWhere(ctx, pool, `pr.msisdn = $1`, trimmed)
 }

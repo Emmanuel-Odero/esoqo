@@ -424,6 +424,9 @@ func (s *Server) handleUpdateParcelDetails(c *gin.Context) {
 		writeError(c, http.StatusBadRequest, "INVALID_REQUEST", err.Error())
 		return
 	}
+	if !requireMsisdn(c, &req.ReceiverMsisdn, "The receiver's phone number") {
+		return
+	}
 	parcelID := c.Param("id")
 	if err := dbx.UpdateParcelDetails(c.Request.Context(), s.Pool, parcelID, req.ReceiverName, req.ReceiverMsisdn, req.DestinationLabel, req.Notes); err != nil {
 		writeParcelAdminError(c, err)
@@ -742,6 +745,9 @@ func (s *Server) handleAdminAddCourier(c *gin.Context) {
 	var req adminAddCourierRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
 		writeError(c, http.StatusBadRequest, "INVALID_REQUEST", err.Error())
+		return
+	}
+	if !requireMsisdn(c, &req.Msisdn, "The courier's phone number") {
 		return
 	}
 	courierID, _, esoqoID, err := dbx.AdminAddCourier(c.Request.Context(), s.Pool, dbx.AdminAddCourierInput{

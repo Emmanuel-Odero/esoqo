@@ -11,6 +11,8 @@ import (
 	cryptorand "crypto/rand"
 	"encoding/json"
 	"errors"
+	"fmt"
+	"log"
 	"strconv"
 	"strings"
 	"time"
@@ -160,25 +162,25 @@ type BookParcelInput struct {
 // PENDING_PAYMENT status already follows — SetParcelPrice then
 // PayParcelWithPoints/ConfirmParcelPaymentByCheckoutID are what turn it
 // into a real, BOOKED parcel.
-func BookParcel(ctx context.Context, pool *pgxpool.Pool, in BookParcelInput) (parcelID, code, deliveryCode string, err error) {
+func BookParcel(ctx context.Context, pool *pgxpool.Pool, in BookParcelInput) (parcelID, code, deliveryCode, serviceTicketNumber string, err error) {
 	if in.SenderName == "" || in.SenderMsisdn == "" {
-		return "", "", "", &ParcelError{"BAD_INPUT", "Sender name and phone are required"}
+		return "", "", "", "", &ParcelError{"BAD_INPUT", "Sender name and phone are required"}
 	}
 	if in.ReceiverName == "" || in.ReceiverMsisdn == "" {
-		return "", "", "", &ParcelError{"BAD_INPUT", "Receiver name and phone are required"}
+		return "", "", "", "", &ParcelError{"BAD_INPUT", "Receiver name and phone are required"}
 	}
 	if in.OriginLabel == "" || in.DestinationLabel == "" {
-		return "", "", "", &ParcelError{"BAD_INPUT", "Origin and destination are required"}
+		return "", "", "", "", &ParcelError{"BAD_INPUT", "Origin and destination are required"}
 	}
 	if !isValidParcelType(in.ParcelType) {
-		return "", "", "", &ParcelError{"BAD_INPUT", "Choose a valid parcel type"}
+		return "", "", "", "", &ParcelError{"BAD_INPUT", "Choose a valid parcel type"}
 	}
 	pricing, err := GetParcelPricing(ctx, pool, in.ParcelType, in.ParcelOrgID)
 	if err != nil {
-		return "", "", "", err
+		return "", "", "", "", err
 	}
 	if pricing == nil {
-		return "", "", "", &ParcelError{"BAD_INPUT", "That parcel type is not priced yet — ask an admin to set it up"}
+		return "", "", "", "", &ParcelError{"BAD_INPUT", "That parcel type is not priced yet — ask an admin to set it up"}
 	}
 	// Cover is priced once, here, and written onto the row — see
 	// BookParcelInput.CoverageTierID's own comment on why it's frozen
@@ -186,14 +188,14 @@ func BookParcel(ctx context.Context, pool *pgxpool.Pool, in BookParcelInput) (pa
 	var coverageFeeKes *float64
 	if in.CoverageTierID != nil && *in.CoverageTierID != "" {
 		if in.DeclaredValueKes == nil || *in.DeclaredValueKes <= 0 {
-			return "", "", "", &ParcelError{"BAD_INPUT", "Say what the contents are worth to add cover"}
+			return "", "", "", "", &ParcelError{"BAD_INPUT", "Say what the contents are worth to add cover"}
 		}
 		tier, terr := GetCoverageTier(ctx, pool, *in.CoverageTierID)
 		if terr != nil {
-			return "", "", "", terr
+			return "", "", "", "", terr
 		}
 		if tier == nil || !tier.Active {
-			return "", "", "", &ParcelError{"BAD_INPUT", "That cover level isn't available"}
+			return "", "", "", "", &ParcelError{"BAD_INPUT", "That cover level isn't available"}
 		}
 		// This is the number frozen onto the parcel, and it must equal what
 		// the quote endpoint showed the sender — same method, same cents,
@@ -206,7 +208,7 @@ func BookParcel(ctx context.Context, pool *pgxpool.Pool, in BookParcelInput) (pa
 		originMethod = "SCHEDULED_PICKUP"
 	}
 	if originMethod != "SCHEDULED_PICKUP" && originMethod != "SELF_DROPOFF" {
-		return "", "", "", &ParcelError{"BAD_INPUT", "Unknown origin method"}
+		return "", "", "", "", &ParcelError{"BAD_INPUT", "Unknown origin method"}
 	}
 	// A self-drop-off has to name a real, walk-in-capable station —
 	// otherwise a front desk somewhere would be expecting a walk-in
@@ -215,14 +217,14 @@ func BookParcel(ctx context.Context, pool *pgxpool.Pool, in BookParcelInput) (pa
 	// destination agent check just below already follows.
 	if originMethod == "SELF_DROPOFF" {
 		if in.ParcelOrgID == nil || *in.ParcelOrgID == "" {
-			return "", "", "", &ParcelError{"BAD_INPUT", "Choose which station you're dropping this off at"}
+			return "", "", "", "", &ParcelError{"BAD_INPUT", "Choose which station you're dropping this off at"}
 		}
 		org, oerr := GetParcelOrg(ctx, pool, *in.ParcelOrgID)
 		if oerr != nil {
-			return "", "", "", oerr
+			return "", "", "", "", oerr
 		}
 		if org == nil || org.Status != ParcelOrgActive || !org.AcceptsWalkIn {
-			return "", "", "", &ParcelError{"BAD_INPUT", "That station isn't taking walk-in drop-offs"}
+			return "", "", "", "", &ParcelError{"BAD_INPUT", "That station isn't taking walk-in drop-offs"}
 		}
 	}
 	// A pickup point that's full or switched off is refused at booking
@@ -230,20 +232,26 @@ func BookParcel(ctx context.Context, pool *pgxpool.Pool, in BookParcelInput) (pa
 	if in.DestinationAgentID != nil && *in.DestinationAgentID != "" {
 		agent, aerr := GetParcelAgent(ctx, pool, *in.DestinationAgentID)
 		if aerr != nil {
-			return "", "", "", aerr
+			return "", "", "", "", aerr
 		}
 		if agent == nil || !agent.Active {
-			return "", "", "", &ParcelError{"BAD_INPUT", "That pickup point isn't available"}
+			return "", "", "", "", &ParcelError{"BAD_INPUT", "That pickup point isn't available"}
 		}
 		if agent.ParcelsHeld >= agent.Capacity {
-			return "", "", "", &ParcelError{"BAD_INPUT", "That pickup point is full — pick another one"}
+			return "", "", "", "", &ParcelError{"BAD_INPUT", "That pickup point is full — pick another one"}
 		}
 	}
 
 	deliveryCode, err = generateDeliveryCode()
 	if err != nil {
-		return "", "", "", err
+		return "", "", "", "", err
 	}
+	// serviceTicketNumber — minted unconditionally, on every booking
+	// path (fresh code or a pre-printed label). See its own schema
+	// comment: this, not the real tracking code, is what a self-service
+	// booking's response actually carries. Checksummed like every other
+	// short code someone might type back in at a counter.
+	serviceTicketNumber = fleetqr.ShortCodeChecked(fleetqr.PrefixServiceTicket, 6)
 
 	insertParcel := func(useCode string) error {
 		// PayAtCounter skips the whole DRAFT_PENDING_PAYMENT -> price ->
@@ -269,7 +277,7 @@ func BookParcel(ctx context.Context, pool *pgxpool.Pool, in BookParcelInput) (pa
 				"lengthCm", "widthCm", "heightCm",
 				"contentsDeclaredAt", "contentsDeclaredByStaffId",
 				"originMethod", "paymentMethod", "slaDeadlineAt",
-				status, "createdAt"
+				status, "createdAt", "serviceTicketNumber"
 			) VALUES (
 				gen_random_uuid(), $1, $2, $3, $4, $5, $6, $7, $8, $9, $10,
 				$11::"ParcelType", $12, $13, $14::"ParcelTransportMode", $15, $16,
@@ -286,7 +294,7 @@ func BookParcel(ctx context.Context, pool *pgxpool.Pool, in BookParcelInput) (pa
 					ORDER BY r."parcelOrgId" NULLS LAST
 					LIMIT 1
 				) * interval '1 hour' END,
-				$32::"ParcelStatus", now()
+				$32::"ParcelStatus", now(), $33
 			) RETURNING id`,
 			useCode, deliveryCode, in.SenderPartyID, in.SenderName, in.SenderMsisdn,
 			in.ReceiverName, in.ReceiverMsisdn, in.OriginLabel, in.DestinationLabel, in.Notes,
@@ -296,7 +304,7 @@ func BookParcel(ctx context.Context, pool *pgxpool.Pool, in BookParcelInput) (pa
 			in.ParcelOrgID,
 			in.OriginLat, in.OriginLng, in.DestinationLat, in.DestinationLng,
 			in.LengthCm, in.WidthCm, in.HeightCm, in.ContentsDeclaredByStaffID,
-			originMethod, paymentMethod, status).
+			originMethod, paymentMethod, status, serviceTicketNumber).
 			Scan(&parcelID)
 	}
 
@@ -308,7 +316,7 @@ func BookParcel(ctx context.Context, pool *pgxpool.Pool, in BookParcelInput) (pa
 		code = *in.ExistingCode
 		tx, terr := pool.Begin(ctx)
 		if terr != nil {
-			return "", "", "", terr
+			return "", "", "", "", terr
 		}
 		defer func() { _ = tx.Rollback(ctx) }()
 		var stockID string
@@ -320,10 +328,10 @@ func BookParcel(ctx context.Context, pool *pgxpool.Pool, in BookParcelInput) (pa
 			FROM parcel_label_stock WHERE code = $1 AND "usedAt" IS NULL FOR UPDATE`,
 			code).Scan(&stockID, &stockOrgID, &voidedAt, &voidedReason)
 		if errors.Is(lockErr, pgx.ErrNoRows) {
-			return "", "", "", &ParcelError{"BAD_INPUT", "That label code isn't a known, unused pre-printed label"}
+			return "", "", "", "", &ParcelError{"BAD_INPUT", "That label code isn't a known, unused pre-printed label"}
 		}
 		if lockErr != nil {
-			return "", "", "", lockErr
+			return "", "", "", "", lockErr
 		}
 		// A withdrawn pad. Checked inside the lock alongside everything
 		// else, so voiding a batch while somebody is mid-booking races
@@ -333,7 +341,7 @@ func BookParcel(ctx context.Context, pool *pgxpool.Pool, in BookParcelInput) (pa
 			if voidedReason != nil && *voidedReason != "" {
 				msg += " — " + *voidedReason
 			}
-			return "", "", "", &ParcelError{"BAD_INPUT", msg}
+			return "", "", "", "", &ParcelError{"BAD_INPUT", msg}
 		}
 		// The induction check: a pad issued to a company is spendable
 		// only by that company. This is the moment the physical label
@@ -348,7 +356,7 @@ func BookParcel(ctx context.Context, pool *pgxpool.Pool, in BookParcelInput) (pa
 				// Deliberately doesn't name the owning company. Whoever is
 				// holding this sticker isn't entitled to learn which of our
 				// partners it was printed for.
-				return "", "", "", &ParcelError{"FORBIDDEN", "That label was issued to another company — use one of your own"}
+				return "", "", "", "", &ParcelError{"FORBIDDEN", "That label was issued to another company — use one of your own"}
 			}
 		}
 		if err := tx.QueryRow(ctx, `
@@ -360,7 +368,7 @@ func BookParcel(ctx context.Context, pool *pgxpool.Pool, in BookParcelInput) (pa
 				"parcelOrgId", "originLat", "originLng", "destinationLat", "destinationLng",
 				"lengthCm", "widthCm", "heightCm",
 				"contentsDeclaredAt", "contentsDeclaredByStaffId",
-				status, "createdAt"
+				status, "createdAt", "serviceTicketNumber"
 			) VALUES (
 				gen_random_uuid(), $1, $2, $3, $4, $5, $6, $7, $8, $9, $10,
 				$11::"ParcelType", $12, $13, $14::"ParcelTransportMode", $15, $16,
@@ -369,7 +377,7 @@ func BookParcel(ctx context.Context, pool *pgxpool.Pool, in BookParcelInput) (pa
 				-- Stamped together: the timestamp is only meaningful
 				-- alongside the person who asked.
 				CASE WHEN $29::uuid IS NULL THEN NULL ELSE now() END, $29::uuid,
-				'DRAFT_PENDING_PAYMENT', now()
+				'DRAFT_PENDING_PAYMENT', now(), $30
 			) RETURNING id`,
 			code, deliveryCode, in.SenderPartyID, in.SenderName, in.SenderMsisdn,
 			in.ReceiverName, in.ReceiverMsisdn, in.OriginLabel, in.DestinationLabel, in.Notes,
@@ -378,26 +386,31 @@ func BookParcel(ctx context.Context, pool *pgxpool.Pool, in BookParcelInput) (pa
 			in.DestinationAgentID, in.DeclaredValueKes, in.CoverageTierID, coverageFeeKes,
 			in.ParcelOrgID,
 			in.OriginLat, in.OriginLng, in.DestinationLat, in.DestinationLng,
-			in.LengthCm, in.WidthCm, in.HeightCm, in.ContentsDeclaredByStaffID).
+			in.LengthCm, in.WidthCm, in.HeightCm, in.ContentsDeclaredByStaffID,
+			serviceTicketNumber).
 			Scan(&parcelID); err != nil {
-			return "", "", "", err
+			return "", "", "", "", err
 		}
 		if _, err := tx.Exec(ctx, `
 			UPDATE parcel_label_stock SET "usedAt" = now(), "usedByParcelId" = $1 WHERE id = $2`,
 			parcelID, stockID); err != nil {
-			return "", "", "", err
+			return "", "", "", "", err
 		}
 		if err := tx.Commit(ctx); err != nil {
-			return "", "", "", err
+			return "", "", "", "", err
 		}
-		return parcelID, code, deliveryCode, nil
+		return parcelID, code, deliveryCode, serviceTicketNumber, nil
 	}
 
 	err = retryUnique(func() error {
 		code = fleetqr.ShortCodeChecked(fleetqr.PrefixParcel, 6)
+		// Regenerated on every retry, not just `code` — a collision on
+		// either @unique column fails the same INSERT, and holding onto
+		// a stale ticket number across retries would just collide again.
+		serviceTicketNumber = fleetqr.ShortCodeChecked(fleetqr.PrefixServiceTicket, 6)
 		return insertParcel(code)
 	})
-	return parcelID, code, deliveryCode, err
+	return parcelID, code, deliveryCode, serviceTicketNumber, err
 }
 
 // BargainReason — one admin-configured "make an offer" option, e.g.
@@ -486,6 +499,97 @@ func GetParcelPricing(ctx context.Context, pool *pgxpool.Pool, parcelType string
 		return nil, nil
 	}
 	return p, err
+}
+
+// How far a company's own rate may sit from the platform card it forks
+// from — half the platform floor at the low end, double the platform
+// ceiling at the high end.
+const (
+	orgPriceFloorFactor   = 0.5
+	orgPriceCeilingFactor = 2.0
+)
+
+// OrgPriceBounds — the range a courier company's own rate for a bracket
+// must land inside, given the platform card's band for that bracket.
+//
+// Bounds exist because "a company sets its own price" and "a company
+// sets any price at all" are different products. The only check here
+// used to be minKes > 0, so a company could quote KES 1 or KES 1,000,000
+// for an envelope and GetParcelPricing would serve that straight to a
+// sender as the quote. On a marketplace where Esoqo takes a percentage
+// of the fare, letting the counterparty set the base unilaterally and
+// without limit is a structural hole, not a missing validation.
+//
+// The band is deliberately wide: this is a guardrail against
+// fat-fingers and abuse, not a pricing committee. A company that
+// genuinely needs to sit outside it is having a commercial
+// conversation, which is what a platform-card change is for.
+//
+// Pure so it's directly testable without a DB fixture, same pattern
+// nextHandoffStatus and SplitParcelRevenue already use.
+func OrgPriceBounds(platformMin, platformMax money.Cents) (floor, ceiling money.Cents) {
+	return platformMin.Scale(orgPriceFloorFactor), platformMax.Scale(orgPriceCeilingFactor)
+}
+
+// UpsertOrgParcelPricingRule — a courier company setting its own price
+// for one parcel type, the self-service counterpart to admin's
+// Prisma-backed platform-card editor (see this file's own "sole writer"
+// comment on ParcelPricing — that's true for the platform card;
+// company-owned rows are a second, cleanly partitioned writer, the same
+// shape ParcelOrgStaff already has between handleAdminUpsertParcelOrgStaff
+// and handleUpsertMyOrgStaff).
+//
+// Deliberately narrow: a company sets minKes/maxKes only. Everything
+// else on the row (weight bracket, bargain range, suggested transport
+// mode, agent discount, SLA) is copied in from the current platform
+// default at save time, not left editable — those describe the bracket
+// itself, which has to mean the same weight range for every company, not
+// something each one can quietly redefine. The tradeoff this accepts:
+// if admin changes those platform fields later, a company's existing
+// override only picks up the change the next time it saves its own
+// price, not immediately — the same staleness any org-specific row
+// already has against the platform card it forked from.
+func UpsertOrgParcelPricingRule(ctx context.Context, pool *pgxpool.Pool, orgID, parcelType string, minKes, maxKes float64) error {
+	if minKes <= 0 || maxKes < minKes {
+		return &ParcelError{"BAD_INPUT", "minKes must be positive and maxKes must be at least minKes"}
+	}
+	platform, err := GetParcelPricing(ctx, pool, parcelType, nil)
+	if err != nil {
+		return err
+	}
+	if platform == nil {
+		return &ParcelError{"BAD_INPUT", "That parcel type is not priced on the platform yet — ask Esoqo to set it up first"}
+	}
+
+	floor, ceiling := OrgPriceBounds(platform.MinKes.Cents(), platform.MaxKes.Cents())
+	if money.FromKES(minKes) < floor || money.FromKES(maxKes) > ceiling {
+		return &ParcelError{"BAD_INPUT", fmt.Sprintf(
+			"Your price for this parcel type has to sit between KES %.0f and KES %.0f",
+			money.AmountOf(floor).KES(), money.AmountOf(ceiling).KES())}
+	}
+	reasonsJSON, err := json.Marshal(platform.BargainReasons)
+	if err != nil {
+		return err
+	}
+	_, err = pool.Exec(ctx, `
+		INSERT INTO parcel_pricing_rule (
+			id, "parcelOrgId", "parcelType", "weightLabel", "minWeightKg", "maxWeightKg",
+			"minKes", "maxKes", "bargainMinPct", "bargainMaxPct", "bargainReasons",
+			"suggestedTransportMode", "agentDropDiscountPct", "updatedAt"
+		) VALUES (
+			gen_random_uuid(), $1, $2::"ParcelType", $3, $4, $5,
+			$6, $7, $8, $9, $10::jsonb,
+			$11::"ParcelTransportMode", $12, now()
+		)
+		ON CONFLICT ("parcelOrgId", "parcelType") DO UPDATE SET
+			"weightLabel" = $3, "minWeightKg" = $4, "maxWeightKg" = $5,
+			"minKes" = $6, "maxKes" = $7, "bargainMinPct" = $8, "bargainMaxPct" = $9,
+			"bargainReasons" = $10::jsonb, "suggestedTransportMode" = $11::"ParcelTransportMode",
+			"agentDropDiscountPct" = $12, "updatedAt" = now()`,
+		orgID, parcelType, platform.WeightLabel, platform.MinWeightKg, platform.MaxWeightKg,
+		minKes, maxKes, platform.BargainMinPct, platform.BargainMaxPct, reasonsJSON,
+		platform.SuggestedTransportMode, platform.AgentDropDiscountPct)
+	return err
 }
 
 // ListParcelPricing — every parcel type's pricing, lightest first, so
@@ -827,6 +931,107 @@ func PayParcelWithPoints(ctx context.Context, pool *pgxpool.Pool, code, partyID 
 	return writeParcelRevenueSplit(ctx, pool, parcelID, priceKes)
 }
 
+// SettleCounterParcel records the money actually taken, in person, for
+// a PAY_AT_COUNTER parcel — the clerk weighing a walk-in box at the
+// desk, or the rider who collected a scheduled pickup coming back with
+// the fare.
+//
+// This closes the one funnel that had no settlement at all. BookParcel's
+// PayAtCounter branch deliberately lands a parcel in BOOKED with
+// priceKes NULL, because nobody has weighed it yet — but nothing
+// anywhere ever filled that in afterwards. SetParcelPrice can't: it only
+// accepts DRAFT_PENDING_PAYMENT, and a counter parcel skipped straight
+// past that. So every walk-in and every pay-on-collection parcel stayed
+// permanently unpriced and unpaid: no priceKes, no paidAt, no revenue
+// split, nothing for AccrueCourierEarnings to pay a courier out of
+// (it bails at priceKes <= 0), and no row in any revenue report. The
+// whole counter business was invisible to the platform's own books.
+//
+// Priced against the same band a sender would have been quoted (see
+// ParcelPriceBand), not a free number: the counter is a different place
+// to pay, not a licence to charge what you like. Bargains are
+// deliberately not offered here — a negotiated fare belongs to the
+// booking flow where the reason is captured and auditable; a clerk who
+// needs to go off-card should be discounting through that path.
+//
+// Idempotent by guard rather than by check-then-act: the UPDATE itself
+// requires paidAt IS NULL, so two clerks settling the same box at once
+// produce one settlement and one "already settled", never two revenue
+// splits.
+func SettleCounterParcel(ctx context.Context, pool *pgxpool.Pool, code string, priceKes float64, orgScope *string) error {
+	if priceKes <= 0 {
+		return &ParcelError{"BAD_INPUT", "Enter what the sender actually paid"}
+	}
+
+	var parcelID, status, parcelType string
+	var paymentMethod, paidAt, originZoneID, destinationZoneID, destinationAgentID, coverageFeeText, parcelOrgID *string
+	// Code or serviceTicketNumber, same reasoning ScanHandoff's own
+	// lookup gives: the clerk settling the fare is holding whichever
+	// reference the sender walked in with, and for a walk-in that is the
+	// ticket number. Settling is gated by capability and tenancy below,
+	// never by which reference was quoted.
+	err := pool.QueryRow(ctx, `
+		SELECT id, status::text, "parcelType"::text, "paymentMethod"::text, "paidAt"::text,
+		       "originZoneId"::text, "destinationZoneId"::text, "destinationAgentId"::text,
+		       "coverageFeeKes"::text, "parcelOrgId"::text
+		FROM parcel WHERE code = $1 OR "serviceTicketNumber" = $1`, code).
+		Scan(&parcelID, &status, &parcelType, &paymentMethod, &paidAt,
+			&originZoneID, &destinationZoneID, &destinationAgentID, &coverageFeeText, &parcelOrgID)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return &ParcelError{"NOT_FOUND", "That parcel was not found"}
+	}
+	if err != nil {
+		return err
+	}
+	// Tenancy, same reasoning handleUpsertMyOrgStaff's own comment
+	// gives: a clerk settles their own company's parcels, and the scope
+	// comes from the session, never from the body. Nil means Esoqo staff
+	// acting with an explicit capability — no narrowing to apply.
+	if orgScope != nil && (parcelOrgID == nil || *parcelOrgID != *orgScope) {
+		return &ParcelError{"NOT_FOUND", "That parcel was not found"}
+	}
+	if paymentMethod == nil || *paymentMethod != "PAY_AT_COUNTER" {
+		return &ParcelError{"BAD_INPUT", "This parcel wasn't booked to be paid at the counter"}
+	}
+	if paidAt != nil {
+		return &ParcelError{"ALREADY_SETTLED", "This parcel has already been settled"}
+	}
+	if status == "CANCELLED" || status == "RETURNED_TO_SENDER" {
+		return &ParcelError{"BAD_INPUT", "This parcel's journey is already closed"}
+	}
+
+	coverageFeeKes, err := parseAgentFee(coverageFeeText)
+	if err != nil {
+		return err
+	}
+	pricing, _, err := ParcelPriceBand(ctx, pool, PriceBandInput{
+		ParcelType:          parcelType,
+		OriginZoneID:        originZoneID,
+		DestinationZoneID:   destinationZoneID,
+		HasDestinationAgent: destinationAgentID != nil && *destinationAgentID != "",
+		CoverageFeeKes:      coverageFeeKes,
+		ParcelOrgID:         parcelOrgID,
+	})
+	if err != nil {
+		return err
+	}
+	price := money.FromKES(priceKes)
+	if price < pricing.MinKes.Cents()-priceToleranceCents || price > pricing.MaxKes.Cents()+priceToleranceCents {
+		return &ParcelError{"BAD_INPUT", "That amount is outside the standard range for this parcel"}
+	}
+
+	tag, err := pool.Exec(ctx, `
+		UPDATE parcel SET "priceKes" = $1, "paidAt" = now()
+		WHERE id = $2 AND "paidAt" IS NULL`, priceKes, parcelID)
+	if err != nil {
+		return err
+	}
+	if tag.RowsAffected() == 0 {
+		return &ParcelError{"ALREADY_SETTLED", "This parcel has already been settled"}
+	}
+	return writeParcelRevenueSplit(ctx, pool, parcelID, priceKes)
+}
+
 // generateDeliveryCode mirrors generatePickupCode's alphabet trick
 // (store.go) — short, no ambiguous characters, read aloud by a human
 // rather than scanned.
@@ -944,6 +1149,15 @@ type ParcelStatusView struct {
 	// view had the data for all along without ever surfacing it.
 	SlaDeadlineAt *time.Time `json:"slaDeadlineAt"`
 
+	// IntakeConfirmedAt — never serialized (json:"-"). Internal-only:
+	// handleGetParcelStatus uses this to decide whether the caller gets
+	// this full view at all, or the reduced pre-intake stub (see
+	// Parcel.serviceTicketNumber's own comment on why nothing here is
+	// visible to the outside world before a handler's first custody
+	// scan, whichever identifier — code or ticket number — they looked
+	// it up by).
+	IntakeConfirmedAt *time.Time `json:"-"`
+
 	// Failed-attempt summary. A receiver who was out needs to know an
 	// attempt happened and why far more than they need the status
 	// string; without this a FAILED_DELIVERY parcel reads as "stuck"
@@ -1036,21 +1250,29 @@ type ParcelLabelInfo struct {
 func GetParcelStatus(ctx context.Context, pool *pgxpool.Pool, code string) (*ParcelStatusView, error) {
 	var v ParcelStatusView
 	var agentName, agentMsisdn, agentHint, agentHours, agentLat, agentLng, agentFee *string
+	// Matches by the real code or by serviceTicketNumber — a sender who
+	// only has the ticket number (the only thing they were ever given
+	// pre-intake, see Parcel.serviceTicketNumber's own comment) still
+	// needs some way to check in. handleGetParcelStatus is what actually
+	// enforces the pre-intake reduction; this just has to find the row
+	// either way.
 	err := pool.QueryRow(ctx, `
 		SELECT p.code, p.status::text, p."originLabel", p."destinationLabel", p."parcelType"::text,
 		       p."priceKes"::text, p."collectionScheduledAt", p."createdAt", p."deliveredAt",
 		       p."cancellationReason", p."cancelledAt", p."receiptConfirmedAt",
-		       p."slaDeadlineAt", p."deliveryAttempts", p."lastAttemptAt", p."lastAttemptReason",
+		       p."slaDeadlineAt", p."intakeConfirmedAt",
+		       p."deliveryAttempts", p."lastAttemptAt", p."lastAttemptReason",
 		       p."podPhotoUrl", p."podReceivedByName", p."podMethod",
 		       a.name, a.msisdn, a."locationHint", a."openingHours",
 		       a.lat::text, a.lng::text, a."holdingFeeKes"::text
 		FROM parcel p
 		LEFT JOIN parcel_agent a ON a.id = p."destinationAgentId"
-		WHERE p.code = $1`, code).
+		WHERE p.code = $1 OR p."serviceTicketNumber" = $1`, code).
 		Scan(&v.Code, &v.Status, &v.OriginLabel, &v.DestinationLabel, &v.ParcelType,
 			&v.PriceKes, &v.CollectionScheduledAt, &v.CreatedAt, &v.DeliveredAt,
 			&v.CancellationReason, &v.CancelledAt, &v.ReceiptConfirmedAt,
-			&v.SlaDeadlineAt, &v.DeliveryAttempts, &v.LastAttemptAt, &v.LastAttemptReason,
+			&v.SlaDeadlineAt, &v.IntakeConfirmedAt,
+			&v.DeliveryAttempts, &v.LastAttemptAt, &v.LastAttemptReason,
 			&v.PodPhotoURL, &v.PodReceivedByName, &v.PodMethod,
 			&agentName, &agentMsisdn, &agentHint, &agentHours,
 			&agentLat, &agentLng, &agentFee)
@@ -1755,6 +1977,11 @@ type ParcelNotifyInfo struct {
 	// pickup SMS say "via Dreamline" instead of a bare "on its way",
 	// same reasoning every other message here already names who/what.
 	CarrierOrgName *string
+	// ParcelOrgID — nil for Esoqo-operated dispatch. Gates the
+	// dispatch-summary text to the company's own team (see
+	// notify.ParcelOrgDispatchSummary): only a courier company has a
+	// "team" to summarize a departure to.
+	ParcelOrgID *string
 }
 
 func GetParcelNotifyInfo(ctx context.Context, pool *pgxpool.Pool, code string) (*ParcelNotifyInfo, error) {
@@ -1762,13 +1989,14 @@ func GetParcelNotifyInfo(ctx context.Context, pool *pgxpool.Pool, code string) (
 	err := pool.QueryRow(ctx, `
 		SELECT p."senderName", p."senderMsisdn", p."receiverName", p."receiverMsisdn", p."originLabel", p."destinationLabel",
 		       p."deliveredAt", p."priceKes"::text, p."mpesaReceiptCode", COALESCE(pr."knownAs", pr."officialName"), p."deliveryCode",
-		       po.name
+		       po.name, p."parcelOrgId"::text
 		FROM parcel p
 		LEFT JOIN person pr ON pr."partyId" = p."currentHolderPartyId"
 		LEFT JOIN parcel_org po ON po.id = p."parcelOrgId"
 		WHERE p.code = $1`, code).
 		Scan(&v.SenderName, &v.SenderMsisdn, &v.ReceiverName, &v.ReceiverMsisdn, &v.OriginLabel, &v.DestinationLabel,
-			&v.DeliveredAt, &v.PriceKes, &v.MpesaReceiptCode, &v.CurrentHolderName, &v.DeliveryCode, &v.CarrierOrgName)
+			&v.DeliveredAt, &v.PriceKes, &v.MpesaReceiptCode, &v.CurrentHolderName, &v.DeliveryCode, &v.CarrierOrgName,
+			&v.ParcelOrgID)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return nil, nil
 	}
@@ -1778,40 +2006,193 @@ func GetParcelNotifyInfo(ctx context.Context, pool *pgxpool.Pool, code string) (
 	return &v, nil
 }
 
+// CountOrgParcelsDispatchedToday — how many of this company's parcels
+// have left its station today, for the team dispatch-summary text (see
+// notify.ParcelOrgDispatchSummary). Counts the first handoff
+// (fromPartyId IS NULL — the same "genuine first pickup" moment
+// ScanHandoff's own wasFirstPickup gates its SMS on) rather than the
+// parcel's own createdAt, so a parcel booked yesterday and only
+// collected this morning counts today, not yesterday.
+// Counted in Africa/Nairobi, not the server's UTC: "today" for a desk
+// in Nairobi rolls over at local midnight, and date_trunc on a UTC now()
+// would have rolled it at 03:00 EAT — putting every parcel dispatched
+// between midnight and 3am on the previous day's tally.
+func CountOrgParcelsDispatchedToday(ctx context.Context, pool *pgxpool.Pool, orgID string) (int, error) {
+	var n int
+	err := pool.QueryRow(ctx, `
+		SELECT count(*)
+		FROM parcel_handoff ph
+		JOIN parcel p ON p.id = ph."parcelId"
+		WHERE p."parcelOrgId" = $1 AND ph."fromPartyId" IS NULL
+		  AND ph."createdAt" >= date_trunc('day', now() AT TIME ZONE 'Africa/Nairobi')
+		                        AT TIME ZONE 'Africa/Nairobi'`, orgID).Scan(&n)
+	return n, err
+}
+
+// ListOrgDispatchDeskMsisdns — who on this company's team actually
+// hears about a departure.
+//
+// Dispatch-capable roles only (DISPATCHER/MANAGER — see
+// authsvc.ParcelStaffCapabilities, where CapParcelOrgDispatch is
+// exactly the "decides where work goes" tier). It used to be every
+// active staff member, which meant every rider on the roster got a text
+// about a box they had nothing to do with: a 20-rider company turned
+// one scan into 20 messages, all of them drawn against the same global
+// daily SMS ceiling that OTP delivery depends on (see
+// authsvc.chargeSmsBudget). A dispatch summary is a desk's tool, and
+// the desk is who gets it.
+//
+// Still party/msisdn-gated: an office-only manager with no partyId (see
+// ParcelOrgStaff's own comment) simply isn't in this list; there's no
+// number to text.
+func ListOrgDispatchDeskMsisdns(ctx context.Context, pool *pgxpool.Pool, orgID string) ([]string, error) {
+	rows, err := pool.Query(ctx, `
+		SELECT DISTINCT pr.msisdn
+		FROM parcel_org_staff st
+		JOIN person pr ON pr."partyId" = st."partyId"
+		WHERE st."orgId" = $1 AND st.active AND pr.msisdn IS NOT NULL
+		  AND st.role IN ('DISPATCHER', 'MANAGER')`, orgID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var out []string
+	for rows.Next() {
+		var m string
+		if err := rows.Scan(&m); err != nil {
+			return nil, err
+		}
+		out = append(out, m)
+	}
+	return out, rows.Err()
+}
+
+// canTakeParcelCustody — whether this party is someone the platform
+// recognises as a carrier for this particular parcel.
+//
+// This exists because the PKG- code is deliberately a *public* bearer
+// credential: it's printed on the outside of the box, and
+// GetParcelStatus is guest-safe precisely so anyone who scans it can
+// track the parcel without an account. A credential that anyone may
+// read cannot also be the thing that proves possession — but ScanHandoff
+// used to accept it as exactly that from any signed-in party, so
+// photographing a label in a matatu was enough to become
+// currentHolderPartyId, and since DeliverParcel requires the current
+// holder, enough to then close the parcel out.
+//
+// Entitlement is therefore a property of the scanner, not of the code:
+//   - an ACTIVE ParcelCourier (the Esoqo-operated fleet and gig side,
+//     including conductors who carry parcels on their own trips), or
+//   - active staff of the company actually carrying this parcel, which
+//     is what makes a front desk's walk-in intake scan work, or
+//   - the collector an admin specifically assigned (AssignParcelCollector
+//     may name a party who isn't otherwise a registered courier), or
+//   - staffOverride — Esoqo ops, decided by capability at the handler
+//     (see handleScanParcelHandoff), never asserted by a client. Same
+//     shape DeliverParcel's allowCodeless takes, and for the same
+//     reason: dbx has no business re-deriving an authorization decision
+//     the auth layer already made.
+//
+// Note what this does NOT restrict: which leg, or which company. An
+// interline handoff from one carrier's rider to another's is still a
+// legitimate scan — the rule is "a known carrier", not "the carrier we
+// predicted".
+func canTakeParcelCustody(ctx context.Context, tx pgx.Tx, partyID string, parcelOrgID, assignedCollector *string, staffOverride bool) (bool, error) {
+	if staffOverride {
+		return true, nil
+	}
+	if assignedCollector != nil && *assignedCollector == partyID {
+		return true, nil
+	}
+	var entitled bool
+	err := tx.QueryRow(ctx, `
+		SELECT EXISTS(
+			SELECT 1 FROM parcel_courier
+			WHERE "partyId" = $1 AND status = 'ACTIVE'
+		) OR EXISTS(
+			SELECT 1 FROM parcel_org_staff
+			WHERE "partyId" = $1 AND active
+			  AND $2::uuid IS NOT NULL AND "orgId" = $2::uuid
+		)`, partyID, parcelOrgID).Scan(&entitled)
+	return entitled, err
+}
+
 // ScanHandoff is a driver/handler scanning a parcel into their own
-// custody. Possession of the code plus being signed in is enough for
-// every leg *after* the first — but the very first pickup
-// (BOOKED→PICKED_UP) is gated by AssignParcelCollector's assignment,
-// when one exists: an admin who scheduled a specific collector meant
-// that scheduling to be enforced, not just a courtesy SMS. With nobody
-// assigned yet, the first signed-in scanner still takes it, matching
-// the physical reality of an unscheduled walk-in collection.
+// custody.
+//
+// Who may scan is canTakeParcelCustody's decision — see that function
+// on why possession of the code alone was never enough. On top of that,
+// the very first pickup (BOOKED→PICKED_UP) is additionally gated by
+// AssignParcelCollector's assignment, when one exists: an admin who
+// scheduled a specific collector meant that scheduling to be enforced,
+// not just a courtesy SMS. With nobody assigned yet, the first entitled
+// scanner takes it, matching the physical reality of an unscheduled
+// walk-in collection.
+//
 // Idempotent: scanning a code you already hold is a no-op, not an
 // error, so a nervous double-scan on a slow network never fails.
 // wasFirstPickup tells the caller whether this was the BOOKED→PICKED_UP
 // transition specifically — that's the one moment handlers_parcels.go
 // sends the pickup SMS; every later leg (IN_TRANSIT) and every replayed
 // scan stays silent.
-func ScanHandoff(ctx context.Context, pool *pgxpool.Pool, code, scannedByPartyID string) (status string, wasFirstPickup bool, err error) {
+//
+// The whole read-check-write runs in one transaction with the parcel row
+// locked FOR UPDATE. Custody is the one thing in this file that two
+// people genuinely race for — two couriers scanning the same label at
+// the same moment — and the previous shape read the row, decided, then
+// issued two independent writes, so both scanners could pass the
+// "assigned to another collector" check against the same stale row and
+// both take it. Locking also makes the parcel_handoff insert atomic with
+// the status change: that table is the append-only custody chain a
+// dispute is settled from, and a leg missing from it because the second
+// statement failed on its own is worse than a failed scan.
+func ScanHandoff(ctx context.Context, pool *pgxpool.Pool, code, scannedByPartyID string, staffOverride bool) (status string, wasFirstPickup bool, resolvedCode string, err error) {
 	if scannedByPartyID == "" {
-		return "", false, &ParcelError{"FORBIDDEN", "Sign in to accept a parcel"}
+		return "", false, "", &ParcelError{"FORBIDDEN", "Sign in to accept a parcel"}
 	}
+
+	tx, err := pool.Begin(ctx)
+	if err != nil {
+		return "", false, "", err
+	}
+	defer func() { _ = tx.Rollback(ctx) }()
+
 	var parcelID, currentStatus string
-	var currentHolder, assignedCollector *string
-	err = pool.QueryRow(ctx, `
-		SELECT id, status::text, "currentHolderPartyId", "assignedCollectorPartyId" FROM parcel WHERE code = $1`, code).
-		Scan(&parcelID, &currentStatus, &currentHolder, &assignedCollector)
+	var currentHolder, assignedCollector, parcelOrgID *string
+	// resolvedCode is the parcel's REAL code, whichever reference was
+	// used to find it. Everything downstream — the notify lookup, the
+	// SMS pair, the label the clerk prints — has to key off this and not
+	// off the caller's input, or a ticket-number intake silently finds
+	// no row and nobody is texted anything.
+	// Matched by the real code or by serviceTicketNumber, same as
+	// GetParcelStatus and for the sharper version of its reason: before
+	// this very scan, the ticket number is the ONLY reference the sender
+	// was ever given (see Parcel.serviceTicketNumber), so it is the only
+	// thing they can hand a clerk at the counter. A code-only lookup here
+	// made the front desk's manual entry unusable for exactly the walk-in
+	// case it exists to serve — and since this scan is what fires the
+	// sender/receiver SMS pair, failing to find the row meant nobody
+	// heard anything at all.
+	//
+	// Accepting it costs no authority: possession of either reference
+	// stopped being sufficient when canTakeParcelCustody landed below.
+	// The scanner still has to be a recognised carrier.
+	err = tx.QueryRow(ctx, `
+		SELECT id, code, status::text, "currentHolderPartyId", "assignedCollectorPartyId", "parcelOrgId"::text
+		FROM parcel WHERE code = $1 OR "serviceTicketNumber" = $1
+		FOR UPDATE`, code).
+		Scan(&parcelID, &resolvedCode, &currentStatus, &currentHolder, &assignedCollector, &parcelOrgID)
 	if errors.Is(err, pgx.ErrNoRows) {
-		return "", false, &ParcelError{"NOT_FOUND", "That parcel was not found"}
+		return "", false, "", &ParcelError{"NOT_FOUND", "That parcel was not found"}
 	}
 	if err != nil {
-		return "", false, err
+		return "", false, "", err
 	}
 	if currentStatus == "DELIVERED" {
-		return "", false, &ParcelError{"ALREADY_DELIVERED", "This parcel has already been delivered"}
+		return "", false, "", &ParcelError{"ALREADY_DELIVERED", "This parcel has already been delivered"}
 	}
 	if currentStatus == "DRAFT_PENDING_PAYMENT" {
-		return "", false, &ParcelError{"BAD_INPUT", "This parcel hasn't been paid for yet"}
+		return "", false, "", &ParcelError{"BAD_INPUT", "This parcel hasn't been paid for yet"}
 	}
 	// Both closed states, and neither was rejected before these statuses
 	// existed — a cancelled parcel was simply unreachable, so the guard
@@ -1819,27 +2200,52 @@ func ScanHandoff(ctx context.Context, pool *pgxpool.Pool, code, scannedByPartyID
 	// (it was physically in someone's hands moments ago), so scanning
 	// one has to fail loudly rather than quietly restart its journey.
 	if currentStatus == "CANCELLED" || currentStatus == "RETURNED_TO_SENDER" {
-		return "", false, &ParcelError{"BAD_INPUT", "This parcel's journey is already closed"}
+		return "", false, "", &ParcelError{"BAD_INPUT", "This parcel's journey is already closed"}
 	}
+	// Checked before entitlement: a replayed scan by whoever already
+	// holds it is a no-op whatever their current standing, so a courier
+	// suspended mid-journey doesn't start getting errors on a parcel
+	// that's already in their hands.
 	if currentHolder != nil && *currentHolder == scannedByPartyID {
-		return currentStatus, false, nil // already holding it — replayed scan
+		return currentStatus, false, resolvedCode, nil // already holding it — replayed scan
+	}
+
+	entitled, err := canTakeParcelCustody(ctx, tx, scannedByPartyID, parcelOrgID, assignedCollector, staffOverride)
+	if err != nil {
+		return "", false, "", err
+	}
+	if !entitled {
+		return "", false, "", &ParcelError{"FORBIDDEN", "Only a registered courier or this company's own staff can take a parcel"}
 	}
 	if currentStatus == "BOOKED" && assignedCollector != nil && *assignedCollector != scannedByPartyID {
-		return "", false, &ParcelError{"FORBIDDEN", "This parcel is assigned to another collector"}
+		return "", false, "", &ParcelError{"FORBIDDEN", "This parcel is assigned to another collector"}
 	}
 
 	nextStatus := nextHandoffStatus(currentStatus)
-	if _, err := pool.Exec(ctx, `
-		UPDATE parcel SET status = $1::"ParcelStatus", "currentHolderPartyId" = $2 WHERE id = $3`,
-		nextStatus, scannedByPartyID, parcelID); err != nil {
-		return "", false, err
+	wasFirstPickup = currentStatus == "BOOKED"
+	// intakeConfirmedAt — this genuine first scan is what
+	// handleGetParcelStatus's guest-safe lookup uses to decide whether
+	// the real tracking code exists to the outside world yet (see
+	// Parcel.serviceTicketNumber's own comment on the ticket-number-only
+	// window before this). Set here, not by the retired confirm-intake
+	// path, because /handoff is the one thing that actually fires this
+	// event now, whichever origin method or staff/rider session it was.
+	if _, err := tx.Exec(ctx, `
+		UPDATE parcel SET status = $1::"ParcelStatus", "currentHolderPartyId" = $2,
+			"intakeConfirmedAt" = CASE WHEN $4 THEN now() ELSE "intakeConfirmedAt" END
+		WHERE id = $3`,
+		nextStatus, scannedByPartyID, parcelID, wasFirstPickup); err != nil {
+		return "", false, "", err
 	}
-	if _, err := pool.Exec(ctx, `
+	if _, err := tx.Exec(ctx, `
 		INSERT INTO parcel_handoff (id, "parcelId", "fromPartyId", "toPartyId", "createdAt")
 		VALUES (gen_random_uuid(), $1, $2, $3, now())`, parcelID, currentHolder, scannedByPartyID); err != nil {
-		return "", false, err
+		return "", false, "", err
 	}
-	return nextStatus, currentStatus == "BOOKED", nil
+	if err := tx.Commit(ctx); err != nil {
+		return "", false, "", err
+	}
+	return nextStatus, wasFirstPickup, resolvedCode, nil
 }
 
 // nextHandoffStatus — a first scan (still BOOKED) means the courier
@@ -1981,7 +2387,17 @@ func DeliverParcel(ctx context.Context, pool *pgxpool.Pool, code, deliveryCode, 
 	// now, and failing the whole call over a pay calculation would leave
 	// a delivered parcel recorded as undelivered — far worse than an
 	// accrual an admin can replay.
-	return AccrueCourierEarnings(ctx, pool, parcelID)
+	//
+	// Swallowed rather than returned, which is what makes that comment
+	// true. Returning it sent a ledger hiccup straight to the courier's
+	// screen as a failed delivery on a parcel already marked DELIVERED,
+	// so the retry came back ALREADY_DELIVERED and neither the sender's
+	// nor the receiver's confirmation SMS ever fired. Logged, because an
+	// unpaid accrual still needs someone to notice and replay it.
+	if err := AccrueCourierEarnings(ctx, pool, parcelID); err != nil {
+		log.Printf("parcel %s delivered but courier earnings accrual failed (replayable): %v", parcelID, err)
+	}
+	return nil
 }
 
 // ParcelRow — one line on either "parcels I sent" or "parcels I'm

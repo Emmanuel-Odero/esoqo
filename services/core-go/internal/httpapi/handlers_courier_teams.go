@@ -118,6 +118,9 @@ func (s *Server) handleAddCourierTeamMember(c *gin.Context) {
 		writeError(c, http.StatusBadRequest, "INVALID_REQUEST", err.Error())
 		return
 	}
+	if !requireMsisdn(c, &req.Msisdn, "That phone number") {
+		return
+	}
 	teamID := c.Param("id")
 	_, esoqoID, err := dbx.AddCourierTeamMember(c.Request.Context(), s.Pool, teamID, dbx.CourierTeamMemberInput{
 		Name: req.Name, Msisdn: req.Msisdn, Role: req.Role,
@@ -177,6 +180,9 @@ func (s *Server) handleUpdateCourierTeamMember(c *gin.Context) {
 	var req courierTeamMemberRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
 		writeError(c, http.StatusBadRequest, "INVALID_REQUEST", err.Error())
+		return
+	}
+	if !requireMsisdn(c, &req.Msisdn, "That phone number") {
 		return
 	}
 	teamID := c.Param("id")

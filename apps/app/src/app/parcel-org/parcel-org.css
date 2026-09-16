@@ -1,0 +1,125 @@
+/* ══════════════════════════════════════════════════════════════
+   Courier-company operator portal — /parcel-org and everything
+   beneath it.
+
+   This surface never had its own chrome: the JSX already referenced
+   a dashboard vocabulary (.head, .kpi, .tbl, .chain, .pill) that
+   matches apps/admin's admin.css, but nothing in this app ever
+   defined those classes — every page rendered as bare, unstyled
+   HTML. This file gives that vocabulary a real definition, adapted
+   to this app's own token set (@esoqo/ui's --r-* / --sh-* vars rather than
+   admin.css's literal px values) rather than importing admin.css
+   wholesale, since admin.css also carries a desktop sidebar shell
+   (.shell, aside) this app doesn't have and shouldn't grow.
+
+   Shell pattern (.porgbar/.porg-wrap) mirrors /me/me.css's .appbar —
+   same "one sticky bar: brand, nav, sign out" shape, sized wider
+   here because a parcels table needs the room a personal record
+   screen doesn't.
+   ══════════════════════════════════════════════════════════════ */
+
+.porg { min-height:100dvh; background:var(--paper) }
+
+/* ── header: brand, company name, nav ──────────────────────────── */
+.porgbar {
+  position:sticky; top:0; z-index:60;
+  background:#fff; border-bottom:1px solid var(--line);
+}
+.porgbar-in {
+  max-width:1180px; margin:0 auto; min-height:62px;
+  padding:calc(6px + var(--safe-t)) max(20px,var(--safe-r)) 6px max(20px,var(--safe-l));
+  display:flex; align-items:center; gap:16px; flex-wrap:wrap;
+}
+.porgbrand { display:inline-flex; align-items:center; gap:10px; min-height:44px }
+.porgbrand .lock { font-size:21px }
+.porg-name {
+  font-family:var(--font-display); font-weight:700; font-size:1.02rem;
+  letter-spacing:-.01em; color:var(--navy); line-height:1.1;
+}
+.porg-name small { display:block; font-family:var(--font-mono); font-weight:600;
+  font-size:.58rem; letter-spacing:.14em; text-transform:uppercase; color:var(--tx-2); margin-top:1px }
+
+.porgnav { display:flex; align-items:center; gap:2px; margin-left:8px; flex-wrap:wrap }
+.porgnav a, .porgnav button {
+  display:inline-flex; align-items:center; gap:7px; padding:0 13px;
+  font-size:.88rem; font-weight:600; color:var(--tx-2); border-radius:8px;
+  white-space:nowrap; min-height:40px; border:0; background:none; cursor:pointer;
+  font-family:inherit;
+}
+.porgnav a:hover, .porgnav button:hover { background:var(--paper); color:var(--navy) }
+.porgnav a[aria-current="page"] { color:var(--navy); background:var(--green-t) }
+
+/* Sign out sits outside the nav flow as its own bordered button — same
+   trailing-action placement as /org/[orgId]'s header (.btn btn-o
+   btn-sm), not a bare nav link, so this shell reads as the same product
+   as the rest of the app's operator consoles. */
+.porg-signout { margin-left:auto }
+
+/* ── content width — wider than the wizard's 660px .wrap; a parcels
+   table and a 5-column KPI row both need real room ── */
+.porg-wrap { max-width:1180px; margin:0 auto;
+  padding:24px max(20px,var(--safe-r)) 60px max(20px,var(--safe-l));
+}
+
+/* ── page head ──────────────────────────────────────────────────── */
+.head { display:flex; gap:18px; align-items:flex-start; margin-bottom:22px; flex-wrap:wrap }
+.head h1 { font-size:1.5rem }
+.head p { color:var(--tx-2); margin:6px 0 0; max-width:70ch }
+.head .actions { margin-left:auto; display:flex; gap:10px; flex-wrap:wrap }
+
+/* ── kpi row ────────────────────────────────────────────────────── */
+.kpis { display:grid; grid-template-columns:repeat(auto-fit,minmax(180px,1fr)); gap:14px; margin-bottom:22px }
+.kpi { background:#fff; border:1px solid var(--line); border-radius:var(--r-lg); padding:16px 18px;
+  position:relative; overflow:hidden }
+.kpi::after { content:''; position:absolute; left:0; top:0; bottom:0; width:3px; background:var(--line) }
+.kpi.g::after { background:var(--green) } .kpi.b::after { background:var(--blue) }
+.kpi.a::after { background:var(--amber) } .kpi.r::after { background:var(--red) }
+.kpi .n { font-family:var(--font-display); font-weight:800; font-size:1.7rem;
+  letter-spacing:-.03em; display:block; line-height:1.1; font-variant-numeric:tabular-nums }
+.kpi .l { font-family:var(--font-mono); font-size:.62rem; letter-spacing:.1em;
+  text-transform:uppercase; color:var(--tx-3); margin-top:5px; display:block }
+.kpi .sub { font-size:.79rem; color:var(--tx-2); margin-top:5px; display:block }
+
+/* ── cards & tables ─────────────────────────────────────────────── */
+.card { background:#fff; border:1px solid var(--line); border-radius:var(--r-lg); padding:20px; min-width:0 }
+.card:has(table.tbl) { overflow-x:auto }
+
+.tbl { width:100%; border-collapse:collapse; font-size:.9rem }
+.tbl th { text-align:left; font-family:var(--font-mono); font-size:.62rem; letter-spacing:.1em;
+  text-transform:uppercase; color:var(--tx-3); font-weight:500; padding:9px 10px;
+  border-bottom:1px solid var(--line); white-space:nowrap }
+.tbl td { padding:12px 10px; border-bottom:1px solid var(--line); vertical-align:top }
+.tbl tr:last-child td { border-bottom:0 }
+.tbl tbody tr:hover { background:var(--paper) }
+
+/* ── status pills ───────────────────────────────────────────────── */
+.pill { font-family:var(--font-mono); font-size:.65rem; padding:4px 9px; border-radius:5px;
+  display:inline-flex; align-items:center; gap:5px; white-space:nowrap; font-weight:500 }
+.p-ok { background:var(--green-t); color:var(--green) }
+.p-warn { background:var(--amber-t); color:var(--amber) }
+.p-bad { background:var(--red-t); color:var(--red) }
+.p-info { background:var(--blue-t); color:var(--blue) }
+.p-mute { background:var(--paper); color:var(--tx-3); border:1px solid var(--line) }
+
+/* ── needs-attention banner ─────────────────────────────────────── */
+.chain { display:flex; align-items:center; gap:10px; font-size:.88rem; padding:12px 16px;
+  border-radius:var(--r-md); margin-bottom:22px }
+.chain.ok { background:var(--green-t); border:1px solid #BFE0CE; color:var(--green) }
+.chain.bad { background:var(--red-t); border:1px solid #F3D2CF; color:var(--red) }
+
+.empty { padding:44px 20px; text-align:center; color:var(--tx-2); font-size:.93rem }
+
+/* ── tablet / phone ─────────────────────────────────────────────── */
+@media (max-width:900px) {
+  .porgnav { order:3; width:100%; padding-top:6px; border-top:1px solid var(--line);
+    margin-top:6px; justify-content:flex-start }
+  .porg-signout { margin-left:0 }
+  .kpis { grid-template-columns:repeat(2,1fr) }
+  .tbl th:nth-child(n+4), .tbl td:nth-child(n+4) { display:none }
+}
+@media (max-width:560px) {
+  .kpis { grid-template-columns:1fr; gap:10px }
+  .head h1 { font-size:1.3rem }
+  .porg-wrap { padding:18px 16px 48px }
+  .card { padding:16px }
+}

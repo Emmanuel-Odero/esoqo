@@ -38,12 +38,16 @@ const (
 	PrefixPickup    Prefix = "PKP"
 	PrefixPaymentID Prefix = "ESK"
 	PrefixParcel    Prefix = "PKG"
+	// PrefixServiceTicket — Parcel.serviceTicketNumber's own prefix,
+	// deliberately distinct from PKG so the two can never be confused
+	// side by side on a printed slip or a counter screen.
+	PrefixServiceTicket Prefix = "TCK"
 )
 
 // ValidPrefix reports whether p is a registered code prefix.
 func ValidPrefix(p Prefix) bool {
 	switch p {
-	case PrefixTrip, PrefixBus, PrefixVoucher, PrefixTicket, PrefixPickup, PrefixPaymentID, PrefixParcel:
+	case PrefixTrip, PrefixBus, PrefixVoucher, PrefixTicket, PrefixPickup, PrefixPaymentID, PrefixParcel, PrefixServiceTicket:
 		return true
 	}
 	return false

@@ -36,6 +36,9 @@ func (s *Server) handleOpenInstallmentPlan(c *gin.Context) {
 		writeError(c, http.StatusBadRequest, "INVALID_REQUEST", err.Error())
 		return
 	}
+	if !requireMsisdn(c, &req.BuyerMsisdn, "The buyer's phone number") {
+		return
+	}
 
 	lines := make([]dbx.PlanLineInput, len(req.Lines))
 	for i, l := range req.Lines {

@@ -34,13 +34,21 @@ export async function actionSearchCollectors(q: string): Promise<CollectorLite[]
  * A clerk/handler's explicit "the box is physically here" moment —
  * the gate on the sender's and receiver's very first SMS about this
  * parcel. Booking it (self-service or a clerk typing a walk-in's
- * details in) never sends anything on its own; only this does. See
- * dbx.ConfirmParcelIntake's own comment for why.
+ * details in) never sends anything on its own; only this does.
+ *
+ * Calls the same custody-scan endpoint the courier-company Front Desk
+ * uses (POST /v1/parcels/:code/handoff) — a dedicated /confirm-intake
+ * route used to exist here but was retired as a duplicate of this one
+ * and this action wasn't updated at the time, silently breaking the
+ * Counter screen's "Confirm the box is here" button and
+ * ParcelDetailModal's own confirm action. handleScanParcelHandoff's own
+ * staffOverride path (parcels.override/parcels.assign) is exactly what
+ * makes this safe for a staff session with no linked Party.
  */
 export async function actionConfirmParcelIntake(code: string): Promise<Result> {
   try {
     await requireStaff();
-    await adminGo(`/v1/parcels/${code}/confirm-intake`, { method: 'POST' });
+    await adminGo(`/v1/parcels/${code}/handoff`, { method: 'POST' });
     revalidatePath('/parcels');
     return { ok: true };
   } catch (e) {
