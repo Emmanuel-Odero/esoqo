@@ -107,8 +107,8 @@ export function CounterForm({
     setNotice(`${target} already has field notes — carried over below.`);
     setItemDescription(info.itemDescription ?? '');
     setDestinationLabel(info.destination ?? '');
-    setSenderName(info.ownerName ?? '');
-    setSenderMsisdn(info.ownerContact ?? '');
+    setSenderName(info.senderName ?? '');
+    setSenderMsisdn(info.senderMsisdn ?? '');
     setItemType(info.itemType ?? '');
     setLengthCm(info.lengthCm != null ? String(info.lengthCm) : '');
     setWidthCm(info.widthCm != null ? String(info.widthCm) : '');
@@ -137,8 +137,8 @@ export function CounterForm({
     return {
       itemDescription: itemDescription.trim(),
       destination: destinationLabel.trim() || undefined,
-      ownerName: senderName.trim() || undefined,
-      ownerContact: senderMsisdn.trim() || undefined,
+      senderName: senderName.trim() || undefined,
+      senderMsisdn: senderMsisdn.trim() || undefined,
       itemType: itemType.trim() || undefined,
       lengthCm: numOrUndef(lengthCm),
       widthCm: numOrUndef(widthCm),

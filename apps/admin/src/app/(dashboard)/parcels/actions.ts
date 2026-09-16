@@ -722,7 +722,7 @@ export async function actionGetTripManifest(tripId: string): Promise<TripManifes
 
 export interface ParcelLabelRegisterRow {
   code: string; createdAt: string; state: string;
-  itemDescription: string | null; destination: string | null; ownerName: string | null;
+  itemDescription: string | null; destination: string | null; senderName: string | null;
   infoAttachedAt: string | null; usedAt: string | null;
   voidedAt: string | null; voidedReason: string | null;
   batchId: string | null; orgName: string | null;
@@ -791,9 +791,9 @@ export async function actionVoidParcelLabelBatch(
 }
 
 // Structured info attached to a pre-printed label — item, destination,
-// owner name/contact/gender, item type, weight range — the moment it's
-// actually stuck on a physical item, independent of (and usually well
-// before) a real booking. core-go's GET /v1/parcels/:code/status then
+// sender/receiver name and contact, item type, weight range — the
+// moment it's actually stuck on a physical item, independent of (and
+// usually well before) a real booking. core-go's GET /v1/parcels/:code/status then
 // surfaces this same info to anyone who scans/tracks the code, on the
 // web track page and the mobile app's scan flow alike (see
 // dbx.GetParcelStatus's own comment on the fallback). Every field but
@@ -802,9 +802,10 @@ export async function actionVoidParcelLabelBatch(
 export interface ParcelLabelInfoInput {
   itemDescription: string;
   destination?: string;
-  ownerName?: string;
-  ownerContact?: string;
-  ownerGender?: string;
+  senderName?: string;
+  senderMsisdn?: string;
+  receiverName?: string;
+  receiverMsisdn?: string;
   itemType?: string;
   weightRangeKg?: string;
   lengthCm?: number;

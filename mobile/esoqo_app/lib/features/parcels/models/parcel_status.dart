@@ -134,9 +134,10 @@ class ParcelLabelInfo {
   ParcelLabelInfo({
     required this.itemDescription,
     this.destination,
-    this.ownerName,
-    this.ownerContact,
-    this.ownerGender,
+    this.senderName,
+    this.senderMsisdn,
+    this.receiverName,
+    this.receiverMsisdn,
     this.itemType,
     this.weightRangeKg,
     required this.attachedAt,
@@ -146,9 +147,10 @@ class ParcelLabelInfo {
       ParcelLabelInfo(
         itemDescription: json['itemDescription'] as String,
         destination: json['destination'] as String?,
-        ownerName: json['ownerName'] as String?,
-        ownerContact: json['ownerContact'] as String?,
-        ownerGender: json['ownerGender'] as String?,
+        senderName: json['senderName'] as String?,
+        senderMsisdn: json['senderMsisdn'] as String?,
+        receiverName: json['receiverName'] as String?,
+        receiverMsisdn: json['receiverMsisdn'] as String?,
         itemType: json['itemType'] as String?,
         weightRangeKg: json['weightRangeKg'] as String?,
         attachedAt:
@@ -158,9 +160,10 @@ class ParcelLabelInfo {
 
   final String itemDescription;
   final String? destination;
-  final String? ownerName;
-  final String? ownerContact;
-  final String? ownerGender;
+  final String? senderName;
+  final String? senderMsisdn;
+  final String? receiverName;
+  final String? receiverMsisdn;
   final String? itemType;
   final String? weightRangeKg;
   final DateTime attachedAt;

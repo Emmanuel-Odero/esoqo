@@ -199,7 +199,7 @@ export async function saveOrgStaff(input: {
 
 export interface OrgLabelRow {
   code: string; createdAt: string; state: string;
-  itemDescription: string | null; destination: string | null; ownerName: string | null;
+  itemDescription: string | null; destination: string | null; senderName: string | null;
   infoAttachedAt: string | null; usedAt: string | null;
   voidedAt: string | null; voidedReason: string | null;
   batchId: string | null; orgName: string | null;

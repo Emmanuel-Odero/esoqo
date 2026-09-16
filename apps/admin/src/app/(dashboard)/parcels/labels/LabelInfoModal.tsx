@@ -7,8 +7,6 @@ import {
   actionAttachParcelLabelInfo, actionGetParcelLabelInfo, type ParcelLabelInfoInput,
 } from '../actions';
 
-const GENDER_OPTIONS = ['Male', 'Female', 'Prefer not to say'];
-
 // A practical, small taxonomy for what's physically stuck on a
 // pre-printed label — deliberately not the same list as ParcelType
 // (the pricing-bracket enum a real booking uses): this is filled in
@@ -53,9 +51,10 @@ export function LabelInfoModal({ initialCode, onClose }: { initialCode?: string;
   const [code, setCode] = useState(initialCode ?? '');
   const [itemDescription, setItemDescription] = useState('');
   const [destination, setDestination] = useState('');
-  const [ownerName, setOwnerName] = useState('');
-  const [ownerContact, setOwnerContact] = useState('');
-  const [ownerGender, setOwnerGender] = useState('');
+  const [senderName, setSenderName] = useState('');
+  const [senderMsisdn, setSenderMsisdn] = useState('');
+  const [receiverName, setReceiverName] = useState('');
+  const [receiverMsisdn, setReceiverMsisdn] = useState('');
   const [itemType, setItemType] = useState('');
   const [weightRangeKg, setWeightRangeKg] = useState('');
   const [error, setError] = useState<string | null>(null);
@@ -91,9 +90,10 @@ export function LabelInfoModal({ initialCode, onClose }: { initialCode?: string;
     const info = result.info;
     setItemDescription(info?.itemDescription ?? '');
     setDestination(info?.destination ?? '');
-    setOwnerName(info?.ownerName ?? '');
-    setOwnerContact(info?.ownerContact ?? '');
-    setOwnerGender(info?.ownerGender ?? '');
+    setSenderName(info?.senderName ?? '');
+    setSenderMsisdn(info?.senderMsisdn ?? '');
+    setReceiverName(info?.receiverName ?? '');
+    setReceiverMsisdn(info?.receiverMsisdn ?? '');
     setItemType(info?.itemType ?? '');
     setWeightRangeKg(info?.weightRangeKg ?? '');
     if (info) announce(`Loaded existing info for ${target}`, 'polite');
@@ -124,9 +124,10 @@ export function LabelInfoModal({ initialCode, onClose }: { initialCode?: string;
     const info: ParcelLabelInfoInput = {
       itemDescription: trimmedDescription,
       destination: destination.trim() || undefined,
-      ownerName: ownerName.trim() || undefined,
-      ownerContact: ownerContact.trim() || undefined,
-      ownerGender: ownerGender.trim() || undefined,
+      senderName: senderName.trim() || undefined,
+      senderMsisdn: senderMsisdn.trim() || undefined,
+      receiverName: receiverName.trim() || undefined,
+      receiverMsisdn: receiverMsisdn.trim() || undefined,
       itemType: itemType.trim() || undefined,
       weightRangeKg: weightRangeKg || undefined,
     };
@@ -196,20 +197,31 @@ export function LabelInfoModal({ initialCode, onClose }: { initialCode?: string;
                   placeholder="e.g. Westlands, Nairobi" style={INPUT} />
               </label>
 
+              <label className="sub" style={{ display: 'block', margin: '0 0 6px' }}>Sender</label>
               <div style={{ display: 'flex', gap: 10, marginBottom: 10 }}>
-                <label className="sub" style={{ flex: 1 }}>Item owner
-                  <input value={ownerName} onChange={(e) => setOwnerName(e.target.value)}
+                <label className="sub" style={{ flex: 1 }}>Sender name
+                  <input value={senderName} onChange={(e) => setSenderName(e.target.value)}
                     placeholder="Full name" style={INPUT} />
                 </label>
-                <label className="sub" style={{ flex: 1 }}>Owner contact
-                  <input value={ownerContact} onChange={(e) => setOwnerContact(e.target.value)}
+                <label className="sub" style={{ flex: 1 }}>Sender contact
+                  <input value={senderMsisdn} onChange={(e) => setSenderMsisdn(e.target.value)}
+                    placeholder="Phone or email" style={INPUT} />
+                </label>
+              </div>
+
+              <label className="sub" style={{ display: 'block', margin: '0 0 6px' }}>Receiver</label>
+              <div style={{ display: 'flex', gap: 10, marginBottom: 10 }}>
+                <label className="sub" style={{ flex: 1 }}>Receiver name
+                  <input value={receiverName} onChange={(e) => setReceiverName(e.target.value)}
+                    placeholder="Full name" style={INPUT} />
+                </label>
+                <label className="sub" style={{ flex: 1 }}>Receiver contact
+                  <input value={receiverMsisdn} onChange={(e) => setReceiverMsisdn(e.target.value)}
                     placeholder="Phone or email" style={INPUT} />
                 </label>
               </div>
 
               <div style={{ display: 'flex', gap: 10, marginBottom: 10, alignItems: 'flex-start' }}>
-                <SelectWithOther label="Gender" value={ownerGender} onChange={setOwnerGender}
-                  options={GENDER_OPTIONS} otherPlaceholder="How they describe it" />
                 <SelectWithOther label="Item type" value={itemType} onChange={setItemType}
                   options={ITEM_TYPE_OPTIONS} otherPlaceholder="What is it?" />
                 <label className="sub" style={{ flex: 1 }}>Weight range

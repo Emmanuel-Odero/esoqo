@@ -3723,12 +3723,14 @@ model ParcelLabelStock {
   /// this when no real Parcel exists yet for the code.
   itemDescription       String?
   destination           String?
-  ownerName             String?
-  /// Phone or email, whichever the owner gave — one free-text field
-  /// rather than two, since a handler in the field is copying down
-  /// whatever the owner said, not filling out a typed contact form.
-  ownerContact          String?
-  ownerGender           String?
+  /// The label's parties, named the same as a real booking's — one
+  /// vocabulary across "attach info to a label" and "book a parcel",
+  /// so what a handler in the field records survives into the counter
+  /// rather than being re-asked (see CounterForm's carry-forward).
+  senderName            String?
+  senderMsisdn          String?
+  receiverName          String?
+  receiverMsisdn        String?
   itemType              String?
   weightRangeKg         String?
   /// Same three dimensions a real booking carries. A handler measuring

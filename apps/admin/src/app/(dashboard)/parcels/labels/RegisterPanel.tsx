@@ -59,7 +59,7 @@ export function RegisterPanel({
         <table className="tbl">
           <thead>
             <tr>
-              <th>Code</th><th>Item</th><th>Destination</th><th>Owner</th>
+              <th>Code</th><th>Item</th><th>Destination</th><th>Sender</th>
               <th>{state === 'voided' ? 'Why' : 'When'}</th><th />
             </tr>
           </thead>
@@ -69,7 +69,7 @@ export function RegisterPanel({
                 <td className="mono">{l.code}</td>
                 <td style={CLIP} title={l.itemDescription ?? ''}>{l.itemDescription ?? <span className="sub">—</span>}</td>
                 <td style={CLIP} title={l.destination ?? ''}>{l.destination ?? <span className="sub">—</span>}</td>
-                <td style={CLIP} title={l.ownerName ?? ''}>{l.ownerName ?? <span className="sub">—</span>}</td>
+                <td style={CLIP} title={l.senderName ?? ''}>{l.senderName ?? <span className="sub">—</span>}</td>
                 <td className="sub" style={{ fontSize: '.8rem' }}>
                   {state === 'voided'
                     ? (l.voidedReason ?? 'Withdrawn')

@@ -261,8 +261,10 @@ function PreLabelPanel({ parcel }: { parcel: ParcelStatusView }) {
           <p style={{ margin: '14px 0 10px' }}>{info.itemDescription}</p>
           <dl style={{ display: 'grid', gap: 6, margin: 0 }}>
             <Row label="Destination" value={info.destination} />
-            <Row label="Owner" value={info.ownerName} />
-            <Row label="Contact" value={info.ownerContact} />
+            <Row label="Sender" value={info.senderName} />
+            <Row label="Sender contact" value={info.senderMsisdn} />
+            <Row label="Receiver" value={info.receiverName} />
+            <Row label="Receiver contact" value={info.receiverMsisdn} />
             <Row label="Item type" value={info.itemType} />
             <Row label="Weight" value={info.weightRangeKg} />
           </dl>

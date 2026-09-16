@@ -178,9 +178,10 @@ export async function actionBookParcel(
 export interface ParcelLabelInfo {
   itemDescription: string;
   destination: string | null;
-  ownerName: string | null;
-  ownerContact: string | null;
-  ownerGender: string | null;
+  senderName: string | null;
+  senderMsisdn: string | null;
+  receiverName: string | null;
+  receiverMsisdn: string | null;
   itemType: string | null;
   weightRangeKg: string | null;
   attachedAt: string;

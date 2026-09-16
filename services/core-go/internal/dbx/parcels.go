@@ -1229,9 +1229,10 @@ type ParcelAgentStop struct {
 type ParcelLabelInfo struct {
 	ItemDescription string    `json:"itemDescription"`
 	Destination     *string   `json:"destination"`
-	OwnerName       *string   `json:"ownerName"`
-	OwnerContact    *string   `json:"ownerContact"`
-	OwnerGender     *string   `json:"ownerGender"`
+	SenderName      *string   `json:"senderName"`
+	SenderMsisdn    *string   `json:"senderMsisdn"`
+	ReceiverName    *string   `json:"receiverName"`
+	ReceiverMsisdn  *string   `json:"receiverMsisdn"`
 	ItemType        *string   `json:"itemType"`
 	WeightRangeKg   *string   `json:"weightRangeKg"`
 	LengthCm        *float64  `json:"lengthCm"`
@@ -1317,12 +1318,12 @@ func GetParcelStatus(ctx context.Context, pool *pgxpool.Pool, code string) (*Par
 	var info ParcelLabelInfo
 	var infoAttachedAt *time.Time
 	serr := pool.QueryRow(ctx, `
-		SELECT code, "createdAt", "itemDescription", destination, "ownerName", "ownerContact",
-		       "ownerGender", "itemType", "weightRangeKg", "infoAttachedAt",
+		SELECT code, "createdAt", "itemDescription", destination, "senderName", "senderMsisdn",
+		       "receiverName", "receiverMsisdn", "itemType", "weightRangeKg", "infoAttachedAt",
 		       "lengthCm"::float8, "widthCm"::float8, "heightCm"::float8
 		FROM parcel_label_stock WHERE code = $1`, code).
-		Scan(&stock.Code, &createdAt, &itemDescription, &info.Destination, &info.OwnerName,
-			&info.OwnerContact, &info.OwnerGender, &info.ItemType, &info.WeightRangeKg, &infoAttachedAt,
+		Scan(&stock.Code, &createdAt, &itemDescription, &info.Destination, &info.SenderName,
+			&info.SenderMsisdn, &info.ReceiverName, &info.ReceiverMsisdn, &info.ItemType, &info.WeightRangeKg, &infoAttachedAt,
 			&info.LengthCm, &info.WidthCm, &info.HeightCm)
 	if errors.Is(serr, pgx.ErrNoRows) {
 		return nil, nil
@@ -1637,9 +1638,10 @@ func ListUnusedParcelLabelStock(
 type ParcelLabelInfoInput struct {
 	ItemDescription string
 	Destination     *string
-	OwnerName       *string
-	OwnerContact    *string
-	OwnerGender     *string
+	SenderName      *string
+	SenderMsisdn    *string
+	ReceiverName    *string
+	ReceiverMsisdn  *string
 	ItemType        *string
 	WeightRangeKg   *string
 	// Measured in the field, carried into the booking rather than
@@ -1651,9 +1653,9 @@ type ParcelLabelInfoInput struct {
 }
 
 // AttachParcelLabelInfo writes structured info onto a pre-printed
-// label — item description, destination, owner name/contact/gender,
-// item type, weight range — the moment a handler sticks it on a
-// physical item in the field, well before (if ever) that item goes
+// label — item description, destination, sender/receiver name and
+// contact, item type, weight range — the moment a handler sticks it on
+// a physical item in the field, well before (if ever) that item goes
 // through a full sender/receiver/pricing/payment booking. Overwrites
 // (never merges) on repeat calls — the caller always resends the full
 // set it wants kept, same as an edit form re-submitting every field —
@@ -1667,13 +1669,13 @@ func AttachParcelLabelInfo(ctx context.Context, pool *pgxpool.Pool, code string,
 	}
 	tag, err := pool.Exec(ctx, `
 		UPDATE parcel_label_stock
-		SET "itemDescription" = $1, "destination" = $2, "ownerName" = $3, "ownerContact" = $4,
-		    "ownerGender" = $5, "itemType" = $6, "weightRangeKg" = $7,
-		    "lengthCm" = $10, "widthCm" = $11, "heightCm" = $12,
-		    "infoAttachedAt" = now(), "infoAttachedByStaffId" = $8
-		WHERE code = $9 AND "usedAt" IS NULL AND "voidedAt" IS NULL`,
-		in.ItemDescription, in.Destination, in.OwnerName, in.OwnerContact,
-		in.OwnerGender, in.ItemType, in.WeightRangeKg, staffID, code,
+		SET "itemDescription" = $1, "destination" = $2, "senderName" = $3, "senderMsisdn" = $4,
+		    "receiverName" = $5, "receiverMsisdn" = $6, "itemType" = $7, "weightRangeKg" = $8,
+		    "lengthCm" = $11, "widthCm" = $12, "heightCm" = $13,
+		    "infoAttachedAt" = now(), "infoAttachedByStaffId" = $9
+		WHERE code = $10 AND "usedAt" IS NULL AND "voidedAt" IS NULL`,
+		in.ItemDescription, in.Destination, in.SenderName, in.SenderMsisdn,
+		in.ReceiverName, in.ReceiverMsisdn, in.ItemType, in.WeightRangeKg, staffID, code,
 		in.LengthCm, in.WidthCm, in.HeightCm)
 	if err != nil {
 		return err
@@ -1701,7 +1703,7 @@ type ParcelLabelRegisterRow struct {
 	State           string     `json:"state"`
 	ItemDescription *string    `json:"itemDescription"`
 	Destination     *string    `json:"destination"`
-	OwnerName       *string    `json:"ownerName"`
+	SenderName      *string    `json:"senderName"`
 	InfoAttachedAt  *time.Time `json:"infoAttachedAt"`
 	UsedAt          *time.Time `json:"usedAt"`
 	VoidedAt        *time.Time `json:"voidedAt"`
@@ -1755,7 +1757,7 @@ func ListParcelLabelRegister(
 		order = `s."createdAt" DESC`
 	}
 	rows, err := pool.Query(ctx, `
-		SELECT s.code, s."createdAt", s."itemDescription", s.destination, s."ownerName",
+		SELECT s.code, s."createdAt", s."itemDescription", s.destination, s."senderName",
 		       s."infoAttachedAt", s."usedAt", s."voidedAt", s."voidedReason",
 		       s."batchId"::text, o.name
 		FROM parcel_label_stock s
@@ -1771,7 +1773,7 @@ func ListParcelLabelRegister(
 	var out []ParcelLabelRegisterRow
 	for rows.Next() {
 		var r ParcelLabelRegisterRow
-		if err := rows.Scan(&r.Code, &r.CreatedAt, &r.ItemDescription, &r.Destination, &r.OwnerName,
+		if err := rows.Scan(&r.Code, &r.CreatedAt, &r.ItemDescription, &r.Destination, &r.SenderName,
 			&r.InfoAttachedAt, &r.UsedAt, &r.VoidedAt, &r.VoidedReason,
 			&r.BatchID, &r.OrgName); err != nil {
 			return nil, err
@@ -1921,12 +1923,12 @@ func GetParcelLabelStockInfo(ctx context.Context, pool *pgxpool.Pool, code strin
 	var itemDescription *string
 	var attachedAt *time.Time
 	err := pool.QueryRow(ctx, `
-		SELECT "usedAt" IS NOT NULL, "itemDescription", destination, "ownerName", "ownerContact",
-		       "ownerGender", "itemType", "weightRangeKg", "infoAttachedAt",
+		SELECT "usedAt" IS NOT NULL, "itemDescription", destination, "senderName", "senderMsisdn",
+		       "receiverName", "receiverMsisdn", "itemType", "weightRangeKg", "infoAttachedAt",
 		       "lengthCm"::float8, "widthCm"::float8, "heightCm"::float8
 		FROM parcel_label_stock WHERE code = $1`, code).
-		Scan(&used, &itemDescription, &info.Destination, &info.OwnerName, &info.OwnerContact,
-			&info.OwnerGender, &info.ItemType, &info.WeightRangeKg, &attachedAt,
+		Scan(&used, &itemDescription, &info.Destination, &info.SenderName, &info.SenderMsisdn,
+			&info.ReceiverName, &info.ReceiverMsisdn, &info.ItemType, &info.WeightRangeKg, &attachedAt,
 			&info.LengthCm, &info.WidthCm, &info.HeightCm)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return nil, &ParcelError{"NOT_FOUND", "That label code isn't a known pre-printed label"}

@@ -1053,16 +1053,17 @@ func (s *Server) handleAdminListParcelLabelStock(c *gin.Context) {
 }
 
 type attachParcelLabelInfoRequest struct {
-	ItemDescription string   `json:"itemDescription" binding:"required"`
-	Destination     *string  `json:"destination"`
-	OwnerName       *string  `json:"ownerName"`
-	OwnerContact    *string  `json:"ownerContact"`
-	OwnerGender     *string  `json:"ownerGender"`
-	ItemType        *string  `json:"itemType"`
-	WeightRangeKg   *string  `json:"weightRangeKg"`
-	LengthCm        *float64 `json:"lengthCm"`
-	WidthCm         *float64 `json:"widthCm"`
-	HeightCm        *float64 `json:"heightCm"`
+	ItemDescription  string   `json:"itemDescription" binding:"required"`
+	Destination      *string  `json:"destination"`
+	SenderName       *string  `json:"senderName"`
+	SenderMsisdn     *string  `json:"senderMsisdn"`
+	ReceiverName     *string  `json:"receiverName"`
+	ReceiverMsisdn   *string  `json:"receiverMsisdn"`
+	ItemType         *string  `json:"itemType"`
+	WeightRangeKg    *string  `json:"weightRangeKg"`
+	LengthCm         *float64 `json:"lengthCm"`
+	WidthCm          *float64 `json:"widthCm"`
+	HeightCm         *float64 `json:"heightCm"`
 }
 
 // handleAttachParcelLabelInfo — POST /v1/admin/parcels/labels/:code/info.
@@ -1088,9 +1089,10 @@ func (s *Server) handleAttachParcelLabelInfo(c *gin.Context) {
 	in := dbx.ParcelLabelInfoInput{
 		ItemDescription: req.ItemDescription,
 		Destination:     req.Destination,
-		OwnerName:       req.OwnerName,
-		OwnerContact:    req.OwnerContact,
-		OwnerGender:     req.OwnerGender,
+		SenderName:      req.SenderName,
+		SenderMsisdn:    req.SenderMsisdn,
+		ReceiverName:    req.ReceiverName,
+		ReceiverMsisdn:  req.ReceiverMsisdn,
 		ItemType:        req.ItemType,
 		WeightRangeKg:   req.WeightRangeKg,
 		LengthCm:        req.LengthCm,
@@ -1109,8 +1111,8 @@ func (s *Server) handleAttachParcelLabelInfo(c *gin.Context) {
 // already on a label instead of opening blank over it — see
 // dbx.GetParcelLabelStockInfo on why the overwrite semantics make this
 // load mandatory rather than a nicety. Same parcels.assign tier as the
-// write: this returns a handler's own field notes, including an owner's
-// name and contact, which is not public-scan material.
+// write: this returns a handler's own field notes, including sender
+// and receiver names and contacts, which is not public-scan material.
 //
 // `info` is null for a real but still-blank label — the ordinary
 // first-attach case, and a 200 rather than a 404, since the label

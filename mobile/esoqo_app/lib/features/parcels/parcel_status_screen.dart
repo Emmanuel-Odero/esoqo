@@ -228,12 +228,14 @@ class ParcelStatusScreen extends ConsumerWidget {
                             ),
                             if (s.preLabelInfo!.destination != null)
                               _labelInfoRow('Destination', s.preLabelInfo!.destination!),
-                            if (s.preLabelInfo!.ownerName != null)
-                              _labelInfoRow('Owner', s.preLabelInfo!.ownerName!),
-                            if (s.preLabelInfo!.ownerContact != null)
-                              _labelInfoRow('Contact', s.preLabelInfo!.ownerContact!),
-                            if (s.preLabelInfo!.ownerGender != null)
-                              _labelInfoRow('Gender', s.preLabelInfo!.ownerGender!),
+                            if (s.preLabelInfo!.senderName != null)
+                              _labelInfoRow('Sender', s.preLabelInfo!.senderName!),
+                            if (s.preLabelInfo!.senderMsisdn != null)
+                              _labelInfoRow('Sender contact', s.preLabelInfo!.senderMsisdn!),
+                            if (s.preLabelInfo!.receiverName != null)
+                              _labelInfoRow('Receiver', s.preLabelInfo!.receiverName!),
+                            if (s.preLabelInfo!.receiverMsisdn != null)
+                              _labelInfoRow('Receiver contact', s.preLabelInfo!.receiverMsisdn!),
                             if (s.preLabelInfo!.itemType != null)
                               _labelInfoRow('Item type', s.preLabelInfo!.itemType!),
                             if (s.preLabelInfo!.weightRangeKg != null)
