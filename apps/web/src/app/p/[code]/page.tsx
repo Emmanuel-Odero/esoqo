@@ -58,7 +58,7 @@ export default async function ScannedLabelPage({
           {/* The verdict comes first, above anything about the parcel.
               Somebody who scanned a forgery needs to know that before
               they read a status that would only lend it credibility. */}
-          <Verdict verdict={parcel?.labelVerdict} />
+          <Verdict verdict={parcel && !('message' in parcel) ? parcel.labelVerdict : undefined} />
           {parcel
             ? <ParcelStatusPanel parcel={parcel} />
             : <NotFound code={code.toUpperCase()} />}
