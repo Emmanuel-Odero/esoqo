@@ -35,9 +35,10 @@ const TrackingMapInner = dynamic(
   },
 );
 
-// 30s. Couriers ping every 30s while their jobs tab is open (see the
-// mobile hub's ping loop), so polling faster only costs requests
-// without ever producing a newer dot.
+// 30s. Couriers ping every 30s while the Holding or Nearby-jobs tab is
+// open (see the mobile hub's ping loop) — Holding being the state where
+// they actually carry the parcel — so polling faster only costs
+// requests without ever producing a newer dot.
 const POLL_MS = 30_000;
 
 export function TrackingMap({ parcel }: { parcel: ParcelStatusView }) {
