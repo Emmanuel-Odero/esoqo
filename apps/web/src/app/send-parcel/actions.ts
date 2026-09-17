@@ -291,23 +291,52 @@ export async function actionGetCourierPosition(code: string): Promise<ParcelPosi
   }
 }
 
+/** One lookup's outcome, discriminated so the caller can tell a parcel
+ *  that genuinely doesn't exist from a service that failed to answer —
+ *  the two are not the same and must never be rendered as the same. */
+export type ParcelStatusResult =
+  | { kind: 'found'; parcel: ParcelStatusView | AwaitingIntakeView }
+  | { kind: 'not-found' }
+  | { kind: 'error'; error: string };
+
 /** Guest-safe — the same code the sender was shown is the bearer
  *  credential for checking on a parcel, same convention a pickup code
  *  follows. Used both for the post-payment poll and for the standalone
- *  "Track a parcel" lookup. */
+ *  "Track a parcel" lookup.
+ *
+ *  Returns { kind: 'not-found' } only when core-go itself answered 404 —
+ *  a code that really isn't on record. Anything else that goes wrong
+ *  (service unreachable, core-go erroring) comes back as
+ *  { kind: 'error' } with a human message, NOT as a not-found, so a down
+ *  backend can't masquerade as "bad code" on someone's screen. */
 export async function actionCheckParcelStatus(
   code: string, k?: string,
-): Promise<ParcelStatusView | AwaitingIntakeView | null> {
+): Promise<ParcelStatusResult> {
+  // `k` is the signature printed in a scanned label's QR. Passing it
+  // through is what lets core-go say whether the sticker is genuinely
+  // ours; omitting it (a typed code, an SMS link) yields
+  // labelVerdict: "unverified", which is not the same as a forgery.
+  const url = `/v1/parcels/${encodeURIComponent(code)}/status${k ? `?k=${encodeURIComponent(k)}` : ''}`;
+  let res: Response;
   try {
-    // `k` is the signature printed in a scanned label's QR. Passing it
-    // through is what lets core-go say whether the sticker is genuinely
-    // ours; omitting it (a typed code, an SMS link) yields
-    // labelVerdict: "unverified", which is not the same as a forgery.
-    const qs = k ? `?k=${encodeURIComponent(k)}` : '';
-    return await goFetch<ParcelStatusView | AwaitingIntakeView>(`/v1/parcels/${encodeURIComponent(code)}/status${qs}`);
+    res = await fetch(`${CORE_GO_URL}${url}`, {
+      headers: { 'Content-Type': 'application/json' },
+      cache: 'no-store',
+      signal: AbortSignal.timeout(15000),
+    });
   } catch {
-    return null;
+    // fetch() throwing (DNS/connection failure, timeout) means core-go
+    // was never reached — the message is Node/undici internals
+    // ("fetch failed"), so swap in the friendly one instead.
+    return { kind: 'error', error: UNAVAILABLE };
   }
+  const json = (await res.json().catch(() => null)) as ParcelStatusView | AwaitingIntakeView | null;
+  if (!res.ok) {
+    if (res.status === 404) return { kind: 'not-found' };
+    return { kind: 'error', error: goMessage(json as GoErrorBody | null, UNAVAILABLE) };
+  }
+  if (!json) return { kind: 'error', error: UNAVAILABLE };
+  return { kind: 'found', parcel: json };
 }
 
 // ── Claiming a parcel ──

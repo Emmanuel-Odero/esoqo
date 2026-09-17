@@ -18,7 +18,8 @@ const fieldStyle: React.CSSProperties = {
 
 export function TrackParcelForm() {
   const [code, setCode] = useState('');
-  const [result, setResult] = useState<ParcelStatusView | AwaitingIntakeView | null | undefined>(undefined);
+  const [parcel, setParcel] = useState<ParcelStatusView | AwaitingIntakeView | null>(null);
+  const [error, setError] = useState<string | null>(null);
   const [pending, start] = useTransition();
 
   // Takes an explicit override so a scan result (which sets `code`
@@ -30,7 +31,16 @@ export function TrackParcelForm() {
     if (!value) return;
     start(async () => {
       const res = await actionCheckParcelStatus(value.toUpperCase());
-      setResult(res);
+      if (res.kind === 'found') {
+        setParcel(res.parcel);
+        setError(null);
+      } else if (res.kind === 'not-found') {
+        setParcel(null);
+        setError("That code wasn't found — check it and try again.");
+      } else {
+        setParcel(null);
+        setError(res.error);
+      }
     });
   }
 
@@ -59,15 +69,15 @@ export function TrackParcelForm() {
         <ParcelScanner onScan={handleScan} />
       </div>
 
-      {result === null && (
+      {error && (
         <p style={{ color: 'var(--red)', display: 'flex', alignItems: 'center', gap: 6, margin: '16px 0 0' }} role="alert">
-          <Icon name="alert-circle" size={15} />That code wasn't found — check it and try again.
+          <Icon name="alert-circle" size={15} />{error}
         </p>
       )}
 
-      {result && (
+      {parcel && (
         <div style={{ marginTop: 18, borderTop: '1px solid var(--line)', paddingTop: 16 }}>
-          <ParcelStatusPanel parcel={result} />
+          <ParcelStatusPanel parcel={parcel} />
         </div>
       )}
     </div>

@@ -43,7 +43,8 @@ export default async function ScannedLabelPage({
   searchParams: Promise<{ k?: string }>;
 }) {
   const [{ code }, { k }] = await Promise.all([params, searchParams]);
-  const parcel = await actionCheckParcelStatus(code.toUpperCase(), k);
+  const res = await actionCheckParcelStatus(code.toUpperCase(), k);
+  const parcel = res.kind === 'found' ? res.parcel : null;
 
   return (
     <>
@@ -59,9 +60,11 @@ export default async function ScannedLabelPage({
               Somebody who scanned a forgery needs to know that before
               they read a status that would only lend it credibility. */}
           <Verdict verdict={parcel && !('message' in parcel) ? parcel.labelVerdict : undefined} />
-          {parcel
-            ? <ParcelStatusPanel parcel={parcel} />
-            : <NotFound code={code.toUpperCase()} />}
+          {res.kind === 'found'
+            ? <ParcelStatusPanel parcel={res.parcel} />
+            : res.kind === 'not-found'
+              ? <NotFound code={code.toUpperCase()} />
+              : <Unavailable message={res.error} />}
         </div>
       </section>
     </>
@@ -116,6 +119,22 @@ function NotFound({ code }: { code: string }) {
       </p>
       <p style={{ marginTop: 14 }}>
         <Link className="btn btn-o btn-sm" href="/send-parcel/track">Track a different parcel</Link>
+      </p>
+    </div>
+  );
+}
+
+/** A scanner whose side of the system is down shouldn't be told their
+ *  badged code doesn't exist — a service failure and a 404 are different
+ *  facts, and only the latter means "no parcel". */
+function Unavailable({ message }: { message: string }) {
+  return (
+    <div className="card" style={{ padding: 20, textAlign: 'center' }}>
+      <Icon name="alert-circle" size={28} />
+      <p style={{ margin: '10px 0 2px', fontWeight: 700 }}>We couldn&apos;t check that parcel</p>
+      <p className="sub" style={{ margin: 0 }}>{message}</p>
+      <p style={{ marginTop: 14 }}>
+        <Link className="btn btn-o btn-sm" href="/send-parcel/track">Try again</Link>
       </p>
     </div>
   );

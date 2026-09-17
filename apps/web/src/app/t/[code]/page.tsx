@@ -35,23 +35,30 @@ export async function generateMetadata(
 
 export default async function TrackByCodePage({ params }: { params: Promise<{ code: string }> }) {
   const { code } = await params;
-  const parcel = await actionCheckParcelStatus(code.toUpperCase());
+  const res = await actionCheckParcelStatus(code.toUpperCase());
+  const upper = code.toUpperCase();
 
   return (
     <section className="sec">
       <div className="wrap" style={{ maxWidth: 480 }}>
-        {parcel ? (
+        {res.kind === 'found' ? (
           <div className="card">
-            <ParcelStatusPanel parcel={parcel} />
+            <ParcelStatusPanel parcel={res.parcel} />
           </div>
-        ) : (
+        ) : res.kind === 'not-found' ? (
           <div className="card">
             <h2 style={{ marginTop: 0 }}>We couldn&apos;t find that parcel</h2>
             <p className="sub">
-              The code <span className="mono">{code.toUpperCase()}</span> didn&apos;t match anything.
+              The code <span className="mono">{upper}</span> didn&apos;t match anything.
               Check it against your text message — codes look like <span className="mono">PKG-XXXXXX</span>.
             </p>
             <Link className="btn btn-o btn-sm" href="/send-parcel/track">Try another code</Link>
+          </div>
+        ) : (
+          <div className="card">
+            <h2 style={{ marginTop: 0 }}>We couldn&apos;t check that parcel</h2>
+            <p className="sub">{res.error}</p>
+            <Link className="btn btn-o btn-sm" href="/send-parcel/track">Try again</Link>
           </div>
         )}
 

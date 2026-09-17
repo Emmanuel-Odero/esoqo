@@ -251,7 +251,7 @@ function SignedInPanel({ me, onSignedOut }: { me: StaffMe; onSignedOut: () => vo
 
 function ScanPanel() {
   const [code, setCode] = useState('');
-  const [status, setStatus] = useState<ParcelStatusView | AwaitingIntakeView | null | undefined>(undefined);
+  const [status, setStatus] = useState<ParcelStatusView | AwaitingIntakeView | null>(null);
   const [deliveryCode, setDeliveryCode] = useState('');
   const [otpCode, setOtpCode] = useState('');
   const [otpSent, setOtpSent] = useState<string | null>(null);
@@ -266,7 +266,23 @@ function ScanPanel() {
     setMessage(null);
     setError(null);
     setOtpSent(null);
-    start(async () => setStatus(await actionCheckParcelStatus(value)));
+    start(async () => refreshStatus(value));
+  }
+
+  function refreshStatus(value: string) {
+    start(async () => {
+      const res = await actionCheckParcelStatus(value);
+      if (res.kind === 'found') {
+        setStatus(res.parcel);
+        setError(null);
+      } else if (res.kind === 'not-found') {
+        setStatus(null);
+        setError("That code wasn't found — check it and try again.");
+      } else {
+        setStatus(null);
+        setError(res.error);
+      }
+    });
   }
 
   function doHandoff() {
@@ -275,7 +291,7 @@ function ScanPanel() {
       const res = await staffScanCustody(code);
       if (!res.ok) { setError(res.error); return; }
       setMessage('Custody recorded.');
-      setStatus(await actionCheckParcelStatus(code));
+      refreshStatus(code);
     });
   }
 
@@ -301,7 +317,7 @@ function ScanPanel() {
       setDeliveryCode('');
       setOtpCode('');
       setOtpSent(null);
-      setStatus(await actionCheckParcelStatus(code));
+      refreshStatus(code);
     });
   }
 
