@@ -205,6 +205,12 @@ services:
       SMTP_PORT: "1025"
       CHOKIDAR_USEPOLLING: "1"
       WATCHPACK_POLLING: "true"
+      # Turbopack's per-app dev servers can each balloon past a GB under
+      # memory pressure; this caps the V8 heap (workers inherit it) so a
+      # server gets a hard limit instead of silently pushed out when the
+      # container rams the Docker VM ceiling and the OS OOM-kills a
+      # neighbour (the quiet way ports used to go dark with no log).
+      NODE_OPTIONS: "--max-old-space-size=2048"
     volumes:
       - .:/app
       - node_modules_root:/app/node_modules
