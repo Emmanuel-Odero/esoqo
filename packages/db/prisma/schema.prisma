@@ -3112,7 +3112,18 @@ model BillPayment {
 
 enum ParcelStatus {
   DRAFT_PENDING_PAYMENT
+  REJECTED_AT_DROPOFF
   BOOKED
+  /// The box is physically at a counter/station, confirmed received by a
+  /// clerk or courier-company front desk, but no rider has taken it for
+  /// delivery yet. Distinct from PICKED_UP so a walk-in drop-off reads
+  /// honestly on the tracker ("received at counter") instead of claiming
+  /// a courier is already on the way, and so a station-held parcel can
+  /// still be claimed as a dispatch job. Set by dbx.ScanHandoff's first
+  /// scan when the origin is SELF_DROPOFF, or by an Esoqo staff counter
+  /// confirmation (a session with no linked Party — the historical gap
+  /// that left counter bookings stuck at AWAITING_INTAKE forever).
+  RECEIVED_AT_COUNTER
   PICKED_UP
   IN_TRANSIT
   /// A courier reached the door and could not hand the parcel over —
@@ -3277,6 +3288,15 @@ model Parcel {
   parcelType    ParcelType
   weightKg      Decimal?             @db.Decimal(6, 2)
   fragile       Boolean              @default(false)
+  itemCategory  String?
+  itemDescription String?
+  perishable    Boolean              @default(false)
+  perishableHandling String?
+  expiryAt      DateTime?
+  intakeCondition String?
+  intakeAcceptedByStaffId String? @db.Uuid
+  intakeRejectedAt DateTime?
+  intakeRejectionReason String?
 
   /// Measured at intake, for the volumetric weight a bulky parcel is
   /// charged on — (L × W × H) / divisor, see dbx.VolumetricKg. All
@@ -3452,6 +3472,9 @@ model Parcel {
   handoffs          ParcelHandoff[]
   labelStockEntries ParcelLabelStock[]
   deliveryAttemptLog ParcelDeliveryAttempt[]
+  shipmentItems      ParcelShipmentItem[]
+  reminderCount      Int @default(0)
+  lastReminderAt     DateTime?
 
   /// Cash on delivery — the social-commerce case this product could not
   /// serve at all before: a seller ships goods, the buyer pays the
@@ -3958,6 +3981,7 @@ model ParcelOrg {
 
   staff        ParcelOrgStaff[]
   parcels      Parcel[]
+  stations     ParcelAgent[]
   couriers     ParcelCourier[]
   pricingRules ParcelPricingRule[]
   labelStock   ParcelLabelStock[]
@@ -3995,6 +4019,8 @@ model ParcelOrgStaff {
   /// "staff row 7" rather than a person would be worthless in a dispute.
   /// Null for office roles that never carry anything.
   partyId String? @db.Uuid
+  stationId String? @db.Uuid
+  station   ParcelAgent? @relation("parcelStationStaff", fields: [stationId], references: [id], onDelete: SetNull)
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -4088,11 +4114,66 @@ model ParcelHandoff {
   /// custody can actually be reconstructed (see dbx.ListParcelHandoffs)
   /// instead of only being inferable from row order.
   fromPartyId String?  @db.Uuid
-  toPartyId   String   @db.Uuid
+  /// Null only for a staff counter receipt with no linked Party (an
+  /// Esoqo desk — see ParcelStatus.RECEIVED_AT_COUNTER): the box is at
+  /// the counter and no carrier holds it yet, but the receipt is still a
+  /// real custody event and belongs in the chain.
+  toPartyId   String?  @db.Uuid
   createdAt   DateTime @default(now())
+  /// The parcel status this leg produced (RECEIVED_AT_COUNTER,
+  /// PICKED_UP, IN_TRANSIT, HELD_AT_AGENT). Null on rows written before
+  /// this column existed. Lets the guest-safe tracking timeline label
+  /// each custody leg without resolving any holder's name.
+  status      ParcelStatus?
 
   @@index([parcelId, createdAt])
   @@map("parcel_handoff")
+}
+
+/// A physical line-haul movement. The manifest is separate from Parcel so
+/// loading and offloading have their own actors, timestamps, and exceptions.
+model ParcelShipment {
+  id                 String @id @default(uuid()) @db.Uuid
+  originLabel        String
+  destinationLabel   String
+  routeLabel         String?
+  vehiclePlate       String?
+  driverPartyId      String? @db.Uuid
+  conductorPartyId   String? @db.Uuid
+  status             String @default("OPEN")
+  startedAt          DateTime?
+  arrivedAt          DateTime?
+  endedAt            DateTime?
+  createdAt          DateTime @default(now())
+  createdByStaffId   String? @db.Uuid
+
+  items ParcelShipmentItem[]
+
+  @@index([status])
+  @@map("parcel_shipment")
+}
+
+model ParcelShipmentItem {
+  id                String @id @default(uuid()) @db.Uuid
+  shipmentId        String @db.Uuid
+  shipment          ParcelShipment @relation(fields: [shipmentId], references: [id], onDelete: Cascade)
+  parcelId          String @db.Uuid
+  parcel            Parcel @relation(fields: [parcelId], references: [id], onDelete: Cascade)
+  loadedAt          DateTime?
+  loadedByPartyId   String? @db.Uuid
+  loadedByStaffId   String? @db.Uuid
+  offloadedAt       DateTime?
+  offloadedByPartyId String? @db.Uuid
+  offloadedByStaffId String? @db.Uuid
+  exceptionCode     String?
+  exceptionNote     String?
+  createdAt         DateTime @default(now())
+
+  @@unique([shipmentId, parcelId])
+  @@index([shipmentId, loadedAt])
+  @@index([shipmentId, offloadedAt])
+  @@index([parcelId])
+  @@map("parcel_shipment_item")
 }
 
 /// The formal courier role — distinct from "any Party", which is all
@@ -4170,6 +4251,8 @@ model ParcelAgent {
   /// member who recorded the drop (same "a real party or nobody" rule
   /// Parcel.currentHolderPartyId already follows).
   partyId String? @db.Uuid
+  parcelOrgId String? @db.Uuid
+  parcelOrg ParcelOrg? @relation(fields: [parcelOrgId], references: [id], onDelete: SetNull)
 
   zoneId String?     @db.Uuid
   zone   ParcelZone? @relation(fields: [zoneId], references: [id])
@@ -4203,6 +4286,7 @@ model ParcelAgent {
   createdByStaffId String?  @db.Uuid
 
   destinationParcels Parcel[] @relation("parcelDestinationAgent")
+  stationStaff ParcelOrgStaff[] @relation("parcelStationStaff")
 
   @@index([zoneId, active])
   @@map("parcel_agent")

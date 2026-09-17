@@ -50,7 +50,8 @@ type AvailableJob struct {
 	DistanceKm       *float64
 }
 
-// ListAvailableJobs — BOOKED, unassigned parcels, ranked by distance
+// ListAvailableJobs — BOOKED or RECEIVED_AT_COUNTER, unassigned
+// parcels, ranked by distance
 // from the courier's latest ping when both the courier's position and
 // the parcel's origin zone are known; parcels with no origin zone (an
 // older or zone-skipped booking) are still listed, just last and
@@ -70,7 +71,7 @@ func ListAvailableJobs(ctx context.Context, pool *pgxpool.Pool, courierPartyID s
 		       z.lat::float8, z.lng::float8
 		FROM parcel p
 		LEFT JOIN parcel_zone z ON z.id = p."originZoneId"
-		WHERE p.status = 'BOOKED' AND p."assignedCollectorPartyId" IS NULL
+		WHERE p.status IN ('BOOKED', 'RECEIVED_AT_COUNTER') AND p."assignedCollectorPartyId" IS NULL
 		ORDER BY p."createdAt" ASC
 		LIMIT 100`)
 	if err != nil {
@@ -131,7 +132,7 @@ func ClaimParcel(ctx context.Context, pool *pgxpool.Pool, code, courierPartyID s
 	}
 	tag, err := pool.Exec(ctx, `
 		UPDATE parcel SET "assignedCollectorPartyId" = $1
-		WHERE code = $2 AND status = 'BOOKED' AND "assignedCollectorPartyId" IS NULL`,
+		WHERE code = $2 AND status IN ('BOOKED', 'RECEIVED_AT_COUNTER') AND "assignedCollectorPartyId" IS NULL`,
 		courierPartyID, code)
 	if err != nil {
 		return err
@@ -198,7 +199,7 @@ func GetLiveDispatchView(ctx context.Context, pool *pgxpool.Pool) ([]LiveCourier
 		       (p."slaDeadlineAt" IS NOT NULL AND p."slaDeadlineAt" < now())
 		FROM parcel p
 		LEFT JOIN parcel_zone z ON z.id = p."originZoneId"
-		WHERE (p.status = 'BOOKED' AND p."assignedCollectorPartyId" IS NULL)
+		WHERE (p.status IN ('BOOKED', 'RECEIVED_AT_COUNTER') AND p."assignedCollectorPartyId" IS NULL)
 		   OR (p.status IN ('PICKED_UP', 'IN_TRANSIT') AND p."slaDeadlineAt" IS NOT NULL AND p."slaDeadlineAt" < now())
 		ORDER BY p."createdAt" DESC
 		LIMIT 200`)

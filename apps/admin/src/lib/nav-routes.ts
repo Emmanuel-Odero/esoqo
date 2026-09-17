@@ -12,35 +12,39 @@
  * the default landing page.
  */
 export const NAV_ROUTES: { path: string; capability: string }[] = [
-  { path: '/', capability: 'report.read' },
-  { path: '/registrations', capability: 'registration.read' },
-  { path: '/payments', capability: 'payment.read' },
-  { path: '/documents', capability: 'document.read' },
-  { path: '/groups', capability: 'party.read' },
-  { path: '/estores', capability: 'store.read' },
-  { path: '/estores/orders', capability: 'order.read' },
-  { path: '/estores/pricing', capability: 'pricing.read' },
-  { path: '/ticketing', capability: 'ticketorg.read' },
-  { path: '/vouchers', capability: 'ticketorg.read' },
-  { path: '/parcels', capability: 'parcels.read' },
-  { path: '/parcels/counter', capability: 'parcels.assign' },
-  { path: '/parcels/live', capability: 'parcels.read' },
-  { path: '/parcels/companies', capability: 'parcels.read' },
-  { path: '/parcels/cod', capability: 'parcels.read' },
-  { path: '/parcels/payouts', capability: 'parcels.read' },
-  { path: '/parcels/couriers', capability: 'parcels.couriers.manage' },
-  { path: '/parcels/teams', capability: 'parcels.couriers.manage' },
-  { path: '/parcels/labels', capability: 'parcels.assign' },
-  { path: '/parcels/pricing', capability: 'parcel_pricing.write' },
-  { path: '/jamii-overview', capability: 'jamii-page.read' },
-  { path: '/jamii-donations', capability: 'jamii-donation.read' },
-  { path: '/staff', capability: 'staff.read' },
-  { path: '/audit', capability: 'audit.read' },
-  { path: '/support-tickets', capability: 'support-ticket.read' },
+  { path: "/", capability: "report.read" },
+  { path: "/registrations", capability: "registration.read" },
+  { path: "/payments", capability: "payment.read" },
+  { path: "/documents", capability: "document.read" },
+  { path: "/groups", capability: "party.read" },
+  { path: "/estores", capability: "store.read" },
+  { path: "/estores/orders", capability: "order.read" },
+  { path: "/estores/pricing", capability: "pricing.read" },
+  { path: "/ticketing", capability: "ticketorg.read" },
+  { path: "/vouchers", capability: "ticketorg.read" },
+  { path: "/parcels", capability: "parcels.read" },
+  { path: "/parcels/counter", capability: "parcels.assign" },
+  { path: "/parcels/operations", capability: "parcels.assign" },
+  { path: "/parcels/live", capability: "parcels.read" },
+  { path: "/parcels/companies", capability: "parcels.read" },
+  { path: "/parcels/cod", capability: "parcels.read" },
+  { path: "/parcels/payouts", capability: "parcels.read" },
+  { path: "/parcels/couriers", capability: "parcels.couriers.manage" },
+  { path: "/parcels/teams", capability: "parcels.couriers.manage" },
+  { path: "/parcels/labels", capability: "parcels.assign" },
+  { path: "/parcels/pricing", capability: "parcel_pricing.write" },
+  { path: "/jamii-overview", capability: "jamii-page.read" },
+  { path: "/jamii-donations", capability: "jamii-donation.read" },
+  { path: "/staff", capability: "staff.read" },
+  { path: "/audit", capability: "audit.read" },
+  { path: "/support-tickets", capability: "support-ticket.read" },
 ];
 
 function allowed(caps: string[], need: string): boolean {
-  return caps.includes('*') || caps.some((c) => c === need || c.startsWith(`${need.split('.')[0]}.`));
+  return (
+    caps.includes("*") ||
+    caps.some((c) => c === need || c.startsWith(`${need.split(".")[0]}.`))
+  );
 }
 
 /** The first route this ctx's capabilities can actually open, or null

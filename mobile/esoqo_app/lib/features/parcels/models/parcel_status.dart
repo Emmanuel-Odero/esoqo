@@ -230,6 +230,7 @@ class ParcelLabel {
 
 const parcelStatusStages = [
   ('BOOKED', 'Booked'),
+  ('RECEIVED_AT_COUNTER', 'Received at counter'),
   ('PICKED_UP', 'Picked up'),
   ('IN_TRANSIT', 'In transit'),
   ('DELIVERED', 'Delivered'),
@@ -244,6 +245,7 @@ const parcelStatusStages = [
 const _parcelStatusLabels = {
   'DRAFT_PENDING_PAYMENT': 'Draft — not paid',
   'BOOKED': 'Booked',
+  'RECEIVED_AT_COUNTER': 'Received at counter',
   'PICKED_UP': 'Picked up',
   'IN_TRANSIT': 'In transit',
   'HELD_AT_AGENT': 'Waiting at a pickup point',
@@ -277,6 +279,8 @@ String parcelStatusMessage(ParcelStatusView status) {
         return 'Collection is scheduled — someone will come by for it soon.';
       }
       return "Booked and paid. We'll text you once it's on its way.";
+    case 'RECEIVED_AT_COUNTER':
+      return 'Received at the counter — a courier will pick it up for delivery.';
     case 'PICKED_UP':
       return 'Picked up and on its way to ${status.destinationLabel}.';
     case 'IN_TRANSIT':
@@ -300,13 +304,15 @@ String parcelStatusMessage(ParcelStatusView status) {
 /// because these drive what the receiver is told and what the courier
 /// is asked to do next — but OTHER always ships with its own free-text
 /// field, the same rule every other "Other" choice in this codebase
-/// follows.
+/// follows. The codes must match core-go's dbx.ValidAttemptReasons
+/// exactly: a value the server doesn't recognise is rejected outright,
+/// so a mismatch here silently blocks every failed-delivery attempt.
 const parcelAttemptReasons = [
-  ('RECEIVER_UNREACHABLE', 'Nobody answered'),
+  ('NOBODY_HOME', 'Nobody answered'),
   ('WRONG_ADDRESS', 'Address was wrong'),
-  ('RECEIVER_ABSENT', 'Receiver was out'),
   ('REFUSED', 'Receiver refused it'),
-  ('ACCESS_BLOCKED', 'Could not get in'),
+  ('NO_DELIVERY_CODE', 'No delivery code'),
+  ('UNREACHABLE', 'Could not reach them'),
   ('OTHER', 'Something else'),
 ];
 

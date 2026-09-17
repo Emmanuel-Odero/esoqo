@@ -1,5 +1,6 @@
 import type { Metadata } from 'next';
 import Link from 'next/link';
+import type { Route } from 'next';
 import { Icon, Logo } from '@esoqo/ui';
 import { ParcelOrgUnauthorised, getParcelOrgMe } from '@/lib/parcel-org-session';
 import './parcel-org.css';
@@ -34,6 +35,7 @@ export default async function ParcelOrgLayout({ children }: { children: React.Re
 
   const canManageStaff = me.capabilities.includes('parcelorgstaff.write');
   const canManagePricing = me.capabilities.includes('parcelorg.write');
+  const canManageStations = me.capabilities.includes('parcelorgstation.write');
 
   return (
     <div className="porg">
@@ -54,6 +56,7 @@ export default async function ParcelOrgLayout({ children }: { children: React.Re
             </Link>
             <Link href="/parcel-org/labels"><Icon name="tag" size={17} />Labels</Link>
             {canManagePricing && <Link href="/parcel-org/pricing"><Icon name="coins" size={17} />Pricing</Link>}
+            {canManageStations && <Link href={'/parcel-org/stations' as Route}><Icon name="pin" size={17} />Stations</Link>}
             {canManageStaff && <Link href="/parcel-org/team"><Icon name="users" size={17} />Team</Link>}
           </nav>
           <form action="/parcel-org/signout" method="post" className="porg-signout">

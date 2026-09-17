@@ -21,6 +21,7 @@ export const NAIROBI = 'Africa/Nairobi';
 export const STATUS_LABEL: Record<string, string> = {
   DRAFT_PENDING_PAYMENT: 'Awaiting payment',
   BOOKED: 'Booked',
+  RECEIVED_AT_COUNTER: 'Received',
   PICKED_UP: 'Picked up',
   IN_TRANSIT: 'On the way',
   FAILED_DELIVERY: 'Delivery attempted',
@@ -66,6 +67,8 @@ export function statusMessage(p: ParcelStatusView): string {
       return 'This booking isn’t paid for yet. Complete payment and we’ll arrange a courier.';
     case 'BOOKED':
       return 'Paid and booked. A courier will collect it shortly.';
+    case 'RECEIVED_AT_COUNTER':
+      return 'Received at the counter. A courier will pick it up for delivery.';
     case 'PICKED_UP':
       return 'A courier has collected it and is on the way.';
     case 'IN_TRANSIT':
@@ -103,13 +106,30 @@ export function statusMessage(p: ParcelStatusView): string {
  * they're departures from the path, and rendering one as an unreached
  * dot would read as "hasn't happened yet" for something that very much
  * has. Those statuses get their own card instead.
+ *
+ * RECEIVED_AT_COUNTER sits between Booked and Picked up, but only for a
+ * parcel that actually went through a counter — see timelineFor.
  */
 export const TIMELINE: [status: string, label: string][] = [
   ['BOOKED', 'Booked'],
-  ['PICKED_UP', 'Picked up'],
+  ['RECEIVED_AT_COUNTER', 'Received at counter'],
+  ['PICKED_UP', 'Collected'],
   ['IN_TRANSIT', 'On the way'],
   ['DELIVERED', 'Delivered'],
 ];
+
+/**
+ * The stages that actually apply to this parcel. A scheduled pickup
+ * never sits at a counter, so drawing "received at counter" as a
+ * reached dot for it would claim something that never happened; the
+ * stage is kept only when the parcel genuinely has a counter event (a
+ * self-drop-off, or an Esoqo desk receipt recorded as one).
+ */
+export function timelineFor(p: ParcelStatusView): [status: string, label: string][] {
+  const counter = p.status === 'RECEIVED_AT_COUNTER'
+    || (p.events ?? []).some((e) => e.status === 'RECEIVED_AT_COUNTER');
+  return counter ? TIMELINE : TIMELINE.filter(([s]) => s !== 'RECEIVED_AT_COUNTER');
+}
 
 export function isOffTimeline(status: string): boolean {
   return !TIMELINE.some(([s]) => s === status);

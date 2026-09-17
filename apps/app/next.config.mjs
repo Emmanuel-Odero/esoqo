@@ -11,6 +11,9 @@ const nextConfig = {
   // crashing the whole page instead of returning a handled error.
   experimental: {
     serverActions: { bodySizeLimit: '11mb' },
+    // Dev memory guard — see apps/web/next.config.mjs.
+    turbopackFileSystemCacheForDev: false,
+    turbopackMemoryLimit: 1024 * 1024 * 1024,
   },
 
   /**

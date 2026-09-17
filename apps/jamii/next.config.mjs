@@ -5,6 +5,12 @@ const nextConfig = {
   transpilePackages: ['@esoqo/ui', '@esoqo/a11y', '@esoqo/domain', '@esoqo/payments'],
   typedRoutes: true,
 
+  // Dev memory guard — see apps/web/next.config.mjs.
+  experimental: {
+    turbopackFileSystemCacheForDev: false,
+    turbopackMemoryLimit: 1024 * 1024 * 1024,
+  },
+
   /**
    * sharp (packages/db/src/image-compression.ts, imported via
    * '@esoqo/db/image-compression' by the upload Server Actions) is a

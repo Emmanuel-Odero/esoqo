@@ -219,11 +219,15 @@ const (
 	CapParcelOrgRead     = "parcelorg.read"
 	CapParcelOrgWrite    = "parcelorg.write"
 	CapParcelOrgStaff    = "parcelorgstaff.write"
+	CapParcelOrgStations = "parcelorgstation.write"
 	CapParcelOrgDispatch = "parcelorg.dispatch"
 	// CapParcelOrgCarry — take custody, record an attempt, drop at an
 	// agent, close at the door. The rider bundle's whole content.
-	CapParcelOrgCarry    = "parcelorg.carry"
-	CapParcelOrgEarnings = "parcelorg.earnings"
+	CapParcelOrgCarry      = "parcelorg.carry"
+	CapParcelOrgEarnings   = "parcelorg.earnings"
+	CapParcelOrgIntake     = "parcelorg.intake"
+	CapParcelOrgArrival    = "parcelorg.arrival"
+	CapParcelOrgCollection = "parcelorg.collection"
 )
 
 // ParcelStaffCapabilities — one bundle per role a parcel company issues
@@ -238,11 +242,15 @@ const (
 var ParcelStaffCapabilities = map[string][]string{
 	"RIDER": {CapParcelOrgRead, CapParcelOrgCarry},
 	"DISPATCHER": {
-		CapParcelOrgRead, CapParcelOrgCarry, CapParcelOrgDispatch,
+		CapParcelOrgRead, CapParcelOrgCarry, CapParcelOrgDispatch, CapParcelOrgArrival,
 	},
+	"STATION_MANAGER":  {CapParcelOrgRead, CapParcelOrgCarry, CapParcelOrgDispatch, CapParcelOrgStaff, CapParcelOrgStations, CapParcelOrgIntake, CapParcelOrgArrival, CapParcelOrgCollection},
+	"INTAKE_CLERK":     {CapParcelOrgRead, CapParcelOrgIntake},
+	"ARRIVAL_CLERK":    {CapParcelOrgRead, CapParcelOrgArrival},
+	"COLLECTION_CLERK": {CapParcelOrgRead, CapParcelOrgCollection},
 	"MANAGER": {
 		CapParcelOrgRead, CapParcelOrgCarry, CapParcelOrgDispatch,
-		CapParcelOrgWrite, CapParcelOrgStaff, CapParcelOrgEarnings,
+		CapParcelOrgWrite, CapParcelOrgStaff, CapParcelOrgStations, CapParcelOrgEarnings,
 	},
 }
 

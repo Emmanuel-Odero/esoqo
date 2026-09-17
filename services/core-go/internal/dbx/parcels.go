@@ -1149,14 +1149,13 @@ type ParcelStatusView struct {
 	// view had the data for all along without ever surfacing it.
 	SlaDeadlineAt *time.Time `json:"slaDeadlineAt"`
 
-	// IntakeConfirmedAt — never serialized (json:"-"). Internal-only:
-	// handleGetParcelStatus uses this to decide whether the caller gets
-	// this full view at all, or the reduced pre-intake stub (see
-	// Parcel.serviceTicketNumber's own comment on why nothing here is
-	// visible to the outside world before a handler's first custody
-	// scan, whichever identifier — code or ticket number — they looked
-	// it up by).
-	IntakeConfirmedAt *time.Time `json:"-"`
+	// IntakeConfirmedAt — when the box was first physically received
+	// (a counter receipt or the first pickup). Exposed on this
+	// guest-safe view so the tracker can date its "received" stage; a
+	// timestamp carries no PII. handleGetParcelStatus still uses its
+	// presence to decide whether the caller gets this full view at all,
+	// or the reduced pre-intake stub.
+	IntakeConfirmedAt *time.Time `json:"intakeConfirmedAt"`
 
 	// Failed-attempt summary. A receiver who was out needs to know an
 	// attempt happened and why far more than they need the status
@@ -1206,6 +1205,81 @@ type ParcelStatusView struct {
 	LabelVerdict string `json:"labelVerdict,omitempty"`
 
 	PreLabelInfo *ParcelLabelInfo `json:"preLabelInfo"`
+
+	// Events — the full custody timeline, oldest first, guest-safe: a
+	// time and a stage label, never a holder's name or phone. Lets the
+	// tracking page show "received at counter 2:14pm, collected 4:02pm"
+	// rather than a bare current status. See ListParcelTrackEvents.
+	Events []ParcelTrackEvent `json:"events"`
+}
+
+// ParcelTrackEvent is one line of the public custody timeline. Status is
+// the ParcelStatus the leg produced (may be empty on rows written before
+// parcel_handoff.status existed); Label is the human sentence the client
+// renders. No holder identity by design — see ParcelStatusView's own
+// PII-minimal rule.
+type ParcelTrackEvent struct {
+	At     time.Time `json:"at"`
+	Status string    `json:"status"`
+	Label  string    `json:"label"`
+}
+
+// trackEventLabel maps a custody leg's resulting status to a guest-safe
+// sentence. Empty (pre-migration rows) falls back to a neutral label.
+func trackEventLabel(status string) string {
+	switch status {
+	case "RECEIVED_AT_COUNTER":
+		return "Received at counter"
+	case "PICKED_UP":
+		return "Collected"
+	case "IN_TRANSIT":
+		return "In transit"
+	case "HELD_AT_AGENT":
+		return "Ready for collection"
+	case "DELIVERED":
+		return "Delivered"
+	default:
+		return "Custody transfer"
+	}
+}
+
+// ListParcelTrackEvents — the parcel_handoff legs as guest-safe timeline
+// rows, oldest first: time plus the status the leg produced, never a
+// holder's identity. See ParcelTrackEvent.
+func ListParcelTrackEvents(ctx context.Context, pool *pgxpool.Pool, parcelID string) ([]ParcelTrackEvent, error) {
+	rows, err := pool.Query(ctx, `
+		SELECT "createdAt", COALESCE(status::text, '')
+		FROM parcel_handoff
+		WHERE "parcelId" = $1
+		ORDER BY "createdAt" ASC`, parcelID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var out []ParcelTrackEvent
+	for rows.Next() {
+		var e ParcelTrackEvent
+		if err := rows.Scan(&e.At, &e.Status); err != nil {
+			return nil, err
+		}
+		e.Label = trackEventLabel(e.Status)
+		out = append(out, e)
+	}
+	return out, rows.Err()
+}
+
+// buildParcelTrackEvents — the full public timeline: booking, every
+// custody leg, then delivery. Best-effort on the legs: a lookup failure
+// must not lose the whole status response.
+func buildParcelTrackEvents(ctx context.Context, pool *pgxpool.Pool, parcelID string, createdAt time.Time, deliveredAt *time.Time) []ParcelTrackEvent {
+	events := []ParcelTrackEvent{{At: createdAt, Status: "BOOKED", Label: "Booked"}}
+	if legs, err := ListParcelTrackEvents(ctx, pool, parcelID); err == nil {
+		events = append(events, legs...)
+	}
+	if deliveredAt != nil {
+		events = append(events, ParcelTrackEvent{At: *deliveredAt, Status: "DELIVERED", Label: "Delivered"})
+	}
+	return events
 }
 
 // ParcelAgentStop — the collection-point details a receiver needs, cut
@@ -1250,6 +1324,7 @@ type ParcelLabelInfo struct {
 // the same whether or not the item behind it was ever formally booked.
 func GetParcelStatus(ctx context.Context, pool *pgxpool.Pool, code string) (*ParcelStatusView, error) {
 	var v ParcelStatusView
+	var parcelID string
 	var agentName, agentMsisdn, agentHint, agentHours, agentLat, agentLng, agentFee *string
 	// Matches by the real code or by serviceTicketNumber — a sender who
 	// only has the ticket number (the only thing they were ever given
@@ -1258,7 +1333,7 @@ func GetParcelStatus(ctx context.Context, pool *pgxpool.Pool, code string) (*Par
 	// enforces the pre-intake reduction; this just has to find the row
 	// either way.
 	err := pool.QueryRow(ctx, `
-		SELECT p.code, p.status::text, p."originLabel", p."destinationLabel", p."parcelType"::text,
+		SELECT p.id, p.code, p.status::text, p."originLabel", p."destinationLabel", p."parcelType"::text,
 		       p."priceKes"::text, p."collectionScheduledAt", p."createdAt", p."deliveredAt",
 		       p."cancellationReason", p."cancelledAt", p."receiptConfirmedAt",
 		       p."slaDeadlineAt", p."intakeConfirmedAt",
@@ -1269,7 +1344,7 @@ func GetParcelStatus(ctx context.Context, pool *pgxpool.Pool, code string) (*Par
 		FROM parcel p
 		LEFT JOIN parcel_agent a ON a.id = p."destinationAgentId"
 		WHERE p.code = $1 OR p."serviceTicketNumber" = $1`, code).
-		Scan(&v.Code, &v.Status, &v.OriginLabel, &v.DestinationLabel, &v.ParcelType,
+		Scan(&parcelID, &v.Code, &v.Status, &v.OriginLabel, &v.DestinationLabel, &v.ParcelType,
 			&v.PriceKes, &v.CollectionScheduledAt, &v.CreatedAt, &v.DeliveredAt,
 			&v.CancellationReason, &v.CancelledAt, &v.ReceiptConfirmedAt,
 			&v.SlaDeadlineAt, &v.IntakeConfirmedAt,
@@ -1306,6 +1381,7 @@ func GetParcelStatus(ctx context.Context, pool *pgxpool.Pool, code string) (*Par
 			}
 			v.Agent = &stop
 		}
+		v.Events = buildParcelTrackEvents(ctx, pool, parcelID, v.CreatedAt, v.DeliveredAt)
 		return &v, nil
 	}
 	if !errors.Is(err, pgx.ErrNoRows) {
@@ -2133,10 +2209,10 @@ func canTakeParcelCustody(ctx context.Context, tx pgx.Tx, partyID string, parcel
 //
 // Idempotent: scanning a code you already hold is a no-op, not an
 // error, so a nervous double-scan on a slow network never fails.
-// wasFirstPickup tells the caller whether this was the BOOKED→PICKED_UP
-// transition specifically — that's the one moment handlers_parcels.go
-// sends the pickup SMS; every later leg (IN_TRANSIT) and every replayed
-// scan stays silent.
+// wasFirstIntake tells the caller whether this was the first physical
+// receipt (still BOOKED) — that's the one moment handlers_parcels.go
+// sends the intake SMS; every later leg (PICKED_UP/IN_TRANSIT) and every
+// replayed scan stays silent.
 //
 // The whole read-check-write runs in one transaction with the parcel row
 // locked FOR UPDATE. Custody is the one thing in this file that two
@@ -2148,8 +2224,17 @@ func canTakeParcelCustody(ctx context.Context, tx pgx.Tx, partyID string, parcel
 // the status change: that table is the append-only custody chain a
 // dispute is settled from, and a leg missing from it because the second
 // statement failed on its own is worse than a failed scan.
-func ScanHandoff(ctx context.Context, pool *pgxpool.Pool, code, scannedByPartyID string, staffOverride bool) (status string, wasFirstPickup bool, resolvedCode string, err error) {
-	if scannedByPartyID == "" {
+func ScanHandoff(ctx context.Context, pool *pgxpool.Pool, code, scannedByPartyID, staffActorID string, staffOverride bool) (status string, wasFirstIntake bool, resolvedCode string, err error) {
+	// An Esoqo staff session has no linked Party (StaffUser carries no
+	// partyId), so a counter confirmation arrives with an empty
+	// scannedByPartyID. That is a legitimate counter receipt, not a
+	// missing actor: the capability-resolved staffOverride is what
+	// authorizes it, and staffActorID records which person confirmed it.
+	// Only a caller with neither a Party nor the override is refused —
+	// the pre-existing hole was rejecting this case before ever looking
+	// at staffOverride, which left every admin-counter booking stuck at
+	// AWAITING_INTAKE forever.
+	if scannedByPartyID == "" && !staffOverride {
 		return "", false, "", &ParcelError{"FORBIDDEN", "Sign in to accept a parcel"}
 	}
 
@@ -2159,7 +2244,7 @@ func ScanHandoff(ctx context.Context, pool *pgxpool.Pool, code, scannedByPartyID
 	}
 	defer func() { _ = tx.Rollback(ctx) }()
 
-	var parcelID, currentStatus string
+	var parcelID, currentStatus, originMethod string
 	var currentHolder, assignedCollector, parcelOrgID *string
 	// resolvedCode is the parcel's REAL code, whichever reference was
 	// used to find it. Everything downstream — the notify lookup, the
@@ -2180,10 +2265,10 @@ func ScanHandoff(ctx context.Context, pool *pgxpool.Pool, code, scannedByPartyID
 	// stopped being sufficient when canTakeParcelCustody landed below.
 	// The scanner still has to be a recognised carrier.
 	err = tx.QueryRow(ctx, `
-		SELECT id, code, status::text, "currentHolderPartyId", "assignedCollectorPartyId", "parcelOrgId"::text
+		SELECT id, code, status::text, "currentHolderPartyId", "assignedCollectorPartyId", "parcelOrgId"::text, "originMethod"::text
 		FROM parcel WHERE code = $1 OR "serviceTicketNumber" = $1
 		FOR UPDATE`, code).
-		Scan(&parcelID, &resolvedCode, &currentStatus, &currentHolder, &assignedCollector, &parcelOrgID)
+		Scan(&parcelID, &resolvedCode, &currentStatus, &currentHolder, &assignedCollector, &parcelOrgID, &originMethod)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return "", false, "", &ParcelError{"NOT_FOUND", "That parcel was not found"}
 	}
@@ -2207,8 +2292,9 @@ func ScanHandoff(ctx context.Context, pool *pgxpool.Pool, code, scannedByPartyID
 	// Checked before entitlement: a replayed scan by whoever already
 	// holds it is a no-op whatever their current standing, so a courier
 	// suspended mid-journey doesn't start getting errors on a parcel
-	// that's already in their hands.
-	if currentHolder != nil && *currentHolder == scannedByPartyID {
+	// that's already in their hands. A no-Party staff receipt has no
+	// holder to replay against.
+	if scannedByPartyID != "" && currentHolder != nil && *currentHolder == scannedByPartyID {
 		return currentStatus, false, resolvedCode, nil // already holding it — replayed scan
 	}
 
@@ -2219,52 +2305,93 @@ func ScanHandoff(ctx context.Context, pool *pgxpool.Pool, code, scannedByPartyID
 	if !entitled {
 		return "", false, "", &ParcelError{"FORBIDDEN", "Only a registered courier or this company's own staff can take a parcel"}
 	}
-	if currentStatus == "BOOKED" && assignedCollector != nil && *assignedCollector != scannedByPartyID {
+	// The assignment gate only binds a real carrier taking custody. A
+	// staff counter receipt with no Party is not that carrier competing
+	// for the parcel — it is the desk that already has the box.
+	if scannedByPartyID != "" && currentStatus == "BOOKED" && assignedCollector != nil && *assignedCollector != scannedByPartyID {
 		return "", false, "", &ParcelError{"FORBIDDEN", "This parcel is assigned to another collector"}
 	}
 
-	nextStatus := nextHandoffStatus(currentStatus)
-	wasFirstPickup = currentStatus == "BOOKED"
-	// intakeConfirmedAt — this genuine first scan is what
-	// handleGetParcelStatus's guest-safe lookup uses to decide whether
-	// the real tracking code exists to the outside world yet (see
-	// Parcel.serviceTicketNumber's own comment on the ticket-number-only
-	// window before this). Set here, not by the retired confirm-intake
-	// path, because /handoff is the one thing that actually fires this
-	// event now, whichever origin method or staff/rider session it was.
-	if _, err := tx.Exec(ctx, `
-		UPDATE parcel SET status = $1::"ParcelStatus", "currentHolderPartyId" = $2,
-			"intakeConfirmedAt" = CASE WHEN $4 THEN now() ELSE "intakeConfirmedAt" END
-		WHERE id = $3`,
-		nextStatus, scannedByPartyID, parcelID, wasFirstPickup); err != nil {
-		return "", false, "", err
-	}
-	if _, err := tx.Exec(ctx, `
-		INSERT INTO parcel_handoff (id, "parcelId", "fromPartyId", "toPartyId", "createdAt")
-		VALUES (gen_random_uuid(), $1, $2, $3, now())`, parcelID, currentHolder, scannedByPartyID); err != nil {
-		return "", false, "", err
+	wasFirstIntake = currentStatus == "BOOKED"
+	// A first receipt is a counter drop-off when it is a self-drop-off
+	// (the sender walked it into a station) or a staff confirmation with
+	// no Party (an Esoqo desk). A scheduled-pickup first scan is a
+	// courier collecting at the sender's door and stays PICKED_UP.
+	atCounter := currentStatus == "BOOKED" &&
+		(originMethod == "SELF_DROPOFF" || (staffOverride && scannedByPartyID == ""))
+	nextStatus := nextHandoffStatus(currentStatus, atCounter)
+
+	if scannedByPartyID == "" {
+		// No Party to attribute custody to, so currentHolderPartyId is
+		// deliberately left alone: the box is at the counter, not with
+		// any carrier yet, and the next real carrier scan takes it from
+		// here. intakeConfirmedByStaffId is the person to hold to it.
+		// The receipt is still written to parcel_handoff with a NULL
+		// holder so the custody chain and the public timeline both show
+		// it as the first real event.
+		if _, err := tx.Exec(ctx, `
+			UPDATE parcel SET status = $1::"ParcelStatus",
+				"intakeConfirmedAt" = CASE WHEN $2 THEN now() ELSE "intakeConfirmedAt" END,
+				"intakeConfirmedByStaffId" = COALESCE(NULLIF($3, '')::uuid, "intakeConfirmedByStaffId")
+			WHERE id = $4`,
+			nextStatus, wasFirstIntake, staffActorID, parcelID); err != nil {
+			return "", false, "", err
+		}
+		if _, err := tx.Exec(ctx, `
+			INSERT INTO parcel_handoff (id, "parcelId", "fromPartyId", "toPartyId", "createdAt", status)
+			VALUES (gen_random_uuid(), $1, $2, NULL, now(), $3::"ParcelStatus")`,
+			parcelID, currentHolder, nextStatus); err != nil {
+			return "", false, "", err
+		}
+	} else {
+		if _, err := tx.Exec(ctx, `
+			UPDATE parcel SET status = $1::"ParcelStatus", "currentHolderPartyId" = $2,
+				"intakeConfirmedAt" = CASE WHEN $4 THEN now() ELSE "intakeConfirmedAt" END
+			WHERE id = $3`,
+			nextStatus, scannedByPartyID, parcelID, wasFirstIntake); err != nil {
+			return "", false, "", err
+		}
+		if _, err := tx.Exec(ctx, `
+			INSERT INTO parcel_handoff (id, "parcelId", "fromPartyId", "toPartyId", "createdAt", status)
+			VALUES (gen_random_uuid(), $1, $2, $3, now(), $4::"ParcelStatus")`,
+			parcelID, currentHolder, scannedByPartyID, nextStatus); err != nil {
+			return "", false, "", err
+		}
 	}
 	if err := tx.Commit(ctx); err != nil {
 		return "", false, "", err
 	}
-	return nextStatus, wasFirstPickup, resolvedCode, nil
+	return nextStatus, wasFirstIntake, resolvedCode, nil
 }
 
-// nextHandoffStatus — a first scan (still BOOKED) means the courier
-// just picked it up; every scan after that is just another leg of the
-// journey. Pure so it's directly testable without a DB fixture, same
-// pattern validDineInStatus/crewOwnsTrip already use elsewhere.
+// nextHandoffStatus — a first scan (still BOOKED) is either a counter
+// receipt or a courier pickup, and every scan after that is another leg
+// of the journey. Pure so it's directly testable without a DB fixture,
+// same pattern validDineInStatus/crewOwnsTrip already use elsewhere.
+//
+// atCounter is true for a self-drop-off first scan or an Esoqo staff
+// counter confirmation (see ScanHandoff); it produces
+// RECEIVED_AT_COUNTER so a box on a station desk reads honestly instead
+// of claiming a courier has collected it. A courier scanning a parcel
+// already at a counter moves it to PICKED_UP.
 //
 // FAILED_DELIVERY and HELD_AT_AGENT both fall through to IN_TRANSIT on
 // purpose: a parcel that failed at the door or was left on a shop shelf
 // and is now being scanned by someone new is, by definition, moving
 // again. Re-deriving IN_TRANSIT is what puts a re-attempt back on the
 // normal timeline instead of stranding it in a failure state forever.
-func nextHandoffStatus(current string) string {
-	if current == "BOOKED" {
+func nextHandoffStatus(current string, atCounter bool) string {
+	switch current {
+	case "BOOKED":
+		if atCounter {
+			return "RECEIVED_AT_COUNTER"
+		}
 		return "PICKED_UP"
+	case "RECEIVED_AT_COUNTER":
+		return "PICKED_UP"
+	default:
+		return "IN_TRANSIT"
 	}
-	return "IN_TRANSIT"
 }
 
 // DeliverProof is the evidence a courier captures at the door. Every
@@ -2330,7 +2457,7 @@ func DeliverParcel(ctx context.Context, pool *pgxpool.Pool, code, deliveryCode, 
 	if status == "DELIVERED" {
 		return &ParcelError{"ALREADY_DELIVERED", "This parcel has already been delivered"}
 	}
-	if status == "DRAFT_PENDING_PAYMENT" || status == "BOOKED" {
+	if status == "DRAFT_PENDING_PAYMENT" || status == "BOOKED" || status == "RECEIVED_AT_COUNTER" {
 		return &ParcelError{"BAD_INPUT", "This parcel hasn't been picked up yet"}
 	}
 	if status == "CANCELLED" || status == "RETURNED_TO_SENDER" {
@@ -2620,8 +2747,8 @@ type AdminParcelStats struct {
 // supplies a *key*, and an unknown key is rejected (see
 // ParcelQueueWhere) rather than passed through.
 var ParcelQueues = map[string]string{
-	"needs-collector":    `p.status = 'BOOKED' AND p."assignedCollectorPartyId" IS NULL`,
-	"overdue-collection": `p.status = 'BOOKED' AND p."collectionScheduledAt" IS NOT NULL AND p."collectionScheduledAt" < now()`,
+	"needs-collector":    `p.status IN ('BOOKED', 'RECEIVED_AT_COUNTER') AND p."assignedCollectorPartyId" IS NULL`,
+	"overdue-collection": `p.status IN ('BOOKED', 'RECEIVED_AT_COUNTER') AND p."collectionScheduledAt" IS NOT NULL AND p."collectionScheduledAt" < now()`,
 	"stale-drafts":       `p.status = 'DRAFT_PENDING_PAYMENT' AND p."createdAt" < now() - interval '24 hours'`,
 	"refunds-owed":       `p."refundStatus" = 'PENDING'`,
 	// Deliberately still only PICKED_UP/IN_TRANSIT: a parcel in
@@ -2632,7 +2759,7 @@ var ParcelQueues = map[string]string{
 	"failed-delivery":  `p.status = 'FAILED_DELIVERY'`,
 	"stale-at-agent":   `p.status = 'HELD_AT_AGENT' AND p."agentHeldSince" < now() - interval '5 days'`,
 	"awaiting-return":  `p.status = 'FAILED_DELIVERY' AND p."deliveryAttempts" >= 3`,
-	"in-flight":        `p.status IN ('BOOKED', 'PICKED_UP', 'IN_TRANSIT')`,
+	"in-flight":        `p.status IN ('BOOKED', 'RECEIVED_AT_COUNTER', 'PICKED_UP', 'IN_TRANSIT')`,
 }
 
 // ParcelQueueWhere resolves a queue key to its predicate. An unknown
@@ -2882,7 +3009,7 @@ func AssignParcelCollector(ctx context.Context, pool *pgxpool.Pool, parcelID, co
 	if err != nil {
 		return "", "", "", "", "", "", err
 	}
-	if status != "BOOKED" {
+	if status != "BOOKED" && status != "RECEIVED_AT_COUNTER" {
 		return "", "", "", "", "", "", &ParcelError{"BAD_INPUT", "Only a paid, booked parcel can be scheduled for collection"}
 	}
 	var collectorMsisdnPtr *string
@@ -3017,7 +3144,7 @@ func CancelParcel(ctx context.Context, pool *pgxpool.Pool, parcelID, cancelledBy
 	if err != nil {
 		return nil, err
 	}
-	if status != "DRAFT_PENDING_PAYMENT" && status != "BOOKED" {
+	if status != "DRAFT_PENDING_PAYMENT" && status != "BOOKED" && status != "RECEIVED_AT_COUNTER" {
 		return nil, &ParcelError{"BAD_INPUT", "Only a draft or a paid, not-yet-picked-up parcel can be cancelled"}
 	}
 
@@ -3029,7 +3156,7 @@ func CancelParcel(ctx context.Context, pool *pgxpool.Pool, parcelID, cancelledBy
 	// that function's own comment on why there's no automatic reversal.
 	refundStatus := "NOT_APPLICABLE"
 	var refundedAt *time.Time
-	if status == "BOOKED" && paymentMethod != nil {
+	if (status == "BOOKED" || status == "RECEIVED_AT_COUNTER") && paymentMethod != nil {
 		switch *paymentMethod {
 		case "ESOKO_POINTS":
 			if senderPartyID != nil && priceKesText != nil {
@@ -3061,8 +3188,8 @@ func CancelParcel(ctx context.Context, pool *pgxpool.Pool, parcelID, cancelledBy
 	return result, nil
 }
 
-// FlagParcelException — a staff member marking a live (PICKED_UP or
-// IN_TRANSIT) parcel as needing attention. Distinct from CancelParcel:
+// FlagParcelException — a staff member marking a live (RECEIVED_AT_COUNTER,
+// PICKED_UP or IN_TRANSIT) parcel as needing attention. Distinct from CancelParcel:
 // this doesn't stop the parcel, it's a "keep an eye on this one" note,
 // same shape CollectionNote already is for a scheduled pickup — just
 // surfaced with its own timestamp/pill instead of tucked into a detail
@@ -3074,7 +3201,7 @@ func FlagParcelException(ctx context.Context, pool *pgxpool.Pool, parcelID, note
 	}
 	tag, err := pool.Exec(ctx, `
 		UPDATE parcel SET "exceptionNote" = $1, "exceptionFlaggedAt" = now(), "exceptionFlaggedByStaffId" = $2
-		WHERE id = $3 AND status IN ('PICKED_UP', 'IN_TRANSIT')`, note, staffID, parcelID)
+		WHERE id = $3 AND status IN ('PICKED_UP', 'IN_TRANSIT', 'RECEIVED_AT_COUNTER')`, note, staffID, parcelID)
 	if err != nil {
 		return err
 	}
@@ -3116,7 +3243,7 @@ func UpdateParcelDetails(ctx context.Context, pool *pgxpool.Pool, parcelID, rece
 	}
 	tag, err := pool.Exec(ctx, `
 		UPDATE parcel SET "receiverName" = $1, "receiverMsisdn" = $2, "destinationLabel" = $3, notes = $4
-		WHERE id = $5 AND status IN ('DRAFT_PENDING_PAYMENT', 'BOOKED')`,
+		WHERE id = $5 AND status IN ('DRAFT_PENDING_PAYMENT', 'BOOKED', 'RECEIVED_AT_COUNTER')`,
 		receiverName, receiverMsisdn, destinationLabel, notes, parcelID)
 	if err != nil {
 		return err
@@ -3171,7 +3298,7 @@ func RequestParcelDeliveryOtp(ctx context.Context, pool *pgxpool.Pool, otp *auth
 	switch status {
 	case "DELIVERED":
 		return "", &ParcelError{"ALREADY_DELIVERED", "This parcel has already been delivered"}
-	case "DRAFT_PENDING_PAYMENT", "BOOKED", "CANCELLED", "RETURNED_TO_SENDER":
+	case "DRAFT_PENDING_PAYMENT", "BOOKED", "RECEIVED_AT_COUNTER", "CANCELLED", "RETURNED_TO_SENDER":
 		return "", &ParcelError{"BAD_INPUT", "This parcel isn't ready to be delivered yet"}
 	}
 	if _, err := otp.IssueOtp(ctx, receiverMsisdn, authsvc.OtpParcelDeliveryConfirm, ip); err != nil {
@@ -3307,7 +3434,7 @@ type HandoffRow struct {
 func ListParcelHandoffs(ctx context.Context, pool *pgxpool.Pool, parcelID string) ([]HandoffRow, error) {
 	rows, err := pool.Query(ctx, `
 		SELECT COALESCE(fromP."knownAs", fromP."officialName"),
-		       COALESCE(toP."knownAs", toP."officialName", 'Unknown'),
+		       COALESCE(toP."knownAs", toP."officialName", 'Esoqo counter'),
 		       h."createdAt"
 		FROM parcel_handoff h
 		LEFT JOIN person fromP ON fromP."partyId" = h."fromPartyId"

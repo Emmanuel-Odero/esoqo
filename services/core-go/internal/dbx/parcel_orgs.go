@@ -403,12 +403,13 @@ func CreateEnterpriseForCourierOrg(ctx context.Context, pool *pgxpool.Pool, busi
 // ── Staff ────────────────────────────────────────────────────────────
 
 type ParcelOrgStaff struct {
-	ID      string  `json:"id"`
-	OrgID   string  `json:"orgId"`
-	Name    string  `json:"name"`
-	Role    string  `json:"role"`
-	Active  bool    `json:"active"`
-	PartyID *string `json:"partyId"`
+	ID        string  `json:"id"`
+	OrgID     string  `json:"orgId"`
+	Name      string  `json:"name"`
+	Role      string  `json:"role"`
+	Active    bool    `json:"active"`
+	PartyID   *string `json:"partyId"`
+	StationID *string `json:"stationId"`
 }
 
 // ParcelStaffForSignIn carries the hash, so it is never the type
@@ -449,6 +450,19 @@ func FindParcelStaffForSignIn(ctx context.Context, pool *pgxpool.Pool, orgSlug, 
 	return &s, nil
 }
 
+func FindParcelStaffForSignInByPartyID(ctx context.Context, pool *pgxpool.Pool, orgSlug, partyID string) (*ParcelStaffForSignIn, error) {
+	var s ParcelStaffForSignIn
+	err := pool.QueryRow(ctx, `SELECT st.id, st."orgId", st.name, st.role, st.active, st."pinHash", st."partyId"::text FROM parcel_org_staff st JOIN parcel_org o ON o.id = st."orgId" WHERE o.slug = $1 AND st."partyId" = $2 AND o.status = 'ACTIVE'`, orgSlug, partyID).
+		Scan(&s.ID, &s.OrgID, &s.Name, &s.Role, &s.Active, &s.PinHash, &s.PartyID)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, err
+	}
+	return &s, nil
+}
+
 // ParcelStaffMsisdn resolves the phone number an OTP-based sign-in
 // would text — the staffer's own partyId, joined out to person.msisdn,
 // never a number the caller supplies. Empty when the staff row has no
@@ -473,7 +487,7 @@ func ParcelStaffMsisdn(ctx context.Context, pool *pgxpool.Pool, orgSlug, name st
 
 func ListParcelOrgStaff(ctx context.Context, pool *pgxpool.Pool, orgID string) ([]ParcelOrgStaff, error) {
 	rows, err := pool.Query(ctx, `
-		SELECT id, "orgId", name, role, active, "partyId"::text
+		SELECT id, "orgId", name, role, active, "partyId"::text, "stationId"::text
 		FROM parcel_org_staff WHERE "orgId" = $1 ORDER BY name ASC`, orgID)
 	if err != nil {
 		return nil, err
@@ -482,7 +496,7 @@ func ListParcelOrgStaff(ctx context.Context, pool *pgxpool.Pool, orgID string) (
 	var out []ParcelOrgStaff
 	for rows.Next() {
 		var s ParcelOrgStaff
-		if err := rows.Scan(&s.ID, &s.OrgID, &s.Name, &s.Role, &s.Active, &s.PartyID); err != nil {
+		if err := rows.Scan(&s.ID, &s.OrgID, &s.Name, &s.Role, &s.Active, &s.PartyID, &s.StationID); err != nil {
 			return nil, err
 		}
 		out = append(out, s)
@@ -490,11 +504,90 @@ func ListParcelOrgStaff(ctx context.Context, pool *pgxpool.Pool, orgID string) (
 	return out, rows.Err()
 }
 
+type ParcelOrgStation struct {
+	ID           string  `json:"id"`
+	Name         string  `json:"name"`
+	Msisdn       string  `json:"msisdn"`
+	LocationHint string  `json:"locationHint"`
+	OpeningHours *string `json:"openingHours"`
+	Lat          float64 `json:"lat"`
+	Lng          float64 `json:"lng"`
+	Capacity     int     `json:"capacity"`
+	Active       bool    `json:"active"`
+}
+
+func ListParcelOrgStations(ctx context.Context, pool *pgxpool.Pool, orgID string) ([]ParcelOrgStation, error) {
+	rows, err := pool.Query(ctx, `SELECT id, name, msisdn, "locationHint", "openingHours", lat::text, lng::text, capacity, active FROM parcel_agent WHERE "parcelOrgId" = $1 ORDER BY name`, orgID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var out []ParcelOrgStation
+	for rows.Next() {
+		var s ParcelOrgStation
+		var lat, lng string
+		if err := rows.Scan(&s.ID, &s.Name, &s.Msisdn, &s.LocationHint, &s.OpeningHours, &lat, &lng, &s.Capacity, &s.Active); err != nil {
+			return nil, err
+		}
+		if s.Lat, err = parseFloatOrZero(lat); err != nil {
+			return nil, err
+		}
+		if s.Lng, err = parseFloatOrZero(lng); err != nil {
+			return nil, err
+		}
+		out = append(out, s)
+	}
+	return out, rows.Err()
+}
+
+func CreateParcelOrgStation(ctx context.Context, pool *pgxpool.Pool, orgID string, in ParcelAgentInput, staffID *string) (string, error) {
+	if err := in.validate(); err != nil {
+		return "", err
+	}
+	var id string
+	err := pool.QueryRow(ctx, `INSERT INTO parcel_agent (id, name, "parcelOrgId", "partyId", "zoneId", lat, lng, msisdn, "locationHint", "openingHours", active, capacity, "holdingFeeKes", "createdAt", "createdByStaffId") VALUES (gen_random_uuid(), $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, now(), $13) RETURNING id`, in.Name, orgID, in.PartyID, in.ZoneID, in.Lat, in.Lng, in.Msisdn, in.LocationHint, in.OpeningHours, in.Active, in.Capacity, in.HoldingFee, staffID).Scan(&id)
+	return id, err
+}
+
+func UpdateParcelOrgStation(ctx context.Context, pool *pgxpool.Pool, orgID, stationID string, in ParcelAgentInput) error {
+	if err := in.validate(); err != nil {
+		return err
+	}
+	tag, err := pool.Exec(ctx, `UPDATE parcel_agent SET name = $1, msisdn = $2, "locationHint" = $3, "openingHours" = $4, lat = $5, lng = $6, capacity = $7, active = $8 WHERE id = $9 AND "parcelOrgId" = $10`, in.Name, in.Msisdn, in.LocationHint, in.OpeningHours, in.Lat, in.Lng, in.Capacity, in.Active, stationID, orgID)
+	if err != nil {
+		return err
+	}
+	if tag.RowsAffected() == 0 {
+		return &ParcelError{"NOT_FOUND", "That station was not found in your company"}
+	}
+	return nil
+}
+
+func AssignParcelOrgStaffStation(ctx context.Context, pool *pgxpool.Pool, orgID, staffID string, stationID *string) error {
+	if stationID != nil && *stationID != "" {
+		var exists bool
+		if err := pool.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM parcel_agent WHERE id = $1 AND "parcelOrgId" = $2)`, *stationID, orgID).Scan(&exists); err != nil {
+			return err
+		}
+		if !exists {
+			return &ParcelError{"NOT_FOUND", "That station is not part of your company"}
+		}
+	}
+	tag, err := pool.Exec(ctx, `UPDATE parcel_org_staff SET "stationId" = $1 WHERE id = $2 AND "orgId" = $3`, stationID, staffID, orgID)
+	if err != nil {
+		return err
+	}
+	if tag.RowsAffected() == 0 {
+		return &ParcelError{"NOT_FOUND", "That staff member was not found"}
+	}
+	return nil
+}
+
 // UpsertParcelOrgStaff creates or updates one PIN login. pinHash empty
 // on an update means "leave the PIN alone" — re-typing a PIN to change
 // somebody's role is the kind of friction that ends with every rider
 // sharing one login.
-func UpsertParcelOrgStaff(ctx context.Context, pool *pgxpool.Pool, id *string, orgID, name, role, pinHash string, partyID *string, active bool) error {
+func UpsertParcelOrgStaff(ctx context.Context, pool *pgxpool.Pool, id *string, orgID, name, role, pinHash string, partyID *string, active bool, stationID *string) error {
 	if strings.TrimSpace(name) == "" {
 		return &ParcelError{"BAD_INPUT", "Give this person a name"}
 	}
@@ -512,20 +605,20 @@ func UpsertParcelOrgStaff(ctx context.Context, pool *pgxpool.Pool, id *string, o
 			return &ParcelError{"BAD_INPUT", "Set a PIN, or invite this person by phone number"}
 		}
 		_, err := pool.Exec(ctx, `
-			INSERT INTO parcel_org_staff (id, "orgId", name, "pinHash", role, active, "partyId", "createdAt", "updatedAt")
-			VALUES (gen_random_uuid(), $1, $2, $3, $4, $5, $6, now(), now())`,
-			orgID, name, pinHash, role, active, partyID)
+			INSERT INTO parcel_org_staff (id, "orgId", name, "pinHash", role, active, "partyId", "stationId", "createdAt", "updatedAt")
+			VALUES (gen_random_uuid(), $1, $2, $3, $4, $5, $6, $7, now(), now())`,
+			orgID, name, pinHash, role, active, partyID, stationID)
 		return err
 	}
 	// Scoped by orgID as well as id: an org session must not be able to
 	// edit another company's staff row by guessing a uuid.
 	tag, err := pool.Exec(ctx, `
 		UPDATE parcel_org_staff SET
-			name = $1, role = $2, active = $3, "partyId" = $4,
-			"pinHash" = CASE WHEN $5 = '' THEN "pinHash" ELSE $5 END,
-			"updatedAt" = now()
-		WHERE id = $6 AND "orgId" = $7`,
-		name, role, active, partyID, pinHash, *id, orgID)
+			name = $1, role = $2, active = $3, "partyId" = $4, "stationId" = $5,
+				"pinHash" = CASE WHEN $6 = '' THEN "pinHash" ELSE $6 END,
+				"updatedAt" = now()
+		WHERE id = $7 AND "orgId" = $8`,
+		name, role, active, partyID, stationID, pinHash, *id, orgID)
 	if err != nil {
 		return err
 	}
@@ -569,7 +662,7 @@ func GetParcelOrgStats(ctx context.Context, pool *pgxpool.Pool, orgID string) (*
 	var s ParcelOrgStats
 	err := pool.QueryRow(ctx, `
 		SELECT
-			count(*) FILTER (WHERE status = 'BOOKED'),
+			count(*) FILTER (WHERE status IN ('BOOKED', 'RECEIVED_AT_COUNTER')),
 			count(*) FILTER (WHERE status IN ('PICKED_UP', 'IN_TRANSIT')),
 			count(*) FILTER (WHERE status = 'FAILED_DELIVERY'),
 			count(*) FILTER (WHERE status = 'HELD_AT_AGENT'),
@@ -729,7 +822,7 @@ func AssignOrgParcel(ctx context.Context, pool *pgxpool.Pool, code, orgID, rider
 	}
 	tag, err := pool.Exec(ctx, `
 		UPDATE parcel SET "assignedCollectorPartyId" = $1
-		WHERE code = $2 AND "parcelOrgId" = $3 AND status = 'BOOKED'`,
+		WHERE code = $2 AND "parcelOrgId" = $3 AND status IN ('BOOKED', 'RECEIVED_AT_COUNTER')`,
 		riderPartyID, code, orgID)
 	if err != nil {
 		return err

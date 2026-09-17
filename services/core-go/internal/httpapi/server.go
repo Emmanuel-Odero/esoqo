@@ -303,6 +303,9 @@ func (s *Server) Router() *gin.Engine {
 		v1.POST("/parcel-orgs/me/labels/batches/:id/void", s.authRequired(), s.handleOrgVoidLabelBatch)
 		v1.GET("/parcel-orgs/me/staff", s.authRequired(), s.handleListMyOrgStaff)
 		v1.POST("/parcel-orgs/me/staff", s.authRequired(), s.handleUpsertMyOrgStaff)
+		v1.GET("/parcel-orgs/me/stations", s.authRequired(), s.handleListMyOrgStations)
+		v1.POST("/parcel-orgs/me/stations", s.authRequired(), s.handleCreateMyOrgStation)
+		v1.PATCH("/parcel-orgs/me/stations/:id", s.authRequired(), s.handleUpdateMyOrgStation)
 		v1.GET("/parcel-orgs/me/pricing", s.authRequired(), s.handleListMyOrgPricing)
 		v1.POST("/parcel-orgs/me/pricing", s.authRequired(), s.handleUpsertMyOrgPricing)
 		v1.POST("/parcels/:code/price", s.handleSetParcelPrice)
@@ -315,6 +318,7 @@ func (s *Server) Router() *gin.Engine {
 		v1.GET("/parcels/:code/label", s.authRequired(), s.handleGetParcelLabel)
 		v1.POST("/parcels/:code/handoff", s.authRequired(), s.handleScanParcelHandoff)
 		v1.POST("/parcels/:code/deliver", s.authRequired(), s.handleDeliverParcel)
+		v1.POST("/parcels/:code/collect", s.authRequired(), s.handleDeliverParcel)
 		// The receiver-OTP alternative to the printed delivery code —
 		// see dbx.RequestParcelDeliveryOtp's own comment.
 		v1.POST("/parcels/:code/deliver/request-otp", s.authRequired(), s.handleRequestParcelDeliveryOtp)
@@ -360,6 +364,18 @@ func (s *Server) Router() *gin.Engine {
 		v1.GET("/admin/parcels", s.authRequired(), s.handleAdminListParcels)
 		v1.GET("/admin/parcels/stats", s.authRequired(), s.handleAdminParcelStats)
 		v1.GET("/admin/parcels/collectors", s.authRequired(), s.handleAdminSearchCollectors)
+		// Operational scan workflows live under their own static namespace;
+		// this avoids colliding with the existing /admin/parcels/:id routes.
+		v1.POST("/admin/parcel-ops/:code/intake", s.authRequired(), s.handleCaptureParcelIntake)
+		v1.POST("/admin/parcel-ops/:code/reject", s.authRequired(), s.handleRejectParcelAtDropoff)
+		v1.GET("/admin/parcel-ops/queue", s.authRequired(), s.handleListParcelOpsQueue)
+		v1.POST("/admin/parcel-ops/shipments", s.authRequired(), s.handleCreateParcelShipment)
+		v1.GET("/admin/parcel-ops/shipments/:id", s.authRequired(), s.handleGetParcelShipment)
+		v1.POST("/admin/parcel-ops/shipments/:id/start", s.authRequired(), s.handleStartParcelShipment)
+		v1.POST("/admin/parcel-ops/shipments/:id/load/:code", s.authRequired(), s.handleLoadParcelToShipment)
+		v1.POST("/admin/parcel-ops/shipments/:id/offload/:code", s.authRequired(), s.handleOffloadParcelFromShipment)
+		v1.POST("/admin/parcel-ops/shipments/:id/finish", s.authRequired(), s.handleFinishParcelShipment)
+		v1.POST("/admin/parcel-ops/:code/pickup-reminder", s.authRequired(), s.handleSendPickupReminder)
 		v1.POST("/admin/parcels/:id/assign", s.authRequired(), s.handleAssignParcelCollector)
 		// Registered as a sibling of /admin/parcels rather than under
 		// :id, for the same gin static-vs-param reason the courier

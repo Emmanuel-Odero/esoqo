@@ -189,6 +189,10 @@ services:
     environment:
       CI: "true"
       APP_ENV: "${APP_ENV:-development}"
+      # Which pnpm dev task the entrypoint runs. "dev:apps" (the default)
+      # is the lean set — web, app, admin, store, core-service — chosen
+      # to fit the VM; DEV_TASK=dev runs every workspace including jamii.
+      DEV_TASK: "${DEV_TASK:-dev:apps}"
       DATABASE_URL: postgresql://esoko:esoko_dev_only@pgbouncer:5432/esoko?pgbouncer=true&connection_limit=10
       DIRECT_DATABASE_URL: postgresql://esoko:esoko_dev_only@postgres:5432/esoko
       REDIS_URL: redis://redis:6379
@@ -205,11 +209,13 @@ services:
       SMTP_PORT: "1025"
       CHOKIDAR_USEPOLLING: "1"
       WATCHPACK_POLLING: "true"
-      # Turbopack's per-app dev servers can each balloon past a GB under
-      # memory pressure; this caps the V8 heap (workers inherit it) so a
-      # server gets a hard limit instead of silently pushed out when the
-      # container rams the Docker VM ceiling and the OS OOM-kills a
-      # neighbour (the quiet way ports used to go dark with no log).
+      # Not every workspace runs by default (see DEV_TASK below). On a
+      # 16GB host the Docker VM is ~11GB, and four or five Turbopack dev
+      # servers each leaking up to a multi-GB V8 heap is enough to OOM
+      # the VM and take the whole stack down. Running a smaller set is
+      # what actually keeps this stable; this cap is a secondary guard
+      # so a single server can't ram the VM ceiling and get a neighbour
+      # OOM-killed (the quiet way ports used to go dark with no log).
       NODE_OPTIONS: "--max-old-space-size=2048"
     volumes:
       - .:/app

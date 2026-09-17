@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"strings"
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -102,6 +103,17 @@ func GetEsoqoPaymentId(ctx context.Context, pool *pgxpool.Pool, partyID string) 
 		return nil, err
 	}
 	return &code, nil
+}
+
+// PartyIDByEsoqoID links an existing Esoqo identity to a parcel-company
+// login without creating a second person record.
+func PartyIDByEsoqoID(ctx context.Context, pool *pgxpool.Pool, code string) (string, error) {
+	var partyID string
+	err := pool.QueryRow(ctx, `SELECT "partyId" FROM esoko_payment_id WHERE code = $1`, strings.ToUpper(strings.TrimSpace(code))).Scan(&partyID)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return "", &ParcelError{"NOT_FOUND", "That Esoqo ID was not found"}
+	}
+	return partyID, err
 }
 
 func isUniqueViolation(err error) bool {

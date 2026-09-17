@@ -1,11 +1,184 @@
-'use server';
+"use server";
 
-import { revalidatePath } from 'next/cache';
-import { updateParcelPricingRule, type UpdateParcelPricingRuleInput } from '@esoqo/db';
-import { requireStaff } from '@/lib/session';
-import { adminGo } from '@/lib/go-ticketing';
+import { revalidatePath } from "next/cache";
+import {
+  updateParcelPricingRule,
+  type UpdateParcelPricingRuleInput,
+} from "@esoqo/db";
+import { requireStaff } from "@/lib/session";
+import { adminGo } from "@/lib/go-ticketing";
 
 export type Result = { ok: true } | { ok: false; error: string };
+
+export interface ParcelOpsQueueRow {
+  code: string;
+  status: string;
+  receiverName: string;
+  destinationLabel: string;
+  perishable: boolean;
+  expiryAt: string | null;
+  declaredValueKes: string | null;
+  reminderCount: number;
+  createdAt: string;
+}
+
+export interface ParcelShipmentView {
+  id: string;
+  originLabel: string;
+  destinationLabel: string;
+  routeLabel: string;
+  vehiclePlate: string;
+  status: string;
+  expected: number;
+  loaded: number;
+  offloaded: number;
+}
+
+export async function actionListParcelOpsQueue(
+  queue = "all",
+): Promise<ParcelOpsQueueRow[]> {
+  await requireStaff();
+  const { parcels } = await adminGo<{ parcels: ParcelOpsQueueRow[] | null }>(
+    `/v1/admin/parcel-ops/queue?queue=${encodeURIComponent(queue)}`,
+  );
+  return parcels ?? [];
+}
+
+export async function actionCaptureParcelIntake(
+  code: string,
+  input: {
+    itemCategory: string;
+    itemDescription: string;
+    perishable: boolean;
+    perishableHandling?: string;
+    expiryAt?: string;
+    condition: string;
+    declaredValueKes?: number;
+  },
+): Promise<Result> {
+  try {
+    await requireStaff();
+    await adminGo(`/v1/admin/parcel-ops/${encodeURIComponent(code)}/intake`, {
+      method: "POST",
+      body: JSON.stringify(input),
+    });
+    revalidatePath("/parcels/operations");
+    return { ok: true };
+  } catch (e) {
+    return {
+      ok: false,
+      error: e instanceof Error ? e.message : "Could not receive that parcel",
+    };
+  }
+}
+
+export async function actionRejectParcelAtDropoff(
+  code: string,
+  reason: string,
+): Promise<Result> {
+  try {
+    await requireStaff();
+    await adminGo(`/v1/admin/parcel-ops/${encodeURIComponent(code)}/reject`, {
+      method: "POST",
+      body: JSON.stringify({ reason }),
+    });
+    revalidatePath("/parcels/operations");
+    return { ok: true };
+  } catch (e) {
+    return {
+      ok: false,
+      error: e instanceof Error ? e.message : "Could not reject that parcel",
+    };
+  }
+}
+
+export async function actionCreateParcelShipment(input: {
+  originLabel: string;
+  destinationLabel: string;
+  routeLabel?: string;
+  vehiclePlate?: string;
+  driverPartyId?: string;
+  conductorPartyId?: string;
+}): Promise<
+  { ok: true; shipment: ParcelShipmentView } | { ok: false; error: string }
+> {
+  try {
+    await requireStaff();
+    const shipment = await adminGo<ParcelShipmentView>(
+      "/v1/admin/parcel-ops/shipments",
+      {
+        method: "POST",
+        body: JSON.stringify(input),
+      },
+    );
+    return { ok: true, shipment };
+  } catch (e) {
+    return {
+      ok: false,
+      error: e instanceof Error ? e.message : "Could not create shipment",
+    };
+  }
+}
+
+async function shipmentAction(
+  path: string,
+): Promise<
+  { ok: true; shipment: ParcelShipmentView } | { ok: false; error: string }
+> {
+  try {
+    await requireStaff();
+    const shipment = await adminGo<ParcelShipmentView>(path, {
+      method: "POST",
+    });
+    return { ok: true, shipment };
+  } catch (e) {
+    return {
+      ok: false,
+      error: e instanceof Error ? e.message : "Could not update shipment",
+    };
+  }
+}
+
+export async function actionLoadParcelToShipment(id: string, code: string) {
+  return shipmentAction(
+    `/v1/admin/parcel-ops/shipments/${encodeURIComponent(id)}/load/${encodeURIComponent(code)}`,
+  );
+}
+export async function actionStartParcelShipment(id: string) {
+  return shipmentAction(
+    `/v1/admin/parcel-ops/shipments/${encodeURIComponent(id)}/start`,
+  );
+}
+export async function actionOffloadParcelFromShipment(
+  id: string,
+  code: string,
+) {
+  return shipmentAction(
+    `/v1/admin/parcel-ops/shipments/${encodeURIComponent(id)}/offload/${encodeURIComponent(code)}`,
+  );
+}
+export async function actionFinishParcelShipment(id: string) {
+  return shipmentAction(
+    `/v1/admin/parcel-ops/shipments/${encodeURIComponent(id)}/finish`,
+  );
+}
+
+export async function actionSendPickupReminder(code: string): Promise<Result> {
+  try {
+    await requireStaff();
+    await adminGo(
+      `/v1/admin/parcel-ops/${encodeURIComponent(code)}/pickup-reminder`,
+      { method: "POST" },
+    );
+    revalidatePath("/parcels/operations");
+    return { ok: true };
+  } catch (e) {
+    return {
+      ok: false,
+      error: e instanceof Error ? e.message : "Could not send reminder",
+    };
+  }
+}
 
 export async function actionUpdateParcelPricing(
   parcelType: string,
@@ -14,19 +187,30 @@ export async function actionUpdateParcelPricing(
   try {
     const ctx = await requireStaff();
     await updateParcelPricingRule(ctx, parcelType, input);
-    revalidatePath('/parcels/pricing');
+    revalidatePath("/parcels/pricing");
     return { ok: true };
   } catch (e) {
-    return { ok: false, error: e instanceof Error ? e.message : 'Could not save that price' };
+    return {
+      ok: false,
+      error: e instanceof Error ? e.message : "Could not save that price",
+    };
   }
 }
 
-export interface CollectorLite { PartyID: string; Name: string; Msisdn: string | null }
+export interface CollectorLite {
+  PartyID: string;
+  Name: string;
+  Msisdn: string | null;
+}
 
-export async function actionSearchCollectors(q: string): Promise<CollectorLite[]> {
+export async function actionSearchCollectors(
+  q: string,
+): Promise<CollectorLite[]> {
   await requireStaff();
   if (!q.trim()) return [];
-  const { collectors } = await adminGo<{ collectors: CollectorLite[] | null }>(`/v1/admin/parcels/collectors?q=${encodeURIComponent(q)}`);
+  const { collectors } = await adminGo<{ collectors: CollectorLite[] | null }>(
+    `/v1/admin/parcels/collectors?q=${encodeURIComponent(q)}`,
+  );
   return collectors ?? [];
 }
 
@@ -48,11 +232,17 @@ export async function actionSearchCollectors(q: string): Promise<CollectorLite[]
 export async function actionConfirmParcelIntake(code: string): Promise<Result> {
   try {
     await requireStaff();
-    await adminGo(`/v1/parcels/${code}/handoff`, { method: 'POST' });
-    revalidatePath('/parcels');
+    await adminGo(`/v1/parcels/${code}/handoff`, { method: "POST" });
+    revalidatePath("/parcels");
     return { ok: true };
   } catch (e) {
-    return { ok: false, error: e instanceof Error ? e.message : 'Could not confirm that parcel was received' };
+    return {
+      ok: false,
+      error:
+        e instanceof Error
+          ? e.message
+          : "Could not confirm that parcel was received",
+    };
   }
 }
 
@@ -62,11 +252,18 @@ export async function actionAssignParcelCollector(
 ): Promise<Result> {
   try {
     await requireStaff();
-    await adminGo(`/v1/admin/parcels/${parcelId}/assign`, { method: 'POST', body: JSON.stringify(input) });
-    revalidatePath('/parcels');
+    await adminGo(`/v1/admin/parcels/${parcelId}/assign`, {
+      method: "POST",
+      body: JSON.stringify(input),
+    });
+    revalidatePath("/parcels");
     return { ok: true };
   } catch (e) {
-    return { ok: false, error: e instanceof Error ? e.message : 'Could not schedule that collection' };
+    return {
+      ok: false,
+      error:
+        e instanceof Error ? e.message : "Could not schedule that collection",
+    };
   }
 }
 
@@ -87,119 +284,209 @@ export interface BulkAssignOutcome {
 export async function actionBulkAssignParcels(
   parcelIds: string[],
   input: { collectorPartyId: string; scheduledAt: string; note?: string },
-): Promise<{ ok: true; result: BulkAssignOutcome } | { ok: false; error: string }> {
+): Promise<
+  { ok: true; result: BulkAssignOutcome } | { ok: false; error: string }
+> {
   try {
     await requireStaff();
-    const result = await adminGo<BulkAssignOutcome>('/v1/admin/parcels/bulk-assign', {
-      method: 'POST', body: JSON.stringify({ parcelIds, ...input }),
-    });
-    revalidatePath('/parcels');
+    const result = await adminGo<BulkAssignOutcome>(
+      "/v1/admin/parcels/bulk-assign",
+      {
+        method: "POST",
+        body: JSON.stringify({ parcelIds, ...input }),
+      },
+    );
+    revalidatePath("/parcels");
     return { ok: true, result };
   } catch (e) {
-    return { ok: false, error: e instanceof Error ? e.message : 'Could not assign those parcels' };
+    return {
+      ok: false,
+      error: e instanceof Error ? e.message : "Could not assign those parcels",
+    };
   }
 }
 
-export async function actionCancelParcel(parcelId: string, reason: string): Promise<Result> {
+export async function actionCancelParcel(
+  parcelId: string,
+  reason: string,
+): Promise<Result> {
   try {
     await requireStaff();
-    await adminGo(`/v1/admin/parcels/${parcelId}/cancel`, { method: 'POST', body: JSON.stringify({ reason }) });
-    revalidatePath('/parcels');
+    await adminGo(`/v1/admin/parcels/${parcelId}/cancel`, {
+      method: "POST",
+      body: JSON.stringify({ reason }),
+    });
+    revalidatePath("/parcels");
     return { ok: true };
   } catch (e) {
-    return { ok: false, error: e instanceof Error ? e.message : 'Could not cancel that parcel' };
+    return {
+      ok: false,
+      error: e instanceof Error ? e.message : "Could not cancel that parcel",
+    };
   }
 }
 
-export async function actionMarkParcelRefunded(parcelId: string): Promise<Result> {
+export async function actionMarkParcelRefunded(
+  parcelId: string,
+): Promise<Result> {
   try {
     await requireStaff();
-    await adminGo(`/v1/admin/parcels/${parcelId}/refund`, { method: 'POST' });
-    revalidatePath('/parcels');
+    await adminGo(`/v1/admin/parcels/${parcelId}/refund`, { method: "POST" });
+    revalidatePath("/parcels");
     return { ok: true };
   } catch (e) {
-    return { ok: false, error: e instanceof Error ? e.message : 'Could not mark that refund as processed' };
+    return {
+      ok: false,
+      error:
+        e instanceof Error
+          ? e.message
+          : "Could not mark that refund as processed",
+    };
   }
 }
 
-export interface HandoffRow { FromName: string | null; ToName: string; CreatedAt: string }
+export interface HandoffRow {
+  FromName: string | null;
+  ToName: string;
+  CreatedAt: string;
+}
 
-export async function actionGetParcelHandoffs(parcelId: string): Promise<HandoffRow[]> {
+export async function actionGetParcelHandoffs(
+  parcelId: string,
+): Promise<HandoffRow[]> {
   await requireStaff();
-  const { handoffs } = await adminGo<{ handoffs: HandoffRow[] | null }>(`/v1/admin/parcels/${parcelId}/handoffs`);
+  const { handoffs } = await adminGo<{ handoffs: HandoffRow[] | null }>(
+    `/v1/admin/parcels/${parcelId}/handoffs`,
+  );
   return handoffs ?? [];
 }
 
 export async function actionUpdateParcelDetails(
   parcelId: string,
-  input: { receiverName: string; receiverMsisdn: string; destinationLabel: string; notes?: string },
+  input: {
+    receiverName: string;
+    receiverMsisdn: string;
+    destinationLabel: string;
+    notes?: string;
+  },
 ): Promise<Result> {
   try {
     await requireStaff();
-    await adminGo(`/v1/admin/parcels/${parcelId}`, { method: 'PATCH', body: JSON.stringify(input) });
-    revalidatePath('/parcels');
+    await adminGo(`/v1/admin/parcels/${parcelId}`, {
+      method: "PATCH",
+      body: JSON.stringify(input),
+    });
+    revalidatePath("/parcels");
     return { ok: true };
   } catch (e) {
-    return { ok: false, error: e instanceof Error ? e.message : 'Could not save those details' };
+    return {
+      ok: false,
+      error: e instanceof Error ? e.message : "Could not save those details",
+    };
   }
 }
 
-export async function actionClearParcelException(parcelId: string): Promise<Result> {
+export async function actionClearParcelException(
+  parcelId: string,
+): Promise<Result> {
   try {
     await requireStaff();
-    await adminGo(`/v1/admin/parcels/${parcelId}/exception/clear`, { method: 'POST' });
-    revalidatePath('/parcels');
+    await adminGo(`/v1/admin/parcels/${parcelId}/exception/clear`, {
+      method: "POST",
+    });
+    revalidatePath("/parcels");
     return { ok: true };
   } catch (e) {
-    return { ok: false, error: e instanceof Error ? e.message : 'Could not clear that exception' };
+    return {
+      ok: false,
+      error: e instanceof Error ? e.message : "Could not clear that exception",
+    };
   }
 }
 
-export async function actionFlagParcelException(parcelId: string, note: string): Promise<Result> {
+export async function actionFlagParcelException(
+  parcelId: string,
+  note: string,
+): Promise<Result> {
   try {
     await requireStaff();
-    await adminGo(`/v1/admin/parcels/${parcelId}/exception`, { method: 'POST', body: JSON.stringify({ note }) });
-    revalidatePath('/parcels');
+    await adminGo(`/v1/admin/parcels/${parcelId}/exception`, {
+      method: "POST",
+      body: JSON.stringify({ note }),
+    });
+    revalidatePath("/parcels");
     return { ok: true };
   } catch (e) {
-    return { ok: false, error: e instanceof Error ? e.message : 'Could not flag that parcel' };
+    return {
+      ok: false,
+      error: e instanceof Error ? e.message : "Could not flag that parcel",
+    };
   }
 }
 
 // ── Couriers ──
 
 export interface ParcelCourierRow {
-  ID: string; PartyID: string; Name: string; Msisdn: string | null;
-  VehicleType: string; Status: string; VettingNote: string | null;
-  ActivatedAt: string | null; SuspendedAt: string | null; CreatedAt: string;
+  ID: string;
+  PartyID: string;
+  Name: string;
+  Msisdn: string | null;
+  VehicleType: string;
+  Status: string;
+  VettingNote: string | null;
+  ActivatedAt: string | null;
+  SuspendedAt: string | null;
+  CreatedAt: string;
 }
 
-export interface CourierPerformance { deliveredCount: number; onTimeCount: number; avgConditionRating: number | null }
+export interface CourierPerformance {
+  deliveredCount: number;
+  onTimeCount: number;
+  avgConditionRating: number | null;
+}
 
-export async function actionListCouriers(status?: string, q?: string): Promise<ParcelCourierRow[]> {
+export async function actionListCouriers(
+  status?: string,
+  q?: string,
+): Promise<ParcelCourierRow[]> {
   await requireStaff();
   const params = new URLSearchParams();
-  if (status) params.set('status', status);
-  if (q) params.set('q', q);
-  const { couriers } = await adminGo<{ couriers: ParcelCourierRow[] | null }>(`/v1/admin/parcels/couriers?${params.toString()}`);
+  if (status) params.set("status", status);
+  if (q) params.set("q", q);
+  const { couriers } = await adminGo<{ couriers: ParcelCourierRow[] | null }>(
+    `/v1/admin/parcels/couriers?${params.toString()}`,
+  );
   return couriers ?? [];
 }
 
-export async function actionSearchOnboardCandidates(q: string): Promise<CollectorLite[]> {
+export async function actionSearchOnboardCandidates(
+  q: string,
+): Promise<CollectorLite[]> {
   await requireStaff();
   if (!q.trim()) return [];
-  const { candidates } = await adminGo<{ candidates: CollectorLite[] | null }>(`/v1/admin/parcels/couriers/candidates?q=${encodeURIComponent(q)}`);
+  const { candidates } = await adminGo<{ candidates: CollectorLite[] | null }>(
+    `/v1/admin/parcels/couriers/candidates?q=${encodeURIComponent(q)}`,
+  );
   return candidates ?? [];
 }
 
-export async function actionOnboardCourier(partyId: string, vehicleType: string): Promise<Result> {
+export async function actionOnboardCourier(
+  partyId: string,
+  vehicleType: string,
+): Promise<Result> {
   try {
     await requireStaff();
-    await adminGo('/v1/admin/parcels/couriers', { method: 'POST', body: JSON.stringify({ partyId, vehicleType }) });
-    revalidatePath('/parcels/couriers');
+    await adminGo("/v1/admin/parcels/couriers", {
+      method: "POST",
+      body: JSON.stringify({ partyId, vehicleType }),
+    });
+    revalidatePath("/parcels/couriers");
     return { ok: true };
   } catch (e) {
-    return { ok: false, error: e instanceof Error ? e.message : 'Could not onboard that courier' };
+    return {
+      ok: false,
+      error: e instanceof Error ? e.message : "Could not onboard that courier",
+    };
   }
 }
 
@@ -211,28 +498,48 @@ export async function actionOnboardCourier(partyId: string, vehicleType: string)
 // notify.CourierOnboarded — so this doubles as phone-number
 // confirmation: if the text never lands, the number was wrong.
 export async function actionAddCourierTeamMember(input: {
-  name: string; msisdn: string; email?: string; vehicleType: string;
+  name: string;
+  msisdn: string;
+  email?: string;
+  vehicleType: string;
 }): Promise<{ ok: true; esoqoId: string } | { ok: false; error: string }> {
   try {
     await requireStaff();
-    const { esoqoId } = await adminGo<{ esoqoId: string }>('/v1/admin/parcels/courier-team', {
-      method: 'POST', body: JSON.stringify(input),
-    });
-    revalidatePath('/parcels/couriers');
+    const { esoqoId } = await adminGo<{ esoqoId: string }>(
+      "/v1/admin/parcels/courier-team",
+      {
+        method: "POST",
+        body: JSON.stringify(input),
+      },
+    );
+    revalidatePath("/parcels/couriers");
     return { ok: true, esoqoId };
   } catch (e) {
-    return { ok: false, error: e instanceof Error ? e.message : 'Could not add that courier' };
+    return {
+      ok: false,
+      error: e instanceof Error ? e.message : "Could not add that courier",
+    };
   }
 }
 
-export async function actionSetCourierStatus(courierId: string, status: string, note?: string): Promise<Result> {
+export async function actionSetCourierStatus(
+  courierId: string,
+  status: string,
+  note?: string,
+): Promise<Result> {
   try {
     await requireStaff();
-    await adminGo(`/v1/admin/parcels/couriers/${courierId}/status`, { method: 'POST', body: JSON.stringify({ status, note }) });
-    revalidatePath('/parcels/couriers');
+    await adminGo(`/v1/admin/parcels/couriers/${courierId}/status`, {
+      method: "POST",
+      body: JSON.stringify({ status, note }),
+    });
+    revalidatePath("/parcels/couriers");
     return { ok: true };
   } catch (e) {
-    return { ok: false, error: e instanceof Error ? e.message : 'Could not update that courier' };
+    return {
+      ok: false,
+      error: e instanceof Error ? e.message : "Could not update that courier",
+    };
   }
 }
 
@@ -240,40 +547,74 @@ export async function actionSetCourierStatus(courierId: string, status: string, 
 // performance by joining parcel.currentHolderPartyId directly, not by
 // the courier row's own id, so the :id path segment here is a
 // placeholder the route needs but the handler doesn't read.
-export async function actionGetCourierPerformance(partyId: string): Promise<CourierPerformance> {
+export async function actionGetCourierPerformance(
+  partyId: string,
+): Promise<CourierPerformance> {
   await requireStaff();
-  return adminGo<CourierPerformance>(`/v1/admin/parcels/couriers/${partyId}/performance?partyId=${encodeURIComponent(partyId)}`);
+  return adminGo<CourierPerformance>(
+    `/v1/admin/parcels/couriers/${partyId}/performance?partyId=${encodeURIComponent(partyId)}`,
+  );
 }
 
 // ── Zones & distance pricing ──
 
-export interface ParcelZone { id: string; name: string; lat: number; lng: number; active: boolean }
+export interface ParcelZone {
+  id: string;
+  name: string;
+  lat: number;
+  lng: number;
+  active: boolean;
+}
 
 export async function actionListParcelZones(): Promise<ParcelZone[]> {
   await requireStaff();
-  const { zones } = await adminGo<{ zones: ParcelZone[] | null }>('/v1/admin/parcels/zones');
+  const { zones } = await adminGo<{ zones: ParcelZone[] | null }>(
+    "/v1/admin/parcels/zones",
+  );
   return zones ?? [];
 }
 
-export async function actionCreateParcelZone(name: string, lat: number, lng: number): Promise<Result> {
+export async function actionCreateParcelZone(
+  name: string,
+  lat: number,
+  lng: number,
+): Promise<Result> {
   try {
     await requireStaff();
-    await adminGo('/v1/admin/parcels/zones', { method: 'POST', body: JSON.stringify({ name, lat, lng }) });
-    revalidatePath('/parcels/pricing');
+    await adminGo("/v1/admin/parcels/zones", {
+      method: "POST",
+      body: JSON.stringify({ name, lat, lng }),
+    });
+    revalidatePath("/parcels/pricing");
     return { ok: true };
   } catch (e) {
-    return { ok: false, error: e instanceof Error ? e.message : 'Could not create that zone' };
+    return {
+      ok: false,
+      error: e instanceof Error ? e.message : "Could not create that zone",
+    };
   }
 }
 
-export async function actionUpdateParcelZone(id: string, name: string, lat: number, lng: number, active: boolean): Promise<Result> {
+export async function actionUpdateParcelZone(
+  id: string,
+  name: string,
+  lat: number,
+  lng: number,
+  active: boolean,
+): Promise<Result> {
   try {
     await requireStaff();
-    await adminGo(`/v1/admin/parcels/zones/${id}`, { method: 'PATCH', body: JSON.stringify({ name, lat, lng, active }) });
-    revalidatePath('/parcels/pricing');
+    await adminGo(`/v1/admin/parcels/zones/${id}`, {
+      method: "PATCH",
+      body: JSON.stringify({ name, lat, lng, active }),
+    });
+    revalidatePath("/parcels/pricing");
     return { ok: true };
   } catch (e) {
-    return { ok: false, error: e instanceof Error ? e.message : 'Could not update that zone' };
+    return {
+      ok: false,
+      error: e instanceof Error ? e.message : "Could not update that zone",
+    };
   }
 }
 
@@ -282,29 +623,54 @@ export async function actionUpdateParcelZone(id: string, name: string, lat: numb
  *  and never read live, so renegotiating a rate can't rewrite what an
  *  already-paid parcel earned. */
 export interface ParcelOrg {
-  id: string; enterpriseId: string; name: string; slug: string; status: string;
-  contactPerson: string | null; contactPhone: string | null; contactEmail: string | null;
-  settlementPhone: string | null; commissionPct: number;
+  id: string;
+  enterpriseId: string;
+  name: string;
+  slug: string;
+  status: string;
+  contactPerson: string | null;
+  contactPhone: string | null;
+  contactEmail: string | null;
+  settlementPhone: string | null;
+  commissionPct: number;
   /** The one physical front desk a sender can walk into — see the
    *  schema's own comment on ParcelOrg.acceptsWalkIn. */
-  acceptsWalkIn: boolean; lat: number | null; lng: number | null;
-  locationHint: string | null; openingHours: string | null;
+  acceptsWalkIn: boolean;
+  lat: number | null;
+  lng: number | null;
+  locationHint: string | null;
+  openingHours: string | null;
 }
 
 export interface ParcelOrgInput {
-  enterpriseId?: string; name: string; slug: string; status: string;
-  contactPerson?: string | null; contactPhone?: string | null;
-  contactEmail?: string | null; settlementPhone?: string | null;
+  enterpriseId?: string;
+  name: string;
+  slug: string;
+  status: string;
+  contactPerson?: string | null;
+  contactPhone?: string | null;
+  contactEmail?: string | null;
+  settlementPhone?: string | null;
   commissionPct: number;
-  acceptsWalkIn: boolean; lat?: number | null; lng?: number | null;
-  locationHint?: string | null; openingHours?: string | null;
+  acceptsWalkIn: boolean;
+  lat?: number | null;
+  lng?: number | null;
+  locationHint?: string | null;
+  openingHours?: string | null;
 }
 
-export interface EnterpriseLite { id: string; name: string; partyId: string; msisdn: string | null }
+export interface EnterpriseLite {
+  id: string;
+  name: string;
+  partyId: string;
+  msisdn: string | null;
+}
 
 export async function actionListParcelOrgs(): Promise<ParcelOrg[]> {
   await requireStaff();
-  const { orgs } = await adminGo<{ orgs: ParcelOrg[] | null }>('/v1/admin/parcels/orgs');
+  const { orgs } = await adminGo<{ orgs: ParcelOrg[] | null }>(
+    "/v1/admin/parcels/orgs",
+  );
   return orgs ?? [];
 }
 
@@ -312,12 +678,14 @@ export async function actionListParcelOrgs(): Promise<ParcelOrg[]> {
  *  TicketOrg do, so onboarding one means naming the business that runs
  *  it. A blank query returns nothing — this is a picker, not a list of
  *  every business on the platform. */
-export async function actionSearchEnterprises(q: string): Promise<EnterpriseLite[]> {
+export async function actionSearchEnterprises(
+  q: string,
+): Promise<EnterpriseLite[]> {
   await requireStaff();
   if (!q.trim()) return [];
-  const { enterprises } = await adminGo<{ enterprises: EnterpriseLite[] | null }>(
-    `/v1/admin/parcels/enterprises?q=${encodeURIComponent(q)}`,
-  );
+  const { enterprises } = await adminGo<{
+    enterprises: EnterpriseLite[] | null;
+  }>(`/v1/admin/parcels/enterprises?q=${encodeURIComponent(q)}`);
   return enterprises ?? [];
 }
 
@@ -329,47 +697,94 @@ export async function actionSearchEnterprises(q: string): Promise<EnterpriseLite
  * register the owning business directly instead of being stuck; see
  * dbx.CreateEnterpriseForCourierOrg's own comment.
  */
-export async function actionCreateEnterprise(name: string): Promise<
+export async function actionCreateEnterprise(
+  name: string,
+): Promise<
   { ok: true; id: string; name: string } | { ok: false; error: string }
 > {
   try {
     await requireStaff();
-    const res = await adminGo<{ id: string; name: string }>('/v1/admin/parcels/enterprises', {
-      method: 'POST', body: JSON.stringify({ name }),
-    });
+    const res = await adminGo<{ id: string; name: string }>(
+      "/v1/admin/parcels/enterprises",
+      {
+        method: "POST",
+        body: JSON.stringify({ name }),
+      },
+    );
     return { ok: true, id: res.id, name: res.name };
   } catch (e) {
-    return { ok: false, error: e instanceof Error ? e.message : 'Could not create that business' };
+    return {
+      ok: false,
+      error: e instanceof Error ? e.message : "Could not create that business",
+    };
   }
 }
 
-export async function actionCreateParcelOrg(input: ParcelOrgInput): Promise<Result> {
+export async function actionCreateParcelOrg(
+  input: ParcelOrgInput,
+): Promise<Result> {
   try {
     await requireStaff();
-    await adminGo('/v1/admin/parcels/orgs', { method: 'POST', body: JSON.stringify(input) });
-    revalidatePath('/parcels/companies');
+    await adminGo<{ id: string }>("/v1/admin/parcels/orgs", {
+      method: "POST",
+      body: JSON.stringify(input),
+    });
+    const portalUrl = `${process.env.NEXT_PUBLIC_APP_URL ?? "http://localhost:3001"}/parcel-co/${input.slug}`;
+    const message = `ESOQO PARCEL: ${input.name} has been created. Staff sign in at ${portalUrl}. Your company manager will receive access separately.`;
+    if (input.contactEmail) {
+      const { sendEmail } = await import("@esoqo/auth");
+      await sendEmail(
+        input.contactEmail,
+        "Your ESOQO PARCEL company profile is ready",
+        message,
+      );
+    }
+    if (input.contactPhone) {
+      const { sendSms } = await import("@esoqo/auth");
+      await sendSms(input.contactPhone, message, "PARCEL_COMPANY_CREATED");
+    }
+    revalidatePath("/parcels/companies");
     return { ok: true };
   } catch (e) {
-    return { ok: false, error: e instanceof Error ? e.message : 'Could not create that company' };
+    return {
+      ok: false,
+      error: e instanceof Error ? e.message : "Could not create that company",
+    };
   }
 }
 
-export async function actionUpdateParcelOrg(id: string, input: ParcelOrgInput): Promise<Result> {
+export async function actionUpdateParcelOrg(
+  id: string,
+  input: ParcelOrgInput,
+): Promise<Result> {
   try {
     await requireStaff();
-    await adminGo(`/v1/admin/parcels/orgs/${id}`, { method: 'PATCH', body: JSON.stringify(input) });
-    revalidatePath('/parcels/companies');
+    await adminGo(`/v1/admin/parcels/orgs/${id}`, {
+      method: "PATCH",
+      body: JSON.stringify(input),
+    });
+    revalidatePath("/parcels/companies");
     return { ok: true };
   } catch (e) {
-    return { ok: false, error: e instanceof Error ? e.message : 'Could not update that company' };
+    return {
+      ok: false,
+      error: e instanceof Error ? e.message : "Could not update that company",
+    };
   }
 }
 
 export interface ParcelOrgStaffRow {
-  id: string; orgId: string; name: string; role: string; active: boolean; partyId: string | null;
+  id: string;
+  orgId: string;
+  name: string;
+  role: string;
+  active: boolean;
+  partyId: string | null;
 }
 
-export async function actionListParcelOrgStaff(orgId: string): Promise<ParcelOrgStaffRow[]> {
+export async function actionListParcelOrgStaff(
+  orgId: string,
+): Promise<ParcelOrgStaffRow[]> {
   await requireStaff();
   const { staff } = await adminGo<{ staff: ParcelOrgStaffRow[] | null }>(
     `/v1/admin/parcels/orgs/${orgId}/staff`,
@@ -387,34 +802,55 @@ export async function actionListParcelOrgStaff(orgId: string): Promise<ParcelOrg
  *  and `msisdn` are alternatives, not both required. */
 export async function actionCreateParcelOrgManager(
   orgId: string,
-  input: { name: string; role: string; pin?: string; msisdn?: string; partyId?: string | null },
+  input: {
+    name: string;
+    role: string;
+    pin?: string;
+    msisdn?: string;
+    esokoId?: string;
+    partyId?: string | null;
+  },
 ): Promise<Result> {
   try {
     await requireStaff();
     await adminGo(`/v1/admin/parcels/orgs/${orgId}/staff`, {
-      method: 'POST',
-      body: JSON.stringify({ ...input, partyId: input.partyId || null, active: true }),
+      method: "POST",
+      body: JSON.stringify({
+        ...input,
+        partyId: input.partyId || null,
+        active: true,
+      }),
     });
-    revalidatePath('/parcels/companies');
+    revalidatePath("/parcels/companies");
     return { ok: true };
   } catch (e) {
-    return { ok: false, error: e instanceof Error ? e.message : 'Could not add that person' };
+    return {
+      ok: false,
+      error: e instanceof Error ? e.message : "Could not add that person",
+    };
   }
 }
 
 /** Hands a parcel to a courier company, or ('' ) takes it back to
  *  Esoqo-operated dispatch. Refused once the parcel is paid for — the
  *  revenue split is frozen against whoever was carrying it then. */
-export async function actionAssignParcelOrg(parcelId: string, parcelOrgId: string): Promise<Result> {
+export async function actionAssignParcelOrg(
+  parcelId: string,
+  parcelOrgId: string,
+): Promise<Result> {
   try {
     await requireStaff();
     await adminGo(`/v1/admin/parcels/${parcelId}/org`, {
-      method: 'POST', body: JSON.stringify({ parcelOrgId }),
+      method: "POST",
+      body: JSON.stringify({ parcelOrgId }),
     });
-    revalidatePath('/parcels');
+    revalidatePath("/parcels");
     return { ok: true };
   } catch (e) {
-    return { ok: false, error: e instanceof Error ? e.message : 'Could not reassign that parcel' };
+    return {
+      ok: false,
+      error: e instanceof Error ? e.message : "Could not reassign that parcel",
+    };
   }
 }
 
@@ -425,35 +861,48 @@ export async function actionAssignParcelOrg(parcelId: string, parcelOrgId: strin
  *  Either may be zero. */
 export interface CourierTariff {
   // Money is decimal strings; pctOfPrice is a rate, so it stays a number.
-  perDeliveryKes: string; pctOfPrice: number; maxPerDeliveryKes: string;
+  perDeliveryKes: string;
+  pctOfPrice: number;
+  maxPerDeliveryKes: string;
 }
 
 export async function actionGetCourierTariff(): Promise<CourierTariff> {
   await requireStaff();
-  return adminGo<CourierTariff>('/v1/admin/parcels/couriers/tariff');
+  return adminGo<CourierTariff>("/v1/admin/parcels/couriers/tariff");
 }
 
-export async function actionSetCourierTariff(input: CourierTariff): Promise<Result> {
+export async function actionSetCourierTariff(
+  input: CourierTariff,
+): Promise<Result> {
   try {
     await requireStaff();
-    await adminGo('/v1/admin/parcels/couriers/tariff', { method: 'POST', body: JSON.stringify(input) });
-    revalidatePath('/parcels/payouts');
+    await adminGo("/v1/admin/parcels/couriers/tariff", {
+      method: "POST",
+      body: JSON.stringify(input),
+    });
+    revalidatePath("/parcels/payouts");
     return { ok: true };
   } catch (e) {
-    return { ok: false, error: e instanceof Error ? e.message : 'Could not save that rate' };
+    return {
+      ok: false,
+      error: e instanceof Error ? e.message : "Could not save that rate",
+    };
   }
 }
 
 export interface CourierOwed {
-  courierPartyId: string; name: string; msisdn: string | null;
+  courierPartyId: string;
+  name: string;
+  msisdn: string | null;
   // owedKes is a decimal string — see @esoqo/domain's money module.
-  parcelCount: number; owedKes: string;
+  parcelCount: number;
+  owedKes: string;
 }
 
 export async function actionListCouriersOwed(): Promise<CourierOwed[]> {
   await requireStaff();
   const { couriers } = await adminGo<{ couriers: CourierOwed[] | null }>(
-    '/v1/admin/parcels/couriers/owed',
+    "/v1/admin/parcels/couriers/owed",
   );
   return couriers ?? [];
 }
@@ -463,44 +912,69 @@ export async function actionListCouriersOwed(): Promise<CourierOwed[]> {
  *  payment or an agreed deduction is exactly what those two columns
  *  exist to show. */
 export async function actionPayCourier(
-  courierPartyId: string, amountKes: string, reference?: string, note?: string,
-): Promise<{ ok: true; expectedKes: string; shortfallKes: string } | { ok: false; error: string }> {
+  courierPartyId: string,
+  amountKes: string,
+  reference?: string,
+  note?: string,
+): Promise<
+  | { ok: true; expectedKes: string; shortfallKes: string }
+  | { ok: false; error: string }
+> {
   try {
     await requireStaff();
     const res = await adminGo<{ expectedKes: string; shortfallKes: string }>(
-      '/v1/admin/parcels/couriers/payout',
+      "/v1/admin/parcels/couriers/payout",
       {
-        method: 'POST',
+        method: "POST",
         body: JSON.stringify({
-          courierPartyId, amountKes,
-          reference: reference || null, note: note || null,
+          courierPartyId,
+          amountKes,
+          reference: reference || null,
+          note: note || null,
         }),
       },
     );
-    revalidatePath('/parcels/payouts');
-    return { ok: true, expectedKes: res.expectedKes, shortfallKes: res.shortfallKes };
+    revalidatePath("/parcels/payouts");
+    return {
+      ok: true,
+      expectedKes: res.expectedKes,
+      shortfallKes: res.shortfallKes,
+    };
   } catch (e) {
-    return { ok: false, error: e instanceof Error ? e.message : 'Could not record that payout' };
+    return {
+      ok: false,
+      error: e instanceof Error ? e.message : "Could not record that payout",
+    };
   }
 }
 
 // ── Cash on delivery ─────────────────────────────────────────────────
 
-export interface CodPolicy { enabled: boolean; maxAmountKes: string; handlingFeePct: number }
+export interface CodPolicy {
+  enabled: boolean;
+  maxAmountKes: string;
+  handlingFeePct: number;
+}
 
 export async function actionGetCodPolicy(): Promise<CodPolicy> {
   await requireStaff();
-  return adminGo<CodPolicy>('/v1/admin/parcels/cod/policy');
+  return adminGo<CodPolicy>("/v1/admin/parcels/cod/policy");
 }
 
 export async function actionSetCodPolicy(input: CodPolicy): Promise<Result> {
   try {
     await requireStaff();
-    await adminGo('/v1/admin/parcels/cod/policy', { method: 'POST', body: JSON.stringify(input) });
-    revalidatePath('/parcels/cod');
+    await adminGo("/v1/admin/parcels/cod/policy", {
+      method: "POST",
+      body: JSON.stringify(input),
+    });
+    revalidatePath("/parcels/cod");
     return { ok: true };
   } catch (e) {
-    return { ok: false, error: e instanceof Error ? e.message : 'Could not save those settings' };
+    return {
+      ok: false,
+      error: e instanceof Error ? e.message : "Could not save those settings",
+    };
   }
 }
 
@@ -509,27 +983,39 @@ export async function actionSetCodPolicy(input: CodPolicy): Promise<Result> {
  *  Esoqo's to pay out, and showing one number for both would invite
  *  paying out cash nobody has counted. */
 export interface SellerOwedCod {
-  senderPartyId: string; senderName: string; senderMsisdn: string;
+  senderPartyId: string;
+  senderName: string;
+  senderMsisdn: string;
   // goodsKes/readyKes are decimal strings — see @esoqo/domain's money module.
-  parcelCount: number; goodsKes: string; readyKes: string;
+  parcelCount: number;
+  goodsKes: string;
+  readyKes: string;
 }
 
 export async function actionListSellersOwedCod(): Promise<SellerOwedCod[]> {
   await requireStaff();
-  const { sellers } = await adminGo<{ sellers: SellerOwedCod[] | null }>('/v1/admin/parcels/cod/sellers');
+  const { sellers } = await adminGo<{ sellers: SellerOwedCod[] | null }>(
+    "/v1/admin/parcels/cod/sellers",
+  );
   return sellers ?? [];
 }
 
-export async function actionSettleSellerCod(senderPartyId: string): Promise<Result> {
+export async function actionSettleSellerCod(
+  senderPartyId: string,
+): Promise<Result> {
   try {
     await requireStaff();
-    await adminGo('/v1/admin/parcels/cod/settle', {
-      method: 'POST', body: JSON.stringify({ senderPartyId }),
+    await adminGo("/v1/admin/parcels/cod/settle", {
+      method: "POST",
+      body: JSON.stringify({ senderPartyId }),
     });
-    revalidatePath('/parcels/cod');
+    revalidatePath("/parcels/cod");
     return { ok: true };
   } catch (e) {
-    return { ok: false, error: e instanceof Error ? e.message : 'Could not settle that seller' };
+    return {
+      ok: false,
+      error: e instanceof Error ? e.message : "Could not settle that seller",
+    };
   }
 }
 
@@ -537,18 +1023,33 @@ export async function actionSettleSellerCod(senderPartyId: string): Promise<Resu
  *  which the server compares against what the parcels say it should
  *  have been — a short hand-over is the whole reason the record exists. */
 export async function actionRemitCod(
-  riderPartyId: string, amountKes: number, note?: string,
-): Promise<{ ok: true; expectedKes: string; shortfallKes: string } | { ok: false; error: string }> {
+  riderPartyId: string,
+  amountKes: number,
+  note?: string,
+): Promise<
+  | { ok: true; expectedKes: string; shortfallKes: string }
+  | { ok: false; error: string }
+> {
   try {
     await requireStaff();
     const res = await adminGo<{ expectedKes: string; shortfallKes: string }>(
-      '/v1/admin/parcels/cod/remit',
-      { method: 'POST', body: JSON.stringify({ riderPartyId, amountKes, note: note || null }) },
+      "/v1/admin/parcels/cod/remit",
+      {
+        method: "POST",
+        body: JSON.stringify({ riderPartyId, amountKes, note: note || null }),
+      },
     );
-    revalidatePath('/parcels/cod');
-    return { ok: true, expectedKes: res.expectedKes, shortfallKes: res.shortfallKes };
+    revalidatePath("/parcels/cod");
+    return {
+      ok: true,
+      expectedKes: res.expectedKes,
+      shortfallKes: res.shortfallKes,
+    };
   } catch (e) {
-    return { ok: false, error: e instanceof Error ? e.message : 'Could not record that hand-over' };
+    return {
+      ok: false,
+      error: e instanceof Error ? e.message : "Could not record that hand-over",
+    };
   }
 }
 
@@ -556,95 +1057,159 @@ export async function actionRemitCod(
  *  parcel_agents.go for why agent-to-agent is the only leg cheap enough
  *  to compete on price in this market. */
 export interface ParcelAgent {
-  id: string; name: string; partyId: string | null;
-  zoneId: string | null; zoneName: string | null;
-  lat: number; lng: number; msisdn: string; locationHint: string;
-  openingHours: string | null; active: boolean;
-  capacity: number; holdingFeeKes: string; parcelsHeld: number;
+  id: string;
+  name: string;
+  partyId: string | null;
+  zoneId: string | null;
+  zoneName: string | null;
+  lat: number;
+  lng: number;
+  msisdn: string;
+  locationHint: string;
+  openingHours: string | null;
+  active: boolean;
+  capacity: number;
+  holdingFeeKes: string;
+  parcelsHeld: number;
 }
 
 export interface ParcelAgentInput {
-  name: string; zoneId?: string | null; lat: number; lng: number;
-  msisdn: string; locationHint: string; openingHours?: string | null;
-  capacity: number; holdingFeeKes: string; active: boolean;
+  name: string;
+  zoneId?: string | null;
+  lat: number;
+  lng: number;
+  msisdn: string;
+  locationHint: string;
+  openingHours?: string | null;
+  capacity: number;
+  holdingFeeKes: string;
+  active: boolean;
 }
 
 export async function actionListParcelAgents(): Promise<ParcelAgent[]> {
   await requireStaff();
   // Inactive shops included, unlike the public list — the whole point
   // of the admin view is seeing the ones that are switched off.
-  const { agents } = await adminGo<{ agents: ParcelAgent[] | null }>('/v1/admin/parcels/agents');
+  const { agents } = await adminGo<{ agents: ParcelAgent[] | null }>(
+    "/v1/admin/parcels/agents",
+  );
   return agents ?? [];
 }
 
-export async function actionCreateParcelAgent(input: ParcelAgentInput): Promise<Result> {
+export async function actionCreateParcelAgent(
+  input: ParcelAgentInput,
+): Promise<Result> {
   try {
     await requireStaff();
-    await adminGo('/v1/admin/parcels/agents', { method: 'POST', body: JSON.stringify(input) });
-    revalidatePath('/parcels/pricing');
+    await adminGo("/v1/admin/parcels/agents", {
+      method: "POST",
+      body: JSON.stringify(input),
+    });
+    revalidatePath("/parcels/pricing");
     return { ok: true };
   } catch (e) {
-    return { ok: false, error: e instanceof Error ? e.message : 'Could not create that pickup point' };
+    return {
+      ok: false,
+      error:
+        e instanceof Error ? e.message : "Could not create that pickup point",
+    };
   }
 }
 
-export async function actionUpdateParcelAgent(id: string, input: ParcelAgentInput): Promise<Result> {
+export async function actionUpdateParcelAgent(
+  id: string,
+  input: ParcelAgentInput,
+): Promise<Result> {
   try {
     await requireStaff();
-    await adminGo(`/v1/admin/parcels/agents/${id}`, { method: 'PATCH', body: JSON.stringify(input) });
-    revalidatePath('/parcels/pricing');
+    await adminGo(`/v1/admin/parcels/agents/${id}`, {
+      method: "PATCH",
+      body: JSON.stringify(input),
+    });
+    revalidatePath("/parcels/pricing");
     return { ok: true };
   } catch (e) {
-    return { ok: false, error: e instanceof Error ? e.message : 'Could not update that pickup point' };
+    return {
+      ok: false,
+      error:
+        e instanceof Error ? e.message : "Could not update that pickup point",
+    };
   }
 }
 
 /** One cover level. The fee a sender pays is feeKes + declaredValue ×
  *  feePct, and maxCoverKes caps what a claim can ever pay out. */
 export interface ParcelCoverageTier {
-  id: string; name: string;
+  id: string;
+  name: string;
   // Decimal strings from core-go; feePct is a rate, so it stays a number.
-  maxCoverKes: string; feeKes: string;
-  feePct: number; active: boolean; sortOrder: number;
+  maxCoverKes: string;
+  feeKes: string;
+  feePct: number;
+  active: boolean;
+  sortOrder: number;
 }
 
 export async function actionListCoverageTiers(): Promise<ParcelCoverageTier[]> {
   await requireStaff();
-  const { tiers } = await adminGo<{ tiers: ParcelCoverageTier[] | null }>('/v1/admin/parcels/coverage');
+  const { tiers } = await adminGo<{ tiers: ParcelCoverageTier[] | null }>(
+    "/v1/admin/parcels/coverage",
+  );
   return tiers ?? [];
 }
 
 /** Upsert by name, matching the server — the rate card is a small named
  *  set an admin edits in place, not a growing collection. */
 export async function actionSaveCoverageTier(
-  input: Omit<ParcelCoverageTier, 'id'>,
+  input: Omit<ParcelCoverageTier, "id">,
 ): Promise<Result> {
   try {
     await requireStaff();
-    await adminGo('/v1/admin/parcels/coverage', { method: 'POST', body: JSON.stringify(input) });
-    revalidatePath('/parcels/pricing');
+    await adminGo("/v1/admin/parcels/coverage", {
+      method: "POST",
+      body: JSON.stringify(input),
+    });
+    revalidatePath("/parcels/pricing");
     return { ok: true };
   } catch (e) {
-    return { ok: false, error: e instanceof Error ? e.message : 'Could not save that cover level' };
+    return {
+      ok: false,
+      error: e instanceof Error ? e.message : "Could not save that cover level",
+    };
   }
 }
 
-export interface ParcelDistanceRate { perKmKes: string; minChargeableKm: number }
+export interface ParcelDistanceRate {
+  perKmKes: string;
+  minChargeableKm: number;
+}
 
 export async function actionGetDistanceRate(): Promise<ParcelDistanceRate | null> {
   await requireStaff();
-  const { rate } = await adminGo<{ rate: ParcelDistanceRate | null }>('/v1/admin/parcels/distance-rate');
+  const { rate } = await adminGo<{ rate: ParcelDistanceRate | null }>(
+    "/v1/admin/parcels/distance-rate",
+  );
   return rate;
 }
 
-export async function actionSetDistanceRate(perKmKes: number, minChargeableKm: number): Promise<Result> {
+export async function actionSetDistanceRate(
+  perKmKes: number,
+  minChargeableKm: number,
+): Promise<Result> {
   try {
     await requireStaff();
-    await adminGo('/v1/admin/parcels/distance-rate', { method: 'POST', body: JSON.stringify({ perKmKes, minChargeableKm }) });
-    revalidatePath('/parcels/pricing');
+    await adminGo("/v1/admin/parcels/distance-rate", {
+      method: "POST",
+      body: JSON.stringify({ perKmKes, minChargeableKm }),
+    });
+    revalidatePath("/parcels/pricing");
     return { ok: true };
   } catch (e) {
-    return { ok: false, error: e instanceof Error ? e.message : 'Could not save the distance rate' };
+    return {
+      ok: false,
+      error:
+        e instanceof Error ? e.message : "Could not save the distance rate",
+    };
   }
 }
 
@@ -655,7 +1220,8 @@ export async function actionSetDistanceRate(perKmKes: number, minChargeableKm: n
 // See dbx.ParcelLabelStock's own comment for the full rationale.
 
 export interface ParcelLabelStockRow {
-  code: string; createdAt: string;
+  code: string;
+  createdAt: string;
   /** The truncated MAC core-go computed for this code, printed in the
    *  QR as k=. Empty on nothing — every listed label gets one — but the
    *  printer degrades gracefully if it ever is. */
@@ -673,34 +1239,51 @@ export interface ParcelLabelStockRow {
  * not a commitment, presenting the label against a shipment is.
  */
 export async function actionGenerateParcelLabels(
-  count: number, parcelOrgId?: string,
-): Promise<{ ok: true; codes: string[]; batchId: string } | { ok: false; error: string }> {
+  count: number,
+  parcelOrgId?: string,
+): Promise<
+  { ok: true; codes: string[]; batchId: string } | { ok: false; error: string }
+> {
   try {
     await requireStaff();
-    const { codes, batchId } = await adminGo<{ codes: string[] | null; batchId: string }>(
-      '/v1/admin/parcels/labels/generate',
-      { method: 'POST', body: JSON.stringify({ count, parcelOrgId: parcelOrgId || undefined }) },
-    );
-    revalidatePath('/parcels/labels');
+    const { codes, batchId } = await adminGo<{
+      codes: string[] | null;
+      batchId: string;
+    }>("/v1/admin/parcels/labels/generate", {
+      method: "POST",
+      body: JSON.stringify({ count, parcelOrgId: parcelOrgId || undefined }),
+    });
+    revalidatePath("/parcels/labels");
     return { ok: true, codes: codes ?? [], batchId };
   } catch (e) {
-    return { ok: false, error: e instanceof Error ? e.message : 'Could not generate labels' };
+    return {
+      ok: false,
+      error: e instanceof Error ? e.message : "Could not generate labels",
+    };
   }
 }
 
-export async function actionListParcelLabelStock(parcelOrgId?: string): Promise<ParcelLabelStockRow[]> {
+export async function actionListParcelLabelStock(
+  parcelOrgId?: string,
+): Promise<ParcelLabelStockRow[]> {
   await requireStaff();
-  const params = new URLSearchParams({ limit: '200' });
-  if (parcelOrgId) params.set('parcelOrgId', parcelOrgId);
-  const { labels } = await adminGo<{ labels: ParcelLabelStockRow[] | null }>(`/v1/admin/parcels/labels?${params}`);
+  const params = new URLSearchParams({ limit: "200" });
+  if (parcelOrgId) params.set("parcelOrgId", parcelOrgId);
+  const { labels } = await adminGo<{ labels: ParcelLabelStockRow[] | null }>(
+    `/v1/admin/parcels/labels?${params}`,
+  );
   return labels ?? [];
 }
 
 export interface TripManifestRow {
-  code: string; receiverName: string; receiverMsisdn: string;
+  code: string;
+  receiverName: string;
+  receiverMsisdn: string;
   destinationLabel: string;
-  dropStageName: string | null; dropStageOrder: number | null;
-  codAmountKes: string | null; codStatus: string;
+  dropStageName: string | null;
+  dropStageOrder: number | null;
+  codAmountKes: string | null;
+  codStatus: string;
 }
 
 /**
@@ -712,7 +1295,9 @@ export interface TripManifestRow {
  * app cannot cover: a signature survives a dispute six weeks later,
  * when the phone that recorded everything has been replaced.
  */
-export async function actionGetTripManifest(tripId: string): Promise<TripManifestRow[]> {
+export async function actionGetTripManifest(
+  tripId: string,
+): Promise<TripManifestRow[]> {
   await requireStaff();
   const { parcels } = await adminGo<{ parcels: TripManifestRow[] | null }>(
     `/v1/admin/parcels/trips/${encodeURIComponent(tripId)}/manifest`,
@@ -721,11 +1306,18 @@ export async function actionGetTripManifest(tripId: string): Promise<TripManifes
 }
 
 export interface ParcelLabelRegisterRow {
-  code: string; createdAt: string; state: string;
-  itemDescription: string | null; destination: string | null; senderName: string | null;
-  infoAttachedAt: string | null; usedAt: string | null;
-  voidedAt: string | null; voidedReason: string | null;
-  batchId: string | null; orgName: string | null;
+  code: string;
+  createdAt: string;
+  state: string;
+  itemDescription: string | null;
+  destination: string | null;
+  senderName: string | null;
+  infoAttachedAt: string | null;
+  usedAt: string | null;
+  voidedAt: string | null;
+  voidedReason: string | null;
+  batchId: string | null;
+  orgName: string | null;
 }
 
 /**
@@ -737,28 +1329,40 @@ export interface ParcelLabelRegisterRow {
  * would show it again.
  */
 export async function actionListParcelLabelRegister(
-  state: string, parcelOrgId?: string,
-): Promise<{ labels: ParcelLabelRegisterRow[]; counts: Record<string, number> }> {
+  state: string,
+  parcelOrgId?: string,
+): Promise<{
+  labels: ParcelLabelRegisterRow[];
+  counts: Record<string, number>;
+}> {
   await requireStaff();
   const params = new URLSearchParams({ state });
-  if (parcelOrgId) params.set('parcelOrgId', parcelOrgId);
-  const res = await adminGo<{ labels: ParcelLabelRegisterRow[] | null; counts: Record<string, number> }>(
-    `/v1/admin/parcels/labels/register?${params}`,
-  );
+  if (parcelOrgId) params.set("parcelOrgId", parcelOrgId);
+  const res = await adminGo<{
+    labels: ParcelLabelRegisterRow[] | null;
+    counts: Record<string, number>;
+  }>(`/v1/admin/parcels/labels/register?${params}`);
   return { labels: res.labels ?? [], counts: res.counts ?? {} };
 }
 
 export interface ParcelLabelBatchRow {
-  batchId: string; createdAt: string;
-  parcelOrgId: string | null; orgName: string | null;
-  total: number; live: number; used: number; voided: number;
+  batchId: string;
+  createdAt: string;
+  parcelOrgId: string | null;
+  orgName: string | null;
+  total: number;
+  live: number;
+  used: number;
+  voided: number;
   voidedReason: string | null;
 }
 
-export async function actionListParcelLabelBatches(parcelOrgId?: string): Promise<ParcelLabelBatchRow[]> {
+export async function actionListParcelLabelBatches(
+  parcelOrgId?: string,
+): Promise<ParcelLabelBatchRow[]> {
   await requireStaff();
   const params = new URLSearchParams();
-  if (parcelOrgId) params.set('parcelOrgId', parcelOrgId);
+  if (parcelOrgId) params.set("parcelOrgId", parcelOrgId);
   const { batches } = await adminGo<{ batches: ParcelLabelBatchRow[] | null }>(
     `/v1/admin/parcels/labels/batches?${params}`,
   );
@@ -775,18 +1379,26 @@ export async function actionListParcelLabelBatches(parcelOrgId?: string): Promis
  * punish a theft that happened after it shipped.
  */
 export async function actionVoidParcelLabelBatch(
-  batchId: string, reason: string, parcelOrgId?: string,
+  batchId: string,
+  reason: string,
+  parcelOrgId?: string,
 ): Promise<{ ok: true; voided: number } | { ok: false; error: string }> {
   try {
     await requireStaff();
     const { voided } = await adminGo<{ voided: number }>(
       `/v1/admin/parcels/labels/batches/${encodeURIComponent(batchId)}/void`,
-      { method: 'POST', body: JSON.stringify({ reason, parcelOrgId: parcelOrgId || undefined }) },
+      {
+        method: "POST",
+        body: JSON.stringify({ reason, parcelOrgId: parcelOrgId || undefined }),
+      },
     );
-    revalidatePath('/parcels/labels');
+    revalidatePath("/parcels/labels");
     return { ok: true, voided };
   } catch (e) {
-    return { ok: false, error: e instanceof Error ? e.message : 'Could not withdraw that batch' };
+    return {
+      ok: false,
+      error: e instanceof Error ? e.message : "Could not withdraw that batch",
+    };
   }
 }
 
@@ -828,12 +1440,19 @@ export interface ParcelLabelInfoInput {
  * owned label stock and attest the contents declaration.
  */
 export interface CounterBookingInput {
-  senderName: string; senderMsisdn: string;
-  receiverName: string; receiverMsisdn: string;
-  originLabel: string; destinationLabel: string;
-  parcelType: string; weightKg?: number;
-  lengthCm?: number; widthCm?: number; heightCm?: number;
-  declaredValueKes?: number; coverageTierId?: string;
+  senderName: string;
+  senderMsisdn: string;
+  receiverName: string;
+  receiverMsisdn: string;
+  originLabel: string;
+  destinationLabel: string;
+  parcelType: string;
+  weightKg?: number;
+  lengthCm?: number;
+  widthCm?: number;
+  heightCm?: number;
+  declaredValueKes?: number;
+  coverageTierId?: string;
   contentsDeclared: boolean;
   existingCode?: string;
   notes?: string;
@@ -842,7 +1461,9 @@ export interface CounterBookingInput {
 
 export async function actionCounterBookParcel(
   input: CounterBookingInput,
-): Promise<{ ok: true; code: string; parcelId: string } | { ok: false; error: string }> {
+): Promise<
+  { ok: true; code: string; parcelId: string } | { ok: false; error: string }
+> {
   try {
     await requireStaff();
     // payAtCounter: true — a counter booking has a customer standing at
@@ -851,19 +1472,30 @@ export async function actionCounterBookParcel(
     // nobody was ever routed through SetParcelPrice/Pay to finish it, so
     // it never became a real, actionable BOOKED parcel and neither party
     // was ever texted. See dbx.BookParcelInput.PayAtCounter.
-    const res = await adminGo<{ parcelId: string; code: string }>('/v1/parcels', {
-      method: 'POST', body: JSON.stringify({ ...input, payAtCounter: true }),
-    });
-    revalidatePath('/parcels');
-    revalidatePath('/parcels/labels');
+    const res = await adminGo<{ parcelId: string; code: string }>(
+      "/v1/parcels",
+      {
+        method: "POST",
+        body: JSON.stringify({ ...input, payAtCounter: true }),
+      },
+    );
+    revalidatePath("/parcels");
+    revalidatePath("/parcels/labels");
     return { ok: true, code: res.code, parcelId: res.parcelId };
   } catch (e) {
-    return { ok: false, error: e instanceof Error ? e.message : 'Could not book that parcel' };
+    return {
+      ok: false,
+      error: e instanceof Error ? e.message : "Could not book that parcel",
+    };
   }
 }
 
 export interface CounterParty {
-  name: string; msisdn: string; lastLabel: string; lastSeen: string; shipments: number;
+  name: string;
+  msisdn: string;
+  lastLabel: string;
+  lastSeen: string;
+  shipments: number;
 }
 
 /**
@@ -876,7 +1508,9 @@ export interface CounterParty {
  * address book would be a second copy of facts we hold, needing a dual
  * write and starting empty for every customer already in the system.
  */
-export async function actionSearchCounterParties(q: string): Promise<CounterParty[]> {
+export async function actionSearchCounterParties(
+  q: string,
+): Promise<CounterParty[]> {
   await requireStaff();
   if (q.trim().length < 3) return [];
   const { parties } = await adminGo<{ parties: CounterParty[] | null }>(
@@ -886,16 +1520,23 @@ export async function actionSearchCounterParties(q: string): Promise<CounterPart
 }
 
 export interface ParcelPricingOption {
-  parcelType: string; weightLabel: string;
-  minWeightKg: number; maxWeightKg: number;
-  minKes: string; maxKes: string;
+  parcelType: string;
+  weightLabel: string;
+  minWeightKg: number;
+  maxWeightKg: number;
+  minKes: string;
+  maxKes: string;
 }
 
 /** Every weight bracket, so the counter can match a measured weight to
  *  its bracket without a round trip per keystroke. */
-export async function actionListParcelPricing(): Promise<ParcelPricingOption[]> {
+export async function actionListParcelPricing(): Promise<
+  ParcelPricingOption[]
+> {
   await requireStaff();
-  const res = await adminGo<{ pricing: ParcelPricingOption[] | null }>('/v1/parcels/pricing');
+  const res = await adminGo<{ pricing: ParcelPricingOption[] | null }>(
+    "/v1/parcels/pricing",
+  );
   return res.pricing ?? [];
 }
 
@@ -917,14 +1558,16 @@ export async function actionListParcelPricing(): Promise<ParcelPricingOption[]> 
  * own capability checks as they always have.
  */
 export type ScanDestination =
-  | { kind: 'parcel'; code: string }
-  | { kind: 'label'; code: string }
-  | { kind: 'unknown' };
+  | { kind: "parcel"; code: string }
+  | { kind: "label"; code: string }
+  | { kind: "unknown" };
 
-export async function actionResolveScannedCode(code: string): Promise<ScanDestination> {
+export async function actionResolveScannedCode(
+  code: string,
+): Promise<ScanDestination> {
   await requireStaff();
   const normalised = code.trim().toUpperCase();
-  if (!normalised) return { kind: 'unknown' };
+  if (!normalised) return { kind: "unknown" };
   try {
     const status = await adminGo<{ code: string; preLabel?: boolean }>(
       `/v1/parcels/${encodeURIComponent(normalised)}/status`,
@@ -932,9 +1575,9 @@ export async function actionResolveScannedCode(code: string): Promise<ScanDestin
     // preLabel means the code resolved against parcel_label_stock
     // rather than a real booking — a blank or filled-in label, whose
     // useful destination is the attach form, not the parcels ledger.
-    return { kind: status.preLabel ? 'label' : 'parcel', code: status.code };
+    return { kind: status.preLabel ? "label" : "parcel", code: status.code };
   } catch {
-    return { kind: 'unknown' };
+    return { kind: "unknown" };
   }
 }
 
@@ -948,7 +1591,9 @@ export async function actionResolveScannedCode(code: string): Promise<ScanDestin
 // is already bound to a booking.
 export async function actionGetParcelLabelInfo(
   code: string,
-): Promise<{ ok: true; info: ParcelLabelInfoInput | null } | { ok: false; error: string }> {
+): Promise<
+  { ok: true; info: ParcelLabelInfoInput | null } | { ok: false; error: string }
+> {
   try {
     await requireStaff();
     const { info } = await adminGo<{ info: ParcelLabelInfoInput | null }>(
@@ -956,20 +1601,30 @@ export async function actionGetParcelLabelInfo(
     );
     return { ok: true, info: info ?? null };
   } catch (e) {
-    return { ok: false, error: e instanceof Error ? e.message : 'Could not load that label' };
+    return {
+      ok: false,
+      error: e instanceof Error ? e.message : "Could not load that label",
+    };
   }
 }
 
-export async function actionAttachParcelLabelInfo(code: string, info: ParcelLabelInfoInput): Promise<Result> {
+export async function actionAttachParcelLabelInfo(
+  code: string,
+  info: ParcelLabelInfoInput,
+): Promise<Result> {
   try {
     await requireStaff();
     await adminGo(`/v1/admin/parcels/labels/info/${encodeURIComponent(code)}`, {
-      method: 'POST', body: JSON.stringify(info),
+      method: "POST",
+      body: JSON.stringify(info),
     });
-    revalidatePath('/parcels/labels');
+    revalidatePath("/parcels/labels");
     return { ok: true };
   } catch (e) {
-    return { ok: false, error: e instanceof Error ? e.message : 'Could not attach that info' };
+    return {
+      ok: false,
+      error: e instanceof Error ? e.message : "Could not attach that info",
+    };
   }
 }
 
@@ -981,64 +1636,120 @@ export async function actionAttachParcelLabelInfo(code: string, info: ParcelLabe
 // marks it back. See dbx's parcel_teams.go for the full rationale.
 
 export interface CourierTeamRow {
-  ID: string; Name: string; ManagerName: string | null;
-  MemberCount: number; FleetCount: number; CreatedAt: string;
+  ID: string;
+  Name: string;
+  ManagerName: string | null;
+  MemberCount: number;
+  FleetCount: number;
+  CreatedAt: string;
 }
 
-export interface CourierTeamMemberRow { PartyID: string; Name: string; Msisdn: string | null; Role: string; AddedAt: string }
-export interface CourierFleetRow { ID: string; FleetNumber: string; VehicleType: string; OpenTripID: string | null; AssignedOpen: number }
+export interface CourierTeamMemberRow {
+  PartyID: string;
+  Name: string;
+  Msisdn: string | null;
+  Role: string;
+  AddedAt: string;
+}
+export interface CourierFleetRow {
+  ID: string;
+  FleetNumber: string;
+  VehicleType: string;
+  OpenTripID: string | null;
+  AssignedOpen: number;
+}
 
 export async function actionListCourierTeams(): Promise<CourierTeamRow[]> {
   await requireStaff();
-  const { teams } = await adminGo<{ teams: CourierTeamRow[] | null }>('/v1/admin/parcels/courier-teams');
+  const { teams } = await adminGo<{ teams: CourierTeamRow[] | null }>(
+    "/v1/admin/parcels/courier-teams",
+  );
   return teams ?? [];
 }
 
-export async function actionGetCourierTeam(teamId: string): Promise<{ name: string; members: CourierTeamMemberRow[]; fleets: CourierFleetRow[] } | null> {
+export async function actionGetCourierTeam(teamId: string): Promise<{
+  name: string;
+  members: CourierTeamMemberRow[];
+  fleets: CourierFleetRow[];
+} | null> {
   try {
     await requireStaff();
-    const res = await adminGo<{ name: string; members: CourierTeamMemberRow[] | null; fleets: CourierFleetRow[] | null }>(`/v1/admin/parcels/courier-teams/${teamId}`);
-    return { name: res.name, members: res.members ?? [], fleets: res.fleets ?? [] };
+    const res = await adminGo<{
+      name: string;
+      members: CourierTeamMemberRow[] | null;
+      fleets: CourierFleetRow[] | null;
+    }>(`/v1/admin/parcels/courier-teams/${teamId}`);
+    return {
+      name: res.name,
+      members: res.members ?? [],
+      fleets: res.fleets ?? [],
+    };
   } catch {
     return null;
   }
 }
 
 export async function actionCreateCourierTeam(input: {
-  name: string; manager: { name: string; msisdn: string; role?: string };
+  name: string;
+  manager: { name: string; msisdn: string; role?: string };
 }): Promise<{ ok: true; teamId: string } | { ok: false; error: string }> {
   try {
     await requireStaff();
-    const { teamId } = await adminGo<{ teamId: string }>('/v1/admin/parcels/courier-teams', {
-      method: 'POST', body: JSON.stringify(input),
-    });
-    revalidatePath('/parcels/teams');
+    const { teamId } = await adminGo<{ teamId: string }>(
+      "/v1/admin/parcels/courier-teams",
+      {
+        method: "POST",
+        body: JSON.stringify(input),
+      },
+    );
+    revalidatePath("/parcels/teams");
     return { ok: true, teamId };
   } catch (e) {
-    return { ok: false, error: e instanceof Error ? e.message : 'Could not create that team' };
+    return {
+      ok: false,
+      error: e instanceof Error ? e.message : "Could not create that team",
+    };
   }
 }
 
-export async function actionAddTeamRosterMember(teamId: string, input: { name: string; msisdn: string; role?: string }): Promise<Result> {
+export async function actionAddTeamRosterMember(
+  teamId: string,
+  input: { name: string; msisdn: string; role?: string },
+): Promise<Result> {
   try {
     await requireStaff();
-    await adminGo(`/v1/admin/parcels/courier-teams/${teamId}/members`, { method: 'POST', body: JSON.stringify(input) });
+    await adminGo(`/v1/admin/parcels/courier-teams/${teamId}/members`, {
+      method: "POST",
+      body: JSON.stringify(input),
+    });
     revalidatePath(`/parcels/teams/${teamId}`);
     return { ok: true };
   } catch (e) {
-    return { ok: false, error: e instanceof Error ? e.message : 'Could not add that member' };
+    return {
+      ok: false,
+      error: e instanceof Error ? e.message : "Could not add that member",
+    };
   }
 }
 
-export async function actionRenameCourierTeam(teamId: string, name: string): Promise<Result> {
+export async function actionRenameCourierTeam(
+  teamId: string,
+  name: string,
+): Promise<Result> {
   try {
     await requireStaff();
-    await adminGo(`/v1/admin/parcels/courier-teams/${teamId}`, { method: 'PATCH', body: JSON.stringify({ name }) });
+    await adminGo(`/v1/admin/parcels/courier-teams/${teamId}`, {
+      method: "PATCH",
+      body: JSON.stringify({ name }),
+    });
     revalidatePath(`/parcels/teams/${teamId}`);
-    revalidatePath('/parcels/teams');
+    revalidatePath("/parcels/teams");
     return { ok: true };
   } catch (e) {
-    return { ok: false, error: e instanceof Error ? e.message : 'Could not rename that team' };
+    return {
+      ok: false,
+      error: e instanceof Error ? e.message : "Could not rename that team",
+    };
   }
 }
 
@@ -1046,50 +1757,84 @@ export async function actionRenameCourierTeam(teamId: string, name: string): Pro
 // number the moment it's saved, same as adding them does; see
 // notify.CourierTeamMemberUpdated.
 export async function actionUpdateTeamRosterMember(
-  teamId: string, partyId: string, input: { name: string; msisdn: string; role?: string },
+  teamId: string,
+  partyId: string,
+  input: { name: string; msisdn: string; role?: string },
 ): Promise<Result> {
   try {
     await requireStaff();
-    await adminGo(`/v1/admin/parcels/courier-teams/${teamId}/members/${partyId}`, { method: 'PATCH', body: JSON.stringify(input) });
+    await adminGo(
+      `/v1/admin/parcels/courier-teams/${teamId}/members/${partyId}`,
+      { method: "PATCH", body: JSON.stringify(input) },
+    );
     revalidatePath(`/parcels/teams/${teamId}`);
     return { ok: true };
   } catch (e) {
-    return { ok: false, error: e instanceof Error ? e.message : 'Could not update that member' };
+    return {
+      ok: false,
+      error: e instanceof Error ? e.message : "Could not update that member",
+    };
   }
 }
 
-export async function actionAddCourierFleet(teamId: string, input: { fleetNumber: string; vehicleType: string }): Promise<Result> {
+export async function actionAddCourierFleet(
+  teamId: string,
+  input: { fleetNumber: string; vehicleType: string },
+): Promise<Result> {
   try {
     await requireStaff();
-    await adminGo(`/v1/admin/parcels/courier-teams/${teamId}/fleets`, { method: 'POST', body: JSON.stringify(input) });
-    revalidatePath(`/parcels/teams/${teamId}`);
-    return { ok: true };
-  } catch (e) {
-    return { ok: false, error: e instanceof Error ? e.message : 'Could not add that fleet' };
-  }
-}
-
-export async function actionAssignParcelsToFleet(fleetId: string, codes: string[]): Promise<{ ok: true; assigned: string[] } | { ok: false; error: string }> {
-  try {
-    await requireStaff();
-    const { assigned } = await adminGo<{ assigned: string[] | null }>(`/v1/admin/parcels/fleets/${fleetId}/assign`, {
-      method: 'POST', body: JSON.stringify({ codes }),
+    await adminGo(`/v1/admin/parcels/courier-teams/${teamId}/fleets`, {
+      method: "POST",
+      body: JSON.stringify(input),
     });
-    revalidatePath('/parcels/teams', 'layout');
+    revalidatePath(`/parcels/teams/${teamId}`);
+    return { ok: true };
+  } catch (e) {
+    return {
+      ok: false,
+      error: e instanceof Error ? e.message : "Could not add that fleet",
+    };
+  }
+}
+
+export async function actionAssignParcelsToFleet(
+  fleetId: string,
+  codes: string[],
+): Promise<{ ok: true; assigned: string[] } | { ok: false; error: string }> {
+  try {
+    await requireStaff();
+    const { assigned } = await adminGo<{ assigned: string[] | null }>(
+      `/v1/admin/parcels/fleets/${fleetId}/assign`,
+      {
+        method: "POST",
+        body: JSON.stringify({ codes }),
+      },
+    );
+    revalidatePath("/parcels/teams", "layout");
     return { ok: true, assigned: assigned ?? [] };
   } catch (e) {
-    return { ok: false, error: e instanceof Error ? e.message : 'Could not assign those parcels' };
+    return {
+      ok: false,
+      error: e instanceof Error ? e.message : "Could not assign those parcels",
+    };
   }
 }
 
-export async function actionCompleteCourierTrip(tripId: string): Promise<Result> {
+export async function actionCompleteCourierTrip(
+  tripId: string,
+): Promise<Result> {
   try {
     await requireStaff();
-    await adminGo(`/v1/admin/parcels/trips/${tripId}/complete`, { method: 'POST' });
-    revalidatePath('/parcels/teams', 'layout');
+    await adminGo(`/v1/admin/parcels/trips/${tripId}/complete`, {
+      method: "POST",
+    });
+    revalidatePath("/parcels/teams", "layout");
     return { ok: true };
   } catch (e) {
-    return { ok: false, error: e instanceof Error ? e.message : 'Could not complete that trip' };
+    return {
+      ok: false,
+      error: e instanceof Error ? e.message : "Could not complete that trip",
+    };
   }
 }
 
@@ -1097,46 +1842,89 @@ export async function actionCompleteCourierTrip(tripId: string): Promise<Result>
  *  the confirmation dbx.AssignParcelsToFleet's own bulk write never
  *  gave, and exactly what dbx.CheckTripDispatched reads to tell a
  *  boarded parcel apart from a left-behind one. */
-export async function actionBoardParcelOntoTrip(tripId: string, code: string): Promise<Result> {
+export async function actionBoardParcelOntoTrip(
+  tripId: string,
+  code: string,
+): Promise<Result> {
   try {
     await requireStaff();
     await adminGo(`/v1/admin/parcels/trips/${tripId}/board`, {
-      method: 'POST', body: JSON.stringify({ code }),
+      method: "POST",
+      body: JSON.stringify({ code }),
     });
-    revalidatePath('/parcels/teams', 'layout');
+    revalidatePath("/parcels/teams", "layout");
     return { ok: true };
   } catch (e) {
-    return { ok: false, error: e instanceof Error ? e.message : 'Could not board that parcel' };
+    return {
+      ok: false,
+      error: e instanceof Error ? e.message : "Could not board that parcel",
+    };
   }
 }
 
-export interface LeftBehindParcelRow { code: string; destinationLabel: string }
+export interface LeftBehindParcelRow {
+  code: string;
+  destinationLabel: string;
+}
 
 /** The explicit "I'm done scanning" moment — see this endpoint's own
  *  handler comment on why exactly one SMS fires from this call, never
  *  a text per parcel. */
 export async function actionCheckTripDispatched(
   tripId: string,
-): Promise<{ ok: true; boardedCount: number; leftBehind: LeftBehindParcelRow[] } | { ok: false; error: string }> {
+): Promise<
+  | { ok: true; boardedCount: number; leftBehind: LeftBehindParcelRow[] }
+  | { ok: false; error: string }
+> {
   try {
     await requireStaff();
-    const res = await adminGo<{ boardedCount: number; leftBehind: LeftBehindParcelRow[] | null }>(
-      `/v1/admin/parcels/trips/${tripId}/checked`, { method: 'POST' },
-    );
-    revalidatePath('/parcels/teams', 'layout');
-    return { ok: true, boardedCount: res.boardedCount, leftBehind: res.leftBehind ?? [] };
+    const res = await adminGo<{
+      boardedCount: number;
+      leftBehind: LeftBehindParcelRow[] | null;
+    }>(`/v1/admin/parcels/trips/${tripId}/checked`, { method: "POST" });
+    revalidatePath("/parcels/teams", "layout");
+    return {
+      ok: true,
+      boardedCount: res.boardedCount,
+      leftBehind: res.leftBehind ?? [],
+    };
   } catch (e) {
-    return { ok: false, error: e instanceof Error ? e.message : 'Could not check this trip as dispatched' };
+    return {
+      ok: false,
+      error:
+        e instanceof Error
+          ? e.message
+          : "Could not check this trip as dispatched",
+    };
   }
 }
 
 // ── Live dispatch ──
 
-export interface LiveCourierPosition { CourierPartyID: string; Name: string; VehicleType: string; Lat: string; Lng: string; At: string }
-export interface LiveUnassignedParcel { Code: string; Status: string; Lat: string | null; Lng: string | null; Overdue: boolean }
+export interface LiveCourierPosition {
+  CourierPartyID: string;
+  Name: string;
+  VehicleType: string;
+  Lat: string;
+  Lng: string;
+  At: string;
+}
+export interface LiveUnassignedParcel {
+  Code: string;
+  Status: string;
+  Lat: string | null;
+  Lng: string | null;
+  Overdue: boolean;
+}
 
-export async function actionGetLiveDispatch(): Promise<{ couriers: LiveCourierPosition[]; parcels: LiveUnassignedParcel[] }> {
+export async function actionGetLiveDispatch(): Promise<{
+  couriers: LiveCourierPosition[];
+  parcels: LiveUnassignedParcel[];
+}> {
   await requireStaff();
-  const res = await adminGo<{ couriers: LiveCourierPosition[] | null; parcels: LiveUnassignedParcel[] | null }>('/v1/admin/parcels/live');
+  const res = await adminGo<{
+    couriers: LiveCourierPosition[] | null;
+    parcels: LiveUnassignedParcel[] | null;
+  }>("/v1/admin/parcels/live");
   return { couriers: res.couriers ?? [], parcels: res.parcels ?? [] };
 }

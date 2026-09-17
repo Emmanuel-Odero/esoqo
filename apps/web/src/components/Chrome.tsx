@@ -13,7 +13,7 @@ export const NAV = [
   ['/', 'Home'],
   ['/discover', 'Shops'],
   ['/tickets', 'Tickets'],
-  ['/send-parcel', 'Send a parcel'],
+  ['/parcels', 'Parcels'],
   ['/prices', 'Prices'],
   ['/counties', 'Counties'],
   ['/institutions', 'Institutions'],
@@ -142,8 +142,9 @@ export function Footer() {
           <div>
             <h2>Tools</h2>
             <Link href="/prices">Market prices</Link>
-            <Link href="/send-parcel">Send a parcel</Link>
-            <Link href="/send-parcel/track">Track a parcel</Link>
+            <Link href="/parcels/send">Send a parcel</Link>
+            <Link href="/parcels/track">Track a parcel</Link>
+            <Link href="/parcels/points">Drop-off &amp; pickup points</Link>
             <Link href="/verify">Verify a certificate</Link>
             <Link href="/counties">County requirements</Link>
             <Link href="/institutions">Institutions</Link>

@@ -3,7 +3,7 @@ import { displayKES, toCentsOrZero } from '@esoqo/domain';
 import { Icon } from '@esoqo/ui';
 import type { AwaitingIntakeView, ParcelStatusView } from './actions';
 import {
-  TIMELINE, etaText, humanTime, isOffTimeline, statusLabel, statusMessage, statusTone,
+  etaText, humanTime, isOffTimeline, statusLabel, statusMessage, statusTone, timelineFor,
 } from './parcel-format';
 import { ClaimPanel } from './ClaimPanel';
 import { TrackingMap } from './TrackingMap';
@@ -38,8 +38,14 @@ export function ParcelStatusPanel({ parcel }: { parcel: ParcelStatusView | Await
   if (parcel.preLabel) return <PreLabelPanel parcel={parcel} />;
 
   const eta = etaText(parcel);
-  const reachedIndex = TIMELINE.findIndex(([s]) => s === parcel.status);
+  const stages = timelineFor(parcel);
+  const reachedIndex = stages.findIndex(([s]) => s === parcel.status);
   const offTimeline = isOffTimeline(parcel.status);
+  // The real custody timeline, when the server supplied one. Preferred
+  // over the derived stepper because it is the actual history — every
+  // leg with its time, from counter receipt to delivery — not a
+  // reconstruction from the current status alone.
+  const events = parcel.events ?? [];
 
   return (
     <div>
@@ -77,9 +83,11 @@ export function ParcelStatusPanel({ parcel }: { parcel: ParcelStatusView | Await
           happened yet" for something that already has. */}
       {offTimeline ? (
         <OffTimelineCard parcel={parcel} />
+      ) : events.length > 1 ? (
+        <EventsTimeline events={events} />
       ) : (
         <ol style={{ listStyle: 'none', margin: '20px 0 0', padding: 0 }}>
-          {TIMELINE.map(([status, label], i) => {
+          {stages.map(([status, label], i) => {
             const reached = reachedIndex >= 0 && i <= reachedIndex;
             return (
               <li key={status} style={{ display: 'flex', gap: 12, alignItems: 'flex-start' }}>
@@ -96,7 +104,7 @@ export function ParcelStatusPanel({ parcel }: { parcel: ParcelStatusView | Await
                       border: '1.5px solid var(--line)', flexShrink: 0,
                     }} />
                   )}
-                  {i < TIMELINE.length - 1 && (
+                  {i < stages.length - 1 && (
                     <span aria-hidden style={{
                       width: 2, height: 26,
                       background: reached ? 'var(--brand, currentColor)' : 'var(--line)',
@@ -120,6 +128,9 @@ export function ParcelStatusPanel({ parcel }: { parcel: ParcelStatusView | Await
           <Row label="Paid" value={`KES ${Number(parcel.priceKes).toLocaleString('en-KE')}`} mono />
         )}
         <Row label="Booked" value={humanTime(parcel.createdAt)} />
+        {parcel.intakeConfirmedAt && (
+          <Row label="Received" value={humanTime(parcel.intakeConfirmedAt)} />
+        )}
         {parcel.deliveredAt && <Row label="Delivered" value={humanTime(parcel.deliveredAt)} />}
       </dl>
 
@@ -177,6 +188,36 @@ function AgentCard({ agent }: { agent: NonNullable<ParcelStatusView['agent']> })
         </p>
       )}
     </div>
+  );
+}
+
+/**
+ * The full custody history, straight from the server: booking, counter
+ * receipt, each hand-over, delivery — each with its time. This is what
+ * answers "where has it been and when", which the single-status view
+ * never could. Every entry here already happened, so all are ticked.
+ */
+function EventsTimeline({ events }: { events: NonNullable<ParcelStatusView['events']> }) {
+  return (
+    <ol style={{ listStyle: 'none', margin: '20px 0 0', padding: 0 }}>
+      {events.map((e, i) => (
+        <li key={`${e.at}-${i}`} style={{ display: 'flex', gap: 12, alignItems: 'flex-start' }}>
+          <span style={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
+            <Icon name="check-circle" size={18} />
+            {i < events.length - 1 && (
+              <span aria-hidden style={{
+                width: 2, height: 26,
+                background: 'var(--brand, currentColor)', opacity: 0.4,
+              }} />
+            )}
+          </span>
+          <span style={{ paddingBottom: 12 }}>
+            <span style={{ display: 'block', fontWeight: 600 }}>{e.label}</span>
+            <span className="sub" style={{ fontSize: '.85rem' }}>{humanTime(e.at)}</span>
+          </span>
+        </li>
+      ))}
+    </ol>
   );
 }
 

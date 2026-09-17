@@ -327,6 +327,7 @@ function ScanPanel() {
   // comment). Only DELIVERED and terminal states get no action at all.
   const handoffLabel: Record<string, string> = {
     BOOKED: 'Check in (received)',
+    RECEIVED_AT_COUNTER: 'Dispatch to next leg',
     PICKED_UP: 'Dispatch to next leg',
     IN_TRANSIT: 'Check in at this stop',
     FAILED_DELIVERY: 'Check in at this stop',

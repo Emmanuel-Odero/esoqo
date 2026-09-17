@@ -1,0 +1,21 @@
+'use client';
+
+import { useState } from 'react';
+import { Icon } from '@esoqo/ui';
+import type { ParcelOrgStationRow } from '@/lib/parcel-org-session';
+import { saveOrgStation } from '../actions';
+
+export function StationsManager({ initial }: { initial: ParcelOrgStationRow[] }) {
+  const [stations, setStations] = useState(initial);
+  const [editing, setEditing] = useState<ParcelOrgStationRow | null>(null);
+  const [adding, setAdding] = useState(false);
+  return <div className="porg-card"><div style={{ overflowX: 'auto' }}><table className="tbl"><thead><tr><th>Station</th><th>Phone</th><th>Capacity</th><th>Status</th><th /></tr></thead><tbody>{stations.map((s) => <tr key={s.id}><td><strong>{s.name}</strong><span className="sub" style={{ display: 'block' }}>{s.locationHint}</span></td><td className="mono">{s.msisdn}</td><td>{s.capacity}</td><td>{s.active ? 'Active' : 'Suspended'}</td><td><button className="btn btn-o btn-sm" onClick={() => { setEditing(s); setAdding(false); }}>Edit</button></td></tr>)}{stations.length === 0 && <tr><td colSpan={5} className="sub">No stations yet.</td></tr>}</tbody></table></div><div style={{ padding: 16, borderTop: '1px solid var(--line)' }}>{(adding || editing) ? <StationForm initial={editing ?? undefined} onDone={(station) => { setStations((rows) => editing ? rows.map((row) => row.id === station.id ? station : row) : [...rows, station]); setEditing(null); setAdding(false); }} onCancel={() => { setEditing(null); setAdding(false); }} /> : <button className="btn btn-p btn-sm" onClick={() => setAdding(true)}><Icon name="plus" size={14} />Add station</button>}</div></div>;
+}
+
+function StationForm({ initial, onDone, onCancel }: { initial?: ParcelOrgStationRow; onDone: (station: ParcelOrgStationRow) => void; onCancel: () => void }) {
+  const [name, setName] = useState(initial?.name ?? ''); const [msisdn, setMsisdn] = useState(initial?.msisdn ?? ''); const [locationHint, setLocationHint] = useState(initial?.locationHint ?? ''); const [openingHours, setOpeningHours] = useState(initial?.openingHours ?? ''); const [lat, setLat] = useState(String(initial?.lat ?? '')); const [lng, setLng] = useState(String(initial?.lng ?? '')); const [capacity, setCapacity] = useState(String(initial?.capacity ?? 50)); const [active, setActive] = useState(initial?.active ?? true); const [error, setError] = useState<string | null>(null);
+  async function save() { const result = await saveOrgStation({ id: initial?.id, name, msisdn, locationHint, openingHours, lat: Number(lat), lng: Number(lng), capacity: Number(capacity), active }); if (!result.ok) { setError(result.error); return; } onDone({ id: initial?.id ?? crypto.randomUUID(), name, msisdn, locationHint, openingHours: openingHours || null, lat: Number(lat), lng: Number(lng), capacity: Number(capacity), active }); }
+  return <div style={{ display: 'grid', gap: 10 }}><div className="row" style={{ gap: 10, flexWrap: 'wrap' }}>{[['Name', name, setName], ['Phone', msisdn, setMsisdn], ['Location', locationHint, setLocationHint], ['Hours', openingHours, setOpeningHours]].map(([label, value, setter]) => <label key={String(label)} className="sub" style={{ flex: 1, minWidth: 180 }}>{String(label)}<input style={inputStyle} value={String(value)} onChange={(e) => (setter as (v: string) => void)(e.target.value)} /></label>)}</div><div className="row" style={{ gap: 10 }}><label className="sub">Latitude<input style={inputStyle} value={lat} onChange={(e) => setLat(e.target.value)} /></label><label className="sub">Longitude<input style={inputStyle} value={lng} onChange={(e) => setLng(e.target.value)} /></label><label className="sub">Capacity<input style={inputStyle} value={capacity} onChange={(e) => setCapacity(e.target.value)} /></label></div><label className="sub"><input type="checkbox" checked={active} onChange={(e) => setActive(e.target.checked)} /> Active</label>{error && <p role="alert" style={{ color: 'var(--red)' }}>{error}</p>}<div className="row" style={{ gap: 8 }}><button className="btn btn-p btn-sm" onClick={() => void save()}>Save station</button><button className="btn btn-o btn-sm" onClick={onCancel}>Cancel</button></div></div>;
+}
+
+const inputStyle: React.CSSProperties = { width: '100%', marginTop: 4, padding: '8px 10px', border: '1.5px solid var(--line)', borderRadius: 6 };

@@ -80,7 +80,11 @@ function OrgRow({ org, canEdit }: { org: ParcelOrg; canEdit: boolean }) {
           <strong>{org.name}</strong>
           {org.contactPerson && <span className="sub" style={{ display: 'block' }}>{org.contactPerson}</span>}
         </td>
-        <td className="mono sub">/parcel-co/{org.slug}</td>
+        <td>
+          <a className="mono" href={`${process.env.NEXT_PUBLIC_APP_URL ?? 'http://localhost:3001'}/parcel-co/${org.slug}`} target="_blank" rel="noreferrer">
+            {process.env.NEXT_PUBLIC_APP_URL ?? 'http://localhost:3001'}/parcel-co/{org.slug}
+          </a>
+        </td>
         <td className="mono">{org.commissionPct}%</td>
         <td>
           <span className={`pill ${org.status === 'ACTIVE' ? 'p-ok' : org.status === 'DRAFT' ? 'p-warn' : 'p-bad'}`}>
@@ -121,6 +125,7 @@ function StaffPanel({ org }: { org: ParcelOrg }) {
   const [name, setName] = useState('');
   const [pin, setPin] = useState('');
   const [msisdn, setMsisdn] = useState('');
+  const [esokoId, setEsokoId] = useState('');
   const [role, setRole] = useState('MANAGER');
   const [error, setError] = useState<string | null>(null);
   const [pending, startTransition] = useTransition();
@@ -140,10 +145,10 @@ function StaffPanel({ org }: { org: ParcelOrg }) {
     }
     startTransition(async () => {
       const result = await actionCreateParcelOrgManager(org.id, {
-        name: name.trim(), role, pin: phone ? undefined : pin, msisdn: phone || undefined,
+        name: name.trim(), role, pin: phone || esokoId ? undefined : pin, msisdn: phone || undefined, esokoId: esokoId.trim() || undefined,
       });
       if (!result.ok) { setError(result.error); return; }
-      setName(''); setPin(''); setMsisdn('');
+      setName(''); setPin(''); setMsisdn(''); setEsokoId('');
       setStaff(await actionListParcelOrgStaff(org.id));
     });
   }
@@ -178,6 +183,10 @@ function StaffPanel({ org }: { org: ParcelOrg }) {
             onChange={(e) => setName(e.target.value)} />
         </div>
         <div>
+          <label className="sub" style={{ display: 'block', marginBottom: 4 }}>Existing Esoqo ID</label>
+          <input className="mono" style={inputStyle} placeholder="ESK-1234-KE" value={esokoId} disabled={!!msisdn.trim()} onChange={(e) => setEsokoId(e.target.value)} />
+        </div>
+        <div>
           <label className="sub" htmlFor={ids.role} style={{ display: 'block', marginBottom: 4 }}>Role</label>
           <select id={ids.role} style={inputStyle} value={role} onChange={(e) => setRole(e.target.value)}>
             <option value="MANAGER">Manager</option>
@@ -204,7 +213,7 @@ function StaffPanel({ org }: { org: ParcelOrg }) {
         </button>
       </div>
       <span className="sub" style={{ fontSize: '.78rem' }}>
-        Set a PIN for the dedicated portal, or leave it blank and enter a phone number instead — they&apos;ll
+        Set a PIN, use an existing Esoqo ID, or enter a phone number instead — they&apos;ll
         get a text with a link to sign in with a one-time code, and nobody else&apos;s number will ever work there.
       </span>
       {error && (

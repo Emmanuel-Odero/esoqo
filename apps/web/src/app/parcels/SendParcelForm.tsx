@@ -38,6 +38,13 @@ const fieldStyle: React.CSSProperties = {
   width: '100%', padding: '10px 14px', border: '1.5px solid var(--line)', borderRadius: 8, fontSize: '.95rem',
 };
 
+/** A quiet step marker so a two-stage form never leaves anyone
+ *  wondering how much is left to fill in. */
+const STEP_EYEBROW: React.CSSProperties = {
+  margin: '0 0 4px', fontSize: '.72rem', letterSpacing: '.12em',
+  textTransform: 'uppercase', fontFamily: 'var(--font-mono)',
+};
+
 export function SendParcelForm(
   { pricing, zones, agents, stations }:
   {
@@ -86,6 +93,7 @@ export function SendParcelForm(
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
   const [pending, start] = useTransition();
 
+  const [code, setCode] = useState<string | null>(null);
   const [serviceTicketNumber, setServiceTicketNumber] = useState<string | null>(null);
   const [deliveryCode, setDeliveryCode] = useState<string | null>(null);
 
@@ -141,6 +149,7 @@ export function SendParcelForm(
         payAtCounter: true,
       });
       if (!booked.ok) { setError(booked.error); return; }
+      setCode(booked.code);
       setServiceTicketNumber(booked.serviceTicketNumber);
       setDeliveryCode(booked.deliveryCode);
       setStage('success');
@@ -187,9 +196,17 @@ export function SendParcelForm(
           </>
         ) : (
           <>
-            <p className="sub" style={{ margin: '0 0 18px' }}>
-              Service ticket <span className="mono" style={{ fontWeight: 700 }}>{serviceTicketNumber}</span>
+            <p className="sub" style={{ margin: '0 0 10px' }}>
+              Parcel tracking code
             </p>
+            <p className="mono" style={{ margin: '0 0 18px', fontWeight: 800, letterSpacing: '.06em', fontSize: '1.5rem' }}>
+              {code}
+            </p>
+            {serviceTicketNumber && (
+              <p className="sub" style={{ margin: '0 0 18px', fontSize: '.82rem' }}>
+                Service ticket <span className="mono" style={{ fontWeight: 700 }}>{serviceTicketNumber}</span>
+              </p>
+            )}
             <div style={{ textAlign: 'left', border: '1px solid var(--line)', borderRadius: 10, padding: 14, marginBottom: 14 }}>
               <p className="sub" style={{ margin: '0 0 4px', fontSize: '.8rem' }}>Delivery code — for your receiver</p>
               <p className="mono" style={{ margin: 0, fontSize: '1.3rem', fontWeight: 800, letterSpacing: '.06em' }}>{deliveryCode}</p>
@@ -212,7 +229,7 @@ export function SendParcelForm(
                 this up; until then the service ticket number above is
                 the only thing to hold onto. */}
             <p className="sub" style={{ fontSize: '.85rem' }}>
-              We&apos;ll text you your real tracking link the moment a courier picks this up.
+              Keep this tracking code handy. You can track the parcel immediately on the public parcel page.
             </p>
           </>
         )}
@@ -230,6 +247,7 @@ export function SendParcelForm(
           <Icon name="arrow-left" size={14} />Back
         </button>
 
+        <p className="sub" style={STEP_EYEBROW}>Step 2 of 2</p>
         <p className="sub" style={{ margin: '0 0 16px', fontSize: '.85rem' }}>
           {isSelfDropoff
             ? <>Dropping off at <strong>{chosenStation?.name}</strong> — {chosenStation?.locationHint}. The fee is settled there, not here.</>
@@ -280,9 +298,10 @@ export function SendParcelForm(
 
   return (
     <div className="card">
+      <p className="sub" style={STEP_EYEBROW}>Step 1 of 2</p>
       <h3 style={{ marginBottom: 4 }}>What are you sending?</h3>
       <p className="sub" style={{ margin: '0 0 16px', fontSize: '.85rem' }}>
-        The fee is settled in person, with the agent or courier — we just need the shipping details.
+        Just the shipping details — the fee is settled in person, with the agent or courier.
       </p>
 
       <FormRow>

@@ -3,7 +3,8 @@
 import { useId, useState, useTransition } from 'react';
 import { Icon } from '@esoqo/ui';
 import type { ParcelOrgStaffRow } from '@/lib/parcel-org-session';
-import { saveOrgStaff } from '../actions';
+import { listOrgStations, saveOrgStaff } from '../actions';
+import type { ParcelOrgStationRow } from '@/lib/parcel-org-session';
 
 /**
  * The company's own roster of PIN logins.
@@ -20,6 +21,8 @@ const ROLES: [value: string, label: string, hint: string][] = [
 
 export function OrgStaffManager({ staff }: { staff: ParcelOrgStaffRow[] }) {
   const [adding, setAdding] = useState(false);
+  const [stations, setStations] = useState<ParcelOrgStationRow[]>([]);
+  useState(() => { void listOrgStations().then(setStations); });
 
   return (
     <div className="card" style={{ padding: 0 }}>
@@ -29,7 +32,7 @@ export function OrgStaffManager({ staff }: { staff: ParcelOrgStaffRow[] }) {
             <tr><th>Name</th><th>Role</th><th>Esoqo party id</th><th>Status</th><th /></tr>
           </thead>
           <tbody>
-            {staff.map((s) => <StaffRow key={s.id} staff={s} />)}
+            {staff.map((s) => <StaffRow key={s.id} staff={s} stations={stations} />)}
             {staff.length === 0 && (
               <tr>
                 <td colSpan={5} className="sub" style={{ textAlign: 'center', padding: 24 }}>
@@ -42,7 +45,7 @@ export function OrgStaffManager({ staff }: { staff: ParcelOrgStaffRow[] }) {
       </div>
       <div style={{ padding: 16, borderTop: '1px solid var(--line)' }}>
         {adding ? (
-          <StaffForm submitLabel="Add to the team" onDone={() => setAdding(false)} onCancel={() => setAdding(false)} />
+            <StaffForm stations={stations} submitLabel="Add to the team" onDone={() => setAdding(false)} onCancel={() => setAdding(false)} />
         ) : (
           <button className="btn btn-o btn-sm" onClick={() => setAdding(true)}>
             <Icon name="plus" size={14} />Add someone
@@ -53,14 +56,14 @@ export function OrgStaffManager({ staff }: { staff: ParcelOrgStaffRow[] }) {
   );
 }
 
-function StaffRow({ staff }: { staff: ParcelOrgStaffRow }) {
+function StaffRow({ staff, stations }: { staff: ParcelOrgStaffRow; stations: ParcelOrgStationRow[] }) {
   const [editing, setEditing] = useState(false);
   if (editing) {
     return (
       <tr>
         <td colSpan={5} style={{ padding: 16 }}>
           <StaffForm
-            initial={staff}
+            initial={staff} stations={stations}
             submitLabel="Save changes"
             onDone={() => setEditing(false)}
             onCancel={() => setEditing(false)}
@@ -95,15 +98,16 @@ const inputStyle: React.CSSProperties = {
 };
 
 function StaffForm({
-  initial, submitLabel, onDone, onCancel,
+  initial, stations, submitLabel, onDone, onCancel,
 }: {
-  initial?: ParcelOrgStaffRow; submitLabel: string; onDone: () => void; onCancel: () => void;
+  initial?: ParcelOrgStaffRow; stations: ParcelOrgStationRow[]; submitLabel: string; onDone: () => void; onCancel: () => void;
 }) {
   const [name, setName] = useState(initial?.name ?? '');
   const [role, setRole] = useState(initial?.role ?? 'RIDER');
   const [pin, setPin] = useState('');
   const [partyId, setPartyId] = useState(initial?.partyId ?? '');
   const [active, setActive] = useState(initial?.active ?? true);
+  const [stationId, setStationId] = useState(initial?.stationId ?? '');
   const [error, setError] = useState<string | null>(null);
   const [pending, startTransition] = useTransition();
   const ids = { name: useId(), role: useId(), pin: useId(), party: useId(), active: useId() };
@@ -117,6 +121,7 @@ function StaffForm({
     startTransition(async () => {
       const result = await saveOrgStaff({
         id: initial?.id, name: name.trim(), role, pin, partyId: partyId.trim() || null, active,
+        stationId: stationId || null,
       });
       if (result.ok) onDone();
       else setError(result.error);
@@ -162,6 +167,14 @@ function StaffForm({
         <span className="sub" style={{ fontSize: '.78rem' }}>
           A rider needs this to scan parcels into their own hands. Dispatchers and managers don’t.
         </span>
+      </div>
+
+      <div>
+        <label className="sub" htmlFor={ids.active} style={{ display: 'block', marginBottom: 4 }}>Assigned station</label>
+        <select style={inputStyle} value={stationId} onChange={(e) => setStationId(e.target.value)}>
+          <option value="">All company operations</option>
+          {stations.map((station) => <option key={station.id} value={station.id}>{station.name}</option>)}
+        </select>
       </div>
 
       <label className="sub" htmlFor={ids.active} style={{ display: 'flex', gap: 8, alignItems: 'center' }}>

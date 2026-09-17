@@ -17,8 +17,8 @@ func TestNextHandoffStatusRecoversFromFailure(t *testing.T) {
 	// is now being scanned by someone is, by definition, moving again.
 	// Without this it would stay stranded in a failure state forever.
 	for _, from := range []string{"FAILED_DELIVERY", "HELD_AT_AGENT"} {
-		if got := nextHandoffStatus(from); got != "IN_TRANSIT" {
-			t.Errorf("nextHandoffStatus(%q) = %q, want IN_TRANSIT", from, got)
+		if got := nextHandoffStatus(from, false); got != "IN_TRANSIT" {
+			t.Errorf("nextHandoffStatus(%q, false) = %q, want IN_TRANSIT", from, got)
 		}
 	}
 }

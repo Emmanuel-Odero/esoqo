@@ -128,7 +128,7 @@ func withGenericTrack(msg string) string {
 	if trackingBaseURL == "" {
 		return msg
 	}
-	withLink := msg + " Track: " + trackingBaseURL + "/send-parcel/track"
+	withLink := msg + " Track: " + trackingBaseURL + "/parcels/track"
 	if len(withLink) > smsSegmentBudget {
 		return msg
 	}
@@ -147,7 +147,7 @@ func ParcelStaffInviteURL(orgSlug, name string) string {
 	if trackingBaseURL == "" {
 		return ""
 	}
-	return trackingBaseURL + "/send-parcel/track?orgSlug=" + url.QueryEscape(orgSlug) + "&name=" + url.QueryEscape(name)
+	return trackingBaseURL + "/parcels/track?orgSlug=" + url.QueryEscape(orgSlug) + "&name=" + url.QueryEscape(name)
 }
 
 // ParcelStaffInvited — sent the moment an admin invites a courier
@@ -273,11 +273,11 @@ func VoucherGifted(amountKES float64, giftedByName, cardLabel, shortCode string)
 func ParcelCollectionScheduled(code, collectorName, collectorMsisdn, scheduledWindow string) string {
 	if collectorMsisdn == "" {
 		return fmt.Sprintf(
-			"Esoqo Logistics: %s will collect parcel %s at %s. Please have it ready.",
+			"ESOQO PARCEL: %s will collect parcel %s at %s. Please have it ready.",
 			trunc(collectorName), code, scheduledWindow)
 	}
 	return fmt.Sprintf(
-		"Esoqo Logistics: %s (%s) will collect parcel %s at %s. Please have it ready.",
+		"ESOQO PARCEL: %s (%s) will collect parcel %s at %s. Please have it ready.",
 		trunc(collectorName), collectorMsisdn, code, scheduledWindow)
 }
 
@@ -288,7 +288,7 @@ func ParcelCollectionScheduled(code, collectorName, collectorMsisdn, scheduledWi
 // don't need this — they already know, they just did it themselves.
 func ParcelPickupAssigned(code, senderName, originLabel, scheduledWindow string) string {
 	return fmt.Sprintf(
-		"Esoqo Logistics: New pickup. Parcel %s from %s at %s. Collect by %s.",
+		"ESOQO PARCEL: New pickup. Parcel %s from %s at %s. Collect by %s.",
 		code, trunc(senderName), trunc(originLabel), scheduledWindow)
 }
 
@@ -301,11 +301,11 @@ func ParcelPickupAssigned(code, senderName, originLabel, scheduledWindow string)
 func ParcelPickedUp(code, destinationLabel, courierName string) string {
 	if courierName == "" {
 		return withTrack(fmt.Sprintf(
-			"Esoqo Logistics: Parcel %s picked up and on its way to %s.",
+			"ESOQO PARCEL: Parcel %s picked up and on its way to %s.",
 			code, trunc(destinationLabel)), code)
 	}
 	return withTrack(fmt.Sprintf(
-		"Esoqo Logistics: Parcel %s picked up by %s and on its way to %s.",
+		"ESOQO PARCEL: Parcel %s picked up by %s and on its way to %s.",
 		code, trunc(courierName), trunc(destinationLabel)), code)
 }
 
@@ -323,7 +323,7 @@ func ParcelPickedUp(code, destinationLabel, courierName string) string {
 func ParcelInTransitToYou(code, senderName, originLabel, deliveryCode, carrierName string) string {
 	if carrierName == "" {
 		return withTrack(fmt.Sprintf(
-			"Esoqo Logistics: A parcel from %s (%s, from %s) is on its way to you. Give the courier code %s to receive it.",
+			"ESOQO PARCEL: A parcel from %s (%s, from %s) is on its way to you. Give the courier code %s to receive it.",
 			trunc(senderName), code, trunc(originLabel), deliveryCode), code)
 	}
 	// Drops the origin clause rather than the carrier name when both
@@ -332,7 +332,7 @@ func ParcelInTransitToYou(code, senderName, originLabel, deliveryCode, carrierNa
 	// receive the parcel; "from Westlands" is the one clause that isn't
 	// load-bearing for that.
 	return withTrack(fmt.Sprintf(
-		"Esoqo Logistics: A parcel from %s (%s) is on its way to you via %s. Code %s to receive it.",
+		"ESOQO PARCEL: A parcel from %s (%s) is on its way to you via %s. Code %s to receive it.",
 		trunc(senderName), code, trunc(carrierName), deliveryCode), code)
 }
 
@@ -368,8 +368,8 @@ func courierCompanyLabel(carrierOrgName *string) string {
 // (ParcelOrgDispatchSummary), never the sender.
 func ParcelIntakeConfirmed(code string, carrierOrgName *string, officeLabel, receiverName, receiverMsisdn string) string {
 	full := fmt.Sprintf(
-		"Esoqo Parcel: Confirmed you submitted parcel %s at %s, %s. We'll text you when %s (%s) gets it.",
-		code, courierCompanyLabel(carrierOrgName), trunc(officeLabel), trunc(receiverName), receiverMsisdn)
+		"ESOQO PARCEL: Your parcel %s was accepted by %s at %s. Track it here.",
+		code, courierCompanyLabel(carrierOrgName), trunc(officeLabel))
 	if len(full) <= smsSegmentBudget {
 		return withTrack(full, code)
 	}
@@ -379,8 +379,8 @@ func ParcelIntakeConfirmed(code string, carrierOrgName *string, officeLabel, rec
 	// over, so naming it back to them is the least valuable thing in the
 	// sentence. Who has it and who it's going to both stay.
 	return withTrack(fmt.Sprintf(
-		"Esoqo Parcel: Confirmed you submitted parcel %s at %s. We'll text you when %s (%s) gets it.",
-		code, courierCompanyLabel(carrierOrgName), trunc(receiverName), receiverMsisdn), code)
+		"ESOQO PARCEL: Your parcel %s was accepted by %s at %s. Track it here.",
+		code, courierCompanyLabel(carrierOrgName), trunc(officeLabel)), code)
 }
 
 // ParcelIntakeConfirmedToReceiver — the receiver's side of the same
@@ -402,12 +402,12 @@ func ParcelIntakeConfirmedToReceiver(code, senderName string, carrierOrgName *st
 	// blank where a code should be.
 	if deliveryCode == "" {
 		return withTrack(fmt.Sprintf(
-			"Esoqo Parcel: Confirmed %s has sent you parcel %s via %s. We'll text you when it's ready for collection.",
-			trunc(senderName), code, courierCompanyLabel(carrierOrgName)), code)
+			"ESOQO PARCEL: Parcel %s from %s via %s is being prepared for delivery. Track it here.",
+			code, trunc(senderName), courierCompanyLabel(carrierOrgName)), code)
 	}
 	return withTrack(fmt.Sprintf(
-		"Esoqo Parcel: %s has sent you parcel %s via %s. Give the courier code %s to receive it.",
-		trunc(senderName), code, courierCompanyLabel(carrierOrgName), deliveryCode), code)
+		"ESOQO PARCEL: Parcel %s from %s via %s is being prepared for delivery. Delivery code: %s. Track it here.",
+		code, trunc(senderName), courierCompanyLabel(carrierOrgName), deliveryCode), code)
 }
 
 // ParcelOrgDispatchSummary — sent to a courier company's dispatch desk
@@ -428,7 +428,7 @@ func ParcelIntakeConfirmedToReceiver(code, senderName string, carrierOrgName *st
 // ParcelNotifyInfo.ParcelOrgID's own comment).
 func ParcelOrgDispatchSummary(orgName, code string, dispatchedToday int) string {
 	return withTrack(fmt.Sprintf(
-		"Esoqo: %s dispatched from %s - %d %s sent today.",
+		"ESOQO PARCEL: %s dispatched from %s - %d %s sent today.",
 		code, trunc(orgName), dispatchedToday, plural(dispatchedToday, "parcel", "parcels")), code)
 }
 
@@ -448,11 +448,11 @@ func ParcelDeliveryAttemptFailed(code, attemptText string, attempts int) string 
 		// about to be returned, so the message has to say so rather than
 		// promise another attempt nobody has committed to.
 		return withTrack(fmt.Sprintf(
-			"Esoqo Logistics: We tried %d times to deliver %s - %s. Call us today or it goes back to the sender.",
+			"ESOQO PARCEL: We tried %d times to deliver %s - %s. Call us today or it goes back to the sender.",
 			attempts, code, attemptText), code)
 	}
 	return withTrack(fmt.Sprintf(
-		"Esoqo Logistics: We tried to deliver %s but %s. We'll try again - reply or call to arrange a time.",
+		"ESOQO PARCEL: We tried to deliver %s but %s. We'll try again - reply or call to arrange a time.",
 		code, attemptText), code)
 }
 
@@ -460,23 +460,37 @@ func ParcelDeliveryAttemptFailed(code, attemptText string, attempts int) string 
 // Carries the shop's own location text and phone because a status of
 // "at a pickup point" is useless without them, and carries the delivery
 // code because that is still what the agent checks at the counter.
-func ParcelAtAgent(code, agentName, locationHint, openingHours, deliveryCode string) string {
+func ParcelAtAgent(code, agentName, locationHint, openingHours, deliveryCode string, carrierOrgName *string) string {
 	msg := fmt.Sprintf(
-		"Esoqo Logistics: Parcel %s is ready at %s (%s). Bring code %s.",
-		code, trunc(agentName), trunc(locationHint), deliveryCode)
+		"ESOQO PARCEL: Parcel %s via %s is ready at %s (%s). Bring code %s.",
+		code, courierCompanyLabel(carrierOrgName), trunc(agentName), trunc(locationHint), deliveryCode)
 	// Hours are the first thing dropped when the budget is tight: a
 	// receiver who knows where to go and what to bring can find out the
 	// hours by walking there or calling, but a receiver who never got
 	// the shop name has nothing at all.
 	if openingHours != "" {
 		withHours := fmt.Sprintf(
-			"Esoqo Logistics: Parcel %s is ready at %s (%s), open %s. Bring code %s.",
-			code, trunc(agentName), trunc(locationHint), trunc(openingHours), deliveryCode)
+			"ESOQO PARCEL: Parcel %s via %s is ready at %s (%s), open %s. Bring code %s.",
+			code, courierCompanyLabel(carrierOrgName), trunc(agentName), trunc(locationHint), trunc(openingHours), deliveryCode)
 		if len(withHours) <= smsSegmentBudget {
 			msg = withHours
 		}
 	}
 	return withTrack(msg, code)
+}
+
+// ParcelPickupReminder is sent only from the collection queue. The count is
+// included so repeated reminders remain auditable to the receiver and staff.
+func ParcelPickupReminder(code string, reminderCount int) string {
+	return withTrack(fmt.Sprintf(
+		"ESOQO PARCEL: Parcel %s is waiting for collection. Reminder %d. Bring your delivery code.",
+		code, reminderCount), code)
+}
+
+func ParcelRejectedAtDropoff(code, reason string) string {
+	return withTrack(fmt.Sprintf(
+		"ESOQO PARCEL: We could not accept parcel %s at drop-off. Reason: %s. Please collect it from the counter.",
+		code, trunc(reason)), code)
 }
 
 // ParcelCodBooked — the seller's confirmation that a cash-on-delivery
@@ -488,7 +502,7 @@ func ParcelAtAgent(code, agentName, locationHint, openingHours, deliveryCode str
 // actually true — the job is accepted, the cash comes at the door.
 func ParcelCodBooked(code, receiverName, destinationLabel string) string {
 	return withTrack(fmt.Sprintf(
-		"Esoqo Logistics: Parcel %s to %s, %s is booked. Your buyer pays the rider on delivery.",
+		"ESOQO PARCEL: Parcel %s to %s, %s is booked. Your buyer pays the rider on delivery.",
 		code, trunc(receiverName), trunc(destinationLabel)), code)
 }
 
@@ -503,11 +517,11 @@ func ParcelCodBooked(code, receiverName, destinationLabel string) string {
 func ParcelCodCollected(code, goodsKes, shortfallKes string, short bool) string {
 	if short {
 		return withTrack(fmt.Sprintf(
-			"Esoqo Logistics: Your buyer paid KES %s for parcel %s - KES %s short. We'll settle the %s to you.",
+			"ESOQO PARCEL: Your buyer paid KES %s for parcel %s - KES %s short. We'll settle the %s to you.",
 			goodsKes, code, shortfallKes, goodsKes), code)
 	}
 	return withTrack(fmt.Sprintf(
-		"Esoqo Logistics: Your buyer paid in full for parcel %s. KES %s will be settled to you.",
+		"ESOQO PARCEL: Your buyer paid in full for parcel %s. KES %s will be settled to you.",
 		code, goodsKes), code)
 }
 
@@ -516,7 +530,7 @@ func ParcelCodCollected(code, goodsKes, shortfallKes string, short bool) string 
 // opening anything.
 func ParcelCodSettled(paidKes string, parcels int, sellerName string) string {
 	return fmt.Sprintf(
-		"Esoqo Logistics: KES %s settled to you for %d cash-on-delivery %s. Thanks for using Esoqo.",
+		"ESOQO PARCEL: KES %s settled to you for %d cash-on-delivery %s. Thanks for using Esoqo.",
 		paidKes, parcels, plural(parcels, "parcel", "parcels"))
 }
 
@@ -538,11 +552,11 @@ func plural(n int, one, many string) string {
 func ParcelOnBus(code, plate, routeName, stageName string) string {
 	if stageName != "" {
 		return withTrack(fmt.Sprintf(
-			"Esoqo Logistics: Parcel %s is on bus %s (%s), coming off at %s.",
+			"ESOQO PARCEL: Parcel %s is on bus %s (%s), coming off at %s.",
 			code, plate, trunc(routeName), trunc(stageName)), code)
 	}
 	return withTrack(fmt.Sprintf(
-		"Esoqo Logistics: Parcel %s is on bus %s (%s), riding to the last stop.",
+		"ESOQO PARCEL: Parcel %s is on bus %s (%s), riding to the last stop.",
 		code, plate, trunc(routeName)), code)
 }
 
@@ -568,7 +582,7 @@ func CourierPaid(amountKes string, reference *string) string {
 // is the one thing a sender chasing a stalled delivery needs to hear.
 func ParcelReturnedToSender(code, reason string) string {
 	return withTrack(fmt.Sprintf(
-		"Esoqo Logistics: Parcel %s could not be delivered (%s) and is on its way back to you.",
+		"ESOQO PARCEL: Parcel %s could not be delivered (%s) and is on its way back to you.",
 		code, trunc(reason)), code)
 }
 
@@ -579,14 +593,14 @@ func ParcelReturnedToSender(code, reason string) string {
 // "delivered" text doesn't match what they expected.
 func ParcelDelivered(code, destinationLabel string, deliveredAt time.Time) string {
 	return withTrack(fmt.Sprintf(
-		"Esoqo Logistics: Parcel %s was delivered to %s at %s.",
+		"ESOQO PARCEL: Parcel %s was delivered to %s at %s.",
 		code, trunc(destinationLabel), deliveredAt.Format("15:04 on 2 Jan")), code)
 }
 
 // ParcelReceived — receiver's side of the same delivery event.
 func ParcelReceived(code, senderName string, deliveredAt time.Time) string {
 	return fmt.Sprintf(
-		"Esoqo Logistics: You received parcel %s from %s at %s. Thanks for using Esoqo.",
+		"ESOQO PARCEL: You received parcel %s from %s at %s. Thanks for using Esoqo.",
 		code, trunc(senderName), deliveredAt.Format("15:04 on 2 Jan"))
 }
 
@@ -595,7 +609,7 @@ func ParcelReceived(code, senderName string, deliveredAt time.Time) string {
 // draft; for a paid one it says exactly what happens to the money —
 // never leaves the sender to wonder.
 func ParcelCancelled(code, reason, refundNote string) string {
-	msg := fmt.Sprintf("Esoqo Logistics: Parcel %s cancelled: %s.", code, reason)
+	msg := fmt.Sprintf("ESOQO PARCEL: Parcel %s cancelled: %s.", code, reason)
 	if refundNote != "" {
 		msg += " " + refundNote
 	}
@@ -609,7 +623,7 @@ func ParcelCancelled(code, reason, refundNote string) string {
 // one thing a sender waiting on a refund actually wants confirmed.
 func ParcelRefunded(code, amountKes string) string {
 	return fmt.Sprintf(
-		"Esoqo Logistics: KES %s refund for parcel %s has been processed to your M-Pesa.",
+		"ESOQO PARCEL: KES %s refund for parcel %s has been processed to your M-Pesa.",
 		amountKes, code)
 }
 
@@ -625,11 +639,11 @@ func ParcelRefunded(code, amountKes string) string {
 func ParcelPaymentConfirmed(code, priceKes, receiverName, destinationLabel, mpesaReceiptCode string) string {
 	if mpesaReceiptCode == "" {
 		return withTrack(fmt.Sprintf(
-			"Esoqo Logistics: KES %s received for parcel %s to %s, %s.",
+			"ESOQO PARCEL: KES %s received for parcel %s to %s, %s.",
 			priceKes, code, trunc(receiverName), trunc(destinationLabel)), code)
 	}
 	return withTrack(fmt.Sprintf(
-		"Esoqo Logistics: KES %s received for parcel %s to %s, %s. M-Pesa ref %s.",
+		"ESOQO PARCEL: KES %s received for parcel %s to %s, %s. M-Pesa ref %s.",
 		priceKes, code, trunc(receiverName), trunc(destinationLabel), mpesaReceiptCode), code)
 }
 
@@ -639,7 +653,7 @@ func ParcelPaymentConfirmed(code, priceKes, receiverName, destinationLabel, mpes
 // which is only ever the courier's own claim of drop-off.
 func ParcelReceiptConfirmed(code, receiverName string, rating int) string {
 	return fmt.Sprintf(
-		"Esoqo Logistics: %s confirmed receiving parcel %s and rated its condition %d/5. Thanks for using Esoqo.",
+		"ESOQO PARCEL: %s confirmed receiving parcel %s and rated its condition %d/5. Thanks for using Esoqo.",
 		trunc(receiverName), code, rating)
 }
 

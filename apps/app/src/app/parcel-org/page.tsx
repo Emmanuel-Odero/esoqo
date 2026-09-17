@@ -136,6 +136,7 @@ export default async function ParcelOrgDashboard(
           style={{ padding: '6px 8px', border: '1.5px solid var(--line)', borderRadius: 6 }}>
           <option value="">All statuses</option>
           <option value="BOOKED">Waiting for a rider</option>
+          <option value="RECEIVED_AT_COUNTER">At the station</option>
           <option value="PICKED_UP">Picked up</option>
           <option value="IN_TRANSIT">On the way</option>
           <option value="FAILED_DELIVERY">Delivery attempted</option>

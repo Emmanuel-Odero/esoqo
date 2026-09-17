@@ -1,8 +1,8 @@
 import type { Metadata } from 'next';
 import Link from 'next/link';
 import { Icon } from '@esoqo/ui';
-import { actionCheckParcelStatus } from '../../send-parcel/actions';
-import { ParcelStatusPanel } from '../../send-parcel/ParcelStatusPanel';
+import { actionCheckParcelStatus } from '../../parcels/actions';
+import { ParcelStatusPanel } from '../../parcels/ParcelStatusPanel';
 
 /**
  * Where a scanned parcel label lands.
@@ -118,7 +118,7 @@ function NotFound({ code }: { code: string }) {
         Check the code against the label, or try again in a moment if it was only just printed.
       </p>
       <p style={{ marginTop: 14 }}>
-        <Link className="btn btn-o btn-sm" href="/send-parcel/track">Track a different parcel</Link>
+        <Link className="btn btn-o btn-sm" href="/parcels/track">Track a different parcel</Link>
       </p>
     </div>
   );
@@ -134,7 +134,7 @@ function Unavailable({ message }: { message: string }) {
       <p style={{ margin: '10px 0 2px', fontWeight: 700 }}>We couldn&apos;t check that parcel</p>
       <p className="sub" style={{ margin: 0 }}>{message}</p>
       <p style={{ marginTop: 14 }}>
-        <Link className="btn btn-o btn-sm" href="/send-parcel/track">Try again</Link>
+        <Link className="btn btn-o btn-sm" href="/parcels/track">Try again</Link>
       </p>
     </div>
   );

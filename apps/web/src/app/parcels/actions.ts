@@ -1,5 +1,7 @@
 'use server';
 
+import { normalizePublicBookingResponse } from './booking-response';
+
 // Same convention as apps/web/tickets/[slug]/actions.ts: server-side Go
 // calls use the docker/compose service URL, falling back to localhost
 // for bare-metal dev. No auth header anywhere in this file — sending a
@@ -147,12 +149,12 @@ export interface BookParcelInput {
  *  themselves and relay it proactively if they'd rather. */
 export async function actionBookParcel(
   input: BookParcelInput,
-): Promise<{ ok: true; serviceTicketNumber: string; deliveryCode: string } | { ok: false; error: string }> {
+): Promise<{ ok: true; code: string; serviceTicketNumber: string; deliveryCode: string } | { ok: false; error: string }> {
   if (!input.senderName.trim() || !input.senderMsisdn.trim()) return { ok: false, error: 'Enter your name and phone number' };
   if (!input.receiverName.trim() || !input.receiverMsisdn.trim()) return { ok: false, error: "Enter the receiver's name and phone number" };
   if (!input.originLabel.trim() || !input.destinationLabel.trim()) return { ok: false, error: 'Enter where it’s coming from and going to' };
   try {
-    const json = await goFetch<{ serviceTicketNumber: string; deliveryCode: string }>('/v1/parcels', {
+    const json = await goFetch<{ code?: string; serviceTicketNumber?: string; deliveryCode?: string }>('/v1/parcels', {
       method: 'POST',
       body: JSON.stringify({
         senderName: input.senderName.trim(), senderMsisdn: input.senderMsisdn.trim(),
@@ -167,7 +169,13 @@ export async function actionBookParcel(
         payAtCounter: input.payAtCounter ?? false,
       }),
     });
-    return { ok: true, serviceTicketNumber: json.serviceTicketNumber, deliveryCode: json.deliveryCode };
+    const normalized = normalizePublicBookingResponse(json);
+    return {
+      ok: true,
+      code: normalized.code,
+      serviceTicketNumber: normalized.serviceTicketNumber,
+      deliveryCode: normalized.deliveryCode,
+    };
   } catch (e) {
     return { ok: false, error: e instanceof Error ? e.message : UNAVAILABLE };
   }
@@ -211,6 +219,14 @@ export interface AwaitingIntakeView {
 export interface ParcelStatusView {
   code: string; status: string; originLabel: string; destinationLabel: string;
   parcelType: string; priceKes: string | null; createdAt: string; deliveredAt: string | null;
+  /** When the box was first physically received — a counter receipt or
+   *  the first pickup. Dates the "received" stage on the tracker. */
+  intakeConfirmedAt?: string | null;
+  /** The full custody timeline, oldest first, guest-safe (time + stage
+   *  label only, never a holder's name). Lets the tracker show
+   *  "received at counter 2:14pm → delivered 5:40pm" rather than a bare
+   *  current status. See dbx.ListParcelTrackEvents. */
+  events?: ParcelTrackEventView[];
   /** The delivery promise frozen at payment time — what lets the page
    *  say "arriving by 4pm today" instead of showing a stepper with no
    *  sense of time at all. */
@@ -249,6 +265,15 @@ export interface ParcelStatusView {
   // a typed code, or a label printed before signing existed, has no
   // signature to check. See the /p/[code] page.
   labelVerdict?: string;
+}
+
+/** One line of the public custody timeline. `label` is the server's own
+ *  human sentence so web, mobile and any future surface don't each map
+ *  the raw status themselves. */
+export interface ParcelTrackEventView {
+  at: string;
+  status: string;
+  label: string;
 }
 
 /** Where the parcel is right now. Deliberately anonymous — no courier
