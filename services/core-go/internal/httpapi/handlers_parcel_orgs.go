@@ -10,6 +10,7 @@ import (
 	"github.com/esoqo/core-go/internal/audit"
 	"github.com/esoqo/core-go/internal/authsvc"
 	"github.com/esoqo/core-go/internal/dbx"
+	"github.com/esoqo/core-go/internal/fleetqr"
 	"github.com/esoqo/core-go/internal/notify"
 )
 
@@ -299,6 +300,7 @@ func (s *Server) handleGetMyParcelOrg(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{
 		"org": gin.H{
 			"id": org.ID, "name": org.Name, "slug": org.Slug, "status": org.Status,
+			"logoUrl": org.LogoUrl, "brandAccent": org.BrandAccent,
 		},
 		"stats":        stats,
 		"role":         ctx.ActorType,
@@ -420,6 +422,13 @@ func (s *Server) handleResolveOrgLabel(c *gin.Context) {
 		writeError(c, http.StatusNotFound, "NOT_FOUND", "That isn't one of your company's labels")
 		return
 	}
+	// Sign so a resolved label reprints genuine — same binding as the
+	// register (code + owning org + batch).
+	batch := ""
+	if label.BatchID != nil {
+		batch = *label.BatchID
+	}
+	label.Sig = fleetqr.SignLabel(s.Cfg.FleetQrSecret, label.Code, orgID, batch)
 	c.JSON(http.StatusOK, gin.H{"label": label})
 }
 
@@ -981,6 +990,12 @@ type parcelOrgRequest struct {
 	Lng           *float64 `json:"lng"`
 	LocationHint  *string  `json:"locationHint"`
 	OpeningHours  *string  `json:"openingHours"`
+
+	// Co-branded label assets. LogoUrl prints centered in the label
+	// header; null/empty = Esoqo branding alone.
+	LogoStorageKey *string `json:"logoStorageKey"`
+	LogoUrl        *string `json:"logoUrl"`
+	BrandAccent    *string `json:"brandAccent"`
 }
 
 func (r parcelOrgRequest) toInput() dbx.ParcelOrgInput {
@@ -992,6 +1007,7 @@ func (r parcelOrgRequest) toInput() dbx.ParcelOrgInput {
 		CommissionPct: r.CommissionPct,
 		AcceptsWalkIn: r.AcceptsWalkIn, Lat: r.Lat, Lng: r.Lng,
 		LocationHint: r.LocationHint, OpeningHours: r.OpeningHours,
+		LogoStorageKey: r.LogoStorageKey, LogoUrl: r.LogoUrl, BrandAccent: r.BrandAccent,
 	}
 }
 

@@ -539,6 +539,10 @@ func (s *Server) handleGetParcelLabel(c *gin.Context) {
 		writeError(c, http.StatusNotFound, "NOT_FOUND", "That parcel was not found")
 		return
 	}
+	// Sign from the stock row (print-time truth) so the reprint is
+	// genuine; branding rides on the same row. Parcels booked at
+	// checkout with no stock row sign as empty and print Esoqo alone.
+	label.Sig = fleetqr.SignLabel(s.Cfg.FleetQrSecret, label.Code, label.StockOrgID, label.StockBatchID)
 	c.JSON(http.StatusOK, label)
 }
 
