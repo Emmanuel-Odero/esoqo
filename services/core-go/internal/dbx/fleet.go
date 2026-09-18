@@ -687,6 +687,134 @@ func LatestPositions(ctx context.Context, pool *pgxpool.Pool, c authsvc.Ctx, org
 	return out, rows.Err()
 }
 
+// FleetOverview — the manager's "how is the fleet doing today" header.
+// One round trip rather than the console fanning out to trips +
+// collections-per-trip + vehicles + crew just to draw four numbers.
+// Read-only (fleet.read), so a MANAGER sees it; the money figures are
+// the same arithmetic the per-trip collections screen uses, just rolled
+// up to the org for the day.
+type FleetOverview struct {
+	ActiveTrips       int    `json:"activeTrips"`
+	VehiclesOnRoad    int    `json:"vehiclesOnRoad"`
+	FleetSize         int    `json:"fleetSize"`
+	CrewActive        int    `json:"crewActive"`
+	RoutesActive      int    `json:"routesActive"`
+	ReportingVehicles int    `json:"reportingVehicles"`
+	FaresTodayCount   int    `json:"faresTodayCount"`
+	FaresTodayKes     string `json:"faresTodayKes"`
+	CashFaresTodayKes string `json:"cashFaresTodayKes"`
+	DeclaredCashToday string `json:"declaredCashTodayKes"`
+	CashVarianceToday string `json:"cashVarianceTodayKes"`
+}
+
+func GetFleetOverview(ctx context.Context, pool *pgxpool.Pool, c authsvc.Ctx, orgID string) (*FleetOverview, error) {
+	if _, err := AssertOwnsOrg(ctx, pool, c, orgID, authsvc.CapFleetRead); err != nil {
+		return nil, err
+	}
+	var o FleetOverview
+	var faresToday, cashFares, declaredCash float64
+	err := pool.QueryRow(ctx, `
+		SELECT
+		  (SELECT count(*) FROM trip WHERE "orgId" = $1 AND status = 'ACTIVE'),
+		  (SELECT count(DISTINCT t."vehicleId") FROM trip t WHERE t."orgId" = $1 AND t.status = 'ACTIVE'),
+		  (SELECT count(*) FROM fleet_vehicle WHERE "orgId" = $1 AND status = 'ACTIVE'),
+		  (SELECT count(*) FROM crew_member WHERE "orgId" = $1 AND active),
+		  (SELECT count(*) FROM short_route WHERE "orgId" = $1 AND active),
+		  -- "reporting" = pinged in the last 15 minutes: a bus that went
+		  -- dark is still on the road, but a map that claims otherwise is
+		  -- worse than one that says so.
+		  (SELECT count(DISTINCT t."vehicleId") FROM trip t
+		     JOIN vehicle_ping p ON p."tripId" = t.id
+		    WHERE t."orgId" = $1 AND t.status = 'ACTIVE' AND p.at > now() - interval '15 minutes'),
+		  COALESCE((SELECT count(*) FROM fare_payment f JOIN trip t ON t.id = f."tripId"
+		     WHERE t."orgId" = $1 AND f.status = 'CONFIRMED' AND f."createdAt" >= date_trunc('day', now())), 0),
+		  COALESCE((SELECT sum(f."amountKes") FROM fare_payment f JOIN trip t ON t.id = f."tripId"
+		     WHERE t."orgId" = $1 AND f.status = 'CONFIRMED' AND f."createdAt" >= date_trunc('day', now())), 0)::float8,
+		  COALESCE((SELECT sum(f."amountKes") FROM fare_payment f JOIN trip t ON t.id = f."tripId"
+		     WHERE t."orgId" = $1 AND f.status = 'CONFIRMED' AND f.method = 'CASH' AND f."createdAt" >= date_trunc('day', now())), 0)::float8,
+		  COALESCE((SELECT sum(d."declaredCashKes") FROM collection_declaration d JOIN trip t ON t.id = d."tripId"
+		     WHERE t."orgId" = $1 AND d."createdAt" >= date_trunc('day', now())), 0)::float8`,
+		orgID).
+		Scan(&o.ActiveTrips, &o.VehiclesOnRoad, &o.FleetSize, &o.CrewActive, &o.RoutesActive,
+			&o.ReportingVehicles, &o.FaresTodayCount, &faresToday, &cashFares, &declaredCash)
+	if err != nil {
+		return nil, err
+	}
+	o.FaresTodayKes = fmt.Sprintf("%.2f", faresToday)
+	o.CashFaresTodayKes = fmt.Sprintf("%.2f", cashFares)
+	o.DeclaredCashToday = fmt.Sprintf("%.2f", declaredCash)
+	o.CashVarianceToday = fmt.Sprintf("%.2f", cashFares-declaredCash)
+	return &o, nil
+}
+
+// ActiveTrails — the ordered recent pings of every active trip, for the
+// live map's route lines. LatestPositions gives one dot per vehicle;
+// this is the path that dot came in on. Bounded to the last
+// [sinceMinutes] so a long shift can't grow the response without limit,
+// and capped per trip in the query (not here) so one chatty handset
+// can't crowd out the rest.
+type TrailPoint struct {
+	Lat string `json:"lat"`
+	Lng string `json:"lng"`
+	At  string `json:"at"`
+}
+
+type ActiveTrail struct {
+	TripID       string       `json:"tripId"`
+	VehicleID    string       `json:"vehicleId"`
+	VehiclePlate string       `json:"vehiclePlate"`
+	Points       []TrailPoint `json:"points"`
+}
+
+func ActiveTrails(ctx context.Context, pool *pgxpool.Pool, c authsvc.Ctx, orgID string, sinceMinutes int) ([]ActiveTrail, error) {
+	if _, err := AssertOwnsOrg(ctx, pool, c, orgID, authsvc.CapVehicleTrack); err != nil {
+		return nil, err
+	}
+	if sinceMinutes <= 0 || sinceMinutes > 24*60 {
+		sinceMinutes = 60
+	}
+	rows, err := pool.Query(ctx, `
+		SELECT t.id, t."vehicleId", v."plateNo", p.lat::text, p.lng::text, p.at::text
+		FROM vehicle_ping p
+		JOIN trip t ON t.id = p."tripId"
+		JOIN fleet_vehicle v ON v.id = t."vehicleId"
+		WHERE t."orgId" = $1 AND t.status = 'ACTIVE' AND p.at > now() - make_interval(mins => $2)
+		ORDER BY t.id, p.at ASC`, orgID, sinceMinutes)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	byTrip := map[string]*ActiveTrail{}
+	var order []string
+	for rows.Next() {
+		var tripID, vehicleID, plate string
+		var pt TrailPoint
+		if err := rows.Scan(&tripID, &vehicleID, &plate, &pt.Lat, &pt.Lng, &pt.At); err != nil {
+			return nil, err
+		}
+		trail, ok := byTrip[tripID]
+		if !ok {
+			trail = &ActiveTrail{TripID: tripID, VehicleID: vehicleID, VehiclePlate: plate, Points: []TrailPoint{}}
+			byTrip[tripID] = trail
+			order = append(order, tripID)
+		}
+		// Hard cap per trip so a runaway pinger can't bloat the payload;
+		// keep the MOST RECENT points, hence replacing from the front.
+		if len(trail.Points) >= 200 {
+			trail.Points = trail.Points[1:]
+		}
+		trail.Points = append(trail.Points, pt)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	out := make([]ActiveTrail, 0, len(order))
+	for _, id := range order {
+		out = append(out, *byTrip[id])
+	}
+	return out, nil
+}
+
 // ── fare payments (pay bus fare from the app) ────────────────────
 
 type Fare struct {

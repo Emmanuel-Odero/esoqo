@@ -21,6 +21,7 @@ import (
 	"regexp"
 	"strings"
 
+	"github.com/esoqo/core-go/internal/fleetqr"
 	"github.com/esoqo/core-go/internal/money"
 
 	"github.com/jackc/pgx/v5"
@@ -172,11 +173,12 @@ type AdminParcelOrg struct {
 	ParcelCount    int          `json:"parcelCount"`
 	DeliveredCount int          `json:"deliveredCount"`
 	EarningsKes    money.Amount `json:"earningsKes"`
-	// PrimaryContactName/Phone — the first MANAGER on the roster (active
-	// ones first), not ParcelOrg.contactPerson. A contact is a person and
-	// people leave; the company outlives them. Falls back to the legacy
-	// contactPerson/contactPhone pair only when no manager exists yet, so
-	// data an admin typed before this split is never silently lost.
+	// PrimaryContactName/Phone — the first flagged contact person on the
+	// roster (active ones first), else the first MANAGER, not
+	// ParcelOrg.contactPerson. A contact is a person and people leave; the
+	// company outlives them. Falls back to the legacy
+	// contactPerson/contactPhone pair only when neither exists, so data an
+	// admin typed before this split is never silently lost.
 	PrimaryContactName  *string `json:"primaryContactName"`
 	PrimaryContactPhone *string `json:"primaryContactPhone"`
 }
@@ -203,8 +205,8 @@ const adminParcelOrgJoins = `
 		SELECT st.name, pr2.msisdn
 		FROM parcel_org_staff st
 		LEFT JOIN person pr2 ON pr2."partyId" = st."partyId"
-		WHERE st."orgId" = o.id AND st.role = 'MANAGER'
-		ORDER BY st.active DESC, st."createdAt" ASC
+		WHERE st."orgId" = o.id AND (st."isContact" OR st.role = 'MANAGER')
+		ORDER BY st."isContact" DESC, st.active DESC, st."createdAt" ASC
 		LIMIT 1
 	) mgr ON true`
 
@@ -563,11 +565,15 @@ func CreateEnterpriseForCourierOrg(ctx context.Context, pool *pgxpool.Pool, busi
 // ── Staff ────────────────────────────────────────────────────────────
 
 type ParcelOrgStaff struct {
-	ID        string  `json:"id"`
-	OrgID     string  `json:"orgId"`
-	Name      string  `json:"name"`
-	Role      string  `json:"role"`
-	Active    bool    `json:"active"`
+	ID     string `json:"id"`
+	OrgID  string `json:"orgId"`
+	Name   string `json:"name"`
+	Role   string `json:"role"`
+	Active bool   `json:"active"`
+	// IsContact — one of the company's contact people (multiple allowed).
+	// The register's primary-contact projection prefers these over the
+	// first manager and the legacy parcel_org.contactPerson fallback.
+	IsContact bool    `json:"isContact"`
 	PartyID   *string `json:"partyId"`
 	StationID *string `json:"stationId"`
 	// Msisdn / EsoqoID — the phone and the ESK-… handle this person can
@@ -577,6 +583,12 @@ type ParcelOrgStaff struct {
 	// an office-only login that was never linked to a person.
 	Msisdn  *string `json:"msisdn"`
 	EsoqoID *string `json:"esoqoId"`
+	// Capabilities — a custom ("Other…") role's explicit permission set.
+	// Empty for a preset role, whose bundle is resolved from Role instead
+	// (see authsvc.ParcelStaffCapabilitiesForRole). Surfaced so the admin
+	// and company team screens can show and edit what a custom role
+	// actually grants.
+	Capabilities []string `json:"capabilities"`
 }
 
 // ParcelStaffForSignIn carries the hash, so it is never the type
@@ -589,6 +601,9 @@ type ParcelStaffForSignIn struct {
 	Active  bool
 	PinHash string
 	PartyID *string
+	// Capabilities — a custom role's explicit permission set. Empty for
+	// a preset role, whose bundle is resolved from Role at sign-in.
+	Capabilities []string
 }
 
 // FindParcelStaffForSignIn resolves an org slug plus a free-typed name.
@@ -602,12 +617,12 @@ type ParcelStaffForSignIn struct {
 func FindParcelStaffForSignIn(ctx context.Context, pool *pgxpool.Pool, orgSlug, name string) (*ParcelStaffForSignIn, error) {
 	var s ParcelStaffForSignIn
 	err := pool.QueryRow(ctx, `
-		SELECT st.id, st."orgId", st.name, st.role, st.active, st."pinHash", st."partyId"::text
+		SELECT st.id, st."orgId", st.name, st.role, st.active, st."pinHash", st."partyId"::text, st.capabilities
 		FROM parcel_org_staff st
 		JOIN parcel_org o ON o.id = st."orgId"
 		WHERE o.slug = $1 AND lower(st.name) = lower($2) AND o.status = 'ACTIVE'`,
 		orgSlug, strings.TrimSpace(name)).
-		Scan(&s.ID, &s.OrgID, &s.Name, &s.Role, &s.Active, &s.PinHash, &s.PartyID)
+		Scan(&s.ID, &s.OrgID, &s.Name, &s.Role, &s.Active, &s.PinHash, &s.PartyID, &s.Capabilities)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return nil, nil
 	}
@@ -619,8 +634,8 @@ func FindParcelStaffForSignIn(ctx context.Context, pool *pgxpool.Pool, orgSlug, 
 
 func FindParcelStaffForSignInByPartyID(ctx context.Context, pool *pgxpool.Pool, orgSlug, partyID string) (*ParcelStaffForSignIn, error) {
 	var s ParcelStaffForSignIn
-	err := pool.QueryRow(ctx, `SELECT st.id, st."orgId", st.name, st.role, st.active, st."pinHash", st."partyId"::text FROM parcel_org_staff st JOIN parcel_org o ON o.id = st."orgId" WHERE o.slug = $1 AND st."partyId" = $2 AND o.status = 'ACTIVE'`, orgSlug, partyID).
-		Scan(&s.ID, &s.OrgID, &s.Name, &s.Role, &s.Active, &s.PinHash, &s.PartyID)
+	err := pool.QueryRow(ctx, `SELECT st.id, st."orgId", st.name, st.role, st.active, st."pinHash", st."partyId"::text, st.capabilities FROM parcel_org_staff st JOIN parcel_org o ON o.id = st."orgId" WHERE o.slug = $1 AND st."partyId" = $2 AND o.status = 'ACTIVE'`, orgSlug, partyID).
+		Scan(&s.ID, &s.OrgID, &s.Name, &s.Role, &s.Active, &s.PinHash, &s.PartyID, &s.Capabilities)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return nil, nil
 	}
@@ -652,10 +667,37 @@ func ParcelStaffMsisdn(ctx context.Context, pool *pgxpool.Pool, orgSlug, name st
 	return msisdn, err
 }
 
+// FindParcelStaffForSignInByOrgAndParty — the one-click entry's
+// authorization check: does this signed-in Person hold an active staff
+// row on THIS company, and if so what role. Keyed by org id (not slug)
+// because the dashboard already has the id from /v1/me/parcel-orgs.
+//
+// Requires the company to be ACTIVE, same as every other sign-in path
+// (FindParcelStaffForSignIn's own WHERE clause) — a DRAFT or suspended
+// tenant is not somewhere a click should drop someone into. Returns nil
+// (not an error) on a miss so the handler can answer a flat 403.
+func FindParcelStaffForSignInByOrgAndParty(ctx context.Context, pool *pgxpool.Pool, orgID, partyID string) (*ParcelStaffForSignIn, error) {
+	var s ParcelStaffForSignIn
+	err := pool.QueryRow(ctx, `
+		SELECT st.id, st."orgId", st.name, st.role, st.active, st."pinHash", st."partyId"::text, st.capabilities
+		FROM parcel_org_staff st
+		JOIN parcel_org o ON o.id = st."orgId"
+		WHERE st."orgId" = $1 AND st."partyId" = $2 AND st.active AND o.status = 'ACTIVE'`,
+		orgID, partyID).
+		Scan(&s.ID, &s.OrgID, &s.Name, &s.Role, &s.Active, &s.PinHash, &s.PartyID, &s.Capabilities)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, err
+	}
+	return &s, nil
+}
+
 func ListParcelOrgStaff(ctx context.Context, pool *pgxpool.Pool, orgID string) ([]ParcelOrgStaff, error) {
 	rows, err := pool.Query(ctx, `
-		SELECT st.id, st."orgId", st.name, st.role, st.active, st."partyId"::text, st."stationId"::text,
-		       pr.msisdn, epi.code
+		SELECT st.id, st."orgId", st.name, st.role, st.active, st."isContact", st."partyId"::text, st."stationId"::text,
+		       pr.msisdn, epi.code, st.capabilities
 		FROM parcel_org_staff st
 		LEFT JOIN person pr ON pr."partyId" = st."partyId"
 		LEFT JOIN esoko_payment_id epi ON epi."partyId" = st."partyId"
@@ -667,12 +709,266 @@ func ListParcelOrgStaff(ctx context.Context, pool *pgxpool.Pool, orgID string) (
 	var out []ParcelOrgStaff
 	for rows.Next() {
 		var s ParcelOrgStaff
-		if err := rows.Scan(&s.ID, &s.OrgID, &s.Name, &s.Role, &s.Active, &s.PartyID, &s.StationID, &s.Msisdn, &s.EsoqoID); err != nil {
+		if err := rows.Scan(&s.ID, &s.OrgID, &s.Name, &s.Role, &s.Active, &s.IsContact, &s.PartyID, &s.StationID, &s.Msisdn, &s.EsoqoID, &s.Capabilities); err != nil {
 			return nil, err
 		}
 		out = append(out, s)
 	}
 	return out, rows.Err()
+}
+
+// MyParcelOrg — one courier company the signed-in person is on the
+// books of. The subject-side mirror of ParcelOrgStaff: where that lists
+// a company's people to a manager, this answers "which companies am I
+// staff of", which nothing else exposes. A person can hold a
+// parcel_org_staff row linked by partyId and still carry only a plain
+// SUBJECT session, so the dashboard has no other way to learn the
+// company exists.
+type MyParcelOrg struct {
+	OrgID  string `json:"orgId"`
+	Name   string `json:"name"`
+	Slug   string `json:"slug"`
+	Status string `json:"status"`
+	Role   string `json:"role"`
+}
+
+// ListMyParcelOrgs — self-scoped by partyID, which the caller must take
+// from the session (ctx.PartyID), never a request param; there is
+// nothing to authorise beyond "this is you". Only active staff rows are
+// returned, so a removed member stops seeing the company immediately.
+// A suspended/ draft company is still listed, with its status, because
+// the person is genuinely on its books — it is the UI's job to say the
+// company isn't trading yet.
+func ListMyParcelOrgs(ctx context.Context, pool *pgxpool.Pool, partyID string) ([]MyParcelOrg, error) {
+	rows, err := pool.Query(ctx, `
+		SELECT o.id, o.name, o.slug, o.status, st.role
+		FROM parcel_org_staff st
+		JOIN parcel_org o ON o.id = st."orgId"
+		WHERE st."partyId" = $1 AND st.active
+		ORDER BY o.name ASC`, partyID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var out []MyParcelOrg
+	for rows.Next() {
+		var o MyParcelOrg
+		if err := rows.Scan(&o.OrgID, &o.Name, &o.Slug, &o.Status, &o.Role); err != nil {
+			return nil, err
+		}
+		out = append(out, o)
+	}
+	return out, rows.Err()
+}
+
+// ── Live dispatch ────────────────────────────────────────────────
+
+// OrgLiveRider — one roster member's latest position. Company riders
+// ping through the same parcel_courier_ping feed platform couriers do
+// when they run the mobile app (there is only one ping table); the join
+// to parcel_org_staff is what scopes someone else's dots out of this
+// company's map. Only the last hour — a dot older than that says where
+// somebody was, not where they are.
+type OrgLiveRider struct {
+	PartyID string `json:"partyId"`
+	Name    string `json:"name"`
+	Role    string `json:"role"`
+	Lat     string `json:"lat"`
+	Lng     string `json:"lng"`
+	At      string `json:"at"`
+}
+
+// OrgLiveParcel — one parcel that either needs a rider or is running
+// late, positioned by its origin zone. Same "needs work" set the admin
+// live map shows, scoped to this company's own parcels.
+type OrgLiveParcel struct {
+	Code     string  `json:"code"`
+	Status   string  `json:"status"`
+	Lat      *string `json:"lat"`
+	Lng      *string `json:"lng"`
+	Overdue  bool    `json:"overdue"`
+	Receiver string  `json:"receiverName"`
+}
+
+// OrgLiveView — everything the company's live dispatch map needs in one
+// round trip, plus the stations that anchor it.
+type OrgLiveView struct {
+	Riders   []OrgLiveRider    `json:"riders"`
+	Parcels  []OrgLiveParcel   `json:"parcels"`
+	Stations []ParcelOrgStation `json:"stations"`
+}
+
+// GetOrgLiveView — the company's own live dispatch: rider dots, parcels
+// needing a rider or running late, and stations. Read capability: every
+// role on the roster holds parcelorg.read, so a rider sees the same map
+// as the dispatcher — the data is operational, not privileged.
+func GetOrgLiveView(ctx context.Context, pool *pgxpool.Pool, orgID string) (*OrgLiveView, error) {
+	view := &OrgLiveView{}
+
+	riderRows, err := pool.Query(ctx, `
+		SELECT DISTINCT ON (st."partyId")
+		       st."partyId"::text, st.name, st.role, p.lat::text, p.lng::text, p.at::text
+		FROM parcel_courier_ping p
+		JOIN parcel_org_staff st ON st."partyId" = p."courierPartyId"
+		WHERE st."orgId" = $1 AND st.active AND p.at > now() - interval '1 hour'
+		ORDER BY st."partyId", p.at DESC`, orgID)
+	if err != nil {
+		return nil, err
+	}
+	for riderRows.Next() {
+		var r OrgLiveRider
+		if err := riderRows.Scan(&r.PartyID, &r.Name, &r.Role, &r.Lat, &r.Lng, &r.At); err != nil {
+			riderRows.Close()
+			return nil, err
+		}
+		view.Riders = append(view.Riders, r)
+	}
+	riderRows.Close()
+	if err := riderRows.Err(); err != nil {
+		return nil, err
+	}
+
+	parcelRows, err := pool.Query(ctx, `
+		SELECT p.code, p.status::text, z.lat::text, z.lng::text,
+		       (p."slaDeadlineAt" IS NOT NULL AND p."slaDeadlineAt" < now()),
+		       p."receiverName"
+		FROM parcel p
+		LEFT JOIN parcel_zone z ON z.id = p."originZoneId"
+		WHERE p."parcelOrgId" = $1
+		  AND ((p.status IN ('BOOKED', 'RECEIVED_AT_COUNTER') AND p."assignedCollectorPartyId" IS NULL)
+		    OR (p.status IN ('PICKED_UP', 'IN_TRANSIT') AND p."slaDeadlineAt" IS NOT NULL AND p."slaDeadlineAt" < now()))
+		ORDER BY p."createdAt" DESC
+		LIMIT 100`, orgID)
+	if err != nil {
+		return nil, err
+	}
+	for parcelRows.Next() {
+		var p OrgLiveParcel
+		if err := parcelRows.Scan(&p.Code, &p.Status, &p.Lat, &p.Lng, &p.Overdue, &p.Receiver); err != nil {
+			parcelRows.Close()
+			return nil, err
+		}
+		view.Parcels = append(view.Parcels, p)
+	}
+	parcelRows.Close()
+	if err := parcelRows.Err(); err != nil {
+		return nil, err
+	}
+
+	stations, err := ListParcelOrgStations(ctx, pool, orgID)
+	if err != nil {
+		return nil, err
+	}
+	for _, s := range stations {
+		if s.Active {
+			view.Stations = append(view.Stations, s)
+		}
+	}
+	if view.Riders == nil {
+		view.Riders = []OrgLiveRider{}
+	}
+	if view.Parcels == nil {
+		view.Parcels = []OrgLiveParcel{}
+	}
+	if view.Stations == nil {
+		view.Stations = []ParcelOrgStation{}
+	}
+	return view, nil
+}
+
+// ── Label scan & attach (org-scoped) ─────────────────────────────
+
+// OrgParcelLabel — one of the company's labels as a scanner sees it:
+// the stock row, whatever field notes have been attached, and the
+// parcel it was spent on, if any.
+type OrgParcelLabel struct {
+	Code            string  `json:"code"`
+	State           string  `json:"state"`
+	ItemDescription *string `json:"itemDescription"`
+	Destination     *string `json:"destination"`
+	SenderName      *string `json:"senderName"`
+	SenderMsisdn    *string `json:"senderMsisdn"`
+	ReceiverName    *string `json:"receiverName"`
+	ReceiverMsisdn  *string `json:"receiverMsisdn"`
+	UsedAt          *string `json:"usedAt"`
+	VoidedAt        *string `json:"voidedAt"`
+	VoidedReason    *string `json:"voidedReason"`
+	ParcelID        *string `json:"parcelId"`
+	ParcelCode      *string `json:"parcelCode"`
+	ParcelStatus    *string `json:"parcelStatus"`
+}
+
+// GetOrgParcelLabel resolves a scanned or typed code against this
+// company's OWN stock only — a code printed for another company (or the
+// shared pool) resolves exactly like a code that doesn't exist, so this
+// endpoint can never become an oracle for anyone else's labels. Returns
+// nil, nil on a miss; the handler answers the uniform "not found".
+func GetOrgParcelLabel(ctx context.Context, pool *pgxpool.Pool, orgID, code string) (*OrgParcelLabel, error) {
+	var l OrgParcelLabel
+	err := pool.QueryRow(ctx, `
+		SELECT s.code,
+		       CASE WHEN s."voidedAt" IS NOT NULL THEN 'voided'
+		            WHEN s."usedAt" IS NOT NULL THEN 'spent'
+		            WHEN s."infoAttachedAt" IS NOT NULL THEN 'filled'
+		            ELSE 'blank' END,
+		       s."itemDescription", s.destination, s."senderName", s."senderMsisdn",
+		       s."receiverName", s."receiverMsisdn",
+		       to_char(s."usedAt", 'YYYY-MM-DD"T"HH24:MI:SSZ'),
+		       to_char(s."voidedAt", 'YYYY-MM-DD"T"HH24:MI:SSZ'),
+		       s."voidedReason",
+		       p.id::text, p.code, p.status::text
+		FROM parcel_label_stock s
+		LEFT JOIN parcel p ON p.id = s."usedByParcelId"
+		WHERE upper(s.code) = upper($1) AND s."parcelOrgId" = $2`, code, orgID).
+		Scan(&l.Code, &l.State, &l.ItemDescription, &l.Destination,
+			&l.SenderName, &l.SenderMsisdn, &l.ReceiverName, &l.ReceiverMsisdn,
+			&l.UsedAt, &l.VoidedAt, &l.VoidedReason,
+			&l.ParcelID, &l.ParcelCode, &l.ParcelStatus)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, err
+	}
+	return &l, nil
+}
+
+// AttachOrgParcelLabelInfo — the company's own version of
+// AttachParcelLabelInfo: write field notes (what the box is, where it's
+// going, who it's for) onto a pre-printed label, well before booking.
+// Same overwrite semantics and the same spent/voided refusals as the
+// admin path, plus one more: the code must belong to THIS company's
+// stock, or a desk could annotate — and so appear to own — a pad that
+// was printed for a competitor.
+func AttachOrgParcelLabelInfo(ctx context.Context, pool *pgxpool.Pool, orgID, code string, in ParcelLabelInfoInput, staffID *string) error {
+	if in.ItemDescription == "" {
+		return &ParcelError{"BAD_INPUT", "A short item description is required"}
+	}
+	tag, err := pool.Exec(ctx, `
+		UPDATE parcel_label_stock
+		SET "itemDescription" = $1, "destination" = $2, "senderName" = $3, "senderMsisdn" = $4,
+		    "receiverName" = $5, "receiverMsisdn" = $6, "itemType" = $7, "weightRangeKg" = $8,
+		    "lengthCm" = $12, "widthCm" = $13, "heightCm" = $14,
+		    "infoAttachedAt" = now(), "infoAttachedByStaffId" = $9
+		WHERE upper(code) = upper($10) AND "parcelOrgId" = $11 AND "usedAt" IS NULL AND "voidedAt" IS NULL`,
+		in.ItemDescription, in.Destination, in.SenderName, in.SenderMsisdn,
+		in.ReceiverName, in.ReceiverMsisdn, in.ItemType, in.WeightRangeKg, staffID, code, orgID,
+		in.LengthCm, in.WidthCm, in.HeightCm)
+	if err != nil {
+		return err
+	}
+	if tag.RowsAffected() == 0 {
+		var exists, used, voided bool
+		_ = pool.QueryRow(ctx, `SELECT true, "usedAt" IS NOT NULL, "voidedAt" IS NOT NULL FROM parcel_label_stock WHERE upper(code) = upper($1) AND "parcelOrgId" = $2`, code, orgID).Scan(&exists, &used, &voided)
+		if used {
+			return &ParcelError{"BAD_INPUT", "That label is already bound to a booked parcel — info can't be attached to it anymore"}
+		}
+		if voided {
+			return &ParcelError{"BAD_INPUT", "That label was withdrawn — info can't be attached to it anymore"}
+		}
+		return &ParcelError{"NOT_FOUND", "That label code isn't one of your company's labels"}
+	}
+	return nil
 }
 
 // ParcelOrgStaffParty resolves the Party and phone behind one staff
@@ -702,10 +998,20 @@ type ParcelOrgStation struct {
 	Lng          float64 `json:"lng"`
 	Capacity     int     `json:"capacity"`
 	Active       bool    `json:"active"`
+	// ManagerStaffID — the parcel_org_staff member who runs this station
+	// (see the schema's own comment). Null until a manager names one.
+	ManagerStaffID *string `json:"managerStaffId"`
+	// MemberCount — how many team members are currently posted here, so
+	// the register can show "3 people" without a per-row detail fetch.
+	MemberCount int `json:"memberCount"`
 }
 
 func ListParcelOrgStations(ctx context.Context, pool *pgxpool.Pool, orgID string) ([]ParcelOrgStation, error) {
-	rows, err := pool.Query(ctx, `SELECT id, name, msisdn, "locationHint", "openingHours", lat::text, lng::text, capacity, active FROM parcel_agent WHERE "parcelOrgId" = $1 ORDER BY name`, orgID)
+	rows, err := pool.Query(ctx, `
+		SELECT s.id, s.name, s.msisdn, s."locationHint", s."openingHours", s.lat::text, s.lng::text,
+		       s.capacity, s.active, s."managerStaffId"::text,
+		       (SELECT count(*) FROM parcel_org_staff st WHERE st."stationId" = s.id AND st."orgId" = s."parcelOrgId")
+		FROM parcel_agent s WHERE s."parcelOrgId" = $1 ORDER BY s.name`, orgID)
 	if err != nil {
 		return nil, err
 	}
@@ -714,7 +1020,7 @@ func ListParcelOrgStations(ctx context.Context, pool *pgxpool.Pool, orgID string
 	for rows.Next() {
 		var s ParcelOrgStation
 		var lat, lng string
-		if err := rows.Scan(&s.ID, &s.Name, &s.Msisdn, &s.LocationHint, &s.OpeningHours, &lat, &lng, &s.Capacity, &s.Active); err != nil {
+		if err := rows.Scan(&s.ID, &s.Name, &s.Msisdn, &s.LocationHint, &s.OpeningHours, &lat, &lng, &s.Capacity, &s.Active, &s.ManagerStaffID, &s.MemberCount); err != nil {
 			return nil, err
 		}
 		if s.Lat, err = parseFloatOrZero(lat); err != nil {
@@ -726,6 +1032,88 @@ func ListParcelOrgStations(ctx context.Context, pool *pgxpool.Pool, orgID string
 		out = append(out, s)
 	}
 	return out, rows.Err()
+}
+
+// GetParcelOrgStation — one station, scoped by org so a detail fetch
+// can't read a competitor's location by guessing an id.
+func GetParcelOrgStation(ctx context.Context, pool *pgxpool.Pool, orgID, stationID string) (*ParcelOrgStation, error) {
+	var s ParcelOrgStation
+	var lat, lng string
+	err := pool.QueryRow(ctx, `
+		SELECT s.id, s.name, s.msisdn, s."locationHint", s."openingHours", s.lat::text, s.lng::text,
+		       s.capacity, s.active, s."managerStaffId"::text,
+		       (SELECT count(*) FROM parcel_org_staff st WHERE st."stationId" = s.id AND st."orgId" = s."parcelOrgId")
+		FROM parcel_agent s WHERE s.id = $1 AND s."parcelOrgId" = $2`, stationID, orgID).
+		Scan(&s.ID, &s.Name, &s.Msisdn, &s.LocationHint, &s.OpeningHours, &lat, &lng, &s.Capacity, &s.Active, &s.ManagerStaffID, &s.MemberCount)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, err
+	}
+	if s.Lat, err = parseFloatOrZero(lat); err != nil {
+		return nil, err
+	}
+	if s.Lng, err = parseFloatOrZero(lng); err != nil {
+		return nil, err
+	}
+	return &s, nil
+}
+
+// ListParcelOrgStationMembers — the team members currently posted to a
+// station, resolved from parcel_org_staff.stationId. The manager is a
+// member like any other; ManagerStaffID only marks which one.
+func ListParcelOrgStationMembers(ctx context.Context, pool *pgxpool.Pool, orgID, stationID string) ([]ParcelOrgStaff, error) {
+	rows, err := pool.Query(ctx, `
+		SELECT st.id, st."orgId", st.name, st.role, st.active, st."isContact", st."partyId"::text, st."stationId"::text,
+		       pr.msisdn, epi.code, st.capabilities
+		FROM parcel_org_staff st
+		LEFT JOIN person pr ON pr."partyId" = st."partyId"
+		LEFT JOIN esoko_payment_id epi ON epi."partyId" = st."partyId"
+		WHERE st."orgId" = $1 AND st."stationId" = $2
+		ORDER BY st.name`, orgID, stationID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var out []ParcelOrgStaff
+	for rows.Next() {
+		var s ParcelOrgStaff
+		if err := rows.Scan(&s.ID, &s.OrgID, &s.Name, &s.Role, &s.Active, &s.IsContact, &s.PartyID, &s.StationID, &s.Msisdn, &s.EsoqoID, &s.Capabilities); err != nil {
+			return nil, err
+		}
+		out = append(out, s)
+	}
+	return out, rows.Err()
+}
+
+// SetParcelOrgStationManager names (or clears) the staff member who runs
+// a station. The staff row must be on this company's roster; a null or
+// empty staffID clears the manager.
+func SetParcelOrgStationManager(ctx context.Context, pool *pgxpool.Pool, orgID, stationID string, staffID *string) error {
+	manager := ""
+	if staffID != nil {
+		manager = *staffID
+	}
+	if manager != "" {
+		var exists bool
+		if err := pool.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM parcel_org_staff WHERE id = $1 AND "orgId" = $2)`, manager, orgID).Scan(&exists); err != nil {
+			return err
+		}
+		if !exists {
+			return &ParcelError{"NOT_FOUND", "That team member is not on your roster"}
+		}
+	}
+	// NULLIF so an empty id clears the manager instead of storing "" in
+	// a uuid column.
+	tag, err := pool.Exec(ctx, `UPDATE parcel_agent SET "managerStaffId" = NULLIF($1, '')::uuid WHERE id = $2 AND "parcelOrgId" = $3`, manager, stationID, orgID)
+	if err != nil {
+		return err
+	}
+	if tag.RowsAffected() == 0 {
+		return &ParcelError{"NOT_FOUND", "That station was not found in your company"}
+	}
+	return nil
 }
 
 func CreateParcelOrgStation(ctx context.Context, pool *pgxpool.Pool, orgID string, in ParcelAgentInput, staffID *string) (string, error) {
@@ -775,12 +1163,28 @@ func AssignParcelOrgStaffStation(ctx context.Context, pool *pgxpool.Pool, orgID,
 // on an update means "leave the PIN alone" — re-typing a PIN to change
 // somebody's role is the kind of friction that ends with every rider
 // sharing one login.
-func UpsertParcelOrgStaff(ctx context.Context, pool *pgxpool.Pool, id *string, orgID, name, role, pinHash string, partyID *string, active bool, stationID *string) error {
+//
+// capabilities is a custom role's explicit permission set (already
+// sanitized by the handler against authsvc.AllParcelOrgCapabilities).
+// setCapabilities is false to leave the stored permissions alone — so
+// toggling a suspension or renaming someone doesn't silently wipe a
+// custom role's permissions — and true to replace them, with an empty
+// slice clearing them (a custom role switched back to a preset).
+func UpsertParcelOrgStaff(ctx context.Context, pool *pgxpool.Pool, id *string, orgID, name, role, pinHash string, partyID *string, active bool, isContact *bool, capabilities []string, setCapabilities bool, stationID *string) error {
 	if strings.TrimSpace(name) == "" {
 		return &ParcelError{"BAD_INPUT", "Give this person a name"}
 	}
-	if _, ok := parcelStaffRoleIsKnown(role); !ok {
-		return &ParcelError{"BAD_INPUT", "Pick a valid role"}
+	// Role is a free label, not an enum: a company can call the job what it
+	// likes (Supervisor, Loader, Depot Lead). A preset role name resolves to
+	// a capability bundle at sign-in; a custom role carries its own explicit
+	// capabilities, and one that carries none of either floors at RIDER —
+	// the narrowest set. See authsvc.ParcelStaffCapabilitiesForRole.
+	role = strings.TrimSpace(role)
+	if role == "" {
+		return &ParcelError{"BAD_INPUT", "Give this person a role"}
+	}
+	if len([]rune(role)) > 40 {
+		return &ParcelError{"BAD_INPUT", "That role name is too long"}
 	}
 	if id == nil || *id == "" {
 		// A PIN and a partyID are the two ways this row ever gets a
@@ -793,20 +1197,25 @@ func UpsertParcelOrgStaff(ctx context.Context, pool *pgxpool.Pool, id *string, o
 			return &ParcelError{"BAD_INPUT", "Set a PIN, or invite this person by phone number"}
 		}
 		_, err := pool.Exec(ctx, `
-			INSERT INTO parcel_org_staff (id, "orgId", name, "pinHash", role, active, "partyId", "stationId", "createdAt", "updatedAt")
-			VALUES (gen_random_uuid(), $1, $2, $3, $4, $5, $6, $7, now(), now())`,
-			orgID, name, pinHash, role, active, partyID, stationID)
+			INSERT INTO parcel_org_staff (id, "orgId", name, "pinHash", role, active, "isContact", "partyId", "stationId", capabilities, "createdAt", "updatedAt")
+			VALUES (gen_random_uuid(), $1, $2, $3, $4, $5, COALESCE($6::boolean, false), $7, $8, COALESCE($9::text[], '{}'), now(), now())`,
+			orgID, name, pinHash, role, active, isContact, partyID, stationID, capabilities)
 		return err
 	}
 	// Scoped by orgID as well as id: an org session must not be able to
-	// edit another company's staff row by guessing a uuid.
+	// edit another company's staff row by guessing a uuid. isContact is
+	// COALESCEd, and capabilities only overwritten when setCapabilities
+	// is true, so an edit that doesn't mention either (a suspend, a role
+	// change) leaves them alone.
 	tag, err := pool.Exec(ctx, `
 		UPDATE parcel_org_staff SET
 			name = $1, role = $2, active = $3, "partyId" = $4, "stationId" = $5,
 				"pinHash" = CASE WHEN $6 = '' THEN "pinHash" ELSE $6 END,
+				"isContact" = COALESCE($7::boolean, "isContact"),
+				capabilities = CASE WHEN $9::boolean THEN COALESCE($8::text[], '{}') ELSE capabilities END,
 				"updatedAt" = now()
-		WHERE id = $7 AND "orgId" = $8`,
-		name, role, active, partyID, stationID, pinHash, *id, orgID)
+		WHERE id = $10 AND "orgId" = $11`,
+		name, role, active, partyID, stationID, pinHash, isContact, capabilities, setCapabilities, *id, orgID)
 	if err != nil {
 		return err
 	}
@@ -814,14 +1223,6 @@ func UpsertParcelOrgStaff(ctx context.Context, pool *pgxpool.Pool, id *string, o
 		return &ParcelError{"NOT_FOUND", "That person was not found"}
 	}
 	return nil
-}
-
-func parcelStaffRoleIsKnown(role string) (string, bool) {
-	switch role {
-	case "RIDER", "DISPATCHER", "MANAGER":
-		return role, true
-	}
-	return "", false
 }
 
 // ── Org-scoped reads ─────────────────────────────────────────────────
@@ -890,6 +1291,12 @@ type OrgParcelRow struct {
 	LastAttemptReason *string `json:"lastAttemptReason"`
 	HolderName        *string `json:"holderName"`
 	AgentName         *string `json:"agentName"`
+	// ExternalRef / ExternalSource — the company's own number from the
+	// system it imported this parcel from, when it brought one. Shown in
+	// the console beside Esoqo's code so staff can search by whichever
+	// they have in hand.
+	ExternalRef    *string `json:"externalRef"`
+	ExternalSource *string `json:"externalSource"`
 	// OriginMethod — see Parcel.originMethod's own comment. Lets the
 	// front desk's "Awaiting drop-off" tab tell "a sender is bringing
 	// this in themselves" apart from "still waiting on our own rider",
@@ -903,8 +1310,11 @@ type OrgParcelRow struct {
 // handlers_parcel_orgs.go). status/originMethod are optional exact
 // filters, combined with AND — "awaiting drop-off" is exactly
 // status=BOOKED AND originMethod=SELF_DROPOFF, so the front desk asks
-// for both rather than the handler special-casing a pseudo-status.
-func ListOrgParcels(ctx context.Context, pool *pgxpool.Pool, orgID string, status, originMethod *string) ([]OrgParcelRow, error) {
+// for both rather than the handler special-casing a pseudo-status. q is
+// an optional free-text search over Esoqo's code AND the company's own
+// externalRef, so a company migrating from another system can find a
+// parcel by whichever number is in hand.
+func ListOrgParcels(ctx context.Context, pool *pgxpool.Pool, orgID string, status, originMethod, q *string) ([]OrgParcelRow, error) {
 	rows, err := pool.Query(ctx, `
 		SELECT p.id, p.code, p.status::text, p."receiverName", p."receiverMsisdn",
 		       p."originLabel", p."destinationLabel", p."parcelType"::text,
@@ -912,15 +1322,17 @@ func ListOrgParcels(ctx context.Context, pool *pgxpool.Pool, orgID string, statu
 		       to_char(p."createdAt", 'YYYY-MM-DD"T"HH24:MI:SSZ'),
 		       to_char(p."slaDeadlineAt", 'YYYY-MM-DD"T"HH24:MI:SSZ'),
 		       p."deliveryAttempts", p."lastAttemptReason",
-		       COALESCE(pr."knownAs", pr."officialName"), a.name, p."originMethod"::text
+		       COALESCE(pr."knownAs", pr."officialName"), a.name, p."originMethod"::text,
+		       p."externalRef", p."externalSource"
 		FROM parcel p
 		LEFT JOIN person pr ON pr."partyId" = p."currentHolderPartyId"
 		LEFT JOIN parcel_agent a ON a.id = p."destinationAgentId"
 		WHERE p."parcelOrgId" = $1
 		  AND ($2::text IS NULL OR p.status::text = $2)
 		  AND ($3::text IS NULL OR p."originMethod"::text = $3)
+		  AND ($4::text IS NULL OR p.code ILIKE '%' || $4 || '%' OR p."externalRef" ILIKE '%' || $4 || '%')
 		ORDER BY p."createdAt" DESC
-		LIMIT 200`, orgID, status, originMethod)
+		LIMIT 200`, orgID, status, originMethod, q)
 	if err != nil {
 		return nil, err
 	}
@@ -931,12 +1343,100 @@ func ListOrgParcels(ctx context.Context, pool *pgxpool.Pool, orgID string, statu
 		if err := rows.Scan(&r.ID, &r.Code, &r.Status, &r.ReceiverName, &r.ReceiverMsisdn,
 			&r.OriginLabel, &r.DestinationLabel, &r.ParcelType, &r.OrgEarningsKes,
 			&r.CreatedAt, &r.SlaDeadlineAt, &r.DeliveryAttempts, &r.LastAttemptReason,
-			&r.HolderName, &r.AgentName, &r.OriginMethod); err != nil {
+			&r.HolderName, &r.AgentName, &r.OriginMethod, &r.ExternalRef, &r.ExternalSource); err != nil {
 			return nil, err
 		}
 		out = append(out, r)
 	}
 	return out, rows.Err()
+}
+
+// ImportParcelInput — a parcel a courier company already tracks in
+// another system, registered into Esoqo so it can be managed and tracked
+// here too. No pricing/payment: the company priced and collected it
+// already; Esoqo is the operations and tracking layer for it.
+type ImportParcelInput struct {
+	ExternalRef      string
+	ExternalSource   *string
+	SenderName       string
+	SenderMsisdn     string
+	ReceiverName     string
+	ReceiverMsisdn   string
+	OriginLabel      string
+	DestinationLabel string
+	ParcelType       string
+	WeightKg         *float64
+	Fragile          bool
+	Notes            *string
+}
+
+// ImportOrgParcel registers an externally-created parcel under [orgID].
+// It lands in RECEIVED_AT_COUNTER — the box is in the company's hands
+// already, which is the truth for anything they're migrating in — and
+// from there flows through the exact same handoff/delivery/tracking
+// machinery as a parcel booked on Esoqo. Esoqo mints its own `code`
+// (the tracking credential); the caller's number is kept in externalRef
+// and searched, never used as the public code.
+func ImportOrgParcel(ctx context.Context, pool *pgxpool.Pool, orgID string, in ImportParcelInput) (id, code string, err error) {
+	if strings.TrimSpace(in.SenderName) == "" || strings.TrimSpace(in.SenderMsisdn) == "" {
+		return "", "", &ParcelError{"BAD_INPUT", "Sender name and phone are required"}
+	}
+	if strings.TrimSpace(in.ReceiverName) == "" || strings.TrimSpace(in.ReceiverMsisdn) == "" {
+		return "", "", &ParcelError{"BAD_INPUT", "Receiver name and phone are required"}
+	}
+	if strings.TrimSpace(in.OriginLabel) == "" || strings.TrimSpace(in.DestinationLabel) == "" {
+		return "", "", &ParcelError{"BAD_INPUT", "Origin and destination are required"}
+	}
+	if !isValidParcelType(in.ParcelType) {
+		return "", "", &ParcelError{"BAD_INPUT", "Choose a valid parcel type"}
+	}
+
+	deliveryCode, err := generateDeliveryCode()
+	if err != nil {
+		return "", "", err
+	}
+	serviceTicketNumber := fleetqr.ShortCodeChecked(fleetqr.PrefixServiceTicket, 6)
+	ref := strings.TrimSpace(in.ExternalRef)
+	var externalRef *string
+	if ref != "" {
+		externalRef = &ref
+	}
+
+	// A PKG- code is 6 chars from a 32-symbol alphabet — collisions are
+	// vanishingly rare but not impossible, and a unique-violation here is
+	// the normal "mint again" case, not a real failure.
+	for attempt := 0; attempt < 5; attempt++ {
+		code = fleetqr.ShortCodeChecked(fleetqr.PrefixParcel, 6)
+		err = pool.QueryRow(ctx, `
+			INSERT INTO parcel (
+				id, code, "deliveryCode", "serviceTicketNumber",
+				"senderName", "senderMsisdn", "receiverName", "receiverMsisdn",
+				"originLabel", "destinationLabel", notes,
+				"parcelType", "weightKg", fragile,
+				"parcelOrgId", "externalRef", "externalSource",
+				"originMethod", status, "createdAt"
+			) VALUES (
+				gen_random_uuid(), $1, $2, $3,
+				$4, $5, $6, $7,
+				$8, $9, $10,
+				$11::"ParcelType", $12, $13,
+				$14, $15, $16,
+				'SCHEDULED_PICKUP'::"ParcelOriginMethod", 'RECEIVED_AT_COUNTER', now()
+			) RETURNING id`,
+			code, deliveryCode, serviceTicketNumber,
+			strings.TrimSpace(in.SenderName), strings.TrimSpace(in.SenderMsisdn),
+			strings.TrimSpace(in.ReceiverName), strings.TrimSpace(in.ReceiverMsisdn),
+			strings.TrimSpace(in.OriginLabel), strings.TrimSpace(in.DestinationLabel), in.Notes,
+			in.ParcelType, in.WeightKg, in.Fragile,
+			orgID, externalRef, in.ExternalSource).Scan(&id)
+		if err == nil {
+			return id, code, nil
+		}
+		if !isUniqueViolation(err) {
+			return "", "", err
+		}
+	}
+	return "", "", &ParcelError{"CONFLICT", "Could not allocate a tracking code — try again"}
 }
 
 // ParcelBelongsToOrg is the scoping check every org-scoped write runs

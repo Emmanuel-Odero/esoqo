@@ -254,6 +254,92 @@ var ParcelStaffCapabilities = map[string][]string{
 	},
 }
 
+// parcelOwnerRoleAliases — free-text titles that plainly mean "this
+// person runs the company", resolved to the MANAGER bundle above.
+//
+// The admin console offers MANAGER/DISPATCHER/RIDER plus an "Other…"
+// that is only a title and floors at RIDER. That floor is right for an
+// invented label, but a company that types "CEO" or "Owner" means
+// someone who runs the place, and handing them a rider's access made a
+// company founder unable to see their own team or earnings. Kept as an
+// explicit allowlist (not a substring/regex match) so an unknown title
+// still cannot widen itself, which is the property the RIDER floor was
+// protecting.
+var parcelOwnerRoleAliases = map[string]string{
+	"OWNER":      "MANAGER",
+	"CEO":        "MANAGER",
+	"FOUNDER":    "MANAGER",
+	"DIRECTOR":   "MANAGER",
+	"PROPRIETOR": "MANAGER",
+	"ADMIN":      "MANAGER",
+}
+
+// ParcelStaffCapabilitiesForRole — the single place that decides which
+// free-text role maps to which capability bundle: an explicit override
+// (a custom role's hand-picked permissions) wins, then an exact preset,
+// then an owner-title alias, then the RIDER floor. Returns a copy so a
+// caller can't mutate the shared preset slice.
+func ParcelStaffCapabilitiesForRole(role string, explicit []string) []string {
+	if caps := SanitizeParcelCapabilities(explicit); len(caps) > 0 {
+		return caps
+	}
+	r := strings.ToUpper(strings.TrimSpace(role))
+	if caps, ok := ParcelStaffCapabilities[r]; ok {
+		return append([]string(nil), caps...)
+	}
+	if alias, ok := parcelOwnerRoleAliases[r]; ok {
+		return append([]string(nil), ParcelStaffCapabilities[alias]...)
+	}
+	return append([]string(nil), ParcelStaffCapabilities["RIDER"]...)
+}
+
+// AllParcelOrgCapabilities — every capability a courier-company staff
+// session may hold. This is the allowlist a custom role's permissions
+// are filtered against: a free-text role must not be able to smuggle in
+// a capability from another domain (a store or fleet grant) or the `*`
+// wildcard. Order is the order the UI renders the checkboxes in.
+var AllParcelOrgCapabilities = []string{
+	CapParcelOrgRead, CapParcelOrgCarry, CapParcelOrgDispatch,
+	CapParcelOrgIntake, CapParcelOrgArrival, CapParcelOrgCollection,
+	CapParcelOrgStations, CapParcelOrgStaff, CapParcelOrgWrite, CapParcelOrgEarnings,
+}
+
+// knownParcelOrgCapability — set form of the list above, for the filter.
+var knownParcelOrgCapability = func() map[string]bool {
+	m := make(map[string]bool, len(AllParcelOrgCapabilities))
+	for _, c := range AllParcelOrgCapabilities {
+		m[c] = true
+	}
+	return m
+}()
+
+// SanitizeParcelCapabilities dedupes explicit and keeps only known
+// parcel-org capabilities, in the canonical order. Returns nil when
+// nothing valid remains, which ParcelStaffCapabilitiesForRole treats as
+// "no override — fall back to the role". A caller can therefore hand it
+// raw request input without a separate validation step.
+func SanitizeParcelCapabilities(explicit []string) []string {
+	if len(explicit) == 0 {
+		return nil
+	}
+	want := make(map[string]bool, len(explicit))
+	for _, c := range explicit {
+		if knownParcelOrgCapability[c] {
+			want[c] = true
+		}
+	}
+	if len(want) == 0 {
+		return nil
+	}
+	out := make([]string, 0, len(want))
+	for _, c := range AllParcelOrgCapabilities {
+		if want[c] {
+			out = append(out, c)
+		}
+	}
+	return out
+}
+
 // RolePresets — convenience bundles only; the model is the capability list
 // on the account. SUBJECT is re-derived per request in
 // SessionService.CtxFromToken; AGENT lists are frozen at staff sign-in.
