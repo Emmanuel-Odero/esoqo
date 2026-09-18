@@ -1,8 +1,9 @@
 'use client';
 
-import { useState, useTransition } from 'react';
+import { useEffect, useState, useTransition } from 'react';
 import { Icon } from '@esoqo/ui';
 import { addCustomParcel } from './actions';
+import { setFormActive } from './form-activity';
 
 const PARCEL_TYPES: [value: string, label: string][] = [
   ['ENVELOPE_DOCUMENT', 'Envelope / document'],
@@ -37,28 +38,116 @@ const gridStyle: React.CSSProperties = {
  * in another book and still needs to be managed and tracked here. Your
  * number stays on the parcel and is searchable; Esoqo mints a tracking
  * code for it and shows it back so it can go on the box.
+ *
+ * The draft survives a dashboard refresh (see DropoffPoll): every
+ * keystroke is mirrored to localStorage and restored on mount, so even
+ * if the page subtree remounts under an open form nothing typed is
+ * ever lost. A successful save or an explicit Close clears it.
  */
+const DRAFT_KEY = 'parcel-org:custom-parcel-draft';
+
+interface CustomParcelDraft {
+  number: string;
+  senderName: string;
+  senderMsisdn: string;
+  receiverName: string;
+  receiverMsisdn: string;
+  originLabel: string;
+  destinationLabel: string;
+  parcelType: string;
+  weightKg: string;
+  fragile: boolean;
+  notes: string;
+}
+
+function loadDraft(): CustomParcelDraft | null {
+  try {
+    if (typeof window === 'undefined') return null;
+    const raw = window.localStorage.getItem(DRAFT_KEY);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw) as Partial<CustomParcelDraft>;
+    if (!parsed || typeof parsed !== 'object') return null;
+    return {
+      number: typeof parsed.number === 'string' ? parsed.number : '',
+      senderName: typeof parsed.senderName === 'string' ? parsed.senderName : '',
+      senderMsisdn: typeof parsed.senderMsisdn === 'string' ? parsed.senderMsisdn : '',
+      receiverName: typeof parsed.receiverName === 'string' ? parsed.receiverName : '',
+      receiverMsisdn: typeof parsed.receiverMsisdn === 'string' ? parsed.receiverMsisdn : '',
+      originLabel: typeof parsed.originLabel === 'string' ? parsed.originLabel : '',
+      destinationLabel: typeof parsed.destinationLabel === 'string' ? parsed.destinationLabel : '',
+      parcelType: typeof parsed.parcelType === 'string' ? parsed.parcelType : 'SMALL',
+      weightKg: typeof parsed.weightKg === 'string' ? parsed.weightKg : '',
+      fragile: parsed.fragile === true,
+      notes: typeof parsed.notes === 'string' ? parsed.notes : '',
+    };
+  } catch {
+    return null;
+  }
+}
+
+function hasContent(d: CustomParcelDraft): boolean {
+  return Boolean(
+    d.number.trim() || d.senderName.trim() || d.senderMsisdn.trim() ||
+    d.receiverName.trim() || d.receiverMsisdn.trim() ||
+    d.originLabel.trim() || d.destinationLabel.trim() || d.notes.trim() ||
+    d.weightKg.trim() || d.fragile || d.parcelType !== 'SMALL',
+  );
+}
+
 export function CustomParcelPanel() {
-  const [open, setOpen] = useState(false);
-  const [number, setNumber] = useState('');
-  const [senderName, setSenderName] = useState('');
-  const [senderMsisdn, setSenderMsisdn] = useState('');
-  const [receiverName, setReceiverName] = useState('');
-  const [receiverMsisdn, setReceiverMsisdn] = useState('');
-  const [originLabel, setOriginLabel] = useState('');
-  const [destinationLabel, setDestinationLabel] = useState('');
-  const [parcelType, setParcelType] = useState('SMALL');
-  const [weightKg, setWeightKg] = useState('');
-  const [fragile, setFragile] = useState(false);
-  const [notes, setNotes] = useState('');
+  const [draft] = useState<CustomParcelDraft | null>(loadDraft);
+  const [open, setOpen] = useState(() => draft !== null && hasContent(draft));
+  const [number, setNumber] = useState(draft?.number ?? '');
+  const [senderName, setSenderName] = useState(draft?.senderName ?? '');
+  const [senderMsisdn, setSenderMsisdn] = useState(draft?.senderMsisdn ?? '');
+  const [receiverName, setReceiverName] = useState(draft?.receiverName ?? '');
+  const [receiverMsisdn, setReceiverMsisdn] = useState(draft?.receiverMsisdn ?? '');
+  const [originLabel, setOriginLabel] = useState(draft?.originLabel ?? '');
+  const [destinationLabel, setDestinationLabel] = useState(draft?.destinationLabel ?? '');
+  const [parcelType, setParcelType] = useState(draft?.parcelType ?? 'SMALL');
+  const [weightKg, setWeightKg] = useState(draft?.weightKg ?? '');
+  const [fragile, setFragile] = useState(draft?.fragile ?? false);
+  const [notes, setNotes] = useState(draft?.notes ?? '');
   const [error, setError] = useState<string | null>(null);
   const [minted, setMinted] = useState<string | null>(null);
   const [pending, startTransition] = useTransition();
+
+  // While this panel is open the dashboard poller stands down, so the
+  // page never refreshes under the form. Removed on close and on
+  // unmount, so a stuck signal can't silence the poller forever.
+  useEffect(() => {
+    if (!open) return;
+    setFormActive(true);
+    return () => setFormActive(false);
+  }, [open ]);
+
+  // Mirror the draft so a remount restores exactly what was typed.
+  useEffect(() => {
+    if (!open) return;
+    try {
+      window.localStorage.setItem(DRAFT_KEY, JSON.stringify({
+        number, senderName, senderMsisdn, receiverName, receiverMsisdn,
+        originLabel, destinationLabel, parcelType, weightKg, fragile, notes,
+      } satisfies CustomParcelDraft));
+    } catch {
+      // Private-mode storage failures must never break typing.
+    }
+  }, [open, number, senderName, senderMsisdn, receiverName, receiverMsisdn,
+    originLabel, destinationLabel, parcelType, weightKg, fragile, notes]);
+
+  function clearDraft() {
+    try {
+      window.localStorage.removeItem(DRAFT_KEY);
+    } catch {
+      // Ignore — see above.
+    }
+  }
 
   function reset() {
     setNumber(''); setSenderName(''); setSenderMsisdn('');
     setReceiverName(''); setReceiverMsisdn(''); setOriginLabel(''); setDestinationLabel('');
     setParcelType('SMALL'); setWeightKg(''); setFragile(false); setNotes('');
+    clearDraft();
   }
 
   const ready = number.trim() && senderName.trim() && senderMsisdn.trim()
