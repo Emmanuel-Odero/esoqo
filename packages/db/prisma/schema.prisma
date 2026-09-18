@@ -3210,6 +3210,19 @@ model Parcel {
   /// person types in" shape a pickup code closes a retail order with.
   deliveryCode String
 
+  /// The parcel's number in whatever system its owner used before Esoqo
+  /// — a courier company importing parcels it already tracks elsewhere
+  /// types its own id here and keeps using it. Distinct from `code`
+  /// (Esoqo's tracking credential) on purpose: a tenant-supplied value
+  /// can't be allowed to collide with, or impersonate, another tenant's
+  /// tracking code. Searched within the owning company's console
+  /// (`?q=`), never a public bearer credential.
+  externalRef String?
+  /// Which outside system externalRef came from ("Wialli", "Safi",
+  /// "Spreadsheet"), so two companies' imports stay legible and a
+  /// future integration has somewhere to hang. Free text.
+  externalSource String?
+
   /// TCK-… — what a self-service booking actually gets back, not
   /// `code`. A sender who typed their own parcel details in hasn't
   /// proven anyone has the box in hand yet (see BookParcel's own
@@ -3604,6 +3617,10 @@ model Parcel {
   @@index([senderPartyId, createdAt])
   @@index([status])
   @@index([courierTripId])
+  /// The company console's "find by our own number" — scoped to the
+  /// owning company so one tenant's external ids can never surface
+  /// another's.
+  @@index([parcelOrgId, externalRef])
   @@map("parcel")
 }
 
@@ -4012,6 +4029,21 @@ model ParcelOrgStaff {
   role    String  @default("RIDER")
   active  Boolean @default(true)
 
+  /// Marked by an admin/manager as one of the company's contact people.
+  /// Multiple are allowed — a depot may want its manager and its dispatcher
+  /// both reachable — and the register/detail "Contact" view prefers these
+  /// over the legacy parcel_org.contactPerson string, which stays only as
+  /// a fallback for rows written before this flag existed.
+  isContact Boolean @default(false)
+
+  /// Explicit permission set for a custom ("Other…") role, chosen from
+  /// authsvc.AllParcelOrgCapabilities. Empty for a preset role, whose
+  /// bundle is resolved from `role` at sign-in; when non-empty it
+  /// replaces the role bundle, so an owner can grant exactly the access
+  /// a free-text title needs instead of the RIDER floor. Validated
+  /// server-side — a stray string here can't widen anything.
+  capabilities String[] @default([])
+
   /// The Party this login acts as when it takes custody of a parcel.
   /// Custody is always attributed to a real Party (see
   /// Parcel.currentHolderPartyId) — a PIN login is an authentication
@@ -4284,6 +4316,13 @@ model ParcelAgent {
 
   createdAt        DateTime @default(now())
   createdByStaffId String?  @db.Uuid
+
+  /// The team member who runs this station day to day — a
+  /// parcel_org_staff row, so a station has an owner inside the
+  /// company's own roster without inventing a second identity. Null
+  /// until a manager names one; the station still works, the console
+  /// just can't say who is accountable.
+  managerStaffId String? @db.Uuid
 
   destinationParcels Parcel[] @relation("parcelDestinationAgent")
   stationStaff ParcelOrgStaff[] @relation("parcelStationStaff")
