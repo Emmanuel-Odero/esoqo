@@ -139,6 +139,10 @@ export interface OrgParcelRow {
   holderName: string | null;
   agentName: string | null;
   originMethod: string;
+  /** The company's own number from the system it imported this parcel
+   *  from, when it brought one. Null for Esoqo-booked parcels. */
+  externalRef: string | null;
+  externalSource: string | null;
 }
 
 export interface ParcelOrgMe {
@@ -151,12 +155,59 @@ export async function getParcelOrgMe(): Promise<ParcelOrgMe> {
   return parcelOrgFetch<ParcelOrgMe>("/v1/parcel-orgs/me");
 }
 
+/** Live dispatch — rider dots, parcels needing a rider or running late,
+ *  and the company's stations. Mirrors core-go's dbx.OrgLiveView. */
+export interface OrgLiveRider {
+  partyId: string;
+  name: string;
+  role: string;
+  lat: string;
+  lng: string;
+  at: string;
+}
+
+export interface OrgLiveParcel {
+  code: string;
+  status: string;
+  lat: string | null;
+  lng: string | null;
+  overdue: boolean;
+  receiverName: string;
+}
+
+export interface OrgLiveView {
+  riders: OrgLiveRider[];
+  parcels: OrgLiveParcel[];
+  stations: ParcelOrgStationRow[];
+}
+
+/** A scanned/typed label resolved against the company's own stock.
+ *  Mirrors dbx.OrgParcelLabel. */
+export interface OrgParcelLabel {
+  code: string;
+  state: string;
+  itemDescription: string | null;
+  destination: string | null;
+  senderName: string | null;
+  senderMsisdn: string | null;
+  receiverName: string | null;
+  receiverMsisdn: string | null;
+  usedAt: string | null;
+  voidedAt: string | null;
+  voidedReason: string | null;
+  parcelId: string | null;
+  parcelCode: string | null;
+  parcelStatus: string | null;
+}
+
 export interface ParcelOrgStaffRow {
   id: string;
   orgId: string;
   name: string;
   role: string;
   active: boolean;
+  /** One of the company's contact people (multiple allowed). */
+  isContact: boolean;
   partyId: string | null;
   stationId: string | null;
   /** The phone and the ESK-… handle this member signs in with — read
@@ -165,6 +216,9 @@ export interface ParcelOrgStaffRow {
    *  linked person. */
   msisdn: string | null;
   esoqoId: string | null;
+  /** A custom ("Other…") role's explicit permissions. Empty for a preset
+   *  role, whose bundle is resolved from `role` at sign-in. */
+  capabilities: string[];
 }
 
 export interface ParcelOrgStationRow {
@@ -177,4 +231,8 @@ export interface ParcelOrgStationRow {
   lng: number;
   capacity: number;
   active: boolean;
+  /** The roster member who runs this station, if named. */
+  managerStaffId: string | null;
+  /** How many team members are currently posted here. */
+  memberCount: number;
 }

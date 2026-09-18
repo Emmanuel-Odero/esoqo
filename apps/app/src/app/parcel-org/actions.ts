@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import {
   ParcelOrgUnauthorised,
   parcelOrgFetch,
+  type OrgParcelLabel,
   type ParcelOrgStaffRow,
   type ParcelOrgStationRow,
 } from "@/lib/parcel-org-session";
@@ -198,9 +199,14 @@ export async function saveOrgStaff(input: {
   name: string;
   role: string;
   pin?: string;
+  msisdn?: string | null;
   partyId?: string | null;
   active: boolean;
+  isContact?: boolean;
   stationId?: string | null;
+  /** A custom role's picked permissions. Always sent by the form, so
+   *  switching back to a preset clears them. */
+  capabilities?: string[];
 }): Promise<Result> {
   try {
     await parcelOrgFetch("/v1/parcel-orgs/me/staff", {
@@ -213,8 +219,15 @@ export async function saveOrgStaff(input: {
         // somebody retype a PIN to change a role is the kind of friction
         // that ends with a whole depot sharing one login.
         pin: input.pin ?? "",
+        // A phone gives this person a full Esoqo account (person + PIN
+        // credential), so they can sign in at /signin as well as the
+        // company portal. Empty keeps them a company-portal-only login.
+        msisdn: input.msisdn || null,
         partyId: input.partyId || null,
         active: input.active,
+        // Undefined (not false) on an update leaves the flag unchanged.
+        isContact: input.isContact,
+        capabilities: input.capabilities,
         stationId: input.stationId || null,
       }),
     });
@@ -361,5 +374,139 @@ export async function voidOrgLabelBatch(
       ok: false,
       error: r.ok ? "Could not withdraw that batch" : r.error,
     };
+  }
+}
+
+export interface CustomParcelInput {
+  externalRef: string;
+  senderName: string;
+  senderMsisdn: string;
+  receiverName: string;
+  receiverMsisdn: string;
+  originLabel: string;
+  destinationLabel: string;
+  parcelType: string;
+  weightKg?: number | null;
+  fragile?: boolean;
+  notes?: string | null;
+}
+
+/** Save a parcel with the company's own number, so work that starts on
+ *  paper or in another book can be managed and tracked on Esoqo too.
+ *  Esoqo mints its own tracking code; the company's number is kept as
+ *  externalRef and searchable. Returns the Esoqo code so the caller can
+ *  show it immediately. */
+export async function addCustomParcel(
+  input: CustomParcelInput,
+): Promise<{ ok: true; code: string } | { ok: false; error: string }> {
+  try {
+    const res = await parcelOrgFetch<{ code: string }>("/v1/parcel-orgs/me/parcels", {
+      method: "POST",
+      body: JSON.stringify({
+        externalRef: input.externalRef.trim(),
+        senderName: input.senderName.trim(),
+        senderMsisdn: input.senderMsisdn.trim(),
+        receiverName: input.receiverName.trim(),
+        receiverMsisdn: input.receiverMsisdn.trim(),
+        originLabel: input.originLabel.trim(),
+        destinationLabel: input.destinationLabel.trim(),
+        parcelType: input.parcelType,
+        weightKg: input.weightKg ?? null,
+        fragile: input.fragile ?? false,
+        notes: input.notes?.trim() || null,
+      }),
+    });
+    revalidatePath("/parcel-org");
+    return { ok: true, code: res.code };
+  } catch (e) {
+    const r = toResult(e);
+    return { ok: false, error: r.ok ? "Could not import that parcel" : r.error };
+  }
+}
+
+/** Name (or clear) the team member who runs a station. */
+export async function setStationManager(
+  stationId: string,
+  staffId: string | null,
+): Promise<Result> {
+  try {
+    await parcelOrgFetch(`/v1/parcel-orgs/me/stations/${encodeURIComponent(stationId)}/manager`, {
+      method: "POST",
+      body: JSON.stringify({ staffId }),
+    });
+    revalidatePath(`/parcel-org/stations/${stationId}`);
+    return { ok: true };
+  } catch (e) {
+    return toResult(e);
+  }
+}
+
+/** Post a roster member to a station (assigned=true) or remove them. */
+export async function assignStationMember(
+  stationId: string,
+  staffId: string,
+  assigned: boolean,
+): Promise<Result> {
+  try {
+    await parcelOrgFetch(`/v1/parcel-orgs/me/stations/${encodeURIComponent(stationId)}/members`, {
+      method: "POST",
+      body: JSON.stringify({ staffId, assigned }),
+    });
+    revalidatePath(`/parcel-org/stations/${stationId}`);
+    return { ok: true };
+  } catch (e) {
+    return toResult(e);
+  }
+}
+
+export interface AttachLabelInfoInput {
+  itemDescription: string;
+  destination?: string | null;
+  senderName?: string | null;
+  senderMsisdn?: string | null;
+  receiverName?: string | null;
+  receiverMsisdn?: string | null;
+}
+
+/** Look a label code up against the company's own stock — what scanning
+ *  a printed label resolves to. A foreign or unknown code fails the
+ *  same way, so this can't probe anyone else's labels. */
+export async function resolveOrgLabel(
+  code: string,
+): Promise<{ ok: true; label: OrgParcelLabel } | { ok: false; error: string }> {
+  try {
+    const res = await parcelOrgFetch<{ label: OrgParcelLabel }>(
+      `/v1/parcel-orgs/me/labels/resolve?code=${encodeURIComponent(code.trim())}`,
+    );
+    return { ok: true, label: res.label };
+  } catch (e) {
+    const r = toResult(e);
+    return { ok: false, error: r.ok ? "Could not look up that label" : r.error };
+  }
+}
+
+/** Write field notes onto one of the company's pre-printed labels —
+ *  what the box is, where it's going, who it's for. Overwrites on
+ *  repeat, and refuses once spent or withdrawn. */
+export async function attachOrgLabelInfo(
+  code: string,
+  input: AttachLabelInfoInput,
+): Promise<Result> {
+  try {
+    await parcelOrgFetch(`/v1/parcel-orgs/me/labels/info/${encodeURIComponent(code.trim())}`, {
+      method: "POST",
+      body: JSON.stringify({
+        itemDescription: input.itemDescription.trim(),
+        destination: input.destination?.trim() || null,
+        senderName: input.senderName?.trim() || null,
+        senderMsisdn: input.senderMsisdn?.trim() || null,
+        receiverName: input.receiverName?.trim() || null,
+        receiverMsisdn: input.receiverMsisdn?.trim() || null,
+      }),
+    });
+    revalidatePath("/parcel-org/labels");
+    return { ok: true };
+  } catch (e) {
+    return toResult(e);
   }
 }

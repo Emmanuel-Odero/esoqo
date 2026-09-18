@@ -108,6 +108,11 @@ function Row({
     <tr>
       <td>
         <span className="mono" style={{ fontWeight: 700 }}>{parcel.code}</span>
+        {parcel.externalRef && (
+          <span className="sub" style={{ display: 'block' }}>
+            Their #: <span className="mono">{parcel.externalRef}</span>
+          </span>
+        )}
         <span className="sub" style={{ display: 'block' }}>{humanTime(parcel.createdAt)}</span>
       </td>
       <td>

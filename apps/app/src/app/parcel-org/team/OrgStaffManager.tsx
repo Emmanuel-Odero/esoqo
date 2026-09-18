@@ -1,10 +1,13 @@
 'use client';
 
-import { useId, useState, useTransition } from 'react';
-import { Icon } from '@esoqo/ui';
+import { useEffect, useId, useState, useTransition } from 'react';
+import { Icon, ParcelCapabilityPicker, RIDER_BASELINE } from '@esoqo/ui';
 import type { ParcelOrgStaffRow } from '@/lib/parcel-org-session';
 import { listOrgStations, saveOrgStaff } from '../actions';
+import { RoleField, PARCEL_STAFF_ROLES } from './RoleField';
 import type { ParcelOrgStationRow } from '@/lib/parcel-org-session';
+
+const isCustomRole = (role: string) => !PARCEL_STAFF_ROLES.includes(role);
 
 /**
  * The company's own roster of PIN logins.
@@ -22,7 +25,14 @@ const ROLES: [value: string, label: string, hint: string][] = [
 export function OrgStaffManager({ staff }: { staff: ParcelOrgStaffRow[] }) {
   const [adding, setAdding] = useState(false);
   const [stations, setStations] = useState<ParcelOrgStationRow[]>([]);
-  useState(() => { void listOrgStations().then(setStations); });
+  // Load the station picker once, after mount — firing a state update
+  // from render (useState initializer) warned in the console and could
+  // re-fire on unrelated re-renders.
+  useEffect(() => {
+    let cancelled = false;
+    void listOrgStations().then((rows) => { if (!cancelled) setStations(rows); });
+    return () => { cancelled = true; };
+  }, []);
 
   return (
     <div className="card" style={{ padding: 0 }}>
@@ -75,7 +85,12 @@ function StaffRow({ staff, stations }: { staff: ParcelOrgStaffRow; stations: Par
   const role = ROLES.find(([v]) => v === staff.role);
   return (
     <tr>
-      <td><strong>{staff.name}</strong></td>
+      <td>
+        <strong>{staff.name}</strong>
+        {staff.isContact && (
+          <span className="pill p-ok" style={{ marginLeft: 8, fontSize: '.68rem' }}>Contact</span>
+        )}
+      </td>
       <td>
         {role?.[1] ?? staff.role}
         <span className="sub" style={{ display: 'block' }}>{role?.[2]}</span>
@@ -107,24 +122,42 @@ function StaffForm({
 }) {
   const [name, setName] = useState(initial?.name ?? '');
   const [role, setRole] = useState(initial?.role ?? 'RIDER');
+  const [capabilities, setCapabilities] = useState<string[]>(initial?.capabilities ?? []);
   const [pin, setPin] = useState('');
+  const [msisdn, setMsisdn] = useState(initial?.msisdn ?? '');
   const [partyId, setPartyId] = useState(initial?.partyId ?? '');
   const [active, setActive] = useState(initial?.active ?? true);
+  const [isContact, setIsContact] = useState(initial?.isContact ?? false);
   const [stationId, setStationId] = useState(initial?.stationId ?? '');
   const [error, setError] = useState<string | null>(null);
   const [pending, startTransition] = useTransition();
-  const ids = { name: useId(), role: useId(), pin: useId(), party: useId(), active: useId() };
+  const ids = { name: useId(), role: useId(), pin: useId(), msisdn: useId(), party: useId(), active: useId(), contact: useId() };
+
+  function pickRole(next: string) {
+    setRole(next);
+    // A fresh custom role starts from the RIDER floor rather than
+    // nothing, so a manager can only add access on top of the safe
+    // default, never accidentally hand out less.
+    if (isCustomRole(next)) setCapabilities((c) => (c.length ? c : [...RIDER_BASELINE]));
+  }
 
   function save() {
     setError(null);
+    if (isCustomRole(role) && !role.trim()) {
+      setError('Type the custom role name');
+      return;
+    }
     if (!initial && pin.length < 4) {
       setError('Set a PIN of at least 4 digits');
       return;
     }
     startTransition(async () => {
       const result = await saveOrgStaff({
-        id: initial?.id, name: name.trim(), role, pin, partyId: partyId.trim() || null, active,
-        stationId: stationId || null,
+        id: initial?.id, name: name.trim(), role, pin, msisdn: msisdn.trim() || null,
+        partyId: partyId.trim() || null, active, isContact, stationId: stationId || null,
+        // Preset -> [] clears any stale custom set; custom -> the picked
+        // permissions. See saveOrgStaff's own comment.
+        capabilities: isCustomRole(role) ? capabilities : [],
       });
       if (result.ok) onDone();
       else setError(result.error);
@@ -140,12 +173,9 @@ function StaffForm({
             onChange={(e) => setName(e.target.value)} />
         </div>
         <div>
-          <label className="sub" htmlFor={ids.role} style={{ display: 'block', marginBottom: 4 }}>Role</label>
-          <select id={ids.role} style={inputStyle} value={role} onChange={(e) => setRole(e.target.value)}>
-            {ROLES.map(([value, label]) => <option key={value} value={value}>{label}</option>)}
-          </select>
+          <RoleField value={role} onChange={pickRole} />
           <span className="sub" style={{ fontSize: '.78rem' }}>
-            {ROLES.find(([v]) => v === role)?.[2]}
+            {ROLES.find(([v]) => v === role)?.[2] ?? 'Custom role — pick its permissions below.'}
           </span>
         </div>
         <div>
@@ -155,7 +185,21 @@ function StaffForm({
           <input id={ids.pin} className="mono" style={inputStyle} type="password" inputMode="numeric"
             value={pin} onChange={(e) => setPin(e.target.value.replace(/\D/g, ''))} />
         </div>
+        <div>
+          <label className="sub" htmlFor={ids.msisdn} style={{ display: 'block', marginBottom: 4 }}>
+            Phone (optional)
+          </label>
+          <input id={ids.msisdn} className="mono" style={inputStyle} placeholder="+2547..."
+            value={msisdn} onChange={(e) => setMsisdn(e.target.value)} />
+          <span className="sub" style={{ fontSize: '.78rem' }}>
+            Give one and they get an Esoqo account they can sign in with at /signin, not just here.
+          </span>
+        </div>
       </div>
+
+      {isCustomRole(role) && (
+        <ParcelCapabilityPicker value={capabilities} onChange={setCapabilities} disabled={pending} />
+      )}
 
       <div>
         <label className="sub" htmlFor={ids.party} style={{ display: 'block', marginBottom: 4 }}>
@@ -184,6 +228,15 @@ function StaffForm({
         <input id={ids.active} type="checkbox" checked={active}
           onChange={(e) => setActive(e.target.checked)} />
         Can sign in
+      </label>
+
+      <label className="sub" htmlFor={ids.contact} style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+        <input id={ids.contact} type="checkbox" checked={isContact}
+          onChange={(e) => setIsContact(e.target.checked)} />
+        Contact person
+        <span style={{ fontSize: '.78rem', color: 'var(--muted, inherit)' }}>
+          — shown to senders as someone who can be reached
+        </span>
       </label>
 
       {error && (

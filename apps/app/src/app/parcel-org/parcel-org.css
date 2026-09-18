@@ -39,15 +39,30 @@
 .porg-name small { display:block; font-family:var(--font-mono); font-weight:600;
   font-size:.58rem; letter-spacing:.14em; text-transform:uppercase; color:var(--tx-2); margin-top:1px }
 
-.porgnav { display:flex; align-items:center; gap:2px; margin-left:8px; flex-wrap:wrap }
+/* A single horizontally-scrollable strip, never a wrapped block: six
+   tabs on a 360px phone wrapped into three cramped rows before, and the
+   active tab was never marked. Scrolling keeps one row and lets the
+   thumb swipe; the scrollbar is hidden because the content is obviously
+   cut off at the edge. */
+.porgnav {
+  display:flex; align-items:center; gap:2px; margin-left:8px;
+  flex-wrap:nowrap; overflow-x:auto; scrollbar-width:none;
+  -webkit-overflow-scrolling:touch; scroll-behavior:smooth;
+}
+.porgnav::-webkit-scrollbar { display:none }
 .porgnav a, .porgnav button {
   display:inline-flex; align-items:center; gap:7px; padding:0 13px;
   font-size:.88rem; font-weight:600; color:var(--tx-2); border-radius:8px;
   white-space:nowrap; min-height:40px; border:0; background:none; cursor:pointer;
-  font-family:inherit;
+  font-family:inherit; flex:0 0 auto;
 }
 .porgnav a:hover, .porgnav button:hover { background:var(--paper); color:var(--navy) }
 .porgnav a[aria-current="page"] { color:var(--navy); background:var(--green-t) }
+.porgnav-badge {
+  font-family:var(--font-mono); font-size:.62rem; font-weight:600; line-height:1;
+  background:var(--amber-t); color:var(--amber); border-radius:999px;
+  padding:3px 6px; margin-left:2px;
+}
 
 /* Sign out sits outside the nav flow as its own bordered button — same
    trailing-action placement as /org/[orgId]'s header (.btn btn-o
@@ -109,11 +124,22 @@
 
 .empty { padding:44px 20px; text-align:center; color:var(--tx-2); font-size:.93rem }
 
+/* ── definition lists (label lookup results) ───────────────────── */
+.dl-grid { display:grid; grid-template-columns:auto 1fr; gap:6px 16px; margin:0 }
+.dl-grid dt { color:var(--tx-2); font-size:.82rem }
+.dl-grid dd { margin:0; font-weight:600; font-size:.9rem }
+
 /* ── tablet / phone ─────────────────────────────────────────────── */
 @media (max-width:900px) {
-  .porgnav { order:3; width:100%; padding-top:6px; border-top:1px solid var(--line);
-    margin-top:6px; justify-content:flex-start }
-  .porg-signout { margin-left:0 }
+  /* Brand + sign out on the first row; the nav drops to its own
+     full-width, swipeable second row under a hairline. */
+  .porgbar-in { padding-left:16px; padding-right:16px; gap:10px }
+  .porgnav {
+    order:3; width:100%; margin:4px 0 0; padding:6px 0 2px;
+    border-top:1px solid var(--line); justify-content:flex-start;
+    scroll-padding-left:16px;
+  }
+  .porgnav a { min-height:38px; padding:0 12px }
   .kpis { grid-template-columns:repeat(2,1fr) }
   .tbl th:nth-child(n+4), .tbl td:nth-child(n+4) { display:none }
 }
@@ -122,4 +148,7 @@
   .head h1 { font-size:1.3rem }
   .porg-wrap { padding:18px 16px 48px }
   .card { padding:16px }
+  .porg-name { font-size:.95rem }
+  .porg-signout .btn { padding-inline:10px }
+  .porgnav a { font-size:.84rem; gap:6px; padding:0 10px }
 }
