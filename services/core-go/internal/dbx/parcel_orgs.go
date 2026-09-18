@@ -20,6 +20,7 @@ import (
 	"errors"
 	"regexp"
 	"strings"
+	"time"
 
 	"github.com/esoqo/core-go/internal/fleetqr"
 	"github.com/esoqo/core-go/internal/money"
@@ -933,6 +934,52 @@ func GetOrgParcelLabel(ctx context.Context, pool *pgxpool.Pool, orgID, code stri
 	return &l, nil
 }
 
+// OrgLabelSearchRow — one spendable sticker, as the custom-parcel
+// label picker lists it. Only the code and when it was printed: the
+// picker matches on the code's tail, nothing else matters.
+type OrgLabelSearchRow struct {
+	Code      string `json:"code"`
+	CreatedAt string `json:"createdAt"`
+}
+
+// SearchOrgLabels — find the company's own unused labels by the END
+// of the code. A desk holds a physical sticker and reads off its last
+// few characters ("…YZN"); typing the whole PKG- code from a sticker
+// held at arm's length is the slow path, and the tail is what
+// disambiguates — shared three-letter tails across live labels are
+// vanishingly rare. Blank stock only (never used, never filled in,
+// never withdrawn): attaching a label spends it, so anything already
+// spoken for is not offered.
+func SearchOrgLabels(ctx context.Context, pool *pgxpool.Pool, orgID, tail string, limit int) ([]OrgLabelSearchRow, error) {
+	tail = strings.ToUpper(strings.TrimSpace(tail))
+	if tail == "" {
+		return []OrgLabelSearchRow{}, nil
+	}
+	if limit <= 0 || limit > 20 {
+		limit = 15
+	}
+	rows, err := pool.Query(ctx, `
+		SELECT s.code, to_char(s."createdAt", 'YYYY-MM-DD"T"HH24:MI:SSZ')
+		FROM parcel_label_stock s
+		WHERE s."parcelOrgId" = $1
+		  AND s."voidedAt" IS NULL AND s."usedAt" IS NULL AND s."infoAttachedAt" IS NULL
+		  AND upper(s.code) LIKE '%' || $2
+		ORDER BY s."createdAt" DESC LIMIT $3`, orgID, tail, limit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	out := []OrgLabelSearchRow{}
+	for rows.Next() {
+		var r OrgLabelSearchRow
+		if err := rows.Scan(&r.Code, &r.CreatedAt); err != nil {
+			return nil, err
+		}
+		out = append(out, r)
+	}
+	return out, rows.Err()
+}
+
 // AttachOrgParcelLabelInfo — the company's own version of
 // AttachParcelLabelInfo: write field notes (what the box is, where it's
 // going, who it's for) onto a pre-printed label, well before booking.
@@ -1368,15 +1415,22 @@ type ImportParcelInput struct {
 	WeightKg         *float64
 	Fragile          bool
 	Notes            *string
+	// LabelCode — one of the company's own pre-printed labels to stick
+	// on this parcel. The label's code BECOMES the parcel's tracking
+	// code (same as BookParcel's ExistingCode path): the physical
+	// sticker and the system record are one identity from this moment.
+	// Nil means Esoqo mints a fresh code instead.
+	LabelCode *string
 }
 
 // ImportOrgParcel registers an externally-created parcel under [orgID].
 // It lands in RECEIVED_AT_COUNTER — the box is in the company's hands
 // already, which is the truth for anything they're migrating in — and
 // from there flows through the exact same handoff/delivery/tracking
-// machinery as a parcel booked on Esoqo. Esoqo mints its own `code`
-// (the tracking credential); the caller's number is kept in externalRef
-// and searched, never used as the public code.
+// machinery as a parcel booked on Esoqo. Without a label Esoqo mints
+// its own `code` (the tracking credential); the caller's number is
+// kept in externalRef and searched, never used as the public code.
+// With one, the pre-printed label's code is the tracking code.
 func ImportOrgParcel(ctx context.Context, pool *pgxpool.Pool, orgID string, in ImportParcelInput) (id, code string, err error) {
 	if strings.TrimSpace(in.SenderName) == "" || strings.TrimSpace(in.SenderMsisdn) == "" {
 		return "", "", &ParcelError{"BAD_INPUT", "Sender name and phone are required"}
@@ -1400,6 +1454,10 @@ func ImportOrgParcel(ctx context.Context, pool *pgxpool.Pool, orgID string, in I
 	var externalRef *string
 	if ref != "" {
 		externalRef = &ref
+	}
+
+	if in.LabelCode != nil && strings.TrimSpace(*in.LabelCode) != "" {
+		return importOrgParcelWithLabel(ctx, pool, orgID, in, externalRef, deliveryCode, serviceTicketNumber)
 	}
 
 	// A PKG- code is 6 chars from a 32-symbol alphabet — collisions are
@@ -1437,6 +1495,84 @@ func ImportOrgParcel(ctx context.Context, pool *pgxpool.Pool, orgID string, in I
 		}
 	}
 	return "", "", &ParcelError{"CONFLICT", "Could not allocate a tracking code — try again"}
+}
+
+// importOrgParcelWithLabel — the sticker-first variant: claim one of
+// the company's own pre-printed labels and register the parcel under
+// its code. Claiming the stock row and inserting the parcel happen in
+// one transaction so two desks sticking the same physical label at
+// once can't both win it — the same shape BookParcel's ExistingCode
+// path already uses, including the org-induction check (a pad printed
+// for one company is spendable only by it; unowned shared-pool stock
+// stays bindable by anyone).
+func importOrgParcelWithLabel(ctx context.Context, pool *pgxpool.Pool, orgID string, in ImportParcelInput, externalRef *string, deliveryCode, serviceTicketNumber string) (id, code string, err error) {
+	code = strings.ToUpper(strings.TrimSpace(*in.LabelCode))
+	tx, terr := pool.Begin(ctx)
+	if terr != nil {
+		return "", "", terr
+	}
+	defer func() { _ = tx.Rollback(ctx) }()
+	var stockID string
+	var stockOrgID *string
+	var voidedAt *time.Time
+	var voidedReason *string
+	lockErr := tx.QueryRow(ctx, `
+		SELECT id, "parcelOrgId"::text, "voidedAt", "voidedReason"
+		FROM parcel_label_stock WHERE upper(code) = $1 AND "usedAt" IS NULL FOR UPDATE`,
+		code).Scan(&stockID, &stockOrgID, &voidedAt, &voidedReason)
+	if errors.Is(lockErr, pgx.ErrNoRows) {
+		return "", "", &ParcelError{"BAD_INPUT", "That label isn't one of your unused pre-printed labels"}
+	}
+	if lockErr != nil {
+		return "", "", lockErr
+	}
+	if voidedAt != nil {
+		msg := "That label has been withdrawn and can't be used"
+		if voidedReason != nil && *voidedReason != "" {
+			msg += " — " + *voidedReason
+		}
+		return "", "", &ParcelError{"BAD_INPUT", msg}
+	}
+	// Deliberately doesn't name the owning company on a miss — whoever
+	// is holding this sticker isn't entitled to learn which of our
+	// partners it was printed for.
+	if stockOrgID != nil && *stockOrgID != orgID {
+		return "", "", &ParcelError{"FORBIDDEN", "That label was issued to another company — use one of your own"}
+	}
+	err = tx.QueryRow(ctx, `
+		INSERT INTO parcel (
+			id, code, "deliveryCode", "serviceTicketNumber",
+			"senderName", "senderMsisdn", "receiverName", "receiverMsisdn",
+			"originLabel", "destinationLabel", notes,
+			"parcelType", "weightKg", fragile,
+			"parcelOrgId", "externalRef", "externalSource",
+			"originMethod", status, "createdAt"
+		) VALUES (
+			gen_random_uuid(), $1, $2, $3,
+			$4, $5, $6, $7,
+			$8, $9, $10,
+			$11::"ParcelType", $12, $13,
+			$14, $15, $16,
+			'SCHEDULED_PICKUP'::"ParcelOriginMethod", 'RECEIVED_AT_COUNTER', now()
+		) RETURNING id`,
+		code, deliveryCode, serviceTicketNumber,
+		strings.TrimSpace(in.SenderName), strings.TrimSpace(in.SenderMsisdn),
+		strings.TrimSpace(in.ReceiverName), strings.TrimSpace(in.ReceiverMsisdn),
+		strings.TrimSpace(in.OriginLabel), strings.TrimSpace(in.DestinationLabel), in.Notes,
+		in.ParcelType, in.WeightKg, in.Fragile,
+		orgID, externalRef, in.ExternalSource).Scan(&id)
+	if err != nil {
+		return "", "", err
+	}
+	if _, err := tx.Exec(ctx, `
+		UPDATE parcel_label_stock SET "usedAt" = now(), "usedByParcelId" = $2 WHERE id = $1`,
+		stockID, id); err != nil {
+		return "", "", err
+	}
+	if err := tx.Commit(ctx); err != nil {
+		return "", "", err
+	}
+	return id, code, nil
 }
 
 // ParcelBelongsToOrg is the scoping check every org-scoped write runs

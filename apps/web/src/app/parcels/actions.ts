@@ -265,6 +265,10 @@ export interface ParcelStatusView {
   // a typed code, or a label printed before signing existed, has no
   // signature to check. See the /p/[code] page.
   labelVerdict?: string;
+  /** The courier company this parcel or label belongs to, if any —
+   *  what lets a scan answer "whose label is this" with a company name
+   *  and "managed by Esoqo". Null for shared-pool stock. */
+  orgName?: string | null;
 }
 
 /** One line of the public custody timeline. `label` is the server's own

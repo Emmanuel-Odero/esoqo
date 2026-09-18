@@ -1206,6 +1206,13 @@ type ParcelStatusView struct {
 
 	PreLabelInfo *ParcelLabelInfo `json:"preLabelInfo"`
 
+	// OrgName — the courier company this parcel or label belongs to, if
+	// any. Guest-safe (a company name, not a person) and the whole
+	// point of company-issued stock: anyone scanning — our app or an
+	// ordinary phone camera — sees whose label they're holding and that
+	// Esoqo manages it. Nil for the shared Esoqo pool.
+	OrgName *string `json:"orgName"`
+
 	// Events — the full custody timeline, oldest first, guest-safe: a
 	// time and a stage label, never a holder's name or phone. Lets the
 	// tracking page show "received at counter 2:14pm, collected 4:02pm"
@@ -1340,9 +1347,11 @@ func GetParcelStatus(ctx context.Context, pool *pgxpool.Pool, code string) (*Par
 		       p."deliveryAttempts", p."lastAttemptAt", p."lastAttemptReason",
 		       p."podPhotoUrl", p."podReceivedByName", p."podMethod",
 		       a.name, a.msisdn, a."locationHint", a."openingHours",
-		       a.lat::text, a.lng::text, a."holdingFeeKes"::text
+		       a.lat::text, a.lng::text, a."holdingFeeKes"::text,
+		       o.name
 		FROM parcel p
 		LEFT JOIN parcel_agent a ON a.id = p."destinationAgentId"
+		LEFT JOIN parcel_org o ON o.id = p."parcelOrgId"
 		WHERE p.code = $1 OR p."serviceTicketNumber" = $1`, code).
 		Scan(&parcelID, &v.Code, &v.Status, &v.OriginLabel, &v.DestinationLabel, &v.ParcelType,
 			&v.PriceKes, &v.CollectionScheduledAt, &v.CreatedAt, &v.DeliveredAt,
@@ -1351,7 +1360,7 @@ func GetParcelStatus(ctx context.Context, pool *pgxpool.Pool, code string) (*Par
 			&v.DeliveryAttempts, &v.LastAttemptAt, &v.LastAttemptReason,
 			&v.PodPhotoURL, &v.PodReceivedByName, &v.PodMethod,
 			&agentName, &agentMsisdn, &agentHint, &agentHours,
-			&agentLat, &agentLng, &agentFee)
+			&agentLat, &agentLng, &agentFee, &v.OrgName)
 	if err == nil {
 		if v.LastAttemptReason != nil {
 			// Resolved server-side rather than left to each client to map:
@@ -1394,13 +1403,15 @@ func GetParcelStatus(ctx context.Context, pool *pgxpool.Pool, code string) (*Par
 	var info ParcelLabelInfo
 	var infoAttachedAt *time.Time
 	serr := pool.QueryRow(ctx, `
-		SELECT code, "createdAt", "itemDescription", destination, "senderName", "senderMsisdn",
-		       "receiverName", "receiverMsisdn", "itemType", "weightRangeKg", "infoAttachedAt",
-		       "lengthCm"::float8, "widthCm"::float8, "heightCm"::float8
-		FROM parcel_label_stock WHERE code = $1`, code).
+		SELECT s.code, s."createdAt", s."itemDescription", s.destination, s."senderName", s."senderMsisdn",
+		       s."receiverName", s."receiverMsisdn", s."itemType", s."weightRangeKg", s."infoAttachedAt",
+		       s."lengthCm"::float8, s."widthCm"::float8, s."heightCm"::float8, o.name
+		FROM parcel_label_stock s
+		LEFT JOIN parcel_org o ON o.id = s."parcelOrgId"
+		WHERE s.code = $1`, code).
 		Scan(&stock.Code, &createdAt, &itemDescription, &info.Destination, &info.SenderName,
 			&info.SenderMsisdn, &info.ReceiverName, &info.ReceiverMsisdn, &info.ItemType, &info.WeightRangeKg, &infoAttachedAt,
-			&info.LengthCm, &info.WidthCm, &info.HeightCm)
+			&info.LengthCm, &info.WidthCm, &info.HeightCm, &stock.OrgName)
 	if errors.Is(serr, pgx.ErrNoRows) {
 		return nil, nil
 	}
@@ -1786,6 +1797,11 @@ type ParcelLabelRegisterRow struct {
 	VoidedReason    *string    `json:"voidedReason"`
 	BatchID         *string    `json:"batchId"`
 	OrgName         *string    `json:"orgName"`
+	// Sig — the truncated MAC printed as k= in the QR's URL. Filled in
+	// by handlers that know both the secret and the owning org (the
+	// stock endpoint and the company register); empty wherever neither
+	// was available. See fleetqr.SignLabel.
+	Sig string `json:"sig"`
 }
 
 // ParcelLabelStates are the register's tabs, each a predicate over the

@@ -60,6 +60,9 @@ export default async function ScannedLabelPage({
               Somebody who scanned a forgery needs to know that before
               they read a status that would only lend it credibility. */}
           <Verdict verdict={parcel && !('message' in parcel) ? parcel.labelVerdict : undefined} />
+          {/* Whose label this is — a sticker picked up anywhere reads
+              with its owner and manager stated plainly, no app needed. */}
+          <Ownership parcel={parcel} />
           {res.kind === 'found'
             ? <ParcelStatusPanel parcel={res.parcel} />
             : res.kind === 'not-found'
@@ -105,6 +108,29 @@ function Verdict({ verdict }: { verdict?: string }) {
   // rendering of "we can't tell", and dressing it up either way would
   // be claiming knowledge we don't have.
   return null;
+}
+
+/**
+ * The ownership answer: this sticker was issued to a company, and
+ * Esoqo manages it. Company-issued stock is the common case for a
+ * scan in the wild (a label on a box, read by an ordinary camera), so
+ * the company name and the tracking code travel together, stated
+ * rather than implied.
+ */
+function Ownership({ parcel }: { parcel: { orgName?: string | null; preLabel?: boolean; status: string } | null }) {
+  if (!parcel || !parcel.orgName) return null;
+  return (
+    <div className="chain" style={{ background: 'var(--blue-t, #E8F0FE)', border: '1px solid #B9CDEC', color: 'var(--ink, #1a1a1a)', marginBottom: 14 }}>
+      <Icon name="building" size={18} />
+      <span>
+        {parcel.preLabel ? (
+          <>This label belongs to <strong>{parcel.orgName}</strong> — managed by Esoqo.</>
+        ) : (
+          <>Carried by <strong>{parcel.orgName}</strong> · managed by Esoqo.</>
+        )}
+      </span>
+    </div>
+  );
 }
 
 function NotFound({ code }: { code: string }) {

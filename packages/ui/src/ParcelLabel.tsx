@@ -122,7 +122,7 @@ export function trackingUrlFor(code: string, sig?: string): string {
  * existed.
  */
 export function PrintableLabel({
-  code, sig, route,
+  code, sig, route, orgName,
 }: {
   code: string; sig?: string;
   /** "KISUMU ▸ NAIROBI", when it's known. The single most useful thing
@@ -131,6 +131,12 @@ export function PrintableLabel({
    *  stock prints an empty band to be written on by hand, which is the
    *  honest workflow. */
   route?: string;
+  /** The courier company this pad was issued to, when it was issued to
+   *  one. Prints as "{company} · Managed by Esoqo" under the route
+   *  band, so anyone holding the box — scanner or not — sees whose
+   *  label it is and who stands behind it. Omitted for shared-pool
+   *  stock, which belongs to no company. */
+  orgName?: string;
 }) {
   const qrSrc = useCodeImage(async (canvas) => {
     const QRCode = await import('qrcode');
@@ -177,6 +183,16 @@ export function PrintableLabel({
           {route ?? ' '}
         </span>
       </div>
+      {/* Company band. Only on company-issued stock: whose pad this is
+          and who manages it, readable without scanning anything. */}
+      {orgName && (
+        <div style={{
+          fontSize: '2.8mm', fontWeight: 700, letterSpacing: '.03em', lineHeight: 1,
+          overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+        }}>
+          {orgName} · Managed by {BRAND}
+        </div>
+      )}
 
       <div style={{ display: 'flex', flexDirection: 'row', alignItems: 'center', gap: '3mm', flex: 1, minHeight: 0 }}>
         <div style={{ width: '27mm', height: '27mm', flexShrink: 0 }}>
