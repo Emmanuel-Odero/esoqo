@@ -5,6 +5,7 @@ import {
   ParcelOrgUnauthorised,
   parcelOrgFetch,
   type DispatchRun,
+  type OrgLabelSearchRow,
   type OrgParcelLabel,
   type ParcelOrgStaffRow,
   type ParcelOrgStationRow,
@@ -300,6 +301,9 @@ export interface OrgLabelRow {
   voidedReason: string | null;
   batchId: string | null;
   orgName: string | null;
+  /** The QR signature, so reprints from this register verify as
+   *  genuine. Empty on rows the server couldn't sign. */
+  sig: string;
 }
 
 export interface OrgLabelBatchRow {
@@ -329,30 +333,6 @@ export async function listOrgLabelBatches(): Promise<OrgLabelBatchRow[]> {
     "/v1/parcel-orgs/me/labels/batches",
   );
   return res.batches ?? [];
-}
-
-export async function generateOrgLabels(
-  count: number,
-): Promise<
-  { ok: true; codes: string[]; batchId: string } | { ok: false; error: string }
-> {
-  try {
-    const res = await parcelOrgFetch<{
-      codes: string[] | null;
-      batchId: string;
-    }>("/v1/parcel-orgs/me/labels/generate", {
-      method: "POST",
-      body: JSON.stringify({ count }),
-    });
-    revalidatePath("/parcel-org/labels");
-    return { ok: true, codes: res.codes ?? [], batchId: res.batchId };
-  } catch (e) {
-    const r = toResult(e);
-    return {
-      ok: false,
-      error: r.ok ? "Could not print those labels" : r.error,
-    };
-  }
 }
 
 /** Withdraw a whole pad — the "it was stolen from the Kisumu desk"
@@ -390,13 +370,17 @@ export interface CustomParcelInput {
   weightKg?: number | null;
   fragile?: boolean;
   notes?: string | null;
+  /** One of the company's own pre-printed labels, picked by tail
+   *  search on the form. Its code becomes the parcel's tracking code. */
+  labelCode?: string | null;
 }
 
 /** Save a parcel with the company's own number, so work that starts on
  *  paper or in another book can be managed and tracked on Esoqo too.
- *  Esoqo mints its own tracking code; the company's number is kept as
- *  externalRef and searchable. Returns the Esoqo code so the caller can
- *  show it immediately. */
+ *  Esoqo mints its own tracking code — unless a pre-printed label is
+ *  attached, in which case that label's code IS the tracking code —
+ *  and the company's number is kept as externalRef and searchable.
+ *  Returns the Esoqo code so the caller can show it immediately. */
 export async function addCustomParcel(
   input: CustomParcelInput,
 ): Promise<{ ok: true; code: string } | { ok: false; error: string }> {
@@ -415,6 +399,7 @@ export async function addCustomParcel(
         weightKg: input.weightKg ?? null,
         fragile: input.fragile ?? false,
         notes: input.notes?.trim() || null,
+        labelCode: input.labelCode?.trim() || null,
       }),
     });
     revalidatePath("/parcel-org");
@@ -423,6 +408,16 @@ export async function addCustomParcel(
     const r = toResult(e);
     return { ok: false, error: r.ok ? "Could not import that parcel" : r.error };
   }
+}
+
+/** Tail-search the company's own unused labels: type the last few
+ *  characters off the physical sticker, pick the full code. */
+export async function searchOrgLabels(q: string): Promise<OrgLabelSearchRow[]> {
+  if (!q.trim()) return [];
+  const res = await parcelOrgFetch<{ labels: OrgLabelSearchRow[] | null }>(
+    `/v1/parcel-orgs/me/labels/search?q=${encodeURIComponent(q.trim())}`,
+  );
+  return res.labels ?? [];
 }
 
 /** Name (or clear) the team member who runs a station. */

@@ -52,6 +52,13 @@ export function LabelStockPanel({
   const toPrint: { code: string; sig?: string }[] = freshlyMinted
     ? freshlyMinted.map((code) => ({ code }))
     : unused.map((u) => ({ code: u.code, sig: u.sig }));
+  // Whose pad is on the printer — printed on every sticker as the
+  // brand, so a box picked up anywhere reads who it belongs to and who
+  // manages it. Undefined for the shared Esoqo pool, which brands as
+  // Esoqo alone.
+  const activeOrgName = activeOrgId
+    ? orgs.find((o) => o.id === activeOrgId)?.name
+    : undefined;
 
   return (
     <>
@@ -108,7 +115,7 @@ export function LabelStockPanel({
             </button>
           </div>
           <p className="sub" style={{ margin: '0 0 10px' }}>Click a label to attach info to it.</p>
-          <LabelSheet codes={toPrint} onSelect={openModal} />
+          <LabelSheet codes={toPrint} orgName={activeOrgName} onSelect={openModal} />
         </div>
       )}
       <PrintStyles />
@@ -127,8 +134,8 @@ const LABELS_PER_PAGE = 10;
 const LABELS_PER_ROW = 2;
 
 function LabelSheet({
-  codes, onSelect,
-}: { codes: { code: string; sig?: string }[]; onSelect: (code: string) => void }) {
+  codes, orgName, onSelect,
+}: { codes: { code: string; sig?: string }[]; orgName?: string; onSelect: (code: string) => void }) {
   const pages: { code: string; sig?: string }[][] = [];
   for (let i = 0; i < codes.length; i += LABELS_PER_PAGE) {
     pages.push(codes.slice(i, i + LABELS_PER_PAGE));
@@ -162,7 +169,7 @@ function LabelSheet({
               style={{ all: 'unset', cursor: 'pointer', display: 'block' }}
               aria-label={`Attach info to ${code}`}
             >
-              <PrintableLabel code={code} sig={sig} />
+              <PrintableLabel code={code} sig={sig} orgName={orgName} />
             </button>
           ))}
         </div>

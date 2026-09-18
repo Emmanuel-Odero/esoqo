@@ -67,6 +67,9 @@ func TestRouterRegistersWithoutConflict(t *testing.T) {
 		"GET /v1/parcel-orgs/me/dispatch":     false,
 		"POST /v1/parcel-orgs/me/dispatch":    false,
 		"GET /v1/parcel-orgs/me/dispatch/:id": false,
+		// Label tail-search beside the register and the info tree.
+		"GET /v1/parcel-orgs/me/labels/search": false,
+		"GET /v1/parcel-orgs/me/labels":        false,
 	}
 	for _, r := range routes {
 		key := r.Method + " " + r.Path

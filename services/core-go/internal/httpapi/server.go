@@ -317,7 +317,10 @@ func (s *Server) Router() *gin.Engine {
 		// withdrawing a stolen pad, all scoped to the session's org.
 		// "batches" is static and sits above :id, same shape as the
 		// admin-side label routes.
-		v1.POST("/parcel-orgs/me/labels/generate", s.authRequired(), s.handleOrgGenerateLabels)
+		// Stock is issued to a company by Esoqo admin — a company never
+		// mints its own. The static "search" segment is load-bearing:
+		// see handleAttachOrgLabelInfo's own comment.
+		v1.GET("/parcel-orgs/me/labels/search", s.authRequired(), s.handleSearchOrgLabels)
 		v1.GET("/parcel-orgs/me/labels", s.authRequired(), s.handleOrgListLabelRegister)
 		// Scan/lookup a code against the company's own stock, and attach
 		// field notes to a printed label. The static "info" segment is
