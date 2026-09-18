@@ -1307,6 +1307,72 @@ func UpsertParcelOrgStaff(ctx context.Context, pool *pgxpool.Pool, id *string, o
 	return nil
 }
 
+// ParcelOrgStaffCredential is the minimum a staffer needs to change
+// their own portal PIN: the stored hash to verify the current PIN
+// against, and the linked party (if any) whose Esoqo credential must
+// move with it so /signin keeps working on the same PIN.
+type ParcelOrgStaffCredential struct {
+	PinHash string
+	PartyID *string
+}
+
+// GetParcelOrgStaffCredential reads a staffer's own login back for a
+// PIN change — scoped by org like every other org read, and
+// active-only: a suspended row's PIN is not something its holder gets
+// to rotate back into use. Nil, nil when there is nothing to change.
+func GetParcelOrgStaffCredential(ctx context.Context, pool *pgxpool.Pool, orgID, staffID string) (*ParcelOrgStaffCredential, error) {
+	var c ParcelOrgStaffCredential
+	err := pool.QueryRow(ctx, `
+		SELECT "pinHash", "partyId"::text FROM parcel_org_staff
+		WHERE id = $1 AND "orgId" = $2 AND active`, staffID, orgID).
+		Scan(&c.PinHash, &c.PartyID)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, err
+	}
+	return &c, nil
+}
+
+// ChangeParcelOrgStaffPin sets a staffer's own portal PIN — the "temp
+// PIN in, chosen PIN out" half of the invite flow. One transaction
+// covers the staff row and, when the row links a Person, that Person's
+// Esoqo credential too: the invite established one PIN for both doors
+// (company portal name+PIN, /signin phone+PIN), and a change must keep
+// that invariant rather than silently splitting them.
+func ChangeParcelOrgStaffPin(ctx context.Context, pool *pgxpool.Pool, orgID, staffID, newHash string) error {
+	tx, err := pool.Begin(ctx)
+	if err != nil {
+		return err
+	}
+	defer func() { _ = tx.Rollback(ctx) }()
+	var partyID *string
+	if err := tx.QueryRow(ctx, `
+		UPDATE parcel_org_staff SET "pinHash" = $1, "updatedAt" = now()
+		WHERE id = $2 AND "orgId" = $3 AND active
+		RETURNING "partyId"::text`, newHash, staffID, orgID).Scan(&partyID); err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return &ParcelError{"NOT_FOUND", "Your login is no longer active — sign in again"}
+		}
+		return err
+	}
+	if partyID != nil && *partyID != "" {
+		// Same shape as dbx.UpsertPin, inside this transaction rather
+		// than through it — a PIN change that updated one door and not
+		// the other would be worse than one that failed cleanly.
+		if _, err := tx.Exec(ctx, `
+			INSERT INTO user_credential ("personId", "pinHash", "pinSetAt", "failedAttempts", "lockedUntil", "updatedAt")
+			VALUES ($1, $2, now(), 0, NULL, now())
+			ON CONFLICT ("personId") DO UPDATE
+			SET "pinHash" = EXCLUDED."pinHash", "pinSetAt" = now(), "failedAttempts" = 0, "lockedUntil" = NULL, "updatedAt" = now()`,
+			*partyID, newHash); err != nil {
+			return err
+		}
+	}
+	return tx.Commit(ctx)
+}
+
 // ── Org-scoped reads ─────────────────────────────────────────────────
 
 // ParcelOrgStats is the operator dashboard's "what needs me today".

@@ -331,6 +331,10 @@ func (s *Server) Router() *gin.Engine {
 		v1.POST("/parcel-orgs/me/labels/batches/:id/void", s.authRequired(), s.handleOrgVoidLabelBatch)
 		v1.GET("/parcel-orgs/me/staff", s.authRequired(), s.handleListMyOrgStaff)
 		v1.POST("/parcel-orgs/me/staff", s.authRequired(), s.handleUpsertMyOrgStaff)
+		// A staffer changing their own portal PIN — self-service for the
+		// whole roster, not management, so it sits beside staff rather
+		// than behind the staff-write capability.
+		v1.POST("/parcel-orgs/me/pin", s.authRequired(), s.handleChangeMyOrgPin)
 		v1.GET("/parcel-orgs/me/stations", s.authRequired(), s.handleListMyOrgStations)
 		v1.POST("/parcel-orgs/me/stations", s.authRequired(), s.handleCreateMyOrgStation)
 		v1.GET("/parcel-orgs/me/stations/:id", s.authRequired(), s.handleGetMyOrgStation)
