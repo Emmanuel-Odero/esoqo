@@ -214,6 +214,20 @@ export async function actionSearchCollectors(
   return collectors ?? [];
 }
 
+/** Any existing person on the platform, for the "add an existing person"
+ *  picker on a company's team. Typeahead, so the caller debounces; blank
+ *  returns nothing (a picker, not a people dump). */
+export async function actionSearchParcelPeople(
+  q: string,
+): Promise<CollectorLite[]> {
+  await requireStaff();
+  if (!q.trim()) return [];
+  const { people } = await adminGo<{ people: CollectorLite[] | null }>(
+    `/v1/admin/parcels/people?q=${encodeURIComponent(q)}`,
+  );
+  return people ?? [];
+}
+
 /**
  * A clerk/handler's explicit "the box is physically here" moment —
  * the gate on the sender's and receiver's very first SMS about this
@@ -737,13 +751,42 @@ export async function actionCreateEnterprise(
 
 export async function actionCreateParcelOrg(
   input: ParcelOrgInput,
+  members: OrgMemberInput[] = [],
 ): Promise<Result> {
   try {
     await requireStaff();
-    await adminGo<{ id: string }>("/v1/admin/parcels/orgs", {
+    const { id } = await adminGo<{ id: string }>("/v1/admin/parcels/orgs", {
       method: "POST",
       body: JSON.stringify(input),
     });
+    // Add the roster in the same onboarding step. Sequential rather than
+    // a single bulk call so each member takes the exact upsert/invite/
+    // PIN-provisioning path the Team manager uses later — and a failure
+    // names the person it stopped on, since the company itself has
+    // already been created by this point.
+    for (const m of members) {
+      if (!m.name.trim()) continue;
+      try {
+        await adminGo(`/v1/admin/parcels/orgs/${id}/staff`, {
+          method: "POST",
+          body: JSON.stringify({
+            name: m.name.trim(),
+            role: m.role,
+            pin: m.pin ?? "",
+            msisdn: m.msisdn?.trim() || null,
+            esokoId: m.esokoId?.trim() || null,
+            isContact: m.isContact ?? false,
+            capabilities: m.capabilities ?? [],
+          }),
+        });
+      } catch (e) {
+        throw new Error(
+          `The company was created, but adding ${m.name.trim()} failed: ` +
+            (e instanceof Error ? e.message : "unknown error") +
+            ". Add them from the company's Team section.",
+        );
+      }
+    }
     const portalUrl = `${process.env.NEXT_PUBLIC_APP_URL ?? "http://localhost:3001"}/parcel-co/${input.slug}`;
     const message = `ESOQO PARCEL: ${input.name} has been created. Staff sign in at ${portalUrl}. Your company manager will receive access separately.`;
     if (input.contactEmail) {
@@ -794,12 +837,31 @@ export interface ParcelOrgStaffRow {
   name: string;
   role: string;
   active: boolean;
+  /** One of the company's contact people. Multiple are allowed; the
+   *  register's Contact column prefers these over the first manager. */
+  isContact: boolean;
   partyId: string | null;
   stationId: string | null;
   /** The phone and the ESK-… handle this person signs in with — the two
    *  credentials an admin reads back to someone locked out. */
   msisdn: string | null;
   esoqoId: string | null;
+  /** A custom ("Other…") role's explicit permissions. Empty for a preset
+   *  role, whose bundle is resolved from `role` at sign-in. */
+  capabilities: string[];
+}
+
+/** One roster member entered during company onboarding. Mirrors the
+ *  fields TeamManager's add form takes, so each member goes through the
+ *  exact same core-go upsert/invite/PIN-provisioning path afterwards. */
+export interface OrgMemberInput {
+  name: string;
+  role: string;
+  pin?: string;
+  msisdn?: string;
+  esokoId?: string;
+  isContact?: boolean;
+  capabilities?: string[];
 }
 
 /** A company's own audit trail, read straight off the append-only
@@ -836,9 +898,19 @@ export async function actionGetParcelOrgDetail(
   id: string,
 ): Promise<ParcelOrgDetail> {
   await requireStaff();
-  return adminGo<ParcelOrgDetail>(
+  const detail = await adminGo<ParcelOrgDetail>(
     `/v1/admin/parcels/orgs/${encodeURIComponent(id)}`,
   );
+  // core-go serialises a nil Go slice as JSON null, not [] — a company
+  // with no roster or no audit rows comes back that way, and the page
+  // reads .length/.map on both. Normalise here (same convention
+  // actionListParcelOrgStaff already follows) rather than making every
+  // caller null-check a field typed as an array.
+  return {
+    ...detail,
+    staff: detail.staff ?? [],
+    activity: detail.activity ?? [],
+  };
 }
 
 export async function actionListParcelOrgStaff(
@@ -897,7 +969,12 @@ export async function actionCreateParcelOrgManager(
     esokoId?: string;
     partyId?: string | null;
     active?: boolean;
+    isContact?: boolean;
     stationId?: string | null;
+    /** A custom role's permissions. Sent as an array (possibly empty) so
+     *  switching back to a preset clears them; omitted on paths that
+     *  don't touch permissions. */
+    capabilities?: string[];
   },
 ): Promise<Result> {
   try {
@@ -913,6 +990,12 @@ export async function actionCreateParcelOrgManager(
         esokoId: input.esokoId ?? null,
         partyId: input.partyId || null,
         active: input.active ?? true,
+        // Undefined (not false) on an update so core-go leaves the flag
+        // alone rather than clearing it — see toggling a suspension.
+        isContact: input.isContact,
+        // Undefined here means "don't touch permissions" (a suspend),
+        // which is exactly right; the edit form always sends its list.
+        capabilities: input.capabilities,
         stationId: input.stationId ?? null,
       }),
     });

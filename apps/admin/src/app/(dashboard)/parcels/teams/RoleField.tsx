@@ -19,22 +19,32 @@ const FIELD: React.CSSProperties = { display: 'block', padding: '6px 8px', borde
  * input rather than silently discarding what doesn't fit the preset
  * list.
  */
-export function RoleField({ value, onChange, label = 'Role' }: { value: string; onChange: (role: string) => void; label?: string }) {
-  const isPreset = ROLE_PRESETS.includes(value);
-  const [customMode, setCustomMode] = useState(!isPreset && value !== '');
+export function RoleField({
+  value, onChange, label = 'Role', presets = ROLE_PRESETS,
+}: {
+  value: string;
+  onChange: (role: string) => void;
+  label?: string;
+  /** The presets offered before "Other…". Different callers have
+   *  different vocabularies — a courier team's titles aren't a courier
+   *  company's staff roles — so this is a prop rather than a fixed list. */
+  presets?: string[];
+}) {
+  const isPreset = presets.includes(value);
+  const [customMode, setCustomMode] = useState(value !== '' && !isPreset);
 
   return (
     <div>
       <label className="sub">{label}
         <select
-          value={customMode ? OTHER : (value || 'MEMBER')}
+          value={customMode ? OTHER : (isPreset ? value : (value || presets[0]))}
           onChange={(e) => {
             if (e.target.value === OTHER) { setCustomMode(true); onChange(''); }
             else { setCustomMode(false); onChange(e.target.value); }
           }}
           style={FIELD}
         >
-          {ROLE_PRESETS.map((r) => <option key={r} value={r}>{r}</option>)}
+          {presets.map((r) => <option key={r} value={r}>{r}</option>)}
           <option value={OTHER}>Other…</option>
         </select>
       </label>

@@ -1,12 +1,20 @@
 'use client';
 
-import { useId, useState, useTransition } from 'react';
-import { Icon } from '@esoqo/ui';
+import { useEffect, useId, useState, useTransition } from 'react';
+import { Icon, ParcelCapabilityPicker, RIDER_BASELINE } from '@esoqo/ui';
 import {
   actionCreateParcelOrg, actionUpdateParcelOrg, actionSearchEnterprises, actionCreateEnterprise,
-  actionListParcelOrgStaff, actionCreateParcelOrgManager, actionIssueParcelOrgStaffId,
-  type ParcelOrg, type ParcelOrgInput, type EnterpriseLite, type ParcelOrgStaffRow,
+  actionListParcelOrgStaff, actionCreateParcelOrgManager, actionIssueParcelOrgStaffId, actionSearchParcelPeople,
+  type ParcelOrg, type ParcelOrgInput, type EnterpriseLite, type ParcelOrgStaffRow, type OrgMemberInput,
+  type CollectorLite,
 } from '../actions';
+import { RoleField } from '../teams/RoleField';
+
+/** The roles a courier company gets out of the box. A preset resolves to
+ *  a fixed capability bundle; anything else is a custom title, and the
+ *  permissions picker below is where its access is actually chosen. */
+const PARCEL_STAFF_ROLES = ['MANAGER', 'DISPATCHER', 'RIDER'];
+const isCustomRole = (role: string) => !PARCEL_STAFF_ROLES.includes(role);
 
 /**
  * Panels shared by the courier-company register and a company's own page.
@@ -101,17 +109,62 @@ export function TeamManager({
   const [name, setName] = useState('');
   const [pin, setPin] = useState('');
   const [msisdn, setMsisdn] = useState('');
-  const [esokoId, setEsokoId] = useState('');
   const [role, setRole] = useState('MANAGER');
+  const [capabilities, setCapabilities] = useState<string[]>([]);
+  const [isContact, setIsContact] = useState(false);
+  // Existing-person picker — a typeahead over anyone already on the
+  // platform. Picking one links their Party instead of minting a new one;
+  // adding someone not in the results goes through the phone field below.
+  const [personQuery, setPersonQuery] = useState('');
+  const [personResults, setPersonResults] = useState<CollectorLite[]>([]);
+  const [selectedPerson, setSelectedPerson] = useState<CollectorLite | null>(null);
+  const [personSearching, setPersonSearching] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [pending, startTransition] = useTransition();
   const [issuing, setIssuing] = useState<string | null>(null);
   const [editingId, setEditingId] = useState<string | null>(null);
-  const ids = { name: useId(), pin: useId(), msisdn: useId(), role: useId(), esoko: useId() };
+  const ids = { name: useId(), pin: useId(), msisdn: useId(), role: useId(), person: useId() };
 
   if (staff === null && !loading) {
     setLoading(true);
     void actionListParcelOrgStaff(org.id).then((rows) => { setStaff(rows); setLoading(false); });
+  }
+
+  // Debounced typeahead: search from 2 characters, ignore a response whose
+  // query has already changed, and stop once someone's been picked.
+  useEffect(() => {
+    const term = personQuery.trim();
+    if (selectedPerson || term.length < 2) { setPersonResults([]); setPersonSearching(false); return; }
+    let cancelled = false;
+    setPersonSearching(true);
+    const timer = setTimeout(async () => {
+      try {
+        const rows = await actionSearchParcelPeople(term);
+        if (!cancelled) setPersonResults(rows);
+      } finally {
+        if (!cancelled) setPersonSearching(false);
+      }
+    }, 250);
+    return () => { cancelled = true; clearTimeout(timer); };
+  }, [personQuery, selectedPerson]);
+
+  function pickPerson(p: CollectorLite) {
+    setSelectedPerson(p);
+    setName(p.Name);
+    setPersonQuery(p.Name);
+    setPersonResults([]);
+  }
+  function pickRole(next: string) {
+    setRole(next);
+    // A fresh custom role starts from the RIDER floor rather than
+    // nothing, so an owner can only add access on top, never accidentally
+    // hand out less than the safe default.
+    if (isCustomRole(next)) setCapabilities((c) => (c.length ? c : [...RIDER_BASELINE]));
+  }
+
+  function clearPerson() {
+    setSelectedPerson(null);
+    setPersonQuery('');
   }
 
   async function refresh() {
@@ -131,7 +184,8 @@ export function TeamManager({
     setError(null);
     startTransition(async () => {
       const result = await actionCreateParcelOrgManager(org.id, {
-        id: s.id, name: s.name, role: s.role, active: !s.active, partyId: s.partyId, stationId: s.stationId,
+        id: s.id, name: s.name, role: s.role, active: !s.active,
+        isContact: s.isContact, partyId: s.partyId, stationId: s.stationId,
       });
       if (!result.ok) { setError(result.error); return; }
       await refresh();
@@ -140,17 +194,29 @@ export function TeamManager({
 
   function add() {
     setError(null);
+    if (isCustomRole(role) && !role.trim()) { setError('Type the custom role name'); return; }
     const phone = msisdn.trim();
-    if (!phone && pin.length < 4) {
-      setError('Set a PIN, or a phone number to invite them by SMS instead');
+    if (!selectedPerson && !phone && pin.length < 4) {
+      setError('Pick an existing person, set a PIN, or enter a phone number');
       return;
     }
     startTransition(async () => {
       const result = await actionCreateParcelOrgManager(org.id, {
-        name: name.trim(), role, pin: phone || esokoId ? undefined : pin, msisdn: phone || undefined, esokoId: esokoId.trim() || undefined,
+        name: name.trim(), role, pin: pin || undefined,
+        // A picked person already has an identity — link their Party and
+        // never re-invite by phone. A new person goes through the phone
+        // path, which creates them and mints their Esoqo ID.
+        partyId: selectedPerson?.PartyID ?? null,
+        msisdn: selectedPerson ? undefined : (phone || undefined),
+        isContact,
+        // Preset role -> [] so a role change clears any stale custom set;
+        // custom -> the picked permissions. Omitted entirely on paths that
+        // don't touch roles so the backend leaves them alone.
+        capabilities: isCustomRole(role) ? capabilities : [],
       });
       if (!result.ok) { setError(result.error); return; }
-      setName(''); setPin(''); setMsisdn(''); setEsokoId('');
+      setName(''); setPin(''); setMsisdn(''); setIsContact(false); clearPerson();
+      setCapabilities([]);
       await refresh();
     });
   }
@@ -185,7 +251,12 @@ export function TeamManager({
                 </tr>
               ) : (
                 <tr key={s.id}>
-                  <td><strong>{s.name}</strong></td>
+                  <td>
+                    <strong>{s.name}</strong>
+                    {s.isContact && (
+                      <span className="pill p-ok" style={{ marginLeft: 8, fontSize: '.68rem' }}>Contact</span>
+                    )}
+                  </td>
                   <td className="sub">{s.role.toLowerCase()}</td>
                   <td>
                     {s.esoqoId ? (
@@ -231,45 +302,85 @@ export function TeamManager({
 
       {canEdit && (
         <>
+          <div style={{ display: 'grid', gap: 6 }}>
+            <label className="sub" htmlFor={ids.person} style={{ display: 'block' }}>
+              Add an existing person — search by name or phone
+            </label>
+            {selectedPerson ? (
+              <div style={{ display: 'flex', gap: 8, alignItems: 'center', padding: '6px 8px', border: '1.5px solid var(--line)', borderRadius: 6 }}>
+                <Icon name="user" size={14} />
+                <span>
+                  Linked to <strong>{selectedPerson.Name}</strong>
+                  {selectedPerson.Msisdn ? <span className="mono sub"> · {selectedPerson.Msisdn}</span> : null}
+                </span>
+                <button type="button" className="btn btn-o btn-sm" style={{ marginLeft: 'auto' }} onClick={clearPerson}>
+                  Change
+                </button>
+              </div>
+            ) : (
+              <input id={ids.person} style={inputStyle} value={personQuery} autoComplete="off"
+                placeholder="Start typing a name or phone number"
+                onChange={(e) => setPersonQuery(e.target.value)} />
+            )}
+            {!selectedPerson && personSearching && (
+              <span className="sub" style={{ fontSize: '.78rem' }}>Searching…</span>
+            )}
+            {!selectedPerson && personResults.length > 0 && (
+              <div style={{ display: 'grid', gap: 4 }}>
+                {personResults.map((p) => (
+                  <button type="button" key={p.PartyID} className="btn btn-o btn-sm"
+                    style={{ justifyContent: 'flex-start' }} onClick={() => pickPerson(p)}>
+                    {p.Name}{p.Msisdn ? ` — ${p.Msisdn}` : ''}
+                  </button>
+                ))}
+              </div>
+            )}
+            {!selectedPerson && personQuery.trim().length >= 2 && !personSearching && personResults.length === 0 && (
+              <span className="sub" style={{ fontSize: '.78rem' }}>
+                Nobody matches. Enter their name and phone below to add them as new — Esoqo will
+                issue their ID.
+              </span>
+            )}
+          </div>
+
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))', gap: 12, alignItems: 'end' }}>
             <div>
               <label className="sub" htmlFor={ids.name} style={{ display: 'block', marginBottom: 4 }}>Name</label>
               <input id={ids.name} style={inputStyle} value={name} placeholder="e.g. Wanjiku"
                 onChange={(e) => setName(e.target.value)} />
             </div>
-            <div>
-              <label className="sub" htmlFor={ids.esoko} style={{ display: 'block', marginBottom: 4 }}>Existing Esoqo ID</label>
-              <input id={ids.esoko} className="mono" style={inputStyle} placeholder="ESK-1234-KE" value={esokoId} disabled={!!msisdn.trim()} onChange={(e) => setEsokoId(e.target.value)} />
-            </div>
-            <div>
-              <label className="sub" htmlFor={ids.role} style={{ display: 'block', marginBottom: 4 }}>Role</label>
-              <select id={ids.role} style={inputStyle} value={role} onChange={(e) => setRole(e.target.value)}>
-                <option value="MANAGER">Manager</option>
-                <option value="DISPATCHER">Dispatcher</option>
-                <option value="RIDER">Rider</option>
-              </select>
-            </div>
+            <RoleField value={role} onChange={pickRole} presets={PARCEL_STAFF_ROLES} />
             <div>
               <label className="sub" htmlFor={ids.pin} style={{ display: 'block', marginBottom: 4 }}>PIN</label>
               <input id={ids.pin} className="mono" style={inputStyle} type="password" inputMode="numeric"
-                value={pin} disabled={!!msisdn.trim()}
-                onChange={(e) => setPin(e.target.value.replace(/\D/g, ''))} />
+                value={pin} onChange={(e) => setPin(e.target.value.replace(/\D/g, ''))} />
             </div>
-            <div>
-              <label className="sub" htmlFor={ids.msisdn} style={{ display: 'block', marginBottom: 4 }}>
-                Or invite by phone
-              </label>
-              <input id={ids.msisdn} className="mono" style={inputStyle} placeholder="+2547..."
-                value={msisdn} disabled={pin.length > 0}
-                onChange={(e) => setMsisdn(e.target.value)} />
-            </div>
-            <button className="btn btn-p btn-sm" disabled={pending || !name.trim()} onClick={add}>
-              {pending ? 'Adding…' : msisdn.trim() ? 'Send invite' : 'Add'}
+            {!selectedPerson && (
+              <div>
+                <label className="sub" htmlFor={ids.msisdn} style={{ display: 'block', marginBottom: 4 }}>
+                  Phone (new person)
+                </label>
+                <input id={ids.msisdn} className="mono" style={inputStyle} placeholder="+2547..."
+                  value={msisdn} onChange={(e) => setMsisdn(e.target.value)} />
+              </div>
+            )}
+            <label className="sub" style={{ display: 'flex', gap: 6, alignItems: 'center', paddingBottom: 8 }}>
+              <input type="checkbox" checked={isContact} onChange={(e) => setIsContact(e.target.checked)} />
+              Contact person
+            </label>
+            <button className="btn btn-p btn-sm" disabled={pending || !name.trim() || (isCustomRole(role) && !role.trim())} onClick={add}>
+              {pending ? 'Adding…' : selectedPerson ? 'Add to team' : msisdn.trim() ? 'Send invite' : 'Add'}
             </button>
           </div>
+          {isCustomRole(role) && (
+            <ParcelCapabilityPicker value={capabilities} onChange={setCapabilities} disabled={pending} />
+          )}
           <span className="sub" style={{ fontSize: '.78rem' }}>
-            Set a PIN, use an existing Esoqo ID, or enter a phone number instead — they&apos;ll
-            get a text with a link to sign in with a one-time code, and nobody else&apos;s number will ever work there.
+            Pick someone already on Esoqo to link their existing identity, or type a new person&apos;s
+            name and phone and Esoqo issues their ID on the spot. A phone number with a PIN gives
+            them a full Esoqo account — they can sign in at /signin and at /parcel-co/{org.slug}.
+            A PIN alone is a company-portal login only. Tick &quot;Contact person&quot; on anyone
+            senders should reach — several is fine. A custom role picks its own permissions above.
           </span>
         </>
       )}
@@ -287,19 +398,31 @@ function StaffEditForm({
 }: { org: ParcelOrg; member: ParcelOrgStaffRow; onSaved: () => void; onCancel: () => void }) {
   const [name, setName] = useState(member.name);
   const [role, setRole] = useState(member.role);
+  const [capabilities, setCapabilities] = useState<string[]>(member.capabilities ?? []);
   const [active, setActive] = useState(member.active);
+  const [isContact, setIsContact] = useState(member.isContact);
   const [pin, setPin] = useState('');
+  const [msisdn, setMsisdn] = useState(member.msisdn ?? '');
   const [error, setError] = useState<string | null>(null);
   const [pending, startTransition] = useTransition();
-  const ids = { name: useId(), role: useId(), pin: useId(), active: useId() };
+  const ids = { name: useId(), role: useId(), pin: useId(), msisdn: useId(), active: useId(), contact: useId() };
+
+  function pickRole(next: string) {
+    setRole(next);
+    if (isCustomRole(next)) setCapabilities((c) => (c.length ? c : [...RIDER_BASELINE]));
+  }
 
   function save() {
     setError(null);
     if (!name.trim()) { setError('Give this person a name'); return; }
+    if (isCustomRole(role) && !role.trim()) { setError('Type the custom role name'); return; }
     startTransition(async () => {
       const result = await actionCreateParcelOrgManager(org.id, {
-        id: member.id, name: name.trim(), role, active, partyId: member.partyId,
-        stationId: member.stationId, pin: pin || undefined,
+        id: member.id, name: name.trim(), role, active, isContact, partyId: member.partyId,
+        stationId: member.stationId, pin: pin || undefined, msisdn: msisdn.trim() || undefined,
+        // Always sent here, so switching a custom role back to a preset
+        // clears its old permissions rather than leaving them behind.
+        capabilities: isCustomRole(role) ? capabilities : [],
       });
       if (!result.ok) { setError(result.error); return; }
       onSaved();
@@ -313,23 +436,28 @@ function StaffEditForm({
           <label className="sub" htmlFor={ids.name} style={{ display: 'block', marginBottom: 4 }}>Name</label>
           <input id={ids.name} style={inputStyle} value={name} onChange={(e) => setName(e.target.value)} />
         </div>
-        <div>
-          <label className="sub" htmlFor={ids.role} style={{ display: 'block', marginBottom: 4 }}>Role</label>
-          <select id={ids.role} style={inputStyle} value={role} onChange={(e) => setRole(e.target.value)}>
-            <option value="MANAGER">Manager</option>
-            <option value="DISPATCHER">Dispatcher</option>
-            <option value="RIDER">Rider</option>
-          </select>
-        </div>
+        <RoleField value={role} onChange={pickRole} presets={PARCEL_STAFF_ROLES} />
         <div>
           <label className="sub" htmlFor={ids.pin} style={{ display: 'block', marginBottom: 4 }}>New PIN (leave blank to keep)</label>
           <input id={ids.pin} className="mono" style={inputStyle} type="password" inputMode="numeric"
             value={pin} onChange={(e) => setPin(e.target.value.replace(/\D/g, ''))} />
         </div>
+        <div>
+          <label className="sub" htmlFor={ids.msisdn} style={{ display: 'block', marginBottom: 4 }}>Phone (for a /signin account)</label>
+          <input id={ids.msisdn} className="mono" style={inputStyle} placeholder="+2547..."
+            value={msisdn} onChange={(e) => setMsisdn(e.target.value)} />
+        </div>
       </div>
+      {isCustomRole(role) && (
+        <ParcelCapabilityPicker value={capabilities} onChange={setCapabilities} disabled={pending} />
+      )}
       <label className="sub" style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
         <input id={ids.active} type="checkbox" checked={active} onChange={(e) => setActive(e.target.checked)} />
         Can sign in
+      </label>
+      <label className="sub" style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+        <input id={ids.contact} type="checkbox" checked={isContact} onChange={(e) => setIsContact(e.target.checked)} />
+        Contact person
       </label>
       {error && (
         <p role="alert" style={{ color: 'var(--red)', fontSize: '.85rem', display: 'flex', gap: 6, alignItems: 'center' }}>
@@ -369,6 +497,10 @@ export function OrgForm({
   const [openingHours, setOpeningHours] = useState(initial?.openingHours ?? '');
   const [lat, setLat] = useState(initial?.lat != null ? String(initial.lat) : '');
   const [lng, setLng] = useState(initial?.lng != null ? String(initial.lng) : '');
+  // Roster entered while onboarding. Create-only: an existing company's
+  // team is edited through TeamManager, where each row has an id to
+  // update in place.
+  const [members, setMembers] = useState<OrgMemberInput[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [pending, startTransition] = useTransition();
   const ids = {
@@ -376,6 +508,16 @@ export function OrgForm({
     phone: useId(), settlement: useId(), ent: useId(), newEnt: useId(),
     walkIn: useId(), location: useId(), hours: useId(),
   };
+
+  function addMember() {
+    setMembers((prev) => [...prev, { name: '', role: 'RIDER', pin: '', msisdn: '', isContact: false }]);
+  }
+  function updateMember(i: number, patch: Partial<OrgMemberInput>) {
+    setMembers((prev) => prev.map((m, idx) => (idx === i ? { ...m, ...patch } : m)));
+  }
+  function removeMember(i: number) {
+    setMembers((prev) => prev.filter((_, idx) => idx !== i));
+  }
 
   function searchEnterprises(q: string) {
     setEntQuery(q);
@@ -399,6 +541,16 @@ export function OrgForm({
 
   function save() {
     setError(null);
+    if (!initial) {
+      for (const m of members) {
+        if (!m.name.trim()) continue;
+        const hasCredential = (m.pin ?? '').length >= 4 || !!m.msisdn?.trim() || !!m.esokoId?.trim();
+        if (!hasCredential) {
+          setError(`${m.name.trim()} needs a PIN of 4+ digits, a phone number, or an Esoqo ID.`);
+          return;
+        }
+      }
+    }
     const input: ParcelOrgInput = {
       // Only sent on create — an update never moves a company to a
       // different owning business, which would silently transfer every
@@ -422,7 +574,7 @@ export function OrgForm({
     startTransition(async () => {
       const result = initial
         ? await actionUpdateParcelOrg(initial.id, input)
-        : await actionCreateParcelOrg(input);
+        : await actionCreateParcelOrg(input, members);
       if (result.ok) onDone();
       else setError(result.error);
     });
@@ -596,6 +748,49 @@ export function OrgForm({
                 onChange={(e) => setLng(e.target.value)} />
             </div>
           </div>
+        </div>
+      )}
+
+      {!initial && (
+        <div style={{ borderTop: '1px solid var(--line)', paddingTop: 12, display: 'grid', gap: 10 }}>
+          <div>
+            <span className="sub" style={{ display: 'block', fontWeight: 600 }}>Team</span>
+            <span className="sub" style={{ fontSize: '.78rem' }}>
+              Add the people who run this company and pick each one&apos;s role. Tick
+              {' '}&quot;Contact&quot; on anyone senders should reach — you can tick several. A
+              member with a phone and a PIN also gets a full Esoqo account they can sign in with
+              at /signin; the rest sign in at /parcel-co/{slug || '…'}.
+            </span>
+          </div>
+          {members.map((m, i) => (
+            <div key={i} style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(130px, 1fr))', gap: 10, alignItems: 'end', padding: 10, border: '1px solid var(--line)', borderRadius: 8 }}>
+              <div>
+                <label className="sub" htmlFor={`member-name-${i}`} style={{ display: 'block', marginBottom: 4 }}>Name</label>
+                <input id={`member-name-${i}`} style={inputStyle} value={m.name} placeholder="e.g. Wanjiku"
+                  onChange={(e) => updateMember(i, { name: e.target.value })} />
+              </div>
+              <RoleField value={m.role} onChange={(r) => updateMember(i, { role: r })} presets={PARCEL_STAFF_ROLES} />
+              <div>
+                <label className="sub" htmlFor={`member-pin-${i}`} style={{ display: 'block', marginBottom: 4 }}>PIN</label>
+                <input id={`member-pin-${i}`} className="mono" style={inputStyle} type="password" inputMode="numeric"
+                  value={m.pin ?? ''} onChange={(e) => updateMember(i, { pin: e.target.value.replace(/\D/g, '') })} />
+              </div>
+              <div>
+                <label className="sub" htmlFor={`member-phone-${i}`} style={{ display: 'block', marginBottom: 4 }}>Or phone</label>
+                <input id={`member-phone-${i}`} className="mono" style={inputStyle} placeholder="+2547..."
+                  value={m.msisdn ?? ''} onChange={(e) => updateMember(i, { msisdn: e.target.value })} />
+              </div>
+              <label className="sub" style={{ display: 'flex', gap: 6, alignItems: 'center', paddingBottom: 8 }}>
+                <input type="checkbox" checked={!!m.isContact}
+                  onChange={(e) => updateMember(i, { isContact: e.target.checked })} />
+                Contact
+              </label>
+              <button type="button" className="btn btn-o btn-sm" onClick={() => removeMember(i)}>Remove</button>
+            </div>
+          ))}
+          <button type="button" className="btn btn-o btn-sm" style={{ justifySelf: 'start' }} onClick={addMember}>
+            <Icon name="plus" size={13} />Add member
+          </button>
         </div>
       )}
 
