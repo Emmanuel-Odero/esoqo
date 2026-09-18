@@ -81,10 +81,7 @@ export function Header() {
               })}
             </nav>
             <div className="row">
-              <a className="btn btn-o btn-sm" href={`${APP}/signin`}>Sign in</a>
-              <a className="btn btn-p btn-sm" href={`${APP}/join`}>
-                <Icon name="arrow-right" size={15} />Join free
-              </a>
+              <a className="btn btn-p btn-sm" href={`${APP}/signin`}>Sign in</a>
             </div>
             <button
               className="hd-menu-btn"
@@ -111,10 +108,7 @@ export function Header() {
               );
             })}
             <div className="hd-drawer-cta">
-              <a className="btn btn-o" href={`${APP}/signin`}>Sign in</a>
-              <a className="btn btn-p" href={`${APP}/join`}>
-                <Icon name="arrow-right" size={15} />Join free
-              </a>
+              <a className="btn btn-p" href={`${APP}/signin`}>Sign in</a>
             </div>
           </nav>
         </div>

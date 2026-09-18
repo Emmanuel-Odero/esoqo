@@ -80,8 +80,8 @@ export default async function Home() {
               </p>
               <div className="row">
                 <span className="dial"><Icon name="keypad" size={18} />Dial <b>*483*77#</b></span>
-                <a className="btn btn-p" href={`${process.env.NEXT_PUBLIC_APP_URL ?? 'http://localhost:3001'}/join`}>
-                  <Icon name="arrow-right" size={16} />Join free
+                <a className="btn btn-p" href={`${process.env.NEXT_PUBLIC_APP_URL ?? 'http://localhost:3001'}/signin`}>
+                  <Icon name="arrow-right" size={16} />Sign in
                 </a>
                 <a className="btn btn-w" href="#for-me">Is it for my work?</a>
               </div>

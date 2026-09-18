@@ -138,10 +138,9 @@ export default function ParcelsHubPage() {
                 shipment on the same records.
               </p>
               <div className="row">
-                <a className="btn btn-p" href={`${APP}/join`}>
-                  <Icon name="arrow-right" size={15} />Open a business account
+                <a className="btn btn-p" href={`${APP}/signin`}>
+                  <Icon name="arrow-right" size={15} />Sign in
                 </a>
-                <a className="btn btn-o" href={`${APP}/signin`}>Sign in</a>
               </div>
             </div>
           </div>
