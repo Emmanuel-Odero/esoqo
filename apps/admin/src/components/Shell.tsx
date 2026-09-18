@@ -46,7 +46,7 @@ const NAV: { group: string; items: [string, IconName, string, string][] }[] = [
     ['/parcels/payouts', 'bank', 'Courier payouts', 'parcels.read'],
     ['/parcels/couriers', 'users', 'Couriers', 'parcels.couriers.manage'],
     ['/parcels/teams', 'truck', 'Courier teams', 'parcels.couriers.manage'],
-    ['/parcels/labels', 'qr', 'Blank labels', 'parcels.assign'],
+    ['/parcels/labels', 'qr', 'Labels', 'parcels.assign'],
     ['/parcels/pricing', 'coins', 'Pricing', 'parcel_pricing.write'],
   ]},
   { group: 'Our Jamii', items: [

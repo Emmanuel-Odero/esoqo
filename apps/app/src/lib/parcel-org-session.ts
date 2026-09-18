@@ -105,6 +105,9 @@ export interface ParcelOrgSummary {
   name: string;
   slug: string;
   status: string;
+  /** Co-branded label logo. Null = Esoqo branding alone. */
+  logoUrl?: string | null;
+  brandAccent?: string | null;
 }
 
 export interface ParcelOrgStats {
@@ -198,6 +201,9 @@ export interface OrgParcelLabel {
   parcelId: string | null;
   parcelCode: string | null;
   parcelStatus: string | null;
+  batchId: string | null;
+  /** QR signature so a resolved label reprints genuine. */
+  sig: string;
 }
 
 /** One spendable sticker from the company's own pad, as the

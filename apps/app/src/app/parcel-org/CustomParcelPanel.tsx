@@ -227,6 +227,8 @@ export function CustomParcelPanel() {
           <p className="sub" style={{ margin: '4px 0 0', maxWidth: '70ch' }}>
             Use your own parcel number — it stays on the parcel and is searchable here. Esoqo
             gives it a tracking code so you can manage and track it like any other.
+            Only Esoqo PKG-… labels scan: your old self-printed stickers are retired —
+            attach one of your Esoqo labels below so the box scans.
           </p>
         </div>
         <button className="btn btn-o btn-sm" aria-label="Close" disabled={pending}

@@ -654,6 +654,11 @@ export interface ParcelOrg {
   lng: number | null;
   locationHint: string | null;
   openingHours: string | null;
+  /** Co-branded label assets. logoUrl prints centered in the label
+   *  header; null = Esoqo branding alone. */
+  logoStorageKey?: string | null;
+  logoUrl?: string | null;
+  brandAccent?: string | null;
   // ── Register enrichment (admin list/detail only) ───────────────────
   /** The registered business that owns the company. Distinct from the
    *  contact person: the business outlives whoever is on the roster. */
@@ -686,6 +691,9 @@ export interface ParcelOrgInput {
   lng?: number | null;
   locationHint?: string | null;
   openingHours?: string | null;
+  logoStorageKey?: string | null;
+  logoUrl?: string | null;
+  brandAccent?: string | null;
 }
 
 export interface EnterpriseLite {
@@ -831,6 +839,42 @@ export async function actionUpdateParcelOrg(
   }
 }
 
+/**
+ * Company logo for co-branded labels.
+ *
+ * Stored via the shared R2/local storage (same putObject pipeline group
+ * documents use) and referenced by URL — core-go only keeps the string.
+ * PNG/JPG under 2MB; printed centered in the label header at fixed mm
+ * sizes, never over QR/barcode pixels. Removing = back to Esoqo alone.
+ */
+export async function actionUploadParcelOrgLogo(
+  form: FormData,
+): Promise<
+  | { ok: true; storageKey: string; url: string }
+  | { ok: false; error: string }
+> {
+  try {
+    await requireStaff();
+    const file = form.get("file");
+    if (!(file instanceof File)) return { ok: false, error: "No file was attached" };
+    if (file.size > 2 * 1024 * 1024) return { ok: false, error: "Keep the logo under 2 MB" };
+    const { sniff, makeStorageKey, putObject } = await import("@esoqo/db");
+    const buf = Buffer.from(await file.arrayBuffer());
+    const check = sniff(buf, file.type, file.name);
+    if (!check.ok || !check.mime || !check.mime.startsWith("image/")) {
+      return { ok: false, error: check.reason ?? "Use a PNG or JPG logo" };
+    }
+    const storageKey = makeStorageKey(check.mime);
+    await putObject(storageKey, buf);
+    return { ok: true, storageKey, url: `/img/${storageKey}` };
+  } catch (e) {
+    return {
+      ok: false,
+      error: e instanceof Error ? e.message : "That upload didn't go through",
+    };
+  }
+}
+
 export interface ParcelOrgStaffRow {
   id: string;
   orgId: string;
@@ -952,9 +996,11 @@ export async function actionIssueParcelOrgStaffId(
  *  Esoqo onboarding a tenant and that tenant running itself.
  *
  *  Two ways in: a PIN for the dedicated company portal, or an msisdn to
- *  invite the person by OTP instead — core-go resolves/creates their
- *  Party and texts them a sign-in link when msisdn is given, so `pin`
- *  and `msisdn` are alternatives, not both required. */
+ *  invite the person by phone instead — core-go resolves/creates their
+ *  Party and texts them a sign-in link plus a first PIN (the typed one,
+ *  or a temporary one when none is typed), so `pin` and `msisdn` are
+ *  alternatives, not both required. The invitee signs in with that PIN
+ *  and then resets it. */
 export async function actionCreateParcelOrgManager(
   orgId: string,
   input: {
@@ -1420,19 +1466,24 @@ export async function actionGenerateParcelLabels(
   count: number,
   parcelOrgId?: string,
 ): Promise<
-  { ok: true; codes: string[]; batchId: string } | { ok: false; error: string }
+  { ok: true; codes: string[]; labels: { code: string; sig: string }[]; batchId: string } | { ok: false; error: string }
 > {
   try {
     await requireStaff();
-    const { codes, batchId } = await adminGo<{
+    const res = await adminGo<{
       codes: string[] | null;
+      labels?: { code: string; sig: string }[] | null;
       batchId: string;
     }>("/v1/admin/parcels/labels/generate", {
       method: "POST",
       body: JSON.stringify({ count, parcelOrgId: parcelOrgId || undefined }),
     });
     revalidatePath("/parcels/labels");
-    return { ok: true, codes: codes ?? [], batchId };
+    const codes = res.codes ?? [];
+    // Backend now returns signed labels directly so the first print is
+    // already genuine; fall back to unsigned codes for older servers.
+    const labels = res.labels ?? codes.map((code) => ({ code, sig: '' }));
+    return { ok: true, codes, labels, batchId: res.batchId };
   } catch (e) {
     return {
       ok: false,
@@ -1451,6 +1502,35 @@ export async function actionListParcelLabelStock(
     `/v1/admin/parcels/labels?${params}`,
   );
   return labels ?? [];
+}
+
+export interface ParcelLabelProjection {
+  code: string;
+  originLabel: string;
+  destinationLabel: string;
+  orgName: string | null;
+  orgLogoUrl: string | null;
+  sig: string;
+}
+
+/**
+ * A booked parcel's own label for reprinting — signature + company
+ * branding resolved server-side, so the sticker is genuine with the pad
+ * owner's logo (Esoqo alone for shared pool). Null when the parcel
+ * isn't visible to this staff member.
+ */
+export async function actionGetParcelLabel(
+  code: string,
+): Promise<ParcelLabelProjection | null> {
+  try {
+    await requireStaff();
+    const label = await adminGo<ParcelLabelProjection>(
+      `/v1/parcels/${encodeURIComponent(code)}/label`,
+    );
+    return label;
+  } catch {
+    return null;
+  }
 }
 
 export interface TripManifestRow {
@@ -1496,6 +1576,8 @@ export interface ParcelLabelRegisterRow {
   voidedReason: string | null;
   batchId: string | null;
   orgName: string | null;
+  parcelOrgId?: string;
+  sig?: string;
 }
 
 /**

@@ -10,6 +10,7 @@ import (
 	"github.com/esoqo/core-go/internal/audit"
 	"github.com/esoqo/core-go/internal/authsvc"
 	"github.com/esoqo/core-go/internal/dbx"
+	"github.com/esoqo/core-go/internal/fleetqr"
 	"github.com/esoqo/core-go/internal/notify"
 )
 
@@ -299,6 +300,7 @@ func (s *Server) handleGetMyParcelOrg(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{
 		"org": gin.H{
 			"id": org.ID, "name": org.Name, "slug": org.Slug, "status": org.Status,
+			"logoUrl": org.LogoUrl, "brandAccent": org.BrandAccent,
 		},
 		"stats":        stats,
 		"role":         ctx.ActorType,
@@ -420,6 +422,13 @@ func (s *Server) handleResolveOrgLabel(c *gin.Context) {
 		writeError(c, http.StatusNotFound, "NOT_FOUND", "That isn't one of your company's labels")
 		return
 	}
+	// Sign so a resolved label reprints genuine — same binding as the
+	// register (code + owning org + batch).
+	batch := ""
+	if label.BatchID != nil {
+		batch = *label.BatchID
+	}
+	label.Sig = fleetqr.SignLabel(s.Cfg.FleetQrSecret, label.Code, orgID, batch)
 	c.JSON(http.StatusOK, gin.H{"label": label})
 }
 
@@ -884,6 +893,67 @@ func (s *Server) handleUpsertMyOrgStaff(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"saved": true})
 }
 
+// handleChangeMyOrgPin — POST /v1/parcel-orgs/me/pin. A staffer
+// changing their own portal PIN: the "temp PIN in, chosen PIN out" half
+// of the invite flow. Any active roster member may call it (read
+// capability — this is self-service, not management); the session's own
+// staff id is the only row it can ever touch.
+//
+// The current PIN is verified first, except for legacy rows that never
+// had one (OTP-only logins pre-dating credential provisioning), which
+// set their first PIN with no current to check. The new PIN keeps the
+// invite's one-PIN-for-both-doors invariant via
+// dbx.ChangeParcelOrgStaffPin, and weak values are refused the same way
+// the subject set-pin endpoint refuses them.
+func (s *Server) handleChangeMyOrgPin(c *gin.Context) {
+	orgID := s.orgCtx(c, authsvc.CapParcelOrgRead)
+	if orgID == "" {
+		return
+	}
+	ctx := ctxFromGin(c)
+	if ctx.ActorID == "" {
+		writeError(c, http.StatusForbidden, "DENIED", "Sign in again to change your PIN")
+		return
+	}
+	var req struct {
+		CurrentPin string `json:"currentPin"`
+		NewPin     string `json:"newPin" binding:"required"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil {
+		writeError(c, http.StatusBadRequest, "INVALID_REQUEST", err.Error())
+		return
+	}
+	cred, err := dbx.GetParcelOrgStaffCredential(c.Request.Context(), s.Pool, orgID, ctx.ActorID)
+	if err != nil {
+		writeError(c, http.StatusInternalServerError, "CHANGE_FAILED", "Could not change that PIN")
+		return
+	}
+	if cred == nil {
+		writeError(c, http.StatusForbidden, "DENIED", "Your login is no longer active — sign in again")
+		return
+	}
+	if strings.TrimSpace(cred.PinHash) != "" &&
+		!authsvc.VerifyPin(strings.TrimSpace(req.CurrentPin), cred.PinHash) {
+		writeError(c, http.StatusUnauthorized, "WRONG_PIN", "Current PIN is incorrect")
+		return
+	}
+	newPin := strings.TrimSpace(req.NewPin)
+	if authsvc.IsWeakPin(newPin) {
+		writeError(c, http.StatusBadRequest, "WEAK_PIN", "Choose a less predictable PIN — not 1234, 0000 or a run of digits.")
+		return
+	}
+	hash, err := authsvc.HashPin(newPin)
+	if err != nil {
+		writeError(c, http.StatusBadRequest, "INVALID_PIN", err.Error())
+		return
+	}
+	if err := dbx.ChangeParcelOrgStaffPin(c.Request.Context(), s.Pool, orgID, ctx.ActorID, hash); err != nil {
+		writeParcelError(c, err)
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"ok": true})
+}
+
 type orgStationRequest struct {
 	Name         string  `json:"name" binding:"required"`
 	Msisdn       string  `json:"msisdn" binding:"required"`
@@ -981,6 +1051,12 @@ type parcelOrgRequest struct {
 	Lng           *float64 `json:"lng"`
 	LocationHint  *string  `json:"locationHint"`
 	OpeningHours  *string  `json:"openingHours"`
+
+	// Co-branded label assets. LogoUrl prints centered in the label
+	// header; null/empty = Esoqo branding alone.
+	LogoStorageKey *string `json:"logoStorageKey"`
+	LogoUrl        *string `json:"logoUrl"`
+	BrandAccent    *string `json:"brandAccent"`
 }
 
 func (r parcelOrgRequest) toInput() dbx.ParcelOrgInput {
@@ -992,6 +1068,7 @@ func (r parcelOrgRequest) toInput() dbx.ParcelOrgInput {
 		CommissionPct: r.CommissionPct,
 		AcceptsWalkIn: r.AcceptsWalkIn, Lat: r.Lat, Lng: r.Lng,
 		LocationHint: r.LocationHint, OpeningHours: r.OpeningHours,
+		LogoStorageKey: r.LogoStorageKey, LogoUrl: r.LogoUrl, BrandAccent: r.BrandAccent,
 	}
 }
 
@@ -1135,9 +1212,17 @@ func (s *Server) handleAdminUpdateParcelOrg(c *gin.Context) {
 // ever sets. Providing Msisdn here is what actually invites someone:
 // it resolves (or creates) their Party the same way admin-adding an
 // independent courier does (dbx.FindOrCreatePersonWithName, mirroring
-// AdminAddCourier), and texts them the sign-in link. Best-effort, same
+// AdminAddCourier), provisions their credential, and texts them the
+// sign-in link plus their first PIN. Best-effort, same
 // "don't fail account creation over a text" convention
 // handleAdminAddCourier already follows for notify.CourierOnboarded.
+//
+// The first PIN is the one the admin typed, or a freshly minted
+// temporary one when they typed none — either way it is set as the
+// credential and texted on the invite, so a first-time invitee can sign
+// in immediately at both doors (company portal name+PIN, /signin
+// phone+PIN) and then reset it. Plaintext lives only in this request
+// scope: hashed below, never logged or audited.
 func (s *Server) handleAdminUpsertParcelOrgStaff(c *gin.Context) {
 	if err := authsvc.RequireCapability(ctxFromGin(c), "parcels.edit", nil); err != nil {
 		writeError(c, http.StatusForbidden, "DENIED", "You can't edit parcel settings")
@@ -1151,13 +1236,36 @@ func (s *Server) handleAdminUpsertParcelOrgStaff(c *gin.Context) {
 	if !optionalMsisdn(c, &req.Msisdn, "That phone number") {
 		return
 	}
+	invite := req.Msisdn != nil && strings.TrimSpace(*req.Msisdn) != ""
+	creating := req.ID == nil || *req.ID == ""
+	initialPin := strings.TrimSpace(req.Pin)
+	if invite && creating && initialPin == "" {
+		// First invite with no PIN chosen: mint a temporary one rather
+		// than leaving the invitee with no credential at all (which is
+		// what made phone-only invites OTP-only until they set a PIN
+		// themselves). Re-roll weak values — a temp PIN texted over SMS
+		// should not be 777777.
+		generated, err := authsvc.GenerateTempPin()
+		if err != nil {
+			writeError(c, http.StatusInternalServerError, "SAVE_FAILED", "Could not create that login")
+			return
+		}
+		initialPin = generated
+		for i := 0; i < 5 && authsvc.IsWeakPin(initialPin); i++ {
+			if regenerated, rerr := authsvc.GenerateTempPin(); rerr == nil {
+				initialPin = regenerated
+			} else {
+				break
+			}
+		}
+	}
 	var pinHash string
-	if strings.TrimSpace(req.Pin) != "" {
-		if len(req.Pin) < 4 {
+	if initialPin != "" {
+		if len(initialPin) < 4 {
 			writeError(c, http.StatusBadRequest, "INVALID_REQUEST", "A PIN needs at least 4 digits")
 			return
 		}
-		h, err := authsvc.HashPin(req.Pin)
+		h, err := authsvc.HashPin(initialPin)
 		if err != nil {
 			writeError(c, http.StatusInternalServerError, "SAVE_FAILED", "Could not save that PIN")
 			return
@@ -1179,7 +1287,6 @@ func (s *Server) handleAdminUpsertParcelOrgStaff(c *gin.Context) {
 		}
 		partyID = &resolved
 	}
-	invite := req.Msisdn != nil && strings.TrimSpace(*req.Msisdn) != ""
 	var msisdn string
 	if invite {
 		msisdn = strings.TrimSpace(*req.Msisdn)
@@ -1187,11 +1294,10 @@ func (s *Server) handleAdminUpsertParcelOrgStaff(c *gin.Context) {
 			writeError(c, http.StatusBadRequest, "INVALID_REQUEST", "That is not a Kenyan mobile number we can invite")
 			return
 		}
-		// A phone plus a PIN provisions a full Esoqo account: the Person
-		// behind the number, and their Esoqo PIN credential set to the
-		// same PIN, so they can sign in at /signin as well as the company
-		// portal. A phone alone stays the OTP-invite path (no credential
-		// until they set one through /signin/set-pin).
+		// A phone provisions a full Esoqo account: the Person behind the
+		// number, and their Esoqo PIN credential set to the first PIN
+		// (typed or temporary), so they can sign in at /signin as well as
+		// the company portal — then reset it.
 		resolvedPartyID, err := dbx.EnsureEsoqoAccountForStaff(c.Request.Context(), s.Pool, name, msisdn, pinHash)
 		if err != nil {
 			writeError(c, http.StatusInternalServerError, "SAVE_FAILED", "Could not invite that person")
@@ -1212,17 +1318,20 @@ func (s *Server) handleAdminUpsertParcelOrgStaff(c *gin.Context) {
 		writeParcelError(c, err)
 		return
 	}
+	// The audit records THAT a first PIN was issued, never the value —
+	// the plaintext lives only in this request scope and the SMS.
 	s.recordParcelOrgAudit(c, "parcel_org.staff_changed", c.Param("id"), map[string]interface{}{
 		"name": name, "role": req.Role, "active": active, "invited": invite,
+		"tempPinIssued": invite && creating && initialPin != "",
 	})
 
 	// Text the invite on create only. An edit that resends the same phone
 	// would otherwise re-text the whole roster every time an admin tweaks
-	// a role, and the staffer already has the link.
-	creating := req.ID == nil || *req.ID == ""
+	// a role, and the staffer already has the link. The first PIN rides
+	// along so they can sign in immediately and then reset it.
 	if invite && creating {
 		if orgName, orgSlug, err := dbx.GetParcelOrgNameSlug(c.Request.Context(), s.Pool, c.Param("id")); err == nil {
-			_ = authsvc.SendSms(msisdn, notify.ParcelStaffInvited(orgName, name, req.Role, notify.ParcelStaffInviteURL(orgSlug, name)), "PARCEL_STAFF_INVITE")
+			_ = authsvc.SendSms(msisdn, notify.ParcelStaffInvited(orgName, name, req.Role, notify.ParcelStaffInviteURL(orgSlug, name), initialPin), "PARCEL_STAFF_INVITE")
 		}
 	}
 	c.JSON(http.StatusOK, gin.H{"saved": true})

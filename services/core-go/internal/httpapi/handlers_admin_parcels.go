@@ -883,7 +883,21 @@ func (s *Server) handleAdminGenerateParcelLabels(c *gin.Context) {
 		writeParcelAdminError(c, err)
 		return
 	}
-	c.JSON(http.StatusOK, gin.H{"codes": codes, "batchId": batchID})
+	// Sign immediately so the first print is already genuine — the mint
+	// response used to return codes only, which printed unsigned until
+	// reload. orgID/batchID are what SignLabel binds, both known here.
+	orgStr := ""
+	if orgID != nil {
+		orgStr = *orgID
+	}
+	labels := make([]gin.H, 0, len(codes))
+	for _, code := range codes {
+		labels = append(labels, gin.H{
+			"code": code,
+			"sig":  fleetqr.SignLabel(s.Cfg.FleetQrSecret, code, orgStr, batchID),
+		})
+	}
+	c.JSON(http.StatusOK, gin.H{"codes": codes, "labels": labels, "batchId": batchID})
 }
 
 // handleAdminSearchCounterParties — GET /v1/admin/parcels/parties?q=.
@@ -931,6 +945,15 @@ func (s *Server) handleAdminListParcelLabelRegister(c *gin.Context) {
 	if err != nil {
 		writeParcelAdminError(c, err)
 		return
+	}
+	// Sign every row so reprints from the register are genuine without a
+	// second fetch — same secret/fields as the stock endpoint.
+	for i := range rows {
+		batch := ""
+		if rows[i].BatchID != nil {
+			batch = *rows[i].BatchID
+		}
+		rows[i].Sig = fleetqr.SignLabel(s.Cfg.FleetQrSecret, rows[i].Code, rows[i].ParcelOrgID, batch)
 	}
 	counts, err := dbx.CountParcelLabelStates(c.Request.Context(), s.Pool, orgID)
 	if err != nil {

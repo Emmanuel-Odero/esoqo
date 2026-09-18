@@ -70,6 +70,8 @@ func TestRouterRegistersWithoutConflict(t *testing.T) {
 		// Label tail-search beside the register and the info tree.
 		"GET /v1/parcel-orgs/me/labels/search": false,
 		"GET /v1/parcel-orgs/me/labels":        false,
+		// Self-service PIN change beside the staff tree.
+		"POST /v1/parcel-orgs/me/pin": false,
 	}
 	for _, r := range routes {
 		key := r.Method + " " + r.Path

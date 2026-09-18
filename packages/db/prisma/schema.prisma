@@ -3992,6 +3992,16 @@ model ParcelOrg {
   /// gives for not modelling this as a real schedule.
   openingHours  String?
 
+  /// Company logo for co-branded parcel labels. Public URL served via
+  /// /img/{key}, same pattern as Store.logoUrl — printed centered in
+  /// the label header band, never over QR/barcode pixels. Null = Esoqo
+  /// branding alone (the fallback every label prints with).
+  logoStorageKey String?
+  logoUrl        String?
+  /// Optional brand accent (hex) for the label header. Validated in
+  /// the admin form; null = default ink.
+  brandAccent    String?
+
   createdAt        DateTime @default(now())
   updatedAt        DateTime @updatedAt
   createdByStaffId String?  @db.Uuid

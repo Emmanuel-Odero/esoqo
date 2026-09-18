@@ -153,13 +153,23 @@ func ParcelStaffInviteURL(orgSlug, name string) string {
 // ParcelStaffInvited — sent the moment an admin invites a courier
 // company staffer by phone number (see
 // httpapi.handleAdminUpsertParcelOrgStaff), instead of the out-of-band
-// "here's your PIN" conversation that flow otherwise requires. Omits
-// the link entirely rather than risk a second segment, same
-// conditional-append reasoning withTrack already gives for a tracking
-// link — the org name and their own name still tell them who this is
-// from and what they were invited to be.
-func ParcelStaffInvited(orgName, name, role, inviteURL string) string {
-	msg := fmt.Sprintf("Esoqo: %s, %s invited you to sign in as %s.", trunc(name), trunc(orgName), roleLabel(role))
+// "here's your PIN" conversation that flow otherwise requires.
+//
+// tempPin is the invitee's first PIN — either the one the admin typed
+// or a freshly minted temporary one — and rides in the text so they can
+// sign in immediately and then reset it. It outranks the link in the
+// single-segment budget: the PIN is the credential, the link is a
+// convenience, so a long org name drops the link, never the PIN. The
+// org name and their own name still tell them who this is from and what
+// they were invited to be.
+func ParcelStaffInvited(orgName, name, role, inviteURL, tempPin string) string {
+	// The role is free text (up to 40 chars) — truncated like every
+	// other embedded field so one long job title can't push this into a
+	// second segment on its own.
+	msg := fmt.Sprintf("Esoqo: %s, %s invited you to sign in as %s.", trunc(name), trunc(orgName), trunc(roleLabel(role)))
+	if tempPin != "" {
+		msg += fmt.Sprintf(" Temp PIN: %s. Change it after you sign in.", tempPin)
+	}
 	if inviteURL == "" {
 		return msg
 	}
