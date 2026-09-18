@@ -29,7 +29,7 @@ export function OrgStaffManager({ staff }: { staff: ParcelOrgStaffRow[] }) {
       <div style={{ overflowX: 'auto' }}>
         <table className="tbl">
           <thead>
-            <tr><th>Name</th><th>Role</th><th>Esoqo party id</th><th>Status</th><th /></tr>
+            <tr><th>Name</th><th>Role</th><th>Sign-in ID / phone</th><th>Status</th><th /></tr>
           </thead>
           <tbody>
             {staff.map((s) => <StaffRow key={s.id} staff={s} stations={stations} />)}
@@ -80,7 +80,10 @@ function StaffRow({ staff, stations }: { staff: ParcelOrgStaffRow; stations: Par
         {role?.[1] ?? staff.role}
         <span className="sub" style={{ display: 'block' }}>{role?.[2]}</span>
       </td>
-      <td className="mono sub">{staff.partyId ?? '—'}</td>
+      <td>
+        <span className="mono" style={{ display: 'block' }}>{staff.esoqoId ?? staff.partyId ?? '—'}</span>
+        {staff.msisdn && <span className="mono sub" style={{ display: 'block' }}>{staff.msisdn}</span>}
+      </td>
       <td>
         <span className={`pill ${staff.active ? 'p-ok' : 'p-warn'}`}>
           {staff.active ? 'Can sign in' : 'Suspended'}
