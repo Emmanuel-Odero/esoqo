@@ -640,6 +640,21 @@ export interface ParcelOrg {
   lng: number | null;
   locationHint: string | null;
   openingHours: string | null;
+  // ── Register enrichment (admin list/detail only) ───────────────────
+  /** The registered business that owns the company. Distinct from the
+   *  contact person: the business outlives whoever is on the roster. */
+  enterpriseName?: string;
+  ownerPartyId?: string;
+  staffCount?: number;
+  activeStaff?: number;
+  parcelCount?: number;
+  deliveredCount?: number;
+  /** Decimal string from core-go — parse before doing money maths. */
+  earningsKes?: string;
+  /** First MANAGER on the roster (else the legacy contact fields), kept
+   *  separate from the company on purpose. */
+  primaryContactName?: string | null;
+  primaryContactPhone?: string | null;
 }
 
 export interface ParcelOrgInput {
@@ -780,6 +795,50 @@ export interface ParcelOrgStaffRow {
   role: string;
   active: boolean;
   partyId: string | null;
+  stationId: string | null;
+  /** The phone and the ESK-… handle this person signs in with — the two
+   *  credentials an admin reads back to someone locked out. */
+  msisdn: string | null;
+  esoqoId: string | null;
+}
+
+/** A company's own audit trail, read straight off the append-only
+ *  audit_event chain. Newest first. */
+export interface ParcelOrgActivityRow {
+  occurredAt: string;
+  actorType: string;
+  actorId: string | null;
+  action: string;
+  payload: Record<string, unknown> | null;
+}
+
+export interface ParcelOrgStats {
+  awaitingPickup: number;
+  inTransit: number;
+  failedDeliveries: number;
+  atAgent: number;
+  deliveredToday: number;
+  earningsTodayKes: string;
+  earningsKes: string;
+  awaitingDropoff: number;
+}
+
+export interface ParcelOrgDetail {
+  org: ParcelOrg;
+  stats: ParcelOrgStats;
+  staff: ParcelOrgStaffRow[];
+  activity: ParcelOrgActivityRow[];
+}
+
+/** One company's full detail view: the company, its numbers, its roster
+ *  (with each member's Esoqo ID), and its activity feed. */
+export async function actionGetParcelOrgDetail(
+  id: string,
+): Promise<ParcelOrgDetail> {
+  await requireStaff();
+  return adminGo<ParcelOrgDetail>(
+    `/v1/admin/parcels/orgs/${encodeURIComponent(id)}`,
+  );
 }
 
 export async function actionListParcelOrgStaff(
@@ -790,6 +849,30 @@ export async function actionListParcelOrgStaff(
     `/v1/admin/parcels/orgs/${orgId}/staff`,
   );
   return staff ?? [];
+}
+
+/** Mint (or read back) the ESK-… handle a roster member signs in with.
+ *  Needed for members created before the invite flow minted IDs — they
+ *  have a Party and a phone but no code, which is the "can't see their
+ *  Esoqo ID" gap. Idempotent on the server. */
+export async function actionIssueParcelOrgStaffId(
+  orgId: string,
+  staffId: string,
+): Promise<{ ok: true; esoqoId: string } | { ok: false; error: string }> {
+  try {
+    await requireStaff();
+    const res = await adminGo<{ esoqoId: string }>(
+      `/v1/admin/parcels/orgs/${orgId}/staff/${staffId}/issue-id`,
+      { method: "POST" },
+    );
+    revalidatePath("/parcels/companies");
+    return { ok: true, esoqoId: res.esoqoId };
+  } catch (e) {
+    return {
+      ok: false,
+      error: e instanceof Error ? e.message : "Could not issue that Esoqo ID",
+    };
+  }
 }
 
 /** Seeds a company's first manager so somebody there can sign in and
@@ -803,12 +886,18 @@ export async function actionListParcelOrgStaff(
 export async function actionCreateParcelOrgManager(
   orgId: string,
   input: {
+    /** Present when editing an existing roster member rather than adding
+     *  one — core-go updates in place, leaving the PIN alone unless a new
+     *  one is sent. */
+    id?: string;
     name: string;
     role: string;
     pin?: string;
     msisdn?: string;
     esokoId?: string;
     partyId?: string | null;
+    active?: boolean;
+    stationId?: string | null;
   },
 ): Promise<Result> {
   try {
@@ -816,9 +905,15 @@ export async function actionCreateParcelOrgManager(
     await adminGo(`/v1/admin/parcels/orgs/${orgId}/staff`, {
       method: "POST",
       body: JSON.stringify({
-        ...input,
+        id: input.id ?? null,
+        name: input.name,
+        role: input.role,
+        pin: input.pin ?? "",
+        msisdn: input.msisdn ?? null,
+        esokoId: input.esokoId ?? null,
         partyId: input.partyId || null,
-        active: true,
+        active: input.active ?? true,
+        stationId: input.stationId ?? null,
       }),
     });
     revalidatePath("/parcels/companies");
@@ -826,7 +921,7 @@ export async function actionCreateParcelOrgManager(
   } catch (e) {
     return {
       ok: false,
-      error: e instanceof Error ? e.message : "Could not add that person",
+      error: e instanceof Error ? e.message : "Could not save that person",
     };
   }
 }

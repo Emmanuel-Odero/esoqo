@@ -16,6 +16,7 @@ package dbx
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"regexp"
 	"strings"
@@ -150,6 +151,165 @@ func ListParcelOrgs(ctx context.Context, pool *pgxpool.Pool) ([]ParcelOrg, error
 			return nil, err
 		}
 		out = append(out, *o)
+	}
+	return out, rows.Err()
+}
+
+// AdminParcelOrg — one row of the operator's courier-company register.
+//
+// The plain ParcelOrg is the tenant's own view of itself; this is the
+// operator's, so it carries the facts an admin page needs to answer
+// "who runs this, who works here, and does it actually carry anything"
+// without an N+1 of separate calls. The owning business name and the
+// primary manager are surfaced explicitly so the company is never
+// rendered as if the contact person *were* the company.
+type AdminParcelOrg struct {
+	ParcelOrg
+	EnterpriseName string       `json:"enterpriseName"`
+	OwnerPartyID   string       `json:"ownerPartyId"`
+	StaffCount     int          `json:"staffCount"`
+	ActiveStaff    int          `json:"activeStaff"`
+	ParcelCount    int          `json:"parcelCount"`
+	DeliveredCount int          `json:"deliveredCount"`
+	EarningsKes    money.Amount `json:"earningsKes"`
+	// PrimaryContactName/Phone — the first MANAGER on the roster (active
+	// ones first), not ParcelOrg.contactPerson. A contact is a person and
+	// people leave; the company outlives them. Falls back to the legacy
+	// contactPerson/contactPhone pair only when no manager exists yet, so
+	// data an admin typed before this split is never silently lost.
+	PrimaryContactName  *string `json:"primaryContactName"`
+	PrimaryContactPhone *string `json:"primaryContactPhone"`
+}
+
+const adminParcelOrgColumns = `
+	o.id, o."enterpriseId", o.name, o.slug, o.status, o."contactPerson", o."contactPhone",
+	o."contactEmail", o."settlementPhone", o."commissionPct"::text,
+	o."acceptsWalkIn", o.lat::text, o.lng::text, o."locationHint", o."openingHours",
+	COALESCE(org."knownAs", org."officialName", pr."knownAs", pr."officialName", e."workRaw", o.name),
+	e."partyId"::text,
+	(SELECT count(*) FROM parcel_org_staff st WHERE st."orgId" = o.id),
+	(SELECT count(*) FROM parcel_org_staff st WHERE st."orgId" = o.id AND st.active),
+	(SELECT count(*) FROM parcel p WHERE p."parcelOrgId" = o.id AND p.status <> 'CANCELLED'),
+	(SELECT count(*) FROM parcel p WHERE p."parcelOrgId" = o.id AND p.status = 'DELIVERED'),
+	COALESCE((SELECT sum(p."orgEarningsKes") FROM parcel p WHERE p."parcelOrgId" = o.id), 0)::float8,
+	COALESCE(mgr.name, o."contactPerson"), COALESCE(mgr.msisdn, o."contactPhone")`
+
+const adminParcelOrgJoins = `
+	FROM parcel_org o
+	JOIN enterprise e ON e.id = o."enterpriseId"
+	LEFT JOIN organisation org ON org."partyId" = e."partyId"
+	LEFT JOIN person pr ON pr."partyId" = e."partyId"
+	LEFT JOIN LATERAL (
+		SELECT st.name, pr2.msisdn
+		FROM parcel_org_staff st
+		LEFT JOIN person pr2 ON pr2."partyId" = st."partyId"
+		WHERE st."orgId" = o.id AND st.role = 'MANAGER'
+		ORDER BY st.active DESC, st."createdAt" ASC
+		LIMIT 1
+	) mgr ON true`
+
+func scanAdminParcelOrg(row pgx.Row) (*AdminParcelOrg, error) {
+	var o AdminParcelOrg
+	var commissionText string
+	var latText, lngText *string
+	if err := row.Scan(&o.ID, &o.EnterpriseID, &o.Name, &o.Slug, &o.Status,
+		&o.ContactPerson, &o.ContactPhone, &o.ContactEmail, &o.SettlementPhone,
+		&commissionText, &o.AcceptsWalkIn, &latText, &lngText, &o.LocationHint, &o.OpeningHours,
+		&o.EnterpriseName, &o.OwnerPartyID,
+		&o.StaffCount, &o.ActiveStaff, &o.ParcelCount, &o.DeliveredCount, &o.EarningsKes,
+		&o.PrimaryContactName, &o.PrimaryContactPhone); err != nil {
+		return nil, err
+	}
+	var err error
+	if o.CommissionPct, err = parseFloatOrZero(commissionText); err != nil {
+		return nil, err
+	}
+	if latText != nil {
+		v, perr := parseFloatOrZero(*latText)
+		if perr != nil {
+			return nil, perr
+		}
+		o.Lat = &v
+	}
+	if lngText != nil {
+		v, perr := parseFloatOrZero(*lngText)
+		if perr != nil {
+			return nil, perr
+		}
+		o.Lng = &v
+	}
+	return &o, nil
+}
+
+// ListAdminParcelOrgs — the whole register, with per-company counts and
+// earnings for the admin page's table and KPIs.
+func ListAdminParcelOrgs(ctx context.Context, pool *pgxpool.Pool) ([]AdminParcelOrg, error) {
+	rows, err := pool.Query(ctx, `SELECT `+adminParcelOrgColumns+adminParcelOrgJoins+` ORDER BY o.name ASC`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var out []AdminParcelOrg
+	for rows.Next() {
+		o, err := scanAdminParcelOrg(rows)
+		if err != nil {
+			return nil, err
+		}
+		out = append(out, *o)
+	}
+	return out, rows.Err()
+}
+
+// GetAdminParcelOrg — one company for the admin detail view.
+func GetAdminParcelOrg(ctx context.Context, pool *pgxpool.Pool, id string) (*AdminParcelOrg, error) {
+	o, err := scanAdminParcelOrg(pool.QueryRow(ctx, `SELECT `+adminParcelOrgColumns+adminParcelOrgJoins+` WHERE o.id = $1`, id))
+	if errors.Is(err, pgx.ErrNoRows) {
+		return nil, nil
+	}
+	return o, err
+}
+
+// ParcelOrgActivity — one line of a company's own audit trail. The
+// audit_event feed is append-only and already hash-chained, which is why
+// the admin page reads it rather than keeping a second changelog.
+type ParcelOrgActivity struct {
+	OccurredAt string      `json:"occurredAt"`
+	ActorType  string      `json:"actorType"`
+	ActorID    *string     `json:"actorId"`
+	Action     string      `json:"action"`
+	Payload    interface{} `json:"payload"`
+}
+
+// ListParcelOrgActivity reads the audit_event rows written against this
+// company (targetType "parcel_org"), newest first.
+func ListParcelOrgActivity(ctx context.Context, pool *pgxpool.Pool, orgID string, limit int) ([]ParcelOrgActivity, error) {
+	if limit <= 0 || limit > 200 {
+		limit = 50
+	}
+	rows, err := pool.Query(ctx, `
+		SELECT to_char("occurredAt", 'YYYY-MM-DD"T"HH24:MI:SS"Z"'),
+		       "actorType", "actorId", action, payload
+		FROM audit_event
+		WHERE "targetType" = 'parcel_org' AND "targetId" = $1
+		ORDER BY id DESC
+		LIMIT $2`, orgID, limit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var out []ParcelOrgActivity
+	for rows.Next() {
+		var a ParcelOrgActivity
+		var payloadRaw []byte
+		if err := rows.Scan(&a.OccurredAt, &a.ActorType, &a.ActorID, &a.Action, &payloadRaw); err != nil {
+			return nil, err
+		}
+		var payload interface{}
+		if len(payloadRaw) > 0 {
+			_ = json.Unmarshal(payloadRaw, &payload) // malformed payload → nil, rendered as no-detail
+		}
+		a.Payload = payload
+		out = append(out, a)
 	}
 	return out, rows.Err()
 }
@@ -410,6 +570,13 @@ type ParcelOrgStaff struct {
 	Active    bool    `json:"active"`
 	PartyID   *string `json:"partyId"`
 	StationID *string `json:"stationId"`
+	// Msisdn / EsoqoID — the phone and the ESK-… handle this person can
+	// sign in with, joined out from their Party. Surfaced so an admin can
+	// read a login back to someone who forgot it, and so the roster shows
+	// a credential actually exists rather than a bare uuid. Both nil for
+	// an office-only login that was never linked to a person.
+	Msisdn  *string `json:"msisdn"`
+	EsoqoID *string `json:"esoqoId"`
 }
 
 // ParcelStaffForSignIn carries the hash, so it is never the type
@@ -487,8 +654,12 @@ func ParcelStaffMsisdn(ctx context.Context, pool *pgxpool.Pool, orgSlug, name st
 
 func ListParcelOrgStaff(ctx context.Context, pool *pgxpool.Pool, orgID string) ([]ParcelOrgStaff, error) {
 	rows, err := pool.Query(ctx, `
-		SELECT id, "orgId", name, role, active, "partyId"::text, "stationId"::text
-		FROM parcel_org_staff WHERE "orgId" = $1 ORDER BY name ASC`, orgID)
+		SELECT st.id, st."orgId", st.name, st.role, st.active, st."partyId"::text, st."stationId"::text,
+		       pr.msisdn, epi.code
+		FROM parcel_org_staff st
+		LEFT JOIN person pr ON pr."partyId" = st."partyId"
+		LEFT JOIN esoko_payment_id epi ON epi."partyId" = st."partyId"
+		WHERE st."orgId" = $1 ORDER BY st.name ASC`, orgID)
 	if err != nil {
 		return nil, err
 	}
@@ -496,12 +667,29 @@ func ListParcelOrgStaff(ctx context.Context, pool *pgxpool.Pool, orgID string) (
 	var out []ParcelOrgStaff
 	for rows.Next() {
 		var s ParcelOrgStaff
-		if err := rows.Scan(&s.ID, &s.OrgID, &s.Name, &s.Role, &s.Active, &s.PartyID, &s.StationID); err != nil {
+		if err := rows.Scan(&s.ID, &s.OrgID, &s.Name, &s.Role, &s.Active, &s.PartyID, &s.StationID, &s.Msisdn, &s.EsoqoID); err != nil {
 			return nil, err
 		}
 		out = append(out, s)
 	}
 	return out, rows.Err()
+}
+
+// ParcelOrgStaffParty resolves the Party and phone behind one staff
+// row, scoped by org so an admin session can't read another company's
+// roster by guessing an id. Empty strings when the row has no linked
+// person (an office-only PIN login) — the caller then has nothing to
+// mint an Esoqo ID against.
+func ParcelOrgStaffParty(ctx context.Context, pool *pgxpool.Pool, orgID, staffID string) (partyID, msisdn string, err error) {
+	err = pool.QueryRow(ctx, `
+		SELECT COALESCE(st."partyId"::text, ''), COALESCE(pr.msisdn, '')
+		FROM parcel_org_staff st
+		LEFT JOIN person pr ON pr."partyId" = st."partyId"
+		WHERE st.id = $1 AND st."orgId" = $2`, staffID, orgID).Scan(&partyID, &msisdn)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return "", "", &ParcelError{"NOT_FOUND", "That team member was not found"}
+	}
+	return partyID, msisdn, err
 }
 
 type ParcelOrgStation struct {

@@ -431,6 +431,7 @@ func (s *Server) Router() *gin.Engine {
 		// seeding each one's first manager so somebody there can sign in
 		// and create the rest of the team.
 		v1.GET("/admin/parcels/orgs", s.authRequired(), s.handleAdminListParcelOrgs)
+		v1.GET("/admin/parcels/orgs/:id", s.authRequired(), s.handleAdminGetParcelOrg)
 		v1.GET("/admin/parcels/enterprises", s.authRequired(), s.handleAdminSearchEnterprises)
 		v1.POST("/admin/parcels/enterprises", s.authRequired(), s.handleAdminCreateEnterprise)
 		v1.POST("/admin/parcels/orgs", s.authRequired(), s.handleAdminCreateParcelOrg)
@@ -438,6 +439,7 @@ func (s *Server) Router() *gin.Engine {
 		v1.PATCH("/admin/parcels/orgs/:id", s.authRequired(), s.handleAdminUpdateParcelOrg)
 		v1.GET("/admin/parcels/orgs/:id/staff", s.authRequired(), s.handleAdminListParcelOrgStaff)
 		v1.POST("/admin/parcels/orgs/:id/staff", s.authRequired(), s.handleAdminUpsertParcelOrgStaff)
+		v1.POST("/admin/parcels/orgs/:id/staff/:staffId/issue-id", s.authRequired(), s.handleAdminIssueParcelOrgStaffID)
 		// Pickup points and the coverage rate card — siblings of zones
 		// above, same parcels.read/parcels.edit split.
 		v1.GET("/admin/parcels/agents", s.authRequired(), s.handleAdminListParcelAgents)
