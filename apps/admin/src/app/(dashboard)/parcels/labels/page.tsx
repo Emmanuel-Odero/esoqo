@@ -18,7 +18,10 @@ export const dynamic = 'force-dynamic';
  *  `?org=` scopes the whole page to one courier company's own pad.
  *  Stock belongs to whoever it was printed for, and a company must not
  *  be shown — let alone able to reprint — another's codes, so the pool,
- *  the batches and any new mint all move together when this changes. */
+ *  the batches and any new mint all move together when this changes.
+ *
+ *  `?state=` selects the register tab: blank | filled | spent | voided | all.
+ *  Blank = empty labels; filled+spent = attached to packages. */
 export default async function ParcelLabelsPage(
   { searchParams }: { searchParams: Promise<{ code?: string; org?: string; state?: string }> },
 ) {
@@ -32,14 +35,19 @@ export default async function ParcelLabelsPage(
     actionListParcelOrgs(),
     actionListParcelLabelRegister(registerState, org),
   ]);
+  const emptyCount = register.counts['blank'] ?? 0;
+  const attachedCount = (register.counts['filled'] ?? 0) + (register.counts['spent'] ?? 0);
 
   return (
     <>
       <LiveRefresh />
       <div className="head">
         <div>
-          <h1>Blank parcel labels</h1>
+          <h1>Labels</h1>
           <p>
+            Manage every label — Esoqo pool and each courier company&apos;s pads.
+            Empty labels ({emptyCount}) are printed stock waiting for a box;
+            attached labels ({attachedCount}) already carry item info or a booking.
             Print a batch of PKG-… codes ahead of any booking — stick one on an envelope or a
             box in advance, then hand the code over at booking (or have the sender scan it)
             instead of every physical label having to be printed fresh at checkout time.

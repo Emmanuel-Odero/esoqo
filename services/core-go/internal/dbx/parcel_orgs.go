@@ -59,12 +59,18 @@ type ParcelOrg struct {
 	Lng           *float64 `json:"lng"`
 	LocationHint  *string  `json:"locationHint"`
 	OpeningHours  *string  `json:"openingHours"`
+	// Co-branded label assets. LogoUrl prints centered in the label
+	// header band (never over QR/barcode); null = Esoqo branding alone.
+	LogoStorageKey *string `json:"logoStorageKey"`
+	LogoUrl        *string `json:"logoUrl"`
+	BrandAccent    *string `json:"brandAccent"`
 }
 
 const parcelOrgColumns = `
 	id, "enterpriseId", name, slug, status, "contactPerson", "contactPhone",
 	"contactEmail", "settlementPhone", "commissionPct"::text,
-	"acceptsWalkIn", lat::text, lng::text, "locationHint", "openingHours"`
+	"acceptsWalkIn", lat::text, lng::text, "locationHint", "openingHours",
+	"logoStorageKey", "logoUrl", "brandAccent"`
 
 func scanParcelOrg(row pgx.Row) (*ParcelOrg, error) {
 	var o ParcelOrg
@@ -72,7 +78,8 @@ func scanParcelOrg(row pgx.Row) (*ParcelOrg, error) {
 	var latText, lngText *string
 	if err := row.Scan(&o.ID, &o.EnterpriseID, &o.Name, &o.Slug, &o.Status,
 		&o.ContactPerson, &o.ContactPhone, &o.ContactEmail, &o.SettlementPhone,
-		&commissionText, &o.AcceptsWalkIn, &latText, &lngText, &o.LocationHint, &o.OpeningHours); err != nil {
+		&commissionText, &o.AcceptsWalkIn, &latText, &lngText, &o.LocationHint, &o.OpeningHours,
+		&o.LogoStorageKey, &o.LogoUrl, &o.BrandAccent); err != nil {
 		return nil, err
 	}
 	var err error
@@ -117,6 +124,9 @@ type ParcelOrgInput struct {
 	Lng             *float64
 	LocationHint    *string
 	OpeningHours    *string
+	LogoStorageKey  *string
+	LogoUrl         *string
+	BrandAccent     *string
 }
 
 func (in ParcelOrgInput) validate() error {
@@ -136,6 +146,15 @@ func (in ParcelOrgInput) validate() error {
 	// ParcelAgent's own required locationHint already enforces.
 	if in.AcceptsWalkIn && (in.LocationHint == nil || strings.TrimSpace(*in.LocationHint) == "") {
 		return &ParcelError{"BAD_INPUT", "Give the walk-in desk a location description"}
+	}
+	// Brand accent is an optional hex colour for the label header — a
+	// stray string here must never break printing, so validate loosely.
+	if in.BrandAccent != nil && strings.TrimSpace(*in.BrandAccent) != "" {
+		trimmed := strings.TrimSpace(*in.BrandAccent)
+		matched, _ := regexp.MatchString(`^#(?:[0-9a-fA-F]{3}|[0-9a-fA-F]{6})$`, trimmed)
+		if !matched {
+			return &ParcelError{"BAD_INPUT", "Brand accent must be a hex colour like #1a73e8"}
+		}
 	}
 	return nil
 }
@@ -188,6 +207,7 @@ const adminParcelOrgColumns = `
 	o.id, o."enterpriseId", o.name, o.slug, o.status, o."contactPerson", o."contactPhone",
 	o."contactEmail", o."settlementPhone", o."commissionPct"::text,
 	o."acceptsWalkIn", o.lat::text, o.lng::text, o."locationHint", o."openingHours",
+	o."logoStorageKey", o."logoUrl", o."brandAccent",
 	COALESCE(org."knownAs", org."officialName", pr."knownAs", pr."officialName", e."workRaw", o.name),
 	e."partyId"::text,
 	(SELECT count(*) FROM parcel_org_staff st WHERE st."orgId" = o.id),
@@ -218,6 +238,7 @@ func scanAdminParcelOrg(row pgx.Row) (*AdminParcelOrg, error) {
 	if err := row.Scan(&o.ID, &o.EnterpriseID, &o.Name, &o.Slug, &o.Status,
 		&o.ContactPerson, &o.ContactPhone, &o.ContactEmail, &o.SettlementPhone,
 		&commissionText, &o.AcceptsWalkIn, &latText, &lngText, &o.LocationHint, &o.OpeningHours,
+		&o.LogoStorageKey, &o.LogoUrl, &o.BrandAccent,
 		&o.EnterpriseName, &o.OwnerPartyID,
 		&o.StaffCount, &o.ActiveStaff, &o.ParcelCount, &o.DeliveredCount, &o.EarningsKes,
 		&o.PrimaryContactName, &o.PrimaryContactPhone); err != nil {
@@ -366,12 +387,14 @@ func CreateParcelOrg(ctx context.Context, pool *pgxpool.Pool, in ParcelOrgInput,
 			id, "enterpriseId", name, slug, status, "contactPerson", "contactPhone",
 			"contactEmail", "settlementPhone", "commissionPct",
 			"acceptsWalkIn", lat, lng, "locationHint", "openingHours",
+			"logoStorageKey", "logoUrl", "brandAccent",
 			"createdAt", "updatedAt", "createdByStaffId"
-		) VALUES (gen_random_uuid(), $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, now(), now(), $15)
+		) VALUES (gen_random_uuid(), $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, now(), now(), $18)
 		RETURNING id`,
 		in.EnterpriseID, in.Name, in.Slug, in.Status, in.ContactPerson, in.ContactPhone,
 		in.ContactEmail, in.SettlementPhone, in.CommissionPct,
-		in.AcceptsWalkIn, in.Lat, in.Lng, in.LocationHint, in.OpeningHours, staffID).Scan(&id)
+		in.AcceptsWalkIn, in.Lat, in.Lng, in.LocationHint, in.OpeningHours,
+		in.LogoStorageKey, in.LogoUrl, in.BrandAccent, staffID).Scan(&id)
 	if isUniqueViolation(err) {
 		return "", &ParcelError{"BAD_INPUT", "That slug is already taken"}
 	}
@@ -387,11 +410,13 @@ func UpdateParcelOrg(ctx context.Context, pool *pgxpool.Pool, id string, in Parc
 			name = $1, slug = $2, status = $3, "contactPerson" = $4, "contactPhone" = $5,
 			"contactEmail" = $6, "settlementPhone" = $7, "commissionPct" = $8,
 			"acceptsWalkIn" = $9, lat = $10, lng = $11, "locationHint" = $12, "openingHours" = $13,
+			"logoStorageKey" = $14, "logoUrl" = $15, "brandAccent" = $16,
 			"updatedAt" = now()
-		WHERE id = $14`,
+		WHERE id = $17`,
 		in.Name, in.Slug, in.Status, in.ContactPerson, in.ContactPhone,
 		in.ContactEmail, in.SettlementPhone, in.CommissionPct,
-		in.AcceptsWalkIn, in.Lat, in.Lng, in.LocationHint, in.OpeningHours, id)
+		in.AcceptsWalkIn, in.Lat, in.Lng, in.LocationHint, in.OpeningHours,
+		in.LogoStorageKey, in.LogoUrl, in.BrandAccent, id)
 	if isUniqueViolation(err) {
 		return &ParcelError{"BAD_INPUT", "That slug is already taken"}
 	}
@@ -897,6 +922,10 @@ type OrgParcelLabel struct {
 	ParcelID        *string `json:"parcelId"`
 	ParcelCode      *string `json:"parcelCode"`
 	ParcelStatus    *string `json:"parcelStatus"`
+	// Batch run + QR signature, so a resolved label reprints genuine
+	// without a second fetch. Signed by the handler (secret owner).
+	BatchID *string `json:"batchId"`
+	Sig     string  `json:"sig"`
 }
 
 // GetOrgParcelLabel resolves a scanned or typed code against this
@@ -917,14 +946,15 @@ func GetOrgParcelLabel(ctx context.Context, pool *pgxpool.Pool, orgID, code stri
 		       to_char(s."usedAt", 'YYYY-MM-DD"T"HH24:MI:SSZ'),
 		       to_char(s."voidedAt", 'YYYY-MM-DD"T"HH24:MI:SSZ'),
 		       s."voidedReason",
-		       p.id::text, p.code, p.status::text
+		       p.id::text, p.code, p.status::text,
+		       s."batchId"::text
 		FROM parcel_label_stock s
 		LEFT JOIN parcel p ON p.id = s."usedByParcelId"
 		WHERE upper(s.code) = upper($1) AND s."parcelOrgId" = $2`, code, orgID).
 		Scan(&l.Code, &l.State, &l.ItemDescription, &l.Destination,
 			&l.SenderName, &l.SenderMsisdn, &l.ReceiverName, &l.ReceiverMsisdn,
 			&l.UsedAt, &l.VoidedAt, &l.VoidedReason,
-			&l.ParcelID, &l.ParcelCode, &l.ParcelStatus)
+			&l.ParcelID, &l.ParcelCode, &l.ParcelStatus, &l.BatchID)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return nil, nil
 	}
@@ -990,6 +1020,11 @@ func SearchOrgLabels(ctx context.Context, pool *pgxpool.Pool, orgID, tail string
 func AttachOrgParcelLabelInfo(ctx context.Context, pool *pgxpool.Pool, orgID, code string, in ParcelLabelInfoInput, staffID *string) error {
 	if in.ItemDescription == "" {
 		return &ParcelError{"BAD_INPUT", "A short item description is required"}
+	}
+	// Strict PKG-only: a company self-print is retired — re-print on the
+	// Esoqo pad instead. Flat message (no oracle on anyone else's stock).
+	if !strings.HasPrefix(strings.ToUpper(strings.TrimSpace(code)), "PKG-") {
+		return &ParcelError{"FOREIGN_LABEL", "That looks like a label printed outside Esoqo. Only Esoqo PKG-… labels scan now — re-print on your Esoqo pad"}
 	}
 	tag, err := pool.Exec(ctx, `
 		UPDATE parcel_label_stock
@@ -1270,6 +1305,72 @@ func UpsertParcelOrgStaff(ctx context.Context, pool *pgxpool.Pool, id *string, o
 		return &ParcelError{"NOT_FOUND", "That person was not found"}
 	}
 	return nil
+}
+
+// ParcelOrgStaffCredential is the minimum a staffer needs to change
+// their own portal PIN: the stored hash to verify the current PIN
+// against, and the linked party (if any) whose Esoqo credential must
+// move with it so /signin keeps working on the same PIN.
+type ParcelOrgStaffCredential struct {
+	PinHash string
+	PartyID *string
+}
+
+// GetParcelOrgStaffCredential reads a staffer's own login back for a
+// PIN change — scoped by org like every other org read, and
+// active-only: a suspended row's PIN is not something its holder gets
+// to rotate back into use. Nil, nil when there is nothing to change.
+func GetParcelOrgStaffCredential(ctx context.Context, pool *pgxpool.Pool, orgID, staffID string) (*ParcelOrgStaffCredential, error) {
+	var c ParcelOrgStaffCredential
+	err := pool.QueryRow(ctx, `
+		SELECT "pinHash", "partyId"::text FROM parcel_org_staff
+		WHERE id = $1 AND "orgId" = $2 AND active`, staffID, orgID).
+		Scan(&c.PinHash, &c.PartyID)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, err
+	}
+	return &c, nil
+}
+
+// ChangeParcelOrgStaffPin sets a staffer's own portal PIN — the "temp
+// PIN in, chosen PIN out" half of the invite flow. One transaction
+// covers the staff row and, when the row links a Person, that Person's
+// Esoqo credential too: the invite established one PIN for both doors
+// (company portal name+PIN, /signin phone+PIN), and a change must keep
+// that invariant rather than silently splitting them.
+func ChangeParcelOrgStaffPin(ctx context.Context, pool *pgxpool.Pool, orgID, staffID, newHash string) error {
+	tx, err := pool.Begin(ctx)
+	if err != nil {
+		return err
+	}
+	defer func() { _ = tx.Rollback(ctx) }()
+	var partyID *string
+	if err := tx.QueryRow(ctx, `
+		UPDATE parcel_org_staff SET "pinHash" = $1, "updatedAt" = now()
+		WHERE id = $2 AND "orgId" = $3 AND active
+		RETURNING "partyId"::text`, newHash, staffID, orgID).Scan(&partyID); err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return &ParcelError{"NOT_FOUND", "Your login is no longer active — sign in again"}
+		}
+		return err
+	}
+	if partyID != nil && *partyID != "" {
+		// Same shape as dbx.UpsertPin, inside this transaction rather
+		// than through it — a PIN change that updated one door and not
+		// the other would be worse than one that failed cleanly.
+		if _, err := tx.Exec(ctx, `
+			INSERT INTO user_credential ("personId", "pinHash", "pinSetAt", "failedAttempts", "lockedUntil", "updatedAt")
+			VALUES ($1, $2, now(), 0, NULL, now())
+			ON CONFLICT ("personId") DO UPDATE
+			SET "pinHash" = EXCLUDED."pinHash", "pinSetAt" = now(), "failedAttempts" = 0, "lockedUntil" = NULL, "updatedAt" = now()`,
+			*partyID, newHash); err != nil {
+			return err
+		}
+	}
+	return tx.Commit(ctx)
 }
 
 // ── Org-scoped reads ─────────────────────────────────────────────────

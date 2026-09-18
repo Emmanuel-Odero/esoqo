@@ -42,7 +42,12 @@ export function CompanyDetail({ detail, canEdit }: { detail: ParcelOrgDetail; ca
   return (
     <>
       <div className="head">
-        <div>
+        <div style={{ display: 'flex', gap: 12, alignItems: 'center' }}>
+          {org.logoUrl ? (
+            <img src={org.logoUrl} alt={`${org.name} logo`}
+              style={{ height: 44, maxWidth: 160, objectFit: 'contain', border: '1px solid var(--line)', borderRadius: 8, padding: 4, background: '#fff' }} />
+          ) : null}
+          <div>
           <Link
             href="/parcels/companies"
             className="sub"
@@ -54,7 +59,9 @@ export function CompanyDetail({ detail, canEdit }: { detail: ParcelOrgDetail; ca
           <p className="sub" style={{ margin: 0 }}>
             {org.enterpriseName ?? 'No registered business linked'} ·{' '}
             <span className="mono">/parcel-co/{org.slug}</span>
+            {org.logoUrl ? ' · branded labels' : ' · Esoqo-branded labels'}
           </p>
+          </div>
         </div>
         <div className="actions">
           <span className={statusPill(org.status)} style={{ alignSelf: 'center' }}>{statusLabel(org.status)}</span>

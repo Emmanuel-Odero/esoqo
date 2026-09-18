@@ -163,6 +163,12 @@ func TestNoMessageForcesUCS2(t *testing.T) {
 		"CourierParcelsLeftBehindOneSample": CourierParcelsLeftBehind(
 			"FLEET-1", 1, []string{"PKG-ABCDEF"}),
 		"CourierTripDeparted": CourierTripDeparted("FLEET-99", 42),
+		"ParcelStaffInvited": ParcelStaffInvited(
+			"Swift Riders", "Wanjiku", "MANAGER", "", ""),
+		"ParcelStaffInvitedTempPin": ParcelStaffInvited(
+			"Swift Riders", "Wanjiku", "MANAGER", "", "482910"),
+		"ParcelStaffInvitedTempPinLong": ParcelStaffInvited(
+			longLabel, longLabel, "MANAGER", "", "482910"),
 	}
 	for name, msg := range messages {
 		for _, r := range msg {
@@ -173,6 +179,64 @@ func TestNoMessageForcesUCS2(t *testing.T) {
 		if len(msg) > 160 {
 			t.Errorf("%s is %d chars, over the single-GSM-7-segment budget of 160: %q", name, len(msg), msg)
 		}
+	}
+}
+
+// TestParcelStaffInvitedCarriesTempPin — a first-time invitee gets
+// their first PIN in the text so they can sign in immediately and then
+// reset it. The PIN outranks the sign-in link in the single-segment
+// budget: a long org name drops the link, never the credential.
+func TestParcelStaffInvitedCarriesTempPin(t *testing.T) {
+	original := trackingBaseURL
+	t.Cleanup(func() { trackingBaseURL = original })
+
+	withPin := ParcelStaffInvited("Swift Riders", "Wanjiku", "MANAGER", "", "482910")
+	if !strings.Contains(withPin, "482910") {
+		t.Errorf("invite should carry the temporary PIN: %q", withPin)
+	}
+	if !strings.Contains(withPin, "Change it after you sign in") {
+		t.Errorf("invite should tell the recipient to reset the PIN: %q", withPin)
+	}
+
+	withoutPin := ParcelStaffInvited("Swift Riders", "Wanjiku", "MANAGER", "", "")
+	if strings.Contains(withoutPin, "Temp PIN") {
+		t.Errorf("invite without a PIN must not mention one: %q", withoutPin)
+	}
+
+	SetTrackingBaseURL("https://esoqo.co.ke")
+	// Tiny names leave room for everything: PIN and link together.
+	tiny := ParcelStaffInvited("AB", "Jo", "RIDER",
+		ParcelStaffInviteURL("ab", "Jo"), "482910")
+	if !strings.Contains(tiny, "482910") || !strings.Contains(tiny, "https://") {
+		t.Errorf("a tiny invite should carry both the PIN and the link: %q", tiny)
+	}
+	if len(tiny) > 160 {
+		t.Errorf("tiny invite overflowed its segment budget: %d chars: %q", len(tiny), tiny)
+	}
+	// Typical names: the PIN (the credential) wins and the link drops.
+	short := ParcelStaffInvited("Swift Riders", "Wanjiku", "MANAGER",
+		ParcelStaffInviteURL("swift-riders", "Wanjiku"), "482910")
+	if !strings.Contains(short, "482910") {
+		t.Errorf("a typical invite must keep the PIN: %q", short)
+	}
+	if strings.Contains(short, "https://") {
+		t.Errorf("a typical invite should drop the link rather than overflow: %q", short)
+	}
+	if len(short) > 160 {
+		t.Errorf("typical invite overflowed its segment budget: %d chars: %q", len(short), short)
+	}
+
+	longLabel := strings.Repeat("x", 80)
+	long := ParcelStaffInvited(longLabel, longLabel, "MANAGER",
+		ParcelStaffInviteURL(longLabel, longLabel), "482910")
+	if !strings.Contains(long, "482910") {
+		t.Errorf("a long invite must keep the PIN even when the link is dropped: %q", long)
+	}
+	if strings.Contains(long, "https://") {
+		t.Errorf("a long invite should drop the link rather than overflow: %q", long)
+	}
+	if len(long) > 160 {
+		t.Errorf("long invite overflowed its segment budget: %d chars: %q", len(long), long)
 	}
 }
 

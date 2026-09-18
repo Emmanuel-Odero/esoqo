@@ -84,6 +84,18 @@ export function CounterForm({
   const load = useCallback(async (raw: string) => {
     const target = extractParcelCode(raw);
     if (!target) return;
+    // Strict PKG-only: a company self-print never verifies. Catch it
+    // here for instant guidance (the server refuses it too, with
+    // FOREIGN_LABEL) — the next step is a fresh Esoqo label, keeping
+    // their number as the parcel's external reference if needed.
+    if (!target.toUpperCase().startsWith('PKG-')) {
+      setError(
+        `“${raw.trim()}” looks like a label printed outside Esoqo. Only Esoqo PKG-… labels scan now — ` +
+        `print a fresh label from Labels and book against that instead.`,
+      );
+      setLoadedCode(null);
+      return;
+    }
     setLoading(true);
     setError(null);
     setNotice(null);
@@ -395,7 +407,18 @@ export function CounterForm({
           Booking creates a draft — price and payment come next, as they always have.
         </span>
       </div>
-      {error && <p role="alert" style={{ color: 'var(--red)', margin: '10px 0 0' }}>{error}</p>}
+      {error && (
+        /printed outside Esoqo|Only Esoqo PKG/i.test(error) ? (
+          <div role="alert" className="chain bad" style={{ marginTop: 10 }}>
+            <span>{error}</span>
+            <a className="btn btn-o btn-sm" href="/parcels/labels" style={{ marginLeft: 8 }}>
+              Print a fresh label
+            </a>
+          </div>
+        ) : (
+          <p role="alert" style={{ color: 'var(--red)', margin: '10px 0 0' }}>{error}</p>
+        )
+      )}
     </div>
   );
 }

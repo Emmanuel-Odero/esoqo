@@ -410,6 +410,26 @@ export async function addCustomParcel(
   }
 }
 
+/** Change your own portal PIN — the "temp PIN in, chosen PIN out"
+ *  half of the invite flow. Self-service for the whole roster: the
+ *  session's own staff row is the only one core-go will touch, and the
+ *  same change covers /signin phone+PIN, so one PIN keeps working at
+ *  both doors. */
+export async function changeMyOrgPin(
+  currentPin: string,
+  newPin: string,
+): Promise<Result> {
+  try {
+    await parcelOrgFetch("/v1/parcel-orgs/me/pin", {
+      method: "POST",
+      body: JSON.stringify({ currentPin, newPin }),
+    });
+    return { ok: true };
+  } catch (e) {
+    return toResult(e);
+  }
+}
+
 /** Tail-search the company's own unused labels: type the last few
  *  characters off the physical sticker, pick the full code. */
 export async function searchOrgLabels(q: string): Promise<OrgLabelSearchRow[]> {

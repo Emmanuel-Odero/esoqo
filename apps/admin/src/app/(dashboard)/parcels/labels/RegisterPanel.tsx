@@ -2,6 +2,7 @@
 
 import Link from 'next/link';
 import type { Route } from 'next';
+import { useState } from 'react';
 import { Icon } from '@esoqo/ui';
 import type { ParcelLabelRegisterRow } from '../actions';
 
@@ -21,9 +22,10 @@ import type { ParcelLabelRegisterRow } from '../actions';
  */
 
 const TABS: { state: string; label: string; hint: string }[] = [
-  { state: 'blank', label: 'Blank', hint: 'Printed, nothing written on them yet' },
+  { state: 'all', label: 'All', hint: 'Every label whatever its state' },
+  { state: 'blank', label: 'Empty', hint: 'Printed, nothing written on them yet' },
   { state: 'filled', label: 'Filled in', hint: 'A handler recorded an item — not yet a booking' },
-  { state: 'spent', label: 'Spent', hint: 'Bound to a real parcel' },
+  { state: 'spent', label: 'Used', hint: 'Bound to a real parcel — attached to a package' },
   { state: 'voided', label: 'Withdrawn', hint: 'Recalled — can never be booked' },
 ];
 
@@ -39,9 +41,28 @@ export function RegisterPanel({
     return `/parcels/labels?${params}` as Route;
   }
 
+  // Client-side search over the loaded register page — finding one code
+  // shouldn't be a round trip. Server tab still scopes the lifecycle.
+  const [filter, setFilter] = useState('');
+  const needle = filter.trim().toUpperCase();
+  const shown = needle
+    ? labels.filter((l) =>
+        l.code.toUpperCase().includes(needle) ||
+        (l.itemDescription ?? '').toUpperCase().includes(needle) ||
+        (l.destination ?? '').toUpperCase().includes(needle) ||
+        (l.senderName ?? '').toUpperCase().includes(needle) ||
+        (l.orgName ?? '').toUpperCase().includes(needle))
+    : labels;
+  const emptyCount = counts['blank'] ?? 0;
+  const attachedCount = (counts['filled'] ?? 0) + (counts['spent'] ?? 0);
+
   return (
     <div className="card" style={{ padding: 16, marginTop: 16 }}>
-      <strong style={{ display: 'block', marginBottom: 10 }}>Label register</strong>
+      <strong style={{ display: 'block', marginBottom: 4 }}>Label register</strong>
+      <p className="sub" style={{ margin: '0 0 10px' }}>
+        {emptyCount} empty · {attachedCount} attached to packages
+        {orgId ? ' · this company’s pad' : ' · all companies + Esoqo pool'}
+      </p>
       <div style={{ display: 'flex', gap: 6, marginBottom: 12, flexWrap: 'wrap' }}>
         {TABS.map((t) => (
           <Link key={t.state} href={tabHref(t.state)} title={t.hint}
@@ -56,17 +77,28 @@ export function RegisterPanel({
           {TABS.find((t) => t.state === state)?.hint}. None right now.
         </p>
       ) : (
+        <>
+        <input
+          className="mono" value={filter} placeholder="Find a code, item, destination, sender or company…"
+          aria-label="Filter this list"
+          onChange={(e) => setFilter(e.target.value.toUpperCase())}
+          style={{ width: '100%', maxWidth: 460, padding: '8px 10px', border: '1.5px solid var(--line)', borderRadius: 6, marginBottom: 12 }}
+        />
+        {shown.length === 0 ? (
+          <p className="sub" style={{ margin: 0 }}>No matches for “{filter.trim()}” in this list.</p>
+        ) : (
         <table className="tbl">
           <thead>
             <tr>
-              <th>Code</th><th>Item</th><th>Destination</th><th>Sender</th>
+              <th>Code</th><th>Company</th><th>Item</th><th>Destination</th><th>Sender</th>
               <th>{state === 'voided' ? 'Why' : 'When'}</th><th />
             </tr>
           </thead>
           <tbody>
-            {labels.map((l) => (
+            {shown.map((l) => (
               <tr key={l.code}>
                 <td className="mono">{l.code}</td>
+                <td style={CLIP} title={l.orgName ?? ''}>{l.orgName ?? <span className="sub">Esoqo pool</span>}</td>
                 <td style={CLIP} title={l.itemDescription ?? ''}>{l.itemDescription ?? <span className="sub">—</span>}</td>
                 <td style={CLIP} title={l.destination ?? ''}>{l.destination ?? <span className="sub">—</span>}</td>
                 <td style={CLIP} title={l.senderName ?? ''}>{l.senderName ?? <span className="sub">—</span>}</td>
@@ -93,7 +125,9 @@ export function RegisterPanel({
             ))}
           </tbody>
         </table>
-      )}
+        )}
+        </>
+        )}
     </div>
   );
 }

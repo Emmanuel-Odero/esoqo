@@ -153,6 +153,16 @@ type BookParcelInput struct {
 	PayAtCounter bool
 }
 
+// isForeignLabelCode reports whether code was printed outside Esoqo.
+// Only PKG-… codes are ever minted here (fleetqr.PrefixParcel); a
+// company self-print (own serials, barcodes from another system) never
+// carries that prefix. Used to reject retired company prints with a
+// FOREIGN_LABEL error the UI can explain, instead of a bare NOT_FOUND.
+func isForeignLabelCode(code string) bool {
+	upper := strings.ToUpper(strings.TrimSpace(code))
+	return !strings.HasPrefix(upper, "PKG-")
+}
+
 // BookParcel mints the parcel's own tracking code (PKG-…, via
 // fleetqr's minting contract — see the security posture's rule on
 // never hand-rolling a short code) plus a second, separate
@@ -314,6 +324,15 @@ func BookParcel(ctx context.Context, pool *pgxpool.Pool, in BookParcelInput) (pa
 		// happen in one transaction so two staff scanning the same
 		// physical label at once can't both win it.
 		code = *in.ExistingCode
+		// Strict PKG-only: labels a company printed itself (its own
+		// serials, never minted here) are retired — they have no stock
+		// row and no signature, so they can never verify. Reject with a
+		// code the UI can explain, not a bare NOT_FOUND: the desk's next
+		// step is to re-print on Esoqo stock and keep their number as
+		// the parcel's external reference.
+		if isForeignLabelCode(code) {
+			return "", "", "", "", &ParcelError{"FOREIGN_LABEL", "That looks like a label printed outside Esoqo (" + strings.ToUpper(strings.TrimSpace(code)) + "). Only Esoqo PKG-… labels scan now — re-print on Esoqo stock and keep your number as the external reference"}
+		}
 		tx, terr := pool.Begin(ctx)
 		if terr != nil {
 			return "", "", "", "", terr
@@ -1535,6 +1554,17 @@ type ParcelLabel struct {
 	// open on the outside of a box.
 	DestinationLat *float64 `json:"destinationLat"`
 	DestinationLng *float64 `json:"destinationLng"`
+	// Reprint branding + signature, so a booked parcel's own label prints
+	// genuine with its company's logo (or Esoqo alone for shared pool).
+	// Resolved from the stock row (print-time truth), signed by the
+	// handler which owns the secret.
+	OrgName    *string `json:"orgName"`
+	OrgLogoUrl *string `json:"orgLogoUrl"`
+	Sig        string  `json:"sig"`
+	// Signing inputs (print-time truth from the stock row). Not
+	// serialized — the handler signs, then these stay empty on the wire.
+	StockOrgID   string `json:"-"`
+	StockBatchID string `json:"-"`
 }
 
 // GetParcelLabel loads the label projection for [code]. Authorization
@@ -1545,12 +1575,18 @@ func GetParcelLabel(ctx context.Context, pool *pgxpool.Pool, code string) (*Parc
 	var v ParcelLabel
 	var receiverMsisdn string
 	err := pool.QueryRow(ctx, `
-		SELECT code, status::text, "parcelType"::text, "weightKg", "originLabel", "destinationLabel",
-		       "receiverName", "receiverMsisdn", "createdAt",
-		       "destinationLat"::float8, "destinationLng"::float8
-		FROM parcel WHERE code = $1`, code).
+		SELECT p.code, p.status::text, p."parcelType"::text, p."weightKg", p."originLabel", p."destinationLabel",
+		       p."receiverName", p."receiverMsisdn", p."createdAt",
+		       p."destinationLat"::float8, p."destinationLng"::float8,
+		       o.name, o."logoUrl",
+		       COALESCE(s."parcelOrgId"::text, ''), COALESCE(s."batchId"::text, '')
+		FROM parcel p
+		LEFT JOIN parcel_label_stock s ON s.code = p.code
+		LEFT JOIN parcel_org o ON o.id = s."parcelOrgId"
+		WHERE p.code = $1`, code).
 		Scan(&v.Code, &v.Status, &v.ParcelType, &v.WeightKg, &v.OriginLabel, &v.DestinationLabel,
-			&v.ReceiverName, &receiverMsisdn, &v.CreatedAt, &v.DestinationLat, &v.DestinationLng)
+			&v.ReceiverName, &receiverMsisdn, &v.CreatedAt, &v.DestinationLat, &v.DestinationLng,
+			&v.OrgName, &v.OrgLogoUrl, &v.StockOrgID, &v.StockBatchID)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return nil, nil
 	}
@@ -1754,6 +1790,11 @@ func AttachParcelLabelInfo(ctx context.Context, pool *pgxpool.Pool, code string,
 	if in.ItemDescription == "" {
 		return &ParcelError{"BAD_INPUT", "A short item description is required"}
 	}
+	// Strict PKG-only, same as BookParcel's ExistingCode path: a
+	// company self-print has no stock row and can never verify.
+	if isForeignLabelCode(code) {
+		return &ParcelError{"FOREIGN_LABEL", "That looks like a label printed outside Esoqo. Only Esoqo PKG-… labels scan now — re-print on Esoqo stock"}
+	}
 	tag, err := pool.Exec(ctx, `
 		UPDATE parcel_label_stock
 		SET "itemDescription" = $1, "destination" = $2, "senderName" = $3, "senderMsisdn" = $4,
@@ -1797,6 +1838,9 @@ type ParcelLabelRegisterRow struct {
 	VoidedReason    *string    `json:"voidedReason"`
 	BatchID         *string    `json:"batchId"`
 	OrgName         *string    `json:"orgName"`
+	// Owning company + batch run, so handlers can sign the QR (see
+	// fleetqr.SignLabel). Empty for the shared Esoqo pool / pre-batch.
+	ParcelOrgID string `json:"parcelOrgId"`
 	// Sig — the truncated MAC printed as k= in the QR's URL. Filled in
 	// by handlers that know both the secret and the owning org (the
 	// stock endpoint and the company register); empty wherever neither
@@ -1837,21 +1881,33 @@ var ParcelLabelStates = map[string]string{
 func ListParcelLabelRegister(
 	ctx context.Context, pool *pgxpool.Pool, state string, orgID *string, limit int,
 ) ([]ParcelLabelRegisterRow, error) {
-	where, ok := ParcelLabelStates[state]
-	if !ok {
-		return nil, &ParcelError{"BAD_INPUT", "Unknown label state"}
+	// "all" is a UI convenience over the same four predicates — every
+	// label whatever its state, newest first, so the Labels register can
+	// show empty vs attached in one place. Not part of ParcelLabelStates
+	// (which stays the four lifecycle tabs with matching counts).
+	var where string
+	effectiveState := state
+	if state == "all" {
+		where = `s."voidedAt" IS NULL OR s."voidedAt" IS NOT NULL`
+	} else {
+		var ok bool
+		where, ok = ParcelLabelStates[state]
+		if !ok {
+			return nil, &ParcelError{"BAD_INPUT", "Unknown label state"}
+		}
 	}
 	if limit <= 0 || limit > 500 {
 		limit = 200
 	}
 	order := `s."createdAt" ASC`
-	if state == "blank" {
+	if state == "blank" || state == "all" {
 		order = `s."createdAt" DESC`
 	}
 	rows, err := pool.Query(ctx, `
 		SELECT s.code, s."createdAt", s."itemDescription", s.destination, s."senderName",
 		       s."infoAttachedAt", s."usedAt", s."voidedAt", s."voidedReason",
-		       s."batchId"::text, o.name
+		       s."batchId"::text, o.name,
+		       COALESCE(s."parcelOrgId"::text, ''), COALESCE(s."batchId"::text, '')
 		FROM parcel_label_stock s
 		LEFT JOIN parcel_org o ON o.id = s."parcelOrgId"
 		WHERE `+where+`
@@ -1865,12 +1921,27 @@ func ListParcelLabelRegister(
 	var out []ParcelLabelRegisterRow
 	for rows.Next() {
 		var r ParcelLabelRegisterRow
+		var batchRaw string
 		if err := rows.Scan(&r.Code, &r.CreatedAt, &r.ItemDescription, &r.Destination, &r.SenderName,
 			&r.InfoAttachedAt, &r.UsedAt, &r.VoidedAt, &r.VoidedReason,
-			&r.BatchID, &r.OrgName); err != nil {
+			&r.BatchID, &r.OrgName, &r.ParcelOrgID, &batchRaw); err != nil {
 			return nil, err
 		}
-		r.State = state
+		if state == "all" {
+			// Derive the lifecycle tab this row belongs to so the All
+			// view can still badge each row.
+			switch {
+			case r.VoidedAt != nil:
+				effectiveState = "voided"
+			case r.UsedAt != nil:
+				effectiveState = "spent"
+			case r.InfoAttachedAt != nil:
+				effectiveState = "filled"
+			default:
+				effectiveState = "blank"
+			}
+		}
+		r.State = effectiveState
 		out = append(out, r)
 	}
 	return out, rows.Err()
@@ -1882,6 +1953,7 @@ func CountParcelLabelStates(
 	ctx context.Context, pool *pgxpool.Pool, orgID *string,
 ) (map[string]int, error) {
 	counts := map[string]int{}
+	total := 0
 	for state, where := range ParcelLabelStates {
 		var n int
 		if err := pool.QueryRow(ctx, `
@@ -1890,7 +1962,9 @@ func CountParcelLabelStates(
 			return nil, err
 		}
 		counts[state] = n
+		total += n
 	}
+	counts["all"] = total
 	return counts, nil
 }
 

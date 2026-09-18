@@ -11,11 +11,11 @@ export function LabelStockPanel({
   canGenerate, unused, openCode, orgs, activeOrgId,
 }: {
   canGenerate: boolean; unused: ParcelLabelStockRow[]; openCode?: string;
-  orgs: ParcelOrg[]; activeOrgId?: string;
+  orgs: (ParcelOrg & { logoUrl?: string | null })[]; activeOrgId?: string;
 }) {
   const router = useRouter();
   const [count, setCount] = useState(20);
-  const [freshlyMinted, setFreshlyMinted] = useState<string[] | null>(null);
+  const [freshlyMinted, setFreshlyMinted] = useState<{ code: string; sig?: string }[] | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [pending, startTransition] = useTransition();
   // The label a click opened the info modal for — undefined means
@@ -33,7 +33,12 @@ export function LabelStockPanel({
       // notice until the codes were already stuck to boxes.
       const result = await actionGenerateParcelLabels(count, activeOrgId);
       if (!result.ok) { setError(result.error); return; }
-      setFreshlyMinted(result.codes);
+      // Signed labels come back ready to print as genuine; refresh in
+      // the background so the pool + register counts catch up too.
+      setFreshlyMinted(
+        (result.labels ?? []).map((l) => ({ code: l.code, sig: l.sig || undefined })),
+      );
+      router.refresh();
     });
   }
 
@@ -45,20 +50,21 @@ export function LabelStockPanel({
   // Freshly-generated codes print first (the whole point of just
   // having clicked "Generate") — falls back to the existing unused
   // pool so re-opening this page still has something to reprint.
-  // Freshly-minted codes arrive without their signatures (the mint
-  // response returns codes only), so they print unsigned and resolve as
-  // "unverified" until the page is reloaded and the pool supplies them.
-  // Correct rather than clever: an unsigned label is a working label.
+  // Freshly-minted rows now carry their signatures from the mint
+  // response, so the first print is already genuine; older servers
+  // still return codes only and print unsigned until reload.
   const toPrint: { code: string; sig?: string }[] = freshlyMinted
-    ? freshlyMinted.map((code) => ({ code }))
+    ? freshlyMinted
     : unused.map((u) => ({ code: u.code, sig: u.sig }));
   // Whose pad is on the printer — printed on every sticker as the
   // brand, so a box picked up anywhere reads who it belongs to and who
   // manages it. Undefined for the shared Esoqo pool, which brands as
   // Esoqo alone.
-  const activeOrgName = activeOrgId
-    ? orgs.find((o) => o.id === activeOrgId)?.name
+  const activeOrg = activeOrgId
+    ? orgs.find((o) => o.id === activeOrgId)
     : undefined;
+  const activeOrgName = activeOrg?.name;
+  const activeOrgLogoUrl = (activeOrg as { logoUrl?: string | null } | undefined)?.logoUrl ?? undefined;
 
   return (
     <>
@@ -115,7 +121,7 @@ export function LabelStockPanel({
             </button>
           </div>
           <p className="sub" style={{ margin: '0 0 10px' }}>Click a label to attach info to it.</p>
-          <LabelSheet codes={toPrint} orgName={activeOrgName} onSelect={openModal} />
+          <LabelSheet codes={toPrint} orgName={activeOrgName} orgLogoUrl={activeOrgLogoUrl} onSelect={openModal} />
         </div>
       )}
       <PrintStyles />
@@ -134,8 +140,8 @@ const LABELS_PER_PAGE = 10;
 const LABELS_PER_ROW = 2;
 
 function LabelSheet({
-  codes, orgName, onSelect,
-}: { codes: { code: string; sig?: string }[]; orgName?: string; onSelect: (code: string) => void }) {
+  codes, orgName, orgLogoUrl, onSelect,
+}: { codes: { code: string; sig?: string }[]; orgName?: string; orgLogoUrl?: string; onSelect: (code: string) => void }) {
   const pages: { code: string; sig?: string }[][] = [];
   for (let i = 0; i < codes.length; i += LABELS_PER_PAGE) {
     pages.push(codes.slice(i, i + LABELS_PER_PAGE));
@@ -169,7 +175,7 @@ function LabelSheet({
               style={{ all: 'unset', cursor: 'pointer', display: 'block' }}
               aria-label={`Attach info to ${code}`}
             >
-              <PrintableLabel code={code} sig={sig} orgName={orgName} />
+              <PrintableLabel code={code} sig={sig} orgName={orgName} orgLogoUrl={orgLogoUrl} />
             </button>
           ))}
         </div>

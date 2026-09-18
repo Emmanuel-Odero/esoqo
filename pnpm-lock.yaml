@@ -111,6 +111,9 @@ importers:
       '@esoqo/ui':
         specifier: workspace:*
         version: link:../../packages/ui
+      html5-qrcode:
+        specifier: 2.3.8
+        version: 2.3.8
       leaflet:
         specifier: ^1.9.4
         version: 1.9.4

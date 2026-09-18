@@ -66,7 +66,11 @@ func (s *Server) handleOrgListLabelRegister(c *gin.Context) {
 		if rows[i].BatchID != nil {
 			batchID = *rows[i].BatchID
 		}
-		rows[i].Sig = fleetqr.SignLabel(s.Cfg.FleetQrSecret, rows[i].Code, orgID, batchID)
+		orgForSig := orgID
+		if rows[i].ParcelOrgID != "" {
+			orgForSig = rows[i].ParcelOrgID
+		}
+		rows[i].Sig = fleetqr.SignLabel(s.Cfg.FleetQrSecret, rows[i].Code, orgForSig, batchID)
 	}
 	counts, err := dbx.CountParcelLabelStates(c.Request.Context(), s.Pool, &orgID)
 	if err != nil {

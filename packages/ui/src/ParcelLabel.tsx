@@ -122,7 +122,7 @@ export function trackingUrlFor(code: string, sig?: string): string {
  * existed.
  */
 export function PrintableLabel({
-  code, sig, route, orgName,
+  code, sig, route, orgName, orgLogoUrl, esoqoLogoUrl,
 }: {
   code: string; sig?: string;
   /** "KISUMU ▸ NAIROBI", when it's known. The single most useful thing
@@ -137,6 +137,15 @@ export function PrintableLabel({
    *  label it is and who stands behind it. Omitted for shared-pool
    *  stock, which belongs to no company. */
   orgName?: string;
+  /** Company logo URL (served via /img/:key). Rendered centered in the
+   *  header brand band at a fixed mm size — never overlaid on the QR or
+   *  barcode pixels, so scannability is unaffected. Falls back to text
+   *  orgName when absent; Esoqo branding always remains. */
+  orgLogoUrl?: string;
+  /** Esoqo master logo URL. Falls back to the BRAND wordmark when
+   *  absent (no logo configured yet), so labels print with our branding
+   *  by default. */
+  esoqoLogoUrl?: string;
 }) {
   const qrSrc = useCodeImage(async (canvas) => {
     const QRCode = await import('qrcode');
@@ -163,22 +172,37 @@ export function PrintableLabel({
         border: '1px dashed #999', borderRadius: '2mm',
       }}
     >
-      {/* Brand + route band. The route is the thing a human sorting
-          boxes reads from arm's length; the wordmark is here because a
-          label is the most-travelled surface this company has, and it
-          costs nothing to put a name on it. */}
+      {/* Brand + route band. Logos live here in the header — fixed mm
+          sizes, never touching QR/barcode pixels — so a phone camera or
+          gun reads clean codes. Company logo centered (the pad owner),
+          Esoqo mark left (who stands behind it). Text fallbacks keep
+          every label printable with Esoqo branding alone. */}
       <div style={{
-        display: 'flex', justifyContent: 'space-between', alignItems: 'baseline',
+        display: 'flex', justifyContent: 'space-between', alignItems: 'center',
         borderBottom: '0.4mm solid #111', paddingBottom: '1mm', gap: '2mm',
+        minHeight: '7mm',
       }}>
-        <strong style={{ fontSize: '3.6mm', letterSpacing: '.02em', lineHeight: 1 }}>{BRAND}</strong>
+        <span style={{ display: 'flex', alignItems: 'center', gap: '1.5mm', minWidth: 0 }}>
+          {esoqoLogoUrl ? (
+            <img src={esoqoLogoUrl} alt="Esoqo"
+              onError={(e) => { (e.currentTarget as HTMLImageElement).style.display = 'none'; }}
+              style={{ height: '5.5mm', maxWidth: '18mm', objectFit: 'contain' }} />
+          ) : (
+            <strong style={{ fontSize: '3.6mm', letterSpacing: '.02em', lineHeight: 1 }}>{BRAND}</strong>
+          )}
+          {orgLogoUrl && (
+            <img src={orgLogoUrl} alt={orgName ?? 'Company logo'}
+              onError={(e) => { (e.currentTarget as HTMLImageElement).style.display = 'none'; }}
+              style={{ height: '6.5mm', maxWidth: '30mm', objectFit: 'contain' }} />
+          )}
+        </span>
         <span style={{
           fontSize: '3.4mm', fontWeight: 700, letterSpacing: '.04em', lineHeight: 1,
           overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
           // Blank stock prints an empty rule to be written on in the
           // field — which is what actually happens, rather than
           // pretending the route is known at print time.
-          borderBottom: route ? 'none' : '0.3mm solid #bbb', minWidth: '28mm',
+          borderBottom: route ? 'none' : '0.3mm solid #bbb', minWidth: '28mm', textAlign: 'right',
         }}>
           {route ?? ' '}
         </span>
