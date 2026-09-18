@@ -328,6 +328,7 @@ func (s *Server) Router() *gin.Engine {
 		v1.GET("/parcel-orgs/me/labels/resolve", s.authRequired(), s.handleResolveOrgLabel)
 		v1.POST("/parcel-orgs/me/labels/info/:code", s.authRequired(), s.handleAttachOrgLabelInfo)
 		v1.GET("/parcel-orgs/me/labels/batches", s.authRequired(), s.handleOrgListLabelBatches)
+		v1.POST("/parcel-orgs/me/labels/void", s.authRequired(), s.handleOrgVoidLabels)
 		v1.POST("/parcel-orgs/me/labels/batches/:id/void", s.authRequired(), s.handleOrgVoidLabelBatch)
 		v1.GET("/parcel-orgs/me/staff", s.authRequired(), s.handleListMyOrgStaff)
 		v1.POST("/parcel-orgs/me/staff", s.authRequired(), s.handleUpsertMyOrgStaff)
@@ -526,6 +527,7 @@ func (s *Server) Router() *gin.Engine {
 		v1.GET("/admin/parcels/parties", s.authRequired(), s.handleAdminSearchCounterParties)
 		v1.GET("/admin/parcels/labels/register", s.authRequired(), s.handleAdminListParcelLabelRegister)
 		v1.GET("/admin/parcels/labels/batches", s.authRequired(), s.handleAdminListParcelLabelBatches)
+		v1.POST("/admin/parcels/labels/void", s.authRequired(), s.handleVoidParcelLabels)
 		v1.POST("/admin/parcels/labels/batches/:id/void", s.authRequired(), s.handleVoidParcelLabelBatch)
 	}
 

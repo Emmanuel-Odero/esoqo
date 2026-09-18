@@ -27,9 +27,9 @@ export const metadata: Metadata = {
  * independently, so a hand-typed URL gets nothing either.
  */
 export default async function ParcelOrgLabelsPage(
-  { searchParams }: { searchParams: Promise<{ state?: string }> },
+  { searchParams }: { searchParams: Promise<{ state?: string; code?: string }> },
 ) {
-  const { state } = await searchParams;
+  const { state, code } = await searchParams;
   const activeState = state ?? 'blank';
 
   let me: Awaited<ReturnType<typeof getParcelOrgMe>>;
@@ -67,7 +67,7 @@ export default async function ParcelOrgLabelsPage(
           </div>
         </div>
       </div>
-      <LabelLookup canManage={me.capabilities.includes('parcelorg.dispatch')} orgName={me.org.name} orgLogoUrl={me.org.logoUrl ?? undefined} />
+      <LabelLookup canManage={me.capabilities.includes('parcelorg.dispatch')} orgName={me.org.name} orgLogoUrl={me.org.logoUrl ?? undefined} initialCode={code} />
       <OrgLabelsClient
         labels={register.labels} counts={register.counts} batches={batches}
         state={activeState}

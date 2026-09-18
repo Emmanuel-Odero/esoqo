@@ -20,3 +20,8 @@ export {
   PrintableLabel, PrintStyles, trackingUrlFor,
   LABEL_WIDTH_MM, LABEL_HEIGHT_MM, LABEL_GAP_MM,
 } from './ParcelLabel';
+export {
+  PrintLayoutControls, LabelPrintSheet, SelectableLabelPrintBlock,
+  labelsPerPage, DEFAULT_PRINT_LAYOUT,
+  type PrintLabelItem, type PrintLayout, type PrintPaper,
+} from './ParcelPrintStudio';

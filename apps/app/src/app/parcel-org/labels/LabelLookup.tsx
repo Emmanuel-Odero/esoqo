@@ -27,8 +27,8 @@ const STATE_LABEL: Record<string, string> = {
  * notes form below offers itself instead of a second trip to a
  * different screen.
  */
-export function LabelLookup({ canManage, orgName, orgLogoUrl }: { canManage: boolean; orgName: string; orgLogoUrl?: string }) {
-  const [code, setCode] = useState('');
+export function LabelLookup({ canManage, orgName, orgLogoUrl, initialCode }: { canManage: boolean; orgName: string; orgLogoUrl?: string; initialCode?: string }) {
+  const [code, setCode] = useState((initialCode ?? '').toUpperCase());
   const [label, setLabel] = useState<OrgParcelLabel | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [pending, startTransition] = useTransition();
@@ -80,8 +80,11 @@ export function LabelLookup({ canManage, orgName, orgLogoUrl }: { canManage: boo
     });
   }
 
-  // Live search: resolve as the code is typed (debounced, minimum 3
-  // chars so single keystrokes don't fan out into requests).
+  // Live search: resolve as the code is typed, from any consecutive
+  // run of 2+ characters (debounced so keystrokes don't fan out into
+  // requests). Partial fragments miss constantly mid-type — only
+  // surface the failure once the entry looks complete (PKG- + 6), or
+  // when the person explicitly asked via Enter/button/scan.
   useEffect(() => {
     const clean = cleanOf(code);
     if (clean.length === 0) {
@@ -91,8 +94,8 @@ export function LabelLookup({ canManage, orgName, orgLogoUrl }: { canManage: boo
       setLiveSearching(false);
       return;
     }
-    if (clean.length < 3) {
-      if (label && !label.code.startsWith(clean)) {
+    if (clean.length < 2) {
+      if (label && !label.code.includes(clean)) {
         lastRequested.current = '';
         setLabel(null);
         setError(null);
@@ -102,10 +105,19 @@ export function LabelLookup({ canManage, orgName, orgLogoUrl }: { canManage: boo
     }
     if (label && label.code === clean) return;
     if (clean === lastRequested.current) return;
-    const t = window.setTimeout(() => requestLookup(clean, clean.length >= 10), 350);
+    const t = window.setTimeout(() => requestLookup(clean, clean.length >= 10), 250);
     return () => window.clearTimeout(t);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [code]);
+
+  // A pre-selected code (?code= from the register's "Details" button)
+  // resolves immediately — selecting a label and writing on it is one
+  // gesture, not type-then-search. Keyed on initialCode so picking a
+  // second label from the register below re-resolves without a reload.
+  useEffect(() => {
+    if (initialCode && cleanOf(initialCode).length >= 2) lookup(initialCode);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [initialCode]);
 
   const writable = label && (label.state === 'blank' || label.state === 'filled') && canManage;
 
@@ -115,8 +127,8 @@ export function LabelLookup({ canManage, orgName, orgLogoUrl }: { canManage: boo
         Scan or type a label code
       </label>
       <p className="sub" style={{ margin: '0 0 8px', fontSize: '.8rem' }}>
-        Camera, scanner gun, or keyboard — results appear as you type. A gun just types
-        into the box below, then Enter.
+        Camera, scanner gun, or keyboard — type any consecutive characters and the match
+        appears live. A gun just types into the box below, then Enter.
       </p>
       <div className="row" style={{ gap: 8 }}>
         <input
@@ -173,7 +185,7 @@ export function LabelLookup({ canManage, orgName, orgLogoUrl }: { canManage: boo
             <PrintStyles />
           </div>
           {writable && label && (
-            <AttachLabelForm code={label.code} initial={label} onSaved={(refreshed) => setLabel(refreshed)} />
+            <AttachLabelForm key={label.code} code={label.code} initial={label} onSaved={(refreshed) => setLabel(refreshed)} />
           )}
         </div>
       )}

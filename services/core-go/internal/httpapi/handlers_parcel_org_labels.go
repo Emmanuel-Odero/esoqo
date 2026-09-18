@@ -94,6 +94,40 @@ func (s *Server) handleOrgListLabelBatches(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"batches": rows})
 }
 
+// handleOrgVoidLabels — POST /v1/parcel-orgs/me/labels/void.
+//
+// A desk discarding one misprinted sticker or a handful of them,
+// without voiding the whole pad. Scoped by session org exactly like
+// the batch void below, so the selection can never reach into another
+// company's stock. Live-only: spent codes stay on their parcels and
+// unknown codes are ignored; the response says how many went.
+func (s *Server) handleOrgVoidLabels(c *gin.Context) {
+	orgID := s.orgCtx(c, authsvc.CapParcelOrgDispatch)
+	if orgID == "" {
+		return
+	}
+	var req struct {
+		Codes  []string `json:"codes" binding:"required"`
+		Reason string   `json:"reason" binding:"required"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil {
+		writeError(c, http.StatusBadRequest, "INVALID_REQUEST", err.Error())
+		return
+	}
+	ctx := ctxFromGin(c)
+	var staffID *string
+	if ctx.ActorID != "" {
+		id := ctx.ActorID
+		staffID = &id
+	}
+	voided, err := dbx.VoidParcelLabelsByCodes(c.Request.Context(), s.Pool, req.Codes, &orgID, req.Reason, staffID)
+	if err != nil {
+		writeParcelError(c, err)
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"voided": voided})
+}
+
 // handleOrgVoidLabelBatch — POST /v1/parcel-orgs/me/labels/batches/:id/void.
 //
 // A company withdrawing its own stolen pad, without having to phone

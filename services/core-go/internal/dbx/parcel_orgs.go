@@ -972,14 +972,15 @@ type OrgLabelSearchRow struct {
 	CreatedAt string `json:"createdAt"`
 }
 
-// SearchOrgLabels — find the company's own unused labels by the END
-// of the code. A desk holds a physical sticker and reads off its last
-// few characters ("…YZN"); typing the whole PKG- code from a sticker
-// held at arm's length is the slow path, and the tail is what
-// disambiguates — shared three-letter tails across live labels are
-// vanishingly rare. Blank stock only (never used, never filled in,
-// never withdrawn): attaching a label spends it, so anything already
-// spoken for is not offered.
+// SearchOrgLabels — find the company's own unused labels by ANY
+// consecutive run of characters in the code. A desk holds a physical
+// sticker and types whatever fragment is readable ("YZN", "PKG-7Q",
+// "4K9Z"); typing the whole PKG- code from a sticker held at arm's
+// length is the slow path, and the fragment is what disambiguates.
+// Substring (not suffix-only): a middle fragment must match too, so
+// results appear live from the second keystroke. Blank stock only
+// (never used, never filled in, never withdrawn): attaching a label
+// spends it, so anything already spoken for is not offered.
 func SearchOrgLabels(ctx context.Context, pool *pgxpool.Pool, orgID, tail string, limit int) ([]OrgLabelSearchRow, error) {
 	tail = strings.ToUpper(strings.TrimSpace(tail))
 	if tail == "" {
@@ -993,7 +994,7 @@ func SearchOrgLabels(ctx context.Context, pool *pgxpool.Pool, orgID, tail string
 		FROM parcel_label_stock s
 		WHERE s."parcelOrgId" = $1
 		  AND s."voidedAt" IS NULL AND s."usedAt" IS NULL AND s."infoAttachedAt" IS NULL
-		  AND upper(s.code) LIKE '%' || $2
+		  AND upper(s.code) LIKE '%' || $2 || '%'
 		ORDER BY s."createdAt" DESC LIMIT $3`, orgID, tail, limit)
 	if err != nil {
 		return nil, err

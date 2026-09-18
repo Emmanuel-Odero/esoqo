@@ -335,6 +335,29 @@ export async function listOrgLabelBatches(): Promise<OrgLabelBatchRow[]> {
   return res.batches ?? [];
 }
 
+/** Discard a handful of unused stickers — misprints, a damaged strip —
+ *  without voiding the whole pad. Live-only on the server: spent codes
+ *  stay on their parcels, unknown codes are ignored. */
+export async function voidOrgLabels(
+  codes: string[],
+  reason: string,
+): Promise<{ ok: true; voided: number } | { ok: false; error: string }> {
+  try {
+    const res = await parcelOrgFetch<{ voided: number }>(
+      `/v1/parcel-orgs/me/labels/void`,
+      { method: "POST", body: JSON.stringify({ codes, reason }) },
+    );
+    revalidatePath("/parcel-org/labels");
+    return { ok: true, voided: res.voided };
+  } catch (e) {
+    const r = toResult(e);
+    return {
+      ok: false,
+      error: r.ok ? "Could not withdraw those labels" : r.error,
+    };
+  }
+}
+
 /** Withdraw a whole pad — the "it was stolen from the Kisumu desk"
  *  button, without having to phone Esoqo to do it. Already-spent codes
  *  are untouched: each is on a parcel already moving. */
