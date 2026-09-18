@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import {
   ParcelOrgUnauthorised,
   parcelOrgFetch,
+  type DispatchRun,
   type OrgParcelLabel,
   type ParcelOrgStaffRow,
   type ParcelOrgStationRow,
@@ -505,6 +506,125 @@ export async function attachOrgLabelInfo(
       }),
     });
     revalidatePath("/parcel-org/labels");
+    return { ok: true };
+  } catch (e) {
+    return toResult(e);
+  }
+}
+
+// ── Dispatch runs ──
+//
+// One vehicle on one origin → destination leg with its crew aboard and
+// a receiving team at the far end. Nothing here names a company — the
+// org comes from the session on the Go side, like everything else in
+// this file.
+
+export interface DispatchCrewInput {
+  name: string;
+  msisdn?: string | null;
+  role: string;
+  customRole?: string | null;
+  staffId?: string | null;
+}
+
+export interface DispatchReceiverInput {
+  name: string;
+  staffId?: string | null;
+}
+
+export interface CreateDispatchInput {
+  vehiclePlate: string;
+  vehicleType: string;
+  originStationId?: string | null;
+  destinationStationId?: string | null;
+  notes?: string | null;
+  crew: DispatchCrewInput[];
+  receivers: DispatchReceiverInput[];
+}
+
+/** The board: active runs by default, recently closed ones on request. */
+export async function listDispatches(includeClosed = false): Promise<DispatchRun[]> {
+  const res = await parcelOrgFetch<{ dispatches: DispatchRun[] | null }>(
+    `/v1/parcel-orgs/me/dispatch${includeClosed ? "?closed=true" : ""}`,
+  );
+  return res.dispatches ?? [];
+}
+
+/** Open a run: vehicle, leg, crew and receiving team in one call. */
+export async function createDispatch(
+  input: CreateDispatchInput,
+): Promise<{ ok: true; id: string } | { ok: false; error: string }> {
+  try {
+    const res = await parcelOrgFetch<{ id: string }>("/v1/parcel-orgs/me/dispatch", {
+      method: "POST",
+      body: JSON.stringify({
+        vehiclePlate: input.vehiclePlate.trim(),
+        vehicleType: input.vehicleType,
+        originStationId: input.originStationId || null,
+        destinationStationId: input.destinationStationId || null,
+        notes: input.notes?.trim() || null,
+        crew: input.crew.map((c) => ({
+          name: c.name.trim(),
+          msisdn: c.msisdn?.trim() || null,
+          role: c.role,
+          customRole: c.customRole?.trim() || null,
+          staffId: c.staffId || null,
+        })),
+        receivers: input.receivers.map((r) => ({
+          name: r.name.trim(),
+          staffId: r.staffId || null,
+        })),
+      }),
+    });
+    revalidatePath("/parcel-org/dispatch");
+    return { ok: true, id: res.id };
+  } catch (e) {
+    const r = toResult(e);
+    return { ok: false, error: r.ok ? "Could not open that run" : r.error };
+  }
+}
+
+/** Move the board marker: whoever holds the run's phone posts it. */
+export async function reportDispatchPosition(
+  id: string,
+  lat: number,
+  lng: number,
+): Promise<Result> {
+  try {
+    await parcelOrgFetch(`/v1/parcel-orgs/me/dispatch/${encodeURIComponent(id)}/position`, {
+      method: "POST",
+      body: JSON.stringify({ lat, lng }),
+    });
+    revalidatePath("/parcel-org/dispatch");
+    return { ok: true };
+  } catch (e) {
+    return toResult(e);
+  }
+}
+
+/** The receiving team's check-in: the run is over, who signed is on
+ *  the record. Blank falls back to the named receiving team. */
+export async function arriveDispatch(id: string, receivedBy: string): Promise<Result> {
+  try {
+    await parcelOrgFetch(`/v1/parcel-orgs/me/dispatch/${encodeURIComponent(id)}/arrive`, {
+      method: "POST",
+      body: JSON.stringify({ receivedBy: receivedBy.trim() }),
+    });
+    revalidatePath("/parcel-org/dispatch");
+    return { ok: true };
+  } catch (e) {
+    return toResult(e);
+  }
+}
+
+/** Call a run off before it arrives. */
+export async function cancelDispatch(id: string): Promise<Result> {
+  try {
+    await parcelOrgFetch(`/v1/parcel-orgs/me/dispatch/${encodeURIComponent(id)}/cancel`, {
+      method: "POST",
+      body: JSON.stringify({}),
+    });
+    revalidatePath("/parcel-org/dispatch");
     return { ok: true };
   } catch (e) {
     return toResult(e);
