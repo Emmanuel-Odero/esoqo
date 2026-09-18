@@ -1,12 +1,12 @@
 import type { Metadata } from 'next';
 import Link from 'next/link';
-import { actionCheckParcelStatus } from '../../send-parcel/actions';
-import { ParcelStatusPanel } from '../../send-parcel/ParcelStatusPanel';
+import { actionCheckParcelStatus } from '../../parcels/actions';
+import { ParcelStatusPanel } from '../../parcels/ParcelStatusPanel';
 
 /**
  * The short public tracking page every parcel SMS now links to.
  *
- * `/t/<code>` rather than nesting under `/send-parcel/track` because
+ * `/t/<code>` rather than nesting under `/parcels/track` because
  * the whole point is the length: this URL is appended to a 160-character
  * GSM-7 message, and notify.withTrack drops the link entirely rather
  * than push a message into a second billable segment (see its comment).
@@ -35,30 +35,37 @@ export async function generateMetadata(
 
 export default async function TrackByCodePage({ params }: { params: Promise<{ code: string }> }) {
   const { code } = await params;
-  const parcel = await actionCheckParcelStatus(code.toUpperCase());
+  const res = await actionCheckParcelStatus(code.toUpperCase());
+  const upper = code.toUpperCase();
 
   return (
     <section className="sec">
       <div className="wrap" style={{ maxWidth: 480 }}>
-        {parcel ? (
+        {res.kind === 'found' ? (
           <div className="card">
-            <ParcelStatusPanel parcel={parcel} />
+            <ParcelStatusPanel parcel={res.parcel} />
           </div>
-        ) : (
+        ) : res.kind === 'not-found' ? (
           <div className="card">
             <h2 style={{ marginTop: 0 }}>We couldn&apos;t find that parcel</h2>
             <p className="sub">
-              The code <span className="mono">{code.toUpperCase()}</span> didn&apos;t match anything.
+              The code <span className="mono">{upper}</span> didn&apos;t match anything.
               Check it against your text message — codes look like <span className="mono">PKG-XXXXXX</span>.
             </p>
-            <Link className="btn btn-o btn-sm" href="/send-parcel/track">Try another code</Link>
+            <Link className="btn btn-o btn-sm" href="/parcels/track">Try another code</Link>
+          </div>
+        ) : (
+          <div className="card">
+            <h2 style={{ marginTop: 0 }}>We couldn&apos;t check that parcel</h2>
+            <p className="sub">{res.error}</p>
+            <Link className="btn btn-o btn-sm" href="/parcels/track">Try again</Link>
           </div>
         )}
 
         <p className="sub" style={{ marginTop: 16, fontSize: '.85rem', textAlign: 'center' }}>
-          <Link href="/send-parcel">Send a parcel</Link>
+          <Link href="/parcels/send">Send a parcel</Link>
           {' · '}
-          <Link href="/send-parcel/track">Track another</Link>
+          <Link href="/parcels/track">Track another</Link>
         </p>
       </div>
     </section>

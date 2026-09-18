@@ -4,6 +4,8 @@ import { Icon } from '@esoqo/ui';
 import { getMyRecord, getGroupBalance, listMyConsents, PAYMENT_APPROVAL_THRESHOLD } from '@esoqo/db';
 import { formatMsisdn } from '@esoqo/domain';
 import { requireSubject } from '@/lib/session';
+import { getMyParcelOrgs } from '@/lib/my-parcel-orgs';
+import { enterParcelOrg } from './parcel-org-actions';
 
 export const dynamic = 'force-dynamic';
 
@@ -29,7 +31,10 @@ const CREDENTIALS: [string, string, string, string | null][] = [
 const RING_R = 26;
 const RING_C = 2 * Math.PI * RING_R;
 
-export default async function MePage() {
+export default async function MePage(
+  { searchParams }: { searchParams: Promise<{ companyError?: string }> },
+) {
+  const { companyError } = await searchParams;
   const ctx = await requireSubject();
   const me = await getMyRecord(ctx);
   if (!me) return <p>Record not found.</p>;
@@ -40,9 +45,10 @@ export default async function MePage() {
   const membership = me.memberships[0];
   const orgId = membership?.orgId ?? null;
 
-  const [balance, grants] = await Promise.all([
+  const [balance, grants, courierOrgs] = await Promise.all([
     orgId ? getGroupBalance(ctx, orgId) : Promise.resolve(null),
     listMyConsents(ctx),
+    getMyParcelOrgs(),
   ]);
 
   const confirmed = CREDENTIALS.filter(([t]) => has(t)).length;
@@ -143,6 +149,44 @@ export default async function MePage() {
           <span className="tile-h">Change it any time</span>
         </Link>
       </section>
+
+      {/* ── companies you're on the books of ──
+          A courier/shipping company an admin adds you to links your
+          partyId to a parcel_org_staff row, but that only lived in an
+          invite text until GET /v1/me/parcel-orgs existed. The company
+          console still needs its own staff sign-in (the company-scoped
+          cookie), so this links to its door rather than pretending the
+          subject session is enough. */}
+      {courierOrgs.length > 0 && (
+        <section className="mcard" aria-label="Your companies">
+          <h2><Icon name="truck" size={18} />Your companies</h2>
+          {companyError && (
+            <p className="err" role="alert" style={{ margin: '0 0 10px' }}>
+              <Icon name="alert-circle" size={14} /> We couldn't open that company just now. Try again.
+            </p>
+          )}
+          <ul className="papers">
+            {courierOrgs.map((org) => (
+              <li className="paper" key={org.orgId}>
+                <span className="ps ok" aria-hidden="true"><Icon name="building" size={16} /></span>
+                <span className="pt">
+                  <span className="t">{org.name}</span>
+                  <span className="s">{org.role.toLowerCase()}</span>
+                </span>
+                {org.status === 'ACTIVE' ? (
+                  <form action={enterParcelOrg.bind(null, org.orgId)} style={{ flex: 'none' }}>
+                    <button type="submit" className="btn btn-o btn-sm">
+                      Open <Icon name="arrow-right" size={15} />
+                    </button>
+                  </form>
+                ) : (
+                  <span className="badge b-warn" style={{ flex: 'none' }}>Not trading yet</span>
+                )}
+              </li>
+            ))}
+          </ul>
+        </section>
+      )}
 
       <div className="dash-cols">
         {/* ── who you are ── */}

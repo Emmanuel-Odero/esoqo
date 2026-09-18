@@ -1,5 +1,5 @@
-import { cookies } from 'next/headers';
-import { goUrl } from './ticketing';
+import { cookies } from "next/headers";
+import { goUrl } from "./ticketing";
 
 /**
  * The courier-company portal's session.
@@ -23,7 +23,7 @@ import { goUrl } from './ticketing';
  * owner's Esoqo session, or vice versa.
  */
 
-export const PARCEL_ORG_SESSION_COOKIE = 'esoqo_parcel_org_session';
+export const PARCEL_ORG_SESSION_COOKIE = "esoqo_parcel_org_session";
 
 // 12 hours — a shift, matching the TTL core-go mints the session with.
 // A longer cookie than the session behind it would only produce a
@@ -34,10 +34,10 @@ export async function setParcelOrgSession(token: string): Promise<void> {
   const jar = await cookies();
   jar.set(PARCEL_ORG_SESSION_COOKIE, token, {
     httpOnly: true,
-    secure: process.env.NODE_ENV === 'production',
-    sameSite: 'lax',
+    secure: process.env.NODE_ENV === "production",
+    sameSite: "lax",
     maxAge: PARCEL_ORG_SESSION_TTL,
-    path: '/',
+    path: "/",
   });
 }
 
@@ -56,8 +56,8 @@ export async function parcelOrgToken(): Promise<string | null> {
  *  without throwing the person out of a shift mid-task. */
 export class ParcelOrgUnauthorised extends Error {
   constructor() {
-    super('Not signed in to a courier company');
-    this.name = 'ParcelOrgUnauthorised';
+    super("Not signed in to a courier company");
+    this.name = "ParcelOrgUnauthorised";
   }
 }
 
@@ -72,7 +72,10 @@ interface GoErrorBody {
  * error: both mean the same thing to this portal (this login can't do
  * that), and the caller decides whether to redirect or explain.
  */
-export async function parcelOrgFetch<T>(path: string, init?: RequestInit): Promise<T> {
+export async function parcelOrgFetch<T>(
+  path: string,
+  init?: RequestInit,
+): Promise<T> {
   const token = await parcelOrgToken();
   if (!token) throw new ParcelOrgUnauthorised();
 
@@ -80,14 +83,15 @@ export async function parcelOrgFetch<T>(path: string, init?: RequestInit): Promi
     ...init,
     headers: {
       Authorization: `Bearer ${token}`,
-      'Content-Type': 'application/json',
+      "Content-Type": "application/json",
       ...(init?.headers ?? {}),
     },
-    cache: 'no-store',
+    cache: "no-store",
     signal: AbortSignal.timeout(15000),
   });
   const json = (await res.json().catch(() => null)) as (T & GoErrorBody) | null;
-  if (res.status === 401 || res.status === 403) throw new ParcelOrgUnauthorised();
+  if (res.status === 401 || res.status === 403)
+    throw new ParcelOrgUnauthorised();
   if (!res.ok || !json) {
     throw new Error(json?.error?.message ?? `Request failed (${res.status})`);
   }
@@ -135,6 +139,10 @@ export interface OrgParcelRow {
   holderName: string | null;
   agentName: string | null;
   originMethod: string;
+  /** The company's own number from the system it imported this parcel
+   *  from, when it brought one. Null for Esoqo-booked parcels. */
+  externalRef: string | null;
+  externalSource: string | null;
 }
 
 export interface ParcelOrgMe {
@@ -144,7 +152,52 @@ export interface ParcelOrgMe {
 }
 
 export async function getParcelOrgMe(): Promise<ParcelOrgMe> {
-  return parcelOrgFetch<ParcelOrgMe>('/v1/parcel-orgs/me');
+  return parcelOrgFetch<ParcelOrgMe>("/v1/parcel-orgs/me");
+}
+
+/** Live dispatch — rider dots, parcels needing a rider or running late,
+ *  and the company's stations. Mirrors core-go's dbx.OrgLiveView. */
+export interface OrgLiveRider {
+  partyId: string;
+  name: string;
+  role: string;
+  lat: string;
+  lng: string;
+  at: string;
+}
+
+export interface OrgLiveParcel {
+  code: string;
+  status: string;
+  lat: string | null;
+  lng: string | null;
+  overdue: boolean;
+  receiverName: string;
+}
+
+export interface OrgLiveView {
+  riders: OrgLiveRider[];
+  parcels: OrgLiveParcel[];
+  stations: ParcelOrgStationRow[];
+}
+
+/** A scanned/typed label resolved against the company's own stock.
+ *  Mirrors dbx.OrgParcelLabel. */
+export interface OrgParcelLabel {
+  code: string;
+  state: string;
+  itemDescription: string | null;
+  destination: string | null;
+  senderName: string | null;
+  senderMsisdn: string | null;
+  receiverName: string | null;
+  receiverMsisdn: string | null;
+  usedAt: string | null;
+  voidedAt: string | null;
+  voidedReason: string | null;
+  parcelId: string | null;
+  parcelCode: string | null;
+  parcelStatus: string | null;
 }
 
 export interface ParcelOrgStaffRow {
@@ -153,5 +206,33 @@ export interface ParcelOrgStaffRow {
   name: string;
   role: string;
   active: boolean;
+  /** One of the company's contact people (multiple allowed). */
+  isContact: boolean;
   partyId: string | null;
+  stationId: string | null;
+  /** The phone and the ESK-… handle this member signs in with — read
+   *  back to someone who forgot, and shown so a manager can see a
+   *  credential exists. Both null for an office-only login with no
+   *  linked person. */
+  msisdn: string | null;
+  esoqoId: string | null;
+  /** A custom ("Other…") role's explicit permissions. Empty for a preset
+   *  role, whose bundle is resolved from `role` at sign-in. */
+  capabilities: string[];
+}
+
+export interface ParcelOrgStationRow {
+  id: string;
+  name: string;
+  msisdn: string;
+  locationHint: string;
+  openingHours: string | null;
+  lat: number;
+  lng: number;
+  capacity: number;
+  active: boolean;
+  /** The roster member who runs this station, if named. */
+  managerStaffId: string | null;
+  /** How many team members are currently posted here. */
+  memberCount: number;
 }

@@ -37,8 +37,19 @@ export function OrgLabelsClient({
   const [count, setCount] = useState(20);
   const [minted, setMinted] = useState<string[] | null>(null);
   const [error, setError] = useState<string | null>(null);
+  // Live filter over the fetched register — the tab is server-side, but
+  // finding one code in the current list shouldn't be a round trip.
+  const [filter, setFilter] = useState('');
   const [pending, startTransition] = useTransition();
   const announce = useAnnounce();
+
+  const needle = filter.trim().toUpperCase();
+  const shown = needle
+    ? labels.filter((l) =>
+        l.code.toUpperCase().includes(needle) ||
+        (l.itemDescription ?? '').toUpperCase().includes(needle) ||
+        (l.destination ?? '').toUpperCase().includes(needle))
+    : labels;
 
   function mint() {
     setError(null);
@@ -93,15 +104,23 @@ export function OrgLabelsClient({
             </a>
           ))}
         </div>
-        {labels.length === 0 ? (
-          <p className="sub" style={{ margin: 0 }}>Nothing here yet.</p>
+        <input
+          className="mono" value={filter} placeholder="Find a code, item or destination in this list…"
+          aria-label="Filter this list"
+          onChange={(e) => setFilter(e.target.value.toUpperCase())}
+          style={{ width: '100%', maxWidth: 420, padding: '8px 10px', border: '1.5px solid var(--line)', borderRadius: 6, marginBottom: 12 }}
+        />
+        {shown.length === 0 ? (
+          <p className="sub" style={{ margin: 0 }}>
+            {labels.length === 0 ? 'Nothing here yet.' : `No matches for “${filter.trim()}” in this list.`}
+          </p>
         ) : (
           <table className="tbl">
             <thead>
               <tr><th>Code</th><th>Item</th><th>Destination</th><th>{state === 'voided' ? 'Why' : 'When'}</th></tr>
             </thead>
             <tbody>
-              {labels.map((l) => (
+              {shown.map((l) => (
                 <tr key={l.code}>
                   <td className="mono">{l.code}</td>
                   <td>{l.itemDescription ?? <span className="sub">—</span>}</td>

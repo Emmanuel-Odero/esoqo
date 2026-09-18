@@ -282,7 +282,7 @@ func (s *Server) handleHoldParcelAtAgent(c *gin.Context) {
 		}
 		if info.ReceiverMsisdn != "" {
 			_ = authsvc.SendSms(info.ReceiverMsisdn,
-				notify.ParcelAtAgent(code, drop.AgentName, drop.LocationHint, hours, info.DeliveryCode),
+				notify.ParcelAtAgent(code, drop.AgentName, drop.LocationHint, hours, info.DeliveryCode, info.CarrierOrgName),
 				"PARCEL_AT_AGENT")
 		}
 	}

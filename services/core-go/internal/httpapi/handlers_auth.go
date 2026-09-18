@@ -28,7 +28,40 @@ func (s *Server) handleIssueOtp(c *gin.Context) {
 		return
 	}
 
-	result, err := s.OTP.IssueOtp(c.Request.Context(), req.Msisdn, authsvc.OtpPurpose(req.Purpose), clientIP(c))
+	purpose := authsvc.OtpPurpose(req.Purpose)
+	if !authsvc.IsPublicOtpPurpose(purpose) {
+		writeError(c, http.StatusBadRequest, "INVALID_PURPOSE", "Unsupported verification purpose")
+		return
+	}
+
+	// A PIN reset is only meaningful for a number that already holds an
+	// account, and sending to any other number is pure SMS spend in an
+	// attacker's pocket. So resolve the account first and, when there
+	// isn't one, answer exactly as if a code had gone out — no message is
+	// sent, and the response stays indistinguishable from the sent path so
+	// this cannot be used to enumerate which numbers are registered.
+	//
+	// This is the check the TypeScript issueOtp callers used to make
+	// before the core-go migration (see apps/jamii's actionRequestPinCode)
+	// and the one that closes the SMS-pumping hole in this endpoint.
+	if purpose == authsvc.OtpPinReset {
+		person, err := dbx.FindPersonByMsisdn(c.Request.Context(), s.Pool, req.Msisdn)
+		if err != nil {
+			log.Printf("otp request: pin-reset account lookup failed: %v", err)
+			writeError(c, http.StatusInternalServerError, "OTP_FAILED", "Could not process that request")
+			return
+		}
+		if person == nil {
+			log.Printf("otp request: pin-reset for unregistered number suppressed")
+			c.JSON(http.StatusOK, gin.H{
+				"expiresAt":       time.Now().Add(authsvc.OtpTTL),
+				"cooldownSeconds": 30,
+			})
+			return
+		}
+	}
+
+	result, err := s.OTP.IssueOtp(c.Request.Context(), req.Msisdn, purpose, clientIP(c))
 	if err != nil {
 		writeOtpError(c, err)
 		return

@@ -21,6 +21,7 @@ export default async function OrgDashboard({ params }: { params: Promise<{ orgId
   const canBookings = canOrg(ctx, org, 'booking.read');
   const canScan = canOrg(ctx, org, 'ticket.checkin');
   const canStaff = canOrg(ctx, org, 'ticketorgstaff.write');
+  const canFleet = org.vertical === 'TRANSPORT' && canOrg(ctx, org, 'fleet.read');
 
   const [listings, bookings] = await Promise.all([
     canListings
@@ -49,6 +50,10 @@ export default async function OrgDashboard({ params }: { params: Promise<{ orgId
   const revenueKes = bookings.filter((b) => b.status === 'PAID').reduce((sum, b) => sum + Number(b.totalKes), 0);
 
   const cards: { href: string; icon: IconName; title: string; body: string; show: boolean }[] = [
+    { href: `/org/${orgId}/fleet`, icon: 'truck',
+      title: 'Fleet', body: 'Live map, dispatch and today’s cash-up', show: canFleet },
+    { href: `/org/${orgId}/fleet/pricing`, icon: 'coins',
+      title: 'Pricing', body: 'Fares per stage along each route', show: canFleet },
     { href: `/org/${orgId}/listings`, icon: org.vertical === 'TRANSPORT' ? 'truck' : 'calendar',
       title: 'Listings', body: `${listings.length} total, ${published} published`, show: canListings },
     { href: `/org/${orgId}/bookings`, icon: 'coins',

@@ -107,13 +107,6 @@ func (s *Server) handleBookParcel(c *gin.Context) {
 	// Only a real staff session can attest that somebody asked the
 	// prohibited-contents question — see the request field's comment.
 	var contentsDeclaredByStaffID *string
-	// bookerAlreadyHasCustody — an authenticated staff or courier-company
-	// session booking this (a Counter walk-in, a future self-service
-	// label assignment) already has the box in hand by definition: they
-	// are the one typing its details in at a desk. Only a true guest,
-	// self-service booking has never proven that — see this handler's
-	// own response comment on why the ticket-number gate exists at all.
-	var bookerAlreadyHasCustody bool
 	if token := bearerToken(c); token != "" {
 		if ctx, _ := s.Session.CtxFromToken(c.Request.Context(), token, clientIP(c)); ctx != nil {
 			if ctx.PartyID != "" {
@@ -124,7 +117,6 @@ func (s *Server) handleBookParcel(c *gin.Context) {
 				binderOrgID = &orgID
 			}
 			binderIsPlatformStaff = authsvc.Can(*ctx, "parcels.assign", nil)
-			bookerAlreadyHasCustody = binderIsPlatformStaff || ctx.ParcelOrgID != ""
 			if req.ContentsDeclared && ctx.ActorID != "" {
 				id := ctx.ActorID
 				contentsDeclaredByStaffID = &id
@@ -149,22 +141,12 @@ func (s *Server) handleBookParcel(c *gin.Context) {
 		writeParcelError(c, err)
 		return
 	}
-	// The real tracking code is withheld from a true guest booking — see
-	// Parcel.serviceTicketNumber's own schema comment. A self-service
-	// sender hasn't proven anyone has the box in hand yet; only
-	// handleScanParcelHandoff's first custody scan does, and only that
-	// moment texts either party the real code. An authenticated staff or
-	// courier-company session is different: they ARE the one physically
-	// holding the box right now (a Counter walk-in, a future self-service
-	// label assignment), so there's nothing left to protect by hiding it
-	// — see bookerAlreadyHasCustody's own comment. They still go through
-	// the same separate "confirm intake" scan afterward (unchanged here)
-	// before the SMS pair fires; this only restores their own visibility
-	// into the code they need to write on the physical parcel right away.
-	respCode := ""
-	if bookerAlreadyHasCustody {
-		respCode = code
-	}
+	// Public parcel bookings need the real tracking code immediately so the
+	// sender can track the parcel, share the link, and hand the receiver a
+	// consistent reference. The service ticket remains available as a
+	// secondary operational identifier for counter workflows, but it is no
+	// longer the front-door code customers rely on.
+	respCode := code
 	status := "DRAFT_PENDING_PAYMENT"
 	if req.PayAtCounter {
 		status = "BOOKED"
@@ -510,7 +492,7 @@ func (s *Server) handleGetParcelStatus(c *gin.Context) {
 // staffer all resolve to the same ctx.PartyID, and "parcels you've
 // sent, are receiving, or are currently holding" means the same thing
 // for all three. Backs the guest tracking page's signed-in staff panel
-// (see /send-parcel/track) as much as any customer's own "my parcels" view.
+// (see /parcels/track) as much as any customer's own "my parcels" view.
 func (s *Server) handleGetPartyParcelActivity(c *gin.Context) {
 	ctx := ctxFromGin(c)
 	if ctx.PartyID == "" {
@@ -586,7 +568,11 @@ func (s *Server) handleScanParcelHandoff(c *gin.Context) {
 	// dbx.canTakeParcelCustody.
 	staffOverride := authsvc.RequireCapability(ctx, "parcels.override", nil) == nil ||
 		authsvc.RequireCapability(ctx, "parcels.assign", nil) == nil
-	status, wasFirstPickup, resolvedCode, err := dbx.ScanHandoff(c.Request.Context(), s.Pool, code, ctx.PartyID, staffOverride)
+	// ctx.ActorID is the StaffUser id for a STAFF session — recorded as
+	// intakeConfirmedByStaffId when a no-Party desk confirms the box (see
+	// dbx.ScanHandoff). Empty for a subject/courier scan, which is fine:
+	// the column is nullable and only a staff confirmation sets it.
+	status, wasFirstIntake, resolvedCode, err := dbx.ScanHandoff(c.Request.Context(), s.Pool, code, ctx.PartyID, ctx.ActorID, staffOverride)
 	if err != nil {
 		writeParcelError(c, err)
 		return
@@ -596,21 +582,26 @@ func (s *Server) handleScanParcelHandoff(c *gin.Context) {
 	// reference that exists pre-intake), and every lookup and message
 	// below is keyed on the real code. Using the input would find no
 	// notify row at all and quietly text nobody — see dbx.ScanHandoff.
-	if wasFirstPickup {
+	if wasFirstIntake {
 		if info, ierr := dbx.GetParcelNotifyInfo(c.Request.Context(), s.Pool, resolvedCode); ierr == nil && info != nil {
 			if info.SenderMsisdn != "" {
 				_ = authsvc.SendSms(info.SenderMsisdn,
 					notify.ParcelIntakeConfirmed(resolvedCode, info.CarrierOrgName, info.OriginLabel, info.ReceiverName, info.ReceiverMsisdn),
 					"PARCEL_INTAKE_CONFIRMED")
 			}
-			if info.ReceiverMsisdn != "" {
-				// info.DeliveryCode, not a blank: this is the receiver's
-				// only message before a courier knocks, so it is the only
-				// place the delivery code can reach the person who has to
-				// produce it. See notify.ParcelIntakeConfirmedToReceiver.
+			// The receiver is contacted at the actionable stage, not when
+			// the parcel first enters custody. A scheduled pickup is ready
+			// for final delivery once the first courier takes it; a counter
+			// intake waits until the parcel reaches its destination point,
+			// where handleHoldParcelAtAgent sends the one readiness SMS.
+			if status == "PICKED_UP" && info.ReceiverMsisdn != "" {
+				carrier := ""
+				if info.CarrierOrgName != nil {
+					carrier = *info.CarrierOrgName
+				}
 				_ = authsvc.SendSms(info.ReceiverMsisdn,
-					notify.ParcelIntakeConfirmedToReceiver(resolvedCode, info.SenderName, info.CarrierOrgName, info.DeliveryCode),
-					"PARCEL_INTAKE_CONFIRMED_TO_RECEIVER")
+					notify.ParcelInTransitToYou(resolvedCode, info.SenderName, info.OriginLabel, info.DeliveryCode, carrier),
+					"PARCEL_READY_FOR_DELIVERY")
 			}
 			// A courier company's own team, not Esoqo-operated dispatch
 			// (nil ParcelOrgID — see that field's own comment) — there's
@@ -806,9 +797,6 @@ func (s *Server) handleDeliverParcel(c *gin.Context) {
 		}
 		if info.SenderMsisdn != "" {
 			_ = authsvc.SendSms(info.SenderMsisdn, notify.ParcelDelivered(code, info.DestinationLabel, deliveredAt), "PARCEL_DELIVERED")
-		}
-		if info.ReceiverMsisdn != "" {
-			_ = authsvc.SendSms(info.ReceiverMsisdn, notify.ParcelReceived(code, info.SenderName, deliveredAt), "PARCEL_DELIVERED")
 		}
 	}
 	resp := gin.H{"status": "DELIVERED"}

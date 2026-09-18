@@ -5,6 +5,12 @@ const nextConfig = {
   transpilePackages: ['@esoqo/ui', '@esoqo/a11y', '@esoqo/domain', '@esoqo/payments'],
   typedRoutes: true,
 
+  // Dev memory guard — see apps/web/next.config.mjs.
+  experimental: {
+    turbopackFileSystemCacheForDev: false,
+    turbopackMemoryLimit: 1024 * 1024 * 1024,
+  },
+
   /**
    * Security headers are set HERE and again at the CDN — see apps/app's
    * next.config.mjs and ADR-0003 for why proxy.ts is not enough on its own.

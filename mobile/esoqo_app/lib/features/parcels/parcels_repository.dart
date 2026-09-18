@@ -453,8 +453,11 @@ class ParcelsRepository {
   }
 
   /// POST /v1/parcel-couriers/me/pings — a courier's own location,
-  /// posted only while the "Nearby jobs" tab is open (see
-  /// parcels_hub_screen.dart's ping loop).
+  /// posted while the "Holding" or "Nearby jobs" tab is open (see
+  /// parcels_hub_screen.dart's ping loop). Holding matters as much as
+  /// Nearby: the public tracking page reads this to show a parcel's
+  /// live position, and a courier is only carrying a parcel while they
+  /// are on Holding.
   Future<void> postCourierPing({required double lat, required double lng}) {
     return _api.post('/v1/parcel-couriers/me/pings', {'lat': lat, 'lng': lng});
   }

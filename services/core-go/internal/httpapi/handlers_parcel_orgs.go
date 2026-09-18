@@ -73,9 +73,20 @@ func (s *Server) handleListWalkInStations(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"stations": stations})
 }
 
+// parcelStaffCapabilities resolves a staffer's capability bundle by role,
+// case-insensitively, so a custom role typed as "Manager" still gets
+// MANAGER. Anything that doesn't match a known preset falls back to the
+// narrowest bundle — RIDER — the same way a drifted role string always
+// has: a custom title must never widen what someone can do, and an
+// unrecognised one should cost them the dispatch screen, not their shift.
+func parcelStaffCapabilities(role string, explicit []string) []string {
+	return authsvc.ParcelStaffCapabilitiesForRole(role, explicit)
+}
+
 type parcelStaffSignInRequest struct {
 	OrgSlug string `json:"orgSlug" binding:"required"`
-	Name    string `json:"name" binding:"required"`
+	Name    string `json:"name"`
+	EsoqoID string `json:"esokoId"`
 	Pin     string `json:"pin" binding:"required"`
 }
 
@@ -93,7 +104,8 @@ func (s *Server) handleParcelStaffSignIn(c *gin.Context) {
 		writeError(c, http.StatusBadRequest, "INVALID_REQUEST", err.Error())
 		return
 	}
-	subject := "parcelorg:" + strings.ToLower(req.OrgSlug+":"+req.Name)
+	identifier := strings.TrimSpace(req.Name)
+	subject := "parcelorg:" + strings.ToLower(req.OrgSlug+":"+identifier+":"+req.EsoqoID)
 	if s.StaffLockout.Locked(c.Request.Context(), subject) {
 		// Same message as a wrong PIN: saying "locked" would confirm the
 		// company/name pair exists.
@@ -101,7 +113,13 @@ func (s *Server) handleParcelStaffSignIn(c *gin.Context) {
 		return
 	}
 
-	staff, err := dbx.FindParcelStaffForSignIn(c.Request.Context(), s.Pool, req.OrgSlug, req.Name)
+	staff, err := dbx.FindParcelStaffForSignIn(c.Request.Context(), s.Pool, req.OrgSlug, identifier)
+	if strings.TrimSpace(req.EsoqoID) != "" {
+		partyID, perr := dbx.PartyIDByEsoqoID(c.Request.Context(), s.Pool, req.EsoqoID)
+		if perr == nil {
+			staff, err = dbx.FindParcelStaffForSignInByPartyID(c.Request.Context(), s.Pool, req.OrgSlug, partyID)
+		}
+	}
 	if err != nil {
 		writeError(c, http.StatusInternalServerError, "SIGN_IN_FAILED", "Could not sign in")
 		return
@@ -117,13 +135,7 @@ func (s *Server) handleParcelStaffSignIn(c *gin.Context) {
 	}
 	s.StaffLockout.Clear(c.Request.Context(), subject)
 
-	caps, ok := authsvc.ParcelStaffCapabilities[staff.Role]
-	if !ok {
-		// Unknown role falls back to the narrowest bundle rather than
-		// refusing: a role string that drifted should cost somebody the
-		// dispatch screen, not their whole shift.
-		caps = authsvc.ParcelStaffCapabilities["RIDER"]
-	}
+	caps := parcelStaffCapabilities(staff.Role, staff.Capabilities)
 	var partyID string
 	if staff.PartyID != nil {
 		partyID = *staff.PartyID
@@ -151,7 +163,7 @@ func (s *Server) handleParcelStaffSignIn(c *gin.Context) {
 // A separate credential from the name+PIN flow above, not a
 // replacement for it: this exists specifically for the surface a
 // stranger can already reach without knowing a company's own URL (see
-// /send-parcel/track's "Authorized search" panel), where a shared PIN
+// /parcels/track's "Authorized search" panel), where a shared PIN
 // behind a public slug is a softer target than a code sent to a real
 // phone nobody but that staffer holds. The dedicated company portal
 // keeps using name+PIN.
@@ -237,10 +249,7 @@ func (s *Server) handleVerifyParcelStaffOtp(c *gin.Context) {
 		writeError(c, http.StatusUnauthorized, "INVALID_CREDENTIALS", "That account is no longer available")
 		return
 	}
-	caps, capOk := authsvc.ParcelStaffCapabilities[staff.Role]
-	if !capOk {
-		caps = authsvc.ParcelStaffCapabilities["RIDER"]
-	}
+	caps := parcelStaffCapabilities(staff.Role, staff.Capabilities)
 	var partyID string
 	if staff.PartyID != nil {
 		partyID = *staff.PartyID
@@ -301,6 +310,178 @@ func (s *Server) handleGetMyParcelOrg(c *gin.Context) {
 	})
 }
 
+// handleListMyParcelOrgs — GET /v1/me/parcel-orgs. The subject-side door
+// onto courier companies: the ones the signed-in person is active staff
+// of. Self-scoped from the session's PartyID — an org id is never taken
+// from the request. Without this, someone an admin adds to a company
+// has a staff row and an Esoqo account but nothing on their own
+// dashboard saying the company exists.
+func (s *Server) handleListMyParcelOrgs(c *gin.Context) {
+	ctx := ctxFromGin(c)
+	orgs, err := dbx.ListMyParcelOrgs(c.Request.Context(), s.Pool, ctx.PartyID)
+	if err != nil {
+		writeError(c, http.StatusInternalServerError, "LIST_FAILED", "Could not load your companies")
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"orgs": orgs})
+}
+
+// handleActivateParcelOrg — POST /v1/me/parcel-orgs/activate. The
+// one-click entry from a signed-in person's dashboard into a company
+// they are staff of.
+//
+// Authorization is the link itself: the caller must already hold a
+// subject session (authRequired) AND an active parcel_org_staff row
+// pointing at that exact partyId, resolved from the session — the org
+// id in the body is only ever a SELECTOR over companies they are
+// already entitled to, never the grant. A miss is a flat 403, identical
+// for "no such company" and "not your company".
+//
+// Mints the same company-scoped session the name+PIN and OTP doors do,
+// so everything downstream (orgCtx, capabilities) is unchanged: this
+// adds a third way in, not a second way to be authorized.
+func (s *Server) handleActivateParcelOrg(c *gin.Context) {
+	ctx := ctxFromGin(c)
+	var req struct {
+		OrgID string `json:"orgId" binding:"required"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil {
+		writeError(c, http.StatusBadRequest, "INVALID_REQUEST", err.Error())
+		return
+	}
+
+	staff, err := dbx.FindParcelStaffForSignInByOrgAndParty(c.Request.Context(), s.Pool, req.OrgID, ctx.PartyID)
+	if err != nil {
+		writeError(c, http.StatusInternalServerError, "ACTIVATE_FAILED", "Could not open that company")
+		return
+	}
+	if staff == nil {
+		writeError(c, http.StatusForbidden, "DENIED", "You're not on that company's team")
+		return
+	}
+
+	caps := parcelStaffCapabilities(staff.Role, staff.Capabilities)
+	const ttl = 12 * time.Hour
+	token, err := s.Session.CreateSession(c.Request.Context(), authsvc.SessionData{
+		ActorType:    authsvc.ActorAgent,
+		ActorID:      staff.ID,
+		ParcelOrgID:  staff.OrgID,
+		PartyID:      ctx.PartyID,
+		Capabilities: append([]string(nil), caps...),
+	}, ttl)
+	if err != nil {
+		writeError(c, http.StatusInternalServerError, "SESSION_CREATE_FAILED", "Could not start a company session")
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{
+		"token": token, "orgId": staff.OrgID, "role": staff.Role, "name": staff.Name,
+		"expiresAt": time.Now().Add(ttl).UnixMilli(),
+	})
+}
+
+// handleGetOrgLive — GET /v1/parcel-orgs/me/live. The company's own
+// live dispatch: rider dots, parcels needing a rider or running late,
+// and the stations that anchor the map. Read capability: the map is
+// operational, not privileged — every role on the roster sees it.
+func (s *Server) handleGetOrgLive(c *gin.Context) {
+	orgID := s.orgCtx(c, authsvc.CapParcelOrgRead)
+	if orgID == "" {
+		return
+	}
+	view, err := dbx.GetOrgLiveView(c.Request.Context(), s.Pool, orgID)
+	if err != nil {
+		writeError(c, http.StatusInternalServerError, "LIVE_FAILED", "Could not load the live view")
+		return
+	}
+	c.JSON(http.StatusOK, view)
+}
+
+// handleResolveOrgLabel — GET /v1/parcel-orgs/me/labels/resolve?code=.
+// Scan or type a label code and see what it is: its state, any field
+// notes attached, and the parcel it was spent on. Scoped to the
+// company's own stock — a foreign or unknown code gets the same flat
+// 404, so this can never be used to probe anyone else's labels.
+func (s *Server) handleResolveOrgLabel(c *gin.Context) {
+	orgID := s.orgCtx(c, authsvc.CapParcelOrgRead)
+	if orgID == "" {
+		return
+	}
+	code := strings.TrimSpace(c.Query("code"))
+	if code == "" {
+		writeError(c, http.StatusBadRequest, "INVALID_REQUEST", "Enter a label code")
+		return
+	}
+	label, err := dbx.GetOrgParcelLabel(c.Request.Context(), s.Pool, orgID, code)
+	if err != nil {
+		writeError(c, http.StatusInternalServerError, "RESOLVE_FAILED", "Could not look up that label")
+		return
+	}
+	if label == nil {
+		writeError(c, http.StatusNotFound, "NOT_FOUND", "That isn't one of your company's labels")
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"label": label})
+}
+
+type attachOrgLabelInfoRequest struct {
+	ItemDescription string   `json:"itemDescription" binding:"required"`
+	Destination     *string  `json:"destination"`
+	SenderName      *string  `json:"senderName"`
+	SenderMsisdn    *string  `json:"senderMsisdn"`
+	ReceiverName    *string  `json:"receiverName"`
+	ReceiverMsisdn  *string  `json:"receiverMsisdn"`
+	ItemType        *string  `json:"itemType"`
+	WeightRangeKg   *string  `json:"weightRangeKg"`
+	LengthCm        *float64 `json:"lengthCm"`
+	WidthCm         *float64 `json:"widthCm"`
+	HeightCm        *float64 `json:"heightCm"`
+}
+
+// handleAttachOrgLabelInfo — POST /v1/parcel-orgs/me/labels/info/:code.
+// Write field notes onto one of the company's own pre-printed labels:
+// what the box is, where it's going, who it's for. Same overwrite
+// semantics as the admin path (the caller resends the full set), same
+// refusal once spent or withdrawn — plus the org scope, so a desk can
+// never annotate a competitor's pad.
+//
+// The static "info" segment mirrors /admin/parcels/labels/info/:code:
+// gin panics on a static segment and a param segment sharing one tree
+// position, so ":code/info" is not an option here.
+func (s *Server) handleAttachOrgLabelInfo(c *gin.Context) {
+	orgID := s.orgCtx(c, authsvc.CapParcelOrgDispatch)
+	if orgID == "" {
+		return
+	}
+	var req attachOrgLabelInfoRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		writeError(c, http.StatusBadRequest, "INVALID_REQUEST", err.Error())
+		return
+	}
+	ctx := ctxFromGin(c)
+	var staffID *string
+	if ctx.ActorID != "" {
+		id := ctx.ActorID
+		staffID = &id
+	}
+	if err := dbx.AttachOrgParcelLabelInfo(c.Request.Context(), s.Pool, orgID, c.Param("code"), dbx.ParcelLabelInfoInput{
+		ItemDescription: req.ItemDescription,
+		Destination:     req.Destination,
+		SenderName:      req.SenderName,
+		SenderMsisdn:    req.SenderMsisdn,
+		ReceiverName:    req.ReceiverName,
+		ReceiverMsisdn:  req.ReceiverMsisdn,
+		ItemType:        req.ItemType,
+		WeightRangeKg:   req.WeightRangeKg,
+		LengthCm:        req.LengthCm,
+		WidthCm:         req.WidthCm,
+		HeightCm:        req.HeightCm,
+	}, staffID); err != nil {
+		writeParcelError(c, err)
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"ok": true})
+}
+
 // handleListMyOrgParcels — GET /v1/parcel-orgs/me/parcels?status=&originMethod=.
 func (s *Server) handleListMyOrgParcels(c *gin.Context) {
 	orgID := s.orgCtx(c, authsvc.CapParcelOrgRead)
@@ -315,12 +496,156 @@ func (s *Server) handleListMyOrgParcels(c *gin.Context) {
 	if v := c.Query("originMethod"); v != "" {
 		originMethod = &v
 	}
-	rows, err := dbx.ListOrgParcels(c.Request.Context(), s.Pool, orgID, status, originMethod)
+	// q — free-text over Esoqo's code and the company's own externalRef,
+	// so a team migrating from another system finds a parcel by either.
+	var q *string
+	if v := strings.TrimSpace(c.Query("q")); v != "" {
+		q = &v
+	}
+	rows, err := dbx.ListOrgParcels(c.Request.Context(), s.Pool, orgID, status, originMethod, q)
 	if err != nil {
 		writeError(c, http.StatusInternalServerError, "LIST_FAILED", "Could not load your parcels")
 		return
 	}
 	c.JSON(http.StatusOK, gin.H{"parcels": rows})
+}
+
+type importParcelRequest struct {
+	ExternalRef      string   `json:"externalRef" binding:"required"`
+	ExternalSource   *string  `json:"externalSource"`
+	SenderName       string   `json:"senderName" binding:"required"`
+	SenderMsisdn     string   `json:"senderMsisdn" binding:"required"`
+	ReceiverName     string   `json:"receiverName" binding:"required"`
+	ReceiverMsisdn   string   `json:"receiverMsisdn" binding:"required"`
+	OriginLabel      string   `json:"originLabel" binding:"required"`
+	DestinationLabel string   `json:"destinationLabel" binding:"required"`
+	ParcelType       string   `json:"parcelType" binding:"required"`
+	WeightKg         *float64 `json:"weightKg"`
+	Fragile          bool     `json:"fragile"`
+	Notes            *string  `json:"notes"`
+}
+
+// handleImportOrgParcel — POST /v1/parcel-orgs/me/parcels. Registers a
+// parcel the company already tracks in another system, so it can be
+// managed and tracked on Esoqo too. The caller's own number goes in
+// externalRef; Esoqo mints the tracking code. Gated on parcelorg.write
+// (a manager's own operation), not the admin parcel capabilities.
+func (s *Server) handleImportOrgParcel(c *gin.Context) {
+	orgID := s.orgCtx(c, authsvc.CapParcelOrgWrite)
+	if orgID == "" {
+		return
+	}
+	var req importParcelRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		writeError(c, http.StatusBadRequest, "INVALID_REQUEST", err.Error())
+		return
+	}
+	if !requireMsisdn(c, &req.SenderMsisdn, "The sender's phone number") {
+		return
+	}
+	if !requireMsisdn(c, &req.ReceiverMsisdn, "The receiver's phone number") {
+		return
+	}
+	id, code, err := dbx.ImportOrgParcel(c.Request.Context(), s.Pool, orgID, dbx.ImportParcelInput{
+		ExternalRef:      req.ExternalRef,
+		ExternalSource:   req.ExternalSource,
+		SenderName:       req.SenderName,
+		SenderMsisdn:     req.SenderMsisdn,
+		ReceiverName:     req.ReceiverName,
+		ReceiverMsisdn:   req.ReceiverMsisdn,
+		OriginLabel:      req.OriginLabel,
+		DestinationLabel: req.DestinationLabel,
+		ParcelType:       req.ParcelType,
+		WeightKg:         req.WeightKg,
+		Fragile:          req.Fragile,
+		Notes:            req.Notes,
+	})
+	if err != nil {
+		writeParcelError(c, err)
+		return
+	}
+	c.JSON(http.StatusCreated, gin.H{"id": id, "code": code})
+}
+
+// handleGetMyOrgStation — GET /v1/parcel-orgs/me/stations/:id. The
+// station, its location, and the team currently posted to it.
+func (s *Server) handleGetMyOrgStation(c *gin.Context) {
+	orgID := s.orgCtx(c, authsvc.CapParcelOrgStations)
+	if orgID == "" {
+		return
+	}
+	station, err := dbx.GetParcelOrgStation(c.Request.Context(), s.Pool, orgID, c.Param("id"))
+	if err != nil {
+		writeError(c, http.StatusInternalServerError, "GET_FAILED", "Could not load that station")
+		return
+	}
+	if station == nil {
+		writeError(c, http.StatusNotFound, "NOT_FOUND", "That station isn't part of your company")
+		return
+	}
+	members, err := dbx.ListParcelOrgStationMembers(c.Request.Context(), s.Pool, orgID, station.ID)
+	if err != nil {
+		writeError(c, http.StatusInternalServerError, "GET_FAILED", "Could not load that station's team")
+		return
+	}
+	if members == nil {
+		members = []dbx.ParcelOrgStaff{}
+	}
+	c.JSON(http.StatusOK, gin.H{"station": station, "members": members})
+}
+
+type stationManagerRequest struct {
+	StaffID *string `json:"staffId"`
+}
+
+// handleSetMyOrgStationManager — POST /v1/parcel-orgs/me/stations/:id/manager.
+// Names (or clears) the team member who runs the station.
+func (s *Server) handleSetMyOrgStationManager(c *gin.Context) {
+	orgID := s.orgCtx(c, authsvc.CapParcelOrgStations)
+	if orgID == "" {
+		return
+	}
+	var req stationManagerRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		writeError(c, http.StatusBadRequest, "INVALID_REQUEST", err.Error())
+		return
+	}
+	if err := dbx.SetParcelOrgStationManager(c.Request.Context(), s.Pool, orgID, c.Param("id"), req.StaffID); err != nil {
+		writeParcelError(c, err)
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"saved": true})
+}
+
+type stationMemberRequest struct {
+	StaffID  string `json:"staffId" binding:"required"`
+	Assigned bool   `json:"assigned"`
+}
+
+// handleAssignMyOrgStationMember — POST /v1/parcel-orgs/me/stations/:id/members.
+// Posts a roster member to this station (assigned=true) or removes them
+// (assigned=false), by setting parcel_org_staff.stationId. Both sides
+// are org-checked, so a manager can't move a competitor's staff.
+func (s *Server) handleAssignMyOrgStationMember(c *gin.Context) {
+	orgID := s.orgCtx(c, authsvc.CapParcelOrgStations)
+	if orgID == "" {
+		return
+	}
+	var req stationMemberRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		writeError(c, http.StatusBadRequest, "INVALID_REQUEST", err.Error())
+		return
+	}
+	var stationID *string
+	if req.Assigned {
+		id := c.Param("id")
+		stationID = &id
+	}
+	if err := dbx.AssignParcelOrgStaffStation(c.Request.Context(), s.Pool, orgID, req.StaffID, stationID); err != nil {
+		writeParcelError(c, err)
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"saved": true})
 }
 
 type assignOrgParcelRequest struct {
@@ -461,10 +786,34 @@ type upsertOrgStaffRequest struct {
 	Pin     string  `json:"pin"`
 	PartyID *string `json:"partyId"`
 	Active  *bool   `json:"active"`
-	// Msisdn — admin-invite-by-phone (see handleAdminUpsertParcelOrgStaff's
-	// own comment). Only honoured on the admin endpoint; a manager
-	// self-serving their own team still issues a PIN.
-	Msisdn *string `json:"msisdn"`
+	// IsContact — mark this member as one of the company's contact people.
+	// Multiple are allowed; nil on an update leaves the flag unchanged.
+	IsContact *bool `json:"isContact"`
+	// Msisdn — the staffer's own phone. When present, the backend finds
+	// or creates their Person and (if a PIN is also given) sets their
+	// Esoqo PIN credential, so they get a full /signin account as well as
+	// the company portal. Admin uses it for the invite text; a manager
+	// self-serving their team can use it to provision a /signin login.
+	Msisdn    *string `json:"msisdn"`
+	EsoqoID   *string `json:"esokoId"`
+	StationID *string `json:"stationId"`
+	// Capabilities — a custom ("Other…") role's hand-picked permissions.
+	// nil when the field is absent, which leaves any stored set alone;
+	// present (even empty) replaces it. Sanitized against the known
+	// parcel-org capabilities before it ever reaches the database.
+	Capabilities *[]string `json:"capabilities"`
+}
+
+// requestedCapabilities turns the request's optional capabilities field
+// into (list, set). set is false only when the field was absent, so a
+// role rename or suspend can't silently wipe a custom role's
+// permissions; an explicit empty list clears them (custom -> preset).
+func requestedCapabilities(in *[]string) (caps []string, set bool) {
+	if in == nil {
+		return nil, false
+	}
+	caps = authsvc.SanitizeParcelCapabilities(*in)
+	return caps, true
 }
 
 // handleUpsertMyOrgStaff — POST /v1/parcel-orgs/me/staff. A manager
@@ -505,12 +854,106 @@ func (s *Server) handleUpsertMyOrgStaff(c *gin.Context) {
 		}
 		pinHash = h
 	}
+	// A phone number on the roster row provisions a full Esoqo account
+	// (Person + PIN credential) the same way the admin path does, so a
+	// manager adding a rider can give them a /signin login too. Without
+	// one, the row stays a company-portal (name + PIN) login and any
+	// partyId is only for custody attribution.
+	partyID := req.PartyID
+	if req.Msisdn != nil && strings.TrimSpace(*req.Msisdn) != "" {
+		msisdn := strings.TrimSpace(*req.Msisdn)
+		resolved, err := dbx.EnsureEsoqoAccountForStaff(c.Request.Context(), s.Pool, strings.TrimSpace(req.Name), msisdn, pinHash)
+		if err != nil {
+			writeError(c, http.StatusInternalServerError, "SAVE_FAILED", "Could not add that person")
+			return
+		}
+		partyID = &resolved
+		_, _ = dbx.EnsureEsoqoPaymentId(c.Request.Context(), s.Pool, resolved, msisdn)
+	}
+	caps, setCaps := requestedCapabilities(req.Capabilities)
 	if err := dbx.UpsertParcelOrgStaff(c.Request.Context(), s.Pool, req.ID, orgID,
-		strings.TrimSpace(req.Name), req.Role, pinHash, req.PartyID, active); err != nil {
+		strings.TrimSpace(req.Name), req.Role, pinHash, partyID, active, req.IsContact, caps, setCaps, req.StationID); err != nil {
 		writeParcelError(c, err)
 		return
 	}
 	c.JSON(http.StatusOK, gin.H{"saved": true})
+}
+
+type orgStationRequest struct {
+	Name         string  `json:"name" binding:"required"`
+	Msisdn       string  `json:"msisdn" binding:"required"`
+	LocationHint string  `json:"locationHint" binding:"required"`
+	OpeningHours *string `json:"openingHours"`
+	Lat          float64 `json:"lat" binding:"required"`
+	Lng          float64 `json:"lng" binding:"required"`
+	Capacity     int     `json:"capacity"`
+	Active       *bool   `json:"active"`
+}
+
+func stationInput(req orgStationRequest) dbx.ParcelAgentInput {
+	active := true
+	if req.Active != nil {
+		active = *req.Active
+	}
+	if req.Capacity == 0 {
+		req.Capacity = 50
+	}
+	return dbx.ParcelAgentInput{Name: req.Name, Msisdn: req.Msisdn, LocationHint: req.LocationHint, OpeningHours: req.OpeningHours, Lat: req.Lat, Lng: req.Lng, Capacity: req.Capacity, Active: active}
+}
+
+func (s *Server) handleListMyOrgStations(c *gin.Context) {
+	orgID := s.orgCtx(c, authsvc.CapParcelOrgStations)
+	if orgID == "" {
+		return
+	}
+	stations, err := dbx.ListParcelOrgStations(c.Request.Context(), s.Pool, orgID)
+	if err != nil {
+		writeError(c, http.StatusInternalServerError, "LIST_FAILED", "Could not load your stations")
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"stations": stations})
+}
+
+func (s *Server) handleCreateMyOrgStation(c *gin.Context) {
+	orgID := s.orgCtx(c, authsvc.CapParcelOrgStations)
+	if orgID == "" {
+		return
+	}
+	var req orgStationRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		writeError(c, http.StatusBadRequest, "INVALID_REQUEST", err.Error())
+		return
+	}
+	if !requireMsisdn(c, &req.Msisdn, "The station phone number") {
+		return
+	}
+	ctx := ctxFromGin(c)
+	id, err := dbx.CreateParcelOrgStation(c.Request.Context(), s.Pool, orgID, stationInput(req), &ctx.ActorID)
+	if err != nil {
+		writeParcelError(c, err)
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"id": id})
+}
+
+func (s *Server) handleUpdateMyOrgStation(c *gin.Context) {
+	orgID := s.orgCtx(c, authsvc.CapParcelOrgStations)
+	if orgID == "" {
+		return
+	}
+	var req orgStationRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		writeError(c, http.StatusBadRequest, "INVALID_REQUEST", err.Error())
+		return
+	}
+	if !requireMsisdn(c, &req.Msisdn, "The station phone number") {
+		return
+	}
+	if err := dbx.UpdateParcelOrgStation(c.Request.Context(), s.Pool, orgID, c.Param("id"), stationInput(req)); err != nil {
+		writeParcelError(c, err)
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"updated": true})
 }
 
 // ── Esoqo admin: onboarding the companies themselves ─────────────────
@@ -552,12 +995,77 @@ func (s *Server) handleAdminListParcelOrgs(c *gin.Context) {
 		writeError(c, http.StatusForbidden, "DENIED", "You don't have access to parcels")
 		return
 	}
-	orgs, err := dbx.ListParcelOrgs(c.Request.Context(), s.Pool)
+	orgs, err := dbx.ListAdminParcelOrgs(c.Request.Context(), s.Pool)
 	if err != nil {
 		writeError(c, http.StatusInternalServerError, "LIST_FAILED", "Could not load courier companies")
 		return
 	}
 	c.JSON(http.StatusOK, gin.H{"orgs": orgs})
+}
+
+// handleAdminGetParcelOrg — GET /v1/admin/parcels/orgs/:id. The detail
+// view behind the register: the company itself (with its owning
+// business and primary contact), today's operating numbers, the full
+// roster with each member's Esoqo ID, and the company's own audit
+// trail. All in one response so a page doesn't fan out into four calls
+// that can disagree with each other mid-render.
+func (s *Server) handleAdminGetParcelOrg(c *gin.Context) {
+	if err := authsvc.RequireCapability(ctxFromGin(c), "parcels.read", nil); err != nil {
+		writeError(c, http.StatusForbidden, "DENIED", "You don't have access to parcels")
+		return
+	}
+	id := c.Param("id")
+	org, err := dbx.GetAdminParcelOrg(c.Request.Context(), s.Pool, id)
+	if err != nil {
+		writeError(c, http.StatusInternalServerError, "GET_FAILED", "Could not load that company")
+		return
+	}
+	if org == nil {
+		writeError(c, http.StatusNotFound, "NOT_FOUND", "That company was not found")
+		return
+	}
+	stats, err := dbx.GetParcelOrgStats(c.Request.Context(), s.Pool, id)
+	if err != nil {
+		writeError(c, http.StatusInternalServerError, "GET_FAILED", "Could not load that company's figures")
+		return
+	}
+	staff, err := dbx.ListParcelOrgStaff(c.Request.Context(), s.Pool, id)
+	if err != nil {
+		writeError(c, http.StatusInternalServerError, "GET_FAILED", "Could not load that company's team")
+		return
+	}
+	activity, err := dbx.ListParcelOrgActivity(c.Request.Context(), s.Pool, id, 50)
+	if err != nil {
+		writeError(c, http.StatusInternalServerError, "GET_FAILED", "Could not load that company's activity")
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{
+		"org":      org,
+		"stats":    stats,
+		"staff":    staff,
+		"activity": activity,
+	})
+}
+
+// recordParcelOrgAudit writes one best-effort audit row against a
+// company — the feed handleAdminGetParcelOrg later reads back as
+// activity. Best-effort for the same reason every other RecordAudit
+// caller is: losing the changelog line must never fail the change the
+// operator already made.
+func (s *Server) recordParcelOrgAudit(c *gin.Context, action, orgID string, payload map[string]interface{}) {
+	ctx := ctxFromGin(c)
+	var actorID, ip *string
+	if ctx.ActorID != "" {
+		id := ctx.ActorID
+		actorID = &id
+	}
+	if v := clientIP(c); v != "" {
+		ip = &v
+	}
+	targetType := "parcel_org"
+	_, _ = audit.RecordAudit(c.Request.Context(), s.Pool, s.Cfg.AuditChainSeed,
+		audit.CtxLike{ActorType: string(ctx.ActorType), ActorID: actorID, IP: ip},
+		audit.Input{Action: action, TargetType: &targetType, TargetID: &orgID, Payload: payload})
 }
 
 func (s *Server) handleAdminCreateParcelOrg(c *gin.Context) {
@@ -584,6 +1092,9 @@ func (s *Server) handleAdminCreateParcelOrg(c *gin.Context) {
 		writeParcelError(c, err)
 		return
 	}
+	s.recordParcelOrgAudit(c, "parcel_org.created", id, map[string]interface{}{
+		"name": req.Name, "slug": strings.ToLower(strings.TrimSpace(req.Slug)),
+	})
 	c.JSON(http.StatusOK, gin.H{"id": id})
 }
 
@@ -601,6 +1112,9 @@ func (s *Server) handleAdminUpdateParcelOrg(c *gin.Context) {
 		writeParcelError(c, err)
 		return
 	}
+	s.recordParcelOrgAudit(c, "parcel_org.updated", c.Param("id"), map[string]interface{}{
+		"name": req.Name, "slug": strings.ToLower(strings.TrimSpace(req.Slug)), "status": req.Status,
+	})
 	c.JSON(http.StatusOK, gin.H{"updated": true})
 }
 
@@ -652,6 +1166,14 @@ func (s *Server) handleAdminUpsertParcelOrgStaff(c *gin.Context) {
 
 	name := strings.TrimSpace(req.Name)
 	partyID := req.PartyID
+	if req.EsoqoID != nil && strings.TrimSpace(*req.EsoqoID) != "" {
+		resolved, err := dbx.PartyIDByEsoqoID(c.Request.Context(), s.Pool, *req.EsoqoID)
+		if err != nil {
+			writeParcelError(c, err)
+			return
+		}
+		partyID = &resolved
+	}
 	invite := req.Msisdn != nil && strings.TrimSpace(*req.Msisdn) != ""
 	var msisdn string
 	if invite {
@@ -660,26 +1182,78 @@ func (s *Server) handleAdminUpsertParcelOrgStaff(c *gin.Context) {
 			writeError(c, http.StatusBadRequest, "INVALID_REQUEST", "That is not a Kenyan mobile number we can invite")
 			return
 		}
-		resolvedPartyID, err := dbx.FindOrCreatePersonWithName(c.Request.Context(), s.Pool, name, msisdn, nil)
+		// A phone plus a PIN provisions a full Esoqo account: the Person
+		// behind the number, and their Esoqo PIN credential set to the
+		// same PIN, so they can sign in at /signin as well as the company
+		// portal. A phone alone stays the OTP-invite path (no credential
+		// until they set one through /signin/set-pin).
+		resolvedPartyID, err := dbx.EnsureEsoqoAccountForStaff(c.Request.Context(), s.Pool, name, msisdn, pinHash)
 		if err != nil {
 			writeError(c, http.StatusInternalServerError, "SAVE_FAILED", "Could not invite that person")
 			return
 		}
 		partyID = &resolvedPartyID
+		// Mint their Esoqo ID now that staff are vouching for the number.
+		// Without this an invited manager had a Party but no ESK-… handle,
+		// so the roster showed no code and they alone couldn't use the
+		// "sign in with an Esoqo ID" path. Best-effort: a failed mint must
+		// not stop the invite that's already on its way.
+		_, _ = dbx.EnsureEsoqoPaymentId(c.Request.Context(), s.Pool, resolvedPartyID, msisdn)
 	}
 
+	caps, setCaps := requestedCapabilities(req.Capabilities)
 	if err := dbx.UpsertParcelOrgStaff(c.Request.Context(), s.Pool, req.ID, c.Param("id"),
-		name, req.Role, pinHash, partyID, active); err != nil {
+		name, req.Role, pinHash, partyID, active, req.IsContact, caps, setCaps, req.StationID); err != nil {
 		writeParcelError(c, err)
 		return
 	}
+	s.recordParcelOrgAudit(c, "parcel_org.staff_changed", c.Param("id"), map[string]interface{}{
+		"name": name, "role": req.Role, "active": active, "invited": invite,
+	})
 
-	if invite {
+	// Text the invite on create only. An edit that resends the same phone
+	// would otherwise re-text the whole roster every time an admin tweaks
+	// a role, and the staffer already has the link.
+	creating := req.ID == nil || *req.ID == ""
+	if invite && creating {
 		if orgName, orgSlug, err := dbx.GetParcelOrgNameSlug(c.Request.Context(), s.Pool, c.Param("id")); err == nil {
 			_ = authsvc.SendSms(msisdn, notify.ParcelStaffInvited(orgName, name, req.Role, notify.ParcelStaffInviteURL(orgSlug, name)), "PARCEL_STAFF_INVITE")
 		}
 	}
 	c.JSON(http.StatusOK, gin.H{"saved": true})
+}
+
+// handleAdminIssueParcelOrgStaffID — POST
+// /v1/admin/parcels/orgs/:id/staff/:staffId/issue-id. Mints (or returns)
+// the ESK-… handle a roster member signs in with, so an admin can read
+// it back to them. Needed because staff created before the invite flow
+// minted IDs have a Party and a phone but no code at all, which is
+// exactly the "I can't see their Esoqo ID" gap. Idempotent — a member
+// who already has one gets the same code back.
+func (s *Server) handleAdminIssueParcelOrgStaffID(c *gin.Context) {
+	if err := authsvc.RequireCapability(ctxFromGin(c), "parcels.edit", nil); err != nil {
+		writeError(c, http.StatusForbidden, "DENIED", "You can't edit parcel settings")
+		return
+	}
+	partyID, msisdn, err := dbx.ParcelOrgStaffParty(c.Request.Context(), s.Pool, c.Param("id"), c.Param("staffId"))
+	if err != nil {
+		writeParcelError(c, err)
+		return
+	}
+	if partyID == "" || msisdn == "" {
+		writeError(c, http.StatusBadRequest, "BAD_INPUT",
+			"That team member isn't linked to a phone number, so there's no Esoqo ID to issue — set a PIN for them instead.")
+		return
+	}
+	code, err := dbx.EnsureEsoqoPaymentId(c.Request.Context(), s.Pool, partyID, msisdn)
+	if err != nil {
+		writeError(c, http.StatusInternalServerError, "ISSUE_FAILED", "Could not issue that Esoqo ID")
+		return
+	}
+	s.recordParcelOrgAudit(c, "parcel_org.staff_id_issued", c.Param("id"), map[string]interface{}{
+		"staffId": c.Param("staffId"), "esoqoId": code,
+	})
+	c.JSON(http.StatusOK, gin.H{"esoqoId": code})
 }
 
 type assignParcelOrgRequest struct {
@@ -751,6 +1325,31 @@ func (s *Server) handleAdminSearchEnterprises(c *gin.Context) {
 		return
 	}
 	c.JSON(http.StatusOK, gin.H{"enterprises": list})
+}
+
+// handleAdminSearchPeople — GET /v1/admin/parcels/people?q=. Backs the
+// "add an existing person" picker on a company's team: any Party with a
+// phone (dbx.SearchCollectorParties), because a staffer joining a
+// courier company may or may not already have an Esoqo identity. Picking
+// a result links that Party; adding someone genuinely new goes through
+// the phone field instead and mints their Esoqo ID at that point.
+// Blank query returns nothing — this is a picker, not a people dump.
+func (s *Server) handleAdminSearchPeople(c *gin.Context) {
+	if err := authsvc.RequireCapability(ctxFromGin(c), "parcels.edit", nil); err != nil {
+		writeError(c, http.StatusForbidden, "DENIED", "You can't edit parcel settings")
+		return
+	}
+	q := strings.TrimSpace(c.Query("q"))
+	if q == "" {
+		c.JSON(http.StatusOK, gin.H{"people": []dbx.CollectorLite{}})
+		return
+	}
+	people, err := dbx.SearchCollectorParties(c.Request.Context(), s.Pool, q)
+	if err != nil {
+		writeError(c, http.StatusInternalServerError, "SEARCH_FAILED", "Could not search people")
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"people": people})
 }
 
 type createEnterpriseRequest struct {

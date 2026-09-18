@@ -1,9 +1,13 @@
-'use server';
+"use server";
 
-import { revalidatePath } from 'next/cache';
+import { revalidatePath } from "next/cache";
 import {
-  ParcelOrgUnauthorised, parcelOrgFetch, type ParcelOrgStaffRow,
-} from '@/lib/parcel-org-session';
+  ParcelOrgUnauthorised,
+  parcelOrgFetch,
+  type OrgParcelLabel,
+  type ParcelOrgStaffRow,
+  type ParcelOrgStationRow,
+} from "@/lib/parcel-org-session";
 
 export type Result = { ok: true } | { ok: false; error: string };
 
@@ -17,9 +21,15 @@ export type Result = { ok: true } | { ok: false; error: string };
  *  funnel their errors through it. */
 function toResult(e: unknown): { ok: false; error: string } {
   if (e instanceof ParcelOrgUnauthorised) {
-    return { ok: false, error: 'Your shift session has expired — sign in again' };
+    return {
+      ok: false,
+      error: "Your shift session has expired — sign in again",
+    };
   }
-  return { ok: false, error: e instanceof Error ? e.message : 'That did not work' };
+  return {
+    ok: false,
+    error: e instanceof Error ? e.message : "That did not work",
+  };
 }
 
 /**
@@ -45,10 +55,11 @@ export async function receiveWalkInParcel(
     // what has to go on the printed label: a ticket number stuck to the
     // box is a reference no later scan resolves.
     const res = await parcelOrgFetch<{ status: string; code: string }>(
-      `/v1/parcels/${encodeURIComponent(reference)}/handoff`, { method: 'POST' },
+      `/v1/parcels/${encodeURIComponent(reference)}/handoff`,
+      { method: "POST" },
     );
-    revalidatePath('/parcel-org');
-    revalidatePath('/parcel-org/receive');
+    revalidatePath("/parcel-org");
+    revalidatePath("/parcel-org/receive");
     return { ok: true, code: res.code };
   } catch (e) {
     return toResult(e);
@@ -71,27 +82,39 @@ export async function receiveWalkInParcel(
  * that's physically in hand should be recorded as such even if the
  * sender is still counting out notes.
  */
-export async function settleCounterParcel(code: string, priceKes: number): Promise<Result> {
+export async function settleCounterParcel(
+  code: string,
+  priceKes: number,
+): Promise<Result> {
   try {
-    await parcelOrgFetch(`/v1/parcels/${encodeURIComponent(code)}/settle-counter`, {
-      method: 'POST',
-      body: JSON.stringify({ priceKes }),
-    });
-    revalidatePath('/parcel-org');
-    revalidatePath('/parcel-org/receive');
+    await parcelOrgFetch(
+      `/v1/parcels/${encodeURIComponent(code)}/settle-counter`,
+      {
+        method: "POST",
+        body: JSON.stringify({ priceKes }),
+      },
+    );
+    revalidatePath("/parcel-org");
+    revalidatePath("/parcel-org/receive");
     return { ok: true };
   } catch (e) {
     return toResult(e);
   }
 }
 
-export async function assignOrgParcel(code: string, riderPartyId: string): Promise<Result> {
+export async function assignOrgParcel(
+  code: string,
+  riderPartyId: string,
+): Promise<Result> {
   try {
-    await parcelOrgFetch(`/v1/parcel-orgs/me/parcels/${encodeURIComponent(code)}/assign`, {
-      method: 'POST',
-      body: JSON.stringify({ riderPartyId }),
-    });
-    revalidatePath('/parcel-org');
+    await parcelOrgFetch(
+      `/v1/parcel-orgs/me/parcels/${encodeURIComponent(code)}/assign`,
+      {
+        method: "POST",
+        body: JSON.stringify({ riderPartyId }),
+      },
+    );
+    revalidatePath("/parcel-org");
     return { ok: true };
   } catch (e) {
     return toResult(e);
@@ -102,18 +125,30 @@ export async function assignOrgParcel(code: string, riderPartyId: string): Promi
  *  routing every hand-over through Esoqo support. The server checks the
  *  rider is on this company's books before touching anything. */
 export async function remitRiderCod(
-  riderPartyId: string, amountKes: string, note?: string,
-): Promise<{ ok: true; expectedKes: string; shortfallKes: string } | { ok: false; error: string }> {
+  riderPartyId: string,
+  amountKes: string,
+  note?: string,
+): Promise<
+  | { ok: true; expectedKes: string; shortfallKes: string }
+  | { ok: false; error: string }
+> {
   try {
-    const res = await parcelOrgFetch<{ expectedKes: string; shortfallKes: string }>(
-      '/v1/parcel-orgs/me/cod/remit',
-      { method: 'POST', body: JSON.stringify({ riderPartyId, amountKes, note: note || null }) },
-    );
-    revalidatePath('/parcel-org');
-    return { ok: true, expectedKes: res.expectedKes, shortfallKes: res.shortfallKes };
+    const res = await parcelOrgFetch<{
+      expectedKes: string;
+      shortfallKes: string;
+    }>("/v1/parcel-orgs/me/cod/remit", {
+      method: "POST",
+      body: JSON.stringify({ riderPartyId, amountKes, note: note || null }),
+    });
+    revalidatePath("/parcel-org");
+    return {
+      ok: true,
+      expectedKes: res.expectedKes,
+      shortfallKes: res.shortfallKes,
+    };
   } catch (e) {
     const r = toResult(e);
-    return { ok: false, error: r.ok ? 'That did not work' : r.error };
+    return { ok: false, error: r.ok ? "That did not work" : r.error };
   }
 }
 
@@ -130,18 +165,22 @@ export interface OrgPricingRow {
 
 export async function listOrgPricing(): Promise<OrgPricingRow[]> {
   const { pricing } = await parcelOrgFetch<{ pricing: OrgPricingRow[] | null }>(
-    '/v1/parcel-orgs/me/pricing',
+    "/v1/parcel-orgs/me/pricing",
   );
   return pricing ?? [];
 }
 
-export async function saveOrgPricing(input: { parcelType: string; minKes: number; maxKes: number }): Promise<Result> {
+export async function saveOrgPricing(input: {
+  parcelType: string;
+  minKes: number;
+  maxKes: number;
+}): Promise<Result> {
   try {
-    await parcelOrgFetch('/v1/parcel-orgs/me/pricing', {
-      method: 'POST',
+    await parcelOrgFetch("/v1/parcel-orgs/me/pricing", {
+      method: "POST",
       body: JSON.stringify(input),
     });
-    revalidatePath('/parcel-org/pricing');
+    revalidatePath("/parcel-org/pricing");
     return { ok: true };
   } catch (e) {
     return toResult(e);
@@ -150,7 +189,7 @@ export async function saveOrgPricing(input: { parcelType: string; minKes: number
 
 export async function listOrgStaff(): Promise<ParcelOrgStaffRow[]> {
   const { staff } = await parcelOrgFetch<{ staff: ParcelOrgStaffRow[] | null }>(
-    '/v1/parcel-orgs/me/staff',
+    "/v1/parcel-orgs/me/staff",
   );
   return staff ?? [];
 }
@@ -160,12 +199,18 @@ export async function saveOrgStaff(input: {
   name: string;
   role: string;
   pin?: string;
+  msisdn?: string | null;
   partyId?: string | null;
   active: boolean;
+  isContact?: boolean;
+  stationId?: string | null;
+  /** A custom role's picked permissions. Always sent by the form, so
+   *  switching back to a preset clears them. */
+  capabilities?: string[];
 }): Promise<Result> {
   try {
-    await parcelOrgFetch('/v1/parcel-orgs/me/staff', {
-      method: 'POST',
+    await parcelOrgFetch("/v1/parcel-orgs/me/staff", {
+      method: "POST",
       body: JSON.stringify({
         id: input.id ?? null,
         name: input.name,
@@ -173,12 +218,56 @@ export async function saveOrgStaff(input: {
         // Empty means "leave the PIN alone" on an update — making
         // somebody retype a PIN to change a role is the kind of friction
         // that ends with a whole depot sharing one login.
-        pin: input.pin ?? '',
+        pin: input.pin ?? "",
+        // A phone gives this person a full Esoqo account (person + PIN
+        // credential), so they can sign in at /signin as well as the
+        // company portal. Empty keeps them a company-portal-only login.
+        msisdn: input.msisdn || null,
         partyId: input.partyId || null,
         active: input.active,
+        // Undefined (not false) on an update leaves the flag unchanged.
+        isContact: input.isContact,
+        capabilities: input.capabilities,
+        stationId: input.stationId || null,
       }),
     });
-    revalidatePath('/parcel-org/team');
+    revalidatePath("/parcel-org/team");
+    return { ok: true };
+  } catch (e) {
+    return toResult(e);
+  }
+}
+
+export async function listOrgStations(): Promise<ParcelOrgStationRow[]> {
+  const { stations } = await parcelOrgFetch<{
+    stations: ParcelOrgStationRow[] | null;
+  }>("/v1/parcel-orgs/me/stations");
+  return stations ?? [];
+}
+
+export async function saveOrgStation(input: {
+  id?: string;
+  name: string;
+  msisdn: string;
+  locationHint: string;
+  openingHours?: string;
+  lat: number;
+  lng: number;
+  capacity: number;
+  active: boolean;
+}): Promise<Result> {
+  try {
+    await parcelOrgFetch(
+      input.id
+        ? `/v1/parcel-orgs/me/stations/${encodeURIComponent(input.id)}`
+        : "/v1/parcel-orgs/me/stations",
+      {
+        method: input.id ? "PATCH" : "POST",
+        body: JSON.stringify(input),
+      },
+    );
+    revalidatePath("/parcel-org/stations");
+    revalidatePath("/parcel-org/team");
     return { ok: true };
   } catch (e) {
     return toResult(e);
@@ -198,49 +287,70 @@ export async function saveOrgStaff(input: {
 // somebody else's stock.
 
 export interface OrgLabelRow {
-  code: string; createdAt: string; state: string;
-  itemDescription: string | null; destination: string | null; senderName: string | null;
-  infoAttachedAt: string | null; usedAt: string | null;
-  voidedAt: string | null; voidedReason: string | null;
-  batchId: string | null; orgName: string | null;
+  code: string;
+  createdAt: string;
+  state: string;
+  itemDescription: string | null;
+  destination: string | null;
+  senderName: string | null;
+  infoAttachedAt: string | null;
+  usedAt: string | null;
+  voidedAt: string | null;
+  voidedReason: string | null;
+  batchId: string | null;
+  orgName: string | null;
 }
 
 export interface OrgLabelBatchRow {
-  batchId: string; createdAt: string;
-  parcelOrgId: string | null; orgName: string | null;
-  total: number; live: number; used: number; voided: number;
+  batchId: string;
+  createdAt: string;
+  parcelOrgId: string | null;
+  orgName: string | null;
+  total: number;
+  live: number;
+  used: number;
+  voided: number;
   voidedReason: string | null;
 }
 
 export async function listOrgLabels(
   state: string,
 ): Promise<{ labels: OrgLabelRow[]; counts: Record<string, number> }> {
-  const res = await parcelOrgFetch<{ labels: OrgLabelRow[] | null; counts: Record<string, number> }>(
-    `/v1/parcel-orgs/me/labels?state=${encodeURIComponent(state)}`,
-  );
+  const res = await parcelOrgFetch<{
+    labels: OrgLabelRow[] | null;
+    counts: Record<string, number>;
+  }>(`/v1/parcel-orgs/me/labels?state=${encodeURIComponent(state)}`);
   return { labels: res.labels ?? [], counts: res.counts ?? {} };
 }
 
 export async function listOrgLabelBatches(): Promise<OrgLabelBatchRow[]> {
   const res = await parcelOrgFetch<{ batches: OrgLabelBatchRow[] | null }>(
-    '/v1/parcel-orgs/me/labels/batches',
+    "/v1/parcel-orgs/me/labels/batches",
   );
   return res.batches ?? [];
 }
 
 export async function generateOrgLabels(
   count: number,
-): Promise<{ ok: true; codes: string[]; batchId: string } | { ok: false; error: string }> {
+): Promise<
+  { ok: true; codes: string[]; batchId: string } | { ok: false; error: string }
+> {
   try {
-    const res = await parcelOrgFetch<{ codes: string[] | null; batchId: string }>(
-      '/v1/parcel-orgs/me/labels/generate',
-      { method: 'POST', body: JSON.stringify({ count }) },
-    );
-    revalidatePath('/parcel-org/labels');
+    const res = await parcelOrgFetch<{
+      codes: string[] | null;
+      batchId: string;
+    }>("/v1/parcel-orgs/me/labels/generate", {
+      method: "POST",
+      body: JSON.stringify({ count }),
+    });
+    revalidatePath("/parcel-org/labels");
     return { ok: true, codes: res.codes ?? [], batchId: res.batchId };
   } catch (e) {
     const r = toResult(e);
-    return { ok: false, error: r.ok ? 'Could not print those labels' : r.error };
+    return {
+      ok: false,
+      error: r.ok ? "Could not print those labels" : r.error,
+    };
   }
 }
 
@@ -248,17 +358,155 @@ export async function generateOrgLabels(
  *  button, without having to phone Esoqo to do it. Already-spent codes
  *  are untouched: each is on a parcel already moving. */
 export async function voidOrgLabelBatch(
-  batchId: string, reason: string,
+  batchId: string,
+  reason: string,
 ): Promise<{ ok: true; voided: number } | { ok: false; error: string }> {
   try {
     const res = await parcelOrgFetch<{ voided: number }>(
       `/v1/parcel-orgs/me/labels/batches/${encodeURIComponent(batchId)}/void`,
-      { method: 'POST', body: JSON.stringify({ reason }) },
+      { method: "POST", body: JSON.stringify({ reason }) },
     );
-    revalidatePath('/parcel-org/labels');
+    revalidatePath("/parcel-org/labels");
     return { ok: true, voided: res.voided };
   } catch (e) {
     const r = toResult(e);
-    return { ok: false, error: r.ok ? 'Could not withdraw that batch' : r.error };
+    return {
+      ok: false,
+      error: r.ok ? "Could not withdraw that batch" : r.error,
+    };
+  }
+}
+
+export interface CustomParcelInput {
+  externalRef: string;
+  senderName: string;
+  senderMsisdn: string;
+  receiverName: string;
+  receiverMsisdn: string;
+  originLabel: string;
+  destinationLabel: string;
+  parcelType: string;
+  weightKg?: number | null;
+  fragile?: boolean;
+  notes?: string | null;
+}
+
+/** Save a parcel with the company's own number, so work that starts on
+ *  paper or in another book can be managed and tracked on Esoqo too.
+ *  Esoqo mints its own tracking code; the company's number is kept as
+ *  externalRef and searchable. Returns the Esoqo code so the caller can
+ *  show it immediately. */
+export async function addCustomParcel(
+  input: CustomParcelInput,
+): Promise<{ ok: true; code: string } | { ok: false; error: string }> {
+  try {
+    const res = await parcelOrgFetch<{ code: string }>("/v1/parcel-orgs/me/parcels", {
+      method: "POST",
+      body: JSON.stringify({
+        externalRef: input.externalRef.trim(),
+        senderName: input.senderName.trim(),
+        senderMsisdn: input.senderMsisdn.trim(),
+        receiverName: input.receiverName.trim(),
+        receiverMsisdn: input.receiverMsisdn.trim(),
+        originLabel: input.originLabel.trim(),
+        destinationLabel: input.destinationLabel.trim(),
+        parcelType: input.parcelType,
+        weightKg: input.weightKg ?? null,
+        fragile: input.fragile ?? false,
+        notes: input.notes?.trim() || null,
+      }),
+    });
+    revalidatePath("/parcel-org");
+    return { ok: true, code: res.code };
+  } catch (e) {
+    const r = toResult(e);
+    return { ok: false, error: r.ok ? "Could not import that parcel" : r.error };
+  }
+}
+
+/** Name (or clear) the team member who runs a station. */
+export async function setStationManager(
+  stationId: string,
+  staffId: string | null,
+): Promise<Result> {
+  try {
+    await parcelOrgFetch(`/v1/parcel-orgs/me/stations/${encodeURIComponent(stationId)}/manager`, {
+      method: "POST",
+      body: JSON.stringify({ staffId }),
+    });
+    revalidatePath(`/parcel-org/stations/${stationId}`);
+    return { ok: true };
+  } catch (e) {
+    return toResult(e);
+  }
+}
+
+/** Post a roster member to a station (assigned=true) or remove them. */
+export async function assignStationMember(
+  stationId: string,
+  staffId: string,
+  assigned: boolean,
+): Promise<Result> {
+  try {
+    await parcelOrgFetch(`/v1/parcel-orgs/me/stations/${encodeURIComponent(stationId)}/members`, {
+      method: "POST",
+      body: JSON.stringify({ staffId, assigned }),
+    });
+    revalidatePath(`/parcel-org/stations/${stationId}`);
+    return { ok: true };
+  } catch (e) {
+    return toResult(e);
+  }
+}
+
+export interface AttachLabelInfoInput {
+  itemDescription: string;
+  destination?: string | null;
+  senderName?: string | null;
+  senderMsisdn?: string | null;
+  receiverName?: string | null;
+  receiverMsisdn?: string | null;
+}
+
+/** Look a label code up against the company's own stock — what scanning
+ *  a printed label resolves to. A foreign or unknown code fails the
+ *  same way, so this can't probe anyone else's labels. */
+export async function resolveOrgLabel(
+  code: string,
+): Promise<{ ok: true; label: OrgParcelLabel } | { ok: false; error: string }> {
+  try {
+    const res = await parcelOrgFetch<{ label: OrgParcelLabel }>(
+      `/v1/parcel-orgs/me/labels/resolve?code=${encodeURIComponent(code.trim())}`,
+    );
+    return { ok: true, label: res.label };
+  } catch (e) {
+    const r = toResult(e);
+    return { ok: false, error: r.ok ? "Could not look up that label" : r.error };
+  }
+}
+
+/** Write field notes onto one of the company's pre-printed labels —
+ *  what the box is, where it's going, who it's for. Overwrites on
+ *  repeat, and refuses once spent or withdrawn. */
+export async function attachOrgLabelInfo(
+  code: string,
+  input: AttachLabelInfoInput,
+): Promise<Result> {
+  try {
+    await parcelOrgFetch(`/v1/parcel-orgs/me/labels/info/${encodeURIComponent(code.trim())}`, {
+      method: "POST",
+      body: JSON.stringify({
+        itemDescription: input.itemDescription.trim(),
+        destination: input.destination?.trim() || null,
+        senderName: input.senderName?.trim() || null,
+        senderMsisdn: input.senderMsisdn?.trim() || null,
+        receiverName: input.receiverName?.trim() || null,
+        receiverMsisdn: input.receiverMsisdn?.trim() || null,
+      }),
+    });
+    revalidatePath("/parcel-org/labels");
+    return { ok: true };
+  } catch (e) {
+    return toResult(e);
   }
 }

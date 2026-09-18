@@ -1,6 +1,13 @@
 #!/bin/sh
 # esoqo-dev entrypoint — installs deps only when actually needed, then
-# hands off to `pnpm dev`.
+# hands off to a pnpm dev task.
+#
+# Which task is DEV_TASK (default "dev:apps"). The default deliberately
+# does NOT run every workspace: five Next.js Turbopack dev servers plus
+# the core service do not fit in a Docker Desktop VM on a 16GB host —
+# they leak until V8's heap cap, and a global OOM then takes the whole
+# stack down. "dev:apps" runs web, app, admin, store and core-service
+# (see package.json); run the full set with DEV_TASK=dev when needed.
 #
 # Why this exists: docker-compose.yml bind-mounts the whole repo into
 # /app for hot-reload. That bind mount would also overlay every
@@ -29,4 +36,4 @@ else
   echo "==> dependencies up to date, skipping install"
 fi
 
-exec pnpm dev
+exec pnpm "${DEV_TASK:-dev}"

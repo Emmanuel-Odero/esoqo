@@ -1,0 +1,29 @@
+# air — rebuild + restart core-go on save, for the bind-mounted dev
+# source (services/core-go/Dockerfile.dev).
+root = "."
+tmp_dir = "tmp"
+
+[build]
+  # CGO_ENABLED=0 to match the production build, and so the image needs
+  # no gcc — same flags as services/core-go/Dockerfile.
+  cmd = "CGO_ENABLED=0 go build -o ./tmp/core-go ./cmd/api"
+  bin = "./tmp/core-go"
+  include_ext = ["go", "mod", "sum"]
+  exclude_dir = ["tmp", "node_modules", ".git"]
+
+  # Polling, not fsnotify: Docker Desktop's virtiofs/gRPC-FUSE bind
+  # mounts don't reliably deliver inotify events — the same reason the
+  # Node dev service runs CHOKIDAR_USEPOLLING=1/WATCHPACK_POLLING=true.
+  poll = true
+  poll_interval = 500
+
+  # Don't leave the container running a half-compiled binary on a syntax
+  # error; the old process keeps serving until the next good build.
+  stop_on_error = true
+  delay = 400
+
+[log]
+  time = true
+
+[misc]
+  clean_on_exit = true

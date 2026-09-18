@@ -39,7 +39,7 @@ export interface AdminParcelRow {
   IntakeConfirmedAt: string | null;
 }
 
-const FLAGGABLE = new Set(['PICKED_UP', 'IN_TRANSIT']);
+const FLAGGABLE = new Set(['RECEIVED_AT_COUNTER', 'PICKED_UP', 'IN_TRANSIT']);
 
 /**
  * A row here used to show every field a parcel has — 11 columns wide,
@@ -63,10 +63,12 @@ export function ParcelsTable({
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const canManage = canAssign || canCancel || canRefund || canEdit;
 
-  // Only BOOKED parcels can take a collector, so those are the only
-  // ones worth selecting. Offering a checkbox on a delivered parcel
-  // would be offering an action that can only fail.
-  const selectable = canAssign ? parcels.filter((p) => p.Status === 'BOOKED') : [];
+  // Only a parcel still waiting for a collector can take one, so those
+  // are the only ones worth selecting. Offering a checkbox on a
+  // delivered parcel would be offering an action that can only fail.
+  const selectable = canAssign
+    ? parcels.filter((p) => p.Status === 'BOOKED' || p.Status === 'RECEIVED_AT_COUNTER')
+    : [];
   const selectableIds = new Set(selectable.map((p) => p.ID));
   const allSelected = selectable.length > 0 && selectable.every((p) => selected.has(p.ID));
 

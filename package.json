@@ -5,6 +5,7 @@
   "engines": { "node": ">=22.9" },
   "scripts": {
     "dev": "turbo run dev --parallel --filter=!@esoqo/cecf-sage-theme",
+    "dev:apps": "turbo run dev --parallel --filter=@esoqo/web --filter=@esoqo/app --filter=@esoqo/admin --filter=@esoqo/store --filter=@esoqo/core-service",
     "build": "turbo run build",
     "lint": "turbo run lint",
     "typecheck": "turbo run typecheck",

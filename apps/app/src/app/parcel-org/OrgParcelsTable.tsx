@@ -18,6 +18,7 @@ import { assignOrgParcel } from './actions';
 const STATUS_LABEL: Record<string, string> = {
   DRAFT_PENDING_PAYMENT: 'Awaiting payment',
   BOOKED: 'Waiting for a rider',
+  RECEIVED_AT_COUNTER: 'At the station',
   PICKED_UP: 'Picked up',
   IN_TRANSIT: 'On the way',
   FAILED_DELIVERY: 'Delivery attempted',
@@ -100,13 +101,18 @@ function Row({
 }: { parcel: OrgParcelRow; canDispatch: boolean; canSeeEarnings: boolean }) {
   const overdue =
     parcel.slaDeadlineAt
-    && ['PICKED_UP', 'IN_TRANSIT'].includes(parcel.status)
+    && ['RECEIVED_AT_COUNTER', 'PICKED_UP', 'IN_TRANSIT'].includes(parcel.status)
     && new Date(parcel.slaDeadlineAt) < new Date();
 
   return (
     <tr>
       <td>
         <span className="mono" style={{ fontWeight: 700 }}>{parcel.code}</span>
+        {parcel.externalRef && (
+          <span className="sub" style={{ display: 'block' }}>
+            Their #: <span className="mono">{parcel.externalRef}</span>
+          </span>
+        )}
         <span className="sub" style={{ display: 'block' }}>{humanTime(parcel.createdAt)}</span>
       </td>
       <td>
@@ -140,7 +146,7 @@ function Row({
       )}
       {canDispatch && (
         <td style={{ textAlign: 'right' }}>
-          {parcel.status === 'BOOKED' && <AssignButton code={parcel.code} />}
+          {(parcel.status === 'BOOKED' || parcel.status === 'RECEIVED_AT_COUNTER') && <AssignButton code={parcel.code} />}
         </td>
       )}
     </tr>

@@ -3,6 +3,7 @@ import { redirect } from 'next/navigation';
 import { ParcelOrgUnauthorised, getParcelOrgMe } from '@/lib/parcel-org-session';
 import { listOrgLabelBatches, listOrgLabels } from '../actions';
 import { OrgLabelsClient } from './OrgLabelsClient';
+import { LabelLookup } from './LabelLookup';
 
 export const dynamic = 'force-dynamic';
 export const metadata: Metadata = {
@@ -57,6 +58,7 @@ export default async function ParcelOrgLabelsPage(
           </p>
         </div>
       </div>
+      <LabelLookup canManage={me.capabilities.includes('parcelorg.dispatch')} />
       <OrgLabelsClient
         labels={register.labels} counts={register.counts} batches={batches}
         state={activeState}

@@ -12,14 +12,14 @@ import {
 import type { AdminParcelRow } from './ParcelsTable';
 import { ParcelLabelPrint } from './ParcelLabelPrint';
 
-const CANCELLABLE = new Set(['DRAFT_PENDING_PAYMENT', 'BOOKED']);
-const FLAGGABLE = new Set(['PICKED_UP', 'IN_TRANSIT']);
-const EDITABLE = new Set(['DRAFT_PENDING_PAYMENT', 'BOOKED']);
+const CANCELLABLE = new Set(['DRAFT_PENDING_PAYMENT', 'BOOKED', 'RECEIVED_AT_COUNTER']);
+const FLAGGABLE = new Set(['RECEIVED_AT_COUNTER', 'PICKED_UP', 'IN_TRANSIT']);
+const EDITABLE = new Set(['DRAFT_PENDING_PAYMENT', 'BOOKED', 'RECEIVED_AT_COUNTER']);
 // A label only means anything once there's a price/route locked in —
 // same "not while it's still a draft" rule EDITABLE's inverse would
 // suggest, but expressed as "everything past DRAFT" rather than
 // enumerating every later status.
-const LABELABLE = new Set(['BOOKED', 'PICKED_UP', 'IN_TRANSIT', 'DELIVERED']);
+const LABELABLE = new Set(['BOOKED', 'RECEIVED_AT_COUNTER', 'PICKED_UP', 'IN_TRANSIT', 'DELIVERED']);
 
 type Panel = 'edit' | 'assign' | 'cancel' | 'flag' | 'label' | null;
 
@@ -97,7 +97,7 @@ export function ParcelDetailModal({
                     Edit details
                   </button>
                 )}
-                {canAssign && parcel.Status === 'BOOKED' && (
+                {canAssign && (parcel.Status === 'BOOKED' || parcel.Status === 'RECEIVED_AT_COUNTER') && (
                   <button className="btn btn-o btn-sm" onClick={() => setPanel(panel === 'assign' ? null : 'assign')}>
                     <Icon name="truck" size={13} />{parcel.AssignedCollectorName ? 'Reschedule collection' : 'Schedule collection'}
                   </button>

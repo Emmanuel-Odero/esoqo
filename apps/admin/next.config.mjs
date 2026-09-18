@@ -9,6 +9,9 @@ const nextConfig = {
   // through Server Actions here too — see apps/app/next.config.mjs.
   experimental: {
     serverActions: { bodySizeLimit: '11mb' },
+    // Dev memory guard — see apps/web/next.config.mjs.
+    turbopackFileSystemCacheForDev: false,
+    turbopackMemoryLimit: 1024 * 1024 * 1024,
   },
 
   /**

@@ -12,6 +12,7 @@ export const dynamic = 'force-dynamic';
 const STATUS_LABEL: Record<string, string> = {
   DRAFT_PENDING_PAYMENT: 'Draft — pending payment',
   BOOKED: 'Booked',
+  RECEIVED_AT_COUNTER: 'Received at counter',
   PICKED_UP: 'Picked up',
   IN_TRANSIT: 'In transit',
   FAILED_DELIVERY: 'Delivery attempted',

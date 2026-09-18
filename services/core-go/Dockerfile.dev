@@ -1,0 +1,37 @@
+# services/core-go — LOCAL DEV image.
+#
+# The production Dockerfile builds a static binary into a toolchain-free
+# runtime image. That is the wrong shape for development: every code
+# change meant rebuilding the image and recreating the container. This
+# one keeps the Go toolchain and runs `air`, so docker-compose can
+# bind-mount services/core-go and a save hot-rebuilds in place — the
+# same "build the image once, edit forever" contract the Node apps get
+# from Dockerfile.dev.
+#
+# Production is unaffected: render.yaml still builds services/core-go/
+# Dockerfile.
+FROM golang:1.25-alpine
+
+# git: go install / module fetch over the network.
+# ca-certificates: outbound TLS to Postgres/SMS/etc. at runtime.
+RUN apk add --no-cache git ca-certificates
+
+# Pinned, not @latest — a dev image that silently changes tool version
+# on a rebuild is a debugging rabbit hole.
+RUN go install github.com/air-verse/air@v1.61.7
+ENV PATH="/go/bin:${PATH}"
+
+WORKDIR /app
+
+# Warm the module cache into the image. docker-compose mounts a named
+# volume at /go/pkg/mod; an empty named volume seeds from the image, so
+# only the very first run pays for the download.
+COPY services/core-go/go.mod services/core-go/go.sum ./
+RUN go mod download
+
+# The source is bind-mounted by compose at runtime. Copying it too keeps
+# this image runnable on its own (docker run, CI smoke test).
+COPY services/core-go/. .
+
+EXPOSE 4100
+CMD ["air", "-c", ".air.toml"]

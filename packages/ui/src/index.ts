@@ -11,6 +11,10 @@ export {
   type SelectWithOtherOption, type SelectWithOtherProps,
 } from './SelectWithOther';
 export { Notice } from './Notice';
+export {
+  ParcelCapabilityPicker, PARCEL_CAPABILITIES, RIDER_BASELINE,
+  type ParcelCapabilityOption,
+} from './ParcelCapabilities';
 export { Logo } from './Logo';
 export {
   PrintableLabel, PrintStyles, trackingUrlFor,

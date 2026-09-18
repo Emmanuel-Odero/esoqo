@@ -193,6 +193,27 @@ func UpsertPin(ctx context.Context, pool *pgxpool.Pool, partyID, pinHash string)
 	return err
 }
 
+// EnsureEsoqoAccountForStaff finds or creates the Person behind a
+// courier-company staffer's phone number and, when a PIN is supplied,
+// sets their Esoqo PIN credential. That gives a staffer added with a
+// phone a full Esoqo account — they can sign in at /signin (phone + PIN)
+// as well as at the company portal (name + org PIN). Without a phone
+// there is no identifier to sign in with, so the caller keeps the
+// office-only name+PIN login instead. Returns the partyId the
+// parcel_org_staff row links to.
+func EnsureEsoqoAccountForStaff(ctx context.Context, pool *pgxpool.Pool, name, msisdn, pinHash string) (partyID string, err error) {
+	partyID, err = FindOrCreatePersonWithName(ctx, pool, name, msisdn, nil)
+	if err != nil {
+		return "", err
+	}
+	if pinHash != "" {
+		if err := UpsertPin(ctx, pool, partyID, pinHash); err != nil {
+			return "", err
+		}
+	}
+	return partyID, nil
+}
+
 // ErrPersonNotFound mirrors auth-credential.ts's SetPinError('NOT_FOUND') —
 // the PIN-reset flow only ever sets a PIN for a Person that already
 // exists (they proved control of the number via OTP first); it never
