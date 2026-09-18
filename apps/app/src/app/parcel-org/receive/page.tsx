@@ -58,7 +58,7 @@ export default async function FrontDeskPage() {
           </p>
         </div>
       </div>
-      <FrontDeskClient waiting={waiting} />
+      <FrontDeskClient waiting={waiting} orgName={me.org.name} orgLogoUrl={me.org.logoUrl ?? undefined} />
     </>
   );
 }

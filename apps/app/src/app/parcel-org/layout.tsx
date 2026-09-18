@@ -46,6 +46,9 @@ export default async function ParcelOrgLayout({ children }: { children: React.Re
     ...(canManagePricing ? [{ href: '/parcel-org/pricing', label: 'Pricing', icon: 'coins' as const }] : []),
     ...(canManageStations ? [{ href: '/parcel-org/stations', label: 'Stations', icon: 'pin' as const }] : []),
     ...(canManageStaff ? [{ href: '/parcel-org/team', label: 'Team', icon: 'users' as const }] : []),
+    // Everyone's own sign-in and PIN — riders holding a temporary invite
+    // PIN need this more than anyone, so it is never capability-gated.
+    { href: '/parcel-org/security', label: 'Security', icon: 'key' },
   ];
 
   return (

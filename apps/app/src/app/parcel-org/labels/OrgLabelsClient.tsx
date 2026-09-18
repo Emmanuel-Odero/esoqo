@@ -24,19 +24,22 @@ import {
  */
 
 const TABS: { state: string; label: string }[] = [
-  { state: 'blank', label: 'Blank' },
+  { state: 'all', label: 'All' },
+  { state: 'blank', label: 'Empty' },
   { state: 'filled', label: 'Filled in' },
   { state: 'spent', label: 'Used' },
   { state: 'voided', label: 'Withdrawn' },
 ];
 
 export function OrgLabelsClient({
-  labels, counts, batches, state, canManage, orgName,
+  labels, counts, batches, state, canManage, orgName, orgLogoUrl,
 }: {
   labels: OrgLabelRow[]; counts: Record<string, number>;
   batches: OrgLabelBatchRow[]; state: string; canManage: boolean;
   /** The company's own name — printed on every reprint as the brand. */
   orgName: string;
+  /** Company logo — centered in the label header; absent = Esoqo alone. */
+  orgLogoUrl?: string;
 }) {
   // Live filter over the fetched register — the tab is server-side, but
   // finding one code in the current list shouldn't be a round trip.
@@ -53,10 +56,15 @@ export function OrgLabelsClient({
   return (
     <>
       <div className="card" style={{ padding: 16, marginBottom: 16 }}>
-        <p className="sub" style={{ margin: 0 }}>
+        <p className="sub" style={{ margin: '0 0 6px' }}>
+          {counts['blank'] ?? 0} empty · {(counts['filled'] ?? 0) + (counts['spent'] ?? 0)} attached to packages.
           These codes are yours — issued to {orgName} by Esoqo. Nobody else can book a
           parcel against them, and if a pad goes missing you can withdraw the whole
           batch below. Need more? Your Esoqo account manager prints the next pad.
+        </p>
+        <p className="sub" style={{ margin: 0 }}>
+          Only Esoqo PKG-… labels scan. Labels your company printed itself are retired —
+          re-print the Esoqo pad below{orgLogoUrl ? ' with your logo attached' : ' (add your logo via your account manager for branded prints)'}.
         </p>
       </div>
 
@@ -75,7 +83,7 @@ export function OrgLabelsClient({
             }}
           >
             {labels.map((l) => (
-              <PrintableLabel key={l.code} code={l.code} sig={l.sig || undefined} orgName={orgName} />
+              <PrintableLabel key={l.code} code={l.code} sig={l.sig || undefined} orgName={orgName} orgLogoUrl={orgLogoUrl} />
             ))}
           </div>
           <PrintStyles />

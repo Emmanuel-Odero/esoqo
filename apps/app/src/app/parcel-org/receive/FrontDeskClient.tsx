@@ -1,10 +1,12 @@
 'use client';
 
-import { useState, useTransition } from 'react';
+import { useEffect, useRef, useState, useTransition } from 'react';
 import { Icon, PrintableLabel, PrintStyles } from '@esoqo/ui';
 import { useAnnounce } from '@esoqo/a11y';
+import { extractParcelCode } from '@esoqo/domain';
 import type { OrgParcelRow } from '@/lib/parcel-org-session';
-import { receiveWalkInParcel, settleCounterParcel } from '../actions';
+import { receiveWalkInParcel, resolveOrgLabel, settleCounterParcel } from '../actions';
+import { ScanButton } from '../ScanButton';
 
 /**
  * The front desk's own worklist plus a manual "type the code" entry —
@@ -13,12 +15,19 @@ import { receiveWalkInParcel, settleCounterParcel } from '../actions';
  * code to hand over, so receiving isn't blocked on this list refreshing
  * first.
  */
-export function FrontDeskClient({ waiting }: { waiting: OrgParcelRow[] }) {
+export function FrontDeskClient({ waiting, orgName, orgLogoUrl }: { waiting: OrgParcelRow[]; orgName: string; orgLogoUrl?: string }) {
   const [manualCode, setManualCode] = useState('');
   const [justReceived, setJustReceived] = useState<string | null>(null);
+  // QR signature for the just-received label, so its reprint stays
+  // genuine. Resolved after receipt; absent = still printable, just
+  // unverified until re-resolved.
+  const [justReceivedSig, setJustReceivedSig] = useState<string | undefined>(undefined);
   const [error, setError] = useState<string | null>(null);
   const [pending, startTransition] = useTransition();
   const announce = useAnnounce();
+  // Focused on mount so a scanner gun types straight into the box.
+  const inputRef = useRef<HTMLInputElement>(null);
+  useEffect(() => { inputRef.current?.focus(); }, []);
 
   // The fare for the box that was just received. Separate state from the
   // receipt itself because they're separate facts on the server too (see
@@ -36,14 +45,23 @@ export function FrontDeskClient({ waiting }: { waiting: OrgParcelRow[] }) {
   function receive(reference: string) {
     setError(null);
     startTransition(async () => {
-      const res = await receiveWalkInParcel(reference);
+      // Camera QRs decode to the tracking URL, guns to the bare code —
+      // accept either; the server resolves both.
+      const clean = extractParcelCode(reference.trim()) || reference.trim();
+      const res = await receiveWalkInParcel(clean);
       if (!res.ok) { setError(res.error); return; }
       setJustReceived(res.code);
+      setJustReceivedSig(undefined);
       setManualCode('');
       setFare('');
       setSettled(false);
       setFareError(null);
       announce(`${res.code} received`, 'assertive');
+      // Resolve the signature in the background so the reprint below is
+      // genuine with company branding (or Esoqo alone when no logo).
+      void resolveOrgLabel(res.code).then((r) => {
+        if (r.ok && r.label.sig) setJustReceivedSig(r.label.sig);
+      });
     });
   }
 
@@ -66,14 +84,15 @@ export function FrontDeskClient({ waiting }: { waiting: OrgParcelRow[] }) {
     <>
       <div className="card" style={{ padding: 16, marginBottom: 16 }}>
         <label className="sub" htmlFor="manual-code" style={{ display: 'block', marginBottom: 6 }}>
-          Or type/scan the sender&apos;s ticket number
+          Or scan / type the sender&apos;s ticket number
         </label>
         <p className="sub" style={{ margin: '0 0 6px', fontSize: '.8rem' }}>
-          A walk-in sender has a TCK- ticket number, not a tracking code — either works here.
+          Camera, scanner gun, or keyboard — a walk-in sender has a TCK- ticket number, not a
+          tracking code. Click the box, then scan your gun and press Enter.
         </p>
         <div className="row" style={{ gap: 8 }}>
-          <input id="manual-code" className="mono" value={manualCode}
-            placeholder="TCK-XXXXXX"
+          <input id="manual-code" ref={inputRef} className="mono" value={manualCode}
+            placeholder="TCK-XXXXXX — click here, then scan"
             onChange={(e) => setManualCode(e.target.value.toUpperCase())}
             onKeyDown={(e) => e.key === 'Enter' && manualCode.trim() && receive(manualCode.trim())}
             style={{ flex: 1, padding: '8px 10px', border: '1.5px solid var(--line)', borderRadius: 6 }} />
@@ -81,6 +100,7 @@ export function FrontDeskClient({ waiting }: { waiting: OrgParcelRow[] }) {
             onClick={() => receive(manualCode.trim())}>
             {pending ? 'Receiving…' : 'Confirm receipt'}
           </button>
+          <ScanButton onScan={(scanned) => receive(scanned)} />
         </div>
         {error && <p role="alert" style={{ color: 'var(--red)', margin: '8px 0 0' }}>{error}</p>}
       </div>
@@ -91,7 +111,7 @@ export function FrontDeskClient({ waiting }: { waiting: OrgParcelRow[] }) {
             {justReceived} received — the sender and receiver have been texted.
           </strong>
           <div className="print-modal-escape">
-            <PrintableLabel code={justReceived} />
+            <PrintableLabel code={justReceived} sig={justReceivedSig} orgName={orgName} orgLogoUrl={orgLogoUrl} />
           </div>
 
           {/* Pay-at-counter fare. Nothing priced this box online — the

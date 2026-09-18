@@ -1,9 +1,11 @@
 'use client';
 
-import { useState, useTransition } from 'react';
-import { Icon } from '@esoqo/ui';
+import { useEffect, useRef, useState, useTransition } from 'react';
+import { Icon, PrintableLabel, PrintStyles } from '@esoqo/ui';
+import { extractParcelCode } from '@esoqo/domain';
 import type { OrgParcelLabel } from '@/lib/parcel-org-session';
 import { attachOrgLabelInfo, resolveOrgLabel } from '../actions';
+import { ScanButton } from '../ScanButton';
 
 const inputStyle: React.CSSProperties = {
   width: '100%', marginTop: 4, padding: '8px 10px',
@@ -25,23 +27,85 @@ const STATE_LABEL: Record<string, string> = {
  * notes form below offers itself instead of a second trip to a
  * different screen.
  */
-export function LabelLookup({ canManage }: { canManage: boolean }) {
+export function LabelLookup({ canManage, orgName, orgLogoUrl }: { canManage: boolean; orgName: string; orgLogoUrl?: string }) {
   const [code, setCode] = useState('');
   const [label, setLabel] = useState<OrgParcelLabel | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [pending, startTransition] = useTransition();
+  // Live-search state: typing resolves the label under the cursor after
+  // a short pause, so results appear as the code is entered. The
+  // sequence guard drops out-of-order responses, and lastRequested stops
+  // the debounced effect re-fetching a code an explicit lookup (Enter,
+  // button, scanner) already asked for.
+  const [liveSearching, setLiveSearching] = useState(false);
+  const seq = useRef(0);
+  const lastRequested = useRef('');
+  // Focused on mount so a scanner gun types straight into the box —
+  // via ref rather than autoFocus (same UX, lint-clean).
+  const inputRef = useRef<HTMLInputElement>(null);
+  useEffect(() => { inputRef.current?.focus(); }, []);
 
-  function lookup() {
+  function cleanOf(raw: string): string {
+    return (extractParcelCode(raw.trim()) || raw.trim()).toUpperCase();
+  }
+
+  function requestLookup(clean: string, showError: boolean) {
+    lastRequested.current = clean;
+    const mySeq = ++seq.current;
+    setLiveSearching(true);
     setError(null);
-    setLabel(null);
-    const ref = code.trim();
-    if (!ref) return;
-    startTransition(async () => {
-      const res = await resolveOrgLabel(ref);
-      if (!res.ok) { setError(res.error); return; }
+    void resolveOrgLabel(clean).then((res) => {
+      if (seq.current !== mySeq) return;
+      setLiveSearching(false);
+      if (!res.ok) {
+        // Partial codes miss constantly mid-type — only surface the
+        // failure once the entry looks complete (PKG- + 6), or when the
+        // person explicitly asked via Enter/button/scan.
+        if (showError) setError(res.error);
+        setLabel(null);
+        return;
+      }
       setLabel(res.label);
     });
   }
+
+  function lookup(ref: string) {
+    // Accept a scanned tracking URL as well as a typed bare code —
+    // camera QRs decode to the URL, guns to the code.
+    const clean = cleanOf(ref);
+    if (!clean) return;
+    setCode(clean);
+    startTransition(() => {
+      requestLookup(clean, true);
+    });
+  }
+
+  // Live search: resolve as the code is typed (debounced, minimum 3
+  // chars so single keystrokes don't fan out into requests).
+  useEffect(() => {
+    const clean = cleanOf(code);
+    if (clean.length === 0) {
+      lastRequested.current = '';
+      setLabel(null);
+      setError(null);
+      setLiveSearching(false);
+      return;
+    }
+    if (clean.length < 3) {
+      if (label && !label.code.startsWith(clean)) {
+        lastRequested.current = '';
+        setLabel(null);
+        setError(null);
+      }
+      setLiveSearching(false);
+      return;
+    }
+    if (label && label.code === clean) return;
+    if (clean === lastRequested.current) return;
+    const t = window.setTimeout(() => requestLookup(clean, clean.length >= 10), 350);
+    return () => window.clearTimeout(t);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [code]);
 
   const writable = label && (label.state === 'blank' || label.state === 'filled') && canManage;
 
@@ -50,17 +114,22 @@ export function LabelLookup({ canManage }: { canManage: boolean }) {
       <label className="sub" htmlFor="label-scan" style={{ display: 'block', marginBottom: 6 }}>
         Scan or type a label code
       </label>
+      <p className="sub" style={{ margin: '0 0 8px', fontSize: '.8rem' }}>
+        Camera, scanner gun, or keyboard — results appear as you type. A gun just types
+        into the box below, then Enter.
+      </p>
       <div className="row" style={{ gap: 8 }}>
         <input
-          id="label-scan" className="mono" value={code}
-          placeholder="PKG-XXXXXX"
+          id="label-scan" ref={inputRef} className="mono" value={code}
+          placeholder="PKG-XXXXXX — click here, then scan your gun"
           onChange={(e) => setCode(e.target.value.toUpperCase())}
-          onKeyDown={(e) => e.key === 'Enter' && lookup()}
+          onKeyDown={(e) => e.key === 'Enter' && lookup(code)}
           style={{ flex: 1, padding: '8px 10px', border: '1.5px solid var(--line)', borderRadius: 6 }}
         />
-        <button className="btn btn-p btn-sm" disabled={pending || !code.trim()} onClick={lookup}>
-          {pending ? 'Looking up…' : 'Look up'}
+        <button className="btn btn-p btn-sm" disabled={(pending || liveSearching) || !code.trim()} onClick={() => lookup(code)}>
+          {pending || liveSearching ? 'Looking up…' : 'Look up'}
         </button>
+        <ScanButton onScan={(scanned) => lookup(scanned)} />
       </div>
       {error && <p role="alert" style={{ color: 'var(--red)', margin: '8px 0 0' }}>{error}</p>}
 
@@ -91,6 +160,18 @@ export function LabelLookup({ canManage }: { canManage: boolean }) {
               {label.parcelStatus && <span className="sub"> · {label.parcelStatus.replace(/_/g, ' ').toLowerCase()}</span>}
             </p>
           )}
+          {/* Reprint this exact sticker with company branding — the
+              resolved row carries its signature, so the QR stays
+              genuine. Without a logo on file this prints Esoqo alone. */}
+          <div style={{ marginTop: 12 }}>
+            <PrintableLabel code={label.code} sig={label.sig || undefined} orgName={orgName} orgLogoUrl={orgLogoUrl} />
+            <div style={{ display: 'flex', gap: 8, marginTop: 8 }}>
+              <button className="btn btn-o btn-sm" onClick={() => window.print()}>
+                <Icon name="print" size={13} />Print this label
+              </button>
+            </div>
+            <PrintStyles />
+          </div>
           {writable && label && (
             <AttachLabelForm code={label.code} initial={label} onSaved={(refreshed) => setLabel(refreshed)} />
           )}
