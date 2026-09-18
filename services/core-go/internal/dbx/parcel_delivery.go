@@ -357,8 +357,8 @@ func HoldParcelAtAgent(ctx context.Context, pool *pgxpool.Pool, code, agentID, b
 	}
 	if newHolder != byPartyID {
 		if _, err := tx.Exec(ctx, `
-			INSERT INTO parcel_handoff (id, "parcelId", "fromPartyId", "toPartyId", "createdAt")
-			VALUES (gen_random_uuid(), $1, $2, $3, now())`, parcelID, byPartyID, newHolder); err != nil {
+			INSERT INTO parcel_handoff (id, "parcelId", "fromPartyId", "toPartyId", "createdAt", status)
+			VALUES (gen_random_uuid(), $1, $2, $3, now(), 'HELD_AT_AGENT')`, parcelID, byPartyID, newHolder); err != nil {
 			return nil, err
 		}
 	}
@@ -396,7 +396,7 @@ func ReturnParcelToSender(ctx context.Context, pool *pgxpool.Pool, code, byParty
 	if status == "DELIVERED" {
 		return &ParcelError{"ALREADY_DELIVERED", "This parcel has already been delivered"}
 	}
-	if status != "FAILED_DELIVERY" && status != "HELD_AT_AGENT" && status != "IN_TRANSIT" {
+	if status != "FAILED_DELIVERY" && status != "HELD_AT_AGENT" && status != "IN_TRANSIT" && status != "RECEIVED_AT_COUNTER" {
 		return &ParcelError{"BAD_INPUT", "Only a parcel that couldn't be delivered can be returned"}
 	}
 	if !isStaff && (currentHolder == nil || *currentHolder != byPartyID) {

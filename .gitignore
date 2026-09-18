@@ -10,6 +10,7 @@ build/
 out/
 .turbo/
 target/          # Rust (services/ledger, services/channels)
+services/core-go/tmp/   # air's dev rebuild output
 
 # ─── PHP (services/cecf-wordpress) ────────────────────────
 vendor/
@@ -68,3 +69,9 @@ next-env.d.ts
 # Unanchored — every app/service gets its own <LOCAL_STORAGE_DIR>/.data
 # (see packages/db/src/storage.ts), not just one at the repo root.
 .data/
+
+# ─── Flutter ────────────────────────────────────────────
+# The tracked Flutter app (mobile/esoqo_app) carries its own .gitignore.
+# mobile/esoko_app is a stray, misspelled Flutter workspace that only ever
+# held generated scaffolding — never commit its build output.
+mobile/esoko_app/

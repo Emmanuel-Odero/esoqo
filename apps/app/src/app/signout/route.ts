@@ -29,9 +29,9 @@ export async function POST(request: NextRequest) {
   jar.delete(SESSION_COOKIE);
 
   // 303, not next/navigation's redirect(): that issues a 307, which
-  // preserves the method — the browser would POST to /join and get a
+  // preserves the method — the browser would POST to /signin and get a
   // 405. 303 is the status that turns a POST into a following GET.
-  return NextResponse.redirect(new URL('/join', request.url), 303);
+  return NextResponse.redirect(new URL('/signin', request.url), 303);
 }
 
 /**

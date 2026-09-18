@@ -90,6 +90,16 @@ class _ParcelsHubScreenState extends ConsumerState<ParcelsHubScreen> {
   // starting/stopping the timer itself) — simpler than tearing a Timer
   // down and rebuilding it on every tab switch, and the cost of a
   // to-nobody tick every 30s when the tab isn't open is negligible.
+  //
+  // The loop fires on Holding AND Nearby, not just Nearby: pings are
+  // what the public tracking page's live map reads (see dbx
+  // GetParcelCourierPosition — the current holder's newest ping is a
+  // parcel's position). A courier browsing Nearby is usually *not*
+  // carrying anything yet; a courier on Holding has the parcel in their
+  // bag right now, which is exactly when a sender/receiver watching the
+  // tracker wants the dot to move. Sending stays excluded — that's the
+  // sender role, not a courier with custody, and pinging from there
+  // would publish location for no parcel's benefit.
   Position? _position;
   bool _locating = false;
   String? _locationError;
@@ -100,7 +110,7 @@ class _ParcelsHubScreenState extends ConsumerState<ParcelsHubScreen> {
   void initState() {
     super.initState();
     _pingTimer = Timer.periodic(const Duration(seconds: 30), (_) {
-      if (_tab == 2 && _position != null) _postPing(_position!);
+      if ((_tab == 1 || _tab == 2) && _position != null) _postPing(_position!);
     });
   }
 

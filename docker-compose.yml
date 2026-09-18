@@ -189,6 +189,10 @@ services:
     environment:
       CI: "true"
       APP_ENV: "${APP_ENV:-development}"
+      # Which pnpm dev task the entrypoint runs. "dev:apps" (the default)
+      # is the lean set — web, app, admin, store, core-service — chosen
+      # to fit the VM; DEV_TASK=dev runs every workspace including jamii.
+      DEV_TASK: "${DEV_TASK:-dev:apps}"
       DATABASE_URL: postgresql://esoko:esoko_dev_only@pgbouncer:5432/esoko?pgbouncer=true&connection_limit=10
       DIRECT_DATABASE_URL: postgresql://esoko:esoko_dev_only@postgres:5432/esoko
       REDIS_URL: redis://redis:6379
@@ -200,11 +204,26 @@ services:
       # rather than replacing the defaults so :3004 direct still works too.
       JAMII_PRIMARY_HOSTS: "jamii.esoko.test,ourjamii.co.ke,localhost,127.0.0.1"
       NODE_ENV: development
+      # SMS_PROVIDER is passed through so .env can point the Node apps
+      # at the local mock-sms catcher (SMS_PROVIDER=mock → localhost:8026)
+      # the same way core-go's SMS_TEST_ENV does. Development otherwise
+      # forces console (see packages/auth/src/sms.ts), so this only ever
+      # opts IN to the catcher; it can't reach a real gateway from here.
+      SMS_PROVIDER: "${SMS_PROVIDER:-console}"
+      SMS_SENDER_ID: "${SMS_SENDER_ID:-ESOQO}"
       SMS_MOCK_URL: http://mock-sms:8080
       SMTP_HOST: mailhog
       SMTP_PORT: "1025"
       CHOKIDAR_USEPOLLING: "1"
       WATCHPACK_POLLING: "true"
+      # Not every workspace runs by default (see DEV_TASK below). On a
+      # 16GB host the Docker VM is ~11GB, and four or five Turbopack dev
+      # servers each leaking up to a multi-GB V8 heap is enough to OOM
+      # the VM and take the whole stack down. Running a smaller set is
+      # what actually keeps this stable; this cap is a secondary guard
+      # so a single server can't ram the VM ceiling and get a neighbour
+      # OOM-killed (the quiet way ports used to go dark with no log).
+      NODE_OPTIONS: "--max-old-space-size=2048"
     volumes:
       - .:/app
       - node_modules_root:/app/node_modules
@@ -245,11 +264,24 @@ services:
   core-go:
     build:
       context: .
-      dockerfile: services/core-go/Dockerfile
+      # Dev image (Go toolchain + air), not the static production
+      # Dockerfile: the source below is bind-mounted and hot-rebuilds on
+      # save, so a core-go edit never needs `up --build` again. Prod is
+      # unaffected — render.yaml still builds services/core-go/Dockerfile.
+      dockerfile: services/core-go/Dockerfile.dev
     container_name: core-go
     restart: unless-stopped
     ports:
       - "4100:4100"
+    volumes:
+      # Source, live. Air rebuilds and restarts the binary in place.
+      - ./services/core-go:/app
+      # Module/build caches off the bind mount, same reasoning the Node
+      # apps' node_modules/.next volumes get: the host's pkg dir is empty
+      # or the wrong arch, and rebuilding the world on every restart is
+      # the thing this setup exists to avoid.
+      - go_mod_cache:/go/pkg/mod
+      - go_build_cache:/root/.cache/go-build
     environment:
       APP_ENV: "${APP_ENV:-development}"
       PORT: "4100"
@@ -397,6 +429,8 @@ volumes:
   node_modules_config:
   node_modules_payments:
   node_modules_core_service:
+  go_mod_cache:
+  go_build_cache:
   next_cache_web:
   next_cache_app:
   next_cache_admin:

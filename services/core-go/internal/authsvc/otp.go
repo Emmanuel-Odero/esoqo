@@ -57,10 +57,30 @@ const (
 )
 
 const (
-	otpTTL         = 10 * time.Minute
+	// OtpTTL is how long an issued code stays valid. Exported so callers
+	// that answer a request WITHOUT sending (see the public endpoint's
+	// account gate) can echo a truthful expiry instead of inventing one.
+	OtpTTL         = 10 * time.Minute
 	otpMaxAttempts = 5
 	smsCostKES     = 0.8 // per segment — replace with the real aggregator rate
 )
+
+// publicOtpPurposes — the only purposes an unauthenticated caller may
+// request through POST /v1/auth/otp. The parcel, staff and step-up
+// purposes are issued server-side only, where the recipient is resolved
+// from a parcel/org/session record first; accepting them here would let
+// anyone mint a code for an arbitrary number under a purpose those flows
+// trust. Keeping this list closed is what stops the public endpoint from
+// becoming a general-purpose SMS sender.
+var publicOtpPurposes = map[OtpPurpose]bool{
+	OtpRegistration: true,
+	OtpSignIn:       true,
+	OtpPinReset:     true,
+}
+
+// IsPublicOtpPurpose reports whether purpose may be requested by an
+// unauthenticated caller on /v1/auth/otp.
+func IsPublicOtpPurpose(p OtpPurpose) bool { return publicOtpPurposes[p] }
 
 var kenyanMobileRe = regexp.MustCompile(`^(7\d{8}|1[01]\d{7})$`)
 
@@ -173,12 +193,12 @@ func (s *OtpService) IssueOtp(ctx context.Context, msisdn string, purpose OtpPur
 		return nil, err
 	}
 	code := fmt.Sprintf("%06d", n.Int64())
-	expiresAt := time.Now().Add(otpTTL)
+	expiresAt := time.Now().Add(OtpTTL)
 
 	pipe := s.rdb.TxPipeline()
 	k := otpKey(msisdn, purpose)
 	pipe.HSet(ctx, k, "hash", s.hashCode(code, msisdn), "attempts", 0)
-	pipe.Expire(ctx, k, otpTTL)
+	pipe.Expire(ctx, k, OtpTTL)
 	pipe.Incr(ctx, sendCountKey)
 	pipe.Expire(ctx, sendCountKey, time.Hour)
 	// The spend reservation was already taken above — incrementing again

@@ -131,6 +131,15 @@ func (s *Server) Router() *gin.Engine {
 		v1.GET("/me/tickets", s.authRequired(), s.handleListMyBookings)
 		v1.GET("/me/orgs", s.authRequired(), s.handleListMyOrgs)
 		v1.GET("/me/org-grants", s.authRequired(), s.handleListMyOrgGrants)
+		// The subject-side counterpart to /me/orgs (ticketing companies
+		// they own): the courier companies they are staff of, so a
+		// shipping company an admin added them to actually shows up on
+		// their dashboard instead of only in an invite text.
+		v1.GET("/me/parcel-orgs", s.authRequired(), s.handleListMyParcelOrgs)
+		// One-click entry: mints the company-scoped session from the
+		// person's own, after checking they hold an active staff row on
+		// that company.
+		v1.POST("/me/parcel-orgs/activate", s.authRequired(), s.handleActivateParcelOrg)
 		v1.POST("/org-context/activate/request", s.authRequired(), s.handleOrgContextActivateRequest)
 		v1.POST("/org-context/activate/verify", s.authRequired(), s.handleOrgContextActivateVerify)
 		v1.POST("/org-context/deactivate", s.authRequired(), s.handleOrgContextDeactivate)
@@ -191,6 +200,10 @@ func (s *Server) Router() *gin.Engine {
 		v1.POST("/fleet/trips/:id/close", s.authRequired(), s.handleCloseTrip)
 		v1.POST("/fleet/trips/:id/pings", s.authRequired(), s.handlePostPing)
 		v1.GET("/fleet/orgs/:orgId/positions", s.authRequired(), s.handleLatestPositions)
+		// The manager console's header + live map: one overview roll-up,
+		// and the ordered recent pings behind the map's route lines.
+		v1.GET("/fleet/orgs/:orgId/overview", s.authRequired(), s.handleFleetOverview)
+		v1.GET("/fleet/orgs/:orgId/trails", s.authRequired(), s.handleActiveTrails)
 		v1.POST("/fleet/trips/:id/declare", s.authRequired(), s.handleDeclare)
 		v1.GET("/fleet/trips/:id/collections", s.authRequired(), s.handleTripCollections)
 		v1.GET("/fleet/my-trip", s.authRequired(), s.handleMyActiveTrip)
@@ -290,7 +303,14 @@ func (s *Server) Router() *gin.Engine {
 		// Everything below reads its org from the session, never the
 		// request — that is the whole tenancy boundary.
 		v1.GET("/parcel-orgs/me", s.authRequired(), s.handleGetMyParcelOrg)
+		// The company's own live dispatch: rider dots, parcels needing
+		// a rider or running late, stations.
+		v1.GET("/parcel-orgs/me/live", s.authRequired(), s.handleGetOrgLive)
 		v1.GET("/parcel-orgs/me/parcels", s.authRequired(), s.handleListMyOrgParcels)
+		// Register a parcel the company already tracks in another system,
+		// so it can be managed and tracked here too — see
+		// handleImportOrgParcel.
+		v1.POST("/parcel-orgs/me/parcels", s.authRequired(), s.handleImportOrgParcel)
 		v1.POST("/parcel-orgs/me/parcels/:code/assign", s.authRequired(), s.handleAssignOrgParcel)
 		v1.POST("/parcel-orgs/me/cod/remit", s.authRequired(), s.handleOrgRemitCod)
 		// A company's own label stock — minting, the register, and
@@ -299,10 +319,23 @@ func (s *Server) Router() *gin.Engine {
 		// admin-side label routes.
 		v1.POST("/parcel-orgs/me/labels/generate", s.authRequired(), s.handleOrgGenerateLabels)
 		v1.GET("/parcel-orgs/me/labels", s.authRequired(), s.handleOrgListLabelRegister)
+		// Scan/lookup a code against the company's own stock, and attach
+		// field notes to a printed label. The static "info" segment is
+		// load-bearing: see handleAttachOrgLabelInfo's own comment.
+		v1.GET("/parcel-orgs/me/labels/resolve", s.authRequired(), s.handleResolveOrgLabel)
+		v1.POST("/parcel-orgs/me/labels/info/:code", s.authRequired(), s.handleAttachOrgLabelInfo)
 		v1.GET("/parcel-orgs/me/labels/batches", s.authRequired(), s.handleOrgListLabelBatches)
 		v1.POST("/parcel-orgs/me/labels/batches/:id/void", s.authRequired(), s.handleOrgVoidLabelBatch)
 		v1.GET("/parcel-orgs/me/staff", s.authRequired(), s.handleListMyOrgStaff)
 		v1.POST("/parcel-orgs/me/staff", s.authRequired(), s.handleUpsertMyOrgStaff)
+		v1.GET("/parcel-orgs/me/stations", s.authRequired(), s.handleListMyOrgStations)
+		v1.POST("/parcel-orgs/me/stations", s.authRequired(), s.handleCreateMyOrgStation)
+		v1.GET("/parcel-orgs/me/stations/:id", s.authRequired(), s.handleGetMyOrgStation)
+		v1.PATCH("/parcel-orgs/me/stations/:id", s.authRequired(), s.handleUpdateMyOrgStation)
+		// Station management: name the member who runs it, and post
+		// roster members to it.
+		v1.POST("/parcel-orgs/me/stations/:id/manager", s.authRequired(), s.handleSetMyOrgStationManager)
+		v1.POST("/parcel-orgs/me/stations/:id/members", s.authRequired(), s.handleAssignMyOrgStationMember)
 		v1.GET("/parcel-orgs/me/pricing", s.authRequired(), s.handleListMyOrgPricing)
 		v1.POST("/parcel-orgs/me/pricing", s.authRequired(), s.handleUpsertMyOrgPricing)
 		v1.POST("/parcels/:code/price", s.handleSetParcelPrice)
@@ -315,6 +348,7 @@ func (s *Server) Router() *gin.Engine {
 		v1.GET("/parcels/:code/label", s.authRequired(), s.handleGetParcelLabel)
 		v1.POST("/parcels/:code/handoff", s.authRequired(), s.handleScanParcelHandoff)
 		v1.POST("/parcels/:code/deliver", s.authRequired(), s.handleDeliverParcel)
+		v1.POST("/parcels/:code/collect", s.authRequired(), s.handleDeliverParcel)
 		// The receiver-OTP alternative to the printed delivery code —
 		// see dbx.RequestParcelDeliveryOtp's own comment.
 		v1.POST("/parcels/:code/deliver/request-otp", s.authRequired(), s.handleRequestParcelDeliveryOtp)
@@ -360,6 +394,18 @@ func (s *Server) Router() *gin.Engine {
 		v1.GET("/admin/parcels", s.authRequired(), s.handleAdminListParcels)
 		v1.GET("/admin/parcels/stats", s.authRequired(), s.handleAdminParcelStats)
 		v1.GET("/admin/parcels/collectors", s.authRequired(), s.handleAdminSearchCollectors)
+		// Operational scan workflows live under their own static namespace;
+		// this avoids colliding with the existing /admin/parcels/:id routes.
+		v1.POST("/admin/parcel-ops/:code/intake", s.authRequired(), s.handleCaptureParcelIntake)
+		v1.POST("/admin/parcel-ops/:code/reject", s.authRequired(), s.handleRejectParcelAtDropoff)
+		v1.GET("/admin/parcel-ops/queue", s.authRequired(), s.handleListParcelOpsQueue)
+		v1.POST("/admin/parcel-ops/shipments", s.authRequired(), s.handleCreateParcelShipment)
+		v1.GET("/admin/parcel-ops/shipments/:id", s.authRequired(), s.handleGetParcelShipment)
+		v1.POST("/admin/parcel-ops/shipments/:id/start", s.authRequired(), s.handleStartParcelShipment)
+		v1.POST("/admin/parcel-ops/shipments/:id/load/:code", s.authRequired(), s.handleLoadParcelToShipment)
+		v1.POST("/admin/parcel-ops/shipments/:id/offload/:code", s.authRequired(), s.handleOffloadParcelFromShipment)
+		v1.POST("/admin/parcel-ops/shipments/:id/finish", s.authRequired(), s.handleFinishParcelShipment)
+		v1.POST("/admin/parcel-ops/:code/pickup-reminder", s.authRequired(), s.handleSendPickupReminder)
 		v1.POST("/admin/parcels/:id/assign", s.authRequired(), s.handleAssignParcelCollector)
 		// Registered as a sibling of /admin/parcels rather than under
 		// :id, for the same gin static-vs-param reason the courier
@@ -415,13 +461,17 @@ func (s *Server) Router() *gin.Engine {
 		// seeding each one's first manager so somebody there can sign in
 		// and create the rest of the team.
 		v1.GET("/admin/parcels/orgs", s.authRequired(), s.handleAdminListParcelOrgs)
+		v1.GET("/admin/parcels/orgs/:id", s.authRequired(), s.handleAdminGetParcelOrg)
 		v1.GET("/admin/parcels/enterprises", s.authRequired(), s.handleAdminSearchEnterprises)
 		v1.POST("/admin/parcels/enterprises", s.authRequired(), s.handleAdminCreateEnterprise)
+		// People picker for a company's team — "add an existing person".
+		v1.GET("/admin/parcels/people", s.authRequired(), s.handleAdminSearchPeople)
 		v1.POST("/admin/parcels/orgs", s.authRequired(), s.handleAdminCreateParcelOrg)
 		v1.POST("/admin/parcels/:id/org", s.authRequired(), s.handleAdminAssignParcelOrg)
 		v1.PATCH("/admin/parcels/orgs/:id", s.authRequired(), s.handleAdminUpdateParcelOrg)
 		v1.GET("/admin/parcels/orgs/:id/staff", s.authRequired(), s.handleAdminListParcelOrgStaff)
 		v1.POST("/admin/parcels/orgs/:id/staff", s.authRequired(), s.handleAdminUpsertParcelOrgStaff)
+		v1.POST("/admin/parcels/orgs/:id/staff/:staffId/issue-id", s.authRequired(), s.handleAdminIssueParcelOrgStaffID)
 		// Pickup points and the coverage rate card — siblings of zones
 		// above, same parcels.read/parcels.edit split.
 		v1.GET("/admin/parcels/agents", s.authRequired(), s.handleAdminListParcelAgents)

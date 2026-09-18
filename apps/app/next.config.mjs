@@ -11,6 +11,9 @@ const nextConfig = {
   // crashing the whole page instead of returning a handled error.
   experimental: {
     serverActions: { bodySizeLimit: '11mb' },
+    // Dev memory guard — see apps/web/next.config.mjs.
+    turbopackFileSystemCacheForDev: false,
+    turbopackMemoryLimit: 1024 * 1024 * 1024,
   },
 
   /**
@@ -32,6 +35,17 @@ const nextConfig = {
         { key: 'Cross-Origin-Opener-Policy', value: 'same-origin' },
       ],
     }];
+  },
+
+  /**
+   * The self-serve /join registration flow is disabled for now — the app
+   * is sign-in only. The route itself has been removed from the app
+   * router, and this forwards any surviving link (an SMS, a bookmark,
+   * the marketing site) to /signin rather than a 404. Delete this entry
+   * and restore the join route to bring registration back.
+   */
+  async redirects() {
+    return [{ source: '/join', destination: '/signin', permanent: false }];
   },
 };
 export default nextConfig;

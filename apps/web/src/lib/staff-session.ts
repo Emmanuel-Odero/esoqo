@@ -2,7 +2,7 @@ import { cookies } from 'next/headers';
 
 /**
  * A parcel-company staffer's own session, held on this otherwise fully
- * guest, no-auth site — see send-parcel/actions.ts's own comment on why
+ * guest, no-auth site — see parcels/actions.ts's own comment on why
  * that file never reads a cookie. This is deliberately a separate,
  * narrow addition: the public tracking page gained a "staff? sign in to
  * scan" panel (see track/StaffPanel.tsx), and a typed Esoqo ID alone is

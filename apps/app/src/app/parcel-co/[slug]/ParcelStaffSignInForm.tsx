@@ -6,6 +6,7 @@ import { parcelStaffSignIn } from './actions';
 
 export function ParcelStaffSignInForm({ orgSlug }: { orgSlug: string }) {
   const [name, setName] = useState('');
+  const [esokoId, setEsokoId] = useState('');
   const [pin, setPin] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [pending, startTransition] = useTransition();
@@ -15,7 +16,7 @@ export function ParcelStaffSignInForm({ orgSlug }: { orgSlug: string }) {
     startTransition(async () => {
       // A successful sign-in redirects from the server action and never
       // returns — only the failure case produces a value to render.
-      const result = await parcelStaffSignIn(orgSlug, { name, pin });
+      const result = await parcelStaffSignIn(orgSlug, { name, esokoId, pin });
       if (result && !result.ok) setError(result.error);
     });
   }
@@ -23,9 +24,9 @@ export function ParcelStaffSignInForm({ orgSlug }: { orgSlug: string }) {
   return (
     <>
       <div className="fld">
-        <label className="lab" htmlFor="ps-name">Your name</label>
+        <label className="lab" htmlFor="ps-name">Your name or Esoqo ID</label>
         <input
-          className="inp" id="ps-name" autoComplete="off" placeholder="e.g. Wanjiku"
+          className="inp" id="ps-name" autoComplete="off" placeholder="Name or ESK-1234-KE"
           value={name} onChange={(e) => setName(e.target.value)}
         />
       </div>
@@ -40,7 +41,7 @@ export function ParcelStaffSignInForm({ orgSlug }: { orgSlug: string }) {
       {error && <p className="err" role="alert"><Icon name="alert-circle" size={14} />{error}</p>}
       <button
         type="button" className="btn btn-p btn-block" style={{ marginTop: 6 }}
-        onClick={submit} disabled={pending || !name.trim() || pin.length < 4}
+        onClick={submit} disabled={pending || (!name.trim() && !esokoId.trim()) || pin.length < 4}
       >
         {pending ? 'Signing in…' : 'Sign in'}
       </button>

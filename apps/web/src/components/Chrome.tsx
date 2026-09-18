@@ -13,7 +13,7 @@ export const NAV = [
   ['/', 'Home'],
   ['/discover', 'Shops'],
   ['/tickets', 'Tickets'],
-  ['/send-parcel', 'Send a parcel'],
+  ['/parcels', 'Parcels'],
   ['/prices', 'Prices'],
   ['/counties', 'Counties'],
   ['/institutions', 'Institutions'],
@@ -81,10 +81,7 @@ export function Header() {
               })}
             </nav>
             <div className="row">
-              <a className="btn btn-o btn-sm" href={`${APP}/signin`}>Sign in</a>
-              <a className="btn btn-p btn-sm" href={`${APP}/join`}>
-                <Icon name="arrow-right" size={15} />Join free
-              </a>
+              <a className="btn btn-p btn-sm" href={`${APP}/signin`}>Sign in</a>
             </div>
             <button
               className="hd-menu-btn"
@@ -111,10 +108,7 @@ export function Header() {
               );
             })}
             <div className="hd-drawer-cta">
-              <a className="btn btn-o" href={`${APP}/signin`}>Sign in</a>
-              <a className="btn btn-p" href={`${APP}/join`}>
-                <Icon name="arrow-right" size={15} />Join free
-              </a>
+              <a className="btn btn-p" href={`${APP}/signin`}>Sign in</a>
             </div>
           </nav>
         </div>
@@ -142,8 +136,9 @@ export function Footer() {
           <div>
             <h2>Tools</h2>
             <Link href="/prices">Market prices</Link>
-            <Link href="/send-parcel">Send a parcel</Link>
-            <Link href="/send-parcel/track">Track a parcel</Link>
+            <Link href="/parcels/send">Send a parcel</Link>
+            <Link href="/parcels/track">Track a parcel</Link>
+            <Link href="/parcels/points">Drop-off &amp; pickup points</Link>
             <Link href="/verify">Verify a certificate</Link>
             <Link href="/counties">County requirements</Link>
             <Link href="/institutions">Institutions</Link>

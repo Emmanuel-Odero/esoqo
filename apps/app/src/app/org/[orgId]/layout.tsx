@@ -34,6 +34,11 @@ export default async function OrgLayout(
 
   const tabs: { href: string; icon: IconName; label: string; show: boolean }[] = [
     { href: `/org/${orgId}`, icon: 'grid', label: 'Dashboard', show: true },
+    // The fleet console is the transport-company manager's real product:
+    // live map, dispatch and fares. Shown whenever the session holds
+    // fleet.read — a MANAGER and an ADMIN both do, a SCANNER does not.
+    { href: `/org/${orgId}/fleet`, icon: 'truck', label: 'Fleet', show: org.vertical === 'TRANSPORT' && canOrg(ctx, org, 'fleet.read') },
+    { href: `/org/${orgId}/fleet/pricing`, icon: 'coins', label: 'Pricing', show: org.vertical === 'TRANSPORT' && canOrg(ctx, org, 'fleet.read') },
     { href: `/org/${orgId}/listings`, icon: org.vertical === 'TRANSPORT' ? 'truck' : 'calendar', label: 'Listings', show: canOrg(ctx, org, 'listing.write') },
     { href: `/org/${orgId}/bookings`, icon: 'coins', label: 'Bookings', show: canOrg(ctx, org, 'booking.read') },
     { href: `/org/${orgId}/scan`, icon: 'qr', label: 'Scan tickets', show: canOrg(ctx, org, 'ticket.checkin') },

@@ -2,6 +2,7 @@ import type { Metadata } from 'next';
 import Link from 'next/link';
 import { Icon, Logo } from '@esoqo/ui';
 import { ParcelOrgUnauthorised, getParcelOrgMe } from '@/lib/parcel-org-session';
+import { ParcelOrgNav, type ParcelOrgNavItem } from './ParcelOrgNav';
 import './parcel-org.css';
 
 export const metadata: Metadata = { title: { default: 'Your parcels', template: '%s · Esoqo' } };
@@ -34,6 +35,16 @@ export default async function ParcelOrgLayout({ children }: { children: React.Re
 
   const canManageStaff = me.capabilities.includes('parcelorgstaff.write');
   const canManagePricing = me.capabilities.includes('parcelorg.write');
+  const canManageStations = me.capabilities.includes('parcelorgstation.write');
+
+  const nav: ParcelOrgNavItem[] = [
+    { href: '/parcel-org', label: 'Parcels', icon: 'box' },
+    { href: '/parcel-org/receive', label: 'Front desk', icon: 'truck', badge: me.stats.awaitingDropoff || undefined },
+    { href: '/parcel-org/labels', label: 'Labels', icon: 'tag' },
+    ...(canManagePricing ? [{ href: '/parcel-org/pricing', label: 'Pricing', icon: 'coins' as const }] : []),
+    ...(canManageStations ? [{ href: '/parcel-org/stations', label: 'Stations', icon: 'pin' as const }] : []),
+    ...(canManageStaff ? [{ href: '/parcel-org/team', label: 'Team', icon: 'users' as const }] : []),
+  ];
 
   return (
     <div className="porg">
@@ -46,16 +57,7 @@ export default async function ParcelOrgLayout({ children }: { children: React.Re
               <small>Courier company</small>
             </span>
           </Link>
-          <nav className="porgnav" aria-label="Main">
-            <Link href="/parcel-org"><Icon name="box" size={17} />Parcels</Link>
-            <Link href="/parcel-org/receive">
-              <Icon name="truck" size={17} />
-              Front desk{me.stats.awaitingDropoff > 0 ? ` (${me.stats.awaitingDropoff})` : ''}
-            </Link>
-            <Link href="/parcel-org/labels"><Icon name="tag" size={17} />Labels</Link>
-            {canManagePricing && <Link href="/parcel-org/pricing"><Icon name="coins" size={17} />Pricing</Link>}
-            {canManageStaff && <Link href="/parcel-org/team"><Icon name="users" size={17} />Team</Link>}
-          </nav>
+          <ParcelOrgNav items={nav} />
           <form action="/parcel-org/signout" method="post" className="porg-signout">
             <button className="btn btn-o btn-sm" type="submit">
               <Icon name="close" size={15} />Sign out

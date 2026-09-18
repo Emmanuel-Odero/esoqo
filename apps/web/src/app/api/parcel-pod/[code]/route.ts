@@ -6,7 +6,7 @@ import { NextResponse } from 'next/server';
  *
  * A proxy rather than a direct link for two reasons. CORE_GO_API_URL is
  * an internal service address in every deployed environment (see
- * send-parcel/actions.ts), so a browser can't reach it at all. And the
+ * parcels/actions.ts), so a browser can't reach it at all. And the
  * photo must never be served from the object store directly — a bucket
  * URL would make delivery photos, which are pictures of people's
  * doorways, publicly enumerable. Authorisation stays where it belongs:

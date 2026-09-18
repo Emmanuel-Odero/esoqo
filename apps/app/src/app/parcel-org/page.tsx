@@ -4,9 +4,11 @@ import { redirect } from 'next/navigation';
 import { Icon } from '@esoqo/ui';
 import {
   ParcelOrgUnauthorised, getParcelOrgMe, parcelOrgFetch,
-  type OrgParcelRow,
+  type OrgLiveParcel, type OrgLiveRider, type OrgParcelRow, type ParcelOrgStationRow,
 } from '@/lib/parcel-org-session';
 import { OrgParcelsTable } from './OrgParcelsTable';
+import { LiveDispatchMap } from './LiveDispatchMap';
+import { CustomParcelPanel } from './CustomParcelPanel';
 import { RiderCashPanel } from './RiderCashPanel';
 import { DropoffPoll } from './DropoffPoll';
 
@@ -28,18 +30,28 @@ export const metadata: Metadata = {
  * turn it into something a browser could edit.
  */
 export default async function ParcelOrgDashboard(
-  { searchParams }: { searchParams: Promise<{ status?: string }> },
+  { searchParams }: { searchParams: Promise<{ status?: string; q?: string }> },
 ) {
-  const { status } = await searchParams;
+  const { status, q } = await searchParams;
 
   let me: Awaited<ReturnType<typeof getParcelOrgMe>>;
   let parcels: OrgParcelRow[];
+  let live: { riders: OrgLiveRider[]; parcels: OrgLiveParcel[]; stations: ParcelOrgStationRow[] } | null = null;
   try {
-    const params = status ? `?status=${encodeURIComponent(status)}` : '';
-    [me, { parcels }] = await Promise.all([
+    const sp = new URLSearchParams();
+    if (status) sp.set('status', status);
+    if (q) sp.set('q', q);
+    const qs = sp.toString();
+    const params = qs ? `?${qs}` : '';
+    [me, { parcels }, live] = await Promise.all([
       getParcelOrgMe(),
       parcelOrgFetch<{ parcels: OrgParcelRow[] | null }>(`/v1/parcel-orgs/me/parcels${params}`)
         .then((r) => ({ parcels: r.parcels ?? [] })),
+      // Best-effort: the map is a bonus over the parcels table, and must
+      // never hold the dashboard hostage if the live view is slow.
+      parcelOrgFetch<{ riders: OrgLiveRider[]; parcels: OrgLiveParcel[]; stations: ParcelOrgStationRow[] }>(
+        '/v1/parcel-orgs/me/live',
+      ).catch(() => null),
     ]);
   } catch (e) {
     // An expired shift session lands here. Sending them to the
@@ -52,6 +64,7 @@ export default async function ParcelOrgDashboard(
 
   const canSeeEarnings = me.capabilities.includes('parcelorg.earnings');
   const canDispatch = me.capabilities.includes('parcelorg.dispatch');
+  const canImport = me.capabilities.includes('parcelorg.write');
   const { stats } = me;
   const needsAttention = stats.failedDeliveries + stats.atAgent;
 
@@ -68,6 +81,8 @@ export default async function ParcelOrgDashboard(
       </div>
 
       <DropoffPoll />
+
+      {canImport && <CustomParcelPanel />}
 
       <div className="kpis" style={{ marginBottom: 22, gridTemplateColumns: 'repeat(auto-fit, minmax(190px, 1fr))' }}>
         {stats.awaitingDropoff > 0 && (
@@ -131,11 +146,31 @@ export default async function ParcelOrgDashboard(
           are the same job. */}
       {canSeeEarnings && <RiderCashPanel />}
 
-      <form style={{ display: 'flex', gap: 8, marginBottom: 16 }}>
+      {live && (live.riders.length + live.parcels.length + live.stations.length > 0) && (
+        <section aria-label="Live dispatch" style={{ marginBottom: 22 }}>
+          <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', gap: 10, marginBottom: 8 }}>
+            <h2 style={{ fontSize: '.98rem', fontWeight: 700, margin: 0, display: 'flex', alignItems: 'center', gap: 9 }}>
+              <Icon name="pin" size={18} />Live dispatch
+            </h2>
+            <span className="sub" style={{ fontSize: '.8rem' }}>
+              {live.riders.length} rider{live.riders.length === 1 ? '' : 's'} out
+              {' · '}{live.parcels.length} parcel{live.parcels.length === 1 ? '' : 's'} need{live.parcels.length === 1 ? 's' : ''} a rider or {live.parcels.length === 1 ? 'is' : 'are'} late
+            </span>
+          </div>
+          <LiveDispatchMap riders={live.riders} parcels={live.parcels} stations={live.stations} />
+        </section>
+      )}
+
+      <form style={{ display: 'flex', gap: 8, marginBottom: 16, flexWrap: 'wrap' }}>
+        <input
+          name="q" defaultValue={q ?? ''} className="mono" placeholder="Search Esoqo code or your own number"
+          style={{ padding: '6px 8px', border: '1.5px solid var(--line)', borderRadius: 6, minWidth: 220, flex: 1, maxWidth: 360 }}
+        />
         <select name="status" defaultValue={status ?? ''} className="mono"
           style={{ padding: '6px 8px', border: '1.5px solid var(--line)', borderRadius: 6 }}>
           <option value="">All statuses</option>
           <option value="BOOKED">Waiting for a rider</option>
+          <option value="RECEIVED_AT_COUNTER">At the station</option>
           <option value="PICKED_UP">Picked up</option>
           <option value="IN_TRANSIT">On the way</option>
           <option value="FAILED_DELIVERY">Delivery attempted</option>

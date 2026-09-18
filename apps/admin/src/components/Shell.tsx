@@ -39,6 +39,7 @@ const NAV: { group: string; items: [string, IconName, string, string][] }[] = [
   { group: 'Parcels', items: [
     ['/parcels', 'basket', 'Parcels', 'parcels.read'],
     ['/parcels/counter', 'plus', 'Counter', 'parcels.assign'],
+    ['/parcels/operations', 'qr', 'Parcel operations', 'parcels.assign'],
     ['/parcels/live', 'trend-up', 'Live dispatch', 'parcels.read'],
     ['/parcels/companies', 'building', 'Courier companies', 'parcels.read'],
     ['/parcels/cod', 'coins', 'Cash on delivery', 'parcels.read'],

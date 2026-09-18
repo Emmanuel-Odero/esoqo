@@ -22,6 +22,10 @@ export default async function ParcelCompaniesPage() {
 
   const active = orgs.filter((o) => o.status === 'ACTIVE').length;
   const draft = orgs.filter((o) => o.status === 'DRAFT').length;
+  const suspended = orgs.filter((o) => o.status === 'SUSPENDED').length;
+  const people = orgs.reduce((n, o) => n + (o.activeStaff ?? 0), 0);
+  const parcels = orgs.reduce((n, o) => n + (o.parcelCount ?? 0), 0);
+  const earnings = orgs.reduce((n, o) => n + Number(o.earningsKes ?? 0), 0);
 
   return (
     <>
@@ -60,12 +64,24 @@ export default async function ParcelCompaniesPage() {
         <div className="kpi g">
           <span className="l">Active companies</span>
           <span className="n">{active}</span>
-          <span className="sub">Taking work today</span>
+          <span className="sub">
+            {orgs.length} total{ suspended > 0 ? ` · ${suspended} suspended` : '' }
+          </span>
         </div>
         <div className="kpi">
           <span className="l">Onboarding</span>
           <span className="n">{draft}</span>
           <span className="sub">Draft — not yet live</span>
+        </div>
+        <div className="kpi">
+          <span className="l">People</span>
+          <span className="n">{people}</span>
+          <span className="sub">Active logins across all companies</span>
+        </div>
+        <div className="kpi">
+          <span className="l">Parcels carried</span>
+          <span className="n">{parcels}</span>
+          <span className="sub">KES {earnings.toLocaleString('en-KE', { maximumFractionDigits: 0 })} earned by partners</span>
         </div>
       </div>
 

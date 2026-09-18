@@ -2,6 +2,7 @@ package httpapi
 
 import (
 	"net/http"
+	"strconv"
 	"strings"
 	"time"
 
@@ -364,6 +365,34 @@ func (s *Server) handleLatestPositions(c *gin.Context) {
 		return
 	}
 	c.JSON(http.StatusOK, gin.H{"positions": positions})
+}
+
+// handleFleetOverview — GET /v1/fleet/orgs/:orgId/overview. The console
+// header: one round trip for the day's counts and money.
+func (s *Server) handleFleetOverview(c *gin.Context) {
+	overview, err := dbx.GetFleetOverview(c.Request.Context(), s.Pool, ctxFromGin(c), c.Param("orgId"))
+	if err != nil {
+		writeFleetError(c, err)
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"overview": overview})
+}
+
+// handleActiveTrails — GET /v1/fleet/orgs/:orgId/trails?minutes=60.
+// The ordered recent pings behind the live map's route lines.
+func (s *Server) handleActiveTrails(c *gin.Context) {
+	minutes := 60
+	if v := c.Query("minutes"); v != "" {
+		if n, err := strconv.Atoi(v); err == nil {
+			minutes = n
+		}
+	}
+	trails, err := dbx.ActiveTrails(c.Request.Context(), s.Pool, ctxFromGin(c), c.Param("orgId"), minutes)
+	if err != nil {
+		writeFleetError(c, err)
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"trails": trails})
 }
 
 // ── fares ────────────────────────────────────────────────────────
