@@ -338,6 +338,15 @@ func (s *Server) Router() *gin.Engine {
 		v1.POST("/parcel-orgs/me/stations/:id/members", s.authRequired(), s.handleAssignMyOrgStationMember)
 		v1.GET("/parcel-orgs/me/pricing", s.authRequired(), s.handleListMyOrgPricing)
 		v1.POST("/parcel-orgs/me/pricing", s.authRequired(), s.handleUpsertMyOrgPricing)
+		// The dispatch board — a company's own runs: vehicle, crew,
+		// leg and receiving team. The static segments sit above :id
+		// for the same reason the label routes do (see above).
+		v1.GET("/parcel-orgs/me/dispatch", s.authRequired(), s.handleListDispatches)
+		v1.POST("/parcel-orgs/me/dispatch", s.authRequired(), s.handleCreateDispatch)
+		v1.GET("/parcel-orgs/me/dispatch/:id", s.authRequired(), s.handleGetDispatch)
+		v1.POST("/parcel-orgs/me/dispatch/:id/position", s.authRequired(), s.handleReportDispatchPosition)
+		v1.POST("/parcel-orgs/me/dispatch/:id/arrive", s.authRequired(), s.handleArriveDispatch)
+		v1.POST("/parcel-orgs/me/dispatch/:id/cancel", s.authRequired(), s.handleCancelDispatch)
 		v1.POST("/parcels/:code/price", s.handleSetParcelPrice)
 		v1.POST("/parcels/:code/settle-counter", s.authRequired(), s.handleSettleCounterParcel)
 		v1.POST("/parcels/:code/pay", s.rateLimit("pay:parcel", 30, time.Hour), s.handlePayParcel)
