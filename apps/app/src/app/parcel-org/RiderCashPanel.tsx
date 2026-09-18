@@ -1,9 +1,10 @@
 'use client';
 import { displayKES, toCentsOrZero, toWire } from '@esoqo/domain';
 
-import { useId, useState, useTransition } from 'react';
+import { useEffect, useId, useState, useTransition } from 'react';
 import { Icon } from '@esoqo/ui';
 import { remitRiderCod } from './actions';
+import { setFormActive } from './form-activity';
 
 /**
  * A depot manager counting one of their own riders in at the end of a
@@ -24,6 +25,14 @@ export function RiderCashPanel() {
   const [error, setError] = useState<string | null>(null);
   const [pending, startTransition] = useTransition();
   const ids = { rider: useId(), amount: useId(), note: useId() };
+
+  // Same deal as the custom-parcel panel: while counting cash the
+  // dashboard poller stands down so the page never refreshes mid-count.
+  useEffect(() => {
+    if (!open) return;
+    setFormActive(true);
+    return () => setFormActive(false);
+  }, [open ]);
 
   if (!open) {
     return (
