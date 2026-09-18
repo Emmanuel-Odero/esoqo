@@ -36,9 +36,11 @@ export default async function ParcelOrgLayout({ children }: { children: React.Re
   const canManageStaff = me.capabilities.includes('parcelorgstaff.write');
   const canManagePricing = me.capabilities.includes('parcelorg.write');
   const canManageStations = me.capabilities.includes('parcelorgstation.write');
+  const canDispatch = me.capabilities.includes('parcelorg.dispatch');
 
   const nav: ParcelOrgNavItem[] = [
     { href: '/parcel-org', label: 'Parcels', icon: 'box' },
+    ...(canDispatch ? [{ href: '/parcel-org/dispatch', label: 'Dispatch', icon: 'send' as const }] : []),
     { href: '/parcel-org/receive', label: 'Front desk', icon: 'truck', badge: me.stats.awaitingDropoff || undefined },
     { href: '/parcel-org/labels', label: 'Labels', icon: 'tag' },
     ...(canManagePricing ? [{ href: '/parcel-org/pricing', label: 'Pricing', icon: 'coins' as const }] : []),

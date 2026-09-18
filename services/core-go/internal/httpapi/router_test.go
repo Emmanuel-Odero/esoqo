@@ -62,6 +62,11 @@ func TestRouterRegistersWithoutConflict(t *testing.T) {
 		"GET /v1/parcels/trips":                false,
 		"GET /v1/parcels/trips/:tripId/stages": false,
 		"POST /v1/parcels/:code/board":         false,
+		// Dispatch board: static /dispatch beside /dispatch/:id and the
+		// :id/... action tree — identical collision shape.
+		"GET /v1/parcel-orgs/me/dispatch":     false,
+		"POST /v1/parcel-orgs/me/dispatch":    false,
+		"GET /v1/parcel-orgs/me/dispatch/:id": false,
 	}
 	for _, r := range routes {
 		key := r.Method + " " + r.Path

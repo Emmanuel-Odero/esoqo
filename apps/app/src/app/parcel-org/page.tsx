@@ -1,13 +1,13 @@
 import { displayKES } from '@esoqo/domain';
 import type { Metadata } from 'next';
+import Link from 'next/link';
 import { redirect } from 'next/navigation';
 import { Icon } from '@esoqo/ui';
 import {
   ParcelOrgUnauthorised, getParcelOrgMe, parcelOrgFetch,
-  type OrgLiveParcel, type OrgLiveRider, type OrgParcelRow, type ParcelOrgStationRow,
+  type OrgParcelRow,
 } from '@/lib/parcel-org-session';
 import { OrgParcelsTable } from './OrgParcelsTable';
-import { LiveDispatchMap } from './LiveDispatchMap';
 import { CustomParcelPanel } from './CustomParcelPanel';
 import { RiderCashPanel } from './RiderCashPanel';
 import { DropoffPoll } from './DropoffPoll';
@@ -36,22 +36,16 @@ export default async function ParcelOrgDashboard(
 
   let me: Awaited<ReturnType<typeof getParcelOrgMe>>;
   let parcels: OrgParcelRow[];
-  let live: { riders: OrgLiveRider[]; parcels: OrgLiveParcel[]; stations: ParcelOrgStationRow[] } | null = null;
   try {
     const sp = new URLSearchParams();
     if (status) sp.set('status', status);
     if (q) sp.set('q', q);
     const qs = sp.toString();
     const params = qs ? `?${qs}` : '';
-    [me, { parcels }, live] = await Promise.all([
+    [me, { parcels }] = await Promise.all([
       getParcelOrgMe(),
       parcelOrgFetch<{ parcels: OrgParcelRow[] | null }>(`/v1/parcel-orgs/me/parcels${params}`)
         .then((r) => ({ parcels: r.parcels ?? [] })),
-      // Best-effort: the map is a bonus over the parcels table, and must
-      // never hold the dashboard hostage if the live view is slow.
-      parcelOrgFetch<{ riders: OrgLiveRider[]; parcels: OrgLiveParcel[]; stations: ParcelOrgStationRow[] }>(
-        '/v1/parcel-orgs/me/live',
-      ).catch(() => null),
     ]);
   } catch (e) {
     // An expired shift session lands here. Sending them to the
@@ -146,18 +140,22 @@ export default async function ParcelOrgDashboard(
           are the same job. */}
       {canSeeEarnings && <RiderCashPanel />}
 
-      {live && (live.riders.length + live.parcels.length + live.stations.length > 0) && (
-        <section aria-label="Live dispatch" style={{ marginBottom: 22 }}>
-          <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', gap: 10, marginBottom: 8 }}>
-            <h2 style={{ fontSize: '.98rem', fontWeight: 700, margin: 0, display: 'flex', alignItems: 'center', gap: 9 }}>
-              <Icon name="pin" size={18} />Live dispatch
-            </h2>
-            <span className="sub" style={{ fontSize: '.8rem' }}>
-              {live.riders.length} rider{live.riders.length === 1 ? '' : 's'} out
-              {' · '}{live.parcels.length} parcel{live.parcels.length === 1 ? '' : 's'} need{live.parcels.length === 1 ? 's' : ''} a rider or {live.parcels.length === 1 ? 'is' : 'are'} late
+      {/* The fleet lives on its own board now — runs are the unit a
+          dispatcher thinks in, not individual parcels. */}
+      {canDispatch && (
+        <section aria-label="Dispatch" style={{ marginBottom: 22 }}>
+          <Link
+            href="/parcel-org/dispatch"
+            className="card"
+            style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '14px 16px', textDecoration: 'none' }}
+          >
+            <Icon name="send" size={20} />
+            <span>
+              <strong style={{ display: 'block' }}>Live dispatch</strong>
+              <span className="sub">The whole fleet on one map — open runs, crews and receiving teams.</span>
             </span>
-          </div>
-          <LiveDispatchMap riders={live.riders} parcels={live.parcels} stations={live.stations} />
+            <Icon name="arrow-right" size={16} />
+          </Link>
         </section>
       )}
 

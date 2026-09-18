@@ -236,3 +236,59 @@ export interface ParcelOrgStationRow {
   /** How many team members are currently posted here. */
   memberCount: number;
 }
+
+/** One person aboard a dispatch run. Mirrors dbx.DispatchCrew —
+ *  roleLabel is server-rendered ("Tout", or the custom title). */
+export interface DispatchCrew {
+  id: string;
+  name: string;
+  msisdn: string | null;
+  role: string;
+  customRole: string | null;
+  staffId: string | null;
+  roleLabel: string;
+}
+
+/** One of the receiving team waiting at the destination to check the
+ *  run in on arrival. Mirrors dbx.DispatchReceiver. */
+export interface DispatchReceiver {
+  id: string;
+  name: string;
+  staffId: string | null;
+}
+
+export interface DispatchStation {
+  id: string;
+  name: string;
+  locationHint: string;
+  lat: number;
+  lng: number;
+}
+
+export interface DispatchPing {
+  lat: number;
+  lng: number;
+  at: string;
+}
+
+/** One run of one of the company's own vehicles. Mirrors dbx.Dispatch:
+ *  the board's fleet unit — plate, crew, origin → destination leg,
+ *  receiving team, live position and trail. */
+export interface DispatchRun {
+  id: string;
+  vehiclePlate: string;
+  vehicleType: string;
+  origin: DispatchStation | null;
+  destination: DispatchStation | null;
+  status: string;
+  notes: string | null;
+  currentLat: number | null;
+  currentLng: number | null;
+  currentAt: string | null;
+  arrivedAt: string | null;
+  receivedBy: string | null;
+  createdAt: string;
+  crew: DispatchCrew[];
+  receivers: DispatchReceiver[];
+  trail: DispatchPing[];
+}
