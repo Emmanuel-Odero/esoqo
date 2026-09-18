@@ -12,16 +12,16 @@ export const metadata: Metadata = {
 };
 
 /**
- * A courier company's own blank label stock.
+ * A courier company's own label stock, issued by Esoqo admin.
  *
- * Label ownership was enforced at booking before this screen existed —
- * core-go refuses a code printed for another company — which made the
- * rule technically true and practically useless, because the only place
- * a pad could be printed was Esoqo's own admin console. A partner had
- * to ask for stock the way they once had to ask for a rider's PIN.
+ * Label ownership is enforced at booking — core-go refuses a code
+ * printed for another company — and pads reach a company only through
+ * Esoqo: there is deliberately no minting on this screen. What lives
+ * here is the register of what was issued (reprintable with the
+ * company's brand), lookup, and withdrawing a pad that walked away.
  *
- * Printing and withdrawing need dispatch; anyone on the company can
- * look. That check here is UX — core-go refuses the underlying routes
+ * Reprinting needs dispatch; anyone on the company can look. That
+ * check here is UX — core-go refuses the underlying routes
  * independently, so a hand-typed URL gets nothing either.
  */
 export default async function ParcelOrgLabelsPage(
@@ -53,7 +53,7 @@ export default async function ParcelOrgLabelsPage(
         <div>
           <h1>Your labels</h1>
           <p>
-            Print a pad of codes ahead of any booking and stick them on boxes as they come in.
+            The pads Esoqo issued to {me.org.name} — stick them on boxes as they come in.
             They are yours — no other company can book a parcel against them.
           </p>
         </div>
@@ -63,6 +63,7 @@ export default async function ParcelOrgLabelsPage(
         labels={register.labels} counts={register.counts} batches={batches}
         state={activeState}
         canManage={me.capabilities.includes('parcelorg.dispatch')}
+        orgName={me.org.name}
       />
     </>
   );

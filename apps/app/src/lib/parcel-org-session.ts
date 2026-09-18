@@ -200,6 +200,14 @@ export interface OrgParcelLabel {
   parcelStatus: string | null;
 }
 
+/** One spendable sticker from the company's own pad, as the
+ *  custom-parcel label picker lists it. Mirrors
+ *  dbx.OrgLabelSearchRow. */
+export interface OrgLabelSearchRow {
+  code: string;
+  createdAt: string;
+}
+
 export interface ParcelOrgStaffRow {
   id: string;
   orgId: string;

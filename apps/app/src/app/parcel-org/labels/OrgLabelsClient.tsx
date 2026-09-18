@@ -1,10 +1,10 @@
 'use client';
 
 import { useState, useTransition } from 'react';
-import { Icon } from '@esoqo/ui';
+import { Icon, PrintableLabel, PrintStyles } from '@esoqo/ui';
 import { useAnnounce } from '@esoqo/a11y';
 import {
-  generateOrgLabels, voidOrgLabelBatch,
+  voidOrgLabelBatch,
   type OrgLabelBatchRow, type OrgLabelRow,
 } from '../actions';
 
@@ -17,8 +17,10 @@ import {
  * enforces that check at booking: a code printed for one company can't
  * be spent by another.
  *
- * Which only became a real control once a company could get a pad of
- * its own. This is that.
+ * Pads are issued by Esoqo admin — a company never mints its own, so
+ * there is no minting on this screen, only the register of what was
+ * issued, reprinting it with the company's brand, and withdrawing a
+ * pad that walked away.
  */
 
 const TABS: { state: string; label: string }[] = [
@@ -29,19 +31,16 @@ const TABS: { state: string; label: string }[] = [
 ];
 
 export function OrgLabelsClient({
-  labels, counts, batches, state, canManage,
+  labels, counts, batches, state, canManage, orgName,
 }: {
   labels: OrgLabelRow[]; counts: Record<string, number>;
   batches: OrgLabelBatchRow[]; state: string; canManage: boolean;
+  /** The company's own name — printed on every reprint as the brand. */
+  orgName: string;
 }) {
-  const [count, setCount] = useState(20);
-  const [minted, setMinted] = useState<string[] | null>(null);
-  const [error, setError] = useState<string | null>(null);
   // Live filter over the fetched register — the tab is server-side, but
   // finding one code in the current list shouldn't be a round trip.
   const [filter, setFilter] = useState('');
-  const [pending, startTransition] = useTransition();
-  const announce = useAnnounce();
 
   const needle = filter.trim().toUpperCase();
   const shown = needle
@@ -51,47 +50,35 @@ export function OrgLabelsClient({
         (l.destination ?? '').toUpperCase().includes(needle))
     : labels;
 
-  function mint() {
-    setError(null);
-    startTransition(async () => {
-      const res = await generateOrgLabels(count);
-      if (!res.ok) { setError(res.error); return; }
-      setMinted(res.codes);
-      announce(`${res.codes.length} labels printed`, 'assertive');
-    });
-  }
-
   return (
     <>
-      {canManage && (
-        <div className="card" style={{ padding: 16, marginBottom: 16 }}>
-          <div style={{ display: 'flex', gap: 10, alignItems: 'flex-end', flexWrap: 'wrap' }}>
-            <label className="sub">How many
-              <input type="number" min={1} max={500} value={count}
-                onChange={(e) => setCount(Math.max(1, Math.min(500, Number(e.target.value) || 1)))}
-                style={{ display: 'block', width: 100, padding: '6px 8px', border: '1.5px solid var(--line)', borderRadius: 6, marginTop: 2 }} />
-            </label>
-            <button className="btn btn-p btn-sm" disabled={pending} onClick={mint}>
-              {pending ? 'Printing…' : `Print ${count} label${count === 1 ? '' : 's'}`}
-            </button>
-            {error && <span className="sub" style={{ color: 'var(--red)' }}>{error}</span>}
-          </div>
-          <p className="sub" style={{ margin: '10px 0 0' }}>
-            These codes are yours. Nobody else can book a parcel against them, and if a pad goes
-            missing you can withdraw the whole batch below.
-          </p>
-        </div>
-      )}
+      <div className="card" style={{ padding: 16, marginBottom: 16 }}>
+        <p className="sub" style={{ margin: 0 }}>
+          These codes are yours — issued to {orgName} by Esoqo. Nobody else can book a
+          parcel against them, and if a pad goes missing you can withdraw the whole
+          batch below. Need more? Your Esoqo account manager prints the next pad.
+        </p>
+      </div>
 
-      {minted && (
+      {state === 'blank' && labels.length > 0 && (
         <div className="card" style={{ padding: 16, marginBottom: 16 }}>
-          <strong>Just printed — {minted.length} code{minted.length === 1 ? '' : 's'}</strong>
-          <p className="sub" style={{ margin: '4px 0 10px' }}>
-            Write these on your labels, or print this page.
-          </p>
-          <div className="mono" style={{ display: 'flex', flexWrap: 'wrap', gap: '6px 16px', fontSize: '.85rem' }}>
-            {minted.map((c) => <span key={c}>{c}</span>)}
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
+            <strong>Reprint your pad — {labels.length} label{labels.length === 1 ? '' : 's'}</strong>
+            <button className="btn btn-o btn-sm" onClick={() => window.print()}>
+              <Icon name="print" size={13} />Print all
+            </button>
           </div>
+          <div
+            className="print-label-page"
+            style={{
+              display: 'grid', gridTemplateColumns: 'repeat(2, 90mm)', gap: '6mm',
+            }}
+          >
+            {labels.map((l) => (
+              <PrintableLabel key={l.code} code={l.code} sig={l.sig || undefined} orgName={orgName} />
+            ))}
+          </div>
+          <PrintStyles />
         </div>
       )}
 

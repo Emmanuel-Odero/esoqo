@@ -523,6 +523,10 @@ type importParcelRequest struct {
 	WeightKg         *float64 `json:"weightKg"`
 	Fragile          bool     `json:"fragile"`
 	Notes            *string  `json:"notes"`
+	// LabelCode — one of the company's own pre-printed labels, picked
+	// by tail search on the custom-parcel form. Its code becomes the
+	// parcel's tracking code (see dbx.ImportOrgParcel).
+	LabelCode *string `json:"labelCode"`
 }
 
 // handleImportOrgParcel — POST /v1/parcel-orgs/me/parcels. Registers a
@@ -559,6 +563,7 @@ func (s *Server) handleImportOrgParcel(c *gin.Context) {
 		WeightKg:         req.WeightKg,
 		Fragile:          req.Fragile,
 		Notes:            req.Notes,
+		LabelCode:        req.LabelCode,
 	})
 	if err != nil {
 		writeParcelError(c, err)

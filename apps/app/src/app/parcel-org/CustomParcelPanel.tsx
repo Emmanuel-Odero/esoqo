@@ -1,8 +1,9 @@
 'use client';
 
-import { useEffect, useState, useTransition } from 'react';
+import { useEffect, useRef, useState, useTransition } from 'react';
 import { Icon } from '@esoqo/ui';
-import { addCustomParcel } from './actions';
+import { addCustomParcel, searchOrgLabels } from './actions';
+import type { OrgLabelSearchRow } from '@/lib/parcel-org-session';
 import { setFormActive } from './form-activity';
 
 const PARCEL_TYPES: [value: string, label: string][] = [
@@ -58,6 +59,7 @@ interface CustomParcelDraft {
   weightKg: string;
   fragile: boolean;
   notes: string;
+  labelCode: string;
 }
 
 function loadDraft(): CustomParcelDraft | null {
@@ -79,6 +81,7 @@ function loadDraft(): CustomParcelDraft | null {
       weightKg: typeof parsed.weightKg === 'string' ? parsed.weightKg : '',
       fragile: parsed.fragile === true,
       notes: typeof parsed.notes === 'string' ? parsed.notes : '',
+      labelCode: typeof parsed.labelCode === 'string' ? parsed.labelCode : '',
     };
   } catch {
     return null;
@@ -90,7 +93,8 @@ function hasContent(d: CustomParcelDraft): boolean {
     d.number.trim() || d.senderName.trim() || d.senderMsisdn.trim() ||
     d.receiverName.trim() || d.receiverMsisdn.trim() ||
     d.originLabel.trim() || d.destinationLabel.trim() || d.notes.trim() ||
-    d.weightKg.trim() || d.fragile || d.parcelType !== 'SMALL',
+    d.weightKg.trim() || d.fragile || d.parcelType !== 'SMALL' ||
+    d.labelCode.trim(),
   );
 }
 
@@ -108,6 +112,14 @@ export function CustomParcelPanel() {
   const [weightKg, setWeightKg] = useState(draft?.weightKg ?? '');
   const [fragile, setFragile] = useState(draft?.fragile ?? false);
   const [notes, setNotes] = useState(draft?.notes ?? '');
+  // The pre-printed sticker stuck on this box, if any. Its code becomes
+  // the parcel's tracking code on save.
+  const [labelCode, setLabelCode] = useState(draft?.labelCode ?? '');
+  const [labelTail, setLabelTail] = useState('');
+  const [labelResults, setLabelResults] = useState<OrgLabelSearchRow[] | null>(null);
+  const [labelSearching, setLabelSearching] = useState(false);
+  const [labelPickerOpen, setLabelPickerOpen] = useState(false);
+  const labelSeq = useRef(0);
   const [error, setError] = useState<string | null>(null);
   const [minted, setMinted] = useState<string | null>(null);
   const [pending, startTransition] = useTransition();
@@ -128,12 +140,40 @@ export function CustomParcelPanel() {
       window.localStorage.setItem(DRAFT_KEY, JSON.stringify({
         number, senderName, senderMsisdn, receiverName, receiverMsisdn,
         originLabel, destinationLabel, parcelType, weightKg, fragile, notes,
+        labelCode,
       } satisfies CustomParcelDraft));
     } catch {
       // Private-mode storage failures must never break typing.
     }
   }, [open, number, senderName, senderMsisdn, receiverName, receiverMsisdn,
-    originLabel, destinationLabel, parcelType, weightKg, fragile, notes]);
+    originLabel, destinationLabel, parcelType, weightKg, fragile, notes,
+    labelCode]);
+
+  // Tail search over the company's own unused labels, debounced. The
+  // sequence guard drops out-of-order responses, so a slow earlier
+  // keystroke can never overwrite a newer one.
+  useEffect(() => {
+    const tail = labelTail.trim();
+    if (!labelPickerOpen || tail.length === 0) {
+      setLabelResults(null);
+      setLabelSearching(false);
+      return;
+    }
+    setLabelSearching(true);
+    const seq = ++labelSeq.current;
+    const id = window.setTimeout(() => {
+      void searchOrgLabels(tail).then((rows) => {
+        if (labelSeq.current !== seq) return;
+        setLabelResults(rows);
+        setLabelSearching(false);
+      }).catch(() => {
+        if (labelSeq.current !== seq) return;
+        setLabelResults([]);
+        setLabelSearching(false);
+      });
+    }, 250);
+    return () => window.clearTimeout(id);
+  }, [labelTail, labelPickerOpen ]);
 
   function clearDraft() {
     try {
@@ -147,6 +187,7 @@ export function CustomParcelPanel() {
     setNumber(''); setSenderName(''); setSenderMsisdn('');
     setReceiverName(''); setReceiverMsisdn(''); setOriginLabel(''); setDestinationLabel('');
     setParcelType('SMALL'); setWeightKg(''); setFragile(false); setNotes('');
+    setLabelCode(''); setLabelTail(''); setLabelResults(null); setLabelPickerOpen(false);
     clearDraft();
   }
 
@@ -162,6 +203,7 @@ export function CustomParcelPanel() {
         senderName, senderMsisdn, receiverName, receiverMsisdn,
         originLabel, destinationLabel, parcelType,
         weightKg: weightKg.trim() ? Number(weightKg) : null, fragile, notes,
+        labelCode: labelCode.trim() || null,
       });
       if (!result.ok) { setError(result.error); return; }
       setMinted(result.code);
@@ -215,6 +257,18 @@ export function CustomParcelPanel() {
             </label>
           </div>
         </fieldset>
+
+        <LabelPicker
+          tail={labelTail}
+          onTail={(v) => { setLabelTail(v.toUpperCase()); setLabelPickerOpen(true); }}
+          results={labelResults}
+          searching={labelSearching}
+          pickerOpen={labelPickerOpen}
+          selected={labelCode}
+          onSelect={(code) => { setLabelCode(code); setLabelPickerOpen(false); setLabelTail(''); setLabelResults(null); }}
+          onClear={() => { setLabelCode(''); setLabelTail(''); setLabelResults(null); }}
+          onClose={() => setLabelPickerOpen(false)}
+        />
 
         <fieldset style={sectionStyle}>
           <h3 style={sectionTitleStyle}>Sender</h3>
@@ -286,5 +340,102 @@ export function CustomParcelPanel() {
         </button>
       </div>
     </section>
+  );
+}
+
+/**
+ * The sticker picker: hold a pre-printed label, read off its last few
+ * characters, and the full code builds itself from behind. Only the
+ * company's own unused stickers are ever offered — matching by tail
+ * (case-insensitive suffix), because the tail is what disambiguates a
+ * sticker held at arm's length.
+ */
+function LabelPicker({
+  tail, onTail, results, searching, pickerOpen, selected, onSelect, onClear, onClose,
+}: {
+  tail: string;
+  onTail: (v: string) => void;
+  results: OrgLabelSearchRow[] | null;
+  searching: boolean;
+  pickerOpen: boolean;
+  selected: string;
+  onSelect: (code: string) => void;
+  onClear: () => void;
+  onClose: () => void;
+}) {
+  return (
+    <fieldset style={sectionStyle}>
+      <h3 style={sectionTitleStyle}>Parcel label (optional)</h3>
+      <p className="sub" style={{ margin: '6px 0 0' }}>
+        Sticking one of your pre-printed labels on this box? Its code becomes the
+        tracking code. Leave this empty and Esoqo mints one instead.
+      </p>
+      {selected ? (
+        <div className="chain ok" style={{ marginTop: 8 }}>
+          <Icon name="tag" size={16} />
+          <span>Label <strong className="mono">{selected}</strong> will go on this parcel</span>
+          <button className="btn btn-o btn-sm" style={{ marginLeft: 'auto' }} onClick={onClear}>
+            <Icon name="close" size={14} />Remove
+          </button>
+        </div>
+      ) : (
+        <div style={{ position: 'relative', marginTop: 8 }}>
+          <input
+            style={inputStyle} className="mono" value={tail}
+            placeholder="Type the last characters, e.g. YZN…"
+            aria-label="Find a label by its last characters"
+            autoComplete="off"
+            onChange={(e) => onTail(e.target.value)}
+            onBlur={() => window.setTimeout(onClose, 150)}
+          />
+          {pickerOpen && tail.trim() && (
+            <div
+              role="listbox" aria-label="Matching labels"
+              style={{
+                position: 'absolute', zIndex: 5, left: 0, right: 0, top: '100%',
+                background: 'var(--bg, #fff)', border: '1.5px solid var(--line)',
+                borderRadius: 8, marginTop: 4, maxHeight: 220, overflowY: 'auto',
+                boxShadow: '0 8px 24px rgba(0,0,0,.12)',
+              }}
+            >
+              {searching || results === null ? (
+                <p className="sub" style={{ margin: 0, padding: '10px 12px' }}>Searching your labels…</p>
+              ) : results.length === 0 ? (
+                <p className="sub" style={{ margin: 0, padding: '10px 12px' }}>
+                  No unused label ends with “{tail.trim().toUpperCase()}”. Check the sticker, or leave
+                  this empty to mint a fresh code.
+                </p>
+              ) : (
+                results.map((r) => (
+                  <TailOption key={r.code} code={r.code} tail={tail.trim().toUpperCase()} onSelect={onSelect} />
+                ))
+              )}
+            </div>
+          )}
+        </div>
+      )}
+    </fieldset>
+  );
+}
+
+/** One dropdown row: the full code with the typed tail emphasised, so
+ *  typing feels like building the code up from behind. */
+function TailOption({ code, tail, onSelect }: { code: string; tail: string; onSelect: (code: string) => void }) {
+  const head = tail && code.toUpperCase().endsWith(tail) ? code.slice(0, code.length - tail.length) : code;
+  const end = tail && code.toUpperCase().endsWith(tail) ? code.slice(code.length - tail.length) : '';
+  return (
+    <button
+      type="button" role="option" aria-selected="false"
+      onMouseDown={(e) => { e.preventDefault(); onSelect(code); }}
+      className="mono"
+      style={{
+        display: 'block', width: '100%', textAlign: 'left', cursor: 'pointer',
+        padding: '9px 12px', border: 0, borderBottom: '1px solid var(--line)',
+        background: 'transparent', fontSize: '.92rem',
+      }}
+    >
+      <span style={{ opacity: 0.55 }}>{head}</span>
+      <strong>{end}</strong>
+    </button>
   );
 }

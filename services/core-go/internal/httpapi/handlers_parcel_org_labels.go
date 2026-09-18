@@ -7,53 +7,36 @@ import (
 
 	"github.com/esoqo/core-go/internal/authsvc"
 	"github.com/esoqo/core-go/internal/dbx"
+	"github.com/esoqo/core-go/internal/fleetqr"
 )
 
 // A courier company's own label stock.
 //
 // Stock became owned when parcel_label_stock gained parcelOrgId, and
-// BookParcel refuses a code belonging to another company — but until
-// now the only screen that could mint or print a pad lived under Esoqo
-// admin. A company that is supposed to own its stock had no way to get
-// any, which made the ownership rule true on paper and useless in
-// practice.
-//
-// Every handler here takes its org from the session, never the request
-// — see this package's handlers_parcel_orgs.go on why that shape is the
-// whole tenancy boundary. That also means minting cannot be aimed at
-// somebody else's pool even by a caller who tries: there is no field to
-// aim it with.
+// BookParcel refuses a code belonging to another company. Pads are
+// issued to a company by Esoqo admin — a company never mints its own —
+// and every handler here takes its org from the session, never the
+// request (see this package's handlers_parcel_orgs.go on why that
+// shape is the whole tenancy boundary).
 
-// handleOrgGenerateLabels — POST /v1/parcel-orgs/me/labels/generate.
+// handleSearchOrgLabels — GET /v1/parcel-orgs/me/labels/search?q=.
 //
-// Gated on dispatch rather than read: printing stock is committing the
-// company to a range of codes it will be accountable for, which is an
-// operational act, not a lookup. Same reasoning that puts the Esoqo-side
-// mint behind parcels.assign.
-func (s *Server) handleOrgGenerateLabels(c *gin.Context) {
-	orgID := s.orgCtx(c, authsvc.CapParcelOrgDispatch)
+// The custom-parcel picker's lookup: a desk holding a physical sticker
+// types its last few characters and picks the full code. Suffix match
+// over the company's own blank stock only — spent, filled-in or
+// withdrawn labels are never offered, because attaching spends the
+// label and only a genuinely unused sticker can be spent.
+func (s *Server) handleSearchOrgLabels(c *gin.Context) {
+	orgID := s.orgCtx(c, authsvc.CapParcelOrgRead)
 	if orgID == "" {
 		return
 	}
-	var req struct {
-		Count int `json:"count" binding:"required"`
-	}
-	if err := c.ShouldBindJSON(&req); err != nil {
-		writeError(c, http.StatusBadRequest, "INVALID_REQUEST", err.Error())
-		return
-	}
-	ctx := ctxFromGin(c)
-	var staffID *string
-	if ctx.ActorID != "" {
-		id := ctx.ActorID
-		staffID = &id
-	}
-	codes, batchID, err := dbx.GenerateParcelLabelStock(c.Request.Context(), s.Pool, req.Count, staffID, &orgID)
+	rows, err := dbx.SearchOrgLabels(c.Request.Context(), s.Pool, orgID, c.Query("q"), 15)
 	if err != nil {
-		writeParcelError(c, err)
+		writeError(c, http.StatusInternalServerError, "SEARCH_FAILED", "Could not search your labels")
 		return
 	}
-	c.JSON(http.StatusOK, gin.H{"codes": codes, "batchId": batchID})
+	c.JSON(http.StatusOK, gin.H{"labels": rows})
 }
 
 // handleOrgListLabelRegister — GET /v1/parcel-orgs/me/labels?state=.
@@ -73,6 +56,17 @@ func (s *Server) handleOrgListLabelRegister(c *gin.Context) {
 	if err != nil {
 		writeParcelError(c, err)
 		return
+	}
+	// Signed here for the same reason the stock endpoint signs (see
+	// handleAdminListParcelLabelStock): the company reprints its own
+	// pads from this register, and a reprinted QR must verify as
+	// genuine. The org is the session's own, batch ids ride on the rows.
+	for i := range rows {
+		var batchID string
+		if rows[i].BatchID != nil {
+			batchID = *rows[i].BatchID
+		}
+		rows[i].Sig = fleetqr.SignLabel(s.Cfg.FleetQrSecret, rows[i].Code, orgID, batchID)
 	}
 	counts, err := dbx.CountParcelLabelStates(c.Request.Context(), s.Pool, &orgID)
 	if err != nil {
