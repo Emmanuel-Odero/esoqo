@@ -581,6 +581,108 @@ func (s *Server) handleImportOrgParcel(c *gin.Context) {
 	c.JSON(http.StatusCreated, gin.H{"id": id, "code": code})
 }
 
+type counterBookRequest struct {
+	SenderName       string   `json:"senderName" binding:"required"`
+	SenderMsisdn     string   `json:"senderMsisdn" binding:"required"`
+	ReceiverName     string   `json:"receiverName" binding:"required"`
+	ReceiverMsisdn   string   `json:"receiverMsisdn" binding:"required"`
+	OriginLabel      string   `json:"originLabel" binding:"required"`
+	DestinationLabel string   `json:"destinationLabel" binding:"required"`
+	ParcelType       string   `json:"parcelType" binding:"required"`
+	WeightKg         *float64 `json:"weightKg"`
+	LengthCm         *float64 `json:"lengthCm"`
+	WidthCm          *float64 `json:"widthCm"`
+	HeightCm         *float64 `json:"heightCm"`
+	DeclaredValueKes *float64 `json:"declaredValueKes"`
+	CoverageTierID   *string  `json:"coverageTierId"`
+	// ContentsDeclared — the clerk asked about prohibited contents and
+	// the sender said no. Only honoured with a staff actor behind it:
+	// attested here from the session, never trusted from the body
+	// alone — same rule the public booking endpoint applies.
+	ContentsDeclared bool    `json:"contentsDeclared"`
+	ExistingCode     *string `json:"existingCode"`
+	Notes            *string `json:"notes"`
+	Fragile          bool    `json:"fragile"`
+}
+
+// handleCounterBookParcel — POST /v1/parcel-orgs/me/counter/book. The
+// company counter: a clerk with a walk-in customer and a box on the
+// desk books a parcel against the company's own stock, in one screen,
+// without routing through the customer web flow.
+//
+// Goes through the same BookParcel every other booking uses, with
+// PayAtCounter (no online price step — it settles in person) and both
+// org fields from the session, never the body: ParcelOrgID so the
+// parcel lands in this company's books, rate card and revenue split,
+// BinderOrgID so only this company's stock can be bound (see
+// BookParcelInput on why the body field cannot gate anything). A
+// clerk can therefore never book onto a competitor's pad, even by
+// hand-crafting the request.
+func (s *Server) handleCounterBookParcel(c *gin.Context) {
+	orgID := s.orgCtx(c, authsvc.CapParcelOrgDispatch)
+	if orgID == "" {
+		return
+	}
+	var req counterBookRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		writeError(c, http.StatusBadRequest, "INVALID_REQUEST", err.Error())
+		return
+	}
+	if !requireMsisdn(c, &req.SenderMsisdn, "The sender's phone number") {
+		return
+	}
+	if !requireMsisdn(c, &req.ReceiverMsisdn, "The receiver's phone number") {
+		return
+	}
+	ctx := ctxFromGin(c)
+	var contentsDeclaredByStaffID *string
+	if req.ContentsDeclared && ctx.ActorID != "" {
+		id := ctx.ActorID
+		contentsDeclaredByStaffID = &id
+	}
+	parcelID, code, deliveryCode, serviceTicketNumber, err := dbx.BookParcel(c.Request.Context(), s.Pool, dbx.BookParcelInput{
+		SenderName: req.SenderName, SenderMsisdn: req.SenderMsisdn,
+		ReceiverName: req.ReceiverName, ReceiverMsisdn: req.ReceiverMsisdn,
+		OriginLabel: req.OriginLabel, DestinationLabel: req.DestinationLabel, Notes: req.Notes,
+		ParcelType: req.ParcelType, WeightKg: req.WeightKg, Fragile: req.Fragile,
+		ExistingCode:       req.ExistingCode,
+		DeclaredValueKes:   req.DeclaredValueKes, CoverageTierID: req.CoverageTierID,
+		ParcelOrgID: &orgID, OriginMethod: "SCHEDULED_PICKUP", PayAtCounter: true,
+		BinderOrgID: &orgID,
+		LengthCm: req.LengthCm, WidthCm: req.WidthCm, HeightCm: req.HeightCm,
+		ContentsDeclaredByStaffID: contentsDeclaredByStaffID,
+	})
+	if err != nil {
+		writeParcelError(c, err)
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{
+		"parcelId": parcelID, "code": code,
+		"serviceTicketNumber": serviceTicketNumber, "deliveryCode": deliveryCode,
+		"status": "BOOKED",
+	})
+}
+
+// handleOrgSearchCounterParties — GET /v1/parcel-orgs/me/parties?q=.
+//
+// The company counter's address book: people this company has shipped
+// to or from before. Dispatch-gated like the booking it feeds — names
+// paired with phone numbers are a contact list, not a lookup, and the
+// scope is the session's org, so one company's customers never
+// complete another company's counter form.
+func (s *Server) handleOrgSearchCounterParties(c *gin.Context) {
+	orgID := s.orgCtx(c, authsvc.CapParcelOrgDispatch)
+	if orgID == "" {
+		return
+	}
+	rows, err := dbx.SearchOrgCounterParties(c.Request.Context(), s.Pool, orgID, c.Query("q"), 8)
+	if err != nil {
+		writeError(c, http.StatusInternalServerError, "SEARCH_FAILED", "Could not search")
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"parties": rows})
+}
+
 // handleGetMyOrgStation — GET /v1/parcel-orgs/me/stations/:id. The
 // station, its location, and the team currently posted to it.
 func (s *Server) handleGetMyOrgStation(c *gin.Context) {

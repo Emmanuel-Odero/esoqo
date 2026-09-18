@@ -916,6 +916,16 @@ type OrgParcelLabel struct {
 	SenderMsisdn    *string `json:"senderMsisdn"`
 	ReceiverName    *string `json:"receiverName"`
 	ReceiverMsisdn  *string `json:"receiverMsisdn"`
+	// What the field handler recorded beyond names: the eyeballed item
+	// type and any tape-measure readings. Carried into a counter
+	// booking rather than re-asked — same contract as the admin
+	// label-info read, so the company counter resumes exactly where
+	// the field left off.
+	ItemType      *string  `json:"itemType"`
+	WeightRangeKg *string  `json:"weightRangeKg"`
+	LengthCm      *float64 `json:"lengthCm"`
+	WidthCm       *float64 `json:"widthCm"`
+	HeightCm      *float64 `json:"heightCm"`
 	UsedAt          *string `json:"usedAt"`
 	VoidedAt        *string `json:"voidedAt"`
 	VoidedReason    *string `json:"voidedReason"`
@@ -941,18 +951,21 @@ func GetOrgParcelLabel(ctx context.Context, pool *pgxpool.Pool, orgID, code stri
 		            WHEN s."usedAt" IS NOT NULL THEN 'spent'
 		            WHEN s."infoAttachedAt" IS NOT NULL THEN 'filled'
 		            ELSE 'blank' END,
-		       s."itemDescription", s.destination, s."senderName", s."senderMsisdn",
-		       s."receiverName", s."receiverMsisdn",
-		       to_char(s."usedAt", 'YYYY-MM-DD"T"HH24:MI:SSZ'),
-		       to_char(s."voidedAt", 'YYYY-MM-DD"T"HH24:MI:SSZ'),
-		       s."voidedReason",
-		       p.id::text, p.code, p.status::text,
-		       s."batchId"::text
+	       s."itemDescription", s.destination, s."senderName", s."senderMsisdn",
+	       s."receiverName", s."receiverMsisdn",
+	       s."itemType", s."weightRangeKg",
+	       s."lengthCm"::float8, s."widthCm"::float8, s."heightCm"::float8,
+	       to_char(s."usedAt", 'YYYY-MM-DD"T"HH24:MI:SSZ'),
+	       to_char(s."voidedAt", 'YYYY-MM-DD"T"HH24:MI:SSZ'),
+	       s."voidedReason",
+	       p.id::text, p.code, p.status::text,
+	       s."batchId"::text
 		FROM parcel_label_stock s
 		LEFT JOIN parcel p ON p.id = s."usedByParcelId"
 		WHERE upper(s.code) = upper($1) AND s."parcelOrgId" = $2`, code, orgID).
 		Scan(&l.Code, &l.State, &l.ItemDescription, &l.Destination,
 			&l.SenderName, &l.SenderMsisdn, &l.ReceiverName, &l.ReceiverMsisdn,
+			&l.ItemType, &l.WeightRangeKg, &l.LengthCm, &l.WidthCm, &l.HeightCm,
 			&l.UsedAt, &l.VoidedAt, &l.VoidedReason,
 			&l.ParcelID, &l.ParcelCode, &l.ParcelStatus, &l.BatchID)
 	if errors.Is(err, pgx.ErrNoRows) {
@@ -1007,6 +1020,63 @@ func SearchOrgLabels(ctx context.Context, pool *pgxpool.Pool, orgID, tail string
 			return nil, err
 		}
 		out = append(out, r)
+	}
+	return out, rows.Err()
+}
+
+// SearchOrgCounterParties — the company counter's address book: people
+// THIS company has shipped to or from before, most-frequent first.
+//
+// Same query shape as the platform-wide SearchCounterParties (past
+// parcels, not a hand-maintained table, so it starts full and cannot
+// disagree with the record), scoped to the session's org. A desk must
+// never complete a regular's name from another company's customers —
+// that list is someone else's business, and showing it would leak
+// names paired with phone numbers across tenants.
+func SearchOrgCounterParties(
+	ctx context.Context, pool *pgxpool.Pool, orgID, q string, limit int,
+) ([]CounterParty, error) {
+	if len([]rune(q)) < 3 {
+		// Two letters matches half the country. Making the caller commit
+		// to three keeps this a lookup rather than a table scan dressed
+		// as one — same floor as the platform-wide search.
+		return nil, nil
+	}
+	if limit <= 0 || limit > 25 {
+		limit = 8
+	}
+	rows, err := pool.Query(ctx, `
+		WITH parties AS (
+			SELECT "senderName" AS name, "senderMsisdn" AS msisdn,
+			       "originLabel" AS label, "createdAt"
+			FROM parcel WHERE "senderMsisdn" <> '' AND "parcelOrgId" = $2::uuid
+			UNION ALL
+			SELECT "receiverName", "receiverMsisdn", "destinationLabel", "createdAt"
+			FROM parcel WHERE "receiverMsisdn" <> '' AND "parcelOrgId" = $2::uuid
+		)
+		SELECT name, msisdn, label, "createdAt", shipments FROM (
+			SELECT DISTINCT ON (msisdn)
+			       name, msisdn, label, "createdAt",
+			       count(*) OVER (PARTITION BY msisdn) AS shipments
+			FROM parties
+			WHERE name ILIKE '%'||$1||'%' OR msisdn ILIKE '%'||$1||'%'
+			-- Newest row per number wins, so a name correction or a
+			-- change of shop supersedes what was recorded a year ago.
+			ORDER BY msisdn, "createdAt" DESC
+		) latest
+		ORDER BY shipments DESC, "createdAt" DESC
+		LIMIT $3`, q, orgID, limit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var out []CounterParty
+	for rows.Next() {
+		var p CounterParty
+		if err := rows.Scan(&p.Name, &p.Msisdn, &p.LastLabel, &p.LastSeen, &p.Shipments); err != nil {
+			return nil, err
+		}
+		out = append(out, p)
 	}
 	return out, rows.Err()
 }

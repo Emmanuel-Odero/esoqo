@@ -49,7 +49,7 @@ export default async function DispatchPage() {
 
       <DropoffPoll />
 
-      <DispatchBoard initialRuns={runs} stations={stations} staff={staff} />
+      <DispatchBoard initialRuns={runs} stations={stations} staff={staff} orgName={me.org.name} />
     </>
   );
 }

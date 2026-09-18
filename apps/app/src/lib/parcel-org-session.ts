@@ -195,6 +195,13 @@ export interface OrgParcelLabel {
   senderMsisdn: string | null;
   receiverName: string | null;
   receiverMsisdn: string | null;
+  /** Field measurements carried into a counter booking rather than
+   *  re-asked — same contract as the admin label-info read. */
+  itemType: string | null;
+  weightRangeKg: string | null;
+  lengthCm: number | null;
+  widthCm: number | null;
+  heightCm: number | null;
   usedAt: string | null;
   voidedAt: string | null;
   voidedReason: string | null;

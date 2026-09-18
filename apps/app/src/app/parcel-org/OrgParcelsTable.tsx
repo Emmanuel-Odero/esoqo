@@ -3,6 +3,7 @@
 import { useState, useTransition } from 'react';
 import { Icon } from '@esoqo/ui';
 import type { OrgParcelRow } from '@/lib/parcel-org-session';
+import { DemoPhoneSpan } from '@/components/DemoContact';
 import { assignOrgParcel } from './actions';
 
 /**
@@ -118,9 +119,7 @@ function Row({
       <td>
         {parcel.receiverName}
         {/* A rider standing at a gate needs to call, not look it up. */}
-        <a className="sub mono" style={{ display: 'block' }} href={`tel:${parcel.receiverMsisdn}`}>
-          {parcel.receiverMsisdn}
-        </a>
+        <DemoPhoneSpan msisdn={parcel.receiverMsisdn} className="sub mono" />
       </td>
       <td className="sub">{parcel.originLabel} → {parcel.destinationLabel}</td>
       <td>

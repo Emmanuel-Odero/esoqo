@@ -3,6 +3,7 @@ import Link from 'next/link';
 import { Icon, Logo } from '@esoqo/ui';
 import { ParcelOrgUnauthorised, getParcelOrgMe } from '@/lib/parcel-org-session';
 import { ParcelOrgNav, type ParcelOrgNavItem } from './ParcelOrgNav';
+import { DemoBanner } from './DemoBanner';
 import './parcel-org.css';
 
 export const metadata: Metadata = { title: { default: 'Your parcels', template: '%s · Esoqo' } };
@@ -41,6 +42,7 @@ export default async function ParcelOrgLayout({ children }: { children: React.Re
   const nav: ParcelOrgNavItem[] = [
     { href: '/parcel-org', label: 'Parcels', icon: 'box' },
     ...(canDispatch ? [{ href: '/parcel-org/dispatch', label: 'Dispatch', icon: 'send' as const }] : []),
+    ...(canDispatch ? [{ href: '/parcel-org/counter', label: 'Counter', icon: 'plus' as const }] : []),
     { href: '/parcel-org/receive', label: 'Front desk', icon: 'truck', badge: me.stats.awaitingDropoff || undefined },
     { href: '/parcel-org/labels', label: 'Labels', icon: 'tag' },
     ...(canManagePricing ? [{ href: '/parcel-org/pricing', label: 'Pricing', icon: 'coins' as const }] : []),
@@ -53,6 +55,7 @@ export default async function ParcelOrgLayout({ children }: { children: React.Re
 
   return (
     <div className="porg">
+      <DemoBanner />
       <header className="porgbar">
         <div className="porgbar-in">
           <Link href="/parcel-org" className="porgbrand" aria-label="Esoqo home">

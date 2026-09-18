@@ -505,6 +505,11 @@ export interface AttachLabelInfoInput {
   senderMsisdn?: string | null;
   receiverName?: string | null;
   receiverMsisdn?: string | null;
+  itemType?: string | null;
+  weightRangeKg?: string | null;
+  lengthCm?: number | null;
+  widthCm?: number | null;
+  heightCm?: number | null;
 }
 
 /** Look a label code up against the company's own stock — what scanning
@@ -541,6 +546,11 @@ export async function attachOrgLabelInfo(
         senderMsisdn: input.senderMsisdn?.trim() || null,
         receiverName: input.receiverName?.trim() || null,
         receiverMsisdn: input.receiverMsisdn?.trim() || null,
+        itemType: input.itemType?.trim() || null,
+        weightRangeKg: input.weightRangeKg?.trim() || null,
+        lengthCm: input.lengthCm ?? null,
+        widthCm: input.widthCm ?? null,
+        heightCm: input.heightCm ?? null,
       }),
     });
     revalidatePath("/parcel-org/labels");
@@ -548,6 +558,92 @@ export async function attachOrgLabelInfo(
   } catch (e) {
     return toResult(e);
   }
+}
+
+// ── Company counter ──
+//
+// The same counter the Esoqo console uses (see @esoqo/ui's CounterForm
+// — one screen, not two implementations), bound here to the company's
+// own session: its stock, its customers, its rate card. Nothing names
+// a company — the org comes from the session on the Go side, so there
+// is no parameter a browser could edit to book onto another pad.
+
+export interface OrgCounterBookInput {
+  senderName: string;
+  senderMsisdn: string;
+  receiverName: string;
+  receiverMsisdn: string;
+  originLabel: string;
+  destinationLabel: string;
+  parcelType: string;
+  weightKg?: number;
+  lengthCm?: number;
+  widthCm?: number;
+  heightCm?: number;
+  declaredValueKes?: number;
+  coverageTierId?: string;
+  contentsDeclared: boolean;
+  existingCode?: string;
+  notes?: string;
+  fragile?: boolean;
+}
+
+/** Book a parcel at the company's own counter. Lands directly in
+ *  BOOKED against the company's books (pay at the desk, in person),
+ *  bound to one of its own pre-printed labels when scanned — or minted
+ *  fresh when the clerk starts from blank. */
+export async function bookOrgCounterParcel(
+  input: OrgCounterBookInput,
+): Promise<{ ok: true; code: string } | { ok: false; error: string }> {
+  try {
+    const res = await parcelOrgFetch<{ code: string }>("/v1/parcel-orgs/me/counter/book", {
+      method: "POST",
+      body: JSON.stringify(input),
+    });
+    revalidatePath("/parcel-org");
+    return { ok: true, code: res.code };
+  } catch (e) {
+    const r = toResult(e);
+    return { ok: false, error: r.ok ? "Could not book that parcel" : r.error };
+  }
+}
+
+export interface OrgCounterParty {
+  name: string;
+  msisdn: string;
+  lastLabel: string;
+  shipments: number;
+}
+
+/** The counter's address book: people this company has shipped to or
+ *  from before, most-frequent first. Three letters minimum — two
+ *  matches half the country. */
+export async function searchOrgCounterParties(q: string): Promise<OrgCounterParty[]> {
+  if (q.trim().length < 3) return [];
+  const res = await parcelOrgFetch<{ parties: OrgCounterParty[] | null }>(
+    `/v1/parcel-orgs/me/parties?q=${encodeURIComponent(q.trim())}`,
+  );
+  return res.parties ?? [];
+}
+
+export interface OrgCounterPricingOption {
+  parcelType: string;
+  weightLabel: string;
+  minWeightKg: number;
+  maxWeightKg: number;
+  minKes: string;
+  maxKes: string;
+}
+
+/** Every weight bracket on the company's own rate card (platform
+ *  default wherever the company hasn't set its own), so the counter
+ *  matches a measured weight to a bracket without a round trip per
+ *  keystroke. Public endpoint — quoted before anyone signs in. */
+export async function listOrgCounterPricing(orgId: string): Promise<OrgCounterPricingOption[]> {
+  const res = await parcelOrgFetch<{ pricing: OrgCounterPricingOption[] | null }>(
+    `/v1/parcels/pricing?parcelOrgId=${encodeURIComponent(orgId)}`,
+  );
+  return res.pricing ?? [];
 }
 
 // ── Dispatch runs ──
@@ -586,6 +682,19 @@ export async function listDispatches(includeClosed = false): Promise<DispatchRun
     `/v1/parcel-orgs/me/dispatch${includeClosed ? "?closed=true" : ""}`,
   );
   return res.dispatches ?? [];
+}
+
+/** One run with its recent trail (up to 200 points): the journey line
+ *  the map draws, plus the pings speed and stops derive from. */
+export async function getDispatch(id: string): Promise<DispatchRun | null> {
+  try {
+    const res = await parcelOrgFetch<{ dispatch: DispatchRun | null }>(
+      `/v1/parcel-orgs/me/dispatch/${encodeURIComponent(id)}`,
+    );
+    return res.dispatch;
+  } catch {
+    return null;
+  }
 }
 
 /** Open a run: vehicle, leg, crew and receiving team in one call. */

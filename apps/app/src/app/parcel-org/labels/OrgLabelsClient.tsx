@@ -1,6 +1,6 @@
 'use client';
 
-import { useMemo, useState, useTransition } from 'react';
+import { Fragment, useMemo, useState, useTransition } from 'react';
 import { Icon, LabelPrintSheet, PrintLayoutControls, DEFAULT_PRINT_LAYOUT, type PrintLayout } from '@esoqo/ui';
 import { useAnnounce } from '@esoqo/a11y';
 import {
@@ -31,6 +31,14 @@ const TABS: { state: string; label: string }[] = [
   { state: 'voided', label: 'Withdrawn' },
 ];
 
+/** What each tab's empty state is telling the reader. */
+const EMPTY_COPY: Record<string, string> = {
+  blank: 'Nothing sitting unused — everything issued has been written on or booked.',
+  filled: 'No written-on-but-not-booked labels right now.',
+  spent: 'No parcels are using your labels right now.',
+  voided: 'No withdrawn labels — nothing has had to be retired yet.',
+};
+
 type SortKey = 'newest' | 'oldest' | 'code' | 'item' | 'destination';
 
 export function OrgLabelsClient({
@@ -52,6 +60,11 @@ export function OrgLabelsClient({
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [layout, setLayout] = useState<PrintLayout>(DEFAULT_PRINT_LAYOUT);
   const [showPreview, setShowPreview] = useState(false);
+  // The one register row opened in place. Inline beats the old
+  // "Details → re-load the top search" hop: every field the row knows
+  // is already in memory, so the expansion is instant and never moves
+  // off the list.
+  const [expandedCode, setExpandedCode] = useState<string | null>(null);
   const [discardReason, setDiscardReason] = useState('');
   const [confirmDiscard, setConfirmDiscard] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
@@ -106,16 +119,39 @@ export function OrgLabelsClient({
 
   return (
     <>
+      {/* The register at a glance — how many stickers are on the pad,
+          written on, or moving, so the review of issued stock is one
+          look rather than a scan of the table below. */}
+      <div className="kpis" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(120px, 1fr))', marginBottom: 12 }}>
+        <div className="kpi">
+          <span className="l">Empty</span>
+          <span className="n">{counts['blank'] ?? 0}</span>
+          <span className="sub">on the pad, ready</span>
+        </div>
+        <div className="kpi">
+          <span className="l">Written on</span>
+          <span className="n">{(counts['filled'] ?? 0) + (counts['spent'] ?? 0)}</span>
+          <span className="sub">details attached</span>
+        </div>
+        <div className="kpi">
+          <span className="l">Used</span>
+          <span className="n">{counts['spent'] ?? 0}</span>
+          <span className="sub">on parcels moving</span>
+        </div>
+        <div className="kpi">
+          <span className="l">Withdrawn</span>
+          <span className="n">{counts['voided'] ?? 0}</span>
+          <span className="sub">can never be used</span>
+        </div>
+      </div>
+
       <div className="card" style={{ padding: 16, marginBottom: 16 }}>
-        <p className="sub" style={{ margin: '0 0 6px' }}>
-          {counts['blank'] ?? 0} empty · {(counts['filled'] ?? 0) + (counts['spent'] ?? 0)} attached to packages.
-          These codes are yours — issued to {orgName} by Esoqo. Nobody else can book a
-          parcel against them, and if a pad goes missing you can withdraw the whole
-          batch below. Need more? Your Esoqo account manager prints the next pad.
-        </p>
         <p className="sub" style={{ margin: 0 }}>
-          Only Esoqo PKG-… labels scan. Labels your company printed itself are retired —
-          re-print the Esoqo pad below{orgLogoUrl ? ' with your logo attached' : ' (add your logo via your account manager for branded prints)'}.
+          These codes are yours — issued to {orgName} by Esoqo, and no other company can book a
+          parcel against them. Only Esoqo PKG-… labels scan now: re-print the Esoqo pad below
+          {orgLogoUrl ? ' with your logo attached' : ' (add a logo via your account manager for branded prints)'}.
+          If a pad goes missing you can withdraw the whole batch at the bottom of the page.
+          Need more? Your Esoqo account manager prints the next pad.
         </p>
       </div>
 
@@ -220,9 +256,20 @@ export function OrgLabelsClient({
           </div>
         )}
         {shown.length === 0 ? (
-          <p className="sub" style={{ margin: 0 }}>
-            {labels.length === 0 ? 'Nothing here yet.' : `No matches for “${filter.trim()}” in this list.`}
-          </p>
+          <div className="empty" style={{ padding: '28px 16px' }}>
+            <span className="ico"><Icon name="qr" size={22} /></span>
+            {labels.length === 0 ? (
+              <>
+                <h3>Nothing {TABS.find((t) => t.state === state)?.label.toLowerCase() ?? 'here'} yet.</h3>
+                <p className="sub">{EMPTY_COPY[state] ?? 'The register is empty for now.'}</p>
+              </>
+            ) : (
+              <>
+                <h3>No matches for “{filter.trim()}”.</h3>
+                <p className="sub">Try any consecutive characters from the {state === 'voided' ? 'withdrawal reason or code' : 'code, item or destination'} — the filter matches as you type.</p>
+              </>
+            )}
+          </div>
         ) : (
           <table className="tbl">
             <thead>
@@ -235,25 +282,41 @@ export function OrgLabelsClient({
             </thead>
             <tbody>
               {shown.map((l) => (
-                <tr key={l.code}>
-                  <td><input type="checkbox" checked={selected.has(l.code)} onChange={() => toggle(l.code)} aria-label={`Select ${l.code}`} /></td>
-                  <td className="mono">{l.code}</td>
-                  <td>{l.itemDescription ?? <span className="sub">—</span>}</td>
-                  <td>{l.destination ?? <span className="sub">—</span>}</td>
-                  <td className="sub" style={{ fontSize: '.8rem' }}>
-                    {state === 'voided'
-                      ? (l.voidedReason ?? 'Withdrawn')
-                      : new Date(l.usedAt ?? l.infoAttachedAt ?? l.createdAt)
-                        .toLocaleDateString('en-KE', { day: 'numeric', month: 'short' })}
-                  </td>
-                  <td style={{ textAlign: 'right', whiteSpace: 'nowrap' }}>
-                    {(l.state === 'blank' || l.state === 'filled') && canManage && (
-                      <a className="btn btn-o btn-sm" href={`/parcel-org/labels?state=${state}&code=${encodeURIComponent(l.code)}`}>
-                        <Icon name="document" size={13} />Details
-                      </a>
-                    )}
-                  </td>
-                </tr>
+                <Fragment key={l.code}>
+                  <tr>
+                    <td><input type="checkbox" checked={selected.has(l.code)} onChange={() => toggle(l.code)} aria-label={`Select ${l.code}`} /></td>
+                    <td className="mono">{l.code}</td>
+                    <td>{l.itemDescription ?? <span className="sub">—</span>}</td>
+                    <td>{l.destination ?? <span className="sub">—</span>}</td>
+                    <td className="sub" style={{ fontSize: '.8rem' }}>
+                      {state === 'voided'
+                        ? (l.voidedReason ?? 'Withdrawn')
+                        : dateOf(l.usedAt ?? l.infoAttachedAt ?? l.createdAt)}
+                    </td>
+                    <td style={{ textAlign: 'right', whiteSpace: 'nowrap' }}>
+                      <button
+                        className="btn btn-o btn-sm"
+                        onClick={() => setExpandedCode((c) => (c === l.code ? null : l.code))}
+                        aria-expanded={expandedCode === l.code}
+                      >
+                        {expandedCode === l.code ? 'Close' : 'Details'}
+                        <Icon name={expandedCode === l.code ? 'chevron-right' : 'chevron-down'} size={13} />
+                      </button>{' '}
+                      {(l.state === 'blank' || l.state === 'filled') && canManage && (
+                        <a className="btn btn-o btn-sm" href={`/parcel-org/counter?code=${encodeURIComponent(l.code)}`}>
+                          <Icon name="plus" size={13} />Book
+                        </a>
+                      )}
+                    </td>
+                  </tr>
+                  {expandedCode === l.code && (
+                    <tr>
+                      <td colSpan={6} style={{ background: 'var(--paper)' }}>
+                        <LabelRowDetail l={l} batch={batches.find((b) => b.batchId === l.batchId) ?? null} />
+                      </td>
+                    </tr>
+                  )}
+                </Fragment>
               ))}
             </tbody>
           </table>
@@ -267,6 +330,39 @@ export function OrgLabelsClient({
 
 function stampOf(l: OrgLabelRow): number {
   return new Date(l.usedAt ?? l.infoAttachedAt ?? l.createdAt).getTime() || 0;
+}
+
+/** "14 Jan" for the scatter of timestamps a label row carries. */
+function dateOf(iso: string): string {
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return '—';
+  return d.toLocaleDateString('en-KE', { day: 'numeric', month: 'short' });
+}
+
+/**
+ * The in-place expansion under a register row. Every field the row
+ * already has — sender, the write-on/used/withdrawn moments, which pad
+ * it came from, whether reprints stay genuine — is shown here, so
+ * "Details" never leaves the list.
+ */
+function LabelRowDetail({ l, batch }: { l: OrgLabelRow; batch: OrgLabelBatchRow | null }) {
+  const rows: [string, string][] = [];
+  if (l.itemDescription) rows.push(['Item', l.itemDescription]);
+  if (l.destination) rows.push(['Destination', l.destination]);
+  if (l.senderName) rows.push(['Sender', l.senderName]);
+  if (l.infoAttachedAt) rows.push(['Details written on', dateOf(l.infoAttachedAt)]);
+  if (l.usedAt) rows.push(['Used on a parcel', dateOf(l.usedAt)]);
+  if (l.voidedAt) rows.push(['Withdrawn', `${dateOf(l.voidedAt)}${l.voidedReason ? ` — ${l.voidedReason}` : ''}`]);
+  rows.push(['Pad', batch ? `printed ${dateOf(batch.createdAt)} · ${batch.live} still live` : 'issued by Esoqo']);
+  rows.push(['Genuine reprint QR', l.sig ? 'Signed — reprints verify as genuine.' : 'Unsigned row.']);
+
+  return (
+    <dl className="dl-grid" style={{ margin: 0 }}>
+      {rows.map(([dt, dd]) => (
+        <Fragment key={dt}><dt className="sub">{dt}</dt><dd>{dd}</dd></Fragment>
+      ))}
+    </dl>
+  );
 }
 
 function BatchList({ batches, canManage }: { batches: OrgLabelBatchRow[]; canManage: boolean }) {

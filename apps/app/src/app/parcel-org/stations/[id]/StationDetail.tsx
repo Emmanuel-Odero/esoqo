@@ -4,6 +4,7 @@ import dynamic from 'next/dynamic';
 import { useState, useTransition } from 'react';
 import { Icon } from '@esoqo/ui';
 import type { ParcelOrgStaffRow, ParcelOrgStationRow } from '@/lib/parcel-org-session';
+import { DemoCallButton } from '@/components/DemoContact';
 import { assignStationMember, setStationManager } from '../../actions';
 
 const StationMap = dynamic(() => import('./StationMap').then((m) => m.StationMap), {
@@ -68,9 +69,7 @@ export function StationDetail({
           <span className={`pill ${station.active ? 'p-ok' : 'p-mute'}`}>
             {station.active ? 'Active' : 'Suspended'}
           </span>
-          <a className="btn btn-o btn-sm" href={`tel:${station.msisdn}`}>
-            <Icon name="phone" size={14} />{station.msisdn}
-          </a>
+          <DemoCallButton msisdn={station.msisdn} label={station.msisdn} />
         </div>
       </div>
 
