@@ -4,6 +4,7 @@ import { useEffect, useId, useState, useTransition } from 'react';
 import { Icon, ParcelCapabilityPicker, RIDER_BASELINE } from '@esoqo/ui';
 import {
   actionCreateParcelOrg, actionUpdateParcelOrg, actionSearchEnterprises, actionCreateEnterprise,
+  actionUploadParcelOrgLogo,
   actionListParcelOrgStaff, actionCreateParcelOrgManager, actionIssueParcelOrgStaffId, actionSearchParcelPeople,
   type ParcelOrg, type ParcelOrgInput, type EnterpriseLite, type ParcelOrgStaffRow, type OrgMemberInput,
   type CollectorLite,
@@ -66,6 +67,9 @@ export function orgToInput(org: ParcelOrg, overrides: Partial<ParcelOrgInput> = 
     lng: org.lng,
     locationHint: org.locationHint,
     openingHours: org.openingHours,
+    logoStorageKey: org.logoStorageKey ?? null,
+    logoUrl: org.logoUrl ?? null,
+    brandAccent: org.brandAccent ?? null,
     ...overrides,
   };
 }
@@ -379,7 +383,9 @@ export function TeamManager({
             Pick someone already on Esoqo to link their existing identity, or type a new person&apos;s
             name and phone and Esoqo issues their ID on the spot. A phone number with a PIN gives
             them a full Esoqo account — they can sign in at /signin and at /parcel-co/{org.slug}.
-            A PIN alone is a company-portal login only. Tick &quot;Contact person&quot; on anyone
+            A PIN alone is a company-portal login only. Inviting by phone texts them a first PIN —
+            typed above, or a temporary one when left blank — which they use to sign in and then
+            reset. Tick &quot;Contact person&quot; on anyone
             senders should reach — several is fine. A custom role picks its own permissions above.
           </span>
         </>
@@ -497,6 +503,14 @@ export function OrgForm({
   const [openingHours, setOpeningHours] = useState(initial?.openingHours ?? '');
   const [lat, setLat] = useState(initial?.lat != null ? String(initial.lat) : '');
   const [lng, setLng] = useState(initial?.lng != null ? String(initial.lng) : '');
+  // Co-branded label assets. logoUrl prints centered in the label
+  // header; empty = Esoqo branding alone (the fallback every label
+  // prints with when a company hasn't entered branding).
+  const [logoUrl, setLogoUrl] = useState(initial?.logoUrl ?? '');
+  const [logoStorageKey, setLogoStorageKey] = useState(initial?.logoStorageKey ?? '');
+  const [brandAccent, setBrandAccent] = useState(initial?.brandAccent ?? '');
+  const [logoPending, startLogoTransition] = useTransition();
+  const [logoError, setLogoError] = useState<string | null>(null);
   // Roster entered while onboarding. Create-only: an existing company's
   // team is edited through TeamManager, where each row has an id to
   // update in place.
@@ -506,7 +520,7 @@ export function OrgForm({
   const ids = {
     name: useId(), slug: useId(), status: useId(), commission: useId(),
     phone: useId(), settlement: useId(), ent: useId(), newEnt: useId(),
-    walkIn: useId(), location: useId(), hours: useId(),
+    walkIn: useId(), location: useId(), hours: useId(), brand: useId(),
   };
 
   function addMember() {
@@ -551,6 +565,11 @@ export function OrgForm({
         }
       }
     }
+    const accent = brandAccent.trim();
+    if (accent && !/^#(?:[0-9a-fA-F]{3}|[0-9a-fA-F]{6})$/.test(accent)) {
+      setError('Brand accent must be a hex colour like #1a73e8 — or leave it empty.');
+      return;
+    }
     const input: ParcelOrgInput = {
       // Only sent on create — an update never moves a company to a
       // different owning business, which would silently transfer every
@@ -570,6 +589,9 @@ export function OrgForm({
       openingHours: acceptsWalkIn ? (openingHours.trim() || null) : null,
       lat: acceptsWalkIn && lat.trim() ? Number(lat) : null,
       lng: acceptsWalkIn && lng.trim() ? Number(lng) : null,
+      logoStorageKey: logoStorageKey.trim() || null,
+      logoUrl: logoUrl.trim() || null,
+      brandAccent: accent || null,
     };
     startTransition(async () => {
       const result = initial
@@ -751,6 +773,58 @@ export function OrgForm({
         </div>
       )}
 
+      <div style={{ borderTop: '1px solid var(--line)', paddingTop: 12, display: 'grid', gap: 10 }}>
+        <div>
+          <span className="sub" style={{ display: 'block', fontWeight: 600 }}>Label branding</span>
+          <span className="sub" style={{ fontSize: '.78rem' }}>
+            Prints centered in every label header for this company&apos;s pads — beside Esoqo&apos;s
+            own mark, never over the QR or barcode. No logo = Esoqo branding alone.
+          </span>
+        </div>
+        <div style={{ display: 'flex', gap: 12, alignItems: 'center', flexWrap: 'wrap' }}>
+          {logoUrl ? (
+            <img src={logoUrl} alt={`${name || 'Company'} logo preview`}
+              style={{ height: 40, maxWidth: 160, objectFit: 'contain', border: '1px solid var(--line)', borderRadius: 6, padding: 4, background: '#fff' }} />
+          ) : (
+            <span className="sub" style={{ fontSize: '.82rem' }}>No logo — labels print with Esoqo branding.</span>
+          )}
+          <label className="btn btn-o btn-sm" style={{ cursor: 'pointer' }}>
+            {logoPending ? 'Uploading…' : logoUrl ? 'Replace logo' : 'Upload logo'}
+            <input type="file" accept="image/png,image/jpeg" hidden disabled={logoPending}
+              onChange={(e) => {
+                const file = e.target.files?.[0];
+                e.target.value = '';
+                if (!file) return;
+                setLogoError(null);
+                const fd = new FormData();
+                fd.append('file', file);
+                startLogoTransition(async () => {
+                  const res = await actionUploadParcelOrgLogo(fd);
+                  if (!res.ok) { setLogoError(res.error); return; }
+                  setLogoStorageKey(res.storageKey);
+                  setLogoUrl(res.url);
+                });
+              }} />
+          </label>
+          {logoUrl && (
+            <button type="button" className="btn btn-o btn-sm" disabled={logoPending}
+              onClick={() => { setLogoUrl(''); setLogoStorageKey(''); }}>
+              Remove
+            </button>
+          )}
+        </div>
+        {logoError && (
+          <p role="alert" style={{ color: 'var(--red)', fontSize: '.85rem', margin: 0 }}>{logoError}</p>
+        )}
+        <div style={{ maxWidth: 220 }}>
+          <label className="sub" htmlFor={ids.brand} style={{ display: 'block', marginBottom: 4 }}>
+            Brand accent (optional hex)
+          </label>
+          <input id={ids.brand} className="mono" style={inputStyle} value={brandAccent}
+            placeholder="#1a73e8" onChange={(e) => setBrandAccent(e.target.value)} />
+        </div>
+      </div>
+
       {!initial && (
         <div style={{ borderTop: '1px solid var(--line)', paddingTop: 12, display: 'grid', gap: 10 }}>
           <div>
@@ -759,7 +833,9 @@ export function OrgForm({
               Add the people who run this company and pick each one&apos;s role. Tick
               {' '}&quot;Contact&quot; on anyone senders should reach — you can tick several. A
               member with a phone and a PIN also gets a full Esoqo account they can sign in with
-              at /signin; the rest sign in at /parcel-co/{slug || '…'}.
+              at /signin; the rest sign in at /parcel-co/{slug || '…'}. Each member invited by
+              phone is texted a first PIN — typed, or a temporary one when left blank — to sign
+              in with and then reset.
             </span>
           </div>
           {members.map((m, i) => (
