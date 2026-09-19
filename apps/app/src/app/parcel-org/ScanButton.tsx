@@ -240,7 +240,9 @@ export function ScanButton({ onScan }: { onScan: (code: string) => void }) {
           <button
             type="button"
             className="btn btn-o btn-sm"
-            disabled={starting || canUseCamera === false}
+            // The branch guard above already excludes `false`, so only
+            // the starting state can disable the button here.
+            disabled={starting}
             onClick={() => {
               setError(null);
               setOpen((v) => !v);

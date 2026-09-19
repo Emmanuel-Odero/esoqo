@@ -1046,12 +1046,12 @@ export async function listActiveShipments(): Promise<ShipmentView[]> {
 /** Get left-behind parcels for a route (missing parcels that should have been loaded). */
 export async function getLeftBehindParcels(
   shipmentId: string,
-): Promise<{ parcels: OrgParcelRow[] } | { ok: false; error: string }> {
+): Promise<{ ok: true; parcels: OrgParcelRow[] } | { ok: false; error: string }> {
   try {
     const res = await parcelOrgFetch<{ parcels: OrgParcelRow[] | null }>(
       `/v1/parcel-orgs/me/shipments/${encodeURIComponent(shipmentId)}/left-behind`,
     );
-    return { parcels: res.parcels ?? [] };
+    return { ok: true, parcels: res.parcels ?? [] };
   } catch (e) {
     const r = toResult(e);
     return {

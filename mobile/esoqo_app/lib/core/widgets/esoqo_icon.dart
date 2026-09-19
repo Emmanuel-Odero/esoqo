@@ -1,4 +1,4 @@
-/// Esoqo's icon system — ported from packages/ui/src/Icon.tsx: 63 stroke
+/// Esoqo's icon system — ported from packages/ui/src/Icon.tsx: 69 stroke
 /// icons on a 24px grid, generated 1:1 from that file's SVG symbols into
 /// assets/icons/*.svg (see the redesign notes; regenerate with the same
 /// extraction script if packages/ui/src/Icon.tsx changes).
