@@ -1,4 +1,5 @@
 import { cookies } from "next/headers";
+import { cache } from "react";
 import { goUrl } from "./ticketing";
 
 /**
@@ -154,35 +155,13 @@ export interface ParcelOrgMe {
   capabilities: string[];
 }
 
-export async function getParcelOrgMe(): Promise<ParcelOrgMe> {
+/** The session profile, fetched once per request. The layout calls this
+ *  for the nav chrome and every child page calls it again for its own
+ *  content — React's cache() unifies those into a single round trip to
+ *  core-go instead of the two each page used to make. */
+export const getParcelOrgMe = cache(async (): Promise<ParcelOrgMe> => {
   return parcelOrgFetch<ParcelOrgMe>("/v1/parcel-orgs/me");
-}
-
-/** Live dispatch — rider dots, parcels needing a rider or running late,
- *  and the company's stations. Mirrors core-go's dbx.OrgLiveView. */
-export interface OrgLiveRider {
-  partyId: string;
-  name: string;
-  role: string;
-  lat: string;
-  lng: string;
-  at: string;
-}
-
-export interface OrgLiveParcel {
-  code: string;
-  status: string;
-  lat: string | null;
-  lng: string | null;
-  overdue: boolean;
-  receiverName: string;
-}
-
-export interface OrgLiveView {
-  riders: OrgLiveRider[];
-  parcels: OrgLiveParcel[];
-  stations: ParcelOrgStationRow[];
-}
+});
 
 /** A scanned/typed label resolved against the company's own stock.
  *  Mirrors dbx.OrgParcelLabel. */

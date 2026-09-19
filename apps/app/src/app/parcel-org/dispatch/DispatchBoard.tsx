@@ -99,6 +99,13 @@ export function DispatchBoard({
   orgName: string;
 }) {
   const [runs, setRuns] = useState(initialRuns);
+  // The page's DropoffPoll calls router.refresh() every 30s, which
+  // re-runs the server component and hands us a fresh initialRuns. The
+  // board must adopt it or the poll would re-fetch endlessly and never
+  // move the board — this is the whole "live fleet" mechanism.
+  useEffect(() => {
+    setRuns(initialRuns);
+  }, [initialRuns]);
   const [selectedId, setSelectedId] = useState<string | null>(
     () => initialRuns.find((r) => r.status === 'ACTIVE')?.id ?? null,
   );
@@ -124,7 +131,12 @@ export function DispatchBoard({
   const activeStaff = staff.filter((s) => s.active);
 
   async function refresh() {
-    setRuns(await listDispatches(true));
+    // A failed refetch (network blip, or the shift session expired) is
+    // not worth throwing the dispatcher out of the board over — the
+    // mutation that triggered it already succeeded server-side, and the
+    // board stays on what it has. The next action will surface the
+    // session problem when it matters.
+    try { setRuns(await listDispatches(true)); } catch { /* keep the current board */ }
   }
 
   // The board list carries no trail (payload weight); the selected
@@ -192,7 +204,6 @@ export function DispatchBoard({
 
           <RunInspector
             run={selectedWithTrail}
-            orgName={orgName}
             onFullDetails={(id) => {
               setExpandedId((prev) => (prev === id ? null : id));
               document.getElementById(`run-${id}`)?.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
@@ -265,10 +276,9 @@ export function DispatchBoard({
  * controls (see DispatchBoard's expandedId).
  */
 function RunInspector({
-  run, orgName, onFullDetails,
+  run, onFullDetails,
 }: {
   run: DispatchRun | null;
-  orgName: string;
   onFullDetails: (id: string) => void;
 }) {
   if (!run) {
@@ -283,10 +293,7 @@ function RunInspector({
   }
 
   const driver = run.crew.find((c) => c.role === 'DRIVER') ?? run.crew[0] ?? null;
-  const stops = recordedStops(run.trail);
-  const speed = currentSpeedKmh(run.trail);
   const progress = journeyProgress(run);
-  const covered = distanceCoveredKm(run.trail);
   const isActive = run.status === 'ACTIVE';
 
   return (
@@ -319,31 +326,8 @@ function RunInspector({
         </div>
       </div>
 
-      <div className="kpis" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(130px, 1fr))', marginTop: 12 }}>
-        <div className="kpi">
-          <span className="l">Moving at</span>
-          <span className="n">{speed === null ? '—' : `${Math.round(speed)} km/h`}</span>
-          <span className="sub">{orgName} fleet</span>
-        </div>
-        <div className="kpi">
-          <span className="l">Journey</span>
-          <span className="n">{progress === null ? '—' : `${Math.round(progress * 100)}%`}</span>
-          <span className="sub">{covered < 1 ? 'just left' : `${covered.toFixed(1)} km covered`}</span>
-        </div>
-        <div className="kpi">
-          <span className="l">Stops made</span>
-          <span className="n">{stops.length}</span>
-          <span className="sub">{run.trail.length} position reports</span>
-        </div>
-        <div className="kpi">
-          <span className="l">Crew</span>
-          <span className="n">{run.crew.length}</span>
-          <span className="sub">{run.receivers.length > 0 ? `receiving: ${run.receivers.map((x) => x.name).join(', ')}` : 'no receiver named'}</span>
-        </div>
-      </div>
-
       {progress !== null && (
-        <div style={{ height: 8, borderRadius: 4, background: 'var(--line)', overflow: 'hidden', marginTop: 12 }}>
+        <div aria-label={`${Math.round(progress * 100)}% of journey complete`} style={{ height: 6, borderRadius: 4, background: 'var(--line)', overflow: 'hidden', marginTop: 14 }}>
           <div style={{ width: `${Math.round(progress * 100)}%`, height: '100%', background: 'var(--blue, #1565C0)' }} />
         </div>
       )}

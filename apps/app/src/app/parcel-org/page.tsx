@@ -1,4 +1,3 @@
-import { displayKES } from '@esoqo/domain';
 import type { Metadata } from 'next';
 import Link from 'next/link';
 import { redirect } from 'next/navigation';
@@ -11,6 +10,7 @@ import { OrgParcelsTable } from './OrgParcelsTable';
 import { CustomParcelPanel } from './CustomParcelPanel';
 import { RiderCashPanel } from './RiderCashPanel';
 import { DropoffPoll } from './DropoffPoll';
+import { DashboardScanner } from './DashboardScanner';
 
 export const dynamic = 'force-dynamic';
 export const metadata: Metadata = {
@@ -59,6 +59,8 @@ export default async function ParcelOrgDashboard(
   const canSeeEarnings = me.capabilities.includes('parcelorg.earnings');
   const canDispatch = me.capabilities.includes('parcelorg.dispatch');
   const canImport = me.capabilities.includes('parcelorg.write');
+  const canCarry = me.capabilities.includes('parcelorg.carry');
+  const canDesk = canDispatch || canCarry;
   const { stats } = me;
   const needsAttention = stats.failedDeliveries + stats.atAgent;
 
@@ -66,35 +68,70 @@ export default async function ParcelOrgDashboard(
     <>
       <div className="head">
         <div>
-          <h1>Parcels</h1>
+          <p className="kicker">{me.org.name}</p>
+          <h1>Parcel operations</h1>
           <p>
-            Your parcels, your riders, your earnings.
+            Start a task or review the parcels that need attention.
             {me.org.status !== 'ACTIVE' && ' This company isn’t active yet — new work won’t be routed to you.'}
           </p>
+        </div>
+        <div className="actions">
+          {canDesk && (
+            <Link href="/parcel-org/counter" className="btn btn-p btn-sm">
+              <Icon name="qr" size={15} /> Open counter
+            </Link>
+          )}
+          {canDispatch && (
+            <Link href="/parcel-org/dispatch" className="btn btn-o btn-sm">
+              <Icon name="send" size={15} /> Dispatch
+            </Link>
+          )}
         </div>
       </div>
 
       <DropoffPoll />
 
+      {canCarry && <DashboardScanner />}
+
+      <section className="courier-actions" aria-label="Start a task">
+        {canDesk && (
+          <Link href="/parcel-org/counter" className="courier-action">
+            <span className="courier-action-icon green"><Icon name="qr" size={19} /></span>
+            <span><strong>Counter</strong><small>Receive or book a parcel</small></span>
+            <Icon className="courier-action-arrow" name="arrow-right" size={17} />
+          </Link>
+        )}
+        {canDispatch && (
+          <Link href="/parcel-org/dispatch" className="courier-action">
+            <span className="courier-action-icon blue"><Icon name="send" size={19} /></span>
+            <span><strong>Dispatch</strong><small>Open or follow a run</small></span>
+            <Icon className="courier-action-arrow" name="arrow-right" size={17} />
+          </Link>
+        )}
+        <Link href="/parcel-org/counter?tab=labels" className="courier-action">
+          <span className="courier-action-icon amber"><Icon name="tag" size={19} /></span>
+            <span><strong>Labels</strong><small>Find or print labels</small></span>
+          <Icon className="courier-action-arrow" name="arrow-right" size={17} />
+        </Link>
+      </section>
+
       {canImport && <CustomParcelPanel />}
 
-      <div className="kpis" style={{ marginBottom: 22, gridTemplateColumns: 'repeat(auto-fit, minmax(190px, 1fr))' }}>
-        {stats.awaitingDropoff > 0 && (
-          <div className="kpi a">
-            <span className="l">Awaiting drop-off</span>
-            <span className="n" style={{ color: 'var(--amber)' }}>{stats.awaitingDropoff}</span>
-            <span className="sub">Booked online, sender bringing it in themselves</span>
-          </div>
-        )}
+      <div className="kpis dashboard-kpis">
+        <div className={`kpi ${stats.awaitingDropoff > 0 ? 'a' : ''}`}>
+          <span className="l">Awaiting drop-off</span>
+          <span className="n">{stats.awaitingDropoff}</span>
+          <span className="sub">sender bringing it in</span>
+        </div>
         <div className="kpi">
-          <span className="l">Waiting for a rider</span>
+          <span className="l">Ready to collect</span>
           <span className="n">{stats.awaitingPickup}</span>
-          <span className="sub">Paid and booked to you, nobody assigned</span>
+          <span className="sub">waiting for a rider</span>
         </div>
         <div className="kpi">
           <span className="l">On the road</span>
           <span className="n">{stats.inTransit}</span>
-          <span className="sub">Picked up or in transit</span>
+          <span className="sub">picked up or in transit</span>
         </div>
         <div className={`kpi ${stats.failedDeliveries > 0 ? 'a' : ''}`}>
           <span className="l">Failed attempts</span>
@@ -102,11 +139,6 @@ export default async function ParcelOrgDashboard(
             {stats.failedDeliveries}
           </span>
           <span className="sub">Somebody has to call the receiver</span>
-        </div>
-        <div className="kpi">
-          <span className="l">At pickup points</span>
-          <span className="n">{stats.atAgent}</span>
-          <span className="sub">Waiting to be collected</span>
         </div>
         <div className="kpi g">
           <span className="l">Delivered today</span>
@@ -116,13 +148,6 @@ export default async function ParcelOrgDashboard(
             doesn't carry the capability, and core-go zeroes the figures
             before they ever reach this page — the check here only
             decides whether to draw the tile. */}
-        {canSeeEarnings && (
-          <div className="kpi g">
-            <span className="l">You’ve earned</span>
-            <span className="n">KES {displayKES(stats.earningsTodayKes)}</span>
-            <span className="sub">today · KES {displayKES(stats.earningsKes)} all time</span>
-          </div>
-        )}
       </div>
 
       {needsAttention > 0 && (
@@ -140,24 +165,9 @@ export default async function ParcelOrgDashboard(
           are the same job. */}
       {canSeeEarnings && <RiderCashPanel />}
 
-      {/* The fleet lives on its own board now — runs are the unit a
-          dispatcher thinks in, not individual parcels. */}
-      {canDispatch && (
-        <section aria-label="Dispatch" style={{ marginBottom: 22 }}>
-          <Link
-            href="/parcel-org/dispatch"
-            className="card"
-            style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '14px 16px', textDecoration: 'none' }}
-          >
-            <Icon name="send" size={20} />
-            <span>
-              <strong style={{ display: 'block' }}>Live dispatch</strong>
-              <span className="sub">The whole fleet on one map — open runs, crews and receiving teams.</span>
-            </span>
-            <Icon name="arrow-right" size={16} />
-          </Link>
-        </section>
-      )}
+      {/* The fleet lives on its own board under the Dispatch tab —
+          runs are the unit a dispatcher thinks in, not individual
+          parcels, so this dashboard doesn't host a second entry to it. */}
 
       <form style={{ display: 'flex', gap: 8, marginBottom: 16, flexWrap: 'wrap' }}>
         <input
@@ -167,6 +177,7 @@ export default async function ParcelOrgDashboard(
         <select name="status" defaultValue={status ?? ''} className="mono"
           style={{ padding: '6px 8px', border: '1.5px solid var(--line)', borderRadius: 6 }}>
           <option value="">All statuses</option>
+          <option value="DRAFT_PENDING_PAYMENT">Awaiting payment</option>
           <option value="BOOKED">Waiting for a rider</option>
           <option value="RECEIVED_AT_COUNTER">At the station</option>
           <option value="PICKED_UP">Picked up</option>
@@ -174,13 +185,15 @@ export default async function ParcelOrgDashboard(
           <option value="FAILED_DELIVERY">Delivery attempted</option>
           <option value="HELD_AT_AGENT">At a pickup point</option>
           <option value="DELIVERED">Delivered</option>
-          <option value="RETURNED_TO_SENDER">Returned</option>
+          <option value="RETURNED_TO_SENDER">Returned to sender</option>
+          <option value="CANCELLED">Cancelled</option>
         </select>
         <button className="btn btn-o btn-sm" type="submit">Filter</button>
       </form>
 
       <OrgParcelsTable
         parcels={parcels}
+        hasFilter={Boolean(status || q)}
         canDispatch={canDispatch}
         canSeeEarnings={canSeeEarnings}
       />

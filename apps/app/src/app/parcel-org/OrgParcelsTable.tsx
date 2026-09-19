@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useTransition } from 'react';
+import Link from 'next/link';
 import { Icon } from '@esoqo/ui';
 import type { OrgParcelRow } from '@/lib/parcel-org-session';
 import { DemoPhoneSpan } from '@/components/DemoContact';
@@ -60,15 +61,31 @@ function humanTime(iso: string | null): string {
 }
 
 export function OrgParcelsTable({
-  parcels, canDispatch, canSeeEarnings,
-}: { parcels: OrgParcelRow[]; canDispatch: boolean; canSeeEarnings: boolean }) {
+  parcels, hasFilter, canDispatch, canSeeEarnings,
+}: { parcels: OrgParcelRow[]; hasFilter: boolean; canDispatch: boolean; canSeeEarnings: boolean }) {
   if (parcels.length === 0) {
     return (
       <div className="card">
         <div className="empty">
           <span className="ico"><Icon name="box" size={22} /></span>
-          <h3>No parcels here yet.</h3>
-          <p className="sub">Parcels routed to your company will show up on this page.</p>
+          {hasFilter ? (
+            <>
+              <h3>No parcels match that filter.</h3>
+              <p className="sub">
+                Your search or status matched nothing on this page.
+                {' '}
+                <Link href="/parcel-org" className="sub" style={{ textDecoration: 'underline' }}>
+                  Clear the filter
+                </Link>{' '}
+                to see everything.
+              </p>
+            </>
+          ) : (
+            <>
+              <h3>No parcels here yet.</h3>
+              <p className="sub">Parcels routed to your company will show up on this page.</p>
+            </>
+          )}
         </div>
       </div>
     );
@@ -77,7 +94,7 @@ export function OrgParcelsTable({
   return (
     <div className="card" style={{ padding: 0 }}>
       <div style={{ overflowX: 'auto' }}>
-        <table className="tbl">
+        <table className="tbl parcel-table">
           <thead>
             <tr>
               <th>Code</th><th>To</th><th>Route</th><th>Status</th>
@@ -107,7 +124,7 @@ function Row({
 
   return (
     <tr>
-      <td>
+      <td data-label="Parcel">
         <span className="mono" style={{ fontWeight: 700 }}>{parcel.code}</span>
         {parcel.externalRef && (
           <span className="sub" style={{ display: 'block' }}>
@@ -116,13 +133,13 @@ function Row({
         )}
         <span className="sub" style={{ display: 'block' }}>{humanTime(parcel.createdAt)}</span>
       </td>
-      <td>
+      <td data-label="Recipient">
         {parcel.receiverName}
         {/* A rider standing at a gate needs to call, not look it up. */}
         <DemoPhoneSpan msisdn={parcel.receiverMsisdn} className="sub mono" />
       </td>
-      <td className="sub">{parcel.originLabel} → {parcel.destinationLabel}</td>
-      <td>
+      <td data-label="Route" className="sub">{parcel.originLabel} → {parcel.destinationLabel}</td>
+      <td data-label="Status">
         <span className={`pill ${pillClass(parcel.status)}`}>
           {STATUS_LABEL[parcel.status] ?? parcel.status}
         </span>
@@ -133,18 +150,18 @@ function Row({
         )}
         {overdue && <span className="pill p-bad" style={{ marginTop: 4 }}>Past SLA</span>}
       </td>
-      <td className="sub">
+      <td data-label="In custody with" className="sub">
         {parcel.agentName ?? parcel.holderName ?? 'Nobody yet'}
       </td>
       {canSeeEarnings && (
-        <td className="mono">
+        <td data-label="You earn" className="mono">
           {parcel.orgEarningsKes
             ? `KES ${Number(parcel.orgEarningsKes).toLocaleString('en-KE')}`
             : '—'}
         </td>
       )}
       {canDispatch && (
-        <td style={{ textAlign: 'right' }}>
+        <td data-label="Actions" style={{ textAlign: 'right' }}>
           {(parcel.status === 'BOOKED' || parcel.status === 'RECEIVED_AT_COUNTER') && <AssignButton code={parcel.code} />}
         </td>
       )}
@@ -186,6 +203,7 @@ function AssignButton({ code }: { code: string }) {
         className="mono"
         style={{ padding: '4px 6px', border: '1.5px solid var(--line)', borderRadius: 6, width: 190 }}
         placeholder="Rider's Esoqo party id"
+        aria-label="Rider's Esoqo party id"
         value={riderPartyId}
         onChange={(e) => setRiderPartyId(e.target.value)}
       />
