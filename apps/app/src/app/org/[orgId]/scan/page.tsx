@@ -10,7 +10,7 @@ export default async function OrgScan({ params }: { params: Promise<{ orgId: str
   return (
     <>
       <div className="mehead">
-        <h1>Gate check-in</h1>
+        <h1>Scan tickets</h1>
         <p>Scan or type each ticket's code once, at the door.</p>
       </div>
       <ScanForm orgId={orgId} />

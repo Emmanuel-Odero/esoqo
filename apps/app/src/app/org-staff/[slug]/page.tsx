@@ -16,7 +16,10 @@ async function getOrgBySlug(slug: string): Promise<{ name: string } | null> {
 export async function generateMetadata({ params }: { params: Promise<{ slug: string }> }): Promise<Metadata> {
   const { slug } = await params;
   const org = await getOrgBySlug(slug);
-  return { title: org ? `Staff sign in — ${org.name}` : 'Organiser not found' };
+  return {
+    title: org ? `Staff sign in — ${org.name}` : 'Organiser not found',
+    robots: { index: false, follow: false },
+  };
 }
 
 /**

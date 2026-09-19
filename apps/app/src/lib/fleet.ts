@@ -95,16 +95,6 @@ export interface ActiveTrail {
   points: TrailPoint[];
 }
 
-export interface TripCollections {
-  mpesaConfirmedKes: string;
-  cashFaresKes: string;
-  voucherConfirmedKes: string;
-  declaredCashKes: string;
-  cashVarianceKes: string;
-  fareCount: number;
-  declarationCount: number;
-}
-
 export async function getFleetOverview(orgId: string): Promise<FleetOverview> {
   const { overview } = await orgGo<{ overview: FleetOverview }>(
     orgId, `/v1/fleet/orgs/${orgId}/overview`,
@@ -153,13 +143,6 @@ export async function activeTrails(orgId: string, minutes = 60): Promise<ActiveT
     orgId, `/v1/fleet/orgs/${orgId}/trails?minutes=${minutes}`,
   );
   return trails ?? [];
-}
-
-export async function tripCollections(orgId: string, tripId: string): Promise<TripCollections | null> {
-  const { summary } = await orgGo<{ summary: TripCollections | null }>(
-    orgId, `/v1/fleet/trips/${tripId}/collections`,
-  );
-  return summary;
 }
 
 export async function startTrip(
