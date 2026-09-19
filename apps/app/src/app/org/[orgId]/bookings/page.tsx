@@ -25,8 +25,8 @@ export default async function OrgBookings({ params }: { params: Promise<{ orgId:
   // A SCANNER session (no booking.read) reaches requireOrgAccess fine —
   // this tab isn't in their nav, but a direct URL visit must still be
   // refused rather than crash.
-  const bookings = await orgGo<{ bookings: GoOrgBooking[] }>(orgId, `/v1/ticketorgs/${orgId}/bookings`)
-    .then((r) => r.bookings)
+  const bookings = await orgGo<{ bookings: GoOrgBooking[] | null }>(orgId, `/v1/ticketorgs/${orgId}/bookings`)
+    .then((r) => r.bookings ?? [])
     .catch((e) => {
       if (e instanceof AuthorisationError) notFound();
       throw e;

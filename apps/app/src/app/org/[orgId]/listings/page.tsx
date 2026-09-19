@@ -23,7 +23,7 @@ export default async function OrgListings({ params }: { params: Promise<{ orgId:
   // must still be refused rather than crash on the enforcement check.
   if (!canOrg(ctx, org, 'listing.write')) notFound();
   const [listings, places] = await Promise.all([
-    orgGo<{ listings: GoListing[] }>(orgId, `/v1/ticketorgs/${orgId}/listings`).then((r) => r.listings)
+    orgGo<{ listings: GoListing[] | null }>(orgId, `/v1/ticketorgs/${orgId}/listings`).then((r) => r.listings ?? [])
       .catch(() => []),
     orgGo<{ venues: GoVenue[]; routes: GoRoute[] }>(orgId, `/v1/ticketorgs/${orgId}/venues-routes`)
       .then((r) => ({ venues: r.venues, routes: r.routes }))

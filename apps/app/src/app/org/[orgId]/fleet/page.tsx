@@ -1,5 +1,3 @@
-import Link from 'next/link';
-import type { Route } from 'next';
 import { notFound } from 'next/navigation';
 import { displayKES } from '@esoqo/domain';
 import { Icon } from '@esoqo/ui';
@@ -39,7 +37,6 @@ export default async function FleetPage({ params }: { params: Promise<{ orgId: s
   const canTrack = canOrg(ctx, org, 'vehicle.track');
   const canReadTrips = canOrg(ctx, org, 'trip.read');
   const canDispatch = canOrg(ctx, org, 'trip.write');
-  const canPrice = canOrg(ctx, org, 'fleet.write');
   const canReadCrew = canOrg(ctx, org, 'crew.read');
 
   // Each read is independently guarded: a custom role that can see the
@@ -131,23 +128,20 @@ export default async function FleetPage({ params }: { params: Promise<{ orgId: s
         canDispatch={canDispatch}
       />
 
-      <div className="dash-cols" style={{ display: 'grid', gap: 14, gridTemplateColumns: 'repeat(auto-fit,minmax(220px,1fr))' }}>
-        <Link href={`/org/${orgId}/fleet/pricing` as Route} className="mcard" style={{ display: 'block', textDecoration: 'none', color: 'inherit' }}>
-          <h2><Icon name="coins" size={18} />Pricing &amp; routes</h2>
-          <p style={{ margin: 0, color: 'var(--tx-2)', fontSize: '.9rem' }}>
-            {routes.length} short route{routes.length === 1 ? '' : 's'} · fares per stage
-            {canPrice ? ' · edit' : ''}
-          </p>
-        </Link>
-        <div className="mcard">
-          <h2><Icon name="truck" size={18} />Fleet</h2>
-          <p style={{ margin: '0 0 6px', color: 'var(--tx-2)', fontSize: '.9rem' }}>
-            {overview?.fleetSize ?? vehicles.filter((v) => v.Status === 'ACTIVE').length} active vehicles · {overview?.crewActive ?? crew.filter((c) => c.Active).length} crew
-          </p>
-          <p className="sub" style={{ margin: 0, fontSize: '.8rem' }}>
-            {vehicles.map((v) => v.PlateNo).slice(0, 12).join(', ') || 'No vehicles registered yet'}
-          </p>
-        </div>
+      {/* Fares live under the "Fares" tab in the console nav above —
+          this page used to repeat a "Pricing & routes" card (plus a
+          self-describing "Fleet" card) below the dispatch panel, so the
+          same destination appeared in nav, dashboard and here. The fleet
+          size/plates summary stays with the KPIs; fares stay one click
+          away in the tab bar. */}
+      <div className="mcard">
+        <h2><Icon name="truck" size={18} />Fleet</h2>
+        <p style={{ margin: '0 0 6px', color: 'var(--tx-2)', fontSize: '.9rem' }}>
+          {overview?.fleetSize ?? vehicles.filter((v) => v.Status === 'ACTIVE').length} active vehicles · {overview?.crewActive ?? crew.filter((c) => c.Active).length} crew
+        </p>
+        <p className="sub" style={{ margin: 0, fontSize: '.8rem' }}>
+          {vehicles.map((v) => v.PlateNo).slice(0, 12).join(', ') || 'No vehicles registered yet'}
+        </p>
       </div>
     </>
   );
