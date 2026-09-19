@@ -1,5 +1,6 @@
 'use client';
 import { useState, useTransition } from 'react';
+import { useRouter } from 'next/navigation';
 import { Icon, SelectWithOther, isSelectWithOtherComplete } from '@esoqo/ui';
 import { useAnnounce } from '@esoqo/a11y';
 import { actionInviteMember, actionSetMemberRole, actionRemoveMember } from '../actions';
@@ -22,7 +23,7 @@ const ROLES = [
 
 function InviteForm({ orgId }: { orgId: string }) {
   const [channel, setChannel] = useState<'phone' | 'email'>('phone');
-  const [msisdn, setMsisdn] = useState('+254 7');
+  const [msisdn, setMsisdn] = useState('');
   const [email, setEmail] = useState('');
   const [officialName, setOfficialName] = useState('');
   const [role, setRole] = useState('MEMBER');
@@ -32,20 +33,24 @@ function InviteForm({ orgId }: { orgId: string }) {
   const [pending, start] = useTransition();
   const announce = useAnnounce();
 
-  const contactReady = channel === 'phone' ? msisdn.trim().length > 0 : email.trim().length > 0;
+  // Stripped of formatting, a real Kenyan number has at least 10 digits.
+  // Counting digits — rather than just "is the field non-empty" — stops
+  // an under-typed or untouched number from being submitted as "+2547".
+  const dial = msisdn.replace(/\D/g, '');
+  const contactReady = channel === 'phone' ? dial.length >= 10 : email.trim().length > 0;
 
   function submit() {
     setError(null); setDone(false);
     start(async () => {
       const r = await actionInviteMember({
         orgId,
-        msisdn: channel === 'phone' ? msisdn.replace(/\s+/g, '') : undefined,
+        msisdn: channel === 'phone' ? dial : undefined,
         email: channel === 'email' ? email.trim() : undefined,
         officialName: officialName.trim() || undefined,
         role, customRole: role === 'OTHER' ? customRole : undefined,
       });
       if (r.ok) {
-        setDone(true); setOfficialName(''); setMsisdn('+254 7'); setEmail(''); setRole('MEMBER'); setCustomRole('');
+        setDone(true); setOfficialName(''); setMsisdn(''); setEmail(''); setRole('MEMBER'); setCustomRole('');
         announce('Invited.', 'polite');
       } else { setError(r.error); announce(r.error, 'assertive'); }
     });
@@ -63,7 +68,8 @@ function InviteForm({ orgId }: { orgId: string }) {
       {channel === 'phone' ? (
         <div className="fld">
           <label className="lab" htmlFor="inv-msisdn">Phone number</label>
-          <input className="inp mono" id="inv-msisdn" value={msisdn} onChange={(e) => setMsisdn(e.target.value)} inputMode="tel" />
+          <input className="inp mono" id="inv-msisdn" value={msisdn} onChange={(e) => setMsisdn(e.target.value)} inputMode="tel" placeholder="+254 7XX XXX XXX" />
+          <p className="hint">Country code included — at least 10 digits.</p>
         </div>
       ) : (
         <div className="fld">
@@ -106,6 +112,7 @@ function MemberRowView({ row }: { row: MemberRow }) {
   const [error, setError] = useState<string | null>(null);
   const [pending, start] = useTransition();
   const announce = useAnnounce();
+  const router = useRouter();
 
   function saveRole(nextRole: string, nextCustomRole: string) {
     setError(null);
@@ -115,7 +122,7 @@ function MemberRowView({ row }: { row: MemberRow }) {
         customRole: nextRole === 'OTHER' ? nextCustomRole : undefined,
       });
       if (!r.ok) { setError(r.error); setRole(row.role); announce(r.error, 'assertive'); }
-      else announce('Role updated.', 'polite');
+      else { announce('Role updated.', 'polite'); router.refresh(); }
     });
   }
 
@@ -131,7 +138,7 @@ function MemberRowView({ row }: { row: MemberRow }) {
     start(async () => {
       const r = await actionRemoveMember({ membershipId: row.membershipId, reason: 'Removed by an officer' });
       if (!r.ok) { setError(r.error); announce(r.error, 'assertive'); }
-      else announce('Removed.', 'polite');
+      else { announce('Removed.', 'polite'); router.refresh(); }
     });
   }
 

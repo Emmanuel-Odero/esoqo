@@ -1,5 +1,6 @@
 'use client';
 import { useState, useTransition } from 'react';
+import { useRouter } from 'next/navigation';
 import { Icon } from '@esoqo/ui';
 import { useAnnounce } from '@esoqo/a11y';
 import { actionSignWithdrawal } from './actions';
@@ -22,6 +23,7 @@ export function WithdrawalSignForm({ withdrawalId, amountKes, purpose, payeeName
   const [error, setError] = useState<string | null>(null);
   const [pending, start] = useTransition();
   const announce = useAnnounce();
+  const router = useRouter();
 
   function submit(decision: 'APPROVE' | 'REJECT') {
     setError(null);
@@ -30,6 +32,9 @@ export function WithdrawalSignForm({ withdrawalId, amountKes, purpose, payeeName
       if (r.ok) {
         setOpen(null); setPin('');
         announce(decision === 'APPROVE' ? 'Signed — approved' : 'Signed — rejected, this withdrawal is halted', 'assertive');
+        // Re-read so the withdrawal's signature count/state reflect the
+        // sign just made — otherwise the card keeps its buttons.
+        router.refresh();
       } else { setError(r.error); announce(r.error, 'assertive'); }
     });
   }

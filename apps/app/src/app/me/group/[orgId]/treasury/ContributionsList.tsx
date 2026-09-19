@@ -1,5 +1,6 @@
 'use client';
 import { useState, useTransition } from 'react';
+import { useRouter } from 'next/navigation';
 import { Icon } from '@esoqo/ui';
 import { useAnnounce } from '@esoqo/a11y';
 import { actionConfirmContribution } from './actions';
@@ -18,6 +19,7 @@ export function ContributionsList({ rows, isOfficer }: { rows: ContributionRow[]
   const [pendingId, setPendingId] = useState<string | null>(null);
   const [pending, start] = useTransition();
   const announce = useAnnounce();
+  const router = useRouter();
 
   function confirm(id: string) {
     setPendingId(id);
@@ -25,6 +27,9 @@ export function ContributionsList({ rows, isOfficer }: { rows: ContributionRow[]
       const r = await actionConfirmContribution(id);
       announce(r.ok ? 'Contribution confirmed and posted' : r.error, r.ok ? 'polite' : 'assertive');
       setPendingId(null);
+      // Confirmed rows must flip to the "Confirmed" badge immediately —
+      // the server is the record, so re-read it.
+      if (r.ok) router.refresh();
     });
   }
 

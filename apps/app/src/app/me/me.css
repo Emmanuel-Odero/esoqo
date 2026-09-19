@@ -10,7 +10,7 @@
    All colour/spacing/radius/motion values come from @esoqo/ui tokens.
    ══════════════════════════════════════════════════════════════ */
 
-.me { min-height:100dvh; background:var(--paper); padding-bottom:calc(76px + var(--safe-b)) }
+.me { min-height:100dvh; background:linear-gradient(180deg,#F8FBFC 0,var(--paper) 340px); padding-bottom:calc(76px + var(--safe-b)) }
 
 /* ── header (one bar: brand, tabs on desktop, More on the right) ── */
 .appbar {
@@ -130,10 +130,10 @@
 /* ── content column ─────────────────────────────────────────── */
 .me .wrap {
   max-width:1120px; margin:0 auto;
-  padding:20px max(20px,var(--safe-r)) 0 max(20px,var(--safe-l));
+  padding:28px max(20px,var(--safe-r)) 0 max(20px,var(--safe-l));
 }
-.mehead { margin-bottom:20px }
-.mehead h1 { font-size:1.5rem; font-weight:700; margin:0 0 6px; letter-spacing:-.02em }
+.mehead { margin-bottom:20px; max-width:720px }
+.mehead h1 { font-size:clamp(1.55rem,3vw,2rem); line-height:1.08; font-weight:700; margin:0 0 7px; letter-spacing:-.03em }
 .mehead p { color:var(--tx-2); margin:0; max-width:56ch }
 
 /* Page header used by the group/treasury pages. */
@@ -147,9 +147,10 @@
   display:flex; flex-direction:column; gap:2px; min-width:0;
   padding:16px 16px 14px; border:1px solid var(--line); border-radius:var(--r-lg);
   background:#fff; box-shadow:var(--sh-s);
-  transition:border-color var(--dur-fast), box-shadow var(--dur-fast);
+  transition:border-color var(--dur-fast), box-shadow var(--dur-fast), transform var(--dur-fast);
 }
-.tile:hover { border-color:var(--navy); box-shadow:var(--sh-m) }
+.tile:hover { border-color:var(--navy); box-shadow:var(--sh-m); transform:translateY(-1px) }
+.tile:focus-visible { outline:3px solid rgba(31,161,99,.28); outline-offset:3px }
 .tile .icbox { width:30px; height:30px; border-radius:8px; margin-bottom:10px }
 .tile .tile-k {
   font-family:var(--font-mono); font-size:.62rem; letter-spacing:.09em;
@@ -169,7 +170,7 @@
 .standing {
   display:flex; align-items:center; gap:16px; flex-wrap:wrap;
   padding:18px; border:1px solid var(--line); border-radius:var(--r-lg);
-  background:#fff; box-shadow:var(--sh-s);
+  background:linear-gradient(115deg,#fff 58%,#F4FBF7); box-shadow:var(--sh-s);
   margin:16px 0 0;
 }
 .standing .ring { margin-right:2px }
@@ -252,12 +253,17 @@
 
 /* ── responsive density ─────────────────────────────────────── */
 @media (max-width:560px) {
+  .me .wrap { padding-top:20px }
+  .mehead { margin-bottom:16px }
   .mrow { flex-direction:column; gap:3px }
   .mrow .k { width:auto }
   .mcard { padding:18px }
   .mcard .btn { width:100%; justify-content:center }
   .standing .btn { flex:1 1 auto; margin-top:4px }
   .tile .tile-v { font-size:1.05rem }
+  .standing { gap:12px; padding:16px }
+  .standing .ring { width:52px; height:52px; transform:scale(.9); transform-origin:left center }
+  .paper { gap:10px }
 }
 
 /* ── navigation skeleton ────────────────────────────────────── */

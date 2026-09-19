@@ -1,5 +1,6 @@
 'use client';
 import { useState, useTransition } from 'react';
+import { useRouter } from 'next/navigation';
 import { Icon } from '@esoqo/ui';
 import { useAnnounce } from '@esoqo/a11y';
 import { actionRevoke } from './actions';
@@ -15,6 +16,7 @@ export function ConsentList({ grants }: { grants: Grant[] }) {
   const [pending, start] = useTransition();
   const [error, setError] = useState<string | null>(null);
   const announce = useAnnounce();
+  const router = useRouter();
 
   const active = grants.filter((g) => !g.revokedAt && new Date(g.expiresAt) > new Date());
   const past = grants.filter((g) => g.revokedAt || new Date(g.expiresAt) <= new Date());
@@ -25,6 +27,10 @@ export function ConsentList({ grants }: { grants: Grant[] }) {
       if (r.ok) {
         announce(`${g.grantee} can no longer see your information`, 'assertive');
         setConfirming(null);
+        // Re-read the grants so the revoked one leaves "Currently
+        // allowed" and lands under "Ended" — without this the row keeps
+        // its "End this" button until a manual reload.
+        router.refresh();
       } else { setError(r.error); announce(r.error, 'assertive'); }
     });
   }
