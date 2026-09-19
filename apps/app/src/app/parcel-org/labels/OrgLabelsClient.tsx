@@ -1,10 +1,11 @@
 'use client';
 
 import { Fragment, useMemo, useState, useTransition } from 'react';
-import { Icon, LabelPrintSheet, PrintLayoutControls, DEFAULT_PRINT_LAYOUT, type PrintLayout } from '@esoqo/ui';
+import { useRouter } from 'next/navigation';
+import { Icon, SelectableLabelPrintBlock } from '@esoqo/ui';
 import { useAnnounce } from '@esoqo/a11y';
 import {
-  voidOrgLabelBatch, voidOrgLabels,
+  attachOrgLabelInfo, voidOrgLabelBatch, voidOrgLabels,
   type OrgLabelBatchRow, type OrgLabelRow,
 } from '../actions';
 
@@ -42,7 +43,7 @@ const EMPTY_COPY: Record<string, string> = {
 type SortKey = 'newest' | 'oldest' | 'code' | 'item' | 'destination';
 
 export function OrgLabelsClient({
-  labels, counts, batches, state, canManage, orgName, orgLogoUrl,
+  labels, counts, batches, state, canManage, orgName, orgLogoUrl, baseHref = '/parcel-org/counter?tab=labels',
 }: {
   labels: OrgLabelRow[]; counts: Record<string, number>;
   batches: OrgLabelBatchRow[]; state: string; canManage: boolean;
@@ -50,6 +51,8 @@ export function OrgLabelsClient({
   orgName: string;
   /** Company logo — centered in the label header; absent = Esoqo alone. */
   orgLogoUrl?: string;
+  /** State filters stay in the Counter label workspace. */
+  baseHref?: string;
 }) {
   // Live filter over the fetched register — the tab is server-side, but
   // finding one code in the current list shouldn't be a round trip.
@@ -58,8 +61,6 @@ export function OrgLabelsClient({
   const [filter, setFilter] = useState('');
   const [sort, setSort] = useState<SortKey>('newest');
   const [selected, setSelected] = useState<Set<string>>(new Set());
-  const [layout, setLayout] = useState<PrintLayout>(DEFAULT_PRINT_LAYOUT);
-  const [showPreview, setShowPreview] = useState(false);
   // The one register row opened in place. Inline beats the old
   // "Details → re-load the top search" hop: every field the row knows
   // is already in memory, so the expansion is instant and never moves
@@ -71,6 +72,7 @@ export function OrgLabelsClient({
   const [error, setError] = useState<string | null>(null);
   const [pending, startTransition] = useTransition();
   const announce = useAnnounce();
+  const router = useRouter();
 
   const needle = filter.trim().toUpperCase();
   const shown = useMemo(() => {
@@ -119,90 +121,24 @@ export function OrgLabelsClient({
 
   return (
     <>
-      {/* The register at a glance — how many stickers are on the pad,
-          written on, or moving, so the review of issued stock is one
-          look rather than a scan of the table below. */}
-      <div className="kpis" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(120px, 1fr))', marginBottom: 12 }}>
-        <div className="kpi">
-          <span className="l">Empty</span>
-          <span className="n">{counts['blank'] ?? 0}</span>
-          <span className="sub">on the pad, ready</span>
-        </div>
-        <div className="kpi">
-          <span className="l">Written on</span>
-          <span className="n">{(counts['filled'] ?? 0) + (counts['spent'] ?? 0)}</span>
-          <span className="sub">details attached</span>
-        </div>
-        <div className="kpi">
-          <span className="l">Used</span>
-          <span className="n">{counts['spent'] ?? 0}</span>
-          <span className="sub">on parcels moving</span>
-        </div>
-        <div className="kpi">
-          <span className="l">Withdrawn</span>
-          <span className="n">{counts['voided'] ?? 0}</span>
-          <span className="sub">can never be used</span>
-        </div>
-      </div>
-
-      <div className="card" style={{ padding: 16, marginBottom: 16 }}>
-        <p className="sub" style={{ margin: 0 }}>
-          These codes are yours — issued to {orgName} by Esoqo, and no other company can book a
-          parcel against them. Only Esoqo PKG-… labels scan now: re-print the Esoqo pad below
-          {orgLogoUrl ? ' with your logo attached' : ' (add a logo via your account manager for branded prints)'}.
-          If a pad goes missing you can withdraw the whole batch at the bottom of the page.
-          Need more? Your Esoqo account manager prints the next pad.
-        </p>
-      </div>
-
-      {(state === 'blank' || selectedRows.length > 0) && shown.length > 0 && (
-        <div className="card" style={{ padding: 16, marginBottom: 16 }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 10, flexWrap: 'wrap', marginBottom: 10 }}>
-            <strong>
-              {selectedRows.length > 0
-                ? `Print selection — ${selectedRows.length} label${selectedRows.length === 1 ? '' : 's'}`
-                : `Reprint your pad — ${shown.length} label${shown.length === 1 ? '' : 's'}`}
-            </strong>
-            <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-              {selectedRows.length === 0 && (
-                <button className="btn btn-o btn-sm" onClick={() => setSelected(new Set(shown.map((l) => l.code)))}>
-                  Select all {shown.length}
-                </button>
-              )}
-              {selectedRows.length > 0 && (
-                <button className="btn btn-o btn-sm" onClick={() => setSelected(new Set())}>Clear selection</button>
-              )}
-              <button className="btn btn-o btn-sm" onClick={() => setShowPreview((v) => !v)}>
-                <Icon name="print" size={13} />{showPreview ? 'Hide preview' : 'Preview…'}
-              </button>
-              {showPreview && (
-                <button className="btn btn-p btn-sm" onClick={() => window.print()}>
-                  <Icon name="print" size={13} />Print {selectedRows.length > 0 ? selectedRows.length : shown.length}
-                </button>
-              )}
-            </div>
-          </div>
-          <p className="sub" style={{ margin: '0 0 10px' }}>
-            {selectedRows.length > 0
-              ? 'Preview below is exactly how the stickers fall on the page — set columns and rows, then print.'
-              : 'Tick labels in the register below to print a selection, or preview the whole list here.'}
-          </p>
-          <PrintLayoutControls layout={layout} onChange={setLayout} />
-          {showPreview && (
-            <div style={{ marginTop: 12 }}>
-              <LabelPrintSheet
-                labels={(selectedRows.length > 0 ? selectedRows : shown).map((l) => ({ code: l.code, sig: l.sig || undefined }))}
-                layout={layout} orgName={orgName} orgLogoUrl={orgLogoUrl} previewScale={0.55}
-              />
-            </div>
-          )}
-        </div>
+      {state === 'blank' && shown.length > 0 && (
+        <SelectableLabelPrintBlock
+          title="Unused labels"
+          labels={shown.map((l) => ({ code: l.code, sig: l.sig || undefined }))}
+          selected={selected}
+          onToggle={toggle}
+          onSelectAll={() => setSelected(new Set(shown.map((l) => l.code)))}
+          onClear={() => setSelected(new Set())}
+          orgName={orgName}
+          orgLogoUrl={orgLogoUrl}
+          collapsible
+        />
       )}
 
       <div className="card" style={{ padding: 16, marginBottom: 16 }}>
         <div style={{ display: 'flex', gap: 6, marginBottom: 12, flexWrap: 'wrap' }}>
           {TABS.map((t) => (
-            <a key={t.state} href={`/parcel-org/labels?state=${t.state}`}
+            <a key={t.state} href={`${baseHref}&state=${t.state}`}
               className={`btn btn-sm ${t.state === state ? 'btn-p' : 'btn-o'}`}>
               {t.label} ({counts[t.state] ?? 0})
             </a>
@@ -231,8 +167,8 @@ export function OrgLabelsClient({
         {selected.size > 0 && (
           <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center', marginBottom: 12, padding: 10, border: '1.5px solid var(--line)', borderRadius: 8, background: 'var(--paper)' }}>
             <strong style={{ fontSize: '.85rem' }}>{selected.size} selected</strong>
-            <button className="btn btn-o btn-sm" onClick={() => { setShowPreview(true); window.scrollTo({ top: 0, behavior: 'smooth' }); }}>
-              <Icon name="print" size={13} />Preview & print
+            <button className="btn btn-o btn-sm" onClick={() => window.scrollTo({ top: 0, behavior: 'smooth' })}>
+              <Icon name="print" size={13} />Go to print preview
             </button>
             <button className="btn btn-o btn-sm" onClick={() => setSelected(new Set())}>Clear</button>
             {canManage && discardable.length > 0 && (
@@ -313,6 +249,9 @@ export function OrgLabelsClient({
                     <tr>
                       <td colSpan={6} style={{ background: 'var(--paper)' }}>
                         <LabelRowDetail l={l} batch={batches.find((b) => b.batchId === l.batchId) ?? null} />
+                        {(l.state === 'blank' || l.state === 'filled') && canManage && (
+                          <WriteLabelDetails code={l.code} initial={l} onDone={() => router.refresh()} />
+                        )}
                       </td>
                     </tr>
                   )}
@@ -362,6 +301,86 @@ function LabelRowDetail({ l, batch }: { l: OrgLabelRow; batch: OrgLabelBatchRow 
         <Fragment key={dt}><dt className="sub">{dt}</dt><dd>{dd}</dd></Fragment>
       ))}
     </dl>
+  );
+}
+
+const writeStyle: React.CSSProperties = {
+  width: '100%', marginTop: 4, padding: '8px 10px',
+  border: '1.5px solid var(--line)', borderRadius: 6,
+};
+
+/**
+ * Write what's on the box onto one of the company's blank labels —
+ * item, destination, sender and receiver — without starting a booking.
+ * The Counter tab's scanner opens booking; this is the "prep the
+ * sticker out in the field, book it later" path. Refuses once spent.
+ */
+function WriteLabelDetails({
+  code, initial, onDone,
+}: { code: string; initial: OrgLabelRow; onDone: () => void }) {
+  const [open, setOpen] = useState(false);
+  const [item, setItem] = useState(initial.itemDescription ?? '');
+  const [destination, setDestination] = useState(initial.destination ?? '');
+  const [senderName, setSenderName] = useState(initial.senderName ?? '');
+  const [senderMsisdn, setSenderMsisdn] = useState('');
+  const [receiverName, setReceiverName] = useState('');
+  const [receiverMsisdn, setReceiverMsisdn] = useState('');
+  const [error, setError] = useState<string | null>(null);
+  const [pending, startTransition] = useTransition();
+
+  if (!open) {
+    return (
+      <button type="button" className="btn btn-o btn-sm" style={{ marginTop: 10 }} onClick={() => setOpen(true)}>
+        <Icon name="document" size={13} />Write details on this label
+      </button>
+    );
+  }
+
+  function save() {
+    setError(null);
+    if (!item.trim()) { setError('Describe the item — that is the one required field.'); return; }
+    startTransition(async () => {
+      const result = await attachOrgLabelInfo(code, {
+        itemDescription: item, destination, senderName, senderMsisdn, receiverName, receiverMsisdn,
+      });
+      if (!result.ok) { setError(result.error); return; }
+      setOpen(false);
+      onDone();
+    });
+  }
+
+  return (
+    <div style={{ marginTop: 12, display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: 10 }}>
+      <label className="sub">What&apos;s on the box
+        <input style={writeStyle} value={item} placeholder="e.g. Shoes, size 42"
+          onChange={(e) => setItem(e.target.value)} />
+      </label>
+      <label className="sub">Destination
+        <input style={writeStyle} value={destination} placeholder="e.g. Nakuru"
+          onChange={(e) => setDestination(e.target.value)} />
+      </label>
+      <label className="sub">Sender name
+        <input style={writeStyle} value={senderName} onChange={(e) => setSenderName(e.target.value)} />
+      </label>
+      <label className="sub">Sender phone
+        <input style={writeStyle} className="mono" value={senderMsisdn} placeholder="07…"
+          onChange={(e) => setSenderMsisdn(e.target.value)} />
+      </label>
+      <label className="sub">Receiver name
+        <input style={writeStyle} value={receiverName} onChange={(e) => setReceiverName(e.target.value)} />
+      </label>
+      <label className="sub">Receiver phone
+        <input style={writeStyle} className="mono" value={receiverMsisdn} placeholder="07…"
+          onChange={(e) => setReceiverMsisdn(e.target.value)} />
+      </label>
+      <div className="row" style={{ gap: 8, gridColumn: '1 / -1' }}>
+        <button className="btn btn-p btn-sm" disabled={pending} onClick={save}>
+          {pending ? 'Saving…' : 'Save details'}
+        </button>
+        <button className="btn btn-o btn-sm" disabled={pending} onClick={() => setOpen(false)}>Cancel</button>
+      </div>
+      {error && <p role="alert" style={{ color: 'var(--red)', margin: 0, gridColumn: '1 / -1' }}>{error}</p>}
+    </div>
   );
 }
 
