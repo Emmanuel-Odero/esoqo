@@ -215,11 +215,13 @@ button, a, input, select, textarea {
 .auth-alt {
   width:100%; max-width:420px; margin-top:16px; background:#fff;
   border:1px solid var(--line); border-radius:var(--r-lg); padding:18px 20px;
-  display:flex; gap:14px; align-items:flex-start;
+  /* Icon left, heading + body stacked right: the h2 and p must not
+     become flex columns beside the icon (they did — three-across). */
+  display:grid; grid-template-columns:auto 1fr; gap:2px 14px; align-items:start;
 }
+.auth-alt .icbox { grid-row:span 2; margin-top:2px }
 .auth-alt h2 { font-size:1rem; margin:2px 0 4px }
 .auth-alt p { font-size:.9rem; color:var(--tx-2); margin:0 }
-.auth-alt .icbox { margin-top:2px }
 
 /* ── document upload ── */
 .upzone { border:2px dashed var(--line); border-radius:var(--r-md); background:var(--paper);
@@ -245,4 +247,23 @@ button, a, input, select, textarea {
   .uppreview { flex-direction:column }
   .upthumb { width:100%; height:150px }
   .jtop { margin-top:22px }
+}
+
+/* ── cross-device guards (every dashboard inherits these) ──────
+   Phones in the field are 320–430px wide with large system fonts;
+   tablets and small laptops sit at 768–1280px. These rules keep any
+   console from scrolling sideways or zoom-jumping, whatever content
+   a capability-gated role renders into it. */
+html, body { overflow-x:clip }
+img { max-width:100% }
+/* Leaflet manages its own tile/pane sizes inline — only the outer
+   container is constrained, never the tiles inside it. */
+.leaflet-container { max-width:100% }
+/* iOS Safari zooms the whole page when a sub-16px field is focused.
+   Bumping fields to 16px on touch-width screens stops the jump; the
+   desktop cascade above is untouched. Inline-styled operator panels
+   keep their own sizes — those are researcher tools, not thumbs. */
+@media (max-width:820px) {
+  input:not([type="checkbox"]):not([type="radio"]),
+  select, textarea { font-size:16px }
 }

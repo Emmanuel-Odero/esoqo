@@ -54,6 +54,9 @@ export default async function MePage(
   const confirmed = CREDENTIALS.filter(([t]) => has(t)).length;
   const total = CREDENTIALS.length;
   const activeGrants = grants.filter((g) => !g.revokedAt && g.expiresAt > new Date());
+  const docs = me.documents ?? [];
+  const docCount = docs.length;
+  const docPending = docs.filter((d) => d.status === 'PENDING_REVIEW').length;
 
   const pay = me.registration?.payment;
   const payApproved = (pay?.approvals ?? []).filter((a) => a.decision === 'APPROVE').length;
@@ -70,7 +73,7 @@ export default async function MePage(
   const primaryCta = membership
     ? { label: 'Open your group treasury', href: `/me/group/${orgId}/treasury` as Route }
     : confirmed < total
-      ? { label: 'See your papers', href: '/me/documents' as const }
+      ? { label: 'See your confirmations', href: '/me/documents' as const }
       : { label: 'Manage sharing', href: '/me/consents' as const };
 
   return (
@@ -128,9 +131,9 @@ export default async function MePage(
           <span className="icbox" style={{ background: 'var(--blue-t)', color: 'var(--blue)' }}>
             <Icon name="document" size={17} />
           </span>
-          <span className="tile-k">Papers confirmed</span>
-          <span className="tile-v">{confirmed} of {total}</span>
-          <span className="tile-h">{confirmed === total ? 'Everything confirmed' : `${total - confirmed} left to add`}</span>
+          <span className="tile-k">Documents</span>
+          <span className="tile-v">{docCount === 0 ? 'None yet' : `${docCount} uploaded`}</span>
+          <span className="tile-h">{docPending > 0 ? `${docPending} being checked` : 'Confirmations below'}</span>
         </Link>
         <Link className="tile" href="/me/payments">
           <span className="icbox" style={{ background: 'var(--amber-t)', color: 'var(--amber)' }}>
@@ -218,9 +221,13 @@ export default async function MePage(
           )}
         </section>
 
-        {/* ── your papers ── */}
+        {/* ── confirmations: Esoqo's checks on your record (attestations).
+            Uploaded files live separately under Documents — the tile above
+            links there. This list used to sit beside a second copy of the
+            same count with no pointer to Documents, so the two "papers"
+            looked like the same job twice. */}
         <section className="mcard">
-          <h2><Icon name="certificate" size={18} />Your papers</h2>
+          <h2><Icon name="certificate" size={18} />Confirmations</h2>
           <ul className="papers">
             {CREDENTIALS.map(([type, label, issuer, opens]) => {
               const a = has(type);
@@ -244,59 +251,47 @@ export default async function MePage(
               );
             })}
           </ul>
+          <Link className="btn btn-o" href="/me/documents" style={{ marginTop: 12 }}>
+            <Icon name="arrow-right" size={15} />Your uploaded documents
+          </Link>
         </section>
       </div>
 
-      {/* ── who can see this ── */}
+      {/* ── trust + group: summaries only. The full grant list lives on
+          /me/consents and the full membership + money on
+          /me/group/[orgId] and its treasury page — this home used to
+          re-render both in full, so the same permissions and the same
+          group appeared twice. Tiles at the top carry the counts; these
+          rows carry the doors. */}
       <section className="mcard">
         <h2><Icon name="eye" size={18} />Who can see this</h2>
-        {activeGrants.length === 0 ? (
-          <div className="mempty" style={{ padding: '16px 0', textAlign: 'left' }}>
-            <p style={{ margin: 0, fontWeight: 600 }}>Nobody. You have granted no access.</p>
-            <p className="hint" style={{ margin: '6px 0 0' }}>
-              Not a bank, not a buyer, not a county, not CECF. When you apply for something you will
-              be asked, each time, and you can end it at any point.
-            </p>
-          </div>
-        ) : (
-          <ul className="papers" style={{ marginBottom: 12 }}>
-            {activeGrants.slice(0, 3).map((g) => (
-              <li className="paper" key={g.id}>
-                <span className="ps ok" aria-hidden="true"><Icon name="shield-check" size={16} /></span>
-                <span className="pt">
-                  <span className="t">{g.grantee.name}</span>
-                  <span className="s">For {g.purpose.replace(/_/g, ' ').toLowerCase()} · until {g.expiresAt.toLocaleDateString('en-KE')}</span>
-                </span>
-              </li>
-            ))}
-          </ul>
-        )}
+        <p style={{ margin: '0 0 12px', color: 'var(--tx-2)', fontSize: '.92rem' }}>
+          {activeGrants.length === 0
+            ? 'Nobody. You have granted no access — not a bank, not a buyer, not a county.'
+            : `${activeGrants.length} ${activeGrants.length === 1 ? 'organisation can' : 'organisations can'} see parts of your record. Change it any time.`}
+        </p>
         <Link className="btn btn-o" href="/me/consents">
           <Icon name="arrow-right" size={15} />Manage permissions
         </Link>
       </section>
 
-      {/* ── your group ── */}
       {membership && (
         <section className="mcard">
           <h2><Icon name="users" size={18} />Your group</h2>
-          <div className="mrow">
-            <span className="k">Group</span>
-            <span className="v">{membership.org.officialName}</span>
+          <p style={{ margin: '0 0 12px', color: 'var(--tx-2)', fontSize: '.92rem' }}>
+            {membership.org.officialName} ·{' '}
+            {membership.role === 'OTHER' ? (membership.customRole || 'Other') : membership.role.toLowerCase()} ·{' '}
+            {membership.org._count.members} members ·{' '}
+            <span className="mono">KES {(balance ?? 0).toLocaleString('en-KE')}</span> held
+          </p>
+          <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+            <Link className="btn btn-p" href={`/me/group/${membership.orgId}/treasury` as Route}>
+              <Icon name="bank" size={16} />Open treasury
+            </Link>
+            <Link className="btn btn-o" href={`/me/group/${membership.orgId}` as Route}>
+              <Icon name="users" size={16} />Group details
+            </Link>
           </div>
-          <div className="mrow">
-            <span className="k">Your role</span>
-            <span className="v">
-              {membership.role === 'OTHER' ? (membership.customRole || 'Other') : membership.role.toLowerCase()}
-            </span>
-          </div>
-          <div className="mrow">
-            <span className="k">Members</span>
-            <span className="v mono">{membership.org._count.members}</span>
-          </div>
-          <Link className="btn btn-p" href={`/me/group/${membership.orgId}/treasury` as Route}>
-            <Icon name="bank" size={16} />Open treasury
-          </Link>
         </section>
       )}
     </>
