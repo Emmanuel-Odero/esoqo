@@ -158,7 +158,7 @@ export function LabelPrintSheet({
  * this owns only the print layout and the print action.
  */
 export function SelectableLabelPrintBlock({
-  labels, selected, onToggle, onSelectAll, onClear, orgName, orgLogoUrl, title,
+  labels, selected, onToggle, onSelectAll, onClear, orgName, orgLogoUrl, title, collapsible = false,
 }: {
   labels: PrintLabelItem[];
   selected: Set<string>;
@@ -167,8 +167,11 @@ export function SelectableLabelPrintBlock({
   onClear: () => void;
   orgName?: string; orgLogoUrl?: string;
   title: string;
+  /** Lets dense operational screens keep the print studio out of the way until needed. */
+  collapsible?: boolean;
 }) {
   const [layout, setLayout] = useState<PrintLayout>(DEFAULT_PRINT_LAYOUT);
+  const [open, setOpen] = useState(!collapsible);
   const chosen = labels.filter((l) => selected.has(l.code));
   const toPrint = chosen.length > 0 ? chosen : [];
   const perPage = labelsPerPage(layout);
@@ -179,13 +182,19 @@ export function SelectableLabelPrintBlock({
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 10, flexWrap: 'wrap', marginBottom: 10 }}>
         <strong>{title} — {labels.length} label{labels.length === 1 ? '' : 's'} · {selected.size} selected{pages > 0 && ` · ${pages} page${pages === 1 ? '' : 's'} at ${perPage}/page`}</strong>
         <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+          {collapsible && <button className="btn btn-o btn-sm" onClick={() => setOpen((value) => !value)} aria-expanded={open}>
+            {open ? 'Hide print tools' : 'Print labels'}<Icon name={open ? 'chevron-down' : 'chevron-right'} size={13} />
+          </button>}
+          {open && <>
           <button className="btn btn-o btn-sm" onClick={onSelectAll}><Icon name="check" size={13} />Select all</button>
           <button className="btn btn-o btn-sm" onClick={onClear}>Clear</button>
           <button className="btn btn-o btn-sm" disabled={toPrint.length === 0} onClick={() => window.print()}>
             <Icon name="print" size={13} />Print {toPrint.length > 0 ? `${toPrint.length} selected` : 'selected'}
           </button>
+          </>}
         </div>
       </div>
+      {open && <>
       <PrintLayoutControls layout={layout} onChange={setLayout} />
       {labels.length > 0 && (
         <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginTop: 12, marginBottom: 12 }} role="group" aria-label="Choose labels to print">
@@ -210,6 +219,7 @@ export function SelectableLabelPrintBlock({
       ) : (
         <p className="sub" style={{ margin: '4px 0 0' }}>Tick the labels above to preview exactly how they fall on the {layout.paper} page before printing.</p>
       )}
+      </>}
     </div>
   );
 }

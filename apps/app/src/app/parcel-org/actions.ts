@@ -7,6 +7,7 @@ import {
   type DispatchRun,
   type OrgLabelSearchRow,
   type OrgParcelLabel,
+  type OrgParcelRow,
   type ParcelOrgStaffRow,
   type ParcelOrgStationRow,
 } from "@/lib/parcel-org-session";
@@ -61,7 +62,7 @@ export async function receiveWalkInParcel(
       { method: "POST" },
     );
     revalidatePath("/parcel-org");
-    revalidatePath("/parcel-org/receive");
+    revalidatePath("/parcel-org/counter");
     return { ok: true, code: res.code };
   } catch (e) {
     return toResult(e);
@@ -97,7 +98,7 @@ export async function settleCounterParcel(
       },
     );
     revalidatePath("/parcel-org");
-    revalidatePath("/parcel-org/receive");
+    revalidatePath("/parcel-org/counter");
     return { ok: true };
   } catch (e) {
     return toResult(e);
@@ -348,6 +349,7 @@ export async function voidOrgLabels(
       { method: "POST", body: JSON.stringify({ codes, reason }) },
     );
     revalidatePath("/parcel-org/labels");
+    revalidatePath("/parcel-org/counter");
     return { ok: true, voided: res.voided };
   } catch (e) {
     const r = toResult(e);
@@ -371,6 +373,7 @@ export async function voidOrgLabelBatch(
       { method: "POST", body: JSON.stringify({ reason }) },
     );
     revalidatePath("/parcel-org/labels");
+    revalidatePath("/parcel-org/counter");
     return { ok: true, voided: res.voided };
   } catch (e) {
     const r = toResult(e);
@@ -554,6 +557,7 @@ export async function attachOrgLabelInfo(
       }),
     });
     revalidatePath("/parcel-org/labels");
+    revalidatePath("/parcel-org/counter");
     return { ok: true };
   } catch (e) {
     return toResult(e);
@@ -624,6 +628,35 @@ export async function searchOrgCounterParties(q: string): Promise<OrgCounterPart
     `/v1/parcel-orgs/me/parties?q=${encodeURIComponent(q.trim())}`,
   );
   return res.parties ?? [];
+}
+
+/** The company's own parcels matching a code, exact-code first. Used by
+ *  the counter's "scan a code that's already a parcel → open it" rule:
+ *  a fresh-minted booking's tracking code lives only on the parcel (it
+ *  was never a pre-printed stock label), so resolving a scanned code
+ *  falls back here. Scoped by session exactly like every other read in
+ *  this file — a foreign code simply doesn't match. */
+export async function lookupOrgParcelByCode(
+  code: string,
+): Promise<OrgParcelRow | null> {
+  const needle = code.trim().toUpperCase();
+  if (!needle) return null;
+  const res = await parcelOrgFetch<{ parcels: OrgParcelRow[] | null }>(
+    `/v1/parcel-orgs/me/parcels?q=${encodeURIComponent(needle)}`,
+  );
+  return (
+    res.parcels?.find((p) => p.code.toUpperCase() === needle) ?? null
+  );
+}
+
+/** The counter worklist, refetched on the desk's own polling interval:
+ *  self-drop-off bookings that walked in online since the page last
+ *  rendered. Same query the server page runs for its first paint. */
+export async function listOrgWaitingParcels(): Promise<OrgParcelRow[]> {
+  const res = await parcelOrgFetch<{ parcels: OrgParcelRow[] | null }>(
+    "/v1/parcel-orgs/me/parcels?status=BOOKED&originMethod=SELF_DROPOFF",
+  );
+  return res.parcels ?? [];
 }
 
 export interface OrgCounterPricingOption {

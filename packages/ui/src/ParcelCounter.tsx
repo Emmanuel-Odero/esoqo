@@ -1,13 +1,14 @@
 'use client';
 
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { forwardRef, useCallback, useEffect, useImperativeHandle, useRef, useState } from 'react';
 import { Icon } from './Icon';
+import { PrintableLabel, PrintStyles } from './ParcelLabel';
 import {
   flushQueue, listQueued, offlineSupported, queueBooking, type QueuedBooking,
 } from './parcelOfflineQueue';
 import type {
   CounterActions, CounterBookInput, CounterLabelInfo, CounterLinks,
-  CounterPartyOption, CounterPricingOption,
+  CounterParcelRef, CounterPartyOption, CounterPricingOption,
 } from './ParcelCounterTypes';
 
 /**
@@ -38,18 +39,55 @@ const ITEM_TYPES = [
   'Electronics', 'Furniture',
 ];
 
-export function CounterForm({
-  initialCode, pricing, volumetricDivisor, actions, links, announce,
-}: {
+/** A parcel code scanned at the counter is usually mid-flight, and the
+ *  clerk explaining where it is to the person standing there reads a
+ *  word, not an enum. Mirrors the dashboard's status filter labels. */
+const PARCEL_STATUS_LABEL: Record<string, string> = {
+  BOOKED: 'booked',
+  RECEIVED_AT_COUNTER: 'at the station',
+  PICKED_UP: 'picked up',
+  IN_TRANSIT: 'on the way',
+  FAILED_DELIVERY: 'waiting on a failed delivery call',
+  HELD_AT_AGENT: 'at a pickup point',
+  DELIVERED: 'delivered',
+  RETURNED_TO_SENDER: 'returned to sender',
+};
+
+/** What an outer scanner can ask the booking form to do. The counter
+ *  page's unified scan bar classes codes itself and, for a PKG- label
+ *  (stock sticker OR an existing parcel — both are PKG-), hands the
+ *  bare code here: the form's own load path already resolves blank
+ *  label → book, filled → resume, spent/parcel → open. */
+export type CounterFormHandle = { scan: (raw: string) => void };
+
+export const CounterForm = forwardRef<CounterFormHandle, {
   initialCode?: string; pricing: CounterPricingOption[]; volumetricDivisor: number;
   actions: CounterActions; links: CounterLinks;
   /** Screen-reader announcements. Each portal wires its own announcer;
    *  omitted means silent (the visual state still updates). */
   announce?: (message: string, priority?: 'polite' | 'assertive') => void;
-}) {
+  /** Company name/logo for the label printed when a booking completes —
+   *  the sender is standing there with the box, so the sticker goes on
+   *  now. Omitted (Esoqo labelling alone) when the portal has none. */
+  orgName?: string;
+  orgLogoUrl?: string;
+  /** Hides the form's own label-code box. A portal that already has a
+   *  unified scanner above this form (the company counter page) calls
+   *  this form's scan() through its ref instead — one box on the page,
+   *  not two. Defaults to showing the box. */
+  scanbox?: boolean;
+}>(function CounterForm({ initialCode, pricing, volumetricDivisor, actions, links, announce, orgName, orgLogoUrl, scanbox = true }, ref) {
   const say = announce ?? (() => {});
   const [code, setCode] = useState(initialCode ?? '');
   const [loadedCode, setLoadedCode] = useState<string | null>(null);
+  // When the scanned code turned out to be an existing parcel rather
+  // than a label. The dead-end becomes a door: the counter shows what
+  // the code IS and where it leads, instead of just refusing it.
+  const [parcelRef, setParcelRef] = useState<CounterParcelRef | null>(null);
+  // QR signature for the label printed on booking completion, resolved
+  // in the background like the front desk's receipt label so the print
+  // stays genuine (see the done card below).
+  const [doneSig, setDoneSig] = useState<string | undefined>(undefined);
   const [loading, setLoading] = useState(false);
   const [notice, setNotice] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -77,7 +115,7 @@ export function CounterForm({
 
   const scanRef = useRef<HTMLInputElement>(null);
 
-  useEffect(() => { if (!initialCode) scanRef.current?.focus(); }, [initialCode]);
+  useEffect(() => { if (scanbox !== false && !initialCode) scanRef.current?.focus(); }, [initialCode, scanbox]);
 
   const load = useCallback(async (raw: string) => {
     const target = extractCode(raw);
@@ -92,6 +130,7 @@ export function CounterForm({
         `print a fresh label from Labels and book against that instead.`,
       );
       setLoadedCode(null);
+      setParcelRef(null);
       return;
     }
     setLoading(true);
@@ -102,9 +141,25 @@ export function CounterForm({
     if (!result.ok) {
       setError(result.error);
       setLoadedCode(null);
+      setParcelRef(null);
       return;
     }
     setCode(target);
+    // The code resolved to a parcel already — one box, every purpose:
+    // this is what "open the parcel, don't error" looks like. Show what
+    // the code IS and where it leads, and never let it be re-booked or
+    // saved to: it is already spent.
+    if (result.parcel) {
+      setParcelRef(result.parcel);
+      setLoadedCode(null);
+      setNotice(
+        `${target} is already ${PARCEL_STATUS_LABEL[result.parcel.status] ?? 'booked'}. ` +
+        `Open it to track — or scan a blank label to book the next one.`,
+      );
+      say(`Already a parcel — ${target}`, 'polite');
+      return;
+    }
+    setParcelRef(null);
     setLoadedCode(target);
     const info = result.info;
     if (!info) {
@@ -128,7 +183,25 @@ export function CounterForm({
     say(`Loaded ${target}`, 'polite');
   }, [actions, say]);
 
+  // What an outer unified scanner calls instead of its own label box:
+  // behaviour is exactly "typed into the box, pressed Load".
+  useImperativeHandle(ref, () => ({ scan: (raw) => void load(raw) }), [load]);
+
   useEffect(() => { if (initialCode) void load(initialCode); }, [initialCode, load]);
+
+  // The counter's last job for a box just booked is the label on it —
+  // the sender is standing there. Resolve the QR signature in the
+  // background so that print is genuine, exactly as the front desk's
+  // just-received label does it. No sig wire → prints unverified,
+  // which still scans (see PrintableLabel).
+  useEffect(() => {
+    if (!done || done.kind !== 'booked' || !actions.getLabelSig) return;
+    let alive = true;
+    void actions.getLabelSig(done.code)
+      .then((sig) => { if (alive) setDoneSig(sig); })
+      .catch(() => {});
+    return () => { alive = false; };
+  }, [done, actions]);
 
   const actual = Number(weightKg) || 0;
   const volumetric = volumetricKg(Number(lengthCm), Number(widthCm), Number(heightCm), volumetricDivisor);
@@ -169,6 +242,7 @@ export function CounterForm({
       setBusy(false);
       if (!res.ok) { setError(res.error); return; }
       setDone({ code: loadedCode, kind: 'held' });
+      setDoneSig(undefined);
       say(`Saved ${loadedCode}`, 'assertive');
     });
   }
@@ -204,6 +278,7 @@ export function CounterForm({
       setBusy(false);
       if (!res.ok) { setError(res.error); return; }
       setDone({ code: res.code, kind: 'booked' });
+      setDoneSig(undefined);
       setIntakeConfirmed(false);
       setConfirmError(null);
       say(`Booked ${res.code}`, 'assertive');
@@ -223,6 +298,7 @@ export function CounterForm({
       try {
         await queueBooking(input);
         setDone({ code: loadedCode, kind: 'queued' });
+        setDoneSig(undefined);
         say(`${loadedCode} held offline`, 'assertive');
       } catch (e) {
         setError(e instanceof Error ? e.message : 'Could not hold that booking offline.');
@@ -270,15 +346,32 @@ export function CounterForm({
             {confirmError && <p className="sub" style={{ color: 'var(--red)', margin: '6px 0 0' }}>{confirmError}</p>}
           </div>
         )}
+        {/* The label a counter booking ends on: the sender is standing
+            there with a box that has no sticker on it yet, so the print
+            happens at this desk the moment the booking lands. The
+            signature arrives in the background (see the effect above),
+            so a fast clerk isn't sent to the printer before it's
+            genuine. */}
+        {done.kind === 'booked' && (
+          <div className="print-modal-escape" style={{ marginTop: 16 }}>
+            <PrintableLabel code={done.code} sig={doneSig} orgName={orgName} orgLogoUrl={orgLogoUrl} />
+          </div>
+        )}
         <div style={{ display: 'flex', gap: 8, justifyContent: 'center', marginTop: 16, flexWrap: 'wrap' }}>
           {/* The counter's real loop is one customer after another, so
               the prominent action is "next", not "go look at what you
               just did". */}
           <a className="btn btn-p btn-sm" href={links.nextHref}>Next customer</a>
+          {done.kind === 'booked' && (
+            <button className="btn btn-o btn-sm" type="button" onClick={() => window.print()}>
+              <Icon name="print" size={13} />Print label
+            </button>
+          )}
           <a className="btn btn-o btn-sm" href={links.parcelHref(done.code)}>
             Open parcel
           </a>
         </div>
+        <PrintStyles />
       </div>
     );
   }
@@ -287,12 +380,17 @@ export function CounterForm({
     <div className="card" style={{ padding: 18 }}>
       <PendingSync book={actions.bookParcel} say={say} />
       {/* ── Scan ─────────────────────────────────────────────── */}
+      {/* Hidden when a unified scanner above this form already owns
+          scanning (see the scanbox prop): the same load path still runs
+          through the ref's scan(), and the feedback below (loaded chip,
+          parcel notice) says what came in. */}
+      {scanbox !== false && (
       <form onSubmit={(e) => { e.preventDefault(); void load(code); }} style={{ marginBottom: 16 }}>
         <label className="sub" style={{ display: 'block' }}>Label code
           <div style={{ display: 'flex', gap: 8, marginTop: 2 }}>
             <input
               ref={scanRef} className="mono" value={code}
-              onChange={(e) => { setCode(e.target.value); setLoadedCode(null); }}
+              onChange={(e) => { setCode(e.target.value); setLoadedCode(null); setParcelRef(null); }}
               placeholder="Scan the label, or type PKG-XXXXXX"
               autoComplete="off" spellCheck={false}
               style={{ flex: 1, padding: '10px 12px', fontSize: '1.05rem', border: '1.5px solid var(--line)', borderRadius: 8 }}
@@ -307,6 +405,7 @@ export function CounterForm({
           to mint a fresh code at the end instead.
         </p>
       </form>
+      )}
 
       {/* The loaded sticker, pinned where the clerk can see it. The
           chip is the persistent anchor for "this booking will bind to
@@ -324,7 +423,17 @@ export function CounterForm({
         </div>
       )}
 
-      {notice && <div className="chain" style={{ marginBottom: 12 }}><Icon name="info" size={16} /><span>{notice}</span></div>}
+      {/* A scanned code that turned out to be an existing parcel: the
+          chain says what it is and the action is the door — "open the
+          parcel" instead of a refusal. */}
+      {parcelRef && (
+        <div className="chain" style={{ marginBottom: 12 }}>
+          <Icon name="box" size={16} />
+          <span style={{ flex: 1 }}>{notice}</span>
+          <a className="btn btn-o btn-sm" href={links.parcelHref(parcelRef.code)}>Open parcel</a>
+        </div>
+      )}
+      {!parcelRef && notice && <div className="chain" style={{ marginBottom: 12 }}><Icon name="info" size={16} /><span>{notice}</span></div>}
 
       <Section title="Who">
         <Row>
@@ -461,7 +570,7 @@ export function CounterForm({
       )}
     </div>
   );
-}
+});
 
 /** What the scan box holds, normalised — the same contract as
  *  @esoqo/domain's extractParcelCode (URL last-segment, else the

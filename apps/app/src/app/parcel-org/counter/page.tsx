@@ -1,34 +1,65 @@
-import type { Metadata } from 'next';
-import { redirect } from 'next/navigation';
-import { ParcelOrgUnauthorised, getParcelOrgMe } from '@/lib/parcel-org-session';
-import { listOrgCounterPricing } from '../actions';
-import { OrgCounterClient } from './OrgCounterClient';
+import type { Metadata } from "next";
+import { redirect } from "next/navigation";
+import {
+  ParcelOrgUnauthorised,
+  getParcelOrgMe,
+  parcelOrgFetch,
+  type OrgParcelRow,
+} from "@/lib/parcel-org-session";
+import {
+  listOrgCounterPricing,
+  listOrgLabelBatches,
+  listOrgLabels,
+} from "../actions";
+import { OrgCounterClient } from "./OrgCounterClient";
 
-export const dynamic = 'force-dynamic';
+export const dynamic = "force-dynamic";
 export const metadata: Metadata = {
-  title: 'Counter — Esoqo',
+  title: "Counter — Esoqo",
   robots: { index: false, follow: false },
 };
 
 /**
- * The company's own counter: taking a parcel in over its own desk.
+ * The company's own counter: taking a parcel in over its desk.
  *
- * `?code=` lands here pre-loaded — from the labels register's
- * "Details" on a sticker a handler already filled in out in the
- * field.
+ * One screen, both jobs — how it used to be split is why the two pages
+ * ever existed separately, and why the two scan boxes (PKG- label vs
+ * TCK- ticket) ever sat apart. A single scan bar sits on top and routes
+ * every code by what it is: ticket → custody at the desk, label →
+ * booking form below. See ScanEverythingBar's own comment for the
+ * routing, FrontDeskClient's for the desk, and OrgCounterClient for
+ * how the desk and the booking form are wired behind the one box.
  *
- * Booking needs dispatch; anyone else is shown the door the same way
- * the labels page does it — core-go refuses the underlying calls
+ * `?code=` lands here pre-loaded — the labels register's "Book" button
+ * sends it over, so a sticker on a box the handler already wrote on is
+ * one gesture away from a booking.
+ *
+ * Both halves stay capability-gated, the same way the two pages each
+ * were: the booking form needs parcelorg.dispatch (a rider has no
+ * business minting bookings), the front-desk worklist parcelorg.carry
+ * (the person waiting on a self-drop-off). A carry-only session — a
+ * rider standing at the desk — gets the scanner and worklist without
+ * the booking form. core-go refuses the underlying calls
  * independently, so a hand-typed URL gets nothing either.
- *
- * The volumetric divisor is read here rather than hard-coded in the
- * form so the number the clerk watches move is the same one core-go
- * will charge on. Same commercial setting both counters share.
  */
-export default async function ParcelOrgCounterPage(
-  { searchParams }: { searchParams: Promise<{ code?: string }> },
-) {
-  const { code } = await searchParams;
+export default async function ParcelOrgCounterPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ code?: string; tab?: string; state?: string }>;
+}) {
+  const { code, tab, state } = await searchParams;
+  const initialTab = code
+    ? "book"
+    : tab === "labels"
+      ? "labels"
+      : tab === "book"
+        ? "book"
+        : "receive";
+  const labelState = ["all", "blank", "filled", "spent", "voided"].includes(
+    state ?? "",
+  )
+    ? state!
+    : "blank";
 
   let me: Awaited<ReturnType<typeof getParcelOrgMe>>;
   try {
@@ -37,34 +68,61 @@ export default async function ParcelOrgCounterPage(
     // An expired shift session lands at the company's own door, not
     // /signin — a rider doesn't know their employer's slug, and the
     // customer sign-in is the wrong door entirely.
-    if (e instanceof ParcelOrgUnauthorised) redirect('/parcel-org/signed-out');
+    if (e instanceof ParcelOrgUnauthorised) redirect("/parcel-org/signed-out");
     throw e;
   }
-  if (!me.capabilities.includes('parcelorg.dispatch')) redirect('/parcel-org');
 
-  const [pricing] = await Promise.all([listOrgCounterPricing(me.org.id)]);
+  const canDispatch = me.capabilities.includes("parcelorg.dispatch");
+  const canCarry = me.capabilities.includes("parcelorg.carry");
+  if (!canDispatch && !canCarry) redirect("/parcel-org");
+
+  const [pricing, waiting, labelRegister, labelBatches] = await Promise.all([
+    canDispatch ? listOrgCounterPricing(me.org.id) : Promise.resolve([]),
+    canCarry
+      ? parcelOrgFetch<{ parcels: OrgParcelRow[] | null }>(
+          "/v1/parcel-orgs/me/parcels?status=BOOKED&originMethod=SELF_DROPOFF",
+        ).then((r) => r.parcels ?? [])
+      : Promise.resolve([]),
+    listOrgLabels(labelState),
+    listOrgLabelBatches(),
+  ]);
   const divisor = Number(process.env.PARCEL_VOLUMETRIC_DIVISOR) || 5000;
 
   return (
     <>
       <div className="head">
-        <div style={{ display: 'flex', gap: 12, alignItems: 'center' }}>
+        <div style={{ display: "flex", gap: 12, alignItems: "center" }}>
           {me.org.logoUrl ? (
-            <img src={me.org.logoUrl} alt={`${me.org.name} logo`}
-              style={{ height: 40, maxWidth: 140, objectFit: 'contain' }} />
+            <img
+              src={me.org.logoUrl}
+              alt={`${me.org.name} logo`}
+              style={{ height: 40, maxWidth: 140, objectFit: "contain" }}
+            />
           ) : null}
           <div>
             <h1>Counter</h1>
             <p>
-              Scan one of {me.org.name}&apos;s labels, or start from blank. Stop wherever the
-              moment allows — a record saved against a label is resumable by whoever handles
-              the box next, and only becomes a booking when there is a sender, a receiver
-              and a route.
+              Scan a ticket, label, or parcel code to start. Choose whether you
+              need to receive a drop-off or create a new booking.
             </p>
           </div>
         </div>
       </div>
-      <OrgCounterClient initialCode={code} pricing={pricing} volumetricDivisor={divisor} />
+      <OrgCounterClient
+        initialCode={code}
+        initialTab={initialTab}
+        labelState={labelState}
+        pricing={pricing}
+        volumetricDivisor={divisor}
+        waiting={waiting}
+        orgName={me.org.name}
+        orgLogoUrl={me.org.logoUrl ?? undefined}
+        canDispatch={canDispatch}
+        canCarry={canCarry}
+        labels={labelRegister.labels}
+        labelCounts={labelRegister.counts}
+        labelBatches={labelBatches}
+      />
     </>
   );
 }

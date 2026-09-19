@@ -67,15 +67,37 @@ export interface CounterLabelInfo {
 export type CounterResult = { ok: true; code: string } | { ok: false; error: string };
 export type CounterVoid = { ok: true } | { ok: false; error: string };
 
+/** A code that scanned into an existing parcel rather than a blank
+ *  label. The counter's rule for "one box, every purpose" — a spent
+ *  label or a fresh tracking code never dead-ends; it opens its
+ *  parcel. */
+export interface CounterParcelRef {
+  code: string;
+  status: string;
+}
+
+/** What scanning a code turned out to be: a blank label (info null), a
+ *  filled-in label to resume from, or — additively — a parcel that
+ *  already exists, which the counter shows the door to instead of
+ *  erroring. */
+export type CounterLabelLookup =
+  | { ok: true; info: CounterLabelInfo | null; parcel?: CounterParcelRef | null }
+  | { ok: false; error: string };
+
 /** The five portal-specific wires a counter needs. Each portal passes
  *  its own session-scoped actions — the form never knows whose desk
  *  it sits on. */
 export interface CounterActions {
-  getLabelInfo: (code: string) => Promise<{ ok: true; info: CounterLabelInfo | null } | { ok: false; error: string }>;
+  getLabelInfo: (code: string) => Promise<CounterLabelLookup>;
   attachLabelInfo: (code: string, info: CounterLabelInfo & { itemDescription: string }) => Promise<CounterVoid>;
   bookParcel: (input: CounterBookInput) => Promise<CounterResult>;
   confirmIntake: (code: string) => Promise<CounterVoid>;
   searchParties: (q: string) => Promise<CounterPartyOption[]>;
+  /** Resolve a code's genuine-print signature, so the label printed at
+   *  the moment of booking has the QR that verifies as real. Optional:
+   *  a portal that can't resolve sigs prints an unverified label, which
+   *  still scans — it just verifies as plain rather than genuine. */
+  getLabelSig?: (code: string) => Promise<string | undefined>;
 }
 
 /** Where the counter's exits lead. Plain hrefs (not framework links)

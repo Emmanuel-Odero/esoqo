@@ -19,8 +19,8 @@ export const metadata: Metadata = { title: { default: 'Your parcels', template: 
  * again here (each child page already calls it for its own data, same
  * "layout re-fetches for chrome, page fetches for content" split
  * /me/layout.tsx follows), but a failure here never redirects — that's
- * still each page's own job (see e.g. FrontDeskPage's own try/catch to
- * /parcel-org/signed-out). A layout-level redirect would loop: this
+ * still each page's own job (see e.g. the counter page's own try/catch
+ * to /parcel-org/signed-out). A layout-level redirect would loop: this
  * layout also wraps /parcel-org/signed-out itself, which by definition
  * has no session to show a company name for. An unauthenticated render
  * just renders children with no porg chrome around them, and the child
@@ -38,13 +38,15 @@ export default async function ParcelOrgLayout({ children }: { children: React.Re
   const canManagePricing = me.capabilities.includes('parcelorg.write');
   const canManageStations = me.capabilities.includes('parcelorgstation.write');
   const canDispatch = me.capabilities.includes('parcelorg.dispatch');
+  // The counter page carries both jobs now — booking (dispatch) and the
+  // front-desk worklist (carry) — so anyone with either capability gets
+  // the one nav entry.
+  const canDesk = canDispatch || me.capabilities.includes('parcelorg.carry');
 
   const nav: ParcelOrgNavItem[] = [
     { href: '/parcel-org', label: 'Parcels', icon: 'box' },
     ...(canDispatch ? [{ href: '/parcel-org/dispatch', label: 'Dispatch', icon: 'send' as const }] : []),
-    ...(canDispatch ? [{ href: '/parcel-org/counter', label: 'Counter', icon: 'plus' as const }] : []),
-    { href: '/parcel-org/receive', label: 'Front desk', icon: 'truck', badge: me.stats.awaitingDropoff || undefined },
-    { href: '/parcel-org/labels', label: 'Labels', icon: 'tag' },
+    ...(canDesk ? [{ href: '/parcel-org/counter', label: 'Counter', icon: 'plus' as const, badge: me.stats.awaitingDropoff || undefined }] : []),
     ...(canManagePricing ? [{ href: '/parcel-org/pricing', label: 'Pricing', icon: 'coins' as const }] : []),
     ...(canManageStations ? [{ href: '/parcel-org/stations', label: 'Stations', icon: 'pin' as const }] : []),
     ...(canManageStaff ? [{ href: '/parcel-org/team', label: 'Team', icon: 'users' as const }] : []),

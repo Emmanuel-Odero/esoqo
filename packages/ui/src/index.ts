@@ -25,10 +25,11 @@ export {
   labelsPerPage, DEFAULT_PRINT_LAYOUT,
   type PrintLabelItem, type PrintLayout, type PrintPaper,
 } from './ParcelPrintStudio';
-export { CounterForm } from './ParcelCounter';
+export { CounterForm, type CounterFormHandle } from './ParcelCounter';
 export type {
-  CounterActions, CounterBookInput, CounterLabelInfo, CounterLinks,
-  CounterPartyOption, CounterPricingOption, CounterResult, CounterVoid,
+  CounterActions, CounterBookInput, CounterLabelInfo, CounterLabelLookup,
+  CounterLinks, CounterParcelRef, CounterPartyOption, CounterPricingOption,
+  CounterResult, CounterVoid,
 } from './ParcelCounterTypes';
 export {
   flushQueue, listQueued, offlineSupported, queueBooking,
