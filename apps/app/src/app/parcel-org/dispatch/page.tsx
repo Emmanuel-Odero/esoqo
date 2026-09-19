@@ -1,7 +1,6 @@
 import type { Metadata } from 'next';
 import { redirect } from 'next/navigation';
 import { ParcelOrgUnauthorised, getParcelOrgMe } from '@/lib/parcel-org-session';
-import { DropoffPoll } from '../DropoffPoll';
 import { listDispatches, listOrgStaff, listOrgStations } from '../actions';
 import { DispatchBoard } from './DispatchBoard';
 
@@ -46,8 +45,8 @@ export default async function DispatchPage() {
         </div>
       </div>
 
-      <DropoffPoll />
-
+      {/* Auto-refresh lives once in parcel-org/layout.tsx (DropoffPoll) —
+          it used to be mounted here AND on the dashboard. */}
       <DispatchBoard initialRuns={runs} stations={stations} staff={staff} orgName={me.org.name} />
     </>
   );

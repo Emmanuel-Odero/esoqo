@@ -4,6 +4,7 @@ import { Icon, Logo } from '@esoqo/ui';
 import { ParcelOrgUnauthorised, getParcelOrgMe } from '@/lib/parcel-org-session';
 import { ParcelOrgNav, type ParcelOrgNavItem } from './ParcelOrgNav';
 import { DemoBanner } from './DemoBanner';
+import { DropoffPoll } from './DropoffPoll';
 import './parcel-org.css';
 
 export const metadata: Metadata = { title: { default: 'Your parcels', template: '%s · Esoqo' } };
@@ -44,10 +45,18 @@ export default async function ParcelOrgLayout({ children }: { children: React.Re
   const canDesk = canDispatch || me.capabilities.includes('parcelorg.carry');
 
   const nav: ParcelOrgNavItem[] = [
+    // One entry per job, each owned by exactly one page:
+    // - Parcels  = review the register (this dashboard, no scanning here)
+    // - Counter  = the ONLY scanner + receive/book worklist, with Labels
+    //              as a tab inside it (no separate Labels page)
+    // - Dispatch = runs / fleet board
+    // - Rates    = parcel-type price overrides (called "Rates", not
+    //              "Pricing", so it can't be confused with transport Fares
+    //              in the ticket organiser console)
     { href: '/parcel-org', label: 'Parcels', icon: 'box' },
     ...(canDispatch ? [{ href: '/parcel-org/dispatch', label: 'Dispatch', icon: 'send' as const }] : []),
     ...(canDesk ? [{ href: '/parcel-org/counter', label: 'Counter', icon: 'plus' as const, badge: me.stats.awaitingDropoff || undefined }] : []),
-    ...(canManagePricing ? [{ href: '/parcel-org/pricing', label: 'Pricing', icon: 'coins' as const }] : []),
+    ...(canManagePricing ? [{ href: '/parcel-org/pricing', label: 'Rates', icon: 'tag' as const }] : []),
     ...(canManageStations ? [{ href: '/parcel-org/stations', label: 'Stations', icon: 'pin' as const }] : []),
     ...(canManageStaff ? [{ href: '/parcel-org/team', label: 'Team', icon: 'users' as const }] : []),
     // Everyone's own sign-in and PIN — riders holding a temporary invite
@@ -75,6 +84,11 @@ export default async function ParcelOrgLayout({ children }: { children: React.Re
           </form>
         </div>
       </header>
+      {/* Single auto-refresh for the whole portal: previously mounted
+          separately on the dashboard and on dispatch, so two timers
+          refreshed the same session. One mount here covers every page,
+          and still stands down while a form is active (see DropoffPoll). */}
+      <DropoffPoll />
       <div className="porg-wrap">{children}</div>
     </div>
   );

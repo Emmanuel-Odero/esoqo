@@ -28,10 +28,12 @@ export default async function StationPage({ params }: { params: Promise<{ id: st
     // The posting pool: the company's roster. Best-effort — the staff
     // list needs parcelorgstaff.write, and a station manager may hold
     // only the station capability. Without it the manager still names
-    // the lead but can't re-post members.
-    const roster = await listOrgStaff().catch(() => [] as ParcelOrgStaffRow[]);
+    // the lead but can't re-post members (StationDetail hides the
+    // posting controls when canManage is false).
+    const canManage = me.capabilities.includes('parcelorgstaff.write');
+    const roster = canManage ? await listOrgStaff().catch(() => [] as ParcelOrgStaffRow[]) : [];
 
-    return <StationDetail station={station} members={members ?? []} roster={roster} canManage={true} />;
+    return <StationDetail station={station} members={members ?? []} roster={roster} canManage={canManage} />;
   } catch (e) {
     if (e instanceof ParcelOrgUnauthorised) redirect('/parcel-org/signed-out');
     throw e;

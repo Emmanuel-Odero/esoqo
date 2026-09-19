@@ -157,7 +157,7 @@
 
 /* ── cards & tables ─────────────────────────────────────────────── */
 .card { background:#fff; border:1px solid var(--line); border-radius:var(--r-lg); padding:20px; min-width:0 }
-.card:has(table.tbl) { overflow-x:auto }
+.card:has(table.tbl) { overflow-x:auto; -webkit-overflow-scrolling:touch }
 
 .tbl { width:100%; border-collapse:collapse; font-size:.9rem }
 .tbl th { text-align:left; font-family:var(--font-mono); font-size:.62rem; letter-spacing:.1em;
@@ -211,7 +211,9 @@
   .head h1 { font-size:1.3rem }
   .porg-wrap { padding:18px 16px 48px }
   .card { padding:16px }
-  .porg-name { font-size:.95rem }
+  .porgbar-in { gap:8px }
+  .porg-name { font-size:.92rem }
+  .porg-name small { font-size:.54rem }
   .porg-signout .btn { padding-inline:10px }
   .porgnav a { font-size:.84rem; gap:6px; padding:0 10px }
   .head .actions { width:100% }
@@ -219,6 +221,24 @@
   .courier-actions { grid-template-columns:1fr; gap:9px }
   .courier-action { min-height:68px; padding:13px }
   .dashboard-scanner { padding:16px }
+  /* The Counter tab switch carries its geometry inline (48px targets,
+     24px side padding per tab) for the desktop desk — three tabs need
+     ~450px and a 360px phone has 328. These beat the inline styles so
+     Receive / New Shipment / Labels share one row instead of forcing
+     the page sideways; targets stay ≥44px. */
+  .task-switch { width:100% !important; box-sizing:border-box; margin-bottom:20px !important }
+  .task-switch > button {
+    flex:1 1 0 !important; min-width:0 !important; justify-content:center !important;
+    padding:10px 8px !important; font-size:.82rem !important; gap:6px !important;
+    min-height:44px !important;
+  }
+  .task-switch > button > span { min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap }
+  .task-switch > button > span > span { margin-left:4px !important; padding:2px 6px !important }
+  .task-switch > button svg { flex:none }
+  /* Roster, stations and label registers keep full columns behind a
+     touch scroll instead of squashing — except the parcels register,
+     which already restacks into labelled cards below. */
+  table.tbl:not(.parcel-table) { min-width:560px }
   /* A horizontal table is hard to use on a phone and hiding the status
      is worse. Parcel rows become labelled, stacked cards instead. */
   .card:has(.parcel-table) { overflow:visible; padding:0; border:0; background:transparent; box-shadow:none }
@@ -230,4 +250,12 @@
   .parcel-table td[data-label="Parcel"]::before { content:'' }
   .parcel-table td[data-label="Parcel"] { display:block; padding-top:0 }
   .parcel-table td[data-label="Actions"] { display:block; padding-top:10px; border-top:1px solid var(--line) }
+}
+
+/* The icon + label + badge row needs ~450px; phones give ~330. Below
+   480px the icons go so the WORDS survive — "New S…" tells a desk
+   worker nothing, while the text labels carry the meaning. */
+@media (max-width:480px) {
+  .task-switch > button { font-size:.78rem !important; padding:10px 6px !important }
+  .task-switch > button > svg { display:none !important }
 }

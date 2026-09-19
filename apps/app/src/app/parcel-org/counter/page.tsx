@@ -91,21 +91,14 @@ export default async function ParcelOrgCounterPage({
   return (
     <>
       <div className="head">
-        <div style={{ display: "flex", gap: 12, alignItems: "center" }}>
-          {me.org.logoUrl ? (
-            <img
-              src={me.org.logoUrl}
-              alt={`${me.org.name} logo`}
-              style={{ height: 40, maxWidth: 140, objectFit: "contain" }}
-            />
-          ) : null}
-          <div>
-            <h1>Counter</h1>
-            <p>
-              Scan a ticket, label, or parcel code to start. Choose whether you
-              need to receive a drop-off or create a new booking.
-            </p>
-          </div>
+        <div>
+          <p className="kicker">{me.org.name}</p>
+          <h1>Counter</h1>
+          <p>
+            Scan a ticket, label, or parcel code to start. Receive a drop-off,
+            create a new booking, or manage label stock — one scanner routes
+            every code to the right tab below.
+          </p>
         </div>
       </div>
       <OrgCounterClient

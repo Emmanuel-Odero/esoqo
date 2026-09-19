@@ -9,8 +9,6 @@ import {
 import { OrgParcelsTable } from './OrgParcelsTable';
 import { CustomParcelPanel } from './CustomParcelPanel';
 import { RiderCashPanel } from './RiderCashPanel';
-import { DropoffPoll } from './DropoffPoll';
-import { DashboardScanner } from './DashboardScanner';
 
 export const dynamic = 'force-dynamic';
 export const metadata: Metadata = {
@@ -71,7 +69,10 @@ export default async function ParcelOrgDashboard(
           <p className="kicker">{me.org.name}</p>
           <h1>Parcel operations</h1>
           <p>
-            Start a task or review the parcels that need attention.
+            Review the parcels that need attention.
+            {canDesk
+              ? ' Receiving, booking and labels all live under Counter; runs live under Dispatch.'
+              : ' Your role covers this register — Counter and Dispatch appear for colleagues who hold them.'}
             {me.org.status !== 'ACTIVE' && ' This company isn’t active yet — new work won’t be routed to you.'}
           </p>
         </div>
@@ -89,31 +90,10 @@ export default async function ParcelOrgDashboard(
         </div>
       </div>
 
-      <DropoffPoll />
-
-      {canCarry && <DashboardScanner />}
-
-      <section className="courier-actions" aria-label="Start a task">
-        {canDesk && (
-          <Link href="/parcel-org/counter" className="courier-action">
-            <span className="courier-action-icon green"><Icon name="qr" size={19} /></span>
-            <span><strong>Counter</strong><small>Receive or book a parcel</small></span>
-            <Icon className="courier-action-arrow" name="arrow-right" size={17} />
-          </Link>
-        )}
-        {canDispatch && (
-          <Link href="/parcel-org/dispatch" className="courier-action">
-            <span className="courier-action-icon blue"><Icon name="send" size={19} /></span>
-            <span><strong>Dispatch</strong><small>Open or follow a run</small></span>
-            <Icon className="courier-action-arrow" name="arrow-right" size={17} />
-          </Link>
-        )}
-        <Link href="/parcel-org/counter?tab=labels" className="courier-action">
-          <span className="courier-action-icon amber"><Icon name="tag" size={19} /></span>
-            <span><strong>Labels</strong><small>Find or print labels</small></span>
-          <Icon className="courier-action-arrow" name="arrow-right" size={17} />
-        </Link>
-      </section>
+      {/* Scanning lives ONLY on Counter (ScanEverythingBar): the
+          dashboard used to host its own custody-only scanner plus three
+          shortcut cards repeating the header buttons above, so the same
+          Counter/Dispatch/Labels entries appeared twice on one screen. */}
 
       {canImport && <CustomParcelPanel />}
 

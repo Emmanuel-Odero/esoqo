@@ -101,7 +101,7 @@ export function FleetDispatchMapInner({
 
   return (
     <div className="card" style={{ padding: 0, overflow: 'hidden' }}>
-      <MapContainer center={center} zoom={allPoints.length ? 7 : 12} style={{ height: 480, width: '100%' }}>
+      <MapContainer center={center} zoom={allPoints.length ? 7 : 12} style={{ height: 'min(440px, 62dvh)', width: '100%' }}>
         <TileLayer
           attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
           url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"

@@ -11,7 +11,7 @@ const FleetDispatchMapInner = dynamic(
   () => import('./FleetDispatchMapInner').then((m) => m.FleetDispatchMapInner),
   {
     ssr: false,
-    loading: () => <div className="card" style={{ height: 480 }} />,
+    loading: () => <div className="card" style={{ height: 'min(440px, 62dvh)' }} />,
   },
 );
 
