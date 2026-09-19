@@ -42,11 +42,35 @@ export function ScanButton({ onScan }: { onScan: (code: string) => void }) {
     clear: () => void;
   } | null>(null);
   const onScanRef = useRef(onScan);
-  // Decoders can report the same QR on several consecutive video frames.
-  // Accept exactly one result per time the scanner is opened; otherwise a
-  // custody scan could make two requests before React closes the preview.
   const acceptedRef = useRef(false);
   onScanRef.current = onScan;
+
+  // Check camera permissions availability upfront to avoid hanging
+  const [canUseCamera, setCanUseCamera] = useState<boolean | null>(null);
+
+  useEffect(() => {
+    // Check camera permissions availability upfront to avoid hanging
+    const checkCameraAvailability = async () => {
+      try {
+        // Check if navigator.mediaDevices exists
+        if (!navigator.mediaDevices?.getUserMedia) {
+          setCanUseCamera(false);
+          return;
+        }
+        // Try a dummy permission check (doesn't prompt user)
+        const permission = await (navigator as any).permissions?.query?.({
+          name: "camera" as any,
+        });
+        setCanUseCamera(
+          permission?.state === "granted" || permission?.state === "prompt",
+        );
+      } catch {
+        // If we can't check permissions, assume camera might work
+        setCanUseCamera(true);
+      }
+    };
+    checkCameraAvailability();
+  }, []);
 
   useEffect(() => {
     if (!open) return;
@@ -111,6 +135,7 @@ export function ScanButton({ onScan }: { onScan: (code: string) => void }) {
 
         const scanner = new Html5Qrcode(viewId);
         scannerRef.current = scanner;
+
         const onSuccess = (decodedText: string) => {
           if (acceptedRef.current) return;
           const code = extractParcelCode(decodedText.trim());
@@ -211,18 +236,25 @@ export function ScanButton({ onScan }: { onScan: (code: string) => void }) {
           flexWrap: "wrap",
         }}
       >
-        <button
-          type="button"
-          className="btn btn-o btn-sm"
-          disabled={starting}
-          onClick={() => {
-            setError(null);
-            setOpen((v) => !v);
-          }}
-        >
-          <Icon name="qr" size={14} />
-          {starting ? "Starting camera…" : open ? "Close scanner" : "Scan"}
-        </button>
+        {canUseCamera !== false ? (
+          <button
+            type="button"
+            className="btn btn-o btn-sm"
+            disabled={starting || canUseCamera === false}
+            onClick={() => {
+              setError(null);
+              setOpen((v) => !v);
+            }}
+          >
+            <Icon name="qr" size={14} />
+            {starting ? "Starting camera…" : open ? "Close scanner" : "Scan"}
+          </button>
+        ) : null}
+        <span style={{ color: "var(--tx-3)", fontSize: "0.85rem" }}>
+          {canUseCamera === false
+            ? "Camera not available"
+            : "Scan with camera or type code"}
+        </span>
       </div>
       {/* Show error above the button if scanner failed to initialize */}
       {error && !open && (

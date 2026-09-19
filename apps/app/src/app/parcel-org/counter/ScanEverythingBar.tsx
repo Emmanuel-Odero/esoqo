@@ -166,38 +166,55 @@ export function ScanEverythingBar({
     <div
       className="card counter-scanner"
       style={{
-        padding: "20px",
-        marginBottom: "24px",
+        padding: "28px",
+        marginBottom: "28px",
         background: "#fff",
-        border: "1px solid #BFE0CE",
-        borderRadius: "12px",
+        border: "1px solid var(--line)",
+        borderRadius: "var(--r-lg)",
+        boxShadow: "var(--sh-s)",
       }}
     >
       <div
         style={{
           display: "flex",
           alignItems: "center",
-          gap: "12px",
-          marginBottom: "16px",
+          gap: "16px",
+          marginBottom: "20px",
         }}
       >
         <div
           style={{
-            width: "40px",
-            height: "40px",
-            borderRadius: "10px",
-            background: "#E8F5E9",
+            width: "52px",
+            height: "52px",
+            borderRadius: "var(--r-md)",
+            background: "var(--green-t)",
             display: "grid",
             placeItems: "center",
+            flexShrink: 0,
           }}
         >
-          <Icon name="qr" size={20} style={{ color: "#1F9F63" }} />
+          <Icon name="qr" size={24} style={{ color: "var(--green)" }} />
         </div>
         <div>
-          <h3 style={{ margin: 0, fontSize: "1rem", fontWeight: 600 }}>
+          <h3
+            style={{
+              margin: 0,
+              fontSize: "1.2rem",
+              fontWeight: 700,
+              color: "var(--navy)",
+              fontFamily: "var(--font-display)",
+            }}
+          >
             Quick Scan
           </h3>
-          <p style={{ margin: "4px 0 0", fontSize: ".85rem", color: "#666" }}>
+          <p
+            style={{
+              margin: "6px 0 0",
+              fontSize: ".9rem",
+              color: "var(--tx-2)",
+              lineHeight: 1.4,
+            }}
+          >
             Scan a code to get started
           </p>
         </div>
@@ -210,7 +227,7 @@ export function ScanEverythingBar({
         style={{
           display: "flex",
           gap: "12px",
-          alignItems: "center",
+          alignItems: "stretch",
           flexWrap: "wrap",
         }}
       >
@@ -227,12 +244,23 @@ export function ScanEverythingBar({
           aria-label="Scan or type a code"
           style={{
             flex: 1,
-            padding: "14px 16px",
-            fontSize: "1rem",
-            border: "1.5px solid #E0E0E0",
-            borderRadius: "10px",
-            minWidth: "250px",
+            padding: "16px 18px",
+            fontSize: "1.05rem",
+            border: "1.5px solid var(--line)",
+            borderRadius: "var(--r-sm)",
+            minWidth: "280px",
             outline: "none",
+            background: "#fff",
+            transition:
+              "border-color var(--dur-fast), box-shadow var(--dur-fast)",
+          }}
+          onFocus={(e) => {
+            e.target.style.borderColor = "var(--green)";
+            e.target.style.boxShadow = "0 0 0 3px rgba(31,161,99,.12)";
+          }}
+          onBlur={(e) => {
+            e.target.style.borderColor = "var(--line)";
+            e.target.style.boxShadow = "none";
           }}
         />
         <button
@@ -240,19 +268,33 @@ export function ScanEverythingBar({
           type="submit"
           disabled={busy || !text.trim()}
           style={{
-            background: "#1F9F63",
+            background: "var(--green)",
             color: "white",
             border: "none",
-            padding: "14px 24px",
-            borderRadius: "10px",
+            padding: "16px 28px",
+            borderRadius: "var(--r-sm)",
             fontSize: "1rem",
             fontWeight: 600,
-            cursor: text.trim() ? "pointer" : "not-allowed",
-            opacity: text.trim() ? 1 : 0.6,
-            transition: "all 0.2s",
+            cursor: text.trim() && !busy ? "pointer" : "not-allowed",
+            opacity: text.trim() && !busy ? 1 : 0.5,
+            transition: "all var(--dur-fast)",
+            minHeight: "56px",
+            display: "flex",
+            alignItems: "center",
+            gap: 8,
           }}
         >
-          {busy ? "Working…" : "Scan"}
+          {busy ? (
+            <>
+              <Icon name="loader" size={18} />
+              Working…
+            </>
+          ) : (
+            <>
+              <Icon name="search" size={18} />
+              Scan
+            </>
+          )}
         </button>
         <ScanButton onScan={(code) => void submit(code)} />
         {canDispatch && emptyLabels.length > 0 && (
@@ -264,16 +306,29 @@ export function ScanEverythingBar({
             aria-controls="empty-label-picker"
             style={{
               background: "#fff",
-              color: "#1F9F63",
-              border: "1px solid #BFE0CE",
-              padding: "12px 18px",
-              borderRadius: "10px",
-              fontSize: "0.9rem",
+              color: "var(--green)",
+              border: "1.5px solid var(--line)",
+              padding: "16px 22px",
+              borderRadius: "var(--r-sm)",
+              fontSize: "0.95rem",
               fontWeight: 600,
               cursor: "pointer",
+              transition: "all var(--dur-fast)",
+              minHeight: "56px",
+              display: "flex",
+              alignItems: "center",
+              gap: 8,
+            }}
+            onMouseEnter={(e) => {
+              e.currentTarget.style.borderColor = "var(--green)";
+              e.currentTarget.style.background = "var(--green-t)";
+            }}
+            onMouseLeave={(e) => {
+              e.currentTarget.style.borderColor = "var(--line)";
+              e.currentTarget.style.background = "#fff";
             }}
           >
-            <Icon name="qr" size={16} /> Choose Label
+            <Icon name="qr" size={18} /> Choose Label
           </button>
         )}
       </form>
@@ -283,18 +338,24 @@ export function ScanEverythingBar({
           className="label-picker-popover"
           aria-label="Choose an empty label"
           style={{
-            marginTop: "12px",
-            padding: "12px",
-            border: "1px solid #BFE0CE",
-            borderRadius: "10px",
-            background: "#fff",
+            marginTop: "20px",
+            padding: "20px",
+            border: "1px solid var(--line)",
+            borderRadius: "var(--r-md)",
+            background: "var(--paper)",
             boxShadow: "var(--sh-s)",
           }}
         >
           <label
             className="sub"
             htmlFor="empty-label-search"
-            style={{ display: "block", marginBottom: "5px", fontWeight: 600 }}
+            style={{
+              display: "block",
+              marginBottom: "8px",
+              fontWeight: 600,
+              fontSize: ".95rem",
+              color: "var(--navy)",
+            }}
           >
             Find an empty label
           </label>
@@ -309,12 +370,21 @@ export function ScanEverythingBar({
             style={{
               width: "100%",
               boxSizing: "border-box",
-              padding: "9px 10px",
+              padding: "12px 14px",
               border: "1.5px solid var(--line)",
-              borderRadius: "7px",
+              borderRadius: "var(--r-sm)",
+              fontSize: ".95rem",
+              marginBottom: "16px",
             }}
           />
-          <div className="label-picker-results">
+          <div
+            className="label-picker-results"
+            style={{
+              display: "flex",
+              flexWrap: "wrap",
+              gap: "12px",
+            }}
+          >
             {matchingLabels.map((label) => (
               <button
                 key={label.code}
@@ -327,13 +397,23 @@ export function ScanEverythingBar({
                   flex: "0 0 41mm",
                   overflow: "hidden",
                   padding: "0",
-                  border: "1px solid var(--line)",
-                  borderRadius: "7px",
+                  border: "1.5px solid var(--line)",
+                  borderRadius: "var(--r-sm)",
                   background: "#fff",
                   cursor: "pointer",
                   textAlign: "left",
-                  transition:
-                    "border-color var(--dur-fast),box-shadow var(--dur-fast)",
+                  transition: "all var(--dur-fast)",
+                  boxShadow: "var(--sh-s)",
+                }}
+                onMouseEnter={(e) => {
+                  e.currentTarget.style.borderColor = "var(--green)";
+                  e.currentTarget.style.transform = "translateY(-2px)";
+                  e.currentTarget.style.boxShadow = "var(--sh-m)";
+                }}
+                onMouseLeave={(e) => {
+                  e.currentTarget.style.borderColor = "var(--line)";
+                  e.currentTarget.style.transform = "translateY(0)";
+                  e.currentTarget.style.boxShadow = "var(--sh-s)";
                 }}
               >
                 <span className="empty-label-preview">
@@ -347,7 +427,16 @@ export function ScanEverythingBar({
               </button>
             ))}
             {matchingLabels.length === 0 && (
-              <p className="sub">No empty label matches "{labelQuery}".</p>
+              <p
+                className="sub"
+                style={{
+                  margin: "20px 0",
+                  color: "var(--tx-2)",
+                  fontSize: ".9rem",
+                }}
+              >
+                No empty label matches "{labelQuery}".
+              </p>
             )}
           </div>
         </section>
@@ -356,20 +445,36 @@ export function ScanEverythingBar({
         <p
           role={status.kind === "problem" ? "alert" : "status"}
           style={{
-            margin: "10px 0 0",
+            margin: "16px 0 0",
             display: "flex",
             alignItems: "center",
-            gap: 6,
-            fontSize: ".85rem",
+            gap: 10,
+            fontSize: ".92rem",
+            padding: "14px 16px",
+            borderRadius: "var(--r-sm)",
+            fontWeight: 500,
+            background:
+              status.kind === "problem"
+                ? "var(--red-t)"
+                : status.kind === "done"
+                  ? "var(--green-t)"
+                  : "var(--blue-t)",
             color:
               status.kind === "problem"
                 ? "var(--red)"
                 : status.kind === "done"
                   ? "var(--green)"
-                  : "var(--tx-2)",
+                  : "var(--blue)",
+            border: `1px solid ${
+              status.kind === "problem"
+                ? "#F3D2CF"
+                : status.kind === "done"
+                  ? "#BFE0CE"
+                  : "#C9DFEE"
+            }`,
           }}
         >
-          <Icon name={statusIcon[status.kind]} size={14} />
+          <Icon name={statusIcon[status.kind]} size={18} />
           {status.text}
         </p>
       )}

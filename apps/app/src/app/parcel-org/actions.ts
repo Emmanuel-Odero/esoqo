@@ -348,7 +348,6 @@ export async function voidOrgLabels(
       `/v1/parcel-orgs/me/labels/void`,
       { method: "POST", body: JSON.stringify({ codes, reason }) },
     );
-    revalidatePath("/parcel-org/labels");
     revalidatePath("/parcel-org/counter");
     return { ok: true, voided: res.voided };
   } catch (e) {
@@ -370,9 +369,11 @@ export async function voidOrgLabelBatch(
   try {
     const res = await parcelOrgFetch<{ voided: number }>(
       `/v1/parcel-orgs/me/labels/batches/${encodeURIComponent(batchId)}/void`,
-      { method: "POST", body: JSON.stringify({ reason }) },
+      {
+        method: "POST",
+        body: JSON.stringify({ reason }),
+      },
     );
-    revalidatePath("/parcel-org/labels");
     revalidatePath("/parcel-org/counter");
     return { ok: true, voided: res.voided };
   } catch (e) {
@@ -411,28 +412,34 @@ export async function addCustomParcel(
   input: CustomParcelInput,
 ): Promise<{ ok: true; code: string } | { ok: false; error: string }> {
   try {
-    const res = await parcelOrgFetch<{ code: string }>("/v1/parcel-orgs/me/parcels", {
-      method: "POST",
-      body: JSON.stringify({
-        externalRef: input.externalRef.trim(),
-        senderName: input.senderName.trim(),
-        senderMsisdn: input.senderMsisdn.trim(),
-        receiverName: input.receiverName.trim(),
-        receiverMsisdn: input.receiverMsisdn.trim(),
-        originLabel: input.originLabel.trim(),
-        destinationLabel: input.destinationLabel.trim(),
-        parcelType: input.parcelType,
-        weightKg: input.weightKg ?? null,
-        fragile: input.fragile ?? false,
-        notes: input.notes?.trim() || null,
-        labelCode: input.labelCode?.trim() || null,
-      }),
-    });
+    const res = await parcelOrgFetch<{ code: string }>(
+      "/v1/parcel-orgs/me/parcels",
+      {
+        method: "POST",
+        body: JSON.stringify({
+          externalRef: input.externalRef.trim(),
+          senderName: input.senderName.trim(),
+          senderMsisdn: input.senderMsisdn.trim(),
+          receiverName: input.receiverName.trim(),
+          receiverMsisdn: input.receiverMsisdn.trim(),
+          originLabel: input.originLabel.trim(),
+          destinationLabel: input.destinationLabel.trim(),
+          parcelType: input.parcelType,
+          weightKg: input.weightKg ?? null,
+          fragile: input.fragile ?? false,
+          notes: input.notes?.trim() || null,
+          labelCode: input.labelCode?.trim() || null,
+        }),
+      },
+    );
     revalidatePath("/parcel-org");
     return { ok: true, code: res.code };
   } catch (e) {
     const r = toResult(e);
-    return { ok: false, error: r.ok ? "Could not import that parcel" : r.error };
+    return {
+      ok: false,
+      error: r.ok ? "Could not import that parcel" : r.error,
+    };
   }
 }
 
@@ -472,10 +479,13 @@ export async function setStationManager(
   staffId: string | null,
 ): Promise<Result> {
   try {
-    await parcelOrgFetch(`/v1/parcel-orgs/me/stations/${encodeURIComponent(stationId)}/manager`, {
-      method: "POST",
-      body: JSON.stringify({ staffId }),
-    });
+    await parcelOrgFetch(
+      `/v1/parcel-orgs/me/stations/${encodeURIComponent(stationId)}/manager`,
+      {
+        method: "POST",
+        body: JSON.stringify({ staffId }),
+      },
+    );
     revalidatePath(`/parcel-org/stations/${stationId}`);
     return { ok: true };
   } catch (e) {
@@ -490,10 +500,13 @@ export async function assignStationMember(
   assigned: boolean,
 ): Promise<Result> {
   try {
-    await parcelOrgFetch(`/v1/parcel-orgs/me/stations/${encodeURIComponent(stationId)}/members`, {
-      method: "POST",
-      body: JSON.stringify({ staffId, assigned }),
-    });
+    await parcelOrgFetch(
+      `/v1/parcel-orgs/me/stations/${encodeURIComponent(stationId)}/members`,
+      {
+        method: "POST",
+        body: JSON.stringify({ staffId, assigned }),
+      },
+    );
     revalidatePath(`/parcel-org/stations/${stationId}`);
     return { ok: true };
   } catch (e) {
@@ -528,7 +541,10 @@ export async function resolveOrgLabel(
     return { ok: true, label: res.label };
   } catch (e) {
     const r = toResult(e);
-    return { ok: false, error: r.ok ? "Could not look up that label" : r.error };
+    return {
+      ok: false,
+      error: r.ok ? "Could not look up that label" : r.error,
+    };
   }
 }
 
@@ -540,23 +556,25 @@ export async function attachOrgLabelInfo(
   input: AttachLabelInfoInput,
 ): Promise<Result> {
   try {
-    await parcelOrgFetch(`/v1/parcel-orgs/me/labels/info/${encodeURIComponent(code.trim())}`, {
-      method: "POST",
-      body: JSON.stringify({
-        itemDescription: input.itemDescription.trim(),
-        destination: input.destination?.trim() || null,
-        senderName: input.senderName?.trim() || null,
-        senderMsisdn: input.senderMsisdn?.trim() || null,
-        receiverName: input.receiverName?.trim() || null,
-        receiverMsisdn: input.receiverMsisdn?.trim() || null,
-        itemType: input.itemType?.trim() || null,
-        weightRangeKg: input.weightRangeKg?.trim() || null,
-        lengthCm: input.lengthCm ?? null,
-        widthCm: input.widthCm ?? null,
-        heightCm: input.heightCm ?? null,
-      }),
-    });
-    revalidatePath("/parcel-org/labels");
+    await parcelOrgFetch(
+      `/v1/parcel-orgs/me/labels/info/${encodeURIComponent(code.trim())}`,
+      {
+        method: "POST",
+        body: JSON.stringify({
+          itemDescription: input.itemDescription.trim(),
+          destination: input.destination?.trim() || null,
+          senderName: input.senderName?.trim() || null,
+          senderMsisdn: input.senderMsisdn?.trim() || null,
+          receiverName: input.receiverName?.trim() || null,
+          receiverMsisdn: input.receiverMsisdn?.trim() || null,
+          itemType: input.itemType?.trim() || null,
+          weightRangeKg: input.weightRangeKg?.trim() || null,
+          lengthCm: input.lengthCm ?? null,
+          widthCm: input.widthCm ?? null,
+          heightCm: input.heightCm ?? null,
+        }),
+      },
+    );
     revalidatePath("/parcel-org/counter");
     return { ok: true };
   } catch (e) {
@@ -600,10 +618,13 @@ export async function bookOrgCounterParcel(
   input: OrgCounterBookInput,
 ): Promise<{ ok: true; code: string } | { ok: false; error: string }> {
   try {
-    const res = await parcelOrgFetch<{ code: string }>("/v1/parcel-orgs/me/counter/book", {
-      method: "POST",
-      body: JSON.stringify(input),
-    });
+    const res = await parcelOrgFetch<{ code: string }>(
+      "/v1/parcel-orgs/me/counter/book",
+      {
+        method: "POST",
+        body: JSON.stringify(input),
+      },
+    );
     revalidatePath("/parcel-org");
     return { ok: true, code: res.code };
   } catch (e) {
@@ -622,7 +643,9 @@ export interface OrgCounterParty {
 /** The counter's address book: people this company has shipped to or
  *  from before, most-frequent first. Three letters minimum — two
  *  matches half the country. */
-export async function searchOrgCounterParties(q: string): Promise<OrgCounterParty[]> {
+export async function searchOrgCounterParties(
+  q: string,
+): Promise<OrgCounterParty[]> {
   if (q.trim().length < 3) return [];
   const res = await parcelOrgFetch<{ parties: OrgCounterParty[] | null }>(
     `/v1/parcel-orgs/me/parties?q=${encodeURIComponent(q.trim())}`,
@@ -644,9 +667,7 @@ export async function lookupOrgParcelByCode(
   const res = await parcelOrgFetch<{ parcels: OrgParcelRow[] | null }>(
     `/v1/parcel-orgs/me/parcels?q=${encodeURIComponent(needle)}`,
   );
-  return (
-    res.parcels?.find((p) => p.code.toUpperCase() === needle) ?? null
-  );
+  return res.parcels?.find((p) => p.code.toUpperCase() === needle) ?? null;
 }
 
 /** The counter worklist, refetched on the desk's own polling interval:
@@ -672,10 +693,12 @@ export interface OrgCounterPricingOption {
  *  default wherever the company hasn't set its own), so the counter
  *  matches a measured weight to a bracket without a round trip per
  *  keystroke. Public endpoint — quoted before anyone signs in. */
-export async function listOrgCounterPricing(orgId: string): Promise<OrgCounterPricingOption[]> {
-  const res = await parcelOrgFetch<{ pricing: OrgCounterPricingOption[] | null }>(
-    `/v1/parcels/pricing?parcelOrgId=${encodeURIComponent(orgId)}`,
-  );
+export async function listOrgCounterPricing(
+  orgId: string,
+): Promise<OrgCounterPricingOption[]> {
+  const res = await parcelOrgFetch<{
+    pricing: OrgCounterPricingOption[] | null;
+  }>(`/v1/parcels/pricing?parcelOrgId=${encodeURIComponent(orgId)}`);
   return res.pricing ?? [];
 }
 
@@ -710,7 +733,9 @@ export interface CreateDispatchInput {
 }
 
 /** The board: active runs by default, recently closed ones on request. */
-export async function listDispatches(includeClosed = false): Promise<DispatchRun[]> {
+export async function listDispatches(
+  includeClosed = false,
+): Promise<DispatchRun[]> {
   const res = await parcelOrgFetch<{ dispatches: DispatchRun[] | null }>(
     `/v1/parcel-orgs/me/dispatch${includeClosed ? "?closed=true" : ""}`,
   );
@@ -735,27 +760,30 @@ export async function createDispatch(
   input: CreateDispatchInput,
 ): Promise<{ ok: true; id: string } | { ok: false; error: string }> {
   try {
-    const res = await parcelOrgFetch<{ id: string }>("/v1/parcel-orgs/me/dispatch", {
-      method: "POST",
-      body: JSON.stringify({
-        vehiclePlate: input.vehiclePlate.trim(),
-        vehicleType: input.vehicleType,
-        originStationId: input.originStationId || null,
-        destinationStationId: input.destinationStationId || null,
-        notes: input.notes?.trim() || null,
-        crew: input.crew.map((c) => ({
-          name: c.name.trim(),
-          msisdn: c.msisdn?.trim() || null,
-          role: c.role,
-          customRole: c.customRole?.trim() || null,
-          staffId: c.staffId || null,
-        })),
-        receivers: input.receivers.map((r) => ({
-          name: r.name.trim(),
-          staffId: r.staffId || null,
-        })),
-      }),
-    });
+    const res = await parcelOrgFetch<{ id: string }>(
+      "/v1/parcel-orgs/me/dispatch",
+      {
+        method: "POST",
+        body: JSON.stringify({
+          vehiclePlate: input.vehiclePlate.trim(),
+          vehicleType: input.vehicleType,
+          originStationId: input.originStationId || null,
+          destinationStationId: input.destinationStationId || null,
+          notes: input.notes?.trim() || null,
+          crew: input.crew.map((c) => ({
+            name: c.name.trim(),
+            msisdn: c.msisdn?.trim() || null,
+            role: c.role,
+            customRole: c.customRole?.trim() || null,
+            staffId: c.staffId || null,
+          })),
+          receivers: input.receivers.map((r) => ({
+            name: r.name.trim(),
+            staffId: r.staffId || null,
+          })),
+        }),
+      },
+    );
     revalidatePath("/parcel-org/dispatch");
     return { ok: true, id: res.id };
   } catch (e) {
@@ -771,10 +799,13 @@ export async function reportDispatchPosition(
   lng: number,
 ): Promise<Result> {
   try {
-    await parcelOrgFetch(`/v1/parcel-orgs/me/dispatch/${encodeURIComponent(id)}/position`, {
-      method: "POST",
-      body: JSON.stringify({ lat, lng }),
-    });
+    await parcelOrgFetch(
+      `/v1/parcel-orgs/me/dispatch/${encodeURIComponent(id)}/position`,
+      {
+        method: "POST",
+        body: JSON.stringify({ lat, lng }),
+      },
+    );
     revalidatePath("/parcel-org/dispatch");
     return { ok: true };
   } catch (e) {
@@ -784,12 +815,18 @@ export async function reportDispatchPosition(
 
 /** The receiving team's check-in: the run is over, who signed is on
  *  the record. Blank falls back to the named receiving team. */
-export async function arriveDispatch(id: string, receivedBy: string): Promise<Result> {
+export async function arriveDispatch(
+  id: string,
+  receivedBy: string,
+): Promise<Result> {
   try {
-    await parcelOrgFetch(`/v1/parcel-orgs/me/dispatch/${encodeURIComponent(id)}/arrive`, {
-      method: "POST",
-      body: JSON.stringify({ receivedBy: receivedBy.trim() }),
-    });
+    await parcelOrgFetch(
+      `/v1/parcel-orgs/me/dispatch/${encodeURIComponent(id)}/arrive`,
+      {
+        method: "POST",
+        body: JSON.stringify({ receivedBy: receivedBy.trim() }),
+      },
+    );
     revalidatePath("/parcel-org/dispatch");
     return { ok: true };
   } catch (e) {
@@ -800,13 +837,226 @@ export async function arriveDispatch(id: string, receivedBy: string): Promise<Re
 /** Call a run off before it arrives. */
 export async function cancelDispatch(id: string): Promise<Result> {
   try {
-    await parcelOrgFetch(`/v1/parcel-orgs/me/dispatch/${encodeURIComponent(id)}/cancel`, {
-      method: "POST",
-      body: JSON.stringify({}),
-    });
+    await parcelOrgFetch(
+      `/v1/parcel-orgs/me/dispatch/${encodeURIComponent(id)}/cancel`,
+      {
+        method: "POST",
+        body: JSON.stringify({}),
+      },
+    );
     revalidatePath("/parcel-org/dispatch");
     return { ok: true };
   } catch (e) {
     return toResult(e);
+  }
+}
+
+// ── Shipment operations ──
+//
+// Shipment = one vehicle movement with parcels loaded onto it.
+// This is the counter-level equivalent of admin/operations/shipments.
+
+export interface ShipmentView {
+  id: string;
+  vehiclePlate: string;
+  vehicleType: string;
+  originLabel: string;
+  destinationLabel: string;
+  routeLabel?: string;
+  status: string;
+  driverName?: string;
+  conductorName?: string;
+  loadedCount: number;
+  expectedCount: number;
+  createdAt: string;
+}
+
+export interface DispatchCrewInput {
+  name: string;
+  msisdn?: string | null;
+  role: string;
+  customRole?: string | null;
+  staffId?: string | null;
+}
+
+export interface ShipmentInput {
+  vehiclePlate: string;
+  vehicleType: string;
+  originLabel: string;
+  destinationLabel: string;
+  routeLabel?: string;
+  driverId?: string | null;
+  conductorId?: string | null;
+  notes?: string | null;
+  crew?: DispatchCrewInput[];
+}
+
+/** Create a new shipment (vehicle movement). */
+export async function createShipment(
+  input: ShipmentInput,
+): Promise<
+  { ok: true; shipment: ShipmentView } | { ok: false; error: string }
+> {
+  try {
+    const res = await parcelOrgFetch<{ shipment: ShipmentView }>(
+      "/v1/parcel-orgs/me/shipments",
+      {
+        method: "POST",
+        body: JSON.stringify({
+          vehiclePlate: input.vehiclePlate.trim(),
+          vehicleType: input.vehicleType,
+          originLabel: input.originLabel.trim(),
+          destinationLabel: input.destinationLabel.trim(),
+          routeLabel: input.routeLabel?.trim() || null,
+          driverId: input.driverId || null,
+          conductorId: input.conductorId || null,
+          notes: input.notes?.trim() || null,
+          crew: input.crew?.map((c) => ({
+            name: c.name.trim(),
+            msisdn: c.msisdn?.trim() || null,
+            role: c.role,
+            customRole: c.customRole?.trim() || null,
+            staffId: c.staffId || null,
+          })),
+        }),
+      },
+    );
+    revalidatePath("/parcel-org/counter");
+    return { ok: true, shipment: res.shipment };
+  } catch (e) {
+    const r = toResult(e);
+    return { ok: false, error: r.ok ? "Could not create shipment" : r.error };
+  }
+}
+
+/** Join an existing active shipment to add parcels to it. */
+export async function joinShipment(
+  shipmentId: string,
+): Promise<
+  { ok: true; shipment: ShipmentView } | { ok: false; error: string }
+> {
+  try {
+    const res = await parcelOrgFetch<{ shipment: ShipmentView }>(
+      `/v1/parcel-orgs/me/shipments/${encodeURIComponent(shipmentId)}/join`,
+      {
+        method: "POST",
+      },
+    );
+    revalidatePath("/parcel-org/counter");
+    return { ok: true, shipment: res.shipment };
+  } catch (e) {
+    const r = toResult(e);
+    return { ok: false, error: r.ok ? "Could not join shipment" : r.error };
+  }
+}
+
+/** Load a parcel onto a shipment (scan to board). */
+export async function loadParcelToShipment(
+  shipmentId: string,
+  parcelCode: string,
+): Promise<
+  { ok: true; shipment: ShipmentView } | { ok: false; error: string }
+> {
+  try {
+    const res = await parcelOrgFetch<{ shipment: ShipmentView }>(
+      `/v1/parcel-orgs/me/shipments/${encodeURIComponent(shipmentId)}/load/${encodeURIComponent(parcelCode)}`,
+      {
+        method: "POST",
+      },
+    );
+    revalidatePath("/parcel-org/counter");
+    // Note: parcel code notification is handled server-side
+    return { ok: true, shipment: res.shipment };
+  } catch (e) {
+    const r = toResult(e);
+    return { ok: false, error: r.ok ? "Could not load parcel" : r.error };
+  }
+}
+
+/** Mark shipment as departed (left station). */
+export async function startShipment(
+  shipmentId: string,
+): Promise<
+  { ok: true; shipment: ShipmentView } | { ok: false; error: string }
+> {
+  try {
+    const res = await parcelOrgFetch<{ shipment: ShipmentView }>(
+      `/v1/parcel-orgs/me/shipments/${encodeURIComponent(shipmentId)}/start`,
+      {
+        method: "POST",
+      },
+    );
+    revalidatePath("/parcel-org/counter");
+    return { ok: true, shipment: res.shipment };
+  } catch (e) {
+    const r = toResult(e);
+    return { ok: false, error: r.ok ? "Could not start shipment" : r.error };
+  }
+}
+
+/** Mark shipment as arrived (reached destination). */
+export async function finishShipment(
+  shipmentId: string,
+): Promise<
+  { ok: true; shipment: ShipmentView } | { ok: false; error: string }
+> {
+  try {
+    const res = await parcelOrgFetch<{ shipment: ShipmentView }>(
+      `/v1/parcel-orgs/me/shipments/${encodeURIComponent(shipmentId)}/finish`,
+      {
+        method: "POST",
+      },
+    );
+    revalidatePath("/parcel-org/counter");
+    return { ok: true, shipment: res.shipment };
+  } catch (e) {
+    const r = toResult(e);
+    return { ok: false, error: r.ok ? "Could not finish shipment" : r.error };
+  }
+}
+
+/** Cancel an open shipment. */
+export async function cancelShipment(
+  shipmentId: string,
+): Promise<{ ok: true } | { ok: false; error: string }> {
+  try {
+    await parcelOrgFetch(
+      `/v1/parcel-orgs/me/shipments/${encodeURIComponent(shipmentId)}/cancel`,
+      {
+        method: "POST",
+        body: JSON.stringify({}),
+      },
+    );
+    revalidatePath("/parcel-org/counter");
+    return { ok: true };
+  } catch (e) {
+    const r = toResult(e);
+    return { ok: false, error: r.ok ? "Could not cancel shipment" : r.error };
+  }
+}
+
+/** List active shipments (open, in transit, or recently completed). */
+export async function listActiveShipments(): Promise<ShipmentView[]> {
+  const res = await parcelOrgFetch<{ shipments: ShipmentView[] | null }>(
+    "/v1/parcel-orgs/me/shipments?status=open,in_transit,departed",
+  );
+  return res.shipments ?? [];
+}
+
+/** Get left-behind parcels for a route (missing parcels that should have been loaded). */
+export async function getLeftBehindParcels(
+  shipmentId: string,
+): Promise<{ parcels: OrgParcelRow[] } | { ok: false; error: string }> {
+  try {
+    const res = await parcelOrgFetch<{ parcels: OrgParcelRow[] | null }>(
+      `/v1/parcel-orgs/me/shipments/${encodeURIComponent(shipmentId)}/left-behind`,
+    );
+    return { parcels: res.parcels ?? [] };
+  } catch (e) {
+    const r = toResult(e);
+    return {
+      ok: false,
+      error: r.ok ? "Could not fetch left-behind parcels" : r.error,
+    };
   }
 }
