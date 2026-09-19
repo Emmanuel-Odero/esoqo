@@ -1,7 +1,7 @@
 import type { SVGProps } from 'react';
 
 /**
- * Icon system — 63 stroke icons on a 24px grid.
+ * Icon system — 69 stroke icons on a 24px grid.
  *
  * No emoji anywhere in this product. Emoji render differently on every
  * platform, are announced unpredictably by screen readers, and cannot be
@@ -9,7 +9,7 @@ import type { SVGProps } from 'react';
  * carries the meaning.
  */
 
-export type IconName = 'alert-circle' | 'alert-triangle' | 'arrow-left' | 'arrow-right' | 'ban' | 'bank' | 'basket' | 'box' | 'building' | 'calendar' | 'certificate' | 'chart' | 'check' | 'check-circle' | 'chevron-down' | 'chevron-right' | 'clock' | 'close' | 'coins' | 'cow' | 'document' | 'download' | 'eye' | 'filter' | 'gov' | 'grid' | 'handshake' | 'info' | 'key' | 'keypad' | 'leaf' | 'lock' | 'mail' | 'map' | 'menu' | 'message' | 'phone' | 'phone-call' | 'pin' | 'plug' | 'plus' | 'print' | 'qr' | 'refresh' | 'scales' | 'seal' | 'search' | 'send' | 'shield' | 'shield-check' | 'shop' | 'sort' | 'star' | 'tag' | 'trend-down' | 'trend-flat' | 'trend-up' | 'truck' | 'umbrella' | 'user' | 'users' | 'wheat' | 'wifi-off';
+export type IconName = 'alert-circle' | 'alert-triangle' | 'arrow-left' | 'arrow-right' | 'ban' | 'bank' | 'basket' | 'box' | 'building' | 'calendar' | 'certificate' | 'chart' | 'check' | 'check-circle' | 'chevron-down' | 'chevron-right' | 'clock' | 'close' | 'coins' | 'cow' | 'document' | 'download' | 'eye' | 'filter' | 'gov' | 'grid' | 'handshake' | 'inbox' | 'info' | 'key' | 'keypad' | 'leaf' | 'link' | 'loader' | 'lock' | 'mail' | 'map' | 'menu' | 'message' | 'package' | 'phone' | 'phone-call' | 'pin' | 'play-circle' | 'plug' | 'plus' | 'plus-circle' | 'print' | 'qr' | 'refresh' | 'scales' | 'seal' | 'search' | 'send' | 'shield' | 'shield-check' | 'shop' | 'sort' | 'star' | 'tag' | 'trend-down' | 'trend-flat' | 'trend-up' | 'truck' | 'umbrella' | 'user' | 'users' | 'wheat' | 'wifi-off';
 
 export function Icon({
   name,
@@ -55,20 +55,26 @@ export function IconSprite() {
       <symbol id="i-gov" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round"><path d='M12 2.5l8.5 4.5H3.5z'/><path d='M6 9.5v8M10 9.5v8M14 9.5v8M18 9.5v8M3.5 20.5h17'/></symbol>
       <symbol id="i-grid" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round"><rect x='3.5' y='3.5' width='7' height='7' rx='1'/><rect x='13.5' y='3.5' width='7' height='7' rx='1'/><rect x='3.5' y='13.5' width='7' height='7' rx='1'/><rect x='13.5' y='13.5' width='7' height='7' rx='1'/></symbol>
       <symbol id="i-handshake" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round"><path d='M8 12l-3-3 4-4 3 2 3-2 4 4-3 3'/><path d='M11 15l2 2 2-2 2 2'/><path d='M5 9l-2.5 2.5L7 16'/><path d='M19 9l2.5 2.5L17 16'/></symbol>
+      <symbol id="i-inbox" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round"><path d='M22 12h-6l-2 3h-4l-2-3H2'/><path d='M5.5 5.1L2 12v6a2 2 0 002 2h16a2 2 0 002-2v-6l-3.5-6.9A2 2 0 0016.8 4H7.2a2 2 0 00-1.7 1.1z'/></symbol>
       <symbol id="i-info" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round"><circle cx='12' cy='12' r='9'/><path d='M12 11v5M12 8v.01'/></symbol>
       <symbol id="i-key" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round"><circle cx='7.5' cy='15.5' r='4'/><path d='M10.5 12.5L20 3M17 6l2.5 2.5M14.5 8.5L17 11'/></symbol>
       <symbol id="i-keypad" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round"><rect x='4' y='3' width='16' height='18' rx='2'/><path d='M8.5 8h.01M12 8h.01M15.5 8h.01M8.5 12h.01M12 12h.01M15.5 12h.01M8.5 16h.01M12 16h.01M15.5 16h.01'/></symbol>
       <symbol id="i-leaf" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round"><path d='M4 20C3 12 8 4 20 4c0 12-8 17-16 16z'/><path d='M4 20c3-6 7-9 12-11'/></symbol>
+      <symbol id="i-link" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round"><path d='M10 13a5 5 0 007.5.5l3-3a5 5 0 00-7-7l-1.7 1.7'/><path d='M14 11a5 5 0 00-7.5-.5l-3 3a5 5 0 007 7l1.7-1.7'/></symbol>
+      <symbol id="i-loader" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round"><path d='M12 2v4M12 18v4M4.9 4.9l2.9 2.9M16.2 16.2l2.9 2.9M2 12h4M18 12h4M4.9 19.1l2.9-2.9M16.2 7.8l2.9-2.9'/></symbol>
       <symbol id="i-lock" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round"><rect x='4.5' y='10' width='15' height='11' rx='2'/><path d='M8 10V7a4 4 0 018 0v3'/><path d='M12 14.5v2.5'/></symbol>
       <symbol id="i-mail" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round"><rect x='2.5' y='5' width='19' height='14' rx='2'/><path d='M3 7l9 6 9-6'/></symbol>
       <symbol id="i-map" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round"><path d='M2.5 6.5l6-3 7 3 6-3v14l-6 3-7-3-6 3z'/><path d='M8.5 3.5v14M15.5 6.5v14'/></symbol>
       <symbol id="i-menu" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round"><path d='M3 6h18M3 12h18M3 18h18'/></symbol>
       <symbol id="i-message" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round"><path d='M20 4H4a1.5 1.5 0 00-1.5 1.5v9A1.5 1.5 0 004 16h3v4l5-4h8a1.5 1.5 0 001.5-1.5v-9A1.5 1.5 0 0020 4z'/></symbol>
+      <symbol id="i-package" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round"><path d='M16.5 9.4L7.6 4.2'/><path d='M21 16V8a2 2 0 00-1-1.7l-7-4a2 2 0 00-2 0l-7 4A2 2 0 003 8v8a2 2 0 001 1.7l7 4a2 2 0 002 0l7-4a2 2 0 002-1.7z'/><path d='M3.3 7L12 12l8.7-5M12 12v9'/></symbol>
       <symbol id="i-phone" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round"><rect x='6' y='2.5' width='12' height='19' rx='2.5'/><path d='M10.5 18.5h3'/></symbol>
       <symbol id="i-phone-call" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round"><path d='M4.5 4.5h4l2 5-2.5 1.5a11 11 0 005 5L14.5 13.5l5 2v4a1.5 1.5 0 01-1.7 1.5A16 16 0 013 6.2 1.5 1.5 0 014.5 4.5z'/></symbol>
       <symbol id="i-pin" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round"><path d='M12 21.5s7-6.2 7-11.3A7 7 0 105 10.2c0 5.1 7 11.3 7 11.3z'/><circle cx='12' cy='10' r='2.6'/></symbol>
+      <symbol id="i-play-circle" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round"><circle cx='12' cy='12' r='9'/><path d='M10 8.5l6 3.5-6 3.5z'/></symbol>
       <symbol id="i-plug" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round"><path d='M9 3v6M15 3v6'/><path d='M6.5 9h11v3a5.5 5.5 0 01-11 0z'/><path d='M12 17.5V22'/></symbol>
       <symbol id="i-plus" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round"><path d='M12 5v14M5 12h14'/></symbol>
+      <symbol id="i-plus-circle" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round"><circle cx='12' cy='12' r='9'/><path d='M12 8v8M8 12h8'/></symbol>
       <symbol id="i-print" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round"><path d='M7 9V3.5h10V9'/><rect x='3.5' y='9' width='17' height='7' rx='1.5'/><path d='M7 14h10v6.5H7z'/></symbol>
       <symbol id="i-qr" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round"><rect x='3' y='3' width='7' height='7' rx='1'/><rect x='14' y='3' width='7' height='7' rx='1'/><rect x='3' y='14' width='7' height='7' rx='1'/><path d='M14 14h3v3h-3zM20 14h1M14 20h3M20 17v4'/></symbol>
       <symbol id="i-refresh" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round"><path d='M20 11a8 8 0 10-1.6 5.5'/><path d='M20 5v6h-6'/></symbol>
