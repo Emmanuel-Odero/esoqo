@@ -162,7 +162,7 @@ func (s *Server) handleBookParcel(c *gin.Context) {
 // here" moment (see dbx.ConfirmParcelIntake, still present but unused —
 // left alone as a schema-adjacent function, not deleted) as a second,
 // never-wired-up path with its own message pair. The Front Desk UI
-// (apps/app's /parcel-org/receive) already calls the real thing:
+// (apps/app's parcel-org counter page) already calls the real thing:
 // POST /v1/parcels/:code/handoff, which now carries this same message
 // pair — see notify.ParcelIntakeConfirmed's own callers there.
 

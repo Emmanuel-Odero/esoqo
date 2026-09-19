@@ -13,7 +13,11 @@ export default async function OrgStaff({ params }: { params: Promise<{ orgId: st
   // Only ADMIN/owner hold ticketorgstaff.write — a MANAGER or SCANNER
   // reaching this URL directly is refused rather than crashed.
   const [org, staff] = await Promise.all([
-    orgGo<{ org: GoOrg }>(orgId, `/v1/ticketorgs/${orgId}`).then((r) => r.org),
+    orgGo<{ org: GoOrg }>(orgId, `/v1/ticketorgs/${orgId}`).then((r) => r.org)
+      .catch((e) => {
+        if (e instanceof AuthorisationError) notFound();
+        throw e;
+      }),
     orgGo<{ staff: GoStaff[] }>(orgId, `/v1/ticketorgs/${orgId}/staff`)
       .then((r) => r.staff)
       .catch((e) => {

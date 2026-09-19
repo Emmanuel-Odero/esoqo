@@ -11,7 +11,7 @@ import type { ActiveTrail, VehiclePosition } from '@/lib/fleet';
  */
 const MapInner = dynamic(() => import('./MapInner').then((m) => m.MapInner), {
   ssr: false,
-  loading: () => <Skeleton height={460} />,
+    loading: () => <Skeleton height="min(430px, 62dvh)" />,
 });
 
 export function LiveFleetMap({

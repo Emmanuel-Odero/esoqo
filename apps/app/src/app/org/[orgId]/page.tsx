@@ -25,16 +25,16 @@ export default async function OrgDashboard({ params }: { params: Promise<{ orgId
 
   const [listings, bookings] = await Promise.all([
     canListings
-      ? orgGo<{ listings: GoListing[] }>(orgId, `/v1/ticketorgs/${orgId}/listings`)
-          .then((r) => r.listings)
+      ? orgGo<{ listings: GoListing[] | null }>(orgId, `/v1/ticketorgs/${orgId}/listings`)
+          .then((r) => r.listings ?? [])
           .catch((e) => {
             if (e instanceof AuthorisationError) notFound();
             throw e;
           })
       : Promise.resolve([]),
     canBookings
-      ? orgGo<{ bookings: GoOrgBooking[] }>(orgId, `/v1/ticketorgs/${orgId}/bookings`)
-          .then((r) => r.bookings)
+      ? orgGo<{ bookings: GoOrgBooking[] | null }>(orgId, `/v1/ticketorgs/${orgId}/bookings`)
+          .then((r) => r.bookings ?? [])
           .catch((e) => {
             if (e instanceof AuthorisationError) notFound();
             throw e;
@@ -52,11 +52,11 @@ export default async function OrgDashboard({ params }: { params: Promise<{ orgId
   const cards: { href: string; icon: IconName; title: string; body: string; show: boolean }[] = [
     { href: `/org/${orgId}/fleet`, icon: 'truck',
       title: 'Fleet', body: 'Live map, dispatch and today’s cash-up', show: canFleet },
-    { href: `/org/${orgId}/fleet/pricing`, icon: 'coins',
-      title: 'Pricing', body: 'Fares per stage along each route', show: canFleet },
-    { href: `/org/${orgId}/listings`, icon: org.vertical === 'TRANSPORT' ? 'truck' : 'calendar',
+    { href: `/org/${orgId}/fleet/pricing`, icon: 'tag',
+      title: 'Fares', body: 'Fares per stage along each route', show: canFleet },
+    { href: `/org/${orgId}/listings`, icon: 'calendar',
       title: 'Listings', body: `${listings.length} total, ${published} published`, show: canListings },
-    { href: `/org/${orgId}/bookings`, icon: 'coins',
+    { href: `/org/${orgId}/bookings`, icon: 'document',
       title: 'Bookings', body: `${bookings.length} total, ${paidBookings} paid`, show: canBookings },
     { href: `/org/${orgId}/scan`, icon: 'qr',
       title: 'Scan tickets', body: 'Check people in at the gate', show: canScan },

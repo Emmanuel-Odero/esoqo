@@ -26,7 +26,8 @@ export default async function FleetPricingPage({ params }: { params: Promise<{ o
   return (
     <>
       <div className="mehead">
-        <h1>Pricing</h1>
+        <p className="kicker">Fleet</p>
+        <h1>Fares</h1>
         <p>Fares per stage along each route.</p>
       </div>
       <PricingPanel orgId={orgId} routes={routes} canEdit={canEdit} />

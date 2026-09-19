@@ -384,8 +384,8 @@ function LabelPicker({
         <div style={{ position: 'relative', marginTop: 8 }}>
           <input
             style={inputStyle} className="mono" value={tail}
-            placeholder="Type the last characters, e.g. YZN…"
-            aria-label="Find a label by its last characters"
+            placeholder="Type any characters, e.g. YZN…"
+            aria-label="Find a label by any characters in its code"
             autoComplete="off"
             onChange={(e) => onTail(e.target.value)}
             onBlur={() => window.setTimeout(onClose, 150)}
@@ -404,7 +404,7 @@ function LabelPicker({
                 <p className="sub" style={{ margin: 0, padding: '10px 12px' }}>Searching your labels…</p>
               ) : results.length === 0 ? (
                 <p className="sub" style={{ margin: 0, padding: '10px 12px' }}>
-                  No unused label ends with “{tail.trim().toUpperCase()}”. Check the sticker, or leave
+                  No unused label contains “{tail.trim().toUpperCase()}”. Check the sticker, or leave
                   this empty to mint a fresh code.
                 </p>
               ) : (
@@ -420,11 +420,15 @@ function LabelPicker({
   );
 }
 
-/** One dropdown row: the full code with the typed tail emphasised, so
- *  typing feels like building the code up from behind. */
+/** One dropdown row: the full code with the typed fragment emphasised
+ *  wherever it occurs, so typing any consecutive run feels like the
+ *  code building itself up live. */
 function TailOption({ code, tail, onSelect }: { code: string; tail: string; onSelect: (code: string) => void }) {
-  const head = tail && code.toUpperCase().endsWith(tail) ? code.slice(0, code.length - tail.length) : code;
-  const end = tail && code.toUpperCase().endsWith(tail) ? code.slice(code.length - tail.length) : '';
+  const upper = code.toUpperCase();
+  const idx = tail ? upper.indexOf(tail) : -1;
+  const head = idx >= 0 ? code.slice(0, idx) : code;
+  const mid = idx >= 0 ? code.slice(idx, idx + tail.length) : '';
+  const rest = idx >= 0 ? code.slice(idx + tail.length) : '';
   return (
     <button
       type="button" role="option" aria-selected="false"
@@ -436,8 +440,11 @@ function TailOption({ code, tail, onSelect }: { code: string; tail: string; onSe
         background: 'transparent', fontSize: '.92rem',
       }}
     >
-      <span style={{ opacity: 0.55 }}>{head}</span>
-      <strong>{end}</strong>
+      {idx >= 0 ? (
+        <><span style={{ opacity: 0.55 }}>{head}</span><strong>{mid}</strong><span style={{ opacity: 0.55 }}>{rest}</span></>
+      ) : (
+        <span style={{ opacity: 0.55 }}>{code}</span>
+      )}
     </button>
   );
 }

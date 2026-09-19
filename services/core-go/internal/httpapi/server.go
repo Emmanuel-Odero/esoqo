@@ -328,7 +328,13 @@ func (s *Server) Router() *gin.Engine {
 		v1.GET("/parcel-orgs/me/labels/resolve", s.authRequired(), s.handleResolveOrgLabel)
 		v1.POST("/parcel-orgs/me/labels/info/:code", s.authRequired(), s.handleAttachOrgLabelInfo)
 		v1.GET("/parcel-orgs/me/labels/batches", s.authRequired(), s.handleOrgListLabelBatches)
+		v1.POST("/parcel-orgs/me/labels/void", s.authRequired(), s.handleOrgVoidLabels)
 		v1.POST("/parcel-orgs/me/labels/batches/:id/void", s.authRequired(), s.handleOrgVoidLabelBatch)
+		// The company counter — booking against the company's own
+		// stock plus the address book that feeds its party fields,
+		// both scoped to the session's org.
+		v1.POST("/parcel-orgs/me/counter/book", s.authRequired(), s.handleCounterBookParcel)
+		v1.GET("/parcel-orgs/me/parties", s.authRequired(), s.handleOrgSearchCounterParties)
 		v1.GET("/parcel-orgs/me/staff", s.authRequired(), s.handleListMyOrgStaff)
 		v1.POST("/parcel-orgs/me/staff", s.authRequired(), s.handleUpsertMyOrgStaff)
 		// A staffer changing their own portal PIN — self-service for the
@@ -526,6 +532,7 @@ func (s *Server) Router() *gin.Engine {
 		v1.GET("/admin/parcels/parties", s.authRequired(), s.handleAdminSearchCounterParties)
 		v1.GET("/admin/parcels/labels/register", s.authRequired(), s.handleAdminListParcelLabelRegister)
 		v1.GET("/admin/parcels/labels/batches", s.authRequired(), s.handleAdminListParcelLabelBatches)
+		v1.POST("/admin/parcels/labels/void", s.authRequired(), s.handleVoidParcelLabels)
 		v1.POST("/admin/parcels/labels/batches/:id/void", s.authRequired(), s.handleVoidParcelLabelBatch)
 	}
 

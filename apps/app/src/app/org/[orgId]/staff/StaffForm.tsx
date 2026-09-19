@@ -1,5 +1,6 @@
 'use client';
 import { useState, useTransition } from 'react';
+import { useRouter } from 'next/navigation';
 import { Icon } from '@esoqo/ui';
 import { useAnnounce } from '@esoqo/a11y';
 import { actionCreateStaff, actionSetStaffActive } from './actions';
@@ -13,6 +14,7 @@ export function StaffForm({ orgId, staff }: { orgId: string; staff: StaffRow[] }
   const [error, setError] = useState<string | null>(null);
   const [pending, start] = useTransition();
   const announce = useAnnounce();
+  const router = useRouter();
 
   function submit() {
     setError(null);
@@ -21,6 +23,7 @@ export function StaffForm({ orgId, staff }: { orgId: string; staff: StaffRow[] }
       if (r.ok) {
         setName(''); setPin('');
         announce('Staff member added.', 'polite');
+        router.refresh();
       } else { setError(r.error); announce(r.error, 'assertive'); }
     });
   }
@@ -28,7 +31,12 @@ export function StaffForm({ orgId, staff }: { orgId: string; staff: StaffRow[] }
   function toggle(staffId: string, active: boolean) {
     start(async () => {
       const r = await actionSetStaffActive(orgId, staffId, active);
-      if (!r.ok) announce(r.error, 'assertive');
+      if (r.ok) {
+        announce(active ? 'Staff member suspended.' : 'Staff member reactivated.', 'polite');
+        // The list comes from the server page — re-read it or the
+        // suspended/reactivated label never flips.
+        router.refresh();
+      } else announce(r.error, 'assertive');
     });
   }
 

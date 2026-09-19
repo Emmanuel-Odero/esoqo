@@ -93,7 +93,7 @@ export default async function ListingDetail(
         {listing.schedules.length === 0 ? <p style={{ margin: 0, color: 'var(--tx-2)' }}>None scheduled yet.</p> : (
           listing.schedules.map((s) => (
             <div className="mrow" key={s.id}>
-              <span className="k">{new Date(s.departAt).toLocaleString('en-KE')}</span>
+              <span className="k">{new Date(s.departAt).toLocaleString('en-KE', { timeZone: 'Africa/Nairobi' })}</span>
               <span className="v">{s.status.toLowerCase()} · {s.bookingsCount} booking{s.bookingsCount === 1 ? '' : 's'}</span>
             </div>
           ))

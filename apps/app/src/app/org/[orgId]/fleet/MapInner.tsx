@@ -40,7 +40,7 @@ export function MapInner({
 
   return (
     <div className="mcard" style={{ padding: 0, overflow: 'hidden' }}>
-      <MapContainer center={center} zoom={12} style={{ height: 460, width: '100%' }}>
+      <MapContainer center={center} zoom={12} style={{ height: 'min(430px, 62dvh)', width: '100%' }}>
         <TileLayer
           attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
           url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"

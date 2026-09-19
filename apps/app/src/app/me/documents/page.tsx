@@ -25,8 +25,13 @@ export default async function MyDocuments() {
   return (
     <>
       <div className="mehead">
+        <p className="kicker">Your record</p>
         <h1>Your documents</h1>
-        <p>Papers you have given Esoqo. Only staff reviewing your record can open them.</p>
+        <p>
+          Files you have given Esoqo. Only staff reviewing your record can open them.
+          Esoqo&apos;s confirmations on your record (phone, ID, group, business, KRA) are summarised
+          on your <a href="/me">Record home</a>.
+        </p>
       </div>
 
       {docs.length === 0 ? (

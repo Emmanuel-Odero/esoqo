@@ -4,6 +4,7 @@ import { notFound } from 'next/navigation';
 import { Icon, Logo, type IconName } from '@esoqo/ui';
 import { requireOrgAccess } from '@/lib/session';
 import { canOrg, orgGo, orgForCan, type GoOrg } from '@/lib/ticketing';
+import { OrgMobileNav } from './OrgMobileNav';
 import '@/app/me/me.css';
 
 export const metadata: Metadata = { title: { default: 'Organiser console', template: '%s · Esoqo' } };
@@ -37,10 +38,13 @@ export default async function OrgLayout(
     // The fleet console is the transport-company manager's real product:
     // live map, dispatch and fares. Shown whenever the session holds
     // fleet.read — a MANAGER and an ADMIN both do, a SCANNER does not.
+    // Each tab owns one icon: Fares uses "tag" (not "coins") so it can't
+    // be mistaken for Bookings' money-in, and Listings keeps "calendar"
+    // even for transport so it can't be mistaken for the Fleet truck.
     { href: `/org/${orgId}/fleet`, icon: 'truck', label: 'Fleet', show: org.vertical === 'TRANSPORT' && canOrg(ctx, org, 'fleet.read') },
-    { href: `/org/${orgId}/fleet/pricing`, icon: 'coins', label: 'Pricing', show: org.vertical === 'TRANSPORT' && canOrg(ctx, org, 'fleet.read') },
-    { href: `/org/${orgId}/listings`, icon: org.vertical === 'TRANSPORT' ? 'truck' : 'calendar', label: 'Listings', show: canOrg(ctx, org, 'listing.write') },
-    { href: `/org/${orgId}/bookings`, icon: 'coins', label: 'Bookings', show: canOrg(ctx, org, 'booking.read') },
+    { href: `/org/${orgId}/fleet/pricing`, icon: 'tag', label: 'Fares', show: org.vertical === 'TRANSPORT' && canOrg(ctx, org, 'fleet.read') },
+    { href: `/org/${orgId}/listings`, icon: 'calendar', label: 'Listings', show: canOrg(ctx, org, 'listing.write') },
+    { href: `/org/${orgId}/bookings`, icon: 'document', label: 'Bookings', show: canOrg(ctx, org, 'booking.read') },
     { href: `/org/${orgId}/scan`, icon: 'qr', label: 'Scan tickets', show: canOrg(ctx, org, 'ticket.checkin') },
     { href: `/org/${orgId}/staff`, icon: 'users', label: 'Staff', show: canOrg(ctx, org, 'ticketorgstaff.write') },
   ];
@@ -57,9 +61,9 @@ export default async function OrgLayout(
             </span>
           </Link>
           {/* Desktop only (me.css hides .headnav under 820px) — the
-              dashboard page below carries the same links as cards, which
-              double as the mobile nav so a phone-width console still
-              reaches every tab. */}
+              .orgnav strip below is the same links for phones, so every
+              tab stays reachable on every subpage (Fleet, Scan, Staff…),
+              not just the dashboard cards. */}
           <nav className="headnav" aria-label="Organiser console">
             {tabs.filter((t) => t.show).map((t) => (
               <Link key={t.href} href={t.href as never}>
@@ -78,6 +82,9 @@ export default async function OrgLayout(
               </button>
             </form>
           )}
+          {/* Phones: the same tabs as .headnav above, swipeable. Rendered
+              always, shown only under 820px by me.css (.orgnav). */}
+          <OrgMobileNav tabs={tabs} orgId={orgId} />
         </div>
       </header>
       <div className="wrap">{children}</div>

@@ -2,11 +2,43 @@ package seed
 
 import (
 	"context"
+	"os"
+	"strings"
 
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/esoqo/core-go/internal/authsvc"
 )
+
+// ProdSeedOrgSlug returns the parcel_org slug an operator asked to plant
+// the parcel demo data into, from SEED_PROD_ORG. Empty means dev-only
+// tenants (demo-swift-riders + esoqo-shippers). Production pushes opt in
+// explicitly — the LOCAL_TEST_PROD comment in cmd/seed/main.go stands.
+func ProdSeedOrgSlug() string {
+	return strings.TrimSpace(os.Getenv("SEED_PROD_ORG"))
+}
+
+// IsProdSeed reports whether this run is a production push (targets a
+// real company account instead of the dev tenants).
+func IsProdSeed() bool {
+	return ProdSeedOrgSlug() != ""
+}
+
+// OrgSlug resolves which parcel_org slug a demo section targets: the
+// tagged production org when SEED_PROD_ORG is set, otherwise the
+// developer default.
+func OrgSlug(def string) string {
+	if s := ProdSeedOrgSlug(); s != "" {
+		return s
+	}
+	return def
+}
+
+// ProdSeedConfirmed guards the production push — SEED_CONFIRM=1 is the
+// explicit "yes, write demo data into a live account" acknowledgment.
+func ProdSeedConfirmed() bool {
+	return strings.TrimSpace(os.Getenv("SEED_CONFIRM")) == "1"
+}
 
 // EnsurePersonParty upserts a demo Person+Party by msisdn (same natural
 // key as the rest of core-go's auth) and sets/resets their PIN — mirrors

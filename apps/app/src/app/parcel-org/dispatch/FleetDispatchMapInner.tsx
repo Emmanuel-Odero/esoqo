@@ -5,6 +5,8 @@ import L from 'leaflet';
 import { useEffect } from 'react';
 import { MapContainer, Marker, Polyline, Popup, TileLayer, useMap } from 'react-leaflet';
 import type { DispatchRun } from '@/lib/parcel-org-session';
+import { DemoPhoneSpan } from '@/components/DemoContact';
+import { lastSeenLabel, recordedStops, speedColor, trailSegments } from './dispatch-stats';
 
 // The fleet marker: the vehicle's number plate as the label, so the
 // board reads at a glance which bus is where. A divIcon again (never
@@ -34,6 +36,32 @@ function dotIcon(color: string) {
 
 const ORIGIN_ICON = dotIcon('#2E7D32');
 const DESTINATION_ICON = dotIcon('#C62828');
+const CHECKPOINT_ICON = L.divIcon({
+  className: '',
+  html: `<div style="width:20px;height:20px;border-radius:50%;background:#4A148C;border:2px solid white;` +
+    `display:flex;align-items:center;justify-content:center;color:#fff;font-size:11px;font-weight:800;` +
+    `box-shadow:0 0 3px rgba(0,0,0,.55)">!</div>`,
+  iconSize: [20, 20],
+  iconAnchor: [10, 10],
+});
+const STOP_ICON = dotIcon('#EF6C00');
+
+/** Well-known traffic-police checkpoints along the corridors this
+ *  company's runs actually drive (Nairobi–Nakuru highway, Thika Rd,
+ *  Ngong Rd). Static points of interest — where to expect a stop and
+ *  plan the route — not a live feed. */
+const CHECKPOINTS: { name: string; corridor: string; lat: number; lng: number }[] = [
+  { name: 'Rironi checkpoint', corridor: 'Nairobi – Nakuru highway', lat: -1.1489, lng: 36.5967 },
+  { name: 'Kamandura checkpoint', corridor: 'Nairobi – Nakuru highway', lat: -1.1042, lng: 36.5531 },
+  { name: 'Kinungi checkpoint', corridor: 'Nairobi – Nakuru highway', lat: -0.9231, lng: 36.4402 },
+  { name: 'Naivasha checkpoint', corridor: 'Nairobi – Nakuru highway', lat: -0.7173, lng: 36.4345 },
+  { name: 'Gilgil weighbridge', corridor: 'Nairobi – Nakuru highway', lat: -0.4956, lng: 36.3043 },
+  { name: 'Lanet checkpoint', corridor: 'Nakuru approach', lat: -0.3301, lng: 36.1189 },
+  { name: 'Juja checkpoint', corridor: 'Thika Rd', lat: -1.1028, lng: 37.0148 },
+  { name: 'Blue Post checkpoint', corridor: 'Thika Rd', lat: -1.0241, lng: 37.0681 },
+  { name: 'Garden Estate checkpoint', corridor: 'Thika Rd', lat: -1.2215, lng: 36.8912 },
+  { name: 'Dagoretti Corner checkpoint', corridor: 'Ngong Rd', lat: -1.3012, lng: 36.7621 },
+];
 
 // Nairobi CBD — only when no run has any position yet.
 const DEFAULT_CENTER: [number, number] = [-1.2864, 36.8172];
@@ -48,13 +76,6 @@ function FitBounds({ points, fitKey }: { points: [number, number][]; fitKey: str
     map.fitBounds(L.latLngBounds(points.map(([lat, lng]) => L.latLng(lat, lng))), { padding: [36, 36] });
   }, [map, fitKey]); // eslint-disable-line react-hooks/exhaustive-deps
   return null;
-}
-
-function minutesAgo(iso: string | null): number | null {
-  if (!iso) return null;
-  const d = new Date(iso);
-  if (Number.isNaN(d.getTime())) return null;
-  return Math.max(0, Math.round((Date.now() - d.getTime()) / 60000));
 }
 
 export function FleetDispatchMapInner({
@@ -80,7 +101,7 @@ export function FleetDispatchMapInner({
 
   return (
     <div className="card" style={{ padding: 0, overflow: 'hidden' }}>
-      <MapContainer center={center} zoom={allPoints.length ? 7 : 12} style={{ height: 480, width: '100%' }}>
+      <MapContainer center={center} zoom={allPoints.length ? 7 : 12} style={{ height: 'min(440px, 62dvh)', width: '100%' }}>
         <TileLayer
           attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
           url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
@@ -90,22 +111,36 @@ export function FleetDispatchMapInner({
           const leg: [number, number][] = [];
           if (r.origin) leg.push([r.origin.lat, r.origin.lng]);
           if (r.destination) leg.push([r.destination.lat, r.destination.lng]);
+          const segments = trailSegments(r.trail);
+          const stops = recordedStops(r.trail);
+          const dimmed = selectedId !== null && r.id !== selectedId;
           return (
             <span key={`leg-${r.id}`}>
               {/* The whole planned journey, origin → destination, in blue. */}
               {leg.length === 2 && (
                 <Polyline
                   positions={leg}
-                  pathOptions={{ color: '#1565C0', weight: 4, opacity: 0.85 }}
+                  pathOptions={{ color: '#1565C0', weight: 4, opacity: dimmed ? 0.3 : 0.85 }}
                 />
               )}
-              {/* Where the run actually went so far — solid darker trace. */}
-              {r.trail.length >= 2 && (
+              {/* Where the run actually went — coloured by measured
+                  speed per segment: green flowing, amber slow, red
+                  crawling. Grey where two reports share a timestamp. */}
+              {segments.map((s, i) => (
                 <Polyline
-                  positions={r.trail.map((p) => [p.lat, p.lng] as [number, number])}
-                  pathOptions={{ color: '#0D47A1', weight: 3, opacity: 0.7 }}
+                  key={`seg-${r.id}-${i}`}
+                  positions={[[s.from.lat, s.from.lng], [s.to.lat, s.to.lng]]}
+                  pathOptions={{ color: speedColor(s.kmh), weight: 4, opacity: dimmed ? 0.25 : 0.9 }}
                 />
-              )}
+              ))}
+              {stops.map((s, i) => (
+                <Marker key={`stop-${r.id}-${i}`} position={[s.lat, s.lng]} icon={STOP_ICON}>
+                  <Popup>
+                    <strong>{r.vehiclePlate} stop</strong><br />
+                    <span className="sub">Stood ~{s.mins} min here</span>
+                  </Popup>
+                </Marker>
+              ))}
               {r.origin && (
                 <Marker position={[r.origin.lat, r.origin.lng]} icon={ORIGIN_ICON}>
                   <Popup>
@@ -127,9 +162,16 @@ export function FleetDispatchMapInner({
             </span>
           );
         })}
+        {CHECKPOINTS.map((c) => (
+          <Marker key={`cp-${c.name}`} position={[c.lat, c.lng]} icon={CHECKPOINT_ICON}>
+            <Popup>
+              <strong>{c.name}</strong><br />
+              <span className="sub">{c.corridor} · known checkpoint — plan stops and papers</span>
+            </Popup>
+          </Marker>
+        ))}
         {shown.map((r) => {
           if (r.currentLat === null || r.currentLng === null) return null;
-          const mins = minutesAgo(r.currentAt);
           const driver = r.crew.find((c) => c.role === 'DRIVER') ?? r.crew[0];
           return (
             <Marker
@@ -142,16 +184,31 @@ export function FleetDispatchMapInner({
                 <strong className="mono">{r.vehiclePlate}</strong>
                 <span className="sub"> · {r.vehicleType.toLowerCase()}</span><br />
                 {driver && <>{driver.name} ({driver.roleLabel.toLowerCase()})<br /></>}
+                {driver?.msisdn && <><DemoPhoneSpan msisdn={driver.msisdn} /><br /></>}
                 {r.origin && r.destination && (
                   <>{r.origin.name} → {r.destination.name}<br /></>
                 )}
-                {mins !== null && <span className="sub">Seen {mins}m ago</span>}
-                {mins === null && <span className="sub">No position yet</span>}
+                <span className="sub">{lastSeenLabel(r.currentAt)}</span>
               </Popup>
             </Marker>
           );
         })}
       </MapContainer>
+      <div className="sub" style={{ display: 'flex', gap: 14, flexWrap: 'wrap', padding: '10px 14px', borderTop: '1px solid var(--line)' }}>
+        <span style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
+          <span style={{ width: 22, height: 4, borderRadius: 2, background: '#2E7D32', display: 'inline-block' }} />Flowing 35+
+        </span>
+        <span style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
+          <span style={{ width: 22, height: 4, borderRadius: 2, background: '#EF6C00', display: 'inline-block' }} />Slow 12–35
+        </span>
+        <span style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
+          <span style={{ width: 22, height: 4, borderRadius: 2, background: '#C62828', display: 'inline-block' }} />Crawling under 12 km/h
+        </span>
+        <span style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
+          <span style={{ width: 14, height: 14, borderRadius: '50%', background: '#4A148C', color: '#fff', fontSize: 9, fontWeight: 800, display: 'inline-flex', alignItems: 'center', justifyContent: 'center' }}>!</span>
+          Known checkpoint
+        </span>
+      </div>
     </div>
   );
 }

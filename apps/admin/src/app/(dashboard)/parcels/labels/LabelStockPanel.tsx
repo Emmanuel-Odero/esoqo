@@ -1,11 +1,12 @@
 'use client';
 
-import { useState, useTransition } from 'react';
+import { useMemo, useState, useTransition } from 'react';
 import { useRouter } from 'next/navigation';
-import { Icon } from '@esoqo/ui';
-import { actionGenerateParcelLabels, type ParcelLabelStockRow, type ParcelOrg } from '../actions';
-import { LABEL_GAP_MM, LABEL_WIDTH_MM, PrintableLabel, PrintStyles } from '../ParcelLabelPrint';
+import { Icon, SelectableLabelPrintBlock } from '@esoqo/ui';
+import { actionGenerateParcelLabels, actionVoidParcelLabels, type ParcelLabelStockRow, type ParcelOrg } from '../actions';
 import { LabelInfoModal } from './LabelInfoModal';
+
+type SortKey = 'code' | 'newest' | 'oldest';
 
 export function LabelStockPanel({
   canGenerate, unused, openCode, orgs, activeOrgId,
@@ -17,6 +18,7 @@ export function LabelStockPanel({
   const [count, setCount] = useState(20);
   const [freshlyMinted, setFreshlyMinted] = useState<{ code: string; sig?: string }[] | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [notice, setNotice] = useState<string | null>(null);
   const [pending, startTransition] = useTransition();
   // The label a click opened the info modal for — undefined means
   // closed, '' means opened via the manual "type any code" entry
@@ -24,9 +26,17 @@ export function LabelStockPanel({
   // own comment on the initialCode distinction.
   const [modalCode, setModalCode] = useState<string | undefined>(openCode);
   const [modalOpen, setModalOpen] = useState(Boolean(openCode));
+  // Print selection + list controls. Sorted/filtered views share one
+  // selection so "sort, tick three, print" works in any order.
+  const [selected, setSelected] = useState<Set<string>>(new Set());
+  const [sort, setSort] = useState<SortKey>('newest');
+  const [filter, setFilter] = useState('');
+  const [discardReason, setDiscardReason] = useState('');
+  const [confirmDiscard, setConfirmDiscard] = useState(false);
 
   function generate() {
     setError(null);
+    setNotice(null);
     startTransition(async () => {
       // Minted into whichever pool is being viewed — printing a pad
       // "for" a company you aren't looking at is a mistake nobody would
@@ -35,9 +45,10 @@ export function LabelStockPanel({
       if (!result.ok) { setError(result.error); return; }
       // Signed labels come back ready to print as genuine; refresh in
       // the background so the pool + register counts catch up too.
-      setFreshlyMinted(
-        (result.labels ?? []).map((l) => ({ code: l.code, sig: l.sig || undefined })),
-      );
+      const fresh = (result.labels ?? []).map((l) => ({ code: l.code, sig: l.sig || undefined }));
+      setFreshlyMinted(fresh);
+      setSelected(new Set(fresh.map((l) => l.code)));
+      setNotice(`${fresh.length} new label${fresh.length === 1 ? '' : 's'} generated and pre-selected below — set columns/rows and print.`);
       router.refresh();
     });
   }
@@ -47,15 +58,56 @@ export function LabelStockPanel({
     setModalOpen(true);
   }
 
+  function toggle(code: string) {
+    setSelected((prev) => {
+      const next = new Set(prev);
+      if (next.has(code)) next.delete(code);
+      else next.add(code);
+      return next;
+    });
+  }
+
   // Freshly-generated codes print first (the whole point of just
   // having clicked "Generate") — falls back to the existing unused
   // pool so re-opening this page still has something to reprint.
-  // Freshly-minted rows now carry their signatures from the mint
-  // response, so the first print is already genuine; older servers
-  // still return codes only and print unsigned until reload.
-  const toPrint: { code: string; sig?: string }[] = freshlyMinted
-    ? freshlyMinted
-    : unused.map((u) => ({ code: u.code, sig: u.sig }));
+  const pool: { code: string; sig?: string; createdAt?: string }[] = useMemo(() => {
+    if (freshlyMinted) return freshlyMinted;
+    return unused.map((u) => ({ code: u.code, sig: u.sig }));
+  }, [freshlyMinted, unused]);
+
+  const createdAtOf = useMemo(() => {
+    const m = new Map<string, string>();
+    for (const u of unused) m.set(u.code, u.createdAt);
+    return m;
+  }, [unused]);
+
+  const visible = useMemo(() => {
+    const needle = filter.trim().toUpperCase();
+    let rows = needle ? pool.filter((l) => l.code.toUpperCase().includes(needle)) : [...pool];
+    rows = [...rows].sort((a, b) => {
+      if (sort === 'code') return a.code.localeCompare(b.code);
+      const ta = createdAtOf.get(a.code) ?? '';
+      const tb = createdAtOf.get(b.code) ?? '';
+      return sort === 'newest' ? tb.localeCompare(ta) : ta.localeCompare(tb);
+    });
+    return rows;
+  }, [pool, filter, sort, createdAtOf]);
+
+  function discardSelected() {
+    if (selected.size === 0 || !discardReason.trim()) return;
+    setError(null);
+    startTransition(async () => {
+      const res = await actionVoidParcelLabels([...selected], discardReason.trim(), activeOrgId);
+      if (!res.ok) { setError(res.error); return; }
+      setNotice(`Withdrew ${res.voided} label${res.voided === 1 ? '' : 's'}.`);
+      setSelected(new Set());
+      setConfirmDiscard(false);
+      setDiscardReason('');
+      setFreshlyMinted(null);
+      router.refresh();
+    });
+  }
+
   // Whose pad is on the printer — printed on every sticker as the
   // brand, so a box picked up anywhere reads who it belongs to and who
   // manages it. Undefined for the shared Esoqo pool, which brands as
@@ -98,7 +150,8 @@ export function LabelStockPanel({
           <button className="btn btn-o btn-sm" onClick={() => openModal(undefined)}>
             <Icon name="qr" size={13} />Attach info to a label
           </button>
-          {error && <span className="sub" style={{ color: 'var(--red)' }}>{error}</span>}
+          {error && <span role="alert" className="sub" style={{ color: 'var(--red)' }}>{error}</span>}
+          {notice && <span className="sub" style={{ color: 'var(--green, #1a7f37)' }}>{notice}</span>}
         </div>
         {!canGenerate && (
           <p className="sub" style={{ margin: '10px 0 0' }}>Generating a new batch needs the parcels.assign capability.</p>
@@ -109,77 +162,91 @@ export function LabelStockPanel({
         </p>
       </div>
 
-      {toPrint.length > 0 && (
-        <div className="card" style={{ padding: 16 }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
-            <strong>
-              {freshlyMinted ? 'New batch' : 'Unused pool'} — {toPrint.length} label{toPrint.length === 1 ? '' : 's'}
-              {' '}· {Math.ceil(toPrint.length / LABELS_PER_PAGE)} page{Math.ceil(toPrint.length / LABELS_PER_PAGE) === 1 ? '' : 's'} at {LABELS_PER_PAGE}/page
-            </strong>
-            <button className="btn btn-o btn-sm" onClick={() => window.print()}>
-              <Icon name="print" size={13} />Print all
-            </button>
+      {pool.length > 0 && (
+        <SelectableLabelPrintBlock
+          title={freshlyMinted ? 'New batch' : 'Unused pool'}
+          labels={visible}
+          selected={selected}
+          onToggle={toggle}
+          onSelectAll={() => setSelected(new Set(visible.map((l) => l.code)))}
+          onClear={() => setSelected(new Set())}
+          orgName={activeOrgName}
+          orgLogoUrl={activeOrgLogoUrl}
+        />
+      )}
+
+      {pool.length > 0 && (
+        <div className="card" style={{ padding: 16, marginBottom: 16 }}>
+          <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'flex-end', marginBottom: 10 }}>
+            <strong style={{ marginRight: 'auto' }}>Unused labels — sort, pick, attach or discard</strong>
+            <label className="sub">Sort
+              <select value={sort} onChange={(e) => setSort(e.target.value as SortKey)}
+                style={{ display: 'block', padding: '6px 8px', border: '1.5px solid var(--line)', borderRadius: 6, marginTop: 2 }}>
+                <option value="newest">Newest first</option>
+                <option value="oldest">Oldest first</option>
+                <option value="code">Code A–Z</option>
+              </select>
+            </label>
+            <label className="sub">Find
+              <input value={filter} onChange={(e) => setFilter(e.target.value.toUpperCase())} placeholder="PKG-…"
+                aria-label="Filter unused labels by code"
+                className="mono"
+                style={{ display: 'block', padding: '6px 8px', border: '1.5px solid var(--line)', borderRadius: 6, marginTop: 2, minWidth: 160 }} />
+            </label>
           </div>
-          <p className="sub" style={{ margin: '0 0 10px' }}>Click a label to attach info to it.</p>
-          <LabelSheet codes={toPrint} orgName={activeOrgName} orgLogoUrl={activeOrgLogoUrl} onSelect={openModal} />
+          <p className="sub" style={{ margin: '0 0 10px' }}>
+            Tick rows to choose exactly which stickers print above. Click a code to write what it is stuck on.
+            Discarding withdraws stickers (misprints, damaged strips) — spent labels are never touched.
+          </p>
+          <table className="tbl">
+            <thead>
+              <tr>
+                <th aria-label="Select"><input type="checkbox" aria-label="Select all listed labels"
+                  checked={visible.length > 0 && visible.every((l) => selected.has(l.code))}
+                  onChange={(e) => setSelected(e.target.checked ? new Set(visible.map((l) => l.code)) : new Set())} /></th>
+                <th>Code</th><th>Added</th><th />
+              </tr>
+            </thead>
+            <tbody>
+              {visible.map((l) => (
+                <tr key={l.code}>
+                  <td><input type="checkbox" checked={selected.has(l.code)} onChange={() => toggle(l.code)} aria-label={`Select ${l.code}`} /></td>
+                  <td className="mono">{l.code}</td>
+                  <td className="sub" style={{ fontSize: '.8rem' }}>
+                    {createdAtOf.get(l.code) ? new Date(createdAtOf.get(l.code) as string).toLocaleDateString('en-KE', { day: 'numeric', month: 'short' }) : 'just now'}
+                  </td>
+                  <td style={{ textAlign: 'right' }}>
+                    <button className="btn btn-o btn-sm" onClick={() => openModal(l.code)}>Fill in</button>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+          {visible.length === 0 && <p className="sub" style={{ marginBottom: 0 }}>No unused labels match “{filter.trim()}”.</p>}
+
+          {canGenerate && selected.size > 0 && (
+            <div style={{ borderTop: '1px solid var(--line)', marginTop: 12, paddingTop: 12 }}>
+              {!confirmDiscard ? (
+                <button className="btn btn-o btn-sm" onClick={() => setConfirmDiscard(true)}>
+                  Discard {selected.size} selected…
+                </button>
+              ) : (
+                <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
+                  <input value={discardReason} onChange={(e) => setDiscardReason(e.target.value)}
+                    placeholder="Why — e.g. misprinted strip"
+                    aria-label="Why these labels are being discarded"
+                    style={{ flex: 1, minWidth: 220, padding: '6px 8px', border: '1.5px solid var(--line)', borderRadius: 6 }} />
+                  <button className="btn btn-p btn-sm" disabled={pending || !discardReason.trim()} onClick={discardSelected}>
+                    {pending ? 'Discarding…' : `Discard ${selected.size}`}
+                  </button>
+                  <button className="btn btn-o btn-sm" onClick={() => { setConfirmDiscard(false); setDiscardReason(''); }}>Cancel</button>
+                </div>
+              )}
+            </div>
+          )}
         </div>
       )}
-      <PrintStyles />
       {modalOpen && <LabelInfoModal initialCode={modalCode} onClose={() => setModalOpen(false)} />}
-    </>
-  );
-}
-
-// 2 across, 5 down — 10 to a physical A4 portrait page, each label a
-// fixed 90mm x 50mm shipping-label-style box (see ParcelLabelPrint's
-// LABEL_WIDTH_MM/HEIGHT_MM). On screen this is just a grid that wraps
-// naturally; in print each chunk of 10 gets its own page via
-// page-break-after, so printing 20 codes genuinely comes out as two
-// full sheets, not one overflowing one.
-const LABELS_PER_PAGE = 10;
-const LABELS_PER_ROW = 2;
-
-function LabelSheet({
-  codes, orgName, orgLogoUrl, onSelect,
-}: { codes: { code: string; sig?: string }[]; orgName?: string; orgLogoUrl?: string; onSelect: (code: string) => void }) {
-  const pages: { code: string; sig?: string }[][] = [];
-  for (let i = 0; i < codes.length; i += LABELS_PER_PAGE) {
-    pages.push(codes.slice(i, i + LABELS_PER_PAGE));
-  }
-  return (
-    <>
-      {pages.map((page, i) => (
-        <div
-          key={i}
-          className="print-label-page"
-          style={{
-            display: 'grid',
-            // mm columns, not px/1fr — see ParcelLabelPrint's own
-            // comment on why an absolute physical unit is what
-            // actually fixed the sizing/alignment, not just a fixed
-            // screen-pixel guess.
-            gridTemplateColumns: `repeat(${LABELS_PER_ROW}, ${LABEL_WIDTH_MM}mm)`,
-            gap: `${LABEL_GAP_MM}mm`,
-            marginBottom: i < pages.length - 1 ? '10mm' : 0,
-          }}
-        >
-          {page.map(({ code, sig }) => (
-            // A plain <button> wrapper, not onClick on the label div
-            // itself — keeps PrintableLabel purely presentational
-            // (it's also used print-only, with no click handler of
-            // its own) and gets keyboard/focus semantics for free.
-            <button
-              key={code}
-              type="button"
-              onClick={() => onSelect(code)}
-              style={{ all: 'unset', cursor: 'pointer', display: 'block' }}
-              aria-label={`Attach info to ${code}`}
-            >
-              <PrintableLabel code={code} sig={sig} orgName={orgName} orgLogoUrl={orgLogoUrl} />
-            </button>
-          ))}
-        </div>
-      ))}
     </>
   );
 }
