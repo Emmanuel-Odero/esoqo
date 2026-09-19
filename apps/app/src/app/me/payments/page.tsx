@@ -5,11 +5,17 @@ import { requireSubject } from '@/lib/session';
 export const dynamic = 'force-dynamic';
 
 /**
- * The person's view of their own payment.
+ * The person's view of their own registration fee payment.
  *
  * Deliberately shows the signature count without naming the approvers —
  * they can see the process is real and how far it has got, without the
  * internal names.
+ *
+ * This page is ONLY the Esoqo registration fee. Booking payments
+ * (event/transport instalments) live with each booking on /me/tickets —
+ * the two money flows used to be indistinguishable ("Payments" vs
+ * tickets carrying their own pay buttons), so each page now names the
+ * other as the door to the other flow.
  */
 export default async function MyPayments() {
   const ctx = await requireSubject();
@@ -20,16 +26,18 @@ export default async function MyPayments() {
     return (
       <>
         <div className="mehead">
+          <p className="kicker">Registration</p>
           <h1>Your payment</h1>
-          <p>Registration fees, and where each one has got to.</p>
+          <p>Registration fees, and where each one has got to. Booking payments live with each booking under <a href="/me/tickets">Tickets</a>.</p>
         </div>
         <div className="mcard">
           <div className="mempty">
             <span className="ico"><Icon name="coins" size={22} /></span>
             <h2 style={{ marginBottom: 7 }}>Nothing recorded</h2>
             <p style={{ margin: 0 }}>
-              You have not told Esoqo about a payment. Nothing is blocked — you can pay whenever
-              you are ready and enter the code then.
+              You have not told Esoqo about a registration payment. You can pay whenever
+              you are ready and enter the code then — some group features wait on a join
+              fee paid from the group treasury page.
             </p>
           </div>
         </div>
@@ -44,8 +52,9 @@ export default async function MyPayments() {
   return (
     <>
       <div className="mehead">
+        <p className="kicker">Registration</p>
         <h1>Your payment</h1>
-        <p>Registration fee, and where it has got to.</p>
+        <p>Registration fee, and where it has got to. Booking payments live with each booking under <a href="/me/tickets">Tickets</a>.</p>
       </div>
 
       <div className="mcard">

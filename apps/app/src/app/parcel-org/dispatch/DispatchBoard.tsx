@@ -2,13 +2,18 @@
 
 import { useEffect, useState, useTransition } from 'react';
 import { Icon } from '@esoqo/ui';
-import type { DispatchRun, ParcelOrgStaffRow, ParcelOrgStationRow } from '@/lib/parcel-org-session';
+import type { DispatchPing, DispatchRun, ParcelOrgStaffRow, ParcelOrgStationRow } from '@/lib/parcel-org-session';
 import {
-  arriveDispatch, cancelDispatch, createDispatch, listDispatches,
+  arriveDispatch, cancelDispatch, createDispatch, getDispatch, listDispatches,
   reportDispatchPosition, type DispatchCrewInput,
 } from '../actions';
 import { setFormActive } from '../form-activity';
+import { DemoCallButton, DemoMessageButton } from '@/components/DemoContact';
 import { FleetDispatchMap } from './FleetDispatchMap';
+import {
+  currentSpeedKmh, distanceCoveredKm, journeyProgress, lastSeenLabel,
+  lastSeenTone, recordedStops,
+} from './dispatch-stats';
 
 const VEHICLE_TYPES = ['VAN', 'TRUCK', 'BUS', 'PICKUP', 'MOTORBIKE', 'OTHER'] as const;
 
@@ -70,6 +75,15 @@ function statusLabel(status: string): string {
   }
 }
 
+function seenPillTone(tone: 'g' | 'a' | 'r' | undefined): string {
+  switch (tone) {
+    case 'g': return 'p-ok';
+    case 'a': return 'p-warn';
+    case 'r': return 'p-bad';
+    default: return '';
+  }
+}
+
 /**
  * The dispatch board: open a run (vehicle + crew + leg + receiving
  * team), watch the whole fleet on one map, and check runs in on
@@ -77,27 +91,64 @@ function statusLabel(status: string): string {
  * parcels; a run is the unit a dispatcher thinks in.
  */
 export function DispatchBoard({
-  initialRuns, stations, staff,
+  initialRuns, stations, staff, orgName,
 }: {
   initialRuns: DispatchRun[];
   stations: ParcelOrgStationRow[];
   staff: ParcelOrgStaffRow[];
+  orgName: string;
 }) {
   const [runs, setRuns] = useState(initialRuns);
+  // The page's DropoffPoll calls router.refresh() every 30s, which
+  // re-runs the server component and hands us a fresh initialRuns. The
+  // board must adopt it or the poll would re-fetch endlessly and never
+  // move the board — this is the whole "live fleet" mechanism.
+  useEffect(() => {
+    setRuns(initialRuns);
+  }, [initialRuns]);
   const [selectedId, setSelectedId] = useState<string | null>(
     () => initialRuns.find((r) => r.status === 'ACTIVE')?.id ?? null,
   );
+  // What the map marker + inspector highlight (selectedId) is separate
+  // from which run card is actually expanded. Picking a marker on the
+  // map opens the inspector under the map instead of yanking the page
+  // down to the card, and the card only opens when the dispatcher asks
+  // for full detail — so a click never feels like it "slides away".
+  const [expandedId, setExpandedId] = useState<string | null>(null);
+  const [trails, setTrails] = useState<Record<string, DispatchPing[]>>({});
   const [showClosed, setShowClosed] = useState(false);
   const [formOpen, setFormOpen] = useState(false);
   const [pending, startTransition] = useTransition();
 
   const selected = runs.find((r) => r.id === selectedId) ?? null;
-  const visible = showClosed ? runs : runs.filter((r) => r.status === 'ACTIVE');
+  const withTrail = (r: DispatchRun): DispatchRun => {
+    const t = trails[r.id];
+    return t ? { ...r, trail: t } : r;
+  };
+  const selectedWithTrail = selected ? withTrail(selected) : null;
+  const runsWithTrails = runs.map(withTrail);
+  const visible = showClosed ? runsWithTrails : runsWithTrails.filter((r) => r.status === 'ACTIVE');
   const activeStaff = staff.filter((s) => s.active);
 
   async function refresh() {
-    setRuns(await listDispatches(true));
+    // A failed refetch (network blip, or the shift session expired) is
+    // not worth throwing the dispatcher out of the board over — the
+    // mutation that triggered it already succeeded server-side, and the
+    // board stays on what it has. The next action will surface the
+    // session problem when it matters.
+    try { setRuns(await listDispatches(true)); } catch { /* keep the current board */ }
   }
+
+  // The board list carries no trail (payload weight); the selected
+  // run's journey loads on demand for the map line and the detail.
+  useEffect(() => {
+    if (!selectedId || trails[selectedId]) return;
+    let live = true;
+    void getDispatch(selectedId).then((detail) => {
+      if (live && detail) setTrails((t) => ({ ...t, [selectedId]: detail.trail ?? [] }));
+    });
+    return () => { live = false; };
+  }, [selectedId, trails]);
 
   // While the create form is open the dashboard poller stands down, so
   // the page never refreshes mid-entry (see DropoffPoll).
@@ -145,11 +196,24 @@ export function DispatchBoard({
             selectedId={selectedId}
             onSelect={(id) => {
               setSelectedId(id);
+              // The inspector sits just under the map, so this barely
+              // moves — it never scrolls the page to the run card.
+              document.getElementById('run-inspector')?.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+            }}
+          />
+
+          <RunInspector
+            run={selectedWithTrail}
+            onFullDetails={(id) => {
+              setExpandedId((prev) => (prev === id ? null : id));
               document.getElementById(`run-${id}`)?.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
             }}
           />
+
           <div style={{ display: 'grid', gap: 12, marginTop: 16 }}>
-            {visible.map((r) => (
+            {visible.map((r) => {
+              const expanded = r.id === expandedId;
+              return (
               <article
                 key={r.id}
                 id={`run-${r.id}`}
@@ -163,7 +227,10 @@ export function DispatchBoard({
                   <div>
                     <span className="mono" style={{ fontWeight: 800, fontSize: '1.05rem' }}>{r.vehiclePlate}</span>
                     <span className="sub"> · {r.vehicleType.toLowerCase()}</span>{' '}
-                    <span className={`pill ${statusPill(r.status)}`}>{statusLabel(r.status)}</span>
+                    <span className={`pill ${statusPill(r.status)}`}>{statusLabel(r.status)}</span>{' '}
+                    {r.status === 'ACTIVE' && (
+                      <span className={`pill ${seenPillTone(lastSeenTone(r.currentAt))}`}>{lastSeenLabel(r.currentAt)}</span>
+                    )}
                     <div className="sub" style={{ marginTop: 4 }}>
                       {r.origin?.name ?? '—'} → {r.destination?.name ?? '—'}
                       {' · '}{r.crew.length} crew
@@ -172,26 +239,99 @@ export function DispatchBoard({
                   </div>
                   <button
                     className="btn btn-o btn-sm"
-                    onClick={() => setSelectedId(r.id === selectedId ? null : r.id)}
+                    onClick={() => {
+                      const next = expanded ? null : r.id;
+                      setExpandedId(next);
+                      if (next) document.getElementById(`run-${next}`)?.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+                    }}
                   >
-                    {r.id === selectedId ? 'Hide details' : 'Details'}
+                    {expanded ? 'Hide details' : 'Full details'}
                     <Icon name="chevron-right" size={14} />
                   </button>
                 </div>
-                {r.id === selectedId && (
+                {expanded && (
                   <RunDetail
                     run={r}
+                    orgName={orgName}
                     pending={pending}
                     startTransition={startTransition}
                     onChanged={refresh}
                   />
                 )}
               </article>
-            ))}
+              );
+            })}
           </div>
         </>
       )}
     </>
+  );
+}
+
+/**
+ * The strip that sits under the fleet map. Clicking a marker puts that
+ * run here — plate, driver, how far along the leg, how it's moving —
+ * without dragging the page down to the card. "Full details" is the
+ * deliberate step for the whole card, with its crew/receiving/custody
+ * controls (see DispatchBoard's expandedId).
+ */
+function RunInspector({
+  run, onFullDetails,
+}: {
+  run: DispatchRun | null;
+  onFullDetails: (id: string) => void;
+}) {
+  if (!run) {
+    return (
+      <div id="run-inspector" className="card" style={{ padding: 14, marginTop: 10 }}>
+        <p className="sub" style={{ display: 'flex', gap: 8, alignItems: 'center', margin: 0 }}>
+          <Icon name="map" size={16} />
+          Pick a marker on the map to inspect that run.
+        </p>
+      </div>
+    );
+  }
+
+  const driver = run.crew.find((c) => c.role === 'DRIVER') ?? run.crew[0] ?? null;
+  const progress = journeyProgress(run);
+  const isActive = run.status === 'ACTIVE';
+
+  return (
+    <div id="run-inspector" className="card" style={{ padding: 14, marginTop: 10 }}>
+      <div className="row" style={{ gap: 10, justifyContent: 'space-between', flexWrap: 'wrap' }}>
+        <div>
+          <span style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
+            <span className="mono" style={{ fontWeight: 800, fontSize: '1.05rem' }}>{run.vehiclePlate}</span>
+            <span className="sub">{run.vehicleType.toLowerCase()}</span>
+            <span className={`pill ${statusPill(run.status)}`}>{statusLabel(run.status)}</span>
+            {isActive && (
+              <span className={`pill ${seenPillTone(lastSeenTone(run.currentAt))}`}>{lastSeenLabel(run.currentAt)}</span>
+            )}
+          </span>
+          <div className="sub" style={{ marginTop: 4 }}>
+            {run.origin?.name ?? '—'} → {run.destination?.name ?? '—'}
+            {driver && <> · {driver.name}{driver.msisdn ? ` (${driver.msisdn})` : ''}</>}
+          </div>
+        </div>
+        <div className="row" style={{ gap: 8, flexWrap: 'wrap' }}>
+          {driver?.msisdn && (
+            <>
+              <DemoCallButton msisdn={driver.msisdn} primary />
+              <DemoMessageButton msisdn={driver.msisdn} />
+            </>
+          )}
+          <button className="btn btn-p btn-sm" onClick={() => onFullDetails(run.id)}>
+            Full details<Icon name="chevron-right" size={14} />
+          </button>
+        </div>
+      </div>
+
+      {progress !== null && (
+        <div aria-label={`${Math.round(progress * 100)}% of journey complete`} style={{ height: 6, borderRadius: 4, background: 'var(--line)', overflow: 'hidden', marginTop: 14 }}>
+          <div style={{ width: `${Math.round(progress * 100)}%`, height: '100%', background: 'var(--blue, #1565C0)' }} />
+        </div>
+      )}
+    </div>
   );
 }
 
@@ -411,9 +551,10 @@ function CreateDispatchForm({
 }
 
 function RunDetail({
-  run, pending, startTransition, onChanged,
+  run, orgName, pending, startTransition, onChanged,
 }: {
   run: DispatchRun;
+  orgName: string;
   pending: boolean;
   startTransition: React.TransitionStartFunction;
   onChanged: () => Promise<void>;
@@ -425,6 +566,12 @@ function RunDetail({
   const [locating, setLocating] = useState(false);
 
   const isActive = run.status === 'ACTIVE';
+  const driver = run.crew.find((c) => c.role === 'DRIVER') ?? run.crew[0] ?? null;
+  const others = run.crew.filter((c) => c !== driver);
+  const stops = recordedStops(run.trail);
+  const speed = currentSpeedKmh(run.trail);
+  const progress = journeyProgress(run);
+  const covered = distanceCoveredKm(run.trail);
 
   function useMyLocation() {
     if (!('geolocation' in navigator)) { setError('This device has no location to share'); return; }
@@ -474,17 +621,72 @@ function RunDetail({
 
   return (
     <div style={{ marginTop: 14, borderTop: '1px solid var(--line)', paddingTop: 12 }}>
+      {/* Live summary: status, speed, progress, stops — the glanceable row. */}
+      <div className="kpis" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))', marginBottom: 12 }}>
+        <div className="kpi">
+          <span className="l">Status</span>
+          <span className="n" style={{ fontSize: '1rem' }}>{isActive ? lastSeenLabel(run.currentAt) : statusLabel(run.status)}</span>
+          <span className="sub">{orgName} fleet</span>
+        </div>
+        <div className="kpi">
+          <span className="l">Moving at</span>
+          <span className="n">{speed === null ? '—' : `${Math.round(speed)} km/h`}</span>
+          <span className="sub">from the last two reports</span>
+        </div>
+        <div className="kpi">
+          <span className="l">Journey</span>
+          <span className="n">{progress === null ? '—' : `${Math.round(progress * 100)}%`}</span>
+          <span className="sub">{covered < 1 ? 'just left' : `${covered.toFixed(1)} km covered`}</span>
+        </div>
+        <div className="kpi">
+          <span className="l">Stops made</span>
+          <span className="n">{stops.length}</span>
+          <span className="sub">{run.trail.length} position reports</span>
+        </div>
+      </div>
+
+      {progress !== null && (
+        <div style={{ height: 8, borderRadius: 4, background: 'var(--line)', overflow: 'hidden', marginBottom: 12 }}>
+          <div style={{ width: `${Math.round(progress * 100)}%`, height: '100%', background: 'var(--blue, #1565C0)' }} />
+        </div>
+      )}
+
+      {stops.length > 0 && (
+        <p className="sub" style={{ margin: '0 0 12px' }}>
+          <Icon name="pin" size={13} /> Stopped {stops.map((s) => `${s.mins} min`).join(' · ')} along the way.
+        </p>
+      )}
+
       <div style={gridStyle}>
         <div>
-          <h4 style={sectionTitleStyle}>Crew aboard</h4>
-          <ul style={{ margin: '8px 0 0', paddingLeft: 18 }}>
-            {run.crew.map((c) => (
-              <li key={c.id} style={{ marginBottom: 4 }}>
-                <strong>{c.name}</strong>{' '}
-                <span className="sub">{c.roleLabel.toLowerCase()}{c.msisdn ? ` · ${c.msisdn}` : ''}</span>
-              </li>
-            ))}
-          </ul>
+          <h4 style={sectionTitleStyle}>Driver</h4>
+          {!driver ? (
+            <p className="sub" style={{ margin: '8px 0 0' }}>No crew recorded on this run.</p>
+          ) : (
+            <div style={{ marginTop: 8 }}>
+              <strong>{driver.name}</strong>{' '}
+              <span className="sub">{driver.roleLabel.toLowerCase()}</span>
+              {driver.msisdn && (
+                <div className="row" style={{ gap: 8, marginTop: 8, flexWrap: 'wrap' }}>
+                  <DemoCallButton msisdn={driver.msisdn} primary />
+                  <DemoMessageButton msisdn={driver.msisdn} />
+                </div>
+              )}
+            </div>
+          )}
+          {others.length > 0 && (
+            <>
+              <h4 style={{ ...sectionTitleStyle, marginTop: 12 }}>Also aboard</h4>
+              <ul style={{ margin: '8px 0 0', paddingLeft: 18 }}>
+                {others.map((c) => (
+                  <li key={c.id} style={{ marginBottom: 4 }}>
+                    <strong>{c.name}</strong>{' '}
+                    <span className="sub">{c.roleLabel.toLowerCase()}{c.msisdn ? ` · ${c.msisdn}` : ''}</span>
+                  </li>
+                ))}
+              </ul>
+            </>
+          )}
         </div>
         <div>
           <h4 style={sectionTitleStyle}>Receiving team</h4>
@@ -514,12 +716,12 @@ function RunDetail({
               <input
                 style={{ ...inputStyle, marginTop: 0, maxWidth: 170 }} className="mono"
                 value={lat} placeholder="Latitude" inputMode="decimal"
-                onChange={(e) => setLat(e.target.value.replace(/[^\d.\-]/g, ''))}
+                onChange={(e) => setLat(e.target.value.replace(/[^\d.-]/g, ''))}
               />
               <input
                 style={{ ...inputStyle, marginTop: 0, maxWidth: 170 }} className="mono"
                 value={lng} placeholder="Longitude" inputMode="decimal"
-                onChange={(e) => setLng(e.target.value.replace(/[^\d.\-]/g, ''))}
+                onChange={(e) => setLng(e.target.value.replace(/[^\d.-]/g, ''))}
               />
               <button className="btn btn-o btn-sm" disabled={locating} onClick={useMyLocation}>
                 <Icon name="pin" size={14} />{locating ? 'Reading…' : 'Use my location'}

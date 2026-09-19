@@ -1,12 +1,10 @@
-'use client';
-
-import type { CounterBookingInput } from '../actions';
+import type { CounterBookInput } from './ParcelCounterTypes';
 
 /**
  * Taking parcels in when the network isn't there.
  *
  * A counter in Kisumu at 7am on bad data still has customers. Every
- * other part of this console can reasonably say "try again" — an intake
+ * other part of the product can reasonably say "try again" — an intake
  * desk cannot, because the alternative is turning a paying customer
  * away or writing on the back of an envelope.
  *
@@ -32,17 +30,21 @@ import type { CounterBookingInput } from '../actions';
  * The direct consequence: **only bookings against an existing code can
  * be queued.** A booking that would mint a fresh code has no key, could
  * be replayed into duplicates, and is refused rather than risked.
+ *
+ * Shared by the Esoqo console counter and the courier-company counter
+ * — the queueing contract is identical, only the submit function
+ * differs (each portal's own booking action).
  */
 
 const DB_NAME = 'esoqo-counter';
 const STORE = 'pending-bookings';
 const DB_VERSION = 1;
 
-export interface QueuedBooking {
+export interface QueuedBooking<T extends { existingCode?: string } = CounterBookInput> {
   /** The pre-printed code. Also the primary key, which is what makes
    *  queueing the same parcel twice a no-op rather than a duplicate. */
   code: string;
-  input: CounterBookingInput;
+  input: T;
   queuedAt: number;
   /** Set after a flush attempt failed for a reason that wasn't the
    *  network — shown to the clerk rather than retried forever. */
@@ -81,13 +83,13 @@ export function offlineSupported(): boolean {
   return typeof indexedDB !== 'undefined';
 }
 
-export async function queueBooking(input: CounterBookingInput): Promise<void> {
+export async function queueBooking<T extends { existingCode?: string }>(input: T): Promise<void> {
   if (!input.existingCode) {
     // Refused rather than risked — see this file's header on why the
     // pre-printed code is what makes a replay safe.
     throw new Error('Only a scanned label can be taken in offline.');
   }
-  const entry: QueuedBooking = {
+  const entry: QueuedBooking<T> = {
     code: input.existingCode,
     input,
     queuedAt: Date.now(),
@@ -95,10 +97,10 @@ export async function queueBooking(input: CounterBookingInput): Promise<void> {
   await tx('readwrite', (s) => s.put(entry));
 }
 
-export async function listQueued(): Promise<QueuedBooking[]> {
+export async function listQueued<T extends { existingCode?: string } = CounterBookInput>(): Promise<QueuedBooking<T>[]> {
   if (!offlineSupported()) return [];
   try {
-    const all = await tx<QueuedBooking[]>('readonly', (s) => s.getAll() as IDBRequest<QueuedBooking[]>);
+    const all = await tx<QueuedBooking<T>[]>('readonly', (s) => s.getAll() as IDBRequest<QueuedBooking<T>[]>);
     return all.sort((a, b) => a.queuedAt - b.queuedAt);
   } catch {
     return [];
@@ -109,7 +111,7 @@ async function remove(code: string): Promise<void> {
   await tx('readwrite', (s) => s.delete(code) as unknown as IDBRequest<undefined>);
 }
 
-async function markFailed(entry: QueuedBooking, error: string): Promise<void> {
+async function markFailed<T extends { existingCode?: string }>(entry: QueuedBooking<T>, error: string): Promise<void> {
   await tx('readwrite', (s) => s.put({ ...entry, lastError: error }));
 }
 
@@ -124,8 +126,8 @@ export interface FlushResult {
  * Send everything queued, oldest first.
  *
  * `submit` is injected rather than imported so this module stays
- * testable and free of server-action wiring; the Counter passes
- * actionCounterBookParcel.
+ * free of server-action wiring; each counter passes its own booking
+ * action (admin or company).
  *
  * The subtle case is the middle branch. "That label code isn't a known,
  * unused pre-printed label" means the code was already spent — which,
@@ -140,13 +142,13 @@ export interface FlushResult {
  * person's hand — and the alternative (a permanent stuck item nobody
  * can clear) is worse at a counter.
  */
-export async function flushQueue(
-  submit: (input: CounterBookingInput) => Promise<{ ok: true; code: string } | { ok: false; error: string }>,
+export async function flushQueue<T extends { existingCode?: string }>(
+  submit: (input: T) => Promise<{ ok: true; code: string } | { ok: false; error: string }>,
 ): Promise<FlushResult> {
   const result: FlushResult = { synced: [], stuck: [] };
   if (!offlineSupported()) return result;
 
-  for (const entry of await listQueued()) {
+  for (const entry of await listQueued<T>()) {
     let res: Awaited<ReturnType<typeof submit>>;
     try {
       res = await submit(entry.input);

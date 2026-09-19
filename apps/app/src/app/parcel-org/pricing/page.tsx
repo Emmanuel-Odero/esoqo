@@ -6,7 +6,7 @@ import { OrgPricingEditor } from './OrgPricingEditor';
 
 export const dynamic = 'force-dynamic';
 export const metadata: Metadata = {
-  title: 'Your pricing — Esoqo',
+  title: 'Parcel rates — Esoqo',
   robots: { index: false, follow: false },
 };
 
@@ -42,10 +42,12 @@ export default async function ParcelOrgPricingPage() {
     <>
       <div className="head">
         <div>
-          <h1>Your pricing</h1>
+          <p className="kicker">Counter · rate card</p>
+          <h1>Parcel rates</h1>
           <p>
             Set your own price per parcel type. Leave a type alone and it stays on Esoqo&apos;s
-            standard rate — this never affects any other company.
+            standard rate — this never affects any other company. Transport fares live separately
+            under each ticket organiser&apos;s Fleet page.
           </p>
         </div>
       </div>

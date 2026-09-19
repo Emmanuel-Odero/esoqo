@@ -20,3 +20,18 @@ export {
   PrintableLabel, PrintStyles, trackingUrlFor,
   LABEL_WIDTH_MM, LABEL_HEIGHT_MM, LABEL_GAP_MM,
 } from './ParcelLabel';
+export {
+  PrintLayoutControls, LabelPrintSheet, SelectableLabelPrintBlock,
+  labelsPerPage, DEFAULT_PRINT_LAYOUT,
+  type PrintLabelItem, type PrintLayout, type PrintPaper,
+} from './ParcelPrintStudio';
+export { CounterForm, type CounterFormHandle } from './ParcelCounter';
+export type {
+  CounterActions, CounterBookInput, CounterLabelInfo, CounterLabelLookup,
+  CounterLinks, CounterParcelRef, CounterPartyOption, CounterPricingOption,
+  CounterResult, CounterVoid,
+} from './ParcelCounterTypes';
+export {
+  flushQueue, listQueued, offlineSupported, queueBooking,
+  type FlushResult, type QueuedBooking,
+} from './parcelOfflineQueue';

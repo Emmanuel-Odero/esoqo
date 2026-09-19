@@ -1043,6 +1043,49 @@ func (s *Server) handleVoidParcelLabelBatch(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"voided": voided})
 }
 
+type voidParcelLabelsRequest struct {
+	Codes       []string `json:"codes" binding:"required"`
+	Reason      string   `json:"reason" binding:"required"`
+	ParcelOrgID *string  `json:"parcelOrgId"`
+}
+
+// handleVoidParcelLabels — POST /v1/admin/parcels/labels/void.
+//
+// The selection counterpart to the whole-batch void above: discard one
+// unused sticker or a handful of them ("these three misprinted, that
+// strip got wet"). Same trust tier (parcels.assign), same live-only
+// semantics — spent codes are left on their parcels, unknown codes are
+// ignored. Returns how many were actually withdrawn so the UI can say
+// "withdrew 4 of 6 — 2 were already used".
+func (s *Server) handleVoidParcelLabels(c *gin.Context) {
+	ctx := ctxFromGin(c)
+	if err := authsvc.RequireCapability(ctx, "parcels.assign", nil); err != nil {
+		writeParcelAdminError(c, err)
+		return
+	}
+	var req voidParcelLabelsRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		writeError(c, http.StatusBadRequest, "INVALID_REQUEST", err.Error())
+		return
+	}
+	var staffID *string
+	if ctx.ActorID != "" {
+		id := ctx.ActorID
+		staffID = &id
+	}
+	var orgID *string
+	if req.ParcelOrgID != nil && strings.TrimSpace(*req.ParcelOrgID) != "" {
+		trimmed := strings.TrimSpace(*req.ParcelOrgID)
+		orgID = &trimmed
+	}
+	voided, err := dbx.VoidParcelLabelsByCodes(c.Request.Context(), s.Pool, req.Codes, orgID, req.Reason, staffID)
+	if err != nil {
+		writeParcelAdminError(c, err)
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"voided": voided})
+}
+
 // handleAdminListParcelLabelStock — GET /v1/admin/parcels/labels?limit=.
 func (s *Server) handleAdminListParcelLabelStock(c *gin.Context) {
 	ctx := ctxFromGin(c)

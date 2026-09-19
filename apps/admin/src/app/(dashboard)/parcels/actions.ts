@@ -1662,6 +1662,36 @@ export async function actionVoidParcelLabelBatch(
   }
 }
 
+/**
+ * Discard an explicit selection of unused labels — the "these three
+ * misprinted, that strip got wet" path, as opposed to voiding a whole
+ * batch. Live-only on the server: spent codes stay on their parcels,
+ * unknown ones are ignored, and the count says how many went.
+ */
+export async function actionVoidParcelLabels(
+  codes: string[],
+  reason: string,
+  parcelOrgId?: string,
+): Promise<{ ok: true; voided: number } | { ok: false; error: string }> {
+  try {
+    await requireStaff();
+    const { voided } = await adminGo<{ voided: number }>(
+      `/v1/admin/parcels/labels/void`,
+      {
+        method: "POST",
+        body: JSON.stringify({ codes, reason, parcelOrgId: parcelOrgId || undefined }),
+      },
+    );
+    revalidatePath("/parcels/labels");
+    return { ok: true, voided };
+  } catch (e) {
+    return {
+      ok: false,
+      error: e instanceof Error ? e.message : "Could not withdraw those labels",
+    };
+  }
+}
+
 // Structured info attached to a pre-printed label — item, destination,
 // sender/receiver name and contact, item type, weight range — the
 // moment it's actually stuck on a physical item, independent of (and

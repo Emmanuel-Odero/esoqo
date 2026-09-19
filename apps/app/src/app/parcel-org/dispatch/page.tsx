@@ -1,7 +1,6 @@
 import type { Metadata } from 'next';
 import { redirect } from 'next/navigation';
 import { ParcelOrgUnauthorised, getParcelOrgMe } from '@/lib/parcel-org-session';
-import { DropoffPoll } from '../DropoffPoll';
 import { listDispatches, listOrgStaff, listOrgStations } from '../actions';
 import { DispatchBoard } from './DispatchBoard';
 
@@ -21,7 +20,7 @@ export const metadata: Metadata = {
 export default async function DispatchPage() {
   let me: Awaited<ReturnType<typeof getParcelOrgMe>>;
   try {
-    [me] = [await getParcelOrgMe()];
+    me = await getParcelOrgMe();
   } catch (e) {
     if (e instanceof ParcelOrgUnauthorised) redirect('/parcel-org/signed-out');
     throw e;
@@ -41,15 +40,14 @@ export default async function DispatchPage() {
         <div>
           <h1>Dispatch</h1>
           <p>
-            Your whole fleet — where every run is headed, who is aboard, and who
-            checks it in when it arrives.
+            Open a run, track the fleet, and check it in on arrival.
           </p>
         </div>
       </div>
 
-      <DropoffPoll />
-
-      <DispatchBoard initialRuns={runs} stations={stations} staff={staff} />
+      {/* Auto-refresh lives once in parcel-org/layout.tsx (DropoffPoll) —
+          it used to be mounted here AND on the dashboard. */}
+      <DispatchBoard initialRuns={runs} stations={stations} staff={staff} orgName={me.org.name} />
     </>
   );
 }

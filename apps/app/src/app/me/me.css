@@ -10,7 +10,7 @@
    All colour/spacing/radius/motion values come from @esoqo/ui tokens.
    ══════════════════════════════════════════════════════════════ */
 
-.me { min-height:100dvh; background:var(--paper); padding-bottom:calc(76px + var(--safe-b)) }
+.me { min-height:100dvh; background:linear-gradient(180deg,#F8FBFC 0,var(--paper) 340px); padding-bottom:calc(76px + var(--safe-b)) }
 
 /* ── header (one bar: brand, tabs on desktop, More on the right) ── */
 .appbar {
@@ -47,6 +47,31 @@
   }
   .headnav a:hover { background:var(--paper); color:var(--navy) }
   .headnav a[aria-current="page"] { color:var(--navy); border-bottom-color:var(--green) }
+}
+
+/* Organiser-console mobile strip — /org/[orgId] reuses this shell but
+   has no bottom tab bar, so phones on a subpage (Fleet, Scan, Staff…)
+   used to be stranded with no way across tabs except the back button.
+   Same capability-gated links as .headnav, one swipeable row, only
+   below the desktop breakpoint where .headnav takes over. */
+.orgnav { display:none }
+@media (max-width:819px) {
+  .appbar-in { flex-wrap:wrap; row-gap:4px }
+  .orgnav {
+    display:flex; align-items:center; gap:2px;
+    flex:1 1 100%;
+    margin:0 calc(-1 * max(20px,var(--safe-r))) 0 calc(-1 * max(20px,var(--safe-l)));
+    padding:4px max(20px,var(--safe-r)) 6px max(20px,var(--safe-l));
+    border-top:1px solid var(--line);
+    overflow-x:auto; scrollbar-width:none; -webkit-overflow-scrolling:touch;
+  }
+  .orgnav::-webkit-scrollbar { display:none }
+  .orgnav a {
+    display:inline-flex; align-items:center; gap:7px; padding:0 12px;
+    font-size:.85rem; font-weight:600; color:var(--tx-2); border-radius:8px;
+    white-space:nowrap; min-height:40px; flex:0 0 auto; font-family:inherit;
+  }
+  .orgnav a[aria-current="page"] { color:var(--navy); background:var(--green-t) }
 }
 
 /* More button (all sizes) — opens the sheet with trust/display + sign out. */
@@ -130,10 +155,10 @@
 /* ── content column ─────────────────────────────────────────── */
 .me .wrap {
   max-width:1120px; margin:0 auto;
-  padding:20px max(20px,var(--safe-r)) 0 max(20px,var(--safe-l));
+  padding:28px max(20px,var(--safe-r)) 0 max(20px,var(--safe-l));
 }
-.mehead { margin-bottom:20px }
-.mehead h1 { font-size:1.5rem; font-weight:700; margin:0 0 6px; letter-spacing:-.02em }
+.mehead { margin-bottom:20px; max-width:720px }
+.mehead h1 { font-size:clamp(1.55rem,3vw,2rem); line-height:1.08; font-weight:700; margin:0 0 7px; letter-spacing:-.03em }
 .mehead p { color:var(--tx-2); margin:0; max-width:56ch }
 
 /* Page header used by the group/treasury pages. */
@@ -147,18 +172,29 @@
   display:flex; flex-direction:column; gap:2px; min-width:0;
   padding:16px 16px 14px; border:1px solid var(--line); border-radius:var(--r-lg);
   background:#fff; box-shadow:var(--sh-s);
-  transition:border-color var(--dur-fast), box-shadow var(--dur-fast);
+  transition:border-color var(--dur-fast), box-shadow var(--dur-fast), transform var(--dur-fast);
 }
-.tile:hover { border-color:var(--navy); box-shadow:var(--sh-m) }
+.tile:hover { border-color:var(--navy); box-shadow:var(--sh-m); transform:translateY(-1px) }
+.tile:focus-visible { outline:3px solid rgba(31,161,99,.28); outline-offset:3px }
 .tile .icbox { width:30px; height:30px; border-radius:8px; margin-bottom:10px }
 .tile .tile-k {
   font-family:var(--font-mono); font-size:.62rem; letter-spacing:.09em;
   text-transform:uppercase; color:var(--tx-2); font-weight:600; white-space:nowrap;
   overflow:hidden; text-overflow:ellipsis;
 }
-.tile .tile-v { font-weight:700; font-size:1.15rem; line-height:1.2; color:var(--navy) }
+.tile .tile-v { font-weight:700; font-size:1.15rem; line-height:1.2; color:var(--navy);
+  overflow-wrap:anywhere }
 .tile .tile-h { font-size:.78rem; color:var(--tx-2); margin-top:3px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap }
 @media (min-width:820px) { .stat-grid { grid-template-columns:repeat(4,1fr); margin-top:20px } }
+/* 320–380px phones: two tiles per row leaves ~150px each — long mono
+   values (KES 1,234,567) either overflow or force sideways scroll.
+   Tighten the tiles and let hints wrap instead of clipping. */
+@media (max-width:380px) {
+  .stat-grid { gap:8px }
+  .tile { padding:12px 12px 10px }
+  .tile .tile-v { font-size:.98rem }
+  .tile .tile-h { white-space:normal; overflow:visible }
+}
 
 /* Content cards — white objects on the paper canvas. */
 .dash-cols { display:grid; gap:14px; margin-bottom:14px }
@@ -169,7 +205,7 @@
 .standing {
   display:flex; align-items:center; gap:16px; flex-wrap:wrap;
   padding:18px; border:1px solid var(--line); border-radius:var(--r-lg);
-  background:#fff; box-shadow:var(--sh-s);
+  background:linear-gradient(115deg,#fff 58%,#F4FBF7); box-shadow:var(--sh-s);
   margin:16px 0 0;
 }
 .standing .ring { margin-right:2px }
@@ -252,12 +288,25 @@
 
 /* ── responsive density ─────────────────────────────────────── */
 @media (max-width:560px) {
+  .me .wrap { padding-top:20px }
+  .mehead { margin-bottom:16px }
   .mrow { flex-direction:column; gap:3px }
   .mrow .k { width:auto }
+  .mrow .v { overflow-wrap:anywhere; min-width:0 }
+  .paper .pt .s { overflow-wrap:anywhere }
+  .balance-hero .v { overflow-wrap:anywhere }
   .mcard { padding:18px }
   .mcard .btn { width:100%; justify-content:center }
-  .standing .btn { flex:1 1 auto; margin-top:4px }
+  .standing { gap:12px; padding:16px }
+  /* The CTA's intrinsic width (~220px) plus the ring leaves nothing
+     for the copy — but the copy's min-width:0 lets it shrink to zero
+     instead of forcing a wrap, collapsing the text to one word per
+     line. A 100% basis puts the button on its own full-width row. */
+  .standing .btn { flex:1 1 100%; margin-top:4px }
   .tile .tile-v { font-size:1.05rem }
+  .standing { gap:12px; padding:16px }
+  .standing .ring { width:52px; height:52px; transform:scale(.9); transform-origin:left center }
+  .paper { gap:10px }
 }
 
 /* ── navigation skeleton ────────────────────────────────────── */

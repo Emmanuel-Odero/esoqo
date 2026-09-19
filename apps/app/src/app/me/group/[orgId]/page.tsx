@@ -2,7 +2,7 @@ import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import type { Route } from 'next';
 import { Icon } from '@esoqo/ui';
-import { getMyRecord, getGroupBalance, listMyGroupMembers } from '@esoqo/db';
+import { getMyRecord, listMyGroupMembers } from '@esoqo/db';
 import { requireSubject } from '@/lib/session';
 import { MembersPanel, type MemberRow } from './MembersPanel';
 
@@ -44,8 +44,7 @@ export default async function GroupDetail({ params }: { params: Promise<{ orgId:
     );
   }
 
-  const [balance, memberRows] = await Promise.all([
-    getGroupBalance(ctx, orgId),
+  const [memberRows] = await Promise.all([
     listMyGroupMembers(ctx, orgId),
   ]);
 
@@ -74,14 +73,18 @@ export default async function GroupDetail({ params }: { params: Promise<{ orgId:
         <p className="lead">{org.knownAs && `Known as ${org.knownAs} · `}{org.party.county}</p>
       </header>
 
+      {/* Money lives ONLY on the treasury page: this detail page used to
+          carry its own balance tile linking the same treasury URL the
+          dashboard tiles already link, so one figure appeared in three
+          places. Membership + roster own this page; treasury owns money. */}
       <div className="stat-grid" aria-label="At a glance">
         <Link className="tile" href={`/me/group/${orgId}/treasury` as Route}>
           <span className="icbox" style={{ background: 'var(--green-t)', color: 'var(--green)' }}>
             <Icon name="bank" size={17} />
           </span>
-          <span className="tile-k">Group balance</span>
-          <span className="tile-v mono">KES {balance.toLocaleString('en-KE')}</span>
-          <span className="tile-h">Open treasury</span>
+          <span className="tile-k">Treasury</span>
+          <span className="tile-v">Open</span>
+          <span className="tile-h">Balance, contributions, withdrawals</span>
         </Link>
         <div className="tile">
           <span className="icbox" style={{ background: 'var(--blue-t)', color: 'var(--blue)' }}>

@@ -2068,6 +2068,55 @@ func VoidParcelLabelBatch(
 	return n, nil
 }
 
+// VoidParcelLabelsByCodes withdraws an explicit selection of labels —
+// the "discard these unused stickers / throw away this handful" path,
+// as opposed to VoidParcelLabelBatch's whole-pad recall.
+//
+// Only live labels are touched: already-spent codes stay bound to the
+// parcels moving in the world, already-withdrawn ones are simply not
+// counted. Unknown codes are ignored rather than errors, so a stale
+// selection (someone else voided one concurrently) still voids the
+// rest. [orgID] scopes exactly like the batch variant: nil is the
+// shared Esoqo pool, non-nil is one company's pad, and a code from
+// another pad is never touched.
+func VoidParcelLabelsByCodes(
+	ctx context.Context, pool *pgxpool.Pool, codes []string, orgID *string, reason string, staffID *string,
+) (voided int, err error) {
+	if reason == "" {
+		return 0, &ParcelError{"BAD_INPUT", "Say why these labels are being withdrawn"}
+	}
+	clean := make([]string, 0, len(codes))
+	seen := map[string]struct{}{}
+	for _, c := range codes {
+		u := strings.ToUpper(strings.TrimSpace(c))
+		if u == "" {
+			continue
+		}
+		if _, dup := seen[u]; dup {
+			continue
+		}
+		seen[u] = struct{}{}
+		clean = append(clean, u)
+	}
+	if len(clean) == 0 {
+		return 0, &ParcelError{"BAD_INPUT", "Select at least one label"}
+	}
+	if len(clean) > 200 {
+		return 0, &ParcelError{"BAD_INPUT", "Withdraw at most 200 labels at once"}
+	}
+	tag, err := pool.Exec(ctx, `
+		UPDATE parcel_label_stock
+		SET "voidedAt" = now(), "voidedReason" = $1, "voidedByStaffId" = $2
+		WHERE upper(code) = ANY($3)
+		  AND "parcelOrgId" IS NOT DISTINCT FROM $4::uuid
+		  AND "usedAt" IS NULL AND "voidedAt" IS NULL`,
+		reason, staffID, clean, orgID)
+	if err != nil {
+		return 0, err
+	}
+	return int(tag.RowsAffected()), nil
+}
+
 // GetParcelLabelStockInfo reads back whatever AttachParcelLabelInfo
 // last wrote, so an edit form can load before it saves.
 //

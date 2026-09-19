@@ -7,6 +7,7 @@ import {
   type DispatchRun,
   type OrgLabelSearchRow,
   type OrgParcelLabel,
+  type OrgParcelRow,
   type ParcelOrgStaffRow,
   type ParcelOrgStationRow,
 } from "@/lib/parcel-org-session";
@@ -61,7 +62,7 @@ export async function receiveWalkInParcel(
       { method: "POST" },
     );
     revalidatePath("/parcel-org");
-    revalidatePath("/parcel-org/receive");
+    revalidatePath("/parcel-org/counter");
     return { ok: true, code: res.code };
   } catch (e) {
     return toResult(e);
@@ -97,7 +98,7 @@ export async function settleCounterParcel(
       },
     );
     revalidatePath("/parcel-org");
-    revalidatePath("/parcel-org/receive");
+    revalidatePath("/parcel-org/counter");
     return { ok: true };
   } catch (e) {
     return toResult(e);
@@ -335,6 +336,29 @@ export async function listOrgLabelBatches(): Promise<OrgLabelBatchRow[]> {
   return res.batches ?? [];
 }
 
+/** Discard a handful of unused stickers — misprints, a damaged strip —
+ *  without voiding the whole pad. Live-only on the server: spent codes
+ *  stay on their parcels, unknown codes are ignored. */
+export async function voidOrgLabels(
+  codes: string[],
+  reason: string,
+): Promise<{ ok: true; voided: number } | { ok: false; error: string }> {
+  try {
+    const res = await parcelOrgFetch<{ voided: number }>(
+      `/v1/parcel-orgs/me/labels/void`,
+      { method: "POST", body: JSON.stringify({ codes, reason }) },
+    );
+    revalidatePath("/parcel-org/counter");
+    return { ok: true, voided: res.voided };
+  } catch (e) {
+    const r = toResult(e);
+    return {
+      ok: false,
+      error: r.ok ? "Could not withdraw those labels" : r.error,
+    };
+  }
+}
+
 /** Withdraw a whole pad — the "it was stolen from the Kisumu desk"
  *  button, without having to phone Esoqo to do it. Already-spent codes
  *  are untouched: each is on a parcel already moving. */
@@ -345,9 +369,12 @@ export async function voidOrgLabelBatch(
   try {
     const res = await parcelOrgFetch<{ voided: number }>(
       `/v1/parcel-orgs/me/labels/batches/${encodeURIComponent(batchId)}/void`,
-      { method: "POST", body: JSON.stringify({ reason }) },
+      {
+        method: "POST",
+        body: JSON.stringify({ reason }),
+      },
     );
-    revalidatePath("/parcel-org/labels");
+    revalidatePath("/parcel-org/counter");
     return { ok: true, voided: res.voided };
   } catch (e) {
     const r = toResult(e);
@@ -385,28 +412,34 @@ export async function addCustomParcel(
   input: CustomParcelInput,
 ): Promise<{ ok: true; code: string } | { ok: false; error: string }> {
   try {
-    const res = await parcelOrgFetch<{ code: string }>("/v1/parcel-orgs/me/parcels", {
-      method: "POST",
-      body: JSON.stringify({
-        externalRef: input.externalRef.trim(),
-        senderName: input.senderName.trim(),
-        senderMsisdn: input.senderMsisdn.trim(),
-        receiverName: input.receiverName.trim(),
-        receiverMsisdn: input.receiverMsisdn.trim(),
-        originLabel: input.originLabel.trim(),
-        destinationLabel: input.destinationLabel.trim(),
-        parcelType: input.parcelType,
-        weightKg: input.weightKg ?? null,
-        fragile: input.fragile ?? false,
-        notes: input.notes?.trim() || null,
-        labelCode: input.labelCode?.trim() || null,
-      }),
-    });
+    const res = await parcelOrgFetch<{ code: string }>(
+      "/v1/parcel-orgs/me/parcels",
+      {
+        method: "POST",
+        body: JSON.stringify({
+          externalRef: input.externalRef.trim(),
+          senderName: input.senderName.trim(),
+          senderMsisdn: input.senderMsisdn.trim(),
+          receiverName: input.receiverName.trim(),
+          receiverMsisdn: input.receiverMsisdn.trim(),
+          originLabel: input.originLabel.trim(),
+          destinationLabel: input.destinationLabel.trim(),
+          parcelType: input.parcelType,
+          weightKg: input.weightKg ?? null,
+          fragile: input.fragile ?? false,
+          notes: input.notes?.trim() || null,
+          labelCode: input.labelCode?.trim() || null,
+        }),
+      },
+    );
     revalidatePath("/parcel-org");
     return { ok: true, code: res.code };
   } catch (e) {
     const r = toResult(e);
-    return { ok: false, error: r.ok ? "Could not import that parcel" : r.error };
+    return {
+      ok: false,
+      error: r.ok ? "Could not import that parcel" : r.error,
+    };
   }
 }
 
@@ -446,10 +479,13 @@ export async function setStationManager(
   staffId: string | null,
 ): Promise<Result> {
   try {
-    await parcelOrgFetch(`/v1/parcel-orgs/me/stations/${encodeURIComponent(stationId)}/manager`, {
-      method: "POST",
-      body: JSON.stringify({ staffId }),
-    });
+    await parcelOrgFetch(
+      `/v1/parcel-orgs/me/stations/${encodeURIComponent(stationId)}/manager`,
+      {
+        method: "POST",
+        body: JSON.stringify({ staffId }),
+      },
+    );
     revalidatePath(`/parcel-org/stations/${stationId}`);
     return { ok: true };
   } catch (e) {
@@ -464,10 +500,13 @@ export async function assignStationMember(
   assigned: boolean,
 ): Promise<Result> {
   try {
-    await parcelOrgFetch(`/v1/parcel-orgs/me/stations/${encodeURIComponent(stationId)}/members`, {
-      method: "POST",
-      body: JSON.stringify({ staffId, assigned }),
-    });
+    await parcelOrgFetch(
+      `/v1/parcel-orgs/me/stations/${encodeURIComponent(stationId)}/members`,
+      {
+        method: "POST",
+        body: JSON.stringify({ staffId, assigned }),
+      },
+    );
     revalidatePath(`/parcel-org/stations/${stationId}`);
     return { ok: true };
   } catch (e) {
@@ -482,6 +521,11 @@ export interface AttachLabelInfoInput {
   senderMsisdn?: string | null;
   receiverName?: string | null;
   receiverMsisdn?: string | null;
+  itemType?: string | null;
+  weightRangeKg?: string | null;
+  lengthCm?: number | null;
+  widthCm?: number | null;
+  heightCm?: number | null;
 }
 
 /** Look a label code up against the company's own stock — what scanning
@@ -497,7 +541,10 @@ export async function resolveOrgLabel(
     return { ok: true, label: res.label };
   } catch (e) {
     const r = toResult(e);
-    return { ok: false, error: r.ok ? "Could not look up that label" : r.error };
+    return {
+      ok: false,
+      error: r.ok ? "Could not look up that label" : r.error,
+    };
   }
 }
 
@@ -509,22 +556,150 @@ export async function attachOrgLabelInfo(
   input: AttachLabelInfoInput,
 ): Promise<Result> {
   try {
-    await parcelOrgFetch(`/v1/parcel-orgs/me/labels/info/${encodeURIComponent(code.trim())}`, {
-      method: "POST",
-      body: JSON.stringify({
-        itemDescription: input.itemDescription.trim(),
-        destination: input.destination?.trim() || null,
-        senderName: input.senderName?.trim() || null,
-        senderMsisdn: input.senderMsisdn?.trim() || null,
-        receiverName: input.receiverName?.trim() || null,
-        receiverMsisdn: input.receiverMsisdn?.trim() || null,
-      }),
-    });
-    revalidatePath("/parcel-org/labels");
+    await parcelOrgFetch(
+      `/v1/parcel-orgs/me/labels/info/${encodeURIComponent(code.trim())}`,
+      {
+        method: "POST",
+        body: JSON.stringify({
+          itemDescription: input.itemDescription.trim(),
+          destination: input.destination?.trim() || null,
+          senderName: input.senderName?.trim() || null,
+          senderMsisdn: input.senderMsisdn?.trim() || null,
+          receiverName: input.receiverName?.trim() || null,
+          receiverMsisdn: input.receiverMsisdn?.trim() || null,
+          itemType: input.itemType?.trim() || null,
+          weightRangeKg: input.weightRangeKg?.trim() || null,
+          lengthCm: input.lengthCm ?? null,
+          widthCm: input.widthCm ?? null,
+          heightCm: input.heightCm ?? null,
+        }),
+      },
+    );
+    revalidatePath("/parcel-org/counter");
     return { ok: true };
   } catch (e) {
     return toResult(e);
   }
+}
+
+// ── Company counter ──
+//
+// The same counter the Esoqo console uses (see @esoqo/ui's CounterForm
+// — one screen, not two implementations), bound here to the company's
+// own session: its stock, its customers, its rate card. Nothing names
+// a company — the org comes from the session on the Go side, so there
+// is no parameter a browser could edit to book onto another pad.
+
+export interface OrgCounterBookInput {
+  senderName: string;
+  senderMsisdn: string;
+  receiverName: string;
+  receiverMsisdn: string;
+  originLabel: string;
+  destinationLabel: string;
+  parcelType: string;
+  weightKg?: number;
+  lengthCm?: number;
+  widthCm?: number;
+  heightCm?: number;
+  declaredValueKes?: number;
+  coverageTierId?: string;
+  contentsDeclared: boolean;
+  existingCode?: string;
+  notes?: string;
+  fragile?: boolean;
+}
+
+/** Book a parcel at the company's own counter. Lands directly in
+ *  BOOKED against the company's books (pay at the desk, in person),
+ *  bound to one of its own pre-printed labels when scanned — or minted
+ *  fresh when the clerk starts from blank. */
+export async function bookOrgCounterParcel(
+  input: OrgCounterBookInput,
+): Promise<{ ok: true; code: string } | { ok: false; error: string }> {
+  try {
+    const res = await parcelOrgFetch<{ code: string }>(
+      "/v1/parcel-orgs/me/counter/book",
+      {
+        method: "POST",
+        body: JSON.stringify(input),
+      },
+    );
+    revalidatePath("/parcel-org");
+    return { ok: true, code: res.code };
+  } catch (e) {
+    const r = toResult(e);
+    return { ok: false, error: r.ok ? "Could not book that parcel" : r.error };
+  }
+}
+
+export interface OrgCounterParty {
+  name: string;
+  msisdn: string;
+  lastLabel: string;
+  shipments: number;
+}
+
+/** The counter's address book: people this company has shipped to or
+ *  from before, most-frequent first. Three letters minimum — two
+ *  matches half the country. */
+export async function searchOrgCounterParties(
+  q: string,
+): Promise<OrgCounterParty[]> {
+  if (q.trim().length < 3) return [];
+  const res = await parcelOrgFetch<{ parties: OrgCounterParty[] | null }>(
+    `/v1/parcel-orgs/me/parties?q=${encodeURIComponent(q.trim())}`,
+  );
+  return res.parties ?? [];
+}
+
+/** The company's own parcels matching a code, exact-code first. Used by
+ *  the counter's "scan a code that's already a parcel → open it" rule:
+ *  a fresh-minted booking's tracking code lives only on the parcel (it
+ *  was never a pre-printed stock label), so resolving a scanned code
+ *  falls back here. Scoped by session exactly like every other read in
+ *  this file — a foreign code simply doesn't match. */
+export async function lookupOrgParcelByCode(
+  code: string,
+): Promise<OrgParcelRow | null> {
+  const needle = code.trim().toUpperCase();
+  if (!needle) return null;
+  const res = await parcelOrgFetch<{ parcels: OrgParcelRow[] | null }>(
+    `/v1/parcel-orgs/me/parcels?q=${encodeURIComponent(needle)}`,
+  );
+  return res.parcels?.find((p) => p.code.toUpperCase() === needle) ?? null;
+}
+
+/** The counter worklist, refetched on the desk's own polling interval:
+ *  self-drop-off bookings that walked in online since the page last
+ *  rendered. Same query the server page runs for its first paint. */
+export async function listOrgWaitingParcels(): Promise<OrgParcelRow[]> {
+  const res = await parcelOrgFetch<{ parcels: OrgParcelRow[] | null }>(
+    "/v1/parcel-orgs/me/parcels?status=BOOKED&originMethod=SELF_DROPOFF",
+  );
+  return res.parcels ?? [];
+}
+
+export interface OrgCounterPricingOption {
+  parcelType: string;
+  weightLabel: string;
+  minWeightKg: number;
+  maxWeightKg: number;
+  minKes: string;
+  maxKes: string;
+}
+
+/** Every weight bracket on the company's own rate card (platform
+ *  default wherever the company hasn't set its own), so the counter
+ *  matches a measured weight to a bracket without a round trip per
+ *  keystroke. Public endpoint — quoted before anyone signs in. */
+export async function listOrgCounterPricing(
+  orgId: string,
+): Promise<OrgCounterPricingOption[]> {
+  const res = await parcelOrgFetch<{
+    pricing: OrgCounterPricingOption[] | null;
+  }>(`/v1/parcels/pricing?parcelOrgId=${encodeURIComponent(orgId)}`);
+  return res.pricing ?? [];
 }
 
 // ── Dispatch runs ──
@@ -558,11 +733,26 @@ export interface CreateDispatchInput {
 }
 
 /** The board: active runs by default, recently closed ones on request. */
-export async function listDispatches(includeClosed = false): Promise<DispatchRun[]> {
+export async function listDispatches(
+  includeClosed = false,
+): Promise<DispatchRun[]> {
   const res = await parcelOrgFetch<{ dispatches: DispatchRun[] | null }>(
     `/v1/parcel-orgs/me/dispatch${includeClosed ? "?closed=true" : ""}`,
   );
   return res.dispatches ?? [];
+}
+
+/** One run with its recent trail (up to 200 points): the journey line
+ *  the map draws, plus the pings speed and stops derive from. */
+export async function getDispatch(id: string): Promise<DispatchRun | null> {
+  try {
+    const res = await parcelOrgFetch<{ dispatch: DispatchRun | null }>(
+      `/v1/parcel-orgs/me/dispatch/${encodeURIComponent(id)}`,
+    );
+    return res.dispatch;
+  } catch {
+    return null;
+  }
 }
 
 /** Open a run: vehicle, leg, crew and receiving team in one call. */
@@ -570,27 +760,30 @@ export async function createDispatch(
   input: CreateDispatchInput,
 ): Promise<{ ok: true; id: string } | { ok: false; error: string }> {
   try {
-    const res = await parcelOrgFetch<{ id: string }>("/v1/parcel-orgs/me/dispatch", {
-      method: "POST",
-      body: JSON.stringify({
-        vehiclePlate: input.vehiclePlate.trim(),
-        vehicleType: input.vehicleType,
-        originStationId: input.originStationId || null,
-        destinationStationId: input.destinationStationId || null,
-        notes: input.notes?.trim() || null,
-        crew: input.crew.map((c) => ({
-          name: c.name.trim(),
-          msisdn: c.msisdn?.trim() || null,
-          role: c.role,
-          customRole: c.customRole?.trim() || null,
-          staffId: c.staffId || null,
-        })),
-        receivers: input.receivers.map((r) => ({
-          name: r.name.trim(),
-          staffId: r.staffId || null,
-        })),
-      }),
-    });
+    const res = await parcelOrgFetch<{ id: string }>(
+      "/v1/parcel-orgs/me/dispatch",
+      {
+        method: "POST",
+        body: JSON.stringify({
+          vehiclePlate: input.vehiclePlate.trim(),
+          vehicleType: input.vehicleType,
+          originStationId: input.originStationId || null,
+          destinationStationId: input.destinationStationId || null,
+          notes: input.notes?.trim() || null,
+          crew: input.crew.map((c) => ({
+            name: c.name.trim(),
+            msisdn: c.msisdn?.trim() || null,
+            role: c.role,
+            customRole: c.customRole?.trim() || null,
+            staffId: c.staffId || null,
+          })),
+          receivers: input.receivers.map((r) => ({
+            name: r.name.trim(),
+            staffId: r.staffId || null,
+          })),
+        }),
+      },
+    );
     revalidatePath("/parcel-org/dispatch");
     return { ok: true, id: res.id };
   } catch (e) {
@@ -606,10 +799,13 @@ export async function reportDispatchPosition(
   lng: number,
 ): Promise<Result> {
   try {
-    await parcelOrgFetch(`/v1/parcel-orgs/me/dispatch/${encodeURIComponent(id)}/position`, {
-      method: "POST",
-      body: JSON.stringify({ lat, lng }),
-    });
+    await parcelOrgFetch(
+      `/v1/parcel-orgs/me/dispatch/${encodeURIComponent(id)}/position`,
+      {
+        method: "POST",
+        body: JSON.stringify({ lat, lng }),
+      },
+    );
     revalidatePath("/parcel-org/dispatch");
     return { ok: true };
   } catch (e) {
@@ -619,12 +815,18 @@ export async function reportDispatchPosition(
 
 /** The receiving team's check-in: the run is over, who signed is on
  *  the record. Blank falls back to the named receiving team. */
-export async function arriveDispatch(id: string, receivedBy: string): Promise<Result> {
+export async function arriveDispatch(
+  id: string,
+  receivedBy: string,
+): Promise<Result> {
   try {
-    await parcelOrgFetch(`/v1/parcel-orgs/me/dispatch/${encodeURIComponent(id)}/arrive`, {
-      method: "POST",
-      body: JSON.stringify({ receivedBy: receivedBy.trim() }),
-    });
+    await parcelOrgFetch(
+      `/v1/parcel-orgs/me/dispatch/${encodeURIComponent(id)}/arrive`,
+      {
+        method: "POST",
+        body: JSON.stringify({ receivedBy: receivedBy.trim() }),
+      },
+    );
     revalidatePath("/parcel-org/dispatch");
     return { ok: true };
   } catch (e) {
@@ -635,13 +837,226 @@ export async function arriveDispatch(id: string, receivedBy: string): Promise<Re
 /** Call a run off before it arrives. */
 export async function cancelDispatch(id: string): Promise<Result> {
   try {
-    await parcelOrgFetch(`/v1/parcel-orgs/me/dispatch/${encodeURIComponent(id)}/cancel`, {
-      method: "POST",
-      body: JSON.stringify({}),
-    });
+    await parcelOrgFetch(
+      `/v1/parcel-orgs/me/dispatch/${encodeURIComponent(id)}/cancel`,
+      {
+        method: "POST",
+        body: JSON.stringify({}),
+      },
+    );
     revalidatePath("/parcel-org/dispatch");
     return { ok: true };
   } catch (e) {
     return toResult(e);
+  }
+}
+
+// ── Shipment operations ──
+//
+// Shipment = one vehicle movement with parcels loaded onto it.
+// This is the counter-level equivalent of admin/operations/shipments.
+
+export interface ShipmentView {
+  id: string;
+  vehiclePlate: string;
+  vehicleType: string;
+  originLabel: string;
+  destinationLabel: string;
+  routeLabel?: string;
+  status: string;
+  driverName?: string;
+  conductorName?: string;
+  loadedCount: number;
+  expectedCount: number;
+  createdAt: string;
+}
+
+export interface DispatchCrewInput {
+  name: string;
+  msisdn?: string | null;
+  role: string;
+  customRole?: string | null;
+  staffId?: string | null;
+}
+
+export interface ShipmentInput {
+  vehiclePlate: string;
+  vehicleType: string;
+  originLabel: string;
+  destinationLabel: string;
+  routeLabel?: string;
+  driverId?: string | null;
+  conductorId?: string | null;
+  notes?: string | null;
+  crew?: DispatchCrewInput[];
+}
+
+/** Create a new shipment (vehicle movement). */
+export async function createShipment(
+  input: ShipmentInput,
+): Promise<
+  { ok: true; shipment: ShipmentView } | { ok: false; error: string }
+> {
+  try {
+    const res = await parcelOrgFetch<{ shipment: ShipmentView }>(
+      "/v1/parcel-orgs/me/shipments",
+      {
+        method: "POST",
+        body: JSON.stringify({
+          vehiclePlate: input.vehiclePlate.trim(),
+          vehicleType: input.vehicleType,
+          originLabel: input.originLabel.trim(),
+          destinationLabel: input.destinationLabel.trim(),
+          routeLabel: input.routeLabel?.trim() || null,
+          driverId: input.driverId || null,
+          conductorId: input.conductorId || null,
+          notes: input.notes?.trim() || null,
+          crew: input.crew?.map((c) => ({
+            name: c.name.trim(),
+            msisdn: c.msisdn?.trim() || null,
+            role: c.role,
+            customRole: c.customRole?.trim() || null,
+            staffId: c.staffId || null,
+          })),
+        }),
+      },
+    );
+    revalidatePath("/parcel-org/counter");
+    return { ok: true, shipment: res.shipment };
+  } catch (e) {
+    const r = toResult(e);
+    return { ok: false, error: r.ok ? "Could not create shipment" : r.error };
+  }
+}
+
+/** Join an existing active shipment to add parcels to it. */
+export async function joinShipment(
+  shipmentId: string,
+): Promise<
+  { ok: true; shipment: ShipmentView } | { ok: false; error: string }
+> {
+  try {
+    const res = await parcelOrgFetch<{ shipment: ShipmentView }>(
+      `/v1/parcel-orgs/me/shipments/${encodeURIComponent(shipmentId)}/join`,
+      {
+        method: "POST",
+      },
+    );
+    revalidatePath("/parcel-org/counter");
+    return { ok: true, shipment: res.shipment };
+  } catch (e) {
+    const r = toResult(e);
+    return { ok: false, error: r.ok ? "Could not join shipment" : r.error };
+  }
+}
+
+/** Load a parcel onto a shipment (scan to board). */
+export async function loadParcelToShipment(
+  shipmentId: string,
+  parcelCode: string,
+): Promise<
+  { ok: true; shipment: ShipmentView } | { ok: false; error: string }
+> {
+  try {
+    const res = await parcelOrgFetch<{ shipment: ShipmentView }>(
+      `/v1/parcel-orgs/me/shipments/${encodeURIComponent(shipmentId)}/load/${encodeURIComponent(parcelCode)}`,
+      {
+        method: "POST",
+      },
+    );
+    revalidatePath("/parcel-org/counter");
+    // Note: parcel code notification is handled server-side
+    return { ok: true, shipment: res.shipment };
+  } catch (e) {
+    const r = toResult(e);
+    return { ok: false, error: r.ok ? "Could not load parcel" : r.error };
+  }
+}
+
+/** Mark shipment as departed (left station). */
+export async function startShipment(
+  shipmentId: string,
+): Promise<
+  { ok: true; shipment: ShipmentView } | { ok: false; error: string }
+> {
+  try {
+    const res = await parcelOrgFetch<{ shipment: ShipmentView }>(
+      `/v1/parcel-orgs/me/shipments/${encodeURIComponent(shipmentId)}/start`,
+      {
+        method: "POST",
+      },
+    );
+    revalidatePath("/parcel-org/counter");
+    return { ok: true, shipment: res.shipment };
+  } catch (e) {
+    const r = toResult(e);
+    return { ok: false, error: r.ok ? "Could not start shipment" : r.error };
+  }
+}
+
+/** Mark shipment as arrived (reached destination). */
+export async function finishShipment(
+  shipmentId: string,
+): Promise<
+  { ok: true; shipment: ShipmentView } | { ok: false; error: string }
+> {
+  try {
+    const res = await parcelOrgFetch<{ shipment: ShipmentView }>(
+      `/v1/parcel-orgs/me/shipments/${encodeURIComponent(shipmentId)}/finish`,
+      {
+        method: "POST",
+      },
+    );
+    revalidatePath("/parcel-org/counter");
+    return { ok: true, shipment: res.shipment };
+  } catch (e) {
+    const r = toResult(e);
+    return { ok: false, error: r.ok ? "Could not finish shipment" : r.error };
+  }
+}
+
+/** Cancel an open shipment. */
+export async function cancelShipment(
+  shipmentId: string,
+): Promise<{ ok: true } | { ok: false; error: string }> {
+  try {
+    await parcelOrgFetch(
+      `/v1/parcel-orgs/me/shipments/${encodeURIComponent(shipmentId)}/cancel`,
+      {
+        method: "POST",
+        body: JSON.stringify({}),
+      },
+    );
+    revalidatePath("/parcel-org/counter");
+    return { ok: true };
+  } catch (e) {
+    const r = toResult(e);
+    return { ok: false, error: r.ok ? "Could not cancel shipment" : r.error };
+  }
+}
+
+/** List active shipments (open, in transit, or recently completed). */
+export async function listActiveShipments(): Promise<ShipmentView[]> {
+  const res = await parcelOrgFetch<{ shipments: ShipmentView[] | null }>(
+    "/v1/parcel-orgs/me/shipments?status=open,in_transit,departed",
+  );
+  return res.shipments ?? [];
+}
+
+/** Get left-behind parcels for a route (missing parcels that should have been loaded). */
+export async function getLeftBehindParcels(
+  shipmentId: string,
+): Promise<{ parcels: OrgParcelRow[] } | { ok: false; error: string }> {
+  try {
+    const res = await parcelOrgFetch<{ parcels: OrgParcelRow[] | null }>(
+      `/v1/parcel-orgs/me/shipments/${encodeURIComponent(shipmentId)}/left-behind`,
+    );
+    return { parcels: res.parcels ?? [] };
+  } catch (e) {
+    const r = toResult(e);
+    return {
+      ok: false,
+      error: r.ok ? "Could not fetch left-behind parcels" : r.error,
+    };
   }
 }

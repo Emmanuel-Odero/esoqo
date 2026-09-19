@@ -14,11 +14,12 @@ const PRIMARY: NavItem[] = [
   { href: '/me/group', icon: 'users', label: 'Group' },
   { href: '/me/payments', icon: 'coins', label: 'Payments' },
   { href: '/me/tickets', icon: 'qr', label: 'Tickets' },
-  { href: '/me/documents', icon: 'document', label: 'Papers' },
+  { href: '/me/documents', icon: 'document', label: 'Documents' },
 ];
 
 const MORE: NavItem[] = [
   { href: '/me/organiser', icon: 'calendar', label: 'Sell tickets (events & transport)' },
+  { href: '/me/vouchers', icon: 'tag', label: 'Vouchers & loyalty' },
   { href: '/me/consents', icon: 'eye', label: 'Who can see your info' },
   { href: '/me/settings', icon: 'grid', label: 'How this looks' },
 ];

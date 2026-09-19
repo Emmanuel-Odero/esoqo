@@ -2,7 +2,7 @@
 
 import Link from 'next/link';
 import type { Route } from 'next';
-import { useState } from 'react';
+import { useState, useTransition } from 'react';
 import { Icon } from '@esoqo/ui';
 import type { ParcelOrgStationRow } from '@/lib/parcel-org-session';
 import { saveOrgStation } from '../actions';
@@ -94,19 +94,23 @@ function StationForm({
   const [capacity, setCapacity] = useState(String(initial?.capacity ?? 50));
   const [active, setActive] = useState(initial?.active ?? true);
   const [error, setError] = useState<string | null>(null);
+  const [pending, startTransition] = useTransition();
 
-  async function save() {
-    const result = await saveOrgStation({
-      id: initial?.id, name, msisdn, locationHint, openingHours,
-      lat: Number(lat), lng: Number(lng), capacity: Number(capacity), active,
-    });
-    if (!result.ok) { setError(result.error); return; }
-    onDone({
-      id: initial?.id ?? crypto.randomUUID(),
-      name, msisdn, locationHint, openingHours: openingHours || null,
-      lat: Number(lat), lng: Number(lng), capacity: Number(capacity), active,
-      managerStaffId: initial?.managerStaffId ?? null,
-      memberCount: initial?.memberCount ?? 0,
+  function save() {
+    setError(null);
+    startTransition(async () => {
+      const result = await saveOrgStation({
+        id: initial?.id, name, msisdn, locationHint, openingHours,
+        lat: Number(lat), lng: Number(lng), capacity: Number(capacity), active,
+      });
+      if (!result.ok) { setError(result.error); return; }
+      onDone({
+        id: initial?.id ?? crypto.randomUUID(),
+        name, msisdn, locationHint, openingHours: openingHours || null,
+        lat: Number(lat), lng: Number(lng), capacity: Number(capacity), active,
+        managerStaffId: initial?.managerStaffId ?? null,
+        memberCount: initial?.memberCount ?? 0,
+      });
     });
   }
 
@@ -127,8 +131,10 @@ function StationForm({
       <label className="sub"><input type="checkbox" checked={active} onChange={(e) => setActive(e.target.checked)} /> Active</label>
       {error && <p role="alert" style={{ color: 'var(--red)' }}>{error}</p>}
       <div className="row" style={{ gap: 8 }}>
-        <button className="btn btn-p btn-sm" onClick={() => void save()}>Save station</button>
-        <button className="btn btn-o btn-sm" onClick={onCancel}>Cancel</button>
+        <button className="btn btn-p btn-sm" disabled={pending} onClick={save}>
+          {pending ? 'Saving…' : 'Save station'}
+        </button>
+        <button className="btn btn-o btn-sm" disabled={pending} onClick={onCancel}>Cancel</button>
       </div>
     </div>
   );
