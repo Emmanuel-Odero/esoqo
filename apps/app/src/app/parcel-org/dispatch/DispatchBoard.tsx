@@ -26,25 +26,9 @@ const CREW_ROLES: [value: string, label: string][] = [
   ['OTHER', 'Other…'],
 ];
 
-const inputStyle: React.CSSProperties = {
-  width: '100%', marginTop: 4, padding: '9px 11px',
-  border: '1.5px solid var(--line)', borderRadius: 8, fontSize: '.92rem',
-};
 
-const sectionStyle: React.CSSProperties = {
-  border: '1px solid var(--line)', borderRadius: 10, padding: '12px 14px',
-  background: 'var(--paper)',
-};
 
-const sectionTitleStyle: React.CSSProperties = {
-  margin: 0, fontSize: '.72rem', fontWeight: 700, letterSpacing: '.08em',
-  textTransform: 'uppercase', color: 'var(--tx-2)',
-};
 
-const gridStyle: React.CSSProperties = {
-  display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(170px, 1fr))',
-  gap: 10, marginTop: 8,
-};
 
 interface CrewRow {
   key: number;
@@ -179,14 +163,14 @@ export function DispatchBoard({
 
   return (
     <>
-      <div className="row" style={{ gap: 8, marginBottom: 16, flexWrap: 'wrap' }}>
-        <button className="btn btn-p btn-sm" onClick={() => setFormOpen((v) => !v)}>
-          <Icon name={formOpen ? 'close' : 'plus'} size={14} />
-          {formOpen ? 'Close' : 'New dispatch'}
+      <div className="ptoolbar">
+        <button className="btn btn-p" onClick={() => setFormOpen((v) => !v)}>
+          <Icon name={formOpen ? 'close' : 'plus'} size={16} />
+          {formOpen ? 'Close' : 'Open a run'}
         </button>
-        <label className="sub" style={{ display: 'flex', gap: 6, alignItems: 'center', marginLeft: 'auto' }}>
+        <label className="pfield-check ptoolbar-spacer porg-run-toggle">
           <input type="checkbox" checked={showClosed} onChange={(e) => setShowClosed(e.target.checked)} />
-          Show arrived &amp; cancelled
+          <span>Show arrived &amp; cancelled</span>
         </label>
       </div>
 
@@ -230,60 +214,66 @@ export function DispatchBoard({
             }}
           />
 
-          <div style={{ display: 'grid', gap: 12, marginTop: 16 }}>
+          <div className="porg-runs-grid">
             {visible.map((r) => {
               const expanded = r.id === expandedId;
               return (
               <article
                 key={r.id}
                 id={`run-${r.id}`}
-                className="card"
-                style={{
-                  padding: 16,
-                  outline: r.id === selectedId ? '2px solid var(--blue, #1565C0)' : undefined,
-                }}
+                className={`porg-run${r.id === selectedId ? ' is-selected' : ''}`}
+                data-status={r.status}
               >
-                <div style={{ display: 'flex', gap: 10, alignItems: 'flex-start', justifyContent: 'space-between', flexWrap: 'wrap' }}>
-                  <div>
-                    <span className="mono" style={{ fontWeight: 800, fontSize: '1.05rem' }}>{r.vehiclePlate}</span>
-                    <span className="sub"> · {r.vehicleType.toLowerCase()}</span>{' '}
-                    <span className={`pill ${statusPill(r.status)}`}>{statusLabel(r.status)}</span>{' '}
-                    {r.status === 'DEPARTED' && (
-                      <span className={`pill ${seenPillTone(lastSeenTone(r.currentAt))}`}>{lastSeenLabel(r.currentAt)}</span>
-                    )}
-                    <div className="sub" style={{ marginTop: 4 }}>
-                      {r.origin?.name ?? '—'} → {r.destination?.name ?? '—'}
+                <div className="porg-run-top">
+                  <div className="porg-run-main">
+                    <div className="porg-run-plate">
+                      <span className="mono">{r.vehiclePlate}</span>
+                      <span className={`pill ${statusPill(r.status)}`}>{statusLabel(r.status)}</span>
+                      {r.status === 'DEPARTED' && (
+                        <span className={`pill ${seenPillTone(lastSeenTone(r.currentAt))}`}>{lastSeenLabel(r.currentAt)}</span>
+                      )}
+                    </div>
+                    <p className="porg-run-leg">
+                      <span>{r.origin?.name ?? '—'}</span>
+                      <Icon name="arrow-right" size={14} aria-hidden="true" />
+                      <span>{r.destination?.name ?? '—'}</span>
+                    </p>
+                    <p className="porg-run-meta">
+                      {r.vehicleType.toLowerCase()}
                       {r.routeName && <> · {r.routeName}</>}
                       {' · '}{r.crew.length} crew
                       {r.receivers.length > 0 && <> · receiving: {r.receivers.map((x) => x.name).join(', ')}</>}
-                    </div>
-                    {/* What is actually on the vehicle, and the paper for
-                        it. The board could not answer either question
-                        before the merge — the parcels lived on a record
-                        this one had no key to (ADR-0006). */}
-                    <div className="row" style={{ gap: 8, marginTop: 8, alignItems: 'center' }}>
-                      <span className="pill p-info mono">
-                        {r.loaded} {r.loaded === 1 ? 'parcel' : 'parcels'}
-                      </span>
+                    </p>
+                  </div>
+                  {/* What is actually on the vehicle, and the paper for
+                      it. The board could not answer either question
+                      before the merge — the parcels lived on a record
+                      this one had no key to (ADR-0006). */}
+                  <div className="porg-run-side">
+                    <span className="porg-run-load">
+                      <b className="mono">{r.loaded}</b>
+                      {r.loaded === 1 ? 'parcel' : 'parcels'}
+                    </span>
+                    <div className="porg-run-btns">
                       <Link
                         className="btn btn-o btn-sm"
                         href={`/parcel-org/dispatch/runs/${r.id}/manifest` as Route}
                       >
                         <Icon name="print" size={14} />Manifest
                       </Link>
+                      <button
+                        className="btn btn-o btn-sm"
+                        onClick={() => {
+                          const next = expanded ? null : r.id;
+                          setExpandedId(next);
+                          if (next) document.getElementById(`run-${next}`)?.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+                        }}
+                      >
+                        {expanded ? 'Hide' : 'Details'}
+                        <Icon name="chevron-right" size={14} />
+                      </button>
                     </div>
                   </div>
-                  <button
-                    className="btn btn-o btn-sm"
-                    onClick={() => {
-                      const next = expanded ? null : r.id;
-                      setExpandedId(next);
-                      if (next) document.getElementById(`run-${next}`)?.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
-                    }}
-                  >
-                    {expanded ? 'Hide details' : 'Full details'}
-                    <Icon name="chevron-right" size={14} />
-                  </button>
                 </div>
                 {expanded && (
                   <RunDetail
@@ -437,31 +427,36 @@ function CreateDispatchForm({
   }
 
   return (
-    <section className="card" style={{ marginBottom: 18, padding: 18 }}>
-      <h2 style={{ margin: 0, fontSize: '1.05rem' }}>New dispatch</h2>
-      <p className="sub" style={{ margin: '4px 0 0', maxWidth: '70ch' }}>
-        Put a fleet on the board: the vehicle, who is aboard and what each person does,
-        where it is going, and who checks it in when it arrives.
-      </p>
+    <section className="ppanel porg-run-form">
+      <div className="ppanel-head">
+        <div>
+          <h2>Open a run</h2>
+          <p>
+            Put a vehicle on the board: who is aboard and what each person does,
+            where it is going, and who checks it in when it arrives. It opens
+            loading, so parcels can be scanned onto it before it leaves.
+          </p>
+        </div>
+      </div>
 
-      <div style={{ display: 'grid', gap: 12, marginTop: 14 }}>
-        <fieldset style={sectionStyle}>
-          <h3 style={sectionTitleStyle}>Vehicle</h3>
-          <div style={gridStyle}>
-            <label className="sub">Number plate
-              <input style={inputStyle} className="mono" value={plate} placeholder="e.g. KDK 412P"
+      <div className="ppanel-body porg-run-form-body">
+        <fieldset className="psection is-boxed">
+          <h3 className="psection-title">Vehicle</h3>
+          <div className="pgrid">
+            <label className="pfield"><span>Number plate</span>
+              <input className="mono" value={plate} placeholder="e.g. KDK 412P"
                 onChange={(e) => setPlate(e.target.value.toUpperCase())} />
             </label>
-            <label className="sub">Vehicle type
-              <select style={inputStyle} value={vehicleType} onChange={(e) => setVehicleType(e.target.value)}>
+            <label className="pfield"><span>Vehicle type</span>
+              <select value={vehicleType} onChange={(e) => setVehicleType(e.target.value)}>
                 {VEHICLE_TYPES.map((t) => <option key={t} value={t}>{t.charAt(0) + t.slice(1).toLowerCase()}</option>)}
               </select>
             </label>
           </div>
         </fieldset>
 
-        <fieldset style={sectionStyle}>
-          <h3 style={sectionTitleStyle}>Journey</h3>
+        <fieldset className="psection is-boxed">
+          <h3 className="psection-title">Journey</h3>
           {/* Route first, and it fills the two fields below. Picking one
               is the common morning case — the same leg every day — and
               typing it out is the exception, not the default. Ad-hoc
@@ -469,9 +464,8 @@ function CreateDispatchForm({
               planned for must not wait on a manager defining a route
               (ADR-0006). */}
           {routes.length > 0 && (
-            <label className="sub">Route
+            <label className="pfield"><span>Route</span>
               <select
-                style={inputStyle}
                 value={routeId}
                 onChange={(e) => {
                   const id = e.target.value;
@@ -496,17 +490,17 @@ function CreateDispatchForm({
               </em>
             </label>
           )}
-          <div style={gridStyle}>
-            <label className="sub">From
-              <select style={inputStyle} value={originId} onChange={(e) => setOriginId(e.target.value)}>
+          <div className="pgrid">
+            <label className="pfield"><span>From</span>
+              <select value={originId} onChange={(e) => setOriginId(e.target.value)}>
                 <option value="">—</option>
                 {stations.filter((s) => s.active).map((s) => (
                   <option key={s.id} value={s.id}>{s.name}</option>
                 ))}
               </select>
             </label>
-            <label className="sub">To
-              <select style={inputStyle} value={destinationId} onChange={(e) => setDestinationId(e.target.value)}>
+            <label className="pfield"><span>To</span>
+              <select value={destinationId} onChange={(e) => setDestinationId(e.target.value)}>
                 <option value="">—</option>
                 {stations.filter((s) => s.active).map((s) => (
                   <option key={s.id} value={s.id}>{s.name}</option>
@@ -514,38 +508,38 @@ function CreateDispatchForm({
               </select>
             </label>
           </div>
-          <label className="sub">Notes (optional)
-            <input style={inputStyle} value={notes} placeholder="e.g. Two crates of avocados, call on approach"
+          <label className="pfield"><span>Notes (optional)</span>
+            <input value={notes} placeholder="e.g. Two crates of avocados, call on approach"
               onChange={(e) => setNotes(e.target.value)} />
           </label>
         </fieldset>
 
-        <fieldset style={sectionStyle}>
-          <h3 style={sectionTitleStyle}>Crew aboard</h3>
+        <fieldset className="psection is-boxed">
+          <h3 className="psection-title">Crew aboard</h3>
           <div style={{ display: 'grid', gap: 10, marginTop: 8 }}>
             {crew.map((c) => (
               <div key={c.key} style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))', gap: 8, alignItems: 'end' }}>
-                <label className="sub">Name
-                  <input style={inputStyle} value={c.name} placeholder="e.g. Otieno"
+                <label className="pfield"><span>Name</span>
+                  <input value={c.name} placeholder="e.g. Otieno"
                     onChange={(e) => patchCrew(c.key, { name: e.target.value })} />
                 </label>
-                <label className="sub">Phone (optional)
-                  <input style={inputStyle} className="mono" value={c.msisdn} placeholder="07…" inputMode="tel"
+                <label className="pfield"><span>Phone (optional)</span>
+                  <input className="mono" value={c.msisdn} placeholder="07…" inputMode="tel"
                     onChange={(e) => patchCrew(c.key, { msisdn: e.target.value })} />
                 </label>
-                <label className="sub">Role
-                  <select style={inputStyle} value={c.role} onChange={(e) => patchCrew(c.key, { role: e.target.value })}>
+                <label className="pfield"><span>Role</span>
+                  <select value={c.role} onChange={(e) => patchCrew(c.key, { role: e.target.value })}>
                     {CREW_ROLES.map(([v, l]) => <option key={v} value={v}>{l}</option>)}
                   </select>
                 </label>
                 {c.role === 'OTHER' && (
-                  <label className="sub">Custom role
-                    <input style={inputStyle} value={c.customRole} placeholder="e.g. Mechanic"
+                  <label className="pfield"><span>Custom role</span>
+                    <input value={c.customRole} placeholder="e.g. Mechanic"
                       onChange={(e) => patchCrew(c.key, { customRole: e.target.value })} />
                   </label>
                 )}
-                <label className="sub">On the roster?
-                  <select style={inputStyle} value={c.staffId}
+                <label className="pfield"><span>On the roster?</span>
+                  <select value={c.staffId}
                     onChange={(e) => {
                       const id = e.target.value;
                       const member = staff.find((s) => s.id === id);
@@ -573,8 +567,8 @@ function CreateDispatchForm({
           </button>
         </fieldset>
 
-        <fieldset style={sectionStyle}>
-          <h3 style={sectionTitleStyle}>Receiving team — checks the run in on arrival</h3>
+        <fieldset className="psection is-boxed">
+          <h3 className="psection-title">Receiving team — checks the run in on arrival</h3>
           {staff.length === 0 ? (
             <p className="sub">No team members yet — type a name below instead.</p>
           ) : (
@@ -593,7 +587,7 @@ function CreateDispatchForm({
           )}
           <div className="row" style={{ gap: 8, marginTop: 10 }}>
             <input
-              style={{ ...inputStyle, marginTop: 0, flex: 1 }}
+              className="pinput" style={{ flex: 1 }}
               value={receiverName}
               placeholder="Or type a name at the counter…"
               onChange={(e) => setReceiverName(e.target.value)}
@@ -613,14 +607,24 @@ function CreateDispatchForm({
             </p>
           )}
         </fieldset>
-      </div>
 
-      {error && <p role="alert" className="sub" style={{ color: 'var(--red)', marginTop: 12 }}>{error}</p>}
+        {error && (
+          <p role="alert" className="pnote pnote-bad">
+            <Icon name="alert-circle" size={16} /><span>{error}</span>
+          </p>
+        )}
 
-      <div className="row" style={{ gap: 8, marginTop: 14 }}>
-        <button className="btn btn-p btn-sm" disabled={pending || !ready} onClick={save}>
-          {pending ? 'Opening…' : 'Open dispatch'}
-        </button>
+        {/* The primary action sits inside the panel body, at the end of
+            the thing it commits — it used to float outside the padded
+            area against the card edge. */}
+        <div className="ptoolbar porg-run-form-actions">
+          <button className="btn btn-p" disabled={pending || !ready} onClick={save}>
+            <Icon name="send" size={16} />{pending ? 'Opening…' : 'Open the run'}
+          </button>
+          {!ready && (
+            <span className="sub">Needs a plate, a destination, and at least one crew member.</span>
+          )}
+        </div>
       </div>
     </section>
   );
@@ -736,9 +740,9 @@ function RunDetail({
         </p>
       )}
 
-      <div style={gridStyle}>
+      <div className="pgrid">
         <div>
-          <h4 style={sectionTitleStyle}>Driver</h4>
+          <h4 className="psection-title">Driver</h4>
           {!driver ? (
             <p className="sub" style={{ margin: '8px 0 0' }}>No crew recorded on this run.</p>
           ) : (
@@ -755,7 +759,7 @@ function RunDetail({
           )}
           {others.length > 0 && (
             <>
-              <h4 style={{ ...sectionTitleStyle, marginTop: 12 }}>Also aboard</h4>
+              <h4 className="psection-title" style={{ marginTop: 12 }}>Also aboard</h4>
               <ul style={{ margin: '8px 0 0', paddingLeft: 18 }}>
                 {others.map((c) => (
                   <li key={c.id} style={{ marginBottom: 4 }}>
@@ -768,7 +772,7 @@ function RunDetail({
           )}
         </div>
         <div>
-          <h4 style={sectionTitleStyle}>Receiving team</h4>
+          <h4 className="psection-title">Receiving team</h4>
           {run.receivers.length === 0 ? (
             <p className="sub" style={{ margin: '8px 0 0' }}>Nobody named — say who signed on arrival.</p>
           ) : (
@@ -789,16 +793,16 @@ function RunDetail({
 
       {isActive && (
         <>
-          <div style={{ ...sectionStyle, marginTop: 12 }}>
-            <h4 style={sectionTitleStyle}>Where is the fleet now?</h4>
+          <div className="psection is-boxed" style={{ marginTop: 12 }}>
+            <h4 className="psection-title">Where is the fleet now?</h4>
             <div className="row" style={{ gap: 8, marginTop: 8, flexWrap: 'wrap' }}>
               <input
-                style={{ ...inputStyle, marginTop: 0, maxWidth: 170 }} className="mono"
+                className="pinput mono" style={{ maxWidth: 170 }}
                 value={lat} placeholder="Latitude" inputMode="decimal"
                 onChange={(e) => setLat(e.target.value.replace(/[^\d.-]/g, ''))}
               />
               <input
-                style={{ ...inputStyle, marginTop: 0, maxWidth: 170 }} className="mono"
+                className="pinput mono" style={{ maxWidth: 170 }}
                 value={lng} placeholder="Longitude" inputMode="decimal"
                 onChange={(e) => setLng(e.target.value.replace(/[^\d.-]/g, ''))}
               />
@@ -812,7 +816,7 @@ function RunDetail({
           </div>
           <div className="row" style={{ gap: 8, marginTop: 12, flexWrap: 'wrap' }}>
             <input
-              style={{ ...inputStyle, marginTop: 0, flex: 1, minWidth: 200 }}
+              className="pinput" style={{ flex: 1, minWidth: 200 }}
               value={receivedBy}
               placeholder={run.receivers.length > 0 ? `Who signed? (${run.receivers.map((r) => r.name).join(', ')})` : 'Who signed at the counter?'}
               onChange={(e) => setReceivedBy(e.target.value)}
