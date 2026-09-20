@@ -1,0 +1,26 @@
+{
+  "name": "Our Jamii · CECF Community Pages",
+  "short_name": "Our Jamii",
+  "description": "A mini-site and crowdfunding page for community impact groups, from CECF",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#FFFFFF",
+  "theme_color": "#16233B",
+  "icons": [
+    {
+      "src": "/favicon-32x32.png", 
+      "sizes": "32x32",
+      "type": "image/png"
+    },
+    {
+      "src": "/apple-touch-icon.png",
+      "sizes": "180x180",
+      "type": "image/png"
+    },
+    {
+      "src": "/favicon.ico",
+      "sizes": "16x16 32x32", 
+      "type": "image/x-icon"
+    }
+  ]
+}

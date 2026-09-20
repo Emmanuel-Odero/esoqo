@@ -1,0 +1,26 @@
+{
+  "name": "Esoqo Store",
+  "short_name": "Store",
+  "description": "Open a store, sell online and in person, and get paid the way your customers already pay",
+  "start_url": "/",
+  "display": "standalone", 
+  "background_color": "#FFFFFF",
+  "theme_color": "#0A2E4D",
+  "icons": [
+    {
+      "src": "/favicon-32x32.png",
+      "sizes": "32x32",
+      "type": "image/png"
+    },
+    {
+      "src": "/apple-touch-icon.png",
+      "sizes": "180x180",
+      "type": "image/png"
+    },
+    {
+      "src": "/favicon.ico",
+      "sizes": "16x16 32x32",
+      "type": "image/x-icon"
+    }
+  ]
+}
