@@ -1,0 +1,286 @@
+/* ══════════════════════════════════════════════════════════════
+   The scanner — /parcel-org/scan.
+
+   Sized for the real thing: a handset or a mounted tablet at a
+   counter, held by someone working fast with a customer waiting.
+   Everything here is bigger than the rest of the portal on purpose.
+   Primary actions are 56px tall, the scan box is 64px, and the
+   digit boxes are 58×64 — a mis-tap at a counter costs a retyped
+   code and a queue, which is dearer than the vertical space.
+
+   Values come from @esoqo/ui tokens except where a fixed physical
+   size is the point (the code boxes, the scan bar).
+   ══════════════════════════════════════════════════════════════ */
+
+.scan-console { max-width: 760px; margin: 0 auto }
+
+/* ── the scan box ────────────────────────────────────────────── */
+.scanbar {
+  position: sticky; top: 72px; z-index: 20;
+  display: flex; align-items: center; gap: 12px;
+  padding: 10px 12px; margin-bottom: 18px;
+  background: linear-gradient(115deg, #fff 55%, var(--green-t));
+  border: 1.5px solid #BFE0CE; border-radius: var(--r-lg);
+  box-shadow: var(--sh-m);
+}
+.scanbar-ic {
+  flex: none; width: 44px; height: 44px; border-radius: 12px;
+  display: grid; place-items: center;
+  background: var(--green-t); color: var(--green);
+}
+.scanbar-form { flex: 1; min-width: 0 }
+.scanbar-input {
+  width: 100%; min-height: 64px; padding: 0 14px;
+  border: 0; background: none; outline: none;
+  font-family: var(--font-mono); font-size: 1.15rem; letter-spacing: .04em;
+  color: var(--navy);
+}
+.scanbar-input::placeholder { color: var(--tx-3); letter-spacing: 0; font-size: .95rem }
+.scanbar-input:disabled { opacity: .5 }
+
+.scan-note { margin-bottom: 16px; align-items: flex-start }
+.scan-note svg { flex: none; margin-top: 2px }
+
+/* ── resting / working states ────────────────────────────────── */
+.scan-idle, .scan-done {
+  text-align: center; padding: 44px 24px;
+  border: 1.5px dashed var(--line); border-radius: var(--r-xl);
+  background: rgba(255, 255, 255, .6);
+}
+.scan-idle h2, .scan-done h2 { font-size: 1.25rem; margin: 0 0 6px }
+.scan-idle p, .scan-done p { color: var(--tx-2); margin: 0 auto; max-width: 46ch; font-size: .95rem }
+.scan-idle-ic, .scan-done-ic {
+  width: 64px; height: 64px; border-radius: 18px; margin: 0 auto 14px;
+  display: grid; place-items: center;
+  background: var(--paper); color: var(--tx-3);
+}
+.scan-idle-ic.is-busy { color: var(--green); background: var(--green-t) }
+.scan-idle-ic.is-busy svg { animation: scan-spin 1s linear infinite }
+@keyframes scan-spin { to { transform: rotate(360deg) } }
+
+.scan-done { border-style: solid; background: #fff; box-shadow: var(--sh-s) }
+.scan-done.ok { border-color: #BFE0CE }
+.scan-done.ok .scan-done-ic { background: var(--green-t); color: var(--green) }
+.scan-done.warn { border-color: #E8D2A0 }
+.scan-done.warn .scan-done-ic { background: var(--amber-t); color: var(--amber) }
+.scan-done-code { font-size: 1.05rem; color: var(--navy); margin: 0 0 6px; letter-spacing: .04em }
+.scan-done .btn { margin-top: 18px }
+
+/* ── the verdict panel ───────────────────────────────────────── */
+.scan-panel {
+  border: 1.5px solid var(--line); border-radius: var(--r-xl);
+  background: #fff; box-shadow: var(--sh-s); overflow: hidden;
+}
+.scan-panel.info { border-color: #C9DFEE }
+.scan-panel.warn { border-color: #E8D2A0 }
+.scan-panel.ok { border-color: #BFE0CE }
+
+.scan-panel-head {
+  display: flex; align-items: center; gap: 13px;
+  padding: 16px 20px; border-bottom: 1px solid var(--line);
+  background: var(--paper);
+}
+.scan-panel.info .scan-panel-head { background: var(--blue-t) }
+.scan-panel.warn .scan-panel-head { background: var(--amber-t) }
+.scan-panel.ok .scan-panel-head { background: var(--green-t) }
+.scan-panel-ic {
+  flex: none; width: 42px; height: 42px; border-radius: 12px;
+  display: grid; place-items: center; background: #fff; color: var(--navy);
+}
+.scan-panel.info .scan-panel-ic { color: var(--blue) }
+.scan-panel.warn .scan-panel-ic { color: var(--amber) }
+.scan-panel.ok .scan-panel-ic { color: var(--green) }
+.scan-panel-head h2 { font-size: 1.12rem; margin: 0; letter-spacing: -.02em }
+/* Not --tx-2: that token is tuned against white and lands at 4.48:1 on
+   the tinted panel headers, just under 1.4.3's 4.5 floor. One step
+   darker clears it on all three tints (blue 4.9, amber 5.4, green 5.7)
+   while still reading as secondary to the heading above it. */
+.scan-panel-code { margin: 2px 0 0; font-size: .82rem; color: #445C72; letter-spacing: .05em }
+
+.scan-panel-body { padding: 20px }
+.scan-panel-body > p { color: var(--tx-2); margin: 0 0 14px; max-width: 58ch }
+.scan-panel-body > .hint { margin-top: 12px }
+
+/* What the clerk checks the box against. */
+.scan-facts {
+  display: grid; gap: 10px 20px; margin: 0 0 16px;
+  padding: 14px 16px; background: var(--paper); border-radius: var(--r-md);
+}
+.scan-facts > div { min-width: 0 }
+/* Bigger and darker than the portal's usual mono label. At .6rem/--tx-3
+   these came out 9.6px at 4.37:1 on the paper fill — under the contrast
+   floor, and too small to skim on a mounted tablet at arm's length.
+   These four words are what a clerk checks the physical box against, so
+   they are the last thing that should be set in the smallest type on
+   the page. */
+.scan-facts dt {
+  font-family: var(--font-mono); font-size: .66rem; letter-spacing: .12em;
+  text-transform: uppercase; color: #445C72; margin-bottom: 2px;
+}
+.scan-facts dd { margin: 0; font-weight: 600; font-size: .94rem; overflow-wrap: anywhere }
+.scan-facts dd .mono { font-weight: 500; color: var(--tx-2) }
+@media (min-width: 560px) { .scan-facts { grid-template-columns: 1fr 1fr } }
+
+.scan-actions { display: flex; gap: 10px; flex-wrap: wrap; margin-top: 4px }
+.scan-actions .btn-lg { flex: 1 1 260px; min-height: 56px; font-size: 1rem }
+
+/* A plain text button that reads as a link — used for the secondary
+   routes that must be reachable without competing with the main one. */
+.linkbtn {
+  display: inline-flex; align-items: center; gap: 6px;
+  border: 0; background: none; padding: 4px 0; min-height: 36px;
+  font-family: inherit; font-size: .86rem; font-weight: 600;
+  color: var(--blue); cursor: pointer;
+}
+.linkbtn:hover { text-decoration: underline }
+
+/* ── the moving-parcel fork ──────────────────────────────────── */
+.scan-fork-q { font-weight: 700; color: var(--navy) !important; font-size: 1rem !important }
+.scan-fork { display: grid; gap: 10px }
+@media (min-width: 620px) { .scan-fork { grid-template-columns: 1fr 1fr } }
+.scan-fork-opt {
+  display: flex; align-items: flex-start; gap: 12px; text-align: left;
+  padding: 16px; min-height: 92px;
+  border: 1.5px solid var(--line); border-radius: var(--r-lg);
+  background: #fff; cursor: pointer; font-family: inherit;
+  transition: border-color var(--dur-fast), box-shadow var(--dur-fast), transform var(--dur-fast);
+}
+.scan-fork-opt:hover:not(:disabled) {
+  border-color: var(--navy); box-shadow: var(--sh-m); transform: translateY(-1px);
+}
+.scan-fork-opt:disabled { opacity: .45; cursor: not-allowed }
+.scan-fork-opt:focus-visible { outline: 3px solid rgba(31, 161, 99, .28); outline-offset: 2px }
+.scan-fork-ic {
+  flex: none; width: 42px; height: 42px; border-radius: 12px;
+  display: grid; place-items: center; background: var(--blue-t); color: var(--blue);
+}
+.scan-fork-opt.is-final .scan-fork-ic { background: var(--green-t); color: var(--green) }
+.scan-fork-opt.is-final:hover:not(:disabled) { border-color: var(--green) }
+.scan-fork-opt strong { display: block; font-size: .98rem; color: var(--navy); margin-bottom: 3px }
+.scan-fork-opt small { display: block; font-size: .81rem; color: var(--tx-2); line-height: 1.4 }
+
+/* ── the run picker ──────────────────────────────────────────── */
+.runs { margin-top: 18px; padding-top: 16px; border-top: 1px solid var(--line) }
+.runs-label {
+  margin: 0 0 10px; font-weight: 700; font-size: .95rem; color: var(--navy);
+}
+.runs-list { list-style: none; margin: 0 0 10px; padding: 0; display: grid; gap: 8px }
+.run {
+  display: flex; align-items: center; gap: 13px; width: 100%; text-align: left;
+  padding: 13px 15px; min-height: 68px;
+  border: 1.5px solid var(--line); border-radius: var(--r-lg);
+  background: #fff; cursor: pointer; font-family: inherit;
+  transition: border-color var(--dur-fast), box-shadow var(--dur-fast);
+}
+.run:hover:not(:disabled) { border-color: var(--green); box-shadow: var(--sh-s) }
+.run:disabled { opacity: .5; cursor: progress }
+.run:focus-visible { outline: 3px solid rgba(31, 161, 99, .28); outline-offset: 2px }
+.run-plate {
+  flex: none; padding: 7px 11px; border-radius: var(--r-sm);
+  background: var(--navy); color: #fff; font-size: .82rem; font-weight: 600;
+  letter-spacing: .04em; white-space: nowrap;
+}
+.run-leg { flex: 1; min-width: 0 }
+.run-leg strong { display: block; font-size: .96rem; color: var(--navy) }
+.run-leg small { display: block; font-size: .79rem; color: var(--tx-2); margin-top: 2px }
+.run-go { flex: none; color: var(--tx-3) }
+.run:hover .run-go { color: var(--green) }
+
+.runs-empty {
+  margin-top: 18px; padding: 16px; border-radius: var(--r-md);
+  background: var(--paper); border: 1px dashed var(--line);
+}
+.runs-empty p {
+  display: flex; align-items: center; gap: 9px;
+  margin: 0 0 12px; font-size: .9rem; color: var(--tx-2);
+}
+.runs-empty p svg { flex: none; color: var(--tx-3) }
+.runs-empty .btn:only-child, .runs-empty .btn { width: 100%; justify-content: center }
+
+.runs-new { margin-top: 18px; padding-top: 16px; border-top: 1px solid var(--line) }
+.runs-new-grid { display: grid; gap: 12px; margin-bottom: 14px }
+@media (min-width: 560px) { .runs-new-grid { grid-template-columns: 1fr 1fr } }
+.runs-new .fld { margin: 0 }
+
+/* ── settle / cash rows ──────────────────────────────────────── */
+.scan-settle { margin-top: 4px }
+.scan-settle-row { display: flex; align-items: center; gap: 9px; flex-wrap: wrap }
+.scan-settle-cur {
+  font-family: var(--font-mono); font-size: .8rem; font-weight: 600;
+  color: var(--tx-2); padding: 0 2px;
+}
+.scan-settle-row .inp { flex: 1 1 130px; min-width: 0; min-height: 52px; font-size: 1.05rem }
+.scan-settle-row .btn { flex: none; min-height: 52px }
+
+/* ── hand-over ───────────────────────────────────────────────── */
+.handover-who { margin: 18px 0 0 }
+.handover-who .inp { min-height: 54px; font-size: 1.02rem }
+.handover-err { margin: 14px 0 0; font-size: .9rem; align-items: flex-start }
+.handover-err svg { flex: none; margin-top: 2px }
+.handover-alt {
+  display: flex; flex-direction: column; align-items: flex-start; gap: 2px;
+  margin-top: 16px; padding-top: 14px; border-top: 1px solid var(--line);
+}
+/* The OTP route sits where the code boxes were, so it needs their
+   bottom margin too — without it "Send the code" collides with the
+   "Who is taking it?" label underneath. */
+.handover-otp-start { margin-bottom: 20px }
+.handover-otp-start p { color: var(--tx-2); font-size: .92rem; margin: 0 0 12px }
+.handover .scan-actions { margin-top: 18px }
+
+/* ── the code boxes (packages/ui CodeInput) ──────────────────── */
+.codein { margin: 6px 0 0 }
+.codein-label {
+  display: block; font-weight: 700; font-size: .95rem;
+  color: var(--navy); margin-bottom: 10px;
+}
+.codein-boxes { display: flex; gap: 8px; flex-wrap: nowrap }
+.codein-box {
+  flex: 1 1 0; min-width: 0; width: 100%;
+  height: 64px; padding: 0;
+  border: 2px solid var(--line); border-radius: var(--r-md);
+  background: #fff; text-align: center;
+  font-size: 1.6rem; font-weight: 600; color: var(--navy);
+  /* The digit is the whole content of the box — tracking that helps a
+     six-character string read as a string works against a single
+     character centred in its own frame. */
+  letter-spacing: 0;
+  transition: border-color var(--dur-fast), box-shadow var(--dur-fast);
+}
+.codein-box:focus {
+  outline: none; border-color: var(--green);
+  box-shadow: 0 0 0 3px rgba(31, 161, 99, .16);
+}
+.codein-box:disabled { background: var(--paper); opacity: .6 }
+.codein-boxes.is-invalid .codein-box {
+  border-color: var(--red); background: var(--red-t);
+}
+/* 320–380px phones: six 64px boxes plus gaps need ~430px. Shrink the
+   boxes rather than wrapping them — a code split across two rows stops
+   reading as one number. */
+@media (max-width: 430px) {
+  .codein-boxes { gap: 5px }
+  .codein-box { height: 56px; font-size: 1.35rem; border-width: 1.5px }
+}
+
+/* ── phones ──────────────────────────────────────────────────── */
+@media (max-width: 560px) {
+  .scanbar { top: 0; padding: 8px 10px; gap: 9px; border-radius: var(--r-md) }
+  .scanbar-ic { width: 38px; height: 38px }
+  .scanbar-input { min-height: 56px; font-size: 1.05rem }
+  .scan-panel-body { padding: 16px }
+  .scan-panel-head { padding: 14px 16px }
+  .scan-idle, .scan-done { padding: 32px 18px }
+  .scan-actions .btn, .scan-actions .btn-lg { width: 100%; flex: 1 1 100% }
+}
+
+/* ── page head ───────────────────────────────────────────────── */
+.scan-head { max-width: 760px; margin: 0 auto 16px }
+.scan-head h1 { font-size: clamp(1.3rem, 2.6vw, 1.6rem); letter-spacing: -.025em; margin: 0 }
+.scan-head p:not(.kicker) {
+  margin: 6px 0 0; color: var(--tx-2); font-size: .92rem; max-width: 58ch;
+}
+@media (max-width: 560px) {
+  .scan-head { margin-bottom: 12px }
+  .scan-head p:not(.kicker) { font-size: .88rem }
+}

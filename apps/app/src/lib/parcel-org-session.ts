@@ -87,11 +87,34 @@ export class ParcelOrgRequestError extends Error {
 }
 
 /**
+ * Codes that genuinely mean "this session is no good" as opposed to
+ * "this session may not do that to that thing".
+ *
+ * The distinction matters because core-go returns 403 for both, and
+ * treating the status alone as a session verdict turned every domain
+ * refusal into "your shift session has expired". A clerk told that
+ * would sign out, sign back in, and hit exactly the same wall — with
+ * the one sentence that would have explained it ("You aren't holding
+ * this parcel", "This parcel is assigned to another collector")
+ * discarded on the way through. See dbx's ParcelError codes, which are
+ * all mapped to 403 by parcelErrorStatus.
+ */
+const SESSION_ERROR_CODES = new Set([
+  "UNAUTHENTICATED",
+  "SESSION_EXPIRED",
+  "SESSION_LOOKUP_FAILED",
+  "DENIED",
+]);
+
+/**
  * Calls core-go with the portal's bearer attached.
  *
- * A 401 or 403 becomes ParcelOrgUnauthorised rather than a generic
- * error: both mean the same thing to this portal (this login can't do
- * that), and the caller decides whether to redirect or explain.
+ * A dead or insufficient SESSION becomes ParcelOrgUnauthorised, so the
+ * caller can redirect to the company's own door. Anything else — the
+ * parcel refusing the operation, a label already spent, a run that has
+ * left — comes back as a ParcelOrgRequestError carrying core-go's own
+ * code and prose, because those are answers the person at the desk can
+ * act on and a redirect would throw away.
  */
 export async function parcelOrgFetch<T>(
   path: string,
@@ -111,8 +134,17 @@ export async function parcelOrgFetch<T>(
     signal: AbortSignal.timeout(15000),
   });
   const json = (await res.json().catch(() => null)) as (T & GoErrorBody) | null;
-  if (res.status === 401 || res.status === 403)
-    throw new ParcelOrgUnauthorised();
+  if (res.status === 401 || res.status === 403) {
+    const code = json?.error?.code ?? "";
+    // No code at all is treated as a session failure: that is what a
+    // proxy or an edge 403 with no JSON body looks like, and "sign in
+    // again" is the safer guess when the server said nothing.
+    if (!code || SESSION_ERROR_CODES.has(code)) throw new ParcelOrgUnauthorised();
+    throw new ParcelOrgRequestError(
+      code,
+      json?.error?.message ?? `Request failed (${res.status})`,
+    );
+  }
   if (!res.ok || !json) {
     throw new ParcelOrgRequestError(
       json?.error?.code ?? `HTTP_${res.status}`,
@@ -176,6 +208,37 @@ export interface ParcelOrgMe {
   org: ParcelOrgSummary;
   stats: ParcelOrgStats;
   capabilities: string[];
+  /**
+   * Whether this login can physically hold a parcel.
+   *
+   * False for a roster row with no linked partyId — an office-only
+   * login. core-go's ScanHandoff deliberately leaves
+   * currentHolderPartyId untouched for those (there is no Party to
+   * attribute custody to), and DeliverParcel refuses anyone who isn't
+   * the current holder. So such a login can receive boxes all day and
+   * never hand one over. The scanner reads this up front and says what
+   * to fix, rather than letting it surface as a FORBIDDEN on the last
+   * step with a receiver standing at the counter.
+   *
+   * Optional so a portal talking to a core-go that predates the field
+   * still renders — undefined is treated as "assume capable", which is
+   * the pre-existing behaviour.
+   */
+  custodyCapable?: boolean;
+}
+
+/** One of the company's own vehicle runs that is still loading —
+ *  what the counter's "receive and load" picker chooses between.
+ *  Mirrors dbx.OrgShipment. */
+export interface OrgShipment {
+  id: string;
+  originLabel: string;
+  destinationLabel: string;
+  routeLabel: string;
+  vehiclePlate: string;
+  status: string;
+  loaded: number;
+  createdAt: string;
 }
 
 /** The session profile, fetched once per request. The layout calls this

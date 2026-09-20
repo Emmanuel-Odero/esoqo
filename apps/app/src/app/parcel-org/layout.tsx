@@ -54,6 +54,13 @@ export default async function ParcelOrgLayout({ children }: { children: React.Re
   // front-desk worklist (carry) — so anyone with either capability gets
   // the one nav entry.
   const canDesk = canDispatch || me.capabilities.includes('parcelorg.carry');
+  // The scanner serves every role that touches a physical box — a rider
+  // taking custody, an intake clerk receiving a walk-in, an arrival
+  // clerk handing one over. Broader than Counter's gate on purpose:
+  // Counter is about creating bookings, this is about boxes.
+  const canScan = canDesk
+    || me.capabilities.includes('parcelorg.intake')
+    || me.capabilities.includes('parcelorg.arrival');
 
   const nav: ParcelOrgNavItem[] = [
     // One entry per job, each owned by exactly one page:
@@ -65,6 +72,11 @@ export default async function ParcelOrgLayout({ children }: { children: React.Re
     //              "Pricing", so it can't be confused with transport Fares
     //              in the ticket organiser console)
     { href: '/parcel-org', label: 'Parcels', icon: 'box' },
+    // Scan sits second, right after the register, because it is the
+    // entry point for every job that starts with a box in someone's
+    // hands — which is most of them. It is the one page that needs no
+    // decision before it is useful: open it and scan.
+    ...(canScan ? [{ href: '/parcel-org/scan', label: 'Scan', icon: 'qr' as const }] : []),
     ...(canDispatch ? [{ href: '/parcel-org/dispatch', label: 'Dispatch', icon: 'send' as const }] : []),
     ...(canDesk ? [{ href: '/parcel-org/counter', label: 'Counter', icon: 'plus' as const, badge: me.stats.awaitingDropoff || undefined }] : []),
     ...(canManagePricing ? [{ href: '/parcel-org/pricing', label: 'Rates', icon: 'tag' as const }] : []),

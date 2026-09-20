@@ -305,6 +305,20 @@ func (s *Server) handleGetMyParcelOrg(c *gin.Context) {
 		"stats":        stats,
 		"role":         ctx.ActorType,
 		"capabilities": ctx.Capabilities,
+		// custodyCapable — whether this login can physically hold a
+		// parcel. A roster row with no linked partyId (an office-only
+		// login, created before the member had an Esoqo number) gets an
+		// empty PartyID here, and dbx.ScanHandoff's no-Party branch then
+		// leaves currentHolderPartyId untouched by design. That is fine
+		// for a desk receipt and fatal at the far end: DeliverParcel
+		// refuses anyone who isn't the current holder, so such a login
+		// can receive boxes all day and never hand one over.
+		//
+		// Surfaced rather than left to be discovered as a FORBIDDEN at
+		// the counter with a receiver standing there. The scanner reads
+		// it up front and says what to fix (link the number on Team)
+		// instead of failing at the last step of the last screen.
+		"custodyCapable": ctx.PartyID != "",
 		// expiresAt — unix millis, so a client can render "signed in
 		// for another Xh Ym" without a separate call. 0 for a session
 		// minted before this field existed.
