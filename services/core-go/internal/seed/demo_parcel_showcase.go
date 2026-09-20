@@ -433,31 +433,34 @@ func seedShowcaseForOrg(ctx context.Context, pool *pgxpool.Pool, cfg showcaseOrg
 
 	// One active dispatch run so the dispatch board + live map have a
 	// vehicle to draw, not just dots.
-	var dispatchID string
-	_ = pool.QueryRow(ctx, `SELECT id FROM parcel_dispatch WHERE "parcelOrgId"=$1 AND status='ACTIVE' LIMIT 1`, orgID).Scan(&dispatchID)
-	if dispatchID == "" {
+	var runID string
+	_ = pool.QueryRow(ctx, `SELECT id FROM parcel_shipment WHERE "parcelOrgId"=$1 AND status='DEPARTED' LIMIT 1`, orgID).Scan(&runID)
+	if runID == "" {
 		stationA := stationIDByName[cfg.stationA]
 		stationB := stationIDByName[cfg.stationB]
-		err := pool.QueryRow(ctx, `INSERT INTO parcel_dispatch (id, "parcelOrgId", "vehiclePlate", "vehicleType",
-			"originStationId", "destinationStationId", status, notes, "currentLat", "currentLng", "currentAt", "createdAt")
-			VALUES (gen_random_uuid(), $1, $2, 'VAN', $3, $4, 'ACTIVE',
-			$5, $6, $7, now(), now()) RETURNING id`,
-			orgID, cfg.dispatchPlate, stationA, stationB, cfg.dispatchNotes, cfg.dispatchLat, cfg.dispatchLng).Scan(&dispatchID)
+		err := pool.QueryRow(ctx, `INSERT INTO parcel_shipment (id, "parcelOrgId", "vehiclePlate", "vehicleType",
+			"originStationId", "destinationStationId", status, notes, "currentLat", "currentLng", "currentAt", "createdAt",
+			"originLabel", "destinationLabel")
+			VALUES (gen_random_uuid(), $1, $2, 'VAN', $3, $4, 'DEPARTED',
+			$5, $6, $7, now(), now(),
+			COALESCE((SELECT name FROM parcel_agent WHERE id = $3), 'Origin'),
+			COALESCE((SELECT name FROM parcel_agent WHERE id = $4), 'Destination')) RETURNING id`,
+			orgID, cfg.dispatchPlate, stationA, stationB, cfg.dispatchNotes, cfg.dispatchLat, cfg.dispatchLng).Scan(&runID)
 		if err != nil {
 			return fmt.Errorf("dispatch: %w", err)
 		}
 		var crewStaff, receiverStaff string
 		_ = pool.QueryRow(ctx, `SELECT id FROM parcel_org_staff WHERE "orgId"=$1 AND name=$2`, orgID, cfg.crewName).Scan(&crewStaff)
 		_ = pool.QueryRow(ctx, `SELECT id FROM parcel_org_staff WHERE "orgId"=$1 AND name=$2`, orgID, cfg.receiverName).Scan(&receiverStaff)
-		_, _ = pool.Exec(ctx, `INSERT INTO parcel_dispatch_crew (id, "dispatchId", name, role, "staffId")
-			VALUES (gen_random_uuid(), $1, $2, 'DRIVER', $3) ON CONFLICT DO NOTHING`, dispatchID, cfg.crewName, nullableUUID(crewStaff))
-		_, _ = pool.Exec(ctx, `INSERT INTO parcel_dispatch_receiver (id, "dispatchId", name, "staffId")
-			VALUES (gen_random_uuid(), $1, $2, $3) ON CONFLICT DO NOTHING`, dispatchID, cfg.receiverName, nullableUUID(receiverStaff))
+		_, _ = pool.Exec(ctx, `INSERT INTO parcel_run_crew (id, "runId", name, role, "staffId")
+			VALUES (gen_random_uuid(), $1, $2, 'DRIVER', $3) ON CONFLICT DO NOTHING`, runID, cfg.crewName, nullableUUID(crewStaff))
+		_, _ = pool.Exec(ctx, `INSERT INTO parcel_run_receiver (id, "runId", name, "staffId")
+			VALUES (gen_random_uuid(), $1, $2, $3) ON CONFLICT DO NOTHING`, runID, cfg.receiverName, nullableUUID(receiverStaff))
 	}
-	if dispatchID != "" {
-		_, _ = pool.Exec(ctx, `INSERT INTO parcel_dispatch_ping (id, "dispatchId", lat, lng, at)
+	if runID != "" {
+		_, _ = pool.Exec(ctx, `INSERT INTO parcel_run_ping (id, "runId", lat, lng, at)
 			VALUES (gen_random_uuid(), $1, $2, $3, now()),
-			       (gen_random_uuid(), $1, $2, $3, now() - interval '12 minutes')`, dispatchID, cfg.dispatchLat, cfg.dispatchLng)
+			       (gen_random_uuid(), $1, $2, $3, now() - interval '12 minutes')`, runID, cfg.dispatchLat, cfg.dispatchLng)
 	}
 
 	// Label stock so the counter's label picker isn't empty — and so

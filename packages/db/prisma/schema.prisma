@@ -4012,8 +4012,8 @@ model ParcelOrg {
   couriers     ParcelCourier[]
   pricingRules ParcelPricingRule[]
   labelStock   ParcelLabelStock[]
-  dispatches   ParcelDispatch[]
-  shipments    ParcelShipment[]
+  runs         ParcelShipment[]
+  routes       ParcelRoute[]
 
   @@index([enterpriseId])
   @@index([status])
@@ -4184,7 +4184,7 @@ model ParcelShipment {
   vehiclePlate     String?
   driverPartyId    String?   @db.Uuid
   conductorPartyId String?   @db.Uuid
-  status           String    @default("OPEN")
+  status           String    @default("LOADING")
   startedAt        DateTime?
   arrivedAt        DateTime?
   endedAt          DateTime?
@@ -4198,9 +4198,39 @@ model ParcelShipment {
   parcelOrgId String?    @db.Uuid
   parcelOrg   ParcelOrg? @relation(fields: [parcelOrgId], references: [id], onDelete: SetNull)
 
-  items ParcelShipmentItem[]
+  /// The journey half, merged in from parcel_dispatch (ADR-0006). One
+  /// lorry used to be two rows in two tables with no key between them:
+  /// this side owned the cargo and knew places only as free text, while
+  /// parcel_dispatch owned the stations, crew and GPS trail and had no
+  /// parcels at all.
+  ///
+  /// originLabel/destinationLabel above are now a SNAPSHOT, not the
+  /// truth: a run that happened is a historical record, and a station
+  /// renamed in March must not rewrite what a manifest printed in
+  /// January said. The station links are the live reference.
+  routeId              String?      @db.Uuid
+  route                ParcelRoute? @relation(fields: [routeId], references: [id], onDelete: SetNull)
+  originStationId      String?      @db.Uuid
+  originStation        ParcelAgent? @relation("runOrigin", fields: [originStationId], references: [id], onDelete: SetNull)
+  destinationStationId String?      @db.Uuid
+  destinationStation   ParcelAgent? @relation("runDestination", fields: [destinationStationId], references: [id], onDelete: SetNull)
+
+  vehicleType String?
+  notes       String?
+  /// Last reported position; ParcelRunPing behind it keeps the trail.
+  currentLat  Float?
+  currentLng  Float?
+  currentAt   DateTime?
+  /// Who signed the run in at the far end.
+  receivedBy  String?
+
+  items     ParcelShipmentItem[]
+  crew      ParcelRunCrew[]
+  receivers ParcelRunReceiver[]
+  pings     ParcelRunPing[]
 
   @@index([status])
+  @@index([routeId, createdAt(sort: Desc)], map: "parcel_shipment_route_idx")
   @@map("parcel_shipment")
 }
 
@@ -4345,58 +4375,22 @@ model ParcelAgent {
 
   destinationParcels   Parcel[]         @relation("parcelDestinationAgent")
   stationStaff         ParcelOrgStaff[] @relation("parcelStationStaff")
-  dispatchOrigins      ParcelDispatch[] @relation("dispatchOrigin")
-  dispatchDestinations ParcelDispatch[] @relation("dispatchDestination")
+  runOrigins           ParcelShipment[] @relation("runOrigin")
+  runDestinations      ParcelShipment[] @relation("runDestination")
+  routeStops           ParcelRouteStop[]
 
   @@index([zoneId, active])
   @@map("parcel_agent")
 }
 
-/// One run of one of a courier company's own vehicles — the "fleet" the
-/// dispatch board shows. A tenant-level run, not parcel-level state:
-/// the company loads crew and parcels onto it, drives an origin →
-/// destination leg, and the receiving team at the far end checks it in.
-/// ACTIVE until checked in (ARRIVED, receivedBy naming who signed) or
-/// called off (CANCELLED). currentLat/currentLng is the last reported
-/// position; ParcelDispatchPing behind it keeps the trail.
-model ParcelDispatch {
-  id          String    @id @default(uuid()) @db.Uuid
-  parcelOrgId String    @db.Uuid
-  org         ParcelOrg @relation(fields: [parcelOrgId], references: [id], onDelete: Cascade)
-
-  vehiclePlate         String
-  vehicleType          String       @default("VAN")
-  originStationId      String?      @db.Uuid
-  originStation        ParcelAgent? @relation("dispatchOrigin", fields: [originStationId], references: [id], onDelete: SetNull)
-  destinationStationId String?      @db.Uuid
-  destinationStation   ParcelAgent? @relation("dispatchDestination", fields: [destinationStationId], references: [id], onDelete: SetNull)
-
-  status           String    @default("ACTIVE")
-  notes            String?
-  currentLat       Float?
-  currentLng       Float?
-  currentAt        DateTime?
-  createdByStaffId String?   @db.Uuid
-  arrivedAt        DateTime?
-  receivedBy       String?
-  createdAt        DateTime  @default(now())
-
-  crew      ParcelDispatchCrew[]
-  receivers ParcelDispatchReceiver[]
-  pings     ParcelDispatchPing[]
-
-  @@index([parcelOrgId, status])
-  @@map("parcel_dispatch")
-}
-
-/// One person aboard a dispatch run — driver, tout, loader, or a custom
-/// title. role is a plain string with customRole for free text, the same
+/// One person aboard a run — driver, tout, loader, or a custom title.
+/// role is a plain string with customRole for free text, the same
 /// convention ParcelOrgStaff.role follows; staffId links the roster row
 /// when the crew member was picked from the team.
-model ParcelDispatchCrew {
-  id         String         @id @default(uuid()) @db.Uuid
-  dispatchId String         @db.Uuid
-  dispatch   ParcelDispatch @relation(fields: [dispatchId], references: [id], onDelete: Cascade)
+model ParcelRunCrew {
+  id    String         @id @default(uuid()) @db.Uuid
+  runId String         @db.Uuid
+  run   ParcelShipment @relation(fields: [runId], references: [id], onDelete: Cascade)
 
   name       String
   msisdn     String?
@@ -4404,39 +4398,83 @@ model ParcelDispatchCrew {
   customRole String?
   staffId    String? @db.Uuid
 
-  @@index([dispatchId])
-  @@map("parcel_dispatch_crew")
+  @@index([runId], map: "parcel_run_crew_run_idx")
+  @@map("parcel_run_crew")
 }
 
 /// One of the receiving team waiting at the destination to check the run
 /// in on arrival. staffId links the roster where possible; name is a
 /// snapshot so the run still reads sensibly if the roster changes later.
-model ParcelDispatchReceiver {
-  id         String         @id @default(uuid()) @db.Uuid
-  dispatchId String         @db.Uuid
-  dispatch   ParcelDispatch @relation(fields: [dispatchId], references: [id], onDelete: Cascade)
+model ParcelRunReceiver {
+  id    String         @id @default(uuid()) @db.Uuid
+  runId String         @db.Uuid
+  run   ParcelShipment @relation(fields: [runId], references: [id], onDelete: Cascade)
 
   name    String
   staffId String? @db.Uuid
 
-  @@index([dispatchId])
-  @@map("parcel_dispatch_receiver")
+  @@index([runId], map: "parcel_run_receiver_run_idx")
+  @@map("parcel_run_receiver")
 }
 
-/// Position reports for a dispatch run — the trail the live map draws.
-/// Unbounded growth is capped on write (see dbx.ReportDispatchPosition):
-/// only recent points are ever read back.
-model ParcelDispatchPing {
-  id         String         @id @default(uuid()) @db.Uuid
-  dispatchId String         @db.Uuid
-  dispatch   ParcelDispatch @relation(fields: [dispatchId], references: [id], onDelete: Cascade)
+/// Position reports for a run — the trail the live map draws. Unbounded
+/// growth is capped on write (see dbx.ReportRunPosition): only recent
+/// points are ever read back.
+model ParcelRunPing {
+  id    String         @id @default(uuid()) @db.Uuid
+  runId String         @db.Uuid
+  run   ParcelShipment @relation(fields: [runId], references: [id], onDelete: Cascade)
 
   lat Float
   lng Float
   at  DateTime @default(now())
 
-  @@index([dispatchId, at(sort: Desc)])
-  @@map("parcel_dispatch_ping")
+  @@index([runId, at(sort: Desc)], map: "parcel_run_ping_run_at_idx")
+  @@map("parcel_run_ping")
+}
+
+/// An ordered list of stations a company serves — its own map, and the
+/// thing a rate card can finally key on (ADR-0006). A run may cite a
+/// route or stand alone: an ad-hoc vehicle at the door has to be
+/// openable without a manager defining a route first.
+model ParcelRoute {
+  id          String    @id @default(uuid()) @db.Uuid
+  parcelOrgId String    @db.Uuid
+  org         ParcelOrg @relation(fields: [parcelOrgId], references: [id], onDelete: Cascade)
+
+  name String
+  /// Short form for manifests and labels ("NBO-KSM"). Unique within one
+  /// company's own book, not across the platform.
+  code   String?
+  active Boolean @default(true)
+
+  createdAt DateTime @default(now())
+
+  stops ParcelRouteStop[]
+  runs  ParcelShipment[]
+
+  @@index([parcelOrgId, active], map: "parcel_route_org_idx")
+  @@map("parcel_route")
+}
+
+/// One stop on a route. sequence is dense and 0-based within a route; a
+/// LEG is simply a consecutive pair of stops, which is why there is no
+/// leg table — a parcel riding two vehicles is already expressible as
+/// two ParcelShipmentItem rows with load/offload times.
+model ParcelRouteStop {
+  id      String      @id @default(uuid()) @db.Uuid
+  routeId String      @db.Uuid
+  route   ParcelRoute @relation(fields: [routeId], references: [id], onDelete: Cascade)
+
+  sequence  Int
+  /// Restrict, not SetNull: a stop with no station is not a stop, and
+  /// blanking one would renumber a route under a dispatcher mid-journey.
+  stationId String      @db.Uuid
+  station   ParcelAgent @relation(fields: [stationId], references: [id], onDelete: Restrict)
+
+  @@unique([routeId, sequence], map: "parcel_route_stop_route_seq_key")
+  @@index([stationId], map: "parcel_route_stop_station_idx")
+  @@map("parcel_route_stop")
 }
 
 /// Admin-editable cover levels a sender can buy against declared value

@@ -41,7 +41,8 @@ type OrgShipment struct {
 
 // ListOpenOrgShipments — this company's runs that are still loading.
 //
-// OPEN only. A departed run is not a choice a clerk at the counter can
+// LOADING only (the status formerly called OPEN — see ADR-0006). A
+// departed run is not a choice a clerk at the counter can
 // make: the lorry has gone, and offering it would put a parcel on a
 // manifest nobody will ever check it off.
 func ListOpenOrgShipments(ctx context.Context, pool *pgxpool.Pool, orgID string) ([]OrgShipment, error) {
@@ -52,7 +53,7 @@ func ListOpenOrgShipments(ctx context.Context, pool *pgxpool.Pool, orgID string)
 		         WHERE i."shipmentId" = s.id AND i."loadedAt" IS NOT NULL),
 		       to_char(s."createdAt", 'YYYY-MM-DD"T"HH24:MI:SSZ')
 		FROM parcel_shipment s
-		WHERE s."parcelOrgId" = $1 AND s.status = 'OPEN'
+		WHERE s."parcelOrgId" = $1 AND s.status = 'LOADING'
 		ORDER BY s."createdAt" DESC
 		LIMIT 50`, orgID)
 	if err != nil {
@@ -143,7 +144,7 @@ func LoadParcelOntoOrgShipment(ctx context.Context, pool *pgxpool.Pool, orgID, s
 	if err != nil {
 		return nil, err
 	}
-	if shipmentStatus != "OPEN" {
+	if shipmentStatus != "LOADING" {
 		return nil, &ParcelError{"BAD_INPUT", "That run has already left"}
 	}
 
@@ -178,7 +179,7 @@ func LoadParcelOntoOrgShipment(ctx context.Context, pool *pgxpool.Pool, orgID, s
 func StartOrgShipment(ctx context.Context, pool *pgxpool.Pool, orgID, shipmentID string) (*OrgShipment, error) {
 	tag, err := pool.Exec(ctx, `
 		UPDATE parcel_shipment SET status = 'DEPARTED', "startedAt" = COALESCE("startedAt", now())
-		WHERE id = $1 AND "parcelOrgId" = $2 AND status = 'OPEN'`, shipmentID, orgID)
+		WHERE id = $1 AND "parcelOrgId" = $2 AND status = 'LOADING'`, shipmentID, orgID)
 	if err != nil {
 		return nil, err
 	}
@@ -207,4 +208,63 @@ func GetOrgShipment(ctx context.Context, pool *pgxpool.Pool, orgID, shipmentID s
 		return nil, err
 	}
 	return &s, nil
+}
+
+// ManifestItem is one line on a run's manifest — the paper (or screen)
+// a crew signs and a receiving clerk checks boxes off against.
+//
+// Denormalised on purpose: a manifest is a document, and a document
+// states what was true when it was printed. Joining the receiver's name
+// at read time is right for a screen and wrong for a record, so the
+// handler stamps the print time and everything else is read once, here.
+type ManifestItem struct {
+	Code             string `json:"code"`
+	ExternalRef      string `json:"externalRef"`
+	ReceiverName     string `json:"receiverName"`
+	ReceiverMsisdn   string `json:"receiverMsisdn"`
+	DestinationLabel string `json:"destinationLabel"`
+	ParcelType       string `json:"parcelType"`
+	Status           string `json:"status"`
+	LoadedAt         string `json:"loadedAt"`
+}
+
+// ListOrgShipmentManifest — every parcel loaded onto one of this
+// company's runs, in the order it was loaded.
+//
+// Load order, not code order: the manifest is checked against a lorry
+// that was packed in this sequence, and the last box on is the first
+// box off. Sorting by code would make the clerk at the tailgate hunt.
+//
+// Ownership is proved in SQL by the same predicate every other function
+// here uses — an unknown id and a competitor's id are indistinguishable
+// from the outside.
+func ListOrgShipmentManifest(ctx context.Context, pool *pgxpool.Pool, orgID, shipmentID string) ([]ManifestItem, error) {
+	rows, err := pool.Query(ctx, `
+		SELECT p.code, COALESCE(p."externalRef", ''), COALESCE(p."receiverName", ''),
+		       COALESCE(p."receiverMsisdn", ''), COALESCE(p."destinationLabel", ''),
+		       COALESCE(p."parcelType"::text, ''), p.status::text,
+		       to_char(i."loadedAt", 'YYYY-MM-DD"T"HH24:MI:SSZ')
+		FROM parcel_shipment_item i
+		JOIN parcel p ON p.id = i."parcelId"
+		JOIN parcel_shipment s ON s.id = i."shipmentId"
+		WHERE i."shipmentId" = $1 AND s."parcelOrgId" = $2 AND i."loadedAt" IS NOT NULL
+		ORDER BY i."loadedAt"`, shipmentID, orgID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	// Never nil: an empty run is a legitimate manifest (nothing loaded
+	// yet), and a nil slice would serialise as JSON null and make the
+	// caller special-case it.
+	items := []ManifestItem{}
+	for rows.Next() {
+		var m ManifestItem
+		if err := rows.Scan(&m.Code, &m.ExternalRef, &m.ReceiverName, &m.ReceiverMsisdn,
+			&m.DestinationLabel, &m.ParcelType, &m.Status, &m.LoadedAt); err != nil {
+			return nil, err
+		}
+		items = append(items, m)
+	}
+	return items, rows.Err()
 }

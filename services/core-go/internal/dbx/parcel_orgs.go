@@ -1464,6 +1464,9 @@ type ParcelOrgStats struct {
 	// needs to know a sender is walking in, not waiting for a rider —
 	// the exact fact a plain status count can't tell it.
 	AwaitingDropoff int `json:"awaitingDropoff"`
+	// Overdue — active parcels past their SLA deadline. Powers the
+	// register's "Overdue only" toggle and the attention band.
+	Overdue int `json:"overdue"`
 }
 
 func GetParcelOrgStats(ctx context.Context, pool *pgxpool.Pool, orgID string) (*ParcelOrgStats, error) {
@@ -1477,11 +1480,14 @@ func GetParcelOrgStats(ctx context.Context, pool *pgxpool.Pool, orgID string) (*
 			count(*) FILTER (WHERE status = 'DELIVERED' AND "deliveredAt" >= date_trunc('day', now())),
 			COALESCE(SUM("orgEarningsKes") FILTER (WHERE "paidAt" >= date_trunc('day', now())), 0)::float8,
 			COALESCE(SUM("orgEarningsKes"), 0)::float8,
-			count(*) FILTER (WHERE status = 'BOOKED' AND "originMethod" = 'SELF_DROPOFF')
+			count(*) FILTER (WHERE status = 'BOOKED' AND "originMethod" = 'SELF_DROPOFF'),
+			count(*) FILTER (WHERE "slaDeadlineAt" IS NOT NULL AND "slaDeadlineAt" < now()
+				AND status IN ('RECEIVED_AT_COUNTER', 'PICKED_UP', 'IN_TRANSIT'))
 		FROM parcel
 		WHERE "parcelOrgId" = $1 AND status != 'CANCELLED'`, orgID).
 		Scan(&s.AwaitingPickup, &s.InTransit, &s.FailedDeliveries, &s.AtAgent,
-			&s.DeliveredToday, &s.EarningsTodayKes, &s.EarningsKes, &s.AwaitingDropoff)
+			&s.DeliveredToday, &s.EarningsTodayKes, &s.EarningsKes, &s.AwaitingDropoff,
+			&s.Overdue)
 	if err != nil {
 		return nil, err
 	}
@@ -1523,6 +1529,83 @@ type OrgParcelRow struct {
 	OriginMethod string `json:"originMethod"`
 }
 
+// ListOrgParcelsFilter — every knob the operator register can turn.
+// All fields optional; zero values mean "no constraint". Kept as a
+// struct (not positional *string args) so new filters don't reshuffle
+// every caller.
+type ListOrgParcelsFilter struct {
+	Status       *string
+	OriginMethod *string
+	Q            *string
+	// ParcelType — SMALL / MEDIUM / LARGE / DOCUMENT…, exact match.
+	ParcelType *string
+	// OverdueOnly — only rows past their SLA deadline and still active.
+	OverdueOnly bool
+	// Sort — created | code | status | earnings. Anything else falls
+	// back to created. Order — asc | desc (default desc for created,
+	// asc otherwise is still honoured explicitly).
+	Sort  string
+	Order string
+	// Limit / Offset — page window. Clamped by the caller-facing
+	// helper, never by SQL alone.
+	Limit  int
+	Offset int
+}
+
+// ListOrgParcelsResult — one page plus the total behind the filter,
+// so the portal can render "page 2 of 14" without a second query.
+type ListOrgParcelsResult struct {
+	Parcels []OrgParcelRow `json:"parcels"`
+	Total   int            `json:"total"`
+}
+
+// DailyBucket — one day of the trailing-7-day operations trend.
+type DailyBucket struct {
+	Day       string `json:"day"`
+	Delivered int    `json:"delivered"`
+	Booked    int    `json:"booked"`
+}
+
+// GetParcelOrgTrends — trailing 7 days (incl. today) of bookings vs
+// deliveries, in Africa/Nairobi days. One query, seven rows, so the
+// dashboard's analytics strip never fans out per day.
+func GetParcelOrgTrends(ctx context.Context, pool *pgxpool.Pool, orgID string) ([]DailyBucket, error) {
+	rows, err := pool.Query(ctx, `
+		SELECT to_char(d, 'Dy DD Mon'),
+		       COALESCE(b.booked, 0)::int,
+		       COALESCE(dlv.delivered, 0)::int
+		FROM (
+			SELECT (date_trunc('day', now() AT TIME ZONE 'Africa/Nairobi') - (s || ' days')::interval) AS d
+			FROM generate_series(6, 0, -1) AS s
+		) days
+		LEFT JOIN (
+			SELECT date_trunc('day', "createdAt" AT TIME ZONE 'Africa/Nairobi') AS d, count(*) AS booked
+			FROM parcel WHERE "parcelOrgId" = $1
+			  AND "createdAt" >= date_trunc('day', now() AT TIME ZONE 'Africa/Nairobi') - interval '6 days'
+			GROUP BY 1
+		) b ON b.d = (days.d AT TIME ZONE 'Africa/Nairobi')
+		LEFT JOIN (
+			SELECT date_trunc('day', "deliveredAt" AT TIME ZONE 'Africa/Nairobi') AS d, count(*) AS delivered
+			FROM parcel WHERE "parcelOrgId" = $1 AND status = 'DELIVERED'
+			  AND "deliveredAt" >= date_trunc('day', now() AT TIME ZONE 'Africa/Nairobi') - interval '6 days'
+			GROUP BY 1
+		) dlv ON dlv.d = (days.d AT TIME ZONE 'Africa/Nairobi')
+		ORDER BY days.d`, orgID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	out := make([]DailyBucket, 0, 7)
+	for rows.Next() {
+		var b DailyBucket
+		if err := rows.Scan(&b.Day, &b.Booked, &b.Delivered); err != nil {
+			return nil, err
+		}
+		out = append(out, b)
+	}
+	return out, rows.Err()
+}
+
 // ListOrgParcels — this company's parcels, newest first.
 //
 // orgID is never taken from the request; it comes from the session (see
@@ -1543,6 +1626,50 @@ type OrgParcelRow struct {
 // externalRef, so a company migrating from another system can find a
 // parcel by whichever number is in hand.
 func ListOrgParcels(ctx context.Context, pool *pgxpool.Pool, orgID string, status, originMethod, q *string) ([]OrgParcelRow, error) {
+	res, err := ListOrgParcelsPage(ctx, pool, orgID, ListOrgParcelsFilter{
+		Status: status, OriginMethod: originMethod, Q: q, Limit: 200,
+	})
+	if err != nil {
+		return nil, err
+	}
+	return res.Parcels, nil
+}
+
+// ListOrgParcelsPage — paginated, sortable ListOrgParcels.
+//
+// Same WHERE semantics, plus parcelType / overdueOnly, ORDER BY on a
+// whitelisted column, and LIMIT/OFFSET with a COUNT(*) OVER() total so
+// the portal paginates against the filter, not the page. Limit is
+// clamped to 1..100 (default 25); offset floors at 0.
+func ListOrgParcelsPage(ctx context.Context, pool *pgxpool.Pool, orgID string, f ListOrgParcelsFilter) (ListOrgParcelsResult, error) {
+	limit := f.Limit
+	if limit <= 0 {
+		limit = 25
+	}
+	if limit > 100 {
+		limit = 100
+	}
+	offset := f.Offset
+	if offset < 0 {
+		offset = 0
+	}
+	order := "DESC"
+	if f.Order == "asc" {
+		order = "ASC"
+	} else if f.Order == "desc" {
+		order = "DESC"
+	} else if f.Sort == "code" || f.Sort == "status" {
+		order = "ASC"
+	}
+	orderBy := `p."createdAt"`
+	switch f.Sort {
+	case "code":
+		orderBy = "p.code"
+	case "status":
+		orderBy = "p.status::text, p.\"createdAt\""
+	case "earnings":
+		orderBy = `p."orgEarningsKes"`
+	}
 	rows, err := pool.Query(ctx, `
 		SELECT p.id, p.code, p.status::text, p."receiverName", p."receiverMsisdn",
 		       p."originLabel", p."destinationLabel", p."parcelType"::text,
@@ -1551,32 +1678,42 @@ func ListOrgParcels(ctx context.Context, pool *pgxpool.Pool, orgID string, statu
 		       to_char(p."slaDeadlineAt", 'YYYY-MM-DD"T"HH24:MI:SSZ'),
 		       p."deliveryAttempts", p."lastAttemptReason",
 		       COALESCE(pr."knownAs", pr."officialName"), a.name, p."originMethod"::text,
-		       p."externalRef", p."externalSource"
+		       p."externalRef", p."externalSource",
+		       count(*) OVER() AS total
 		FROM parcel p
 		LEFT JOIN person pr ON pr."partyId" = p."currentHolderPartyId"
 		LEFT JOIN parcel_agent a ON a.id = p."destinationAgentId"
 		WHERE p."parcelOrgId" = $1
 		  AND ($2::text IS NULL OR p.status::text = ANY(string_to_array($2, ',')))
 		  AND ($3::text IS NULL OR p."originMethod"::text = $3)
-		  AND ($4::text IS NULL OR p.code ILIKE '%' || $4 || '%' OR p."externalRef" ILIKE '%' || $4 || '%')
-		ORDER BY p."createdAt" DESC
-		LIMIT 200`, orgID, status, originMethod, q)
+		  AND ($4::text IS NULL OR p.code ILIKE '%' || $4 || '%' OR p."externalRef" ILIKE '%' || $4 || '%'
+		       OR p."receiverName" ILIKE '%' || $4 || '%' OR p."receiverMsisdn" ILIKE '%' || $4 || '%')
+		  AND ($5::text IS NULL OR p."parcelType"::text = $5)
+		  AND (NOT $6::bool OR (p."slaDeadlineAt" IS NOT NULL AND p."slaDeadlineAt" < now()
+		       AND p.status IN ('RECEIVED_AT_COUNTER', 'PICKED_UP', 'IN_TRANSIT')))
+		ORDER BY `+orderBy+` `+order+`
+		LIMIT $7 OFFSET $8`, orgID, f.Status, f.OriginMethod, f.Q, f.ParcelType, f.OverdueOnly, limit, offset)
 	if err != nil {
-		return nil, err
+		return ListOrgParcelsResult{}, err
 	}
 	defer rows.Close()
-	var out []OrgParcelRow
+	out := make([]OrgParcelRow, 0, limit)
+	total := 0
 	for rows.Next() {
 		var r OrgParcelRow
 		if err := rows.Scan(&r.ID, &r.Code, &r.Status, &r.ReceiverName, &r.ReceiverMsisdn,
 			&r.OriginLabel, &r.DestinationLabel, &r.ParcelType, &r.OrgEarningsKes,
 			&r.CreatedAt, &r.SlaDeadlineAt, &r.DeliveryAttempts, &r.LastAttemptReason,
-			&r.HolderName, &r.AgentName, &r.OriginMethod, &r.ExternalRef, &r.ExternalSource); err != nil {
-			return nil, err
+			&r.HolderName, &r.AgentName, &r.OriginMethod, &r.ExternalRef, &r.ExternalSource,
+			&total); err != nil {
+			return ListOrgParcelsResult{}, err
 		}
 		out = append(out, r)
 	}
-	return out, rows.Err()
+	if err := rows.Err(); err != nil {
+		return ListOrgParcelsResult{}, err
+	}
+	return ListOrgParcelsResult{Parcels: out, Total: total}, nil
 }
 
 // ImportParcelInput — a parcel a courier company already tracks in

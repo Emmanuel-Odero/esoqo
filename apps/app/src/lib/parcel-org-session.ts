@@ -179,6 +179,9 @@ export interface ParcelOrgStats {
    *  subset of awaitingPickup, broken out because it means "a sender is
    *  walking in", not "waiting on our own rider". */
   awaitingDropoff: number;
+  /** Active parcels past their SLA deadline — powers the register's
+   *  "Overdue only" toggle and the attention band. */
+  overdue: number;
 }
 
 export interface OrgParcelRow {
@@ -225,6 +228,14 @@ export interface ParcelOrgMe {
    * the pre-existing behaviour.
    */
   custodyCapable?: boolean;
+}
+
+/** One day of the trailing-7-day operations trend. Mirrors
+ *  dbx.DailyBucket — booked vs delivered per Nairobi day. */
+export interface ParcelOrgTrendDay {
+  day: string;
+  booked: number;
+  delivered: number;
 }
 
 /** One of the company's own vehicle runs that is still loading —
@@ -357,9 +368,13 @@ export interface DispatchPing {
   at: string;
 }
 
-/** One run of one of the company's own vehicles. Mirrors dbx.Dispatch:
- *  the board's fleet unit — plate, crew, origin → destination leg,
- *  receiving team, live position and trail. */
+/** One run of one of the company's own vehicles. Mirrors dbx.Run.
+ *
+ *  Since ADR-0006 this is the WHOLE run: plate, crew, the origin →
+ *  destination leg, the receiving team, live position and trail — and
+ *  the parcels aboard. It used to be only the journey half, because the
+ *  cargo lived on a separate shipment record with no key between them,
+ *  which is why the board could never say what was on a vehicle. */
 export interface DispatchRun {
   id: string;
   vehiclePlate: string;
@@ -377,4 +392,36 @@ export interface DispatchRun {
   crew: DispatchCrew[];
   receivers: DispatchReceiver[];
   trail: DispatchPing[];
+  /** The route followed, when one was chosen. Null for an ad-hoc run —
+   *  a vehicle at the door nobody scheduled, which stays possible on
+   *  purpose (ADR-0006). */
+  routeId: string | null;
+  routeName: string | null;
+  /** Parcels currently aboard. The number the merge exists to make
+   *  answerable from the board. */
+  loaded: number;
+}
+
+/** One stop on a route: a station, and where it falls in the order. */
+export interface OrgRouteStop {
+  id: string;
+  sequence: number;
+  stationId: string;
+  stationName: string;
+  locationHint: string;
+  lat: number;
+  lng: number;
+}
+
+/** A company's own route — the ordered list of stations it serves. A
+ *  LEG is a consecutive pair of stops; there is no leg record, because
+ *  a parcel riding two vehicles is already two run items. */
+export interface OrgRoute {
+  id: string;
+  name: string;
+  code: string | null;
+  active: boolean;
+  stops: OrgRouteStop[];
+  /** Runs still out against it — what makes deleting one a decision. */
+  openRuns: number;
 }

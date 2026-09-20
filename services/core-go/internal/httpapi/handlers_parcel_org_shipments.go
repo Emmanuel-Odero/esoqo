@@ -107,3 +107,36 @@ func (s *Server) handleStartMyOrgShipment(c *gin.Context) {
 	}
 	c.JSON(http.StatusOK, gin.H{"shipment": run})
 }
+
+// handleGetMyOrgShipmentManifest — GET /v1/parcel-orgs/me/shipments/:id/manifest.
+//
+// The run plus every parcel on it: what a crew carries as paper and a
+// receiving clerk checks boxes off against. Same read capability as
+// listing runs — a manifest is the operational document of a job the
+// holder is already doing, not a privileged report.
+//
+// The shipment is fetched as well as the items so the printed sheet can
+// name the vehicle and the leg. Both calls are org-scoped in SQL, so a
+// guessed id 404s rather than leaking whether it exists.
+func (s *Server) handleGetMyOrgShipmentManifest(c *gin.Context) {
+	orgID := s.orgCtx(c, authsvc.CapParcelOrgRead)
+	if orgID == "" {
+		return
+	}
+	shipmentID := strings.TrimSpace(c.Param("id"))
+	if shipmentID == "" {
+		writeError(c, http.StatusBadRequest, "BAD_INPUT", "Which run?")
+		return
+	}
+	run, err := dbx.GetOrgShipment(c.Request.Context(), s.Pool, orgID, shipmentID)
+	if err != nil {
+		writeParcelError(c, err)
+		return
+	}
+	items, err := dbx.ListOrgShipmentManifest(c.Request.Context(), s.Pool, orgID, shipmentID)
+	if err != nil {
+		writeError(c, http.StatusInternalServerError, "LIST_FAILED", "Could not load the manifest")
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"shipment": run, "items": items})
+}

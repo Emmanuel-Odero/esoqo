@@ -2,6 +2,7 @@ package httpapi
 
 import (
 	"net/http"
+	"strconv"
 	"strings"
 	"time"
 
@@ -505,7 +506,11 @@ func (s *Server) handleAttachOrgLabelInfo(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"ok": true})
 }
 
-// handleListMyOrgParcels — GET /v1/parcel-orgs/me/parcels?status=&originMethod=.
+// handleListMyOrgParcels — GET /v1/parcel-orgs/me/parcels?status=&originMethod=&q=&parcelType=&overdue=&sort=&order=&limit=&offset=.
+//
+// Paginated: returns {parcels, total}. Legacy callers that ignore total
+// keep working — parcels is still the same array shape, newest first
+// when no sort is given.
 func (s *Server) handleListMyOrgParcels(c *gin.Context) {
 	orgID := s.orgCtx(c, authsvc.CapParcelOrgRead)
 	if orgID == "" {
@@ -519,18 +524,73 @@ func (s *Server) handleListMyOrgParcels(c *gin.Context) {
 	if v := c.Query("originMethod"); v != "" {
 		originMethod = &v
 	}
-	// q — free-text over Esoqo's code and the company's own externalRef,
-	// so a team migrating from another system finds a parcel by either.
+	// q — free-text over Esoqo's code, the company's own externalRef,
+	// receiver name and phone, so a desk finds a parcel by whatever is
+	// in hand.
 	var q *string
 	if v := strings.TrimSpace(c.Query("q")); v != "" {
 		q = &v
 	}
-	rows, err := dbx.ListOrgParcels(c.Request.Context(), s.Pool, orgID, status, originMethod, q)
+	var parcelType *string
+	if v := strings.TrimSpace(c.Query("parcelType")); v != "" {
+		parcelType = &v
+	}
+	overdue := c.Query("overdue") == "1" || strings.EqualFold(c.Query("overdue"), "true")
+	limit, offset := 25, 0
+	if v := strings.TrimSpace(c.Query("limit")); v != "" {
+		if n, err := strconv.Atoi(v); err == nil {
+			limit = n
+		}
+	}
+	// page/perPage — the portal's friendlier spelling; wins when set.
+	if v := strings.TrimSpace(c.Query("perPage")); v != "" {
+		if n, err := strconv.Atoi(v); err == nil {
+			limit = n
+		}
+	}
+	if v := strings.TrimSpace(c.Query("page")); v != "" {
+		if n, err := strconv.Atoi(v); err == nil && n > 0 {
+			pp := limit
+			if pp <= 0 {
+				pp = 25
+			}
+			offset = (n - 1) * pp
+		}
+	}
+	if v := strings.TrimSpace(c.Query("offset")); v != "" {
+		if n, err := strconv.Atoi(v); err == nil {
+			offset = n
+		}
+	}
+	res, err := dbx.ListOrgParcelsPage(c.Request.Context(), s.Pool, orgID, dbx.ListOrgParcelsFilter{
+		Status: status, OriginMethod: originMethod, Q: q,
+		ParcelType: parcelType, OverdueOnly: overdue,
+		Sort: c.Query("sort"), Order: c.Query("order"),
+		Limit: limit, Offset: offset,
+	})
 	if err != nil {
 		writeError(c, http.StatusInternalServerError, "LIST_FAILED", "Could not load your parcels")
 		return
 	}
-	c.JSON(http.StatusOK, gin.H{"parcels": rows})
+	if res.Parcels == nil {
+		res.Parcels = []dbx.OrgParcelRow{}
+	}
+	c.JSON(http.StatusOK, gin.H{"parcels": res.Parcels, "total": res.Total})
+}
+
+// handleParcelOrgTrends — GET /v1/parcel-orgs/me/trends. Trailing-7-day
+// bookings vs deliveries for the dashboard's analytics strip.
+func (s *Server) handleParcelOrgTrends(c *gin.Context) {
+	orgID := s.orgCtx(c, authsvc.CapParcelOrgRead)
+	if orgID == "" {
+		return
+	}
+	days, err := dbx.GetParcelOrgTrends(c.Request.Context(), s.Pool, orgID)
+	if err != nil {
+		writeError(c, http.StatusInternalServerError, "TRENDS_FAILED", "Could not load trends")
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"days": days})
 }
 
 type importParcelRequest struct {

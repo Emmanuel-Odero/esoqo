@@ -316,6 +316,7 @@ func (s *Server) Router() *gin.Engine {
 		// a rider or running late, stations.
 		v1.GET("/parcel-orgs/me/live", s.authRequired(), s.handleGetOrgLive)
 		v1.GET("/parcel-orgs/me/parcels", s.authRequired(), s.handleListMyOrgParcels)
+		v1.GET("/parcel-orgs/me/trends", s.authRequired(), s.handleParcelOrgTrends)
 		// Register a parcel the company already tracks in another system,
 		// so it can be managed and tracked here too — see
 		// handleImportOrgParcel.
@@ -367,16 +368,46 @@ func (s *Server) Router() *gin.Engine {
 		// A parcel only reports IN_TRANSIT by being loaded onto one of
 		// these (see dbx.LoadParcelOntoOrgShipment), so the counter's
 		// "receive and load" has something real to put a box on.
+		// ── Runs ──
+		//
+		// One record since ADR-0006. /me/runs is canonical; the two older
+		// prefixes below resolve to the same handlers because a rider's
+		// installed PWA may still hold either, and renaming a route by
+		// breaking it strands exactly the people who cannot easily update.
+		//
+		// The two halves were split by what each model happened to own:
+		// "shipments" knew the cargo, "dispatch" knew the journey. Both
+		// now read parcel_shipment.
+		v1.GET("/parcel-orgs/me/runs", s.authRequired(), s.handleListRuns)
+		v1.POST("/parcel-orgs/me/runs", s.authRequired(), s.handleCreateRun)
+		v1.GET("/parcel-orgs/me/runs/:id", s.authRequired(), s.handleGetRun)
+		v1.GET("/parcel-orgs/me/runs/:id/manifest", s.authRequired(), s.handleGetMyOrgShipmentManifest)
+		v1.POST("/parcel-orgs/me/runs/:id/load", s.authRequired(), s.handleLoadOntoMyOrgShipment)
+		v1.POST("/parcel-orgs/me/runs/:id/start", s.authRequired(), s.handleStartMyOrgShipment)
+		v1.POST("/parcel-orgs/me/runs/:id/position", s.authRequired(), s.handleReportRunPosition)
+		v1.POST("/parcel-orgs/me/runs/:id/arrive", s.authRequired(), s.handleArriveRun)
+		v1.POST("/parcel-orgs/me/runs/:id/cancel", s.authRequired(), s.handleCancelRun)
+
+		// Compatibility aliases. /me/shipments kept the loading picker's
+		// shape (handleListMyOrgShipments returns the picker row, not the
+		// full run) because the Scanner still reads exactly that.
 		v1.GET("/parcel-orgs/me/shipments", s.authRequired(), s.handleListMyOrgShipments)
 		v1.POST("/parcel-orgs/me/shipments", s.authRequired(), s.handleCreateMyOrgShipment)
+		v1.GET("/parcel-orgs/me/shipments/:id/manifest", s.authRequired(), s.handleGetMyOrgShipmentManifest)
 		v1.POST("/parcel-orgs/me/shipments/:id/load", s.authRequired(), s.handleLoadOntoMyOrgShipment)
 		v1.POST("/parcel-orgs/me/shipments/:id/start", s.authRequired(), s.handleStartMyOrgShipment)
-		v1.GET("/parcel-orgs/me/dispatch", s.authRequired(), s.handleListDispatches)
-		v1.POST("/parcel-orgs/me/dispatch", s.authRequired(), s.handleCreateDispatch)
-		v1.GET("/parcel-orgs/me/dispatch/:id", s.authRequired(), s.handleGetDispatch)
-		v1.POST("/parcel-orgs/me/dispatch/:id/position", s.authRequired(), s.handleReportDispatchPosition)
-		v1.POST("/parcel-orgs/me/dispatch/:id/arrive", s.authRequired(), s.handleArriveDispatch)
-		v1.POST("/parcel-orgs/me/dispatch/:id/cancel", s.authRequired(), s.handleCancelDispatch)
+		v1.GET("/parcel-orgs/me/dispatch", s.authRequired(), s.handleListRuns)
+		v1.POST("/parcel-orgs/me/dispatch", s.authRequired(), s.handleCreateRun)
+		v1.GET("/parcel-orgs/me/dispatch/:id", s.authRequired(), s.handleGetRun)
+		v1.POST("/parcel-orgs/me/dispatch/:id/position", s.authRequired(), s.handleReportRunPosition)
+		v1.POST("/parcel-orgs/me/dispatch/:id/arrive", s.authRequired(), s.handleArriveRun)
+		v1.POST("/parcel-orgs/me/dispatch/:id/cancel", s.authRequired(), s.handleCancelRun)
+
+		// ── Routes ── the company's own map: which stations, in what order.
+		v1.GET("/parcel-orgs/me/routes", s.authRequired(), s.handleListMyOrgRoutes)
+		v1.POST("/parcel-orgs/me/routes", s.authRequired(), s.handleSaveMyOrgRoute)
+		v1.POST("/parcel-orgs/me/routes/:id", s.authRequired(), s.handleSaveMyOrgRoute)
+		v1.DELETE("/parcel-orgs/me/routes/:id", s.authRequired(), s.handleDeleteMyOrgRoute)
 		v1.POST("/parcels/:code/price", s.handleSetParcelPrice)
 		v1.POST("/parcels/:code/settle-counter", s.authRequired(), s.handleSettleCounterParcel)
 		v1.POST("/parcels/:code/pay", s.rateLimit("pay:parcel", 30, time.Hour), s.handlePayParcel)

@@ -1,8 +1,14 @@
-// Package dbx (parcel_org_dispatch.go) — a courier company's own dispatch runs.
+// Package dbx (parcel_org_runs.go) — a courier company's own vehicle runs.
 //
-// A dispatch is one vehicle on one origin → destination leg with its
-// crew aboard and a receiving team waiting at the far end to check the
-// run in on arrival. Tenant-level, like everything else in this file:
+// A run is one vehicle on one origin → destination leg with its crew
+// aboard, a receiving team waiting at the far end, AND the parcels
+// loaded onto it. That last part is new: until ADR-0006 this was
+// parcel_dispatch, a table with stations, crew and a GPS trail but no
+// cargo at all, while parcel_shipment held the cargo and knew places
+// only as free text. One lorry, two rows, no key between them. Both
+// now live in parcel_shipment, and everything here reads that table.
+//
+// Tenant-level, like everything else in this file:
 // every read and write is filtered by the session's ParcelOrgID, and
 // stations/staff referenced by a run are re-checked against the same
 // org so a run can never point at a competitor's station or roster.
@@ -27,38 +33,38 @@ import (
 // Dispatch crew roles the console offers. OTHER carries a free-text
 // customRole; the rest ignore it.
 const (
-	DispatchRoleDriver = "DRIVER"
-	DispatchRoleTout   = "TOUT"
-	DispatchRoleLoader = "LOADER"
-	DispatchRoleOther  = "OTHER"
+	RunRoleDriver = "DRIVER"
+	RunRoleTout   = "TOUT"
+	RunRoleLoader = "LOADER"
+	RunRoleOther  = "OTHER"
 )
 
-// DispatchCrewRoleLabel renders a crew row for the board and the map
+// RunCrewRoleLabel renders a crew row for the board and the map
 // popup — "Tout" rather than "TOUT", the custom title for OTHER.
-func DispatchCrewRoleLabel(role, customRole string) string {
-	if strings.ToUpper(strings.TrimSpace(role)) == DispatchRoleOther && strings.TrimSpace(customRole) != "" {
+func RunCrewRoleLabel(role, customRole string) string {
+	if strings.ToUpper(strings.TrimSpace(role)) == RunRoleOther && strings.TrimSpace(customRole) != "" {
 		return strings.TrimSpace(customRole)
 	}
 	switch strings.ToUpper(strings.TrimSpace(role)) {
-	case DispatchRoleDriver:
+	case RunRoleDriver:
 		return "Driver"
-	case DispatchRoleTout:
+	case RunRoleTout:
 		return "Tout"
-	case DispatchRoleLoader:
+	case RunRoleLoader:
 		return "Loader"
 	default:
 		return "Crew"
 	}
 }
 
-// sanitizeDispatchRole keeps the stored role to the known set so the
+// sanitizeRunRole keeps the stored role to the known set so the
 // board can group and label reliably; anything unrecognised becomes
 // OTHER with the original text kept as the custom title, so inventing
 // a title never fails the save — it just renders as what was typed.
-func sanitizeDispatchRole(role, customRole string) (string, *string) {
+func sanitizeRunRole(role, customRole string) (string, *string) {
 	r := strings.ToUpper(strings.TrimSpace(role))
 	switch r {
-	case DispatchRoleDriver, DispatchRoleTout, DispatchRoleLoader:
+	case RunRoleDriver, RunRoleTout, RunRoleLoader:
 		return r, nil
 	default:
 		custom := strings.TrimSpace(customRole)
@@ -66,31 +72,31 @@ func sanitizeDispatchRole(role, customRole string) (string, *string) {
 			custom = strings.TrimSpace(role)
 		}
 		if custom == "" {
-			return DispatchRoleOther, nil
+			return RunRoleOther, nil
 		}
-		return DispatchRoleOther, &custom
+		return RunRoleOther, &custom
 	}
 }
 
-type DispatchCrew struct {
+type RunCrew struct {
 	ID         string  `json:"id"`
 	Name       string  `json:"name"`
 	Msisdn     *string `json:"msisdn"`
 	Role       string  `json:"role"`
 	CustomRole *string `json:"customRole"`
 	StaffID    *string `json:"staffId"`
-	// RoleLabel is derived (see DispatchCrewRoleLabel) so clients never
+	// RoleLabel is derived (see RunCrewRoleLabel) so clients never
 	// reimplement the OTHER-falls-back-to-custom title rule.
 	RoleLabel string `json:"roleLabel"`
 }
 
-type DispatchReceiver struct {
+type RunReceiver struct {
 	ID      string  `json:"id"`
 	Name    string  `json:"name"`
 	StaffID *string `json:"staffId"`
 }
 
-type DispatchStation struct {
+type RunStation struct {
 	ID           string  `json:"id"`
 	Name         string  `json:"name"`
 	LocationHint string  `json:"locationHint"`
@@ -98,7 +104,7 @@ type DispatchStation struct {
 	Lng          float64 `json:"lng"`
 }
 
-type DispatchPing struct {
+type RunPing struct {
 	Lat float64 `json:"lat"`
 	Lng float64 `json:"lng"`
 	At  string  `json:"at"`
@@ -108,8 +114,8 @@ type Dispatch struct {
 	ID                 string            `json:"id"`
 	VehiclePlate       string            `json:"vehiclePlate"`
 	VehicleType        string            `json:"vehicleType"`
-	Origin             *DispatchStation  `json:"origin"`
-	Destination        *DispatchStation  `json:"destination"`
+	Origin             *RunStation  `json:"origin"`
+	Destination        *RunStation  `json:"destination"`
 	Status             string            `json:"status"`
 	Notes              *string           `json:"notes"`
 	CurrentLat         *float64          `json:"currentLat"`
@@ -118,12 +124,18 @@ type Dispatch struct {
 	ArrivedAt          *string           `json:"arrivedAt"`
 	ReceivedBy         *string           `json:"receivedBy"`
 	CreatedAt          string            `json:"createdAt"`
-	Crew               []DispatchCrew    `json:"crew"`
-	Receivers          []DispatchReceiver `json:"receivers"`
-	Trail              []DispatchPing    `json:"trail"`
+	// The route followed, when one was chosen. Nil for an ad-hoc run.
+	RouteID            *string           `json:"routeId"`
+	RouteName          *string           `json:"routeName"`
+	// How many parcels are aboard — the number the merge exists to make
+	// answerable from the board. A dispatch could never report it.
+	Loaded             int               `json:"loaded"`
+	Crew               []RunCrew    `json:"crew"`
+	Receivers          []RunReceiver `json:"receivers"`
+	Trail              []RunPing    `json:"trail"`
 }
 
-type DispatchCrewInput struct {
+type RunCrewInput struct {
 	Name       string
 	Msisdn     *string
 	Role       string
@@ -131,26 +143,31 @@ type DispatchCrewInput struct {
 	StaffID    *string
 }
 
-type DispatchReceiverInput struct {
+type RunReceiverInput struct {
 	Name    string
 	StaffID *string
 }
 
-type CreateDispatchInput struct {
+type CreateRunInput struct {
 	VehiclePlate         string
 	VehicleType          string
 	OriginStationID      *string
 	DestinationStationID *string
+	// The route this run follows, when it follows a planned one. Nil is
+	// an ad-hoc run — a vehicle at the door that nobody scheduled — and
+	// must stay possible, or the counter stops during exactly the rush
+	// the ad-hoc run exists to absorb (ADR-0006).
+	RouteID *string
 	Notes                *string
-	Crew                 []DispatchCrewInput
-	Receivers            []DispatchReceiverInput
+	Crew                 []RunCrewInput
+	Receivers            []RunReceiverInput
 	CreatedByStaffID     *string
 }
 
-// dispatchVehicleTypes — the console's vehicle picker. Free text would let
+// runVehicleTypes — the console's vehicle picker. Free text would let
 // a typo ("Vna") fork the board's grouping; OTHER keeps the escape
 // hatch without forking anything.
-var dispatchVehicleTypes = map[string]bool{
+var runVehicleTypes = map[string]bool{
 	"VAN": true, "TRUCK": true, "BUS": true, "PICKUP": true, "MOTORBIKE": true, "OTHER": true,
 }
 
@@ -166,17 +183,17 @@ func staffBelongsToOrg(ctx context.Context, pool *pgxpool.Pool, orgID, staffID s
 	return n > 0, err
 }
 
-// CreateDispatch opens a run: vehicle, leg, crew and receiving team in
+// CreateRun opens a run: vehicle, leg, crew and receiving team in
 // one transaction, so the board never shows a half-written dispatch.
 // Stations and roster links are re-checked against the org — ids arrive
 // from the browser and are not trusted on their own.
-func CreateDispatch(ctx context.Context, pool *pgxpool.Pool, orgID string, in CreateDispatchInput) (string, error) {
+func CreateRun(ctx context.Context, pool *pgxpool.Pool, orgID string, in CreateRunInput) (string, error) {
 	plate := strings.ToUpper(strings.TrimSpace(in.VehiclePlate))
 	if plate == "" {
 		return "", &ParcelError{"BAD_INPUT", "The vehicle's number plate is required"}
 	}
 	vehicleType := strings.ToUpper(strings.TrimSpace(in.VehicleType))
-	if !dispatchVehicleTypes[vehicleType] {
+	if !runVehicleTypes[vehicleType] {
 		vehicleType = "OTHER"
 	}
 	if in.OriginStationID != nil && *in.OriginStationID != "" {
@@ -209,7 +226,7 @@ func CreateDispatch(ctx context.Context, pool *pgxpool.Pool, orgID string, in Cr
 		if in.Crew[i].Name == "" {
 			return "", &ParcelError{"BAD_INPUT", "Every crew member needs a name"}
 		}
-		in.Crew[i].Role, in.Crew[i].CustomRole = sanitizeDispatchRole(in.Crew[i].Role, stringOrEmpty(in.Crew[i].CustomRole))
+		in.Crew[i].Role, in.Crew[i].CustomRole = sanitizeRunRole(in.Crew[i].Role, stringOrEmpty(in.Crew[i].CustomRole))
 		if in.Crew[i].CustomRole != nil && strings.TrimSpace(*in.Crew[i].CustomRole) == "" {
 			in.Crew[i].CustomRole = nil
 		}
@@ -268,17 +285,32 @@ func CreateDispatch(ctx context.Context, pool *pgxpool.Pool, orgID string, in Cr
 	}
 	defer tx.Rollback(ctx)
 	var id string
+	// LOADING, not DEPARTED: a run now has a cargo phase, which is the
+	// whole point of the merge (ADR-0006). A dispatch used to be created
+	// at the moment a vehicle set off because it had no parcels to wait
+	// for; this one can be opened at the shed and loaded against.
+	//
+	// The labels are written from the chosen stations and are a SNAPSHOT
+	// from here on — renaming a station later must not rewrite what a
+	// manifest printed today said. They are also NOT NULL on this table,
+	// so there is no option to leave them out.
 	err = tx.QueryRow(ctx, `
-		INSERT INTO parcel_dispatch ("parcelOrgId", "vehiclePlate", "vehicleType",
-			"originStationId", "destinationStationId", notes, "createdByStaffId", status)
-		VALUES ($1, $2, $3, $4, $5, $6, $7, 'ACTIVE') RETURNING id`,
-		orgID, plate, vehicleType, in.OriginStationID, in.DestinationStationID, notes, in.CreatedByStaffID).Scan(&id)
+		INSERT INTO parcel_shipment ("parcelOrgId", "vehiclePlate", "vehicleType",
+			"originStationId", "destinationStationId", "routeId", notes, "createdByStaffId",
+			"originLabel", "destinationLabel", status)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8,
+			COALESCE((SELECT name FROM parcel_agent WHERE id = $4), 'Origin'),
+			COALESCE((SELECT name FROM parcel_agent WHERE id = $5), 'Destination'),
+			'LOADING')
+		RETURNING id`,
+		orgID, plate, vehicleType, in.OriginStationID, in.DestinationStationID,
+		in.RouteID, notes, in.CreatedByStaffID).Scan(&id)
 	if err != nil {
 		return "", err
 	}
 	for _, c := range in.Crew {
 		if _, err := tx.Exec(ctx, `
-			INSERT INTO parcel_dispatch_crew ("dispatchId", name, msisdn, role, "customRole", "staffId")
+			INSERT INTO parcel_run_crew ("runId", name, msisdn, role, "customRole", "staffId")
 			VALUES ($1, $2, $3, $4, $5, $6)`,
 			id, c.Name, c.Msisdn, c.Role, c.CustomRole, c.StaffID); err != nil {
 			return "", err
@@ -286,7 +318,7 @@ func CreateDispatch(ctx context.Context, pool *pgxpool.Pool, orgID string, in Cr
 	}
 	for _, r := range in.Receivers {
 		if _, err := tx.Exec(ctx, `
-			INSERT INTO parcel_dispatch_receiver ("dispatchId", name, "staffId")
+			INSERT INTO parcel_run_receiver ("runId", name, "staffId")
 			VALUES ($1, $2, $3)`, id, r.Name, r.StaffID); err != nil {
 			return "", err
 		}
@@ -304,7 +336,7 @@ func stringOrEmpty(s *string) string {
 	return *s
 }
 
-func scanDispatchStation(id, name, hint, latText, lngText *string) (*DispatchStation, error) {
+func scanRunStation(id, name, hint, latText, lngText *string) (*RunStation, error) {
 	if id == nil || *id == "" {
 		return nil, nil
 	}
@@ -323,16 +355,19 @@ func scanDispatchStation(id, name, hint, latText, lngText *string) (*DispatchSta
 	if hint != nil {
 		hintVal = *hint
 	}
-	return &DispatchStation{ID: *id, Name: nameVal, LocationHint: hintVal, Lat: lat, Lng: lng}, nil
+	return &RunStation{ID: *id, Name: nameVal, LocationHint: hintVal, Lat: lat, Lng: lng}, nil
 }
 
-// ListDispatches — the board: active runs first, then recently closed
+// ListRuns — the board: active runs first, then recently closed
 // ones. Crew and receivers ride along so the board renders without a
 // per-row fetch; the trail stays behind the detail endpoint (bounded
 // there), because a board that drags every ping of every run is how a
 // dispatch screen gets slow exactly when it matters.
-func ListDispatches(ctx context.Context, pool *pgxpool.Pool, orgID string, includeClosed bool) ([]Dispatch, error) {
-	statusFilter := `AND d.status = 'ACTIVE'`
+func ListRuns(ctx context.Context, pool *pgxpool.Pool, orgID string, includeClosed bool) ([]Dispatch, error) {
+	// A run is "open" in two states now, where a dispatch had one:
+	// still at the shed taking boxes, or out on the road. Both are runs
+	// a dispatcher is responsible for today.
+	statusFilter := `AND d.status IN ('LOADING', 'DEPARTED')`
 	if includeClosed {
 		statusFilter = ``
 	}
@@ -342,12 +377,17 @@ func ListDispatches(ctx context.Context, pool *pgxpool.Pool, orgID string, inclu
 		       t.id::text, t.name, t."locationHint", t.lat::text, t.lng::text,
 		       d.status, d.notes,
 		       d."currentLat"::text, d."currentLng"::text, d."currentAt"::text,
-		       d."arrivedAt"::text, d."receivedBy", d."createdAt"::text
-		FROM parcel_dispatch d
+		       d."arrivedAt"::text, d."receivedBy", d."createdAt"::text,
+		       d."routeId"::text, r.name,
+		       (SELECT count(*) FROM parcel_shipment_item i
+		         WHERE i."shipmentId" = d.id AND i."loadedAt" IS NOT NULL
+		           AND i."offloadedAt" IS NULL)
+		FROM parcel_shipment d
 		LEFT JOIN parcel_agent o ON o.id = d."originStationId"
 		LEFT JOIN parcel_agent t ON t.id = d."destinationStationId"
+		LEFT JOIN parcel_route r ON r.id = d."routeId"
 		WHERE d."parcelOrgId" = $1 `+statusFilter+`
-		ORDER BY (d.status = 'ACTIVE') DESC, d."createdAt" DESC LIMIT 50`, orgID)
+		ORDER BY (d.status IN ('LOADING', 'DEPARTED')) DESC, d."createdAt" DESC LIMIT 50`, orgID)
 	if err != nil {
 		return nil, err
 	}
@@ -362,13 +402,14 @@ func ListDispatches(ctx context.Context, pool *pgxpool.Pool, orgID string, inclu
 			&oID, &oName, &oHint, &oLat, &oLng,
 			&tID, &tName, &tHint, &tLat, &tLng,
 			&d.Status, &d.Notes, &curLat, &curLng, &curAt,
-			&d.ArrivedAt, &d.ReceivedBy, &d.CreatedAt); err != nil {
+			&d.ArrivedAt, &d.ReceivedBy, &d.CreatedAt,
+			&d.RouteID, &d.RouteName, &d.Loaded); err != nil {
 			return nil, err
 		}
-		if d.Origin, err = scanDispatchStation(oID, oName, oHint, oLat, oLng); err != nil {
+		if d.Origin, err = scanRunStation(oID, oName, oHint, oLat, oLng); err != nil {
 			return nil, err
 		}
-		if d.Destination, err = scanDispatchStation(tID, tName, tHint, tLat, tLng); err != nil {
+		if d.Destination, err = scanRunStation(tID, tName, tHint, tLat, tLng); err != nil {
 			return nil, err
 		}
 		if curLat != nil && *curLat != "" {
@@ -394,61 +435,61 @@ func ListDispatches(ctx context.Context, pool *pgxpool.Pool, orgID string, inclu
 		return nil, err
 	}
 	for i := range out {
-		crew, err := listDispatchCrew(ctx, pool, orgID, out[i].ID)
+		crew, err := listRunCrew(ctx, pool, orgID, out[i].ID)
 		if err != nil {
 			return nil, err
 		}
 		out[i].Crew = crew
-		receivers, err := listDispatchReceivers(ctx, pool, orgID, out[i].ID)
+		receivers, err := listRunReceivers(ctx, pool, orgID, out[i].ID)
 		if err != nil {
 			return nil, err
 		}
 		out[i].Receivers = receivers
 		if out[i].Trail == nil {
-			out[i].Trail = []DispatchPing{}
+			out[i].Trail = []RunPing{}
 		}
 	}
 	return out, nil
 }
 
-func listDispatchCrew(ctx context.Context, pool *pgxpool.Pool, orgID, dispatchID string) ([]DispatchCrew, error) {
+func listRunCrew(ctx context.Context, pool *pgxpool.Pool, orgID, runID string) ([]RunCrew, error) {
 	rows, err := pool.Query(ctx, `
 		SELECT c.id, c.name, c.msisdn, c.role, c."customRole", c."staffId"::text
-		FROM parcel_dispatch_crew c
-		JOIN parcel_dispatch d ON d.id = c."dispatchId"
-		WHERE c."dispatchId" = $1 AND d."parcelOrgId" = $2
-		ORDER BY CASE c.role WHEN 'DRIVER' THEN 0 WHEN 'TOUT' THEN 1 WHEN 'LOADER' THEN 2 ELSE 3 END, c.name`, dispatchID, orgID)
+		FROM parcel_run_crew c
+		JOIN parcel_shipment d ON d.id = c."runId"
+		WHERE c."runId" = $1 AND d."parcelOrgId" = $2
+		ORDER BY CASE c.role WHEN 'DRIVER' THEN 0 WHEN 'TOUT' THEN 1 WHEN 'LOADER' THEN 2 ELSE 3 END, c.name`, runID, orgID)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
-	var out []DispatchCrew
+	var out []RunCrew
 	for rows.Next() {
-		var c DispatchCrew
+		var c RunCrew
 		if err := rows.Scan(&c.ID, &c.Name, &c.Msisdn, &c.Role, &c.CustomRole, &c.StaffID); err != nil {
 			return nil, err
 		}
 		custom := stringOrEmpty(c.CustomRole)
-		c.RoleLabel = DispatchCrewRoleLabel(c.Role, custom)
+		c.RoleLabel = RunCrewRoleLabel(c.Role, custom)
 		out = append(out, c)
 	}
 	return out, rows.Err()
 }
 
-func listDispatchReceivers(ctx context.Context, pool *pgxpool.Pool, orgID, dispatchID string) ([]DispatchReceiver, error) {
+func listRunReceivers(ctx context.Context, pool *pgxpool.Pool, orgID, runID string) ([]RunReceiver, error) {
 	rows, err := pool.Query(ctx, `
 		SELECT r.id, r.name, r."staffId"::text
-		FROM parcel_dispatch_receiver r
-		JOIN parcel_dispatch d ON d.id = r."dispatchId"
-		WHERE r."dispatchId" = $1 AND d."parcelOrgId" = $2
-		ORDER BY r.name`, dispatchID, orgID)
+		FROM parcel_run_receiver r
+		JOIN parcel_shipment d ON d.id = r."runId"
+		WHERE r."runId" = $1 AND d."parcelOrgId" = $2
+		ORDER BY r.name`, runID, orgID)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
-	var out []DispatchReceiver
+	var out []RunReceiver
 	for rows.Next() {
-		var r DispatchReceiver
+		var r RunReceiver
 		if err := rows.Scan(&r.ID, &r.Name, &r.StaffID); err != nil {
 			return nil, err
 		}
@@ -457,29 +498,29 @@ func listDispatchReceivers(ctx context.Context, pool *pgxpool.Pool, orgID, dispa
 	return out, rows.Err()
 }
 
-// GetDispatch — one run with its recent trail (last 200 points): the
+// GetRun — one run with its recent trail (last 200 points): the
 // map's blue journey line plus where the vehicle actually went. Scoped
 // by org so a run id from another company reads as not-found.
-func GetDispatch(ctx context.Context, pool *pgxpool.Pool, orgID, dispatchID string) (*Dispatch, error) {
-	lists, err := ListDispatches(ctx, pool, orgID, true)
+func GetRun(ctx context.Context, pool *pgxpool.Pool, orgID, runID string) (*Dispatch, error) {
+	lists, err := ListRuns(ctx, pool, orgID, true)
 	if err != nil {
 		return nil, err
 	}
 	for i := range lists {
-		if lists[i].ID != dispatchID {
+		if lists[i].ID != runID {
 			continue
 		}
 		d := &lists[i]
 		rows, err := pool.Query(ctx, `
 			SELECT p.lat::text, p.lng::text, p.at::text
-			FROM parcel_dispatch_ping p
-			JOIN parcel_dispatch d ON d.id = p."dispatchId"
-			WHERE p."dispatchId" = $1 AND d."parcelOrgId" = $2
-			ORDER BY p.at DESC LIMIT 200`, dispatchID, orgID)
+			FROM parcel_run_ping p
+			JOIN parcel_shipment d ON d.id = p."runId"
+			WHERE p."runId" = $1 AND d."parcelOrgId" = $2
+			ORDER BY p.at DESC LIMIT 200`, runID, orgID)
 		if err != nil {
 			return nil, err
 		}
-		var trail []DispatchPing
+		var trail []RunPing
 		for rows.Next() {
 			var latText, lngText, at string
 			if err := rows.Scan(&latText, &lngText, &at); err != nil {
@@ -496,7 +537,7 @@ func GetDispatch(ctx context.Context, pool *pgxpool.Pool, orgID, dispatchID stri
 				rows.Close()
 				return nil, err
 			}
-			trail = append(trail, DispatchPing{Lat: lat, Lng: lng, At: at})
+			trail = append(trail, RunPing{Lat: lat, Lng: lng, At: at})
 		}
 		rows.Close()
 		if err := rows.Err(); err != nil {
@@ -512,11 +553,11 @@ func GetDispatch(ctx context.Context, pool *pgxpool.Pool, orgID, dispatchID stri
 	return nil, nil
 }
 
-// ReportDispatchPosition records where the run is: the board marker
+// ReportRunPosition records where the run is: the board marker
 // moves to it and the point joins the trail. Only ACTIVE runs accept
 // positions — a checked-in run's trail is history, not something a
 // stale phone should keep rewriting.
-func ReportDispatchPosition(ctx context.Context, pool *pgxpool.Pool, orgID, dispatchID string, lat, lng float64) error {
+func ReportRunPosition(ctx context.Context, pool *pgxpool.Pool, orgID, runID string, lat, lng float64) error {
 	if lat < -90 || lat > 90 || lng < -180 || lng > 180 {
 		return &ParcelError{"BAD_INPUT", "That position doesn't look like real coordinates"}
 	}
@@ -527,9 +568,9 @@ func ReportDispatchPosition(ctx context.Context, pool *pgxpool.Pool, orgID, disp
 	defer tx.Rollback(ctx)
 	var id string
 	err = tx.QueryRow(ctx, `
-		UPDATE parcel_dispatch SET "currentLat" = $3, "currentLng" = $4, "currentAt" = now()
-		WHERE id = $1 AND "parcelOrgId" = $2 AND status = 'ACTIVE' RETURNING id`,
-		dispatchID, orgID, lat, lng).Scan(&id)
+		UPDATE parcel_shipment SET "currentLat" = $3, "currentLng" = $4, "currentAt" = now()
+		WHERE id = $1 AND "parcelOrgId" = $2 AND status = 'DEPARTED' RETURNING id`,
+		runID, orgID, lat, lng).Scan(&id)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return &ParcelError{"NOT_FOUND", "That run isn't active — or isn't one of yours"}
 	}
@@ -537,32 +578,32 @@ func ReportDispatchPosition(ctx context.Context, pool *pgxpool.Pool, orgID, disp
 		return err
 	}
 	if _, err := tx.Exec(ctx, `
-		INSERT INTO parcel_dispatch_ping ("dispatchId", lat, lng) VALUES ($1, $2, $3)`, id, lat, lng); err != nil {
+		INSERT INTO parcel_run_ping ("runId", lat, lng) VALUES ($1, $2, $3)`, id, lat, lng); err != nil {
 		return err
 	}
 	// Keep the trail bounded: a run that pings for weeks must not grow
 	// its history — or the detail payload — without limit.
 	if _, err := tx.Exec(ctx, `
-		DELETE FROM parcel_dispatch_ping WHERE "dispatchId" = $1 AND id NOT IN (
-			SELECT id FROM parcel_dispatch_ping WHERE "dispatchId" = $1 ORDER BY at DESC LIMIT 200
+		DELETE FROM parcel_run_ping WHERE "runId" = $1 AND id NOT IN (
+			SELECT id FROM parcel_run_ping WHERE "runId" = $1 ORDER BY at DESC LIMIT 200
 		)`, id); err != nil {
 		return err
 	}
 	return tx.Commit(ctx)
 }
 
-// ArriveDispatch checks a run in: the receiving team's moment. Who
+// ArriveRun checks a run in: the receiving team's moment. Who
 // signed is recorded free-text (the person at the counter may not hold
 // a login), defaulting to the named receiving team when the field is
 // left blank. Only ACTIVE runs can arrive.
-func ArriveDispatch(ctx context.Context, pool *pgxpool.Pool, orgID, dispatchID, receivedBy string) error {
+func ArriveRun(ctx context.Context, pool *pgxpool.Pool, orgID, runID, receivedBy string) error {
 	receivedBy = strings.TrimSpace(receivedBy)
 	if receivedBy == "" {
 		var fallback *string
 		err := pool.QueryRow(ctx, `
-			SELECT string_agg(r.name, ', ') FROM parcel_dispatch_receiver r
-			JOIN parcel_dispatch d ON d.id = r."dispatchId"
-			WHERE r."dispatchId" = $1 AND d."parcelOrgId" = $2`, dispatchID, orgID).Scan(&fallback)
+			SELECT string_agg(r.name, ', ') FROM parcel_run_receiver r
+			JOIN parcel_shipment d ON d.id = r."runId"
+			WHERE r."runId" = $1 AND d."parcelOrgId" = $2`, runID, orgID).Scan(&fallback)
 		if err != nil {
 			return err
 		}
@@ -574,8 +615,8 @@ func ArriveDispatch(ctx context.Context, pool *pgxpool.Pool, orgID, dispatchID, 
 		return &ParcelError{"BAD_INPUT", "Say who received the run — a name at the counter is enough"}
 	}
 	res, err := pool.Exec(ctx, `
-		UPDATE parcel_dispatch SET status = 'ARRIVED', "arrivedAt" = now(), "receivedBy" = $3
-		WHERE id = $1 AND "parcelOrgId" = $2 AND status = 'ACTIVE'`, dispatchID, orgID, receivedBy)
+		UPDATE parcel_shipment SET status = 'ARRIVED', "arrivedAt" = now(), "receivedBy" = $3
+		WHERE id = $1 AND "parcelOrgId" = $2 AND status = 'DEPARTED'`, runID, orgID, receivedBy)
 	if err != nil {
 		return err
 	}
@@ -585,12 +626,12 @@ func ArriveDispatch(ctx context.Context, pool *pgxpool.Pool, orgID, dispatchID, 
 	return nil
 }
 
-// CancelDispatch calls a run off before it arrives. History stays
+// CancelRun calls a run off before it arrives. History stays
 // readable; only the board stops showing it as live.
-func CancelDispatch(ctx context.Context, pool *pgxpool.Pool, orgID, dispatchID string) error {
+func CancelRun(ctx context.Context, pool *pgxpool.Pool, orgID, runID string) error {
 	res, err := pool.Exec(ctx, `
-		UPDATE parcel_dispatch SET status = 'CANCELLED'
-		WHERE id = $1 AND "parcelOrgId" = $2 AND status = 'ACTIVE'`, dispatchID, orgID)
+		UPDATE parcel_shipment SET status = 'CANCELLED'
+		WHERE id = $1 AND "parcelOrgId" = $2 AND status IN ('LOADING', 'DEPARTED')`, runID, orgID)
 	if err != nil {
 		return err
 	}

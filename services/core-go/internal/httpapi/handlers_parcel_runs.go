@@ -14,8 +14,14 @@ import (
 // own session. Every handler reads the org from the session (see
 // orgCtx), never from the request: a run id from another company reads
 // as not-found, never as somebody else's run.
+//
+// Canonically mounted at /v1/parcel-orgs/me/runs since ADR-0006 merged
+// dispatches and shipments into one record. The older /me/dispatch and
+// /me/shipments paths still resolve here — a rider's installed PWA may
+// hold either, and breaking a route to rename it would strand exactly
+// the people who cannot easily update.
 
-type dispatchCrewRequest struct {
+type runCrewRequest struct {
 	Name       string  `json:"name" binding:"required"`
 	Msisdn     *string `json:"msisdn"`
 	Role       string  `json:"role"`
@@ -23,29 +29,31 @@ type dispatchCrewRequest struct {
 	StaffID    *string `json:"staffId"`
 }
 
-type dispatchReceiverRequest struct {
+type runReceiverRequest struct {
 	Name    string  `json:"name" binding:"required"`
 	StaffID *string `json:"staffId"`
 }
 
-type createDispatchRequest struct {
+type createRunRequest struct {
 	VehiclePlate         string                  `json:"vehiclePlate" binding:"required"`
 	VehicleType          string                  `json:"vehicleType"`
 	OriginStationID      *string                 `json:"originStationId"`
 	DestinationStationID *string                 `json:"destinationStationId"`
 	Notes                *string                 `json:"notes"`
-	Crew                 []dispatchCrewRequest   `json:"crew" binding:"required"`
-	Receivers            []dispatchReceiverRequest `json:"receivers"`
+	// Optional: an ad-hoc run cites no route (ADR-0006).
+	RouteID              *string                 `json:"routeId"`
+	Crew                 []runCrewRequest   `json:"crew" binding:"required"`
+	Receivers            []runReceiverRequest `json:"receivers"`
 }
 
-// handleListDispatches — GET /v1/parcel-orgs/me/dispatch?closed=true.
+// handleListRuns — GET /v1/parcel-orgs/me/dispatch?closed=true.
 // The board: active runs by default, recently closed ones on request.
-func (s *Server) handleListDispatches(c *gin.Context) {
+func (s *Server) handleListRuns(c *gin.Context) {
 	orgID := s.orgCtx(c, authsvc.CapParcelOrgDispatch)
 	if orgID == "" {
 		return
 	}
-	runs, err := dbx.ListDispatches(c.Request.Context(), s.Pool, orgID, c.Query("closed") == "true")
+	runs, err := dbx.ListRuns(c.Request.Context(), s.Pool, orgID, c.Query("closed") == "true")
 	if err != nil {
 		writeError(c, http.StatusInternalServerError, "LIST_FAILED", "Could not load your runs")
 		return
@@ -53,17 +61,20 @@ func (s *Server) handleListDispatches(c *gin.Context) {
 	if runs == nil {
 		runs = []dbx.Dispatch{}
 	}
-	c.JSON(http.StatusOK, gin.H{"dispatches": runs})
+	// Both keys, same slice: "runs" is what the record is now called,
+	// "dispatches" keeps a client that predates ADR-0006 working. Cheap
+	// to send twice; expensive to strand an installed PWA.
+	c.JSON(http.StatusOK, gin.H{"runs": runs, "dispatches": runs})
 }
 
-// handleGetDispatch — GET /v1/parcel-orgs/me/dispatch/:id. One run with
+// handleGetRun — GET /v1/parcel-orgs/me/dispatch/:id. One run with
 // its trail: what the fleet map draws.
-func (s *Server) handleGetDispatch(c *gin.Context) {
+func (s *Server) handleGetRun(c *gin.Context) {
 	orgID := s.orgCtx(c, authsvc.CapParcelOrgDispatch)
 	if orgID == "" {
 		return
 	}
-	run, err := dbx.GetDispatch(c.Request.Context(), s.Pool, orgID, c.Param("id"))
+	run, err := dbx.GetRun(c.Request.Context(), s.Pool, orgID, c.Param("id"))
 	if err != nil {
 		writeError(c, http.StatusInternalServerError, "GET_FAILED", "Could not load that run")
 		return
@@ -72,23 +83,23 @@ func (s *Server) handleGetDispatch(c *gin.Context) {
 		writeError(c, http.StatusNotFound, "NOT_FOUND", "That run isn't one of yours")
 		return
 	}
-	c.JSON(http.StatusOK, gin.H{"dispatch": run})
+	c.JSON(http.StatusOK, gin.H{"run": run, "dispatch": run})
 }
 
-// handleCreateDispatch — POST /v1/parcel-orgs/me/dispatch. Opens a run:
+// handleCreateRun — POST /v1/parcel-orgs/me/dispatch. Opens a run:
 // vehicle, leg, crew and receiving team. A manager/dispatcher
 // operation (parcelorg.dispatch), not a rider's.
-func (s *Server) handleCreateDispatch(c *gin.Context) {
+func (s *Server) handleCreateRun(c *gin.Context) {
 	orgID := s.orgCtx(c, authsvc.CapParcelOrgDispatch)
 	if orgID == "" {
 		return
 	}
-	var req createDispatchRequest
+	var req createRunRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
 		writeError(c, http.StatusBadRequest, "INVALID_REQUEST", err.Error())
 		return
 	}
-	crew := make([]dbx.DispatchCrewInput, 0, len(req.Crew))
+	crew := make([]dbx.RunCrewInput, 0, len(req.Crew))
 	for _, m := range req.Crew {
 		msisdn := m.Msisdn
 		if msisdn != nil && strings.TrimSpace(*msisdn) != "" {
@@ -105,17 +116,17 @@ func (s *Server) handleCreateDispatch(c *gin.Context) {
 		if staffID != nil && strings.TrimSpace(*staffID) == "" {
 			staffID = nil
 		}
-		crew = append(crew, dbx.DispatchCrewInput{
+		crew = append(crew, dbx.RunCrewInput{
 			Name: m.Name, Msisdn: msisdn, Role: m.Role, CustomRole: m.CustomRole, StaffID: staffID,
 		})
 	}
-	receivers := make([]dbx.DispatchReceiverInput, 0, len(req.Receivers))
+	receivers := make([]dbx.RunReceiverInput, 0, len(req.Receivers))
 	for _, r := range req.Receivers {
 		staffID := r.StaffID
 		if staffID != nil && strings.TrimSpace(*staffID) == "" {
 			staffID = nil
 		}
-		receivers = append(receivers, dbx.DispatchReceiverInput{Name: r.Name, StaffID: staffID})
+		receivers = append(receivers, dbx.RunReceiverInput{Name: r.Name, StaffID: staffID})
 	}
 	var origin, destination *string
 	if req.OriginStationID != nil && strings.TrimSpace(*req.OriginStationID) != "" {
@@ -124,10 +135,15 @@ func (s *Server) handleCreateDispatch(c *gin.Context) {
 	if req.DestinationStationID != nil && strings.TrimSpace(*req.DestinationStationID) != "" {
 		destination = req.DestinationStationID
 	}
-	id, err := dbx.CreateDispatch(c.Request.Context(), s.Pool, orgID, dbx.CreateDispatchInput{
+	var routeID *string
+	if req.RouteID != nil && strings.TrimSpace(*req.RouteID) != "" {
+		routeID = req.RouteID
+	}
+	id, err := dbx.CreateRun(c.Request.Context(), s.Pool, orgID, dbx.CreateRunInput{
 		VehiclePlate: req.VehiclePlate, VehicleType: req.VehicleType,
 		OriginStationID: origin, DestinationStationID: destination,
-		Notes: req.Notes, Crew: crew, Receivers: receivers,
+		RouteID: routeID,
+		Notes:   req.Notes, Crew: crew, Receivers: receivers,
 	})
 	if err != nil {
 		writeParcelError(c, err)
@@ -136,25 +152,25 @@ func (s *Server) handleCreateDispatch(c *gin.Context) {
 	c.JSON(http.StatusCreated, gin.H{"id": id})
 }
 
-type dispatchPositionRequest struct {
+type runPositionRequest struct {
 	Lat float64 `json:"lat" binding:"required"`
 	Lng float64 `json:"lng" binding:"required"`
 }
 
-// handleReportDispatchPosition — POST
+// handleReportRunPosition — POST
 // /v1/parcel-orgs/me/dispatch/:id/position. Moves the board marker and
 // extends the trail. Whoever holds the run's phone posts it.
-func (s *Server) handleReportDispatchPosition(c *gin.Context) {
+func (s *Server) handleReportRunPosition(c *gin.Context) {
 	orgID := s.orgCtx(c, authsvc.CapParcelOrgDispatch)
 	if orgID == "" {
 		return
 	}
-	var req dispatchPositionRequest
+	var req runPositionRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
 		writeError(c, http.StatusBadRequest, "INVALID_REQUEST", err.Error())
 		return
 	}
-	if err := dbx.ReportDispatchPosition(c.Request.Context(), s.Pool, orgID, c.Param("id"), req.Lat, req.Lng); err != nil {
+	if err := dbx.ReportRunPosition(c.Request.Context(), s.Pool, orgID, c.Param("id"), req.Lat, req.Lng); err != nil {
 		writeParcelError(c, err)
 		return
 	}
@@ -163,14 +179,14 @@ func (s *Server) handleReportDispatchPosition(c *gin.Context) {
 
 type arriveDispatchRequest struct {
 	// Who signed at the counter. Blank falls back to the named
-	// receiving team (see dbx.ArriveDispatch).
+	// receiving team (see dbx.ArriveRun).
 	ReceivedBy string `json:"receivedBy"`
 }
 
-// handleArriveDispatch — POST /v1/parcel-orgs/me/dispatch/:id/arrive.
+// handleArriveRun — POST /v1/parcel-orgs/me/dispatch/:id/arrive.
 // The receiving team's check-in: the run is over, who signed is on the
 // record.
-func (s *Server) handleArriveDispatch(c *gin.Context) {
+func (s *Server) handleArriveRun(c *gin.Context) {
 	orgID := s.orgCtx(c, authsvc.CapParcelOrgDispatch)
 	if orgID == "" {
 		return
@@ -180,21 +196,21 @@ func (s *Server) handleArriveDispatch(c *gin.Context) {
 		writeError(c, http.StatusBadRequest, "INVALID_REQUEST", err.Error())
 		return
 	}
-	if err := dbx.ArriveDispatch(c.Request.Context(), s.Pool, orgID, c.Param("id"), req.ReceivedBy); err != nil {
+	if err := dbx.ArriveRun(c.Request.Context(), s.Pool, orgID, c.Param("id"), req.ReceivedBy); err != nil {
 		writeParcelError(c, err)
 		return
 	}
 	c.JSON(http.StatusOK, gin.H{"arrived": true})
 }
 
-// handleCancelDispatch — POST /v1/parcel-orgs/me/dispatch/:id/cancel.
+// handleCancelRun — POST /v1/parcel-orgs/me/dispatch/:id/cancel.
 // Calls a run off before it arrives.
-func (s *Server) handleCancelDispatch(c *gin.Context) {
+func (s *Server) handleCancelRun(c *gin.Context) {
 	orgID := s.orgCtx(c, authsvc.CapParcelOrgDispatch)
 	if orgID == "" {
 		return
 	}
-	if err := dbx.CancelDispatch(c.Request.Context(), s.Pool, orgID, c.Param("id")); err != nil {
+	if err := dbx.CancelRun(c.Request.Context(), s.Pool, orgID, c.Param("id")); err != nil {
 		writeParcelError(c, err)
 		return
 	}
