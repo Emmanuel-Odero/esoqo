@@ -14,25 +14,9 @@ const PARCEL_TYPES: [value: string, label: string][] = [
   ['HEAVY_OVERSIZE', 'Heavy / oversize'],
 ];
 
-const inputStyle: React.CSSProperties = {
-  width: '100%', marginTop: 4, padding: '9px 11px',
-  border: '1.5px solid var(--line)', borderRadius: 8, fontSize: '.92rem',
-};
 
-const sectionStyle: React.CSSProperties = {
-  border: '1px solid var(--line)', borderRadius: 10, padding: '12px 14px',
-  background: 'var(--paper)',
-};
 
-const sectionTitleStyle: React.CSSProperties = {
-  margin: 0, fontSize: '.72rem', fontWeight: 700, letterSpacing: '.08em',
-  textTransform: 'uppercase', color: 'var(--tx-2)',
-};
 
-const gridStyle: React.CSSProperties = {
-  display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(170px, 1fr))',
-  gap: 10, marginTop: 8,
-};
 
 /**
  * Add a parcel with your own number — for work that starts on paper or
@@ -213,47 +197,53 @@ export function CustomParcelPanel() {
 
   if (!open) {
     return (
-      <button className="btn btn-o btn-sm" onClick={() => setOpen(true)} style={{ marginBottom: 16 }}>
-        <Icon name="plus" size={14} />Add a custom parcel
-      </button>
+      <div className="ptoolbar porg-custom-open">
+        <button className="btn btn-o" onClick={() => setOpen(true)}>
+          <Icon name="plus" size={16} />Add a custom parcel
+        </button>
+        <span className="sub">
+          Bringing a parcel in from your own system, with your own number.
+        </span>
+      </div>
     );
   }
 
   return (
-    <section className="card" style={{ marginBottom: 18, padding: 18 }}>
-      <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 12, marginBottom: 4 }}>
+    <section className="ppanel porg-custom-parcel">
+      <div className="ppanel-head">
         <div>
-          <h2 style={{ margin: 0, fontSize: '1.05rem' }}>Add a custom parcel</h2>
-          <p className="sub" style={{ margin: '4px 0 0', maxWidth: '70ch' }}>
+          <h2>Add a custom parcel</h2>
+          <p>
             Use your own parcel number — it stays on the parcel and is searchable here. Esoqo
             gives it a tracking code so you can manage and track it like any other.
             Only Esoqo PKG-… labels scan: your old self-printed stickers are retired —
             attach one of your Esoqo labels below so the box scans.
           </p>
         </div>
-        <button className="btn btn-o btn-sm" aria-label="Close" disabled={pending}
-          onClick={() => { reset(); setOpen(false); setError(null); setMinted(null); }}>
-          <Icon name="close" size={14} />
-        </button>
+        <div className="ppanel-head-actions">
+          <button className="btn btn-o btn-sm" aria-label="Close" disabled={pending}
+            onClick={() => { reset(); setOpen(false); setError(null); setMinted(null); }}>
+            <Icon name="close" size={14} />Close
+          </button>
+        </div>
       </div>
 
-      {minted && (
-        <div className="chain ok" style={{ margin: '14px 0 0' }}>
-          <Icon name="check-circle" size={16} />
-          <span>Saved. Tracking code: <strong className="mono">{minted}</strong></span>
-        </div>
-      )}
-
-      <div style={{ display: 'grid', gap: 12, marginTop: 14 }}>
-        <fieldset style={sectionStyle}>
-          <h3 style={sectionTitleStyle}>Parcel number</h3>
-          <div style={gridStyle}>
-            <label className="sub">Your number
-              <input style={inputStyle} className="mono" value={number} placeholder="e.g. SWIFT-00471"
+      <div className="ppanel-body porg-custom-body">
+        {minted && (
+          <p className="pnote pnote-ok" role="status">
+            <Icon name="check-circle" size={16} />
+            <span>Saved. Tracking code: <strong className="mono">{minted}</strong></span>
+          </p>
+        )}
+        <fieldset className="psection is-boxed">
+          <h3 className="psection-title">Parcel number</h3>
+          <div className="pgrid">
+            <label className="pfield"><span>Your number</span>
+              <input className="mono" value={number} placeholder="e.g. SWIFT-00471"
                 onChange={(e) => setNumber(e.target.value)} />
             </label>
-            <label className="sub">Parcel type
-              <select style={inputStyle} value={parcelType} onChange={(e) => setParcelType(e.target.value)}>
+            <label className="pfield"><span>Parcel type</span>
+              <select value={parcelType} onChange={(e) => setParcelType(e.target.value)}>
                 {PARCEL_TYPES.map(([v, l]) => <option key={v} value={v}>{l}</option>)}
               </select>
             </label>
@@ -272,74 +262,78 @@ export function CustomParcelPanel() {
           onClose={() => setLabelPickerOpen(false)}
         />
 
-        <fieldset style={sectionStyle}>
-          <h3 style={sectionTitleStyle}>Sender</h3>
-          <div style={gridStyle}>
-            <label className="sub">Name
-              <input style={inputStyle} value={senderName} onChange={(e) => setSenderName(e.target.value)} />
+        <fieldset className="psection is-boxed">
+          <h3 className="psection-title">Sender</h3>
+          <div className="pgrid">
+            <label className="pfield"><span>Name</span>
+              <input value={senderName} onChange={(e) => setSenderName(e.target.value)} />
             </label>
-            <label className="sub">Phone
-              <input style={inputStyle} className="mono" value={senderMsisdn} placeholder="07…" inputMode="tel"
+            <label className="pfield"><span>Phone</span>
+              <input className="mono" value={senderMsisdn} placeholder="07…" inputMode="tel"
                 onChange={(e) => setSenderMsisdn(e.target.value)} />
             </label>
           </div>
         </fieldset>
 
-        <fieldset style={sectionStyle}>
-          <h3 style={sectionTitleStyle}>Receiver</h3>
-          <div style={gridStyle}>
-            <label className="sub">Name
-              <input style={inputStyle} value={receiverName} onChange={(e) => setReceiverName(e.target.value)} />
+        <fieldset className="psection is-boxed">
+          <h3 className="psection-title">Receiver</h3>
+          <div className="pgrid">
+            <label className="pfield"><span>Name</span>
+              <input value={receiverName} onChange={(e) => setReceiverName(e.target.value)} />
             </label>
-            <label className="sub">Phone
-              <input style={inputStyle} className="mono" value={receiverMsisdn} placeholder="07…" inputMode="tel"
+            <label className="pfield"><span>Phone</span>
+              <input className="mono" value={receiverMsisdn} placeholder="07…" inputMode="tel"
                 onChange={(e) => setReceiverMsisdn(e.target.value)} />
             </label>
           </div>
         </fieldset>
 
-        <fieldset style={sectionStyle}>
-          <h3 style={sectionTitleStyle}>Journey</h3>
-          <div style={gridStyle}>
-            <label className="sub">From
-              <input style={inputStyle} value={originLabel} placeholder="e.g. Nairobi CBD"
+        <fieldset className="psection is-boxed">
+          <h3 className="psection-title">Journey</h3>
+          <div className="pgrid">
+            <label className="pfield"><span>From</span>
+              <input value={originLabel} placeholder="e.g. Nairobi CBD"
                 onChange={(e) => setOriginLabel(e.target.value)} />
             </label>
-            <label className="sub">To
-              <input style={inputStyle} value={destinationLabel} placeholder="e.g. Nakuru"
+            <label className="pfield"><span>To</span>
+              <input value={destinationLabel} placeholder="e.g. Nakuru"
                 onChange={(e) => setDestinationLabel(e.target.value)} />
             </label>
           </div>
         </fieldset>
 
-        <fieldset style={sectionStyle}>
-          <h3 style={sectionTitleStyle}>Package</h3>
-          <div style={gridStyle}>
-            <label className="sub">Weight (kg, optional)
-              <input style={inputStyle} className="mono" value={weightKg} inputMode="decimal"
+        <fieldset className="psection is-boxed">
+          <h3 className="psection-title">Package</h3>
+          <div className="pgrid">
+            <label className="pfield"><span>Weight (kg, optional)</span>
+              <input className="mono" value={weightKg} inputMode="decimal"
                 onChange={(e) => setWeightKg(e.target.value.replace(/[^\d.]/g, ''))} />
             </label>
-            <label className="sub">Notes (optional)
-              <input style={inputStyle} value={notes} onChange={(e) => setNotes(e.target.value)} />
+            <label className="pfield"><span>Notes (optional)</span>
+              <input value={notes} onChange={(e) => setNotes(e.target.value)} />
             </label>
           </div>
-          <label className="sub" style={{ display: 'flex', gap: 8, alignItems: 'center', marginTop: 10 }}>
+          <label className="pfield-check" style={{ marginTop: 10 }}>
             <input type="checkbox" checked={fragile} onChange={(e) => setFragile(e.target.checked)} />
-            Fragile — handle with care
+            <span>Fragile — handle with care</span>
           </label>
         </fieldset>
-      </div>
 
-      {error && <p role="alert" className="sub" style={{ color: 'var(--red)', marginTop: 12 }}>{error}</p>}
+        {error && (
+          <p role="alert" className="pnote pnote-bad">
+            <Icon name="alert-circle" size={16} /><span>{error}</span>
+          </p>
+        )}
 
-      <div className="row" style={{ gap: 8, marginTop: 14, flexWrap: 'wrap' }}>
-        <button className="btn btn-p btn-sm" disabled={pending || !ready} onClick={save}>
-          {pending ? 'Saving…' : 'Save parcel'}
-        </button>
-        <button className="btn btn-o btn-sm" disabled={pending}
-          onClick={() => { reset(); setOpen(false); setError(null); }}>
-          Close
-        </button>
+        <div className="ptoolbar" style={{ marginBottom: 0 }}>
+          <button className="btn btn-p" disabled={pending || !ready} onClick={save}>
+            <Icon name="check" size={16} />{pending ? 'Saving…' : 'Save parcel'}
+          </button>
+          <button className="btn btn-o" disabled={pending}
+            onClick={() => { reset(); setOpen(false); setError(null); }}>
+            Cancel
+          </button>
+        </div>
       </div>
     </section>
   );
@@ -366,8 +360,8 @@ function LabelPicker({
   onClose: () => void;
 }) {
   return (
-    <fieldset style={sectionStyle}>
-      <h3 style={sectionTitleStyle}>Parcel label (optional)</h3>
+    <fieldset className="psection is-boxed">
+      <h3 className="psection-title">Parcel label (optional)</h3>
       <p className="sub" style={{ margin: '6px 0 0' }}>
         Sticking one of your pre-printed labels on this box? Its code becomes the
         tracking code. Leave this empty and Esoqo mints one instead.
@@ -383,7 +377,7 @@ function LabelPicker({
       ) : (
         <div style={{ position: 'relative', marginTop: 8 }}>
           <input
-            style={inputStyle} className="mono" value={tail}
+            className="pinput mono" value={tail}
             placeholder="Type any characters, e.g. YZN…"
             aria-label="Find a label by any characters in its code"
             autoComplete="off"
