@@ -10,11 +10,12 @@ export default function SignInPage() {
     <div className="si-root">
       <div className="si-brand">
         <div className="si-brand-inner">
-          <span className="si-mark">
-            <Logo />
-          </span>
-          <strong>Esoqo</strong>
-          <span className="si-brand-sub">Operations Dashboard</span>
+          <div className="si-brand-header">
+            <span className="si-mark">
+              <Logo inverse />
+            </span>
+            <span className="si-brand-sub">Operations Dashboard</span>
+          </div>
         </div>
         <div className="si-brand-foot">
           <span className="si-badge">Staff access only</span>
