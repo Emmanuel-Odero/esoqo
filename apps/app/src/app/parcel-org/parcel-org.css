@@ -26,18 +26,17 @@
   background:#fff; border-bottom:1px solid var(--line);
 }
 .porgbar-in {
-  max-width:1180px; margin:0 auto; min-height:62px;
+  max-width:1180px; margin:0 auto; min-height:64px;
   padding:calc(6px + var(--safe-t)) max(20px,var(--safe-r)) 6px max(20px,var(--safe-l));
-  display:flex; align-items:center; gap:16px; flex-wrap:wrap;
+  display:flex; align-items:center; gap:8px; flex-wrap:wrap;
 }
-.porgbrand { display:inline-flex; align-items:center; gap:10px; min-height:44px }
+/* Wordmark only. The company's name and "Courier company" now come
+   from the shared WorkspaceSwitcher beside it — the same control, in
+   the same slot, as /me and the organiser console, which is what makes
+   crossing between them feel like one product rather than three. */
+.porgbrand { display:inline-flex; align-items:center; min-height:44px; flex:none }
 .porgbrand .lock { font-size:21px }
-.porg-name {
-  font-family:var(--font-display); font-weight:700; font-size:1.02rem;
-  letter-spacing:-.01em; color:var(--navy); line-height:1.1;
-}
-.porg-name small { display:block; font-family:var(--font-mono); font-weight:600;
-  font-size:.58rem; letter-spacing:.14em; text-transform:uppercase; color:var(--tx-2); margin-top:1px }
+.porgbar-in .wsw { max-width:250px }
 
 /* A single horizontally-scrollable strip, never a wrapped block: six
    tabs on a 360px phone wrapped into three cramped rows before, and the
@@ -81,6 +80,49 @@
 .head h1 { font-size:clamp(1.55rem,3vw,2rem); line-height:1.08; letter-spacing:-.03em }
 .head p { color:var(--tx-2); margin:6px 0 0; max-width:70ch }
 .head .actions { margin-left:auto; display:flex; gap:10px; flex-wrap:wrap }
+
+/* ── dashboard hero ──────────────────────────────────────────────
+   The old .head put the company name, the page title and two buttons
+   on one bare row with nothing to sit on. This is the same content as
+   one object, with the day's money beside it for whoever is allowed
+   to see it — the one figure a manager opens this page for. Mirrors
+   /me's .me-hero so a person who works for a courier and keeps their
+   own record recognises the same shape in both. */
+.porg-hero {
+  display:flex; align-items:stretch; flex-wrap:wrap;
+  border:1px solid var(--line); border-radius:var(--r-xl); background:#fff;
+  box-shadow:var(--sh-s); overflow:hidden; margin:0 0 16px;
+}
+.porg-hero-copy { flex:1 1 340px; min-width:0; padding:24px 26px 22px }
+.porg-hero-copy .kicker { display:flex; align-items:center; gap:10px; flex-wrap:wrap }
+.porg-hero-state { text-transform:none; letter-spacing:0 }
+.porg-hero h1 {
+  font-size:clamp(1.55rem,3vw,2.05rem); line-height:1.06;
+  letter-spacing:-.032em; font-weight:700; margin:0;
+}
+.porg-hero p { color:var(--tx-2); margin:8px 0 0; max-width:62ch; font-size:.94rem }
+.porg-hero-actions { display:flex; gap:10px; flex-wrap:wrap; margin-top:18px }
+
+.porg-today {
+  flex:0 1 240px; min-width:0; display:flex; flex-direction:column; justify-content:center;
+  padding:24px 26px; border-left:1px solid var(--line);
+  background:linear-gradient(150deg,#F4FBF7,#E9F4EE);
+}
+.porg-today-k { font-family:var(--font-mono); font-size:.6rem; letter-spacing:.14em;
+  text-transform:uppercase; color:var(--green); font-weight:600 }
+.porg-today-v { font-family:var(--font-display); font-weight:800; font-size:clamp(1.5rem,4vw,1.95rem);
+  letter-spacing:-.03em; color:var(--navy); line-height:1.1; margin-top:4px; overflow-wrap:anywhere }
+.porg-today-h { font-size:.79rem; color:var(--tx-2); margin-top:4px }
+
+/* The attention band carries its own way in now — reading "3 parcels
+   couldn't be delivered" and then having to build the filter by hand
+   was the gap between knowing and doing. */
+.porg-attention {
+  background:var(--amber-t); border:1px solid #E8D2A0; color:var(--amber);
+  flex-wrap:wrap;
+}
+.porg-attention span { flex:1; min-width:180px }
+.porg-attention .btn { flex:none; background:#fff }
 
 /* The dashboard puts the three high-frequency jobs before the report
    data. Each is a full-row target: practical on a mounted tablet and
@@ -140,12 +182,10 @@
 .counter-workspace-head h2 { margin:0; font-size:1.18rem; letter-spacing:-.02em }
 .counter-workspace-head p:not(.kicker) { margin:4px 0 0; color:var(--tx-2); font-size:.88rem }
 
-.dashboard-kpis { grid-template-columns:repeat(4,1fr); margin-bottom:18px }
-
 /* ── kpi row ────────────────────────────────────────────────────── */
 .kpis { display:grid; grid-template-columns:repeat(auto-fit,minmax(180px,1fr)); gap:14px; margin-bottom:22px }
 .kpi { background:#fff; border:1px solid var(--line); border-radius:var(--r-lg); padding:16px 18px;
-  position:relative; overflow:hidden }
+  position:relative; overflow:hidden; min-width:0; color:var(--tx); display:block }
 .kpi::after { content:''; position:absolute; left:0; top:0; bottom:0; width:3px; background:var(--line) }
 .kpi.g::after { background:var(--green) } .kpi.b::after { background:var(--blue) }
 .kpi.a::after { background:var(--amber) } .kpi.r::after { background:var(--red) }
@@ -154,6 +194,56 @@
 .kpi .l { font-family:var(--font-mono); font-size:.62rem; letter-spacing:.1em;
   text-transform:uppercase; color:var(--tx-3); margin-top:5px; display:block }
 .kpi .sub { font-size:.79rem; color:var(--tx-2); margin-top:5px; display:block }
+
+/* A tile that filters the register below says so by behaving like a
+   control: it lifts, and its arrow appears on approach. The tiles that
+   can't filter (delivered TODAY — a date window, not a status) stay
+   flat, which is the honest difference between them. */
+.kpi-link { cursor:pointer; padding-right:34px;
+  transition:border-color var(--dur-fast), box-shadow var(--dur-fast), transform var(--dur-fast) }
+.kpi-link:hover { border-color:var(--navy); box-shadow:var(--sh-m); transform:translateY(-1px) }
+.kpi-link:focus-visible { outline:3px solid rgba(31,161,99,.28); outline-offset:3px }
+.kpi-go { position:absolute; right:12px; top:16px; color:var(--tx-3);
+  opacity:0; transition:opacity var(--dur-fast) }
+.kpi-link:hover .kpi-go, .kpi-link:focus-visible .kpi-go { opacity:1 }
+.kpi-link[aria-current="true"] { border-color:var(--navy); box-shadow:var(--sh-m) }
+.kpi-link[aria-current="true"] .kpi-go { opacity:1; color:var(--navy) }
+
+/* Non-zero and somebody has to act — the number itself takes the tone,
+   so the board reads at arm's length from a mounted tablet. */
+.kpi.is-urgent.a .n { color:var(--amber) }
+.kpi.is-urgent.r .n { color:var(--red) }
+
+/* The dashboard's board is a fixed six, so it gets explicit tracks
+   rather than .kpis' auto-fit — six tiles in a 1180px column auto-fit
+   to five-and-a-stray, and a board whose last tile has wrapped onto its
+   own row no longer reads as one glance. MUST stay after .kpis: both
+   are one class deep, so source order is what decides this. */
+.dashboard-kpis { grid-template-columns:repeat(3,1fr); margin-bottom:18px }
+@media (min-width:1040px) { .dashboard-kpis { grid-template-columns:repeat(6,1fr) } }
+
+/* ── the register ───────────────────────────────────────────────── */
+.porg-register-head { display:flex; align-items:baseline; gap:14px; margin:0 0 12px; flex-wrap:wrap }
+.porg-register-head h2 { font-size:1.12rem; letter-spacing:-.02em; margin:0 }
+.porg-applied {
+  display:inline-flex; align-items:center; gap:7px;
+  padding:5px 6px 5px 10px; border-radius:var(--r-pill);
+  background:var(--blue-t); color:var(--blue);
+  font-size:.79rem; font-weight:600;
+}
+.porg-applied-n {
+  font-family:var(--font-mono); font-size:.7rem; font-weight:600;
+  background:#fff; border-radius:var(--r-pill); padding:2px 8px;
+}
+.porg-clear {
+  display:inline-flex; align-items:center; gap:6px; margin-left:auto;
+  font-size:.83rem; font-weight:600; color:var(--blue);
+}
+.porg-clear:hover { text-decoration:underline }
+.porg-filters { display:flex; gap:8px; margin-bottom:14px; flex-wrap:wrap; align-items:center }
+.porg-filters .inp { min-height:40px; padding:8px 11px; font-size:.9rem; width:auto }
+.porg-search { flex:1 1 220px; min-width:0; max-width:380px }
+.porg-status { flex:0 0 auto }
 
 /* ── cards & tables ─────────────────────────────────────────────── */
 .card { background:#fff; border:1px solid var(--line); border-radius:var(--r-lg); padding:20px; min-width:0 }
@@ -201,19 +291,38 @@
   }
   .porgnav a { min-height:38px; padding:0 12px }
   .kpis { grid-template-columns:repeat(2,1fr) }
-  .dashboard-kpis { grid-template-columns:repeat(2,1fr) }
+  .dashboard-kpis { grid-template-columns:repeat(3,1fr) }
   .courier-actions { grid-template-columns:repeat(2,1fr) }
+  /* The hero's money rail becomes a full-width footer strip rather than
+     a 240px column fighting the copy for a tablet's width. */
+  .porg-hero-copy { flex-basis:100%; padding:20px }
+  .porg-today { flex:1 1 100%; padding:16px 20px; border-left:0; border-top:1px solid var(--line);
+    flex-direction:row; align-items:baseline; gap:10px; flex-wrap:wrap }
+  .porg-today-h { margin-top:0; margin-left:auto }
   .task-switch { width:100% }
   .counter-task-nav { grid-template-columns:1fr }
 }
 @media (max-width:560px) {
-  .kpis { grid-template-columns:1fr; gap:10px }
+  /* Two KPI tiles per row, not one: the board's job is a single glance
+     at the whole shift, and one-per-row turns it into six screens of
+     scrolling before the register is even visible. */
+  .kpis { grid-template-columns:repeat(2,1fr); gap:10px }
+  .dashboard-kpis { grid-template-columns:repeat(2,1fr) }
+  .kpi { padding:13px 14px }
+  .kpi-link { padding-right:14px }
+  .kpi .n { font-size:1.45rem }
+  .kpi-go { display:none }
+  .porg-hero-actions .btn { flex:1 1 140px }
+  .porg-filters .btn { width:100%; justify-content:center }
+  .porg-search, .porg-status { flex:1 1 100%; max-width:none }
   .head h1 { font-size:1.3rem }
   .porg-wrap { padding:18px 16px 48px }
   .card { padding:16px }
   .porgbar-in { gap:8px }
-  .porg-name { font-size:.92rem }
-  .porg-name small { font-size:.54rem }
+  /* The wordmark goes so the company name keeps room beside Sign out on
+     a 360px screen; the switcher's monogram carries the brand slot. */
+  .porgbrand, .porgbar-in .appbar-div { display:none }
+  .porgbar-in .wsw { max-width:none }
   .porg-signout .btn { padding-inline:10px }
   .porgnav a { font-size:.84rem; gap:6px; padding:0 10px }
   .head .actions { width:100% }

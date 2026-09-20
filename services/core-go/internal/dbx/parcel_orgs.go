@@ -1526,10 +1526,19 @@ type OrgParcelRow struct {
 // ListOrgParcels — this company's parcels, newest first.
 //
 // orgID is never taken from the request; it comes from the session (see
-// handlers_parcel_orgs.go). status/originMethod are optional exact
-// filters, combined with AND — "awaiting drop-off" is exactly
-// status=BOOKED AND originMethod=SELF_DROPOFF, so the front desk asks
-// for both rather than the handler special-casing a pseudo-status. q is
+// handlers_parcel_orgs.go). status/originMethod are optional filters,
+// combined with AND — "awaiting drop-off" is exactly status=BOOKED AND
+// originMethod=SELF_DROPOFF, so the front desk asks for both rather
+// than the handler special-casing a pseudo-status.
+//
+// status accepts a comma-separated list, which is how the operator
+// dashboard's KPI tiles became real filters: two of them count more
+// than one status ("on the road" is PICKED_UP + IN_TRANSIT, "ready to
+// collect" is BOOKED + RECEIVED_AT_COUNTER, both per
+// GetParcelOrgStats above), so a single-value filter could never show
+// the rows behind the number it was sitting under. A value with no
+// comma still matches exactly one status, so every existing caller —
+// and the dashboard's own status dropdown — is unaffected. q is
 // an optional free-text search over Esoqo's code AND the company's own
 // externalRef, so a company migrating from another system can find a
 // parcel by whichever number is in hand.
@@ -1547,7 +1556,7 @@ func ListOrgParcels(ctx context.Context, pool *pgxpool.Pool, orgID string, statu
 		LEFT JOIN person pr ON pr."partyId" = p."currentHolderPartyId"
 		LEFT JOIN parcel_agent a ON a.id = p."destinationAgentId"
 		WHERE p."parcelOrgId" = $1
-		  AND ($2::text IS NULL OR p.status::text = $2)
+		  AND ($2::text IS NULL OR p.status::text = ANY(string_to_array($2, ',')))
 		  AND ($3::text IS NULL OR p."originMethod"::text = $3)
 		  AND ($4::text IS NULL OR p.code ILIKE '%' || $4 || '%' OR p."externalRef" ILIKE '%' || $4 || '%')
 		ORDER BY p."createdAt" DESC
