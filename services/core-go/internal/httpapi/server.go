@@ -363,6 +363,14 @@ func (s *Server) Router() *gin.Engine {
 		// The dispatch board — a company's own runs: vehicle, crew,
 		// leg and receiving team. The static segments sit above :id
 		// for the same reason the label routes do (see above).
+		// The company's own vehicle runs — the manifest side of dispatch.
+		// A parcel only reports IN_TRANSIT by being loaded onto one of
+		// these (see dbx.LoadParcelOntoOrgShipment), so the counter's
+		// "receive and load" has something real to put a box on.
+		v1.GET("/parcel-orgs/me/shipments", s.authRequired(), s.handleListMyOrgShipments)
+		v1.POST("/parcel-orgs/me/shipments", s.authRequired(), s.handleCreateMyOrgShipment)
+		v1.POST("/parcel-orgs/me/shipments/:id/load", s.authRequired(), s.handleLoadOntoMyOrgShipment)
+		v1.POST("/parcel-orgs/me/shipments/:id/start", s.authRequired(), s.handleStartMyOrgShipment)
 		v1.GET("/parcel-orgs/me/dispatch", s.authRequired(), s.handleListDispatches)
 		v1.POST("/parcel-orgs/me/dispatch", s.authRequired(), s.handleCreateDispatch)
 		v1.GET("/parcel-orgs/me/dispatch/:id", s.authRequired(), s.handleGetDispatch)

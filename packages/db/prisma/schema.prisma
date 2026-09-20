@@ -4013,6 +4013,7 @@ model ParcelOrg {
   pricingRules ParcelPricingRule[]
   labelStock   ParcelLabelStock[]
   dispatches   ParcelDispatch[]
+  shipments    ParcelShipment[]
 
   @@index([enterpriseId])
   @@index([status])
@@ -4189,6 +4190,13 @@ model ParcelShipment {
   endedAt          DateTime?
   createdAt        DateTime  @default(now())
   createdByStaffId String?   @db.Uuid
+
+  /// Which courier company's run this is. NULL = Esoqo-operated, the
+  /// same convention Parcel.parcelOrgId already uses. Every org-scoped
+  /// read filters on it, so an unowned shipment is invisible to every
+  /// company rather than visible to all of them.
+  parcelOrgId String?    @db.Uuid
+  parcelOrg   ParcelOrg? @relation(fields: [parcelOrgId], references: [id], onDelete: SetNull)
 
   items ParcelShipmentItem[]
 
