@@ -4585,6 +4585,7 @@ model TicketOrg {
   shortRoutes ShortRoute[]
   trips       Trip[]
   staffGrants OrgStaffGrant[]
+  luggage     LuggageTag[]
 
   @@index([enterpriseId])
   @@index([status])
@@ -5128,7 +5129,10 @@ model Ticket {
 
   createdAt DateTime @default(now())
 
-  addons TicketAddon[]
+  addons  TicketAddon[]
+  /// Bags this passenger checked in — see LuggageTag.ticketId. Optional
+  /// on that side: plenty of passengers board without a digital ticket.
+  luggage LuggageTag[]
 
   @@index([bookingId])
   @@index([status])
@@ -5190,6 +5194,9 @@ model CrewMember {
   drivenTrips    Trip[]                  @relation("TripDriver")
   conductedTrips Trip[]                  @relation("TripConductor")
   declarations   CollectionDeclaration[]
+  /// Bags this crew member put aboard / handed back — see LuggageTag.
+  luggageBoarded LuggageTag[]            @relation("LuggageBoardedBy")
+  luggageClaimed LuggageTag[]            @relation("LuggageClaimedBy")
   /// PIN logins linked to this person — see TicketOrgStaff.crewMemberId.
   staffLogins    TicketOrgStaff[]
   /// SUBJECT staff grants linked to this person — see
@@ -5222,7 +5229,9 @@ model FareStage {
   shortRoute   ShortRoute @relation(fields: [shortRouteId], references: [id], onDelete: Cascade)
 
   /// Parcels booked to come off at this stage — see Parcel.dropStageId.
-  parcelDrops Parcel[]
+  parcelDrops  Parcel[]
+  /// Passenger bags coming off here — see LuggageTag.dropStageId.
+  luggageDrops LuggageTag[]
 
   name    String
   order   Int
@@ -5289,6 +5298,8 @@ model Trip {
   /// Parcels riding this trip — see Parcel.tripId. A passenger trip
   /// doubles as freight capacity that would otherwise travel empty.
   parcels      Parcel[]
+  /// Passenger luggage tagged onto this run — see LuggageTag.tripId.
+  luggage      LuggageTag[]
 
   @@index([orgId, status])
   @@index([vehicleId, status])
@@ -5363,6 +5374,159 @@ model CollectionDeclaration {
   @@index([tripId])
   @@index([crewId])
   @@map("collection_declaration")
+}
+
+/// Where a bag is in its one short life.
+///
+/// Four states, not a parcel's eight, because a bag's journey is a
+/// bracket rather than a chain: it goes on at boarding and comes off at
+/// alighting, on one vehicle, with its owner sitting a few feet away.
+/// UNCLAIMED is the only state nobody intends — it is set in bulk at
+/// trip close for anything still aboard, which is what turns a pile of
+/// forgotten bags into a worklist while the crew is still holding them.
+enum LuggageStatus {
+  /// Tagged at the desk or the stage, not yet scanned onto a vehicle.
+  TAGGED
+  /// Scanned aboard. The normal state for the length of a trip.
+  ABOARD
+  /// Handed back to the passenger.
+  CLAIMED
+  /// Still aboard when the trip closed. Not an error state — a signal.
+  UNCLAIMED
+}
+
+/// How a bag was handed back — the honest record of a handover.
+///
+/// A boolean ("claimed: true") would flatten four materially different
+/// events into one. STUB_SCAN is the designed path. OVERRIDE is a crew
+/// member deciding, with a reason, to release a bag to someone who
+/// cannot produce the stub — which will happen, and which the system's
+/// job is to record rather than prevent. A month of override reasons is
+/// the best available list of what to fix next.
+enum LuggageClaimMethod {
+  /// The passenger's tear-off stub was scanned. The designed path.
+  STUB_SCAN
+  /// The code was read off the stub and typed — a dead phone, a torn
+  /// stub, a scanner that will not focus in the dark.
+  CODE_TYPED
+  /// Matched against the passenger's own ticket rather than a stub.
+  TICKET_MATCH
+  /// Released without a matching stub. Demands a reason; surfaces on
+  /// the trip's close-out.
+  OVERRIDE
+}
+
+/// One piece of passenger luggage, tagged onto one trip.
+///
+/// Deliberately NOT a Parcel, though the two share their pads
+/// (ParcelLabelStock), their code minting (fleetqr) and their scanner
+/// (/v1/scan/resolve). The operational shapes barely overlap:
+///
+///   - a parcel's receiver is a third party at the far end; a bag's
+///     "receiver" is the person who handed it over, sitting in seat 14;
+///   - a parcel's custody is a chain across couriers, agents and legs;
+///     a bag's is a bracket on one vehicle;
+///   - a parcel has a price, an SLA and a delivery code; a bag usually
+///     rides free with the ticket and is claimed with a stub;
+///   - a parcel's dominant failure is "never delivered"; a bag's is
+///     "taken by the wrong passenger at an intermediate stage".
+///
+/// Parcel carries ~60 columns, of which ~50 are meaningless here
+/// (receiverMsisdn, deliveryCode, COD, zones, coverage, payout splits,
+/// slaDeadlineAt). Routing bags through it would mean a filter on every
+/// parcel query and an exception to every parcel invariant, forever, to
+/// save one migration now.
+model LuggageTag {
+  id String @id @default(uuid()) @db.Uuid
+
+  /// LUG-… — checksummed, because this code is read aloud off a paper
+  /// stub and typed by hand far more often than a parcel code is: the
+  /// person asking is standing at a counter looking at it.
+  code String @unique
+
+  /// The vehicle run this bag is riding. Required, unlike a parcel's
+  /// optional tripId: a bag with no trip is not something this system
+  /// can help with, and allowing it would slowly recreate the parcel
+  /// product badly.
+  tripId String @db.Uuid
+  trip   Trip   @relation(fields: [tripId], references: [id], onDelete: Cascade)
+
+  orgId String    @db.Uuid
+  org   TicketOrg @relation(fields: [orgId], references: [id], onDelete: Cascade)
+
+  /// The passenger's ticket, when they hold one. Optional on purpose —
+  /// plenty of people board and pay cash, and a luggage system that
+  /// refuses them is one the crew stops using by lunchtime.
+  ticketId String? @db.Uuid
+  ticket   Ticket? @relation(fields: [ticketId], references: [id])
+
+  /// Always captured, ticket or not. Only the surname and initial are
+  /// printed on the tag (see the print component): enough for a
+  /// conductor to call over a crowd, not enough to be a PII leak on
+  /// adhesive.
+  passengerName   String
+  passengerMsisdn String?
+
+  /// "2 of 3". The highest-value pair of columns here: it is what makes
+  /// a missing bag visible at the moment of claiming rather than three
+  /// hours later on a phone call. Pieces tagged together share a
+  /// groupId so the claim screen can say "one still aboard".
+  pieceNo    Int     @default(1)
+  pieceCount Int     @default(1)
+  /// Null for a single-piece tag. Set for every piece of a multi-piece
+  /// group, including the first, so "the others in this group" is one
+  /// indexed lookup rather than a join on passenger name.
+  groupId    String? @db.Uuid
+
+  /// Which stage it comes off at, when the route has named stages.
+  /// Null means it rides to the terminus.
+  dropStageId      String?    @db.Uuid
+  dropStage        FareStage? @relation(fields: [dropStageId], references: [id])
+  /// What prints in the largest type on the tag. Copied at tagging
+  /// rather than read live off dropStage, the same freeze-the-promise
+  /// rule Parcel.transportMode follows: the tag is already physically
+  /// on the bag, and a later rename of a stage must not make the
+  /// printed word disagree with the record.
+  destinationLabel String
+
+  /// Only recorded when an excess-weight fee actually applies — this is
+  /// not a rate card and must not grow into one. The fee posts through
+  /// the existing ledger like any other money.
+  weightKg     Decimal? @db.Decimal(6, 2)
+  excessFeeKes Decimal? @db.Decimal(10, 2)
+
+  /// One photo at boarding. The whole damage dispute, settled — the
+  /// same bracket logic Parcel.intakePhotoUrl/podPhotoUrl provides,
+  /// collapsed to one end because a bag is handed back to the person
+  /// who watched it go on.
+  photoUrl String?
+
+  status LuggageStatus @default(TAGGED)
+
+  boardedAt       DateTime?
+  boardedByCrewId String?     @db.Uuid
+  boardedByCrew   CrewMember? @relation("LuggageBoardedBy", fields: [boardedByCrewId], references: [id])
+
+  claimedAt           DateTime?
+  claimedByCrewId     String?             @db.Uuid
+  claimedByCrew       CrewMember?         @relation("LuggageClaimedBy", fields: [claimedByCrewId], references: [id])
+  claimMethod         LuggageClaimMethod?
+  /// Required by dbx.ClaimLuggage whenever claimMethod is OVERRIDE, and
+  /// null otherwise. A release with no stub and no reason is the thing
+  /// this column exists to make impossible to record silently.
+  claimOverrideReason String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  /// The boarding scan's hot path: "everything still aboard this trip",
+  /// which is also the close-out sweep and the claim screen's sibling
+  /// lookup.
+  @@index([tripId, status])
+  @@index([orgId, createdAt])
+  @@index([groupId])
+  @@index([ticketId])
+  @@map("luggage_tag")
 }
 
 /// PRIMARY = esoko.app/o/{slug}; CUSTOM = the org's own domain

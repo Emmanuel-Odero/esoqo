@@ -476,21 +476,26 @@ func crewMemberIDForStaff(ctx context.Context, pool *pgxpool.Pool, staffID strin
 // login is linked to. note/endStatus are optional either way — a
 // manager closing on someone's behalf may still leave both nil, exactly
 // as before this field existed; see TripEndStatus in schema.prisma.
-func CloseTrip(ctx context.Context, pool *pgxpool.Pool, c authsvc.Ctx, tripID string, note *string, endStatus *string) error {
+//
+// Returns any passenger luggage still aboard, now marked UNCLAIMED —
+// see SweepUnclaimedLuggage. Closing a trip is the moment that
+// information is worth something, because the crew has not yet walked
+// away from the bags.
+func CloseTrip(ctx context.Context, pool *pgxpool.Pool, c authsvc.Ctx, tripID string, note *string, endStatus *string) ([]*LuggageTag, error) {
 	var orgID, status string
 	var driverID, conductorID *string
 	if err := pool.QueryRow(ctx, `SELECT "orgId", status::text, "driverId", "conductorId" FROM trip WHERE id = $1`, tripID).Scan(&orgID, &status, &driverID, &conductorID); err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
-			return &FleetError{"NOT_FOUND", "Trip not found"}
+			return nil, &FleetError{"NOT_FOUND", "Trip not found"}
 		}
-		return err
+		return nil, err
 	}
 	if _, managerErr := AssertOwnsOrg(ctx, pool, c, orgID, authsvc.CapTripWrite); managerErr != nil {
 		if _, crewErr := AssertOwnsOrg(ctx, pool, c, orgID, authsvc.CapTripCloseOwn); crewErr != nil {
 			// Neither grant held — surface the manager-path error; both
 			// are 403s with the same shape, so which capability name
 			// shows up doesn't leak which path almost worked.
-			return managerErr
+			return nil, managerErr
 		}
 		// Two ways a CREW bundle can be held here: an AGENT PIN session
 		// (legacy — see docs/proposals/esoqo-unified-crew-identity.md),
@@ -506,22 +511,46 @@ func CloseTrip(ctx context.Context, pool *pgxpool.Pool, c authsvc.Ctx, tripID st
 			crewMemberID, err = crewMemberIDForStaff(ctx, pool, c.ActorID)
 		}
 		if err != nil {
-			return err
+			return nil, err
 		}
 		if !crewOwnsTrip(crewMemberID, driverID, conductorID) {
-			return &authsvc.AuthorisationError{Capability: authsvc.CapTripCloseOwn, ActorType: c.ActorType, ActorID: c.ActorID}
+			return nil, &authsvc.AuthorisationError{Capability: authsvc.CapTripCloseOwn, ActorType: c.ActorType, ActorID: c.ActorID}
 		}
 	}
 	if status != "ACTIVE" {
-		return &FleetError{"TRIP_CLOSED", "That trip is already closed"}
+		return nil, &FleetError{"TRIP_CLOSED", "That trip is already closed"}
 	}
 	if endStatus != nil && !validTripEndStatus[*endStatus] {
-		return &FleetError{"BAD_INPUT", "endStatus must be OK, NEEDS_FUEL or NEEDS_REPAIR"}
+		return nil, &FleetError{"BAD_INPUT", "endStatus must be OK, NEEDS_FUEL or NEEDS_REPAIR"}
 	}
-	_, err := pool.Exec(ctx, `
+	// Closing the trip and sweeping its uncollected bags happen together
+	// or not at all. A trip that closed without the sweep would leave
+	// bags sitting in ABOARD forever, indistinguishable from bags on a
+	// vehicle still running — which is the exact state the sweep exists
+	// to make visible.
+	tx, err := pool.Begin(ctx)
+	if err != nil {
+		return nil, err
+	}
+	defer func() { _ = tx.Rollback(ctx) }()
+
+	if _, err := tx.Exec(ctx, `
 		UPDATE trip SET status = 'CLOSED', "endedAt" = now(), "endNote" = $2, "endStatus" = $3
-		WHERE id = $1`, tripID, note, endStatus)
-	return err
+		WHERE id = $1`, tripID, note, endStatus); err != nil {
+		return nil, err
+	}
+	// Anything still aboard becomes UNCLAIMED and comes back to the
+	// caller, so the close-out screen can name the bags rather than
+	// count them — the crew is still holding them at this exact moment,
+	// which is the only moment naming them is any use.
+	unclaimed, err := SweepUnclaimedLuggage(ctx, tx, tripID)
+	if err != nil {
+		return nil, err
+	}
+	if err := tx.Commit(ctx); err != nil {
+		return nil, err
+	}
+	return unclaimed, nil
 }
 
 // MyTrip is the crew-facing "my shift" projection — just enough to

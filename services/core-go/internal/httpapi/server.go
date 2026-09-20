@@ -208,6 +208,15 @@ func (s *Server) Router() *gin.Engine {
 		v1.GET("/fleet/trips/:id/collections", s.authRequired(), s.handleTripCollections)
 		v1.GET("/fleet/my-trip", s.authRequired(), s.handleMyActiveTrip)
 
+		// Passenger luggage. Under /fleet/ because a bag belongs to a
+		// vehicle run, not to the parcel network — see
+		// handlers_luggage.go's header and LuggageTag's schema comment on
+		// why these are not parcel routes.
+		v1.POST("/fleet/luggage", s.authRequired(), s.handleTagLuggage)
+		v1.POST("/fleet/luggage/:code/board", s.authRequired(), s.handleBoardLuggage)
+		v1.POST("/fleet/luggage/:code/claim", s.authRequired(), s.handleClaimLuggage)
+		v1.GET("/fleet/trips/:id/luggage", s.authRequired(), s.handleListTripLuggage)
+
 		v1.POST("/fares", s.rateLimit("pay:fare", 40, time.Hour), s.handleCreateFare)
 		v1.GET("/fares/:id", s.handleGetFare)
 		v1.GET("/fares/:id/status", s.handleFareStatus)
