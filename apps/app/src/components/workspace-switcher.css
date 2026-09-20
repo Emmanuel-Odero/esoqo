@@ -1,0 +1,138 @@
+/* ══════════════════════════════════════════════════════════════
+   Workspace switcher — the identity control in every shell's header.
+
+   Its own file rather than a block inside me.css or parcel-org.css
+   because it is the one component all three shells share, and the
+   whole promise of it is that it looks and behaves identically in
+   each. A copy per shell is a drift waiting to happen.
+
+   All values come from @esoqo/ui tokens.
+   ══════════════════════════════════════════════════════════════ */
+
+/* Hairline between the Esoqo wordmark and the workspace identity. Both
+   shells' bars use it, so it lives here beside the thing it separates.
+   Hidden on phones along with the wordmark (see each shell's own
+   breakpoint) — there the switcher's monogram is the only mark needed. */
+.appbar-div {
+  flex:none; width:1px; height:26px; background:var(--line); margin:0 2px;
+}
+
+.wsw-root { position:relative; flex:0 1 auto; min-width:0 }
+
+.wsw {
+  display:inline-flex; align-items:center; gap:10px;
+  min-height:46px; padding:5px 10px 5px 6px; min-width:0; max-width:300px;
+  border:1px solid transparent; border-radius:var(--r-md);
+  background:none; font-family:inherit; text-align:left; color:var(--tx);
+}
+.wsw-trigger {
+  cursor:pointer;
+  transition:background var(--dur-fast), border-color var(--dur-fast);
+}
+.wsw-trigger:hover { background:var(--paper); border-color:var(--line) }
+.wsw-trigger[aria-expanded="true"] { background:var(--paper); border-color:var(--line) }
+.wsw-static { cursor:default }
+
+/* The monogram tile. Colour is semantic, not decorative: green is the
+   person's own record (tokens.css — "you and yours"), blue an organiser
+   they run, navy a company they work for. Somebody glancing at the bar
+   should know which of the three they're in before reading a word. */
+.wsw-mark {
+  flex:none; width:34px; height:34px; border-radius:10px;
+  display:grid; place-items:center;
+  font-family:var(--font-mono); font-weight:600; font-size:.72rem;
+  letter-spacing:.02em; line-height:1;
+}
+.wsw-personal { background:var(--green-t); color:var(--green) }
+.wsw-ticket   { background:var(--blue-t);  color:var(--blue) }
+.wsw-courier  { background:#E6ECF2;        color:var(--navy) }
+
+.wsw-id { min-width:0; display:block; line-height:1.15 }
+.wsw-id strong {
+  display:block; font-family:var(--font-display); font-weight:700;
+  font-size:.97rem; letter-spacing:-.012em; color:var(--navy);
+  white-space:nowrap; overflow:hidden; text-overflow:ellipsis;
+}
+.wsw-id small {
+  display:block; font-family:var(--font-mono); font-weight:600;
+  font-size:.57rem; letter-spacing:.13em; text-transform:uppercase;
+  color:var(--tx-2); margin-top:2px;
+  white-space:nowrap; overflow:hidden; text-overflow:ellipsis;
+}
+.wsw-chev { flex:none; color:var(--tx-3); margin-left:2px }
+.wsw-trigger[aria-expanded="true"] .wsw-chev { transform:rotate(180deg); color:var(--navy) }
+
+/* ── the menu ─────────────────────────────────────────────────── */
+.wsw-menu {
+  position:absolute; z-index:140; top:calc(100% + 8px); left:0;
+  width:min(330px, calc(100vw - 32px));
+  background:#fff; border:1px solid var(--line); border-radius:var(--r-lg);
+  box-shadow:var(--e-3); padding:12px;
+  max-height:min(70dvh, 560px); overflow:auto;
+  animation:wsw-pop var(--dur) var(--ease-out);
+}
+@keyframes wsw-pop {
+  from { opacity:0; transform:translateY(-6px) scale(.985) }
+  to   { opacity:1; transform:none }
+}
+
+.wsw-lede {
+  margin:2px 4px 12px; font-size:.79rem; line-height:1.45; color:var(--tx-2);
+}
+
+.wsw-group + .wsw-group { margin-top:10px; padding-top:10px; border-top:1px solid var(--line) }
+.wsw-group-h {
+  margin:0 0 4px 6px; font-family:var(--font-mono); font-weight:600;
+  font-size:.58rem; letter-spacing:.14em; text-transform:uppercase; color:var(--tx-3);
+}
+
+.wsw-form { display:block }
+.wsw-row {
+  display:flex; align-items:center; gap:11px; width:100%;
+  padding:9px 10px; min-height:56px; border-radius:var(--r-md);
+  border:0; background:none; font-family:inherit; text-align:left;
+  color:var(--tx); cursor:pointer;
+  transition:background var(--dur-fast);
+}
+.wsw-row:hover:not(.is-current):not(.is-locked) { background:var(--paper) }
+.wsw-row:focus-visible { outline:3px solid rgba(31,161,99,.28); outline-offset:-2px }
+.wsw-row:disabled { cursor:progress }
+.wsw-row .wsw-mark { width:32px; height:32px; border-radius:9px }
+
+.wsw-row-id { min-width:0; flex:1; line-height:1.2 }
+.wsw-row-id strong {
+  display:block; font-size:.92rem; font-weight:700; color:var(--navy);
+  white-space:nowrap; overflow:hidden; text-overflow:ellipsis;
+}
+.wsw-row-id small {
+  display:block; font-size:.76rem; color:var(--tx-2); margin-top:1px;
+  white-space:nowrap; overflow:hidden; text-overflow:ellipsis;
+}
+.wsw-go { flex:none; color:var(--tx-3) }
+.wsw-row:hover .wsw-go { color:var(--green) }
+.wsw-pending { font-family:var(--font-mono); font-size:.8rem; letter-spacing:.1em; color:var(--green) }
+
+.wsw-row.is-current { background:var(--green-t); cursor:default }
+/* --tx-2 is tuned against white and lands at 4.48:1 on the green tint
+   this row is painted with — under 1.4.3's 4.5 floor for small text.
+   One step darker (5.7:1 on --green-t) keeps the muted reading without
+   failing the only row that has a tinted background. */
+.wsw-row.is-current .wsw-row-id small { color:#445C72 }
+.wsw-here {
+  flex:none; font-family:var(--font-mono); font-size:.58rem; font-weight:600;
+  letter-spacing:.12em; text-transform:uppercase; color:var(--green);
+  background:#fff; border:1px solid #BFE0CE; border-radius:var(--r-pill); padding:4px 9px;
+}
+.wsw-row.is-locked { opacity:.55; cursor:not-allowed }
+
+/* ── phones ───────────────────────────────────────────────────── */
+@media (max-width:560px) {
+  .wsw { max-width:none; gap:9px; padding-right:6px }
+  .wsw-mark { width:32px; height:32px }
+  .wsw-id strong { font-size:.9rem }
+  /* The trigger is the leftmost thing in the bar on a phone (the
+     wordmark beside it is hidden below this breakpoint), so anchoring
+     the panel to its left edge keeps it on screen; the width already
+     clamps to the viewport minus the bar's own gutters. */
+  .wsw-menu { width:calc(100vw - 32px); max-width:330px }
+}

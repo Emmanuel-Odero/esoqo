@@ -2,6 +2,8 @@ import type { Metadata } from 'next';
 import Link from 'next/link';
 import { Icon, Logo } from '@esoqo/ui';
 import { ParcelOrgUnauthorised, getParcelOrgMe } from '@/lib/parcel-org-session';
+import { listWorkspaces } from '@/lib/workspaces';
+import { WorkspaceSwitcher } from '@/components/WorkspaceSwitcher';
 import { ParcelOrgNav, type ParcelOrgNavItem } from './ParcelOrgNav';
 import { DemoBanner } from './DemoBanner';
 import { DropoffPoll } from './DropoffPoll';
@@ -28,10 +30,19 @@ export const metadata: Metadata = { title: { default: 'Your parcels', template: 
  * page's own redirect fires on the next paint.
  */
 export default async function ParcelOrgLayout({ children }: { children: React.ReactNode }) {
-  const me = await getParcelOrgMe().catch((e) => {
-    if (e instanceof ParcelOrgUnauthorised) return null;
-    throw e;
-  });
+  const [me, workspaces] = await Promise.all([
+    getParcelOrgMe().catch((e) => {
+      if (e instanceof ParcelOrgUnauthorised) return null;
+      throw e;
+    }),
+    // Read with the PERSON's bearer, not the company's. A manager who
+    // signed in as themselves gets the full switcher and can step back
+    // to their own record — or across to a second company — without
+    // dropping this shift session. A rider who came in through the
+    // company's own door has no subject cookie, so this is empty and
+    // the switcher degrades to a plain company nameplate.
+    listWorkspaces(),
+  ]);
 
   if (!me) return <>{children}</>;
 
@@ -71,11 +82,14 @@ export default async function ParcelOrgLayout({ children }: { children: React.Re
         <div className="porgbar-in">
           <Link href="/parcel-org" className="porgbrand" aria-label="Esoqo home">
             <Logo />
-            <span className="porg-name">
-              {me.org.name}
-              <small>Courier company</small>
-            </span>
           </Link>
+          <span className="appbar-div" aria-hidden="true" />
+          <WorkspaceSwitcher
+            workspaces={workspaces}
+            currentKey={`courier:${me.org.id}`}
+            fallbackName={me.org.name}
+            fallbackSubtitle="Courier company"
+          />
           <ParcelOrgNav items={nav} />
           <form action="/parcel-org/signout" method="post" className="porg-signout">
             <button className="btn btn-o btn-sm" type="submit">

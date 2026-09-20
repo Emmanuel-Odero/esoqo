@@ -7,7 +7,7 @@ import { goUrl } from '@/lib/ticketing';
 import { setParcelOrgSession } from '@/lib/parcel-org-session';
 
 /**
- * One click from the dashboard into a company the person is staff of.
+ * One click into a courier company the person is staff of.
  *
  * The person's own Esoqo session (SESSION_COOKIE) is the credential;
  * core-go checks it against an active parcel_org_staff row before
@@ -16,6 +16,11 @@ import { setParcelOrgSession } from '@/lib/parcel-org-session';
  * the company cookie and land in the console. The console's own
  * 401/403 handling then re-reads /v1/parcel-orgs/me — this only gets
  * them in the door.
+ *
+ * Lives at the app root rather than under /me because all three shells
+ * (/me, /org/[orgId], /parcel-org) now offer the same switcher, and a
+ * courier manager switching between two of their own companies should
+ * not have to go back to their personal record first.
  */
 export async function enterParcelOrg(orgId: string): Promise<void> {
   const token = (await cookies()).get(SESSION_COOKIE)?.value;
