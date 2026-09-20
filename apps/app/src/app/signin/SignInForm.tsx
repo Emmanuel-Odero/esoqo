@@ -75,6 +75,63 @@ export function SignInForm() {
       <p style={{ textAlign: 'center', marginTop: 16, fontSize: '.86rem' }}>
         <Link href="/signin/set-pin" style={{ color: 'var(--blue)' }}>No PIN yet, or forgotten it? Set your PIN</Link>
       </p>
+
+      {/* Privacy notice — Data Protection Act, 2019, s.25(1)(a).
+          Must be visible before any personal data is collected.
+          The matching Kiswahili text is required for the DPA
+          requirement to be met in the language people actually use. */}
+      <div
+        role="note"
+        aria-label="Privacy notice"
+        style={{
+          marginTop: 24,
+          padding: '12px 14px',
+          borderRadius: 8,
+          background: 'var(--paper, #f8f8f6)',
+          border: '1px solid var(--line, #e5e5e3)',
+          fontSize: '.82rem',
+          color: 'var(--tx-2, #555)',
+          lineHeight: 1.55,
+        }}
+      >
+        <strong style={{ display: 'block', marginBottom: 4, color: 'var(--tx, #111)' }}>
+          Your privacy / Faragha yako
+        </strong>
+
+        {/* English */}
+        <p style={{ margin: '0 0 10px' }}>
+          Esoqo collects your name and phone number to create and maintain your registry record.
+          Your data is held under the{' '}
+          <strong>Data Protection Act, 2019</strong> and will not be shared without your
+          consent. You can view, correct, or request deletion of your record at any time — write
+          to{' '}
+          <a href="mailto:dpo@esoqo.co.ke" style={{ color: 'var(--blue, #1a73e8)' }}>
+            dpo@esoqo.co.ke
+          </a>{' '}
+          or visit{' '}
+          <Link href="https://esoqo.co.ke/trust" style={{ color: 'var(--blue, #1a73e8)' }}>
+            esoqo.co.ke/trust
+          </Link>
+          .
+        </p>
+
+        {/* Kiswahili */}
+        <p style={{ margin: 0, borderTop: '1px solid var(--line, #e5e5e3)', paddingTop: 10 }}>
+          Esoqo inakusanya jina lako na nambari ya simu ili kuunda na kutunza rekodi yako
+          kwenye rejista. Taarifa zako zinashikiliwa chini ya{' '}
+          <strong>Sheria ya Ulinzi wa Data, 2019</strong> na hazitashirikiwa bila idhini
+          yako. Unaweza kutazama, kusahihisha, au kuomba kufutwa kwa rekodi yako wakati
+          wowote — andika kwa{' '}
+          <a href="mailto:dpo@esoqo.co.ke" style={{ color: 'var(--blue, #1a73e8)' }}>
+            dpo@esoqo.co.ke
+          </a>{' '}
+          au tembelea{' '}
+          <Link href="https://esoqo.co.ke/trust" style={{ color: 'var(--blue, #1a73e8)' }}>
+            esoqo.co.ke/trust
+          </Link>
+          .
+        </p>
+      </div>
     </>
   );
 }
