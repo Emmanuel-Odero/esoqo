@@ -5,7 +5,7 @@ import type { Route } from 'next';
 import { useState, useTransition } from 'react';
 import { Icon } from '@esoqo/ui';
 import type { ParcelOrgStationRow } from '@/lib/parcel-org-session';
-import { saveOrgStation } from '../actions';
+import { saveOrgStation } from '../../actions';
 
 const inputStyle: React.CSSProperties = {
   width: '100%', marginTop: 4, padding: '8px 10px', border: '1.5px solid var(--line)', borderRadius: 6,
@@ -32,7 +32,7 @@ export function StationsManager({ initial }: { initial: ParcelOrgStationRow[] })
             {stations.map((s) => (
               <tr key={s.id}>
                 <td>
-                  <Link href={`/parcel-org/stations/${s.id}` as Route} style={{ fontWeight: 700 }}>
+                  <Link href={`/parcel-org/settings/stations/${s.id}` as Route} style={{ fontWeight: 700 }}>
                     {s.name}
                   </Link>
                   <span className="sub" style={{ display: 'block' }}>{s.locationHint}</span>
@@ -48,7 +48,7 @@ export function StationsManager({ initial }: { initial: ParcelOrgStationRow[] })
                   <span className={`pill ${s.active ? 'p-ok' : 'p-mute'}`}>{s.active ? 'Active' : 'Suspended'}</span>
                 </td>
                 <td style={{ textAlign: 'right', whiteSpace: 'nowrap' }}>
-                  <Link className="btn btn-o btn-sm" href={`/parcel-org/stations/${s.id}` as Route}>
+                  <Link className="btn btn-o btn-sm" href={`/parcel-org/settings/stations/${s.id}` as Route}>
                     Manage
                   </Link>
                   <button className="btn btn-o btn-sm" style={{ marginLeft: 6 }}

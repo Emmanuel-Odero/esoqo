@@ -5,7 +5,7 @@ import { useState, useTransition } from 'react';
 import { Icon } from '@esoqo/ui';
 import type { ParcelOrgStaffRow, ParcelOrgStationRow } from '@/lib/parcel-org-session';
 import { DemoCallButton } from '@/components/DemoContact';
-import { assignStationMember, setStationManager } from '../../actions';
+import { assignStationMember, setStationManager } from '../../../actions';
 
 const StationMap = dynamic(() => import('./StationMap').then((m) => m.StationMap), {
   ssr: false,

@@ -1,6 +1,6 @@
 import { redirect } from 'next/navigation';
 import { getParcelOrgMe, ParcelOrgUnauthorised } from '@/lib/parcel-org-session';
-import { listOrgStations } from '../actions';
+import { listOrgStations } from '../../actions';
 import { StationsManager } from './StationsManager';
 
 export const dynamic = 'force-dynamic';

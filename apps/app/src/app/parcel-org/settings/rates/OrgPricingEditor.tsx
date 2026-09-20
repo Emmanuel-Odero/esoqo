@@ -1,8 +1,8 @@
 'use client';
 
 import { useId, useState, useTransition } from 'react';
-import type { OrgPricingRow } from '../actions';
-import { saveOrgPricing } from '../actions';
+import type { OrgPricingRow } from '../../actions';
+import { saveOrgPricing } from '../../actions';
 
 const TYPE_LABEL: Record<string, string> = {
   ENVELOPE_DOCUMENT: 'Envelope / Document',

@@ -3,7 +3,7 @@
 import { useState, useTransition } from 'react';
 import { Icon } from '@esoqo/ui';
 import { useAnnounce } from '@esoqo/a11y';
-import { changeMyOrgPin } from '../actions';
+import { changeMyOrgPin } from '../../actions';
 
 const inputStyle: React.CSSProperties = {
   width: '100%', marginTop: 4, padding: '8px 10px',

@@ -3,7 +3,7 @@ import {
   ParcelOrgUnauthorised, getParcelOrgMe, parcelOrgFetch,
   type ParcelOrgStaffRow, type ParcelOrgStationRow,
 } from '@/lib/parcel-org-session';
-import { listOrgStaff } from '../../actions';
+import { listOrgStaff } from '../../../actions';
 import { StationDetail } from './StationDetail';
 
 export const dynamic = 'force-dynamic';

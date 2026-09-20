@@ -1,7 +1,7 @@
 import type { Metadata } from 'next';
 import { redirect } from 'next/navigation';
 import { ParcelOrgUnauthorised, getParcelOrgMe } from '@/lib/parcel-org-session';
-import { listOrgPricing } from '../actions';
+import { listOrgPricing } from '../../actions';
 import { OrgPricingEditor } from './OrgPricingEditor';
 
 export const dynamic = 'force-dynamic';

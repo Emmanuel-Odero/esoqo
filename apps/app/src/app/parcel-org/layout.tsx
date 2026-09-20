@@ -46,10 +46,16 @@ export default async function ParcelOrgLayout({ children }: { children: React.Re
 
   if (!me) return <>{children}</>;
 
-  const canManageStaff = me.capabilities.includes('parcelorgstaff.write');
+  // Staff and station capabilities are no longer read here: those nav
+  // entries became Settings tabs, and Settings decides its own tab list
+  // from the same capabilities (see settings/sections.ts).
   const canManagePricing = me.capabilities.includes('parcelorg.write');
-  const canManageStations = me.capabilities.includes('parcelorgstation.write');
   const canDispatch = me.capabilities.includes('parcelorg.dispatch');
+  const canSeeMoney = me.capabilities.includes('parcelorg.earnings');
+  // Counter is the commercial desk — booking and the label stock a
+  // booking spends. Receiving moved to the Scanner, so carry alone no
+  // longer opens it.
+  const canSell = canDispatch || canManagePricing;
   // The counter page carries both jobs now — booking (dispatch) and the
   // front-desk worklist (carry) — so anyone with either capability gets
   // the one nav entry.
@@ -64,27 +70,33 @@ export default async function ParcelOrgLayout({ children }: { children: React.Re
 
   const nav: ParcelOrgNavItem[] = [
     // One entry per job, each owned by exactly one page:
-    // - Parcels  = review the register (this dashboard, no scanning here)
-    // - Counter  = the ONLY scanner + receive/book worklist, with Labels
-    //              as a tab inside it (no separate Labels page)
+    // - Parcels  = review the register (review only — no booking, no
+    //              scanning, no cash)
+    // - Scan     = the ONLY scanner; a box in someone's hands
+    // - Counter  = the commercial desk: book a parcel
+    // - Money    = reconcile rider float
     // - Dispatch = runs / fleet board
-    // - Rates    = parcel-type price overrides (called "Rates", not
-    //              "Pricing", so it can't be confused with transport Fares
-    //              in the ticket organiser console)
+    // - Settings = everything configured, not operated (tabs inside)
     { href: '/parcel-org', label: 'Parcels', icon: 'box' },
     // Scan sits second, right after the register, because it is the
     // entry point for every job that starts with a box in someone's
     // hands — which is most of them. It is the one page that needs no
     // decision before it is useful: open it and scan.
-    ...(canScan ? [{ href: '/parcel-org/scan', label: 'Scan', icon: 'qr' as const }] : []),
+    // The badge counts senders expected at the desk. It sat on Counter
+    // while the worklist did; it follows the worklist here.
+    ...(canScan ? [{ href: '/parcel-org/scan', label: 'Scan', icon: 'qr' as const, badge: me.stats.awaitingDropoff || undefined }] : []),
     ...(canDispatch ? [{ href: '/parcel-org/dispatch', label: 'Dispatch', icon: 'send' as const }] : []),
-    ...(canDesk ? [{ href: '/parcel-org/counter', label: 'Counter', icon: 'plus' as const, badge: me.stats.awaitingDropoff || undefined }] : []),
-    ...(canManagePricing ? [{ href: '/parcel-org/pricing', label: 'Rates', icon: 'tag' as const }] : []),
-    ...(canManageStations ? [{ href: '/parcel-org/stations', label: 'Stations', icon: 'pin' as const }] : []),
-    ...(canManageStaff ? [{ href: '/parcel-org/team', label: 'Team', icon: 'users' as const }] : []),
-    // Everyone's own sign-in and PIN — riders holding a temporary invite
-    // PIN need this more than anyone, so it is never capability-gated.
-    { href: '/parcel-org/security', label: 'Security', icon: 'key' },
+    ...(canSell ? [{ href: '/parcel-org/counter', label: 'Counter', icon: 'plus' as const }] : []),
+    // Counting cash in is its own job with its own page now — the
+    // rider-float panel used to sit at the bottom of the register.
+    ...(canSeeMoney ? [{ href: '/parcel-org/money', label: 'Money', icon: 'coins' as const }] : []),
+    // Everything a company CONFIGURES rather than operates — rates,
+    // label stock, stations, team, and everyone's own sign-in — is one
+    // entry with tabs inside. These were five separate top-level
+    // entries, so more than half this nav was things you touch once a
+    // month sitting beside things you touch once a minute. Never gated:
+    // the sign-in tab inside it is open to everyone, riders most of all.
+    { href: '/parcel-org/settings', label: 'Settings', icon: 'grid' },
   ];
 
   return (
