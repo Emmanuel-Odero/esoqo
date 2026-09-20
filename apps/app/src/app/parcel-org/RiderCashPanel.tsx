@@ -3,6 +3,7 @@ import { displayKES, toCentsOrZero, toWire } from '@esoqo/domain';
 
 import { useEffect, useId, useState, useTransition } from 'react';
 import { Icon } from '@esoqo/ui';
+import type { ParcelOrgStaffRow } from '@/lib/parcel-org-session';
 import { remitRiderCod } from './actions';
 import { setFormActive } from './form-activity';
 
@@ -15,9 +16,13 @@ import { setFormActive } from './form-activity';
  * table and the system's expectation are allowed to disagree, and
  * pre-filling the expected figure is exactly how somebody confirms a
  * number they never actually counted.
+ *
+ * The rider is PICKED, though. This used to ask for "Rider's Esoqo
+ * party id" in a bare text box — a UUID nobody standing at a counter
+ * has, which made the one action on this page effectively unusable
+ * without going to look it up. The roster already carries partyId.
  */
-export function RiderCashPanel() {
-  const [open, setOpen] = useState(false);
+export function RiderCashPanel({ riders }: { riders: ParcelOrgStaffRow[] }) {
   const [riderPartyId, setRiderPartyId] = useState('');
   const [amount, setAmount] = useState('');
   const [note, setNote] = useState('');
@@ -26,21 +31,12 @@ export function RiderCashPanel() {
   const [pending, startTransition] = useTransition();
   const ids = { rider: useId(), amount: useId(), note: useId() };
 
-  // Same deal as the custom-parcel panel: while counting cash the
-  // dashboard poller stands down so the page never refreshes mid-count.
+  // While counting cash the dashboard poller stands down, so the page
+  // never refreshes mid-count.
   useEffect(() => {
-    if (!open) return;
     setFormActive(true);
     return () => setFormActive(false);
-  }, [open ]);
-
-  if (!open) {
-    return (
-      <button className="btn btn-o btn-sm" style={{ marginBottom: 16 }} onClick={() => setOpen(true)}>
-        <Icon name="coins" size={14} />Count a rider&apos;s cash in
-      </button>
-    );
-  }
+  }, []);
 
   function submit() {
     setError(null);
@@ -51,66 +47,96 @@ export function RiderCashPanel() {
       const res = await remitRiderCod(riderPartyId.trim(), toWire(toCentsOrZero(amount)), note.trim());
       if (!res.ok) { setError(res.error); return; }
       setResult({ expectedKes: res.expectedKes, shortfallKes: res.shortfallKes });
-      setRiderPartyId(''); setAmount(''); setNote('');
+      setAmount(''); setNote('');
     });
   }
 
-  const inputStyle: React.CSSProperties = {
-    padding: '6px 8px', border: '1.5px solid var(--line)', borderRadius: 6, width: '100%',
-  };
+  const short = result ? toCentsOrZero(result.shortfallKes) > 0 : false;
 
   return (
-    <div className="card" style={{ marginBottom: 16 }}>
-      <div className="row" style={{ justifyContent: 'space-between', alignItems: 'flex-start' }}>
+    <section className="ppanel porg-money-count">
+      <div className="ppanel-head">
         <div>
-          <h3 style={{ margin: 0 }}>Count a rider&apos;s cash in</h3>
-          <p className="sub" style={{ margin: '4px 0 12px', fontSize: '.85rem' }}>
-            Closes out every parcel that rider collected money for.
+          <h2>Count a rider in</h2>
+          <p>
+            Records what you actually counted and closes out every parcel that rider
+            collected money for. A shortfall is kept on the record, not rejected.
           </p>
         </div>
-        <button className="btn btn-o btn-sm" onClick={() => setOpen(false)}>Close</button>
       </div>
 
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(170px, 1fr))', gap: 12, alignItems: 'end' }}>
-        <div>
-          <label className="sub" htmlFor={ids.rider} style={{ display: 'block', marginBottom: 4 }}>
-            Rider&apos;s Esoqo party id
-          </label>
-          <input id={ids.rider} className="mono" style={inputStyle} value={riderPartyId}
-            onChange={(e) => setRiderPartyId(e.target.value)} />
-        </div>
-        <div>
-          <label className="sub" htmlFor={ids.amount} style={{ display: 'block', marginBottom: 4 }}>
-            Amount counted (KES)
-          </label>
-          <input id={ids.amount} className="mono" style={inputStyle} value={amount}
-            placeholder="What you actually counted"
-            onChange={(e) => setAmount(e.target.value.replace(/[^\d.]/g, ''))} />
-        </div>
-        <div>
-          <label className="sub" htmlFor={ids.note} style={{ display: 'block', marginBottom: 4 }}>
-            Note (optional)
-          </label>
-          <input id={ids.note} style={inputStyle} value={note} onChange={(e) => setNote(e.target.value)} />
-        </div>
-        <button className="btn btn-p btn-sm" disabled={pending || !riderPartyId.trim() || !amount} onClick={submit}>
-          {pending ? 'Recording…' : 'Record'}
-        </button>
-      </div>
+      <div className="ppanel-body">
+        {riders.length === 0 ? (
+          <div className="pempty">
+            <span className="pempty-icon"><Icon name="users" size={20} /></span>
+            <strong>No riders on the roster yet</strong>
+            <p>
+              Cash is counted in against a named rider. Add them under Settings →
+              Team first.
+            </p>
+          </div>
+        ) : (
+          <>
+            <div className="pgrid">
+              <div className="pfield">
+                <label htmlFor={ids.rider}>Rider</label>
+                <select
+                  id={ids.rider}
+                  value={riderPartyId}
+                  onChange={(e) => { setRiderPartyId(e.target.value); setResult(null); }}
+                >
+                  <option value="">Choose a rider…</option>
+                  {riders.map((r) => (
+                    <option key={r.id} value={r.partyId ?? ''}>
+                      {r.name}{r.msisdn ? ` · ${r.msisdn}` : ''}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <div className="pfield">
+                <label htmlFor={ids.amount}>Amount counted (KES)</label>
+                <input
+                  id={ids.amount} className="mono" value={amount} inputMode="decimal"
+                  placeholder="What you actually counted"
+                  onChange={(e) => setAmount(e.target.value.replace(/[^\d.]/g, ''))}
+                />
+                <em className="phint">Not pre-filled on purpose — count first.</em>
+              </div>
+              <div className="pfield">
+                <label htmlFor={ids.note}>Note (optional)</label>
+                <input id={ids.note} value={note} onChange={(e) => setNote(e.target.value)} placeholder="e.g. two notes short, will bring tomorrow" />
+              </div>
+            </div>
 
-      {result && (
-        <p className="sub" style={{ marginTop: 12, fontSize: '.85rem' }}>
-          Expected KES {displayKES(result.expectedKes)}.
-          {toCentsOrZero(result.shortfallKes) > 0
-            ? ` That's KES ${displayKES(result.shortfallKes)} short — both figures are on the record.`
-            : ' Counted in full.'}
-        </p>
-      )}
-      {error && (
-        <p role="alert" style={{ color: 'var(--red)', fontSize: '.85rem', display: 'flex', gap: 6, alignItems: 'center', marginTop: 12 }}>
-          <Icon name="alert-circle" size={14} />{error}
-        </p>
-      )}
-    </div>
+            <div className="ptoolbar" style={{ marginTop: 'var(--sp-5)', marginBottom: 0 }}>
+              <button
+                className="btn btn-p"
+                disabled={pending || !riderPartyId || !amount}
+                onClick={submit}
+              >
+                <Icon name="coins" size={16} />{pending ? 'Recording…' : 'Record the count'}
+              </button>
+            </div>
+
+            {result && (
+              <p className={`pnote ${short ? 'pnote-warn' : 'pnote-ok'}`} style={{ marginTop: 'var(--sp-4)' }} role="status">
+                <Icon name={short ? 'alert-triangle' : 'check-circle'} size={16} />
+                <span>
+                  Expected KES {displayKES(result.expectedKes)}.{' '}
+                  {short
+                    ? `That's KES ${displayKES(result.shortfallKes)} short — both figures are on the record.`
+                    : 'Counted in full.'}
+                </span>
+              </p>
+            )}
+            {error && (
+              <p className="pnote pnote-bad" style={{ marginTop: 'var(--sp-4)' }} role="alert">
+                <Icon name="alert-circle" size={16} /><span>{error}</span>
+              </p>
+            )}
+          </>
+        )}
+      </div>
+    </section>
   );
 }
