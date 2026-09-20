@@ -1131,15 +1131,55 @@ func writeParcelRevenueSplit(ctx context.Context, pool *pgxpool.Pool, parcelID s
 	return err
 }
 
+// DeliveryCodeDigits is the length of a newly issued delivery code.
+//
+// Six DIGITS, not the six mixed letters-and-digits this used to mint.
+// The code's whole job is to survive a trip through the physical world:
+// it is read off an SMS by a receiver, often spoken down a phone to a
+// clerk, and typed by that clerk on a counter handset. Letters cost on
+// every one of those legs — "is that an M or an N", upper or lower, and
+// a full QWERTY keyboard on a phone where a numeric pad would do. A
+// digits-only code opens the system numeric keypad (inputMode="numeric"
+// on the counter's entry field), reads aloud unambiguously in any
+// language spoken at the desk, and needs no case handling at all.
+//
+// The cost is entropy: 10^6 rather than 32^6, about a thousandth of the
+// space. That is acceptable ONLY because handleDeliverParcel now locks
+// a parcel's code after DeliveryCodeMaxAttempts wrong tries — without
+// that throttle a courier holding a parcel could simply enumerate the
+// million and launder a diverted box as a clean DELIVERY_CODE handover
+// rather than the photo-and-name STAFF_OVERRIDE that leaves a trail.
+// The two changes are one decision; neither is safe to revert alone.
+//
+// Codes already issued stay valid: DeliverParcel compares against the
+// stored value with EqualFold and never re-derives the format, so every
+// alphanumeric code in flight keeps working until its parcel lands.
+const DeliveryCodeDigits = 6
+
+// DeliveryCodeMaxAttempts — wrong delivery codes tolerated per parcel
+// before the handover has to fall back to an auditable route (OTP to
+// the number on file, or a staff override with photo and name).
+const DeliveryCodeMaxAttempts = 5
+
 func generateDeliveryCode() (string, error) {
-	b := make([]byte, 6)
-	if _, err := cryptorand.Read(b); err != nil {
-		return "", err
-	}
-	const alphabet = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789"
-	out := make([]byte, 6)
+	const digits = "0123456789"
+	out := make([]byte, DeliveryCodeDigits)
+	// Rejection sampling, not modulo. 256 divides evenly by the old
+	// 32-character alphabet, so the previous `% len(alphabet)` was
+	// unbiased by luck; 256 % 10 is 6, so the same trick would make
+	// 0–5 measurably likelier than 6–9 in every position. On a code
+	// this short, a skewed digit distribution is real entropy lost.
 	for i := range out {
-		out[i] = alphabet[int(b[i])%len(alphabet)]
+		for {
+			var b [1]byte
+			if _, err := cryptorand.Read(b[:]); err != nil {
+				return "", err
+			}
+			if b[0] < 250 { // 250 = 25 * 10, the largest multiple of 10 that fits
+				out[i] = digits[int(b[0])%10]
+				break
+			}
+		}
 	}
 	return string(out), nil
 }

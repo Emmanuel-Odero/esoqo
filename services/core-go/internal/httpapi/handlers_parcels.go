@@ -1,6 +1,8 @@
 package httpapi
 
 import (
+	"errors"
+	"fmt"
 	"log"
 	"net/http"
 	"strconv"
@@ -772,10 +774,68 @@ func (s *Server) handleDeliverParcel(c *gin.Context) {
 		return
 	}
 
+	// ── Delivery-code throttle ──────────────────────────────────────
+	//
+	// The code is six digits now (see dbx.DeliveryCodeDigits), which is
+	// a million combinations — enumerable in seconds by the one party
+	// with both the parcel and the right to call this endpoint: the
+	// courier currently holding it. Without a wall here, diverting a box
+	// and then guessing your way to a DELIVERY_CODE proof would look
+	// exactly like an honest handover in the audit trail, while the
+	// legitimate no-code routes (OTP to the number on file, or a staff
+	// override with photo and name) both leave evidence. The throttle is
+	// what keeps the short code honest; it is not optional.
+	//
+	// Keyed on the parcel, not the caller or the IP: the thing being
+	// guessed is this parcel's code, and a courier switching handsets or
+	// networks must not get a fresh allowance. Only wrong codes count —
+	// a receiver who fumbles twice and then reads it correctly is no
+	// closer to a lockout than one who got it right first time.
+	//
+	// OTP and override deliveries skip the gate entirely: neither is
+	// guessing the delivery code, and locking a parcel out of the two
+	// routes that exist precisely for "the code didn't arrive" would
+	// strand the receiver standing at the counter.
+	triesCode := "parcel-delivery-code:" + code
+	guessingCode := strings.TrimSpace(req.DeliveryCode) != "" && !otpVerified
+	if guessingCode &&
+		authsvc.FailedAttempts(c.Request.Context(), s.Redis, triesCode) >= dbx.DeliveryCodeMaxAttempts {
+		writeError(c, http.StatusTooManyRequests, "CODE_LOCKED",
+			"Too many wrong codes for this parcel. Send the receiver a one-time code instead, or hand over with a photo and their name.")
+		return
+	}
+
 	if err := dbx.DeliverParcel(c.Request.Context(), s.Pool, code, req.DeliveryCode, ctx.PartyID, proof, allowCodeless, otpVerified); err != nil {
+		// A wrong code is the only failure worth counting. Every other
+		// rejection here (not holding it, already delivered, journey
+		// closed) is a statement about the parcel that no amount of
+		// retrying changes, and counting those would lock a parcel over
+		// a clerk repeating a call that was never going to succeed.
+		var pe *dbx.ParcelError
+		if errors.As(err, &pe) && pe.Code == "WRONG_CODE" && guessingCode {
+			left := dbx.DeliveryCodeMaxAttempts -
+				authsvc.RecordFailure(c.Request.Context(), s.Redis, triesCode, time.Hour)
+			if left <= 0 {
+				writeError(c, http.StatusTooManyRequests, "CODE_LOCKED",
+					"Too many wrong codes for this parcel. Send the receiver a one-time code instead, or hand over with a photo and their name.")
+				return
+			}
+			// Saying how many tries remain is deliberate. The person
+			// typing is a clerk helping a receiver read a number off a
+			// phone, not an attacker being handed a hint — and a clerk
+			// who doesn't know a lockout is coming will burn the last
+			// try on a guess instead of switching to the OTP route.
+			writeError(c, http.StatusUnauthorized, "WRONG_CODE",
+				fmt.Sprintf("That code doesn't match. %d %s left before this parcel locks.",
+					left, map[bool]string{true: "try", false: "tries"}[left == 1]))
+			return
+		}
 		writeParcelError(c, err)
 		return
 	}
+	// Delivered — nothing left to guess, so the counter goes rather than
+	// ageing out on its own.
+	authsvc.ClearFailures(c.Request.Context(), s.Redis, triesCode)
 
 	// After the hand-over, never before: a wrong delivery code must not
 	// be able to book a collection for goods that never changed hands.

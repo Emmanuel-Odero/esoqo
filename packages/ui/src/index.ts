@@ -32,6 +32,7 @@ export {
   type PrintLabelItem, type PrintLayout, type PrintPaper,
 } from './ParcelPrintStudio';
 export { CounterForm, type CounterFormHandle } from './ParcelCounter';
+export { CodeInput } from './CodeInput';
 export type {
   CounterActions, CounterBookInput, CounterLabelInfo, CounterLabelLookup,
   CounterLinks, CounterParcelRef, CounterPartyOption, CounterPricingOption,
