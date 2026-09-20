@@ -7,77 +7,88 @@ import { Icon } from '@esoqo/ui';
 import type { ParcelOrgStationRow } from '@/lib/parcel-org-session';
 import { saveOrgStation } from '../../actions';
 
-const inputStyle: React.CSSProperties = {
-  width: '100%', marginTop: 4, padding: '8px 10px', border: '1.5px solid var(--line)', borderRadius: 6,
-};
-
 /**
- * The station register. Each row now opens a station's own page — its
+ * The station register. Each row opens a station's own page — its
  * location on a map and the team posted to it — rather than only being
  * editable here. Creating and editing a location stays on this screen.
+ *
+ * Rows, not a table: six columns (station, phone, team, capacity,
+ * status, actions) could not fit a phone and scrolled sideways, which
+ * hid the status — the one column that says whether a station is
+ * taking parcels at all.
  */
 export function StationsManager({ initial }: { initial: ParcelOrgStationRow[] }) {
   const [stations, setStations] = useState(initial);
   const [editing, setEditing] = useState<ParcelOrgStationRow | null>(null);
   const [adding, setAdding] = useState(false);
 
+  const form = (adding || editing) ? (
+    <StationForm
+      initial={editing ?? undefined}
+      onDone={(station) => {
+        setStations((rows) => (editing ? rows.map((row) => (row.id === station.id ? station : row)) : [...rows, station]));
+        setEditing(null); setAdding(false);
+      }}
+      onCancel={() => { setEditing(null); setAdding(false); }}
+    />
+  ) : null;
+
   return (
-    <div className="card" style={{ padding: 0 }}>
-      <div style={{ overflowX: 'auto' }}>
-        <table className="tbl">
-          <thead>
-            <tr><th>Station</th><th>Phone</th><th>Team</th><th>Capacity</th><th>Status</th><th /></tr>
-          </thead>
-          <tbody>
-            {stations.map((s) => (
-              <tr key={s.id}>
-                <td>
-                  <Link href={`/parcel-org/settings/stations/${s.id}` as Route} style={{ fontWeight: 700 }}>
-                    {s.name}
-                  </Link>
-                  <span className="sub" style={{ display: 'block' }}>{s.locationHint}</span>
-                </td>
-                <td className="mono">{s.msisdn}</td>
-                <td>
-                  {s.memberCount > 0
-                    ? `${s.memberCount} member${s.memberCount === 1 ? '' : 's'}`
-                    : <span className="sub">Nobody posted</span>}
-                </td>
-                <td>{s.capacity}</td>
-                <td>
-                  <span className={`pill ${s.active ? 'p-ok' : 'p-mute'}`}>{s.active ? 'Active' : 'Suspended'}</span>
-                </td>
-                <td style={{ textAlign: 'right', whiteSpace: 'nowrap' }}>
-                  <Link className="btn btn-o btn-sm" href={`/parcel-org/settings/stations/${s.id}` as Route}>
-                    Manage
-                  </Link>
-                  <button className="btn btn-o btn-sm" style={{ marginLeft: 6 }}
-                    onClick={() => { setEditing(s); setAdding(false); }}>Edit</button>
-                </td>
-              </tr>
-            ))}
-            {stations.length === 0 && (
-              <tr><td colSpan={6} className="sub" style={{ textAlign: 'center', padding: 24 }}>No stations yet.</td></tr>
-            )}
-          </tbody>
-        </table>
-      </div>
-      <div style={{ padding: 16, borderTop: '1px solid var(--line)' }}>
-        {(adding || editing) ? (
-          <StationForm
-            initial={editing ?? undefined}
-            onDone={(station) => {
-              setStations((rows) => (editing ? rows.map((row) => (row.id === station.id ? station : row)) : [...rows, station]));
-              setEditing(null); setAdding(false);
-            }}
-            onCancel={() => { setEditing(null); setAdding(false); }}
-          />
-        ) : (
-          <button className="btn btn-p btn-sm" onClick={() => setAdding(true)}>
-            <Icon name="plus" size={14} />Add station
+    <div className="porg-stations">
+      {!form && (
+        <div className="ptoolbar">
+          <button className="btn btn-p" onClick={() => setAdding(true)}>
+            <Icon name="plus" size={16} />Add station
           </button>
-        )}
-      </div>
+        </div>
+      )}
+
+      {form}
+
+      {stations.length === 0 && !form ? (
+        <div className="ppanel">
+          <div className="pempty">
+            <span className="pempty-icon"><Icon name="pin" size={20} /></span>
+            <strong>No stations yet</strong>
+            <p>
+              A station is a place receivers collect from, and the thing routes are
+              built out of. Add the first one above.
+            </p>
+          </div>
+        </div>
+      ) : (
+        <ul className="plist">
+          {stations.map((s) => (
+            <li key={s.id}>
+              <div className="plist-main">
+                <span className="plist-title">
+                  <Link href={`/parcel-org/settings/stations/${s.id}` as Route}>{s.name}</Link>
+                  <span className={`pill ${s.active ? 'p-ok' : 'p-mute'}`}>
+                    {s.active ? 'Active' : 'Suspended'}
+                  </span>
+                </span>
+                <span className="plist-sub">
+                  {s.locationHint || 'No location note'}
+                  {s.msisdn && <> · <span className="mono">{s.msisdn}</span></>}
+                </span>
+                <span className="plist-sub">
+                  {s.memberCount > 0
+                    ? `${s.memberCount} member${s.memberCount === 1 ? '' : 's'} posted`
+                    : 'Nobody posted'}
+                  {' · holds '}{s.capacity}
+                </span>
+              </div>
+              <div className="plist-actions">
+                <Link className="btn btn-o btn-sm" href={`/parcel-org/settings/stations/${s.id}` as Route}>
+                  <Icon name="map" size={14} />Manage
+                </Link>
+                <button className="btn btn-o btn-sm"
+                  onClick={() => { setEditing(s); setAdding(false); }}>Edit</button>
+              </div>
+            </li>
+          ))}
+        </ul>
+      )}
     </div>
   );
 }
@@ -115,27 +126,52 @@ function StationForm({
   }
 
   return (
-    <div style={{ display: 'grid', gap: 10 }}>
-      <div className="row" style={{ gap: 10, flexWrap: 'wrap' }}>
-        {([['Name', name, setName], ['Phone', msisdn, setMsisdn], ['Location', locationHint, setLocationHint], ['Hours', openingHours, setOpeningHours]] as const).map(([label, value, setter]) => (
-          <label key={label} className="sub" style={{ flex: 1, minWidth: 180 }}>{label}
-            <input style={inputStyle} value={value} onChange={(e) => setter(e.target.value)} />
+    <section className="ppanel porg-station-form">
+      <div className="ppanel-head">
+        <div>
+          <h2>{initial ? `Edit ${initial.name}` : 'Add a station'}</h2>
+          <p>
+            Where receivers collect, and the places a route is built out of. The
+            coordinates put it on the dispatch map.
+          </p>
+        </div>
+      </div>
+      <div className="ppanel-body">
+        <div className="pgrid">
+          {([['Name', name, setName], ['Phone', msisdn, setMsisdn], ['Location', locationHint, setLocationHint], ['Hours', openingHours, setOpeningHours]] as const).map(([label, value, setter]) => (
+            <label key={label} className="pfield"><span>{label}</span>
+              <input value={value} onChange={(e) => setter(e.target.value)} />
+            </label>
+          ))}
+          <label className="pfield"><span>Latitude</span>
+            <input className="mono" value={lat} inputMode="decimal" onChange={(e) => setLat(e.target.value)} />
           </label>
-        ))}
+          <label className="pfield"><span>Longitude</span>
+            <input className="mono" value={lng} inputMode="decimal" onChange={(e) => setLng(e.target.value)} />
+          </label>
+          <label className="pfield"><span>Capacity</span>
+            <input className="mono" value={capacity} inputMode="numeric" onChange={(e) => setCapacity(e.target.value)} />
+          </label>
+        </div>
+
+        <label className="pfield-check" style={{ marginTop: 'var(--sp-4)' }}>
+          <input type="checkbox" checked={active} onChange={(e) => setActive(e.target.checked)} />
+          <span>Active — taking parcels. Uncheck to suspend without deleting.</span>
+        </label>
+
+        {error && (
+          <p role="alert" className="pnote pnote-bad" style={{ marginTop: 'var(--sp-4)' }}>
+            <Icon name="alert-circle" size={16} /><span>{error}</span>
+          </p>
+        )}
+
+        <div className="ptoolbar" style={{ marginTop: 'var(--sp-5)', marginBottom: 0 }}>
+          <button className="btn btn-p" disabled={pending} onClick={save}>
+            {pending ? 'Saving…' : 'Save station'}
+          </button>
+          <button className="btn btn-o" disabled={pending} onClick={onCancel}>Cancel</button>
+        </div>
       </div>
-      <div className="row" style={{ gap: 10 }}>
-        <label className="sub">Latitude<input style={inputStyle} className="mono" value={lat} inputMode="decimal" onChange={(e) => setLat(e.target.value)} /></label>
-        <label className="sub">Longitude<input style={inputStyle} className="mono" value={lng} inputMode="decimal" onChange={(e) => setLng(e.target.value)} /></label>
-        <label className="sub">Capacity<input style={inputStyle} className="mono" value={capacity} inputMode="numeric" onChange={(e) => setCapacity(e.target.value)} /></label>
-      </div>
-      <label className="sub"><input type="checkbox" checked={active} onChange={(e) => setActive(e.target.checked)} /> Active</label>
-      {error && <p role="alert" style={{ color: 'var(--red)' }}>{error}</p>}
-      <div className="row" style={{ gap: 8 }}>
-        <button className="btn btn-p btn-sm" disabled={pending} onClick={save}>
-          {pending ? 'Saving…' : 'Save station'}
-        </button>
-        <button className="btn btn-o btn-sm" disabled={pending} onClick={onCancel}>Cancel</button>
-      </div>
-    </div>
+    </section>
   );
 }

@@ -16,11 +16,28 @@ const isCustomRole = (role: string) => !PARCEL_STAFF_ROLES.includes(role);
  * say what each one can do rather than naming the capability bundle —
  * a depot manager issuing a PIN is choosing a job, not a permission set.
  */
+// Every role core-go grants capabilities for (see authsvc's
+// ParcelStaffCapabilities). The station roles were missing here, so a
+// roster showed raw enum values — "COLLECTION_CLERK" — to a manager
+// who never chose that spelling.
 const ROLES: [value: string, label: string, hint: string][] = [
   ['RIDER', 'Rider', 'Carries parcels and closes them at the door'],
   ['DISPATCHER', 'Dispatcher', 'Also assigns parcels to riders'],
   ['MANAGER', 'Manager', 'Also manages the team and sees earnings'],
+  ['STATION_MANAGER', 'Station manager', 'Runs one station, its team and its parcels'],
+  ['INTAKE_CLERK', 'Intake clerk', 'Receives parcels over the counter'],
+  ['ARRIVAL_CLERK', 'Arrival clerk', 'Checks runs in when they land'],
+  ['COLLECTION_CLERK', 'Collection clerk', 'Hands parcels to the people collecting them'],
 ];
+
+/** A role with no entry above — a custom title a company invented.
+ *  Rendered as typed rather than as the stored SCREAMING_CASE. */
+function roleLabel(role: string): string {
+  const known = ROLES.find(([v]) => v === role);
+  if (known) return known[1];
+  const words = role.replace(/_/g, ' ').toLowerCase().trim();
+  return words.charAt(0).toUpperCase() + words.slice(1);
+}
 
 export function OrgStaffManager({ staff }: { staff: ParcelOrgStaffRow[] }) {
   const [adding, setAdding] = useState(false);
@@ -35,33 +52,33 @@ export function OrgStaffManager({ staff }: { staff: ParcelOrgStaffRow[] }) {
   }, []);
 
   return (
-    <div className="card" style={{ padding: 0 }}>
-      <div style={{ overflowX: 'auto' }}>
-        <table className="tbl">
-          <thead>
-            <tr><th>Name</th><th>Role</th><th>Sign-in ID / phone</th><th>Status</th><th /></tr>
-          </thead>
-          <tbody>
-            {staff.map((s) => <StaffRow key={s.id} staff={s} stations={stations} />)}
-            {staff.length === 0 && (
-              <tr>
-                <td colSpan={5} className="sub" style={{ textAlign: 'center', padding: 24 }}>
-                  Nobody yet. Add your first rider below.
-                </td>
-              </tr>
-            )}
-          </tbody>
-        </table>
-      </div>
-      <div style={{ padding: 16, borderTop: '1px solid var(--line)' }}>
-        {adding ? (
-            <StaffForm stations={stations} submitLabel="Add to the team" onDone={() => setAdding(false)} onCancel={() => setAdding(false)} />
-        ) : (
-          <button className="btn btn-o btn-sm" onClick={() => setAdding(true)}>
-            <Icon name="plus" size={14} />Add someone
+    <div className="porg-team">
+      {adding ? (
+        <StaffForm stations={stations} submitLabel="Add to the team" onDone={() => setAdding(false)} onCancel={() => setAdding(false)} />
+      ) : (
+        <div className="ptoolbar">
+          <button className="btn btn-p" onClick={() => setAdding(true)}>
+            <Icon name="plus" size={16} />Add someone
           </button>
-        )}
-      </div>
+        </div>
+      )}
+
+      {staff.length === 0 && !adding ? (
+        <div className="ppanel">
+          <div className="pempty">
+            <span className="pempty-icon"><Icon name="users" size={20} /></span>
+            <strong>Nobody on the team yet</strong>
+            <p>
+              Each person signs in with their own name and PIN — never a shared
+              login. Add your first rider above.
+            </p>
+          </div>
+        </div>
+      ) : (
+        <ul className="plist">
+          {staff.map((s) => <StaffRow key={s.id} staff={s} stations={stations} />)}
+        </ul>
+      )}
     </div>
   );
 }
@@ -70,50 +87,47 @@ function StaffRow({ staff, stations }: { staff: ParcelOrgStaffRow; stations: Par
   const [editing, setEditing] = useState(false);
   if (editing) {
     return (
-      <tr>
-        <td colSpan={5} style={{ padding: 16 }}>
-          <StaffForm
-            initial={staff} stations={stations}
-            submitLabel="Save changes"
-            onDone={() => setEditing(false)}
-            onCancel={() => setEditing(false)}
-          />
-        </td>
-      </tr>
+      <li className="is-editing">
+        <StaffForm
+          initial={staff} stations={stations}
+          submitLabel="Save changes"
+          onDone={() => setEditing(false)}
+          onCancel={() => setEditing(false)}
+        />
+      </li>
     );
   }
-  const role = ROLES.find(([v]) => v === staff.role);
+  const hint = ROLES.find(([v]) => v === staff.role)?.[2];
   return (
-    <tr>
-      <td>
-        <strong>{staff.name}</strong>
-        {staff.isContact && (
-          <span className="pill p-ok" style={{ marginLeft: 8, fontSize: '.68rem' }}>Contact</span>
-        )}
-      </td>
-      <td>
-        {role?.[1] ?? staff.role}
-        <span className="sub" style={{ display: 'block' }}>{role?.[2]}</span>
-      </td>
-      <td>
-        <span className="mono" style={{ display: 'block' }}>{staff.esoqoId ?? staff.partyId ?? '—'}</span>
-        {staff.msisdn && <span className="mono sub" style={{ display: 'block' }}>{staff.msisdn}</span>}
-      </td>
-      <td>
-        <span className={`pill ${staff.active ? 'p-ok' : 'p-warn'}`}>
-          {staff.active ? 'Can sign in' : 'Suspended'}
+    <li>
+      <div className="plist-main">
+        <span className="plist-title">
+          {staff.name}
+          <span className={`pill ${staff.active ? 'p-ok' : 'p-warn'}`}>
+            {staff.active ? 'Can sign in' : 'Suspended'}
+          </span>
+          {staff.isContact && <span className="pill p-info">Contact</span>}
         </span>
-      </td>
-      <td style={{ textAlign: 'right' }}>
+        <span className="plist-sub">
+          <strong>{roleLabel(staff.role)}</strong>
+          {hint && <> — {hint}</>}
+        </span>
+        {/* The phone is what a manager recognises someone by. The raw
+            party UUID is a database key and was being printed in full
+            whenever an Esoqo handle didn't exist — noise that pushed
+            the useful line off a phone screen. */}
+        <span className="plist-sub mono">
+          {staff.msisdn ?? 'No phone on file'}
+          {staff.esoqoId && <> · {staff.esoqoId}</>}
+        </span>
+      </div>
+      <div className="plist-actions">
         <button className="btn btn-o btn-sm" onClick={() => setEditing(true)}>Edit</button>
-      </td>
-    </tr>
+      </div>
+    </li>
   );
 }
 
-const inputStyle: React.CSSProperties = {
-  padding: '6px 8px', border: '1.5px solid var(--line)', borderRadius: 6, width: '100%',
-};
 
 function StaffForm({
   initial, stations, submitLabel, onDone, onCancel,
@@ -165,33 +179,33 @@ function StaffForm({
   }
 
   return (
-    <div style={{ display: 'grid', gap: 12 }}>
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: 12 }}>
-        <div>
-          <label className="sub" htmlFor={ids.name} style={{ display: 'block', marginBottom: 4 }}>Name</label>
-          <input id={ids.name} style={inputStyle} value={name} placeholder="e.g. Wanjiku"
+    <div className="porg-staff-form">
+      <div className="pgrid">
+        <div className="pfield">
+          <label htmlFor={ids.name}>Name</label>
+          <input id={ids.name} value={name} placeholder="e.g. Wanjiku"
             onChange={(e) => setName(e.target.value)} />
         </div>
-        <div>
+        <div className="pfield">
           <RoleField value={role} onChange={pickRole} />
-          <span className="sub" style={{ fontSize: '.78rem' }}>
+          <span className="phint">
             {ROLES.find(([v]) => v === role)?.[2] ?? 'Custom role — pick its permissions below.'}
           </span>
         </div>
-        <div>
-          <label className="sub" htmlFor={ids.pin} style={{ display: 'block', marginBottom: 4 }}>
+        <div className="pfield">
+          <label htmlFor={ids.pin}>
             {initial ? 'New PIN (leave blank to keep)' : 'PIN'}
           </label>
-          <input id={ids.pin} className="mono" style={inputStyle} type="password" inputMode="numeric"
+          <input id={ids.pin} className="mono" type="password" inputMode="numeric"
             value={pin} onChange={(e) => setPin(e.target.value.replace(/\D/g, ''))} />
         </div>
-        <div>
-          <label className="sub" htmlFor={ids.msisdn} style={{ display: 'block', marginBottom: 4 }}>
+        <div className="pfield">
+          <label htmlFor={ids.msisdn}>
             Phone (optional)
           </label>
-          <input id={ids.msisdn} className="mono" style={inputStyle} placeholder="+2547..."
+          <input id={ids.msisdn} className="mono" placeholder="+2547..."
             value={msisdn} onChange={(e) => setMsisdn(e.target.value)} />
-          <span className="sub" style={{ fontSize: '.78rem' }}>
+          <span className="phint">
             Give one and they get an Esoqo account they can sign in with at /signin, not just here.
           </span>
         </div>
@@ -201,55 +215,55 @@ function StaffForm({
         <ParcelCapabilityPicker value={capabilities} onChange={setCapabilities} disabled={pending} />
       )}
 
-      <div>
-        <label className="sub" htmlFor={ids.party} style={{ display: 'block', marginBottom: 4 }}>
+      <div className="pfield">
+        <label htmlFor={ids.party}>
           Esoqo party id (riders only)
         </label>
-        <input id={ids.party} className="mono" style={inputStyle} value={partyId}
+        <input id={ids.party} className="mono" value={partyId}
           placeholder="Needed to take custody of a parcel"
           onChange={(e) => setPartyId(e.target.value)} />
         {/* Custody is always attributed to a real person, never to a
             login row — a handoff chain pointing at "staff row 7" would
             be worthless in a dispute. Office roles don't need one. */}
-        <span className="sub" style={{ fontSize: '.78rem' }}>
+        <span className="phint">
           A rider needs this to scan parcels into their own hands. Dispatchers and managers don’t.
         </span>
       </div>
 
-      <div>
-        <label className="sub" htmlFor={ids.active} style={{ display: 'block', marginBottom: 4 }}>Assigned station</label>
-        <select style={inputStyle} value={stationId} onChange={(e) => setStationId(e.target.value)}>
+      <div className="pfield">
+        <label htmlFor={ids.active}>Assigned station</label>
+        <select value={stationId} onChange={(e) => setStationId(e.target.value)}>
           <option value="">All company operations</option>
           {stations.map((station) => <option key={station.id} value={station.id}>{station.name}</option>)}
         </select>
       </div>
 
-      <label className="sub" htmlFor={ids.active} style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+      <label className="pfield-check" htmlFor={ids.active}>
         <input id={ids.active} type="checkbox" checked={active}
           onChange={(e) => setActive(e.target.checked)} />
-        Can sign in
+        <span>Can sign in</span>
       </label>
 
-      <label className="sub" htmlFor={ids.contact} style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+      <label className="pfield-check" htmlFor={ids.contact}>
         <input id={ids.contact} type="checkbox" checked={isContact}
           onChange={(e) => setIsContact(e.target.checked)} />
-        Contact person
-        <span style={{ fontSize: '.78rem', color: 'var(--muted, inherit)' }}>
-          — shown to senders as someone who can be reached
+        <span>
+          Contact person
+          <span className="phint"> — shown to senders as someone who can be reached</span>
         </span>
       </label>
 
       {error && (
-        <p role="alert" style={{ color: 'var(--red)', fontSize: '.85rem', display: 'flex', gap: 6, alignItems: 'center' }}>
+        <p role="alert" className="pnote pnote-bad">
           <Icon name="alert-circle" size={14} />{error}
         </p>
       )}
 
-      <div className="row" style={{ gap: 8 }}>
-        <button className="btn btn-p btn-sm" disabled={pending || !name.trim()} onClick={save}>
+      <div className="ptoolbar" style={{ marginBottom: 0 }}>
+        <button className="btn btn-p" disabled={pending || !name.trim()} onClick={save}>
           {pending ? 'Saving…' : submitLabel}
         </button>
-        <button className="btn btn-o btn-sm" disabled={pending} onClick={onCancel}>Cancel</button>
+        <button className="btn btn-o" disabled={pending} onClick={onCancel}>Cancel</button>
       </div>
     </div>
   );
