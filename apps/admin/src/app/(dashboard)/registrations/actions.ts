@@ -249,3 +249,36 @@ export async function actionRemoveWalkInDocument(id: string): Promise<{ ok: bool
     return { ok: false, error: toSafeErrorMessage(e, "That file couldn't be removed. Please try again.") };
   }
 }
+
+/**
+ * Staff-initiated DPA erasure — used when a data subject contacts Esoqo
+ * by email, USSD or phone to request deletion and ops staff act on it.
+ *
+ * Requires the `party.erase` capability, which is granted only to the
+ * Data Protection Officer role and superadmin (*). The capability check
+ * is enforced inside erasePartyData itself (requireCapability), so even
+ * if the server action is called directly the DAL refuses.
+ *
+ * Erases the party identified by `partyId`, not by registration id —
+ * a party may have multiple registrations, and the erasure is of the
+ * person, not one filing. The reason is mandatory here: this is a
+ * staff action with an explicit audit obligation.
+ */
+export async function actionEraseParty(
+  partyId: string,
+  reason: string,
+): Promise<{ ok: true; erasedAt: string } | { ok: false; error: string }> {
+  if (!reason.trim()) {
+    return { ok: false, error: 'A reason is required for staff-initiated erasure.' };
+  }
+  try {
+    const ctx = await requireStaff();
+    const { erasePartyData } = await import('@esoqo/db');
+    const result = await erasePartyData(ctx, partyId, reason.trim());
+    revalidatePath('/registrations');
+    return { ok: true, erasedAt: result.erasedAt.toISOString() };
+  } catch (e) {
+    console.error(e);
+    return { ok: false, error: toSafeErrorMessage(e, 'Erasure failed. Confirm you hold the party.erase capability and the record is not already erased.') };
+  }
+}
