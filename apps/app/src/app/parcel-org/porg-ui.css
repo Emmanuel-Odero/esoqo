@@ -1,0 +1,331 @@
+/* ══════════════════════════════════════════════════════════════
+   Courier portal — the shared component layer.
+
+   Dispatch, Money, Counter and Settings were each styled inline, at
+   the call site: 145 style={{…}} props between them, every panel
+   inventing its own padding, every input its own border. That is what
+   made those pages read as older than the register beside them — not
+   the colours, which were always the tokens, but the absence of any
+   agreed shape for a panel, a field, or a figure.
+
+   Everything here is built from tokens.css. No literal colours, no
+   magic radii. A page should be able to say WHAT something is
+   (.pfield, .pstat, .ppanel) and never how it is drawn.
+
+   Reads as one system with parcel-org.css, which keeps the shell and
+   the register; this file is the furniture inside them.
+   ══════════════════════════════════════════════════════════════ */
+
+/* ── panel: the standard surface ────────────────────────────────
+   A slightly larger radius and a two-stage shadow than .card, because
+   these carry whole workflows rather than a table. */
+.ppanel {
+  background: #fff;
+  border: 1px solid var(--line);
+  border-radius: var(--r-xl);
+  box-shadow: var(--sh-s);
+  min-width: 0;
+  overflow: hidden;
+}
+.ppanel + .ppanel { margin-top: var(--sp-4) }
+
+.ppanel-head {
+  display: flex; align-items: flex-start; gap: var(--sp-4); flex-wrap: wrap;
+  padding: var(--sp-5) var(--sp-6);
+  border-bottom: 1px solid var(--line);
+  background: linear-gradient(180deg, #fff, var(--paper));
+}
+.ppanel-head > div:first-child { flex: 1 1 260px; min-width: 0 }
+.ppanel-head h2, .ppanel-head h3 {
+  margin: 0; font-family: var(--font-display);
+  font-size: 1.02rem; font-weight: 700; letter-spacing: -.01em; color: var(--navy);
+}
+.ppanel-head p { margin: 4px 0 0; font-size: .86rem; color: var(--tx-2); max-width: 62ch }
+.ppanel-head-actions { display: flex; gap: var(--sp-2); flex-wrap: wrap; margin-left: auto }
+.ppanel-body { padding: var(--sp-6) }
+.ppanel-body > :first-child { margin-top: 0 }
+.ppanel-body > :last-child { margin-bottom: 0 }
+/* A body that is only a table gets no padding — the table draws its
+   own gutters and doubling them looks like a mistake. */
+.ppanel-body.is-flush { padding: 0 }
+
+/* ── section: a titled group inside a panel ───────────────────── */
+.psection { border: 0; margin: 0; padding: 0 }
+.psection + .psection { margin-top: var(--sp-6); padding-top: var(--sp-6); border-top: 1px solid var(--line) }
+.psection-title {
+  margin: 0 0 var(--sp-3); padding: 0;
+  font-family: var(--font-mono); font-size: .64rem; font-weight: 500;
+  letter-spacing: .12em; text-transform: uppercase; color: var(--tx-3);
+}
+
+/* ── fields ─────────────────────────────────────────────────────
+   One shape for every control in the portal. The old inline inputs
+   used 1.5px borders and 6px radii in some files and 1px/8px in
+   others, which is the kind of difference nobody can name but
+   everybody feels. */
+.pfield { display: grid; gap: 5px; min-width: 0 }
+.pfield > span, .pfield > label { font-size: .82rem; font-weight: 600; color: var(--tx-2) }
+.pfield em, .pfield .phint {
+  font-style: normal; font-size: .76rem; color: var(--tx-3); line-height: 1.45;
+}
+
+.pinput, .pfield input:not([type='checkbox']):not([type='radio']), .pfield select, .pfield textarea {
+  width: 100%; min-width: 0; box-sizing: border-box;
+  padding: 10px 12px;
+  border: 1px solid var(--line); border-radius: var(--r-sm);
+  background: #fff; color: var(--tx);
+  font: inherit; font-size: .92rem;
+  transition: border-color var(--dur-fast), box-shadow var(--dur-fast);
+  /* iOS zooms the page when a focused control is under 16px. 0.92rem
+     is under it on most roots, so hold the phone size at 16px. */
+}
+.pinput:hover, .pfield input:hover, .pfield select:hover { border-color: var(--blue-2) }
+.pinput:focus, .pfield input:focus, .pfield select:focus, .pfield textarea:focus {
+  outline: 0; border-color: var(--green-2);
+  box-shadow: 0 0 0 3px rgba(31, 161, 99, .18);
+}
+.pinput:disabled, .pfield input:disabled, .pfield select:disabled {
+  background: var(--paper); color: var(--tx-3); cursor: not-allowed;
+}
+.pfield select { appearance: none; padding-right: 34px;
+  background-image: linear-gradient(45deg, transparent 50%, var(--tx-2) 50%),
+                    linear-gradient(135deg, var(--tx-2) 50%, transparent 50%);
+  background-position: calc(100% - 17px) 55%, calc(100% - 12px) 55%;
+  background-size: 5px 5px, 5px 5px; background-repeat: no-repeat;
+}
+.pfield-check { display: flex; align-items: flex-start; gap: var(--sp-3) }
+.pfield-check input { width: 18px; height: 18px; flex: none; margin-top: 2px; accent-color: var(--green-2) }
+.pfield-check span { font-size: .88rem; color: var(--tx); font-weight: 500 }
+
+/* ── grid: the one responsive form layout ───────────────────────
+   auto-fit + minmax, so a form reflows by available width rather
+   than by a breakpoint somebody has to remember to update. */
+.pgrid { display: grid; gap: var(--sp-4); grid-template-columns: repeat(auto-fit, minmax(210px, 1fr)) }
+.pgrid-2 { grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)) }
+.pgrid-wide { grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)) }
+.pgrid-end { align-items: end }
+.pgrid-full { grid-column: 1 / -1 }
+
+/* ── stats: a figure that means something ───────────────────────
+   Money's whole purpose is a number a manager trusts, so the number
+   is the loudest thing on it and the label explains rather than
+   decorates. */
+.pstats { display: grid; gap: var(--sp-3); grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)) }
+.pstat {
+  padding: var(--sp-5); border: 1px solid var(--line); border-radius: var(--r-lg);
+  background: #fff; min-width: 0;
+}
+.pstat-k {
+  display: block; font-family: var(--font-mono); font-size: .6rem; font-weight: 500;
+  letter-spacing: .14em; text-transform: uppercase; color: var(--tx-3);
+}
+.pstat-v {
+  display: block; margin-top: 6px; font-family: var(--font-display); font-weight: 800;
+  font-size: clamp(1.4rem, 3.4vw, 1.85rem); line-height: 1.08; letter-spacing: -.03em;
+  color: var(--navy); overflow-wrap: anywhere;
+}
+.pstat-h { display: block; margin-top: 5px; font-size: .79rem; color: var(--tx-2) }
+/* The one figure the page exists for. */
+.pstat.is-lead { background: linear-gradient(150deg, #F4FBF7, #E4F1EA); border-color: #BFE0CE }
+.pstat.is-lead .pstat-k { color: var(--green) }
+
+/* ── toolbar ────────────────────────────────────────────────────── */
+.ptoolbar {
+  display: flex; align-items: center; gap: var(--sp-3); flex-wrap: wrap;
+  margin-bottom: var(--sp-4);
+}
+.ptoolbar-spacer { margin-left: auto }
+
+/* ── empty state ────────────────────────────────────────────────
+   Says what would be here and how to make it appear. An empty panel
+   that only says "nothing yet" makes the user wonder if it broke. */
+.pempty {
+  display: grid; justify-items: center; gap: var(--sp-2);
+  padding: var(--sp-8) var(--sp-5); text-align: center;
+  color: var(--tx-2); font-size: .9rem;
+}
+.pempty-icon {
+  width: 44px; height: 44px; display: grid; place-items: center;
+  border-radius: var(--r-pill); background: var(--paper); color: var(--tx-3);
+  margin-bottom: var(--sp-1);
+}
+.pempty strong { color: var(--navy); font-size: .96rem; font-weight: 700 }
+.pempty p { margin: 0; max-width: 46ch }
+
+/* ── inline feedback ────────────────────────────────────────────── */
+.pnote {
+  display: flex; align-items: flex-start; gap: var(--sp-2);
+  padding: 10px 13px; border-radius: var(--r-sm);
+  font-size: .86rem; line-height: 1.5;
+}
+.pnote svg { flex: none; margin-top: 2px }
+.pnote-ok { background: var(--green-t); border: 1px solid #BFE0CE; color: var(--green) }
+.pnote-warn { background: var(--amber-t); border: 1px solid #F0D3A8; color: var(--amber) }
+.pnote-bad { background: var(--red-t); border: 1px solid #F3D2CF; color: var(--red) }
+
+/* ── list rows: a repeated record that is not a table ───────────── */
+.plist { list-style: none; margin: 0; padding: 0; display: grid; gap: var(--sp-2) }
+.plist > li {
+  display: flex; align-items: center; gap: var(--sp-4); min-width: 0;
+  padding: 13px var(--sp-4);
+  border: 1px solid var(--line); border-radius: var(--r-lg); background: #fff;
+  transition: border-color var(--dur-fast), box-shadow var(--dur-fast);
+}
+.plist > li:hover { border-color: #C4D4E1; box-shadow: var(--sh-s) }
+.plist-main { flex: 1 1 auto; min-width: 0; display: grid; gap: 3px }
+.plist-title { font-weight: 700; color: var(--navy); display: flex; align-items: center; gap: var(--sp-2); flex-wrap: wrap }
+.plist-sub { font-size: .82rem; color: var(--tx-2); overflow-wrap: anywhere }
+.plist-actions { display: flex; gap: var(--sp-2); flex: none; flex-wrap: wrap }
+
+/* ── responsive ─────────────────────────────────────────────────
+   The component layer reflows by content width (auto-fit above), so
+   these breakpoints only handle what geometry alone cannot: chrome
+   padding, and rows that must become stacks to stay tappable. */
+@media (max-width: 720px) {
+  .ppanel { border-radius: var(--r-lg) }
+  .ppanel-head { padding: var(--sp-4) var(--sp-5) }
+  .ppanel-body { padding: var(--sp-5) }
+  .ppanel-head-actions { margin-left: 0; width: 100% }
+  .ppanel-head-actions .btn { flex: 1 1 auto; justify-content: center }
+}
+@media (max-width: 560px) {
+  /* A toolbar's trailing control stops trailing: pushed right on a
+     narrow screen it ends up alone on its own line, reading as though
+     it belongs to nothing. */
+  .ptoolbar-spacer { margin-left: 0 }
+  .ppanel-head { padding: var(--sp-4) }
+  .ppanel-body { padding: var(--sp-4) }
+  .pstat { padding: var(--sp-4) }
+  .pstats { grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: var(--sp-2) }
+  /* 16px prevents iOS zooming the whole page on focus. */
+  .pinput, .pfield input:not([type='checkbox']), .pfield select, .pfield textarea { font-size: 16px }
+  /* A row with actions becomes a stack: side-by-side leaves the label
+     truncated to nothing and the buttons under 44px. */
+  .plist > li { flex-wrap: wrap; gap: var(--sp-3) }
+  .plist-main { flex: 1 1 100% }
+  .plist-actions { width: 100% }
+  .plist-actions .btn { flex: 1 1 auto; justify-content: center; min-height: 40px }
+  .ptoolbar > .btn { flex: 1 1 auto; justify-content: center }
+  .ptoolbar > .pfield-check { flex: 1 1 100%; align-items: center }
+}
+
+/* ══════════════════════════════════════════════════════════════
+   Dispatch — the run board.
+   ══════════════════════════════════════════════════════════════ */
+
+/* A boxed section inside a form panel: grouped fields that belong
+   together (Vehicle, Journey, Crew) need a visible container, unlike
+   the bare .psection used where a rule is enough. */
+.psection.is-boxed {
+  padding: var(--sp-4) var(--sp-5);
+  border: 1px solid var(--line); border-radius: var(--r-lg);
+  background: var(--paper);
+}
+.psection.is-boxed + .psection.is-boxed { margin-top: var(--sp-4); padding-top: var(--sp-4); border-top: 1px solid var(--line) }
+.porg-run-form-body { display: grid; gap: var(--sp-4) }
+.porg-run-form-actions { margin: var(--sp-1) 0 0; align-items: center }
+.porg-run-form-actions .sub { font-size: .82rem }
+.porg-run-toggle span { font-size: .84rem; color: var(--tx-2); font-weight: 500 }
+
+/* Runs. A card per vehicle: the plate and its state read first, the
+   leg second, the load and its paperwork on the right where the eye
+   lands after the status pill. */
+.porg-runs-grid { display: grid; gap: var(--sp-3); margin-top: var(--sp-4) }
+.porg-run {
+  padding: var(--sp-5);
+  border: 1px solid var(--line); border-radius: var(--r-xl); background: #fff;
+  box-shadow: var(--sh-s); min-width: 0;
+  transition: border-color var(--dur-fast), box-shadow var(--dur-fast);
+}
+.porg-run:hover { border-color: #C4D4E1; box-shadow: var(--sh-m) }
+.porg-run.is-selected { border-color: var(--blue-2); box-shadow: 0 0 0 3px rgba(15, 92, 158, .12) }
+/* A hairline of state down the leading edge: scanning a column of runs
+   for the one that is still loading should not need the pill read. */
+.porg-run { border-left: 3px solid var(--line) }
+.porg-run[data-status='LOADING'] { border-left-color: var(--amber-light) }
+.porg-run[data-status='DEPARTED'] { border-left-color: var(--green-2) }
+.porg-run[data-status='ARRIVED'] { border-left-color: var(--blue-2) }
+.porg-run[data-status='CANCELLED'] { border-left-color: var(--line) }
+
+.porg-run-top { display: flex; gap: var(--sp-4); align-items: flex-start; flex-wrap: wrap }
+.porg-run-main { flex: 1 1 260px; min-width: 0 }
+.porg-run-plate { display: flex; align-items: center; gap: var(--sp-2); flex-wrap: wrap }
+.porg-run-plate .mono { font-size: 1.1rem; font-weight: 800; letter-spacing: -.01em; color: var(--navy) }
+.porg-run-leg {
+  display: flex; align-items: center; gap: var(--sp-2); flex-wrap: wrap;
+  margin: var(--sp-2) 0 0; font-size: .92rem; font-weight: 600; color: var(--tx);
+}
+.porg-run-leg svg { color: var(--tx-3); flex: none }
+.porg-run-meta { margin: 4px 0 0; font-size: .82rem; color: var(--tx-2) }
+
+.porg-run-side { display: flex; align-items: center; gap: var(--sp-3); flex: none; flex-wrap: wrap }
+/* The number the merge exists to make answerable, so it is a figure
+   rather than another pill in the row. */
+.porg-run-load {
+  display: inline-flex; align-items: baseline; gap: 6px;
+  padding: 8px 13px; border-radius: var(--r-md);
+  background: var(--blue-t); color: var(--blue); font-size: .78rem; font-weight: 600;
+}
+.porg-run-load b { font-size: 1.15rem; font-weight: 800; line-height: 1 }
+.porg-run-btns { display: flex; gap: var(--sp-2); flex-wrap: wrap }
+
+@media (max-width: 640px) {
+  .porg-run { padding: var(--sp-4) }
+  .porg-run-side { width: 100%; justify-content: space-between }
+  .porg-run-btns { flex: 1 1 auto; justify-content: flex-end }
+  .porg-run-btns .btn { flex: 1 1 auto; justify-content: center; min-height: 40px }
+  .psection.is-boxed { padding: var(--sp-4) }
+}
+
+/* ══════════════════════════════════════════════════════════════
+   Money, Rates — figures and ranges.
+   ══════════════════════════════════════════════════════════════ */
+.porg-money-stats { margin-bottom: var(--sp-5) }
+.porg-money-count { margin-bottom: var(--sp-4) }
+
+.porg-rates > li.is-editing { align-items: stretch }
+.porg-rates-edit { max-width: 420px; margin-top: var(--sp-3) }
+.porg-rate-range {
+  flex: none; padding: 7px 12px; border-radius: var(--r-md);
+  background: var(--paper); color: var(--navy);
+  font-size: .88rem; font-weight: 700; white-space: nowrap;
+}
+@media (max-width: 560px) {
+  /* The range is the row's point — keep it above the buttons rather
+     than letting it wrap into the action strip. */
+  .porg-rate-range { width: 100%; text-align: center }
+}
+
+/* ══════════════════════════════════════════════════════════════
+   Settings — team, stations, security.
+   ══════════════════════════════════════════════════════════════ */
+
+/* A row that has become a form stops being a row: the flex layout
+   would squeeze a whole staff form into the leftover space beside the
+   action buttons. */
+.plist > li.is-editing { display: block; padding: var(--sp-5); background: var(--paper) }
+.plist > li.is-editing:hover { box-shadow: none; border-color: var(--line) }
+
+.porg-team, .porg-stations, .porg-routes { display: grid; gap: var(--sp-4) }
+.porg-staff-form { display: grid; gap: var(--sp-4) }
+.porg-station-form { margin-bottom: var(--sp-2) }
+
+.plist-title a { color: var(--navy); text-decoration: none }
+.plist-title a:hover { text-decoration: underline }
+
+/* PIN fields are short and fixed-width by nature — a 4–6 digit box
+   stretched across a desktop panel looks broken. */
+.porg-pin-fields { display: grid; gap: var(--sp-4); max-width: 300px }
+.porg-pin-fields input { letter-spacing: .3em; font-size: 1.05rem }
+
+/* ══════════════════════════════════════════════════════════════
+   Counter — the custom-parcel panel.
+   ══════════════════════════════════════════════════════════════ */
+.porg-custom-open { margin-top: var(--sp-5) }
+.porg-custom-open .sub { font-size: .84rem }
+.porg-custom-parcel { margin-top: var(--sp-5) }
+.porg-custom-body { display: grid; gap: var(--sp-4) }
+
+/* The shared CounterForm from @esoqo/ui brings its own layout; this
+   only gives it room to breathe under the page head. */
+.porg-counter-form { margin-bottom: var(--sp-5) }

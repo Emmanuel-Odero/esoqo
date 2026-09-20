@@ -8,6 +8,9 @@ import { ParcelOrgNav, type ParcelOrgNavItem } from './ParcelOrgNav';
 import { DemoBanner } from './DemoBanner';
 import { DropoffPoll } from './DropoffPoll';
 import './parcel-org.css';
+// The shared component layer (panels, fields, stats, list rows) sits
+// after the shell so page-level classes can still override it.
+import './porg-ui.css';
 
 export const metadata: Metadata = { title: { default: 'Your parcels', template: '%s · Esoqo' } };
 

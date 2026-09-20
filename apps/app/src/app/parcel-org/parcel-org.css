@@ -123,46 +123,6 @@
 }
 .porg-attention span { flex:1; min-width:180px }
 .porg-attention .btn { flex:none; background:#fff }
-
-/* The dashboard puts the three high-frequency jobs before the report
-   data. Each is a full-row target: practical on a mounted tablet and
-   clear enough that a new desk worker need not hunt through navigation. */
-.courier-actions { display:grid; grid-template-columns:repeat(3,1fr); gap:12px; margin:0 0 22px }
-.courier-action { min-width:0; display:flex; align-items:center; gap:11px; padding:14px;
-  background:rgba(255,255,255,.88); border:1px solid var(--line); border-radius:var(--r-lg);
-  box-shadow:var(--sh-s); color:var(--tx); transition:transform var(--dur-fast),box-shadow var(--dur-fast),border-color var(--dur-fast) }
-.courier-action:hover { color:var(--tx); border-color:#9BCBB0; box-shadow:var(--sh-m); transform:translateY(-1px) }
-.courier-action:focus-visible { outline:3px solid rgba(31,161,99,.28); outline-offset:3px }
-.courier-action strong,.courier-action small { display:block }
-.courier-action strong { font-size:.9rem; margin-bottom:2px }
-.courier-action small { color:var(--tx-2); font-size:.76rem; line-height:1.35 }
-.courier-action-icon { width:38px; height:38px; flex:none; display:grid; place-items:center; border-radius:10px }
-.courier-action-icon.green { color:var(--green); background:var(--green-t) }
-.courier-action-icon.blue { color:var(--blue); background:var(--blue-t) }
-.courier-action-icon.amber { color:var(--amber); background:var(--amber-t) }
-.courier-action-arrow { flex:none; margin-left:auto; color:var(--tx-3) }
-
-.dashboard-scanner { position:relative; overflow:hidden; padding:18px; margin-bottom:16px;
-  border-color:#BFE0CE; background:linear-gradient(120deg,#fff 55%,var(--green-t)) }
-.dashboard-scanner::after { content:''; position:absolute; width:130px; height:130px; border-radius:50%;
-  right:-52px; top:-65px; background:rgba(31,161,99,.08); pointer-events:none }
-.dashboard-scanner > * { position:relative; z-index:1 }
-.scan-title-icon { width:32px; height:32px; border-radius:9px; display:grid; place-items:center;
-  color:var(--green); background:var(--green-t) }
-
-/* Counter work is intentionally one task at a time: book, or keep the
-   stock a booking spends. The chosen workspace gets the full page. */
-.task-switch { display:flex; gap:3px; width:fit-content; padding:4px; margin:0 0 14px;
-  background:var(--paper); border:1px solid var(--line); border-radius:10px }
-.task-switch button { min-height:36px; padding:0 14px; border:0; border-radius:7px;
-  background:transparent; color:var(--tx-2); font:600 .86rem/1 var(--font-body); cursor:pointer }
-.task-switch button.is-active { background:#fff; color:var(--navy); box-shadow:var(--sh-s) }
-.task-switch button:focus-visible { outline:3px solid rgba(31,161,99,.28); outline-offset:2px }
-.task-switch button > span { display:inline-flex; align-items:center; gap:7px }
-.porg-tab-n { padding:2px 7px; border-radius:999px; background:var(--blue-t); color:var(--blue);
-  font-size:.7rem; font-weight:700 }
-.task-switch button.is-active .porg-tab-n { background:var(--blue); color:#fff }
-
 /* Export trouble — a capped or failed CSV, said out loud rather than
    left for somebody to discover in a spreadsheet. */
 .porg-export-note { display: flex; align-items: center; gap: 8px; margin: 10px 0 0;
@@ -185,52 +145,46 @@
   .porg-run-id { flex: 1 1 100% }
 }
 
-/* Settings sub-nav. A quiet strip, not a second main nav: these are
-   sections of one page, so they read as tabs under the Settings title
-   rather than competing with the portal bar above them. Scrolls
-   sideways on a phone for the same reason .porgnav does. */
-.porgset-nav { display:flex; gap:2px; margin:0 0 22px; padding-bottom:2px;
-  border-bottom:1px solid var(--line); overflow-x:auto; scrollbar-width:none }
+/* Settings sub-nav — sections of one page, so it reads as a quiet
+   strip under the Settings title rather than a second main nav
+   competing with the portal bar above it. Scrolls sideways on a phone
+   for the same reason .porgnav does: seven tabs never fit, and wrapping
+   them into three rows buries the content. */
+.porgset-nav {
+  display:flex; gap:2px; margin:0 0 var(--sp-6); padding-bottom:2px;
+  border-bottom:1px solid var(--line);
+  overflow-x:auto; scrollbar-width:none; -webkit-overflow-scrolling:touch;
+}
 .porgset-nav::-webkit-scrollbar { display:none }
-.porgset-nav a { display:inline-flex; align-items:center; gap:7px; flex:none;
-  padding:10px 14px; margin-bottom:-1px; border-bottom:2px solid transparent;
-  color:var(--tx-2); font:600 .88rem/1 var(--font-body); text-decoration:none; white-space:nowrap }
-.porgset-nav a:hover { color:var(--navy) }
-.porgset-nav a[aria-current='page'] { color:var(--navy); border-bottom-color:var(--green) }
-.porgset-nav a:focus-visible { outline:3px solid rgba(31,161,99,.28); outline-offset:-3px; border-radius:6px }
-/* Each section brings its own <h1>-era heading from when it was a page;
-   inside Settings the shell owns the title, so they step down. */
-.porgset-body .head h1 { font-size:1.15rem }
-.porgset-body .head { margin-bottom:16px }
+.porgset-nav a {
+  display:inline-flex; align-items:center; gap:7px; flex:none;
+  padding:11px 15px; margin-bottom:-1px;
+  border-bottom:2px solid transparent; border-radius:var(--r-sm) var(--r-sm) 0 0;
+  color:var(--tx-2); font:600 .88rem/1 var(--font-body);
+  text-decoration:none; white-space:nowrap;
+  transition:color var(--dur-fast), background var(--dur-fast), border-color var(--dur-fast);
+}
+.porgset-nav a:hover { color:var(--navy); background:var(--paper) }
+.porgset-nav a[aria-current='page'] { color:var(--navy); border-bottom-color:var(--green-2) }
+.porgset-nav a[aria-current='page'] svg { color:var(--green) }
+.porgset-nav a:focus-visible { outline:3px solid rgba(31,161,99,.28); outline-offset:-3px }
+
+/* Each section brings its own heading from when it was a page; inside
+   Settings the shell owns the title, so they step down a level. */
+.porgset-body .head { margin-bottom:var(--sp-5) }
+.porgset-body .head h1 { font-size:1.18rem; letter-spacing:-.015em }
+.porgset-body .head p { font-size:.88rem }
+
+@media (max-width:560px) {
+  .porgset-nav { margin-bottom:var(--sp-5) }
+  .porgset-nav a { padding:11px 12px; font-size:.84rem }
+}
 
 /* The worklist under the scanner: senders who said they'd walk in. It
    is secondary to the scan box by construction — see scan/page.tsx. */
 .scan-waiting { margin-top:28px; padding-top:22px; border-top:1px solid var(--line) }
 .scan-waiting h2 { margin:0; font-size:1.05rem; font-weight:700; color:var(--navy) }
 .scan-waiting .sub { margin:4px 0 14px; font-size:.88rem }
-.counter-scanner { border-color:#BFE0CE; background:linear-gradient(110deg,#fff 60%,var(--green-t)) }
-.label-picker-popover { margin-top:12px; padding:12px; border:1px solid #BFE0CE; border-radius:10px; background:#fff; box-shadow:var(--sh-s) }
-.label-picker-popover > label { display:block; margin-bottom:5px; font-weight:600 }
-.label-picker-popover > input { width:100%; box-sizing:border-box; padding:9px 10px; border:1.5px solid var(--line); border-radius:7px }
-.label-picker-results { display:flex; gap:8px; overflow-x:auto; padding:10px 1px 2px; scrollbar-width:thin }
-.label-picker-results > .sub { margin:4px 0; white-space:nowrap }
-.empty-label { width:41mm; height:23.5mm; flex:0 0 41mm; overflow:hidden; padding:0; border:1px solid var(--line);
-  border-radius:7px; background:#fff; cursor:pointer; text-align:left; transition:border-color var(--dur-fast),box-shadow var(--dur-fast) }
-.empty-label:hover { border-color:var(--green); box-shadow:var(--sh-s) }
-.empty-label:focus-visible { outline:3px solid rgba(31,161,99,.28); outline-offset:2px }
-.empty-label-preview { display:block; width:90mm; height:50mm; transform:scale(.43); transform-origin:top left; pointer-events:none }
-.counter-task-nav { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:8px; margin:0 0 14px }
-.counter-task-nav button { display:flex; align-items:center; gap:9px; padding:11px 12px; text-align:left; border:1px solid var(--line); border-radius:10px;
-  background:#fff; color:var(--tx-2); cursor:pointer; font-family:inherit }
-.counter-task-nav button > svg { flex:none; color:var(--green) }
-.counter-task-nav button span,.counter-task-nav button small { display:block }
-.counter-task-nav button span { font-size:.86rem; font-weight:700; color:var(--navy) }
-.counter-task-nav button small { margin-top:2px; font-size:.72rem; font-weight:400; color:var(--tx-2) }
-.counter-task-nav button.is-active { border-color:#8DCAA8; background:var(--green-t); box-shadow:inset 3px 0 var(--green) }
-.counter-task-nav button:focus-visible { outline:3px solid rgba(31,161,99,.28); outline-offset:2px }
-.counter-workspace-head { display:flex; align-items:end; justify-content:space-between; gap:12px; margin:4px 0 16px }
-.counter-workspace-head h2 { margin:0; font-size:1.18rem; letter-spacing:-.02em }
-.counter-workspace-head p:not(.kicker) { margin:4px 0 0; color:var(--tx-2); font-size:.88rem }
 
 /* ── kpi row ────────────────────────────────────────────────────── */
 .kpis { display:grid; grid-template-columns:repeat(auto-fit,minmax(180px,1fr)); gap:14px; margin-bottom:22px }
@@ -392,15 +346,12 @@
   .porgnav a { min-height:38px; padding:0 12px }
   .kpis { grid-template-columns:repeat(2,1fr) }
   .dashboard-kpis { grid-template-columns:repeat(3,1fr) }
-  .courier-actions { grid-template-columns:repeat(2,1fr) }
   /* The hero's money rail becomes a full-width footer strip rather than
      a 240px column fighting the copy for a tablet's width. */
   .porg-hero-copy { flex-basis:100%; padding:20px }
   .porg-today { flex:1 1 100%; padding:16px 20px; border-left:0; border-top:1px solid var(--line);
     flex-direction:row; align-items:baseline; gap:10px; flex-wrap:wrap }
   .porg-today-h { margin-top:0; margin-left:auto }
-  .task-switch { width:100% }
-  .counter-task-nav { grid-template-columns:1fr }
 }
 @media (max-width:560px) {
   /* Two KPI tiles per row, not one: the board's job is a single glance
@@ -427,23 +378,6 @@
   .porgnav a { font-size:.84rem; gap:6px; padding:0 10px }
   .head .actions { width:100% }
   .head .actions .btn { flex:1 1 140px }
-  .courier-actions { grid-template-columns:1fr; gap:9px }
-  .courier-action { min-height:68px; padding:13px }
-  .dashboard-scanner { padding:16px }
-  /* The Counter tab switch carries its geometry inline (48px targets,
-     24px side padding per tab) for the desktop desk — three tabs need
-     ~450px and a 360px phone has 328. These beat the inline styles so
-     Receive / New Shipment / Labels share one row instead of forcing
-     the page sideways; targets stay ≥44px. */
-  .task-switch { width:100% !important; box-sizing:border-box; margin-bottom:20px !important }
-  .task-switch > button {
-    flex:1 1 0 !important; min-width:0 !important; justify-content:center !important;
-    padding:10px 8px !important; font-size:.82rem !important; gap:6px !important;
-    min-height:44px !important;
-  }
-  .task-switch > button > span { min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap }
-  .task-switch > button > span > span { margin-left:4px !important; padding:2px 6px !important }
-  .task-switch > button svg { flex:none }
   /* Roster, stations and label registers keep full columns behind a
      touch scroll instead of squashing — except the parcels register,
      which already restacks into labelled cards below. */
@@ -461,13 +395,6 @@
   .parcel-table td[data-label="Actions"] { display:block; padding-top:10px; border-top:1px solid var(--line) }
 }
 
-/* The icon + label + badge row needs ~450px; phones give ~330. Below
-   480px the icons go so the WORDS survive — "New S…" tells a desk
-   worker nothing, while the text labels carry the meaning. */
-@media (max-width:480px) {
-  .task-switch > button { font-size:.78rem !important; padding:10px 6px !important }
-  .task-switch > button > svg { display:none !important }
-}
 
 /* Routes — the company's own map, edited as an ordered list because
    that is what a route is. Origin/destination fields would describe a
