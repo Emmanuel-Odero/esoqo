@@ -43,6 +43,9 @@ export default async function OrgLayout(
     // even for transport so it can't be mistaken for the Fleet truck.
     { href: `/org/${orgId}/fleet`, icon: 'truck', label: 'Fleet', show: org.vertical === 'TRANSPORT' && canOrg(ctx, org, 'fleet.read') },
     { href: `/org/${orgId}/fleet/pricing`, icon: 'tag', label: 'Fares', show: org.vertical === 'TRANSPORT' && canOrg(ctx, org, 'fleet.read') },
+    // Luggage is gated on luggage.read, not fleet.read: a conductor's
+    // CREW bundle carries the luggage grants without the fleet console's.
+    { href: `/org/${orgId}/luggage`, icon: 'package', label: 'Luggage', show: org.vertical === 'TRANSPORT' && canOrg(ctx, org, 'luggage.read') },
     { href: `/org/${orgId}/listings`, icon: 'calendar', label: 'Listings', show: canOrg(ctx, org, 'listing.write') },
     { href: `/org/${orgId}/bookings`, icon: 'document', label: 'Bookings', show: canOrg(ctx, org, 'booking.read') },
     { href: `/org/${orgId}/scan`, icon: 'qr', label: 'Scan tickets', show: canOrg(ctx, org, 'ticket.checkin') },
