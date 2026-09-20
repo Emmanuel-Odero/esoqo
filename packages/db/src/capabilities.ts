@@ -243,6 +243,12 @@ export const CAPABILITY_CATALOGUE = [
     ['fare.verify', 'Verify a fare payment (crew)'],
     ['collection.declare', 'Declare cash collected on a trip'],
     ['collection.read', 'View collections and variances'],
+    // Passenger luggage. Three, not one: tagging creates a record,
+    // claiming releases physical property to a person, and reading the
+    // manifest exposes every passenger's name on the vehicle.
+    ['luggage.tag', "Tag a passenger's bags onto a trip"],
+    ['luggage.claim', 'Hand a tagged bag back to its passenger'],
+    ['luggage.read', "View a trip's luggage manifest"],
   ]},
   { group: 'Malls', items: [
     ['mall.read', 'View a mall and its tenant list'],
@@ -321,6 +327,10 @@ export const ROLE_PRESETS = {
             'fleet.read:own', 'fleet.write:own', 'crew.read:own', 'crew.write:own',
             'trip.read:own', 'trip.write:own', 'vehicle.track:own',
             'fare.pay:own', 'fare.read:own', 'collection.declare:own', 'collection.read:own',
+            // An owner works luggage on their own fleet — a small
+            // operator IS the conductor often enough that withholding
+            // the write grants would be theatre.
+            'luggage.tag:own', 'luggage.claim:own', 'luggage.read:own',
             // Malls — a subject may manage tenants of a mall the same
             // way they manage a store: the ':own' qualifier only checks
             // the caller against the mall Organisation's own partyId
@@ -426,21 +436,27 @@ export const TICKETING_STAFF_CAPABILITIES = {
   MANAGER: ['ticket.checkin', 'listing.write', 'listing.publish', 'ticketclass.write',
             'schedule.write', 'venue.write', 'route.write',
             'booking.read', 'booking.cancel', 'booking.refund', 'ticketorg.read',
-            'fleet.read', 'crew.read', 'trip.read', 'fare.read', 'fare.verify', 'collection.read', 'vehicle.track'],
+            'fleet.read', 'crew.read', 'trip.read', 'fare.read', 'fare.verify', 'collection.read', 'vehicle.track',
+            'luggage.read', 'luggage.tag', 'luggage.claim'],
   ADMIN:   ['ticket.checkin', 'listing.write', 'listing.publish', 'ticketclass.write',
             'schedule.write', 'venue.write', 'route.write',
             'booking.read', 'booking.cancel', 'booking.refund',
             'ticketorg.read', 'ticketorg.write', 'ticketorgstaff.write',
             'fleet.read', 'fleet.write', 'crew.read', 'crew.write',
             'trip.read', 'trip.write', 'fare.read', 'fare.pay',
-            'collection.read', 'collection.declare', 'vehicle.track'],
+            'collection.read', 'collection.declare', 'vehicle.track',
+            'luggage.read', 'luggage.tag', 'luggage.claim'],
   // trip.close:own — a CREW login may close only the one trip it's
   // linked to as driver/conductor (TicketOrgStaff.crewMemberId); see
   // dbx.CloseTrip. CREW deliberately still lacks trip.write/trip.read.
   // collection.read: a crew member declaring cash has to be able to
   // see the running tally they're declaring against — same org-wide
   // scope collection.declare already carries for CREW, not a new one.
-  CREW:    ['collection.declare', 'collection.read', 'vehicle.track', 'fare.read', 'fare.verify', 'trip.close:own', 'ticketorg.read'],
+  // Luggage sits on CREW because the conductor loading bags at a stage
+  // is the entire user of the feature — a design needing a manager
+  // present to tag a bag is one crews route around with a biro.
+  CREW:    ['collection.declare', 'collection.read', 'vehicle.track', 'fare.read', 'fare.verify', 'trip.close:own', 'ticketorg.read',
+            'luggage.read', 'luggage.tag', 'luggage.claim'],
 } as const satisfies Record<string, readonly Capability[]>;
 
 export type TicketingStaffRole = keyof typeof TICKETING_STAFF_CAPABILITIES;
