@@ -8,7 +8,10 @@ import {
   useState,
   useTransition,
 } from "react";
-import { Icon, PrintableLabel, PrintStyles } from "@esoqo/ui";
+import {
+  dropPointFor, flushCustody, Icon, pendingCustodyCount, PrintableLabel,
+  PrintStyles, queueCustody,
+} from "@esoqo/ui";
 import { useAnnounce } from "@esoqo/a11y";
 import { extractParcelCode } from "@esoqo/domain";
 import type { OrgParcelRow } from "@/lib/parcel-org-session";
@@ -69,8 +72,19 @@ export const FrontDeskClient = forwardRef<
   const [justReceivedSig, setJustReceivedSig] = useState<string | undefined>(
     undefined,
   );
+  // The destination of the box just received, for the label's drop-point
+  // band — see where this is set in `receive`.
+  const [justReceivedTo, setJustReceivedTo] = useState<string | undefined>(
+    undefined,
+  );
   const [error, setError] = useState<string | null>(null);
   const [receiving, setReceiving] = useState(false);
+  // Custody moves taken in while the network was down, still waiting to
+  // reach the server. Surfaced rather than hidden: a clerk who cannot
+  // see that eleven receipts are still on the device has no way to know
+  // the day's work has not left it.
+  const [queuedCount, setQueuedCount] = useState(0);
+  const [stuck, setStuck] = useState<{ key: string; code: string; error: string }[]>([]);
   const announce = useAnnounce();
 
   // The worklist lives here, not in the server props it arrived with:
@@ -98,6 +112,48 @@ export const FrontDeskClient = forwardRef<
       clearInterval(id);
     };
   }, []);
+
+  /**
+   * Push anything held offline back to the server.
+   *
+   * Runs on mount, whenever the browser says the network came back, and
+   * on the worklist's own poll — three triggers because none alone is
+   * reliable: `online` fires on a captive portal that still cannot
+   * reach us, and a tablet left open all day may never fire it at all.
+   * The flush is idempotent, so running it more often than necessary
+   * costs a request and nothing else.
+   */
+  const flush = useCallback(async () => {
+    const res = await flushCustody<{ reference: string }>(async (entry) => {
+      try {
+        const r = await receiveWalkInParcel(entry.input.reference);
+        return r.ok ? { ok: true as const } : { ok: false as const, error: r.error, errorCode: r.errorCode };
+      } catch {
+        // Still offline — rethrow so the queue leaves it alone rather
+        // than marking it failed for a reason that is not its fault.
+        throw new Error("offline");
+      }
+    });
+    setStuck(res.stuck.filter((s) => s.error !== ""));
+    const left = await pendingCustodyCount();
+    setQueuedCount(left);
+    if (res.synced.length > 0) {
+      announce(`${res.synced.length} offline receipt${res.synced.length > 1 ? "s" : ""} synced`, "polite");
+      const rows = await listOrgWaitingParcels().catch(() => null);
+      if (rows) setWorklist([...rows].sort(oldestFirst));
+    }
+  }, [announce]);
+
+  useEffect(() => {
+    void flush();
+    const onOnline = () => void flush();
+    window.addEventListener("online", onOnline);
+    const id = setInterval(() => void flush(), POLL_MS);
+    return () => {
+      window.removeEventListener("online", onOnline);
+      clearInterval(id);
+    };
+  }, [flush]);
 
   // The fare for the box that was just received. Separate state from the
   // receipt itself because they're separate facts on the server too (see
@@ -140,11 +196,50 @@ export const FrontDeskClient = forwardRef<
       // Camera QRs decode to the tracking URL, guns to the bare code —
       // accept either; the server resolves both.
       const clean = extractParcelCode(reference.trim()) || reference.trim();
-      const res = await receiveWalkInParcel(clean);
+      let res: Awaited<ReturnType<typeof receiveWalkInParcel>>;
+      try {
+        res = await receiveWalkInParcel(clean);
+      } catch {
+        // The network went, not the server. Take the box in hand anyway
+        // and record the intent — a desk that refuses custody because a
+        // mast is down sends the customer away with their parcel, which
+        // is the one outcome worse than a delayed record.
+        //
+        // dbx.ScanHandoff already treats a replayed scan by the current
+        // holder as a no-op success, so flushing this later is safe
+        // however many times it runs (see packages/ui custodyQueue).
+        setReceiving(false);
+        try {
+          await queueCustody("parcel.receive", clean, { reference: clean });
+          setQueuedCount((n) => n + 1);
+          announce(`${clean} held offline — it will sync when the network returns`, "assertive");
+          // Deliberately no label print: the real tracking code is
+          // resolved server-side (a walk-in often presents a TCK- ticket,
+          // not the PKG- code), so printing now would put a reference on
+          // a box that no later scan resolves. The clerk is told why.
+          return {
+            ok: false as const,
+            error: `Held offline — ${clean} will sync when the network returns. Print the label once it has.`,
+          };
+        } catch {
+          return { ok: false as const, error: "No network, and this device cannot hold work offline." };
+        }
+      }
       setReceiving(false);
       if (!res.ok) return res;
       setJustReceived(res.code);
       setJustReceivedSig(undefined);
+      // Where this box is going, for the drop-point band on the label
+      // printed two lines from here. Read off the worklist row we already
+      // have rather than fetched: this desk was just looking at that row.
+      // Captured now instead of derived at render time because the next
+      // poll legitimately drops the row, and a label that loses its
+      // destination a few seconds after printing would be worse than one
+      // that never had it. No matching row (a box that was never on this
+      // worklist) prints the blank write-on rule, which is honest.
+      setJustReceivedTo(
+        worklist.find((p) => p.code === res.code)?.destinationLabel,
+      );
       // Drop the row off the worklist right now — a confirm-receipt
       // that leaves the row standing until the next poll reads as the
       // system ignoring what just happened.
@@ -160,7 +255,10 @@ export const FrontDeskClient = forwardRef<
       });
       return res;
     },
-    [announce],
+    // worklist, because the destination lookup above reads it — a stale
+    // closure here would miss every row the 30s poll has brought in
+    // since mount, which is most of them by mid-morning.
+    [announce, worklist],
   );
 
   useImperativeHandle(ref, () => ({ receive }), [receive]);
@@ -169,6 +267,43 @@ export const FrontDeskClient = forwardRef<
 
   return (
     <>
+      {/* Held-offline banner. Visible whenever anything is waiting,
+          because the failure this guards against is a clerk going home
+          believing the day's receipts are on the server when they are
+          on the tablet. */}
+      {(queuedCount > 0 || stuck.length > 0) && (
+        <div
+          className="card"
+          role="status"
+          style={{
+            padding: "14px 18px",
+            marginBottom: 16,
+            background: stuck.length > 0 ? "var(--red-t)" : "var(--blue-t)",
+            border: `1px solid ${stuck.length > 0 ? "var(--red)" : "var(--blue)"}`,
+            borderRadius: "var(--r-sm)",
+          }}
+        >
+          <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+            <Icon name={stuck.length > 0 ? "alert-triangle" : "wifi-off"} size={18} />
+            <strong>
+              {queuedCount > 0
+                ? `${queuedCount} receipt${queuedCount > 1 ? "s" : ""} held on this device`
+                : "Some held receipts need attention"}
+            </strong>
+          </div>
+          {queuedCount > 0 && stuck.length === 0 && (
+            <p className="sub" style={{ margin: "6px 0 0" }}>
+              They will sync on their own when the network returns. Keep the
+              parcels here until they do.
+            </p>
+          )}
+          {stuck.map((s) => (
+            <p key={s.key} className="sub" style={{ margin: "6px 0 0" }}>
+              <span className="mono">{s.code}</span> — {s.error}
+            </p>
+          ))}
+        </div>
+      )}
       {justReceived && (
         <div
           className="card"
@@ -226,6 +361,7 @@ export const FrontDeskClient = forwardRef<
             <PrintableLabel
               code={justReceived}
               sig={justReceivedSig}
+              route={dropPointFor(justReceivedTo)}
               orgName={orgName}
               orgLogoUrl={orgLogoUrl}
             />

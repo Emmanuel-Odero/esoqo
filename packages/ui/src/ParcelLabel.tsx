@@ -34,8 +34,8 @@ export const LABEL_GAP_MM = 6;
 // down to the mm sizes above via CSS stays crisp instead of blurring.
 // 3–4x the eventual display size at 96dpi covers a typical 300dpi
 // print engine's upscaling without visibly softening either code.
-const QR_PIXELS = 380; // → displayed at 32mm
-const BARCODE_HEIGHT_PIXELS = 110; // → displayed at 16mm
+const QR_PIXELS = 380; // → displayed at 24mm (~4x downscale)
+const BARCODE_HEIGHT_PIXELS = 110; // → displayed at 11mm
 
 // A real shipping-label layout, not a cramped grid cell: QR on the
 // left (the thing someone's actually going to scan with a phone —
@@ -105,6 +105,47 @@ export function trackingUrlFor(code: string, sig?: string): string {
   return sig ? `${base}/p/${code}?k=${sig}` : `${base}/t/${code}`;
 }
 
+/** How many characters of a drop point survive onto the label. Enough
+ *  for "MACHAKOS JUNCTION", short enough to stay legible at 5.5mm. */
+const DROP_POINT_MAX = 18;
+
+/**
+ * The drop point, as it is safe and useful to print large.
+ *
+ * A counter clerk types `destinationLabel` as free prose, because prose
+ * is what a courier actually reads — "Westlands, opposite Sarit". Two
+ * things follow, and they pull in opposite directions:
+ *
+ *   - A handler with no scanner sorting eleven boxes at a stage needs to
+ *     know which come off *here*, at arm's length, in bad light. That
+ *     argues for printing it big.
+ *   - That same prose can be most of a street address, and a label rides
+ *     in the open on a box. Printing it verbatim and large would put a
+ *     receiver's location on adhesive — exactly the exposure this
+ *     component's header comment removed sender/receiver details to
+ *     avoid.
+ *
+ * So only the leading locality survives: the text up to the first comma
+ * or dash, uppercased and capped. "Westlands, opposite Sarit" prints
+ * WESTLANDS. That is the routing decision a handler makes — which is
+ * operational information — with the navigational detail left behind the
+ * scan, where the person who needs it already has to look.
+ *
+ * Returns undefined for anything that reduces to nothing, so the caller
+ * prints the blank write-on rule rather than an empty band.
+ */
+export function dropPointFor(label?: string | null): string | undefined {
+  if (!label) return undefined;
+  // Split on the separators people actually use between "where" and
+  // "where exactly" — a comma, a dash, or a slash.
+  const head = label.split(/[,\-/(]/)[0]?.trim() ?? '';
+  if (!head) return undefined;
+  const upper = head.toUpperCase().replace(/\s+/g, ' ');
+  return upper.length > DROP_POINT_MAX
+    ? `${upper.slice(0, DROP_POINT_MAX - 1).trimEnd()}…`
+    : upper;
+}
+
 /**
  * The label as it prints.
  *
@@ -125,11 +166,19 @@ export function PrintableLabel({
   code, sig, route, orgName, orgLogoUrl, esoqoLogoUrl,
 }: {
   code: string; sig?: string;
-  /** "KISUMU ▸ NAIROBI", when it's known. The single most useful thing
-   *  to someone sorting a pile of boxes at 5am is where each one is
-   *  going, readable at arm's length without scanning anything. Blank
-   *  stock prints an empty band to be written on by hand, which is the
-   *  honest workflow. */
+  /** Where this box is going — "KISUMU ▸ NAIROBI" from an admin print,
+   *  or a bare drop point like "NAKURU" from a counter booking. The
+   *  single most useful thing to someone sorting a pile of boxes at 5am
+   *  is where each one comes off, readable at arm's length without
+   *  scanning anything, so this gets its own band rather than competing
+   *  with the logos in the header.
+   *
+   *  Pass a counter's free-text `destinationLabel` through dropPointFor
+   *  first — it is prose that can contain a street address, and this
+   *  band is printed large on something that rides in the open.
+   *
+   *  Blank stock prints an empty rule to be written on by hand, which is
+   *  the honest workflow. */
   route?: string;
   /** The courier company this pad was issued to, when it was issued to
    *  one. Prints as "{company} · Managed by Esoqo" under the route
@@ -196,30 +245,46 @@ export function PrintableLabel({
               style={{ height: '6.5mm', maxWidth: '30mm', objectFit: 'contain' }} />
           )}
         </span>
-        <span style={{
-          fontSize: '3.4mm', fontWeight: 700, letterSpacing: '.04em', lineHeight: 1,
-          overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
-          // Blank stock prints an empty rule to be written on in the
-          // field — which is what actually happens, rather than
-          // pretending the route is known at print time.
-          borderBottom: route ? 'none' : '0.3mm solid #bbb', minWidth: '28mm', textAlign: 'right',
-        }}>
-          {route ?? ' '}
-        </span>
+        {/* Company name sits in the header now, where the route band used
+            to be squeezed — it is branding, and branding belongs next to
+            the logos. That vacates the full label width for the one
+            thing a handler without a scanner actually has to read. */}
+        {orgName && (
+          <span style={{
+            fontSize: '2.8mm', fontWeight: 700, letterSpacing: '.03em', lineHeight: 1,
+            overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+            textAlign: 'right', minWidth: 0,
+          }}>
+            {orgName} · Managed by {BRAND}
+          </span>
+        )}
       </div>
-      {/* Company band. Only on company-issued stock: whose pad this is
-          and who manages it, readable without scanning anything. */}
-      {orgName && (
-        <div style={{
-          fontSize: '2.8mm', fontWeight: 700, letterSpacing: '.03em', lineHeight: 1,
-          overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
-        }}>
-          {orgName} · Managed by {BRAND}
-        </div>
-      )}
+
+      {/* The drop-point band.
+          Full width, 5.5mm, the largest type on the label — because
+          "which of these boxes comes off here" is the decision made a
+          hundred times a trip, by someone holding a torch rather than a
+          scanner. Deliberately the drop point alone and never the full
+          address (see dropPointFor): routing information, not a
+          receiver's location.
+          Blank stock prints an empty rule to be written on in the field,
+          which is what actually happens rather than pretending the
+          destination is known at print time. */}
+      <div style={{
+        fontSize: route ? '5.5mm' : '3mm', fontWeight: 800, letterSpacing: '.02em',
+        lineHeight: 1.05, minHeight: '6mm', display: 'flex', alignItems: 'center',
+        overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+        borderBottom: route ? 'none' : '0.3mm solid #bbb',
+      }}>
+        {route ?? ' '}
+      </div>
 
       <div style={{ display: 'flex', flexDirection: 'row', alignItems: 'center', gap: '3mm', flex: 1, minHeight: 0 }}>
-        <div style={{ width: '27mm', height: '27mm', flexShrink: 0 }}>
+        {/* 24mm, down from 27mm, to fund the drop-point band above. Still
+            comfortably scannable: QR_PIXELS is 380, so this is a ~4x
+            downscale at 96dpi and the modules stay crisp through a
+            300dpi print engine. */}
+        <div style={{ width: '24mm', height: '24mm', flexShrink: 0 }}>
           {qrSrc && <img src={qrSrc} alt={`Tracking QR code for ${code}`} width={QR_PIXELS} height={QR_PIXELS}
             style={{ width: '100%', height: '100%', objectFit: 'contain' }} />}
         </div>
