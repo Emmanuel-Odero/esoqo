@@ -399,6 +399,29 @@
   .wsl-row .btn { width:auto }
 }
 
+/* ── coming up strip (home) ─────────────────────────────────── */
+.me-coming { border-color:#BFE0CE; background:linear-gradient(120deg,#fff 60%,var(--green-t)) }
+.coming-list { list-style:none; margin:0; padding:0 }
+.coming-list li { display:flex; align-items:center; gap:12px; padding:11px 0; border-bottom:1px solid var(--line) }
+.coming-list li:last-child { border-bottom:0 }
+.coming-ic { flex:none; width:34px; height:34px; border-radius:10px; display:grid; place-items:center; background:var(--blue-t); color:var(--blue) }
+.coming-ic.owe { background:var(--amber-t); color:var(--amber) }
+.coming-t { flex:1; min-width:0; line-height:1.3 }
+.coming-t strong { display:block; font-size:.92rem; color:var(--navy); overflow:hidden; text-overflow:ellipsis; white-space:nowrap }
+.coming-t small { display:block; font-size:.78rem; color:var(--tx-2); overflow:hidden; text-overflow:ellipsis; white-space:nowrap }
+
+/* ── tickets register (filters + pager) ───────────────────────── */
+.tix-summary { display:flex; gap:8px; flex-wrap:wrap; margin-bottom:12px }
+.tix-chip { display:inline-flex; align-items:center; gap:7px; padding:7px 12px; border-radius:999px; background:#fff; border:1px solid var(--line); font-size:.8rem; font-weight:600; color:var(--tx-2) }
+.tix-chip.is-warn { background:var(--amber-t); border-color:#E8D2A0; color:var(--amber) }
+.tix-chip.is-mute { background:var(--paper) }
+.tix-filters { display:flex; gap:8px; flex-wrap:wrap; margin-bottom:14px }
+.tix-filters .inp { min-height:40px; padding:8px 11px; font-size:.88rem }
+.tix-search { flex:1 1 220px; min-width:0 }
+.tix-pager { display:flex; align-items:center; justify-content:center; gap:14px; padding:6px 0 14px; font-size:.82rem; color:var(--tx-2) }
+.tix-browse { margin:4px 0 0; font-size:.87rem }
+.tix-browse a { color:var(--blue); font-weight:600 }
+
 /* ── navigation skeleton ────────────────────────────────────── */
 .skel { padding:6px 0 24px }
 .skel-line {

@@ -1,10 +1,13 @@
 import Link from 'next/link';
 import type { Route } from 'next';
+import { cookies } from 'next/headers';
 import { Icon, type IconName } from '@esoqo/ui';
+import { SESSION_COOKIE } from '@esoqo/auth';
 import { getMyRecord, getGroupBalance, listMyConsents, PAYMENT_APPROVAL_THRESHOLD } from '@esoqo/db';
 import { formatMsisdn } from '@esoqo/domain';
 import { requireSubject } from '@/lib/session';
 import { listWorkspaces } from '@/lib/workspaces';
+import { goUrl, type GoMyBooking } from '@/lib/ticketing';
 import { enterParcelOrg } from '@/app/workspace-actions';
 
 export const dynamic = 'force-dynamic';
@@ -68,10 +71,22 @@ export default async function MePage(
 
   // listWorkspaces() is already resolved for the header switcher — the
   // cache() around it makes this a free read, not a second round trip.
-  const [balance, grants, workspaces] = await Promise.all([
+  const token = (await cookies()).get(SESSION_COOKIE)?.value;
+  const [balance, grants, workspaces, bookings] = await Promise.all([
     orgId ? getGroupBalance(ctx, orgId) : Promise.resolve(null),
     listMyConsents(ctx),
     listWorkspaces(),
+    // Best-effort: the "Coming up" strip below. A failed bookings read
+    // degrades to no strip, never a failed dashboard.
+    (token
+      ? fetch(goUrl('/v1/me/bookings'), {
+          headers: { Authorization: `Bearer ${token}` },
+          cache: 'no-store',
+        })
+          .then((r) => (r.ok ? r.json() : { bookings: [] }))
+          .then((j) => ((j?.bookings ?? []) as GoMyBooking[]))
+          .catch(() => [] as GoMyBooking[])
+      : Promise.resolve([] as GoMyBooking[])),
   ]);
 
   const confirmed = CREDENTIALS.filter(([t]) => has(t)).length;
@@ -211,6 +226,50 @@ export default async function MePage(
           <span className="tile-h">Change it any time</span>
         </Link>
       </section>
+
+      {/* ── coming up: the week ahead, not the archive ──
+          The dashboard knew balances and papers but never answered "what
+          have I got on". Next two departures + anything awaiting payment,
+          newest first; nothing when there's nothing. */}
+      {(() => {
+        const now = Date.now();
+        const upcomingTrips = bookings
+          .filter((b) => new Date(b.departAt).getTime() >= now && b.status !== 'CANCELLED' && b.status !== 'REFUNDED')
+          .sort((a, b) => +new Date(a.departAt) - +new Date(b.departAt))
+          .slice(0, 2);
+        const owing = bookings.filter((b) => b.status === 'PENDING_PAYMENT' || b.status === 'PARTIALLY_PAID').slice(0, 2);
+        if (upcomingTrips.length === 0 && owing.length === 0) return null;
+        return (
+          <section className="mcard me-coming" aria-label="Coming up">
+            <h2><Icon name="calendar" size={18} />Coming up</h2>
+            <ul className="coming-list">
+              {upcomingTrips.map((b) => (
+                <li key={b.id}>
+                  <span className="coming-ic"><Icon name={b.vertical === 'TRANSPORT' ? 'truck' : 'calendar'} size={15} /></span>
+                  <span className="coming-t">
+                    <strong>{b.listingTitle}</strong>
+                    <small>{new Date(b.departAt).toLocaleString('en-KE', { timeZone: 'Africa/Nairobi', weekday: 'short', day: 'numeric', month: 'short', hour: 'numeric', minute: '2-digit' })} · {b.orgName}</small>
+                  </span>
+                  <Link className="btn btn-o btn-sm" href="/me/tickets">Open</Link>
+                </li>
+              ))}
+              {owing.map((b) => {
+                const balanceDue = Math.max(0, Number(b.totalKes) - Number(b.amountPaidKes));
+                return (
+                  <li key={`owe-${b.id}`} className="is-owe">
+                    <span className="coming-ic owe"><Icon name="coins" size={15} /></span>
+                    <span className="coming-t">
+                      <strong>KES {balanceDue.toLocaleString('en-KE')} still to pay</strong>
+                      <small>{b.listingTitle} · {b.orgName}</small>
+                    </span>
+                    <Link className="btn btn-o btn-sm" href="/me/tickets">Pay</Link>
+                  </li>
+                );
+              })}
+            </ul>
+          </section>
+        );
+      })()}
 
       {/* ── where else you work ──
           Courier companies and ticket organisers in one list, because to
