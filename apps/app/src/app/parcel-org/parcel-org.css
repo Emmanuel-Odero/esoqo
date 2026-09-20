@@ -150,14 +150,64 @@
 .scan-title-icon { width:32px; height:32px; border-radius:9px; display:grid; place-items:center;
   color:var(--green); background:var(--green-t) }
 
-/* Counter work is intentionally one task at a time. The scan box remains
-   fixed above this switch, while the chosen workspace gets the full page. */
+/* Counter work is intentionally one task at a time: book, or keep the
+   stock a booking spends. The chosen workspace gets the full page. */
 .task-switch { display:flex; gap:3px; width:fit-content; padding:4px; margin:0 0 14px;
   background:var(--paper); border:1px solid var(--line); border-radius:10px }
 .task-switch button { min-height:36px; padding:0 14px; border:0; border-radius:7px;
   background:transparent; color:var(--tx-2); font:600 .86rem/1 var(--font-body); cursor:pointer }
 .task-switch button.is-active { background:#fff; color:var(--navy); box-shadow:var(--sh-s) }
 .task-switch button:focus-visible { outline:3px solid rgba(31,161,99,.28); outline-offset:2px }
+.task-switch button > span { display:inline-flex; align-items:center; gap:7px }
+.porg-tab-n { padding:2px 7px; border-radius:999px; background:var(--blue-t); color:var(--blue);
+  font-size:.7rem; font-weight:700 }
+.task-switch button.is-active .porg-tab-n { background:var(--blue); color:#fff }
+
+/* Export trouble — a capped or failed CSV, said out loud rather than
+   left for somebody to discover in a spreadsheet. */
+.porg-export-note { display: flex; align-items: center; gap: 8px; margin: 10px 0 0;
+  padding: 9px 12px; border: 1px solid #F0D3A8; border-radius: var(--r-sm);
+  background: #FDF6EA; color: var(--navy); font-size: .86rem }
+
+/* Runs loading, under the dispatch board — the manifest's way in. */
+.porg-runs { margin-top: 28px; padding-top: 22px; border-top: 1px solid var(--line) }
+.porg-runs-head h2 { margin: 0; font-size: 1.05rem; font-weight: 700; color: var(--navy) }
+.porg-runs-head .sub { margin: 4px 0 14px; font-size: .88rem }
+.porg-runs-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px }
+.porg-runs-list li { display: flex; align-items: center; gap: 14px; padding: 11px 14px;
+  border: 1px solid var(--line); border-radius: var(--r-sm); background: var(--paper) }
+.porg-run-id { flex: 1; min-width: 0 }
+.porg-run-id .mono { font-weight: 700; color: var(--navy) }
+.porg-run-id .sub { display: block; font-size: .8rem }
+.porg-run-n { flex: none; font-size: .84rem; color: var(--tx-2) }
+@media (max-width: 560px) {
+  .porg-runs-list li { flex-wrap: wrap }
+  .porg-run-id { flex: 1 1 100% }
+}
+
+/* Settings sub-nav. A quiet strip, not a second main nav: these are
+   sections of one page, so they read as tabs under the Settings title
+   rather than competing with the portal bar above them. Scrolls
+   sideways on a phone for the same reason .porgnav does. */
+.porgset-nav { display:flex; gap:2px; margin:0 0 22px; padding-bottom:2px;
+  border-bottom:1px solid var(--line); overflow-x:auto; scrollbar-width:none }
+.porgset-nav::-webkit-scrollbar { display:none }
+.porgset-nav a { display:inline-flex; align-items:center; gap:7px; flex:none;
+  padding:10px 14px; margin-bottom:-1px; border-bottom:2px solid transparent;
+  color:var(--tx-2); font:600 .88rem/1 var(--font-body); text-decoration:none; white-space:nowrap }
+.porgset-nav a:hover { color:var(--navy) }
+.porgset-nav a[aria-current='page'] { color:var(--navy); border-bottom-color:var(--green) }
+.porgset-nav a:focus-visible { outline:3px solid rgba(31,161,99,.28); outline-offset:-3px; border-radius:6px }
+/* Each section brings its own <h1>-era heading from when it was a page;
+   inside Settings the shell owns the title, so they step down. */
+.porgset-body .head h1 { font-size:1.15rem }
+.porgset-body .head { margin-bottom:16px }
+
+/* The worklist under the scanner: senders who said they'd walk in. It
+   is secondary to the scan box by construction — see scan/page.tsx. */
+.scan-waiting { margin-top:28px; padding-top:22px; border-top:1px solid var(--line) }
+.scan-waiting h2 { margin:0; font-size:1.05rem; font-weight:700; color:var(--navy) }
+.scan-waiting .sub { margin:4px 0 14px; font-size:.88rem }
 .counter-scanner { border-color:#BFE0CE; background:linear-gradient(110deg,#fff 60%,var(--green-t)) }
 .label-picker-popover { margin-top:12px; padding:12px; border:1px solid #BFE0CE; border-radius:10px; background:#fff; box-shadow:var(--sh-s) }
 .label-picker-popover > label { display:block; margin-bottom:5px; font-weight:600 }
@@ -214,13 +264,63 @@
 .kpi.is-urgent.a .n { color:var(--amber) }
 .kpi.is-urgent.r .n { color:var(--red) }
 
-/* The dashboard's board is a fixed six, so it gets explicit tracks
-   rather than .kpis' auto-fit — six tiles in a 1180px column auto-fit
-   to five-and-a-stray, and a board whose last tile has wrapped onto its
-   own row no longer reads as one glance. MUST stay after .kpis: both
-   are one class deep, so source order is what decides this. */
+/* The dashboard's board gets explicit tracks rather than .kpis'
+   auto-fit — tiles auto-fitting to five-and-a-stray no longer read as
+   one glance. MUST stay after .kpis: both are one class deep, so source
+   order is what decides this. */
 .dashboard-kpis { grid-template-columns:repeat(3,1fr); margin-bottom:18px }
 @media (min-width:1040px) { .dashboard-kpis { grid-template-columns:repeat(6,1fr) } }
+/* Seven tiles can't sit 6-across without stranding one on its own row,
+   and 7-across in an 1180px column squeezes every tile to ~150px.
+   Four columns (4+3) keeps every tile readable at desktop width. */
+@media (min-width:1040px) {
+  .dashboard-kpis-7 { grid-template-columns:repeat(4,1fr) }
+}
+
+/* ── throughput strip ─────────────────────────────────────────── */
+.porg-trends { margin-bottom:18px; padding:18px 20px 14px }
+.porg-trends h2 { font-size:1.05rem; margin:2px 0 0; letter-spacing:-.02em }
+.porg-trends-head { display:flex; align-items:flex-end; justify-content:space-between; gap:12px; flex-wrap:wrap; margin-bottom:10px }
+.porg-trends-legend { display:flex; gap:16px; font-size:.82rem; color:var(--tx-2); flex-wrap:wrap }
+.porg-trends-legend .dot { display:inline-block; width:9px; height:9px; border-radius:50%; margin-right:6px }
+.dot-booked { background:var(--blue) }
+.dot-delivered { background:var(--green) }
+.porg-spark { width:100%; height:64px; display:block }
+.porg-trends-days { display:flex; justify-content:space-between; font-family:var(--font-mono); font-size:.62rem; letter-spacing:.06em; text-transform:uppercase; color:var(--tx-3); margin-top:6px }
+
+/* ── saved views ──────────────────────────────────────────────── */
+.porg-views { margin-bottom:12px }
+.porg-views-row { display:flex; gap:8px; flex-wrap:wrap }
+.porg-view {
+  display:inline-flex; align-items:center; gap:6px; padding:7px 12px;
+  border:1px solid var(--line); border-radius:999px; background:#fff;
+  font-size:.8rem; font-weight:600; color:var(--tx-2);
+}
+.porg-view:hover { border-color:var(--navy); color:var(--navy) }
+.porg-view-custom { padding-right:6px }
+.porg-view-custom a { color:inherit }
+.porg-view-custom button { border:0; background:none; cursor:pointer; color:var(--tx-3); display:grid; place-items:center; padding:4px }
+.porg-views-save { display:flex; gap:8px; margin-top:8px; flex-wrap:wrap }
+.porg-views-save input { min-height:38px; padding:7px 10px; border:1.5px solid var(--line); border-radius:8px; font:inherit; font-size:.86rem }
+.porg-views-pin { margin-top:8px; border:0; background:none; cursor:pointer; color:var(--blue); font:600 .82rem/1 var(--font-body); display:inline-flex; align-items:center; gap:6px }
+.porg-views-pin:hover { text-decoration:underline }
+
+/* ── register toolbar / pagination ────────────────────────────── */
+.porg-reg-toolbar {
+  display:flex; align-items:center; justify-content:space-between; gap:10px;
+  padding:12px 16px; border-bottom:1px solid var(--line); flex-wrap:wrap;
+}
+.porg-range { font-size:.78rem; color:var(--tx-2) }
+.porg-reg-tools { display:flex; align-items:center; gap:8px; flex-wrap:wrap }
+.porg-perpage select { min-height:34px; border:1.5px solid var(--line); border-radius:8px; background:#fff; font:600 .8rem var(--font-body); padding:4px 8px }
+.th-sort { color:inherit }
+.th-sort:hover { color:var(--navy); text-decoration:underline }
+.porg-pager { display:flex; align-items:center; justify-content:center; gap:14px; padding:14px 16px }
+.porg-page { font-size:.8rem; color:var(--tx-2) }
+.porg-pager .is-disabled { opacity:.4; pointer-events:none }
+.porg-reg-card.is-compact .tbl td { padding:7px 10px }
+.porg-check { display:inline-flex; align-items:center; gap:7px; font-size:.85rem; font-weight:600; color:var(--tx-2); white-space:nowrap }
+.porg-check input { width:17px; height:17px; accent-color:var(--red) }
 
 /* ── the register ───────────────────────────────────────────────── */
 .porg-register-head { display:flex; align-items:baseline; gap:14px; margin:0 0 12px; flex-wrap:wrap }
@@ -368,3 +468,43 @@
   .task-switch > button { font-size:.78rem !important; padding:10px 6px !important }
   .task-switch > button > svg { display:none !important }
 }
+
+/* Routes — the company's own map, edited as an ordered list because
+   that is what a route is. Origin/destination fields would describe a
+   two-stop route and quietly make longer ones unrepresentable. */
+.porgroutes-bar { display:flex; align-items:center; gap:12px; margin-bottom:16px; flex-wrap:wrap }
+.porgroutes-empty { padding:22px; border:1px dashed var(--line); border-radius:var(--r-sm);
+  color:var(--tx-2); text-align:center; max-width:60ch }
+.porgroutes-list { list-style:none; margin:0; padding:0; display:grid; gap:8px }
+.porgroutes-list li { display:flex; align-items:center; gap:14px; padding:12px 14px;
+  border:1px solid var(--line); border-radius:var(--r-sm); background:var(--paper) }
+.porgroutes-id { flex:1; min-width:0; display:grid; gap:3px }
+.porgroutes-name { display:flex; align-items:center; gap:8px; font-weight:700; color:var(--navy) }
+.porgroutes-code { font-size:.78rem; padding:2px 7px; border-radius:999px;
+  background:var(--blue-t); color:var(--blue) }
+
+.porgroutes-editor { max-width:640px }
+.porgroutes-editor h2 { margin:0 0 14px; font-size:1.1rem; color:var(--navy) }
+.porgroutes-editor h3 { margin:22px 0 8px; font-size:.78rem; font-weight:700;
+  letter-spacing:.06em; text-transform:uppercase; color:var(--tx-2) }
+.porgroutes-fields { display:grid; gap:12px }
+.porgroutes-fields label { display:grid; gap:4px; font-size:.84rem; color:var(--tx-2) }
+.porgroutes-fields input { padding:9px 11px; border:1px solid var(--line);
+  border-radius:var(--r-sm); font:inherit }
+.porgroutes-check { display:flex !important; align-items:center; gap:9px }
+.porgroutes-check input { width:auto }
+
+/* Numbered, because the number IS the data — stop 3 of 5 is what makes
+   a leg addressable. */
+.porgroutes-stops { list-style:none; margin:0; padding:0; display:grid; gap:6px }
+.porgroutes-stops li { display:flex; align-items:center; gap:10px; padding:9px 12px;
+  border:1px solid var(--line); border-radius:var(--r-sm); background:var(--paper) }
+.porgroutes-seq { flex:none; width:24px; height:24px; display:grid; place-items:center;
+  border-radius:999px; background:var(--navy); color:#fff; font-size:.74rem; font-weight:700 }
+.porgroutes-stop { flex:1; min-width:0; font-weight:600; color:var(--navy) }
+.porgroutes-moves { display:flex; gap:4px; flex:none }
+.porgroutes-add { display:grid; gap:4px; margin-top:14px; font-size:.84rem; color:var(--tx-2) }
+.porgroutes-add select { padding:9px 11px; border:1px solid var(--line);
+  border-radius:var(--r-sm); font:inherit }
+.porgroutes-actions { display:flex; gap:8px; margin-top:20px; flex-wrap:wrap }
+.porgroutes-del { margin-left:auto; color:var(--red); border-color:#E7C3C3 }

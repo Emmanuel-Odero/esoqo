@@ -9,8 +9,13 @@ import {
   useTransition,
 } from "react";
 import {
-  dropPointFor, flushCustody, Icon, pendingCustodyCount, PrintableLabel,
-  PrintStyles, queueCustody,
+  dropPointFor,
+  flushCustody,
+  Icon,
+  pendingCustodyCount,
+  PrintableLabel,
+  PrintStyles,
+  queueCustody,
 } from "@esoqo/ui";
 import { useAnnounce } from "@esoqo/a11y";
 import { extractParcelCode } from "@esoqo/domain";
@@ -84,7 +89,9 @@ export const FrontDeskClient = forwardRef<
   // see that eleven receipts are still on the device has no way to know
   // the day's work has not left it.
   const [queuedCount, setQueuedCount] = useState(0);
-  const [stuck, setStuck] = useState<{ key: string; code: string; error: string }[]>([]);
+  const [stuck, setStuck] = useState<
+    { key: string; code: string; error: string }[]
+  >([]);
   const announce = useAnnounce();
 
   // The worklist lives here, not in the server props it arrived with:
@@ -127,7 +134,9 @@ export const FrontDeskClient = forwardRef<
     const res = await flushCustody<{ reference: string }>(async (entry) => {
       try {
         const r = await receiveWalkInParcel(entry.input.reference);
-        return r.ok ? { ok: true as const } : { ok: false as const, error: r.error, errorCode: r.errorCode };
+        return r.ok
+          ? { ok: true as const }
+          : { ok: false as const, error: r.error, errorCode: r.errorCode };
       } catch {
         // Still offline — rethrow so the queue leaves it alone rather
         // than marking it failed for a reason that is not its fault.
@@ -138,7 +147,10 @@ export const FrontDeskClient = forwardRef<
     const left = await pendingCustodyCount();
     setQueuedCount(left);
     if (res.synced.length > 0) {
-      announce(`${res.synced.length} offline receipt${res.synced.length > 1 ? "s" : ""} synced`, "polite");
+      announce(
+        `${res.synced.length} offline receipt${res.synced.length > 1 ? "s" : ""} synced`,
+        "polite",
+      );
       const rows = await listOrgWaitingParcels().catch(() => null);
       if (rows) setWorklist([...rows].sort(oldestFirst));
     }
@@ -212,7 +224,10 @@ export const FrontDeskClient = forwardRef<
         try {
           await queueCustody("parcel.receive", clean, { reference: clean });
           setQueuedCount((n) => n + 1);
-          announce(`${clean} held offline — it will sync when the network returns`, "assertive");
+          announce(
+            `${clean} held offline — it will sync when the network returns`,
+            "assertive",
+          );
           // Deliberately no label print: the real tracking code is
           // resolved server-side (a walk-in often presents a TCK- ticket,
           // not the PKG- code), so printing now would put a reference on
@@ -222,7 +237,10 @@ export const FrontDeskClient = forwardRef<
             error: `Held offline — ${clean} will sync when the network returns. Print the label once it has.`,
           };
         } catch {
-          return { ok: false as const, error: "No network, and this device cannot hold work offline." };
+          return {
+            ok: false as const,
+            error: "No network, and this device cannot hold work offline.",
+          };
         }
       }
       setReceiving(false);
@@ -267,55 +285,56 @@ export const FrontDeskClient = forwardRef<
 
   return (
     <>
-      {/* Held-offline banner. Visible whenever anything is waiting,
-          because the failure this guards against is a clerk going home
-          believing the day's receipts are on the server when they are
-          on the tablet. */}
+      {/* Offline queue banner - compact, clear */}
       {(queuedCount > 0 || stuck.length > 0) && (
         <div
           className="card"
           role="status"
           style={{
-            padding: "14px 18px",
+            padding: "12px 16px",
             marginBottom: 16,
-            background: stuck.length > 0 ? "var(--red-t)" : "var(--blue-t)",
-            border: `1px solid ${stuck.length > 0 ? "var(--red)" : "var(--blue)"}`,
-            borderRadius: "var(--r-sm)",
+            background: stuck.length > 0 ? "var(--red-t)" : "var(--amber-t)",
+            border: `1px solid ${stuck.length > 0 ? "var(--red)" : "var(--amber)"}`,
+            borderRadius: "var(--r-md)",
+            display: "flex",
+            alignItems: "center",
+            gap: 10,
           }}
         >
-          <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-            <Icon name={stuck.length > 0 ? "alert-triangle" : "wifi-off"} size={18} />
-            <strong>
+          <Icon
+            name={stuck.length > 0 ? "alert-triangle" : "wifi-off"}
+            size={18}
+          />
+          <div style={{ flex: 1 }}>
+            <strong style={{ fontSize: ".9rem" }}>
               {queuedCount > 0
-                ? `${queuedCount} receipt${queuedCount > 1 ? "s" : ""} held on this device`
-                : "Some held receipts need attention"}
+                ? `${queuedCount} receipt${queuedCount > 1 ? "s" : ""} held offline`
+                : "Some receipts need attention"}
             </strong>
+            {queuedCount > 0 && stuck.length === 0 && (
+              <p
+                className="sub"
+                style={{ margin: "2px 0 0", fontSize: ".8rem" }}
+              >
+                Will sync automatically when network returns
+              </p>
+            )}
           </div>
-          {queuedCount > 0 && stuck.length === 0 && (
-            <p className="sub" style={{ margin: "6px 0 0" }}>
-              They will sync on their own when the network returns. Keep the
-              parcels here until they do.
-            </p>
-          )}
-          {stuck.map((s) => (
-            <p key={s.key} className="sub" style={{ margin: "6px 0 0" }}>
-              <span className="mono">{s.code}</span> — {s.error}
-            </p>
-          ))}
         </div>
       )}
       {justReceived && (
         <div
           className="card"
           style={{
-            padding: "24px",
-            marginBottom: "24px",
+            padding: "20px",
+            marginBottom: "20px",
             background: "var(--green-t)",
-            border: "1px solid #BFE0CE",
+            border: "1px solid var(--green)",
             borderRadius: "var(--r-lg)",
             boxShadow: "var(--sh-s)",
           }}
         >
+          {/* Success header */}
           <div
             style={{
               display: "flex",
@@ -326,29 +345,34 @@ export const FrontDeskClient = forwardRef<
           >
             <div
               style={{
-                width: 40,
-                height: 40,
+                width: 36,
+                height: 36,
                 borderRadius: "var(--r-sm)",
                 background: "var(--green)",
-                display: "flex",
-                alignItems: "center",
-                justifyContent: "center",
+                display: "grid",
+                placeItems: "center",
               }}
             >
-              <Icon name="check-circle" size={22} style={{ color: "#fff" }} />
+              <Icon name="check" size={20} style={{ color: "#fff" }} />
             </div>
-            <strong
-              style={{
-                display: "block",
-                fontSize: "1.05rem",
-                color: "var(--green)",
-                fontWeight: 700,
-              }}
-            >
-              {justReceived} received — the sender and receiver have been
-              texted.
-            </strong>
+            <div>
+              <strong
+                style={{
+                  display: "block",
+                  fontSize: "1rem",
+                  color: "var(--green)",
+                  fontWeight: 700,
+                }}
+              >
+                {justReceived} received
+              </strong>
+              <p className="sub" style={{ margin: 0, fontSize: ".85rem" }}>
+                Sender and receiver have been notified
+              </p>
+            </div>
           </div>
+
+          {/* Label print section */}
           <div
             className="print-modal-escape"
             style={{
@@ -367,104 +391,89 @@ export const FrontDeskClient = forwardRef<
             />
           </div>
 
-          {/* Pay-at-counter fare. Nothing priced this box online — the
-              sender chose to settle here — so if it isn't recorded at
-              this desk it is never recorded anywhere. */}
-          <div
-            style={{
-              borderTop: "1px solid #BFE0CE",
-              marginTop: 16,
-              paddingTop: 16,
-            }}
-          >
-            {settled ? (
-              <p
-                className="sub"
-                style={{
-                  margin: 0,
-                  display: "flex",
-                  alignItems: "center",
-                  gap: 8,
-                  color: "var(--green)",
-                  fontWeight: 600,
-                }}
-              >
-                <Icon name="check-circle" size={16} /> Payment recorded.
-              </p>
-            ) : (
-              <>
-                <label
-                  className="sub"
-                  htmlFor="fare"
-                  style={{
-                    display: "block",
-                    marginBottom: 8,
-                    fontWeight: 600,
-                    fontSize: ".95rem",
-                    color: "var(--navy)",
-                  }}
-                >
-                  Amount the sender paid (KES)
-                </label>
-                <div className="row" style={{ gap: 10 }}>
-                  <input
-                    id="fare"
-                    className="mono"
-                    value={fare}
-                    inputMode="numeric"
-                    placeholder="0"
-                    onChange={(e) =>
-                      setFare(e.target.value.replace(/[^0-9.]/g, ""))
-                    }
-                    onKeyDown={(e) => e.key === "Enter" && settle(justReceived)}
-                    style={{
-                      flex: 1,
-                      padding: "12px 14px",
-                      border: "1.5px solid var(--line)",
-                      borderRadius: "var(--r-sm)",
-                      fontSize: ".95rem",
-                      background: "#fff",
-                    }}
-                  />
-                  <button
-                    className="btn btn-p btn-sm"
-                    disabled={pending || !fare.trim()}
-                    onClick={() => settle(justReceived)}
-                    style={{
-                      padding: "12px 20px",
-                      minHeight: 48,
-                    }}
-                  >
-                    {pending ? "Recording…" : "Record payment"}
-                  </button>
-                </div>
-                {fareError && (
-                  <p
-                    role="alert"
-                    style={{
-                      color: "var(--red)",
-                      margin: "12px 0 0",
-                      fontSize: ".9rem",
-                      fontWeight: 500,
-                    }}
-                  >
-                    {fareError}
-                  </p>
-                )}
-              </>
-            )}
-          </div>
-
-          <div style={{ display: "flex", gap: 10, marginTop: 16 }}>
-            <button
-              className="btn btn-o btn-sm"
-              onClick={() => window.print()}
+          {/* Payment section */}
+          {settled ? (
+            <div
               style={{
                 display: "flex",
                 alignItems: "center",
                 gap: 8,
-                padding: "10px 18px",
+                color: "var(--green)",
+                fontWeight: 600,
               }}
+            >
+              <Icon name="check-circle" size={16} />
+              Payment recorded
+            </div>
+          ) : (
+            <div
+              style={{ borderTop: "1px solid var(--green)", paddingTop: 16 }}
+            >
+              <label
+                className="sub"
+                htmlFor="fare"
+                style={{
+                  display: "block",
+                  marginBottom: 8,
+                  fontWeight: 600,
+                  fontSize: ".9rem",
+                  color: "var(--navy)",
+                }}
+              >
+                Pay-at-counter (KES)
+              </label>
+              <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
+                <input
+                  id="fare"
+                  className="mono"
+                  value={fare}
+                  inputMode="numeric"
+                  placeholder="0"
+                  onChange={(e) =>
+                    setFare(e.target.value.replace(/[^0-9.]/g, ""))
+                  }
+                  onKeyDown={(e) => e.key === "Enter" && settle(justReceived)}
+                  style={{
+                    flex: 1,
+                    minWidth: 120,
+                    padding: "10px 12px",
+                    border: "1.5px solid var(--line)",
+                    borderRadius: "var(--r-sm)",
+                    fontSize: ".95rem",
+                    background: "#fff",
+                  }}
+                />
+                <button
+                  className="btn btn-p btn-sm"
+                  disabled={pending || !fare.trim()}
+                  onClick={() => settle(justReceived)}
+                  style={{ padding: "10px 16px" }}
+                >
+                  {pending ? "Recording…" : "Record payment"}
+                </button>
+              </div>
+              {fareError && (
+                <p
+                  role="alert"
+                  style={{
+                    color: "var(--red)",
+                    margin: "10px 0 0",
+                    fontSize: ".85rem",
+                    fontWeight: 500,
+                  }}
+                >
+                  {fareError}
+                </p>
+              )}
+            </div>
+          )}
+
+          {/* Action buttons */}
+          <div style={{ display: "flex", gap: 10, marginTop: 16 }}>
+            <button
+              className="btn btn-o btn-sm"
+              onClick={() => window.print()}
+              style={{ display: "flex", alignItems: "center", gap: 8 }}
             >
               <Icon name="print" size={16} />
               Print label
@@ -472,7 +481,6 @@ export const FrontDeskClient = forwardRef<
             <button
               className="btn btn-o btn-sm"
               onClick={() => setJustReceived(null)}
-              style={{ padding: "10px 18px" }}
             >
               Next parcel
             </button>
@@ -481,10 +489,11 @@ export const FrontDeskClient = forwardRef<
         </div>
       )}
 
+      {/* Worklist card - clean header with icon */}
       <div
         className="card"
         style={{
-          padding: "24px",
+          padding: "20px",
           background: "#fff",
           border: "1px solid var(--line)",
           borderRadius: "var(--r-lg)",
@@ -496,195 +505,155 @@ export const FrontDeskClient = forwardRef<
             display: "flex",
             alignItems: "center",
             justifyContent: "space-between",
-            marginBottom: 20,
+            marginBottom: 16,
             paddingBottom: 16,
             borderBottom: "1px solid var(--line)",
+            gap: 12,
+            flexWrap: "wrap",
           }}
         >
-          <div>
-            <strong
+          <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+            <div
               style={{
-                display: "block",
-                fontSize: "1.2rem",
-                color: "var(--navy)",
+                width: 40,
+                height: 40,
+                borderRadius: "var(--r-sm)",
+                background: "var(--blue-t)",
+                display: "grid",
+                placeItems: "center",
+              }}
+            >
+              <Icon name="inbox" size={20} style={{ color: "var(--blue)" }} />
+            </div>
+            <div>
+              <h3
+                style={{
+                  margin: 0,
+                  fontSize: "1.1rem",
+                  fontWeight: 700,
+                  color: "var(--navy)",
+                }}
+              >
+                Waiting at your desk
+              </h3>
+              <p
+                style={{
+                  margin: "4px 0 0",
+                  color: "var(--tx-2)",
+                  fontSize: ".85rem",
+                }}
+              >
+                Self-drop-off bookings ready for receipt
+              </p>
+            </div>
+          </div>
+          {visibleWaiting.length > 0 && (
+            <div
+              style={{
+                background: "var(--blue)",
+                color: "#fff",
+                padding: "6px 14px",
+                borderRadius: "var(--r-pill)",
+                fontSize: ".85rem",
                 fontWeight: 700,
-                fontFamily: "var(--font-display)",
               }}
             >
-              Waiting at your desk
-            </strong>
-            <p
-              style={{
-                margin: "6px 0 0",
-                color: "var(--tx-2)",
-                fontSize: ".9rem",
-              }}
-            >
-              Self-drop-off bookings ready for receipt
-            </p>
-          </div>
-          <div
-            style={{
-              background: "var(--blue-t)",
-              color: "var(--blue)",
-              padding: "8px 16px",
-              borderRadius: "var(--r-pill)",
-              fontSize: ".9rem",
-              fontWeight: 700,
-              fontFamily: "var(--font-mono)",
-            }}
-          >
-            {visibleWaiting.length}
-          </div>
+              {visibleWaiting.length}
+            </div>
+          )}
         </div>
+
         {visibleWaiting.length === 0 ? (
           <div
             style={{
               textAlign: "center",
-              padding: "40px 20px",
+              padding: "32px 20px",
               color: "var(--tx-2)",
             }}
           >
             <div
               style={{
-                width: 60,
-                height: 60,
-                borderRadius: "var(--r-lg)",
+                width: 56,
+                height: 56,
+                borderRadius: "var(--r-md)",
                 background: "var(--paper)",
-                display: "flex",
-                alignItems: "center",
-                justifyContent: "center",
-                margin: "0 auto 16px",
+                display: "grid",
+                placeItems: "center",
+                margin: "0 auto 12px",
               }}
             >
-              <Icon name="inbox" size={28} style={{ color: "var(--tx-3)" }} />
+              <Icon
+                name="check-circle"
+                size={24}
+                style={{ color: "var(--green)" }}
+              />
             </div>
-            <p className="sub" style={{ margin: 0, fontSize: ".95rem" }}>
-              Nothing waiting right now.
+            <p className="sub" style={{ margin: 0, fontSize: ".9rem" }}>
+              All caught up — nothing waiting.
             </p>
           </div>
         ) : (
-          <div style={{ overflowX: "auto" }}>
-            <table
-              className="tbl"
-              style={{
-                width: "100%",
-                borderCollapse: "collapse",
-              }}
-            >
-              <thead>
-                <tr
+          <div style={{ display: "grid", gap: 8 }}>
+            {visibleWaiting.map((p) => (
+              <div
+                key={p.code}
+                style={{
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "space-between",
+                  gap: 12,
+                  padding: "14px 16px",
+                  border: "1px solid var(--line)",
+                  borderRadius: "var(--r-sm)",
+                  background: "#fff",
+                  flexWrap: "wrap",
+                }}
+              >
+                <div style={{ flex: 1, minWidth: 200 }}>
+                  <span
+                    className="mono"
+                    style={{
+                      fontWeight: 700,
+                      fontSize: ".95rem",
+                      color: "var(--navy)",
+                    }}
+                  >
+                    {p.code}
+                  </span>
+                  <div style={{ marginTop: 4, fontSize: ".85rem" }}>
+                    <span style={{ color: "var(--tx-2)" }}>
+                      {p.receiverName}
+                      {p.destinationLabel && (
+                        <>
+                          <span
+                            style={{ margin: "0 6px", color: "var(--line)" }}
+                          >
+                            ·
+                          </span>
+                          {p.destinationLabel}
+                        </>
+                      )}
+                    </span>
+                  </div>
+                </div>
+                <button
+                  className="btn btn-p btn-sm"
+                  disabled={receiving}
+                  onClick={() =>
+                    void receive(p.code).then((r) => {
+                      if (!r.ok) setError(r.error);
+                    })
+                  }
                   style={{
-                    borderBottom: "1px solid var(--line)",
-                    textAlign: "left",
+                    padding: "10px 16px",
+                    fontSize: ".85rem",
                   }}
                 >
-                  <th
-                    style={{
-                      padding: "12px 16px",
-                      fontWeight: 600,
-                      fontSize: ".9rem",
-                      color: "var(--tx-3)",
-                    }}
-                  >
-                    Code
-                  </th>
-                  <th
-                    style={{
-                      padding: "12px 16px",
-                      fontWeight: 600,
-                      fontSize: ".9rem",
-                      color: "var(--tx-3)",
-                    }}
-                  >
-                    Receiver
-                  </th>
-                  <th
-                    style={{
-                      padding: "12px 16px",
-                      fontWeight: 600,
-                      fontSize: ".9rem",
-                      color: "var(--tx-3)",
-                    }}
-                  >
-                    Destination
-                  </th>
-                  <th
-                    style={{
-                      padding: "12px 16px",
-                      textAlign: "right",
-                    }}
-                  ></th>
-                </tr>
-              </thead>
-              <tbody>
-                {visibleWaiting.map((p) => (
-                  <tr
-                    key={p.code}
-                    style={{
-                      borderBottom: "1px solid var(--line)",
-                      transition: "background var(--dur-fast)",
-                    }}
-                    onMouseEnter={(e) =>
-                      (e.currentTarget.style.background = "var(--paper)")
-                    }
-                    onMouseLeave={(e) =>
-                      (e.currentTarget.style.background = "transparent")
-                    }
-                  >
-                    <td
-                      className="mono"
-                      style={{
-                        padding: "16px",
-                        fontWeight: 600,
-                        fontSize: ".9rem",
-                      }}
-                    >
-                      {p.code}
-                    </td>
-                    <td
-                      style={{
-                        padding: "16px",
-                        fontSize: ".9rem",
-                      }}
-                    >
-                      {p.receiverName}
-                    </td>
-                    <td
-                      style={{
-                        padding: "16px",
-                        fontSize: ".9rem",
-                        color: "var(--tx-2)",
-                      }}
-                    >
-                      {p.destinationLabel}
-                    </td>
-                    <td
-                      style={{
-                        padding: "16px",
-                        textAlign: "right",
-                      }}
-                    >
-                      <button
-                        className="btn btn-p btn-sm"
-                        disabled={receiving}
-                        onClick={() =>
-                          void receive(p.code).then((r) => {
-                            if (!r.ok) setError(r.error);
-                          })
-                        }
-                        style={{
-                          padding: "10px 18px",
-                          fontSize: ".9rem",
-                        }}
-                      >
-                        Confirm receipt
-                      </button>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+                  <Icon name="check" size={14} style={{ marginRight: 6 }} />
+                  Confirm
+                </button>
+              </div>
+            ))}
           </div>
         )}
         {error && (

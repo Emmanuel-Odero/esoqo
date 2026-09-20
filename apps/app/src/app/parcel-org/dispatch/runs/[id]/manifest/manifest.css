@@ -1,0 +1,65 @@
+/* The manifest sheet.
+ *
+ * Two renderings of one document: on screen it is a page in the portal,
+ * on paper it is the only thing on the sheet. The print rules below are
+ * not decoration — a manifest that wastes the top third of an A4 page
+ * on portal chrome is one the dispatcher stops printing.
+ */
+
+.manifest { max-width: 880px; margin: 0 auto; }
+.manifest-bar { display: flex; justify-content: space-between; align-items: center; margin-bottom: 18px; }
+
+.manifest-sheet {
+  padding: 28px 30px 34px;
+  border: 1px solid var(--line);
+  border-radius: var(--r-md);
+  background: #fff;
+}
+
+.manifest-head { display: flex; justify-content: space-between; align-items: flex-start; gap: 20px;
+  padding-bottom: 16px; border-bottom: 2px solid var(--navy); }
+.manifest-org { margin: 0; font-size: .78rem; font-weight: 700; letter-spacing: .08em;
+  text-transform: uppercase; color: var(--tx-2); }
+.manifest-head h1 { margin: 4px 0 0; font-size: 1.5rem; font-weight: 800; color: var(--navy); }
+.manifest-meta { display: flex; flex-direction: column; align-items: flex-end; gap: 6px; }
+.manifest-plate { font-size: 1.15rem; font-weight: 800; color: var(--navy); }
+
+.manifest-facts { display: flex; flex-wrap: wrap; gap: 22px 34px; margin: 18px 0 22px; }
+.manifest-facts dt { font-size: .72rem; font-weight: 700; letter-spacing: .06em;
+  text-transform: uppercase; color: var(--tx-2); }
+.manifest-facts dd { margin: 3px 0 0; font-size: .96rem; font-weight: 600; color: var(--navy); }
+
+.manifest-empty { padding: 22px; border: 1px dashed var(--line); border-radius: var(--r-sm);
+  color: var(--tx-2); text-align: center; }
+
+.manifest-table { width: 100%; border-collapse: collapse; }
+.manifest-table th { padding: 9px 10px; border-bottom: 1px solid var(--navy); text-align: left;
+  font-size: .72rem; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; color: var(--tx-2); }
+.manifest-table td { padding: 10px; border-bottom: 1px solid var(--line); vertical-align: top;
+  font-size: .9rem; }
+.manifest-n { width: 34px; color: var(--tx-2); }
+.manifest-code { font-weight: 700; }
+.manifest-sub { display: block; font-size: .78rem; color: var(--tx-2); }
+/* An empty box the receiving clerk ticks with a pen. */
+.manifest-tick { width: 92px; }
+.manifest-table tbody .manifest-tick { border-left: 1px solid var(--line); }
+
+.manifest-sign { display: flex; gap: 26px; margin-top: 38px; }
+.manifest-sign > div { flex: 1; }
+.manifest-sign span { display: block; font-size: .72rem; font-weight: 700; letter-spacing: .06em;
+  text-transform: uppercase; color: var(--tx-2); }
+.manifest-sign i { display: block; margin-top: 30px; border-bottom: 1px solid var(--navy); }
+
+@media print {
+  /* The portal's own chrome — header bar, nav, banners — is not part of
+     this document. Hidden by tag rather than by class so a future nav
+     element doesn't silently start appearing on printed manifests. */
+  .porgbar, .porg-signout, .noprint { display: none !important; }
+  .porg-wrap, .porg { padding: 0 !important; margin: 0 !important; }
+  .manifest, .manifest-sheet { max-width: none; margin: 0; padding: 0; border: 0; }
+  /* Never split a parcel's row across two sheets: half a line on the
+     next page is a box somebody checks in twice or not at all. */
+  .manifest-table tr { page-break-inside: avoid; }
+  .manifest-table thead { display: table-header-group; }
+  .manifest-sign { page-break-inside: avoid; }
+}

@@ -10,7 +10,7 @@ import { ScanButton } from '../ScanButton';
 import { HandOverPanel } from './HandOverPanel';
 import { RunPicker } from './RunPicker';
 import { listOpenRuns, receiveParcel, resolveScan, settleAtCounter } from './actions';
-import type { ScanTarget } from './stages';
+import type { ScanTarget } from '../parcel-stages';
 
 /**
  * The scanner's whole behaviour, in one place.
@@ -195,7 +195,7 @@ export function ScannerConsole({
             <strong>This login can receive boxes but cannot hand them over.</strong>
             It isn&rsquo;t linked to a person, and Esoqo records who is holding every parcel.
             Ask a manager to add your phone number to your row on{' '}
-            <Link href="/parcel-org/team">the Team page</Link>.
+            <Link href="/parcel-org/settings/team">the Team page</Link>.
           </p>
         </div>
       )}

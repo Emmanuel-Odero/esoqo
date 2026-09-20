@@ -1,20 +1,23 @@
 'use client';
 
-import { useState, useTransition } from 'react';
+import { useMemo, useState, useTransition } from 'react';
 import Link from 'next/link';
+import type { Route } from 'next';
+import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 import { Icon } from '@esoqo/ui';
 import type { OrgParcelRow } from '@/lib/parcel-org-session';
 import { DemoPhoneSpan } from '@/components/DemoContact';
-import { assignOrgParcel } from './actions';
+import { assignOrgParcel, exportOrgParcels } from './actions';
+import { can, isInFlight, stageFor } from './parcel-stages';
 
 /**
- * A courier company's parcel list.
+ * The register as an operations explorer, not a static list.
  *
- * Columns are chosen for what a dispatcher does next, not for
- * completeness: who it's for and where, who's holding it, and whether
- * it has already failed. The customer's price is deliberately absent —
- * the company is paid its own earnings, and what Esoqo charged on top
- * is not theirs to see (core-go doesn't send it either).
+ * Server owns the page window (it fetched exactly these rows with a
+ * total); the client owns presentation — sort headers that rewrite the
+ * URL, density, CSV export of the visible page, and pagination that
+ * keeps every active filter. Sorting never reorders client-side: it
+ * navigates, so page 2 of a sorted view is still the server's page 2.
  */
 
 const STATUS_LABEL: Record<string, string> = {
@@ -45,8 +48,6 @@ function pillClass(status: string): string {
   }
 }
 
-/** "Today, 2:33 PM" — never a raw ISO string. Africa/Nairobi, because
- *  that is where the parcels are. */
 function humanTime(iso: string | null): string {
   if (!iso) return '';
   const d = new Date(iso);
@@ -60,9 +61,109 @@ function humanTime(iso: string | null): string {
   return `${d.toLocaleDateString('en-KE', { day: 'numeric', month: 'short', timeZone: tz })}, ${time}`;
 }
 
+interface Props {
+  parcels: OrgParcelRow[];
+  total: number;
+  page: number;
+  perPage: number;
+  sort: string;
+  order: string;
+  hasFilter: boolean;
+  canDispatch: boolean;
+  canSeeEarnings: boolean;
+}
+
+function buildHref(
+  pathname: string,
+  current: URLSearchParams,
+  overrides: Record<string, string | null>,
+): string {
+  const sp = new URLSearchParams(current.toString());
+  for (const [k, v] of Object.entries(overrides)) {
+    if (v === null || v === '') sp.delete(k);
+    else sp.set(k, v);
+  }
+  const qs = sp.toString();
+  return qs ? `${pathname}?${qs}` : pathname;
+}
+
 export function OrgParcelsTable({
-  parcels, hasFilter, canDispatch, canSeeEarnings,
-}: { parcels: OrgParcelRow[]; hasFilter: boolean; canDispatch: boolean; canSeeEarnings: boolean }) {
+  parcels, total, page, perPage, sort, order,
+  hasFilter, canDispatch, canSeeEarnings,
+}: Props) {
+  const pathname = usePathname();
+  const searchParams = useSearchParams();
+  const router = useRouter();
+  const [, startTransition] = useTransition();
+  const [density, setDensity] = useState<'comfortable' | 'compact'>(() =>
+    typeof window !== 'undefined' && localStorage.getItem('parcel-org:density') === 'compact' ? 'compact' : 'comfortable',
+  );
+  // The export fetches the whole filtered set, so it can take a moment
+  // and it can fail — both need somewhere to show.
+  const [exporting, startExport] = useTransition();
+  const [exportError, setExportError] = useState<string | null>(null);
+
+  const params = useMemo(
+    () => new URLSearchParams(searchParams.toString()),
+    [searchParams],
+  );
+
+  function toggleDensity() {
+    const next = density === 'comfortable' ? 'compact' : 'comfortable';
+    setDensity(next);
+    try {
+      localStorage.setItem('parcel-org:density', next);
+    } catch { /* ignore */ }
+  }
+
+  /**
+   * Export everything the current filter matches, not the page on
+   * screen. It used to write out whatever rows were rendered, so
+   * "export the overdue parcels" silently produced the first 25 of
+   * them under a filename that didn't say so.
+   */
+  function exportCsv() {
+    setExportError(null);
+    startExport(async () => {
+      const res = await exportOrgParcels(params.toString());
+      if (!res.ok) {
+        setExportError(res.error);
+        return;
+      }
+      const header = ['code', 'externalRef', 'receiver', 'phone', 'route', 'status', 'holder', 'attempts', 'created', 'earningsKes'];
+      const lines = res.parcels.map((p) => [
+        p.code, p.externalRef ?? '', p.receiverName, p.receiverMsisdn,
+        `${p.originLabel} → ${p.destinationLabel}`, p.status,
+        p.agentName ?? p.holderName ?? '', String(p.deliveryAttempts),
+        p.createdAt, p.orgEarningsKes ?? '',
+      ].map((v) => `"${String(v).replace(/"/g, '""')}"`).join(','));
+      const blob = new Blob([[header.join(','), ...lines].join('\n')], { type: 'text/csv' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      // Names what it holds: a filtered export and a whole-register
+      // export are different files and shouldn't collide in Downloads.
+      a.download = hasFilter ? 'parcels-filtered.csv' : 'parcels-all.csv';
+      a.click();
+      URL.revokeObjectURL(url);
+      // Never let a capped export pass as a complete one — a short file
+      // looks exactly like a finished one.
+      if (res.truncated) {
+        setExportError(`Exported the first ${res.parcels.length} rows — narrow the filter for the rest.`);
+      }
+    });
+  }
+
+  const totalPages = Math.max(1, Math.ceil(Math.max(total, parcels.length) / perPage));
+  const from = total === 0 ? 0 : (page - 1) * perPage + 1;
+  const to = total === 0 ? 0 : Math.min(total, (page - 1) * perPage + parcels.length);
+
+  const sortHref = (key: string) => {
+    const nextOrder = sort === key ? (order === 'asc' ? 'desc' : 'asc') : key === 'code' || key === 'status' ? 'asc' : 'desc';
+    return buildHref(pathname, params, { sort: key, order: nextOrder, page: '1' }) as Route;
+  };
+  const sortMark = (key: string) => (sort === key ? (order === 'asc' ? ' ↑' : ' ↓') : '');
+
   if (parcels.length === 0) {
     return (
       <div className="card">
@@ -72,7 +173,7 @@ export function OrgParcelsTable({
             <>
               <h3>No parcels match that filter.</h3>
               <p className="sub">
-                Your search or status matched nothing on this page.
+                Your search or status matched nothing.
                 {' '}
                 <Link href="/parcel-org" className="sub" style={{ textDecoration: 'underline' }}>
                   Clear the filter
@@ -92,14 +193,51 @@ export function OrgParcelsTable({
   }
 
   return (
-    <div className="card" style={{ padding: 0 }}>
+    <div className={`card porg-reg-card${density === 'compact' ? ' is-compact' : ''}`} style={{ padding: 0 }}>
+      <div className="porg-reg-toolbar">
+        <span className="porg-range mono" role="status">
+          {total > 0 ? `${from}–${to} of ${total}` : `${parcels.length} shown`}
+        </span>
+        <span className="porg-reg-tools">
+          <label className="porg-perpage">
+            <span className="sr-only">Rows per page</span>
+            <select
+              aria-label="Rows per page"
+              value={String(perPage)}
+              onChange={(e) => {
+                const v = e.target.value;
+                startTransition(() => router.push(buildHref(pathname, params, { perPage: v, page: '1' }) as Route));
+              }}
+            >
+              {[10, 25, 50].map((n) => (
+                <option key={n} value={String(n)}>{n} / page</option>
+              ))}
+            </select>
+          </label>
+          <button type="button" className="btn btn-o btn-sm" onClick={toggleDensity} aria-pressed={density === 'compact'}>
+            <Icon name="grid" size={14} />{density === 'compact' ? 'Comfortable' : 'Compact'}
+          </button>
+          <button type="button" className="btn btn-o btn-sm" onClick={exportCsv} disabled={exporting}>
+            <Icon name="document" size={14} />
+            {exporting ? 'Building…' : hasFilter ? `CSV (${total})` : 'CSV'}
+          </button>
+        </span>
+      </div>
+      {exportError && (
+        <p className="porg-export-note" role="status">
+          <Icon name="alert-triangle" size={15} />{exportError}
+        </p>
+      )}
       <div style={{ overflowX: 'auto' }}>
         <table className="tbl parcel-table">
           <thead>
             <tr>
-              <th>Code</th><th>To</th><th>Route</th><th>Status</th>
+              <th><Link className="th-sort" href={sortHref('code')}>Code{sortMark('code')}</Link></th>
+              <th>To</th>
+              <th>Route</th>
+              <th><Link className="th-sort" href={sortHref('status')}>Status{sortMark('status')}</Link></th>
               <th>Who has it</th>
-              {canSeeEarnings && <th>You earn</th>}
+              {canSeeEarnings && <th><Link className="th-sort" href={sortHref('earnings')}>You earn{sortMark('earnings')}</Link></th>}
               {canDispatch && <th />}
             </tr>
           </thead>
@@ -110,6 +248,29 @@ export function OrgParcelsTable({
           </tbody>
         </table>
       </div>
+      <div className="porg-pager">
+        {page <= 1 ? (
+          <span className="btn btn-o btn-sm is-disabled" aria-disabled="true">← Prev</span>
+        ) : (
+          <Link
+            className="btn btn-o btn-sm"
+            href={buildHref(pathname, params, { page: String(page - 1) }) as Route}
+          >
+            ← Prev
+          </Link>
+        )}
+        <span className="mono porg-page" role="status">Page {page} of {totalPages}</span>
+        {page >= totalPages ? (
+          <span className="btn btn-o btn-sm is-disabled" aria-disabled="true">Next →</span>
+        ) : (
+          <Link
+            className="btn btn-o btn-sm"
+            href={buildHref(pathname, params, { page: String(page + 1) }) as Route}
+          >
+            Next →
+          </Link>
+        )}
+      </div>
     </div>
   );
 }
@@ -117,9 +278,13 @@ export function OrgParcelsTable({
 function Row({
   parcel, canDispatch, canSeeEarnings,
 }: { parcel: OrgParcelRow; canDispatch: boolean; canSeeEarnings: boolean }) {
+  // Both of this row's judgements about the parcel — is it late, can it
+  // be assigned — come from the shared state machine rather than status
+  // lists written out here. See parcel-stages.ts for why.
+  const stage = stageFor(parcel.status);
   const overdue =
     parcel.slaDeadlineAt
-    && ['RECEIVED_AT_COUNTER', 'PICKED_UP', 'IN_TRANSIT'].includes(parcel.status)
+    && isInFlight(parcel.status)
     && new Date(parcel.slaDeadlineAt) < new Date();
 
   return (
@@ -135,7 +300,6 @@ function Row({
       </td>
       <td data-label="Recipient">
         {parcel.receiverName}
-        {/* A rider standing at a gate needs to call, not look it up. */}
         <DemoPhoneSpan msisdn={parcel.receiverMsisdn} className="sub mono" />
       </td>
       <td data-label="Route" className="sub">{parcel.originLabel} → {parcel.destinationLabel}</td>
@@ -146,6 +310,7 @@ function Row({
         {parcel.deliveryAttempts > 0 && (
           <span className="sub" style={{ display: 'block' }}>
             {parcel.deliveryAttempts} failed {parcel.deliveryAttempts === 1 ? 'try' : 'tries'}
+            {parcel.lastAttemptReason ? ` — ${parcel.lastAttemptReason}` : ''}
           </span>
         )}
         {overdue && <span className="pill p-bad" style={{ marginTop: 4 }}>Past SLA</span>}
@@ -162,22 +327,13 @@ function Row({
       )}
       {canDispatch && (
         <td data-label="Actions" style={{ textAlign: 'right' }}>
-          {(parcel.status === 'BOOKED' || parcel.status === 'RECEIVED_AT_COUNTER') && <AssignButton code={parcel.code} />}
+          {can(stage, 'assign') && <AssignButton code={parcel.code} />}
         </td>
       )}
     </tr>
   );
 }
 
-/**
- * Assigning by Esoqo ID rather than a rider picker.
- *
- * A dropdown would need the company's whole roster on every row, and
- * the server already refuses any party who isn't on this company's team
- * (see dbx.AssignOrgParcel) — so the narrow input is both less to load
- * and no weaker. A picker is the right follow-up once rosters are big
- * enough to make typing an id annoying.
- */
 function AssignButton({ code }: { code: string }) {
   const [open, setOpen] = useState(false);
   const [riderPartyId, setRiderPartyId] = useState('');

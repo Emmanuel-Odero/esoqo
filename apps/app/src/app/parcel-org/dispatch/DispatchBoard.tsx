@@ -1,8 +1,10 @@
 'use client';
 
 import { useEffect, useState, useTransition } from 'react';
+import Link from 'next/link';
+import type { Route } from 'next';
 import { Icon } from '@esoqo/ui';
-import type { DispatchPing, DispatchRun, ParcelOrgStaffRow, ParcelOrgStationRow } from '@/lib/parcel-org-session';
+import type { DispatchPing, DispatchRun, OrgRoute, ParcelOrgStaffRow, ParcelOrgStationRow } from '@/lib/parcel-org-session';
 import {
   arriveDispatch, cancelDispatch, createDispatch, getDispatch, listDispatches,
   reportDispatchPosition, type DispatchCrewInput,
@@ -58,9 +60,13 @@ function blankCrewRow(): CrewRow {
   return { key: crewKey++, name: '', msisdn: '', role: 'DRIVER', customRole: '', staffId: '' };
 }
 
+// A run now has a loading phase, because it now has cargo. ACTIVE used
+// to be the only live status a dispatch could hold — it was created at
+// the moment a vehicle set off, having nothing to wait for (ADR-0006).
 function statusPill(status: string): string {
   switch (status) {
-    case 'ACTIVE': return 'p-ok';
+    case 'LOADING': return 'p-warn';
+    case 'DEPARTED': return 'p-ok';
     case 'ARRIVED': return 'p-info';
     default: return 'p-bad';
   }
@@ -68,11 +74,18 @@ function statusPill(status: string): string {
 
 function statusLabel(status: string): string {
   switch (status) {
-    case 'ACTIVE': return 'On the road';
+    case 'LOADING': return 'Loading';
+    case 'DEPARTED': return 'On the road';
     case 'ARRIVED': return 'Arrived';
     case 'CANCELLED': return 'Cancelled';
     default: return status;
   }
+}
+
+/** Still the dispatcher's problem today: at the shed taking boxes, or
+ *  out on the road. Two states where there used to be one. */
+function isOpenRun(status: string): boolean {
+  return status === 'LOADING' || status === 'DEPARTED';
 }
 
 function seenPillTone(tone: 'g' | 'a' | 'r' | undefined): string {
@@ -87,15 +100,21 @@ function seenPillTone(tone: 'g' | 'a' | 'r' | undefined): string {
 /**
  * The dispatch board: open a run (vehicle + crew + leg + receiving
  * team), watch the whole fleet on one map, and check runs in on
- * arrival. Fleet-level, deliberately — this page never lists individual
- * parcels; a run is the unit a dispatcher thinks in.
+ * arrival. Fleet-level, deliberately — a run is the unit a dispatcher
+ * thinks in, so this page still never lists individual parcels.
+ *
+ * It does now say how many are aboard, and prints the manifest for
+ * them. Before ADR-0006 it could do neither: the parcels lived on a
+ * separate shipment record with no foreign key to this one, so the
+ * board showed a lorry it could not tell you the contents of.
  */
 export function DispatchBoard({
-  initialRuns, stations, staff, orgName,
+  initialRuns, stations, staff, routes, orgName,
 }: {
   initialRuns: DispatchRun[];
   stations: ParcelOrgStationRow[];
   staff: ParcelOrgStaffRow[];
+  routes: OrgRoute[];
   orgName: string;
 }) {
   const [runs, setRuns] = useState(initialRuns);
@@ -107,7 +126,7 @@ export function DispatchBoard({
     setRuns(initialRuns);
   }, [initialRuns]);
   const [selectedId, setSelectedId] = useState<string | null>(
-    () => initialRuns.find((r) => r.status === 'ACTIVE')?.id ?? null,
+    () => initialRuns.find((r) => isOpenRun(r.status))?.id ?? null,
   );
   // What the map marker + inspector highlight (selectedId) is separate
   // from which run card is actually expanded. Picking a marker on the
@@ -127,7 +146,7 @@ export function DispatchBoard({
   };
   const selectedWithTrail = selected ? withTrail(selected) : null;
   const runsWithTrails = runs.map(withTrail);
-  const visible = showClosed ? runsWithTrails : runsWithTrails.filter((r) => r.status === 'ACTIVE');
+  const visible = showClosed ? runsWithTrails : runsWithTrails.filter((r) => isOpenRun(r.status));
   const activeStaff = staff.filter((s) => s.active);
 
   async function refresh() {
@@ -175,6 +194,7 @@ export function DispatchBoard({
         <CreateDispatchForm
           stations={stations}
           staff={activeStaff}
+          routes={routes}
           pending={pending}
           startTransition={startTransition}
           onDone={(id) => { setFormOpen(false); void refresh().then(() => setSelectedId(id)); }}
@@ -228,13 +248,29 @@ export function DispatchBoard({
                     <span className="mono" style={{ fontWeight: 800, fontSize: '1.05rem' }}>{r.vehiclePlate}</span>
                     <span className="sub"> · {r.vehicleType.toLowerCase()}</span>{' '}
                     <span className={`pill ${statusPill(r.status)}`}>{statusLabel(r.status)}</span>{' '}
-                    {r.status === 'ACTIVE' && (
+                    {r.status === 'DEPARTED' && (
                       <span className={`pill ${seenPillTone(lastSeenTone(r.currentAt))}`}>{lastSeenLabel(r.currentAt)}</span>
                     )}
                     <div className="sub" style={{ marginTop: 4 }}>
                       {r.origin?.name ?? '—'} → {r.destination?.name ?? '—'}
+                      {r.routeName && <> · {r.routeName}</>}
                       {' · '}{r.crew.length} crew
                       {r.receivers.length > 0 && <> · receiving: {r.receivers.map((x) => x.name).join(', ')}</>}
+                    </div>
+                    {/* What is actually on the vehicle, and the paper for
+                        it. The board could not answer either question
+                        before the merge — the parcels lived on a record
+                        this one had no key to (ADR-0006). */}
+                    <div className="row" style={{ gap: 8, marginTop: 8, alignItems: 'center' }}>
+                      <span className="pill p-info mono">
+                        {r.loaded} {r.loaded === 1 ? 'parcel' : 'parcels'}
+                      </span>
+                      <Link
+                        className="btn btn-o btn-sm"
+                        href={`/parcel-org/dispatch/runs/${r.id}/manifest` as Route}
+                      >
+                        <Icon name="print" size={14} />Manifest
+                      </Link>
                     </div>
                   </div>
                   <button
@@ -294,7 +330,10 @@ function RunInspector({
 
   const driver = run.crew.find((c) => c.role === 'DRIVER') ?? run.crew[0] ?? null;
   const progress = journeyProgress(run);
-  const isActive = run.status === 'ACTIVE';
+  // DEPARTED, not merely open: a run still at the shed has no position
+  // to report and no arrival to confirm, and the server refuses both
+  // for a LOADING run (see dbx.ReportRunPosition).
+  const isActive = run.status === 'DEPARTED';
 
   return (
     <div id="run-inspector" className="card" style={{ padding: 14, marginTop: 10 }}>
@@ -336,16 +375,18 @@ function RunInspector({
 }
 
 function CreateDispatchForm({
-  stations, staff, pending, startTransition, onDone,
+  stations, staff, routes, pending, startTransition, onDone,
 }: {
   stations: ParcelOrgStationRow[];
   staff: ParcelOrgStaffRow[];
+  routes: OrgRoute[];
   pending: boolean;
   startTransition: React.TransitionStartFunction;
   onDone: (id: string) => void;
 }) {
   const [plate, setPlate] = useState('');
   const [vehicleType, setVehicleType] = useState<string>('VAN');
+  const [routeId, setRouteId] = useState('');
   const [originId, setOriginId] = useState('');
   const [destinationId, setDestinationId] = useState('');
   const [notes, setNotes] = useState('');
@@ -383,6 +424,7 @@ function CreateDispatchForm({
       const result = await createDispatch({
         vehiclePlate: plate,
         vehicleType,
+        routeId: routeId || null,
         originStationId: originId || null,
         destinationStationId: destinationId || null,
         notes: notes.trim() || null,
@@ -420,6 +462,40 @@ function CreateDispatchForm({
 
         <fieldset style={sectionStyle}>
           <h3 style={sectionTitleStyle}>Journey</h3>
+          {/* Route first, and it fills the two fields below. Picking one
+              is the common morning case — the same leg every day — and
+              typing it out is the exception, not the default. Ad-hoc
+              stays possible on purpose: a vehicle at the door nobody
+              planned for must not wait on a manager defining a route
+              (ADR-0006). */}
+          {routes.length > 0 && (
+            <label className="sub">Route
+              <select
+                style={inputStyle}
+                value={routeId}
+                onChange={(e) => {
+                  const id = e.target.value;
+                  setRouteId(id);
+                  const r = routes.find((x) => x.id === id);
+                  if (r && r.stops.length >= 2) {
+                    setOriginId(r.stops[0]!.stationId);
+                    setDestinationId(r.stops[r.stops.length - 1]!.stationId);
+                  }
+                }}
+              >
+                <option value="">Ad-hoc — no route</option>
+                {routes.filter((r) => r.active).map((r) => (
+                  <option key={r.id} value={r.id}>
+                    {r.name}{r.code ? ` (${r.code})` : ''}
+                  </option>
+                ))}
+              </select>
+              <em className="sub">
+                Sets where it leaves from and where it ends. Change either below if
+                this vehicle is only doing part of the route.
+              </em>
+            </label>
+          )}
           <div style={gridStyle}>
             <label className="sub">From
               <select style={inputStyle} value={originId} onChange={(e) => setOriginId(e.target.value)}>
@@ -565,7 +641,10 @@ function RunDetail({
   const [error, setError] = useState<string | null>(null);
   const [locating, setLocating] = useState(false);
 
-  const isActive = run.status === 'ACTIVE';
+  // DEPARTED, not merely open: a run still at the shed has no position
+  // to report and no arrival to confirm, and the server refuses both
+  // for a LOADING run (see dbx.ReportRunPosition).
+  const isActive = run.status === 'DEPARTED';
   const driver = run.crew.find((c) => c.role === 'DRIVER') ?? run.crew[0] ?? null;
   const others = run.crew.filter((c) => c !== driver);
   const stops = recordedStops(run.trail);

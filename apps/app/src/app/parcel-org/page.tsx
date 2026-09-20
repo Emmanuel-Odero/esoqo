@@ -5,11 +5,12 @@ import { redirect } from 'next/navigation';
 import { Icon } from '@esoqo/ui';
 import {
   ParcelOrgUnauthorised, getParcelOrgMe, parcelOrgFetch,
-  type OrgParcelRow,
+  type OrgParcelRow, type ParcelOrgTrendDay,
 } from '@/lib/parcel-org-session';
 import { OrgParcelsTable } from './OrgParcelsTable';
-import { CustomParcelPanel } from './CustomParcelPanel';
-import { RiderCashPanel } from './RiderCashPanel';
+import { RegisterFilters } from './RegisterFilters';
+import { TrendsStrip } from './TrendsStrip';
+import { SavedViews } from './SavedViews';
 
 export const dynamic = 'force-dynamic';
 export const metadata: Metadata = {
@@ -30,19 +31,12 @@ export const metadata: Metadata = {
  *
  * Reading order is the shift's own order: what needs a person right now
  * (the attention band), then the shape of the day (the KPI board), then
- * the register itself. The KPI tiles are filters, not decoration —
- * every number is a link to exactly the rows behind it.
+ * the week's throughput, then the register itself. The KPI tiles are
+ * filters, not decoration — every number is a link to exactly the rows
+ * behind it. The register is server-paginated against the same filter
+ * the URL carries, so page 2 of "overdue only" stays overdue only.
  */
 
-/**
- * KPI → the register filter that shows exactly those rows.
- *
- * Kept beside the tiles rather than inlined because the mapping has to
- * agree with GetParcelOrgStats's own FILTER clauses in core-go; when
- * one changes the other must, and a reader has to be able to check that
- * in one place. Statuses match dbx.ListOrgParcels, which accepts a
- * comma-separated list for exactly this reason.
- */
 interface Kpi {
   key: string;
   label: string;
@@ -56,25 +50,67 @@ interface Kpi {
   urgentWhenSet?: boolean;
 }
 
+interface Search {
+  status?: string;
+  q?: string;
+  originMethod?: string;
+  parcelType?: string;
+  overdue?: string;
+  sort?: string;
+  order?: string;
+  page?: string;
+  perPage?: string;
+}
+
+const PER_PAGE_OPTIONS = [10, 25, 50];
+
+/**
+ * Did somebody arrive here ASKING for specific rows? A bare
+ * /parcel-org is a default landing and may be redirected by role; a
+ * link carrying a filter is a deliberate destination and never is —
+ * the counter's own "view this parcel" link is /parcel-org?q=CODE, and
+ * bouncing that to the Scanner would strand the person who followed it.
+ */
+function hasFilterableSearch(sp: Search): boolean {
+  return Boolean(sp.q || sp.status || sp.originMethod || sp.parcelType || sp.overdue);
+}
+
 export default async function ParcelOrgDashboard(
-  { searchParams }: { searchParams: Promise<{ status?: string; q?: string; originMethod?: string }> },
+  { searchParams }: { searchParams: Promise<Search> },
 ) {
-  const { status, q, originMethod } = await searchParams;
+  const sp = await searchParams;
+  const { status, q, originMethod, parcelType, overdue, sort, order } = sp;
+  const perPage = PER_PAGE_OPTIONS.includes(Number(sp.perPage)) ? Number(sp.perPage) : 25;
+  const page = Math.max(1, Number(sp.page) || 1);
+  const sortKey = ['created', 'code', 'status', 'earnings'].includes(sort ?? '') ? sort! : 'created';
+  const orderKey = order === 'asc' || order === 'desc' ? order : '';
+  const overdueOnly = overdue === '1' || overdue === 'true';
 
   let me: Awaited<ReturnType<typeof getParcelOrgMe>>;
   let parcels: OrgParcelRow[];
+  let total = 0;
+  let trends: ParcelOrgTrendDay[] = [];
   try {
-    const sp = new URLSearchParams();
-    if (status) sp.set('status', status);
-    if (originMethod) sp.set('originMethod', originMethod);
-    if (q) sp.set('q', q);
-    const qs = sp.toString();
-    const params = qs ? `?${qs}` : '';
-    [me, { parcels }] = await Promise.all([
-      getParcelOrgMe(),
-      parcelOrgFetch<{ parcels: OrgParcelRow[] | null }>(`/v1/parcel-orgs/me/parcels${params}`)
-        .then((r) => ({ parcels: r.parcels ?? [] })),
-    ]);
+    const qs = new URLSearchParams();
+    if (status) qs.set('status', status);
+    if (originMethod) qs.set('originMethod', originMethod);
+    if (q) qs.set('q', q);
+    if (parcelType) qs.set('parcelType', parcelType);
+    if (overdueOnly) qs.set('overdue', '1');
+    if (sortKey !== 'created' || orderKey) {
+      qs.set('sort', sortKey);
+      if (orderKey) qs.set('order', orderKey);
+    }
+    qs.set('page', String(page));
+    qs.set('perPage', String(perPage));
+    const params = `?${qs.toString()}`;
+    const list = parcelOrgFetch<{ parcels: OrgParcelRow[] | null; total?: number }>(
+      `/v1/parcel-orgs/me/parcels${params}`,
+    ).then((r) => ({ parcels: r.parcels ?? [], total: r.total ?? r.parcels?.length ?? 0 }));
+    const trendReq = parcelOrgFetch<{ days: ParcelOrgTrendDay[] | null }>(
+      '/v1/parcel-orgs/me/trends',
+    ).then((r) => r.days ?? []).catch(() => [] as ParcelOrgTrendDay[]);
+    [me, { parcels, total }, trends] = await Promise.all([getParcelOrgMe(), list, trendReq]);
   } catch (e) {
     // An expired shift session lands here. Sending them to the
     // company's own door rather than a generic sign-in matters: a rider
@@ -84,20 +120,38 @@ export default async function ParcelOrgDashboard(
     throw e;
   }
 
+  // Land each session on its own job. A rider opening the portal wants
+  // the scan box, not a register they can't act on — this page is a
+  // manager's review surface, and it was everyone's front door only
+  // because it happens to sit at the root path. The nav still carries
+  // "Parcels", so this redirects the default, it doesn't lock anyone
+  // out. Anyone with a desk or office role (dispatch, earnings, write)
+  // stays here; a pure box-handler goes to the Scanner.
+  const isFieldOnly = !me.capabilities.some((c) =>
+    ['parcelorg.dispatch', 'parcelorg.earnings', 'parcelorg.write'].includes(c),
+  ) && me.capabilities.some((c) =>
+    ['parcelorg.carry', 'parcelorg.intake', 'parcelorg.arrival'].includes(c),
+  );
+  if (isFieldOnly && !hasFilterableSearch(sp)) redirect('/parcel-org/scan');
+
   const canSeeEarnings = me.capabilities.includes('parcelorg.earnings');
   const canDispatch = me.capabilities.includes('parcelorg.dispatch');
-  const canImport = me.capabilities.includes('parcelorg.write');
   const canCarry = me.capabilities.includes('parcelorg.carry');
   const canDesk = canDispatch || canCarry;
   const { stats } = me;
-  const needsAttention = stats.failedDeliveries + stats.atAgent;
-  const hasFilter = Boolean(status || q || originMethod);
+  const overdueCount = (stats as { overdue?: number }).overdue ?? 0;
+  const needsAttention = stats.failedDeliveries + stats.atAgent + overdueCount;
+  const hasFilter = Boolean(status || q || originMethod || parcelType || overdueOnly);
   // Rebuilt in the same shape the KPI tiles emit, so a tile's filter can
   // be matched back to the tile's own label for the chip below.
   const appliedKpiFilter = status
     ? `status=${status}${originMethod ? `&originMethod=${originMethod}` : ''}`
     : null;
   const isActive = me.org.status === 'ACTIVE';
+  const currentQuery = new URLSearchParams(
+    Object.entries({ status, q, originMethod, parcelType, ...(overdueOnly ? { overdue: '1' } : {}) })
+      .filter(([, v]) => Boolean(v)) as [string, string][],
+  ).toString();
 
   const earningsToday = Number(stats.earningsTodayKes);
   const earningsTodayLabel = Number.isFinite(earningsToday)
@@ -129,6 +183,15 @@ export default async function ParcelOrgDashboard(
       value: stats.inTransit,
       filter: 'status=PICKED_UP,IN_TRANSIT',
       tone: 'b',
+    },
+    {
+      key: 'overdue',
+      label: 'Past SLA',
+      sub: 'still moving, running late',
+      value: overdueCount,
+      filter: 'overdue=1',
+      tone: 'r',
+      urgentWhenSet: true,
     },
     {
       key: 'failed',
@@ -213,6 +276,7 @@ export default async function ParcelOrgDashboard(
         <div className="chain porg-attention" role="status">
           <Icon name="alert-triangle" size={18} />
           <span>
+            {overdueCount > 0 && <>{overdueCount} past SLA. </>}
             {stats.failedDeliveries > 0 && (
               <>{stats.failedDeliveries} parcel{stats.failedDeliveries === 1 ? '' : 's'} couldn’t be delivered. </>
             )}
@@ -221,9 +285,11 @@ export default async function ParcelOrgDashboard(
           <Link
             className="btn btn-o btn-sm"
             href={
-              (stats.failedDeliveries > 0
-                ? '/parcel-org?status=FAILED_DELIVERY'
-                : '/parcel-org?status=HELD_AT_AGENT') as Route
+              (overdueCount > 0
+                ? '/parcel-org?overdue=1'
+                : stats.failedDeliveries > 0
+                  ? '/parcel-org?status=FAILED_DELIVERY'
+                  : '/parcel-org?status=HELD_AT_AGENT') as Route
             }
           >
             Show them <Icon name="arrow-right" size={15} />
@@ -231,15 +297,15 @@ export default async function ParcelOrgDashboard(
         </div>
       )}
 
-      {/* Scanning lives ONLY on Counter (ScanEverythingBar): the
-          dashboard used to host its own custody-only scanner plus three
-          shortcut cards repeating the header buttons above, so the same
-          Counter/Dispatch/Labels entries appeared twice on one screen. */}
-
-      {canImport && <CustomParcelPanel />}
+      {/* This page reviews the register and nothing else. Scanning lives
+          on /parcel-org/scan, booking (including the bulk import panel
+          that used to render here) on /parcel-org/counter, and cash
+          reconciliation on /parcel-org/money — each one job, one page.
+          Before that split this single screen booked parcels, counted
+          rider float, and listed the register all at once. */}
 
       {/* ── the board. Every tile is the filter for its own number. ── */}
-      <nav className="kpis dashboard-kpis" aria-label="Parcels by stage">
+      <nav className="kpis dashboard-kpis dashboard-kpis-7" aria-label="Parcels by stage">
         {kpis.map((k) => {
           const cls = `kpi ${k.tone}${k.urgentWhenSet && k.value > 0 ? ' is-urgent' : ''}`;
           const body = (
@@ -255,6 +321,7 @@ export default async function ParcelOrgDashboard(
             const [name, value] = pair.split('=');
             if (name === 'status') return status === value;
             if (name === 'originMethod') return originMethod === value;
+            if (name === 'overdue') return overdueOnly && value === '1';
             return false;
           });
           return (
@@ -271,10 +338,7 @@ export default async function ParcelOrgDashboard(
         })}
       </nav>
 
-      {/* Only a manager handles cash — the same capability that gates
-          earnings, because counting money in and seeing what it came to
-          are the same job. */}
-      {canSeeEarnings && <RiderCashPanel />}
+      <TrendsStrip days={trends} />
 
       {/* The fleet lives on its own board under the Dispatch tab —
           runs are the unit a dispatcher thinks in, not individual
@@ -291,9 +355,11 @@ export default async function ParcelOrgDashboard(
           {hasFilter && (
             <span className="porg-applied">
               <Icon name="filter" size={13} />
-              {kpis.find((k) => k.filter === appliedKpiFilter)?.label
-                ?? (q ? `Matching “${q}”` : 'Filtered')}
-              <span className="porg-applied-n">{parcels.length}</span>
+              {(kpis.find((k) => k.filter === appliedKpiFilter)?.label
+                ?? (overdueOnly ? 'Past SLA' : null)
+                ?? (q ? `Matching “${q}”` : null)
+                ?? 'Filtered')}
+              <span className="porg-applied-n">{total}</span>
             </span>
           )}
           {hasFilter && (
@@ -303,48 +369,29 @@ export default async function ParcelOrgDashboard(
           )}
         </div>
 
-        {/* Both fields are uncontrolled, so React reuses the existing DOM
-            node across a soft navigation and their defaultValue is
-            ignored on every render after the first — clicking a KPI tile
-            filtered the register while the dropdown still read "All
-            statuses". Keying the form on the applied filter remounts
-            both, so the controls always state what is actually applied. */}
-        <form className="porg-filters" key={`${status ?? ''}|${originMethod ?? ''}|${q ?? ''}`}>
-          <label className="sr-only" htmlFor="porg-q">Search Esoqo code or your own number</label>
-          <input
-            id="porg-q" name="q" defaultValue={q ?? ''} className="inp mono porg-search"
-            placeholder="Search Esoqo code or your own number"
-          />
-          <label className="sr-only" htmlFor="porg-status">Filter by status</label>
-          {/* A multi-status filter arriving from a KPI tile
-              ("BOOKED,RECEIVED_AT_COUNTER") matches no single option, so
-              the select would silently show "All statuses" over a
-              filtered list. The extra option names what is actually
-              applied, and Clear filter above is the way out of it. */}
-          <select id="porg-status" name="status" defaultValue={status ?? ''} className="inp mono porg-status">
-            <option value="">All statuses</option>
-            {status?.includes(',') && <option value={status}>From the board above</option>}
-            <option value="DRAFT_PENDING_PAYMENT">Awaiting payment</option>
-            <option value="BOOKED">Waiting for a rider</option>
-            <option value="RECEIVED_AT_COUNTER">At the station</option>
-            <option value="PICKED_UP">Picked up</option>
-            <option value="IN_TRANSIT">On the way</option>
-            <option value="FAILED_DELIVERY">Delivery attempted</option>
-            <option value="HELD_AT_AGENT">At a pickup point</option>
-            <option value="DELIVERED">Delivered</option>
-            <option value="RETURNED_TO_SENDER">Returned to sender</option>
-            <option value="CANCELLED">Cancelled</option>
-          </select>
-          {/* Carried so a search inside a KPI filter doesn't silently
-              widen it back out to every origin. */}
-          {originMethod && <input type="hidden" name="originMethod" value={originMethod} />}
-          <button className="btn btn-o btn-sm" type="submit">
-            <Icon name="filter" size={15} />Filter
-          </button>
-        </form>
+        <SavedViews currentQuery={currentQuery} />
+
+        {/* Client-side submit → soft navigation, no full reload. Keyed
+            on the applied filter so the controls remount (and therefore
+            restate) what is actually applied after a KPI-tile click —
+            React would otherwise reuse the DOM node and leave the
+            dropdown reading "All statuses" over a filtered list. */}
+        <RegisterFilters
+          key={`${status ?? ''}|${originMethod ?? ''}|${q ?? ''}|${parcelType ?? ''}|${overdueOnly}`}
+          status={status}
+          q={q}
+          parcelType={parcelType}
+          overdueOnly={overdueOnly}
+          originMethod={originMethod}
+        />
 
         <OrgParcelsTable
           parcels={parcels}
+          total={total}
+          page={page}
+          perPage={perPage}
+          sort={sortKey}
+          order={orderKey || (sortKey === 'code' || sortKey === 'status' ? 'asc' : 'desc')}
           hasFilter={hasFilter}
           canDispatch={canDispatch}
           canSeeEarnings={canSeeEarnings}

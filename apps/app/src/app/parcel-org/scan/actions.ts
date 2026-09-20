@@ -9,7 +9,7 @@ import {
   type OrgParcelRow,
   type OrgShipment,
 } from "@/lib/parcel-org-session";
-import { stageFor, type ScanTarget } from "./stages";
+import { stageFor, type ScanTarget } from "../parcel-stages";
 
 /**
  * The scanner's own wires.
