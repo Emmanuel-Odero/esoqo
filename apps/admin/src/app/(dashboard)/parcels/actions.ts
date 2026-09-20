@@ -6,7 +6,7 @@ import {
   type UpdateParcelPricingRuleInput,
 } from "@esoqo/db";
 import { requireStaff } from "@/lib/session";
-import { adminGo } from "@/lib/go-ticketing";
+import { adminGo, GoRequestError } from "@/lib/go-ticketing";
 
 export type Result = { ok: true } | { ok: false; error: string };
 
@@ -1752,7 +1752,8 @@ export interface CounterBookingInput {
 export async function actionCounterBookParcel(
   input: CounterBookingInput,
 ): Promise<
-  { ok: true; code: string; parcelId: string } | { ok: false; error: string }
+  | { ok: true; code: string; parcelId: string }
+  | { ok: false; error: string; errorCode?: string }
 > {
   try {
     await requireStaff();
@@ -1776,6 +1777,10 @@ export async function actionCounterBookParcel(
     return {
       ok: false,
       error: e instanceof Error ? e.message : "Could not book that parcel",
+      // Forwarded so the offline queue can branch on LABEL_ALREADY_SPENT
+      // rather than on the message text — see GoRequestError. Named
+      // errorCode because the success shape's `code` is a parcel code.
+      ...(e instanceof GoRequestError ? { errorCode: e.code } : {}),
     };
   }
 }

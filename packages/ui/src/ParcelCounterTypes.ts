@@ -64,8 +64,28 @@ export interface CounterLabelInfo {
   heightCm?: number | null;
 }
 
-export type CounterResult = { ok: true; code: string } | { ok: false; error: string };
-export type CounterVoid = { ok: true } | { ok: false; error: string };
+/** A failure, with core-go's own error code when there was one.
+ *
+ *  The code is what lets a caller branch on *which* failure happened.
+ *  Without it the only signal is `error`, and the one place that has to
+ *  branch — the offline queue's "was this label already spent, meaning
+ *  our earlier attempt got through?" test — was reduced to matching the
+ *  message text with a regex. Optional because a thrown non-Error, an
+ *  expired session or a network fault has no server code to carry. */
+export interface CounterFailure {
+  ok: false;
+  error: string;
+  /** core-go's error code.
+   *
+   *  Named errorCode, not code, because every success shape in this file
+   *  already has a `code` meaning a *parcel* code. One field name with
+   *  two meanings depending on a sibling boolean is the kind of thing
+   *  that reads fine and gets misused six months later. */
+  errorCode?: string;
+}
+
+export type CounterResult = { ok: true; code: string } | CounterFailure;
+export type CounterVoid = { ok: true } | CounterFailure;
 
 /** A code that scanned into an existing parcel rather than a blank
  *  label. The counter's rule for "one box, every purpose" — a spent
@@ -82,7 +102,7 @@ export interface CounterParcelRef {
  *  erroring. */
 export type CounterLabelLookup =
   | { ok: true; info: CounterLabelInfo | null; parcel?: CounterParcelRef | null }
-  | { ok: false; error: string };
+  | CounterFailure;
 
 /** The five portal-specific wires a counter needs. Each portal passes
  *  its own session-scoped actions — the form never knows whose desk

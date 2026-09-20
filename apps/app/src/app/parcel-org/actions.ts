@@ -2,6 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import {
+  ParcelOrgRequestError,
   ParcelOrgUnauthorised,
   parcelOrgFetch,
   type DispatchRun,
@@ -21,13 +22,23 @@ export type Result = { ok: true } | { ok: false; error: string };
 /** Always the failure variant — typed as such rather than as the wider
  *  Result so callers returning a richer success shape (see
  *  receiveWalkInParcel, which hands back the resolved code) can still
- *  funnel their errors through it. */
-function toResult(e: unknown): { ok: false; error: string } {
+ *  funnel their errors through it.
+ *
+ *  `code` is core-go's own error code, forwarded verbatim so a caller
+ *  can branch on which failure this was instead of reading the prose —
+ *  the offline counter queue needs exactly that for LABEL_ALREADY_SPENT.
+ *  Optional because a session expiry and a thrown non-Error have no
+ *  server code to forward. */
+function toResult(e: unknown): { ok: false; error: string; errorCode?: string } {
   if (e instanceof ParcelOrgUnauthorised) {
     return {
       ok: false,
       error: "Your shift session has expired — sign in again",
+      errorCode: "UNAUTHORISED",
     };
+  }
+  if (e instanceof ParcelOrgRequestError) {
+    return { ok: false, error: e.message, errorCode: e.code };
   }
   return {
     ok: false,
@@ -49,7 +60,9 @@ function toResult(e: unknown): { ok: false; error: string } {
  */
 export async function receiveWalkInParcel(
   reference: string,
-): Promise<{ ok: true; code: string } | { ok: false; error: string }> {
+): Promise<
+  { ok: true; code: string } | { ok: false; error: string; errorCode?: string }
+> {
   try {
     // `reference` is whatever the sender walked in with. Pre-intake that
     // is the service ticket number, not the tracking code — the code
@@ -616,7 +629,9 @@ export interface OrgCounterBookInput {
  *  fresh when the clerk starts from blank. */
 export async function bookOrgCounterParcel(
   input: OrgCounterBookInput,
-): Promise<{ ok: true; code: string } | { ok: false; error: string }> {
+): Promise<
+  { ok: true; code: string } | { ok: false; error: string; errorCode?: string }
+> {
   try {
     const res = await parcelOrgFetch<{ code: string }>(
       "/v1/parcel-orgs/me/counter/book",
@@ -628,8 +643,10 @@ export async function bookOrgCounterParcel(
     revalidatePath("/parcel-org");
     return { ok: true, code: res.code };
   } catch (e) {
-    const r = toResult(e);
-    return { ok: false, error: r.ok ? "Could not book that parcel" : r.error };
+    // toResult's code rides along untouched — the offline queue reads it
+    // to tell "this label was already spent, so our earlier attempt got
+    // through" apart from a real rejection it must surface to the clerk.
+    return toResult(e);
   }
 }
 

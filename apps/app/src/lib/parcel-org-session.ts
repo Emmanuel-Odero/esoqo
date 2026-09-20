@@ -67,6 +67,26 @@ interface GoErrorBody {
 }
 
 /**
+ * A core-go rejection that kept its error code.
+ *
+ * The code used to be dropped here and only the prose survived, which
+ * forced callers that needed to branch on *which* failure it was to
+ * match the message text — see packages/ui/src/parcelOfflineQueue.ts,
+ * which regexed the wording of a spent-label error to decide whether a
+ * replayed offline booking had in fact succeeded. That made a copy-edit
+ * in a Go string a silent client break. The code is the contract; this
+ * class is how it reaches the caller.
+ */
+export class ParcelOrgRequestError extends Error {
+  readonly code: string;
+  constructor(code: string, message: string) {
+    super(message);
+    this.name = "ParcelOrgRequestError";
+    this.code = code;
+  }
+}
+
+/**
  * Calls core-go with the portal's bearer attached.
  *
  * A 401 or 403 becomes ParcelOrgUnauthorised rather than a generic
@@ -94,7 +114,10 @@ export async function parcelOrgFetch<T>(
   if (res.status === 401 || res.status === 403)
     throw new ParcelOrgUnauthorised();
   if (!res.ok || !json) {
-    throw new Error(json?.error?.message ?? `Request failed (${res.status})`);
+    throw new ParcelOrgRequestError(
+      json?.error?.code ?? `HTTP_${res.status}`,
+      json?.error?.message ?? `Request failed (${res.status})`,
+    );
   }
   return json as T;
 }

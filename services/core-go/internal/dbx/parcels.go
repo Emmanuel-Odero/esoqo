@@ -347,7 +347,16 @@ func BookParcel(ctx context.Context, pool *pgxpool.Pool, in BookParcelInput) (pa
 			FROM parcel_label_stock WHERE code = $1 AND "usedAt" IS NULL FOR UPDATE`,
 			code).Scan(&stockID, &stockOrgID, &voidedAt, &voidedReason)
 		if errors.Is(lockErr, pgx.ErrNoRows) {
-			return "", "", "", "", &ParcelError{"BAD_INPUT", "That label code isn't a known, unused pre-printed label"}
+			// LABEL_ALREADY_SPENT, not BAD_INPUT, because one caller
+			// treats this as success: the offline counter queue replays a
+			// booking it never saw the reply for, and "that label is no
+			// longer unused" is how it learns the parcel already exists
+			// (see packages/ui/src/parcelOfflineQueue.ts). That client
+			// used to regex this sentence — a copy-edit here silently
+			// broke its dedupe and stranded a queued parcel that had in
+			// fact shipped. The code is the contract now; the prose is
+			// free to change.
+			return "", "", "", "", &ParcelError{"LABEL_ALREADY_SPENT", "That label code isn't a known, unused pre-printed label"}
 		}
 		if lockErr != nil {
 			return "", "", "", "", lockErr

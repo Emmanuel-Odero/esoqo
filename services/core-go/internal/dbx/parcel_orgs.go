@@ -1693,7 +1693,15 @@ func importOrgParcelWithLabel(ctx context.Context, pool *pgxpool.Pool, orgID str
 		FROM parcel_label_stock WHERE upper(code) = $1 AND "usedAt" IS NULL FOR UPDATE`,
 		code).Scan(&stockID, &stockOrgID, &voidedAt, &voidedReason)
 	if errors.Is(lockErr, pgx.ErrNoRows) {
-		return "", "", &ParcelError{"BAD_INPUT", "That label isn't one of your unused pre-printed labels"}
+		// Same LABEL_ALREADY_SPENT contract as BookParcel's ExistingCode
+		// path — see the long comment there. This is the path a courier
+		// company's own counter books through, so it is the one the
+		// offline queue replays against most; it previously returned
+		// BAD_INPUT and matched the client's regex only because "unused
+		// pre-printed label" happens to be a substring of "unused
+		// pre-printed labels". That is not a contract, it is a
+		// coincidence one pluralisation away from stranding parcels.
+		return "", "", &ParcelError{"LABEL_ALREADY_SPENT", "That label isn't one of your unused pre-printed labels"}
 	}
 	if lockErr != nil {
 		return "", "", lockErr

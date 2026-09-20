@@ -992,24 +992,40 @@ func (s *Server) handleClaimParcel(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"claimed": true})
 }
 
+// parcelErrorStatus maps a ParcelError code to its HTTP status.
+//
+// Split out from writeParcelError so the mapping is testable without a
+// gin context — these codes are a published client contract (the
+// offline counter queue branches on one of them), and a contract with
+// no test is a convention.
+func parcelErrorStatus(code string) int {
+	switch code {
+	case "NOT_FOUND":
+		return http.StatusNotFound
+	case "FORBIDDEN":
+		return http.StatusForbidden
+	case "INSUFFICIENT_POINTS":
+		return http.StatusPaymentRequired
+	case "ALREADY_SETTLED", "ALREADY_DELIVERED":
+		// Conflict, not a bad request: the caller did nothing wrong,
+		// the parcel simply moved on. A clerk's till app can tell
+		// "someone already took this money" apart from "you typed a
+		// bad amount" without parsing prose.
+		return http.StatusConflict
+	case "LABEL_ALREADY_SPENT":
+		// Also a conflict, and for the sharpest version of the same
+		// reason: for the offline counter queue this response is how a
+		// replayed booking discovers it already succeeded. A 400 there
+		// would read as "the clerk typed something wrong" for a parcel
+		// that shipped hours ago.
+		return http.StatusConflict
+	}
+	return http.StatusBadRequest
+}
+
 func writeParcelError(c *gin.Context, err error) {
 	if pe, ok := err.(*dbx.ParcelError); ok {
-		status := http.StatusBadRequest
-		switch pe.Code {
-		case "NOT_FOUND":
-			status = http.StatusNotFound
-		case "FORBIDDEN":
-			status = http.StatusForbidden
-		case "INSUFFICIENT_POINTS":
-			status = http.StatusPaymentRequired
-		case "ALREADY_SETTLED", "ALREADY_DELIVERED":
-			// Conflict, not a bad request: the caller did nothing wrong,
-			// the parcel simply moved on. A clerk's till app can tell
-			// "someone already took this money" apart from "you typed a
-			// bad amount" without parsing prose.
-			status = http.StatusConflict
-		}
-		writeError(c, status, pe.Code, pe.Message)
+		writeError(c, parcelErrorStatus(pe.Code), pe.Code, pe.Message)
 		return
 	}
 	writeError(c, http.StatusInternalServerError, "PARCEL_FAILED", "Could not complete that")
