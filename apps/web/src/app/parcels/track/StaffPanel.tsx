@@ -2,13 +2,12 @@
 
 import { Suspense, useEffect, useState, useTransition } from 'react';
 import { useSearchParams } from 'next/navigation';
-import { Icon } from '@esoqo/ui';
+import { CameraScanner, Icon } from '@esoqo/ui';
 import {
   staffRequestOtp, staffVerifyOtp, staffSignOut, getStaffMe, getStaffActivity, staffScanCustody,
   staffDeliverParcel, staffRequestDeliveryOtp, lookupEsoqoId,
   type StaffMe, type PartyParcelActivityRow,
 } from './staff-actions';
-import { CodeScanner } from '@/components/CodeScanner';
 import { actionCheckParcelStatus, type AwaitingIntakeView, type ParcelStatusView } from '../actions';
 
 const ROLE_LABEL: Record<PartyParcelActivityRow['role'], string> = {
@@ -344,7 +343,7 @@ function ScanPanel() {
           style={{ flex: 1, padding: '8px 10px', border: '1.5px solid var(--line)', borderRadius: 6 }} />
         <button className="btn btn-o btn-sm" disabled={!code.trim()} onClick={() => lookup(code)}>Look up</button>
       </div>
-      <CodeScanner onScan={lookup} />
+      <CameraScanner onScan={lookup} />
 
       {status && 'message' in status && (
         // AWAITING_INTAKE — looked up by the service ticket number a

@@ -3,9 +3,8 @@
 import { useCallback, useState, useTransition } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { Icon, type IconName } from '@esoqo/ui';
+import { CameraScanner, Icon, type IconName } from '@esoqo/ui';
 
-import { CodeScanner } from '@/components/CodeScanner';
 import { actionResolveScan, type ScanResolution } from './actions';
 
 /**
@@ -94,10 +93,10 @@ export function ScanClient() {
         <span className="mono">PKG- · TKT- · PKP- · ESK- · BUS-</span>
       </p>
 
-      {/* CodeScanner keeps its own open/closed state and only pulls in
+      {/* CameraScanner keeps its own open/closed state and only pulls in
           html5-qrcode once the camera is actually opened, so mounting it
           unconditionally costs nothing until somebody taps Scan. */}
-      <CodeScanner onScan={resolve} hint="Point your camera at any Esoqo QR or barcode." />
+      <CameraScanner onScan={resolve} hint="Point your camera at any Esoqo QR or barcode." />
 
       {pending && <p className="sub" style={{ marginTop: 16 }}>Looking that up…</p>}
       {result && !pending && <ResultCard result={result} />}
