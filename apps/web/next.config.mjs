@@ -62,7 +62,13 @@ const nextConfig = {
         { key: 'X-Frame-Options', value: 'DENY' },
         { key: 'X-Content-Type-Options', value: 'nosniff' },
         { key: 'Referrer-Policy', value: 'strict-origin-when-cross-origin' },
-        { key: 'Permissions-Policy', value: 'camera=(), microphone=(), geolocation=(self)' },
+        // `camera=()` (an empty allowlist) forbids camera use on the
+        // page itself, not just in embedded iframes — with it set, the
+        // browser rejects getUserMedia outright (no permission prompt
+        // ever appears) everywhere CameraScanner is used on this site
+        // (/scan, the guest tracker). `(self)` keeps third-party iframes
+        // blocked while allowing the page's own scanner to ask.
+        { key: 'Permissions-Policy', value: 'camera=(self), microphone=(), geolocation=(self)' },
         { key: 'Strict-Transport-Security', value: 'max-age=63072000; includeSubDomains; preload' },
         { key: 'Cross-Origin-Opener-Policy', value: 'same-origin' },
       ],
