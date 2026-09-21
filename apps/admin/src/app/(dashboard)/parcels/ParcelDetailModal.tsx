@@ -43,7 +43,11 @@ export function ParcelDetailModal({
   canAssign: boolean; canCancel: boolean; canRefund: boolean; canEdit: boolean;
   onClose: () => void;
 }) {
-  const [panel, setPanel] = useState<Panel>(null);
+  // Defaults open, not a click-through: the whole point of surfacing
+  // the label here is that whoever's looking at the record can see
+  // the actual sticker — full QR + barcode, at real size — without an
+  // extra tap for every parcel they check.
+  const [panel, setPanel] = useState<Panel>(LABELABLE.has(parcel.Status) ? 'label' : null);
   const [handoffs, setHandoffs] = useState<HandoffRow[] | null>(null);
   const [handoffsLoading, setHandoffsLoading] = useState(true);
 
@@ -59,7 +63,7 @@ export function ParcelDetailModal({
     <div className="scrim" role="presentation" onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}>
       <div className="modal" role="dialog" aria-modal="true" aria-labelledby="pd-title">
         <div className="modal-hd">
-          <div>
+          <div style={{ flex: 1, minWidth: 0 }}>
             <h2 id="pd-title" className="mono">{parcel.Code}</h2>
             <p className="sub" style={{ margin: '2px 0 0' }}>
               <span className={`pill ${parcel.Status === 'DRAFT_PENDING_PAYMENT' ? 'p-warn' : parcel.Status === 'CANCELLED' ? 'p-bad' : parcel.Status === 'DELIVERED' ? 'p-ok' : 'p-info'}`}>
