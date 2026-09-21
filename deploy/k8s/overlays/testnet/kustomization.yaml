@@ -13,43 +13,64 @@ kind: Kustomization
 namespace: esoqo-testnet
 
 resources:
-  - ../../base
-  - namespace.yaml
-  - ingress.yaml
-  - config.yaml
+- ../../base
+- namespace.yaml
+- ingress.yaml
+- config.yaml
 
+# No includeSelectors key — it defaults to false, which is what we want.
+# `commonLabels` would instead inject into spec.selector.matchLabels,
+# which Kubernetes makes immutable after creation. Verified: the rendered
+# web Deployment selector is {app.kubernetes.io/name: web} only.
 labels:
-  - includeSelectors: false # see base/kustomization.yaml
-    pairs:
-      app.kubernetes.io/instance: testnet
+- pairs:
+    app.kubernetes.io/instance: testnet
 
+# Written by `kustomize edit set image` from build-and-push.sh or CI.
+# The newName lines are kustomize's own doing and are redundant here
+# (name and newName match) — harmless, and hand-removing them just
+# means the next edit puts them back.
 images:
-  - name: ghcr.io/emmanuel-odero/esoqo-web
-    newTag: bootstrap
-  - name: ghcr.io/emmanuel-odero/esoqo-app
-    newTag: bootstrap
-  - name: ghcr.io/emmanuel-odero/esoqo-admin
-    newTag: bootstrap
-  - name: ghcr.io/emmanuel-odero/esoqo-store
-    newTag: bootstrap
-  - name: ghcr.io/emmanuel-odero/esoqo-jamii
-    newTag: bootstrap
-  - name: ghcr.io/emmanuel-odero/esoqo-core-service
-    newTag: bootstrap
-  - name: ghcr.io/emmanuel-odero/esoqo-core-go
-    newTag: bootstrap
+- name: ghcr.io/emmanuel-odero/esoqo-admin
+  newName: ghcr.io/emmanuel-odero/esoqo-admin
+  newTag: e05cf4a35a52
+- name: ghcr.io/emmanuel-odero/esoqo-app
+  newName: ghcr.io/emmanuel-odero/esoqo-app
+  newTag: e05cf4a35a52
+- name: ghcr.io/emmanuel-odero/esoqo-core-go
+  newName: ghcr.io/emmanuel-odero/esoqo-core-go
+  newTag: e05cf4a35a52
+- name: ghcr.io/emmanuel-odero/esoqo-core-service
+  newName: ghcr.io/emmanuel-odero/esoqo-core-service
+  newTag: e05cf4a35a52
+- name: ghcr.io/emmanuel-odero/esoqo-jamii
+  newName: ghcr.io/emmanuel-odero/esoqo-jamii
+  newTag: e05cf4a35a52
+- name: ghcr.io/emmanuel-odero/esoqo-store
+  newName: ghcr.io/emmanuel-odero/esoqo-store
+  newTag: e05cf4a35a52
+- name: ghcr.io/emmanuel-odero/esoqo-web
+  newName: ghcr.io/emmanuel-odero/esoqo-web
+  newTag: e05cf4a35a52
 
 patches:
-  # testnet carries no real traffic — one replica each is enough, and
-  # it halves what the cluster has to schedule.
-  - target: { kind: Deployment, labelSelector: "app.kubernetes.io/part-of=esoqo" }
-    patch: |
-      - op: replace
-        path: /spec/replicas
-        value: 1
-  # With a single PgBouncer replica, the full pool is available to it.
-  - target: { kind: Deployment, name: pgbouncer }
-    patch: |
-      - op: replace
-        path: /spec/replicas
-        value: 1
+# testnet carries no real traffic — one replica each is enough, and it
+# halves what the cluster has to schedule.
+- patch: |
+    - op: replace
+      path: /spec/replicas
+      value: 1
+  target:
+    kind: Deployment
+    labelSelector: app.kubernetes.io/part-of=esoqo
+# Redundant with the selector above (pgbouncer carries that label too),
+# but kept explicit: with a single PgBouncer replica the whole
+# DEFAULT_POOL_SIZE is available to it, and anyone raising the replica
+# count needs to see that decision here rather than infer it.
+- patch: |
+    - op: replace
+      path: /spec/replicas
+      value: 1
+  target:
+    kind: Deployment
+    name: pgbouncer
