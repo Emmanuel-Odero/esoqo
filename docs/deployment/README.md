@@ -199,10 +199,17 @@ dig +short admin.testnet.esoko.global
 ### 3.7 GHCR package visibility
 
 The first push creates the packages as **private**, and the cluster
-cannot pull them. Either make them public
-(github.com/users/Emmanuel-Odero/packages → each package → Package
-settings → Change visibility), or create a pull secret in each
-namespace:
+cannot pull them. Use a pull secret.
+
+> ⚠  Do **not** resolve this by making the packages public.
+> `esoqo-core-service` ships the entire workspace at `/repo` —
+> TypeScript source for every app and package, because tsx compiles at
+> runtime (see `docker/Dockerfile.core`). Publishing that package
+> publishes the source. The Next images are less exposed but still
+> carry traced server code. Private packages plus a pull secret is the
+> only correct answer here.
+
+Create the pull secret in each namespace:
 
 ```bash
 kubectl -n esoqo-testnet create secret docker-registry ghcr \
