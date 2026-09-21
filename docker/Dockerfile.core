@@ -1,0 +1,48 @@
+# syntax=docker/dockerfile:1.7
+# ════════════════════════════════════════════════════════════════════
+#  Production image for services/core — the Fastify domain API.
+#
+#  Unlike the Next apps this image ships TypeScript source and runs it
+#  through tsx, rather than shipping a compiled dist/. That is forced
+#  by the workspace, not a shortcut: packages/db, /domain, /auth and
+#  /payments all declare `"main": "./src/index.ts"` with no build
+#  script, so there is no compiled JS for a `tsc`-built core to import.
+#  The Next apps get away with it via transpilePackages; a plain Node
+#  process does not.
+#
+#  Consequence: tsx is a devDependency but a RUNTIME requirement here,
+#  so this image installs the full workspace rather than --prod. If the
+#  image size becomes a problem, the fix is to give the four packages
+#  real build outputs — not to prune tsx out of this image.
+# ════════════════════════════════════════════════════════════════════
+ARG NODE_VERSION=22.12.0
+
+FROM node:${NODE_VERSION}-bookworm-slim AS base
+ENV PNPM_HOME=/pnpm PATH=/pnpm:$PATH CI=1
+RUN corepack enable && corepack prepare pnpm@9.12.0 --activate \
+ && apt-get update \
+ && apt-get install -y --no-install-recommends openssl ca-certificates \
+ && rm -rf /var/lib/apt/lists/*
+WORKDIR /repo
+
+FROM base AS build
+COPY . .
+RUN --mount=type=cache,id=pnpm-store,target=/pnpm/store \
+    pnpm install --frozen-lockfile
+RUN pnpm --filter @esoqo/db generate
+# Typecheck at build time so a broken deploy fails here rather than on
+# the first request that happens to hit the broken module — tsx compiles
+# lazily per-file and would otherwise surface it in production.
+RUN pnpm --filter @esoqo/core-service typecheck
+
+FROM base AS runner
+ENV NODE_ENV=production PORT=4000
+RUN useradd --system --uid 1001 --gid 0 core
+COPY --from=build --chown=1001:0 /repo /repo
+USER 1001
+EXPOSE 4000
+
+# Bypasses the package.json `start` script, which carries
+# --env-file-if-exists=../../.env — harmless but meaningless in a
+# cluster where config arrives as env vars from a Secret/ConfigMap.
+CMD ["node", "--import", "tsx", "services/core/src/index.ts"]

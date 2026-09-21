@@ -1,0 +1,78 @@
+# ════════════════════════════════════════════════════════════════════
+#  Nightly logical backup.
+#
+#  In-cluster Postgres means nobody else is taking backups. A PVC
+#  snapshot is not a backup either — it captures whatever the volume
+#  held, including a corrupt page, and restores it faithfully.
+#
+#  ⚠  This writes to a PVC in the SAME cluster. That covers the common
+#  failure (a bad migration, a mistaken DELETE) and does NOT cover
+#  cluster or storage loss. Shipping these off-cluster is the open item
+#  tracked in docs/deployment/README.md § "Backup gaps".
+# ════════════════════════════════════════════════════════════════════
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: postgres-backups
+  labels: { app.kubernetes.io/part-of: esoqo }
+spec:
+  accessModes: [ReadWriteOnce]
+  resources:
+    requests: { storage: 40Gi }
+---
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: postgres-backup
+  labels: { app.kubernetes.io/name: postgres-backup, app.kubernetes.io/part-of: esoqo }
+spec:
+  schedule: "17 1 * * *" # 01:17 UTC — off the hour, so it does not
+                         # collide with every other cron on the cluster
+  timeZone: Africa/Nairobi
+  concurrencyPolicy: Forbid # a slow dump must not stack on the next one
+  successfulJobsHistoryLimit: 3
+  failedJobsHistoryLimit: 7 # keep failures around longer than successes
+  jobTemplate:
+    spec:
+      backoffLimit: 2
+      template:
+        spec:
+          restartPolicy: OnFailure
+          securityContext: { fsGroup: 999 }
+          containers:
+            - name: pg-dump
+              image: postgres:16-alpine
+              command: ["sh", "-c"]
+              args:
+                - |
+                  set -euo pipefail
+                  STAMP="$(date -u +%Y%m%dT%H%M%SZ)"
+                  OUT="/backups/esoqo-${STAMP}.dump"
+
+                  # Custom format (-Fc), not plain SQL: it is compressed,
+                  # and pg_restore can then do selective/parallel restore.
+                  # Dumps through the DIRECT connection — pg_dump holds one
+                  # long transaction, which transaction-pooled PgBouncer
+                  # would break apart underneath it.
+                  pg_dump --format=custom --compress=9 --no-owner \
+                          --file="$OUT" "$DIRECT_DATABASE_URL"
+
+                  # Verify before pruning. A dump that cannot be listed is
+                  # not a backup, and discovering that during an incident
+                  # is the worst possible time.
+                  pg_restore --list "$OUT" > /dev/null
+                  echo "backup ok: $OUT ($(du -h "$OUT" | cut -f1))"
+
+                  # 14 days of nightlies. Prune only AFTER a verified new
+                  # dump exists, never before.
+                  find /backups -name 'esoqo-*.dump' -type f -mtime +14 -print -delete
+              env:
+                - name: DIRECT_DATABASE_URL
+                  valueFrom: { secretKeyRef: { name: esoqo-db, key: DIRECT_DATABASE_URL } }
+              volumeMounts: [{ name: backups, mountPath: /backups }]
+              resources:
+                requests: { cpu: 100m, memory: 256Mi }
+                limits: { memory: 1Gi }
+          volumes:
+            - name: backups
+              persistentVolumeClaim: { claimName: postgres-backups }

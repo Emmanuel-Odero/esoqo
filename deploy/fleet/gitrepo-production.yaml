@@ -1,0 +1,41 @@
+# ════════════════════════════════════════════════════════════════════
+#  Fleet GitRepo — production.
+#
+#  Apply once into `fleet-default` on the Rancher local cluster, exactly
+#  as with the testnet GitRepo. See that file's header.
+#
+#  Note correctDrift is enabled here too. That means a manual
+#  `kubectl edit` against production is reverted within a minute — so
+#  an emergency fix must be a commit, not an edit. If an incident truly
+#  needs a manual change, pause the GitRepo first:
+#
+#      kubectl -n fleet-default patch gitrepo esoqo-production \
+#        --type merge -p '{"spec":{"paused":true}}'
+#
+#  and unpause it the moment the fix has been committed. A production
+#  cluster left paused is a production cluster that has silently stopped
+#  deploying.
+# ════════════════════════════════════════════════════════════════════
+apiVersion: fleet.cattle.io/v1alpha1
+kind: GitRepo
+metadata:
+  name: esoqo-production
+  namespace: fleet-default
+spec:
+  repo: https://github.com/Emmanuel-Odero/esoko-254
+  branch: production
+  paths:
+    - deploy/k8s/overlays/production
+
+  clientSecretName: esoqo-git-credentials
+
+  pollingInterval: 60s
+
+  targets:
+    - name: production
+      clusterSelector:
+        matchLabels:
+          env: production
+
+  correctDrift:
+    enabled: true

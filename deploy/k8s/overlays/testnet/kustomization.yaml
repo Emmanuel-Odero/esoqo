@@ -1,0 +1,55 @@
+# ════════════════════════════════════════════════════════════════════
+#  testnet overlay — deployed from branch esoko/testnet.
+#
+#  The `images` block below is the deploy trigger. CI builds and pushes
+#  an image per app, then rewrites the newTag values here and commits.
+#  Fleet sees the commit and rolls the cluster. So a deploy is a commit,
+#  and a rollback is `git revert` — there is no out-of-band "deploy"
+#  action that leaves git disagreeing with the cluster.
+# ════════════════════════════════════════════════════════════════════
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+namespace: esoqo-testnet
+
+resources:
+  - ../../base
+  - namespace.yaml
+  - ingress.yaml
+  - config.yaml
+
+labels:
+  - includeSelectors: false # see base/kustomization.yaml
+    pairs:
+      app.kubernetes.io/instance: testnet
+
+images:
+  - name: ghcr.io/emmanuel-odero/esoqo-web
+    newTag: bootstrap
+  - name: ghcr.io/emmanuel-odero/esoqo-app
+    newTag: bootstrap
+  - name: ghcr.io/emmanuel-odero/esoqo-admin
+    newTag: bootstrap
+  - name: ghcr.io/emmanuel-odero/esoqo-store
+    newTag: bootstrap
+  - name: ghcr.io/emmanuel-odero/esoqo-jamii
+    newTag: bootstrap
+  - name: ghcr.io/emmanuel-odero/esoqo-core-service
+    newTag: bootstrap
+  - name: ghcr.io/emmanuel-odero/esoqo-core-go
+    newTag: bootstrap
+
+patches:
+  # testnet carries no real traffic — one replica each is enough, and
+  # it halves what the cluster has to schedule.
+  - target: { kind: Deployment, labelSelector: "app.kubernetes.io/part-of=esoqo" }
+    patch: |
+      - op: replace
+        path: /spec/replicas
+        value: 1
+  # With a single PgBouncer replica, the full pool is available to it.
+  - target: { kind: Deployment, name: pgbouncer }
+    patch: |
+      - op: replace
+        path: /spec/replicas
+        value: 1

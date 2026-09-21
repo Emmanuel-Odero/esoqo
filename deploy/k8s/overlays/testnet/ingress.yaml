@@ -1,0 +1,91 @@
+# ════════════════════════════════════════════════════════════════════
+#  testnet ingress — *.testnet.esoko.global
+#
+#  Hosts are listed EXPLICITLY rather than as a wildcard, because the
+#  TLS side decides this: a wildcard certificate can only be issued
+#  through an ACME DNS-01 challenge, and cert-manager ships no Namecheap
+#  DNS solver. Explicit hosts use HTTP-01, which needs nothing but a
+#  reachable ingress — no registrar API credentials anywhere.
+#
+#  DNS is still wildcard (one `*.testnet` A record covers all five), so
+#  adding a sixth app means adding a rule and a tls host here, and no
+#  DNS change at all.
+#
+#  If a wildcard cert becomes necessary (many dynamic subdomains), the
+#  upgrade path is to move the zone to Cloudflare — a token already
+#  exists for Jamii custom domains — and switch the issuer to dns01.
+#  See docs/deployment/README.md § "TLS and wildcards".
+# ════════════════════════════════════════════════════════════════════
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: esoqo
+  annotations:
+    cert-manager.io/cluster-issuer: letsencrypt-prod
+    # Server Actions in apps/app accept 11MB uploads; nginx's 1MB
+    # default would reject them at the proxy with a 413 before the app
+    # ever sees the request.
+    nginx.ingress.kubernetes.io/proxy-body-size: "12m"
+    nginx.ingress.kubernetes.io/proxy-read-timeout: "60"
+    # testnet is a preview environment and must never be indexed.
+    nginx.ingress.kubernetes.io/configuration-snippet: |
+      more_set_headers "X-Robots-Tag: noindex, nofollow";
+spec:
+  ingressClassName: nginx
+  tls:
+    - secretName: esoqo-testnet-tls
+      hosts:
+        - testnet.esoko.global
+        - app.testnet.esoko.global
+        - admin.testnet.esoko.global
+        - store.testnet.esoko.global
+        - jamii.testnet.esoko.global
+  rules:
+    - host: testnet.esoko.global
+      http:
+        paths:
+          - { path: /, pathType: Prefix, backend: { service: { name: web, port: { number: 80 } } } }
+    - host: app.testnet.esoko.global
+      http:
+        paths:
+          - { path: /, pathType: Prefix, backend: { service: { name: app, port: { number: 80 } } } }
+    - host: admin.testnet.esoko.global
+      http:
+        paths:
+          - { path: /, pathType: Prefix, backend: { service: { name: admin, port: { number: 80 } } } }
+    - host: store.testnet.esoko.global
+      http:
+        paths:
+          - { path: /, pathType: Prefix, backend: { service: { name: store, port: { number: 80 } } } }
+    - host: jamii.testnet.esoko.global
+      http:
+        paths:
+          - { path: /, pathType: Prefix, backend: { service: { name: jamii, port: { number: 80 } } } }
+---
+# The two backend APIs are exposed on their own hostnames because the
+# mobile app and the M-Pesa/Pesapal callbacks both need a public URL.
+# Path-routing them under the web host instead would collide with the
+# Next apps' own /api routes.
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: esoqo-api
+  annotations:
+    cert-manager.io/cluster-issuer: letsencrypt-prod
+    nginx.ingress.kubernetes.io/proxy-body-size: "2m"
+spec:
+  ingressClassName: nginx
+  tls:
+    - secretName: esoqo-testnet-api-tls
+      hosts:
+        - api.testnet.esoko.global
+        - mobile.testnet.esoko.global
+  rules:
+    - host: api.testnet.esoko.global
+      http:
+        paths:
+          - { path: /, pathType: Prefix, backend: { service: { name: core-service, port: { number: 80 } } } }
+    - host: mobile.testnet.esoko.global
+      http:
+        paths:
+          - { path: /, pathType: Prefix, backend: { service: { name: core-go, port: { number: 80 } } } }

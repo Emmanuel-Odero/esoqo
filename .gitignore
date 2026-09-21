@@ -31,6 +31,16 @@ venv/
 .env.production
 .env.development
 
+# Filled-in copies of deploy/scripts/secrets.env.template. The template
+# itself is tracked; anything matching this pattern holds real cluster
+# credentials and must not be.
+*.secrets.env
+secrets.env
+
+# Locally built Go binary. The deployed one is built inside
+# services/core-go/Dockerfile, never copied from a developer's machine.
+services/core-go/bin/
+
 # ─── IDE / editor ─────────────────────────────────────────
 .idea/
 .vscode/

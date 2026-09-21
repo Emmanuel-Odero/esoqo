@@ -1,0 +1,76 @@
+# ════════════════════════════════════════════════════════════════════
+#  production overlay — deployed from branch `production`.
+#
+#  Identical to the testnet overlay in structure on purpose: if the two
+#  ever need to diverge beyond replicas, hostnames and provider modes,
+#  that divergence belongs in a patch here where it is visible in a
+#  diff — not in a base that quietly behaves differently per namespace.
+#
+#  A deploy is a commit to `production` (fast-forwarded from an already
+#  green esoko/testnet). A rollback is `git revert`.
+# ════════════════════════════════════════════════════════════════════
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+namespace: esoqo-production
+
+resources:
+  - ../../base
+  - namespace.yaml
+  - ingress.yaml
+  - config.yaml
+
+labels:
+  - includeSelectors: false # see base/kustomization.yaml
+    pairs:
+      app.kubernetes.io/instance: production
+
+images:
+  - name: ghcr.io/emmanuel-odero/esoqo-web
+    newTag: bootstrap
+  - name: ghcr.io/emmanuel-odero/esoqo-app
+    newTag: bootstrap
+  - name: ghcr.io/emmanuel-odero/esoqo-admin
+    newTag: bootstrap
+  - name: ghcr.io/emmanuel-odero/esoqo-store
+    newTag: bootstrap
+  - name: ghcr.io/emmanuel-odero/esoqo-jamii
+    newTag: bootstrap
+  - name: ghcr.io/emmanuel-odero/esoqo-core-service
+    newTag: bootstrap
+  - name: ghcr.io/emmanuel-odero/esoqo-core-go
+    newTag: bootstrap
+
+patches:
+  # Give Postgres real headroom. The base's 20Gi/2Gi is sized for a
+  # preview environment; a volumeClaimTemplate cannot be shrunk later,
+  # and on most CSI drivers cannot be grown in place without a manual
+  # resize, so this is set correctly once here.
+  - target: { kind: StatefulSet, name: postgres }
+    patch: |
+      - op: replace
+        path: /spec/template/spec/containers/0/resources/requests/cpu
+        value: 500m
+      - op: replace
+        path: /spec/template/spec/containers/0/resources/requests/memory
+        value: 2Gi
+      - op: replace
+        path: /spec/template/spec/containers/0/resources/limits/memory
+        value: 6Gi
+      - op: replace
+        path: /spec/volumeClaimTemplates/0/spec/resources/requests/storage
+        value: 100Gi
+
+  # A PodDisruptionBudget is not enough on its own — spread the replicas
+  # so a single node drain cannot take a whole app down.
+  - target: { kind: Deployment, labelSelector: "app.kubernetes.io/part-of=esoqo" }
+    patch: |
+      - op: add
+        path: /spec/template/spec/topologySpreadConstraints
+        value:
+          - maxSkew: 1
+            topologyKey: kubernetes.io/hostname
+            whenUnsatisfiable: ScheduleAnyway
+            labelSelector:
+              matchLabels:
+                app.kubernetes.io/part-of: esoqo

@@ -1,7 +1,10 @@
 name: CI
 
 on:
-  push: { branches: [main] }
+  # The deployable branches are here alongside main: build-images.yml
+  # turns a push to either one into running containers, and code that
+  # ships must have been linted, typechecked and tested first.
+  push: { branches: [main, esoko/testnet, production] }
   pull_request:
 
 concurrency:

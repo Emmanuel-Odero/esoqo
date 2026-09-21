@@ -1,12 +1,27 @@
-node_modules
+# Docker matches these patterns from the context ROOT, not at every
+# level — a bare `node_modules` misses apps/web/node_modules and every
+# other workspace copy. Unprefixed, this context measured 9.86GB and the
+# build died partway through COPY with an I/O error; with `**/` it is
+# a few tens of MB.
+**/node_modules
 .pnpm-store
-.next
-turbo
-dist
+**/.next
+**/.turbo
+**/dist
 .git
 *.md
 .env
+.env*.local
 .env.local
+
+# Build outputs and local-only artefacts that must never reach an image.
+**/.DS_Store
+**/coverage
+**/test-results
+**/playwright-report
+**/.playwright
+services/core-go/bin
+mobile
 
 # PHP (services/cecf-wordpress) — never trust a host-local composer
 # install; every Docker build must produce its own vendor/ from

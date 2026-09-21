@@ -1,0 +1,65 @@
+# ════════════════════════════════════════════════════════════════════
+#  production non-secret configuration.
+#
+#  Read the testnet overlay's config.yaml header first — the two PORT
+#  and NEXT_PUBLIC_* warnings there apply identically here.
+#
+#  The difference that matters: every provider below is LIVE. SMS
+#  reaches real handsets, M-Pesa and Pesapal move real money, and the
+#  OTP spend cap is the only thing between a loop bug and a real bill.
+# ════════════════════════════════════════════════════════════════════
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: esoqo-config
+data:
+  NODE_ENV: production
+  APP_ENV: production
+  LOG_LEVEL: info
+
+  # ── Public origins ────────────────────────────────────────────────
+  NEXT_PUBLIC_WEB_URL: https://esoko.global
+  NEXT_PUBLIC_APP_URL: https://app.esoko.global
+  NEXT_PUBLIC_STORE_URL: https://store.esoko.global
+  PUBLIC_TRACKING_BASE_URL: https://esoko.global/parcels/track
+
+  # ── Service-to-service (in-cluster DNS; never leaves the cluster) ──
+  CORE_API_URL: http://core-service
+  CORE_GO_API_URL: http://core-go
+
+  CORS_ALLOWED_ORIGINS: >-
+    https://esoko.global,https://www.esoko.global,https://app.esoko.global,https://admin.esoko.global,https://store.esoko.global,https://jamii.esoko.global
+
+  # ── Jamii community sites ─────────────────────────────────────────
+  JAMII_PRIMARY_HOSTS: jamii.esoko.global
+  NEXT_PUBLIC_JAMII_PRIMARY_ORIGIN: https://jamii.esoko.global
+  NEXT_PUBLIC_JAMII_DOMAIN_TARGET: jamii.esoko.global
+
+  # ── Providers — LIVE ──────────────────────────────────────────────
+  # All three gates take console|sandbox|production (packages/payments/
+  # src/mpesa.ts, pesapal.ts; packages/auth/src/sms.ts). Any SMS value
+  # other than console/mock dials Africa's Talking for real — sandbox
+  # vs live is then decided by which SMS_USERNAME is in the Secret.
+  SMS_PROVIDER: production
+  SMS_SENDER_ID: ESOQO
+  EMAIL_PROVIDER: smtp
+  EMAIL_FROM: Esoqo <no-reply@esoko.global>
+  MPESA_PROVIDER: production
+  PESAPAL_PROVIDER: production
+  PESAPAL_IPN_URL: https://api.esoko.global/webhooks/pesapal/ipn
+
+  # MPESA_CALLBACK_URL is deliberately NOT here. Daraja signs nothing,
+  # so the callback is authenticated solely by living at a URL only
+  # Safaricom was told — MPESA_CALLBACK_SECRET is appended as the last
+  # path segment. That makes the whole URL a credential, so it lives in
+  # the esoqo-secrets Secret. See deploy/scripts/secrets.env.template.
+
+  # ── Domain tuning ─────────────────────────────────────────────────
+  PARCEL_VOLUMETRIC_DIVISOR: "5000"
+  FARE_PROOF_TTL_MIN: "120"
+  VOUCHERS_ENABLED: "true"
+  LOYALTY_EARN_ENABLED: "true"
+  OTP_RATE_LIMIT_PER_HOUR: "5"
+  OTP_DAILY_SPEND_CAP_KES: "5000"
+
+  LOCAL_STORAGE_DIR: /tmp/esoqo-uploads
