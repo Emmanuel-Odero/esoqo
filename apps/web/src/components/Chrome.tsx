@@ -88,6 +88,13 @@ export function Header() {
               })}
             </nav>
             <div className="row">
+              {/* Quick receiving/confirmation, no account needed: an
+                  owner checking a delivery or a tout confirming a
+                  parcel is handed off shouldn't have to sign in first
+                  to find out what a code is — see /scan. */}
+              <Link className="btn btn-o btn-sm" href="/scan">
+                <Icon name="qr" size={16} />Scan
+              </Link>
               <a className="btn btn-p btn-sm" href={`${APP}/signin`}>
                 Sign in
               </a>
@@ -126,6 +133,9 @@ export function Header() {
               );
             })}
             <div className="hd-drawer-cta">
+              <Link className="btn btn-o" href="/scan">
+                <Icon name="qr" size={16} />Scan a code
+              </Link>
               <a className="btn btn-p" href={`${APP}/signin`}>
                 Sign in
               </a>
