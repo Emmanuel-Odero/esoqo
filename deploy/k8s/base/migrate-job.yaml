@@ -1,12 +1,20 @@
 # ════════════════════════════════════════════════════════════════════
 #  Prisma `migrate deploy` — one Job per release.
 #
-#  The name carries __RELEASE_TAG__, which CI substitutes with the short
-#  commit SHA. That is not cosmetic: a Job's spec.template is immutable,
-#  so a fixed-name Job would make Fleet fail to apply on the second
-#  release and then silently report "modified" forever. A new name per
-#  release also means every migration run is independently auditable —
-#  `kubectl get jobs` is the deployment history.
+#  The name's last segment is replaced with the short commit SHA by
+#  whichever path builds the images — .github/workflows/build-images.yml
+#  or deploy/scripts/build-and-push.sh. That is not cosmetic: a Job's
+#  spec.template is immutable, so a fixed-name Job would make Fleet fail
+#  to apply on the second release and then silently report "modified"
+#  forever. A new name per release also means every migration run is
+#  independently auditable — `kubectl get jobs` is the deploy history.
+#
+#  The committed placeholder is `bootstrap` rather than something
+#  obviously templated like __RELEASE_TAG__, because Kubernetes names
+#  must be RFC 1123 labels: underscores are illegal, so the templated
+#  form made the repo's own checked-in state un-appliable. Anyone
+#  registering the GitRepo before running a build would have hit a
+#  validation error with no obvious cause.
 #
 #  ⚠  ORDERING. Fleet applies this Job and the new app Deployments in the
 #  same pass; nothing makes the rollout wait for the migration. For
@@ -23,7 +31,7 @@
 apiVersion: batch/v1
 kind: Job
 metadata:
-  name: esoqo-migrate-__RELEASE_TAG__
+  name: esoqo-migrate-bootstrap
   labels:
     app.kubernetes.io/name: migrate
     app.kubernetes.io/part-of: esoqo
