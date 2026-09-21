@@ -1527,6 +1527,23 @@ type OrgParcelRow struct {
 	// this in themselves" apart from "still waiting on our own rider",
 	// which today's plain status filter alone can't distinguish.
 	OriginMethod string `json:"originMethod"`
+
+	// Receiver self-authentication, for the console's escalation queue
+	// (see dbx/parcel_receiver_auth.go). Carried on the list row rather
+	// than fetched per parcel because the whole point is a filter — "show
+	// me the ones that are stuck" — and a queue that needs one request
+	// per row to know whether a row belongs in it is not a queue.
+	//
+	// No delivery code here, current or otherwise. The console shows
+	// that something is locked and offers the two verbs; the code itself
+	// reaches only the two people entitled to it, by SMS.
+	ReceiverAuthAttempts     int     `json:"receiverAuthAttempts"`
+	ReceiverAuthLockedAt     *string `json:"receiverAuthLockedAt"`
+	ReceiverAuthHardLockedAt *string `json:"receiverAuthHardLockedAt"`
+	DeliveryCodeVersion      int     `json:"deliveryCodeVersion"`
+	// CourierEarningsHeldUntil — set on a self-confirmed collection, the
+	// other verb this queue offers. See DeliverParcel's tail.
+	CourierEarningsHeldUntil *string `json:"courierEarningsHeldUntil"`
 }
 
 // ListOrgParcelsFilter — every knob the operator register can turn.
@@ -1541,6 +1558,11 @@ type ListOrgParcelsFilter struct {
 	ParcelType *string
 	// OverdueOnly — only rows past their SLA deadline and still active.
 	OverdueOnly bool
+	// LockedOnly — only rows where a receiver has locked themselves out
+	// of the delivery code, soft or hard. The console's escalation
+	// queue: these are the parcels that stop moving until somebody at a
+	// desk grants a retry or issues a new code.
+	LockedOnly bool
 	// Sort — created | code | status | earnings. Anything else falls
 	// back to created. Order — asc | desc (default desc for created,
 	// asc otherwise is still honoured explicitly).
@@ -1679,6 +1701,11 @@ func ListOrgParcelsPage(ctx context.Context, pool *pgxpool.Pool, orgID string, f
 		       p."deliveryAttempts", p."lastAttemptReason",
 		       COALESCE(pr."knownAs", pr."officialName"), a.name, p."originMethod"::text,
 		       p."externalRef", p."externalSource",
+		       p."receiverAuthAttempts",
+		       to_char(p."receiverAuthLockedAt", 'YYYY-MM-DD"T"HH24:MI:SSZ'),
+		       to_char(p."receiverAuthHardLockedAt", 'YYYY-MM-DD"T"HH24:MI:SSZ'),
+		       p."deliveryCodeVersion",
+		       to_char(p."courierEarningsHeldUntil", 'YYYY-MM-DD"T"HH24:MI:SSZ'),
 		       count(*) OVER() AS total
 		FROM parcel p
 		LEFT JOIN person pr ON pr."partyId" = p."currentHolderPartyId"
@@ -1691,8 +1718,11 @@ func ListOrgParcelsPage(ctx context.Context, pool *pgxpool.Pool, orgID string, f
 		  AND ($5::text IS NULL OR p."parcelType"::text = $5)
 		  AND (NOT $6::bool OR (p."slaDeadlineAt" IS NOT NULL AND p."slaDeadlineAt" < now()
 		       AND p.status IN ('RECEIVED_AT_COUNTER', 'PICKED_UP', 'IN_TRANSIT')))
+		  AND (NOT $7::bool OR p."receiverAuthLockedAt" IS NOT NULL
+		       OR p."receiverAuthHardLockedAt" IS NOT NULL)
 		ORDER BY `+orderBy+` `+order+`
-		LIMIT $7 OFFSET $8`, orgID, f.Status, f.OriginMethod, f.Q, f.ParcelType, f.OverdueOnly, limit, offset)
+		LIMIT $8 OFFSET $9`, orgID, f.Status, f.OriginMethod, f.Q, f.ParcelType, f.OverdueOnly,
+		f.LockedOnly, limit, offset)
 	if err != nil {
 		return ListOrgParcelsResult{}, err
 	}
@@ -1705,6 +1735,8 @@ func ListOrgParcelsPage(ctx context.Context, pool *pgxpool.Pool, orgID string, f
 			&r.OriginLabel, &r.DestinationLabel, &r.ParcelType, &r.OrgEarningsKes,
 			&r.CreatedAt, &r.SlaDeadlineAt, &r.DeliveryAttempts, &r.LastAttemptReason,
 			&r.HolderName, &r.AgentName, &r.OriginMethod, &r.ExternalRef, &r.ExternalSource,
+			&r.ReceiverAuthAttempts, &r.ReceiverAuthLockedAt, &r.ReceiverAuthHardLockedAt,
+			&r.DeliveryCodeVersion, &r.CourierEarningsHeldUntil,
 			&total); err != nil {
 			return ListOrgParcelsResult{}, err
 		}

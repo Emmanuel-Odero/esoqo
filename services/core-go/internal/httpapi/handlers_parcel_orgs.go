@@ -536,6 +536,8 @@ func (s *Server) handleListMyOrgParcels(c *gin.Context) {
 		parcelType = &v
 	}
 	overdue := c.Query("overdue") == "1" || strings.EqualFold(c.Query("overdue"), "true")
+	// ?locked=1 — the receiver-authentication escalation queue.
+	locked := c.Query("locked") == "1" || strings.EqualFold(c.Query("locked"), "true")
 	limit, offset := 25, 0
 	if v := strings.TrimSpace(c.Query("limit")); v != "" {
 		if n, err := strconv.Atoi(v); err == nil {
@@ -564,7 +566,7 @@ func (s *Server) handleListMyOrgParcels(c *gin.Context) {
 	}
 	res, err := dbx.ListOrgParcelsPage(c.Request.Context(), s.Pool, orgID, dbx.ListOrgParcelsFilter{
 		Status: status, OriginMethod: originMethod, Q: q,
-		ParcelType: parcelType, OverdueOnly: overdue,
+		ParcelType: parcelType, OverdueOnly: overdue, LockedOnly: locked,
 		Sort: c.Query("sort"), Order: c.Query("order"),
 		Limit: limit, Offset: offset,
 	})

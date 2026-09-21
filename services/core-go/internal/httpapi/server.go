@@ -265,7 +265,15 @@ func (s *Server) Router() *gin.Engine {
 		v1.POST("/me/voucher-batches", s.rateLimit("pay:voucherbatch", 20, time.Hour), s.authRequired(), s.handleIssueAllowanceBatch)
 		v1.GET("/me/voucher-batches", s.authRequired(), s.handleListVoucherBatches)
 
-		v1.POST("/parcels", s.handleBookParcel)
+		// Unauthenticated by design (ADR-0003: sending a parcel never
+		// requires an account), and until now unlimited as well — the
+		// only public write in this file with no bucket at all. Limited
+		// now that the web form is a single screen a guest can submit in
+		// seconds: making booking faster for a sender makes it equally
+		// faster for anyone minting junk rows. Generous enough that a
+		// shop booking a morning's parcels from one connection never
+		// notices.
+		v1.POST("/parcels", s.rateLimit("book:parcel", 20, time.Hour), s.handleBookParcel)
 		v1.GET("/parcels/pricing", s.handleGetParcelPricing)
 		v1.GET("/parcels/zones", s.handleListParcelZones)
 		// Public for the same reason pricing and zones are: the booking
@@ -322,6 +330,18 @@ func (s *Server) Router() *gin.Engine {
 		// handleImportOrgParcel.
 		v1.POST("/parcel-orgs/me/parcels", s.authRequired(), s.handleImportOrgParcel)
 		v1.POST("/parcel-orgs/me/parcels/:code/assign", s.authRequired(), s.handleAssignOrgParcel)
+		// Resolving a receiver who can't get past the delivery code —
+		// the company's own escalation queue. Grant two more tries, or
+		// (once that's been burned, or the code is simply gone) mint a
+		// replacement and text both parties. Release is the other half
+		// of a self-confirmed collection: the courier pay DeliverParcel
+		// held rather than accrued.
+		v1.POST("/parcel-orgs/me/parcels/:code/receiver-auth/grant-retry",
+			s.authRequired(), s.handleOrgGrantReceiverAuthRetry)
+		v1.POST("/parcel-orgs/me/parcels/:code/delivery-code/reissue",
+			s.authRequired(), s.handleOrgReissueDeliveryCode)
+		v1.POST("/parcel-orgs/me/parcels/:code/courier-earnings/release",
+			s.authRequired(), s.handleOrgReleaseHeldEarnings)
 		v1.POST("/parcel-orgs/me/cod/remit", s.authRequired(), s.handleOrgRemitCod)
 		// A company's own label stock — minting, the register, and
 		// withdrawing a stolen pad, all scoped to the session's org.
@@ -431,6 +451,23 @@ func (s *Server) Router() *gin.Engine {
 			s.rateLimit("claim:parcel", 10, time.Hour), s.handleRequestParcelClaimOtp)
 		v1.POST("/parcels/:code/claim/verify",
 			s.rateLimit("claim:parcelverify", 20, time.Hour), s.handleVerifyParcelClaim)
+		// The other route to the same place, by the code rather than the
+		// phone (see handlers_parcel_receiver.go). Public for the same
+		// reason the claim pair is: the person standing at an agent's
+		// counter has no account and is not going to make one.
+		//
+		// Rate-limited per IP even though the real gate is the
+		// three-attempt counter on the parcel row. The two cover
+		// different attacks: the row counter stops guessing at ONE
+		// parcel, the IP limit stops one host walking a list of codes
+		// photographed off a shelf, which a per-parcel counter cannot see
+		// by construction. Confirm is limited harder than verify — there
+		// is no honest reason to close more than a handful of parcels
+		// from one address in an hour.
+		v1.POST("/parcels/:code/receiver/verify",
+			s.rateLimit("receiver-auth:parcel", 15, time.Hour), s.handleVerifyReceiverCode)
+		v1.POST("/parcels/:code/receiver/confirm",
+			s.rateLimit("receiver-confirm:parcel", 10, time.Hour), s.handleReceiverSelfConfirm)
 		v1.POST("/parcels/:code/receipt/otp", s.handleRequestParcelReceiptOtp)
 		v1.POST("/parcels/:code/receipt/confirm", s.handleConfirmParcelReceipt)
 		v1.GET("/parcels/:code/handoffs", s.authRequired(), s.handleListParcelHandoffs)
@@ -487,6 +524,17 @@ func (s *Server) Router() *gin.Engine {
 		v1.POST("/admin/parcels/:id/exception", s.authRequired(), s.handleFlagParcelException)
 		v1.POST("/admin/parcels/:id/exception/clear", s.authRequired(), s.handleClearParcelException)
 		v1.GET("/admin/parcels/:id/handoffs", s.authRequired(), s.handleAdminListParcelHandoffs)
+		// The same three receiver-auth resolutions the company console
+		// has, as a superset: admin can unstick any carrier's parcel,
+		// including an Esoqo-operated one that has no company console to
+		// act from. Keyed on the parcel uuid because the admin app works
+		// in ids throughout.
+		v1.POST("/admin/parcels/:id/receiver-auth/grant-retry",
+			s.authRequired(), s.handleAdminGrantReceiverAuthRetry)
+		v1.POST("/admin/parcels/:id/delivery-code/reissue",
+			s.authRequired(), s.handleAdminReissueDeliveryCode)
+		v1.POST("/admin/parcels/:id/courier-earnings/release",
+			s.authRequired(), s.handleAdminReleaseHeldEarnings)
 
 		v1.GET("/admin/parcels/couriers/candidates", s.authRequired(), s.handleAdminSearchOnboardCandidates)
 		v1.GET("/admin/parcels/couriers", s.authRequired(), s.handleAdminListCouriers)

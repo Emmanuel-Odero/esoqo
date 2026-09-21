@@ -72,6 +72,29 @@ type bookParcelRequest struct {
 	// question, and a declaration nobody made is worse than none at all.
 	ContentsDeclared bool `json:"contentsDeclared"`
 
+	// The SENDER's own declaration, which anyone may make — including a
+	// guest, unlike ContentsDeclared directly above.
+	//
+	// The two are not the same claim and are deliberately not merged.
+	// ContentsDeclared says a named member of staff asked a person, face
+	// to face, whether the box holds anything prohibited; a web form can
+	// never produce that, which is why it stays staff-only. These say
+	// the sender described the contents, put a value on them, and ticked
+	// that they are lawful and that both sets of terms are accepted.
+	// Weaker, and worth recording precisely because the alternative on a
+	// self-service booking was recording nothing at all.
+	//
+	// TermsVersion is what the client actually displayed. Trusted from
+	// the body on purpose — the server cannot know which wording a page
+	// rendered, and a version invented here would describe the
+	// deployment rather than the agreement. Bounded, so a client cannot
+	// park an essay in the column.
+	SenderDeclaredContents *string `json:"senderDeclaredContents"`
+	LawfulContentsAttested bool    `json:"lawfulContentsAttested"`
+	TermsAccepted          bool    `json:"termsAccepted"`
+	TermsVersion           *string `json:"termsVersion"`
+	CarrierTermsVersion    *string `json:"carrierTermsVersion"`
+
 	// A dropped pin for either end. ~80% of Kenyans have no formal
 	// address and addressing failure is this market's largest cause of
 	// delivery failure — a pin is what a courier's maps app can actually
@@ -80,6 +103,28 @@ type bookParcelRequest struct {
 	OriginLng      *float64 `json:"originLng"`
 	DestinationLat *float64 `json:"destinationLat"`
 	DestinationLng *float64 `json:"destinationLng"`
+}
+
+// trimPtr normalises an optional free-text field: whitespace off, nil
+// if nothing is left, truncated to max.
+//
+// Truncation rather than rejection because none of the fields it
+// guards is worth failing a booking over — a sender who pasted a
+// paragraph into "what's inside" should get their parcel booked with
+// the first 500 characters, not an error they have to puzzle out at a
+// counter.
+func trimPtr(s *string, max int) *string {
+	if s == nil {
+		return nil
+	}
+	v := strings.TrimSpace(*s)
+	if v == "" {
+		return nil
+	}
+	if len(v) > max {
+		v = v[:max]
+	}
+	return &v
 }
 
 // handleBookParcel — POST /v1/parcels. Guest-or-authenticated, same
@@ -138,6 +183,11 @@ func (s *Server) handleBookParcel(c *gin.Context) {
 		BinderOrgID: binderOrgID, BinderIsPlatformStaff: binderIsPlatformStaff,
 		LengthCm: req.LengthCm, WidthCm: req.WidthCm, HeightCm: req.HeightCm,
 		ContentsDeclaredByStaffID: contentsDeclaredByStaffID,
+		SenderDeclaredContents:    trimPtr(req.SenderDeclaredContents, 500),
+		LawfulContentsAttested:    req.LawfulContentsAttested,
+		TermsAccepted:             req.TermsAccepted,
+		TermsVersion:              trimPtr(req.TermsVersion, 40),
+		CarrierTermsVersion:       trimPtr(req.CarrierTermsVersion, 40),
 	})
 	if err != nil {
 		writeParcelError(c, err)
@@ -805,7 +855,12 @@ func (s *Server) handleDeliverParcel(c *gin.Context) {
 		return
 	}
 
-	if err := dbx.DeliverParcel(c.Request.Context(), s.Pool, code, req.DeliveryCode, ctx.PartyID, proof, allowCodeless, otpVerified); err != nil {
+	// receiverSelfConfirm is false and stays false on this route: this is
+	// the staff hand-over endpoint, and a caller who has authenticated as
+	// staff is by definition not the receiver closing their own parcel.
+	// The self-confirm path is handleReceiverSelfConfirm, which reaches
+	// DeliverParcel only after spending a receiver token.
+	if err := dbx.DeliverParcel(c.Request.Context(), s.Pool, code, req.DeliveryCode, ctx.PartyID, proof, allowCodeless, otpVerified, false); err != nil {
 		// A wrong code is the only failure worth counting. Every other
 		// rejection here (not holding it, already delivered, journey
 		// closed) is a statement about the parcel that no amount of
