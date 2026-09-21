@@ -418,6 +418,78 @@ export async function actionClearParcelException(
   }
 }
 
+// ── Unsticking a receiver who can't get past the delivery code ───────
+//
+// A superset of the same three verbs the carrying company's own
+// console has: admin can resolve a stuck parcel for ANY carrier,
+// including Esoqo-operated ones, which have no company console to act
+// from at all. Keyed on the parcel id because this app works in ids
+// throughout; core-go resolves the code.
+
+/** Allow two more verification attempts. Refused once the parcel is
+ *  hard locked — at that point only a new code moves it. */
+export async function actionGrantReceiverAuthRetry(
+  parcelId: string,
+): Promise<Result> {
+  try {
+    await requireStaff();
+    await adminGo(`/v1/admin/parcels/${parcelId}/receiver-auth/grant-retry`, {
+      method: "POST",
+    });
+    revalidatePath("/parcels");
+    return { ok: true };
+  } catch (e) {
+    return {
+      ok: false,
+      error: e instanceof Error ? e.message : "Could not allow more tries",
+    };
+  }
+}
+
+/** Mint a new delivery code and clear every lock.
+ *
+ *  The code is never returned here and never rendered in this console.
+ *  core-go texts it to the receiver and the sender; showing it on an
+ *  operator's screen would make the one secret in this flow readable
+ *  by anyone passing the desk. */
+export async function actionReissueDeliveryCode(
+  parcelId: string,
+): Promise<Result> {
+  try {
+    await requireStaff();
+    await adminGo(`/v1/admin/parcels/${parcelId}/delivery-code/reissue`, {
+      method: "POST",
+    });
+    revalidatePath("/parcels");
+    return { ok: true };
+  } catch (e) {
+    return {
+      ok: false,
+      error: e instanceof Error ? e.message : "Could not issue a new code",
+    };
+  }
+}
+
+/** Pay out a delivery the receiver closed themselves at a pickup point,
+ *  which held the accrual because no staff member witnessed it. */
+export async function actionReleaseHeldCourierEarnings(
+  parcelId: string,
+): Promise<Result> {
+  try {
+    await requireStaff();
+    await adminGo(`/v1/admin/parcels/${parcelId}/courier-earnings/release`, {
+      method: "POST",
+    });
+    revalidatePath("/parcels");
+    return { ok: true };
+  } catch (e) {
+    return {
+      ok: false,
+      error: e instanceof Error ? e.message : "Could not release those earnings",
+    };
+  }
+}
+
 export async function actionFlagParcelException(
   parcelId: string,
   note: string,

@@ -1,12 +1,13 @@
 'use client';
 
 import { useEffect, useState, useTransition } from 'react';
-import { Icon } from '@esoqo/ui';
+import { Icon, type IconName } from '@esoqo/ui';
 import { useAnnounce } from '@esoqo/a11y';
 import {
   actionAssignParcelCollector, actionSearchCollectors, actionCancelParcel, actionMarkParcelRefunded,
   actionGetParcelHandoffs, actionFlagParcelException, actionClearParcelException, actionUpdateParcelDetails,
   actionConfirmParcelIntake,
+  actionGrantReceiverAuthRetry, actionReissueDeliveryCode, actionReleaseHeldCourierEarnings,
   type CollectorLite, type HandoffRow,
 } from './actions';
 import type { AdminParcelRow } from './ParcelsTable';
@@ -109,6 +110,30 @@ export function ParcelDetailModal({
                   </button>
                 )}
                 {canCancel && parcel.ExceptionNote && <ClearExceptionButton parcelId={parcel.ID} />}
+                {/* Escalating, and only the step the parcel is at:
+                    offering "new code" beside "two more tries" invites
+                    an operator to reissue on a receiver who merely
+                    mistyped a digit, which burns two SMS and kills a
+                    code they may be about to get right. */}
+                {canAssign && parcel.ReceiverAuthLockedAt && !parcel.ReceiverAuthHardLockedAt && (
+                  <ReceiverAuthButton
+                    parcelId={parcel.ID} label="Allow two more tries" icon="refresh"
+                    done="Two more tries allowed" action={actionGrantReceiverAuthRetry}
+                  />
+                )}
+                {canCancel && (parcel.ReceiverAuthLockedAt || parcel.ReceiverAuthHardLockedAt) && (
+                  <ReceiverAuthButton
+                    parcelId={parcel.ID} label="Issue a new delivery code" icon="key"
+                    done="New delivery code texted to the sender and receiver"
+                    action={actionReissueDeliveryCode}
+                  />
+                )}
+                {canCancel && parcel.CourierEarningsHeldUntil && (
+                  <ReceiverAuthButton
+                    parcelId={parcel.ID} label="Release courier pay" icon="coins"
+                    done="Courier earnings released" action={actionReleaseHeldCourierEarnings}
+                  />
+                )}
                 {canCancel && CANCELLABLE.has(parcel.Status) && (
                   <button className="btn btn-o btn-sm" style={{ color: 'var(--red)' }} onClick={() => setPanel(panel === 'cancel' ? null : 'cancel')}>
                     <Icon name="close" size={13} />Cancel parcel
@@ -189,6 +214,44 @@ function DetailSections({
               <Icon name="alert-triangle" size={12} />{parcel.ExceptionNote}
             </span>
             {parcel.ExceptionFlaggedAt && <span className="sub" style={{ display: 'block' }}>Flagged {new Date(parcel.ExceptionFlaggedAt).toLocaleString('en-KE')}</span>}
+          </Row>
+        )}
+        {/* The receiver's own side of the code. Distinct from delivery
+            attempts below, which is a courier reaching a door and
+            finding nobody: here the parcel is exactly where it should
+            be and the person collecting it cannot prove who they are. */}
+        {(parcel.ReceiverAuthAttempts > 0 || parcel.ReceiverAuthLockedAt
+          || parcel.ReceiverAuthHardLockedAt || parcel.DeliveryCodeVersion > 1) && (
+          <Row label="Receiver verification">
+            <span className={`pill ${parcel.ReceiverAuthHardLockedAt ? 'p-bad' : parcel.ReceiverAuthLockedAt ? 'p-warn' : 'p-info'}`}>
+              <Icon name="lock" size={12} />
+              {parcel.ReceiverAuthHardLockedAt
+                ? 'Hard locked — needs a new code'
+                : parcel.ReceiverAuthLockedAt
+                  ? 'Locked out'
+                  : `${parcel.ReceiverAuthAttempts} wrong ${parcel.ReceiverAuthAttempts === 1 ? 'code' : 'codes'}`}
+            </span>
+            {(parcel.ReceiverAuthHardLockedAt ?? parcel.ReceiverAuthLockedAt) && (
+              <span className="sub" style={{ display: 'block' }}>
+                Since {new Date((parcel.ReceiverAuthHardLockedAt ?? parcel.ReceiverAuthLockedAt)!).toLocaleString('en-KE')}
+                {' · '}{parcel.ReceiverAuthAttempts} wrong codes
+              </span>
+            )}
+            {parcel.DeliveryCodeVersion > 1 && (
+              <span className="sub" style={{ display: 'block' }}>
+                Delivery code reissued {parcel.DeliveryCodeVersion - 1}×
+              </span>
+            )}
+          </Row>
+        )}
+        {parcel.CourierEarningsHeldUntil && (
+          <Row label="Courier pay held">
+            <span className="pill p-warn">
+              until {new Date(parcel.CourierEarningsHeldUntil).toLocaleString('en-KE')}
+            </span>
+            <span className="sub" style={{ display: 'block' }}>
+              The receiver closed this themselves at a pickup point — no staff witness.
+            </span>
           </Row>
         )}
         {parcel.Status === 'CANCELLED' && (
@@ -539,6 +602,36 @@ function ClearExceptionButton({ parcelId }: { parcelId: string }) {
           else announce('Exception cleared', 'assertive');
         })}>
         <Icon name="check" size={13} />{pending ? 'Clearing…' : 'Clear exception'}
+      </button>
+      <ActionError error={error} />
+    </span>
+  );
+}
+
+/** The three receiver-verification verbs share a shape — one POST, no
+ *  input, a confirmation to announce — so they share a button rather
+ *  than three near-identical copies of ClearExceptionButton. */
+function ReceiverAuthButton({
+  parcelId, label, icon, done, action,
+}: {
+  parcelId: string;
+  label: string;
+  icon: IconName;
+  done: string;
+  action: (parcelId: string) => Promise<{ ok: true } | { ok: false; error: string }>;
+}) {
+  const [pending, startTransition] = useTransition();
+  const [error, setError] = useState<string | null>(null);
+  const announce = useAnnounce();
+  return (
+    <span>
+      <button className="btn btn-o btn-sm" disabled={pending}
+        onClick={() => startTransition(async () => {
+          const result = await action(parcelId);
+          if (!result.ok) setError(result.error);
+          else announce(done, 'assertive');
+        })}>
+        <Icon name={icon} size={13} />{pending ? 'Working…' : label}
       </button>
       <ActionError error={error} />
     </span>
