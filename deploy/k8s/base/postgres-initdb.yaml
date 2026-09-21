@@ -1,0 +1,62 @@
+# ════════════════════════════════════════════════════════════════════
+#  First-boot bootstrap, mounted at /docker-entrypoint-initdb.d.
+#
+#  Runs exactly once, on an empty PGDATA. Re-applying this ConfigMap
+#  against an initialised volume changes nothing — extensions and roles
+#  added later need a migration, not an edit here.
+#
+#  Diverges from docker/postgres/init/01-extensions.sql in two ways, on
+#  purpose:
+#
+#   · That file hardcodes `PASSWORD 'esoko_dev_only'` for the esoqo_app
+#     role. A literal password in a git-tracked manifest is a credential
+#     leak the moment the repo is cloned, so it comes from a Secret.
+#   · It also hardcodes the database name in GRANT/COMMENT. Here the
+#     name arrives as POSTGRES_DB from a Secret, so everything that
+#     needs it is in the .sh where psql variables can carry it.
+# ════════════════════════════════════════════════════════════════════
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: postgres-initdb
+  labels: { app.kubernetes.io/part-of: esoqo }
+data:
+  01-extensions.sql: |
+    CREATE EXTENSION IF NOT EXISTS "pgcrypto";      -- gen_random_uuid, digest
+    CREATE EXTENSION IF NOT EXISTS "citext";        -- case-insensitive email
+    CREATE EXTENSION IF NOT EXISTS "pg_trgm";       -- fuzzy entity resolution
+
+  02-app-role.sh: |
+    #!/bin/bash
+    set -euo pipefail
+
+    if [ -z "${APP_ROLE_PASSWORD:-}" ]; then
+      echo "02-app-role: APP_ROLE_PASSWORD unset — refusing to create a passwordless role" >&2
+      exit 1
+    fi
+
+    # Prisma migrates as the owner; the app connects as this role so row-level
+    # security is never bypassed by table ownership.
+    psql -v ON_ERROR_STOP=1 \
+         --username "$POSTGRES_USER" --dbname "$POSTGRES_DB" \
+         -v pw="$APP_ROLE_PASSWORD" -v dbname="$POSTGRES_DB" <<'EOSQL'
+      DO $$
+      BEGIN
+        IF NOT EXISTS (SELECT FROM pg_roles WHERE rolname = 'esoqo_app') THEN
+          CREATE ROLE esoqo_app LOGIN NOBYPASSRLS;
+        END IF;
+      END
+      $$;
+
+      ALTER ROLE esoqo_app PASSWORD :'pw';
+
+      GRANT CONNECT ON DATABASE :"dbname" TO esoqo_app;
+      GRANT USAGE ON SCHEMA public TO esoqo_app;
+      ALTER DEFAULT PRIVILEGES IN SCHEMA public
+        GRANT SELECT, INSERT, UPDATE, DELETE ON TABLES TO esoqo_app;
+      ALTER DEFAULT PRIVILEGES IN SCHEMA public
+        GRANT USAGE, SELECT ON SEQUENCES TO esoqo_app;
+
+      COMMENT ON DATABASE :"dbname" IS
+        'Esoqo registry. Consent-bound. Subject to the Data Protection Act 2019.';
+    EOSQL

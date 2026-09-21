@@ -2,7 +2,7 @@
 
 import { forwardRef, useCallback, useEffect, useImperativeHandle, useRef, useState } from 'react';
 import { Icon } from './Icon';
-import { PrintableLabel, PrintStyles } from './ParcelLabel';
+import { dropPointFor, PrintableLabel, PrintStyles } from './ParcelLabel';
 import {
   flushQueue, listQueued, offlineSupported, queueBooking, type QueuedBooking,
 } from './parcelOfflineQueue';
@@ -354,7 +354,20 @@ export const CounterForm = forwardRef<CounterFormHandle, {
             genuine. */}
         {done.kind === 'booked' && (
           <div className="print-modal-escape" style={{ marginTop: 16 }}>
-            <PrintableLabel code={done.code} sig={doneSig} orgName={orgName} orgLogoUrl={orgLogoUrl} />
+            {/* route: the drop point, from what the clerk just typed into
+                "To". This label goes straight onto a box that will be
+                sorted by people without scanners, and the destination was
+                sitting in this form's own state the whole time — it just
+                never reached the sticker. dropPointFor keeps it to the
+                locality, so a free-text address never prints large on
+                something that rides in the open. */}
+            <PrintableLabel
+              code={done.code}
+              sig={doneSig}
+              route={dropPointFor(destinationLabel)}
+              orgName={orgName}
+              orgLogoUrl={orgLogoUrl}
+            />
           </div>
         )}
         <div style={{ display: 'flex', gap: 8, justifyContent: 'center', marginTop: 16, flexWrap: 'wrap' }}>

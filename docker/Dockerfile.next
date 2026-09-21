@@ -1,0 +1,109 @@
+# syntax=docker/dockerfile:1.7
+# ════════════════════════════════════════════════════════════════════
+#  Production image for any of the five Next.js apps.
+#
+#  One Dockerfile, five images — selected by `--build-arg APP=web`
+#  (web | app | admin | store | jamii). They differ only in which
+#  workspace gets built and which port it listens on, so five
+#  near-identical Dockerfiles would be five places to forget a fix.
+#
+#  Debian slim, not Alpine: Prisma's query engine is generated inside
+#  the build stage against the host's libc. On musl that needs an
+#  explicit binaryTargets entry in schema.prisma, which isn't there —
+#  and a missing engine fails at first query, not at build, so the
+#  image ships green and dies in production. Debian matches Prisma's
+#  default target with no schema change.
+# ════════════════════════════════════════════════════════════════════
+ARG NODE_VERSION=22.12.0
+
+FROM node:${NODE_VERSION}-bookworm-slim AS base
+ENV PNPM_HOME=/pnpm PATH=/pnpm:$PATH CI=1
+RUN corepack enable && corepack prepare pnpm@9.12.0 --activate \
+ && apt-get update \
+ && apt-get install -y --no-install-recommends openssl ca-certificates \
+ && rm -rf /var/lib/apt/lists/*
+WORKDIR /repo
+
+# ── build ───────────────────────────────────────────────────────────
+FROM base AS build
+ARG APP
+
+# NEXT_PUBLIC_* are inlined into the client bundle by `next build`, so
+# they are BUILD inputs, not runtime env. This is why testnet and
+# production get separately built images from the same commit rather
+# than one image promoted between them — see docs/deployment/README.md.
+ARG NEXT_PUBLIC_WEB_URL
+ARG NEXT_PUBLIC_APP_URL
+ARG NEXT_PUBLIC_STORE_URL
+ARG NEXT_PUBLIC_CECF_URL
+ARG NEXT_PUBLIC_JAMII_PRIMARY_ORIGIN
+ARG NEXT_PUBLIC_JAMII_DOMAIN_TARGET
+ARG NEXT_PUBLIC_PLAY_STORE_URL
+ARG NEXT_PUBLIC_APP_STORE_URL
+ENV NEXT_PUBLIC_WEB_URL=$NEXT_PUBLIC_WEB_URL \
+    NEXT_PUBLIC_APP_URL=$NEXT_PUBLIC_APP_URL \
+    NEXT_PUBLIC_STORE_URL=$NEXT_PUBLIC_STORE_URL \
+    NEXT_PUBLIC_CECF_URL=$NEXT_PUBLIC_CECF_URL \
+    NEXT_PUBLIC_JAMII_PRIMARY_ORIGIN=$NEXT_PUBLIC_JAMII_PRIMARY_ORIGIN \
+    NEXT_PUBLIC_JAMII_DOMAIN_TARGET=$NEXT_PUBLIC_JAMII_DOMAIN_TARGET \
+    NEXT_PUBLIC_PLAY_STORE_URL=$NEXT_PUBLIC_PLAY_STORE_URL \
+    NEXT_PUBLIC_APP_STORE_URL=$NEXT_PUBLIC_APP_STORE_URL \
+    NEXT_TELEMETRY_DISABLED=1
+
+# NODE_ENV is deliberately NOT set to production in this stage. pnpm
+# honours it and would skip every devDependency — including typescript
+# and @types/node, which live in the root package.json and which
+# `next build` refuses to run without ("Please install typescript and
+# @types/node"). `next build` sets NODE_ENV=production for the compile
+# itself regardless, so nothing is lost by leaving it unset here.
+
+COPY . .
+
+# The pnpm store is a cache mount rather than a layer: the whole repo is
+# copied above, so any source change invalidates the install layer, but
+# the mount survives that and keeps a warm rebuild near-instant.
+#
+# --prod=false belt-and-braces: it pins the devDependency behaviour to
+# this flag rather than to whatever NODE_ENV happens to be, so setting
+# NODE_ENV here later cannot silently break the build again.
+RUN --mount=type=cache,id=pnpm-store,target=/pnpm/store \
+    pnpm install --frozen-lockfile --prod=false
+
+# `next build` typechecks against the generated client; @esoqo/db's
+# postinstall already ran generate, but a cached store can skip
+# postinstall entirely, so make it explicit.
+RUN pnpm --filter @esoqo/db generate
+RUN pnpm --filter @esoqo/${APP} build
+
+# ── runtime ─────────────────────────────────────────────────────────
+FROM node:${NODE_VERSION}-bookworm-slim AS runner
+ARG APP
+ARG PORT=3000
+ENV APP=${APP} \
+    PORT=${PORT} \
+    HOSTNAME=0.0.0.0 \
+    NODE_ENV=production \
+    NEXT_TELEMETRY_DISABLED=1
+
+RUN apt-get update \
+ && apt-get install -y --no-install-recommends openssl ca-certificates \
+ && rm -rf /var/lib/apt/lists/* \
+ && useradd --system --uid 1001 --gid 0 nextjs
+
+WORKDIR /repo
+
+# Three copies, because `output: standalone` splits its result: the
+# traced server tree, and then .next/static and public/ which Next
+# deliberately leaves out (it assumes a CDN serves them). Without the
+# latter two the app boots and renders unstyled, assetless HTML.
+COPY --from=build --chown=1001:0 /repo/apps/${APP}/.next/standalone ./
+COPY --from=build --chown=1001:0 /repo/apps/${APP}/.next/static ./apps/${APP}/.next/static
+COPY --from=build --chown=1001:0 /repo/apps/${APP}/public ./apps/${APP}/public
+
+USER 1001
+EXPOSE ${PORT}
+
+# APP is an ARG, so it cannot be interpolated by exec-form CMD. `exec`
+# keeps node as PID 1 so Kubernetes' SIGTERM reaches it and the pod
+# drains instead of being SIGKILLed at the grace period.
+CMD ["sh", "-c", "exec node apps/$APP/server.js"]

@@ -4,6 +4,8 @@ import { notFound } from 'next/navigation';
 import { Icon, Logo, type IconName } from '@esoqo/ui';
 import { requireOrgAccess } from '@/lib/session';
 import { canOrg, orgGo, orgForCan, type GoOrg } from '@/lib/ticketing';
+import { listWorkspaces } from '@/lib/workspaces';
+import { WorkspaceSwitcher } from '@/components/WorkspaceSwitcher';
 import { OrgMobileNav } from './OrgMobileNav';
 import '@/app/me/me.css';
 
@@ -28,9 +30,15 @@ export default async function OrgLayout(
   const { orgId } = await params;
   const { kind, ctx } = await requireOrgAccess(orgId);
 
-  const org = await orgGo<{ org: GoOrg }>(orgId, `/v1/ticketorgs/${orgId}`)
-    .then((r) => orgForCan(r.org))
-    .catch(() => null);
+  const [org, workspaces] = await Promise.all([
+    orgGo<{ org: GoOrg }>(orgId, `/v1/ticketorgs/${orgId}`)
+      .then((r) => orgForCan(r.org))
+      .catch(() => null),
+    // A staff session (kind !== 'owner') carries no subject bearer, so
+    // this comes back empty and the switcher renders as a plain
+    // identity block — correct: a scanner has nothing of their own here.
+    listWorkspaces(),
+  ]);
   if (!org) notFound();
 
   const tabs: { href: string; icon: IconName; label: string; show: boolean }[] = [
@@ -43,6 +51,9 @@ export default async function OrgLayout(
     // even for transport so it can't be mistaken for the Fleet truck.
     { href: `/org/${orgId}/fleet`, icon: 'truck', label: 'Fleet', show: org.vertical === 'TRANSPORT' && canOrg(ctx, org, 'fleet.read') },
     { href: `/org/${orgId}/fleet/pricing`, icon: 'tag', label: 'Fares', show: org.vertical === 'TRANSPORT' && canOrg(ctx, org, 'fleet.read') },
+    // Luggage is gated on luggage.read, not fleet.read: a conductor's
+    // CREW bundle carries the luggage grants without the fleet console's.
+    { href: `/org/${orgId}/luggage`, icon: 'package', label: 'Luggage', show: org.vertical === 'TRANSPORT' && canOrg(ctx, org, 'luggage.read') },
     { href: `/org/${orgId}/listings`, icon: 'calendar', label: 'Listings', show: canOrg(ctx, org, 'listing.write') },
     { href: `/org/${orgId}/bookings`, icon: 'document', label: 'Bookings', show: canOrg(ctx, org, 'booking.read') },
     { href: `/org/${orgId}/scan`, icon: 'qr', label: 'Scan tickets', show: canOrg(ctx, org, 'ticket.checkin') },
@@ -55,11 +66,14 @@ export default async function OrgLayout(
         <div className="appbar-in">
           <Link href={`/org/${orgId}`} className="appbrand" aria-label="Organiser console home">
             <Logo />
-            <span className="appbar-name">
-              {org.name}
-              <small>{org.vertical === 'TRANSPORT' ? 'Transport organiser' : 'Events organiser'}</small>
-            </span>
           </Link>
+          <span className="appbar-div" aria-hidden="true" />
+          <WorkspaceSwitcher
+            workspaces={workspaces}
+            currentKey={`ticket:${orgId}`}
+            fallbackName={org.name}
+            fallbackSubtitle={org.vertical === 'TRANSPORT' ? 'Transport organiser' : 'Events organiser'}
+          />
           {/* Desktop only (me.css hides .headnav under 820px) — the
               .orgnav strip below is the same links for phones, so every
               tab stays reachable on every subpage (Fleet, Scan, Staff…),
@@ -71,17 +85,16 @@ export default async function OrgLayout(
               </Link>
             ))}
           </nav>
-          {kind === 'owner' ? (
-            <Link href="/me/organiser" className="btn btn-o btn-sm">
-              <Icon name="arrow-left" size={15} />Your organisers
-            </Link>
-          ) : (
-            <form action="/org-staff/signout" method="post">
-              <button type="submit" className="btn btn-o btn-sm">
-                <Icon name="close" size={15} />Sign out
-              </button>
-            </form>
-          )}
+          {/* The way back to the person's own record is the switcher
+              above, on every screen of every console — this trailing
+              slot is now just sign out, which is what it means in the
+              courier portal too. An owner leaving here ends their Esoqo
+              session; a staff login ends only the console's. */}
+          <form action={kind === 'owner' ? '/signout' : '/org-staff/signout'} method="post">
+            <button type="submit" className="btn btn-o btn-sm">
+              <Icon name="close" size={15} />Sign out
+            </button>
+          </form>
           {/* Phones: the same tabs as .headnav above, swipeable. Rendered
               always, shown only under 820px by me.css (.orgnav). */}
           <OrgMobileNav tabs={tabs} orgId={orgId} />

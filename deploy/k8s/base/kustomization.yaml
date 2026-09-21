@@ -1,0 +1,31 @@
+# ════════════════════════════════════════════════════════════════════
+#  Base — environment-agnostic. Nothing here names preview or
+#  production, and nothing here is deployable on its own: the base
+#  carries no namespace, no hostnames and no image tags. Those are the
+#  overlays' job, which is what keeps the two environments provably
+#  identical in everything except the things that must differ.
+#
+#  The Ingress lives in the overlays, not here — hostnames and TLS
+#  issuers have nothing in common between environments.
+# ════════════════════════════════════════════════════════════════════
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+resources:
+  - postgres.yaml
+  - postgres-initdb.yaml
+  - pgbouncer.yaml
+  - redis.yaml
+  - core-services.yaml
+  - nextjs-apps.yaml
+  - migrate-job.yaml
+  - backup-cronjob.yaml
+
+# `labels` with includeSelectors: false, not `commonLabels`. commonLabels
+# injects into spec.selector.matchLabels, which Kubernetes makes
+# immutable after creation — a later edit to these labels would make
+# every Deployment un-updatable and need a manual delete to recover.
+labels:
+  - includeSelectors: false
+    pairs:
+      app.kubernetes.io/managed-by: fleet

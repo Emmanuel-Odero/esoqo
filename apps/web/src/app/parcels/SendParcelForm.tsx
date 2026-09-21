@@ -31,15 +31,31 @@ const PARCEL_TYPES = [
  * price, run a bargain engine and take an M-Pesa payment inline; all
  * of that is gone until pricing online is actually sorted, not merely
  * hidden — there is no quote request anywhere in this file.
+ *
+ * One screen, not two. It was details → contact behind a Continue
+ * button, which cost a sender a page transition to reach four fields
+ * they could see coming, and hid the total length of the job until
+ * they were already half through it. A single scroll is honest about
+ * the size of the form and lets somebody fill it in whatever order the
+ * information reaches them — which at a counter, reading a number off
+ * a customer's phone, is rarely top to bottom.
  */
-type Stage = 'details' | 'contact' | 'success';
+type Stage = 'form' | 'success';
+
+/** Which wording of Esoqo's shipping terms this form showed.
+ *
+ * Sent with the booking and stored against the parcel, because in a
+ * dispute "they accepted the terms" is worth very little next to "they
+ * accepted THIS text, on this date". Bump whenever the terms change;
+ * do not reuse a version for altered wording. */
+const TERMS_VERSION = '2026-09-01';
 
 const fieldStyle: React.CSSProperties = {
   width: '100%', padding: '10px 14px', border: '1.5px solid var(--line)', borderRadius: 8, fontSize: '.95rem',
 };
 
-/** A quiet step marker so a two-stage form never leaves anyone
- *  wondering how much is left to fill in. */
+/** A quiet eyebrow above the first heading — what this card is, before
+ *  the first question. It used to count steps; there is one now. */
 const STEP_EYEBROW: React.CSSProperties = {
   margin: '0 0 4px', fontSize: '.72rem', letterSpacing: '.12em',
   textTransform: 'uppercase', fontFamily: 'var(--font-mono)',
@@ -88,7 +104,18 @@ export function SendParcelForm(
   const [receiverMsisdn, setReceiverMsisdn] = useState('');
   const [notes, setNotes] = useState('');
 
-  const [stage, setStage] = useState<Stage>('details');
+  // ── What's actually in the box ──────────────────────────────────────
+  // The declaration a shipping booking has always needed and this form
+  // never asked for. Distinct from the staff-side contentsDeclared
+  // flag, which asserts that a clerk asked the question in person — a
+  // web form cannot claim that, so these are recorded as the sender's
+  // own statement instead (see Parcel.senderDeclaredContents).
+  const [declaredContents, setDeclaredContents] = useState('');
+  const [declaredValue, setDeclaredValue] = useState('');
+  const [lawfulAttested, setLawfulAttested] = useState(false);
+  const [termsAccepted, setTermsAccepted] = useState(false);
+
+  const [stage, setStage] = useState<Stage>('form');
   const [error, setError] = useState<string | null>(null);
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
   const [pending, start] = useTransition();
@@ -109,27 +136,35 @@ export function SendParcelForm(
     if (match) setParcelType(match.parcelType);
   }, [weightKg, pricing]);
 
-  function goToContact() {
-    const errs: Record<string, string> = {};
-    if (!originLabel.trim()) errs.origin = 'Where is it being collected from?';
-    if (!destinationLabel.trim()) errs.destination = 'Where is it going?';
-    if (deliveryMode === 'AGENT' && !destinationAgentId) errs.agent = 'Choose a pickup point';
-    if (originMethod === 'SELF_DROPOFF' && !dropoffStationId) errs.station = 'Choose which station you’re dropping this off at';
-    setFieldErrors(errs);
-    if (Object.keys(errs).length > 0) return;
-    setStage('contact');
-  }
-
   /** The one and only write. No price is quoted or charged — the fee is
-   *  settled in person, so this books the parcel and stops. */
+   *  settled in person, so this books the parcel and stops.
+   *
+   *  Every rule in one place now that the form is one screen. The
+   *  errors land beside their own fields, so a sender who missed
+   *  something halfway up is shown where rather than told to go
+   *  looking. */
   function submitBooking() {
     const errs: Record<string, string> = {};
     if (!senderName.trim()) errs.senderName = 'We need your name';
     if (!senderMsisdn.trim()) errs.senderMsisdn = 'We need your phone number';
     if (!receiverName.trim()) errs.receiverName = "We need the receiver's name";
     if (!receiverMsisdn.trim()) errs.receiverMsisdn = "We need the receiver's phone number";
+    if (!originLabel.trim()) errs.origin = 'Where is it being collected from?';
+    if (!destinationLabel.trim()) errs.destination = 'Where is it going?';
+    if (deliveryMode === 'AGENT' && !destinationAgentId) errs.agent = 'Choose a pickup point';
+    if (originMethod === 'SELF_DROPOFF' && !dropoffStationId) errs.station = 'Choose which station you’re dropping this off at';
+    // Required, not optional. A courier is legally answerable for what
+    // it carries, and "the sender didn't say" is not a defence — which
+    // is the whole reason this form asking nothing at all was a gap.
+    if (!declaredContents.trim()) errs.contents = 'Say what is inside';
+    if (!declaredValue.trim()) errs.value = 'Roughly what is it worth?';
+    if (!lawfulAttested) errs.lawful = 'Please confirm the contents are legal to send';
+    if (!termsAccepted) errs.terms = 'Please accept the terms to book';
     setFieldErrors(errs);
-    if (Object.keys(errs).length > 0) return;
+    if (Object.keys(errs).length > 0) {
+      setError('Some details are missing — check the highlighted fields.');
+      return;
+    }
 
     setError(null);
     start(async () => {
@@ -142,6 +177,11 @@ export function SendParcelForm(
         destinationAgentId: deliveryMode === 'AGENT' ? (destinationAgentId || undefined) : undefined,
         originMethod,
         parcelOrgId: isSelfDropoff ? dropoffStationId : undefined,
+        senderDeclaredContents: declaredContents.trim(),
+        declaredValueKes: Number(declaredValue),
+        lawfulContentsAttested: lawfulAttested,
+        termsAccepted,
+        termsVersion: TERMS_VERSION,
         // No price is quoted or charged online for any booking here —
         // see dbx.BookParcelInput.PayAtCounter's own comment. A walk-in
         // drop-off settles at the station, a scheduled pickup settles
@@ -237,72 +277,35 @@ export function SendParcelForm(
     );
   }
 
-  // ── Stage 2: who ────────────────────────────────────────────────────
-
-  if (stage === 'contact') {
-    return (
-      <div className="card">
-        <button type="button" className="btn btn-o btn-sm" style={{ marginBottom: 16 }}
-          onClick={() => setStage('details')}>
-          <Icon name="arrow-left" size={14} />Back
-        </button>
-
-        <p className="sub" style={STEP_EYEBROW}>Step 2 of 2</p>
-        <p className="sub" style={{ margin: '0 0 16px', fontSize: '.85rem' }}>
-          {isSelfDropoff
-            ? <>Dropping off at <strong>{chosenStation?.name}</strong> — {chosenStation?.locationHint}. The fee is settled there, not here.</>
-            : 'The fee is settled with the courier who collects it, not here.'}
-        </p>
-
-        <h3 style={{ margin: '20px 0 16px' }}>Your details</h3>
-        <FormRow>
-          <Field id="sd-name" label="Your name" value={senderName} onChange={setSenderName} error={fieldErrors.senderName} />
-          <Field id="sd-msisdn" label="Your phone" value={senderMsisdn} error={fieldErrors.senderMsisdn}
-            onChange={setSenderMsisdn} placeholder="+2547XXXXXXXX" />
-        </FormRow>
-
-        <h3 style={{ margin: '20px 0 16px' }}>Receiver&apos;s details</h3>
-        <FormRow>
-          <Field id="rc-name" label="Receiver's name" value={receiverName} onChange={setReceiverName} error={fieldErrors.receiverName} />
-          <Field id="rc-msisdn" label="Receiver's phone" value={receiverMsisdn} onChange={setReceiverMsisdn}
-            placeholder="+2547XXXXXXXX" error={fieldErrors.receiverMsisdn} />
-        </FormRow>
-        <p className="sub" style={{ margin: '4px 0 0', fontSize: '.78rem' }}>
-          We text the receiver their delivery code and a tracking link — so make sure this number is right.
-        </p>
-
-        <div style={{ marginTop: 16 }}>
-          <label className="sub" htmlFor="notes" style={{ display: 'block', marginBottom: 6 }}>
-            Notes for the courier (optional)
-          </label>
-          <textarea id="notes" style={{ ...fieldStyle, minHeight: 70, resize: 'vertical' }}
-            value={notes} onChange={(e) => setNotes(e.target.value)} placeholder="e.g. Call on arrival, gate 3" />
-        </div>
-
-        {error && <ErrorLine message={error} />}
-
-        <button type="button" className="btn btn-p" style={{ width: '100%', marginTop: 18 }}
-          disabled={pending} onClick={submitBooking}>
-          {pending ? 'Submitting…' : isSelfDropoff ? 'Submit — pay at the counter' : 'Confirm booking'}
-        </button>
-        <p className="sub" style={{ margin: '8px 0 0', fontSize: '.78rem', textAlign: 'center' }}>
-          {isSelfDropoff
-            ? 'Nothing to pay online — settle the fee at the counter when you drop this off.'
-            : 'Nothing to pay online — settle the fee with the courier when they collect it.'}
-        </p>
-      </div>
-    );
-  }
-
-  // ── Stage 1: what and where ──────────────────────────────────────────
+  // ── The form ────────────────────────────────────────────────────────
 
   return (
     <div className="card">
-      <p className="sub" style={STEP_EYEBROW}>Step 1 of 2</p>
-      <h3 style={{ marginBottom: 4 }}>What are you sending?</h3>
+      <p className="sub" style={STEP_EYEBROW}>Book a parcel</p>
+      <h3 style={{ marginBottom: 4 }}>Who is it for?</h3>
       <p className="sub" style={{ margin: '0 0 16px', fontSize: '.85rem' }}>
-        Just the shipping details — the fee is settled in person, with the agent or courier.
+        Everything on one page — the fee is settled in person, with the agent or courier.
       </p>
+
+      {/* People first, details second. Names and numbers are what a
+          sender already has in their head; the parcel type and the
+          hub routing are decisions, and a form that opens with a
+          decision reads as longer than it is. */}
+      <FormRow>
+        <Field id="sd-name" label="Your name" value={senderName} onChange={setSenderName} error={fieldErrors.senderName} />
+        <Field id="sd-msisdn" label="Your phone" value={senderMsisdn} error={fieldErrors.senderMsisdn}
+          onChange={setSenderMsisdn} placeholder="+2547XXXXXXXX" />
+      </FormRow>
+      <FormRow>
+        <Field id="rc-name" label="Receiver's name" value={receiverName} onChange={setReceiverName} error={fieldErrors.receiverName} />
+        <Field id="rc-msisdn" label="Receiver's phone" value={receiverMsisdn} onChange={setReceiverMsisdn}
+          placeholder="+2547XXXXXXXX" error={fieldErrors.receiverMsisdn} />
+      </FormRow>
+      <p className="sub" style={{ margin: '4px 0 0', fontSize: '.78rem' }}>
+        We text the receiver their delivery code and a tracking link — so make sure this number is right.
+      </p>
+
+      <h3 style={{ margin: '22px 0 16px' }}>What are you sending?</h3>
 
       <FormRow>
         <div>
@@ -431,16 +434,88 @@ export function SendParcelForm(
         </>
       )}
 
+      {/* ── The declaration ──────────────────────────────────────────
+          What's inside, what it's worth, and that it's legal to send.
+          Required, all of it: a courier is answerable for what it
+          carries, and this form asked none of it until now.
+
+          Deliberately NOT the staff-side contentsDeclared flag, which
+          core-go refuses from a guest booking because it means "a
+          named clerk asked this person, face to face". This is the
+          sender's own statement, stored in its own columns. */}
+      <h3 style={{ margin: '22px 0 12px' }}>What&apos;s inside?</h3>
+      <div style={{ marginBottom: 12 }}>
+        <label className="sub" htmlFor="contents" style={{ display: 'block', marginBottom: 6 }}>
+          Describe the contents
+        </label>
+        <input id="contents" style={fieldStyle} value={declaredContents}
+          onChange={(e) => setDeclaredContents(e.target.value)}
+          placeholder="e.g. 2 pairs of shoes and a phone charger" />
+        {fieldErrors.contents && <ErrorLine message={fieldErrors.contents} />}
+      </div>
+      <div style={{ marginBottom: 12 }}>
+        <label className="sub" htmlFor="declared-value" style={{ display: 'block', marginBottom: 6 }}>
+          Roughly what is it worth? (KES)
+        </label>
+        <input id="declared-value" style={{ ...fieldStyle, maxWidth: 200 }} value={declaredValue}
+          inputMode="numeric"
+          onChange={(e) => setDeclaredValue(e.target.value.replace(/[^\d]/g, ''))}
+          placeholder="e.g. 4500" />
+        {fieldErrors.value && <ErrorLine message={fieldErrors.value} />}
+        <p className="sub" style={{ margin: '6px 0 0', fontSize: '.78rem' }}>
+          Used if anything goes wrong. Be honest — a figure nobody believes helps nobody.
+        </p>
+      </div>
+
+      <label className="sub" htmlFor="lawful" style={{ display: 'flex', gap: 8, alignItems: 'flex-start', margin: '14px 0 0' }}>
+        <input id="lawful" type="checkbox" checked={lawfulAttested} style={{ marginTop: 3 }}
+          onChange={(e) => setLawfulAttested(e.target.checked)} />
+        <span>
+          I confirm the contents are legal to send and contain no prohibited items —
+          no cash, weapons, drugs, explosives, or live animals.
+        </span>
+      </label>
+      {fieldErrors.lawful && <ErrorLine message={fieldErrors.lawful} />}
+
+      {/* Two parties' terms, named as two: Esoqo runs the platform, the
+          carrying company runs the truck, and a claim may turn on only
+          one of them. Rolling them into "the terms" would be the kind
+          of vagueness that becomes somebody's problem later. */}
+      <label className="sub" htmlFor="terms" style={{ display: 'flex', gap: 8, alignItems: 'flex-start', margin: '10px 0 0' }}>
+        <input id="terms" type="checkbox" checked={termsAccepted} style={{ marginTop: 3 }}
+          onChange={(e) => setTermsAccepted(e.target.checked)} />
+        <span>
+          I accept Esoqo&apos;s <a href="/help" target="_blank" rel="noreferrer">terms of service</a>{' '}
+          and the shipping terms of the company that carries this parcel.
+        </span>
+      </label>
+      {fieldErrors.terms && <ErrorLine message={fieldErrors.terms} />}
+
+      <div style={{ marginTop: 18 }}>
+        <label className="sub" htmlFor="notes" style={{ display: 'block', marginBottom: 6 }}>
+          Notes for the courier (optional)
+        </label>
+        <textarea id="notes" style={{ ...fieldStyle, minHeight: 70, resize: 'vertical' }}
+          value={notes} onChange={(e) => setNotes(e.target.value)} placeholder="e.g. Call on arrival, gate 3" />
+      </div>
+
       <p className="sub" style={{ margin: '22px 0 0', fontSize: '.85rem', borderTop: '1px solid var(--line)', paddingTop: 16 }}>
-        Nothing to pay here — the fee is worked out and settled in person, with the agent or courier.
+        {isSelfDropoff && chosenStation
+          ? <>Dropping off at <strong>{chosenStation.name}</strong> — {chosenStation.locationHint}. The fee is settled there, not here.</>
+          : 'Nothing to pay here — the fee is worked out and settled in person, with the agent or courier.'}
       </p>
 
       {error && <ErrorLine message={error} />}
 
       <button type="button" className="btn btn-p" style={{ width: '100%', marginTop: 16 }}
-        disabled={isSelfDropoff && !dropoffStationId} onClick={goToContact}>
-        Continue
+        disabled={pending} onClick={submitBooking}>
+        {pending ? 'Submitting…' : isSelfDropoff ? 'Book — pay at the counter' : 'Confirm booking'}
       </button>
+      <p className="sub" style={{ margin: '8px 0 0', fontSize: '.78rem', textAlign: 'center' }}>
+        {isSelfDropoff
+          ? 'Nothing to pay online — settle the fee at the counter when you drop this off.'
+          : 'Nothing to pay online — settle the fee with the courier when they collect it.'}
+      </p>
     </div>
   );
 }

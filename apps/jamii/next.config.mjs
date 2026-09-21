@@ -1,7 +1,24 @@
+import path from "node:path";
+import { fileURLToPath } from "node:url";
+
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
+
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   reactStrictMode: true,
   poweredByHeader: false,
+
+  /**
+   * Container builds. `standalone` emits .next/standalone with only the
+   * traced runtime dependencies, so the deploy image carries neither the
+   * pnpm store nor the monorepo source — roughly 200MB instead of 2GB.
+   *
+   * outputFileTracingRoot must be the workspace root: pnpm hoists
+   * @esoqo/* and their deps to the root node_modules, and without this
+   * Next traces from the app directory and silently omits them.
+   */
+  output: "standalone",
+  outputFileTracingRoot: path.join(__dirname, "../../"),
   transpilePackages: ['@esoqo/ui', '@esoqo/a11y', '@esoqo/domain', '@esoqo/payments'],
   typedRoutes: true,
 

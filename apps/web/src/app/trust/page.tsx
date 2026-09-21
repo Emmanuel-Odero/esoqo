@@ -57,8 +57,8 @@ export default function TrustPage() {
               <div className="tbl" style={{ border: 0 }}>
                 {([
                   ['Registered name', 'Esoqo Limited'],
-                  ['Company number', '[to be added]'],
-                  ['Data controller', 'ODPC/REG/[number]'],
+                  ['Company number', 'Registration pending — BRS Kenya'],
+                  ['Data controller', 'ODPC registration filed — number to be published on confirmation'],
                   ['Office', 'Nairobi, Kenya'],
                   ['Data Protection Officer', 'dpo@esoqo.co.ke'],
                 ] as const).map(([k, v]) => (

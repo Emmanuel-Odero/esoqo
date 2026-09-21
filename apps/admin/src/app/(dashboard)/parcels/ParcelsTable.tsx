@@ -37,6 +37,19 @@ export interface AdminParcelRow {
   // sender/receiver SMS, and this row's own "Confirm received" action.
   // See dbx.ConfirmParcelIntake.
   IntakeConfirmedAt: string | null;
+  // Receiver self-authentication — the receiver proving from their own
+  // phone that they are the receiver, by typing the delivery code.
+  // Three wrong tries locks the parcel; admin can allow two more or
+  // mint a replacement, for any carrier including Esoqo-operated ones
+  // with no company console of their own. No delivery code here: admin
+  // needs to unstick the parcel, not read the secret.
+  ReceiverAuthAttempts: number;
+  ReceiverAuthLockedAt: string | null;
+  ReceiverAuthHardLockedAt: string | null;
+  DeliveryCodeVersion: number;
+  /** Set when a receiver closed their own collection at a pickup point,
+   *  with no staff witness — the courier's pay waits out a hold. */
+  CourierEarningsHeldUntil: string | null;
 }
 
 const FLAGGABLE = new Set(['RECEIVED_AT_COUNTER', 'PICKED_UP', 'IN_TRANSIT']);
@@ -151,6 +164,19 @@ export function ParcelsTable({
                     )}
                     {!p.ExceptionNote && p.SlaDeadlineAt && FLAGGABLE.has(p.Status) && new Date(p.SlaDeadlineAt) < new Date() && (
                       <span className="pill p-warn" style={{ display: 'block', width: 'fit-content', marginTop: 2 }}>Past SLA</span>
+                    )}
+                    {/* Shown alongside the others rather than instead
+                        of them: a locked receiver and a past-SLA clock
+                        are both true at once on exactly the parcels an
+                        operator most needs to see, and hiding either
+                        would misdescribe why it is stuck. */}
+                    {(p.ReceiverAuthLockedAt || p.ReceiverAuthHardLockedAt) && (
+                      <span
+                        className={`pill ${p.ReceiverAuthHardLockedAt ? 'p-bad' : 'p-warn'}`}
+                        style={{ display: 'flex', gap: 4, alignItems: 'center', width: 'fit-content', marginTop: 2 }}
+                      >
+                        <Icon name="lock" size={11} />{p.ReceiverAuthHardLockedAt ? 'Needs new code' : 'Receiver locked'}
+                      </span>
                     )}
                   </td>
                   <td style={{ textAlign: 'right' }}>

@@ -33,6 +33,7 @@ const (
 	ScanKindParty       = "party"
 	ScanKindCertificate = "certificate"
 	ScanKindParcel      = "parcel"
+	ScanKindLuggage     = "luggage"
 	ScanKindUnknown     = "unknown"
 )
 
@@ -75,6 +76,12 @@ func actionForKind(kind string) string {
 		return ActionVerify
 	case ScanKindParcel:
 		return ActionTrack
+	case ScanKindLuggage:
+		// Track, not verify: whoever scans a luggage stub is asking
+		// "where is my bag", and the projection behind it is the
+		// guest-safe one. Crew who need to act on it are in the luggage
+		// desk, which is capability-gated and does not come through here.
+		return ActionTrack
 	default:
 		return ActionInfo
 	}
@@ -95,6 +102,7 @@ type ScanHit struct {
 	Party       *PartyHit
 	Certificate *CertificateHit
 	Parcel      *ParcelStatusView
+	Luggage     *LuggageScanInfo
 }
 
 func unknownHit() *ScanHit {
@@ -126,6 +134,8 @@ func hit[T any](kind string, payload T) *ScanHit {
 		h.Certificate = any(payload).(*CertificateHit)
 	case ScanKindParcel:
 		h.Parcel = any(payload).(*ParcelStatusView)
+	case ScanKindLuggage:
+		h.Luggage = any(payload).(*LuggageScanInfo)
 	}
 	return h
 }
@@ -152,6 +162,11 @@ var shortCodePrefixes = []struct {
 	{prefix: "PKP-", kind: ScanKindOrder},
 	{prefix: "ESK-", kind: ScanKindParty},
 	{prefix: "PKG-", kind: ScanKindParcel, checkedLen: 6},
+	// Checked, like BUS-/TRIP-/VCH-/PKG-: a LUG- code is read aloud off
+	// a paper stub and typed by hand more than any other code here, so
+	// rejecting a fat-fingered character without a round trip is worth
+	// more on this prefix than on any of them.
+	{prefix: "LUG-", kind: ScanKindLuggage, checkedLen: 6},
 }
 
 // VoucherPublic is the card anyone holding the QR may see.
@@ -398,6 +413,14 @@ func resolveShortCode(ctx context.Context, pool *pgxpool.Pool, kind, code, qrSec
 	case ScanKindParcel:
 		if p, err := GetParcelStatus(ctx, pool, code); err == nil && p != nil {
 			return hit(kind, p)
+		}
+	case ScanKindLuggage:
+		// Guest-safe by construction: a luggage stub lives in a coat
+		// pocket and whoever holds it may scan it, so this projection
+		// carries the surname-and-initial form and nothing else. Crew
+		// detail stays behind ListTripLuggage's capability check.
+		if l, err := ResolveLuggageByCode(ctx, pool, code); err == nil && l != nil {
+			return hit(kind, l)
 		}
 	}
 	return nil

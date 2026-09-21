@@ -1,0 +1,82 @@
+# ════════════════════════════════════════════════════════════════════
+#  Prisma `migrate deploy` — one Job per release.
+#
+#  The name's last segment is replaced with the short commit SHA by
+#  whichever path builds the images — .github/workflows/build-images.yml
+#  or deploy/scripts/build-and-push.sh. That is not cosmetic: a Job's
+#  spec.template is immutable, so a fixed-name Job would make Fleet fail
+#  to apply on the second release and then silently report "modified"
+#  forever. A new name per release also means every migration run is
+#  independently auditable — `kubectl get jobs` is the deploy history.
+#
+#  The committed placeholder is `bootstrap` rather than something
+#  obviously templated like __RELEASE_TAG__, because Kubernetes names
+#  must be RFC 1123 labels: underscores are illegal, so the templated
+#  form made the repo's own checked-in state un-appliable. Anyone
+#  registering the GitRepo before running a build would have hit a
+#  validation error with no obvious cause.
+#
+#  ⚠  ORDERING. Fleet applies this Job and the new app Deployments in the
+#  same pass; nothing makes the rollout wait for the migration. For
+#  additive migrations (new nullable column, new table) that is fine —
+#  old pods ignore what they don't know about. For a BREAKING migration
+#  (dropped or renamed column, tightened constraint) it is not, and the
+#  runbook requires the expand/contract procedure in
+#  docs/deployment/README.md § "Breaking schema changes". Do not rely on
+#  this Job to sequence a destructive change.
+#
+#  Uses the core-service image because it already carries the full
+#  workspace: the Prisma CLI, schema.prisma, and all 108 migrations.
+# ════════════════════════════════════════════════════════════════════
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: esoqo-migrate-e05cf4a35a52
+  labels:
+    app.kubernetes.io/name: migrate
+    app.kubernetes.io/part-of: esoqo
+spec:
+  backoffLimit: 2
+  ttlSecondsAfterFinished: 604800 # keep a week of history, then reap
+  template:
+    metadata:
+      labels: { app.kubernetes.io/name: migrate, app.kubernetes.io/part-of: esoqo }
+    spec:
+      restartPolicy: Never
+      securityContext: { runAsNonRoot: true, runAsUser: 1001 }
+      # Postgres may still be initialising on a first-ever deploy, and a
+      # migration that fails because the socket is not up yet burns a
+      # backoffLimit attempt for no reason.
+      initContainers:
+        - name: wait-for-postgres
+          image: postgres:16-alpine
+          command: ["sh", "-c"]
+          args:
+            - |
+              until pg_isready -h postgres -p 5432 -U "$POSTGRES_USER"; do
+                echo "waiting for postgres..."
+                sleep 2
+              done
+          env:
+            - name: POSTGRES_USER
+              valueFrom: { secretKeyRef: { name: esoqo-db, key: POSTGRES_USER } }
+      containers:
+        - name: migrate
+          image: ghcr.io/emmanuel-odero/esoqo-core-service:latest
+          workingDir: /repo
+          # migrate deploy, never migrate dev: `dev` is interactive, will
+          # offer to reset the database, and generates new migration files.
+          command: ["pnpm", "--filter", "@esoqo/db", "migrate:deploy"]
+          envFrom:
+            - configMapRef: { name: esoqo-config }
+            - secretRef: { name: esoqo-db }
+            - secretRef: { name: esoqo-secrets }
+          env:
+            # Prisma's migration engine takes advisory locks and runs DDL,
+            # neither of which survives a transaction-pooled connection.
+            # It must bypass PgBouncer — hence DIRECT_DATABASE_URL.
+            - name: DATABASE_URL
+              valueFrom: { secretKeyRef: { name: esoqo-db, key: DIRECT_DATABASE_URL } }
+          resources:
+            requests: { cpu: 100m, memory: 256Mi }
+            limits: { memory: 768Mi }

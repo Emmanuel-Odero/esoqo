@@ -6,6 +6,7 @@ import {
   etaText, humanTime, isOffTimeline, statusLabel, statusMessage, statusTone, timelineFor,
 } from './parcel-format';
 import { ClaimPanel } from './ClaimPanel';
+import { ReceiverAuthPanel } from './ReceiverAuthPanel';
 import { TrackingMap } from './TrackingMap';
 
 /**
@@ -135,9 +136,16 @@ export function ParcelStatusPanel({ parcel }: { parcel: ParcelStatusView | Await
       </dl>
 
       {/* Everything above is what a stranger holding the code sees.
-          This is the door for the two people it actually belongs to —
-          opened by proving they hold the phone on the parcel, not the
-          code, which anyone who handled the box also holds. */}
+          These two are the door for the people it actually belongs to,
+          and they ask for different proof on purpose: the delivery code
+          only the receiver was sent, or the phone number already on the
+          parcel. Neither is the tracking code, which anyone who handled
+          the box also holds.
+
+          Receiver-first, because that is who is standing in front of a
+          counter wanting in — the sender is usually at a desk with time
+          to wait for a text. */}
+      <ReceiverAuthPanel code={parcel.code} />
       <ClaimPanel code={parcel.code} />
     </div>
   );
@@ -192,31 +200,50 @@ function AgentCard({ agent }: { agent: NonNullable<ParcelStatusView['agent']> })
 }
 
 /**
- * The full custody history, straight from the server: booking, counter
- * receipt, each hand-over, delivery — each with its time. This is what
- * answers "where has it been and when", which the single-status view
- * never could. Every entry here already happened, so all are ticked.
+ * The full history, straight from the server: booking, counter receipt,
+ * each hand-over, delivery — plus the things that happened between them
+ * which are not custody at all, like a receiver locking themselves out
+ * of the delivery code or a new code being issued.
+ *
+ * Every entry used to be drawn as a green tick, on the reasoning that
+ * everything on the list had already happened and so had gone right.
+ * That held while the list was custody legs only. It stopped holding
+ * the moment a failure could appear here, and a tick beside "Receiver
+ * authentication failed" is not a cosmetic problem — it tells a worried
+ * sender the opposite of the truth. Hence severity, which the server
+ * sets per row.
  */
+const EVENT_MARK = {
+  INFO: { icon: 'check-circle', color: undefined },
+  WARNING: { icon: 'alert-triangle', color: 'var(--amber, #9a6700)' },
+  CRITICAL: { icon: 'alert-circle', color: 'var(--red, #b42318)' },
+} as const;
+
 function EventsTimeline({ events }: { events: NonNullable<ParcelStatusView['events']> }) {
   return (
     <ol style={{ listStyle: 'none', margin: '20px 0 0', padding: 0 }}>
-      {events.map((e, i) => (
-        <li key={`${e.at}-${i}`} style={{ display: 'flex', gap: 12, alignItems: 'flex-start' }}>
-          <span style={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
-            <Icon name="check-circle" size={18} />
-            {i < events.length - 1 && (
-              <span aria-hidden style={{
-                width: 2, height: 26,
-                background: 'var(--brand, currentColor)', opacity: 0.4,
-              }} />
-            )}
-          </span>
-          <span style={{ paddingBottom: 12 }}>
-            <span style={{ display: 'block', fontWeight: 600 }}>{e.label}</span>
-            <span className="sub" style={{ fontSize: '.85rem' }}>{humanTime(e.at)}</span>
-          </span>
-        </li>
-      ))}
+      {events.map((e, i) => {
+        // Defaulting to INFO keeps a response from an older core-go
+        // (no severity field at all) rendering exactly as it did before.
+        const mark = EVENT_MARK[e.severity ?? 'INFO'] ?? EVENT_MARK.INFO;
+        return (
+          <li key={`${e.at}-${i}`} style={{ display: 'flex', gap: 12, alignItems: 'flex-start' }}>
+            <span style={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
+              <Icon name={mark.icon} size={18} style={mark.color ? { color: mark.color } : undefined} />
+              {i < events.length - 1 && (
+                <span aria-hidden style={{
+                  width: 2, height: 26,
+                  background: 'var(--brand, currentColor)', opacity: 0.4,
+                }} />
+              )}
+            </span>
+            <span style={{ paddingBottom: 12 }}>
+              <span style={{ display: 'block', fontWeight: 600, color: mark.color }}>{e.label}</span>
+              <span className="sub" style={{ fontSize: '.85rem' }}>{humanTime(e.at)}</span>
+            </span>
+          </li>
+        );
+      })}
     </ol>
   );
 }

@@ -371,3 +371,89 @@ func TestVoucherLoadedQuotesTheNewBalance(t *testing.T) {
 		t.Errorf("top-up message should quote the new balance: %q", msg)
 	}
 }
+
+// ── Receiver self-authentication ─────────────────────────────────────
+
+// TestReceiverAuthMessagesAddressTheRightPerson pins the one genuinely
+// non-obvious choice in this group: a HARD lock texts the SENDER, not
+// the receiver.
+//
+// That is deliberate and it is the sort of thing a later edit would
+// "fix" without realising. By the time five attempts have failed we no
+// longer believe whoever has been typing is the receiver. Texting the
+// receiver's number would either tell an impostor how far they got, or
+// tell a genuine receiver something they can do nothing about. The
+// sender holds the original code, knows who they sent it to, and is
+// the only person able to say "that is not them" or "ring them, it's
+// 4821".
+func TestReceiverAuthMessagesAddressTheRightPerson(t *testing.T) {
+	desk := ParcelReceiverAuthLocked("PKG-ABC123")
+	if !strings.Contains(desk, "PKG-ABC123") {
+		t.Errorf("the desk must be told which parcel: %q", desk)
+	}
+	// A message that only reports a problem generates a phone call to
+	// Esoqo. This one has to name the two things the desk can do.
+	if !strings.Contains(desk, "2 more") || !strings.Contains(strings.ToLower(desk), "new code") {
+		t.Errorf("the desk alert must name both remedies (allow more tries / issue a new code): %q", desk)
+	}
+
+	sender := ParcelReceiverAuthHardLocked("PKG-ABC123", "Otis Baraka")
+	if !strings.Contains(sender, "Otis Baraka") {
+		t.Errorf("the sender must be told WHO failed — they are being asked to vouch for a person: %q", sender)
+	}
+	if strings.Contains(strings.ToLower(sender), "try again") {
+		t.Errorf("a hard lock offers no more tries; the message must not imply one: %q", sender)
+	}
+}
+
+// Both parties get the replacement. A reissue usually happens because
+// the receiver's SMS is the thing that failed in the first place, so
+// the sender relaying it by voice is frequently the only path that
+// works — and relaying the code is what the sender has always done
+// here (ListMyParcels returns deliveryCode to the sender's own list
+// for exactly this reason).
+func TestReissuedCodeReachesBothParties(t *testing.T) {
+	const newCode = "481902"
+
+	toReceiver := ParcelDeliveryCodeReissued("PKG-ABC123", newCode)
+	if !strings.Contains(toReceiver, newCode) {
+		t.Errorf("the receiver must actually be given the new code: %q", toReceiver)
+	}
+	// Without this, a receiver holding two texts tries the first one
+	// they find and burns an attempt on a dead code.
+	if !strings.Contains(strings.ToLower(toReceiver), "no longer works") {
+		t.Errorf("the receiver must be told the old code is dead: %q", toReceiver)
+	}
+
+	toSender := ParcelDeliveryCodeReissuedToSender("PKG-ABC123", newCode, "Otis Baraka")
+	if !strings.Contains(toSender, newCode) {
+		t.Errorf("the sender must be given the new code to relay: %q", toSender)
+	}
+	if !strings.Contains(toSender, "Otis Baraka") {
+		t.Errorf("the sender must be told who to pass it to: %q", toSender)
+	}
+}
+
+// Every one of these is billed per segment and must survive the GSM-7
+// rule this whole package is written against — including with the
+// pathological free-text values trunc() exists to absorb.
+func TestReceiverAuthMessagesFitOneSegment(t *testing.T) {
+	long := strings.Repeat("Bartholomew Wanjiku-Kiprotich ", 4)
+	for name, msg := range map[string]string{
+		"locked":           ParcelReceiverAuthLocked("PKG-ABC123"),
+		"hardLocked":       ParcelReceiverAuthHardLocked("PKG-ABC123", long),
+		"reissuedReceiver": ParcelDeliveryCodeReissued("PKG-ABC123", "481902"),
+		"reissuedSender":   ParcelDeliveryCodeReissuedToSender("PKG-ABC123", "481902", long),
+	} {
+		if len(msg) > smsSegmentBudget {
+			t.Errorf("%s: %d chars, over the %d-char single-segment budget — this silently doubles the cost of every send: %q",
+				name, len(msg), smsSegmentBudget, msg)
+		}
+		for _, r := range msg {
+			if r > 127 {
+				t.Errorf("%s: non-ASCII %q forces UCS-2 and cuts the segment to 70 chars: %q", name, r, msg)
+				break
+			}
+		}
+	}
+}

@@ -67,11 +67,54 @@ interface GoErrorBody {
 }
 
 /**
+ * A core-go rejection that kept its error code.
+ *
+ * The code used to be dropped here and only the prose survived, which
+ * forced callers that needed to branch on *which* failure it was to
+ * match the message text — see packages/ui/src/parcelOfflineQueue.ts,
+ * which regexed the wording of a spent-label error to decide whether a
+ * replayed offline booking had in fact succeeded. That made a copy-edit
+ * in a Go string a silent client break. The code is the contract; this
+ * class is how it reaches the caller.
+ */
+export class ParcelOrgRequestError extends Error {
+  readonly code: string;
+  constructor(code: string, message: string) {
+    super(message);
+    this.name = "ParcelOrgRequestError";
+    this.code = code;
+  }
+}
+
+/**
+ * Codes that genuinely mean "this session is no good" as opposed to
+ * "this session may not do that to that thing".
+ *
+ * The distinction matters because core-go returns 403 for both, and
+ * treating the status alone as a session verdict turned every domain
+ * refusal into "your shift session has expired". A clerk told that
+ * would sign out, sign back in, and hit exactly the same wall — with
+ * the one sentence that would have explained it ("You aren't holding
+ * this parcel", "This parcel is assigned to another collector")
+ * discarded on the way through. See dbx's ParcelError codes, which are
+ * all mapped to 403 by parcelErrorStatus.
+ */
+const SESSION_ERROR_CODES = new Set([
+  "UNAUTHENTICATED",
+  "SESSION_EXPIRED",
+  "SESSION_LOOKUP_FAILED",
+  "DENIED",
+]);
+
+/**
  * Calls core-go with the portal's bearer attached.
  *
- * A 401 or 403 becomes ParcelOrgUnauthorised rather than a generic
- * error: both mean the same thing to this portal (this login can't do
- * that), and the caller decides whether to redirect or explain.
+ * A dead or insufficient SESSION becomes ParcelOrgUnauthorised, so the
+ * caller can redirect to the company's own door. Anything else — the
+ * parcel refusing the operation, a label already spent, a run that has
+ * left — comes back as a ParcelOrgRequestError carrying core-go's own
+ * code and prose, because those are answers the person at the desk can
+ * act on and a redirect would throw away.
  */
 export async function parcelOrgFetch<T>(
   path: string,
@@ -91,10 +134,22 @@ export async function parcelOrgFetch<T>(
     signal: AbortSignal.timeout(15000),
   });
   const json = (await res.json().catch(() => null)) as (T & GoErrorBody) | null;
-  if (res.status === 401 || res.status === 403)
-    throw new ParcelOrgUnauthorised();
+  if (res.status === 401 || res.status === 403) {
+    const code = json?.error?.code ?? "";
+    // No code at all is treated as a session failure: that is what a
+    // proxy or an edge 403 with no JSON body looks like, and "sign in
+    // again" is the safer guess when the server said nothing.
+    if (!code || SESSION_ERROR_CODES.has(code)) throw new ParcelOrgUnauthorised();
+    throw new ParcelOrgRequestError(
+      code,
+      json?.error?.message ?? `Request failed (${res.status})`,
+    );
+  }
   if (!res.ok || !json) {
-    throw new Error(json?.error?.message ?? `Request failed (${res.status})`);
+    throw new ParcelOrgRequestError(
+      json?.error?.code ?? `HTTP_${res.status}`,
+      json?.error?.message ?? `Request failed (${res.status})`,
+    );
   }
   return json as T;
 }
@@ -124,6 +179,9 @@ export interface ParcelOrgStats {
    *  subset of awaitingPickup, broken out because it means "a sender is
    *  walking in", not "waiting on our own rider". */
   awaitingDropoff: number;
+  /** Active parcels past their SLA deadline — powers the register's
+   *  "Overdue only" toggle and the attention band. */
+  overdue: number;
 }
 
 export interface OrgParcelRow {
@@ -147,12 +205,69 @@ export interface OrgParcelRow {
    *  from, when it brought one. Null for Esoqo-booked parcels. */
   externalRef: string | null;
   externalSource: string | null;
+
+  /** Receiver self-authentication, for the escalation queue. A receiver
+   *  proving from their own phone that they are the receiver, by typing
+   *  the delivery code — three tries, then `receiverAuthLockedAt` and
+   *  this desk is texted. Staff may allow two more; burning those sets
+   *  `receiverAuthHardLockedAt`, which only a reissued code clears.
+   *
+   *  No delivery code here, current or otherwise: the console shows
+   *  that a parcel is stuck and offers the verbs, and the code itself
+   *  only ever reaches the sender and the receiver, by SMS. */
+  receiverAuthAttempts: number;
+  receiverAuthLockedAt: string | null;
+  receiverAuthHardLockedAt: string | null;
+  deliveryCodeVersion: number;
+  /** Set when a receiver closed their own collection at a pickup point.
+   *  The courier's pay waits out a hold instead of accruing on the spot,
+   *  because no member of staff witnessed the handover. */
+  courierEarningsHeldUntil: string | null;
 }
 
 export interface ParcelOrgMe {
   org: ParcelOrgSummary;
   stats: ParcelOrgStats;
   capabilities: string[];
+  /**
+   * Whether this login can physically hold a parcel.
+   *
+   * False for a roster row with no linked partyId — an office-only
+   * login. core-go's ScanHandoff deliberately leaves
+   * currentHolderPartyId untouched for those (there is no Party to
+   * attribute custody to), and DeliverParcel refuses anyone who isn't
+   * the current holder. So such a login can receive boxes all day and
+   * never hand one over. The scanner reads this up front and says what
+   * to fix, rather than letting it surface as a FORBIDDEN on the last
+   * step with a receiver standing at the counter.
+   *
+   * Optional so a portal talking to a core-go that predates the field
+   * still renders — undefined is treated as "assume capable", which is
+   * the pre-existing behaviour.
+   */
+  custodyCapable?: boolean;
+}
+
+/** One day of the trailing-7-day operations trend. Mirrors
+ *  dbx.DailyBucket — booked vs delivered per Nairobi day. */
+export interface ParcelOrgTrendDay {
+  day: string;
+  booked: number;
+  delivered: number;
+}
+
+/** One of the company's own vehicle runs that is still loading —
+ *  what the counter's "receive and load" picker chooses between.
+ *  Mirrors dbx.OrgShipment. */
+export interface OrgShipment {
+  id: string;
+  originLabel: string;
+  destinationLabel: string;
+  routeLabel: string;
+  vehiclePlate: string;
+  status: string;
+  loaded: number;
+  createdAt: string;
 }
 
 /** The session profile, fetched once per request. The layout calls this
@@ -271,9 +386,13 @@ export interface DispatchPing {
   at: string;
 }
 
-/** One run of one of the company's own vehicles. Mirrors dbx.Dispatch:
- *  the board's fleet unit — plate, crew, origin → destination leg,
- *  receiving team, live position and trail. */
+/** One run of one of the company's own vehicles. Mirrors dbx.Run.
+ *
+ *  Since ADR-0006 this is the WHOLE run: plate, crew, the origin →
+ *  destination leg, the receiving team, live position and trail — and
+ *  the parcels aboard. It used to be only the journey half, because the
+ *  cargo lived on a separate shipment record with no key between them,
+ *  which is why the board could never say what was on a vehicle. */
 export interface DispatchRun {
   id: string;
   vehiclePlate: string;
@@ -291,4 +410,36 @@ export interface DispatchRun {
   crew: DispatchCrew[];
   receivers: DispatchReceiver[];
   trail: DispatchPing[];
+  /** The route followed, when one was chosen. Null for an ad-hoc run —
+   *  a vehicle at the door nobody scheduled, which stays possible on
+   *  purpose (ADR-0006). */
+  routeId: string | null;
+  routeName: string | null;
+  /** Parcels currently aboard. The number the merge exists to make
+   *  answerable from the board. */
+  loaded: number;
+}
+
+/** One stop on a route: a station, and where it falls in the order. */
+export interface OrgRouteStop {
+  id: string;
+  sequence: number;
+  stationId: string;
+  stationName: string;
+  locationHint: string;
+  lat: number;
+  lng: number;
+}
+
+/** A company's own route — the ordered list of stations it serves. A
+ *  LEG is a consecutive pair of stops; there is no leg record, because
+ *  a parcel riding two vehicles is already two run items. */
+export interface OrgRoute {
+  id: string;
+  name: string;
+  code: string | null;
+  active: boolean;
+  stops: OrgRouteStop[];
+  /** Runs still out against it — what makes deleting one a decision. */
+  openRuns: number;
 }

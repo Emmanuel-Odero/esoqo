@@ -1,0 +1,102 @@
+# ════════════════════════════════════════════════════════════════════
+#  Postgres 16 — the system of record.
+#
+#  A StatefulSet with a volumeClaimTemplate, not a Deployment with a
+#  PVC: a Deployment's rolling update starts the new pod before the old
+#  one terminates, and both would mount the same ReadWriteOnce volume.
+#  The new pod hangs unschedulable while the old one holds the lock.
+#  StatefulSet's OrderedReady policy terminates first, then starts.
+# ════════════════════════════════════════════════════════════════════
+apiVersion: v1
+kind: Service
+metadata:
+  name: postgres
+  labels: { app.kubernetes.io/name: postgres, app.kubernetes.io/part-of: esoqo }
+spec:
+  clusterIP: None # headless — StatefulSet pods get stable DNS names
+  ports: [{ name: postgres, port: 5432, targetPort: 5432 }]
+  selector: { app.kubernetes.io/name: postgres }
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: postgres
+  labels: { app.kubernetes.io/name: postgres, app.kubernetes.io/part-of: esoqo }
+spec:
+  serviceName: postgres
+  replicas: 1
+  selector:
+    matchLabels: { app.kubernetes.io/name: postgres }
+  template:
+    metadata:
+      labels: { app.kubernetes.io/name: postgres, app.kubernetes.io/part-of: esoqo }
+    spec:
+      securityContext:
+        # 70, not 999. The postgres group is gid 999 in the Debian-based
+        # image but gid 70 in postgres:16-alpine, which is what this
+        # StatefulSet runs. The entrypoint starts as root and chowns
+        # PGDATA itself, so a wrong value here is survivable today —
+        # but it stops being survivable the moment a PodSecurity policy
+        # forces runAsNonRoot and that chown never happens.
+        fsGroup: 70
+      terminationGracePeriodSeconds: 120 # let a checkpoint finish
+      containers:
+        - name: postgres
+          image: postgres:16-alpine
+          # Mirrors docker-compose.yml's tuning so a query that is fast
+          # locally is fast here. max_connections stays low on purpose:
+          # PgBouncer is the only thing that should be opening sessions
+          # (ADR-0002), so a high ceiling here would only mask a leak.
+          args:
+            - postgres
+            - -c
+            - max_connections=100
+            - -c
+            - shared_buffers=256MB
+            - -c
+            - work_mem=8MB
+            - -c
+            - log_min_duration_statement=500
+          ports: [{ name: postgres, containerPort: 5432 }]
+          env:
+            - name: POSTGRES_USER
+              valueFrom: { secretKeyRef: { name: esoqo-db, key: POSTGRES_USER } }
+            - name: POSTGRES_PASSWORD
+              valueFrom: { secretKeyRef: { name: esoqo-db, key: POSTGRES_PASSWORD } }
+            - name: POSTGRES_DB
+              valueFrom: { secretKeyRef: { name: esoqo-db, key: POSTGRES_DB } }
+            # The official image refuses to initdb into a non-empty
+            # directory, and a mounted PVC always contains lost+found.
+            - name: PGDATA
+              value: /var/lib/postgresql/data/pgdata
+            # Consumed only by the 02-app-role.sh init script.
+            - name: APP_ROLE_PASSWORD
+              valueFrom: { secretKeyRef: { name: esoqo-db, key: APP_ROLE_PASSWORD } }
+            - name: POSTGRES_INITDB_ARGS
+              value: "--data-checksums"
+          volumeMounts:
+            - { name: data, mountPath: /var/lib/postgresql/data }
+            - { name: initdb, mountPath: /docker-entrypoint-initdb.d }
+          readinessProbe:
+            exec: { command: ["sh", "-c", "pg_isready -U \"$POSTGRES_USER\" -d \"$POSTGRES_DB\""] }
+            initialDelaySeconds: 10
+            periodSeconds: 5
+            timeoutSeconds: 3
+          livenessProbe:
+            exec: { command: ["sh", "-c", "pg_isready -U \"$POSTGRES_USER\""] }
+            initialDelaySeconds: 45
+            periodSeconds: 15
+            timeoutSeconds: 5
+            failureThreshold: 4
+          resources:
+            requests: { cpu: 250m, memory: 512Mi }
+            limits: { memory: 2Gi }
+      volumes:
+        - name: initdb
+          configMap: { name: postgres-initdb }
+  volumeClaimTemplates:
+    - metadata: { name: data }
+      spec:
+        accessModes: [ReadWriteOnce]
+        resources:
+          requests: { storage: 20Gi }

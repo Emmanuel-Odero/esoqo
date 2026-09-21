@@ -209,7 +209,7 @@ func LoadParcelToShipment(ctx context.Context, pool *pgxpool.Pool, shipmentID, c
 	} else if err != nil {
 		return nil, err
 	}
-	if shipmentStatus != "OPEN" {
+	if shipmentStatus != "LOADING" {
 		return nil, &ParcelError{"BAD_INPUT", "This shipment is no longer loading"}
 	}
 	if _, err := tx.Exec(ctx, `
@@ -231,7 +231,7 @@ func LoadParcelToShipment(ctx context.Context, pool *pgxpool.Pool, shipmentID, c
 
 func StartParcelShipment(ctx context.Context, pool *pgxpool.Pool, shipmentID, staffID string) (*ParcelShipment, error) {
 	var s ParcelShipment
-	err := pool.QueryRow(ctx, `UPDATE parcel_shipment SET status = 'DEPARTED', "startedAt" = COALESCE("startedAt", now()) WHERE id = $1 AND status = 'OPEN' RETURNING id, "originLabel", "destinationLabel", COALESCE("routeLabel", ''), COALESCE("vehiclePlate", ''), status`, shipmentID).
+	err := pool.QueryRow(ctx, `UPDATE parcel_shipment SET status = 'DEPARTED', "startedAt" = COALESCE("startedAt", now()) WHERE id = $1 AND status = 'LOADING' RETURNING id, "originLabel", "destinationLabel", COALESCE("routeLabel", ''), COALESCE("vehiclePlate", ''), status`, shipmentID).
 		Scan(&s.ID, &s.OriginLabel, &s.DestinationLabel, &s.RouteLabel, &s.VehiclePlate, &s.Status)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return nil, &ParcelError{"BAD_INPUT", "Shipment is not open"}

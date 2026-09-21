@@ -32,29 +32,31 @@
 
 .si-mark {
   display: inline-flex;
-  width: 54px;
-  height: 54px;
-  border-radius: 14px;
-  background: var(--green);
-  color: #fff;
+  width: auto;
+  height: auto;
   align-items: center;
   justify-content: center;
-  margin-bottom: 22px;
+  margin-bottom: 0;
 }
 
-.si-brand-inner > strong {
+.si-mark img {
+  width: 100%;
+  max-width: 280px;
+  height: auto;
   display: block;
-  font-family: var(--font-display);
-  font-weight: 800;
-  font-size: 1.8rem;
-  color: #fff;
-  line-height: 1.15;
+}
+
+.si-brand-header {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 14px;
 }
 
 .si-brand-sub {
-  font-size: .92rem;
+  font-size: 1rem;
   color: #7FA0B8;
-  margin-top: 5px;
+  margin-top: 0;
   display: block;
 }
 
@@ -222,7 +224,11 @@
     grid-template-columns: 1fr;
   }
   .si-brand {
-    display: none;
+    display: flex;
+    padding: 40px 20px;
+  }
+  .si-mark img {
+    max-width: 200px;
   }
   .si-panel {
     padding: 28px 20px;

@@ -16,6 +16,25 @@ interface GoErrorBody {
   error?: { code?: string; message?: string };
 }
 
+/**
+ * A core-go rejection that kept its error code.
+ *
+ * Mirrors apps/app's ParcelOrgRequestError, and exists for the same
+ * reason: a caller that needs to know *which* failure this was should
+ * branch on a code, never on the wording. The offline counter queue
+ * (packages/ui/src/parcelOfflineQueue.ts) is the caller that forced the
+ * issue — it reads LABEL_ALREADY_SPENT to decide a replayed booking had
+ * already succeeded, and used to regex the message to do it.
+ */
+export class GoRequestError extends Error {
+  readonly code: string;
+  constructor(code: string, message: string) {
+    super(message);
+    this.name = 'GoRequestError';
+    this.code = code;
+  }
+}
+
 export async function adminGo<T>(path: string, init?: RequestInit): Promise<T> {
   const token = (await cookies()).get(SESSION_COOKIE)?.value;
   const res = await fetch(`${CORE_GO_URL}${path}`, {
@@ -34,7 +53,7 @@ export async function adminGo<T>(path: string, init?: RequestInit): Promise<T> {
     if (res.status === 403 || code === 'DENIED') {
       throw new AuthorisationError(message, { actorType: 'STAFF', actorId: null });
     }
-    throw new Error(message);
+    throw new GoRequestError(code ?? `HTTP_${res.status}`, message);
   }
   return json as T;
 }

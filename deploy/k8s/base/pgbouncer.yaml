@@ -1,0 +1,71 @@
+# ════════════════════════════════════════════════════════════════════
+#  PgBouncer — the mandatory gatekeeper (ADR-0002).
+#
+#  Transaction pooling. Every app replica opens its own Prisma pool, so
+#  N replicas × pool_size would exhaust Postgres' 100 max_connections
+#  long before the cluster is busy. PgBouncer multiplexes them onto
+#  DEFAULT_POOL_SIZE server connections.
+#
+#  Stateless, so a Deployment — but note the replica count is NOT a free
+#  dial: each PgBouncer replica keeps its own DEFAULT_POOL_SIZE server
+#  connections, so 3 replicas × 20 = 60 of Postgres' 100. Raising
+#  replicas means lowering DEFAULT_POOL_SIZE in step.
+# ════════════════════════════════════════════════════════════════════
+apiVersion: v1
+kind: Service
+metadata:
+  name: pgbouncer
+  labels: { app.kubernetes.io/name: pgbouncer, app.kubernetes.io/part-of: esoqo }
+spec:
+  ports: [{ name: pgbouncer, port: 6432, targetPort: 5432 }]
+  selector: { app.kubernetes.io/name: pgbouncer }
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: pgbouncer
+  labels: { app.kubernetes.io/name: pgbouncer, app.kubernetes.io/part-of: esoqo }
+spec:
+  replicas: 2
+  selector:
+    matchLabels: { app.kubernetes.io/name: pgbouncer }
+  template:
+    metadata:
+      labels: { app.kubernetes.io/name: pgbouncer, app.kubernetes.io/part-of: esoqo }
+    spec:
+      containers:
+        - name: pgbouncer
+          image: edoburu/pgbouncer:v1.23.1-p2 # pinned; :latest silently
+                                              # changed auth defaults before
+          ports: [{ name: pgbouncer, containerPort: 5432 }]
+          env:
+            - { name: DB_HOST, value: postgres }
+            - { name: DB_PORT, value: "5432" }
+            - name: DB_USER
+              valueFrom: { secretKeyRef: { name: esoqo-db, key: POSTGRES_USER } }
+            - name: DB_PASSWORD
+              valueFrom: { secretKeyRef: { name: esoqo-db, key: POSTGRES_PASSWORD } }
+            - name: DB_NAME
+              valueFrom: { secretKeyRef: { name: esoqo-db, key: POSTGRES_DB } }
+            - { name: POOL_MODE, value: transaction }
+            - { name: MAX_CLIENT_CONN, value: "1000" }
+            - { name: DEFAULT_POOL_SIZE, value: "20" }
+            - { name: MIN_POOL_SIZE, value: "5" }
+            - { name: RESERVE_POOL_SIZE, value: "5" }
+            - { name: SERVER_RESET_QUERY, value: DISCARD ALL }
+            - { name: AUTH_TYPE, value: scram-sha-256 }
+            # Prisma sends both on connect and PgBouncer rejects unknown
+            # startup parameters outright — without this every Prisma
+            # connection fails at handshake with a cryptic error.
+            - { name: IGNORE_STARTUP_PARAMETERS, value: extra_float_digits,options }
+          readinessProbe:
+            tcpSocket: { port: 5432 }
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          livenessProbe:
+            tcpSocket: { port: 5432 }
+            initialDelaySeconds: 20
+            periodSeconds: 20
+          resources:
+            requests: { cpu: 50m, memory: 32Mi }
+            limits: { memory: 128Mi }

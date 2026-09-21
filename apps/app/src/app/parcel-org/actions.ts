@@ -2,12 +2,15 @@
 
 import { revalidatePath } from "next/cache";
 import {
+  ParcelOrgRequestError,
   ParcelOrgUnauthorised,
   parcelOrgFetch,
   type DispatchRun,
   type OrgLabelSearchRow,
   type OrgParcelLabel,
   type OrgParcelRow,
+  type OrgRoute,
+  type OrgShipment,
   type ParcelOrgStaffRow,
   type ParcelOrgStationRow,
 } from "@/lib/parcel-org-session";
@@ -21,13 +24,23 @@ export type Result = { ok: true } | { ok: false; error: string };
 /** Always the failure variant — typed as such rather than as the wider
  *  Result so callers returning a richer success shape (see
  *  receiveWalkInParcel, which hands back the resolved code) can still
- *  funnel their errors through it. */
-function toResult(e: unknown): { ok: false; error: string } {
+ *  funnel their errors through it.
+ *
+ *  `code` is core-go's own error code, forwarded verbatim so a caller
+ *  can branch on which failure this was instead of reading the prose —
+ *  the offline counter queue needs exactly that for LABEL_ALREADY_SPENT.
+ *  Optional because a session expiry and a thrown non-Error have no
+ *  server code to forward. */
+function toResult(e: unknown): { ok: false; error: string; errorCode?: string } {
   if (e instanceof ParcelOrgUnauthorised) {
     return {
       ok: false,
       error: "Your shift session has expired — sign in again",
+      errorCode: "UNAUTHORISED",
     };
+  }
+  if (e instanceof ParcelOrgRequestError) {
+    return { ok: false, error: e.message, errorCode: e.code };
   }
   return {
     ok: false,
@@ -49,7 +62,9 @@ function toResult(e: unknown): { ok: false; error: string } {
  */
 export async function receiveWalkInParcel(
   reference: string,
-): Promise<{ ok: true; code: string } | { ok: false; error: string }> {
+): Promise<
+  { ok: true; code: string } | { ok: false; error: string; errorCode?: string }
+> {
   try {
     // `reference` is whatever the sender walked in with. Pre-intake that
     // is the service ticket number, not the tracking code — the code
@@ -62,7 +77,7 @@ export async function receiveWalkInParcel(
       { method: "POST" },
     );
     revalidatePath("/parcel-org");
-    revalidatePath("/parcel-org/counter");
+    revalidatePath("/parcel-org/scan");
     return { ok: true, code: res.code };
   } catch (e) {
     return toResult(e);
@@ -98,7 +113,7 @@ export async function settleCounterParcel(
       },
     );
     revalidatePath("/parcel-org");
-    revalidatePath("/parcel-org/counter");
+    revalidatePath("/parcel-org/scan");
     return { ok: true };
   } catch (e) {
     return toResult(e);
@@ -116,6 +131,67 @@ export async function assignOrgParcel(
         method: "POST",
         body: JSON.stringify({ riderPartyId }),
       },
+    );
+    revalidatePath("/parcel-org");
+    return { ok: true };
+  } catch (e) {
+    return toResult(e);
+  }
+}
+
+// ── Unsticking a receiver who can't get past the delivery code ───────
+//
+// A receiver proves from their own phone that they are the receiver by
+// typing the code only they were sent. Three wrong tries locks the
+// parcel and texts this desk. These three verbs are what the desk can
+// do about it, and they escalate in that order: allow two more tries,
+// then (once those are gone, or the code is simply lost) mint a
+// replacement. Release is unrelated but lives here because it is the
+// other half of the same flow — the courier pay a self-confirmed
+// collection held instead of accruing.
+
+/** Allow two more attempts. Refused once the parcel is hard locked —
+ *  a grant that could be re-granted would not be a limit. */
+export async function grantReceiverAuthRetry(code: string): Promise<Result> {
+  try {
+    await parcelOrgFetch(
+      `/v1/parcel-orgs/me/parcels/${encodeURIComponent(code)}/receiver-auth/grant-retry`,
+      { method: "POST" },
+    );
+    revalidatePath("/parcel-org");
+    return { ok: true };
+  } catch (e) {
+    return toResult(e);
+  }
+}
+
+/** Mint a new delivery code and clear every lock.
+ *
+ *  The new code is never returned here and never shown in this console.
+ *  Both the receiver and the sender are texted it by core-go; putting
+ *  it on a desk monitor would make the one secret in this flow readable
+ *  by anyone walking past. */
+export async function reissueDeliveryCode(code: string): Promise<Result> {
+  try {
+    await parcelOrgFetch(
+      `/v1/parcel-orgs/me/parcels/${encodeURIComponent(code)}/delivery-code/reissue`,
+      { method: "POST" },
+    );
+    revalidatePath("/parcel-org");
+    return { ok: true };
+  } catch (e) {
+    return toResult(e);
+  }
+}
+
+/** Pay out a delivery the receiver closed themselves at a pickup point.
+ *  Held rather than accrued at the time because nobody from this
+ *  company witnessed the handover. */
+export async function releaseHeldCourierEarnings(code: string): Promise<Result> {
+  try {
+    await parcelOrgFetch(
+      `/v1/parcel-orgs/me/parcels/${encodeURIComponent(code)}/courier-earnings/release`,
+      { method: "POST" },
     );
     revalidatePath("/parcel-org");
     return { ok: true };
@@ -183,7 +259,7 @@ export async function saveOrgPricing(input: {
       method: "POST",
       body: JSON.stringify(input),
     });
-    revalidatePath("/parcel-org/pricing");
+    revalidatePath("/parcel-org/settings/rates");
     return { ok: true };
   } catch (e) {
     return toResult(e);
@@ -234,7 +310,7 @@ export async function saveOrgStaff(input: {
         stationId: input.stationId || null,
       }),
     });
-    revalidatePath("/parcel-org/team");
+    revalidatePath("/parcel-org/settings/team");
     return { ok: true };
   } catch (e) {
     return toResult(e);
@@ -269,8 +345,8 @@ export async function saveOrgStation(input: {
         body: JSON.stringify(input),
       },
     );
-    revalidatePath("/parcel-org/stations");
-    revalidatePath("/parcel-org/team");
+    revalidatePath("/parcel-org/settings/stations");
+    revalidatePath("/parcel-org/settings/team");
     return { ok: true };
   } catch (e) {
     return toResult(e);
@@ -348,7 +424,7 @@ export async function voidOrgLabels(
       `/v1/parcel-orgs/me/labels/void`,
       { method: "POST", body: JSON.stringify({ codes, reason }) },
     );
-    revalidatePath("/parcel-org/counter");
+    revalidatePath("/parcel-org/settings/labels");
     return { ok: true, voided: res.voided };
   } catch (e) {
     const r = toResult(e);
@@ -374,7 +450,7 @@ export async function voidOrgLabelBatch(
         body: JSON.stringify({ reason }),
       },
     );
-    revalidatePath("/parcel-org/counter");
+    revalidatePath("/parcel-org/settings/labels");
     return { ok: true, voided: res.voided };
   } catch (e) {
     const r = toResult(e);
@@ -486,7 +562,7 @@ export async function setStationManager(
         body: JSON.stringify({ staffId }),
       },
     );
-    revalidatePath(`/parcel-org/stations/${stationId}`);
+    revalidatePath(`/parcel-org/settings/stations/${stationId}`);
     return { ok: true };
   } catch (e) {
     return toResult(e);
@@ -507,7 +583,7 @@ export async function assignStationMember(
         body: JSON.stringify({ staffId, assigned }),
       },
     );
-    revalidatePath(`/parcel-org/stations/${stationId}`);
+    revalidatePath(`/parcel-org/settings/stations/${stationId}`);
     return { ok: true };
   } catch (e) {
     return toResult(e);
@@ -575,7 +651,7 @@ export async function attachOrgLabelInfo(
         }),
       },
     );
-    revalidatePath("/parcel-org/counter");
+    revalidatePath("/parcel-org/settings/labels");
     return { ok: true };
   } catch (e) {
     return toResult(e);
@@ -616,7 +692,9 @@ export interface OrgCounterBookInput {
  *  fresh when the clerk starts from blank. */
 export async function bookOrgCounterParcel(
   input: OrgCounterBookInput,
-): Promise<{ ok: true; code: string } | { ok: false; error: string }> {
+): Promise<
+  { ok: true; code: string } | { ok: false; error: string; errorCode?: string }
+> {
   try {
     const res = await parcelOrgFetch<{ code: string }>(
       "/v1/parcel-orgs/me/counter/book",
@@ -628,8 +706,10 @@ export async function bookOrgCounterParcel(
     revalidatePath("/parcel-org");
     return { ok: true, code: res.code };
   } catch (e) {
-    const r = toResult(e);
-    return { ok: false, error: r.ok ? "Could not book that parcel" : r.error };
+    // toResult's code rides along untouched — the offline queue reads it
+    // to tell "this label was already spent, so our earlier attempt got
+    // through" apart from a real rejection it must surface to the clerk.
+    return toResult(e);
   }
 }
 
@@ -725,6 +805,9 @@ export interface DispatchReceiverInput {
 export interface CreateDispatchInput {
   vehiclePlate: string;
   vehicleType: string;
+  /** The planned route this run follows. Null is an ad-hoc run — a
+   *  vehicle at the door nobody scheduled (ADR-0006). */
+  routeId?: string | null;
   originStationId?: string | null;
   destinationStationId?: string | null;
   notes?: string | null;
@@ -736,20 +819,23 @@ export interface CreateDispatchInput {
 export async function listDispatches(
   includeClosed = false,
 ): Promise<DispatchRun[]> {
-  const res = await parcelOrgFetch<{ dispatches: DispatchRun[] | null }>(
-    `/v1/parcel-orgs/me/dispatch${includeClosed ? "?closed=true" : ""}`,
+  // /me/runs, not /me/dispatch: one record since ADR-0006, and this one
+  // carries the parcels aboard as well as the journey. The old path
+  // still resolves to the same handler for installed clients.
+  const res = await parcelOrgFetch<{ runs: DispatchRun[] | null }>(
+    `/v1/parcel-orgs/me/runs${includeClosed ? "?closed=true" : ""}`,
   );
-  return res.dispatches ?? [];
+  return res.runs ?? [];
 }
 
 /** One run with its recent trail (up to 200 points): the journey line
  *  the map draws, plus the pings speed and stops derive from. */
 export async function getDispatch(id: string): Promise<DispatchRun | null> {
   try {
-    const res = await parcelOrgFetch<{ dispatch: DispatchRun | null }>(
-      `/v1/parcel-orgs/me/dispatch/${encodeURIComponent(id)}`,
+    const res = await parcelOrgFetch<{ run: DispatchRun | null }>(
+      `/v1/parcel-orgs/me/runs/${encodeURIComponent(id)}`,
     );
-    return res.dispatch;
+    return res.run;
   } catch {
     return null;
   }
@@ -761,12 +847,13 @@ export async function createDispatch(
 ): Promise<{ ok: true; id: string } | { ok: false; error: string }> {
   try {
     const res = await parcelOrgFetch<{ id: string }>(
-      "/v1/parcel-orgs/me/dispatch",
+      "/v1/parcel-orgs/me/runs",
       {
         method: "POST",
         body: JSON.stringify({
           vehiclePlate: input.vehiclePlate.trim(),
           vehicleType: input.vehicleType,
+          routeId: input.routeId || null,
           originStationId: input.originStationId || null,
           destinationStationId: input.destinationStationId || null,
           notes: input.notes?.trim() || null,
@@ -800,7 +887,7 @@ export async function reportDispatchPosition(
 ): Promise<Result> {
   try {
     await parcelOrgFetch(
-      `/v1/parcel-orgs/me/dispatch/${encodeURIComponent(id)}/position`,
+      `/v1/parcel-orgs/me/runs/${encodeURIComponent(id)}/position`,
       {
         method: "POST",
         body: JSON.stringify({ lat, lng }),
@@ -821,10 +908,29 @@ export async function arriveDispatch(
 ): Promise<Result> {
   try {
     await parcelOrgFetch(
-      `/v1/parcel-orgs/me/dispatch/${encodeURIComponent(id)}/arrive`,
+      `/v1/parcel-orgs/me/runs/${encodeURIComponent(id)}/arrive`,
       {
         method: "POST",
         body: JSON.stringify({ receivedBy: receivedBy.trim() }),
+      },
+    );
+    revalidatePath("/parcel-org/dispatch");
+    return { ok: true };
+  } catch (e) {
+    return toResult(e);
+  }
+}
+
+/** The shed moment: a loading run sets off, and loading closes
+ *  behind it. Only LOADING runs can depart — the server refuses anything
+ *  else, so a double-tap on a run that just left reports itself plainly. */
+export async function departDispatch(id: string): Promise<Result> {
+  try {
+    await parcelOrgFetch(
+      `/v1/parcel-orgs/me/runs/${encodeURIComponent(id)}/start`,
+      {
+        method: "POST",
+        body: JSON.stringify({}),
       },
     );
     revalidatePath("/parcel-org/dispatch");
@@ -838,7 +944,7 @@ export async function arriveDispatch(
 export async function cancelDispatch(id: string): Promise<Result> {
   try {
     await parcelOrgFetch(
-      `/v1/parcel-orgs/me/dispatch/${encodeURIComponent(id)}/cancel`,
+      `/v1/parcel-orgs/me/runs/${encodeURIComponent(id)}/cancel`,
       {
         method: "POST",
         body: JSON.stringify({}),
@@ -851,212 +957,136 @@ export async function cancelDispatch(id: string): Promise<Result> {
   }
 }
 
-// ── Shipment operations ──
+// Shipment operations (createShipment / joinShipment / loadParcelToShipment
+// / startShipment / finishShipment / cancelShipment / listActiveShipments /
+// getLeftBehindParcels) lived here until the Counter page's "New Shipment"
+// tab was removed. That tab created vehicle runs — plate, route, driver,
+// conductor — which is Dispatch's job and was a third implementation of it,
+// against /v1/parcel-orgs/me/shipments/*. Dispatch's own run actions
+// (listDispatches and friends, above) are the ones in use.
+
+// ── Run manifests ──
 //
-// Shipment = one vehicle movement with parcels loaded onto it.
-// This is the counter-level equivalent of admin/operations/shipments.
+// The paper a crew carries and a receiving clerk checks boxes off
+// against. Read from the shipment side because that is where the
+// parcel↔vehicle link actually lives (parcel_shipment_item) — see the
+// note in dispatch/page.tsx about the two run models.
 
-export interface ShipmentView {
-  id: string;
-  vehiclePlate: string;
-  vehicleType: string;
-  originLabel: string;
+/** One line on a manifest. Mirrors dbx.ManifestItem. */
+export interface ManifestItem {
+  code: string;
+  externalRef: string;
+  receiverName: string;
+  receiverMsisdn: string;
   destinationLabel: string;
-  routeLabel?: string;
+  parcelType: string;
   status: string;
-  driverName?: string;
-  conductorName?: string;
-  loadedCount: number;
-  expectedCount: number;
-  createdAt: string;
+  loadedAt: string;
 }
 
-export interface DispatchCrewInput {
-  name: string;
-  msisdn?: string | null;
-  role: string;
-  customRole?: string | null;
-  staffId?: string | null;
-}
-
-export interface ShipmentInput {
-  vehiclePlate: string;
-  vehicleType: string;
-  originLabel: string;
-  destinationLabel: string;
-  routeLabel?: string;
-  driverId?: string | null;
-  conductorId?: string | null;
-  notes?: string | null;
-  crew?: DispatchCrewInput[];
-}
-
-/** Create a new shipment (vehicle movement). */
-export async function createShipment(
-  input: ShipmentInput,
+/** A run and everything loaded onto it, in load order. */
+export async function getRunManifest(
+  shipmentId: string,
 ): Promise<
-  { ok: true; shipment: ShipmentView } | { ok: false; error: string }
+  { ok: true; shipment: OrgShipment; items: ManifestItem[] } | { ok: false; error: string }
 > {
   try {
-    const res = await parcelOrgFetch<{ shipment: ShipmentView }>(
-      "/v1/parcel-orgs/me/shipments",
+    const res = await parcelOrgFetch<{ shipment: OrgShipment; items: ManifestItem[] | null }>(
+      `/v1/parcel-orgs/me/shipments/${encodeURIComponent(shipmentId)}/manifest`,
+    );
+    return { ok: true, shipment: res.shipment, items: res.items ?? [] };
+  } catch (e) {
+    const r = toResult(e);
+    return { ok: false, error: r.ok ? "Could not load that manifest" : r.error };
+  }
+}
+
+/**
+ * Every row matching a filter, for export — not just the page on screen.
+ *
+ * The register's CSV button used to write out whatever 25 rows were
+ * rendered, under a filename that said nothing about that, so "export
+ * the overdue parcels" quietly produced the first page of them. This
+ * asks the server for the whole set.
+ *
+ * Capped, and the caller is told when the cap bit: a silent truncation
+ * in an export is worse than no export, because a short file looks
+ * exactly like a complete one.
+ */
+export async function exportOrgParcels(
+  query: string,
+): Promise<
+  { ok: true; parcels: OrgParcelRow[]; truncated: boolean } | { ok: false; error: string }
+> {
+  const MAX = 5000;
+  try {
+    const qs = new URLSearchParams(query);
+    qs.delete("page");
+    qs.set("perPage", String(MAX));
+    const res = await parcelOrgFetch<{ parcels: OrgParcelRow[] | null; total?: number }>(
+      `/v1/parcel-orgs/me/parcels?${qs.toString()}`,
+    );
+    const parcels = res.parcels ?? [];
+    return { ok: true, parcels, truncated: (res.total ?? parcels.length) > parcels.length };
+  } catch (e) {
+    const r = toResult(e);
+    return { ok: false, error: r.ok ? "Could not build that export" : r.error };
+  }
+}
+
+// ── Routes ──
+//
+// A company's own map: which stations, in what order. Defining one is
+// configuration a manager does monthly (hence Settings), while running
+// one is Dispatch, daily — the same split Stations already follows.
+
+export async function listOrgRoutes(): Promise<OrgRoute[]> {
+  const res = await parcelOrgFetch<{ routes: OrgRoute[] | null }>(
+    "/v1/parcel-orgs/me/routes",
+  );
+  return res.routes ?? [];
+}
+
+/** Create (no id) or replace (with one). The station order IS the
+ *  route, so reordering on the client is just another save. */
+export async function saveOrgRoute(input: {
+  id?: string;
+  name: string;
+  code?: string | null;
+  stationIds: string[];
+  active: boolean;
+}): Promise<Result> {
+  try {
+    await parcelOrgFetch(
+      input.id
+        ? `/v1/parcel-orgs/me/routes/${encodeURIComponent(input.id)}`
+        : "/v1/parcel-orgs/me/routes",
       {
         method: "POST",
         body: JSON.stringify({
-          vehiclePlate: input.vehiclePlate.trim(),
-          vehicleType: input.vehicleType,
-          originLabel: input.originLabel.trim(),
-          destinationLabel: input.destinationLabel.trim(),
-          routeLabel: input.routeLabel?.trim() || null,
-          driverId: input.driverId || null,
-          conductorId: input.conductorId || null,
-          notes: input.notes?.trim() || null,
-          crew: input.crew?.map((c) => ({
-            name: c.name.trim(),
-            msisdn: c.msisdn?.trim() || null,
-            role: c.role,
-            customRole: c.customRole?.trim() || null,
-            staffId: c.staffId || null,
-          })),
+          name: input.name,
+          code: input.code || null,
+          stationIds: input.stationIds,
+          active: input.active,
         }),
       },
     );
-    revalidatePath("/parcel-org/counter");
-    return { ok: true, shipment: res.shipment };
-  } catch (e) {
-    const r = toResult(e);
-    return { ok: false, error: r.ok ? "Could not create shipment" : r.error };
-  }
-}
-
-/** Join an existing active shipment to add parcels to it. */
-export async function joinShipment(
-  shipmentId: string,
-): Promise<
-  { ok: true; shipment: ShipmentView } | { ok: false; error: string }
-> {
-  try {
-    const res = await parcelOrgFetch<{ shipment: ShipmentView }>(
-      `/v1/parcel-orgs/me/shipments/${encodeURIComponent(shipmentId)}/join`,
-      {
-        method: "POST",
-      },
-    );
-    revalidatePath("/parcel-org/counter");
-    return { ok: true, shipment: res.shipment };
-  } catch (e) {
-    const r = toResult(e);
-    return { ok: false, error: r.ok ? "Could not join shipment" : r.error };
-  }
-}
-
-/** Load a parcel onto a shipment (scan to board). */
-export async function loadParcelToShipment(
-  shipmentId: string,
-  parcelCode: string,
-): Promise<
-  { ok: true; shipment: ShipmentView } | { ok: false; error: string }
-> {
-  try {
-    const res = await parcelOrgFetch<{ shipment: ShipmentView }>(
-      `/v1/parcel-orgs/me/shipments/${encodeURIComponent(shipmentId)}/load/${encodeURIComponent(parcelCode)}`,
-      {
-        method: "POST",
-      },
-    );
-    revalidatePath("/parcel-org/counter");
-    // Note: parcel code notification is handled server-side
-    return { ok: true, shipment: res.shipment };
-  } catch (e) {
-    const r = toResult(e);
-    return { ok: false, error: r.ok ? "Could not load parcel" : r.error };
-  }
-}
-
-/** Mark shipment as departed (left station). */
-export async function startShipment(
-  shipmentId: string,
-): Promise<
-  { ok: true; shipment: ShipmentView } | { ok: false; error: string }
-> {
-  try {
-    const res = await parcelOrgFetch<{ shipment: ShipmentView }>(
-      `/v1/parcel-orgs/me/shipments/${encodeURIComponent(shipmentId)}/start`,
-      {
-        method: "POST",
-      },
-    );
-    revalidatePath("/parcel-org/counter");
-    return { ok: true, shipment: res.shipment };
-  } catch (e) {
-    const r = toResult(e);
-    return { ok: false, error: r.ok ? "Could not start shipment" : r.error };
-  }
-}
-
-/** Mark shipment as arrived (reached destination). */
-export async function finishShipment(
-  shipmentId: string,
-): Promise<
-  { ok: true; shipment: ShipmentView } | { ok: false; error: string }
-> {
-  try {
-    const res = await parcelOrgFetch<{ shipment: ShipmentView }>(
-      `/v1/parcel-orgs/me/shipments/${encodeURIComponent(shipmentId)}/finish`,
-      {
-        method: "POST",
-      },
-    );
-    revalidatePath("/parcel-org/counter");
-    return { ok: true, shipment: res.shipment };
-  } catch (e) {
-    const r = toResult(e);
-    return { ok: false, error: r.ok ? "Could not finish shipment" : r.error };
-  }
-}
-
-/** Cancel an open shipment. */
-export async function cancelShipment(
-  shipmentId: string,
-): Promise<{ ok: true } | { ok: false; error: string }> {
-  try {
-    await parcelOrgFetch(
-      `/v1/parcel-orgs/me/shipments/${encodeURIComponent(shipmentId)}/cancel`,
-      {
-        method: "POST",
-        body: JSON.stringify({}),
-      },
-    );
-    revalidatePath("/parcel-org/counter");
+    revalidatePath("/parcel-org/settings/routes");
+    revalidatePath("/parcel-org/dispatch");
     return { ok: true };
   } catch (e) {
-    const r = toResult(e);
-    return { ok: false, error: r.ok ? "Could not cancel shipment" : r.error };
+    return toResult(e);
   }
 }
 
-/** List active shipments (open, in transit, or recently completed). */
-export async function listActiveShipments(): Promise<ShipmentView[]> {
-  const res = await parcelOrgFetch<{ shipments: ShipmentView[] | null }>(
-    "/v1/parcel-orgs/me/shipments?status=open,in_transit,departed",
-  );
-  return res.shipments ?? [];
-}
-
-/** Get left-behind parcels for a route (missing parcels that should have been loaded). */
-export async function getLeftBehindParcels(
-  shipmentId: string,
-): Promise<{ ok: true; parcels: OrgParcelRow[] } | { ok: false; error: string }> {
+export async function deleteOrgRoute(id: string): Promise<Result> {
   try {
-    const res = await parcelOrgFetch<{ parcels: OrgParcelRow[] | null }>(
-      `/v1/parcel-orgs/me/shipments/${encodeURIComponent(shipmentId)}/left-behind`,
-    );
-    return { ok: true, parcels: res.parcels ?? [] };
+    await parcelOrgFetch(`/v1/parcel-orgs/me/routes/${encodeURIComponent(id)}`, {
+      method: "DELETE",
+    });
+    revalidatePath("/parcel-org/settings/routes");
+    return { ok: true };
   } catch (e) {
-    const r = toResult(e);
-    return {
-      ok: false,
-      error: r.ok ? "Could not fetch left-behind parcels" : r.error,
-    };
+    return toResult(e);
   }
 }

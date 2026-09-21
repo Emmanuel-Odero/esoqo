@@ -47,6 +47,7 @@ func TestRouterRegistersWithoutConflict(t *testing.T) {
 		"POST /v1/parcel-orgs/staff/signin": false,
 		"GET /v1/parcel-orgs/by-slug/:slug": false,
 		"GET /v1/parcel-orgs/me/parcels":    false,
+		"GET /v1/parcel-orgs/me/trends":    false,
 		"GET /v1/admin/parcels/orgs":        false,
 		"POST /v1/admin/parcels/:id/org":    false,
 		// COD adds a third static sibling under /parcels/:code/... and a

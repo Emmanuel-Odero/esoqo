@@ -1,0 +1,75 @@
+# ════════════════════════════════════════════════════════════════════
+#  Redis 7 — sessions, OTP state, USSD session state, rate limits.
+#
+#  StatefulSet with a PVC despite Redis being "just a cache": it isn't.
+#  Sessions and OTP state live here, so a wipe signs every user out and
+#  invalidates in-flight OTPs. Hence appendonly and a volume.
+#
+#  maxmemory-policy noeviction is deliberate and matches dev. With an
+#  eviction policy, memory pressure would silently drop session keys and
+#  OTP records — users would be logged out at random with nothing in the
+#  logs. noeviction turns that into a loud write error instead.
+# ════════════════════════════════════════════════════════════════════
+apiVersion: v1
+kind: Service
+metadata:
+  name: redis
+  labels: { app.kubernetes.io/name: redis, app.kubernetes.io/part-of: esoqo }
+spec:
+  clusterIP: None
+  ports: [{ name: redis, port: 6379, targetPort: 6379 }]
+  selector: { app.kubernetes.io/name: redis }
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: redis
+  labels: { app.kubernetes.io/name: redis, app.kubernetes.io/part-of: esoqo }
+spec:
+  serviceName: redis
+  replicas: 1
+  selector:
+    matchLabels: { app.kubernetes.io/name: redis }
+  template:
+    metadata:
+      labels: { app.kubernetes.io/name: redis, app.kubernetes.io/part-of: esoqo }
+    spec:
+      # 1000, not 999. In redis:7-alpine the redis user is uid 999 but
+      # gid 1000 — the two do not match, and fsGroup takes the GROUP.
+      # See the equivalent note in postgres.yaml.
+      securityContext: { fsGroup: 1000 }
+      containers:
+        - name: redis
+          image: redis:7-alpine
+          # requirepass via env: the image's entrypoint does not read
+          # REDIS_PASSWORD, so it has to be threaded into the command.
+          command: ["sh", "-c"]
+          args:
+            - >-
+              exec redis-server
+              --appendonly yes
+              --maxmemory 384mb
+              --maxmemory-policy noeviction
+              --requirepass "$REDIS_PASSWORD"
+          env:
+            - name: REDIS_PASSWORD
+              valueFrom: { secretKeyRef: { name: esoqo-db, key: REDIS_PASSWORD } }
+          ports: [{ name: redis, containerPort: 6379 }]
+          volumeMounts: [{ name: data, mountPath: /data }]
+          readinessProbe:
+            exec: { command: ["sh", "-c", "redis-cli -a \"$REDIS_PASSWORD\" --no-auth-warning ping"] }
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          livenessProbe:
+            exec: { command: ["sh", "-c", "redis-cli -a \"$REDIS_PASSWORD\" --no-auth-warning ping"] }
+            initialDelaySeconds: 20
+            periodSeconds: 20
+          resources:
+            requests: { cpu: 50m, memory: 128Mi }
+            limits: { memory: 512Mi } # headroom over maxmemory for AOF buffers
+  volumeClaimTemplates:
+    - metadata: { name: data }
+      spec:
+        accessModes: [ReadWriteOnce]
+        resources:
+          requests: { storage: 5Gi }

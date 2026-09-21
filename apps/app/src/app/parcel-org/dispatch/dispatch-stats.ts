@@ -85,10 +85,13 @@ export function recordedStops(trail: DispatchPing[]): RecordedStop[] {
   return stops;
 }
 
-/** "Active now" under 2 minutes, otherwise "8 min ago" / "2 h ago". */
-export function lastSeenLabel(iso: string | null): string {
+/** "Active now" under 2 minutes, otherwise "8 min ago" / "2 h ago".
+ *  `now` is injectable so live labels can tick from one clock — and so
+ *  server rendering can pass a fixed snapshot instead of its own
+ *  Date.now() (see useNow in DispatchBoard). */
+export function lastSeenLabel(iso: string | null, now: number = Date.now()): string {
   if (!iso) return 'No position yet';
-  const mins = Math.max(0, Math.round((Date.now() - new Date(iso).getTime()) / 60000));
+  const mins = Math.max(0, Math.round((now - new Date(iso).getTime()) / 60000));
   if (mins < 2) return 'Active now';
   if (mins < 60) return `${mins} min ago`;
   const h = Math.floor(mins / 60);
@@ -96,9 +99,9 @@ export function lastSeenLabel(iso: string | null): string {
   return m === 0 ? `${h} h ago` : `${h} h ${m} min ago`;
 }
 
-export function lastSeenTone(iso: string | null): 'g' | 'a' | 'r' | undefined {
+export function lastSeenTone(iso: string | null, now: number = Date.now()): 'g' | 'a' | 'r' | undefined {
   if (!iso) return undefined;
-  const mins = (Date.now() - new Date(iso).getTime()) / 60000;
+  const mins = (now - new Date(iso).getTime()) / 60000;
   if (mins < 10) return 'g';
   if (mins < 45) return 'a';
   return 'r';
@@ -127,6 +130,14 @@ export function journeyProgress(run: DispatchRun): number | null {
   if (total < 0.5) return null;
   const left = haversineKm(run.currentLat, run.currentLng, run.destination.lat, run.destination.lng);
   return Math.min(1, Math.max(0, 1 - left / total));
+}
+
+/** Straight-line km from the run's latest position to its destination.
+ *  Label it honestly wherever shown ("straight line") — roads are
+ *  longer, and a dispatcher planning fuel on this number should know. */
+export function remainingStraightKm(run: DispatchRun): number | null {
+  if (!run.destination || run.currentLat === null || run.currentLng === null) return null;
+  return haversineKm(run.currentLat, run.currentLng, run.destination.lat, run.destination.lng);
 }
 
 /** Total travelled distance along the recorded trail. */

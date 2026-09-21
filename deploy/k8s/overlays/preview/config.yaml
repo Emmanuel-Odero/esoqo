@@ -1,0 +1,101 @@
+# ════════════════════════════════════════════════════════════════════
+#  preview non-secret configuration.
+#
+#  Safe to keep in git — every value here is either public (a URL a
+#  browser will see anyway) or a tuning knob. Anything that grants
+#  access lives in a Secret created out-of-band; see
+#  deploy/scripts/secrets.env.template.
+#
+#  ⚠  Do NOT add a `PORT` key. This ConfigMap is consumed with envFrom
+#  by every workload, and envFrom overrides the image's own ENV — a
+#  single PORT here would make all seven services try to listen on the
+#  same port and fail their probes simultaneously.
+#
+#  ⚠  NEXT_PUBLIC_* appear here for the server-side runtime only. The
+#  browser bundle gets its copy baked in at `next build` time from the
+#  identical values in .github/workflows/build-images.yml. If the two
+#  drift, the server and the client disagree about their own URLs and
+#  auth redirects break in ways that look like cookie bugs. Change both.
+# ════════════════════════════════════════════════════════════════════
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: esoqo-config
+data:
+  NODE_ENV: production
+
+  # ⚠  NOT "preview". packages/domain/src/env.ts recognises exactly
+  # three values — LOCAL_TEST_PROD, PRODUCTION/PROD, and anything else
+  # silently falls through to `development`. A preview environment
+  # running in development mode is wrong in ways that are quiet rather
+  # than loud:
+  #
+  #   · packages/auth/src/email.ts forces provider `mailhog` regardless
+  #     of EMAIL_PROVIDER, so every email dials a host that does not
+  #     exist in this cluster.
+  #   · packages/db/src/storage.ts defaults to `local`, so uploads land
+  #     on the pod filesystem and vanish on the next restart.
+  #   · services/core/src/lib/cloudflare-saas.ts no-ops Jamii custom
+  #     domain provisioning.
+  #
+  # `production` here does NOT mean real money or real SMS — those are
+  # gated separately by MPESA_/PESAPAL_/SMS_PROVIDER below, and sandbox
+  # is honoured in any run mode. This makes preview behave like
+  # production, which is the entire point of a preview environment.
+  APP_ENV: production
+  LOG_LEVEL: info
+
+  # With APP_ENV=production, storage would default to r2 and fail on the
+  # first upload if no bucket is configured. `local` is explicit and
+  # honest for a preview environment — but note uploads are pod-local
+  # and DO NOT survive a restart. Set R2_* in the preview secret and
+  # drop this line to make them durable.
+  STORAGE_PROVIDER: local
+
+  # ── Public origins ────────────────────────────────────────────────
+  NEXT_PUBLIC_WEB_URL: https://preview.esoko.global
+  NEXT_PUBLIC_APP_URL: https://app.preview.esoko.global
+  NEXT_PUBLIC_STORE_URL: https://store.preview.esoko.global
+  PUBLIC_TRACKING_BASE_URL: https://preview.esoko.global/parcels/track
+
+  # ── Service-to-service (in-cluster DNS; never leaves the cluster) ──
+  CORE_API_URL: http://core-service
+  CORE_GO_API_URL: http://core-go
+
+  CORS_ALLOWED_ORIGINS: >-
+    https://preview.esoko.global,https://app.preview.esoko.global,https://admin.preview.esoko.global,https://store.preview.esoko.global,https://jamii.preview.esoko.global
+
+  # ── Jamii community sites ─────────────────────────────────────────
+  JAMII_PRIMARY_HOSTS: jamii.preview.esoko.global
+  NEXT_PUBLIC_JAMII_PRIMARY_ORIGIN: https://jamii.preview.esoko.global
+  NEXT_PUBLIC_JAMII_DOMAIN_TARGET: jamii.preview.esoko.global
+
+  # ── Providers ─────────────────────────────────────────────────────
+  # preview must never send a real SMS or move real money. `console`
+  # logs the message instead of dispatching it, and M-Pesa/Pesapal point
+  # at their sandboxes. Changing any of these three on preview means
+  # real people get real texts and real charges.
+  # All three gates take console|sandbox|production (packages/payments/
+  # src/mpesa.ts, pesapal.ts; packages/auth/src/sms.ts).
+  SMS_PROVIDER: console
+  SMS_SENDER_ID: ESOQO
+  EMAIL_PROVIDER: smtp
+  EMAIL_FROM: Esoqo preview <no-reply@preview.esoko.global>
+  MPESA_PROVIDER: sandbox
+  PESAPAL_PROVIDER: sandbox
+  PESAPAL_IPN_URL: https://api.preview.esoko.global/webhooks/pesapal/ipn
+
+  # MPESA_CALLBACK_URL lives in the Secret — it embeds
+  # MPESA_CALLBACK_SECRET as its last path segment, which is the only
+  # thing authenticating the callback. See the production overlay's
+  # config.yaml for the full reasoning.
+
+  # ── Domain tuning (mirrors .env.example defaults) ─────────────────
+  PARCEL_VOLUMETRIC_DIVISOR: "5000"
+  FARE_PROOF_TTL_MIN: "120"
+  VOUCHERS_ENABLED: "true"
+  LOYALTY_EARN_ENABLED: "true"
+  OTP_RATE_LIMIT_PER_HOUR: "5"
+  OTP_DAILY_SPEND_CAP_KES: "500"
+
+  LOCAL_STORAGE_DIR: /tmp/esoqo-uploads

@@ -16,11 +16,12 @@ const FleetDispatchMapInner = dynamic(
 );
 
 export function FleetDispatchMap({
-  runs, selectedId, onSelect,
+  runs, selectedId, focus, onSelect,
 }: {
   runs: DispatchRun[];
   selectedId: string | null;
+  focus: { id: string; n: number } | null;
   onSelect: (id: string) => void;
 }) {
-  return <FleetDispatchMapInner runs={runs} selectedId={selectedId} onSelect={onSelect} />;
+  return <FleetDispatchMapInner runs={runs} selectedId={selectedId} focus={focus} onSelect={onSelect} />;
 }

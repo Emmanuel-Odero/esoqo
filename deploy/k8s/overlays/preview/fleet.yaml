@@ -1,0 +1,34 @@
+# ════════════════════════════════════════════════════════════════════
+#  Fleet bundle options for the preview overlay.
+#
+#  Fleet auto-detects Kustomize from the sibling kustomization.yaml; this
+#  file only sets what Fleet cannot infer.
+# ════════════════════════════════════════════════════════════════════
+defaultNamespace: preview
+
+kustomize:
+  dir: .
+
+# Give the first deploy room. A cold start pulls seven images, runs
+# initdb, then the migration Job walks 108 migrations — comfortably past
+# Fleet's default 10-minute patience, and a premature timeout marks the
+# bundle failed while it is still legitimately working.
+helm:
+  timeoutSeconds: 1800
+
+diff:
+  comparePatches:
+    # Kubernetes defaults these fields server-side, so Fleet sees a
+    # difference on every poll and reports the bundle "Modified"
+    # forever — drift detection that cries wolf gets ignored, which is
+    # worse than not having it.
+    - apiVersion: v1
+      kind: Service
+      operations:
+        - { op: remove, path: /spec/clusterIP }
+        - { op: remove, path: /spec/clusterIPs }
+    - apiVersion: batch/v1
+      kind: Job
+      operations:
+        - { op: remove, path: /spec/selector }
+        - { op: remove, path: /spec/template/metadata/labels }

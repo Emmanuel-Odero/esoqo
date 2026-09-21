@@ -1,0 +1,258 @@
+# ════════════════════════════════════════════════════════════════════
+#  Build → push → bump. The deploy half of CI.
+#
+#  ci.yml decides whether the code is good; this workflow turns it into
+#  running containers. The two run in PARALLEL on the same push — this
+#  one does not wait for ci.yml, and deliberately so: on preview, a fast
+#  preview of a commit that later fails a test is useful, not dangerous.
+#
+#  ⚠  That makes branch protection the real gate for production, not
+#  this file. `production` must require the CI checks and disallow
+#  direct pushes, so the only way a commit arrives is a merge that was
+#  already green. Setting that up is a step in
+#  docs/deployment/README.md § "One-time setup" — without it, a push
+#  straight to `production` deploys untested code.
+#
+#  The pipeline:
+#
+#    1. build one image per app, per environment, and push to GHCR
+#    2. rewrite the image tags in that environment's Kustomize overlay
+#    3. commit the rewrite back to the same branch
+#
+#  Step 3 is the actual deploy. Fleet is watching the branch; the commit
+#  is what it reacts to. Nothing here talks to the cluster, so no
+#  kubeconfig or cluster credential exists in GitHub at all — the blast
+#  radius of a leaked Actions token stops at the registry.
+#
+#  ⚠  Why build twice instead of promoting one image: NEXT_PUBLIC_* are
+#  inlined into the client bundle by `next build`, so an image built
+#  with preview URLs has those URLs hardcoded in the JavaScript it
+#  serves. There is no runtime override. See
+#  docs/deployment/README.md § "Why images are not promoted".
+# ════════════════════════════════════════════════════════════════════
+name: Build and deploy
+
+on:
+  push:
+    branches: [preview, live]
+    paths-ignore:
+      # The tag-bump commit this workflow makes itself touches only the
+      # overlay. Without this the workflow would retrigger on its own
+      # commit, forever.
+      - 'deploy/k8s/overlays/*/kustomization.yaml'
+      - 'deploy/k8s/base/migrate-job.yaml'
+      - '**/*.md'
+  workflow_dispatch:
+    inputs:
+      reason:
+        description: Why this manual build (recorded in the commit message)
+        required: true
+
+concurrency:
+  # Never let two deploys of the same branch interleave — the second
+  # would push tags derived from a tree the first has already moved.
+  # No cancel-in-progress: a half-finished push leaves the overlay
+  # pointing at an image that was never completed.
+  group: deploy-${{ github.ref }}
+  cancel-in-progress: false
+
+permissions:
+  contents: write  # to push the tag bump
+  packages: write  # to push to GHCR
+
+env:
+  REGISTRY: ghcr.io
+  OWNER: emmanuel-odero # GHCR paths must be lowercase; the GitHub
+                        # account is Emmanuel-Odero
+
+jobs:
+  # ── Resolve which environment this branch means ───────────────────
+  gate:
+    runs-on: ubuntu-latest
+    outputs:
+      env_name: ${{ steps.resolve.outputs.env_name }}
+      overlay: ${{ steps.resolve.outputs.overlay }}
+      tag: ${{ steps.resolve.outputs.tag }}
+      web_url: ${{ steps.resolve.outputs.web_url }}
+      app_url: ${{ steps.resolve.outputs.app_url }}
+      store_url: ${{ steps.resolve.outputs.store_url }}
+      jamii_origin: ${{ steps.resolve.outputs.jamii_origin }}
+    steps:
+      - id: resolve
+        run: |
+          set -euo pipefail
+          case "${GITHUB_REF_NAME}" in
+            preview)
+              echo "env_name=preview"                                     >> "$GITHUB_OUTPUT"
+              echo "overlay=deploy/k8s/overlays/preview"                 >> "$GITHUB_OUTPUT"
+              echo "web_url=https://preview.esoko.global"                >> "$GITHUB_OUTPUT"
+              echo "app_url=https://app.preview.esoko.global"            >> "$GITHUB_OUTPUT"
+              echo "store_url=https://store.preview.esoko.global"        >> "$GITHUB_OUTPUT"
+              echo "jamii_origin=https://jamii.preview.esoko.global"     >> "$GITHUB_OUTPUT"
+              ;;
+            live)
+              echo "env_name=production"                                 >> "$GITHUB_OUTPUT"
+              echo "overlay=deploy/k8s/overlays/production"              >> "$GITHUB_OUTPUT"
+              echo "web_url=https://esoko.global"                        >> "$GITHUB_OUTPUT"
+              echo "app_url=https://app.esoko.global"                    >> "$GITHUB_OUTPUT"
+              echo "store_url=https://store.esoko.global"                >> "$GITHUB_OUTPUT"
+              echo "jamii_origin=https://jamii.esoko.global"             >> "$GITHUB_OUTPUT"
+              ;;
+            *)
+              echo "::error::${GITHUB_REF_NAME} is not a deployable branch"
+              exit 1
+              ;;
+          esac
+          # Short SHA is the image tag. Immutable, and it points straight
+          # back at the commit that produced it — unlike `latest`, which
+          # makes "what is actually running?" unanswerable.
+          echo "tag=$(git rev-parse --short=12 "${GITHUB_SHA}" || echo "${GITHUB_SHA:0:12}")" >> "$GITHUB_OUTPUT"
+
+  # ── Build the five Next apps ──────────────────────────────────────
+  next-apps:
+    needs: gate
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false # one app's failure should not hide the others'
+      matrix:
+        include:
+          - { app: web,   port: 3000 }
+          - { app: app,   port: 3001 }
+          - { app: admin, port: 3002 }
+          - { app: store, port: 3003 }
+          - { app: jamii, port: 3004 }
+    steps:
+      - uses: actions/checkout@v4
+      - uses: docker/setup-buildx-action@v3
+      - uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build and push
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: docker/Dockerfile.next
+          push: true
+          tags: |
+            ${{ env.REGISTRY }}/${{ env.OWNER }}/esoqo-${{ matrix.app }}:${{ needs.gate.outputs.tag }}
+            ${{ env.REGISTRY }}/${{ env.OWNER }}/esoqo-${{ matrix.app }}:${{ needs.gate.outputs.env_name }}
+          build-args: |
+            APP=${{ matrix.app }}
+            PORT=${{ matrix.port }}
+            NEXT_PUBLIC_WEB_URL=${{ needs.gate.outputs.web_url }}
+            NEXT_PUBLIC_APP_URL=${{ needs.gate.outputs.app_url }}
+            NEXT_PUBLIC_STORE_URL=${{ needs.gate.outputs.store_url }}
+            NEXT_PUBLIC_JAMII_PRIMARY_ORIGIN=${{ needs.gate.outputs.jamii_origin }}
+          # GitHub's own cache backend, scoped per app so five parallel
+          # builds do not evict each other's layers.
+          cache-from: type=gha,scope=${{ matrix.app }}
+          cache-to: type=gha,scope=${{ matrix.app }},mode=max
+
+  # ── Build the two backend services ────────────────────────────────
+  services:
+    needs: gate
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { name: core-service, file: docker/Dockerfile.core }
+          - { name: core-go,      file: services/core-go/Dockerfile }
+    steps:
+      - uses: actions/checkout@v4
+      - uses: docker/setup-buildx-action@v3
+      - uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build and push
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: ${{ matrix.file }}
+          push: true
+          tags: |
+            ${{ env.REGISTRY }}/${{ env.OWNER }}/esoqo-${{ matrix.name }}:${{ needs.gate.outputs.tag }}
+            ${{ env.REGISTRY }}/${{ env.OWNER }}/esoqo-${{ matrix.name }}:${{ needs.gate.outputs.env_name }}
+          cache-from: type=gha,scope=${{ matrix.name }}
+          cache-to: type=gha,scope=${{ matrix.name }},mode=max
+
+  # ── The deploy: rewrite tags, commit, let Fleet do the rest ───────
+  bump:
+    needs: [gate, next-apps, services]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.ref_name }}
+          # The default GITHUB_TOKEN cannot push to a protected branch.
+          # If `production` is protected (it should be), set a
+          # DEPLOY_BOT_TOKEN secret with a PAT allowed to bypass, and
+          # this falls back to it.
+          token: ${{ secrets.DEPLOY_BOT_TOKEN || secrets.GITHUB_TOKEN }}
+
+      - name: Set image tags in the overlay
+        working-directory: ${{ needs.gate.outputs.overlay }}
+        run: |
+          set -euo pipefail
+          curl -sSfL https://raw.githubusercontent.com/kubernetes-sigs/kustomize/master/hack/install_kustomize.sh | bash
+          for img in web app admin store jamii core-service core-go; do
+            ./kustomize edit set image \
+              "ghcr.io/emmanuel-odero/esoqo-${img}=ghcr.io/emmanuel-odero/esoqo-${img}:${{ needs.gate.outputs.tag }}"
+          done
+          rm -f kustomize
+
+      - name: Name this release's migration Job
+        run: |
+          set -euo pipefail
+          # The Job name must change per release — a Job's spec.template
+          # is immutable, so reusing a name makes Fleet fail to apply.
+          # Kubernetes names must be RFC 1123, so the tag is lowercased.
+          TAG_LC=$(echo "${{ needs.gate.outputs.tag }}" | tr '[:upper:]' '[:lower:]')
+          sed -i -E "s/^(  name: esoqo-migrate-).*$/\1${TAG_LC}/" deploy/k8s/base/migrate-job.yaml
+          grep '  name: esoqo-migrate-' deploy/k8s/base/migrate-job.yaml
+
+      - name: Verify the overlay still builds
+        run: |
+          set -euo pipefail
+          # Catches a malformed edit BEFORE it is committed. Without this
+          # a broken overlay reaches Fleet, which can only report the
+          # bundle as errored — and the branch is already dirty.
+          kubectl kustomize "${{ needs.gate.outputs.overlay }}" > /dev/null
+          echo "overlay renders cleanly"
+
+      - name: Commit
+        run: |
+          set -euo pipefail
+          git config user.name  "esoqo-deploy[bot]"
+          git config user.email "deploy@esoko.global"
+          git add deploy/k8s
+          if git diff --cached --quiet; then
+            echo "nothing to bump — images unchanged"
+            exit 0
+          fi
+          # [skip ci] so ci.yml does not re-run on a commit that changes
+          # no application code. The paths-ignore above already stops
+          # THIS workflow from retriggering.
+          git commit -m "deploy(${{ needs.gate.outputs.env_name }}): ${{ needs.gate.outputs.tag }} [skip ci]"
+          git push origin HEAD:${{ github.ref_name }}
+
+      - name: Summary
+        run: |
+          {
+            echo "### Deployed to ${{ needs.gate.outputs.env_name }}"
+            echo
+            echo "| | |"
+            echo "|---|---|"
+            echo "| Image tag | \`${{ needs.gate.outputs.tag }}\` |"
+            echo "| Overlay | \`${{ needs.gate.outputs.overlay }}\` |"
+            echo "| Web | ${{ needs.gate.outputs.web_url }} |"
+            echo
+            echo "Fleet polls every 60s. Watch it land in Rancher →"
+            echo "Continuous Delivery → Bundles."
+          } >> "$GITHUB_STEP_SUMMARY"
