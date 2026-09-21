@@ -46,44 +46,48 @@
 .porgnav-container {
   position: relative; display: flex; align-items: center;
   margin-left: 8px; flex: 1 1 auto; min-width: 0;
+  padding-right: 6px; /* Reserve space for scroll indicators on mobile */
 }
 .porgnav {
-  display:flex; align-items:center; gap:2px; 
-  flex-wrap:nowrap; overflow-x:auto; scrollbar-width:none;
+  display:flex; align-items:center; gap:1px; 
+  flex-wrap:nowrap; overflow-x:auto; overflow-y:hidden; scrollbar-width:none;
   -webkit-overflow-scrolling:touch; scroll-behavior:smooth;
-  width: 100%; position: relative;
+  width: 100%; position: relative; mask-image: linear-gradient(to right, transparent 0%, black 12px, black 88%, transparent 100%);
+  -webkit-mask-image: linear-gradient(to right, transparent 0%, black 12px, black 88%, transparent 100%);
 }
 .porgnav::-webkit-scrollbar { display:none }
 .porgnav a, .porgnav button {
-  display:inline-flex; align-items:center; gap:7px; padding:0 13px;
-  font-size:.88rem; font-weight:600; color:var(--tx-2); border-radius:8px;
+  display:inline-flex; align-items:center; gap:6px; padding:0 12px;
+  font-size:.87rem; font-weight:600; color:var(--tx-2); border-radius:6px;
   white-space:nowrap; min-height:40px; border:0; background:none; cursor:pointer;
-  font-family:inherit; flex:0 0 auto;
+  font-family:inherit; flex:0 0 auto; transition:color var(--dur-fast), background var(--dur-fast);
 }
 .porgnav a:hover, .porgnav button:hover { background:var(--paper); color:var(--navy) }
-.porgnav a[aria-current="page"] { color:var(--navy); background:var(--green-t) }
+.porgnav a[aria-current="page"] { color:var(--navy); background:var(--green-t); font-weight:700 }
+.porgnav a:focus-visible, .porgnav button:focus-visible { outline:2px solid var(--green); outline-offset:-2px }
 .porgnav-badge {
-  font-family:var(--font-mono); font-size:.62rem; font-weight:600; line-height:1;
+  font-family:var(--font-mono); font-size:.6rem; font-weight:600; line-height:1;
   background:var(--amber-t); color:var(--amber); border-radius:999px;
-  padding:3px 6px; margin-left:2px;
+  padding:2px 5px; margin-left:2px;
 }
 
 /* Scroll indicators — transparent chevrons showing more content is available */
 .porgnav-scroll {
   position: absolute; top: 50%; transform: translateY(-50%);
-  font-size: 20px; font-weight: 300; color: rgba(31, 161, 99, 0.4);
-  pointer-events: none; user-select: none; letter-spacing: 2px;
+  font-size: 18px; font-weight: 300; color: var(--green);
+  pointer-events: none; user-select: none; letter-spacing: 1px;
   display: flex; align-items: center; justify-content: center;
-  width: 40px; height: 40px;
+  width: 36px; height: 40px; opacity: 0.6;
 }
 .porgnav-scroll-left {
-  left: 0; background: linear-gradient(to right, rgba(255,255,255,0.8), transparent);
-  padding-right: 12px;
+  left: 0; background: linear-gradient(to right, rgba(255,255,255,0.95), rgba(255,255,255,0.3));
+  padding-right: 8px;
 }
 .porgnav-scroll-right {
-  right: 0; background: linear-gradient(to left, rgba(255,255,255,0.8), transparent);
-  padding-left: 12px;
+  right: 0; background: linear-gradient(to left, rgba(255,255,255,0.95), rgba(255,255,255,0.3));
+  padding-left: 8px;
 }
+.porgnav-scroll:hover { opacity: 1; color: var(--green) }
 
 /* Sign out sits outside the nav flow as its own bordered button — same
    trailing-action placement as /org/[orgId]'s header (.btn btn-o
@@ -253,6 +257,14 @@
   .dashboard-kpis-7 { grid-template-columns:repeat(4,1fr) }
 }
 
+/* Optimized tablet breakpoint for mid-range devices */
+@media (min-width:768px) and (max-width:1039px) {
+  .dashboard-kpis { grid-template-columns:repeat(3,1fr); gap:12px }
+  .porg-hero { display:flex; align-items:stretch; flex-wrap:wrap }
+  .porg-hero-copy { flex:1 1 280px; padding:20px }
+  .porg-today { flex:0 1 240px; padding:20px }
+}
+
 /* ── throughput strip ─────────────────────────────────────────── */
 .porg-trends { margin-bottom:18px; padding:18px 20px 14px }
 .porg-trends h2 { font-size:1.05rem; margin:2px 0 0; letter-spacing:-.02em }
@@ -294,7 +306,7 @@
 .porg-pager { display:flex; align-items:center; justify-content:center; gap:14px; padding:14px 16px }
 .porg-page { font-size:.8rem; color:var(--tx-2) }
 .porg-pager .is-disabled { opacity:.4; pointer-events:none }
-.porg-reg-card.is-compact .tbl td { padding:7px 10px }
+.porg-reg-card.is-compact .tbl td { padding:6px 8px }
 .porg-check { display:inline-flex; align-items:center; gap:7px; font-size:.85rem; font-weight:600; color:var(--tx-2); white-space:nowrap }
 .porg-check input { width:17px; height:17px; accent-color:var(--red) }
 
@@ -316,20 +328,38 @@
   font-size:.83rem; font-weight:600; color:var(--blue);
 }
 .porg-clear:hover { text-decoration:underline }
-.porg-filters { display:flex; gap:8px; margin-bottom:14px; flex-wrap:wrap; align-items:center }
+.porg-filters { display:flex; gap:8px; margin-bottom:14px; flex-wrap:wrap; align-items:stretch }
 .porg-filters .inp { min-height:40px; padding:8px 11px; font-size:.9rem; width:auto }
-.porg-search { flex:1 1 220px; min-width:0; max-width:380px }
+.porg-search { flex:1 1 220px; min-width:120px; max-width:380px }
 .porg-status { flex:0 0 auto }
+
+/* Mobile-friendly form inputs */
+.porg-filters .inp, .porg-filters select { 
+  border-radius:var(--r-md); 
+  border:1.5px solid var(--line); 
+  transition:border-color var(--dur-fast), box-shadow var(--dur-fast);
+}
+.porg-filters .inp:focus, .porg-filters select:focus { 
+  border-color:var(--green); 
+  box-shadow:0 0 0 3px rgba(31,161,99,0.1);
+  outline:none;
+}
+.porg-filters .btn { 
+  border-radius:var(--r-md); 
+  min-height:40px;
+  font-weight:600;
+  transition:all var(--dur-fast);
+}
 
 /* ── cards & tables ─────────────────────────────────────────────── */
 .card { background:#fff; border:1px solid var(--line); border-radius:var(--r-lg); padding:20px; min-width:0 }
 .card:has(table.tbl) { overflow-x:auto; -webkit-overflow-scrolling:touch }
 
-.tbl { width:100%; border-collapse:collapse; font-size:.9rem }
-.tbl th { text-align:left; font-family:var(--font-mono); font-size:.62rem; letter-spacing:.1em;
-  text-transform:uppercase; color:var(--tx-3); font-weight:500; padding:9px 10px;
+.tbl { width:100%; border-collapse:collapse; font-size:.82rem; line-height:1.35 }
+.tbl th { text-align:left; font-family:var(--font-mono); font-size:.6rem; letter-spacing:.09em;
+  text-transform:uppercase; color:var(--tx-3); font-weight:500; padding:6px 8px;
   border-bottom:1px solid var(--line); white-space:nowrap }
-.tbl td { padding:12px 10px; border-bottom:1px solid var(--line); vertical-align:top }
+.tbl td { padding:6px 8px; border-bottom:1px solid var(--line); vertical-align:middle }
 .tbl tr:last-child td { border-bottom:0 }
 .tbl tbody tr:hover { background:var(--paper) }
 
@@ -359,75 +389,171 @@
 @media (max-width:900px) {
   /* Brand + sign out on the first row; the nav drops to its own
      full-width, swipeable second row under a hairline. */
-  .porgbar-in { padding-left:16px; padding-right:16px; gap:10px }
+  .porgbar-in { padding-left:14px; padding-right:14px; gap:8px }
   .porgnav-container {
-    order: 3; width: 100%; margin: 4px 0 0; padding: 6px 0 2px;
+    order: 3; width: 100%; margin: 4px 0 0; padding: 4px 0 2px;
     border-top: 1px solid var(--line); margin-left: 0;
   }
   .porgnav {
     justify-content:flex-start;
-    scroll-padding-left:16px;
+    scroll-padding-left:14px;
   }
-  .porgnav a { min-height:38px; padding:0 12px }
+  .porgnav a { min-height:36px; padding:0 11px; font-size:.82rem }
+  .porgnav-badge { font-size:.58rem; padding:2px 5px }
   .porgnav-scroll {
     position: fixed; top: auto; transform: none;
     width: 24px; height: 24px; font-size: 16px;
   }
   .porgnav-scroll-left {
-    left: 16px; bottom: 6px; background: none; padding: 0;
+    left: 14px; bottom: 6px; background: none; padding: 0;
   }
   .porgnav-scroll-right {
-    right: 16px; bottom: 6px; background: none; padding: 0;
+    right: 14px; bottom: 6px; background: none; padding: 0;
   }
   .kpis { grid-template-columns:repeat(2,1fr) }
-  .dashboard-kpis { grid-template-columns:repeat(3,1fr) }
+  .dashboard-kpis { grid-template-columns:repeat(2,1fr); gap:12px }
+  .kpi { padding:14px 13px }
+  
   /* The hero's money rail becomes a full-width footer strip rather than
      a 240px column fighting the copy for a tablet's width. */
-  .porg-hero-copy { flex-basis:100%; padding:20px }
-  .porg-today { flex:1 1 100%; padding:16px 20px; border-left:0; border-top:1px solid var(--line);
-    flex-direction:row; align-items:baseline; gap:10px; flex-wrap:wrap }
+  .porg-hero-copy { flex-basis:100%; padding:18px 20px }
+  .porg-hero h1 { font-size:1.6rem }
+  .porg-hero p { font-size:.9rem }
+  .porg-today { flex:1 1 100%; padding:14px 20px; border-left:0; border-top:1px solid var(--line);
+    flex-direction:row; align-items:baseline; gap:12px; flex-wrap:wrap }
+  .porg-today-v { font-size:1.7rem }
   .porg-today-h { margin-top:0; margin-left:auto }
+  
+  /* Filters improvements */
+  .porg-filters { gap:8px; margin-bottom:12px }
+  .porg-search { flex:1 1 100%; max-width:none; min-height:38px }
+  .porg-status { flex:0 1 auto; min-height:38px }
+  
+  /* Tighter spacing on smaller tablets */
+  .porg-wrap { padding:20px 16px 48px }
+  .card { padding:14px }
+  .porg-attention { gap:10px; padding:11px 14px; font-size:.85rem }
 }
 @media (max-width:560px) {
   /* Two KPI tiles per row, not one: the board's job is a single glance
      at the whole shift, and one-per-row turns it into six screens of
      scrolling before the register is even visible. */
   .kpis { grid-template-columns:repeat(2,1fr); gap:10px }
-  .dashboard-kpis { grid-template-columns:repeat(2,1fr) }
-  .kpi { padding:13px 14px }
-  .kpi-link { padding-right:14px }
-  .kpi .n { font-size:1.45rem }
+  .dashboard-kpis { grid-template-columns:1fr }
+  .kpi { padding:14px 13px; min-height:auto }
+  .kpi .n { font-size:1.55rem; line-height:1 }
+  .kpi .l { font-size:.58rem; margin-top:6px }
+  .kpi .sub { font-size:.75rem; margin-top:4px }
+  .kpi-link { padding-right:13px }
   .kpi-go { display:none }
-  .porg-hero-actions .btn { flex:1 1 140px }
-  .porg-filters .btn { width:100%; justify-content:center }
-  .porg-search, .porg-status { flex:1 1 100%; max-width:none }
+  .kpi-link:hover { transform:none }
+  
+  /* Hero section improvements */
+  .porg-hero { flex-direction:column; border-radius:var(--r-lg); gap:0 }
+  .porg-hero-copy { flex-basis:auto; padding:16px 14px }
+  .porg-hero-copy .kicker { gap:6px; align-items:flex-start; flex-wrap:wrap }
+  .porg-hero-copy .pill { font-size:.65rem; padding:3px 8px }
+  .porg-hero-copy h1 { font-size:1.4rem; letter-spacing:-.025em; margin:6px 0 0 }
+  .porg-hero-copy p { font-size:.84rem; margin:6px 0 0; max-width:none }
+  .porg-hero-actions { 
+    gap:6px; 
+    margin-top:12px;
+    display:grid;
+    grid-template-columns:1fr;
+    width:100%;
+  }
+  .porg-hero-actions .btn { 
+    width:100%; 
+    min-height:42px; 
+    font-size:.85rem; 
+    padding:10px 12px;
+    display:flex;
+    align-items:center;
+    justify-content:center;
+    gap:6px;
+  }
+  .porg-today { 
+    flex:1 1 auto; 
+    padding:12px 14px; 
+    border-left:0; 
+    border-top:1px solid var(--line); 
+    flex-direction:column; 
+    align-items:flex-start; 
+    gap:4px;
+    justify-content:flex-start;
+  }
+  .porg-today-k { font-size:.5rem; letter-spacing:.12em }
+  .porg-today-v { font-size:1.4rem; letter-spacing:-.025em; margin-top:2px }
+  .porg-today-h { font-size:.72rem; margin-top:0 }
+  
+  /* Filters and search */
+  .porg-filters { gap:6px; margin-bottom:12px; align-items:stretch }
+  .porg-filters .btn { width:100%; justify-content:center; min-height:40px; font-size:.85rem; padding:8px 10px }
+  .porg-search { flex:1 1 100%; max-width:none; min-height:40px }
+  .porg-status { flex:1 1 100%; max-width:none; min-height:40px }
+  .porg-search .inp, .porg-status .inp, .porg-status select { 
+    font-size:.88rem; 
+    padding:9px 10px; 
+    width:100%;
+    box-sizing:border-box;
+  }
+  
+  /* Register toolbar improvements */
+  .porg-reg-toolbar { padding:10px 12px; gap:8px }
+  .porg-range { font-size:.75rem }
+  .porg-reg-tools { gap:6px }
+  .porg-perpage select { min-height:36px; font-size:.78rem; padding:4px 6px }
+  .porg-reg-tools .btn { min-height:36px; font-size:.8rem; padding:6px 10px }
+  
+  /* Attention band */
+  .porg-attention { gap:8px; padding:10px 12px; font-size:.82rem }
+  .porg-attention span { min-width:160px }
+  .porg-attention .btn { padding:8px 12px }
+  
+  /* General improvements */
   .head h1 { font-size:1.3rem }
-  .porg-wrap { padding:18px 16px 48px }
-  .card { padding:16px }
-  .porgbar-in { gap:8px }
+  .head p { font-size:.86rem }
+  .head h2 { font-size:1rem }
+  .porg-wrap { padding:16px 12px 48px }
+  .card { padding:14px; border-radius:var(--r-md) }
+  .porgbar-in { gap:8px; padding:6px 12px 6px 12px }
+  
   /* The wordmark goes so the company name keeps room beside Sign out on
      a 360px screen; the switcher's monogram carries the brand slot. */
   .porgbrand, .porgbar-in .appbar-div { display:none }
-  .porgbar-in .wsw { max-width:none }
-  .porg-signout .btn { padding-inline:10px }
-  .porgnav a { font-size:.84rem; gap:6px; padding:0 10px }
+  .porgbar-in .wsw { max-width:none; flex:1 }
+  .porg-signout { margin-left:auto }
+  .porg-signout .btn { padding-inline:8px; font-size:.8rem; min-height:36px }
+  
+  /* Navigation improvements */
+  .porgnav a { font-size:.8rem; gap:5px; padding:0 9px; min-height:36px }
+  .porgnav-badge { font-size:.56rem; padding:2px 5px }
+  
+  /* Register head improvements */
+  .porg-register-head { gap:10px; margin-bottom:10px }
+  .porg-register-head h2 { font-size:1rem }
+  .porg-applied { gap:6px; padding:4px 8px; font-size:.75rem }
+  .porg-clear { font-size:.78rem; gap:5px }
+  
   .head .actions { width:100% }
   .head .actions .btn { flex:1 1 140px }
+  
   /* Roster, stations and label registers keep full columns behind a
      touch scroll instead of squashing — except the parcels register,
      which already restacks into labelled cards below. */
   table.tbl:not(.parcel-table) { min-width:560px }
+  
   /* A horizontal table is hard to use on a phone and hiding the status
      is worse. Parcel rows become labelled, stacked cards instead. */
   .card:has(.parcel-table) { overflow:visible; padding:0; border:0; background:transparent; box-shadow:none }
   .parcel-table, .parcel-table tbody, .parcel-table tr, .parcel-table td { display:block; width:100% }
   .parcel-table thead { position:absolute; width:1px; height:1px; padding:0; overflow:hidden; clip:rect(0,0,0,0); white-space:nowrap; border:0 }
-  .parcel-table tr { padding:15px 16px; margin-bottom:10px; border:1px solid var(--line); border-radius:var(--r-lg); background:#fff; box-shadow:var(--sh-s) }
-  .parcel-table td { display:grid; grid-template-columns:104px minmax(0,1fr); gap:10px; padding:8px 0; border:0; text-align:left !important }
-  .parcel-table td::before { content:attr(data-label); color:var(--tx-3); font-family:var(--font-mono); font-size:.61rem; letter-spacing:.08em; text-transform:uppercase; padding-top:2px }
+  .parcel-table tr { padding:13px 14px; margin-bottom:10px; border:1px solid var(--line); border-radius:var(--r-md); background:#fff; box-shadow:var(--sh-s) }
+  .parcel-table td { display:grid; grid-template-columns:90px minmax(0,1fr); gap:8px; padding:7px 0; border:0; text-align:left !important; font-size:.8rem }
+  .parcel-table td::before { content:attr(data-label); color:var(--tx-3); font-family:var(--font-mono); font-size:.58rem; letter-spacing:.08em; text-transform:uppercase; padding-top:1px; font-weight:600 }
   .parcel-table td[data-label="Parcel"]::before { content:'' }
-  .parcel-table td[data-label="Parcel"] { display:block; padding-top:0 }
-  .parcel-table td[data-label="Actions"] { display:block; padding-top:10px; border-top:1px solid var(--line) }
+  .parcel-table td[data-label="Parcel"] { display:block; padding-top:0; grid-template-columns:none }
+  .parcel-table td[data-label="Actions"] { display:block; padding-top:10px; border-top:1px solid var(--line); grid-template-columns:none }
 }
 
 
