@@ -38,7 +38,11 @@ spec:
       template:
         spec:
           restartPolicy: OnFailure
-          securityContext: { fsGroup: 999 }
+          # 70 — the postgres gid in postgres:16-alpine. See postgres.yaml.
+          # This one matters more than the StatefulSet's: nothing here
+          # runs as root to chown the backups volume afterwards, so a
+          # wrong fsGroup means pg_dump cannot write its output at all.
+          securityContext: { fsGroup: 70 }
           containers:
             - name: pg-dump
               image: postgres:16-alpine

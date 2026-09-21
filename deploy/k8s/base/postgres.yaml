@@ -32,8 +32,13 @@ spec:
       labels: { app.kubernetes.io/name: postgres, app.kubernetes.io/part-of: esoqo }
     spec:
       securityContext:
-        fsGroup: 999 # the postgres group in the official image; without
-                     # this the mounted PVC is root-owned and initdb aborts
+        # 70, not 999. The postgres group is gid 999 in the Debian-based
+        # image but gid 70 in postgres:16-alpine, which is what this
+        # StatefulSet runs. The entrypoint starts as root and chowns
+        # PGDATA itself, so a wrong value here is survivable today —
+        # but it stops being survivable the moment a PodSecurity policy
+        # forces runAsNonRoot and that chown never happens.
+        fsGroup: 70
       terminationGracePeriodSeconds: 120 # let a checkpoint finish
       containers:
         - name: postgres

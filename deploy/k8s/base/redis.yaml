@@ -34,7 +34,10 @@ spec:
     metadata:
       labels: { app.kubernetes.io/name: redis, app.kubernetes.io/part-of: esoqo }
     spec:
-      securityContext: { fsGroup: 999 }
+      # 1000, not 999. In redis:7-alpine the redis user is uid 999 but
+      # gid 1000 — the two do not match, and fsGroup takes the GROUP.
+      # See the equivalent note in postgres.yaml.
+      securityContext: { fsGroup: 1000 }
       containers:
         - name: redis
           image: redis:7-alpine
