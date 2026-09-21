@@ -442,6 +442,41 @@ token already exists for Jamii custom domains) and switch the solver to
 
 ---
 
+## 9a. If the cluster runs Traefik, not nginx
+
+k3s ships Traefik by default, and this cluster is k3s. Both overlays'
+`ingress.yaml` sets `ingressClassName: nginx` and carries
+`nginx.ingress.kubernetes.io/*` annotations.
+
+The dangerous part is not the class name — a wrong class produces an
+Ingress that never gets an address, which is loud. It is the
+**annotations, which Traefik silently ignores**. Nothing errors; the
+behaviour just isn't there:
+
+| Intent | nginx annotation | Traefik equivalent |
+|---|---|---|
+| 11MB Server Action uploads | `proxy-body-size: 12m` | a `Middleware` with `buffering.maxRequestBodyBytes` |
+| `www` → apex redirect | `from-to-www-redirect: "true"` | a `Middleware` with `redirectRegex` |
+| `noindex` on testnet | `configuration-snippet` | a `Middleware` with `headers.customResponseHeaders` |
+
+Losing the first one is the one that bites: uploads over 1MB fail with
+a 413 from the proxy, and `apps/app` is built around 10MB document
+uploads. Traefik's own default body limit is unlimited, so in practice
+uploads work — but nothing is enforcing the 12MB ceiling either.
+
+To switch, change `ingressClassName` to `traefik` in both overlays and
+add a Middleware per behaviour you actually need, referenced by
+`traefik.ingress.kubernetes.io/router.middlewares:
+<namespace>-<middleware>@kubernetescrd`.
+
+Installing ingress-nginx alongside Traefik is also fine — k3s supports
+multiple controllers, and keeping nginx means the manifests work as
+written. Decide based on what else on the cluster already depends on
+Traefik.
+
+`deploy/scripts/preflight.sh` reports the available IngressClasses, so
+run it before assuming either way.
+
 ## 10. Backups and restore
 
 A `CronJob` dumps Postgres nightly at 01:17 Africa/Nairobi, verifies the
