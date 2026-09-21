@@ -1,7 +1,7 @@
 # ════════════════════════════════════════════════════════════════════
 #  production non-secret configuration.
 #
-#  Read the testnet overlay's config.yaml header first — the two PORT
+#  Read the preview overlay's config.yaml header first — the two PORT
 #  and NEXT_PUBLIC_* warnings there apply identically here.
 #
 #  The difference that matters: every provider below is LIVE. SMS
@@ -15,7 +15,7 @@ metadata:
 data:
   NODE_ENV: production
   # Must be PRODUCTION or PROD (case-insensitive). packages/domain/src/
-  # env.ts treats every other value as `development` — see the testnet
+  # env.ts treats every other value as `development` — see the preview
   # overlay's config.yaml for what that silently breaks.
   APP_ENV: production
   LOG_LEVEL: info

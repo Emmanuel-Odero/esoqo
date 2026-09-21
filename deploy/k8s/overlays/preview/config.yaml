@@ -1,5 +1,5 @@
 # ════════════════════════════════════════════════════════════════════
-#  testnet non-secret configuration.
+#  preview non-secret configuration.
 #
 #  Safe to keep in git — every value here is either public (a URL a
 #  browser will see anyway) or a tuning knob. Anything that grants
@@ -24,7 +24,7 @@ metadata:
 data:
   NODE_ENV: production
 
-  # ⚠  NOT "testnet". packages/domain/src/env.ts recognises exactly
+  # ⚠  NOT "preview". packages/domain/src/env.ts recognises exactly
   # three values — LOCAL_TEST_PROD, PRODUCTION/PROD, and anything else
   # silently falls through to `development`. A preview environment
   # running in development mode is wrong in ways that are quiet rather
@@ -40,7 +40,7 @@ data:
   #
   # `production` here does NOT mean real money or real SMS — those are
   # gated separately by MPESA_/PESAPAL_/SMS_PROVIDER below, and sandbox
-  # is honoured in any run mode. This makes testnet behave like
+  # is honoured in any run mode. This makes preview behave like
   # production, which is the entire point of a preview environment.
   APP_ENV: production
   LOG_LEVEL: info
@@ -48,42 +48,42 @@ data:
   # With APP_ENV=production, storage would default to r2 and fail on the
   # first upload if no bucket is configured. `local` is explicit and
   # honest for a preview environment — but note uploads are pod-local
-  # and DO NOT survive a restart. Set R2_* in the testnet secret and
+  # and DO NOT survive a restart. Set R2_* in the preview secret and
   # drop this line to make them durable.
   STORAGE_PROVIDER: local
 
   # ── Public origins ────────────────────────────────────────────────
-  NEXT_PUBLIC_WEB_URL: https://testnet.esoko.global
-  NEXT_PUBLIC_APP_URL: https://app.testnet.esoko.global
-  NEXT_PUBLIC_STORE_URL: https://store.testnet.esoko.global
-  PUBLIC_TRACKING_BASE_URL: https://testnet.esoko.global/parcels/track
+  NEXT_PUBLIC_WEB_URL: https://preview.esoko.global
+  NEXT_PUBLIC_APP_URL: https://app.preview.esoko.global
+  NEXT_PUBLIC_STORE_URL: https://store.preview.esoko.global
+  PUBLIC_TRACKING_BASE_URL: https://preview.esoko.global/parcels/track
 
   # ── Service-to-service (in-cluster DNS; never leaves the cluster) ──
   CORE_API_URL: http://core-service
   CORE_GO_API_URL: http://core-go
 
   CORS_ALLOWED_ORIGINS: >-
-    https://testnet.esoko.global,https://app.testnet.esoko.global,https://admin.testnet.esoko.global,https://store.testnet.esoko.global,https://jamii.testnet.esoko.global
+    https://preview.esoko.global,https://app.preview.esoko.global,https://admin.preview.esoko.global,https://store.preview.esoko.global,https://jamii.preview.esoko.global
 
   # ── Jamii community sites ─────────────────────────────────────────
-  JAMII_PRIMARY_HOSTS: jamii.testnet.esoko.global
-  NEXT_PUBLIC_JAMII_PRIMARY_ORIGIN: https://jamii.testnet.esoko.global
-  NEXT_PUBLIC_JAMII_DOMAIN_TARGET: jamii.testnet.esoko.global
+  JAMII_PRIMARY_HOSTS: jamii.preview.esoko.global
+  NEXT_PUBLIC_JAMII_PRIMARY_ORIGIN: https://jamii.preview.esoko.global
+  NEXT_PUBLIC_JAMII_DOMAIN_TARGET: jamii.preview.esoko.global
 
   # ── Providers ─────────────────────────────────────────────────────
-  # testnet must never send a real SMS or move real money. `console`
+  # preview must never send a real SMS or move real money. `console`
   # logs the message instead of dispatching it, and M-Pesa/Pesapal point
-  # at their sandboxes. Changing any of these three on testnet means
+  # at their sandboxes. Changing any of these three on preview means
   # real people get real texts and real charges.
   # All three gates take console|sandbox|production (packages/payments/
   # src/mpesa.ts, pesapal.ts; packages/auth/src/sms.ts).
   SMS_PROVIDER: console
   SMS_SENDER_ID: ESOQO
   EMAIL_PROVIDER: smtp
-  EMAIL_FROM: Esoqo testnet <no-reply@testnet.esoko.global>
+  EMAIL_FROM: Esoqo preview <no-reply@preview.esoko.global>
   MPESA_PROVIDER: sandbox
   PESAPAL_PROVIDER: sandbox
-  PESAPAL_IPN_URL: https://api.testnet.esoko.global/webhooks/pesapal/ipn
+  PESAPAL_IPN_URL: https://api.preview.esoko.global/webhooks/pesapal/ipn
 
   # MPESA_CALLBACK_URL lives in the Secret — it embeds
   # MPESA_CALLBACK_SECRET as its last path segment, which is the only

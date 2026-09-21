@@ -16,8 +16,8 @@
 #                      credentials, payment provider secrets.
 #
 #  Note the images are per-environment despite coming from one commit:
-#  NEXT_PUBLIC_* are compiled into the client bundle, so a testnet image
-#  has testnet URLs baked in and can never be promoted to production.
+#  NEXT_PUBLIC_* are compiled into the client bundle, so a preview image
+#  has preview URLs baked in and can never be promoted to production.
 #  See docs/deployment/README.md § "Why images are not promoted".
 # ════════════════════════════════════════════════════════════════════
 

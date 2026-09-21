@@ -1,5 +1,5 @@
 # ════════════════════════════════════════════════════════════════════
-#  testnet ingress — *.testnet.esoko.global
+#  preview ingress — *.preview.esoko.global
 #
 #  Hosts are listed EXPLICITLY rather than as a wildcard, because the
 #  TLS side decides this: a wildcard certificate can only be issued
@@ -7,7 +7,7 @@
 #  DNS solver. Explicit hosts use HTTP-01, which needs nothing but a
 #  reachable ingress — no registrar API credentials anywhere.
 #
-#  DNS is still wildcard (one `*.testnet` A record covers all five), so
+#  DNS is still wildcard (one `*.preview` A record covers all five), so
 #  adding a sixth app means adding a rule and a tls host here, and no
 #  DNS change at all.
 #
@@ -27,37 +27,37 @@ metadata:
     # ever sees the request.
     nginx.ingress.kubernetes.io/proxy-body-size: "12m"
     nginx.ingress.kubernetes.io/proxy-read-timeout: "60"
-    # testnet is a preview environment and must never be indexed.
+    # preview is a preview environment and must never be indexed.
     nginx.ingress.kubernetes.io/configuration-snippet: |
       more_set_headers "X-Robots-Tag: noindex, nofollow";
 spec:
   ingressClassName: nginx
   tls:
-    - secretName: esoqo-testnet-tls
+    - secretName: esoqo-preview-tls
       hosts:
-        - testnet.esoko.global
-        - app.testnet.esoko.global
-        - admin.testnet.esoko.global
-        - store.testnet.esoko.global
-        - jamii.testnet.esoko.global
+        - preview.esoko.global
+        - app.preview.esoko.global
+        - admin.preview.esoko.global
+        - store.preview.esoko.global
+        - jamii.preview.esoko.global
   rules:
-    - host: testnet.esoko.global
+    - host: preview.esoko.global
       http:
         paths:
           - { path: /, pathType: Prefix, backend: { service: { name: web, port: { number: 80 } } } }
-    - host: app.testnet.esoko.global
+    - host: app.preview.esoko.global
       http:
         paths:
           - { path: /, pathType: Prefix, backend: { service: { name: app, port: { number: 80 } } } }
-    - host: admin.testnet.esoko.global
+    - host: admin.preview.esoko.global
       http:
         paths:
           - { path: /, pathType: Prefix, backend: { service: { name: admin, port: { number: 80 } } } }
-    - host: store.testnet.esoko.global
+    - host: store.preview.esoko.global
       http:
         paths:
           - { path: /, pathType: Prefix, backend: { service: { name: store, port: { number: 80 } } } }
-    - host: jamii.testnet.esoko.global
+    - host: jamii.preview.esoko.global
       http:
         paths:
           - { path: /, pathType: Prefix, backend: { service: { name: jamii, port: { number: 80 } } } }
@@ -76,16 +76,16 @@ metadata:
 spec:
   ingressClassName: nginx
   tls:
-    - secretName: esoqo-testnet-api-tls
+    - secretName: esoqo-preview-api-tls
       hosts:
-        - api.testnet.esoko.global
-        - mobile.testnet.esoko.global
+        - api.preview.esoko.global
+        - mobile.preview.esoko.global
   rules:
-    - host: api.testnet.esoko.global
+    - host: api.preview.esoko.global
       http:
         paths:
           - { path: /, pathType: Prefix, backend: { service: { name: core-service, port: { number: 80 } } } }
-    - host: mobile.testnet.esoko.global
+    - host: mobile.preview.esoko.global
       http:
         paths:
           - { path: /, pathType: Prefix, backend: { service: { name: core-go, port: { number: 80 } } } }

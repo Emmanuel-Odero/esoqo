@@ -1,7 +1,7 @@
 # ════════════════════════════════════════════════════════════════════
 #  production ingress — esoko.global
 #
-#  Same explicit-host / HTTP-01 reasoning as the testnet overlay; see
+#  Same explicit-host / HTTP-01 reasoning as the preview overlay; see
 #  the header there.
 #
 #  The apex (esoko.global) needs an A record, not a CNAME — DNS forbids

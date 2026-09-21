@@ -8,7 +8,7 @@
 #  Actions is unavailable, or to deploy a commit without pushing it
 #  through CI first.
 #
-#      deploy/scripts/build-and-push.sh testnet
+#      deploy/scripts/build-and-push.sh preview
 #      deploy/scripts/build-and-push.sh production
 #
 #  Everything it produces is identical to the workflow's output: same
@@ -27,16 +27,16 @@ REGISTRY="ghcr.io"
 OWNER="emmanuel-odero" # GHCR paths are lowercase; the account is Emmanuel-Odero
 
 case "$ENVIRONMENT" in
-  testnet)
-    BRANCH="esoko/testnet"
-    OVERLAY="deploy/k8s/overlays/testnet"
-    WEB_URL="https://testnet.esoko.global"
-    APP_URL="https://app.testnet.esoko.global"
-    STORE_URL="https://store.testnet.esoko.global"
-    JAMII_ORIGIN="https://jamii.testnet.esoko.global"
+  preview)
+    BRANCH="preview"
+    OVERLAY="deploy/k8s/overlays/preview"
+    WEB_URL="https://preview.esoko.global"
+    APP_URL="https://app.preview.esoko.global"
+    STORE_URL="https://store.preview.esoko.global"
+    JAMII_ORIGIN="https://jamii.preview.esoko.global"
     ;;
   production)
-    BRANCH="production"
+    BRANCH="live"
     OVERLAY="deploy/k8s/overlays/production"
     WEB_URL="https://esoko.global"
     APP_URL="https://app.esoko.global"
@@ -44,7 +44,7 @@ case "$ENVIRONMENT" in
     JAMII_ORIGIN="https://jamii.esoko.global"
     ;;
   *)
-    echo "usage: $0 <testnet|production>" >&2
+    echo "usage: $0 <preview|production>" >&2
     exit 64
     ;;
 esac
@@ -53,7 +53,7 @@ REPO_ROOT=$(git rev-parse --show-toplevel)
 cd "$REPO_ROOT"
 
 # Refuse to build from the wrong branch. The overlay committed at the
-# end goes to $BRANCH, and building testnet code while standing on
+# end goes to $BRANCH, and building preview code while standing on
 # production would push production-tagged images built from the wrong
 # tree — with NEXT_PUBLIC_* baked in, that is not recoverable by a
 # retag.

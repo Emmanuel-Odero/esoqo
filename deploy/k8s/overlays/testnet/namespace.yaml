@@ -1,7 +1,0 @@
-apiVersion: v1
-kind: Namespace
-metadata:
-  name: esoqo-testnet
-  labels:
-    app.kubernetes.io/part-of: esoqo
-    app.kubernetes.io/instance: testnet

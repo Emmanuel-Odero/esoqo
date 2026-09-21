@@ -8,8 +8,8 @@ cluster.
 
 ## 1. The model in one paragraph
 
-**A deploy is a commit.** Pushing to `esoko/testnet` builds images, writes
-the new image tags into `deploy/k8s/overlays/testnet/kustomization.yaml`,
+**A deploy is a commit.** Pushing to `preview` builds images, writes
+the new image tags into `deploy/k8s/overlays/preview/kustomization.yaml`,
 and commits that back. Rancher Fleet watches the branch and applies the
 result to the cluster. Production works identically from the `production`
 branch. Nothing deploys by running `kubectl apply` at a laptop, and
@@ -17,12 +17,12 @@ Fleet's drift correction will revert anything that tries. A rollback is
 therefore `git revert`, and "what is running?" is answered by reading the
 overlay at that branch's HEAD.
 
-| | testnet | production |
+| | preview | production |
 |---|---|---|
-| Branch | `esoko/testnet` | `production` |
-| Namespace | `esoqo-testnet` | `esoqo-production` |
-| Overlay | `deploy/k8s/overlays/testnet` | `deploy/k8s/overlays/production` |
-| Apex host | `testnet.esoko.global` | `esoko.global` |
+| Branch | `preview` | `production` |
+| Namespace | `preview` | `production` |
+| Overlay | `deploy/k8s/overlays/preview` | `deploy/k8s/overlays/production` |
+| Apex host | `preview.esoko.global` | `esoko.global` |
 | SMS | `console` — logs, never sends | **live** |
 | Payments | sandbox | **live** |
 | Replicas | 1 each | 2 (1 for admin) |
@@ -35,15 +35,15 @@ overlay at that branch's HEAD.
 Seven workloads plus three stateful pieces, all in one namespace per
 environment.
 
-| Workload | Image | Port | Hostname (testnet) |
+| Workload | Image | Port | Hostname (preview) |
 |---|---|---|---|
-| `web` | `esoqo-web` | 3000 | `testnet.esoko.global` |
-| `app` | `esoqo-app` | 3001 | `app.testnet.esoko.global` |
-| `admin` | `esoqo-admin` | 3002 | `admin.testnet.esoko.global` |
-| `store` | `esoqo-store` | 3003 | `store.testnet.esoko.global` |
-| `jamii` | `esoqo-jamii` | 3004 | `jamii.testnet.esoko.global` |
-| `core-service` | `esoqo-core-service` | 4000 | `api.testnet.esoko.global` |
-| `core-go` | `esoqo-core-go` | 4100 | `mobile.testnet.esoko.global` |
+| `web` | `esoqo-web` | 3000 | `preview.esoko.global` |
+| `app` | `esoqo-app` | 3001 | `app.preview.esoko.global` |
+| `admin` | `esoqo-admin` | 3002 | `admin.preview.esoko.global` |
+| `store` | `esoqo-store` | 3003 | `store.preview.esoko.global` |
+| `jamii` | `esoqo-jamii` | 3004 | `jamii.preview.esoko.global` |
+| `core-service` | `esoqo-core-service` | 4000 | `api.preview.esoko.global` |
+| `core-go` | `esoqo-core-go` | 4100 | `mobile.preview.esoko.global` |
 | `postgres` | `postgres:16-alpine` | 5432 | *(in-cluster only)* |
 | `pgbouncer` | `edoburu/pgbouncer` | 6432 | *(in-cluster only)* |
 | `redis` | `redis:7-alpine` | 6379 | *(in-cluster only)* |
@@ -86,7 +86,7 @@ In Rancher (<https://rancher.2lovelaces.io/>), on the target cluster:
    secrets, and debug a bad rollout.
 
 1. **Label the cluster.** Cluster → Edit Config → Labels. Add
-   `env=testnet` (or `env=production`). The Fleet `GitRepo` selects on
+   `env=preview` (or `env=production`). The Fleet `GitRepo` selects on
    this label rather than naming the cluster, so replacing the cluster
    later does not mean editing the repo.
 2. **Install ingress-nginx** if the cluster has no ingress controller.
@@ -126,7 +126,7 @@ kubectl -n fleet-default create secret generic esoqo-git-credentials \
 Also on the Rancher local cluster:
 
 ```bash
-kubectl apply -f deploy/fleet/gitrepo-testnet.yaml
+kubectl apply -f deploy/fleet/gitrepo-preview.yaml
 # later, when production is ready:
 kubectl apply -f deploy/fleet/gitrepo-production.yaml
 ```
@@ -136,9 +136,9 @@ Watch it in Rancher → **Continuous Delivery → Git Repos**.
 ### 3.5 Secrets
 
 ```bash
-cp deploy/scripts/secrets.env.template ~/esoqo-testnet.secrets.env
+cp deploy/scripts/secrets.env.template ~/preview.secrets.env
 # fill it in — every "required" field
-deploy/scripts/create-secrets.sh testnet ~/esoqo-testnet.secrets.env
+deploy/scripts/create-secrets.sh preview ~/preview.secrets.env
 ```
 
 The script validates before touching the cluster, builds the connection
@@ -147,7 +147,7 @@ filled-in file in a password manager and delete it from disk.
 
 > `AUDIT_CHAIN_SEED` is set **once per environment and never rotated**.
 > Changing it breaks the existing hash chain permanently and
-> `audit:verify` will fail forever after. testnet and production must
+> `audit:verify` will fail forever after. preview and production must
 > have different values.
 
 ### 3.6 DNS at Namecheap
@@ -168,13 +168,13 @@ If that is empty, the controller is `NodePort` rather than
 kubectl get nodes -o wide
 ```
 
-Then add these records. Two records cover all five testnet apps, because
+Then add these records. Two records cover all five preview apps, because
 the apex and the wildcard together match every hostname:
 
 | Type | Host | Value | TTL |
 |---|---|---|---|
-| A | `testnet` | `<INGRESS_IP>` | 5 min |
-| A | `*.testnet` | `<INGRESS_IP>` | 5 min |
+| A | `preview` | `<INGRESS_IP>` | 5 min |
+| A | `*.preview` | `<INGRESS_IP>` | 5 min |
 
 And for production, when you get there:
 
@@ -192,8 +192,8 @@ Verify before expecting TLS to work — cert-manager cannot succeed until
 these resolve publicly:
 
 ```bash
-dig +short testnet.esoko.global
-dig +short admin.testnet.esoko.global
+dig +short preview.esoko.global
+dig +short admin.preview.esoko.global
 ```
 
 ### 3.7 GHCR package visibility
@@ -212,11 +212,11 @@ cannot pull them. Use a pull secret.
 Create the pull secret in each namespace:
 
 ```bash
-kubectl -n esoqo-testnet create secret docker-registry ghcr \
+kubectl -n preview create secret docker-registry ghcr \
   --docker-server=ghcr.io \
   --docker-username=Emmanuel-Odero \
   --docker-password='<PAT with read:packages>'
-kubectl -n esoqo-testnet patch serviceaccount default \
+kubectl -n preview patch serviceaccount default \
   -p '{"imagePullSecrets":[{"name":"ghcr"}]}'
 ```
 
@@ -239,10 +239,10 @@ protected branch), so the tag-bump commit can land.
 
 ---
 
-## 4. Routine deploy to testnet
+## 4. Routine deploy to preview
 
 ```bash
-git checkout esoko/testnet
+git checkout preview
 git pull
 # ... work ...
 git commit -m "feat(parcels): ..."
@@ -254,13 +254,13 @@ That is the whole procedure. Then watch:
 1. **GitHub → Actions → "Build and deploy"** — seven images build in
    parallel, then `bump` commits the new tags. ~8–12 min cold, ~3–4 min
    warm.
-2. **Rancher → Continuous Delivery → Bundles** — `esoqo-testnet` goes
+2. **Rancher → Continuous Delivery → Bundles** — `preview` goes
    `Modified` → `Ready` within the 60s poll.
 3. Confirm:
    ```bash
-   kubectl -n esoqo-testnet get pods
-   kubectl -n esoqo-testnet rollout status deploy/web --timeout=5m
-   curl -sS https://testnet.esoko.global/api/health
+   kubectl -n preview get pods
+   kubectl -n preview rollout status deploy/web --timeout=5m
+   curl -sS https://preview.esoko.global/api/health
    ```
 
 ### Deploying without GitHub Actions
@@ -270,9 +270,9 @@ critical path — it only builds the images and commits the tag bump.
 `deploy/scripts/build-and-push.sh` does both from a laptop:
 
 ```bash
-git checkout esoko/testnet        # the script refuses to run from another branch
-deploy/scripts/build-and-push.sh testnet
-git push origin esoko/testnet     # this is what Fleet reacts to
+git checkout preview        # the script refuses to run from another branch
+deploy/scripts/build-and-push.sh preview
+git push origin preview     # this is what Fleet reacts to
 ```
 
 The output is identical to the workflow's — same images, same tags,
@@ -287,25 +287,25 @@ and walk all 108 Prisma migrations. Give it 20 minutes before concluding
 anything is wrong, and watch the migration Job specifically:
 
 ```bash
-kubectl -n esoqo-testnet get jobs
-kubectl -n esoqo-testnet logs -l app.kubernetes.io/name=migrate -f
+kubectl -n preview get jobs
+kubectl -n preview logs -l app.kubernetes.io/name=migrate -f
 ```
 
 ---
 
 ## 5. Promoting to production
 
-Production is a fast-forward of an already-green testnet. It is never
-built from a branch that testnet has not run.
+Production is a fast-forward of an already-green preview. It is never
+built from a branch that preview has not run.
 
 ```bash
-# 1. confirm testnet is actually healthy — not just deployed
-kubectl -n esoqo-testnet get pods
-curl -sS https://testnet.esoko.global/api/health
+# 1. confirm preview is actually healthy — not just deployed
+kubectl -n preview get pods
+curl -sS https://preview.esoko.global/api/health
 
 # 2. open the promotion PR
 git checkout production && git pull
-git merge --ff-only esoko/testnet    # refuses if they have diverged
+git merge --ff-only preview    # refuses if they have diverged
 git push
 ```
 
@@ -320,7 +320,7 @@ production overlay. Because `NEXT_PUBLIC_*` differ, the images are
 Then verify, in this order:
 
 ```bash
-kubectl -n esoqo-production rollout status deploy/web --timeout=10m
+kubectl -n production rollout status deploy/web --timeout=10m
 curl -sS https://esoko.global/api/health
 curl -sS https://api.esoko.global/ready      # walks the audit chain
 ```
@@ -346,7 +346,7 @@ directly and then immediately commit the equivalent revert (otherwise
 Fleet's drift correction undoes you within the minute):
 
 ```bash
-kubectl -n esoqo-production rollout undo deploy/web
+kubectl -n production rollout undo deploy/web
 ```
 
 > A revert rolls back **code**, not **schema**. If the bad release
@@ -359,15 +359,15 @@ kubectl -n esoqo-production rollout undo deploy/web
 
 `next build` inlines every `NEXT_PUBLIC_*` value into the client
 JavaScript bundle. There is no runtime override — by the time the pod
-starts, `https://testnet.esoko.global` is a string literal in the
+starts, `https://preview.esoko.global` is a string literal in the
 shipped JS.
 
-So an image built for testnet can never serve production: it would tell
-browsers to call the testnet API, and auth would fail in ways that look
+So an image built for preview can never serve production: it would tell
+browsers to call the preview API, and auth would fail in ways that look
 like cookie bugs. Both environments build from the same commit with
 different build args, producing different images with the same source.
 
-The practical consequence: **the artifact tested on testnet is not
+The practical consequence: **the artifact tested on preview is not
 byte-identical to the one running in production.** What is guaranteed
 identical is the source commit and the build process. If that guarantee
 ever becomes insufficient, the fix is to move those values to a runtime
@@ -391,7 +391,7 @@ across two releases:
 Read from old. Deploy. Backfill:
 
 ```bash
-kubectl -n esoqo-production exec -it deploy/core-service -- \
+kubectl -n production exec -it deploy/core-service -- \
   pnpm --filter @esoqo/db backfill:<script>
 ```
 
@@ -430,9 +430,9 @@ expected and correct for staging), then switch to `letsencrypt-prod`.
 Check progress:
 
 ```bash
-kubectl -n esoqo-testnet get certificate
-kubectl -n esoqo-testnet describe certificate esoqo-testnet-tls
-kubectl -n esoqo-testnet get challenge   # empty once issued
+kubectl -n preview get certificate
+kubectl -n preview describe certificate preview-tls
+kubectl -n preview get challenge   # empty once issued
 ```
 
 If a wildcard certificate ever becomes necessary — many dynamic Jamii
@@ -457,7 +457,7 @@ behaviour just isn't there:
 |---|---|---|
 | 11MB Server Action uploads | `proxy-body-size: 12m` | a `Middleware` with `buffering.maxRequestBodyBytes` |
 | `www` → apex redirect | `from-to-www-redirect: "true"` | a `Middleware` with `redirectRegex` |
-| `noindex` on testnet | `configuration-snippet` | a `Middleware` with `headers.customResponseHeaders` |
+| `noindex` on preview | `configuration-snippet` | a `Middleware` with `headers.customResponseHeaders` |
 
 Losing the first one is the one that bites: uploads over 1MB fail with
 a 413 from the proxy, and `apps/app` is built around 10MB document
@@ -487,7 +487,7 @@ never costs you the previous good one.
 Take one manually before any risky migration:
 
 ```bash
-kubectl -n esoqo-production create job --from=cronjob/postgres-backup \
+kubectl -n production create job --from=cronjob/postgres-backup \
   manual-$(date +%s)
 ```
 
@@ -496,7 +496,7 @@ CronJob's pods, so this runs a throwaway pod against it rather than
 exec'ing into a running workload:
 
 ```bash
-kubectl -n esoqo-production run backup-ls --rm -it --restart=Never \
+kubectl -n production run backup-ls --rm -it --restart=Never \
   --image=busybox --overrides='{
     "spec": {
       "containers": [{
@@ -518,22 +518,22 @@ can ever trigger it.
 ```bash
 # 1. pause Fleet, or drift correction scales the apps back up
 #    underneath the restore
-kubectl -n fleet-default patch gitrepo esoqo-production \
+kubectl -n fleet-default patch gitrepo production \
   --type merge -p '{"spec":{"paused":true}}'
 
 # 2. stop everything that writes
-kubectl -n esoqo-production scale deploy --all --replicas=0
+kubectl -n production scale deploy --all --replicas=0
 
 # 3. edit BACKUP_FILE in the manifest, then run it. The Job verifies
 #    the dump is readable BEFORE it drops anything.
-kubectl -n esoqo-production apply -f deploy/scripts/restore-job.yaml
-kubectl -n esoqo-production logs -f job/postgres-restore
+kubectl -n production apply -f deploy/scripts/restore-job.yaml
+kubectl -n production logs -f job/postgres-restore
 
 # 4. bring it back, then unpause, then clean up
-kubectl -n esoqo-production scale deploy --all --replicas=2
-kubectl -n fleet-default patch gitrepo esoqo-production \
+kubectl -n production scale deploy --all --replicas=2
+kubectl -n fleet-default patch gitrepo production \
   --type merge -p '{"spec":{"paused":false}}'
-kubectl -n esoqo-production delete job postgres-restore
+kubectl -n production delete job postgres-restore
 ```
 
 **Unpause the moment you are done.** A paused GitRepo is a cluster that
@@ -551,7 +551,7 @@ These are known and currently open:
   loss. PITR needs WAL archiving, which in practice means moving to an
   operator like CloudNativePG.
 - **Restores are untested.** A backup you have never restored is a
-  hypothesis. Restore into testnet at least once per quarter.
+  hypothesis. Restore into preview at least once per quarter.
 
 ---
 
@@ -603,13 +603,13 @@ overlay's `config.yaml`. They must match; change both.
 ### Useful commands
 
 ```bash
-kubectl -n esoqo-testnet get pods -w
-kubectl -n esoqo-testnet logs -f deploy/web
-kubectl -n esoqo-testnet describe pod <pod>          # events explain pending
-kubectl -n esoqo-testnet exec -it postgres-0 -- psql -U esoko -d esoko
+kubectl -n preview get pods -w
+kubectl -n preview logs -f deploy/web
+kubectl -n preview describe pod <pod>          # events explain pending
+kubectl -n preview exec -it postgres-0 -- psql -U esoko -d esoko
 
 # force Fleet to re-sync now rather than at the next poll
-kubectl -n fleet-default annotate gitrepo esoqo-testnet \
+kubectl -n fleet-default annotate gitrepo preview \
   fleet.cattle.io/force-sync="$(date +%s)" --overwrite
 ```
 

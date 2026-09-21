@@ -2,7 +2,7 @@
 # ════════════════════════════════════════════════════════════════════
 #  Pre-deploy cluster check.
 #
-#      deploy/scripts/preflight.sh testnet
+#      deploy/scripts/preflight.sh preview
 #
 #  Every failure below is one that otherwise surfaces as a pod stuck
 #  Pending or a certificate stuck False — states that look like a bug in
@@ -17,9 +17,9 @@ set -uo pipefail   # deliberately not -e: every check must run, so the
 
 ENVIRONMENT="${1:-}"
 case "$ENVIRONMENT" in
-  testnet)    NAMESPACE=esoqo-testnet;    APEX=testnet.esoko.global ;;
-  production) NAMESPACE=esoqo-production; APEX=esoko.global ;;
-  *) echo "usage: $0 <testnet|production>" >&2; exit 64 ;;
+  preview)    NAMESPACE=preview;    APEX=preview.esoko.global ;;
+  production) NAMESPACE=production; APEX=esoko.global ;;
+  *) echo "usage: $0 <preview|production>" >&2; exit 64 ;;
 esac
 
 PASS=0; FAIL=0; WARN=0

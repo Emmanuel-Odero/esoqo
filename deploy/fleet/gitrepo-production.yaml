@@ -2,7 +2,7 @@
 #  Fleet GitRepo — production.
 #
 #  Apply once into `fleet-default` on the Rancher local cluster, exactly
-#  as with the testnet GitRepo. See that file's header.
+#  as with the preview GitRepo. See that file's header.
 #
 #  Note correctDrift is enabled here too. That means a manual
 #  `kubectl edit` against production is reverted within a minute — so
@@ -23,7 +23,7 @@ metadata:
   namespace: fleet-default
 spec:
   repo: https://github.com/Emmanuel-Odero/esoko-254
-  branch: production
+  branch: live
   paths:
     - deploy/k8s/overlays/production
 

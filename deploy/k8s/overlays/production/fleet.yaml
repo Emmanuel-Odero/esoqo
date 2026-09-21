@@ -4,7 +4,7 @@
 #  Fleet auto-detects Kustomize from the sibling kustomization.yaml; this
 #  file only sets what Fleet cannot infer.
 # ════════════════════════════════════════════════════════════════════
-defaultNamespace: esoqo-production
+defaultNamespace: production
 
 kustomize:
   dir: .

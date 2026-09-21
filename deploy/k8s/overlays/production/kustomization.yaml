@@ -1,22 +1,23 @@
 # ════════════════════════════════════════════════════════════════════
 #  production overlay — deployed from branch `production`.
 #
-#  Identical to the testnet overlay in structure on purpose: if the two
+#  Identical to the preview overlay in structure on purpose: if the two
 #  ever need to diverge beyond replicas, hostnames and provider modes,
 #  that divergence belongs in a patch here where it is visible in a
 #  diff — not in a base that quietly behaves differently per namespace.
 #
 #  A deploy is a commit to `production` (fast-forwarded from an already
-#  green esoko/testnet). A rollback is `git revert`.
+#  green preview). A rollback is `git revert`.
 # ════════════════════════════════════════════════════════════════════
 apiVersion: kustomize.config.k8s.io/v1beta1
 kind: Kustomization
 
-namespace: esoqo-production
+namespace: production
 
+# No namespace.yaml — see the preview overlay's kustomization.yaml.
+# Rancher owns these namespaces and their project annotations.
 resources:
   - ../../base
-  - namespace.yaml
   - ingress.yaml
   - config.yaml
 

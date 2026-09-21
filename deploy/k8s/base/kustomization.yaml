@@ -1,5 +1,5 @@
 # ════════════════════════════════════════════════════════════════════
-#  Base — environment-agnostic. Nothing here names testnet or
+#  Base — environment-agnostic. Nothing here names preview or
 #  production, and nothing here is deployable on its own: the base
 #  carries no namespace, no hostnames and no image tags. Those are the
 #  overlays' job, which is what keeps the two environments provably

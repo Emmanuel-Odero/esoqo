@@ -1,10 +1,10 @@
 # ════════════════════════════════════════════════════════════════════
-#  Fleet bundle options for the testnet overlay.
+#  Fleet bundle options for the preview overlay.
 #
 #  Fleet auto-detects Kustomize from the sibling kustomization.yaml; this
 #  file only sets what Fleet cannot infer.
 # ════════════════════════════════════════════════════════════════════
-defaultNamespace: esoqo-testnet
+defaultNamespace: preview
 
 kustomize:
   dir: .

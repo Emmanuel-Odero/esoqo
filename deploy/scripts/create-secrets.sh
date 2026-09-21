@@ -9,7 +9,7 @@
 #  enough to reach the database or spend money on someone's behalf.
 #
 #  Usage:
-#      deploy/scripts/create-secrets.sh testnet    ./testnet.secrets.env
+#      deploy/scripts/create-secrets.sh preview    ./preview.secrets.env
 #      deploy/scripts/create-secrets.sh production ./production.secrets.env
 #
 #  The env file is a plain KEY=value list — start from
@@ -26,20 +26,20 @@ ENVIRONMENT="${1:-}"
 ENV_FILE="${2:-}"
 
 if [[ -z "$ENVIRONMENT" || -z "$ENV_FILE" ]]; then
-  echo "usage: $0 <testnet|production> <path-to-env-file>" >&2
+  echo "usage: $0 <preview|production> <path-to-env-file>" >&2
   exit 64
 fi
 
 case "$ENVIRONMENT" in
-  testnet)    NAMESPACE=esoqo-testnet ;;
-  production) NAMESPACE=esoqo-production ;;
-  *) echo "error: environment must be 'testnet' or 'production', got '$ENVIRONMENT'" >&2; exit 64 ;;
+  preview)    NAMESPACE=preview ;;
+  production) NAMESPACE=production ;;
+  *) echo "error: environment must be 'preview' or 'production', got '$ENVIRONMENT'" >&2; exit 64 ;;
 esac
 
 [[ -f "$ENV_FILE" ]] || { echo "error: no such file: $ENV_FILE" >&2; exit 66; }
 
 # Refuse to run against the wrong cluster. `kubectl` remembers whatever
-# context was used last, and "I thought I was on testnet" is how
+# context was used last, and "I thought I was on preview" is how
 # production databases get their credentials rotated by surprise.
 CONTEXT=$(kubectl config current-context)
 echo "  environment : $ENVIRONMENT"
