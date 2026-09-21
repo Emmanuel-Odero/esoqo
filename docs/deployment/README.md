@@ -235,6 +235,23 @@ That is the whole procedure. Then watch:
    curl -sS https://testnet.esoko.global/api/health
    ```
 
+### Deploying without GitHub Actions
+
+Fleet reads manifests straight from git, so Actions was never on the
+critical path — it only builds the images and commits the tag bump.
+`deploy/scripts/build-and-push.sh` does both from a laptop:
+
+```bash
+git checkout esoko/testnet        # the script refuses to run from another branch
+deploy/scripts/build-and-push.sh testnet
+git push origin esoko/testnet     # this is what Fleet reacts to
+```
+
+The output is identical to the workflow's — same images, same tags,
+same overlay edit — so a later CI-built deploy picks up seamlessly.
+Needs `docker login ghcr.io` with a `write:packages` PAT, `kustomize`
+on PATH, and roughly 15GB of free Docker disk.
+
 ### First deploy only
 
 The very first deploy has more to do: pull seven images, run `initdb`,
