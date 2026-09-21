@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useRef } from 'react';
-import { Icon } from '@esoqo/ui';
+import { dropPointFor, Icon, PrintStyles, ScaledLabel } from '@esoqo/ui';
 import type { OrgParcelRow } from '@/lib/parcel-org-session';
 import { DemoPhoneSpan } from '@/components/DemoContact';
 import { affordancesFor, stageFor } from './parcel-stages';
@@ -33,12 +33,14 @@ import { affordancesFor, stageFor } from './parcel-stages';
  * whatever the caller is allowed to do about them.
  */
 export function ParcelDrawer({
-  parcel, onClose, canSeeEarnings = false, actions,
+  parcel, onClose, canSeeEarnings = false, actions, orgName, orgLogoUrl,
 }: {
   parcel: OrgParcelRow;
   onClose: () => void;
   canSeeEarnings?: boolean;
   actions?: React.ReactNode;
+  orgName?: string;
+  orgLogoUrl?: string;
 }) {
   const panelRef = useRef<HTMLDivElement>(null);
   const closeRef = useRef<HTMLButtonElement>(null);
@@ -85,7 +87,7 @@ export function ParcelDrawer({
         aria-label={`Parcel ${parcel.code}`}
       >
         <header className="pdrawer-head">
-          <div>
+          <div style={{ flex: 1, minWidth: 0 }}>
             <span className="pdrawer-code mono">{parcel.code}</span>
             <div className="pdrawer-pills">
               <span className={`pill ${pillFor(stage)}`}>{STATUS_LABEL[parcel.status] ?? parcel.status}</span>
@@ -109,6 +111,23 @@ export function ParcelDrawer({
         </header>
 
         <div className="pdrawer-body">
+          {/* The actual sticker, not a bare QR — same design as the
+              label pool's own preview (see LabelStockPanel's "Unused
+              pool"), fitted to the drawer's own width so it never
+              overflows a narrow phone. No `sig`: OrgParcelRow doesn't
+              carry the label's signature, so this prints/scans as an
+              unverified — but still fully working — label (see
+              PrintableLabel's own comment on that fallback). */}
+          <section className="pdrawer-block pdrawer-label">
+            <ScaledLabel
+              code={parcel.code}
+              route={dropPointFor(parcel.destinationLabel)}
+              orgName={orgName}
+              orgLogoUrl={orgLogoUrl}
+            />
+            <PrintStyles />
+          </section>
+
           {/* The receiver first: it is the fact a clerk checks the box
               against, and the one a mistake is most expensive in. */}
           <section className="pdrawer-block">

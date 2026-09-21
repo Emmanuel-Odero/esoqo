@@ -656,6 +656,8 @@ export const FrontDeskClient = forwardRef<
       {viewing && (
         <ParcelDrawer
           parcel={viewing}
+          orgName={orgName}
+          orgLogoUrl={orgLogoUrl}
           onClose={() => setViewing(null)}
           actions={
             <>

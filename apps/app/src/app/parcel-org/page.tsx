@@ -412,6 +412,8 @@ export default async function ParcelOrgDashboard(
           canDispatch={canDispatch}
           canSeeEarnings={canSeeEarnings}
           riders={riders}
+          orgName={me.org.name}
+          orgLogoUrl={me.org.logoUrl ?? undefined}
         />
       </div>
     </>

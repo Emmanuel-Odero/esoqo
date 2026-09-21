@@ -1,6 +1,6 @@
 'use client';
 import { displayKES, toCentsOrZero } from '@esoqo/domain';
-import { Icon } from '@esoqo/ui';
+import { dropPointFor, Icon, PrintStyles, ScaledLabel } from '@esoqo/ui';
 import type { AwaitingIntakeView, ParcelStatusView } from './actions';
 import {
   etaText, humanTime, isOffTimeline, statusLabel, statusMessage, statusTone, timelineFor,
@@ -51,7 +51,7 @@ export function ParcelStatusPanel({ parcel }: { parcel: ParcelStatusView | Await
   return (
     <div>
       <div className="row" style={{ justifyContent: 'space-between', alignItems: 'flex-start', gap: 12 }}>
-        <div>
+        <div style={{ flex: 1, minWidth: 0 }}>
           <p className="mono" style={{ margin: 0, fontWeight: 800, fontSize: '1.05rem', letterSpacing: '.04em' }}>
             {parcel.code}
           </p>
@@ -60,6 +60,21 @@ export function ParcelStatusPanel({ parcel }: { parcel: ParcelStatusView | Await
           </p>
         </div>
         <StatusPill status={parcel.status} />
+      </div>
+
+      {/* The real sticker, not a bare QR — same design as the courier
+          portal's own label preview. No `sig`: the guest-safe status
+          projection this page renders doesn't carry the label's
+          signature, so this shows as an unverified — but still fully
+          scannable — label (see PrintableLabel's own comment on that
+          fallback). */}
+      <div className="track-label">
+        <ScaledLabel
+          code={parcel.code}
+          route={dropPointFor(parcel.destinationLabel)}
+          orgName={parcel.orgName ?? undefined}
+        />
+        <PrintStyles />
       </div>
 
       <p style={{ margin: '14px 0 0' }}>{statusMessage(parcel)}</p>
@@ -321,8 +336,16 @@ function PreLabelPanel({ parcel }: { parcel: ParcelStatusView }) {
   return (
     <div>
       <div className="row" style={{ justifyContent: 'space-between', alignItems: 'flex-start', gap: 12 }}>
-        <p className="mono" style={{ margin: 0, fontWeight: 800, fontSize: '1.05rem' }}>{parcel.code}</p>
+        <p className="mono" style={{ margin: 0, fontWeight: 800, fontSize: '1.05rem', flex: 1 }}>{parcel.code}</p>
         <StatusPill status="LABEL_PRINTED" />
+      </div>
+      <div className="track-label">
+        <ScaledLabel
+          code={parcel.code}
+          route={dropPointFor(info?.destination)}
+          orgName={parcel.orgName ?? undefined}
+        />
+        <PrintStyles />
       </div>
       {info ? (
         <>

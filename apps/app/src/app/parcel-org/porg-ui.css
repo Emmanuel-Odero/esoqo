@@ -596,6 +596,11 @@
 }
 .pdrawer-late { color: var(--red) }
 
+/* The real sticker — see @esoqo/ui's ScaledLabel, which measures this
+   wrapper's own width and fits the label to it, so it never overflows
+   the drawer on a narrow phone. */
+.pdrawer-label { display: flex; justify-content: center; padding: 2px 0 6px }
+
 .pdrawer-foot {
   flex: none; padding: var(--sp-4) var(--sp-5);
   padding-bottom: calc(var(--sp-4) + var(--safe-b));
