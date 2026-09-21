@@ -3327,6 +3327,35 @@ model Parcel {
   contentsDeclaredAt        DateTime?
   contentsDeclaredByStaffId String?   @db.Uuid
 
+  /// What the SENDER themselves asserted at booking — deliberately not
+  /// the contentsDeclaredAt pair above, which means something stronger
+  /// and narrower: "a named member of staff asked this person about
+  /// prohibited items, face to face". A self-service booking can never
+  /// produce that fact, and widening the staff pair to cover a web
+  /// checkbox would quietly destroy the only column that currently
+  /// says a human did the asking.
+  ///
+  /// These four are the weaker but still useful thing: the sender
+  /// described the contents, put a value on them, and ticked that they
+  /// are lawful and that they accept both sets of terms. Timestamps and
+  /// a version rather than booleans, for the reason the staff pair
+  /// already gives — in a dispute, "which terms, and when" is the whole
+  /// question, and a bare true answers none of it.
+  ///
+  /// termsVersion is Esoqo's own; carrierTermsVersion is the carrying
+  /// company's, captured separately because they are two different
+  /// promises made by two different legal entities and a claim may turn
+  /// on only one of them. Both null on a staff-entered booking, which
+  /// records consent through contentsDeclaredByStaffId instead. The
+  /// declared VALUE lives in declaredValueKes further down — it is the
+  /// same number cover is priced from, and duplicating it here would
+  /// invite the two copies to disagree.
+  senderDeclaredContents   String?
+  lawfulContentsAttestedAt DateTime?
+  termsAcceptedAt          DateTime?
+  termsVersion             String?
+  carrierTermsVersion      String?
+
   /// Condition when we took it in, as podPhotoUrl is condition when we
   /// handed it over. The pair brackets our custody — a damage dispute
   /// is settled by comparing them, and with only the second one every
@@ -3453,6 +3482,46 @@ model Parcel {
   lastAttemptAt     DateTime?
   lastAttemptReason String?
 
+  /// The receiver proving, from their own phone, that they are the
+  /// receiver — by typing the deliveryCode only they were sent (see
+  /// dbx.VerifyReceiverCode). Distinct from the courier-side throttle
+  /// in handleDeliverParcel, which is Redis-only and fails open on
+  /// purpose: that one guards a staff endpoint and a lost counter
+  /// merely means a clerk gets more tries. This counter is escalation
+  /// state. Staff have to see it, act on it, and have their grant
+  /// survive a Redis restart, so it lives on the row.
+  ///
+  /// Three attempts, then receiverAuthLockedAt and an alert to the
+  /// carrying company. Staff may grant receiverAuthExtraGranted more
+  /// (two, once). Burning those sets receiverAuthHardLockedAt, which
+  /// nothing but a reissue clears — at that point the code is assumed
+  /// compromised or lost and guessing further proves nothing.
+  receiverAuthAttempts     Int       @default(0)
+  receiverAuthLockedAt     DateTime?
+  receiverAuthExtraGranted Int       @default(0)
+  receiverAuthHardLockedAt DateTime?
+
+  /// Bumped every time dbx.ReissueDeliveryCode mints a replacement.
+  /// The version is what makes a reissue legible after the fact: the
+  /// code column itself only ever holds the current value, so without
+  /// this a timeline entry saying "a new code was issued" has nothing
+  /// to count. deliveryCodeIssuedAt is null for every parcel booked
+  /// before reissue existed, which reads correctly as "the original".
+  deliveryCodeVersion  Int       @default(1)
+  deliveryCodeIssuedAt DateTime?
+
+  /// Set when a receiver closes their own parcel at an agent's counter
+  /// (podMethod RECEIVER_SELF_AGENT). Every other delivery accrues
+  /// courier pay the instant it commits (see dbx.AccrueCourierEarnings)
+  /// because a member of staff was physically present to assert it
+  /// happened. A self-confirmed one has no such witness, so the pay
+  /// waits out a hold and is released deliberately — by staff, or by a
+  /// sweep once this passes. A fraudulent self-confirm is then a thing
+  /// somebody can still catch before money moves, rather than an
+  /// irreversible accrual (which is exactly what AccrueCourierEarnings
+  /// is, by design).
+  courierEarningsHeldUntil DateTime?
+
   /// What the sender says the contents are worth, and the coverage tier
   /// they bought against it (see ParcelCoverageTier). Both null on a
   /// booking with no cover — the default. coverageFeeKes is copied in
@@ -3486,6 +3555,7 @@ model Parcel {
   labelStockEntries  ParcelLabelStock[]
   deliveryAttemptLog ParcelDeliveryAttempt[]
   shipmentItems      ParcelShipmentItem[]
+  events             ParcelEvent[]
   reminderCount      Int                     @default(0)
   lastReminderAt     DateTime?
 
@@ -4174,6 +4244,83 @@ model ParcelHandoff {
   @@map("parcel_handoff")
 }
 
+/// What kind of thing happened. Deliberately narrow at birth — this is
+/// a history table, and a history table whose vocabulary is "anything"
+/// degrades into a log nobody can query. Add a value when a new fact
+/// needs to be *shown* somewhere, not merely recorded.
+enum ParcelEventKind {
+  RECEIVER_AUTH_PASSED
+  RECEIVER_AUTH_FAILED
+  RECEIVER_AUTH_LOCKED
+  RECEIVER_AUTH_RETRY_GRANTED
+  RECEIVER_AUTH_HARD_LOCKED
+  DELIVERY_CODE_REISSUED
+  RECEIVER_SELF_CONFIRMED
+  COURIER_EARNINGS_HELD
+  COURIER_EARNINGS_RELEASED
+}
+
+/// How loudly to render it. The public timeline drew every entry as a
+/// green tick until this existed, which was fine while every entry was
+/// a custody leg that had genuinely gone right, and actively misleading
+/// the moment a failure could appear there.
+enum ParcelEventSeverity {
+  INFO
+  WARNING
+  CRITICAL
+}
+
+/// One thing that happened to a parcel which is not a custody transfer,
+/// append-only. ParcelHandoff next door answers "who had it, when";
+/// this answers everything else the timeline needs to say — a receiver
+/// failing to authenticate, a code being reissued, courier pay being
+/// held.
+///
+/// It exists because there was previously nowhere to put such a fact.
+/// dbx.buildParcelTrackEvents synthesized the entire public timeline
+/// out of parcel_handoff rows plus a booked/delivered bookend, so a
+/// non-custody event was literally unrepresentable, and
+/// Parcel.exceptionNote — the nearest thing — is a single overwritable
+/// slot, not a history.
+///
+/// publicLabel is the visibility switch and the wording in one field:
+/// NULL means the row never leaves staff surfaces, and a non-null value
+/// is the exact sentence a guest sees. One field rather than a boolean
+/// plus a string because the two can't safely disagree — a row marked
+/// public with nothing to say would render as a blank line in a
+/// stranger's tracking page. staffDetail carries what the public label
+/// must not: attempt counts, actor identity, the reason.
+model ParcelEvent {
+  id       String @id @default(uuid()) @db.Uuid
+  parcelId String @db.Uuid
+  parcel   Parcel @relation(fields: [parcelId], references: [id], onDelete: Cascade)
+
+  kind     ParcelEventKind
+  severity ParcelEventSeverity @default(INFO)
+
+  publicLabel String?
+  staffDetail String?
+
+  /// GUEST | STAFF | SYSTEM. Plain string for the same reason
+  /// Parcel.podMethod is one: the set of things that can act on a
+  /// parcel grows by a word far more often than it needs a migration.
+  /// actorPartyId is set only for STAFF; a guest has no Party by
+  /// definition, which is the whole premise of the flow that writes
+  /// most of these rows.
+  actorType    String
+  actorPartyId String? @db.Uuid
+  /// Kept for the failure rows specifically. Someone working out
+  /// whether a locked parcel was a confused receiver or a sweep needs
+  /// to know whether the five attempts came from one address or five,
+  /// and nothing else on the row can tell them.
+  actorIp      String?
+
+  createdAt DateTime @default(now())
+
+  @@index([parcelId, createdAt])
+  @@map("parcel_event")
+}
+
 /// A physical line-haul movement. The manifest is separate from Parcel so
 /// loading and offloading have their own actors, timestamps, and exceptions.
 model ParcelShipment {
@@ -4373,11 +4520,11 @@ model ParcelAgent {
   /// just can't say who is accountable.
   managerStaffId String? @db.Uuid
 
-  destinationParcels   Parcel[]         @relation("parcelDestinationAgent")
-  stationStaff         ParcelOrgStaff[] @relation("parcelStationStaff")
-  runOrigins           ParcelShipment[] @relation("runOrigin")
-  runDestinations      ParcelShipment[] @relation("runDestination")
-  routeStops           ParcelRouteStop[]
+  destinationParcels Parcel[]          @relation("parcelDestinationAgent")
+  stationStaff       ParcelOrgStaff[]  @relation("parcelStationStaff")
+  runOrigins         ParcelShipment[]  @relation("runOrigin")
+  runDestinations    ParcelShipment[]  @relation("runDestination")
+  routeStops         ParcelRouteStop[]
 
   @@index([zoneId, active])
   @@map("parcel_agent")
@@ -4442,7 +4589,7 @@ model ParcelRoute {
   parcelOrgId String    @db.Uuid
   org         ParcelOrg @relation(fields: [parcelOrgId], references: [id], onDelete: Cascade)
 
-  name String
+  name   String
   /// Short form for manifests and labels ("NBO-KSM"). Unique within one
   /// company's own book, not across the platform.
   code   String?
