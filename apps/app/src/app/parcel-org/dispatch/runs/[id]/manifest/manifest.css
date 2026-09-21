@@ -33,10 +33,10 @@
   color: var(--tx-2); text-align: center; }
 
 .manifest-table { width: 100%; border-collapse: collapse; }
-.manifest-table th { padding: 9px 10px; border-bottom: 1px solid var(--navy); text-align: left;
-  font-size: .72rem; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; color: var(--tx-2); }
-.manifest-table td { padding: 10px; border-bottom: 1px solid var(--line); vertical-align: top;
-  font-size: .9rem; }
+.manifest-table th { padding: 6px 8px; border-bottom: 1px solid var(--navy); text-align: left;
+  font-size: .66rem; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; color: var(--tx-2); }
+.manifest-table td { padding: 6px 8px; border-bottom: 1px solid var(--line); vertical-align: middle;
+  font-size: .82rem; line-height: 1.35; }
 .manifest-n { width: 34px; color: var(--tx-2); }
 .manifest-code { font-weight: 700; }
 .manifest-sub { display: block; font-size: .78rem; color: var(--tx-2); }

@@ -59,6 +59,11 @@ header { position:sticky; top:0; z-index:90; background:rgba(255,255,255,.95);
 .btn-sm { padding:9px 17px; font-size:.87rem; min-height:38px }
 .row { display:flex; gap:11px; flex-wrap:wrap; align-items:center }
 
+/* The real parcel sticker on the tracking result — see @esoqo/ui's
+   ScaledLabel, which measures this wrapper's own width and fits the
+   label to it so it never overflows a phone. */
+.track-label { margin:14px 0 0 }
+
 /* hero */
 .hero { position:relative; background:var(--navy); color:#fff; overflow:hidden; padding:74px 0 100px }
 .hero-bg { position:absolute; inset:0; z-index:0 }
@@ -144,10 +149,10 @@ header { position:sticky; top:0; z-index:90; background:rgba(255,255,255,.95);
 .icbox-sm { width:30px; height:30px; border-radius:8px }
 .shead { display:flex; gap:16px; align-items:flex-start; margin-bottom:22px }
 .tbl { border:1px solid var(--line); border-radius:10px; overflow:hidden; background:#fff }
-.tbl .th { display:grid; padding:12px 20px; background:var(--blue-t); font-family:var(--font-mono);
-  font-size:.67rem; letter-spacing:.12em; text-transform:uppercase; color:var(--tx-2); gap:12px }
-.tbl .tr { display:grid; padding:14px 20px; border-top:1px solid var(--line);
-  gap:12px; align-items:center; font-size:.93rem }
+.tbl .th { display:grid; padding:6px 12px; background:var(--blue-t); font-family:var(--font-mono);
+  font-size:.62rem; letter-spacing:.1em; text-transform:uppercase; color:var(--tx-2); gap:8px }
+.tbl .tr { display:grid; padding:7px 12px; border-top:1px solid var(--line);
+  gap:8px; align-items:center; font-size:.84rem; line-height:1.35 }
 .tbl .tr:hover { background:var(--paper) }
 .sub { color:var(--tx-2); font-size:.86rem }
 .sec-tint { background:var(--paper) }

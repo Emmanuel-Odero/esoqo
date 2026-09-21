@@ -78,6 +78,10 @@ interface Props {
   /** Roster members who can take custody — the assign picker's options.
    *  Empty for a session that can't assign. */
   riders: ParcelOrgStaffRow[];
+  /** Co-branding for the drawer's own label preview — same values
+   *  page.tsx already fetched via getParcelOrgMe() for the page header. */
+  orgName?: string;
+  orgLogoUrl?: string;
 }
 
 function buildHref(
@@ -96,14 +100,14 @@ function buildHref(
 
 export function OrgParcelsTable({
   parcels, total, page, perPage, sort, order,
-  hasFilter, canDispatch, canSeeEarnings, riders,
+  hasFilter, canDispatch, canSeeEarnings, riders, orgName, orgLogoUrl,
 }: Props) {
   const pathname = usePathname();
   const searchParams = useSearchParams();
   const router = useRouter();
   const [, startTransition] = useTransition();
   const [density, setDensity] = useState<'comfortable' | 'compact'>(() =>
-    typeof window !== 'undefined' && localStorage.getItem('parcel-org:density') === 'compact' ? 'compact' : 'comfortable',
+    typeof window !== 'undefined' && localStorage.getItem('parcel-org:density') === 'comfortable' ? 'comfortable' : 'compact',
   );
   // The export fetches the whole filtered set, so it can take a moment
   // and it can fail — both need somewhere to show.
@@ -265,6 +269,8 @@ export function OrgParcelsTable({
         <ParcelDrawer
           parcel={open}
           canSeeEarnings={canSeeEarnings}
+          orgName={orgName}
+          orgLogoUrl={orgLogoUrl}
           onClose={() => setOpen(null)}
           actions={
             // A locked receiver outranks everything else this drawer
