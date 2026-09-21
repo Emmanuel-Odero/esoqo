@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useRef, useState, useTransition } from 'react';
-import { Icon } from '@esoqo/ui';
+import { Icon, Modal } from '@esoqo/ui';
 import { addCustomParcel, searchOrgLabels } from './actions';
 import type { OrgLabelSearchRow } from '@/lib/parcel-org-session';
 import { setFormActive } from './form-activity';
@@ -24,9 +24,14 @@ const PARCEL_TYPES: [value: string, label: string][] = [
  * number stays on the parcel and is searchable; Esoqo mints a tracking
  * code for it and shows it back so it can go on the box.
  *
+ * Lives in a dialog, not stacked on the page: it's a distinct workflow
+ * from desk booking (own numbering, own paper trail) and used far less
+ * often, so it shouldn't cost every counter session a scroll past a
+ * second full form it isn't using.
+ *
  * The draft survives a dashboard refresh (see DropoffPoll): every
  * keystroke is mirrored to localStorage and restored on mount, so even
- * if the page subtree remounts under an open form nothing typed is
+ * if the page subtree remounts under an open dialog nothing typed is
  * ever lost. A successful save or an explicit Close clears it.
  */
 const DRAFT_KEY = 'parcel-org:custom-parcel-draft';
@@ -197,38 +202,31 @@ export function CustomParcelPanel() {
 
   if (!open) {
     return (
-      <div className="ptoolbar porg-custom-open">
-        <button className="btn btn-o" onClick={() => setOpen(true)}>
-          <Icon name="plus" size={16} />Add a custom parcel
-        </button>
-        <span className="sub">
-          Bringing a parcel in from your own system, with your own number.
-        </span>
-      </div>
+      <button type="button" className="btn btn-o btn-sm" onClick={() => setOpen(true)}>
+        <Icon name="plus" size={16} />Add a custom parcel
+      </button>
     );
   }
 
   return (
-    <section className="ppanel porg-custom-parcel">
-      <div className="ppanel-head">
-        <div>
-          <h2>Add a custom parcel</h2>
-          <p>
-            Use your own parcel number — it stays on the parcel and is searchable here. Esoqo
-            gives it a tracking code so you can manage and track it like any other.
-            Only Esoqo PKG-… labels scan: your old self-printed stickers are retired —
-            attach one of your Esoqo labels below so the box scans.
-          </p>
-        </div>
-        <div className="ppanel-head-actions">
-          <button className="btn btn-o btn-sm" aria-label="Close" disabled={pending}
-            onClick={() => { reset(); setOpen(false); setError(null); setMinted(null); }}>
-            <Icon name="close" size={14} />Close
+    <Modal
+      title="Add a custom parcel"
+      subtitle="Use your own parcel number — it stays on the parcel and is searchable here. Esoqo gives it a tracking code so you can manage and track it like any other. Only Esoqo PKG-… labels scan: attach one of your Esoqo labels below so the box scans."
+      size="lg"
+      onClose={() => { reset(); setOpen(false); setError(null); setMinted(null); }}
+      footer={(
+        <>
+          <button className="btn btn-p" disabled={pending || !ready} onClick={save}>
+            <Icon name="check" size={16} />{pending ? 'Saving…' : 'Save parcel'}
           </button>
-        </div>
-      </div>
-
-      <div className="ppanel-body porg-custom-body">
+          <button className="btn btn-o" disabled={pending}
+            onClick={() => { reset(); setOpen(false); setError(null); }}>
+            Cancel
+          </button>
+        </>
+      )}
+    >
+      <div className="porg-custom-body">
         {minted && (
           <p className="pnote pnote-ok" role="status">
             <Icon name="check-circle" size={16} />
@@ -324,18 +322,8 @@ export function CustomParcelPanel() {
             <Icon name="alert-circle" size={16} /><span>{error}</span>
           </p>
         )}
-
-        <div className="ptoolbar" style={{ marginBottom: 0 }}>
-          <button className="btn btn-p" disabled={pending || !ready} onClick={save}>
-            <Icon name="check" size={16} />{pending ? 'Saving…' : 'Save parcel'}
-          </button>
-          <button className="btn btn-o" disabled={pending}
-            onClick={() => { reset(); setOpen(false); setError(null); }}>
-            Cancel
-          </button>
-        </div>
       </div>
-    </section>
+    </Modal>
   );
 }
 

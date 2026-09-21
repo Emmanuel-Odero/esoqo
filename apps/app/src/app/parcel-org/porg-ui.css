@@ -528,11 +528,8 @@
 .porg-pin-fields input { letter-spacing: .3em; font-size: 1.05rem }
 
 /* ══════════════════════════════════════════════════════════════
-   Counter — the custom-parcel panel.
+   Counter — the custom-parcel dialog body.
    ══════════════════════════════════════════════════════════════ */
-.porg-custom-open { margin-top: var(--sp-5) }
-.porg-custom-open .sub { font-size: .84rem }
-.porg-custom-parcel { margin-top: var(--sp-5) }
 .porg-custom-body { display: grid; gap: var(--sp-4) }
 
 /* The shared CounterForm from @esoqo/ui brings its own layout; this

@@ -69,6 +69,16 @@ export default async function ParcelOrgCounterPage({
             belongs on the Scanner.
           </p>
         </div>
+        {/* Bulk/custom intake — booking by any other name, so its
+            trigger lives beside the booking desk's own actions. It used
+            to render inline on the page (and, earlier still, on the
+            parcels register); now it's a dialog, so choosing it doesn't
+            cost every counter session a second form to scroll past. */}
+        {canWrite && (
+          <div className="actions">
+            <CustomParcelPanel />
+          </div>
+        )}
       </div>
       <OrgCounterClient
         initialCode={code}
@@ -77,11 +87,6 @@ export default async function ParcelOrgCounterPage({
         orgName={me.org.name}
         orgLogoUrl={me.org.logoUrl ?? undefined}
       />
-      {/* Bulk/custom intake — booking by any other name, so it lives
-          with the booking desk. It used to render on the parcels
-          register, which made that page a place you could create work
-          as well as review it. */}
-      {canWrite && <CustomParcelPanel />}
     </>
   );
 }
