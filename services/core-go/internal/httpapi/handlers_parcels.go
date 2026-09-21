@@ -502,20 +502,6 @@ func (s *Server) handleGetParcelStatus(c *gin.Context) {
 		writeError(c, http.StatusNotFound, "NOT_FOUND", "That parcel was not found")
 		return
 	}
-	// Nothing to show yet, whichever identifier this was looked up by
-	// (see Parcel.serviceTicketNumber's own comment) — a parcel nobody
-	// has physically received doesn't have a real code, a route, or a
-	// status worth reading out to the outside world. The real code in
-	// particular must never leak here pre-intake: it's the one field
-	// this whole reduction exists to protect.
-	if status.IntakeConfirmedAt == nil {
-		c.JSON(http.StatusOK, gin.H{
-			"status": "AWAITING_INTAKE",
-			"message": "This parcel hasn't been received yet. Once a handler confirms it, " +
-				"you'll get a text with your tracking link.",
-		})
-		return
-	}
 	// Was the label this was scanned from genuinely ours?
 	//
 	// Three states, not a boolean, and the middle one is the reason:
