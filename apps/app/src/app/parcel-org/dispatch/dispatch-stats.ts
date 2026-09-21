@@ -27,7 +27,8 @@ export interface TrailSegment {
 
 /** Consecutive ping pairs with distance, duration and speed. A null
  *  speed means the two reports share a timestamp — unmeasurable, not zero. */
-export function trailSegments(trail: DispatchPing[]): TrailSegment[] {
+export function trailSegments(trail: DispatchPing[] | null | undefined): TrailSegment[] {
+  if (!Array.isArray(trail)) return [];
   const out: TrailSegment[] = [];
   for (let i = 0; i + 1 < trail.length; i++) {
     const from = trail[i];
@@ -58,7 +59,8 @@ export interface RecordedStop {
 
 /** A stop is consecutive reports within ~250m spanning 5+ minutes —
  *  the vehicle standing still with its phone on, not GPS wobble. */
-export function recordedStops(trail: DispatchPing[]): RecordedStop[] {
+export function recordedStops(trail: DispatchPing[] | null | undefined): RecordedStop[] {
+  if (!Array.isArray(trail)) return [];
   const stops: RecordedStop[] = [];
   let cluster: DispatchPing[] = [];
   const flush = () => {
@@ -108,7 +110,8 @@ export function lastSeenTone(iso: string | null, now: number = Date.now()): 'g' 
 }
 
 /** Last measurable segment speed, newest first. */
-export function currentSpeedKmh(trail: DispatchPing[]): number | null {
+export function currentSpeedKmh(trail: DispatchPing[] | null | undefined): number | null {
+  if (!Array.isArray(trail)) return null;
   for (let i = trail.length - 2; i >= 0; i--) {
     const a = trail[i];
     const b = trail[i + 1];
@@ -141,6 +144,6 @@ export function remainingStraightKm(run: DispatchRun): number | null {
 }
 
 /** Total travelled distance along the recorded trail. */
-export function distanceCoveredKm(trail: DispatchPing[]): number {
+export function distanceCoveredKm(trail: DispatchPing[] | null | undefined): number {
   return trailSegments(trail).reduce((s, seg) => s + seg.km, 0);
 }

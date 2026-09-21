@@ -392,7 +392,7 @@ func ListRuns(ctx context.Context, pool *pgxpool.Pool, orgID string, includeClos
 		return nil, err
 	}
 	defer rows.Close()
-	var out []Dispatch
+	out := []Dispatch{}
 	for rows.Next() {
 		var d Dispatch
 		var oID, oName, oHint, oLat, oLng *string
@@ -463,7 +463,7 @@ func listRunCrew(ctx context.Context, pool *pgxpool.Pool, orgID, runID string) (
 		return nil, err
 	}
 	defer rows.Close()
-	var out []RunCrew
+	out := []RunCrew{}
 	for rows.Next() {
 		var c RunCrew
 		if err := rows.Scan(&c.ID, &c.Name, &c.Msisdn, &c.Role, &c.CustomRole, &c.StaffID); err != nil {
@@ -487,7 +487,7 @@ func listRunReceivers(ctx context.Context, pool *pgxpool.Pool, orgID, runID stri
 		return nil, err
 	}
 	defer rows.Close()
-	var out []RunReceiver
+	out := []RunReceiver{}
 	for rows.Next() {
 		var r RunReceiver
 		if err := rows.Scan(&r.ID, &r.Name, &r.StaffID); err != nil {
@@ -520,7 +520,7 @@ func GetRun(ctx context.Context, pool *pgxpool.Pool, orgID, runID string) (*Disp
 		if err != nil {
 			return nil, err
 		}
-		var trail []RunPing
+		trail := []RunPing{}
 		for rows.Next() {
 			var latText, lngText, at string
 			if err := rows.Scan(&latText, &lngText, &at); err != nil {

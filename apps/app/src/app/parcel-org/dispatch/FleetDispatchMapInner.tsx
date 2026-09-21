@@ -109,7 +109,8 @@ function FocusRunner({ runs, focus, locked }: { runs: DispatchRun[]; focus: { id
     if (flown.current === key) return;
     const run = runs.find((r) => r.id === focus.id);
     if (!run) return;
-    const lastPing = run.trail[run.trail.length - 1];
+    const trail = Array.isArray(run.trail) ? run.trail : [];
+    const lastPing = trail[trail.length - 1];
     const target: [number, number] | null =
       run.currentLat !== null && run.currentLng !== null
         ? [run.currentLat, run.currentLng]
@@ -231,7 +232,7 @@ export function FleetDispatchMapInner({
     if (r.destination) allPoints.push([r.destination.lat, r.destination.lng]);
     if (r.currentLat !== null && r.currentLng !== null) allPoints.push([r.currentLat, r.currentLng]);
     if (showTrails) {
-      for (const p of r.trail) allPoints.push([p.lat, p.lng]);
+      for (const p of (Array.isArray(r.trail) ? r.trail : [])) allPoints.push([p.lat, p.lng]);
     }
   }
   const center: [number, number] = allPoints.length
@@ -316,8 +317,9 @@ export function FleetDispatchMapInner({
               const leg: [number, number][] = [];
               if (r.origin) leg.push([r.origin.lat, r.origin.lng]);
               if (r.destination) leg.push([r.destination.lat, r.destination.lng]);
-              const segments = showTrails ? trailSegments(r.trail) : [];
-              const stops = showTrails ? recordedStops(r.trail) : [];
+              const trail = Array.isArray(r.trail) ? r.trail : [];
+              const segments = showTrails ? trailSegments(trail) : [];
+              const stops = showTrails ? recordedStops(trail) : [];
               const dimmed = selectedId !== null && r.id !== selectedId;
               return (
                 <span key={`leg-${r.id}`}>
@@ -376,7 +378,8 @@ export function FleetDispatchMapInner({
               </Marker>
             ))}
             {positioned.map((r) => {
-              const driver = r.crew.find((c) => c.role === 'DRIVER') ?? r.crew[0];
+              const crew = Array.isArray(r.crew) ? r.crew : [];
+              const driver = crew.find((c) => c.role === 'DRIVER') ?? crew[0];
               if (r.currentLat === null || r.currentLng === null) return null;
               return (
                 <Marker
@@ -387,8 +390,8 @@ export function FleetDispatchMapInner({
                 >
                   <Popup>
                     <strong className="mono">{r.vehiclePlate}</strong>
-                    <span className="sub"> · {r.vehicleType.toLowerCase()}</span><br />
-                    {driver && <>{driver.name} ({driver.roleLabel.toLowerCase()})<br /></>}
+                    <span className="sub"> · {(r.vehicleType ?? '').toLowerCase()}</span><br />
+                    {driver && <>{driver.name} ({(driver.roleLabel ?? driver.role ?? '').toLowerCase()})<br /></>}
                     {driver?.msisdn && <><DemoPhoneSpan msisdn={driver.msisdn} /><br /></>}
                     {r.origin && r.destination && (
                       <>{r.origin.name} → {r.destination.name}<br /></>

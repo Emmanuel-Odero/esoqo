@@ -815,6 +815,19 @@ export interface CreateDispatchInput {
   receivers: DispatchReceiverInput[];
 }
 
+/** Go's encoding/json renders a nil slice as null, so a run with no
+ *  crew, no receivers or no pings yet arrives with those fields null
+ *  despite the DispatchRun type saying array. Normalise at the boundary
+ *  so the board never reads `.length` of null. */
+function normaliseDispatchRun(r: DispatchRun): DispatchRun {
+  return {
+    ...r,
+    crew: Array.isArray(r.crew) ? r.crew : [],
+    receivers: Array.isArray(r.receivers) ? r.receivers : [],
+    trail: Array.isArray(r.trail) ? r.trail : [],
+  };
+}
+
 /** The board: active runs by default, recently closed ones on request. */
 export async function listDispatches(
   includeClosed = false,
@@ -825,7 +838,7 @@ export async function listDispatches(
   const res = await parcelOrgFetch<{ runs: DispatchRun[] | null }>(
     `/v1/parcel-orgs/me/runs${includeClosed ? "?closed=true" : ""}`,
   );
-  return res.runs ?? [];
+  return (res.runs ?? []).map(normaliseDispatchRun);
 }
 
 /** One run with its recent trail (up to 200 points): the journey line
@@ -835,7 +848,7 @@ export async function getDispatch(id: string): Promise<DispatchRun | null> {
     const res = await parcelOrgFetch<{ run: DispatchRun | null }>(
       `/v1/parcel-orgs/me/runs/${encodeURIComponent(id)}`,
     );
-    return res.run;
+    return res.run ? normaliseDispatchRun(res.run) : null;
   } catch {
     return null;
   }
@@ -1044,7 +1057,10 @@ export async function listOrgRoutes(): Promise<OrgRoute[]> {
   const res = await parcelOrgFetch<{ routes: OrgRoute[] | null }>(
     "/v1/parcel-orgs/me/routes",
   );
-  return res.routes ?? [];
+  return (res.routes ?? []).map((r) => ({
+    ...r,
+    stops: Array.isArray(r.stops) ? r.stops : [],
+  }));
 }
 
 /** Create (no id) or replace (with one). The station order IS the

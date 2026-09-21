@@ -104,16 +104,18 @@ function attentionOrder(a: DispatchRun, b: DispatchRun): number {
  *  plate, stations, crew, receiving team, route, notes. */
 function matchRun(r: DispatchRun, needle: string): boolean {
   if (!needle) return true;
+  const crew = Array.isArray(r.crew) ? r.crew : [];
+  const receivers = Array.isArray(r.receivers) ? r.receivers : [];
   const hay = [
-    r.vehiclePlate,
-    r.vehicleType,
+    r.vehiclePlate ?? '',
+    r.vehicleType ?? '',
     r.origin?.name ?? '',
     r.destination?.name ?? '',
     r.routeName ?? '',
     r.notes ?? '',
     statusLabel(r.status),
-    ...r.crew.flatMap((c) => [c.name, c.msisdn ?? '']),
-    ...r.receivers.map((x) => x.name),
+    ...crew.flatMap((c) => [c.name ?? '', c.msisdn ?? '']),
+    ...receivers.map((x) => x.name ?? ''),
   ].join(' ').toLowerCase();
   return needle.split(/\s+/).every((w) => w && hay.includes(w));
 }
@@ -238,7 +240,7 @@ export function DispatchBoard({
   // The day's plates, for the Open-a-run plate suggestions — the same
   // vans run daily, so retyping them is pure toil.
   const knownPlates = useMemo(
-    () => [...new Set(runs.map((r) => r.vehiclePlate.trim()).filter(Boolean))].sort(),
+    () => [...new Set(runs.map((r) => (r.vehiclePlate ?? '').trim()).filter(Boolean))].sort(),
     [runs],
   );
   // While searching, the board follows the query: if the highlighted
@@ -490,6 +492,8 @@ export function DispatchBoard({
           <div className="porg-runs-grid">
             {visible.map((r) => {
               const expanded = r.id === expandedId;
+              const crewList = Array.isArray(r.crew) ? r.crew : [];
+              const receiverList = Array.isArray(r.receivers) ? r.receivers : [];
               return (
               <article
                 key={r.id}
@@ -512,10 +516,10 @@ export function DispatchBoard({
                       <span>{r.destination?.name ?? '—'}</span>
                     </p>
                     <p className="porg-run-meta">
-                      {r.vehicleType.toLowerCase()}
+                      {(r.vehicleType ?? '').toLowerCase()}
                       {r.routeName && <> · {r.routeName}</>}
-                      {' · '}{r.crew.length} crew
-                      {r.receivers.length > 0 && <> · receiving: {r.receivers.map((x) => x.name).join(', ')}</>}
+                      {' · '}{crewList.length} crew
+                      {receiverList.length > 0 && <> · receiving: {receiverList.map((x) => x.name).join(', ')}</>}
                     </p>
                   </div>
                   {/* What is actually on the vehicle, and the paper for
@@ -600,7 +604,8 @@ function RunInspector({
     );
   }
 
-  const driver = run.crew.find((c) => c.role === 'DRIVER') ?? run.crew[0] ?? null;
+  const crewList = Array.isArray(run.crew) ? run.crew : [];
+  const driver = crewList.find((c) => c.role === 'DRIVER') ?? crewList[0] ?? null;
   const progress = journeyProgress(run);
   const toGo = remainingStraightKm(run);
   // DEPARTED, not merely open: a run still at the shed has no position
@@ -614,7 +619,7 @@ function RunInspector({
         <div>
           <span style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
             <span className="mono" style={{ fontWeight: 800, fontSize: '1.05rem' }}>{run.vehiclePlate}</span>
-            <span className="sub">{run.vehicleType.toLowerCase()}</span>
+            <span className="sub">{(run.vehicleType ?? '').toLowerCase()}</span>
             <span className={`pill ${statusPill(run.status)}`}>{statusLabel(run.status)}</span>
             {isActive && (
               <LastSeenPill at={run.currentAt} now={now} />
@@ -861,9 +866,10 @@ function CreateDispatchForm({
                   const id = e.target.value;
                   setRouteId(id);
                   const r = routes.find((x) => x.id === id);
-                  if (r && r.stops.length >= 2) {
-                    setOriginId(r.stops[0]!.stationId);
-                    setDestinationId(r.stops[r.stops.length - 1]!.stationId);
+                  const stops = Array.isArray(r?.stops) ? r.stops : [];
+                  if (stops.length >= 2) {
+                    setOriginId(stops[0]!.stationId);
+                    setDestinationId(stops[stops.length - 1]!.stationId);
                   }
                 }}
               >
@@ -1091,12 +1097,15 @@ function RunDetail({
   const isActive = run.status === 'DEPARTED';
   const isLoading = run.status === 'LOADING';
   const now = useNow();
-  const driver = run.crew.find((c) => c.role === 'DRIVER') ?? run.crew[0] ?? null;
-  const others = run.crew.filter((c) => c !== driver);
-  const stops = recordedStops(run.trail);
-  const speed = currentSpeedKmh(run.trail);
+  const crewList = Array.isArray(run.crew) ? run.crew : [];
+  const receiverList = Array.isArray(run.receivers) ? run.receivers : [];
+  const trail = Array.isArray(run.trail) ? run.trail : [];
+  const driver = crewList.find((c) => c.role === 'DRIVER') ?? crewList[0] ?? null;
+  const others = crewList.filter((c) => c !== driver);
+  const stops = recordedStops(trail);
+  const speed = currentSpeedKmh(trail);
   const progress = journeyProgress(run);
-  const covered = distanceCoveredKm(run.trail);
+  const covered = distanceCoveredKm(trail);
 
   function useMyLocation() {
     if (!('geolocation' in navigator)) { setError('This device has no location to share'); return; }
@@ -1198,7 +1207,7 @@ function RunDetail({
         <div className="kpi">
           <span className="l">Stops made</span>
           <span className="n">{stops.length}</span>
-          <span className="sub">{run.trail.length} position reports</span>
+          <span className="sub">{trail.length} position reports</span>
         </div>
       </div>
 
@@ -1222,7 +1231,7 @@ function RunDetail({
           ) : (
             <div style={{ marginTop: 8 }}>
               <strong>{driver.name}</strong>{' '}
-              <span className="sub">{driver.roleLabel.toLowerCase()}</span>
+              <span className="sub">{(driver.roleLabel ?? driver.role ?? '').toLowerCase()}</span>
               {driver.msisdn && (
                 <div className="row" style={{ gap: 8, marginTop: 8, flexWrap: 'wrap' }}>
                   <DemoCallButton msisdn={driver.msisdn} primary />
@@ -1238,7 +1247,7 @@ function RunDetail({
                 {others.map((c) => (
                   <li key={c.id} style={{ marginBottom: 4 }}>
                     <strong>{c.name}</strong>{' '}
-                    <span className="sub">{c.roleLabel.toLowerCase()}{c.msisdn ? ` · ${c.msisdn}` : ''}</span>
+                    <span className="sub">{(c.roleLabel ?? c.role ?? '').toLowerCase()}{c.msisdn ? ` · ${c.msisdn}` : ''}</span>
                   </li>
                 ))}
               </ul>
@@ -1247,11 +1256,11 @@ function RunDetail({
         </div>
         <div>
           <h4 className="psection-title">Receiving team</h4>
-          {run.receivers.length === 0 ? (
+          {receiverList.length === 0 ? (
             <p className="sub" style={{ margin: '8px 0 0' }}>Nobody named — say who signed on arrival.</p>
           ) : (
             <ul style={{ margin: '8px 0 0', paddingLeft: 18 }}>
-              {run.receivers.map((r) => <li key={r.id}>{r.name}</li>)}
+              {receiverList.map((r) => <li key={r.id}>{r.name}</li>)}
             </ul>
           )}
           {run.notes && <p className="sub" style={{ margin: '8px 0 0' }}>Note: {run.notes}</p>}
@@ -1312,7 +1321,7 @@ function RunDetail({
             <input
               className="pinput" style={{ flex: 1, minWidth: 200 }}
               value={receivedBy}
-              placeholder={run.receivers.length > 0 ? `Who signed? (${run.receivers.map((r) => r.name).join(', ')})` : 'Who signed at the counter?'}
+              placeholder={receiverList.length > 0 ? `Who signed? (${receiverList.map((r) => r.name).join(', ')})` : 'Who signed at the counter?'}
               onChange={(e) => setReceivedBy(e.target.value)}
             />
             <button className="btn btn-p btn-sm" disabled={pending} onClick={arrive}>
