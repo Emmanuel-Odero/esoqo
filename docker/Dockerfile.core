@@ -18,8 +18,15 @@
 ARG NODE_VERSION=22.12.0
 
 FROM node:${NODE_VERSION}-bookworm-slim AS base
-ENV PNPM_HOME=/pnpm PATH=/pnpm:$PATH CI=1
+# COREPACK_HOME must be a world-readable path, not the default under
+# root's home. The migration Job runs `pnpm` in this image as uid 1001;
+# with the cache in /root/.cache it is unreadable, so corepack decides
+# pnpm is not installed and tries to fetch the latest version over the
+# network — which then fails signature verification and kills the Job.
+# An image that must reach the registry to start is not a sealed image.
+ENV PNPM_HOME=/pnpm PATH=/pnpm:$PATH CI=1 COREPACK_HOME=/opt/corepack
 RUN corepack enable && corepack prepare pnpm@9.12.0 --activate \
+ && chmod -R a+rX /opt/corepack \
  && apt-get update \
  && apt-get install -y --no-install-recommends openssl ca-certificates \
  && rm -rf /var/lib/apt/lists/*
