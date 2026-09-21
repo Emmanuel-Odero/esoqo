@@ -48,16 +48,26 @@ ENV NEXT_PUBLIC_WEB_URL=$NEXT_PUBLIC_WEB_URL \
     NEXT_PUBLIC_JAMII_DOMAIN_TARGET=$NEXT_PUBLIC_JAMII_DOMAIN_TARGET \
     NEXT_PUBLIC_PLAY_STORE_URL=$NEXT_PUBLIC_PLAY_STORE_URL \
     NEXT_PUBLIC_APP_STORE_URL=$NEXT_PUBLIC_APP_STORE_URL \
-    NEXT_TELEMETRY_DISABLED=1 \
-    NODE_ENV=production
+    NEXT_TELEMETRY_DISABLED=1
+
+# NODE_ENV is deliberately NOT set to production in this stage. pnpm
+# honours it and would skip every devDependency — including typescript
+# and @types/node, which live in the root package.json and which
+# `next build` refuses to run without ("Please install typescript and
+# @types/node"). `next build` sets NODE_ENV=production for the compile
+# itself regardless, so nothing is lost by leaving it unset here.
 
 COPY . .
 
 # The pnpm store is a cache mount rather than a layer: the whole repo is
 # copied above, so any source change invalidates the install layer, but
 # the mount survives that and keeps a warm rebuild near-instant.
+#
+# --prod=false belt-and-braces: it pins the devDependency behaviour to
+# this flag rather than to whatever NODE_ENV happens to be, so setting
+# NODE_ENV here later cannot silently break the build again.
 RUN --mount=type=cache,id=pnpm-store,target=/pnpm/store \
-    pnpm install --frozen-lockfile
+    pnpm install --frozen-lockfile --prod=false
 
 # `next build` typechecks against the generated client; @esoqo/db's
 # postinstall already ran generate, but a cached store can skip

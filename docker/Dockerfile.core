@@ -42,7 +42,20 @@ COPY --from=build --chown=1001:0 /repo /repo
 USER 1001
 EXPOSE 4000
 
+# WORKDIR is the service directory, not /repo, and that is load-bearing:
+# tsx is a devDependency of services/core, so pnpm installs it to
+# services/core/node_modules rather than hoisting it to the root. Run
+# from /repo and Node resolves 'tsx' against /repo/node_modules, does
+# not find it, and the container exits immediately with
+# ERR_MODULE_NOT_FOUND — a failure that a build cannot catch because the
+# image builds perfectly.
+#
+# The migration Job reuses this image with workingDir: /repo, which
+# overrides this and is correct there — pnpm --filter resolves from the
+# workspace root.
+WORKDIR /repo/services/core
+
 # Bypasses the package.json `start` script, which carries
 # --env-file-if-exists=../../.env — harmless but meaningless in a
 # cluster where config arrives as env vars from a Secret/ConfigMap.
-CMD ["node", "--import", "tsx", "services/core/src/index.ts"]
+CMD ["node", "--import", "tsx", "src/index.ts"]
