@@ -173,9 +173,25 @@ table.ui-table { width: 100%; border-collapse: collapse; font-size: .84rem; line
    would squeeze into whatever space is left in that row instead of
    getting its own line below it. No-op in a block-level parent. */
 .cscan { flex: 1 1 100%; margin-top: 12px }
-.cscan-view { width: 100%; max-width: 480px; aspect-ratio: 1 / 1; border-radius: 12px;
-  overflow: hidden; border: 1.5px solid var(--line); background: #111 }
-.cscan-view video { width: 100% !important; height: 100% !important; object-fit: cover; border-radius: 12px }
+.cscan-frame { position: relative; width: 100%; max-width: 480px; margin: 0 auto }
+.cscan-view { width: 100%; max-width: 480px; aspect-ratio: 1 / 1; border-radius: 16px;
+  overflow: hidden; border: 1.5px solid var(--line); background: #0b141d; box-shadow: var(--sh-m) }
+.cscan-view video { width: 100% !important; height: 100% !important; object-fit: cover; border-radius: 16px }
+.cscan-view canvas, .cscan-view img { border-radius: 16px }
+.cscan-corners { position: absolute; inset: 14px; pointer-events: none }
+.cscan-corners span { position: absolute; width: 30px; height: 30px;
+  border: 3px solid #fff; border-radius: 6px; opacity: .95;
+  filter: drop-shadow(0 1px 3px rgba(0,0,0,.5)) }
+.cscan-corners span:nth-child(1) { top: 0; left: 0; border-right: 0; border-bottom: 0 }
+.cscan-corners span:nth-child(2) { top: 0; right: 0; border-left: 0; border-bottom: 0 }
+.cscan-corners span:nth-child(3) { bottom: 0; left: 0; border-right: 0; border-top: 0 }
+.cscan-corners span:nth-child(4) { bottom: 0; right: 0; border-left: 0; border-top: 0 }
+.cscan-loading { position: absolute; inset: 0; display: flex; flex-direction: column;
+  gap: 10px; align-items: center; justify-content: center; color: #fff;
+  font-size: .9rem; background: #0b141d }
+.cscan-pulse { width: 44px; height: 44px; border-radius: 50%;
+  border: 3px solid rgba(255,255,255,.25); border-top-color: #fff;
+  animation: ui-spin .8s linear infinite }
 @media (max-width: 560px) {
   .cscan-view { max-width: 100%; aspect-ratio: 3 / 4 }
 }

@@ -26,9 +26,19 @@ export function Modal({
   size?: 'sm' | 'md' | 'lg';
 }) {
   const panelRef = useRef<HTMLDivElement>(null);
+  const onCloseRef = useRef(onClose);
+  onCloseRef.current = onClose;
 
+  // Mount-only: callers pass `onClose` as an inline arrow, so a new
+  // reference lands on every parent re-render (e.g. every keystroke in
+  // a controlled input inside the modal). If this effect depended on
+  // `onClose` it would tear down and re-run on each of those renders —
+  // and re-running called `panelRef.current?.focus()` again, yanking
+  // focus off the input mid-keystroke and dismissing the mobile
+  // keyboard. A ref holds the latest onClose so Escape still calls the
+  // current one, without the effect itself needing to depend on it.
   useEffect(() => {
-    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose(); };
+    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') onCloseRef.current(); };
     document.addEventListener('keydown', onKey);
     const prevOverflow = document.body.style.overflow;
     document.body.style.overflow = 'hidden';
@@ -37,7 +47,7 @@ export function Modal({
       document.removeEventListener('keydown', onKey);
       document.body.style.overflow = prevOverflow;
     };
-  }, [onClose]);
+  }, []);
 
   if (typeof document === 'undefined') return null;
 

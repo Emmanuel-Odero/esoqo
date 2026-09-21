@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useId, useRef, useState } from 'react';
+import type { Html5Qrcode as Html5QrcodeType } from 'html5-qrcode';
 import { Icon } from './Icon';
 
 /**
@@ -51,7 +52,7 @@ export function CameraScanner({
   const [attempt, setAttempt] = useState(0);
   const containerRef = useRef<HTMLDivElement>(null);
   const viewId = `esoqo-scan-view-${useId().replace(/[^a-zA-Z0-9]/g, '')}`;
-  const scannerRef = useRef<{ stop: () => Promise<void>; clear: () => void } | null>(null);
+  const scannerRef = useRef<Html5QrcodeType | null>(null);
   const onScanRef = useRef(onScan);
   onScanRef.current = onScan;
 
@@ -71,8 +72,15 @@ export function CameraScanner({
           throw new CameraError("This browser doesn't expose camera access. Type the code instead.", false);
         }
 
-        const { Html5Qrcode } = await import('html5-qrcode');
         if (cancelled || !containerRef.current) return;
+
+        // Dynamically imported on first open only: html5-qrcode touches
+        // `document`/`window` at module scope, so a static import pulls it
+        // into every Server Component that transitively imports @esoqo/ui
+        // (layout → IconSprite → index → here) and 500s the whole site
+        // when the server bundle resolves it. Dynamic + client-only keeps
+        // the initial page light and SSR safe.
+        const { Html5Qrcode: Html5QrcodeClass } = await import('html5-qrcode');
 
         // Ask for the camera explicitly first — this is the call that
         // makes the browser show its native permission prompt, and it's
@@ -84,13 +92,13 @@ export function CameraScanner({
         priming.getTracks().forEach((t) => t.stop());
         if (cancelled || !containerRef.current) return;
 
-        const cameras = await Html5Qrcode.getCameras().catch(() => []);
+        const cameras = await Html5QrcodeClass.getCameras().catch(() => []);
         const rear = cameras.find((c) => /back|rear|environment/i.test(c.label));
         // No rear match (most laptops, some phones with one camera) —
         // any enumerated camera is still a camera; take the first.
         const chosen = rear ?? cameras[0];
 
-        const scanner = new Html5Qrcode(viewId);
+        const scanner = new Html5QrcodeClass(viewId);
         scannerRef.current = scanner;
         const onSuccess = (decodedText: string) => {
           onScanRef.current(decodedText.trim());
@@ -103,7 +111,16 @@ export function CameraScanner({
         const config = {
           fps: 10,
           qrbox: (viewfinderWidth: number, viewfinderHeight: number) => {
-            const edge = Math.floor(Math.min(viewfinderWidth, viewfinderHeight) * 0.75);
+            // html5-qrcode throws a plain, unmatched string (not caught
+            // by toCameraError's patterns, so it fell through to the
+            // generic "Couldn't start the camera" message) if either
+            // side of the box comes out under its own 50px floor — which
+            // happens whenever the live view is still 0×0 at the instant
+            // this runs (e.g. right after permission is granted, before
+            // the video element has laid out). Floor it here so a small
+            // or momentarily-unsized viewport degrades to a small box
+            // instead of an opaque failure.
+            const edge = Math.max(50, Math.floor(Math.min(viewfinderWidth, viewfinderHeight) * 0.75));
             return { width: edge, height: edge };
           },
         };
@@ -127,15 +144,28 @@ export function CameraScanner({
             break;
           } catch (e) {
             lastErr = e;
+            // eslint-disable-next-line no-console -- the only way to see
+            // *which* start attempt failed and why when self-testing on
+            // a phone with no attached debugger.
+            console.error('[CameraScanner] start attempt failed', e);
           }
         }
-        if (!didStart) throw toCameraError(lastErr);
+        // Permission was already granted (priming succeeded above) —
+        // every attempt here failed inside html5-qrcode itself, not at
+        // the permission prompt. Say so explicitly so "no prompt showed"
+        // and "prompt showed, decoder still failed" never look the same
+        // failure to someone testing this on-device.
+        if (!didStart) throw toCameraError(lastErr, true);
 
         if (cancelled && didStart) {
           scanner.stop().catch(() => {}).finally(() => scanner.clear());
         }
       } catch (e) {
-        if (!cancelled) setError(e instanceof CameraError ? e : toCameraError(e));
+        if (!cancelled) {
+          // eslint-disable-next-line no-console -- see the attempt-level log above
+          console.error('[CameraScanner] failed to start', e);
+          setError(e instanceof CameraError ? e : toCameraError(e));
+        }
       } finally {
         if (!cancelled) setStarting(false);
       }
@@ -160,17 +190,31 @@ export function CameraScanner({
     <>
       <button
         type="button"
-        className="btn btn-o btn-sm"
+        className={`btn ${open ? 'btn-o' : 'btn-p'} btn-lg btn-block`}
         disabled={starting}
         onClick={() => { setError(null); setOpen((v) => !v); }}
+        aria-expanded={open}
       >
-        <Icon name="qr" size={14} />
-        {starting ? 'Starting camera…' : open ? 'Close scanner' : 'Scan code'}
+        <Icon name="qr" size={20} />
+        {starting ? 'Starting camera…' : open ? 'Close scanner' : 'Scan with camera'}
       </button>
       {open && (
         <div className="cscan">
-          <div id={viewId} ref={containerRef} className="cscan-view" />
-          {!error && <p className="sub" style={{ margin: '8px 0 0' }}>{hint}</p>}
+          <div className="cscan-frame">
+            <div id={viewId} ref={containerRef} className="cscan-view" />
+            {!error && (
+              <div aria-hidden className="cscan-corners">
+                <span /><span /><span /><span />
+              </div>
+            )}
+            {starting && (
+              <div className="cscan-loading" aria-hidden>
+                <span className="cscan-pulse" />
+                <span>Opening camera…</span>
+              </div>
+            )}
+          </div>
+          {!error && <p className="sub" style={{ margin: '10px 0 0', textAlign: 'center' }}>{hint}</p>}
           {error && (
             <div role="alert" className="cscan-err">
               <Icon name="alert-circle" size={16} />
@@ -198,14 +242,20 @@ class CameraError extends Error {
 
 /** One short, actionable line per failure kind — never a walkthrough of
  *  browser settings. html5-qrcode throws plain strings (not Errors) for
- *  its own failures, so both shapes are matched by name and message. */
-function toCameraError(e: unknown): CameraError {
+ *  its own failures, so both shapes are matched by name and message.
+ *  `permissionGranted` marks failures that happened *after* the browser
+ *  already handed us the camera (priming succeeded) — those are a
+ *  decoder problem, not a permission one, and should never be worded
+ *  like a permission problem. The raw message is appended so someone
+ *  self-testing on a phone (no attached debugger) can still read what
+ *  actually failed instead of only the generic line. */
+function toCameraError(e: unknown, permissionGranted = false): CameraError {
   if (e instanceof CameraError) return e;
   const message = e instanceof Error ? e.message : String(e ?? '');
   const name = e instanceof Error ? e.name : '';
   const hay = `${name} ${message}`;
 
-  if (/NotAllowedError|PermissionDenied|permission .*denied|not allowed/i.test(hay)) {
+  if (!permissionGranted && /NotAllowedError|PermissionDenied|permission .*denied|not allowed/i.test(hay)) {
     return new CameraError(
       "Camera access is blocked for this site. Click the camera icon in your browser's address bar to allow it, then try again.",
       true,
@@ -220,5 +270,11 @@ function toCameraError(e: unknown): CameraError {
   if (/Overconstrained/i.test(hay)) {
     return new CameraError("Couldn't match a camera to use. Try again, or type the code instead.", true);
   }
-  return new CameraError("Couldn't start the camera. Try again, or type the code instead.", true);
+  const detail = message && message !== 'undefined' ? ` (${message})` : '';
+  return new CameraError(
+    permissionGranted
+      ? `Camera access was granted, but the scanner couldn't start${detail}. Try again.`
+      : `Couldn't start the camera${detail}. Try again, or type the code instead.`,
+    true,
+  );
 }
