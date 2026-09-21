@@ -24,6 +24,9 @@ __pycache__/
 .venv/
 venv/
 
+# mkcert-generated local dev TLS cert/key for --experimental-https
+certificates/
+
 # ─── secrets ──────────────────────────────────────────────
 .env
 .env.local
