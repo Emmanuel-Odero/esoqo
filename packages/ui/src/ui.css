@@ -160,11 +160,25 @@ table.ui-table { width: 100%; border-collapse: collapse; font-size: .84rem; line
     border-radius: 16px 16px 0 0 }
 }
 
-/* ── camera scanner ── */
-.cscan { margin-top: 12px }
-.cscan-view { width: 100%; max-width: 320px; min-height: 220px; border-radius: 12px;
+/* ── camera scanner ──
+   Full-width up to a generous cap, sized by aspect-ratio rather than a
+   fixed min-height — on a narrow phone (where this matters most) it
+   fills nearly the whole screen width instead of sitting in a fixed
+   220px box, which is what made the live preview feel cramped and the
+   qrbox target hard to line a label up inside. */
+/* flex-basis:100% is for callers that drop the "Scan code" trigger
+   inline in a flex row next to other controls (see the scanner's own
+   .scanbar) — CameraScanner returns its button and this view as
+   flex-row siblings, so without a full-width basis the opened camera
+   would squeeze into whatever space is left in that row instead of
+   getting its own line below it. No-op in a block-level parent. */
+.cscan { flex: 1 1 100%; margin-top: 12px }
+.cscan-view { width: 100%; max-width: 480px; aspect-ratio: 1 / 1; border-radius: 12px;
   overflow: hidden; border: 1.5px solid var(--line); background: #111 }
-.cscan-view video { border-radius: 12px }
+.cscan-view video { width: 100% !important; height: 100% !important; object-fit: cover; border-radius: 12px }
+@media (max-width: 560px) {
+  .cscan-view { max-width: 100%; aspect-ratio: 3 / 4 }
+}
 .cscan-err { display: flex; align-items: center; gap: 8px; flex-wrap: wrap;
   background: var(--red-t); border: 1px solid #f3d2cf; color: var(--red);
   border-radius: var(--r-sm); padding: 10px 12px; margin-top: 8px; font-size: .87rem }

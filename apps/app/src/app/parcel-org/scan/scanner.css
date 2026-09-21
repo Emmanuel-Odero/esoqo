@@ -15,9 +15,21 @@
 .scan-console { max-width: 760px; margin: 0 auto }
 
 /* ── the scan box ────────────────────────────────────────────── */
+/* top clears .porgbar (parcel-org.css), which is ALSO sticky at
+   top:0 with a higher z-index — this can't be 0 at any width or the
+   scan box (the entire point of this page) sticks underneath the
+   page header instead of below it. .porgbar-in is min-height:64px
+   with 6px+safe-t/6px padding and a 1px border, and that doesn't
+   shrink on a phone, so the offset is the same at every width;
+   var(--safe-t) covers a notch's inset the flat part can't. */
+/* flex-wrap: wrap so the camera view (see ui.css's .cscan, flex-basis
+   100%) drops to its own full-width row under the icon/input/button
+   once opened, instead of squeezing into whatever's left of this row
+   — which is what made the live preview measure out tiny on a phone
+   even after .cscan-view itself was sized responsively. */
 .scanbar {
-  position: sticky; top: 72px; z-index: 20;
-  display: flex; align-items: center; gap: 12px;
+  position: sticky; top: calc(77px + var(--safe-t)); z-index: 20;
+  display: flex; align-items: center; flex-wrap: wrap; gap: 12px;
   padding: 10px 12px; margin-bottom: 18px;
   background: linear-gradient(115deg, #fff 55%, var(--green-t));
   border: 1.5px solid #BFE0CE; border-radius: var(--r-lg);
@@ -100,6 +112,11 @@
 .scan-panel-body { padding: 20px }
 .scan-panel-body > p { color: var(--tx-2); margin: 0 0 14px; max-width: 58ch }
 .scan-panel-body > .hint { margin-top: 12px }
+
+/* The real sticker for whatever was just scanned — see @esoqo/ui's
+   ScaledLabel, which measures this wrapper's own width and fits the
+   label to it so it never overflows a phone. */
+.scan-label { margin: 0 0 16px }
 
 /* What the clerk checks the box against. */
 .scan-facts {
@@ -265,7 +282,7 @@
 
 /* ── phones ──────────────────────────────────────────────────── */
 @media (max-width: 560px) {
-  .scanbar { top: 0; padding: 8px 10px; gap: 9px; border-radius: var(--r-md) }
+  .scanbar { padding: 8px 10px; gap: 9px; border-radius: var(--r-md) }
   .scanbar-ic { width: 38px; height: 38px }
   .scanbar-input { min-height: 56px; font-size: 1.05rem }
   .scan-panel-body { padding: 16px }

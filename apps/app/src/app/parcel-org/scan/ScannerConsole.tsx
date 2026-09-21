@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState, useTransition } from 'react';
 import Link from 'next/link';
-import { Icon } from '@esoqo/ui';
+import { dropPointFor, Icon, PrintStyles, ScaledLabel } from '@esoqo/ui';
 import { useAnnounce } from '@esoqo/a11y';
 import { extractParcelCode } from '@esoqo/domain';
 import type { OrgParcelRow, OrgShipment } from '@/lib/parcel-org-session';
@@ -55,10 +55,11 @@ type Phase =
   | { k: 'done'; title: string; detail: string; code?: string; tone: 'ok' | 'warn' };
 
 export function ScannerConsole({
-  orgName, initialRuns, canCarry, canDispatch, canIntake, canArrival,
+  orgName, orgLogoUrl, initialRuns, canCarry, canDispatch, canIntake, canArrival,
   canOverride, custodyCapable,
 }: {
   orgName: string;
+  orgLogoUrl?: string;
   initialRuns: OrgShipment[];
   canCarry: boolean;
   canDispatch: boolean;
@@ -267,6 +268,7 @@ export function ScannerConsole({
           custodyCapable={custodyCapable}
           busy={busy}
           orgName={orgName}
+          orgLogoUrl={orgLogoUrl}
           onReceive={doReceive}
           onHandOver={(parcel) => setPhase({ k: 'handover', parcel })}
           onLoaded={(code, run) => {
@@ -312,7 +314,7 @@ function describe(t: ScanTarget): string {
  */
 function TargetPanel({
   target, runs, canCarry, canDispatch, canIntake, canArrival, custodyCapable,
-  busy, orgName, onReceive, onHandOver, onLoaded, onSettled, onError, onReset,
+  busy, orgName, orgLogoUrl, onReceive, onHandOver, onLoaded, onSettled, onError, onReset,
 }: {
   target: ScanTarget;
   runs: OrgShipment[];
@@ -323,6 +325,7 @@ function TargetPanel({
   custodyCapable: boolean;
   busy: boolean;
   orgName: string;
+  orgLogoUrl?: string;
   onReceive: (reference: string, then?: (code: string) => void) => void;
   onHandOver: (parcel: OrgParcelRow) => void;
   onLoaded: (code: string, run: OrgShipment) => void;
@@ -375,6 +378,11 @@ function TargetPanel({
         title={blank ? 'Empty label' : 'Label already written on'}
         code={target.code}
       >
+        <ScanLabelPreview
+          code={target.code}
+          route={blank ? undefined : dropPointFor(target.label.destination)}
+          orgName={orgName} orgLogoUrl={orgLogoUrl}
+        />
         <p>
           {blank
             ? 'Nothing is written on this sticker yet. Fill in who it is from, who it is for, and where it is going — then receive it.'
@@ -399,7 +407,13 @@ function TargetPanel({
 
   const { parcel, stage } = target;
   const head = (
-    <ParcelSummary parcel={parcel} />
+    <>
+      <ScanLabelPreview
+        code={parcel.code} route={dropPointFor(parcel.destinationLabel)}
+        orgName={orgName} orgLogoUrl={orgLogoUrl}
+      />
+      <ParcelSummary parcel={parcel} />
+    </>
   );
 
   switch (stage) {
@@ -587,13 +601,30 @@ function Panel({
     <section className={`scan-panel ${tone}`} aria-label={title}>
       <header className="scan-panel-head">
         <span className="scan-panel-ic" aria-hidden="true"><Icon name={icon} size={22} /></span>
-        <div>
+        <div style={{ flex: 1, minWidth: 0 }}>
           <h2>{title}</h2>
           <p className="mono scan-panel-code">{code}</p>
         </div>
       </header>
       <div className="scan-panel-body">{children}</div>
     </section>
+  );
+}
+
+/** The actual sticker for whatever was just scanned — same design as
+ *  the label pool's own preview (LabelStockPanel's "Unused pool"),
+ *  fitted to the console's own width so it never overflows on a
+ *  phone. No `sig`: nothing this console resolves carries the label's
+ *  signature, so this shows as an unverified — but still fully
+ *  working — label. */
+function ScanLabelPreview({
+  code, route, orgName, orgLogoUrl,
+}: { code: string; route?: string; orgName?: string; orgLogoUrl?: string }) {
+  return (
+    <div className="scan-label">
+      <ScaledLabel code={code} route={route} orgName={orgName} orgLogoUrl={orgLogoUrl} />
+      <PrintStyles />
+    </div>
   );
 }
 

@@ -83,6 +83,7 @@ export default async function ParcelOrgScanPage() {
       </div>
       <ScannerConsole
         orgName={me.org.name}
+        orgLogoUrl={me.org.logoUrl ?? undefined}
         initialRuns={runs}
         canCarry={canCarry}
         canDispatch={canDispatch}

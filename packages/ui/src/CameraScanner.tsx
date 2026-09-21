@@ -96,7 +96,17 @@ export function CameraScanner({
           onScanRef.current(decodedText.trim());
           setOpen(false);
         };
-        const config = { fps: 10, qrbox: { width: 220, height: 220 } };
+        // A fixed 220px qrbox reads as a tiny target inside a preview
+        // that now fills a phone's width (see .cscan-view in ui.css) —
+        // scale it to the actual live-view size instead, so the aiming
+        // box stays a sensible fraction of the frame at any width.
+        const config = {
+          fps: 10,
+          qrbox: (viewfinderWidth: number, viewfinderHeight: number) => {
+            const edge = Math.floor(Math.min(viewfinderWidth, viewfinderHeight) * 0.75);
+            return { width: edge, height: edge };
+          },
+        };
 
         // deviceId when we found one (exact — we know it exists), else
         // a soft facingMode hint, else whatever camera the browser
