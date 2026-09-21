@@ -205,6 +205,24 @@ export interface OrgParcelRow {
    *  from, when it brought one. Null for Esoqo-booked parcels. */
   externalRef: string | null;
   externalSource: string | null;
+
+  /** Receiver self-authentication, for the escalation queue. A receiver
+   *  proving from their own phone that they are the receiver, by typing
+   *  the delivery code — three tries, then `receiverAuthLockedAt` and
+   *  this desk is texted. Staff may allow two more; burning those sets
+   *  `receiverAuthHardLockedAt`, which only a reissued code clears.
+   *
+   *  No delivery code here, current or otherwise: the console shows
+   *  that a parcel is stuck and offers the verbs, and the code itself
+   *  only ever reaches the sender and the receiver, by SMS. */
+  receiverAuthAttempts: number;
+  receiverAuthLockedAt: string | null;
+  receiverAuthHardLockedAt: string | null;
+  deliveryCodeVersion: number;
+  /** Set when a receiver closed their own collection at a pickup point.
+   *  The courier's pay waits out a hold instead of accruing on the spot,
+   *  because no member of staff witnessed the handover. */
+  courierEarningsHeldUntil: string | null;
 }
 
 export interface ParcelOrgMe {

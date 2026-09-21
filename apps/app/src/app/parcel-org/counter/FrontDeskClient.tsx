@@ -20,6 +20,7 @@ import {
 import { useAnnounce } from "@esoqo/a11y";
 import { extractParcelCode } from "@esoqo/domain";
 import type { OrgParcelRow } from "@/lib/parcel-org-session";
+import { ParcelDrawer } from "../ParcelDrawer";
 import {
   listOrgWaitingParcels,
   receiveWalkInParcel,
@@ -84,6 +85,9 @@ export const FrontDeskClient = forwardRef<
   );
   const [error, setError] = useState<string | null>(null);
   const [receiving, setReceiving] = useState(false);
+  // The waiting parcel whose record is open. Receiving is a custody
+  // transfer, so it happens inside the record rather than from the row.
+  const [viewing, setViewing] = useState<OrgParcelRow | null>(null);
   // Custody moves taken in while the network was down, still waiting to
   // reach the server. Surfaced rather than hidden: a clerk who cannot
   // see that eleven receipts are still on the device has no way to know
@@ -593,68 +597,37 @@ export const FrontDeskClient = forwardRef<
             </p>
           </div>
         ) : (
-          <div style={{ display: "grid", gap: 8 }}>
+          <ul className="plist">
             {visibleWaiting.map((p) => (
-              <div
-                key={p.code}
-                style={{
-                  display: "flex",
-                  alignItems: "center",
-                  justifyContent: "space-between",
-                  gap: 12,
-                  padding: "14px 16px",
-                  border: "1px solid var(--line)",
-                  borderRadius: "var(--r-sm)",
-                  background: "#fff",
-                  flexWrap: "wrap",
-                }}
-              >
-                <div style={{ flex: 1, minWidth: 200 }}>
-                  <span
-                    className="mono"
-                    style={{
-                      fontWeight: 700,
-                      fontSize: ".95rem",
-                      color: "var(--navy)",
-                    }}
+              <li key={p.code}>
+                <div className="plist-main">
+                  {/* Opens the record. Confirming receipt takes legal
+                      custody of somebody else's property, and this row
+                      used to offer that against a receiver's name and a
+                      destination — see ParcelDrawer.tsx. */}
+                  <button
+                    type="button"
+                    className="pdrawer-open mono"
+                    onClick={() => setViewing(p)}
                   >
                     {p.code}
+                  </button>
+                  <span className="plist-sub">
+                    {p.receiverName}
+                    {p.destinationLabel && <> · {p.destinationLabel}</>}
                   </span>
-                  <div style={{ marginTop: 4, fontSize: ".85rem" }}>
-                    <span style={{ color: "var(--tx-2)" }}>
-                      {p.receiverName}
-                      {p.destinationLabel && (
-                        <>
-                          <span
-                            style={{ margin: "0 6px", color: "var(--line)" }}
-                          >
-                            ·
-                          </span>
-                          {p.destinationLabel}
-                        </>
-                      )}
-                    </span>
-                  </div>
                 </div>
-                <button
-                  className="btn btn-p btn-sm"
-                  disabled={receiving}
-                  onClick={() =>
-                    void receive(p.code).then((r) => {
-                      if (!r.ok) setError(r.error);
-                    })
-                  }
-                  style={{
-                    padding: "10px 16px",
-                    fontSize: ".85rem",
-                  }}
-                >
-                  <Icon name="check" size={14} style={{ marginRight: 6 }} />
-                  Confirm
-                </button>
-              </div>
+                <div className="plist-actions">
+                  <button
+                    className="btn btn-o btn-sm"
+                    onClick={() => setViewing(p)}
+                  >
+                    View &amp; receive
+                  </button>
+                </div>
+              </li>
             ))}
-          </div>
+          </ul>
         )}
         {error && (
           <p
@@ -677,6 +650,39 @@ export const FrontDeskClient = forwardRef<
           </p>
         )}
       </div>
+
+      {/* Receiving lives inside the record, under the facts a clerk
+          checks the box against. */}
+      {viewing && (
+        <ParcelDrawer
+          parcel={viewing}
+          onClose={() => setViewing(null)}
+          actions={
+            <>
+              <p className="sub">
+                Check the box matches what is written above, then take it in. The
+                sender gets a receipt by text the moment you do.
+              </p>
+              <div className="ptoolbar">
+                <button
+                  className="btn btn-p"
+                  disabled={receiving}
+                  onClick={() => {
+                    const code = viewing.code;
+                    setViewing(null);
+                    void receive(code).then((r) => {
+                      if (!r.ok) setError(r.error);
+                    });
+                  }}
+                >
+                  <Icon name="check" size={16} />
+                  {receiving ? "Receiving…" : "Received — take it in"}
+                </button>
+              </div>
+            </>
+          }
+        />
+      )}
     </>
   );
 });

@@ -7,6 +7,7 @@ import {
   ParcelOrgUnauthorised, getParcelOrgMe, parcelOrgFetch,
   type OrgParcelRow, type ParcelOrgTrendDay,
 } from '@/lib/parcel-org-session';
+import { listOrgStaff } from './actions';
 import { OrgParcelsTable } from './OrgParcelsTable';
 import { RegisterFilters } from './RegisterFilters';
 import { TrendsStrip } from './TrendsStrip';
@@ -56,6 +57,8 @@ interface Search {
   originMethod?: string;
   parcelType?: string;
   overdue?: string;
+  /** The receiver-authentication escalation queue. */
+  locked?: string;
   sort?: string;
   order?: string;
   page?: string;
@@ -72,19 +75,20 @@ const PER_PAGE_OPTIONS = [10, 25, 50];
  * bouncing that to the Scanner would strand the person who followed it.
  */
 function hasFilterableSearch(sp: Search): boolean {
-  return Boolean(sp.q || sp.status || sp.originMethod || sp.parcelType || sp.overdue);
+  return Boolean(sp.q || sp.status || sp.originMethod || sp.parcelType || sp.overdue || sp.locked);
 }
 
 export default async function ParcelOrgDashboard(
   { searchParams }: { searchParams: Promise<Search> },
 ) {
   const sp = await searchParams;
-  const { status, q, originMethod, parcelType, overdue, sort, order } = sp;
+  const { status, q, originMethod, parcelType, overdue, locked, sort, order } = sp;
   const perPage = PER_PAGE_OPTIONS.includes(Number(sp.perPage)) ? Number(sp.perPage) : 25;
   const page = Math.max(1, Number(sp.page) || 1);
   const sortKey = ['created', 'code', 'status', 'earnings'].includes(sort ?? '') ? sort! : 'created';
   const orderKey = order === 'asc' || order === 'desc' ? order : '';
   const overdueOnly = overdue === '1' || overdue === 'true';
+  const lockedOnly = locked === '1' || locked === 'true';
 
   let me: Awaited<ReturnType<typeof getParcelOrgMe>>;
   let parcels: OrgParcelRow[];
@@ -97,6 +101,7 @@ export default async function ParcelOrgDashboard(
     if (q) qs.set('q', q);
     if (parcelType) qs.set('parcelType', parcelType);
     if (overdueOnly) qs.set('overdue', '1');
+    if (lockedOnly) qs.set('locked', '1');
     if (sortKey !== 'created' || orderKey) {
       qs.set('sort', sortKey);
       if (orderKey) qs.set('order', orderKey);
@@ -137,11 +142,19 @@ export default async function ParcelOrgDashboard(
   const canSeeEarnings = me.capabilities.includes('parcelorg.earnings');
   const canDispatch = me.capabilities.includes('parcelorg.dispatch');
   const canCarry = me.capabilities.includes('parcelorg.carry');
+
+  // The assign picker's options. Only a roster member with a linked
+  // party can take custody — a handoff is recorded against the person,
+  // never against a login row. Fetched only when the session can
+  // actually assign, so a rider's dashboard costs one call fewer.
+  const riders = canDispatch
+    ? (await listOrgStaff().catch(() => [])).filter((s) => s.active && s.partyId)
+    : [];
   const canDesk = canDispatch || canCarry;
   const { stats } = me;
   const overdueCount = (stats as { overdue?: number }).overdue ?? 0;
   const needsAttention = stats.failedDeliveries + stats.atAgent + overdueCount;
-  const hasFilter = Boolean(status || q || originMethod || parcelType || overdueOnly);
+  const hasFilter = Boolean(status || q || originMethod || parcelType || overdueOnly || lockedOnly);
   // Rebuilt in the same shape the KPI tiles emit, so a tile's filter can
   // be matched back to the tile's own label for the chip below.
   const appliedKpiFilter = status
@@ -149,7 +162,7 @@ export default async function ParcelOrgDashboard(
     : null;
   const isActive = me.org.status === 'ACTIVE';
   const currentQuery = new URLSearchParams(
-    Object.entries({ status, q, originMethod, parcelType, ...(overdueOnly ? { overdue: '1' } : {}) })
+    Object.entries({ status, q, originMethod, parcelType, ...(overdueOnly ? { overdue: '1' } : {}), ...(lockedOnly ? { locked: '1' } : {}) })
       .filter(([, v]) => Boolean(v)) as [string, string][],
   ).toString();
 
@@ -322,6 +335,7 @@ export default async function ParcelOrgDashboard(
             if (name === 'status') return status === value;
             if (name === 'originMethod') return originMethod === value;
             if (name === 'overdue') return overdueOnly && value === '1';
+            if (name === 'locked') return lockedOnly && value === '1';
             return false;
           });
           return (
@@ -356,6 +370,7 @@ export default async function ParcelOrgDashboard(
             <span className="porg-applied">
               <Icon name="filter" size={13} />
               {(kpis.find((k) => k.filter === appliedKpiFilter)?.label
+                ?? (lockedOnly ? 'Receiver locked out' : null)
                 ?? (overdueOnly ? 'Past SLA' : null)
                 ?? (q ? `Matching “${q}”` : null)
                 ?? 'Filtered')}
@@ -377,11 +392,12 @@ export default async function ParcelOrgDashboard(
             React would otherwise reuse the DOM node and leave the
             dropdown reading "All statuses" over a filtered list. */}
         <RegisterFilters
-          key={`${status ?? ''}|${originMethod ?? ''}|${q ?? ''}|${parcelType ?? ''}|${overdueOnly}`}
+          key={`${status ?? ''}|${originMethod ?? ''}|${q ?? ''}|${parcelType ?? ''}|${overdueOnly}|${lockedOnly}`}
           status={status}
           q={q}
           parcelType={parcelType}
           overdueOnly={overdueOnly}
+          lockedOnly={lockedOnly}
           originMethod={originMethod}
         />
 
@@ -395,6 +411,7 @@ export default async function ParcelOrgDashboard(
           hasFilter={hasFilter}
           canDispatch={canDispatch}
           canSeeEarnings={canSeeEarnings}
+          riders={riders}
         />
       </div>
     </>

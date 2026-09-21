@@ -5,9 +5,13 @@ import Link from 'next/link';
 import type { Route } from 'next';
 import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 import { Icon } from '@esoqo/ui';
-import type { OrgParcelRow } from '@/lib/parcel-org-session';
+import type { OrgParcelRow, ParcelOrgStaffRow } from '@/lib/parcel-org-session';
 import { DemoPhoneSpan } from '@/components/DemoContact';
-import { assignOrgParcel, exportOrgParcels } from './actions';
+import {
+  assignOrgParcel, exportOrgParcels,
+  grantReceiverAuthRetry, reissueDeliveryCode, releaseHeldCourierEarnings,
+} from './actions';
+import { ParcelDrawer } from './ParcelDrawer';
 import { can, isInFlight, stageFor } from './parcel-stages';
 
 /**
@@ -71,6 +75,9 @@ interface Props {
   hasFilter: boolean;
   canDispatch: boolean;
   canSeeEarnings: boolean;
+  /** Roster members who can take custody — the assign picker's options.
+   *  Empty for a session that can't assign. */
+  riders: ParcelOrgStaffRow[];
 }
 
 function buildHref(
@@ -89,7 +96,7 @@ function buildHref(
 
 export function OrgParcelsTable({
   parcels, total, page, perPage, sort, order,
-  hasFilter, canDispatch, canSeeEarnings,
+  hasFilter, canDispatch, canSeeEarnings, riders,
 }: Props) {
   const pathname = usePathname();
   const searchParams = useSearchParams();
@@ -102,6 +109,9 @@ export function OrgParcelsTable({
   // and it can fail — both need somewhere to show.
   const [exporting, startExport] = useTransition();
   const [exportError, setExportError] = useState<string | null>(null);
+  // The row that is open. Held as the row itself rather than an id so
+  // the drawer never has to re-find it after a filter change.
+  const [open, setOpen] = useState<OrgParcelRow | null>(null);
 
   const params = useMemo(
     () => new URLSearchParams(searchParams.toString()),
@@ -243,11 +253,40 @@ export function OrgParcelsTable({
           </thead>
           <tbody>
             {parcels.map((p) => (
-              <Row key={p.id} parcel={p} canDispatch={canDispatch} canSeeEarnings={canSeeEarnings} />
+              <Row
+                key={p.id} parcel={p} canDispatch={canDispatch}
+                canSeeEarnings={canSeeEarnings} onOpen={setOpen}
+              />
             ))}
           </tbody>
         </table>
       </div>
+      {open && (
+        <ParcelDrawer
+          parcel={open}
+          canSeeEarnings={canSeeEarnings}
+          onClose={() => setOpen(null)}
+          actions={
+            // A locked receiver outranks everything else this drawer
+            // can offer: the parcel has physically stopped, and
+            // assigning a rider to a box nobody can be handed is busy
+            // work. Same reason the lock gets a pill in the header.
+            canDispatch && needsReceiverAuthAction(open) ? (
+              <ReceiverAuthActions
+                parcel={open}
+                onDone={() => { setOpen(null); router.refresh(); }}
+              />
+            ) : canDispatch && can(stageFor(open.status), 'assign') ? (
+              <AssignAction
+                code={open.code}
+                riders={riders}
+                onDone={() => { setOpen(null); router.refresh(); }}
+              />
+            ) : undefined
+          }
+        />
+      )}
+
       <div className="porg-pager">
         {page <= 1 ? (
           <span className="btn btn-o btn-sm is-disabled" aria-disabled="true">← Prev</span>
@@ -276,8 +315,11 @@ export function OrgParcelsTable({
 }
 
 function Row({
-  parcel, canDispatch, canSeeEarnings,
-}: { parcel: OrgParcelRow; canDispatch: boolean; canSeeEarnings: boolean }) {
+  parcel, canDispatch, canSeeEarnings, onOpen,
+}: {
+  parcel: OrgParcelRow; canDispatch: boolean; canSeeEarnings: boolean;
+  onOpen: (p: OrgParcelRow) => void;
+}) {
   // Both of this row's judgements about the parcel — is it late, can it
   // be assigned — come from the shared state machine rather than status
   // lists written out here. See parcel-stages.ts for why.
@@ -290,7 +332,11 @@ function Row({
   return (
     <tr>
       <td data-label="Parcel">
-        <span className="mono" style={{ fontWeight: 700 }}>{parcel.code}</span>
+        {/* The code opens the record. A row used to offer a verb with
+            no way to see what it applied to — see ParcelDrawer.tsx. */}
+        <button type="button" className="pdrawer-open mono" onClick={() => onOpen(parcel)}>
+          {parcel.code}
+        </button>
         {parcel.externalRef && (
           <span className="sub" style={{ display: 'block' }}>
             Their #: <span className="mono">{parcel.externalRef}</span>
@@ -327,53 +373,152 @@ function Row({
       )}
       {canDispatch && (
         <td data-label="Actions" style={{ textAlign: 'right' }}>
-          {can(stage, 'assign') && <AssignButton code={parcel.code} />}
+          {/* One verb only, and it opens the record first. Assigning
+              used to happen inline against a raw party UUID typed into
+              a box beside four truncated columns. */}
+          <button type="button" className="btn btn-o btn-sm" onClick={() => onOpen(parcel)}>
+            View{can(stage, 'assign') ? ' & assign' : ''}
+          </button>
         </td>
       )}
     </tr>
   );
 }
 
-function AssignButton({ code }: { code: string }) {
-  const [open, setOpen] = useState(false);
+/**
+ * Assigning, inside the record it applies to.
+ *
+ * This used to be a button on the row that swapped itself for a text
+ * box asking for "Rider's Esoqo party id" — a UUID nobody at a desk
+ * has, typed against a parcel they could only see four columns of.
+ * The roster already carries partyId, so the rider is picked.
+ */
+function AssignAction({
+  code, riders, onDone,
+}: { code: string; riders: ParcelOrgStaffRow[]; onDone: () => void }) {
   const [riderPartyId, setRiderPartyId] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [pending, startTransition] = useTransition();
-
-  if (!open) {
-    return <button className="btn btn-o btn-sm" onClick={() => setOpen(true)}>Assign</button>;
-  }
 
   function save() {
     setError(null);
     startTransition(async () => {
       const result = await assignOrgParcel(code, riderPartyId.trim());
-      if (result.ok) setOpen(false);
+      if (result.ok) onDone();
       else setError(result.error);
     });
   }
 
+  if (riders.length === 0) {
+    return (
+      <p className="sub">
+        No riders with an Esoqo account on the roster yet — a rider needs one to
+        take custody. Add it under Settings → Team.
+      </p>
+    );
+  }
+
   return (
-    <div style={{ display: 'grid', gap: 6, justifyItems: 'end' }}>
-      <input
-        className="mono"
-        style={{ padding: '4px 6px', border: '1.5px solid var(--line)', borderRadius: 6, width: 190 }}
-        placeholder="Rider's Esoqo party id"
-        aria-label="Rider's Esoqo party id"
-        value={riderPartyId}
-        onChange={(e) => setRiderPartyId(e.target.value)}
-      />
-      <div className="row" style={{ gap: 6 }}>
-        <button className="btn btn-p btn-sm" disabled={pending || !riderPartyId.trim()} onClick={save}>
-          {pending ? 'Assigning…' : 'Assign'}
-        </button>
-        <button className="btn btn-o btn-sm" disabled={pending} onClick={() => setOpen(false)}>Cancel</button>
+    <>
+      <div className="pfield">
+        <label htmlFor={`assign-${code}`}>Give it to</label>
+        <select
+          id={`assign-${code}`}
+          value={riderPartyId}
+          onChange={(e) => setRiderPartyId(e.target.value)}
+        >
+          <option value="">Choose a rider…</option>
+          {riders.map((r) => (
+            <option key={r.id} value={r.partyId ?? ''}>
+              {r.name}{r.msisdn ? ` · ${r.msisdn}` : ''}
+            </option>
+          ))}
+        </select>
       </div>
       {error && (
-        <span role="alert" className="sub" style={{ color: 'var(--red)' }}>
-          <Icon name="alert-circle" size={12} />{error}
-        </span>
+        <p role="alert" className="pnote pnote-bad">
+          <Icon name="alert-circle" size={16} /><span>{error}</span>
+        </p>
       )}
-    </div>
+      <div className="ptoolbar">
+        <button className="btn btn-p" disabled={pending || !riderPartyId} onClick={save}>
+          <Icon name="user" size={16} />{pending ? 'Assigning…' : 'Assign to this rider'}
+        </button>
+      </div>
+    </>
+  );
+}
+
+/** Whether this parcel is waiting on a decision from this desk about
+ *  its receiver — locked out of the delivery code, or holding courier
+ *  pay from a collection the receiver closed themselves. */
+function needsReceiverAuthAction(p: OrgParcelRow): boolean {
+  return Boolean(p.receiverAuthLockedAt || p.receiverAuthHardLockedAt || p.courierEarningsHeldUntil);
+}
+
+/**
+ * The three verbs for a parcel whose receiver can't get past the code.
+ *
+ * Escalating, and only ever offering the step the parcel is actually
+ * at: two more tries while a soft lock can still be forgiven, a new
+ * code once it can't. Showing both at once invites a clerk to reissue
+ * on a receiver who simply fat-fingered a digit — which costs two SMS
+ * and invalidates a code the receiver may be about to type correctly.
+ *
+ * Release sits beside them rather than in its own surface because it
+ * is the same conversation: this parcel closed without a witness, and
+ * somebody here has to say whether that was real.
+ */
+function ReceiverAuthActions({
+  parcel, onDone,
+}: { parcel: OrgParcelRow; onDone: () => void }) {
+  const [error, setError] = useState<string | null>(null);
+  const [pending, startTransition] = useTransition();
+
+  function run(fn: (code: string) => Promise<{ ok: true } | { ok: false; error: string }>) {
+    setError(null);
+    startTransition(async () => {
+      const result = await fn(parcel.code);
+      if (result.ok) onDone();
+      else setError(result.error);
+    });
+  }
+
+  const hardLocked = Boolean(parcel.receiverAuthHardLockedAt);
+  const locked = Boolean(parcel.receiverAuthLockedAt);
+
+  return (
+    <>
+      <div className="porg-verbs">
+        {locked && !hardLocked && (
+          <button type="button" className="btn btn-o btn-sm" disabled={pending}
+            onClick={() => run(grantReceiverAuthRetry)}>
+            Allow two more tries
+          </button>
+        )}
+        {(locked || hardLocked) && (
+          <button type="button" className="btn btn-p btn-sm" disabled={pending}
+            onClick={() => run(reissueDeliveryCode)}>
+            Issue a new delivery code
+          </button>
+        )}
+        {parcel.courierEarningsHeldUntil && (
+          <button type="button" className="btn btn-o btn-sm" disabled={pending}
+            onClick={() => run(releaseHeldCourierEarnings)}>
+            Release courier pay
+          </button>
+        )}
+      </div>
+      {(locked || hardLocked) && (
+        <p className="sub" style={{ marginTop: 8 }}>
+          A new code is texted to the receiver and the sender. It is never shown here.
+        </p>
+      )}
+      {error && (
+        <p role="alert" className="pnote pnote-bad">
+          <Icon name="alert-circle" size={16} /><span>{error}</span>
+        </p>
+      )}
+    </>
   );
 }

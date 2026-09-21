@@ -14,12 +14,16 @@ import { Icon } from '@esoqo/ui';
  * new filter's page 3 is meaningless.
  */
 export function RegisterFilters({
-  status, q, parcelType, overdueOnly, originMethod,
+  status, q, parcelType, overdueOnly, lockedOnly, originMethod,
 }: {
   status?: string;
   q?: string;
   parcelType?: string;
   overdueOnly: boolean;
+  /** The receiver-authentication escalation queue — parcels where the
+   *  receiver has locked themselves out of the delivery code and this
+   *  desk has to decide something before the box moves again. */
+  lockedOnly: boolean;
   originMethod?: string;
 }) {
   const router = useRouter();
@@ -39,6 +43,8 @@ export function RegisterFilters({
     setOrClear('parcelType', fd.get('parcelType') as string | null);
     if (fd.get('overdue')) sp.set('overdue', '1');
     else sp.delete('overdue');
+    if (fd.get('locked')) sp.set('locked', '1');
+    else sp.delete('locked');
     if (originMethod) sp.set('originMethod', originMethod);
     sp.set('page', '1');
     const qs = sp.toString();
@@ -84,6 +90,10 @@ export function RegisterFilters({
       <label className="porg-check">
         <input type="checkbox" name="overdue" value="1" defaultChecked={overdueOnly} />
         Overdue only
+      </label>
+      <label className="porg-check">
+        <input type="checkbox" name="locked" value="1" defaultChecked={lockedOnly} />
+        Receiver locked out
       </label>
       <button className="btn btn-o btn-sm" type="submit">
         <Icon name="filter" size={15} />Filter
