@@ -22,6 +22,7 @@ export {
   PrintableLabel, PrintStyles, trackingUrlFor, dropPointFor,
   LABEL_WIDTH_MM, LABEL_HEIGHT_MM, LABEL_GAP_MM,
 } from './ParcelLabel';
+export { ScaledLabel } from './ScaledLabel';
 export {
   PrintableLuggageTag, shortenPassengerName,
   LUGGAGE_TAG_WIDTH_MM, LUGGAGE_TAG_HEIGHT_MM,

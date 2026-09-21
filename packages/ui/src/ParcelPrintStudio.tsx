@@ -115,30 +115,71 @@ export function LabelPrintSheet({
   return (
     <>
       <style>{`@media print { .print-page-caption { display: none !important; } }`}</style>
+      {/* Everywhere this renders, it sits behind other content in the
+          DOM — a "stock belongs to" card, layout controls, the code
+          chips — that print's `visibility: hidden` hack (see
+          PrintStyles) hides but does NOT remove from layout:
+          `visibility: hidden` preserves an element's box, it just
+          stops painting it. Left alone, that hidden content still
+          pushes these pages down from the true top of the sheet by
+          however tall it is, so the first page prints with a large
+          blank gap (or starts partway down, or off the bottom of page
+          one entirely) instead of flush at the paper's edge — the
+          other half of "labels land in the wrong place on the page."
+          `.print-sheet-root` (see PrintStyles) pulls the whole group
+          out of that flow via `position: absolute; top: 0; left: 0`,
+          so pagination starts at the physical page origin regardless
+          of what precedes it. It stays a single wrapper — not one
+          escape per page — because pages must remain in normal flow
+          RELATIVE TO EACH OTHER for `page-break-after` to keep
+          separating them; a `position: fixed` per page would instead
+          repeat every page's content on every sheet (paged media's
+          defined behaviour for fixed-positioned boxes), which is the
+          one thing this data structure never wants. */}
+      <div className="print-sheet-root">
       {pages.map((page, i) => (
         <figure key={i} className="print-label-page" style={{ margin: '0 0 14px' }}>
           <figcaption className="sub print-page-caption" style={{ marginBottom: 6 }}>
             Page {i + 1} of {pages.length} — {page.length} label{page.length === 1 ? '' : 's'} · {layout.columns} across × {layout.rows} down on {layout.paper} {layout.orientation}
           </figcaption>
           {/* The paper itself: a bordered sheet at real aspect ratio so
-              what you see is where stickers land. Scaled on screen only;
-              print CSS uses the mm grid at full size. */}
-          <div style={{
-            width: `${pw * scale}mm`, maxWidth: '100%', aspectRatio: `${pw} / ${ph}`,
-            border: '1.5px solid var(--line)', borderRadius: 8, background: '#fff',
-            boxShadow: '0 2px 10px rgba(0,0,0,.08)', padding: `${MARGIN_MM * scale}mm`,
-            boxSizing: 'border-box', overflow: 'hidden',
-          }}>
+              what you see is where stickers land on screen. `scale` is
+              an on-screen-only shrink (see `previewScale`'s own doc) —
+              every mm dimension below reads it through the CSS variable
+              --lp-scale rather than baking it into a literal value, so
+              PrintStyles' own `.lp-sheet-scale` rule can force it back
+              to 1 under @media print. Without that reset this whole
+              "paper" box — including the 90×50mm labels inside it —
+              printed at 55% of its real physical size: exactly the
+              "labels land in the wrong place on the sheet" bug this
+              fixes, since a courier's pre-cut label stock is cut to the
+              REAL 90×50mm, not 55% of it. */}
+          <div
+            className="lp-sheet-scale"
+            style={{
+              '--lp-scale': scale,
+              width: `calc(${pw}mm * var(--lp-scale))`, maxWidth: '100%',
+              aspectRatio: `${pw} / ${ph}`,
+              border: '1.5px solid var(--line)', borderRadius: 8, background: '#fff',
+              boxShadow: '0 2px 10px rgba(0,0,0,.08)',
+              padding: `calc(${MARGIN_MM}mm * var(--lp-scale))`,
+              boxSizing: 'border-box', overflow: 'hidden',
+            } as React.CSSProperties}
+          >
             <div style={{
               display: 'grid',
-              gridTemplateColumns: `repeat(${layout.columns}, ${LABEL_WIDTH_MM * scale}mm)`,
-              gridAutoRows: `${LABEL_HEIGHT_MM * scale}mm`,
-              gap: `${LABEL_GAP_MM * scale}mm`,
+              gridTemplateColumns: `repeat(${layout.columns}, calc(${LABEL_WIDTH_MM}mm * var(--lp-scale)))`,
+              gridAutoRows: `calc(${LABEL_HEIGHT_MM}mm * var(--lp-scale))`,
+              gap: `calc(${LABEL_GAP_MM}mm * var(--lp-scale))`,
               alignContent: 'start',
             }}>
               {page.map(({ code, sig }) => (
-                <div key={code} style={{ width: `${LABEL_WIDTH_MM * scale}mm`, height: `${LABEL_HEIGHT_MM * scale}mm`, overflow: 'hidden', transform: `scale(1)`, transformOrigin: 'top left' }}>
-                  <div style={{ transform: `scale(${scale})`, transformOrigin: 'top left', width: `${LABEL_WIDTH_MM}mm`, height: `${LABEL_HEIGHT_MM}mm` }}>
+                <div key={code} style={{
+                  width: `calc(${LABEL_WIDTH_MM}mm * var(--lp-scale))`,
+                  height: `calc(${LABEL_HEIGHT_MM}mm * var(--lp-scale))`,
+                  overflow: 'hidden',
+                }}>
+                  <div style={{ transform: 'scale(var(--lp-scale))', transformOrigin: 'top left', width: `${LABEL_WIDTH_MM}mm`, height: `${LABEL_HEIGHT_MM}mm` }}>
                     <PrintableLabel code={code} sig={sig} orgName={orgName} orgLogoUrl={orgLogoUrl} />
                   </div>
                 </div>
@@ -147,6 +188,7 @@ export function LabelPrintSheet({
           </div>
         </figure>
       ))}
+      </div>
       <PrintStyles />
     </>
   );

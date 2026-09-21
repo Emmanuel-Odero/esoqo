@@ -359,14 +359,56 @@ export function PrintStyles() {
       __html: `
       @media print {
         @page { size: portrait; margin: 10mm; }
+        body { position: relative; }
         body * { visibility: hidden; }
         .print-label, .print-label *,
         .print-label-page, .print-label-page *,
+        .print-sheet-root, .print-sheet-root *,
         .print-modal-escape, .print-modal-escape * { visibility: visible; }
         .print-modal-escape { position: fixed; top: 0; left: 0; }
+        /* visibility:hidden hides everything else without removing
+           it from layout, so whatever precedes a print target in the
+           DOM (page chrome, cards, controls) still reserves its own
+           height and pushes the target down from the sheet's true top
+           edge. A single position:fixed escape (above) is fine for
+           one always-one-page label, but is wrong for a POSSIBLY
+           multi-page batch: fixed-positioned boxes are defined to
+           repeat on every printed page rather than paginate, which
+           would print every page's labels stacked on page one. Using
+           position:absolute instead — anchored to body, made
+           positioned just above — keeps the group's pages in normal
+           flow relative to EACH OTHER (so page-break-after below still
+           separates them) while pulling the whole group to start at
+           the sheet's real top-left regardless of what's hidden above
+           it. */
+        .print-sheet-root { position: absolute; top: 0; left: 0; width: 100%; }
         .print-label-page { page-break-after: always; break-after: page; }
         .print-label-page:last-child { page-break-after: auto; break-after: auto; }
         .print-label { break-inside: avoid; page-break-inside: avoid; }
+        /* ScaledLabel fits a preview to whatever on-screen container
+           it's in — including shrinking below 90×50mm on a narrow
+           phone. That transform must never reach paper: a preview
+           scaled down to fit a small screen is not a smaller sticker. */
+        .esoqo-scaled-label { transform: none !important; }
+        /* LabelPrintSheet's on-screen "paper" framing — a bordered,
+           shadowed box pre-shrunk by previewScale so a whole page
+           fits a card — is exactly that: an on-screen affordance. Print
+           already gets a real page with a real margin from @page
+           above; printing this box verbatim would shrink every label to
+           a fraction of its true 90×50mm size AND double up the page
+           margin (a literal 210mm-wide box, complete with its own
+           padding standing in for that margin, inside a canvas @page
+           already inset by 10mm). Resetting --lp-scale to 1 restores
+           true size (every mm dimension in LabelPrintSheet reads the
+           scale through this variable); stripping the frame's own
+           box model lets the grid flow naturally inside the page's own
+           margin instead of nesting a second one inside it. */
+        .lp-sheet-scale {
+          --lp-scale: 1 !important;
+          width: auto !important; height: auto !important; aspect-ratio: auto !important;
+          max-width: none !important; border: none !important; box-shadow: none !important;
+          padding: 0 !important; background: none !important; overflow: visible !important;
+        }
       }
     `,
     }} />
