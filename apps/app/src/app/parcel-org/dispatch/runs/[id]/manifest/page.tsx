@@ -76,8 +76,8 @@ export default async function RunManifestPage(
           </div>
           <div className="manifest-meta">
             <span className="mono manifest-plate">{shipment.vehiclePlate || 'No plate'}</span>
-            <span className={`pill ${shipment.status === 'OPEN' ? 'p-warn' : 'p-ok'}`}>
-              {shipment.status === 'OPEN' ? 'Still loading' : 'Departed'}
+            <span className={`pill ${shipment.status === 'LOADING' ? 'p-warn' : shipment.status === 'DEPARTED' ? 'p-ok' : 'p-info'}`}>
+              {shipment.status === 'LOADING' ? 'Still loading' : shipment.status === 'DEPARTED' ? 'On the road' : shipment.status.toLowerCase()}
             </span>
           </div>
         </header>
@@ -105,8 +105,9 @@ export default async function RunManifestPage(
 
         {items.length === 0 ? (
           <p className="manifest-empty">
-            Nothing loaded onto this run yet. Scan parcels onto it from the Scanner,
-            then print this sheet.
+            {shipment.status === 'LOADING'
+              ? 'Nothing loaded onto this run yet. Scan parcels onto it from the Scanner, then print this sheet.'
+              : 'Nothing was loaded onto this run before it closed. Its manifest stays empty as the record.'}
           </p>
         ) : (
           <table className="manifest-table">

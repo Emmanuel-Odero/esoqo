@@ -584,7 +584,197 @@ func SeedDemoDispatchFleet(ctx context.Context, pool *pgxpool.Pool) error {
 	}
 
 	fmt.Printf("  dispatch fleet: esoqo-shippers (%d runs, %d routes)\n", len(eshipFleetRuns), routeCount)
+
+	// Cargo last: the showcase plants ~24 parcels and the loop above
+	// plants ~15 runs, and without this step the two never meet — the
+	// board shows lorries with nothing aboard and parcels with no fleet.
+	if loading, aboard, err := seedDispatchCargo(ctx, pool, orgID, stationIDByName, staffIDByName); err != nil {
+		return err
+	} else {
+		fmt.Printf("  dispatch cargo: %d loading, %d aboard departed runs\n", loading, aboard)
+	}
 	return nil
+}
+
+// seedDispatchCargo puts the showcase parcels onto the fleet, so the
+// board's "parcels aboard" figure and the manifests are real.
+//
+// Two halves, matching the two halves of the loading rule
+// (dbx.LoadParcelOntoOrgShipment — LOADING only):
+//
+//   - parcels waiting at the counter go onto a dedicated LOADING shed
+//     run (created here, reset here every seed), and move to IN_TRANSIT
+//     as part of loading — the same transition the scanner performs.
+//   - parcels already IN_TRANSIT with no manifest row join a DEPARTED
+//     run's manifest, round-robin, but only when they have no manifest
+//     row anywhere yet: additive, never rewriting a document or
+//     stealing a box a tester already moved.
+//
+// Returns (loading count, departed-aboard count).
+func seedDispatchCargo(ctx context.Context, pool *pgxpool.Pool, orgID string, stationIDByName, staffIDByName map[string]string) (int, int, error) {
+	// ── The shed run ──
+	const shedPlate = "KDB 900L"
+	var shedRunID string
+	if err := pool.QueryRow(ctx, `SELECT id FROM parcel_shipment WHERE "parcelOrgId" = $1 AND "vehiclePlate" = $2`, orgID, shedPlate).Scan(&shedRunID); err != nil {
+		originID := stationIDByName["ESOQO Shippers – Kabiria Hub"]
+		destID := stationIDByName["ESOQO Shippers – CBD Counter"]
+		err = pool.QueryRow(ctx, `INSERT INTO parcel_shipment (id, "parcelOrgId", "vehiclePlate", "vehicleType",
+			"originStationId", "destinationStationId", status, notes, "createdAt",
+			"originLabel", "destinationLabel")
+			VALUES (gen_random_uuid(), $1, $2, 'VAN', $3, $4, 'LOADING', $5, now(),
+			COALESCE((SELECT name FROM parcel_agent WHERE id = $3), 'Origin'),
+			COALESCE((SELECT name FROM parcel_agent WHERE id = $4), 'Destination')) RETURNING id`,
+			orgID, shedPlate, nullableStr(originID), nullableStr(destID),
+			nullableStr("Shed run — scan the counter parcels onto this one")).Scan(&shedRunID)
+		if err != nil {
+			return 0, 0, fmt.Errorf("shed run %s: %w", shedPlate, err)
+		}
+	}
+	// This plate is the demo's loading run, so it is reset to the shed
+	// every seed — a tester setting it off must not permanently strand
+	// the "load a parcel" story, the same way the loop above rewrites
+	// every other run's status and trail.
+	if _, err := pool.Exec(ctx, `UPDATE parcel_shipment SET status='LOADING',
+		"currentLat"=NULL, "currentLng"=NULL, "currentAt"=NULL,
+		"arrivedAt"=NULL, "receivedBy"=NULL WHERE id=$1`, shedRunID); err != nil {
+		return 0, 0, fmt.Errorf("shed reset %s: %w", shedPlate, err)
+	}
+	if _, err := pool.Exec(ctx, `DELETE FROM parcel_run_crew WHERE "runId" = $1`, shedRunID); err != nil {
+		return 0, 0, fmt.Errorf("shed crew clear %s: %w", shedPlate, err)
+	}
+	var shedStaff *string
+	if id, ok := staffIDByName["Kiki Viki"]; ok {
+		shedStaff = &id
+	}
+	if _, err := pool.Exec(ctx, `INSERT INTO parcel_run_crew ("runId", name, msisdn, role, "staffId")
+		VALUES ($1, 'Kiki Viki', '+254728387694', 'DRIVER', $2)`, shedRunID, shedStaff); err != nil {
+		return 0, 0, fmt.Errorf("shed crew %s: %w", shedPlate, err)
+	}
+	// The shed manifest is rewritten wholesale (like the trails above):
+	// everything waiting at the counter goes on, in code order — plus
+	// whatever the last seed already put on, which is IN_TRANSIT by now
+	// and would otherwise fall off the manifest on a reseed.
+	keptRows, err := pool.Query(ctx, `SELECT i."parcelId", p.code FROM parcel_shipment_item i
+		JOIN parcel p ON p.id = i."parcelId" WHERE i."shipmentId" = $1 ORDER BY p.code`, shedRunID)
+	if err != nil {
+		return 0, 0, fmt.Errorf("shed manifest read %s: %w", shedPlate, err)
+	}
+	type keptParcel struct{ id, code string }
+	var keptList []keptParcel
+	kept := map[string]bool{}
+	for keptRows.Next() {
+		var kp keptParcel
+		if err := keptRows.Scan(&kp.id, &kp.code); err != nil {
+			keptRows.Close()
+			return 0, 0, err
+		}
+		keptList = append(keptList, kp)
+		kept[kp.id] = true
+	}
+	keptRows.Close()
+	if err := keptRows.Err(); err != nil {
+		return 0, 0, err
+	}
+	if _, err := pool.Exec(ctx, `DELETE FROM parcel_shipment_item WHERE "shipmentId" = $1`, shedRunID); err != nil {
+		return 0, 0, fmt.Errorf("shed manifest clear %s: %w", shedPlate, err)
+	}
+	rows, err := pool.Query(ctx, `SELECT id, code FROM parcel
+		WHERE "parcelOrgId" = $1 AND status = 'RECEIVED_AT_COUNTER' ORDER BY code`, orgID)
+	if err != nil {
+		return 0, 0, err
+	}
+	loading := 0
+	loadOne := func(parcelID, code string, moveToTransit bool) error {
+		if _, err := pool.Exec(ctx, `INSERT INTO parcel_shipment_item (id, "shipmentId", "parcelId", "loadedAt")
+			VALUES (gen_random_uuid(), $1, $2, now())`, shedRunID, parcelID); err != nil {
+			return fmt.Errorf("load %s: %w", code, err)
+		}
+		if moveToTransit {
+			if _, err := pool.Exec(ctx, `UPDATE parcel SET status = 'IN_TRANSIT' WHERE id = $1`, parcelID); err != nil {
+				return fmt.Errorf("transit %s: %w", code, err)
+			}
+			_, _ = pool.Exec(ctx, `INSERT INTO parcel_handoff (id, "parcelId", status, "createdAt")
+				VALUES (gen_random_uuid(), $1, 'IN_TRANSIT', now())`, parcelID)
+		}
+		loading++
+		return nil
+	}
+	for _, kp := range keptList {
+		if err := loadOne(kp.id, kp.code, false); err != nil {
+			rows.Close()
+			return 0, 0, err
+		}
+	}
+	for rows.Next() {
+		var parcelID, code string
+		if err := rows.Scan(&parcelID, &code); err != nil {
+			rows.Close()
+			return 0, 0, err
+		}
+		if kept[parcelID] {
+			continue
+		}
+		if err := loadOne(parcelID, code, true); err != nil {
+			rows.Close()
+			return 0, 0, err
+		}
+	}
+	rows.Close()
+	if err := rows.Err(); err != nil {
+		return 0, 0, err
+	}
+
+	// ── Departed manifests ──
+	departedRows, err := pool.Query(ctx, `SELECT id FROM parcel_shipment
+		WHERE "parcelOrgId" = $1 AND status = 'DEPARTED' ORDER BY "createdAt"`, orgID)
+	if err != nil {
+		return loading, 0, err
+	}
+	var departedIDs []string
+	for departedRows.Next() {
+		var id string
+		if err := departedRows.Scan(&id); err != nil {
+			departedRows.Close()
+			return loading, 0, err
+		}
+		departedIDs = append(departedIDs, id)
+	}
+	departedRows.Close()
+	if err := departedRows.Err(); err != nil {
+		return loading, 0, err
+	}
+	aboard := 0
+	if len(departedIDs) > 0 {
+		unattached, err := pool.Query(ctx, `SELECT p.id, p.code FROM parcel p
+			WHERE p."parcelOrgId" = $1 AND p.status = 'IN_TRANSIT'
+			  AND NOT EXISTS (SELECT 1 FROM parcel_shipment_item i WHERE i."parcelId" = p.id)
+			ORDER BY p.code`, orgID)
+		if err != nil {
+			return loading, 0, err
+		}
+		i := 0
+		for unattached.Next() {
+			var parcelID, code string
+			if err := unattached.Scan(&parcelID, &code); err != nil {
+				unattached.Close()
+				return loading, aboard, err
+			}
+			runID := departedIDs[i%len(departedIDs)]
+			if _, err := pool.Exec(ctx, `INSERT INTO parcel_shipment_item (id, "shipmentId", "parcelId", "loadedAt")
+				VALUES (gen_random_uuid(), $1, $2, now())
+				ON CONFLICT ("shipmentId", "parcelId") DO NOTHING`, runID, parcelID); err != nil {
+				unattached.Close()
+				return loading, aboard, fmt.Errorf("manifest %s: %w", code, err)
+			}
+			aboard++
+			i++
+		}
+		unattached.Close()
+		if err := unattached.Err(); err != nil {
+			return loading, aboard, err
+		}
+	}
+	return loading, aboard, nil
 }
 
 func nullableStr(s string) *string {
