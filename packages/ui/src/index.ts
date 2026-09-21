@@ -11,6 +11,8 @@ export {
   type SelectWithOtherOption, type SelectWithOtherProps,
 } from './SelectWithOther';
 export { Notice } from './Notice';
+export { Modal } from './Modal';
+export { CameraScanner } from './CameraScanner';
 export {
   ParcelCapabilityPicker, PARCEL_CAPABILITIES, RIDER_BASELINE,
   type ParcelCapabilityOption,
