@@ -139,6 +139,67 @@ export async function assignOrgParcel(
   }
 }
 
+// ── Unsticking a receiver who can't get past the delivery code ───────
+//
+// A receiver proves from their own phone that they are the receiver by
+// typing the code only they were sent. Three wrong tries locks the
+// parcel and texts this desk. These three verbs are what the desk can
+// do about it, and they escalate in that order: allow two more tries,
+// then (once those are gone, or the code is simply lost) mint a
+// replacement. Release is unrelated but lives here because it is the
+// other half of the same flow — the courier pay a self-confirmed
+// collection held instead of accruing.
+
+/** Allow two more attempts. Refused once the parcel is hard locked —
+ *  a grant that could be re-granted would not be a limit. */
+export async function grantReceiverAuthRetry(code: string): Promise<Result> {
+  try {
+    await parcelOrgFetch(
+      `/v1/parcel-orgs/me/parcels/${encodeURIComponent(code)}/receiver-auth/grant-retry`,
+      { method: "POST" },
+    );
+    revalidatePath("/parcel-org");
+    return { ok: true };
+  } catch (e) {
+    return toResult(e);
+  }
+}
+
+/** Mint a new delivery code and clear every lock.
+ *
+ *  The new code is never returned here and never shown in this console.
+ *  Both the receiver and the sender are texted it by core-go; putting
+ *  it on a desk monitor would make the one secret in this flow readable
+ *  by anyone walking past. */
+export async function reissueDeliveryCode(code: string): Promise<Result> {
+  try {
+    await parcelOrgFetch(
+      `/v1/parcel-orgs/me/parcels/${encodeURIComponent(code)}/delivery-code/reissue`,
+      { method: "POST" },
+    );
+    revalidatePath("/parcel-org");
+    return { ok: true };
+  } catch (e) {
+    return toResult(e);
+  }
+}
+
+/** Pay out a delivery the receiver closed themselves at a pickup point.
+ *  Held rather than accrued at the time because nobody from this
+ *  company witnessed the handover. */
+export async function releaseHeldCourierEarnings(code: string): Promise<Result> {
+  try {
+    await parcelOrgFetch(
+      `/v1/parcel-orgs/me/parcels/${encodeURIComponent(code)}/courier-earnings/release`,
+      { method: "POST" },
+    );
+    revalidatePath("/parcel-org");
+    return { ok: true };
+  } catch (e) {
+    return toResult(e);
+  }
+}
+
 /** A depot manager counting one of their own riders in, without
  *  routing every hand-over through Esoqo support. The server checks the
  *  rider is on this company's books before touching anything. */
@@ -851,6 +912,25 @@ export async function arriveDispatch(
       {
         method: "POST",
         body: JSON.stringify({ receivedBy: receivedBy.trim() }),
+      },
+    );
+    revalidatePath("/parcel-org/dispatch");
+    return { ok: true };
+  } catch (e) {
+    return toResult(e);
+  }
+}
+
+/** The shed moment: a loading run sets off, and loading closes
+ *  behind it. Only LOADING runs can depart — the server refuses anything
+ *  else, so a double-tap on a run that just left reports itself plainly. */
+export async function departDispatch(id: string): Promise<Result> {
+  try {
+    await parcelOrgFetch(
+      `/v1/parcel-orgs/me/runs/${encodeURIComponent(id)}/start`,
+      {
+        method: "POST",
+        body: JSON.stringify({}),
       },
     );
     revalidatePath("/parcel-org/dispatch");
