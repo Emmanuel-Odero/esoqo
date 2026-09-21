@@ -14,6 +14,9 @@ metadata:
   name: esoqo-config
 data:
   NODE_ENV: production
+  # Must be PRODUCTION or PROD (case-insensitive). packages/domain/src/
+  # env.ts treats every other value as `development` — see the testnet
+  # overlay's config.yaml for what that silently breaks.
   APP_ENV: production
   LOG_LEVEL: info
 

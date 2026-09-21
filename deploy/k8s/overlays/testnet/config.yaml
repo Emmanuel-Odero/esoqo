@@ -23,8 +23,34 @@ metadata:
   name: esoqo-config
 data:
   NODE_ENV: production
-  APP_ENV: testnet
+
+  # ⚠  NOT "testnet". packages/domain/src/env.ts recognises exactly
+  # three values — LOCAL_TEST_PROD, PRODUCTION/PROD, and anything else
+  # silently falls through to `development`. A preview environment
+  # running in development mode is wrong in ways that are quiet rather
+  # than loud:
+  #
+  #   · packages/auth/src/email.ts forces provider `mailhog` regardless
+  #     of EMAIL_PROVIDER, so every email dials a host that does not
+  #     exist in this cluster.
+  #   · packages/db/src/storage.ts defaults to `local`, so uploads land
+  #     on the pod filesystem and vanish on the next restart.
+  #   · services/core/src/lib/cloudflare-saas.ts no-ops Jamii custom
+  #     domain provisioning.
+  #
+  # `production` here does NOT mean real money or real SMS — those are
+  # gated separately by MPESA_/PESAPAL_/SMS_PROVIDER below, and sandbox
+  # is honoured in any run mode. This makes testnet behave like
+  # production, which is the entire point of a preview environment.
+  APP_ENV: production
   LOG_LEVEL: info
+
+  # With APP_ENV=production, storage would default to r2 and fail on the
+  # first upload if no bucket is configured. `local` is explicit and
+  # honest for a preview environment — but note uploads are pod-local
+  # and DO NOT survive a restart. Set R2_* in the testnet secret and
+  # drop this line to make them durable.
+  STORAGE_PROVIDER: local
 
   # ── Public origins ────────────────────────────────────────────────
   NEXT_PUBLIC_WEB_URL: https://testnet.esoko.global
