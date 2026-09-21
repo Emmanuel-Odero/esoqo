@@ -94,6 +94,24 @@ fi
 read -r -p "Build and push 7 images? [y/N] " confirm
 [[ "$confirm" == "y" || "$confirm" == "Y" ]] || { echo "aborted"; exit 1; }
 
+# Registry pushes fail transiently — a dropped connection partway
+# through a 600MB layer is routine, and without a retry one blip leaves
+# the release half-pushed: some images at the new tag, some not, and an
+# overlay about to be pinned to tags that do not all exist. Retrying is
+# safe because a push is idempotent; already-uploaded layers are skipped.
+push_with_retry() {
+  local ref="$1"
+  for attempt in 1 2 3; do
+    if docker push "$ref"; then
+      return 0
+    fi
+    echo "  push failed (attempt $attempt/3) — retrying in $((attempt * 10))s"
+    sleep $((attempt * 10))
+  done
+  echo "error: could not push $ref after 3 attempts" >&2
+  return 1
+}
+
 build() {
   local name="$1" dockerfile="$2"; shift 2
   local image="$REGISTRY/$OWNER/esoqo-$name"
@@ -108,8 +126,8 @@ build() {
     --tag "$image:$ENVIRONMENT" \
     "$@" \
     .
-  docker push "$image:$TAG"
-  docker push "$image:$ENVIRONMENT"
+  push_with_retry "$image:$TAG"
+  push_with_retry "$image:$ENVIRONMENT"
 }
 
 NEXT_ARGS=(
