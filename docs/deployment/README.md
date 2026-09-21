@@ -511,6 +511,24 @@ that overlay's `fleet.yaml`.
 ran at once, or it is pointed at PgBouncer instead of direct Postgres.
 Confirm the Job's `DATABASE_URL` resolves to `DIRECT_DATABASE_URL`.
 
+**`core-go` CrashLoopBackOff, logs say "refusing to start"** — it
+requires `FLEET_QR_SECRET` and (with any `MPESA_PROVIDER` other than
+`console`) `MPESA_CALLBACK_SECRET`. Outside `APP_ENV=development` it
+will not fall back to the dev values published in this repo, by design.
+Both are required entries in `secrets.env.template`.
+
+**A pod restarts instantly with `ERR_MODULE_NOT_FOUND: 'tsx'`** — the
+core-service image must run with its WORKDIR at `/repo/services/core`,
+not `/repo`. tsx is a devDependency of that package so pnpm does not
+hoist it, and Node resolving from `/repo` will not find it. The
+migration Job's `workingDir: /repo` is a deliberate exception.
+
+**Image build fails with "Please install typescript and @types/node"**
+— something set `NODE_ENV=production` in the build stage. pnpm honours
+it and skips devDependencies, and those two live in the root
+package.json. `docker/Dockerfile.next` passes `--prod=false` to prevent
+exactly this; do not remove it.
+
 **`pnpm install` fails in the image build with a lockfile error** —
 `pnpm-lock.yaml` is out of date. Run `pnpm install` locally and commit
 it; the build uses `--frozen-lockfile` deliberately.

@@ -65,9 +65,19 @@ require() {
 # missing key.
 for key in \
   POSTGRES_USER POSTGRES_PASSWORD POSTGRES_DB APP_ROLE_PASSWORD REDIS_PASSWORD \
-  SESSION_SECRET OTP_PEPPER AUDIT_CHAIN_SEED; do
+  SESSION_SECRET OTP_PEPPER AUDIT_CHAIN_SEED \
+  FLEET_QR_SECRET MPESA_CALLBACK_SECRET; do
   require "$key"
 done
+
+# FLEET_QR_SECRET and MPESA_CALLBACK_SECRET are required above rather
+# than optional, and that is not conservatism. Both environments run
+# APP_ENV=production, and services/core-go/internal/config/config.go
+# refuses to boot without them outside development — it will not fall
+# back to the dev values published in this repo, because a service that
+# silently starts with 'dev-session-secret-change-me' issues sessions
+# anyone holding the source can forge. Omit either and core-go
+# CrashLoopBackOffs with the reason only visible in its logs.
 
 # These three are what sign sessions, hash OTPs and chain the audit log.
 # A short one is not a weak secret, it is no secret at all — and the
