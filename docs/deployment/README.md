@@ -64,6 +64,27 @@ Do this once per environment. It is the only part involving a browser.
 
 In Rancher (<https://rancher.2lovelaces.io/>), on the target cluster:
 
+0. **Check your own permissions first.** A Rancher kubeconfig carries
+   only the rights your Rancher role grants, and a restricted role
+   produces a kubeconfig that authenticates fine and then refuses
+   everything — which reads like a broken manifest rather than a
+   missing role. Verify before anything else:
+
+   ```bash
+   export KUBECONFIG=<downloaded kubeconfig>
+   kubectl auth can-i create deployments --all-namespaces
+   kubectl auth can-i create gitrepos.fleet.cattle.io -n fleet-default
+   ```
+
+   Both must print `yes`. If either prints `no`, you need the
+   **Cluster Owner** role on this cluster (Rancher → Cluster → Members),
+   or an admin-issued kubeconfig. Nothing below will work without it.
+
+   Note that Fleet applies manifests with its OWN service account, so
+   the GitRepo permission is what matters for ongoing deploys — but you
+   still need workload permissions to run the preflight, create the
+   secrets, and debug a bad rollout.
+
 1. **Label the cluster.** Cluster → Edit Config → Labels. Add
    `env=testnet` (or `env=production`). The Fleet `GitRepo` selects on
    this label rather than naming the cluster, so replacing the cluster

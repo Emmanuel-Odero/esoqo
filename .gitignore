@@ -41,6 +41,14 @@ secrets.env
 # services/core-go/Dockerfile, never copied from a developer's machine.
 services/core-go/bin/
 
+# Kubeconfigs. A downloaded Rancher kubeconfig carries a bearer token
+# with full cluster authority — committing one hands the cluster to
+# anyone who can read the repo. Kept here rather than only in ~/.kube
+# because the file is easy to drop into the working tree by accident.
+.kube/
+*.kubeconfig
+kubeconfig*.y*ml
+
 # ─── IDE / editor ─────────────────────────────────────────
 .idea/
 .vscode/
