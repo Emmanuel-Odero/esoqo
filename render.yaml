@@ -107,6 +107,18 @@ services:
         fromDatabase:
           name: esoko-db
           property: connectionString
+      # A dedicated connection for Postgres LISTEN/NOTIFY (the counter
+      # ticket queue's live push — see dbx/parcel_counter_tickets.go).
+      # Same connectionString as DATABASE_URL today since production has
+      # no pgbouncer in front of it, but kept as its own pool rather
+      # than reusing DATABASE_URL's: dev *does* run through a
+      # transaction-mode pgbouncer, where LISTEN silently never receives
+      # anything, so this variable is what makes the two environments
+      # behave the same way instead of only working in one of them.
+      - key: DIRECT_DATABASE_URL
+        fromDatabase:
+          name: esoko-db
+          property: connectionString
       - key: REDIS_URL
         sync: false   # same Redis instance as esoko-core above — set to the same value
       - key: SESSION_SECRET

@@ -27,7 +27,7 @@ func TestRouterRegistersWithoutConflict(t *testing.T) {
 	// Nil pool and client are fine: Router() only wires handlers, it
 	// never dials anything. A handler that did would fail its own test,
 	// not this one.
-	s := NewServer(config.Config{}, nil, nil)
+	s := NewServer(config.Config{}, nil, nil, nil)
 
 	defer func() {
 		if r := recover(); r != nil {

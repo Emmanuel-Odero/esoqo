@@ -23,12 +23,19 @@ import (
 )
 
 type Server struct {
-	Cfg     config.Config
-	Pool    *pgxpool.Pool
-	Redis   *redis.Client
-	OTP     *authsvc.OtpService
-	Session *authsvc.SessionService
-	OrgCtx  *authsvc.OrgContextService
+	Cfg   config.Config
+	Pool  *pgxpool.Pool
+	Redis *redis.Client
+	// NotifyPool — a connection pool built from cfg.DirectDatabaseURL,
+	// used only for Postgres LISTEN (the counter ticket queue's live
+	// push; see streamCounterTicketEvents). Kept separate from Pool
+	// because Pool may run through a transaction-mode connection pooler
+	// (dev's pgbouncer) that silently breaks LISTEN — see
+	// config.Config.DirectDatabaseURL's own comment.
+	NotifyPool *pgxpool.Pool
+	OTP        *authsvc.OtpService
+	Session    *authsvc.SessionService
+	OrgCtx     *authsvc.OrgContextService
 
 	// StaffLockout bounds PIN guesses on ticket-staff sign-in, which has
 	// no per-account failure column of its own.
@@ -41,14 +48,15 @@ type Server struct {
 	Storage storage.Store
 }
 
-func NewServer(cfg config.Config, pool *pgxpool.Pool, rdb *redis.Client) *Server {
+func NewServer(cfg config.Config, pool, notifyPool *pgxpool.Pool, rdb *redis.Client) *Server {
 	return &Server{
-		Cfg:     cfg,
-		Pool:    pool,
-		Redis:   rdb,
-		OTP:     authsvc.NewOtpService(rdb, cfg.OTPPepper, cfg.OTPDailySpendCapKES, cfg.OTPRateLimitPerHour),
-		Session: authsvc.NewSessionService(rdb),
-		OrgCtx:  authsvc.NewOrgContextService(rdb, time.Duration(cfg.OrgContextActivationDays)*24*time.Hour),
+		Cfg:        cfg,
+		Pool:       pool,
+		NotifyPool: notifyPool,
+		Redis:      rdb,
+		OTP:        authsvc.NewOtpService(rdb, cfg.OTPPepper, cfg.OTPDailySpendCapKES, cfg.OTPRateLimitPerHour),
+		Session:    authsvc.NewSessionService(rdb),
+		OrgCtx:     authsvc.NewOrgContextService(rdb, time.Duration(cfg.OrgContextActivationDays)*24*time.Hour),
 		// 10 tries an hour: comfortably above a tired operator fumbling a
 		// PIN at the start of a shift, far below anything that makes
 		// guessing a 4-digit secret worthwhile.
@@ -284,6 +292,16 @@ func (s *Server) Router() *gin.Engine {
 		// this off myself" needs to see which companies accept a
 		// walk-in before booking, let alone signing in.
 		v1.GET("/parcels/stations", s.handleListWalkInStations)
+		// Walk-in counter tickets. Public — same boundary as booking and
+		// the station picker above: a kiosk, a counter-QR web form and
+		// the app all mint/poll these before anyone has signed in. Rate
+		// limited on create only; the id itself is the bearer credential
+		// for everything after (see dbx.GetCounterTicket's own comment).
+		v1.POST("/parcels/counter-tickets",
+			s.rateLimit("book:counterticket", 30, time.Hour), s.handleCreateCounterTicket)
+		v1.GET("/parcels/counter-tickets/:id", s.handleGetCounterTicket)
+		v1.GET("/parcels/counter-tickets/:id/stream", s.handleStreamCounterTicket)
+		v1.PATCH("/parcels/counter-tickets/:id/draft", s.handlePatchCounterTicketDraft)
 		v1.GET("/parcels/coverage", s.handleListCoverageTiers)
 		// Cash on delivery. The policy is public so a booking form knows
 		// whether to offer it at all; setting and confirming COD sit on
@@ -352,6 +370,13 @@ func (s *Server) Router() *gin.Engine {
 		// see handleAttachOrgLabelInfo's own comment.
 		v1.GET("/parcel-orgs/me/labels/search", s.authRequired(), s.handleSearchOrgLabels)
 		v1.GET("/parcel-orgs/me/labels", s.authRequired(), s.handleOrgListLabelRegister)
+		// The walk-in counter queue: every WAITING ticket for the
+		// session's own org, oldest first, plus its live SSE stream and
+		// the "Serve" action that claims one. See
+		// handlers_parcel_counter_tickets.go.
+		v1.GET("/parcel-orgs/me/counter-tickets/queue", s.authRequired(), s.handleListCounterTicketQueue)
+		v1.GET("/parcel-orgs/me/counter-tickets/stream", s.authRequired(), s.handleStreamCounterTicketQueue)
+		v1.POST("/parcel-orgs/me/counter-tickets/:id/claim", s.authRequired(), s.handleClaimCounterTicket)
 		// Scan/lookup a code against the company's own stock, and attach
 		// field notes to a printed label. The static "info" segment is
 		// load-bearing: see handleAttachOrgLabelInfo's own comment.

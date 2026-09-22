@@ -61,7 +61,7 @@ var closedLoopStoredValueRoutes = map[string]bool{
 
 func TestStoredValueSurfaceStaysClosedLoop(t *testing.T) {
 	gin.SetMode(gin.TestMode)
-	s := NewServer(config.Config{}, nil, nil)
+	s := NewServer(config.Config{}, nil, nil, nil)
 
 	var inspected int
 	for _, r := range s.Router().Routes() {
@@ -103,7 +103,7 @@ func TestStoredValueSurfaceStaysClosedLoop(t *testing.T) {
 // activity, different argument, already governed by their own controls.
 func TestNoStoredValueCashOutOrTransferRoutes(t *testing.T) {
 	gin.SetMode(gin.TestMode)
-	s := NewServer(config.Config{}, nil, nil)
+	s := NewServer(config.Config{}, nil, nil, nil)
 
 	banned := []string{
 		"unload", "cashout", "cash-out", "redeem",

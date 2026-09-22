@@ -4076,14 +4076,15 @@ model ParcelOrg {
   updatedAt        DateTime @updatedAt
   createdByStaffId String?  @db.Uuid
 
-  staff        ParcelOrgStaff[]
-  parcels      Parcel[]
-  stations     ParcelAgent[]
-  couriers     ParcelCourier[]
-  pricingRules ParcelPricingRule[]
-  labelStock   ParcelLabelStock[]
-  runs         ParcelShipment[]
-  routes       ParcelRoute[]
+  staff          ParcelOrgStaff[]
+  parcels        Parcel[]
+  stations       ParcelAgent[]
+  couriers       ParcelCourier[]
+  pricingRules   ParcelPricingRule[]
+  labelStock     ParcelLabelStock[]
+  runs           ParcelShipment[]
+  routes         ParcelRoute[]
+  counterTickets ParcelCounterTicket[]
 
   @@index([enterpriseId])
   @@index([status])
@@ -4139,8 +4140,75 @@ model ParcelOrgStaff {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
+  claimedCounterTickets ParcelCounterTicket[]
+
   @@index([orgId])
   @@map("parcel_org_staff")
+}
+
+/// How a walk-in customer's service ticket came to exist — the one
+/// endpoint (POST .../counter-tickets) serves a kiosk at the counter,
+/// a web form opened from a counter QR on the customer's own phone,
+/// and the Esoqo mobile app alike; this is the only thing that differs
+/// between them.
+enum ParcelCounterTicketChannel {
+  KIOSK
+  WEB_QR
+  APP
+}
+
+/// WAITING is the only state that shows up in a clerk's live queue.
+/// CLAIMED means a clerk is actively serving it — not that a Parcel
+/// exists yet, since a claimed ticket still has to go through the
+/// ordinary booking/label-binding flow same as any counter intake.
+/// EXPIRED is a customer who walked off or a stale kiosk session,
+/// aged out rather than left WAITING forever.
+enum ParcelCounterTicketStatus {
+  WAITING
+  CLAIMED
+  EXPIRED
+  CANCELLED
+}
+
+/// A walk-in's place in line, minted the moment they ask for service
+/// rather than when a clerk starts on them — the ticket number is the
+/// one thing they're handed before any parcel details exist (same
+/// pre-intake role Parcel.serviceTicketNumber already plays for a
+/// booking that's further along). Deliberately its own model rather
+/// than an early Parcel row: BookParcel requires full sender/receiver/
+/// type data up front (see its own comment), but a ticket only ever
+/// needs a phone number to exist.
+///
+/// draftDetails holds whatever the customer filled into the send-parcel
+/// form while waiting (see apps/web's SendParcelForm autosave) — a
+/// free-form JSON blob the clerk's intake screen prefills from at claim
+/// time, never validated or read by anything else here.
+model ParcelCounterTicket {
+  id    String    @id @default(uuid()) @db.Uuid
+  orgId String    @db.Uuid
+  org   ParcelOrg @relation(fields: [orgId], references: [id], onDelete: Cascade)
+
+  /// "TCK-…" — same fleetqr.PrefixServiceTicket pool Parcel.serviceTicketNumber
+  /// mints from, so a ticket and a pre-intake parcel are never
+  /// confusable at a glance by their prefix alone.
+  serviceTicketNumber String                     @unique
+  msisdn              String
+  channel             ParcelCounterTicketChannel
+  status              ParcelCounterTicketStatus  @default(WAITING)
+
+  draftDetails Json?
+
+  claimedByStaffId String?         @db.Uuid
+  claimedByStaff   ParcelOrgStaff? @relation(fields: [claimedByStaffId], references: [id], onDelete: SetNull)
+  claimedAt        DateTime?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  /// The live queue is always "WAITING tickets for org X, oldest
+  /// first" — this index is that query.
+  @@index([orgId, status, createdAt])
+  @@map("parcel_counter_ticket")
 }
 
 /// Admin-owned pricing config, one row per ParcelType — same
