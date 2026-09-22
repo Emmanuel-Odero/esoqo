@@ -84,6 +84,18 @@ header { position:sticky; top:0; z-index:90; background:rgba(255,255,255,.95);
   opacity:0; transform:scale(.6); transition:opacity .2s ease, transform .2s ease; vertical-align:middle }
 .pf-h3-done.on { opacity:1; transform:scale(1) }
 
+/* Collapsible sections on the tracking page — timeline + printable
+   sticker default closed so a phone-camera scan lands on a status
+   that fits one screen, not a page to scroll through. Native
+   details/summary: no JS state, free keyboard/AT support. */
+.track-more { margin-top:16px; border-top:1px solid var(--line); padding-top:12px }
+.track-more summary { cursor:pointer; font-weight:600; font-size:.9rem; color:var(--tx-2);
+  list-style:none; display:flex; align-items:center; gap:6px }
+.track-more summary::-webkit-details-marker { display:none }
+.track-more summary::before { content:"›"; display:inline-block; transition:transform .15s ease; font-size:1.1em }
+.track-more[open] summary::before { transform:rotate(90deg) }
+.track-more[open] summary { margin-bottom:4px }
+
 /* hero */
 .hero { position:relative; background:var(--navy); color:#fff; overflow:hidden; padding:74px 0 100px }
 .hero-bg { position:absolute; inset:0; z-index:0 }

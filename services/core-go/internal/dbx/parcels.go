@@ -1310,6 +1310,11 @@ type ParcelStatusView struct {
 	// ordinary phone camera — sees whose label they're holding and that
 	// Esoqo manages it. Nil for the shared Esoqo pool.
 	OrgName *string `json:"orgName"`
+	// OrgLogoUrl — the same company's logo, alongside its name, so a
+	// scan from an ordinary phone camera can show the co-brand mark
+	// next to "managed by Esoqo" rather than a name alone. Nil exactly
+	// when OrgName is nil (shared Esoqo pool, no company to brand).
+	OrgLogoUrl *string `json:"orgLogoUrl"`
 
 	// Events — the full custody timeline, oldest first, guest-safe: a
 	// time and a stage label, never a holder's name or phone. Lets the
@@ -1491,7 +1496,7 @@ func GetParcelStatus(ctx context.Context, pool *pgxpool.Pool, code string) (*Par
 		       p."podPhotoUrl", p."podReceivedByName", p."podMethod",
 		       a.name, a.msisdn, a."locationHint", a."openingHours",
 		       a.lat::text, a.lng::text, a."holdingFeeKes"::text,
-		       o.name
+		       o.name, o."logoUrl"
 		FROM parcel p
 		LEFT JOIN parcel_agent a ON a.id = p."destinationAgentId"
 		LEFT JOIN parcel_org o ON o.id = p."parcelOrgId"
@@ -1503,7 +1508,7 @@ func GetParcelStatus(ctx context.Context, pool *pgxpool.Pool, code string) (*Par
 			&v.DeliveryAttempts, &v.LastAttemptAt, &v.LastAttemptReason,
 			&v.PodPhotoURL, &v.PodReceivedByName, &v.PodMethod,
 			&agentName, &agentMsisdn, &agentHint, &agentHours,
-			&agentLat, &agentLng, &agentFee, &v.OrgName)
+			&agentLat, &agentLng, &agentFee, &v.OrgName, &v.OrgLogoUrl)
 	if err == nil {
 		if v.LastAttemptReason != nil {
 			// Resolved server-side rather than left to each client to map:
@@ -1548,13 +1553,13 @@ func GetParcelStatus(ctx context.Context, pool *pgxpool.Pool, code string) (*Par
 	serr := pool.QueryRow(ctx, `
 		SELECT s.code, s."createdAt", s."itemDescription", s.destination, s."senderName", s."senderMsisdn",
 		       s."receiverName", s."receiverMsisdn", s."itemType", s."weightRangeKg", s."infoAttachedAt",
-		       s."lengthCm"::float8, s."widthCm"::float8, s."heightCm"::float8, o.name
+		       s."lengthCm"::float8, s."widthCm"::float8, s."heightCm"::float8, o.name, o."logoUrl"
 		FROM parcel_label_stock s
 		LEFT JOIN parcel_org o ON o.id = s."parcelOrgId"
 		WHERE s.code = $1`, code).
 		Scan(&stock.Code, &createdAt, &itemDescription, &info.Destination, &info.SenderName,
 			&info.SenderMsisdn, &info.ReceiverName, &info.ReceiverMsisdn, &info.ItemType, &info.WeightRangeKg, &infoAttachedAt,
-			&info.LengthCm, &info.WidthCm, &info.HeightCm, &stock.OrgName)
+			&info.LengthCm, &info.WidthCm, &info.HeightCm, &stock.OrgName, &stock.OrgLogoUrl)
 	if errors.Is(serr, pgx.ErrNoRows) {
 		return nil, nil
 	}

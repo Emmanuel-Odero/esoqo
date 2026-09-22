@@ -295,6 +295,9 @@ export interface ParcelStatusView {
    *  what lets a scan answer "whose label is this" with a company name
    *  and "managed by Esoqo". Null for shared-pool stock. */
   orgName?: string | null;
+  /** That same company's logo, alongside its name. Null whenever
+   *  orgName is null (shared Esoqo pool, no company to brand). */
+  orgLogoUrl?: string | null;
 }
 
 /** One line of the public custody timeline. `label` is the server's own

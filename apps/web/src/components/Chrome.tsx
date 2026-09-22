@@ -27,7 +27,10 @@ export function Logo({ inverse = false }: { inverse?: boolean }) {
   return (
     <span className={`lock${inverse ? " inv" : ""}`}>
       <img
-        src={inverse ? "/esoko-logo-dark.png" : "/esoko-logo-light.png"}
+        // The re-exported brand wordmark (navy "SOQO" text) only reads on
+        // a light background — the footer's dark variant still falls back
+        // to the legacy asset until a white-text export exists.
+        src={inverse ? "/esoko-logo-dark.png" : "/esoqo-logo.png"}
         alt="Esoqo home"
         style={{ height: "60px", width: "auto", display: "block" }}
       />

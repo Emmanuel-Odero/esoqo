@@ -62,21 +62,6 @@ export function ParcelStatusPanel({ parcel }: { parcel: ParcelStatusView | Await
         <StatusPill status={parcel.status} />
       </div>
 
-      {/* The real sticker, not a bare QR — same design as the courier
-          portal's own label preview. No `sig`: the guest-safe status
-          projection this page renders doesn't carry the label's
-          signature, so this shows as an unverified — but still fully
-          scannable — label (see PrintableLabel's own comment on that
-          fallback). */}
-      <div className="track-label">
-        <ScaledLabel
-          code={parcel.code}
-          route={dropPointFor(parcel.destinationLabel)}
-          orgName={parcel.orgName ?? undefined}
-        />
-        <PrintStyles />
-      </div>
-
       <p style={{ margin: '14px 0 0' }}>{statusMessage(parcel)}</p>
 
       {eta && (
@@ -97,58 +82,84 @@ export function ParcelStatusPanel({ parcel }: { parcel: ParcelStatusView | Await
       {/* A parcel that's off the happy path gets a card explaining why
           instead of a timeline of dots that would all read "hasn't
           happened yet" for something that already has. */}
-      {offTimeline ? (
-        <OffTimelineCard parcel={parcel} />
-      ) : events.length > 1 ? (
-        <EventsTimeline events={events} />
-      ) : (
-        <ol style={{ listStyle: 'none', margin: '20px 0 0', padding: 0 }}>
-          {stages.map(([status, label], i) => {
-            const reached = reachedIndex >= 0 && i <= reachedIndex;
-            return (
-              <li key={status} style={{ display: 'flex', gap: 12, alignItems: 'flex-start' }}>
-                <span style={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
-                  {/* An empty ring rather than an icon for the unreached
-                      steps — the sprite has no hollow-circle glyph, and
-                      a ring reads as "not yet" more clearly than a
-                      greyed-out tick would anyway. */}
-                  {reached ? (
-                    <Icon name="check-circle" size={18} />
-                  ) : (
-                    <span aria-hidden style={{
-                      width: 18, height: 18, borderRadius: '50%',
-                      border: '1.5px solid var(--line)', flexShrink: 0,
-                    }} />
-                  )}
-                  {i < stages.length - 1 && (
-                    <span aria-hidden style={{
-                      width: 2, height: 26,
-                      background: reached ? 'var(--brand, currentColor)' : 'var(--line)',
-                      opacity: reached ? 0.4 : 1,
-                    }} />
-                  )}
-                </span>
-                <span style={{ paddingBottom: 12, fontWeight: reached ? 600 : 400, opacity: reached ? 1 : 0.55 }}>
-                  {label}
-                </span>
-              </li>
-            );
-          })}
-        </ol>
-      )}
+      {offTimeline && <OffTimelineCard parcel={parcel} />}
 
-      {parcel.status === 'DELIVERED' && <ProofOfDelivery parcel={parcel} />}
+      {/* Everything above is the one-glance answer: status, next step,
+          where to go. The full history and the printable sticker are
+          real content but not what a phone camera scan needs first —
+          collapsed by default so this page fits a phone screen without
+          scrolling, one tap away for whoever wants more. */}
+      <details className="track-more">
+        <summary>Full timeline</summary>
+        {events.length > 1 ? (
+          <EventsTimeline events={events} />
+        ) : (
+          <ol style={{ listStyle: 'none', margin: '14px 0 0', padding: 0 }}>
+            {stages.map(([status, label], i) => {
+              const reached = reachedIndex >= 0 && i <= reachedIndex;
+              return (
+                <li key={status} style={{ display: 'flex', gap: 12, alignItems: 'flex-start' }}>
+                  <span style={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
+                    {/* An empty ring rather than an icon for the unreached
+                        steps — the sprite has no hollow-circle glyph, and
+                        a ring reads as "not yet" more clearly than a
+                        greyed-out tick would anyway. */}
+                    {reached ? (
+                      <Icon name="check-circle" size={18} />
+                    ) : (
+                      <span aria-hidden style={{
+                        width: 18, height: 18, borderRadius: '50%',
+                        border: '1.5px solid var(--line)', flexShrink: 0,
+                      }} />
+                    )}
+                    {i < stages.length - 1 && (
+                      <span aria-hidden style={{
+                        width: 2, height: 26,
+                        background: reached ? 'var(--brand, currentColor)' : 'var(--line)',
+                        opacity: reached ? 0.4 : 1,
+                      }} />
+                    )}
+                  </span>
+                  <span style={{ paddingBottom: 12, fontWeight: reached ? 600 : 400, opacity: reached ? 1 : 0.55 }}>
+                    {label}
+                  </span>
+                </li>
+              );
+            })}
+          </ol>
+        )}
 
-      <dl style={{ margin: '16px 0 0', display: 'grid', gap: 6 }}>
-        {parcel.priceKes && (
-          <Row label="Paid" value={`KES ${Number(parcel.priceKes).toLocaleString('en-KE')}`} mono />
-        )}
-        <Row label="Booked" value={humanTime(parcel.createdAt)} />
-        {parcel.intakeConfirmedAt && (
-          <Row label="Received" value={humanTime(parcel.intakeConfirmedAt)} />
-        )}
-        {parcel.deliveredAt && <Row label="Delivered" value={humanTime(parcel.deliveredAt)} />}
-      </dl>
+        {parcel.status === 'DELIVERED' && <ProofOfDelivery parcel={parcel} />}
+
+        <dl style={{ margin: '16px 0 0', display: 'grid', gap: 6 }}>
+          {parcel.priceKes && (
+            <Row label="Paid" value={`KES ${Number(parcel.priceKes).toLocaleString('en-KE')}`} mono />
+          )}
+          <Row label="Booked" value={humanTime(parcel.createdAt)} />
+          {parcel.intakeConfirmedAt && (
+            <Row label="Received" value={humanTime(parcel.intakeConfirmedAt)} />
+          )}
+          {parcel.deliveredAt && <Row label="Delivered" value={humanTime(parcel.deliveredAt)} />}
+        </dl>
+      </details>
+
+      <details className="track-more">
+        <summary>Printable label</summary>
+        {/* The real sticker, not a bare QR — same design as the courier
+            portal's own label preview. No `sig`: the guest-safe status
+            projection this page renders doesn't carry the label's
+            signature, so this shows as an unverified — but still fully
+            scannable — label (see PrintableLabel's own comment on that
+            fallback). */}
+        <div className="track-label">
+          <ScaledLabel
+            code={parcel.code}
+            route={dropPointFor(parcel.destinationLabel)}
+            orgName={parcel.orgName ?? undefined}
+          />
+          <PrintStyles />
+        </div>
+      </details>
 
       {/* Everything above is what a stranger holding the code sees.
           These two are the door for the people it actually belongs to,

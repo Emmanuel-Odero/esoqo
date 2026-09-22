@@ -117,11 +117,19 @@ function Verdict({ verdict }: { verdict?: string }) {
  * the company name and the tracking code travel together, stated
  * rather than implied.
  */
-function Ownership({ parcel }: { parcel: { orgName?: string | null; preLabel?: boolean; status: string } | null }) {
+function Ownership({
+  parcel,
+}: {
+  parcel: { orgName?: string | null; orgLogoUrl?: string | null; preLabel?: boolean; status: string } | null;
+}) {
   if (!parcel || !parcel.orgName) return null;
   return (
     <div className="chain" style={{ background: 'var(--blue-t, #E8F0FE)', border: '1px solid #B9CDEC', color: 'var(--ink, #1a1a1a)', marginBottom: 14 }}>
-      <Icon name="building" size={18} />
+      {parcel.orgLogoUrl ? (
+        <img src={parcel.orgLogoUrl} alt={`${parcel.orgName} logo`} style={{ width: 22, height: 22, borderRadius: 5, objectFit: 'contain', flexShrink: 0, background: '#fff' }} />
+      ) : (
+        <Icon name="building" size={18} />
+      )}
       <span>
         {parcel.preLabel ? (
           <>This label belongs to <strong>{parcel.orgName}</strong> — managed by Esoqo.</>
