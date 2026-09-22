@@ -662,11 +662,16 @@ func ParcelDelivered(code, destinationLabel string, deliveredAt time.Time) strin
 		code, trunc(destinationLabel), deliveredAt.Format("15:04 on 2 Jan")), code)
 }
 
-// ParcelReceived — receiver's side of the same delivery event.
+// ParcelReceived — receiver's side of the same delivery event: the
+// final confirmation that this parcel reached them, specifically.
+// Carries the tracking link like every other courier message here (see
+// withTrack) — previously written but never called from a handler, so
+// a receiver's own successful collection went unacknowledged even
+// though the sender got ParcelDelivered for the identical event.
 func ParcelReceived(code, senderName string, deliveredAt time.Time) string {
-	return fmt.Sprintf(
+	return withTrack(fmt.Sprintf(
 		"ESOQO PARCEL: You received parcel %s from %s at %s. Thanks for using Esoqo.",
-		code, trunc(senderName), deliveredAt.Format("15:04 on 2 Jan"))
+		code, trunc(senderName), deliveredAt.Format("15:04 on 2 Jan")), code)
 }
 
 // ParcelCancelled — sent to the sender when an admin cancels a draft

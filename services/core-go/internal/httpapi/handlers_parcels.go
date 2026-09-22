@@ -903,6 +903,13 @@ func (s *Server) handleDeliverParcel(c *gin.Context) {
 		if info.SenderMsisdn != "" {
 			_ = authsvc.SendSms(info.SenderMsisdn, notify.ParcelDelivered(code, info.DestinationLabel, deliveredAt), "PARCEL_DELIVERED")
 		}
+		// The receiver's own confirmation that it reached them —
+		// ParcelDelivered above is the courier's claim, told to the
+		// sender; this is the same event told to the person who actually
+		// took it, closing the loop DeliverParcel opened.
+		if info.ReceiverMsisdn != "" {
+			_ = authsvc.SendSms(info.ReceiverMsisdn, notify.ParcelReceived(code, info.SenderName, deliveredAt), "PARCEL_RECEIVED")
+		}
 	}
 	resp := gin.H{"status": "DELIVERED"}
 	if codResult != nil {
