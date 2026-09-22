@@ -103,6 +103,25 @@ class ParcelsRepository {
     );
   }
 
+  /// PATCH /v1/parcels/:code — the sender's own fix for a wrong
+  /// receiver name/number or destination, before a courier has taken
+  /// custody. Full overwrite, same convention as attaching label info:
+  /// the caller resends every field, not a partial patch.
+  Future<void> updateOwnDetails({
+    required String code,
+    required String receiverName,
+    required String receiverMsisdn,
+    required String destinationLabel,
+    String? notes,
+  }) {
+    return _api.patch('/v1/parcels/${Uri.encodeComponent(code)}', {
+      'receiverName': receiverName,
+      'receiverMsisdn': receiverMsisdn,
+      'destinationLabel': destinationLabel,
+      if (notes != null && notes.isNotEmpty) 'notes': notes,
+    });
+  }
+
   /// GET /v1/parcels/pricing?parcelType= — public, needed before the
   /// sender has even booked, let alone signed in. Passing both zone ids
   /// folds the distance surcharge into the returned band (and adds

@@ -317,6 +317,7 @@ class _ParcelsHubScreenState extends ConsumerState<ParcelsHubScreen> {
                                 builder: (_) => ParcelStatusScreen(
                                   code: p.code,
                                   deliveryCode: p.deliveryCode,
+                                  isSender: true,
                                 ),
                               ),
                             ),
@@ -545,7 +546,9 @@ class _ParcelsHubScreenState extends ConsumerState<ParcelsHubScreen> {
             _refreshAll();
             if (!context.mounted) return;
             Navigator.of(context).push(
-              MaterialPageRoute(builder: (_) => ParcelStatusScreen(code: code)),
+              MaterialPageRoute(
+                builder: (_) => ParcelStatusScreen(code: code, isSender: true),
+              ),
             );
           }
         },
