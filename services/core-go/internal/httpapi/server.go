@@ -456,6 +456,7 @@ func (s *Server) Router() *gin.Engine {
 		v1.POST("/parcels/:code/price", s.handleSetParcelPrice)
 		v1.POST("/parcels/:code/settle-counter", s.authRequired(), s.handleSettleCounterParcel)
 		v1.POST("/parcels/:code/pay", s.rateLimit("pay:parcel", 30, time.Hour), s.handlePayParcel)
+		v1.PATCH("/parcels/:code", s.authRequired(), s.handleUpdateOwnParcelDetails)
 		v1.GET("/parcels/:code/status", s.handleGetParcelStatus)
 		// Public and code-gated like /status above — the live position
 		// is deliberately anonymous (see dbx.CourierPosition).

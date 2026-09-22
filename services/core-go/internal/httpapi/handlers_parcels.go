@@ -389,6 +389,40 @@ func (s *Server) handleSetParcelPrice(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"priceKes": req.PriceKes.KES()})
 }
 
+type updateOwnParcelDetailsRequest struct {
+	ReceiverName     string  `json:"receiverName" binding:"required"`
+	ReceiverMsisdn   string  `json:"receiverMsisdn" binding:"required"`
+	DestinationLabel string  `json:"destinationLabel" binding:"required"`
+	Notes            *string `json:"notes"`
+}
+
+// handleUpdateOwnParcelDetails — PATCH /v1/parcels/:code. The sender's
+// own self-serve fix for a wrong receiver number or destination, so a
+// typo doesn't have to wait on staff — see dbx.UpdateOwnParcelDetails
+// for why this is scoped to the booking party and the same
+// not-yet-picked-up window as the admin equivalent.
+func (s *Server) handleUpdateOwnParcelDetails(c *gin.Context) {
+	ctx := ctxFromGin(c)
+	if ctx.PartyID == "" {
+		writeError(c, http.StatusUnauthorized, "SIGN_IN_REQUIRED", "Sign in to edit this parcel")
+		return
+	}
+	var req updateOwnParcelDetailsRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		writeError(c, http.StatusBadRequest, "INVALID_REQUEST", err.Error())
+		return
+	}
+	if !requireMsisdn(c, &req.ReceiverMsisdn, "The receiver's phone number") {
+		return
+	}
+	code := c.Param("code")
+	if err := dbx.UpdateOwnParcelDetails(c.Request.Context(), s.Pool, code, ctx.PartyID, req.ReceiverName, req.ReceiverMsisdn, req.DestinationLabel, req.Notes); err != nil {
+		writeParcelError(c, err)
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"ok": true})
+}
+
 type payParcelRequest struct {
 	PaymentMethod string `json:"paymentMethod" binding:"required"` // MPESA_STK | ESOKO_POINTS
 	Msisdn        string `json:"msisdn"`                           // required for MPESA_STK

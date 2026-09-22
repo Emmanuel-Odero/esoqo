@@ -3843,6 +3843,31 @@ func UpdateParcelDetails(ctx context.Context, pool *pgxpool.Pool, parcelID, rece
 	return nil
 }
 
+// UpdateOwnParcelDetails is UpdateParcelDetails' sender-facing twin: the
+// same correction (receiver name/phone, destination, notes) before a
+// courier has taken custody, but scoped by code + senderPartyId instead
+// of an admin's parcelID, so a sender can fix a wrong receiver number
+// themselves instead of waiting on staff. A guest booking has no
+// senderPartyId to match, so guests still have to go through staff —
+// consistent with PayParcelWithPoints drawing the same line.
+func UpdateOwnParcelDetails(ctx context.Context, pool *pgxpool.Pool, code, partyID, receiverName, receiverMsisdn, destinationLabel string, notes *string) error {
+	if strings.TrimSpace(receiverName) == "" || strings.TrimSpace(receiverMsisdn) == "" || strings.TrimSpace(destinationLabel) == "" {
+		return &ParcelError{"BAD_INPUT", "Receiver name, phone and destination are required"}
+	}
+	tag, err := pool.Exec(ctx, `
+		UPDATE parcel SET "receiverName" = $1, "receiverMsisdn" = $2, "destinationLabel" = $3, notes = $4
+		WHERE code = $5 AND "senderPartyId" = $6
+		  AND status IN ('DRAFT_PENDING_PAYMENT', 'BOOKED', 'RECEIVED_AT_COUNTER')`,
+		receiverName, receiverMsisdn, destinationLabel, notes, code, partyID)
+	if err != nil {
+		return err
+	}
+	if tag.RowsAffected() == 0 {
+		return &ParcelError{"BAD_INPUT", "Only a draft or paid, not-yet-picked-up parcel you booked can be edited"}
+	}
+	return nil
+}
+
 // ── Receiver receipt confirmation (guest-safe, OTP-gated) ──
 
 // maskMsisdn — "+254712345678" → "+254 71•• •••78", enough for a
