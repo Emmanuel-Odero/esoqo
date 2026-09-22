@@ -1343,6 +1343,12 @@ func (s *Server) handleAdminCreateParcelOrg(c *gin.Context) {
 		writeError(c, http.StatusBadRequest, "INVALID_REQUEST", "Pick the enterprise that runs this company")
 		return
 	}
+	if !optionalMsisdn(c, &req.ContactPhone, "The company phone") {
+		return
+	}
+	if !optionalMsisdn(c, &req.SettlementPhone, "The settlement M-Pesa number") {
+		return
+	}
 	var staffID *string
 	if ctx.ActorID != "" {
 		staffID = &ctx.ActorID

@@ -52,6 +52,9 @@ func (s *Server) handleCreateCourierTeam(c *gin.Context) {
 		writeError(c, http.StatusBadRequest, "INVALID_REQUEST", err.Error())
 		return
 	}
+	if !requireMsisdn(c, &req.Manager.Msisdn, "The manager's phone number") {
+		return
+	}
 	var staffID *string
 	if ctx.ActorID != "" {
 		id := ctx.ActorID
