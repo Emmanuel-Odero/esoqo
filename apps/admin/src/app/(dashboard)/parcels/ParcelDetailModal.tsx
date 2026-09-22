@@ -6,12 +6,13 @@ import { useAnnounce } from '@esoqo/a11y';
 import {
   actionAssignParcelCollector, actionSearchCollectors, actionCancelParcel, actionMarkParcelRefunded,
   actionGetParcelHandoffs, actionFlagParcelException, actionClearParcelException, actionUpdateParcelDetails,
-  actionConfirmParcelIntake,
+  actionConfirmParcelIntake, actionConfirmParcelCashPayment,
   actionGrantReceiverAuthRetry, actionReissueDeliveryCode, actionReleaseHeldCourierEarnings,
   type CollectorLite, type HandoffRow,
 } from './actions';
 import type { AdminParcelRow } from './ParcelsTable';
 import { ParcelLabelPrint } from './ParcelLabelPrint';
+import { ContactButtons } from '@/components/ContactButtons';
 
 const CANCELLABLE = new Set(['DRAFT_PENDING_PAYMENT', 'BOOKED', 'RECEIVED_AT_COUNTER']);
 const FLAGGABLE = new Set(['RECEIVED_AT_COUNTER', 'PICKED_UP', 'IN_TRANSIT']);
@@ -37,10 +38,10 @@ type Panel = 'edit' | 'assign' | 'cancel' | 'flag' | 'label' | null;
  *  - Delete-ish: cancel the parcel, clear a resolved exception.
  */
 export function ParcelDetailModal({
-  parcel, statusLabel, canAssign, canCancel, canRefund, canEdit, onClose,
+  parcel, statusLabel, canAssign, canCancel, canRefund, canEdit, canConfirmPayment, onClose,
 }: {
   parcel: AdminParcelRow; statusLabel: Record<string, string>;
-  canAssign: boolean; canCancel: boolean; canRefund: boolean; canEdit: boolean;
+  canAssign: boolean; canCancel: boolean; canRefund: boolean; canEdit: boolean; canConfirmPayment: boolean;
   onClose: () => void;
 }) {
   // Defaults open, not a click-through: the whole point of surfacing
@@ -57,7 +58,7 @@ export function ParcelDetailModal({
     return () => { cancelled = true; };
   }, [parcel.ID]);
 
-  const canManage = canAssign || canCancel || canRefund || canEdit;
+  const canManage = canAssign || canCancel || canRefund || canEdit || canConfirmPayment;
 
   return (
     <div className="scrim" role="presentation" onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}>
@@ -106,6 +107,9 @@ export function ParcelDetailModal({
                   <button className="btn btn-o btn-sm" onClick={() => setPanel(panel === 'assign' ? null : 'assign')}>
                     <Icon name="truck" size={13} />{parcel.AssignedCollectorName ? 'Reschedule collection' : 'Schedule collection'}
                   </button>
+                )}
+                {canConfirmPayment && parcel.Status === 'DRAFT_PENDING_PAYMENT' && (
+                  <ConfirmCashPaymentButton parcelId={parcel.ID} priceKes={parcel.PriceKes} />
                 )}
                 {canRefund && parcel.RefundStatus === 'PENDING' && <RefundButton parcelId={parcel.ID} />}
                 {canCancel && !parcel.ExceptionNote && FLAGGABLE.has(parcel.Status) && (
@@ -168,8 +172,14 @@ function DetailSections({
   return (
     <table className="tbl">
       <tbody>
-        <Row label="Sender">{parcel.SenderName} <span className="sub">· {parcel.SenderMsisdn}</span></Row>
-        <Row label="Receiver">{parcel.ReceiverName} <span className="sub">· {parcel.ReceiverMsisdn}</span></Row>
+        <Row label="Sender">
+          {parcel.SenderName} <span className="sub">· {parcel.SenderMsisdn}</span>
+          <ContactButtons msisdn={parcel.SenderMsisdn} />
+        </Row>
+        <Row label="Receiver">
+          {parcel.ReceiverName} <span className="sub">· {parcel.ReceiverMsisdn}</span>
+          <ContactButtons msisdn={parcel.ReceiverMsisdn} />
+        </Row>
         <Row label="Route">{parcel.OriginLabel} → {parcel.DestinationLabel}</Row>
         {parcel.Notes && <Row label="Notes">{parcel.Notes}</Row>}
         <Row label="Type">{parcel.ParcelType.replace(/_/g, ' ')}</Row>
@@ -569,6 +579,45 @@ function ConfirmIntakeButton({ code }: { code: string }) {
         })}>
         <Icon name="check-circle" size={13} />{pending ? 'Confirming…' : 'Confirm received'}
       </button>
+      <ActionError error={error} />
+    </span>
+  );
+}
+
+/** Cash paid at the counter — a stronger two-step confirm than most
+ *  buttons here get, showing the exact amount being confirmed before
+ *  anything happens: this is the one click that makes a parcel real
+ *  money, same weight as the M-Pesa/points transitions it stands in
+ *  for, and staff should see the figure they're vouching for matches
+ *  what was actually handed over. */
+function ConfirmCashPaymentButton({ parcelId, priceKes }: { parcelId: string; priceKes: string | null }) {
+  const [confirming, setConfirming] = useState(false);
+  const [pending, startTransition] = useTransition();
+  const [error, setError] = useState<string | null>(null);
+  const announce = useAnnounce();
+
+  if (!confirming) {
+    return (
+      <button className="btn btn-o btn-sm" style={{ color: 'var(--green)' }} onClick={() => setConfirming(true)}>
+        <Icon name="coins" size={13} />Confirm cash payment
+      </button>
+    );
+  }
+  return (
+    <span style={{ display: 'inline-flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
+      <span className="sub" style={{ fontSize: '.82rem' }}>
+        Confirm KES {priceKes ? Number(priceKes).toLocaleString('en-KE') : '0'} received in cash?
+      </span>
+      <button className="btn btn-p btn-sm" disabled={pending}
+        onClick={() => startTransition(async () => {
+          const result = await actionConfirmParcelCashPayment(parcelId);
+          if (!result.ok) { setError(result.error); return; }
+          announce('Cash payment confirmed — parcel booked', 'assertive');
+          setConfirming(false);
+        })}>
+        {pending ? 'Confirming…' : 'Yes, confirm'}
+      </button>
+      <button className="btn btn-o btn-sm" onClick={() => { setConfirming(false); setError(null); }}>Cancel</button>
       <ActionError error={error} />
     </span>
   );

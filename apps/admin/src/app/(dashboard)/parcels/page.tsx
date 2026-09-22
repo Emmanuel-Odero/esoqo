@@ -55,6 +55,7 @@ export default async function ParcelsPage(
   const canCancel = ctx.capabilities.includes('*') || ctx.capabilities.includes('parcels.cancel');
   const canRefund = ctx.capabilities.includes('*') || ctx.capabilities.includes('parcels.refund');
   const canEdit = ctx.capabilities.includes('*') || ctx.capabilities.includes('parcels.edit');
+  const canConfirmPayment = ctx.capabilities.includes('*') || ctx.capabilities.includes('parcels.confirmCashPayment');
   const { status, q, queue, page } = await searchParams;
 
   const pageNumber = Math.max(1, Number(page) || 1);
@@ -166,6 +167,7 @@ export default async function ParcelsPage(
       <ParcelsTable
         parcels={parcels ?? []} statusLabel={STATUS_LABEL}
         canAssign={canAssign} canCancel={canCancel} canRefund={canRefund} canEdit={canEdit}
+        canConfirmPayment={canConfirmPayment}
         total={total} page={pageNumber} pageSize={PAGE_SIZE}
         baseQuery={{ status, q, queue }}
       />

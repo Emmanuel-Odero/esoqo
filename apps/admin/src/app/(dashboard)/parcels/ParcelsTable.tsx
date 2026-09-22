@@ -64,17 +64,17 @@ const FLAGGABLE = new Set(['RECEIVED_AT_COUNTER', 'PICKED_UP', 'IN_TRANSIT']);
  * being permanently on screen for all 200 rows whether needed or not.
  */
 export function ParcelsTable({
-  parcels, statusLabel, canAssign, canCancel, canRefund, canEdit,
+  parcels, statusLabel, canAssign, canCancel, canRefund, canEdit, canConfirmPayment,
   total, page, pageSize, baseQuery,
 }: {
   parcels: AdminParcelRow[]; statusLabel: Record<string, string>;
-  canAssign: boolean; canCancel: boolean; canRefund: boolean; canEdit: boolean;
+  canAssign: boolean; canCancel: boolean; canRefund: boolean; canEdit: boolean; canConfirmPayment: boolean;
   total: number; page: number; pageSize: number;
   baseQuery: { status?: string; q?: string; queue?: string };
 }) {
   const [active, setActive] = useState<AdminParcelRow | null>(null);
   const [selected, setSelected] = useState<Set<string>>(new Set());
-  const canManage = canAssign || canCancel || canRefund || canEdit;
+  const canManage = canAssign || canCancel || canRefund || canEdit || canConfirmPayment;
 
   // Only a parcel still waiting for a collector can take one, so those
   // are the only ones worth selecting. Offering a checkbox on a
@@ -197,6 +197,7 @@ export function ParcelsTable({
           parcel={active}
           statusLabel={statusLabel}
           canAssign={canAssign} canCancel={canCancel} canRefund={canRefund} canEdit={canEdit}
+          canConfirmPayment={canConfirmPayment}
           onClose={() => setActive(null)}
         />
       )}

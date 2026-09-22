@@ -3399,6 +3399,11 @@ model Parcel {
   /// own mpesaReceiptCode columns already play. Null for ESOKO_POINTS.
   mpesaReceiptCode         String?
   paidAt                   DateTime?
+  /// Set only for a CASH payment — who at the counter confirmed the
+  /// cash was actually handed over, same audit shape as
+  /// refundedByStaffId/cancelledByStaffId below. Null for MPESA_STK
+  /// and ESOKO_POINTS, which confirm themselves.
+  paidByStaffId            String?   @db.Uuid
 
   /// Who's coming to collect it and when, set by an admin scheduling a
   /// pickup — distinct from currentHolderPartyId, which only changes

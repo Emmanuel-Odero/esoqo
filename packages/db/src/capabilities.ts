@@ -263,6 +263,7 @@ export const CAPABILITY_CATALOGUE = [
     ['parcels.assign', 'Assign a collector and schedule a parcel pickup'],
     ['parcels.cancel', 'Cancel a draft or not-yet-picked-up parcel'],
     ['parcels.refund', "Mark a cancelled parcel's M-Pesa payment as refunded"],
+    ['parcels.confirmCashPayment', 'Mark a parcel as paid by cash and book it'],
     ['parcels.edit', 'Correct a draft or booked parcel\'s receiver, destination or notes'],
     ['parcels.couriers.manage', 'Onboard, vet, suspend and reinstate parcel couriers'],
     ['parcel_pricing.write', 'Change parcel pricing, zones and bargain rules'],

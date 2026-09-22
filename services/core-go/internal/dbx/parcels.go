@@ -941,6 +941,76 @@ func ConfirmParcelPaymentByCheckoutID(ctx context.Context, pool *pgxpool.Pool, c
 	return code, true, nil
 }
 
+// ConfirmParcelCashPayment — the counter-cash payment path: a staff
+// member confirming the sender physically handed over the dispatch
+// fee, rather than an STK/points round trip. Same shape as
+// ConfirmParcelPaymentByCheckoutID (idempotent on status, same
+// SETTLEMENT/PARCEL_REVENUE ledger posting, same loyalty earn, same
+// frozen revenue split, same SLA-deadline rule) — looked up by parcel
+// id (an admin action, not a webhook) rather than a checkout request,
+// and with no mpesaReceiptCode to record. staffID is who confirmed it,
+// for the same audit reason refundedByStaffId/cancelledByStaffId exist.
+func ConfirmParcelCashPayment(ctx context.Context, pool *pgxpool.Pool, parcelID, staffID string, loyaltyEnabled bool) (code string, err error) {
+	var status, priceKesText string
+	var senderPartyID *string
+	err = pool.QueryRow(ctx, `
+		SELECT code, status::text, "priceKes"::text, "senderPartyId" FROM parcel WHERE id = $1`, parcelID).
+		Scan(&code, &status, &priceKesText, &senderPartyID)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return "", &ParcelError{"NOT_FOUND", "That parcel was not found"}
+	}
+	if err != nil {
+		return "", err
+	}
+	if status != "DRAFT_PENDING_PAYMENT" {
+		return "", &ParcelError{"BAD_INPUT", "This parcel is not awaiting payment"}
+	}
+	priceKes, err := strconv.ParseFloat(priceKesText, 64)
+	if err != nil {
+		return "", err
+	}
+	if priceKes <= 0 {
+		return "", &ParcelError{"BAD_INPUT", "Choose a price before confirming payment"}
+	}
+
+	settlementAcct, err := ledger.EnsureAccount(ctx, pool, nil, "SETTLEMENT", "KES")
+	if err != nil {
+		return "", err
+	}
+	revenueAcct, err := ledger.EnsureAccount(ctx, pool, nil, "PARCEL_REVENUE", "KES")
+	if err != nil {
+		return "", err
+	}
+	if _, err := ledger.PostEntry(ctx, pool,
+		"parcel:"+parcelID, "Parcel delivery payment (cash)", "core-go:parcel:"+parcelID,
+		[]ledger.Posting{{AccountID: settlementAcct, AmountCents: ledger.CentsFromKES(priceKes)}, {AccountID: revenueAcct, AmountCents: ledger.CentsFromKES(-priceKes)}}); err != nil {
+		return "", err
+	}
+
+	if senderPartyID != nil {
+		_ = loyalty.EarnForSpend(ctx, pool, *senderPartyID, priceKes, "parcel:"+parcelID, loyaltyEnabled)
+	}
+
+	if _, err := pool.Exec(ctx, `
+		UPDATE parcel SET "paidAt" = now(), status = 'BOOKED', "paymentMethod" = 'CASH', "paidByStaffId" = $1,
+		       "slaDeadlineAt" = now() + (
+		           SELECT r."slaHours" FROM parcel_pricing_rule r
+		           WHERE r."parcelType" = parcel."parcelType"
+		             AND (r."parcelOrgId" IS NULL OR r."parcelOrgId" = parcel."parcelOrgId")
+		           ORDER BY r."parcelOrgId" NULLS LAST
+		           LIMIT 1
+		       ) * interval '1 hour'
+		WHERE id = $2`, staffID, parcelID); err != nil {
+		return "", err
+	}
+	// Frozen here, on the one transition that makes a parcel real money —
+	// same rule ConfirmParcelPaymentByCheckoutID's own comment describes.
+	if err := writeParcelRevenueSplit(ctx, pool, parcelID, priceKes); err != nil {
+		return "", err
+	}
+	return code, nil
+}
+
 // PayParcelWithPoints — the ESOKO_POINTS payment path, settled inline
 // (no STK round trip), same shape store checkout's VOUCHER method
 // already follows. Only the party that booked the parcel can spend
@@ -1970,6 +2040,7 @@ type ParcelLabelRegisterRow struct {
 	ItemDescription *string    `json:"itemDescription"`
 	Destination     *string    `json:"destination"`
 	SenderName      *string    `json:"senderName"`
+	SenderMsisdn    *string    `json:"senderMsisdn"`
 	RouteLabel      *string    `json:"routeLabel"`
 	InfoAttachedAt  *time.Time `json:"infoAttachedAt"`
 	UsedAt          *time.Time `json:"usedAt"`
@@ -2043,7 +2114,7 @@ func ListParcelLabelRegister(
 		order = `s."createdAt" DESC`
 	}
 	rows, err := pool.Query(ctx, `
-		SELECT s.code, s."createdAt", s."itemDescription", s.destination, s."senderName",
+		SELECT s.code, s."createdAt", s."itemDescription", s.destination, s."senderName", s."senderMsisdn",
 		       s."infoAttachedAt", s."usedAt", s."voidedAt", s."voidedReason",
 		       s."batchId"::text, o.name, s."routeLabel",
 		       COALESCE(s."parcelOrgId"::text, ''), COALESCE(s."batchId"::text, '')
@@ -2061,7 +2132,7 @@ func ListParcelLabelRegister(
 	for rows.Next() {
 		var r ParcelLabelRegisterRow
 		var batchRaw string
-		if err := rows.Scan(&r.Code, &r.CreatedAt, &r.ItemDescription, &r.Destination, &r.SenderName,
+		if err := rows.Scan(&r.Code, &r.CreatedAt, &r.ItemDescription, &r.Destination, &r.SenderName, &r.SenderMsisdn,
 			&r.InfoAttachedAt, &r.UsedAt, &r.VoidedAt, &r.VoidedReason,
 			&r.BatchID, &r.OrgName, &r.RouteLabel, &r.ParcelOrgID, &batchRaw); err != nil {
 			return nil, err

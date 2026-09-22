@@ -479,6 +479,45 @@ func (s *Server) handleClearParcelException(c *gin.Context) {
 // actually processed it out of band (see dbx.MarkParcelRefunded) —
 // previously CancelParcel's NeedsManualRefund flag was mentioned once
 // in an SMS and then never tracked again.
+// handleConfirmParcelCashPayment — POST /v1/admin/parcels/:id/pay-cash.
+// The counter-cash counterpart to the sender's own M-Pesa/points pay
+// step — a staff member confirming cash actually changed hands. Its
+// own capability, same trust tier as refund: handling money, not
+// dispatch.
+func (s *Server) handleConfirmParcelCashPayment(c *gin.Context) {
+	ctx := ctxFromGin(c)
+	if err := authsvc.RequireCapability(ctx, "parcels.confirmCashPayment", nil); err != nil {
+		writeParcelAdminError(c, err)
+		return
+	}
+	parcelID := c.Param("id")
+	code, err := dbx.ConfirmParcelCashPayment(c.Request.Context(), s.Pool, parcelID, ctx.ActorID, s.Cfg.LoyaltyEarnEnabled)
+	if err != nil {
+		writeParcelAdminError(c, err)
+		return
+	}
+
+	var actorID *string
+	if ctx.ActorID != "" {
+		actorID = &ctx.ActorID
+	}
+	var ip *string
+	if v := clientIP(c); v != "" {
+		ip = &v
+	}
+	targetType := "parcel"
+	_, _ = audit.RecordAudit(c.Request.Context(), s.Pool, s.Cfg.AuditChainSeed,
+		audit.CtxLike{ActorType: string(ctx.ActorType), ActorID: actorID, IP: ip},
+		audit.Input{
+			Action:     "parcel.cash_payment_confirmed",
+			TargetType: &targetType,
+			TargetID:   &parcelID,
+			Payload:    map[string]interface{}{"code": code},
+		})
+
+	c.JSON(http.StatusOK, gin.H{"code": code, "status": "BOOKED", "paymentMethod": "CASH"})
+}
+
 func (s *Server) handleMarkParcelRefunded(c *gin.Context) {
 	ctx := ctxFromGin(c)
 	if err := authsvc.RequireCapability(ctx, "parcels.refund", nil); err != nil {

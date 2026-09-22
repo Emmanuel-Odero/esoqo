@@ -545,6 +545,7 @@ func (s *Server) Router() *gin.Engine {
 		v1.POST("/admin/parcels/bulk-assign", s.authRequired(), s.handleBulkAssignParcels)
 		v1.POST("/admin/parcels/:id/cancel", s.authRequired(), s.handleCancelParcel)
 		v1.POST("/admin/parcels/:id/refund", s.authRequired(), s.handleMarkParcelRefunded)
+		v1.POST("/admin/parcels/:id/pay-cash", s.authRequired(), s.handleConfirmParcelCashPayment)
 		v1.PATCH("/admin/parcels/:id", s.authRequired(), s.handleUpdateParcelDetails)
 		v1.POST("/admin/parcels/:id/exception", s.authRequired(), s.handleFlagParcelException)
 		v1.POST("/admin/parcels/:id/exception/clear", s.authRequired(), s.handleClearParcelException)

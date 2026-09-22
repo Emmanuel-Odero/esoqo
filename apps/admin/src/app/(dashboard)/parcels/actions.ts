@@ -361,6 +361,27 @@ export async function actionMarkParcelRefunded(
   }
 }
 
+/** The counter-cash counterpart to the sender's own M-Pesa/points pay
+ *  step — confirms cash actually changed hands and books the parcel. */
+export async function actionConfirmParcelCashPayment(
+  parcelId: string,
+): Promise<Result> {
+  try {
+    await requireStaff();
+    await adminGo(`/v1/admin/parcels/${parcelId}/pay-cash`, { method: "POST" });
+    revalidatePath("/parcels");
+    return { ok: true };
+  } catch (e) {
+    return {
+      ok: false,
+      error:
+        e instanceof Error
+          ? e.message
+          : "Could not confirm that cash payment",
+    };
+  }
+}
+
 export interface HandoffRow {
   FromName: string | null;
   ToName: string;
@@ -880,8 +901,12 @@ export async function actionCreateParcelOrg(
       );
     }
     if (input.contactPhone) {
-      const { sendSms } = await import("@esoqo/auth");
-      await sendSms(input.contactPhone, message, "PARCEL_COMPANY_CREATED");
+      const { normaliseMsisdn } = await import("@esoqo/domain");
+      const msisdn = normaliseMsisdn(input.contactPhone);
+      if (msisdn) {
+        const { sendSms } = await import("@esoqo/auth");
+        await sendSms(msisdn, message, "PARCEL_COMPANY_CREATED");
+      }
     }
     revalidatePath("/parcels/companies");
     return { ok: true };
@@ -1644,6 +1669,7 @@ export interface ParcelLabelRegisterRow {
   itemDescription: string | null;
   destination: string | null;
   senderName: string | null;
+  senderMsisdn: string | null;
   routeLabel: string | null;
   infoAttachedAt: string | null;
   usedAt: string | null;
