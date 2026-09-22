@@ -2041,6 +2041,8 @@ type ParcelLabelRegisterRow struct {
 	Destination     *string    `json:"destination"`
 	SenderName      *string    `json:"senderName"`
 	SenderMsisdn    *string    `json:"senderMsisdn"`
+	ReceiverName    *string    `json:"receiverName"`
+	ReceiverMsisdn  *string    `json:"receiverMsisdn"`
 	RouteLabel      *string    `json:"routeLabel"`
 	InfoAttachedAt  *time.Time `json:"infoAttachedAt"`
 	UsedAt          *time.Time `json:"usedAt"`
@@ -2115,6 +2117,7 @@ func ListParcelLabelRegister(
 	}
 	rows, err := pool.Query(ctx, `
 		SELECT s.code, s."createdAt", s."itemDescription", s.destination, s."senderName", s."senderMsisdn",
+		       s."receiverName", s."receiverMsisdn",
 		       s."infoAttachedAt", s."usedAt", s."voidedAt", s."voidedReason",
 		       s."batchId"::text, o.name, s."routeLabel",
 		       COALESCE(s."parcelOrgId"::text, ''), COALESCE(s."batchId"::text, '')
@@ -2133,6 +2136,7 @@ func ListParcelLabelRegister(
 		var r ParcelLabelRegisterRow
 		var batchRaw string
 		if err := rows.Scan(&r.Code, &r.CreatedAt, &r.ItemDescription, &r.Destination, &r.SenderName, &r.SenderMsisdn,
+			&r.ReceiverName, &r.ReceiverMsisdn,
 			&r.InfoAttachedAt, &r.UsedAt, &r.VoidedAt, &r.VoidedReason,
 			&r.BatchID, &r.OrgName, &r.RouteLabel, &r.ParcelOrgID, &batchRaw); err != nil {
 			return nil, err

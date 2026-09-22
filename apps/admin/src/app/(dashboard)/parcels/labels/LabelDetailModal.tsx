@@ -104,6 +104,8 @@ export function LabelDetailModal({
             <dt className="sub">Route</dt><dd>{label.routeLabel ?? '—'}</dd>
             <dt className="sub">Sender</dt>
             <dd>{label.senderName ?? '—'}<ContactButtons msisdn={label.senderMsisdn} /></dd>
+            <dt className="sub">Receiver</dt>
+            <dd>{label.receiverName ?? '—'}<ContactButtons msisdn={label.receiverMsisdn} /></dd>
             {label.batchId && (
               <>
                 <dt className="sub">Batch</dt>

@@ -1670,6 +1670,8 @@ export interface ParcelLabelRegisterRow {
   destination: string | null;
   senderName: string | null;
   senderMsisdn: string | null;
+  receiverName: string | null;
+  receiverMsisdn: string | null;
   routeLabel: string | null;
   infoAttachedAt: string | null;
   usedAt: string | null;

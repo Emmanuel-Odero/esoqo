@@ -481,6 +481,12 @@ func (s *Server) handleAttachOrgLabelInfo(c *gin.Context) {
 		writeError(c, http.StatusBadRequest, "INVALID_REQUEST", err.Error())
 		return
 	}
+	if !optionalMsisdn(c, &req.SenderMsisdn, "Sender phone") {
+		return
+	}
+	if !optionalMsisdn(c, &req.ReceiverMsisdn, "Receiver phone") {
+		return
+	}
 	ctx := ctxFromGin(c)
 	var staffID *string
 	if ctx.ActorID != "" {
