@@ -820,7 +820,7 @@ function AddMember({ group, onClose }: { group: Group; onClose: () => void }) {
               </label>
               <input id="am-new-phone" className="inp" style={{ width: '100%', marginBottom: 12 }}
                 value={newPhone} onChange={(e) => setNewPhone(e.target.value)}
-                placeholder="+254 7…" />
+                placeholder="07XX XXX XXX" />
             </>
           )}
 

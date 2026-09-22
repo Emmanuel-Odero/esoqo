@@ -189,7 +189,7 @@ function AgentForm({
             {zones.map((z) => <option key={z.id} value={z.id}>{z.name}</option>)}
           </select>
         </div>
-        <Field label="Phone" value={msisdn} onChange={setMsisdn} placeholder="+2547XXXXXXXX" />
+        <Field label="Phone" value={msisdn} onChange={setMsisdn} placeholder="07XX XXX XXX" />
       </div>
 
       {/* The one field a receiver actually navigates by. Coordinates

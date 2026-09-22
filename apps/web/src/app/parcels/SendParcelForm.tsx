@@ -430,12 +430,12 @@ export function SendParcelForm(
       <FormRow>
         <Field id="sd-name" label="Your name" value={senderName} onChange={setSenderName} error={fieldErrors.senderName} />
         <Field id="sd-msisdn" label="Your phone" value={senderMsisdn} error={fieldErrors.senderMsisdn}
-          onChange={setSenderMsisdn} placeholder="+2547XXXXXXXX" />
+          onChange={setSenderMsisdn} placeholder="07XX XXX XXX" />
       </FormRow>
       <FormRow>
         <Field id="rc-name" label="Receiver's name" value={receiverName} onChange={setReceiverName} error={fieldErrors.receiverName} />
         <Field id="rc-msisdn" label="Receiver's phone" value={receiverMsisdn} onChange={setReceiverMsisdn}
-          placeholder="+2547XXXXXXXX" error={fieldErrors.receiverMsisdn} />
+          placeholder="07XX XXX XXX" error={fieldErrors.receiverMsisdn} />
       </FormRow>
       <p className="sub" style={{ margin: '4px 0 0', fontSize: '.78rem' }}>
         We text the receiver their delivery code and a tracking link — so make sure this number is right.

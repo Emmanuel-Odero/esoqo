@@ -68,7 +68,7 @@ function InviteForm({ orgId }: { orgId: string }) {
       {channel === 'phone' ? (
         <div className="fld">
           <label className="lab" htmlFor="inv-msisdn">Phone number</label>
-          <input className="inp mono" id="inv-msisdn" value={msisdn} onChange={(e) => setMsisdn(e.target.value)} inputMode="tel" placeholder="+254 7XX XXX XXX" />
+          <input className="inp mono" id="inv-msisdn" value={msisdn} onChange={(e) => setMsisdn(e.target.value)} inputMode="tel" placeholder="07XX XXX XXX" />
           <p className="hint">Country code included — at least 10 digits.</p>
         </div>
       ) : (

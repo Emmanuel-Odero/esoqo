@@ -203,7 +203,7 @@ function StaffForm({
           <label htmlFor={ids.msisdn}>
             Phone (optional)
           </label>
-          <input id={ids.msisdn} className="mono" placeholder="+2547..."
+          <input id={ids.msisdn} className="mono" placeholder="07XX XXX XXX"
             value={msisdn} onChange={(e) => setMsisdn(e.target.value)} />
           <span className="phint">
             Give one and they get an Esoqo account they can sign in with at /signin, not just here.

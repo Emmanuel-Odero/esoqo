@@ -48,7 +48,7 @@ export function SignInForm() {
         <input
           className="inp" id="id" value={identifier} autoComplete="username"
           onChange={(e) => setIdentifier(e.target.value)}
-          placeholder="+254 7… or you@example.com"
+          placeholder="07XX XXX XXX or you@example.com"
           aria-invalid={field === 'identifier'}
         />
       </div>

@@ -616,7 +616,7 @@ export function TeamManager({
                   id={ids.msisdn}
                   className="mono"
                   style={inputStyle}
-                  placeholder="+2547..."
+                  placeholder="07XX XXX XXX"
                   value={msisdn}
                   onChange={(e) => setMsisdn(e.target.value)}
                 />
@@ -822,7 +822,7 @@ function StaffEditForm({
             id={ids.msisdn}
             className="mono"
             style={inputStyle}
-            placeholder="+2547..."
+            placeholder="07XX XXX XXX"
             value={msisdn}
             onChange={(e) => setMsisdn(e.target.value)}
           />
@@ -1657,7 +1657,7 @@ export function OrgForm({
                   id={`member-phone-${i}`}
                   className="mono"
                   style={inputStyle}
-                  placeholder="+2547..."
+                  placeholder="07XX XXX XXX"
                   value={m.msisdn ?? ""}
                   onChange={(e) => updateMember(i, { msisdn: e.target.value })}
                 />
