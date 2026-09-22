@@ -2,9 +2,10 @@
 
 import { useEffect, useRef, useState, useTransition } from 'react';
 import { Icon, Modal } from '@esoqo/ui';
-import { addCustomParcel, searchOrgLabels } from './actions';
+import { addCustomParcel, listOrgLabels, resolveOrgLabel, searchOrgLabels } from './actions';
 import type { OrgLabelSearchRow } from '@/lib/parcel-org-session';
 import { setFormActive } from './form-activity';
+import { ScanButton } from './ScanButton';
 
 const PARCEL_TYPES: [value: string, label: string][] = [
   ['ENVELOPE_DOCUMENT', 'Envelope / document'],
@@ -109,6 +110,16 @@ export function CustomParcelPanel() {
   const [labelSearching, setLabelSearching] = useState(false);
   const [labelPickerOpen, setLabelPickerOpen] = useState(false);
   const labelSeq = useRef(0);
+  // A scan hands back whatever the camera read, not a label this
+  // company actually owns and can still spend — the type-ahead search
+  // and browse list are already scoped to that set (see searchOrgLabels/
+  // listOrgLabels), but a scan skips straight to a full code with no
+  // such check. Left unchecked, that full code was only ever caught at
+  // Save, after a clerk had already typed out the whole shipment —
+  // this re-checks it the moment it's scanned instead.
+  const [labelChecking, setLabelChecking] = useState(false);
+  const [labelCheckError, setLabelCheckError] = useState<string | null>(null);
+  const labelCheckSeq = useRef(0);
   const [error, setError] = useState<string | null>(null);
   const [minted, setMinted] = useState<string | null>(null);
   const [pending, startTransition] = useTransition();
@@ -141,11 +152,32 @@ export function CustomParcelPanel() {
   // Tail search over the company's own unused labels, debounced. The
   // sequence guard drops out-of-order responses, so a slow earlier
   // keystroke can never overwrite a newer one.
+  //
+  // An empty tail with the picker open isn't "no query yet" — it's
+  // "show me what's available to pick from", so it lists the register's
+  // own blank labels (see listOrgLabels('blank'), same data Settings →
+  // Labels shows) instead of leaving the dropdown empty until someone
+  // starts typing. Undebounced: opening the picker is the trigger, not
+  // a keystroke.
   useEffect(() => {
     const tail = labelTail.trim();
-    if (!labelPickerOpen || tail.length === 0) {
+    if (!labelPickerOpen) {
       setLabelResults(null);
       setLabelSearching(false);
+      return;
+    }
+    if (tail.length === 0) {
+      setLabelSearching(true);
+      const seq = ++labelSeq.current;
+      void listOrgLabels('blank').then(({ labels }) => {
+        if (labelSeq.current !== seq) return;
+        setLabelResults(labels.map((l) => ({ code: l.code, createdAt: l.createdAt })));
+        setLabelSearching(false);
+      }).catch(() => {
+        if (labelSeq.current !== seq) return;
+        setLabelResults([]);
+        setLabelSearching(false);
+      });
       return;
     }
     setLabelSearching(true);
@@ -162,7 +194,7 @@ export function CustomParcelPanel() {
       });
     }, 250);
     return () => window.clearTimeout(id);
-  }, [labelTail, labelPickerOpen ]);
+  }, [labelTail, labelPickerOpen]);
 
   function clearDraft() {
     try {
@@ -177,7 +209,42 @@ export function CustomParcelPanel() {
     setReceiverName(''); setReceiverMsisdn(''); setOriginLabel(''); setDestinationLabel('');
     setParcelType('SMALL'); setWeightKg(''); setFragile(false); setNotes('');
     setLabelCode(''); setLabelTail(''); setLabelResults(null); setLabelPickerOpen(false);
+    setLabelChecking(false); setLabelCheckError(null);
     clearDraft();
+  }
+
+  // A scanned code is checked against the company's own register before
+  // it's accepted — same states Save itself would reject on
+  // (dbx.importOrgParcelWithLabel): already spent, withdrawn, or not
+  // found under this company at all. `blank` and `filled` both pass —
+  // Save accepts either (a label can have field notes attached before
+  // it's ever booked against).
+  function handleScannedLabel(code: string) {
+    setLabelCheckError(null);
+    setLabelChecking(true);
+    const seq = ++labelCheckSeq.current;
+    void resolveOrgLabel(code).then((res) => {
+      if (labelCheckSeq.current !== seq) return;
+      setLabelChecking(false);
+      if (!res.ok) {
+        setLabelCheckError(`${code}: ${res.error}`);
+        return;
+      }
+      if (res.label.state === 'spent') {
+        setLabelCheckError(`${code} has already been used on another parcel.`);
+        return;
+      }
+      if (res.label.state === 'voided') {
+        setLabelCheckError(`${code} has been withdrawn and can't be used.`);
+        return;
+      }
+      setLabelCode(code);
+      setLabelTail(''); setLabelResults(null); setLabelPickerOpen(false);
+    }).catch(() => {
+      if (labelCheckSeq.current !== seq) return;
+      setLabelChecking(false);
+      setLabelCheckError(`Could not check ${code} — try again.`);
+    });
   }
 
   const ready = number.trim() && senderName.trim() && senderMsisdn.trim()
@@ -251,12 +318,16 @@ export function CustomParcelPanel() {
         <LabelPicker
           tail={labelTail}
           onTail={(v) => { setLabelTail(v.toUpperCase()); setLabelPickerOpen(true); }}
+          onFocus={() => setLabelPickerOpen(true)}
           results={labelResults}
           searching={labelSearching}
           pickerOpen={labelPickerOpen}
           selected={labelCode}
-          onSelect={(code) => { setLabelCode(code); setLabelPickerOpen(false); setLabelTail(''); setLabelResults(null); }}
-          onClear={() => { setLabelCode(''); setLabelTail(''); setLabelResults(null); }}
+          onSelect={(code) => { setLabelCode(code); setLabelPickerOpen(false); setLabelTail(''); setLabelResults(null); setLabelCheckError(null); }}
+          onScan={handleScannedLabel}
+          checking={labelChecking}
+          checkError={labelCheckError}
+          onClear={() => { setLabelCode(''); setLabelTail(''); setLabelResults(null); setLabelCheckError(null); }}
           onClose={() => setLabelPickerOpen(false)}
         />
 
@@ -335,18 +406,28 @@ export function CustomParcelPanel() {
  * sticker held at arm's length.
  */
 function LabelPicker({
-  tail, onTail, results, searching, pickerOpen, selected, onSelect, onClear, onClose,
+  tail, onTail, onFocus, results, searching, pickerOpen, selected, onSelect, onScan,
+  checking, checkError, onClear, onClose,
 }: {
   tail: string;
   onTail: (v: string) => void;
+  onFocus: () => void;
   results: OrgLabelSearchRow[] | null;
   searching: boolean;
   pickerOpen: boolean;
   selected: string;
   onSelect: (code: string) => void;
+  /** A scan hands back a raw code that hasn't been checked against the
+   *  register yet — see this file's own handleScannedLabel. Kept apart
+   *  from onSelect (a dropdown pick, already known-good) so a scanned
+   *  code gets verified before it's accepted rather than after Save. */
+  onScan: (code: string) => void;
+  checking: boolean;
+  checkError: string | null;
   onClear: () => void;
   onClose: () => void;
 }) {
+  const browsing = tail.trim().length === 0;
   return (
     <fieldset className="psection is-boxed">
       <h3 className="psection-title">Parcel label (optional)</h3>
@@ -364,17 +445,35 @@ function LabelPicker({
         </div>
       ) : (
         <div style={{ position: 'relative', marginTop: 8 }}>
-          <input
-            className="pinput mono" value={tail}
-            placeholder="Type any characters, e.g. YZN…"
-            aria-label="Find a label by any characters in its code"
-            autoComplete="off"
-            onChange={(e) => onTail(e.target.value)}
-            onBlur={() => window.setTimeout(onClose, 150)}
-          />
-          {pickerOpen && tail.trim() && (
+          <div className="row" style={{ gap: 8, alignItems: 'stretch' }}>
+            <input
+              className="pinput mono" value={tail}
+              placeholder="Tap to browse, or type any characters, e.g. YZN…"
+              aria-label="Browse or find a label by any characters in its code"
+              autoComplete="off"
+              style={{ flex: 1 }}
+              onChange={(e) => onTail(e.target.value)}
+              onFocus={onFocus}
+              onBlur={() => window.setTimeout(onClose, 150)}
+            />
+            <ScanButton onScan={onScan} />
+          </div>
+          {checking && (
+            <p className="sub" style={{ margin: '6px 0 0', fontSize: '.8rem', display: 'flex', alignItems: 'center', gap: 6 }}>
+              <Icon name="loader" size={14} />Checking that label…
+            </p>
+          )}
+          {checkError && !checking && (
+            <p role="alert" style={{
+              color: 'var(--red, #b42318)', display: 'flex', alignItems: 'center', gap: 6,
+              margin: '6px 0 0', fontSize: '.8rem',
+            }}>
+              <Icon name="alert-circle" size={14} />{checkError}
+            </p>
+          )}
+          {pickerOpen && (
             <div
-              role="listbox" aria-label="Matching labels"
+              role="listbox" aria-label={browsing ? 'Available labels' : 'Matching labels'}
               style={{
                 position: 'absolute', zIndex: 5, left: 0, right: 0, top: '100%',
                 background: 'var(--bg, #fff)', border: '1.5px solid var(--line)',
@@ -383,22 +482,52 @@ function LabelPicker({
               }}
             >
               {searching || results === null ? (
-                <p className="sub" style={{ margin: 0, padding: '10px 12px' }}>Searching your labels…</p>
+                <p className="sub" style={{ margin: 0, padding: '10px 12px' }}>
+                  {browsing ? 'Loading your unused labels…' : 'Searching your labels…'}
+                </p>
               ) : results.length === 0 ? (
                 <p className="sub" style={{ margin: 0, padding: '10px 12px' }}>
-                  No unused label contains “{tail.trim().toUpperCase()}”. Check the sticker, or leave
-                  this empty to mint a fresh code.
+                  {browsing
+                    ? 'No unused pre-printed labels on file. Leave this empty to mint a fresh code.'
+                    : `No unused label contains "${tail.trim().toUpperCase()}". Check the sticker, or leave this empty to mint a fresh code.`}
                 </p>
               ) : (
-                results.map((r) => (
-                  <TailOption key={r.code} code={r.code} tail={tail.trim().toUpperCase()} onSelect={onSelect} />
-                ))
+                <>
+                  {browsing && (
+                    <p className="sub" style={{ margin: 0, padding: '8px 12px 4px', fontSize: '.72rem' }}>
+                      {results.length} unused label{results.length === 1 ? '' : 's'} — newest first. Keep typing to narrow it down.
+                    </p>
+                  )}
+                  {results.map((r) => (
+                    browsing
+                      ? <BrowseOption key={r.code} code={r.code} onSelect={onSelect} />
+                      : <TailOption key={r.code} code={r.code} tail={tail.trim().toUpperCase()} onSelect={onSelect} />
+                  ))}
+                </>
               )}
             </div>
           )}
         </div>
       )}
     </fieldset>
+  );
+}
+
+/** One row in the plain browse list — no fragment to highlight, since
+ *  nothing was typed yet. */
+function BrowseOption({ code, onSelect }: { code: string; onSelect: (code: string) => void }) {
+  return (
+    <button
+      type="button" role="option" aria-selected="false"
+      className="mono"
+      style={{
+        display: 'block', width: '100%', textAlign: 'left', padding: '8px 12px',
+        border: 'none', background: 'transparent', cursor: 'pointer', fontSize: '.9rem',
+      }}
+      onMouseDown={(e) => { e.preventDefault(); onSelect(code); }}
+    >
+      {code}
+    </button>
   );
 }
 
