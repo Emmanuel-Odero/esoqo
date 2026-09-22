@@ -653,8 +653,11 @@ func (s *Server) Router() *gin.Engine {
 		v1.GET("/admin/parcels/parties", s.authRequired(), s.handleAdminSearchCounterParties)
 		v1.GET("/admin/parcels/labels/register", s.authRequired(), s.handleAdminListParcelLabelRegister)
 		v1.GET("/admin/parcels/labels/batches", s.authRequired(), s.handleAdminListParcelLabelBatches)
+		v1.GET("/admin/parcels/routes", s.authRequired(), s.handleAdminListParcelRoutes)
 		v1.POST("/admin/parcels/labels/void", s.authRequired(), s.handleVoidParcelLabels)
 		v1.POST("/admin/parcels/labels/batches/:id/void", s.authRequired(), s.handleVoidParcelLabelBatch)
+		v1.DELETE("/admin/parcels/labels", s.authRequired(), s.handleDeleteParcelLabels)
+		v1.DELETE("/admin/parcels/labels/batches/:id", s.authRequired(), s.handleDeleteParcelLabelBatch)
 	}
 
 	// Two routes, one handler. Daraja publishes no signature, HMAC or

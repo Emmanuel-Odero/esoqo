@@ -3854,6 +3854,17 @@ model ParcelLabelStock {
   infoAttachedAt        DateTime?
   infoAttachedByStaffId String?   @db.Uuid
 
+  /// The company's operating corridor this label prints with — e.g.
+  /// "Nairobi -> Mombasa". routeId is set when a real ParcelRoute was
+  /// picked; routeLabel is always set (a snapshot of that route's name,
+  /// or a typed "From -> To" when no defined route fit) so the printed
+  /// text survives the route being renamed or deleted later — the same
+  /// snapshot-plus-live-reference shape ParcelShipment.originLabel/
+  /// destinationLabel already uses against the same table.
+  routeId    String?      @db.Uuid
+  route      ParcelRoute? @relation(fields: [routeId], references: [id], onDelete: SetNull)
+  routeLabel String?
+
   /// Both partial, matching the migration: "what can this company
   /// still use" and "void this batch" only ever ask about live stock,
   /// so spent and voided rows are dead weight in them.
@@ -4665,8 +4676,9 @@ model ParcelRoute {
 
   createdAt DateTime @default(now())
 
-  stops ParcelRouteStop[]
-  runs  ParcelShipment[]
+  stops      ParcelRouteStop[]
+  runs       ParcelShipment[]
+  labelStock ParcelLabelStock[]
 
   @@index([parcelOrgId, active], map: "parcel_route_org_idx")
   @@map("parcel_route")

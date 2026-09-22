@@ -1467,6 +1467,8 @@ type ParcelLabelInfo struct {
 	LengthCm        *float64  `json:"lengthCm"`
 	WidthCm         *float64  `json:"widthCm"`
 	HeightCm        *float64  `json:"heightCm"`
+	RouteID         *string   `json:"routeId"`
+	RouteLabel      *string   `json:"routeLabel"`
 	AttachedAt      time.Time `json:"attachedAt"`
 }
 
@@ -1902,6 +1904,12 @@ type ParcelLabelInfoInput struct {
 	LengthCm *float64
 	WidthCm  *float64
 	HeightCm *float64
+	// The company's operating corridor this label prints with. RouteID
+	// is set when a real ParcelRoute was picked; RouteLabel is the
+	// snapshot actually printed either way — see the schema's own
+	// comment on ParcelLabelStock.routeLabel.
+	RouteID    *string
+	RouteLabel *string
 }
 
 // AttachParcelLabelInfo writes structured info onto a pre-printed
@@ -1929,11 +1937,12 @@ func AttachParcelLabelInfo(ctx context.Context, pool *pgxpool.Pool, code string,
 		SET "itemDescription" = $1, "destination" = $2, "senderName" = $3, "senderMsisdn" = $4,
 		    "receiverName" = $5, "receiverMsisdn" = $6, "itemType" = $7, "weightRangeKg" = $8,
 		    "lengthCm" = $11, "widthCm" = $12, "heightCm" = $13,
+		    "routeId" = $14, "routeLabel" = $15,
 		    "infoAttachedAt" = now(), "infoAttachedByStaffId" = $9
 		WHERE code = $10 AND "usedAt" IS NULL AND "voidedAt" IS NULL`,
 		in.ItemDescription, in.Destination, in.SenderName, in.SenderMsisdn,
 		in.ReceiverName, in.ReceiverMsisdn, in.ItemType, in.WeightRangeKg, staffID, code,
-		in.LengthCm, in.WidthCm, in.HeightCm)
+		in.LengthCm, in.WidthCm, in.HeightCm, in.RouteID, in.RouteLabel)
 	if err != nil {
 		return err
 	}
@@ -1961,6 +1970,7 @@ type ParcelLabelRegisterRow struct {
 	ItemDescription *string    `json:"itemDescription"`
 	Destination     *string    `json:"destination"`
 	SenderName      *string    `json:"senderName"`
+	RouteLabel      *string    `json:"routeLabel"`
 	InfoAttachedAt  *time.Time `json:"infoAttachedAt"`
 	UsedAt          *time.Time `json:"usedAt"`
 	VoidedAt        *time.Time `json:"voidedAt"`
@@ -2017,7 +2027,7 @@ func ListParcelLabelRegister(
 	var where string
 	effectiveState := state
 	if state == "all" {
-		where = `s."voidedAt" IS NULL OR s."voidedAt" IS NOT NULL`
+		where = `TRUE`
 	} else {
 		var ok bool
 		where, ok = ParcelLabelStates[state]
@@ -2035,11 +2045,11 @@ func ListParcelLabelRegister(
 	rows, err := pool.Query(ctx, `
 		SELECT s.code, s."createdAt", s."itemDescription", s.destination, s."senderName",
 		       s."infoAttachedAt", s."usedAt", s."voidedAt", s."voidedReason",
-		       s."batchId"::text, o.name,
+		       s."batchId"::text, o.name, s."routeLabel",
 		       COALESCE(s."parcelOrgId"::text, ''), COALESCE(s."batchId"::text, '')
 		FROM parcel_label_stock s
 		LEFT JOIN parcel_org o ON o.id = s."parcelOrgId"
-		WHERE `+where+`
+		WHERE (`+where+`)
 		  AND s."parcelOrgId" IS NOT DISTINCT FROM $1::uuid
 		ORDER BY `+order+`
 		LIMIT $2`, orgID, limit)
@@ -2053,7 +2063,7 @@ func ListParcelLabelRegister(
 		var batchRaw string
 		if err := rows.Scan(&r.Code, &r.CreatedAt, &r.ItemDescription, &r.Destination, &r.SenderName,
 			&r.InfoAttachedAt, &r.UsedAt, &r.VoidedAt, &r.VoidedReason,
-			&r.BatchID, &r.OrgName, &r.ParcelOrgID, &batchRaw); err != nil {
+			&r.BatchID, &r.OrgName, &r.RouteLabel, &r.ParcelOrgID, &batchRaw); err != nil {
 			return nil, err
 		}
 		if state == "all" {
@@ -2087,7 +2097,7 @@ func CountParcelLabelStates(
 		var n int
 		if err := pool.QueryRow(ctx, `
 			SELECT count(*) FROM parcel_label_stock
-			WHERE `+where+` AND "parcelOrgId" IS NOT DISTINCT FROM $1::uuid`, orgID).Scan(&n); err != nil {
+			WHERE (`+where+`) AND "parcelOrgId" IS NOT DISTINCT FROM $1::uuid`, orgID).Scan(&n); err != nil {
 			return nil, err
 		}
 		counts[state] = n
@@ -2110,6 +2120,43 @@ type ParcelLabelBatchRow struct {
 	Used         int       `json:"used"`
 	Voided       int       `json:"voided"`
 	VoidedReason *string   `json:"voidedReason"`
+}
+
+// ParcelLabelRouteOption is one of a company's own defined routes, as
+// the label-info picker offers it — just enough to display and to
+// snapshot onto a label, not the full stop-by-stop Route dbx.ListRoutes
+// returns for the company's own route-management screen.
+type ParcelLabelRouteOption struct {
+	ID     string  `json:"id"`
+	Name   string  `json:"name"`
+	Code   *string `json:"code"`
+	Active bool    `json:"active"`
+}
+
+// AdminListParcelRoutes — a company's active routes, for admin to pick
+// from when attaching a route to a label. Unlike ListRoutes (the
+// company's own self-service route manager) this never assembles
+// stops: a label only ever prints the route's name, so there is
+// nothing here for a stop list to serve.
+func AdminListParcelRoutes(ctx context.Context, pool *pgxpool.Pool, orgID string) ([]ParcelLabelRouteOption, error) {
+	rows, err := pool.Query(ctx, `
+		SELECT id, name, code, active
+		FROM parcel_route
+		WHERE "parcelOrgId" = $1
+		ORDER BY active DESC, name`, orgID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	out := []ParcelLabelRouteOption{}
+	for rows.Next() {
+		var r ParcelLabelRouteOption
+		if err := rows.Scan(&r.ID, &r.Name, &r.Code, &r.Active); err != nil {
+			return nil, err
+		}
+		out = append(out, r)
+	}
+	return out, rows.Err()
 }
 
 // ListParcelLabelBatches — the pads, newest first, scoped to one
@@ -2208,6 +2255,73 @@ func VoidParcelLabelBatch(
 // rest. [orgID] scopes exactly like the batch variant: nil is the
 // shared Esoqo pool, non-nil is one company's pad, and a code from
 // another pad is never touched.
+// DeleteParcelLabelsByCodes permanently removes labels that are still
+// fully blank — never attached, never used, never withdrawn. Unlike
+// VoidParcelLabelsByCodes this is a real DELETE, for genuinely
+// mistaken or test batches an admin wants gone rather than recorded as
+// withdrawn; anything with history on it (attached, spent or already
+// voided) is silently excluded from the match rather than erred on, so
+// a mixed selection deletes what it can and leaves the rest for
+// Withdraw.
+//
+// [orgID] scopes the act to the caller's own stock, same as void.
+func DeleteParcelLabelsByCodes(
+	ctx context.Context, pool *pgxpool.Pool, codes []string, orgID *string,
+) (deleted int, err error) {
+	clean := make([]string, 0, len(codes))
+	seen := map[string]struct{}{}
+	for _, c := range codes {
+		u := strings.ToUpper(strings.TrimSpace(c))
+		if u == "" {
+			continue
+		}
+		if _, dup := seen[u]; dup {
+			continue
+		}
+		seen[u] = struct{}{}
+		clean = append(clean, u)
+	}
+	if len(clean) == 0 {
+		return 0, &ParcelError{"BAD_INPUT", "Select at least one label"}
+	}
+	if len(clean) > 200 {
+		return 0, &ParcelError{"BAD_INPUT", "Delete at most 200 labels at once"}
+	}
+	tag, err := pool.Exec(ctx, `
+		DELETE FROM parcel_label_stock
+		WHERE upper(code) = ANY($1)
+		  AND "parcelOrgId" IS NOT DISTINCT FROM $2::uuid
+		  AND "usedAt" IS NULL AND "voidedAt" IS NULL AND "infoAttachedAt" IS NULL`,
+		clean, orgID)
+	if err != nil {
+		return 0, err
+	}
+	return int(tag.RowsAffected()), nil
+}
+
+// DeleteParcelLabelBatch permanently removes every still-blank label in
+// a batch. Same "touch only what's untouched" rule as
+// DeleteParcelLabelsByCodes: attached, spent or already-voided rows in
+// the batch are left exactly where they are.
+func DeleteParcelLabelBatch(
+	ctx context.Context, pool *pgxpool.Pool, batchID string, orgID *string,
+) (deleted int, err error) {
+	tag, err := pool.Exec(ctx, `
+		DELETE FROM parcel_label_stock
+		WHERE "batchId" = $1::uuid
+		  AND "parcelOrgId" IS NOT DISTINCT FROM $2::uuid
+		  AND "usedAt" IS NULL AND "voidedAt" IS NULL AND "infoAttachedAt" IS NULL`,
+		batchID, orgID)
+	if err != nil {
+		return 0, err
+	}
+	n := int(tag.RowsAffected())
+	if n == 0 {
+		return 0, &ParcelError{"NOT_FOUND", "No deletable labels in that batch"}
+	}
+	return n, nil
+}
+
 func VoidParcelLabelsByCodes(
 	ctx context.Context, pool *pgxpool.Pool, codes []string, orgID *string, reason string, staffID *string,
 ) (voided int, err error) {
@@ -2269,11 +2383,13 @@ func GetParcelLabelStockInfo(ctx context.Context, pool *pgxpool.Pool, code strin
 	err := pool.QueryRow(ctx, `
 		SELECT "usedAt" IS NOT NULL, "itemDescription", destination, "senderName", "senderMsisdn",
 		       "receiverName", "receiverMsisdn", "itemType", "weightRangeKg", "infoAttachedAt",
-		       "lengthCm"::float8, "widthCm"::float8, "heightCm"::float8
+		       "lengthCm"::float8, "widthCm"::float8, "heightCm"::float8,
+		       "routeId"::text, "routeLabel"
 		FROM parcel_label_stock WHERE code = $1`, code).
 		Scan(&used, &itemDescription, &info.Destination, &info.SenderName, &info.SenderMsisdn,
 			&info.ReceiverName, &info.ReceiverMsisdn, &info.ItemType, &info.WeightRangeKg, &attachedAt,
-			&info.LengthCm, &info.WidthCm, &info.HeightCm)
+			&info.LengthCm, &info.WidthCm, &info.HeightCm,
+			&info.RouteID, &info.RouteLabel)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return nil, &ParcelError{"NOT_FOUND", "That label code isn't a known pre-printed label"}
 	}
@@ -3250,6 +3366,9 @@ type AdminParcelListParams struct {
 	Q *string
 	// Queue is a key into ParcelQueues, or nil for no queue filter.
 	Queue *string
+	// ParcelOrgID scopes to one courier company's parcels, or nil for
+	// every company plus Esoqo-direct.
+	ParcelOrgID *string
 	// Oldest sorts by dwell — longest-waiting first.
 	//
 	// This is the right default for a *queue* and the wrong one for the
@@ -3317,10 +3436,11 @@ func AdminListParcels(ctx context.Context, pool *pgxpool.Pool, p AdminParcelList
 		LEFT JOIN parcel_org po ON po.id = p."parcelOrgId"
 		WHERE ($1::text IS NULL OR p.status::text = $1)
 		  AND ($2::text IS NULL OR p."senderName" ILIKE '%'||$2||'%' OR p."receiverName" ILIKE '%'||$2||'%' OR p.code ILIKE '%'||$2||'%')
+		  AND ($3::uuid IS NULL OR p."parcelOrgId" = $3::uuid)
 		  AND (` + queueWhere + `)
 		ORDER BY ` + order + `
-		LIMIT $3 OFFSET $4`
-	rows, err := pool.Query(ctx, query, p.Status, p.Q, p.Limit, p.Offset)
+		LIMIT $4 OFFSET $5`
+	rows, err := pool.Query(ctx, query, p.Status, p.Q, p.ParcelOrgID, p.Limit, p.Offset)
 	if err != nil {
 		return nil, 0, err
 	}
