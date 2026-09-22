@@ -7,6 +7,8 @@ import {
 import { listOrgCounterPricing } from "../actions";
 import { CustomParcelPanel } from "../CustomParcelPanel";
 import { OrgCounterClient } from "./OrgCounterClient";
+import { listCounterTicketQueue } from "../counter-queue/actions";
+import { CounterQueueClient } from "../counter-queue/CounterQueueClient";
 
 export const dynamic = "force-dynamic";
 export const metadata: Metadata = {
@@ -53,9 +55,15 @@ export default async function ParcelOrgCounterPage({
 
   const canDispatch = me.capabilities.includes("parcelorg.dispatch");
   const canWrite = me.capabilities.includes("parcelorg.write");
-  if (!canDispatch) redirect("/parcel-org");
+  // parcelorg.intake — INTAKE_CLERK's own bundle (see
+  // authsvc.ParcelStaffCapabilities) — reaches this page too: serving
+  // the walk-in queue and booking the parcel that follows IS the
+  // intake job, same as dispatch desk staff minting a booking directly.
+  const canIntake = me.capabilities.includes("parcelorg.intake");
+  if (!canDispatch && !canIntake) redirect("/parcel-org");
 
   const pricing = await listOrgCounterPricing(me.org.id);
+  const queue = canIntake ? await listCounterTicketQueue() : null;
   const divisor = Number(process.env.PARCEL_VOLUMETRIC_DIVISOR) || 5000;
 
   return (
@@ -80,6 +88,11 @@ export default async function ParcelOrgCounterPage({
           </div>
         )}
       </div>
+      {queue?.ok && (
+        <div style={{ marginBottom: 20 }}>
+          <CounterQueueClient initial={queue.tickets} />
+        </div>
+      )}
       <OrgCounterClient
         initialCode={code}
         pricing={pricing}
