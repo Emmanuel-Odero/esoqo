@@ -181,19 +181,25 @@ export function PrintableLabel({
    *  the honest workflow. */
   route?: string;
   /** The courier company this pad was issued to, when it was issued to
-   *  one. Prints as "{company} · Managed by Esoqo" under the route
-   *  band, so anyone holding the box — scanner or not — sees whose
-   *  label it is and who stands behind it. Omitted for shared-pool
-   *  stock, which belongs to no company. */
+   *  one. Prints centred in the header, alongside its logo — the pad
+   *  owner's own mark and name are what someone picking up the box
+   *  should see first. Omitted for shared-pool stock, which belongs to
+   *  no company. */
   orgName?: string;
-  /** Company logo URL (served via /img/:key). Rendered centered in the
-   *  header brand band at a fixed mm size — never overlaid on the QR or
-   *  barcode pixels, so scannability is unaffected. Falls back to text
-   *  orgName when absent; Esoqo branding always remains. */
+  /** Company logo URL (served via /img/:key). Rendered centred in the
+   *  header band next to the company name, at a fixed mm size — never
+   *  overlaid on the QR or barcode pixels, so scannability is
+   *  unaffected. */
   orgLogoUrl?: string;
-  /** Esoqo master logo URL. Falls back to the BRAND wordmark when
-   *  absent (no logo configured yet), so labels print with our branding
-   *  by default. */
+  /** Esoqo's own full-name logo (not just a mark — the wordmark image
+   *  itself). Prints twice, at two different sizes for two different
+   *  jobs: small, top-left in the header, as Esoqo's own constant
+   *  signature regardless of whose pad this is; and again, larger, in
+   *  the header's centred slot whenever the company has no logo of its
+   *  own on file, standing in next to the company name so that slot
+   *  isn't empty. It also prints centred in the trust footer, between
+   *  "Managed by Esoqo" and the tracking link. Falls back to the BRAND
+   *  wordmark as plain text wherever it's absent. */
   esoqoLogoUrl?: string;
 }) {
   const qrSrc = useCodeImage(async (canvas) => {
@@ -211,53 +217,50 @@ export function PrintableLabel({
     <div
       className="print-label"
       style={{
-        display: 'flex', flexDirection: 'column', gap: '1.5mm',
+        display: 'flex', flexDirection: 'column', gap: '1mm',
         width: `${LABEL_WIDTH_MM}mm`, height: `${LABEL_HEIGHT_MM}mm`,
         padding: '2.5mm 3mm', boxSizing: 'border-box',
-        // A dashed cut-guide, not a solid box — this is what actually
-        // gets cut apart into individual stickers, so the border
-        // itself needs to read as "cut along here", not as part of
-        // the label's own design.
-        border: '1px dashed #999', borderRadius: '2mm',
+        borderRadius: '2mm',
       }}
     >
-      {/* Brand + route band. Logos live here in the header — fixed mm
-          sizes, never touching QR/barcode pixels — so a phone camera or
-          gun reads clean codes. Company logo centered (the pad owner),
-          Esoqo mark left (who stands behind it). Text fallbacks keep
-          every label printable with Esoqo branding alone. */}
+      {/* Brand band, three zones. Left: Esoqo's own small mark, always
+          present — Esoqo's own signature on every label regardless of
+          whose pad it is. Centre: the pad owner — its logo and name
+          together when it has a logo on file; when it doesn't, Esoqo's
+          logo steps in next to the company name so that slot still
+          reads as branded rather than empty. Right: an empty spacer
+          the same width as the left cell, so the centre column is
+          actually centred in the label rather than pushed off-centre
+          by the left mark's own width. */}
       <div style={{
-        display: 'flex', justifyContent: 'space-between', alignItems: 'center',
-        borderBottom: '0.4mm solid #111', paddingBottom: '1mm', gap: '2mm',
-        minHeight: '7mm',
+        display: 'grid', gridTemplateColumns: '1fr auto 1fr', alignItems: 'center', gap: '1.5mm',
+        borderBottom: '0.4mm solid #111', paddingBottom: '1mm', minHeight: '7mm',
       }}>
-        <span style={{ display: 'flex', alignItems: 'center', gap: '1.5mm', minWidth: 0 }}>
+        <span style={{ justifySelf: 'start' }}>
           {esoqoLogoUrl ? (
-            <img src={esoqoLogoUrl} alt="Esoqo"
+            <img src={esoqoLogoUrl} alt={BRAND}
               onError={(e) => { (e.currentTarget as HTMLImageElement).style.display = 'none'; }}
-              style={{ height: '5.5mm', maxWidth: '18mm', objectFit: 'contain' }} />
+              style={{ height: '6mm', maxWidth: '17mm', objectFit: 'contain' }} />
           ) : (
-            <strong style={{ fontSize: '3.6mm', letterSpacing: '.02em', lineHeight: 1 }}>{BRAND}</strong>
-          )}
-          {orgLogoUrl && (
-            <img src={orgLogoUrl} alt={orgName ?? 'Company logo'}
-              onError={(e) => { (e.currentTarget as HTMLImageElement).style.display = 'none'; }}
-              style={{ height: '6.5mm', maxWidth: '30mm', objectFit: 'contain' }} />
+            <strong style={{ fontSize: '2.6mm', letterSpacing: '.02em', lineHeight: 1 }}>{BRAND}</strong>
           )}
         </span>
-        {/* Company name sits in the header now, where the route band used
-            to be squeezed — it is branding, and branding belongs next to
-            the logos. That vacates the full label width for the one
-            thing a handler without a scanner actually has to read. */}
-        {orgName && (
-          <span style={{
-            fontSize: '2.8mm', fontWeight: 700, letterSpacing: '.03em', lineHeight: 1,
+        <span style={{ justifySelf: 'center', display: 'flex', alignItems: 'center', gap: '1.2mm', minWidth: 0, maxWidth: '46mm' }}>
+          {orgLogoUrl ? (
+            <img src={orgLogoUrl} alt={orgName ?? 'Company logo'}
+              onError={(e) => { (e.currentTarget as HTMLImageElement).style.display = 'none'; }}
+              style={{ height: '6.5mm', maxWidth: '20mm', objectFit: 'contain', flexShrink: 0 }} />
+          ) : esoqoLogoUrl && orgName && (
+            <img src={esoqoLogoUrl} alt="" aria-hidden="true"
+              onError={(e) => { (e.currentTarget as HTMLImageElement).style.display = 'none'; }}
+              style={{ height: '5.5mm', maxWidth: '15mm', objectFit: 'contain', flexShrink: 0 }} />
+          )}
+          <strong style={{
+            fontSize: orgLogoUrl ? '2.9mm' : '3.4mm', letterSpacing: '.02em', lineHeight: 1,
             overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
-            textAlign: 'right', minWidth: 0,
-          }}>
-            {orgName} · Managed by {BRAND}
-          </span>
-        )}
+          }}>{orgName ?? BRAND}</strong>
+        </span>
+        <span />
       </div>
 
       {/* The drop-point band.
@@ -280,17 +283,18 @@ export function PrintableLabel({
       </div>
 
       <div style={{ display: 'flex', flexDirection: 'row', alignItems: 'center', gap: '3mm', flex: 1, minHeight: 0 }}>
-        {/* 24mm, down from 27mm, to fund the drop-point band above. Still
-            comfortably scannable: QR_PIXELS is 380, so this is a ~4x
-            downscale at 96dpi and the modules stay crisp through a
-            300dpi print engine. */}
-        <div style={{ width: '24mm', height: '24mm', flexShrink: 0 }}>
+        {/* 22mm, down from 24mm, to fund a properly-legible footer logo
+            below without pushing the label past its fixed 50mm height.
+            Still comfortably scannable: QR_PIXELS is 380, so this is
+            still roughly a 4x downscale at 96dpi and the modules stay
+            crisp through a 300dpi print engine. */}
+        <div style={{ width: '21mm', height: '21mm', flexShrink: 0 }}>
           {qrSrc && <img src={qrSrc} alt={`Tracking QR code for ${code}`} width={QR_PIXELS} height={QR_PIXELS}
             style={{ width: '100%', height: '100%', objectFit: 'contain' }} />}
         </div>
-        <div style={{ display: 'flex', flexDirection: 'column', justifyContent: 'center', gap: '2mm', minWidth: 0, flex: 1 }}>
+        <div style={{ display: 'flex', flexDirection: 'column', justifyContent: 'center', gap: '1.5mm', minWidth: 0, flex: 1 }}>
           <strong className="mono" style={{ fontSize: '4.6mm', lineHeight: 1 }}>{code}</strong>
-          <div style={{ width: '100%', height: '11mm' }}>
+          <div style={{ width: '100%', height: '10mm' }}>
             {barcodeSrc && <img src={barcodeSrc} alt={`Barcode for ${code}`}
               style={{ width: '100%', height: '100%', objectFit: 'contain' }} />}
           </div>
@@ -298,16 +302,33 @@ export function PrintableLabel({
         </div>
       </div>
 
-      {/* The trust footer. Small, always present, and the only thing on
-          the label that makes the signature visible to a person — "scan
-          it, and if it isn't ours it says so" is a claim worth printing
-          precisely because it is checkable. */}
+      {/* The trust footer — three parts. Left: the genuineness check and
+          "Managed by Esoqo", as plain text (who stands behind the label,
+          and whether that's checkable). Centre: Esoqo's own full-name
+          logo — sized to be legible without crowding the text either
+          side of it, which is why it's capped small even though it's
+          the one full wordmark image on the whole label. Right: the
+          tracking link. Text sides get `flex: 1` so they share the
+          remaining width evenly and don't crush the centred logo. */}
       <div style={{
         display: 'flex', justifyContent: 'space-between', alignItems: 'center',
-        borderTop: '0.3mm solid #ddd', paddingTop: '0.8mm', fontSize: '2.3mm', color: '#555', lineHeight: 1,
+        borderTop: '0.3mm solid #ddd', paddingTop: '0.8mm', fontSize: '2.1mm', color: '#555', lineHeight: 1, gap: '1.5mm',
       }}>
-        <span>{sig ? `✓ genuine ${BRAND} label` : `${BRAND} label`}</span>
-        <span>{TRACK_HOST}</span>
+        <span style={{ flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+          {sig ? '✓ genuine' : 'unverified'} · Managed by {BRAND}
+        </span>
+        <span style={{ flexShrink: 0, display: 'flex', alignItems: 'center' }}>
+          {esoqoLogoUrl ? (
+            <img src={esoqoLogoUrl} alt={BRAND}
+              onError={(e) => { (e.currentTarget as HTMLImageElement).style.display = 'none'; }}
+              style={{ height: '6mm', maxWidth: '28mm', objectFit: 'contain' }} />
+          ) : (
+            <strong style={{ fontSize: '2.6mm' }}>{BRAND}</strong>
+          )}
+        </span>
+        <span style={{ flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', textAlign: 'right' }}>
+          {TRACK_HOST}
+        </span>
       </div>
     </div>
   );

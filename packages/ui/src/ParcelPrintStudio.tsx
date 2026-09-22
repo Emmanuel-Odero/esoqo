@@ -1,10 +1,21 @@
 'use client';
 
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { LABEL_GAP_MM, LABEL_HEIGHT_MM, LABEL_WIDTH_MM, PrintableLabel, PrintStyles } from './ParcelLabel';
 import { Icon } from './Icon';
 
-export interface PrintLabelItem { code: string; sig?: string }
+// Same fixed mm→px ratio ScaledLabel uses — see its own comment on why
+// this (not device pixel density) is the right conversion.
+const PX_PER_MM = 96 / 25.4;
+
+export interface PrintLabelItem {
+  code: string;
+  sig?: string;
+  /** This label's own route text, if it has one — see ParcelLabel's
+   *  own doc on the route band. Per-item because a batch being printed
+   *  together can span several routes. */
+  route?: string;
+}
 
 export type PrintPaper = 'A4' | 'Letter' | 'A5';
 
@@ -29,10 +40,17 @@ const PAPER_MM: Record<PrintPaper, { w: number; h: number }> = {
 
 const MARGIN_MM = 10;
 
-function fitsPaper(layout: PrintLayout): { fits: boolean; needW: number; needH: number; availW: number; availH: number } {
+/** The sheet's own w×h in mm, orientation applied — one place both the
+ *  fit check and the print preview read it from, so they can't drift. */
+export function paperDimsMm(layout: PrintLayout): { w: number; h: number } {
   const sheet = PAPER_MM[layout.paper];
-  const pw = layout.orientation === 'portrait' ? sheet.w : sheet.h;
-  const ph = layout.orientation === 'portrait' ? sheet.h : sheet.w;
+  return layout.orientation === 'portrait'
+    ? { w: sheet.w, h: sheet.h }
+    : { w: sheet.h, h: sheet.w };
+}
+
+function fitsPaper(layout: PrintLayout): { fits: boolean; needW: number; needH: number; availW: number; availH: number } {
+  const { w: pw, h: ph } = paperDimsMm(layout);
   const availW = pw - MARGIN_MM * 2;
   const availH = ph - MARGIN_MM * 2;
   const needW = layout.columns * LABEL_WIDTH_MM + (layout.columns - 1) * LABEL_GAP_MM;
@@ -94,9 +112,9 @@ export function PrintLayoutControls({
 }
 
 export function LabelPrintSheet({
-  labels, layout, orgName, orgLogoUrl, previewScale,
+  labels, layout, orgName, orgLogoUrl, esoqoLogoUrl, previewScale,
 }: {
-  labels: PrintLabelItem[]; layout: PrintLayout; orgName?: string; orgLogoUrl?: string;
+  labels: PrintLabelItem[]; layout: PrintLayout; orgName?: string; orgLogoUrl?: string; esoqoLogoUrl?: string;
   /** 0..1 shrink for the on-screen preview so a full page fits the card. Print always uses real mm. */
   previewScale?: number;
 }) {
@@ -106,10 +124,16 @@ export function LabelPrintSheet({
     for (let i = 0; i < labels.length; i += perPage) out.push(labels.slice(i, i + perPage));
     return out;
   }, [labels, perPage]);
-  const sheet = PAPER_MM[layout.paper];
-  const pw = layout.orientation === 'portrait' ? sheet.w : sheet.h;
-  const ph = layout.orientation === 'portrait' ? sheet.h : sheet.w;
+  const { w: pw, h: ph } = paperDimsMm(layout);
   const scale = previewScale ?? 1;
+  // Cut-guide positions: the mm centre of each gutter between cells,
+  // one dashed line per cut rather than two adjacent cell borders
+  // touching (which is what a per-label border gave — a doubled,
+  // slightly-off-centre edge instead of one clean line to cut along).
+  const colCuts = Array.from({ length: Math.max(0, layout.columns - 1) }, (_, i) =>
+    i * (LABEL_WIDTH_MM + LABEL_GAP_MM) + LABEL_WIDTH_MM + LABEL_GAP_MM / 2);
+  const rowCuts = Array.from({ length: Math.max(0, layout.rows - 1) }, (_, i) =>
+    i * (LABEL_HEIGHT_MM + LABEL_GAP_MM) + LABEL_HEIGHT_MM + LABEL_GAP_MM / 2);
 
   if (labels.length === 0) return null;
   return (
@@ -164,25 +188,43 @@ export function LabelPrintSheet({
               boxShadow: '0 2px 10px rgba(0,0,0,.08)',
               padding: `calc(${MARGIN_MM}mm * var(--lp-scale))`,
               boxSizing: 'border-box', overflow: 'hidden',
+              margin: '0 auto',
             } as React.CSSProperties}
           >
             <div style={{
+              position: 'relative',
               display: 'grid',
               gridTemplateColumns: `repeat(${layout.columns}, calc(${LABEL_WIDTH_MM}mm * var(--lp-scale)))`,
               gridAutoRows: `calc(${LABEL_HEIGHT_MM}mm * var(--lp-scale))`,
               gap: `calc(${LABEL_GAP_MM}mm * var(--lp-scale))`,
               alignContent: 'start',
             }}>
-              {page.map(({ code, sig }) => (
+              {page.map(({ code, sig, route }) => (
                 <div key={code} style={{
                   width: `calc(${LABEL_WIDTH_MM}mm * var(--lp-scale))`,
                   height: `calc(${LABEL_HEIGHT_MM}mm * var(--lp-scale))`,
                   overflow: 'hidden',
                 }}>
                   <div style={{ transform: 'scale(var(--lp-scale))', transformOrigin: 'top left', width: `${LABEL_WIDTH_MM}mm`, height: `${LABEL_HEIGHT_MM}mm` }}>
-                    <PrintableLabel code={code} sig={sig} orgName={orgName} orgLogoUrl={orgLogoUrl} />
+                    <PrintableLabel code={code} sig={sig} route={route} orgName={orgName} orgLogoUrl={orgLogoUrl} esoqoLogoUrl={esoqoLogoUrl} />
                   </div>
                 </div>
+              ))}
+              {/* Cut guides — real trim lines through the gutters (see
+                  colCuts/rowCuts above), not just each label's own edge. */}
+              {colCuts.map((mm, i) => (
+                <div key={`vcut${i}`} aria-hidden style={{
+                  position: 'absolute', top: 0, bottom: 0,
+                  left: `calc(${mm}mm * var(--lp-scale))`,
+                  borderLeft: '1px dashed #999', pointerEvents: 'none',
+                }} />
+              ))}
+              {rowCuts.map((mm, i) => (
+                <div key={`hcut${i}`} aria-hidden style={{
+                  position: 'absolute', left: 0, right: 0,
+                  top: `calc(${mm}mm * var(--lp-scale))`,
+                  borderTop: '1px dashed #999', pointerEvents: 'none',
+                }} />
               ))}
             </div>
           </div>
@@ -200,14 +242,14 @@ export function LabelPrintSheet({
  * this owns only the print layout and the print action.
  */
 export function SelectableLabelPrintBlock({
-  labels, selected, onToggle, onSelectAll, onClear, orgName, orgLogoUrl, title, collapsible = false,
+  labels, selected, onToggle, onSelectAll, onClear, orgName, orgLogoUrl, esoqoLogoUrl, title, collapsible = false,
 }: {
   labels: PrintLabelItem[];
   selected: Set<string>;
   onToggle: (code: string) => void;
   onSelectAll: () => void;
   onClear: () => void;
-  orgName?: string; orgLogoUrl?: string;
+  orgName?: string; orgLogoUrl?: string; esoqoLogoUrl?: string;
   title: string;
   /** Lets dense operational screens keep the print studio out of the way until needed. */
   collapsible?: boolean;
@@ -218,6 +260,26 @@ export function SelectableLabelPrintBlock({
   const toPrint = chosen.length > 0 ? chosen : [];
   const perPage = labelsPerPage(layout);
   const pages = toPrint.length === 0 ? 0 : Math.ceil(toPrint.length / perPage);
+
+  // Fills the card's own width instead of a fixed guess — the same
+  // "measure the container, scale to fit" ScaledLabel already does for
+  // a single label, applied here to the whole printed page so "too
+  // small, not centred" isn't a magic previewScale number that happens
+  // to work on one screen width and not another.
+  const previewRef = useRef<HTMLDivElement>(null);
+  const [previewScale, setPreviewScale] = useState(0.55);
+  const { w: paperWidthMm } = paperDimsMm(layout);
+  useEffect(() => {
+    const el = previewRef.current;
+    if (!el) return;
+    const ro = new ResizeObserver((entries) => {
+      const width = entries[0]?.contentRect.width;
+      if (!width) return;
+      setPreviewScale(Math.max(0.3, Math.min(1, width / (paperWidthMm * PX_PER_MM))));
+    });
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, [paperWidthMm]);
 
   return (
     <div className="card" style={{ padding: 16, marginBottom: 16 }}>
@@ -257,7 +319,9 @@ export function SelectableLabelPrintBlock({
         </div>
       )}
       {toPrint.length > 0 ? (
-        <LabelPrintSheet labels={toPrint} layout={layout} orgName={orgName} orgLogoUrl={orgLogoUrl} previewScale={0.55} />
+        <div ref={previewRef} style={{ width: '100%' }}>
+          <LabelPrintSheet labels={toPrint} layout={layout} orgName={orgName} orgLogoUrl={orgLogoUrl} esoqoLogoUrl={esoqoLogoUrl} previewScale={previewScale} />
+        </div>
       ) : (
         <p className="sub" style={{ margin: '4px 0 0' }}>Tick the labels above to preview exactly how they fall on the {layout.paper} page before printing.</p>
       )}
