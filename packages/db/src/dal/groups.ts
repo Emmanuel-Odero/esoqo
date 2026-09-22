@@ -729,20 +729,30 @@ export async function searchGroupsForStaff(ctx: Ctx, q: string) {
  * at a time" even though the schema itself allows more, so any other
  * active membership is soft-exited first — same audit trail as a normal
  * removal, just bundled with the add in one transaction.
+ *
+ * Returns a MemberAddedNotice, same as addMember/addNewMember — this is
+ * a staff action on a person who did nothing themselves to trigger it
+ * (unlike registration's own self-picked-a-group path, 2c in
+ * completeRegistration, where the registrant chose the group during
+ * their own flow and needs no separate telling). Before this returned
+ * only the raw Membership and its caller, actionAssignToGroup in
+ * apps/admin/registrations/actions.ts, sent nothing at all — the one
+ * gap in an otherwise consistent "tell them" rule every other add path
+ * here already follows.
  */
 export async function assignPersonToGroup(
   ctx: Ctx, personPartyId: string, orgPartyId: string, role: MemberRole = 'MEMBER',
-) {
+): Promise<{ membership: Awaited<ReturnType<typeof prisma.membership.create>> } & MemberAddedNotice> {
   requireCapability(ctx, 'membership.write', { partyId: orgPartyId });
 
-  return prisma.$transaction(async (tx) => {
+  const m = await prisma.$transaction(async (tx) => {
     const others = await tx.membership.findMany({
       where: { personId: personPartyId, exitedAt: null, orgId: { not: orgPartyId } },
     });
-    for (const m of others) {
-      await tx.membership.update({ where: { id: m.id }, data: { exitedAt: new Date() } });
+    for (const other of others) {
+      await tx.membership.update({ where: { id: other.id }, data: { exitedAt: new Date() } });
       await recordAudit(ctx, {
-        action: 'membership.removed', targetType: 'membership', targetId: m.id,
+        action: 'membership.removed', targetType: 'membership', targetId: other.id,
         payload: { reason: 'Moved to another group' },
       }, tx as never);
     }
@@ -750,18 +760,33 @@ export async function assignPersonToGroup(
     const existing = await tx.membership.findUnique({
       where: { personId_orgId: { personId: personPartyId, orgId: orgPartyId } },
     });
-    const m = existing
+    const created = existing
       ? await tx.membership.update({ where: { id: existing.id }, data: { exitedAt: null, role } })
       : await tx.membership.create({ data: { personId: personPartyId, orgId: orgPartyId, role } });
 
     await recordAudit(ctx, {
       action: existing ? 'membership.reinstated' : 'membership.added',
-      targetType: 'membership', targetId: m.id,
+      targetType: 'membership', targetId: created.id,
       payload: { orgPartyId, personPartyId, role },
     }, tx as never);
 
-    return m;
+    return created;
   });
+
+  const person = await prisma.person.findUnique({
+    where: { partyId: personPartyId }, select: { msisdn: true, email: true },
+  });
+  const { orgName, joinFeeKes } = await groupNotifyContext(orgPartyId);
+  return {
+    membership: m,
+    orgName,
+    joinFeeKes: m.status === 'PENDING' ? joinFeeKes : 0,
+    notify: person?.msisdn
+      ? { channel: 'sms', to: person.msisdn }
+      : person?.email
+        ? { channel: 'email', to: person.email }
+        : null,
+  };
 }
 
 /** People not yet in this group, for the add-member picker. */

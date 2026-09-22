@@ -10,6 +10,7 @@ import {
 } from '@esoqo/db';
 import { hashPin, generateTempPin } from '@esoqo/auth';
 import { toSafeErrorMessage } from '@esoqo/domain';
+import { tellThemTheyWereAdded } from '../groups/actions';
 
 type PayMethod = 'MPESA' | 'BANK_TRANSFER' | 'CASH_TO_AGENT';
 export interface PaymentInput {
@@ -142,7 +143,8 @@ export async function actionSearchGroupsForStaff(q: string) {
 export async function actionAssignToGroup(personId: string, orgPartyId: string): Promise<Result> {
   try {
     const ctx = await requireStaff();
-    await assignPersonToGroup(ctx, personId, orgPartyId);
+    const notice = await assignPersonToGroup(ctx, personId, orgPartyId);
+    await tellThemTheyWereAdded(notice);
     revalidatePath('/registrations');
     return { ok: true, data: undefined };
   } catch (e) { return fail(e); }
