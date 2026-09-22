@@ -192,14 +192,10 @@ export function PrintableLabel({
    *  unaffected. */
   orgLogoUrl?: string;
   /** Esoqo's own full-name logo (not just a mark — the wordmark image
-   *  itself). Prints twice, at two different sizes for two different
-   *  jobs: small, top-left in the header, as Esoqo's own constant
-   *  signature regardless of whose pad this is; and again, larger, in
-   *  the header's centred slot whenever the company has no logo of its
-   *  own on file, standing in next to the company name so that slot
-   *  isn't empty. It also prints centred in the trust footer, between
-   *  "Managed by Esoqo" and the tracking link. Falls back to the BRAND
-   *  wordmark as plain text wherever it's absent. */
+   *  itself). Prints once, centred in the trust footer between "Managed
+   *  by Esoqo" and the tracking link — the header band is the pad
+   *  owner's alone, see orgName/orgLogoUrl above. Falls back to the
+   *  BRAND wordmark as plain text when absent. */
   esoqoLogoUrl?: string;
 }) {
   const qrSrc = useCodeImage(async (canvas) => {
@@ -223,44 +219,24 @@ export function PrintableLabel({
         borderRadius: '2mm',
       }}
     >
-      {/* Brand band, three zones. Left: Esoqo's own small mark, always
-          present — Esoqo's own signature on every label regardless of
-          whose pad it is. Centre: the pad owner — its logo and name
-          together when it has a logo on file; when it doesn't, Esoqo's
-          logo steps in next to the company name so that slot still
-          reads as branded rather than empty. Right: an empty spacer
-          the same width as the left cell, so the centre column is
-          actually centred in the label rather than pushed off-centre
-          by the left mark's own width. */}
+      {/* Brand band: the pad owner, centred — logo and name together
+          when a logo is on file; just the name, styled large enough to
+          carry the header on its own, when it isn't. No Esoqo branding
+          here — this band is the company's, Esoqo's own mark lives in
+          the trust footer below instead. */}
       <div style={{
-        display: 'grid', gridTemplateColumns: '1fr auto 1fr', alignItems: 'center', gap: '1.5mm',
+        display: 'flex', justifyContent: 'center', alignItems: 'center', gap: '1.5mm',
         borderBottom: '0.4mm solid #111', paddingBottom: '1mm', minHeight: '7mm',
       }}>
-        <span style={{ justifySelf: 'start' }}>
-          {esoqoLogoUrl ? (
-            <img src={esoqoLogoUrl} alt={BRAND}
-              onError={(e) => { (e.currentTarget as HTMLImageElement).style.display = 'none'; }}
-              style={{ height: '6mm', maxWidth: '17mm', objectFit: 'contain' }} />
-          ) : (
-            <strong style={{ fontSize: '2.6mm', letterSpacing: '.02em', lineHeight: 1 }}>{BRAND}</strong>
-          )}
-        </span>
-        <span style={{ justifySelf: 'center', display: 'flex', alignItems: 'center', gap: '1.2mm', minWidth: 0, maxWidth: '46mm' }}>
-          {orgLogoUrl ? (
-            <img src={orgLogoUrl} alt={orgName ?? 'Company logo'}
-              onError={(e) => { (e.currentTarget as HTMLImageElement).style.display = 'none'; }}
-              style={{ height: '6.5mm', maxWidth: '20mm', objectFit: 'contain', flexShrink: 0 }} />
-          ) : esoqoLogoUrl && orgName && (
-            <img src={esoqoLogoUrl} alt="" aria-hidden="true"
-              onError={(e) => { (e.currentTarget as HTMLImageElement).style.display = 'none'; }}
-              style={{ height: '5.5mm', maxWidth: '15mm', objectFit: 'contain', flexShrink: 0 }} />
-          )}
-          <strong style={{
-            fontSize: orgLogoUrl ? '2.9mm' : '3.4mm', letterSpacing: '.02em', lineHeight: 1,
-            overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
-          }}>{orgName ?? BRAND}</strong>
-        </span>
-        <span />
+        {orgLogoUrl && (
+          <img src={orgLogoUrl} alt={orgName ?? 'Company logo'}
+            onError={(e) => { (e.currentTarget as HTMLImageElement).style.display = 'none'; }}
+            style={{ height: '6.5mm', maxWidth: '22mm', objectFit: 'contain', flexShrink: 0 }} />
+        )}
+        <strong style={{
+          fontSize: orgLogoUrl ? '2.9mm' : '4.4mm', letterSpacing: '.02em', lineHeight: 1,
+          overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: '60mm',
+        }}>{orgName ?? BRAND}</strong>
       </div>
 
       {/* The drop-point band.
