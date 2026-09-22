@@ -64,6 +64,26 @@ header { position:sticky; top:0; z-index:90; background:rgba(255,255,255,.95);
    label to it so it never overflows a phone. */
 .track-label { margin:14px 0 0 }
 
+/* Send-a-parcel form's progress rail — the existing section headings
+   turned into a visible, sticky "how far am I" signal, no navigation
+   gating (the form stays one long scroll — see SendParcelForm's own
+   comment on why a gated step wasn't the fix last time this shipped). */
+.pf-rail { position:sticky; top:64px; z-index:70; display:flex; gap:6px;
+  background:#fff; padding:10px 0; margin-bottom:14px; border-bottom:1px solid var(--line) }
+.pf-rail-step { flex:1; display:flex; flex-direction:column; gap:6px; align-items:center;
+  font-size:.72rem; color:var(--tx-2); text-align:center }
+.pf-rail-dot { width:100%; height:4px; border-radius:99px; background:var(--line); transition:background .25s ease }
+.pf-rail-step.done .pf-rail-dot { background:var(--green) }
+.pf-rail-step.done { color:var(--green) }
+
+/* The little check that fades into a section heading once its own
+   fields validate — the "done" micro-affirmation, reusing the same
+   check-circle language ChoiceCard already renders for a selected
+   option, not a new visual vocabulary. */
+.pf-h3-done { display:inline-flex; margin-left:8px; color:var(--green);
+  opacity:0; transform:scale(.6); transition:opacity .2s ease, transform .2s ease; vertical-align:middle }
+.pf-h3-done.on { opacity:1; transform:scale(1) }
+
 /* hero */
 .hero { position:relative; background:var(--navy); color:#fff; overflow:hidden; padding:74px 0 100px }
 .hero-bg { position:absolute; inset:0; z-index:0 }

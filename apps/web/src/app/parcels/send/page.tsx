@@ -4,6 +4,7 @@ import {
   actionListParcelAgents, actionListParcelPricing, actionListParcelZones,
   actionListWalkInStations,
 } from '../actions';
+import { actionGetCounterTicket } from '../counter-ticket-actions';
 import { SendParcelForm } from '../SendParcelForm';
 
 export const metadata: Metadata = {
@@ -29,12 +30,19 @@ export const dynamic = 'force-dynamic';
  * Tracking lives on its own page (/parcels/track); this page is only
  * the booking form, so it stays short and focused.
  */
-export default async function SendParcelPage() {
-  const [pricing, zones, agents, stations] = await Promise.all([
+export default async function SendParcelPage({
+  searchParams,
+}: { searchParams: Promise<{ ticket?: string }> }) {
+  const { ticket: ticketId } = await searchParams;
+  const [pricing, zones, agents, stations, ticket] = await Promise.all([
     actionListParcelPricing(),
     actionListParcelZones(),
     actionListParcelAgents(),
     actionListWalkInStations(),
+    // Opened from a counter ticket's "fill in details while you wait"
+    // link (see CounterTicketStatus) — a WAITING ticket's own
+    // draftDetails, if any, resumes the form exactly where it was left.
+    ticketId ? actionGetCounterTicket(ticketId) : Promise.resolve(null),
   ]);
 
   return (
@@ -52,7 +60,11 @@ export default async function SendParcelPage() {
 
       <section className="sec">
         <div className="wrap" style={{ maxWidth: 620 }}>
-          <SendParcelForm pricing={pricing} zones={zones} agents={agents} stations={stations} />
+          <SendParcelForm
+            pricing={pricing} zones={zones} agents={agents} stations={stations}
+            ticketId={ticket ? ticketId : undefined}
+            initialDraft={ticket?.draftDetails as Record<string, unknown> | null | undefined}
+          />
 
           <p className="sub" style={{ textAlign: 'center', marginTop: 18, fontSize: '.88rem' }}>
             Already sent one? <Link href="/parcels/track">Track it here</Link>.
