@@ -49,23 +49,53 @@ export function paperDimsMm(layout: PrintLayout): { w: number; h: number } {
     : { w: sheet.h, h: sheet.w };
 }
 
-function fitsPaper(layout: PrintLayout): { fits: boolean; needW: number; needH: number; availW: number; availH: number } {
+/**
+ * How big a label actually prints, given the chosen grid.
+ *
+ * Labels don't have one fixed physical size — the point of choosing
+ * columns × rows is to say how many go on a sheet, and each one grows
+ * or shrinks to fill its share of the page: fewer per page means
+ * bigger stickers, not more blank paper around small ones. `cellW`/
+ * `cellH` is that share (page, minus margin, divided evenly with gaps
+ * subtracted); `fillScale` is how much the label's native 90×50mm
+ * design has to scale to fit inside it without distorting — capped by
+ * whichever dimension is tighter, so a cell that's proportionally
+ * wider or taller than 90:50 leaves a little breathing room on one
+ * axis rather than stretching the QR code into an oval.
+ */
+export interface PrintSizing {
+  cellW: number; cellH: number; fillScale: number;
+  /** The label's actual printed footprint, aspect preserved. */
+  printedW: number; printedH: number;
+}
+
+export function computePrintSizing(layout: PrintLayout): PrintSizing {
   const { w: pw, h: ph } = paperDimsMm(layout);
+  const columns = Math.max(1, layout.columns);
+  const rows = Math.max(1, layout.rows);
   const availW = pw - MARGIN_MM * 2;
   const availH = ph - MARGIN_MM * 2;
-  const needW = layout.columns * LABEL_WIDTH_MM + (layout.columns - 1) * LABEL_GAP_MM;
-  const needH = layout.rows * LABEL_HEIGHT_MM + (layout.rows - 1) * LABEL_GAP_MM;
-  return { fits: needW <= availW + 0.01 && needH <= availH + 0.01, needW, needH, availW, availH };
+  const cellW = (availW - (columns - 1) * LABEL_GAP_MM) / columns;
+  const cellH = (availH - (rows - 1) * LABEL_GAP_MM) / rows;
+  const fillScale = Math.max(0.1, Math.min(cellW / LABEL_WIDTH_MM, cellH / LABEL_HEIGHT_MM));
+  return { cellW, cellH, fillScale, printedW: LABEL_WIDTH_MM * fillScale, printedH: LABEL_HEIGHT_MM * fillScale };
 }
+
+// Below this, the QR and barcode are still technically decodable but
+// small enough that a phone camera starts struggling in anything but
+// good light — worth a nudge rather than a silent surprise at the
+// printer.
+const SMALL_PRINT_THRESHOLD = 0.32;
 
 /**
  * Print studio: columns × rows per sheet on a paper size, with a live
  * WYSIWYG preview of exactly how stickers fall on each page.
  *
  * One component backs both the Esoqo dashboard and the courier portal
- * so "20 labels per page" means the same grid in both places. Labels
- * are fixed 90×50mm physical stickers; the grid only changes how many
- * fit per sheet, never the sticker size.
+ * so "20 labels per page" means the same grid in both places. A label
+ * has no fixed print size — see computePrintSizing — so there's
+ * nothing here to "overflow" the page; the grid always fits by
+ * construction, it just makes the stickers bigger or smaller.
  */
 export function PrintLayoutControls({
   layout, onChange,
@@ -73,7 +103,7 @@ export function PrintLayoutControls({
   layout: PrintLayout; onChange: (l: PrintLayout) => void;
 }) {
   const perPage = labelsPerPage(layout);
-  const fit = fitsPaper(layout);
+  const sizing = computePrintSizing(layout);
   return (
     <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', alignItems: 'flex-end' }}>
       <label className="sub">Columns
@@ -100,11 +130,11 @@ export function PrintLayoutControls({
         </select>
       </label>
       <span className="sub" style={{ fontWeight: 700 }} aria-live="polite">
-        {perPage} per page
+        {perPage} per page · prints at ~{sizing.printedW.toFixed(0)}×{sizing.printedH.toFixed(0)}mm
       </span>
-      {!fit.fits && (
+      {sizing.fillScale < SMALL_PRINT_THRESHOLD && (
         <span role="alert" style={{ fontSize: '.8rem', color: 'var(--red)', maxWidth: 300 }}>
-          {layout.columns}×{layout.rows} needs {fit.needW.toFixed(0)}×{fit.needH.toFixed(0)}mm but {layout.paper} {layout.orientation} fits {fit.availW.toFixed(0)}×{fit.availH.toFixed(0)}mm — labels will overflow. Reduce rows or columns.
+          That's small enough the QR/barcode may be hard to scan — reduce rows or columns to print bigger.
         </span>
       )}
     </div>
@@ -145,14 +175,17 @@ export function LabelPrintSheet({
   }, [labels, perPage]);
   const { w: pw, h: ph } = paperDimsMm(layout);
   const scale = previewScale ?? 1;
+  const { cellW, cellH, fillScale } = computePrintSizing(layout);
   // Cut-guide positions: the mm centre of each gutter between cells,
   // one dashed line per cut rather than two adjacent cell borders
   // touching (which is what a per-label border gave — a doubled,
   // slightly-off-centre edge instead of one clean line to cut along).
+  // Read off the actual cell size, not the label's native 90×50mm —
+  // the cell is whatever computePrintSizing decided fills the page.
   const colCuts = Array.from({ length: Math.max(0, layout.columns - 1) }, (_, i) =>
-    i * (LABEL_WIDTH_MM + LABEL_GAP_MM) + LABEL_WIDTH_MM + LABEL_GAP_MM / 2);
+    i * (cellW + LABEL_GAP_MM) + cellW + LABEL_GAP_MM / 2);
   const rowCuts = Array.from({ length: Math.max(0, layout.rows - 1) }, (_, i) =>
-    i * (LABEL_HEIGHT_MM + LABEL_GAP_MM) + LABEL_HEIGHT_MM + LABEL_GAP_MM / 2);
+    i * (cellH + LABEL_GAP_MM) + cellH + LABEL_GAP_MM / 2);
 
   if (labels.length === 0) return null;
   return (
@@ -187,16 +220,17 @@ export function LabelPrintSheet({
           </figcaption>
           {/* The paper itself: a bordered sheet at real aspect ratio so
               what you see is where stickers land on screen. `scale` is
-              an on-screen-only shrink (see `previewScale`'s own doc) —
-              every mm dimension below reads it through the CSS variable
-              --lp-scale rather than baking it into a literal value, so
-              PrintStyles' own `.lp-sheet-scale` rule can force it back
-              to 1 under @media print. Without that reset this whole
-              "paper" box — including the 90×50mm labels inside it —
-              printed at 55% of its real physical size: exactly the
-              "labels land in the wrong place on the sheet" bug this
-              fixes, since a courier's pre-cut label stock is cut to the
-              REAL 90×50mm, not 55% of it. */}
+              an on-screen-only shrink (see `previewScale`'s own doc),
+              separate from `fillScale` above (which decides the
+              label's actual printed size and applies equally on screen
+              and in print) — every mm dimension below reads `scale`
+              through the CSS variable --lp-scale rather than baking it
+              into a literal value, so PrintStyles' own `.lp-sheet-scale`
+              rule can force it back to 1 under @media print. Without
+              that reset this whole "paper" box printed at whatever
+              fraction the on-screen preview happened to be shrunk to —
+              a page that looks right on screen but comes out of the
+              printer at a fraction of real size, cut lines included. */}
           <div
             className="lp-sheet-scale"
             style={{
@@ -213,18 +247,31 @@ export function LabelPrintSheet({
             <div style={{
               position: 'relative',
               display: 'grid',
-              gridTemplateColumns: `repeat(${layout.columns}, calc(${LABEL_WIDTH_MM}mm * var(--lp-scale)))`,
-              gridAutoRows: `calc(${LABEL_HEIGHT_MM}mm * var(--lp-scale))`,
+              gridTemplateColumns: `repeat(${layout.columns}, calc(${cellW}mm * var(--lp-scale)))`,
+              gridAutoRows: `calc(${cellH}mm * var(--lp-scale))`,
               gap: `calc(${LABEL_GAP_MM}mm * var(--lp-scale))`,
               alignContent: 'start',
             }}>
               {page.map(({ code, sig, route }) => (
                 <div key={code} style={{
-                  width: `calc(${LABEL_WIDTH_MM}mm * var(--lp-scale))`,
-                  height: `calc(${LABEL_HEIGHT_MM}mm * var(--lp-scale))`,
+                  width: `calc(${cellW}mm * var(--lp-scale))`,
+                  height: `calc(${cellH}mm * var(--lp-scale))`,
                   overflow: 'hidden',
+                  display: 'flex', alignItems: 'center', justifyContent: 'center',
                 }}>
-                  <div style={{ transform: 'scale(var(--lp-scale))', transformOrigin: 'top left', width: `${LABEL_WIDTH_MM}mm`, height: `${LABEL_HEIGHT_MM}mm` }}>
+                  {/* The label always renders at its native 90×50mm and
+                      scales up or down to fill the cell — fillScale
+                      from computePrintSizing, combined with --lp-scale
+                      (the separate, screen-preview-only shrink, reset
+                      to 1 at print time). Centred rather than pinned to
+                      a corner: fillScale preserves aspect ratio, so a
+                      cell whose own proportions don't match 90:50
+                      leaves slack on one axis, and centring is the
+                      option that doesn't read as mis-cut. */}
+                  <div style={{
+                    transform: `scale(calc(${fillScale} * var(--lp-scale)))`, transformOrigin: 'center',
+                    width: `${LABEL_WIDTH_MM}mm`, height: `${LABEL_HEIGHT_MM}mm`, flexShrink: 0,
+                  }}>
                     <PrintableLabel code={code} sig={sig} route={route} orgName={orgName} orgLogoUrl={orgLogoUrl} esoqoLogoUrl={esoqoLogoUrl}
                       onReady={() => {
                         readyCodesRef.current.add(code);
