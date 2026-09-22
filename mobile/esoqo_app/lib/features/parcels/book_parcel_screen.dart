@@ -71,6 +71,13 @@ class _BookParcelScreenState extends ConsumerState<BookParcelScreen> {
   List<ParcelCoverageTier> _tiers = const [];
   String? _coverageTierId;
 
+  // Cash on delivery — the buyer pays the seller for the goods (and
+  // optionally the dispatch fee) at the door instead of the seller
+  // prepaying now. Only offered once the policy loads and says it's on.
+  ParcelCodPolicy? _codPolicy;
+  bool _isCod = false;
+  final _codAmount = TextEditingController();
+
   // A real pin for the pickup end. Only the origin is offered here:
   // the sender is standing at it, so "use my location" is honest and
   // one tap. Asking them to pin a destination they are not at would be
@@ -107,6 +114,7 @@ class _BookParcelScreenState extends ConsumerState<BookParcelScreen> {
     _loadZones();
     _loadAgents();
     _loadTiers();
+    _loadCodPolicy();
   }
 
   @override
@@ -124,6 +132,7 @@ class _BookParcelScreenState extends ConsumerState<BookParcelScreen> {
     _notes.dispose();
     _existingCode.dispose();
     _declaredValue.dispose();
+    _codAmount.dispose();
     super.dispose();
   }
 
@@ -176,6 +185,16 @@ class _BookParcelScreenState extends ConsumerState<BookParcelScreen> {
     }
   }
 
+  Future<void> _loadCodPolicy() async {
+    try {
+      final policy = await ref.read(parcelsRepositoryProvider).getCodPolicy();
+      if (mounted) setState(() => _codPolicy = policy);
+    } on ApiException {
+      // No policy loaded means no COD offer — falls back to the
+      // always-available prepay/pay-in-person path.
+    }
+  }
+
   // ── Derived values ──────────────────────────────────────────────────
 
   /// The entered weight converted to kg — the unit toggle only affects
@@ -189,6 +208,11 @@ class _BookParcelScreenState extends ConsumerState<BookParcelScreen> {
 
   double? get _declaredValueKes {
     final raw = double.tryParse(_declaredValue.text.trim());
+    return (raw == null || raw <= 0) ? null : raw;
+  }
+
+  double? get _codAmountKes {
+    final raw = double.tryParse(_codAmount.text.trim());
     return (raw == null || raw <= 0) ? null : raw;
   }
 
@@ -308,6 +332,10 @@ class _BookParcelScreenState extends ConsumerState<BookParcelScreen> {
       setState(() => _error = 'Waiting for a price — try again in a moment.');
       return;
     }
+    if (_isCod && _codAmountKes == null) {
+      setState(() => _error = "Say what the buyer owes for the goods.");
+      return;
+    }
     setState(() {
       _busy = true;
       _error = null;
@@ -339,6 +367,24 @@ class _BookParcelScreenState extends ConsumerState<BookParcelScreen> {
         priceKes: _payableKes,
         bargainReason: _selectedReason?.reason,
       );
+      if (_isCod) {
+        // Delivery fee is always bundled into what the courier collects
+        // at the door — see dbx.ConfirmParcelCodBooking's own comment:
+        // that's what makes it possible to confirm this booking with
+        // nothing prepaid. A seller who wants to prepay the fee and
+        // only collect the goods value on delivery isn't offered that
+        // here; it's a real combination the backend supports but not
+        // one this first pass exposes.
+        await repo.setCod(
+          code: booked.code,
+          codAmountKes: _codAmountKes!,
+          collectDeliveryFee: true,
+        );
+        await repo.confirmCod(booked.code);
+        if (!mounted) return;
+        Navigator.of(context).pop(booked.code);
+        return;
+      }
       if (!mounted) return;
       // pushReplacement, not push — the booking form is done; payment
       // collapses into the same slot so a final pop lands back on the
@@ -683,6 +729,34 @@ class _BookParcelScreenState extends ConsumerState<BookParcelScreen> {
         'make sure this number is right.',
         style: small,
       ),
+      if (_codPolicy?.enabled == true) ...[
+        const SizedBox(height: EsoqoSpacing.s5),
+        EsoqoSubHeader('Payment'),
+        const SizedBox(height: EsoqoSpacing.s2),
+        SwitchListTile.adaptive(
+          contentPadding: EdgeInsets.zero,
+          title: const Text('Buyer pays cash on delivery'),
+          subtitle: const Text(
+            "Nothing to pay now — the courier collects it, delivery fee "
+            "included, when they hand the parcel over.",
+          ),
+          value: _isCod,
+          onChanged: (v) => setState(() => _isCod = v),
+        ),
+        if (_isCod) ...[
+          const SizedBox(height: EsoqoSpacing.s2),
+          EsoqoField.amount(
+            controller: _codAmount,
+            label: 'Amount the buyer owes',
+          ),
+          const SizedBox(height: EsoqoSpacing.s2),
+          Text(
+            'Up to KES ${_codPolicy!.maxAmountKes.format()}. '
+            '${_codPolicy!.handlingFeePct > 0 ? '${_codPolicy!.handlingFeePct.toStringAsFixed(0)}% handling fee deducted from your payout.' : ''}',
+            style: small,
+          ),
+        ],
+      ],
       if (_error != null) ...[
         const SizedBox(height: EsoqoSpacing.s3),
         EsoqoFormError(message: _error!),
