@@ -112,13 +112,32 @@ export function PrintLayoutControls({
 }
 
 export function LabelPrintSheet({
-  labels, layout, orgName, orgLogoUrl, esoqoLogoUrl, previewScale,
+  labels, layout, orgName, orgLogoUrl, esoqoLogoUrl, previewScale, onReadyChange,
 }: {
   labels: PrintLabelItem[]; layout: PrintLayout; orgName?: string; orgLogoUrl?: string; esoqoLogoUrl?: string;
   /** 0..1 shrink for the on-screen preview so a full page fits the card. Print always uses real mm. */
   previewScale?: number;
+  /** How many of `labels` have actually finished drawing their QR and
+   *  barcode, called every time that count changes (starting at
+   *  (0, labels.length) the moment this list of codes is set) — see
+   *  PrintableLabel's own onReady doc on why a bulk print needs this:
+   *  window.print() has no idea 50-100 canvas draws are still in
+   *  flight, and used to reliably beat some of them to the printer. */
+  onReadyChange?: (ready: number, total: number) => void;
 }) {
   const perPage = labelsPerPage(layout);
+  const codesKey = labels.map((l) => l.code).join(',');
+  const readyCodesRef = useRef<Set<string>>(new Set());
+  useEffect(() => {
+    readyCodesRef.current = new Set();
+    onReadyChange?.(0, labels.length);
+    // Reset only when the actual set of codes changes — a fresh
+    // selection means fresh drawing, not stale counts from the last
+    // one. onReadyChange and labels.length are deliberately excluded:
+    // including them would re-fire this on every parent re-render a
+    // readiness tick itself causes.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [codesKey]);
   const pages = useMemo(() => {
     const out: PrintLabelItem[][] = [];
     for (let i = 0; i < labels.length; i += perPage) out.push(labels.slice(i, i + perPage));
@@ -206,7 +225,11 @@ export function LabelPrintSheet({
                   overflow: 'hidden',
                 }}>
                   <div style={{ transform: 'scale(var(--lp-scale))', transformOrigin: 'top left', width: `${LABEL_WIDTH_MM}mm`, height: `${LABEL_HEIGHT_MM}mm` }}>
-                    <PrintableLabel code={code} sig={sig} route={route} orgName={orgName} orgLogoUrl={orgLogoUrl} esoqoLogoUrl={esoqoLogoUrl} />
+                    <PrintableLabel code={code} sig={sig} route={route} orgName={orgName} orgLogoUrl={orgLogoUrl} esoqoLogoUrl={esoqoLogoUrl}
+                      onReady={() => {
+                        readyCodesRef.current.add(code);
+                        onReadyChange?.(readyCodesRef.current.size, labels.length);
+                      }} />
                   </div>
                 </div>
               ))}
@@ -260,6 +283,10 @@ export function SelectableLabelPrintBlock({
   const toPrint = chosen.length > 0 ? chosen : [];
   const perPage = labelsPerPage(layout);
   const pages = toPrint.length === 0 ? 0 : Math.ceil(toPrint.length / perPage);
+  // See LabelPrintSheet's own onReadyChange doc — a bulk selection can
+  // still be mid-draw when someone reaches for Print, which is what
+  // actually printed blank QR/barcode boxes at 50-100 labels.
+  const [ready, setReady] = useState(0);
 
   // Fills the card's own width instead of a fixed guess — the same
   // "measure the container, scale to fit" ScaledLabel already does for
@@ -292,8 +319,13 @@ export function SelectableLabelPrintBlock({
           {open && <>
           <button className="btn btn-o btn-sm" onClick={onSelectAll}><Icon name="check" size={13} />Select all</button>
           <button className="btn btn-o btn-sm" onClick={onClear}>Clear</button>
-          <button className="btn btn-o btn-sm" disabled={toPrint.length === 0} onClick={() => window.print()}>
-            <Icon name="print" size={13} />Print {toPrint.length > 0 ? `${toPrint.length} selected` : 'selected'}
+          <button className="btn btn-o btn-sm" disabled={toPrint.length === 0 || ready < toPrint.length} onClick={() => window.print()}>
+            <Icon name="print" size={13} />
+            {toPrint.length === 0
+              ? 'Print selected'
+              : ready < toPrint.length
+                ? `Preparing ${ready}/${toPrint.length}…`
+                : `Print ${toPrint.length} selected`}
           </button>
           </>}
         </div>
@@ -320,7 +352,8 @@ export function SelectableLabelPrintBlock({
       )}
       {toPrint.length > 0 ? (
         <div ref={previewRef} style={{ width: '100%' }}>
-          <LabelPrintSheet labels={toPrint} layout={layout} orgName={orgName} orgLogoUrl={orgLogoUrl} esoqoLogoUrl={esoqoLogoUrl} previewScale={previewScale} />
+          <LabelPrintSheet labels={toPrint} layout={layout} orgName={orgName} orgLogoUrl={orgLogoUrl} esoqoLogoUrl={esoqoLogoUrl}
+            previewScale={previewScale} onReadyChange={(r) => setReady(r)} />
         </div>
       ) : (
         <p className="sub" style={{ margin: '4px 0 0' }}>Tick the labels above to preview exactly how they fall on the {layout.paper} page before printing.</p>

@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 
 /**
  * A parcel label — just the code, its QR and its Code128 barcode.
@@ -163,9 +163,13 @@ export function dropPointFor(label?: string | null): string | undefined {
  * existed.
  */
 export function PrintableLabel({
-  code, sig, route, orgName, orgLogoUrl, esoqoLogoUrl,
+  code, sig, route, orgName, orgLogoUrl, esoqoLogoUrl, onReady,
 }: {
   code: string; sig?: string;
+  /** Fires once, the moment this label's QR and barcode have both
+   *  actually finished drawing — see the component's own comment on
+   *  why a bulk print needs this. */
+  onReady?: () => void;
   /** Where this box is going — "KISUMU ▸ NAIROBI" from an admin print,
    *  or a bare drop point like "NAKURU" from a counter booking. The
    *  single most useful thing to someone sorting a pile of boxes at 5am
@@ -208,6 +212,25 @@ export function PrintableLabel({
       format: 'CODE128', height: BARCODE_HEIGHT_PIXELS, width: 2.4, displayValue: false, margin: 6,
     });
   }, [code]);
+
+  // Both codes are drawn asynchronously (dynamic import + canvas draw
+  // each) — fine for one label on screen, but a bulk print of 50-100
+  // fires that many canvas draws at once, competing for the same main
+  // thread. Printing (window.print()) has no idea any of this is still
+  // in flight, so a bulk job used to reliably beat some fraction of
+  // labels to the punch — printed with blank QR/barcode boxes where
+  // the draw simply hadn't finished yet, which is what actually reads
+  // as "losing styling and position" once cut apart. onReady lets a
+  // caller printing many of these at once hold the print trigger until
+  // every single one has actually finished drawing.
+  const ready = qrSrc !== null && barcodeSrc !== null;
+  const firedReady = useRef(false);
+  useEffect(() => {
+    if (ready && !firedReady.current) {
+      firedReady.current = true;
+      onReady?.();
+    }
+  }, [ready, onReady]);
 
   return (
     <div

@@ -68,6 +68,10 @@ export function RegisterPanel({
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [layout, setLayout] = useState<PrintLayout>(DEFAULT_PRINT_LAYOUT);
   const [showPreview, setShowPreview] = useState(false);
+  // See LabelPrintSheet's own onReadyChange doc — without this, a bulk
+  // selection (50-100+) could still be mid-draw when Print is clicked,
+  // which is what actually printed blank QR/barcode boxes at volume.
+  const [printReady, setPrintReady] = useState(0);
   const [discardReason, setDiscardReason] = useState('');
   const [confirmDiscard, setConfirmDiscard] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState(false);
@@ -263,14 +267,18 @@ export function RegisterPanel({
           <div style={{ marginBottom: 12, padding: 12, border: '1.5px dashed var(--line)', borderRadius: 8 }}>
             <PrintLayoutControls layout={layout} onChange={setLayout} />
             <div style={{ marginTop: 10, display: 'flex', gap: 8, alignItems: 'center', marginBottom: 10 }}>
-              <button className="btn btn-p btn-sm" onClick={() => window.print()}>
-                <Icon name="print" size={13} />Print {selectedRows.length} selected
+              <button className="btn btn-p btn-sm" disabled={printReady < selectedRows.length} onClick={() => window.print()}>
+                <Icon name="print" size={13} />
+                {printReady < selectedRows.length
+                  ? `Preparing ${printReady}/${selectedRows.length}…`
+                  : `Print ${selectedRows.length} selected`}
               </button>
               <span className="sub">Preview below is how stickers fall on the page.</span>
             </div>
             <LabelPrintSheet
               labels={selectedRows.map((l) => ({ code: l.code, sig: l.sig || undefined, route: l.routeLabel ?? undefined }))}
               layout={layout} orgName={previewOrgName} esoqoLogoUrl={ESOQO_LOGO_URL} previewScale={0.55}
+              onReadyChange={(r) => setPrintReady(r)}
             />
           </div>
         )}
