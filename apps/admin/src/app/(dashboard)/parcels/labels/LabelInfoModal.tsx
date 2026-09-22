@@ -4,7 +4,8 @@ import { useCallback, useEffect, useState } from 'react';
 import { Icon } from '@esoqo/ui';
 import { useAnnounce } from '@esoqo/a11y';
 import {
-  actionAttachParcelLabelInfo, actionGetParcelLabelInfo, type ParcelLabelInfoInput,
+  actionAttachParcelLabelInfo, actionGetParcelLabelInfo, actionListParcelRoutes,
+  type ParcelLabelInfoInput, type ParcelLabelRouteOption,
 } from '../actions';
 
 // A practical, small taxonomy for what's physically stuck on a
@@ -47,7 +48,9 @@ const INPUT: React.CSSProperties = {
  * the handler wasn't editing. Correcting one typo cost the other six
  * fields. The load is what makes the overwrite safe.
  */
-export function LabelInfoModal({ initialCode, onClose }: { initialCode?: string; onClose: () => void }) {
+export function LabelInfoModal({
+  initialCode, onClose, orgId,
+}: { initialCode?: string; onClose: () => void; orgId?: string }) {
   const [code, setCode] = useState(initialCode ?? '');
   const [itemDescription, setItemDescription] = useState('');
   const [destination, setDestination] = useState('');
@@ -57,6 +60,12 @@ export function LabelInfoModal({ initialCode, onClose }: { initialCode?: string;
   const [receiverMsisdn, setReceiverMsisdn] = useState('');
   const [itemType, setItemType] = useState('');
   const [weightRangeKg, setWeightRangeKg] = useState('');
+  // Route: either one of the company's own defined routes (routeChoice
+  // holds its id) or OTHER_ROUTE with a typed From/To — see RoutePicker.
+  const [routes, setRoutes] = useState<ParcelLabelRouteOption[]>([]);
+  const [routeChoice, setRouteChoice] = useState('');
+  const [routeFrom, setRouteFrom] = useState('');
+  const [routeTo, setRouteTo] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [saved, setSaved] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -68,7 +77,32 @@ export function LabelInfoModal({ initialCode, onClose }: { initialCode?: string;
   const [loading, setLoading] = useState(false);
   const [loadedCode, setLoadedCode] = useState<string | null>(null);
   const [hadInfo, setHadInfo] = useState(false);
+  // The route this label had on load, before `routes` has necessarily
+  // finished fetching — reconciled into routeChoice/From/To by the
+  // effect below once both are available, rather than racing them.
+  const [loadedRouteId, setLoadedRouteId] = useState<string | null>(null);
+  const [loadedRouteLabel, setLoadedRouteLabel] = useState<string | null>(null);
   const announce = useAnnounce();
+
+  useEffect(() => {
+    if (orgId) void actionListParcelRoutes(orgId).then(setRoutes);
+  }, [orgId]);
+
+  // Reconcile once the label's own load has told us its route and the
+  // org's route list has arrived (order between the two isn't fixed).
+  useEffect(() => {
+    if (!loadedCode) return;
+    if (loadedRouteId && routes.some((r) => r.id === loadedRouteId)) {
+      setRouteChoice(loadedRouteId);
+      setRouteFrom(''); setRouteTo('');
+    } else if (loadedRouteLabel) {
+      setRouteChoice(OTHER_ROUTE);
+      const [from, to] = loadedRouteLabel.split(/\s*(?:->|→)\s*/);
+      setRouteFrom(from ?? loadedRouteLabel); setRouteTo(to ?? '');
+    } else {
+      setRouteChoice(''); setRouteFrom(''); setRouteTo('');
+    }
+  }, [loadedCode, loadedRouteId, loadedRouteLabel, routes]);
 
   const load = useCallback(async (raw: string) => {
     const target = raw.trim().toUpperCase();
@@ -96,6 +130,8 @@ export function LabelInfoModal({ initialCode, onClose }: { initialCode?: string;
     setReceiverMsisdn(info?.receiverMsisdn ?? '');
     setItemType(info?.itemType ?? '');
     setWeightRangeKg(info?.weightRangeKg ?? '');
+    setLoadedRouteId(info?.routeId ?? null);
+    setLoadedRouteLabel(info?.routeLabel ?? null);
     if (info) announce(`Loaded existing info for ${target}`, 'polite');
   }, [announce]);
 
@@ -121,6 +157,20 @@ export function LabelInfoModal({ initialCode, onClose }: { initialCode?: string;
       return;
     }
     setError(null);
+    // A picked route snapshots that route's own name; "Other" combines
+    // the typed From/To into the same routeLabel — see ParcelLabelStock
+    // .routeLabel's own comment on why this is a snapshot, not a live
+    // reference alone. Picking "—" clears both, same as any other field.
+    let routeId: string | undefined;
+    let routeLabel: string | undefined;
+    if (routeChoice === OTHER_ROUTE) {
+      const from = routeFrom.trim();
+      const to = routeTo.trim();
+      if (from && to) routeLabel = `${from} → ${to}`;
+    } else if (routeChoice) {
+      routeId = routeChoice;
+      routeLabel = routes.find((r) => r.id === routeChoice)?.name;
+    }
     const info: ParcelLabelInfoInput = {
       itemDescription: trimmedDescription,
       destination: destination.trim() || undefined,
@@ -130,6 +180,8 @@ export function LabelInfoModal({ initialCode, onClose }: { initialCode?: string;
       receiverMsisdn: receiverMsisdn.trim() || undefined,
       itemType: itemType.trim() || undefined,
       weightRangeKg: weightRangeKg || undefined,
+      routeId,
+      routeLabel,
     };
     setSaving(true);
     void actionAttachParcelLabelInfo(trimmedCode, info).then((result) => {
@@ -197,6 +249,26 @@ export function LabelInfoModal({ initialCode, onClose }: { initialCode?: string;
                   placeholder="e.g. Westlands, Nairobi" style={INPUT} />
               </label>
 
+              <label className="sub" style={{ display: 'block', marginBottom: 4 }}>Route
+                <select value={routeChoice} onChange={(e) => setRouteChoice(e.target.value)} style={INPUT}>
+                  <option value="">—</option>
+                  {routes.map((r) => <option key={r.id} value={r.id}>{r.name}{r.code ? ` (${r.code})` : ''}</option>)}
+                  <option value={OTHER_ROUTE}>Other…</option>
+                </select>
+              </label>
+              {routeChoice === OTHER_ROUTE && (
+                <div style={{ display: 'flex', gap: 10, marginBottom: 10, alignItems: 'flex-end' }}>
+                  <label className="sub" style={{ flex: 1 }}>From
+                    <input value={routeFrom} onChange={(e) => setRouteFrom(e.target.value)}
+                      placeholder="e.g. Nairobi" style={INPUT} />
+                  </label>
+                  <label className="sub" style={{ flex: 1 }}>To
+                    <input value={routeTo} onChange={(e) => setRouteTo(e.target.value)}
+                      placeholder="e.g. Mombasa" style={INPUT} />
+                  </label>
+                </div>
+              )}
+
               <label className="sub" style={{ display: 'block', margin: '0 0 6px' }}>Sender</label>
               <div style={{ display: 'flex', gap: 10, marginBottom: 10 }}>
                 <label className="sub" style={{ flex: 1 }}>Sender name
@@ -247,6 +319,12 @@ export function LabelInfoModal({ initialCode, onClose }: { initialCode?: string;
 // The sentinel the <select> shows while the free-text box is open. It
 // is never stored and never submitted — see SelectWithOther.
 const OTHER = '__other__';
+
+/** Sentinel for the route select's "Other…" — same "never stored,
+ *  reconciled from the resulting value on reload" shape as OTHER
+ *  above, except the route's "other" is two fields (From/To), not one
+ *  free-text box, so it can't reuse SelectWithOther directly. */
+const OTHER_ROUTE = '__other_route__';
 
 /**
  * A dropdown whose "Other" actually collects the other.

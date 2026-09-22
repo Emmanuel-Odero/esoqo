@@ -1,18 +1,22 @@
 'use client';
 
 import { useState, useTransition } from 'react';
+import Link from 'next/link';
+import type { Route } from 'next';
 import { Icon } from '@esoqo/ui';
 import { useAnnounce } from '@esoqo/a11y';
-import { actionVoidParcelLabelBatch, type ParcelLabelBatchRow } from '../actions';
+import { actionVoidParcelLabelBatch, actionDeleteParcelLabelBatch, type ParcelLabelBatchRow } from '../actions';
+import { batchTitle } from './batchTitle';
 
 /**
  * The pads, not the stickers.
  *
  * A batch is the run that came off the printer together and gets
  * carried to a branch together, which is also the unit that goes
- * missing — so it's the unit that can be withdrawn. Voiding label by
- * label would be asking someone to click two hundred times to report
- * one theft.
+ * missing — so it's the unit that can be withdrawn or, if it never
+ * should have existed at all (a test run, a misconfigured mint),
+ * deleted outright. Voiding or deleting label by label would be asking
+ * someone to click two hundred times to report one theft.
  *
  * Labels minted before batches were tracked don't appear here at all,
  * rather than being lumped into one phantom pad: the batches they came
@@ -21,7 +25,9 @@ import { actionVoidParcelLabelBatch, type ParcelLabelBatchRow } from '../actions
  * pool above — they just can't be recalled as a group, because they
  * never were one.
  */
-export function BatchesPanel({ batches }: { batches: ParcelLabelBatchRow[] }) {
+export function BatchesPanel({
+  batches, orgId, basePath = '/parcels/labels',
+}: { batches: ParcelLabelBatchRow[]; orgId?: string; basePath?: string }) {
   if (batches.length === 0) {
     return (
       <div className="card" style={{ padding: 16, marginTop: 16 }}>
@@ -40,25 +46,35 @@ export function BatchesPanel({ batches }: { batches: ParcelLabelBatchRow[] }) {
       <table className="tbl">
         <thead>
           <tr>
-            <th>Printed</th><th>For</th>
+            <th>Batch</th>
             <th className="num">Usable</th><th className="num">Spent</th><th className="num">Withdrawn</th>
             <th />
           </tr>
         </thead>
         <tbody>
-          {batches.map((b) => <BatchRow key={b.batchId} batch={b} />)}
+          {batches.map((b) => <BatchRow key={b.batchId} batch={b} orgId={orgId} basePath={basePath} />)}
         </tbody>
       </table>
     </div>
   );
 }
 
-function BatchRow({ batch }: { batch: ParcelLabelBatchRow }) {
-  const [confirming, setConfirming] = useState(false);
+function BatchRow({
+  batch, orgId, basePath,
+}: { batch: ParcelLabelBatchRow; orgId?: string; basePath: string }) {
+  const [confirming, setConfirming] = useState<'void' | 'delete' | null>(null);
   const [reason, setReason] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [pending, startTransition] = useTransition();
   const announce = useAnnounce();
+
+  const orgQuery = orgId && basePath === '/parcels/labels' ? `&org=${orgId}` : '';
+  const registerHref = `${basePath}?tab=register&state=all&batch=${batch.batchId}${orgQuery}` as Route;
+  // A batch with anything ever used or withdrawn in it can still be
+  // withdrawn (its remaining live labels), but not hard-deleted — the
+  // delete predicate only ever touches fully blank rows, and a batch
+  // that already has history is, definitionally, not fully blank.
+  const fullyUnused = batch.used === 0 && batch.voided === 0;
 
   function voidBatch() {
     if (!reason.trim()) { setError('Say why this batch is being withdrawn.'); return; }
@@ -69,15 +85,26 @@ function BatchRow({ batch }: { batch: ParcelLabelBatchRow }) {
       );
       if (!result.ok) { setError(result.error); return; }
       announce(`${result.voided} labels withdrawn`, 'assertive');
-      setConfirming(false);
+      setConfirming(null);
+    });
+  }
+
+  function deleteBatch() {
+    setError(null);
+    startTransition(async () => {
+      const result = await actionDeleteParcelLabelBatch(batch.batchId, batch.parcelOrgId ?? undefined);
+      if (!result.ok) { setError(result.error); return; }
+      announce(`${result.deleted} labels permanently deleted`, 'assertive');
+      setConfirming(null);
     });
   }
 
   return (
     <>
       <tr>
-        <td className="sub">{new Date(batch.createdAt).toLocaleDateString('en-KE', { day: 'numeric', month: 'short', year: 'numeric' })}</td>
-        <td>{batch.orgName ?? <span className="sub">Esoqo pool</span>}</td>
+        <td>
+          <Link href={registerHref} title="View labels in this batch">{batchTitle(batch)}</Link>
+        </td>
         <td className="num mono">{batch.live}</td>
         <td className="num mono sub">{batch.used}</td>
         <td className="num mono">
@@ -85,20 +112,25 @@ function BatchRow({ batch }: { batch: ParcelLabelBatchRow }) {
             ? <span style={{ color: 'var(--red)' }}>{batch.voided}</span>
             : <span className="sub">0</span>}
         </td>
-        <td style={{ textAlign: 'right' }}>
+        <td style={{ textAlign: 'right', whiteSpace: 'nowrap' }}>
           {/* Nothing usable left means nothing to withdraw — a button
               whose only outcome is "no usable labels in that batch"
               shouldn't be offered. */}
           {batch.live > 0 && !confirming && (
-            <button className="btn btn-o btn-sm" onClick={() => setConfirming(true)}>
+            <button className="btn btn-o btn-sm" onClick={() => setConfirming('void')} style={{ marginRight: 6 }}>
               <Icon name="alert-triangle" size={13} />Withdraw
+            </button>
+          )}
+          {fullyUnused && !confirming && (
+            <button className="btn btn-o btn-sm" onClick={() => setConfirming('delete')} style={{ color: 'var(--red)' }}>
+              <Icon name="close" size={13} />Delete
             </button>
           )}
         </td>
       </tr>
-      {confirming && (
+      {confirming === 'void' && (
         <tr>
-          <td colSpan={6} style={{ background: 'var(--paper)' }}>
+          <td colSpan={5} style={{ background: 'var(--paper)' }}>
             <p className="sub" style={{ margin: '0 0 8px' }}>
               Withdrawing stops all {batch.live} unused label{batch.live === 1 ? '' : 's'} in this
               batch from ever being booked. The {batch.used} already spent
@@ -115,7 +147,26 @@ function BatchRow({ batch }: { batch: ParcelLabelBatchRow }) {
               <button className="btn btn-p btn-sm" disabled={pending} onClick={voidBatch}>
                 {pending ? 'Withdrawing…' : `Withdraw ${batch.live}`}
               </button>
-              <button className="btn btn-o btn-sm" onClick={() => { setConfirming(false); setError(null); }}>
+              <button className="btn btn-o btn-sm" onClick={() => { setConfirming(null); setError(null); }}>
+                Cancel
+              </button>
+            </div>
+            {error && <p role="alert" style={{ color: 'var(--red)', margin: '8px 0 0' }}>{error}</p>}
+          </td>
+        </tr>
+      )}
+      {confirming === 'delete' && (
+        <tr>
+          <td colSpan={5} style={{ background: 'var(--paper)' }}>
+            <p className="sub" style={{ margin: '0 0 8px', color: 'var(--red)' }}>
+              Permanently deletes all {batch.total} label{batch.total === 1 ? '' : 's'} in this batch —
+              unlike Withdraw, this cannot be undone. Only offered because none of them have been used yet.
+            </p>
+            <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
+              <button className="btn btn-d btn-sm" disabled={pending} onClick={deleteBatch}>
+                {pending ? 'Deleting…' : `Delete ${batch.total} permanently`}
+              </button>
+              <button className="btn btn-o btn-sm" onClick={() => { setConfirming(null); setError(null); }}>
                 Cancel
               </button>
             </div>

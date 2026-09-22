@@ -6,7 +6,11 @@ import { useMemo, useState, useTransition } from 'react';
 import { useRouter } from 'next/navigation';
 import { Icon, LabelPrintSheet, PrintLayoutControls, DEFAULT_PRINT_LAYOUT, type PrintLayout } from '@esoqo/ui';
 import type { ParcelLabelRegisterRow } from '../actions';
-import { actionVoidParcelLabels } from '../actions';
+import { actionVoidParcelLabels, actionDeleteParcelLabels } from '../actions';
+import { batchShortCode } from './batchTitle';
+import { LabelCard } from './LabelCard';
+import { LabelDetailModal } from './LabelDetailModal';
+import { ESOQO_LOGO_URL } from './constants';
 
 /**
  * The register: every label, at whatever point of its life it reached.
@@ -35,20 +39,26 @@ const TABS: { state: string; label: string; hint: string }[] = [
   { state: 'voided', label: 'Withdrawn', hint: 'Recalled — can never be booked' },
 ];
 
+// Colours the active tab by what the lifecycle stage means — same
+// green/amber/red semantics .pill already carries in this app, so
+// "Withdrawn" reads as a warning colour the same way it does
+// everywhere else rather than the default green every other tab gets.
+const STATE_TONE: Record<string, string> = { filled: 'warn', voided: 'bad' };
+
 type SortKey = 'code' | 'newest' | 'oldest' | 'item' | 'destination';
 
 export function RegisterPanel({
-  labels, counts, state, orgId,
+  labels, counts, state, orgId, batchFilter, basePath = '/parcels/labels',
 }: {
   labels: ParcelLabelRegisterRow[]; counts: Record<string, number>;
-  state: string; orgId?: string;
+  state: string; orgId?: string; batchFilter?: string; basePath?: string;
 }) {
   const router = useRouter();
   const [pending, startTransition] = useTransition();
   function tabHref(s: string): Route {
     const params = new URLSearchParams({ state: s });
-    if (orgId) params.set('org', orgId);
-    return `/parcels/labels?${params}` as Route;
+    if (orgId && basePath === '/parcels/labels') params.set('org', orgId);
+    return `${basePath}?${params}` as Route;
   }
 
   // Client-side search over the loaded register page — finding one code
@@ -60,19 +70,29 @@ export function RegisterPanel({
   const [showPreview, setShowPreview] = useState(false);
   const [discardReason, setDiscardReason] = useState('');
   const [confirmDiscard, setConfirmDiscard] = useState(false);
+  const [confirmDelete, setConfirmDelete] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [openCode, setOpenCode] = useState<string | null>(null);
+
+  // A batch's "View labels" link narrows straight to its rows — same
+  // table, no separate query, since every register row already carries
+  // its batchId.
+  const scopedToBatch = useMemo(
+    () => (batchFilter ? labels.filter((l) => l.batchId === batchFilter) : labels),
+    [labels, batchFilter],
+  );
 
   const needle = filter.trim().toUpperCase();
   const filtered = useMemo(() => {
     const rows = needle
-      ? labels.filter((l) =>
+      ? scopedToBatch.filter((l) =>
           l.code.toUpperCase().includes(needle) ||
           (l.itemDescription ?? '').toUpperCase().includes(needle) ||
           (l.destination ?? '').toUpperCase().includes(needle) ||
           (l.senderName ?? '').toUpperCase().includes(needle) ||
           (l.orgName ?? '').toUpperCase().includes(needle))
-      : [...labels];
+      : [...scopedToBatch];
     return rows.sort((a, b) => {
       switch (sort) {
         case 'code': return a.code.localeCompare(b.code);
@@ -82,12 +102,27 @@ export function RegisterPanel({
         case 'destination': return (a.destination ?? '').localeCompare(b.destination ?? '');
       }
     });
-  }, [labels, needle, sort]);
+  }, [scopedToBatch, needle, sort]);
 
   const selectedRows = useMemo(() => filtered.filter((l) => selected.has(l.code)), [filtered, selected]);
   const discardable = useMemo(() => selectedRows.filter((l) => !l.usedAt && !l.voidedAt), [selectedRows]);
+  // Hard-delete only ever applies to labels with no history at all —
+  // same "blank" predicate the server enforces, checked client-side
+  // just to decide whether the button is worth offering.
+  const deletable = useMemo(
+    () => selectedRows.filter((l) => !l.usedAt && !l.voidedAt && !l.infoAttachedAt),
+    [selectedRows],
+  );
   const emptyCount = counts['blank'] ?? 0;
   const attachedCount = (counts['filled'] ?? 0) + (counts['spent'] ?? 0);
+  const openLabel = openCode ? labels.find((l) => l.code === openCode) ?? null : null;
+  // The bulk print preview brands the whole sheet as one company (see
+  // LabelPrintSheet — it takes one orgName/orgLogoUrl for the page, not
+  // per label), so when the register itself is scoped to one company
+  // this reads it straight off the selection; an unscoped "all
+  // companies" register just prints unbranded, which is correct — a
+  // mixed-company sheet has no one company to brand it as.
+  const previewOrgName = orgId ? selectedRows[0]?.orgName ?? undefined : undefined;
 
   function toggle(code: string) {
     setSelected((prev) => {
@@ -112,6 +147,19 @@ export function RegisterPanel({
     });
   }
 
+  function deleteSelected() {
+    if (deletable.length === 0) return;
+    setError(null);
+    startTransition(async () => {
+      const res = await actionDeleteParcelLabels(deletable.map((l) => l.code), orgId);
+      if (!res.ok) { setError(res.error); return; }
+      setMessage(`Permanently deleted ${res.deleted} label${res.deleted === 1 ? '' : 's'}.`);
+      setSelected(new Set());
+      setConfirmDelete(false);
+      router.refresh();
+    });
+  }
+
   return (
     <div className="card" style={{ padding: 16, marginTop: 16 }}>
       <strong style={{ display: 'block', marginBottom: 4 }}>Label register</strong>
@@ -119,10 +167,17 @@ export function RegisterPanel({
         {emptyCount} empty · {attachedCount} attached to packages
         {orgId ? ' · this company’s pad' : ' · all companies + Esoqo pool'}
       </p>
-      <div style={{ display: 'flex', gap: 6, marginBottom: 12, flexWrap: 'wrap' }}>
+      {batchFilter && (
+        <div className="chain" style={{ marginBottom: 12 }}>
+          <Icon name="filter" size={15} />
+          <span>Showing only batch <span className="mono">#{batchShortCode(batchFilter)}</span> ({scopedToBatch.length} label{scopedToBatch.length === 1 ? '' : 's'}).</span>
+          <Link href={tabHref(state)} className="btn btn-o btn-sm" style={{ marginLeft: 'auto' }}>Clear</Link>
+        </div>
+      )}
+      <div className="seg" style={{ marginBottom: 12 }}>
         {TABS.map((t) => (
           <Link key={t.state} href={tabHref(t.state)} title={t.hint}
-            className={`btn btn-sm ${t.state === state ? 'btn-p' : 'btn-o'}`}>
+            className={`seg-item${t.state === state ? ` active${STATE_TONE[t.state] ? ` ${STATE_TONE[t.state]}` : ''}` : ''}`}>
             {t.label} ({counts[t.state] ?? 0})
           </Link>
         ))}
@@ -179,8 +234,28 @@ export function RegisterPanel({
                 </>
               )
             )}
+            {deletable.length > 0 && state !== 'spent' && !confirmDiscard && (
+              !confirmDelete ? (
+                <button className="btn btn-o btn-sm" onClick={() => setConfirmDelete(true)} style={{ color: 'var(--red)' }}>
+                  Delete {deletable.length} permanently…
+                </button>
+              ) : (
+                <>
+                  <span className="sub" style={{ fontSize: '.8rem', color: 'var(--red)' }}>
+                    Permanently removes {deletable.length} — unlike Withdraw, this cannot be undone.
+                  </span>
+                  <button className="btn btn-d btn-sm" disabled={pending} onClick={deleteSelected}>
+                    {pending ? 'Deleting…' : `Delete ${deletable.length}`}
+                  </button>
+                  <button className="btn btn-o btn-sm" onClick={() => setConfirmDelete(false)}>Cancel</button>
+                </>
+              )
+            )}
             {selectedRows.length !== discardable.length && (
-              <span className="sub" style={{ fontSize: '.78rem' }}>Used/withdrawn labels print fine but are never discarded.</span>
+              <span className="sub" style={{ fontSize: '.78rem' }}>
+                Used/withdrawn labels print fine but are never discarded.
+                {discardable.length !== deletable.length && ' Filled-in labels can be withdrawn but not deleted — delete only ever touches labels with nothing recorded on them yet.'}
+              </span>
             )}
           </div>
         )}
@@ -193,57 +268,40 @@ export function RegisterPanel({
               </button>
               <span className="sub">Preview below is how stickers fall on the page.</span>
             </div>
-            <LabelPrintSheet labels={selectedRows.map((l) => ({ code: l.code, sig: l.sig || undefined }))} layout={layout} previewScale={0.55} />
+            <LabelPrintSheet
+              labels={selectedRows.map((l) => ({ code: l.code, sig: l.sig || undefined, route: l.routeLabel ?? undefined }))}
+              layout={layout} orgName={previewOrgName} esoqoLogoUrl={ESOQO_LOGO_URL} previewScale={0.55}
+            />
           </div>
         )}
         {filtered.length === 0 ? (
           <p className="sub" style={{ margin: 0 }}>No matches for “{filter.trim()}” in this list.</p>
         ) : (
-        <table className="tbl">
-          <thead>
-            <tr>
-              <th aria-label="Select"><input type="checkbox" aria-label="Select all listed labels"
-                checked={filtered.length > 0 && filtered.every((l) => selected.has(l.code))}
-                onChange={(e) => setSelected(e.target.checked ? new Set(filtered.map((l) => l.code)) : new Set())} /></th>
-              <th>Code</th><th>Company</th><th>Item</th><th>Destination</th><th>Sender</th>
-              <th>{state === 'voided' ? 'Why' : 'When'}</th><th />
-            </tr>
-          </thead>
-          <tbody>
-            {filtered.map((l) => (
-              <tr key={l.code}>
-                <td><input type="checkbox" checked={selected.has(l.code)} onChange={() => toggle(l.code)} aria-label={`Select ${l.code}`} /></td>
-                <td className="mono">{l.code}</td>
-                <td style={CLIP} title={l.orgName ?? ''}>{l.orgName ?? <span className="sub">Esoqo pool</span>}</td>
-                <td style={CLIP} title={l.itemDescription ?? ''}>{l.itemDescription ?? <span className="sub">—</span>}</td>
-                <td style={CLIP} title={l.destination ?? ''}>{l.destination ?? <span className="sub">—</span>}</td>
-                <td style={CLIP} title={l.senderName ?? ''}>{l.senderName ?? <span className="sub">—</span>}</td>
-                <td className="sub" style={{ fontSize: '.8rem' }}>
-                  {state === 'voided'
-                    ? (l.voidedReason ?? 'Withdrawn')
-                    : whenFor(l)}
-                </td>
-                <td style={{ textAlign: 'right', whiteSpace: 'nowrap' }}>
-                  {/* A spent label's real home is the parcel it became;
-                      sending someone to the attach form for it would
-                      only produce a refusal. */}
-                  {l.usedAt ? (
-                    <Link className="btn btn-o btn-sm" href={`/parcels?q=${encodeURIComponent(l.code)}` as Route}>
-                      <Icon name="eye" size={13} />Parcel
-                    </Link>
-                  ) : !l.voidedAt ? (
-                    <Link className="btn btn-o btn-sm" href={`/parcels/counter?code=${encodeURIComponent(l.code)}` as Route}>
-                      <Icon name="send" size={13} />{l.infoAttachedAt ? 'Resume' : 'Fill in'}
-                    </Link>
-                  ) : null}
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
+        <>
+        <label className="sub" style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 10 }}>
+          <input type="checkbox" aria-label="Select all listed labels"
+            checked={filtered.length > 0 && filtered.every((l) => selected.has(l.code))}
+            onChange={(e) => setSelected(e.target.checked ? new Set(filtered.map((l) => l.code)) : new Set())} />
+          Select all {filtered.length} shown
+        </label>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(150px, 1fr))', gap: 10 }}>
+          {filtered.map((l) => (
+            <LabelCard key={l.code} label={l} selected={selected.has(l.code)}
+              meta={state === 'voided' ? (l.voidedReason ?? 'Withdrawn') : whenFor(l)}
+              onToggle={() => toggle(l.code)} onOpen={() => setOpenCode(l.code)} />
+          ))}
+        </div>
+        </>
         )}
         </>
         )}
+      {openLabel && (
+        <LabelDetailModal
+          label={openLabel} orgId={orgId}
+          onClose={() => setOpenCode(null)}
+          onChanged={() => router.refresh()}
+        />
+      )}
     </div>
   );
 }
@@ -252,11 +310,17 @@ export function RegisterPanel({
  *  only date worth a column. */
 function whenFor(l: ParcelLabelRegisterRow): string {
   const stamp = l.usedAt ?? l.infoAttachedAt ?? l.createdAt;
-  return new Date(stamp).toLocaleDateString('en-KE', { day: 'numeric', month: 'short', year: 'numeric' });
+  // Pinned to Africa/Nairobi rather than the machine's local zone: this
+  // is a client component whose initial render is server-rendered, and
+  // a bare toLocaleDateString picks up whatever zone each machine is
+  // in — the container (often UTC) and the browser (Kenya) disagree
+  // near midnight, which React then reports as a hydration mismatch.
+  return new Date(stamp).toLocaleDateString('en-KE', {
+    day: 'numeric', month: 'short', year: 'numeric', timeZone: 'Africa/Nairobi',
+  });
 }
 
 function whenStamp(l: ParcelLabelRegisterRow): number {
   return new Date(l.usedAt ?? l.infoAttachedAt ?? l.createdAt).getTime() || 0;
 }
 
-const CLIP = { maxWidth: 180, overflow: 'hidden' as const, textOverflow: 'ellipsis' as const, whiteSpace: 'nowrap' as const };

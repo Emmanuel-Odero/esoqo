@@ -7,6 +7,8 @@ import {
 } from "@esoqo/db";
 import { requireStaff } from "@/lib/session";
 import { adminGo, GoRequestError } from "@/lib/go-ticketing";
+import type { AdminParcelRow } from "./ParcelsTable";
+export type { AdminParcelRow } from "./ParcelsTable";
 
 export type Result = { ok: true } | { ok: false; error: string };
 
@@ -1642,6 +1644,7 @@ export interface ParcelLabelRegisterRow {
   itemDescription: string | null;
   destination: string | null;
   senderName: string | null;
+  routeLabel: string | null;
   infoAttachedAt: string | null;
   usedAt: string | null;
   voidedAt: string | null;
@@ -1699,6 +1702,27 @@ export async function actionListParcelLabelBatches(
     `/v1/admin/parcels/labels/batches?${params}`,
   );
   return batches ?? [];
+}
+
+export interface ParcelLabelRouteOption {
+  id: string;
+  name: string;
+  code: string | null;
+  active: boolean;
+}
+
+/** A courier company's own defined routes, for the label-info route
+ *  picker — see LabelInfoModal. Routes belong to a company; there is
+ *  no list for the shared Esoqo pool. */
+export async function actionListParcelRoutes(
+  parcelOrgId: string,
+): Promise<ParcelLabelRouteOption[]> {
+  await requireStaff();
+  const params = new URLSearchParams({ parcelOrgId });
+  const { routes } = await adminGo<{ routes: ParcelLabelRouteOption[] | null }>(
+    `/v1/admin/parcels/routes?${params}`,
+  );
+  return routes ?? [];
 }
 
 /**
@@ -1764,6 +1788,84 @@ export async function actionVoidParcelLabels(
   }
 }
 
+/**
+ * Permanently remove every still-blank label in a batch — the hard
+ * delete a test/mistaken batch needs, as opposed to Withdraw's
+ * "recorded and kept for the audit trail". Attached, spent or
+ * already-voided codes in the batch are left exactly where they are.
+ */
+export async function actionDeleteParcelLabelBatch(
+  batchId: string,
+  parcelOrgId?: string,
+): Promise<{ ok: true; deleted: number } | { ok: false; error: string }> {
+  try {
+    await requireStaff();
+    const { deleted } = await adminGo<{ deleted: number }>(
+      `/v1/admin/parcels/labels/batches/${encodeURIComponent(batchId)}`,
+      {
+        method: "DELETE",
+        body: JSON.stringify({ parcelOrgId: parcelOrgId || undefined }),
+      },
+    );
+    revalidatePath("/parcels/labels");
+    return { ok: true, deleted };
+  } catch (e) {
+    return {
+      ok: false,
+      error: e instanceof Error ? e.message : "Could not delete that batch",
+    };
+  }
+}
+
+/**
+ * Permanently remove an explicit selection of still-blank labels.
+ * Server-side guarded to blank rows only — attached, spent or
+ * withdrawn codes in the selection are silently skipped, so a mixed
+ * selection deletes what it can.
+ */
+export async function actionDeleteParcelLabels(
+  codes: string[],
+  parcelOrgId?: string,
+): Promise<{ ok: true; deleted: number } | { ok: false; error: string }> {
+  try {
+    await requireStaff();
+    const { deleted } = await adminGo<{ deleted: number }>(
+      `/v1/admin/parcels/labels`,
+      {
+        method: "DELETE",
+        body: JSON.stringify({ codes, parcelOrgId: parcelOrgId || undefined }),
+      },
+    );
+    revalidatePath("/parcels/labels");
+    return { ok: true, deleted };
+  } catch (e) {
+    return {
+      ok: false,
+      error: e instanceof Error ? e.message : "Could not delete those labels",
+    };
+  }
+}
+
+/**
+ * A courier company's own parcels, for its profile page — the same
+ * admin parcels list the ops console uses, scoped down to one company
+ * instead of everyone's.
+ */
+export async function actionListParcelsForOrg(
+  parcelOrgId: string,
+  opts?: { limit?: number; offset?: number },
+): Promise<{ parcels: AdminParcelRow[]; total: number }> {
+  await requireStaff();
+  const params = new URLSearchParams({
+    parcelOrgId, limit: String(opts?.limit ?? 20), offset: String(opts?.offset ?? 0),
+  });
+  const { parcels, total } = await adminGo<{
+    parcels: AdminParcelRow[] | null;
+    total: number;
+  }>(`/v1/admin/parcels?${params}`);
+  return { parcels: parcels ?? [], total };
+}
+
 // Structured info attached to a pre-printed label — item, destination,
 // sender/receiver name and contact, item type, weight range — the
 // moment it's actually stuck on a physical item, independent of (and
@@ -1785,6 +1887,12 @@ export interface ParcelLabelInfoInput {
   lengthCm?: number;
   widthCm?: number;
   heightCm?: number;
+  /** Set when a real ParcelRoute was picked. */
+  routeId?: string;
+  /** The route text actually printed — the picked route's name, or a
+   *  typed "From -> To" when "Other" was chosen. Always sent alongside
+   *  routeId (or alone, with routeId omitted) — see LabelInfoModal. */
+  routeLabel?: string;
 }
 
 /**
