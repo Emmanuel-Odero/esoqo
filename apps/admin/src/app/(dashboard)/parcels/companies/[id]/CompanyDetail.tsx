@@ -2,14 +2,19 @@
 
 import { useState, useTransition } from "react";
 import Link from "next/link";
+import type { Route } from "next";
 import { useRouter } from "next/navigation";
 import { Icon } from "@esoqo/ui";
-import { actionUpdateParcelOrg, type ParcelOrgDetail } from "../../actions";
+import {
+  actionUpdateParcelOrg,
+  type ParcelLabelBatchRow,
+  type ParcelOrgDetail,
+} from "../../actions";
 import {
   APP_URL,
   MiniKpi,
   OrgForm,
-  TeamManager,
+  SummaryCard,
   activityLabel,
   kes,
   orgToInput,
@@ -20,9 +25,11 @@ import {
 export function CompanyDetail({
   detail,
   canEdit,
+  labelBatches,
 }: {
   detail: ParcelOrgDetail;
   canEdit: boolean;
+  labelBatches: ParcelLabelBatchRow[];
 }) {
   const { org, stats, staff, activity } = detail;
   const router = useRouter();
@@ -57,6 +64,11 @@ export function CompanyDetail({
       setError("Could not copy — select the sign-in link manually.");
     }
   }
+
+  const unusedLabels = labelBatches.reduce((n, b) => n + b.live, 0);
+  const usedLabels = labelBatches.reduce((n, b) => n + b.used, 0);
+  const withdrawnLabels = labelBatches.reduce((n, b) => n + b.voided, 0);
+  const activeStaff = staff.filter((s) => s.active).length;
 
   return (
     <>
@@ -132,7 +144,6 @@ export function CompanyDetail({
 
       <nav className="ctabs" aria-label="Company sections">
         <a href="#overview">Overview</a>
-        <a href="#team">Team</a>
         <a href="#profile">Profile</a>
         <a href="#activity">Activity</a>
       </nav>
@@ -144,12 +155,19 @@ export function CompanyDetail({
         </div>
       )}
 
+      {/* One graspable screen: what this company is doing, at a glance
+       *  — numbers, not the underlying rows. Labels, Parcels and Team
+       *  used to each render their full table here the moment the page
+       *  loaded (every batch, every recent parcel, the whole roster
+       *  form) whether or not that's what the admin came here for.
+       *  Each is now a summary card; the rows live one click away. */}
       <section id="overview" className="cdetail-sec">
         <h2>Overview</h2>
         <div
           className="kpis"
           style={{
             gridTemplateColumns: "repeat(auto-fit, minmax(160px, 1fr))",
+            marginBottom: 16,
           }}
         >
           <MiniKpi
@@ -174,6 +192,45 @@ export function CompanyDetail({
           <MiniKpi label="Esoqo earnings" value={kes(org.earningsKes)} />
         </div>
 
+        <div
+          className="grid3"
+          style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))", gap: 16, marginBottom: 16 }}
+        >
+          <SummaryCard
+            icon="qr"
+            title="Labels"
+            stats={[
+              { label: "Unused", value: String(unusedLabels) },
+              { label: "Used", value: String(usedLabels) },
+              { label: "Withdrawn", value: String(withdrawnLabels) },
+              { label: "Batches", value: String(labelBatches.length) },
+            ]}
+            href={`/parcels/companies/${org.id}/labels` as Route}
+            cta="View & manage labels"
+          />
+          <SummaryCard
+            icon="basket"
+            title="Parcels"
+            stats={[
+              { label: "Carried", value: String(org.parcelCount ?? 0) },
+              { label: "Delivered", value: String(org.deliveredCount ?? 0) },
+              { label: "In flight", value: String(stats.inTransit) },
+            ]}
+            href={`/parcels/companies/${org.id}/parcels` as Route}
+            cta="View all parcels"
+          />
+          <SummaryCard
+            icon="users"
+            title="Team"
+            stats={[
+              { label: "Active", value: String(activeStaff) },
+              { label: "Total", value: String(staff.length) },
+            ]}
+            href={`/parcels/companies/${org.id}/team` as Route}
+            cta="Manage team"
+          />
+        </div>
+
         <div className="card">
           <h2>Business profile</h2>
           <dl className="dl-grid">
@@ -192,13 +249,6 @@ export function CompanyDetail({
             <dt className="sub">Opening hours</dt>
             <dd>{org.openingHours ?? "—"}</dd>
           </dl>
-        </div>
-      </section>
-
-      <section id="team" className="cdetail-sec">
-        <h2>Team</h2>
-        <div className="card">
-          <TeamManager org={org} initialStaff={staff} canEdit={canEdit} />
         </div>
       </section>
 

@@ -1,7 +1,9 @@
 "use client";
 
+import Link from "next/link";
+import type { Route } from "next";
 import { useEffect, useId, useState, useTransition } from "react";
-import { Icon, ParcelCapabilityPicker, RIDER_BASELINE } from "@esoqo/ui";
+import { Icon, ParcelCapabilityPicker, RIDER_BASELINE, type IconName } from "@esoqo/ui";
 import {
   actionCreateParcelOrg,
   actionUpdateParcelOrg,
@@ -119,6 +121,46 @@ export function MiniKpi({ label, value }: { label: string; value: string }) {
       <span className="mono" style={{ fontSize: "1.1rem" }}>
         {value}
       </span>
+    </div>
+  );
+}
+
+/**
+ * A summary card for one category of a company's data — a few numbers
+ * and one way in, not the data itself.
+ *
+ * The company page used to render each category's full table inline
+ * (every batch, every recent parcel, the whole team form) the moment
+ * the page loaded — everything a company has, all at once, whether or
+ * not that's what the admin came to look at. This is the "look before
+ * you leap" step that was missing: see the shape of what's there,
+ * then choose to go in.
+ */
+export function SummaryCard({
+  icon, title, stats, href, cta,
+}: {
+  icon: IconName;
+  title: string;
+  stats: { label: string; value: string }[];
+  href: Route;
+  cta: string;
+}) {
+  return (
+    <div className="card" style={{ padding: 16, display: "flex", flexDirection: "column", gap: 12 }}>
+      <strong style={{ display: "flex", alignItems: "center", gap: 8 }}>
+        <Icon name={icon} size={16} />{title}
+      </strong>
+      <div style={{ display: "flex", gap: 16, flexWrap: "wrap" }}>
+        {stats.map((s) => (
+          <div key={s.label}>
+            <span className="mono" style={{ fontSize: "1.3rem", display: "block" }}>{s.value}</span>
+            <span className="sub" style={{ fontSize: ".72rem" }}>{s.label}</span>
+          </div>
+        ))}
+      </div>
+      <Link href={href} className="btn btn-o btn-sm" style={{ alignSelf: "flex-start", marginTop: "auto" }}>
+        {cta} <Icon name="arrow-right" size={13} />
+      </Link>
     </div>
   );
 }
