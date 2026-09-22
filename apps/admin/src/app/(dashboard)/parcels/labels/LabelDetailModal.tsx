@@ -8,6 +8,7 @@ import { actionVoidParcelLabels, actionDeleteParcelLabels, type ParcelLabelRegis
 import { LabelInfoModal } from './LabelInfoModal';
 import { batchShortCode } from './batchTitle';
 import { ESOQO_LOGO_URL } from './constants';
+import { ContactButtons } from '@/components/ContactButtons';
 
 const INPUT: React.CSSProperties = {
   padding: '6px 8px', border: '1.5px solid var(--line)', borderRadius: 6,
@@ -101,7 +102,8 @@ export function LabelDetailModal({
             <dt className="sub">Item</dt><dd>{label.itemDescription ?? '—'}</dd>
             <dt className="sub">Destination</dt><dd>{label.destination ?? '—'}</dd>
             <dt className="sub">Route</dt><dd>{label.routeLabel ?? '—'}</dd>
-            <dt className="sub">Sender</dt><dd>{label.senderName ?? '—'}</dd>
+            <dt className="sub">Sender</dt>
+            <dd>{label.senderName ?? '—'}<ContactButtons msisdn={label.senderMsisdn} /></dd>
             {label.batchId && (
               <>
                 <dt className="sub">Batch</dt>
