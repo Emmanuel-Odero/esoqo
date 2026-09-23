@@ -1,7 +1,7 @@
 import { notFound } from 'next/navigation';
 import type { Metadata } from 'next';
 import { requireStaff } from '@/lib/session';
-import { actionGetParcelOrgDetail } from '../../actions';
+import { actionGetParcelOrgDetail, actionListParcelLabelBatches } from '../../actions';
 import { CompanyDetail } from './CompanyDetail';
 
 export const dynamic = 'force-dynamic';
@@ -31,5 +31,9 @@ export default async function CompanyPage({ params }: { params: Promise<{ id: st
     notFound();
   }
 
-  return <CompanyDetail detail={detail} canEdit={canEdit} />;
+  const batches = await actionListParcelLabelBatches(id);
+
+  return (
+    <CompanyDetail detail={detail} canEdit={canEdit} labelBatches={batches} />
+  );
 }

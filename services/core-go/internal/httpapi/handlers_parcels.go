@@ -1,6 +1,8 @@
 package httpapi
 
 import (
+	"errors"
+	"fmt"
 	"log"
 	"net/http"
 	"strconv"
@@ -70,6 +72,29 @@ type bookParcelRequest struct {
 	// question, and a declaration nobody made is worse than none at all.
 	ContentsDeclared bool `json:"contentsDeclared"`
 
+	// The SENDER's own declaration, which anyone may make — including a
+	// guest, unlike ContentsDeclared directly above.
+	//
+	// The two are not the same claim and are deliberately not merged.
+	// ContentsDeclared says a named member of staff asked a person, face
+	// to face, whether the box holds anything prohibited; a web form can
+	// never produce that, which is why it stays staff-only. These say
+	// the sender described the contents, put a value on them, and ticked
+	// that they are lawful and that both sets of terms are accepted.
+	// Weaker, and worth recording precisely because the alternative on a
+	// self-service booking was recording nothing at all.
+	//
+	// TermsVersion is what the client actually displayed. Trusted from
+	// the body on purpose — the server cannot know which wording a page
+	// rendered, and a version invented here would describe the
+	// deployment rather than the agreement. Bounded, so a client cannot
+	// park an essay in the column.
+	SenderDeclaredContents *string `json:"senderDeclaredContents"`
+	LawfulContentsAttested bool    `json:"lawfulContentsAttested"`
+	TermsAccepted          bool    `json:"termsAccepted"`
+	TermsVersion           *string `json:"termsVersion"`
+	CarrierTermsVersion    *string `json:"carrierTermsVersion"`
+
 	// A dropped pin for either end. ~80% of Kenyans have no formal
 	// address and addressing failure is this market's largest cause of
 	// delivery failure — a pin is what a courier's maps app can actually
@@ -78,6 +103,28 @@ type bookParcelRequest struct {
 	OriginLng      *float64 `json:"originLng"`
 	DestinationLat *float64 `json:"destinationLat"`
 	DestinationLng *float64 `json:"destinationLng"`
+}
+
+// trimPtr normalises an optional free-text field: whitespace off, nil
+// if nothing is left, truncated to max.
+//
+// Truncation rather than rejection because none of the fields it
+// guards is worth failing a booking over — a sender who pasted a
+// paragraph into "what's inside" should get their parcel booked with
+// the first 500 characters, not an error they have to puzzle out at a
+// counter.
+func trimPtr(s *string, max int) *string {
+	if s == nil {
+		return nil
+	}
+	v := strings.TrimSpace(*s)
+	if v == "" {
+		return nil
+	}
+	if len(v) > max {
+		v = v[:max]
+	}
+	return &v
 }
 
 // handleBookParcel — POST /v1/parcels. Guest-or-authenticated, same
@@ -136,6 +183,11 @@ func (s *Server) handleBookParcel(c *gin.Context) {
 		BinderOrgID: binderOrgID, BinderIsPlatformStaff: binderIsPlatformStaff,
 		LengthCm: req.LengthCm, WidthCm: req.WidthCm, HeightCm: req.HeightCm,
 		ContentsDeclaredByStaffID: contentsDeclaredByStaffID,
+		SenderDeclaredContents:    trimPtr(req.SenderDeclaredContents, 500),
+		LawfulContentsAttested:    req.LawfulContentsAttested,
+		TermsAccepted:             req.TermsAccepted,
+		TermsVersion:              trimPtr(req.TermsVersion, 40),
+		CarrierTermsVersion:       trimPtr(req.CarrierTermsVersion, 40),
 	})
 	if err != nil {
 		writeParcelError(c, err)
@@ -337,6 +389,40 @@ func (s *Server) handleSetParcelPrice(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"priceKes": req.PriceKes.KES()})
 }
 
+type updateOwnParcelDetailsRequest struct {
+	ReceiverName     string  `json:"receiverName" binding:"required"`
+	ReceiverMsisdn   string  `json:"receiverMsisdn" binding:"required"`
+	DestinationLabel string  `json:"destinationLabel" binding:"required"`
+	Notes            *string `json:"notes"`
+}
+
+// handleUpdateOwnParcelDetails — PATCH /v1/parcels/:code. The sender's
+// own self-serve fix for a wrong receiver number or destination, so a
+// typo doesn't have to wait on staff — see dbx.UpdateOwnParcelDetails
+// for why this is scoped to the booking party and the same
+// not-yet-picked-up window as the admin equivalent.
+func (s *Server) handleUpdateOwnParcelDetails(c *gin.Context) {
+	ctx := ctxFromGin(c)
+	if ctx.PartyID == "" {
+		writeError(c, http.StatusUnauthorized, "SIGN_IN_REQUIRED", "Sign in to edit this parcel")
+		return
+	}
+	var req updateOwnParcelDetailsRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		writeError(c, http.StatusBadRequest, "INVALID_REQUEST", err.Error())
+		return
+	}
+	if !requireMsisdn(c, &req.ReceiverMsisdn, "The receiver's phone number") {
+		return
+	}
+	code := c.Param("code")
+	if err := dbx.UpdateOwnParcelDetails(c.Request.Context(), s.Pool, code, ctx.PartyID, req.ReceiverName, req.ReceiverMsisdn, req.DestinationLabel, req.Notes); err != nil {
+		writeParcelError(c, err)
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"ok": true})
+}
+
 type payParcelRequest struct {
 	PaymentMethod string `json:"paymentMethod" binding:"required"` // MPESA_STK | ESOKO_POINTS
 	Msisdn        string `json:"msisdn"`                           // required for MPESA_STK
@@ -448,20 +534,6 @@ func (s *Server) handleGetParcelStatus(c *gin.Context) {
 	}
 	if status == nil {
 		writeError(c, http.StatusNotFound, "NOT_FOUND", "That parcel was not found")
-		return
-	}
-	// Nothing to show yet, whichever identifier this was looked up by
-	// (see Parcel.serviceTicketNumber's own comment) — a parcel nobody
-	// has physically received doesn't have a real code, a route, or a
-	// status worth reading out to the outside world. The real code in
-	// particular must never leak here pre-intake: it's the one field
-	// this whole reduction exists to protect.
-	if status.IntakeConfirmedAt == nil {
-		c.JSON(http.StatusOK, gin.H{
-			"status": "AWAITING_INTAKE",
-			"message": "This parcel hasn't been received yet. Once a handler confirms it, " +
-				"you'll get a text with your tracking link.",
-		})
 		return
 	}
 	// Was the label this was scanned from genuinely ours?
@@ -772,10 +844,73 @@ func (s *Server) handleDeliverParcel(c *gin.Context) {
 		return
 	}
 
-	if err := dbx.DeliverParcel(c.Request.Context(), s.Pool, code, req.DeliveryCode, ctx.PartyID, proof, allowCodeless, otpVerified); err != nil {
+	// ── Delivery-code throttle ──────────────────────────────────────
+	//
+	// The code is six digits now (see dbx.DeliveryCodeDigits), which is
+	// a million combinations — enumerable in seconds by the one party
+	// with both the parcel and the right to call this endpoint: the
+	// courier currently holding it. Without a wall here, diverting a box
+	// and then guessing your way to a DELIVERY_CODE proof would look
+	// exactly like an honest handover in the audit trail, while the
+	// legitimate no-code routes (OTP to the number on file, or a staff
+	// override with photo and name) both leave evidence. The throttle is
+	// what keeps the short code honest; it is not optional.
+	//
+	// Keyed on the parcel, not the caller or the IP: the thing being
+	// guessed is this parcel's code, and a courier switching handsets or
+	// networks must not get a fresh allowance. Only wrong codes count —
+	// a receiver who fumbles twice and then reads it correctly is no
+	// closer to a lockout than one who got it right first time.
+	//
+	// OTP and override deliveries skip the gate entirely: neither is
+	// guessing the delivery code, and locking a parcel out of the two
+	// routes that exist precisely for "the code didn't arrive" would
+	// strand the receiver standing at the counter.
+	triesCode := "parcel-delivery-code:" + code
+	guessingCode := strings.TrimSpace(req.DeliveryCode) != "" && !otpVerified
+	if guessingCode &&
+		authsvc.FailedAttempts(c.Request.Context(), s.Redis, triesCode) >= dbx.DeliveryCodeMaxAttempts {
+		writeError(c, http.StatusTooManyRequests, "CODE_LOCKED",
+			"Too many wrong codes for this parcel. Send the receiver a one-time code instead, or hand over with a photo and their name.")
+		return
+	}
+
+	// receiverSelfConfirm is false and stays false on this route: this is
+	// the staff hand-over endpoint, and a caller who has authenticated as
+	// staff is by definition not the receiver closing their own parcel.
+	// The self-confirm path is handleReceiverSelfConfirm, which reaches
+	// DeliverParcel only after spending a receiver token.
+	if err := dbx.DeliverParcel(c.Request.Context(), s.Pool, code, req.DeliveryCode, ctx.PartyID, proof, allowCodeless, otpVerified, false); err != nil {
+		// A wrong code is the only failure worth counting. Every other
+		// rejection here (not holding it, already delivered, journey
+		// closed) is a statement about the parcel that no amount of
+		// retrying changes, and counting those would lock a parcel over
+		// a clerk repeating a call that was never going to succeed.
+		var pe *dbx.ParcelError
+		if errors.As(err, &pe) && pe.Code == "WRONG_CODE" && guessingCode {
+			left := dbx.DeliveryCodeMaxAttempts -
+				authsvc.RecordFailure(c.Request.Context(), s.Redis, triesCode, time.Hour)
+			if left <= 0 {
+				writeError(c, http.StatusTooManyRequests, "CODE_LOCKED",
+					"Too many wrong codes for this parcel. Send the receiver a one-time code instead, or hand over with a photo and their name.")
+				return
+			}
+			// Saying how many tries remain is deliberate. The person
+			// typing is a clerk helping a receiver read a number off a
+			// phone, not an attacker being handed a hint — and a clerk
+			// who doesn't know a lockout is coming will burn the last
+			// try on a guess instead of switching to the OTP route.
+			writeError(c, http.StatusUnauthorized, "WRONG_CODE",
+				fmt.Sprintf("That code doesn't match. %d %s left before this parcel locks.",
+					left, map[bool]string{true: "try", false: "tries"}[left == 1]))
+			return
+		}
 		writeParcelError(c, err)
 		return
 	}
+	// Delivered — nothing left to guess, so the counter goes rather than
+	// ageing out on its own.
+	authsvc.ClearFailures(c.Request.Context(), s.Redis, triesCode)
 
 	// After the hand-over, never before: a wrong delivery code must not
 	// be able to book a collection for goods that never changed hands.
@@ -801,6 +936,13 @@ func (s *Server) handleDeliverParcel(c *gin.Context) {
 		}
 		if info.SenderMsisdn != "" {
 			_ = authsvc.SendSms(info.SenderMsisdn, notify.ParcelDelivered(code, info.DestinationLabel, deliveredAt), "PARCEL_DELIVERED")
+		}
+		// The receiver's own confirmation that it reached them —
+		// ParcelDelivered above is the courier's claim, told to the
+		// sender; this is the same event told to the person who actually
+		// took it, closing the loop DeliverParcel opened.
+		if info.ReceiverMsisdn != "" {
+			_ = authsvc.SendSms(info.ReceiverMsisdn, notify.ParcelReceived(code, info.SenderName, deliveredAt), "PARCEL_RECEIVED")
 		}
 	}
 	resp := gin.H{"status": "DELIVERED"}
@@ -992,24 +1134,40 @@ func (s *Server) handleClaimParcel(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"claimed": true})
 }
 
+// parcelErrorStatus maps a ParcelError code to its HTTP status.
+//
+// Split out from writeParcelError so the mapping is testable without a
+// gin context — these codes are a published client contract (the
+// offline counter queue branches on one of them), and a contract with
+// no test is a convention.
+func parcelErrorStatus(code string) int {
+	switch code {
+	case "NOT_FOUND":
+		return http.StatusNotFound
+	case "FORBIDDEN":
+		return http.StatusForbidden
+	case "INSUFFICIENT_POINTS":
+		return http.StatusPaymentRequired
+	case "ALREADY_SETTLED", "ALREADY_DELIVERED":
+		// Conflict, not a bad request: the caller did nothing wrong,
+		// the parcel simply moved on. A clerk's till app can tell
+		// "someone already took this money" apart from "you typed a
+		// bad amount" without parsing prose.
+		return http.StatusConflict
+	case "LABEL_ALREADY_SPENT":
+		// Also a conflict, and for the sharpest version of the same
+		// reason: for the offline counter queue this response is how a
+		// replayed booking discovers it already succeeded. A 400 there
+		// would read as "the clerk typed something wrong" for a parcel
+		// that shipped hours ago.
+		return http.StatusConflict
+	}
+	return http.StatusBadRequest
+}
+
 func writeParcelError(c *gin.Context, err error) {
 	if pe, ok := err.(*dbx.ParcelError); ok {
-		status := http.StatusBadRequest
-		switch pe.Code {
-		case "NOT_FOUND":
-			status = http.StatusNotFound
-		case "FORBIDDEN":
-			status = http.StatusForbidden
-		case "INSUFFICIENT_POINTS":
-			status = http.StatusPaymentRequired
-		case "ALREADY_SETTLED", "ALREADY_DELIVERED":
-			// Conflict, not a bad request: the caller did nothing wrong,
-			// the parcel simply moved on. A clerk's till app can tell
-			// "someone already took this money" apart from "you typed a
-			// bad amount" without parsing prose.
-			status = http.StatusConflict
-		}
-		writeError(c, status, pe.Code, pe.Message)
+		writeError(c, parcelErrorStatus(pe.Code), pe.Code, pe.Message)
 		return
 	}
 	writeError(c, http.StatusInternalServerError, "PARCEL_FAILED", "Could not complete that")

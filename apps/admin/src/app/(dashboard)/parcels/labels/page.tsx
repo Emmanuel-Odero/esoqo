@@ -1,42 +1,31 @@
+import Link from 'next/link';
+import type { Route } from 'next';
+import { Icon } from '@esoqo/ui';
 import { requireStaff } from '@/lib/session';
 import { LiveRefresh } from '@/components/LiveRefresh';
-import {
-  actionListParcelLabelBatches, actionListParcelLabelRegister,
-  actionListParcelLabelStock, actionListParcelOrgs,
-} from '../actions';
-import { BatchesPanel } from './BatchesPanel';
-import { LabelStockPanel } from './LabelStockPanel';
-import { RegisterPanel } from './RegisterPanel';
+import { actionListParcelLabelBatches, actionListParcelOrgs } from '../actions';
+import { LabelWorkspace } from './LabelWorkspace';
 
 export const dynamic = 'force-dynamic';
 
 /** `?code=` opens straight into that label's attach form — how the
- *  topbar scanner lands here (see ScanBox), and what makes "scan the
- *  label, write down what it's stuck on" a single gesture rather than
- *  a scan followed by hunting for the code in a grid.
+ *  topbar scanner lands here (see ScanBox). Since a scanned code always
+ *  belongs to *some* pool, it skips the picker below and goes straight
+ *  into the cross-company workspace, same as picking "Esoqo pool".
  *
- *  `?org=` scopes the whole page to one courier company's own pad.
- *  Stock belongs to whoever it was printed for, and a company must not
- *  be shown — let alone able to reprint — another's codes, so the pool,
- *  the batches and any new mint all move together when this changes.
- *
- *  `?state=` selects the register tab: blank | filled | spent | voided | all.
- *  Blank = empty labels; filled+spent = attached to packages. */
+ *  `?org=` (or `?tab=`/`?state=`/`?batch=`) means a company (or the
+ *  Esoqo pool) has already been chosen — anything past that point goes
+ *  to the Mint/Register/Batches workspace. Absent all four, this page
+ *  shows the picker: which pool are you here to look at? Landing on
+ *  the picker rather than everyone's labels at once is the same
+ *  "companies first" shape the courier-company page now follows — see
+ *  its own comment on why a summary before the rows matters. */
 export default async function ParcelLabelsPage(
-  { searchParams }: { searchParams: Promise<{ code?: string; org?: string; state?: string }> },
+  { searchParams }: { searchParams: Promise<{ code?: string; org?: string; state?: string; batch?: string; tab?: string }> },
 ) {
-  const ctx = await requireStaff();
-  const canGenerate = ctx.capabilities.includes('*') || ctx.capabilities.includes('parcels.assign');
-  const { code, org, state } = await searchParams;
-  const registerState = state ?? 'blank';
-  const [unused, batches, orgs, register] = await Promise.all([
-    actionListParcelLabelStock(org),
-    actionListParcelLabelBatches(org),
-    actionListParcelOrgs(),
-    actionListParcelLabelRegister(registerState, org),
-  ]);
-  const emptyCount = register.counts['blank'] ?? 0;
-  const attachedCount = (register.counts['filled'] ?? 0) + (register.counts['spent'] ?? 0);
+  await requireStaff();
+  const { code, org, state, batch, tab } = await searchParams;
+  const choosingPool = !code && !org && !state && !batch && !tab;
 
   return (
     <>
@@ -45,24 +34,82 @@ export default async function ParcelLabelsPage(
         <div>
           <h1>Labels</h1>
           <p>
-            Manage every label — Esoqo pool and each courier company&apos;s pads.
-            Empty labels ({emptyCount}) are printed stock waiting for a box;
-            attached labels ({attachedCount}) already carry item info or a booking.
-            Print a batch of PKG-… codes ahead of any booking — stick one on an envelope or a
-            box in advance, then hand the code over at booking (or have the sender scan it)
-            instead of every physical label having to be printed fresh at checkout time.
+            {choosingPool
+              ? 'Pick a courier company or the shared Esoqo pool to see its label stock, register and batches.'
+              : 'Manage this pool’s labels — mint new stock, browse the register, or withdraw/delete a batch.'}
           </p>
         </div>
       </div>
-      <LabelStockPanel
-        canGenerate={canGenerate} unused={unused} openCode={code}
-        orgs={orgs} activeOrgId={org}
-      />
-      <RegisterPanel
-        labels={register.labels} counts={register.counts}
-        state={registerState} orgId={org}
-      />
-      <BatchesPanel batches={batches} />
+
+      {choosingPool ? (
+        <PoolPicker />
+      ) : (
+        <LabelWorkspace
+          basePath="/parcels/labels" orgId={org}
+          code={code} state={state} batch={batch} tab={tab}
+        />
+      )}
     </>
+  );
+}
+
+async function PoolPicker() {
+  const [batches, orgs] = await Promise.all([
+    actionListParcelLabelBatches(),
+    actionListParcelOrgs(),
+  ]);
+
+  const countsByOrg = new Map<string, { unused: number; used: number; withdrawn: number }>();
+  for (const b of batches) {
+    const key = b.parcelOrgId ?? '';
+    const cur = countsByOrg.get(key) ?? { unused: 0, used: 0, withdrawn: 0 };
+    cur.unused += b.live;
+    cur.used += b.used;
+    cur.withdrawn += b.voided;
+    countsByOrg.set(key, cur);
+  }
+
+  const pools: { id?: string; name: string; logoUrl?: string | null }[] = [
+    { id: undefined, name: 'Esoqo pool (shared)' },
+    ...orgs.map((o) => ({ id: o.id, name: o.name, logoUrl: o.logoUrl })),
+  ];
+
+  return (
+    <div className="grid3" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: 16 }}>
+      {pools.map((p) => {
+        const counts = countsByOrg.get(p.id ?? '') ?? { unused: 0, used: 0, withdrawn: 0 };
+        const href = (p.id ? `/parcels/labels?org=${p.id}` : '/parcels/labels?tab=register') as Route;
+        return (
+          <Link key={p.id ?? 'esoqo'} href={href} className="card"
+            style={{ padding: 16, display: 'flex', flexDirection: 'column', gap: 12, textDecoration: 'none', color: 'inherit' }}>
+            <strong style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+              {p.logoUrl ? (
+                <img src={p.logoUrl} alt="" style={{ height: 20, width: 20, objectFit: 'contain', borderRadius: 4 }} />
+              ) : (
+                <Icon name="qr" size={16} />
+              )}
+              {p.name}
+            </strong>
+            <div style={{ display: 'flex', gap: 16, flexWrap: 'wrap' }}>
+              <Stat label="Unused" value={counts.unused} />
+              <Stat label="Used" value={counts.used} />
+              <Stat label="Withdrawn" value={counts.withdrawn} />
+            </div>
+            <span className="btn btn-o btn-sm" style={{ alignSelf: 'flex-start', marginTop: 'auto' }}>
+              View labels <Icon name="arrow-right" size={13} />
+            </span>
+          </Link>
+        );
+      })}
+    </div>
+  );
+}
+
+function Stat({ label, value }: { label: string; value: number }) {
+  return (
+    <div>
+      <span className="mono" style={{ fontSize: '1.3rem', display: 'block' }}>{value}</span>
+      <span className="sub" style={{ fontSize: '.72rem' }}>{label}</span>
+    </div>
   );
 }

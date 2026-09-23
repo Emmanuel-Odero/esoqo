@@ -304,7 +304,7 @@ function ContactStep({ f, update, counties }: { f: FormData; update: (k: keyof F
       <div style={{ marginBottom: 14 }}>
         <label className="sub" htmlFor="wi-msisdn" style={{ display: 'block', marginBottom: 6 }}>Phone number *</label>
         <input id="wi-msisdn" className="inp mono" style={{ width: '100%' }}
-          value={f.msisdn} placeholder="+254 7XX XXX XXX"
+          value={f.msisdn} placeholder="07XX XXX XXX"
           onChange={(e) => update('msisdn', e.target.value)} />
       </div>
 

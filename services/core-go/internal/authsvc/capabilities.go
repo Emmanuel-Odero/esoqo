@@ -169,6 +169,19 @@ const (
 	// equality either way.
 	CapTripCloseOwn = "trip.close:own"
 
+	// Passenger luggage. Three capabilities, not one, because the three
+	// acts carry different risk: tagging a bag creates a record, claiming
+	// one releases physical property to a person, and reading the
+	// manifest exposes every passenger's name on the vehicle.
+	//
+	// Both write capabilities sit on CREW deliberately — the conductor
+	// with forty bags and three minutes is the whole user. A design that
+	// needed a manager present to tag a bag would be a design crews
+	// route around with a biro.
+	CapLuggageTag   = "luggage.tag"
+	CapLuggageClaim = "luggage.claim"
+	CapLuggageRead  = "luggage.read"
+
 	CapVoucherCreate = "voucher.create"
 	CapVoucherRead   = "voucher.read"
 	CapVoucherSpend  = "voucher.spend"
@@ -187,6 +200,7 @@ var TicketingStaffCapabilities = map[string][]string{
 		"schedule.write", "venue.write", "route.write",
 		"booking.read", "booking.cancel", "booking.refund", "ticketorg.read",
 		CapFleetRead, CapCrewRead, CapTripRead, CapFareRead, CapFareVerify, CapCollectionRead, CapVehicleTrack,
+		CapLuggageRead, CapLuggageTag, CapLuggageClaim,
 		CapVoucherRead, CapVoucherFreeze, CapLoyaltyRead},
 	"ADMIN": {"ticket.checkin", "listing.write", "listing.publish", "ticketclass.write",
 		"schedule.write", "venue.write", "route.write",
@@ -194,7 +208,8 @@ var TicketingStaffCapabilities = map[string][]string{
 		"ticketorg.read", "ticketorg.write", "ticketorgstaff.write",
 		CapFleetRead, CapFleetWrite, CapCrewRead, CapCrewWrite,
 		CapTripRead, CapTripWrite, CapFareRead, CapFarePay,
-		CapCollectionRead, CapCollectionDeclare, CapVehicleTrack},
+		CapCollectionRead, CapCollectionDeclare, CapVehicleTrack,
+		CapLuggageRead, CapLuggageTag, CapLuggageClaim},
 	// CapCollectionRead added alongside CapTripCloseOwn: a crew member
 	// declaring cash has to be able to see the running tally they're
 	// declaring against (fares confirmed vs cash counted) — the whole
@@ -202,7 +217,13 @@ var TicketingStaffCapabilities = map[string][]string{
 	// org-wide scope collection.declare already has for CREW (not
 	// restricted to the caller's own trip; ownership is the trip match
 	// at declare time, not the read), so this isn't a new precedent.
-	"CREW": {CapCollectionDeclare, CapCollectionRead, CapVehicleTrack, CapFareRead, CapFareVerify, CapTripCloseOwn, "ticketorg.read"},
+	// Luggage sits on CREW for the reason the capability block gives: the
+	// conductor loading bags at a stage is the entire user of this
+	// feature. CapLuggageClaim is a real grant of authority — it releases
+	// property — and it belongs here anyway, because the person handing
+	// the bag back is the person holding it.
+	"CREW": {CapCollectionDeclare, CapCollectionRead, CapVehicleTrack, CapFareRead, CapFareVerify, CapTripCloseOwn, "ticketorg.read",
+		CapLuggageRead, CapLuggageTag, CapLuggageClaim},
 }
 
 // ParcelOrgCapabilities — the courier-company grants. Org-scoped via
@@ -366,6 +387,11 @@ var RolePresets = map[RoleName][]string{
 		"fleet.read:own", "fleet.write:own", "crew.read:own", "crew.write:own",
 		"trip.read:own", "trip.write:own", "vehicle.track:own",
 		"fare.pay:own", "fare.read:own", "collection.declare:own", "collection.read:own",
+		// An owner can tag, claim and read luggage on their own fleet —
+		// the same :own shape every other fleet grant above follows. A
+		// small operator IS the conductor on their own vehicle often
+		// enough that withholding the write grants would be theatre.
+		"luggage.tag:own", "luggage.claim:own", "luggage.read:own",
 		"voucher.create:own", "voucher.read:own", "voucher.spend:own", "voucher.freeze:own", "loyalty.read:own",
 	},
 }

@@ -207,7 +207,7 @@ function AddCourierPanel({ onClose }: { onClose: () => void }) {
       </label>
       <div style={{ display: 'flex', gap: 10 }}>
         <label className="sub" style={{ flex: 1 }}>Phone number
-          <input value={msisdn} onChange={(e) => setMsisdn(e.target.value)} placeholder="+2547XXXXXXXX"
+          <input value={msisdn} onChange={(e) => setMsisdn(e.target.value)} placeholder="07XX XXX XXX"
             style={{ ...FIELD, width: '100%' }} />
         </label>
         <label className="sub" style={{ flex: 1 }}>Contact (email, optional)

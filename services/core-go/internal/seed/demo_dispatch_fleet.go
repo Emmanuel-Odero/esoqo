@@ -143,7 +143,7 @@ var eshipFleetRuns = []fleetRunSpec{
 			{name: "Kiki Viki", msisdn: "+254728387694", role: "DRIVER", staffName: "Kiki Viki"},
 			{name: "Samuel Kariuki", msisdn: "+254722114401", role: "TOUT", staffName: "Samuel Kariuki"},
 		},
-		receivers: []string{"Kiki Viki"}, status: "ACTIVE",
+		receivers: []string{"Kiki Viki"}, status: "DEPARTED",
 	},
 	{
 		plate: "KDK 214T", vehicleType: "TRUCK",
@@ -156,7 +156,7 @@ var eshipFleetRuns = []fleetRunSpec{
 			{name: "Mary Wambui", msisdn: "+254722114403", role: "TOUT", staffName: "Mary Wambui"},
 			{name: "John Kiprop", msisdn: "+254722114404", role: "LOADER", staffName: "John Kiprop"},
 		},
-		receivers: []string{"Nakuru receiving team"}, status: "ACTIVE",
+		receivers: []string{"Nakuru receiving team"}, status: "DEPARTED",
 	},
 	{
 		plate: "KDL 639P", vehicleType: "BUS",
@@ -167,7 +167,7 @@ var eshipFleetRuns = []fleetRunSpec{
 			{name: "Grace Achieng", msisdn: "+254722114405", role: "DRIVER", staffName: "Grace Achieng"},
 			{name: "Daniel Mutua", msisdn: "+254722114406", role: "TOUT", staffName: "Daniel Mutua"},
 		},
-		receivers: []string{"Thika receiving team"}, status: "ACTIVE",
+		receivers: []string{"Thika receiving team"}, status: "DEPARTED",
 	},
 	{
 		plate: "KDM 102B", vehicleType: "VAN",
@@ -177,7 +177,7 @@ var eshipFleetRuns = []fleetRunSpec{
 		crew: []fleetCrewSpec{
 			{name: "Faith Nyambura", msisdn: "+254722114407", role: "DRIVER", staffName: "Faith Nyambura"},
 		},
-		receivers: []string{"Kiki Viki"}, status: "ACTIVE",
+		receivers: []string{"Kiki Viki"}, status: "DEPARTED",
 	},
 	{
 		plate: "KDN 771C", vehicleType: "MOTORBIKE",
@@ -187,7 +187,7 @@ var eshipFleetRuns = []fleetRunSpec{
 		crew: []fleetCrewSpec{
 			{name: "Kevin Barasa", msisdn: "+254722114408", role: "DRIVER", staffName: "Kevin Barasa"},
 		},
-		receivers: []string{"CBD front desk"}, status: "ACTIVE",
+		receivers: []string{"CBD front desk"}, status: "DEPARTED",
 	},
 	{
 		plate: "KDP 336F", vehicleType: "TRUCK",
@@ -199,7 +199,7 @@ var eshipFleetRuns = []fleetRunSpec{
 			{name: "Alice Moraa", msisdn: "+254722114409", role: "DRIVER", staffName: "Alice Moraa"},
 			{name: "Tom Ochieng", msisdn: "+254722114410", role: "LOADER", staffName: "Tom Ochieng"},
 		},
-		receivers: []string{"Kiki Viki"}, status: "ACTIVE",
+		receivers: []string{"Kiki Viki"}, status: "DEPARTED",
 	},
 	{
 		plate: "KDQ 905H", vehicleType: "PICKUP",
@@ -210,7 +210,7 @@ var eshipFleetRuns = []fleetRunSpec{
 			{name: "Brian Kimani", msisdn: "+254722114411", role: "DRIVER", staffName: "Brian Kimani"},
 			{name: "Susan Njoki", msisdn: "+254722114412", role: "TOUT", staffName: "Susan Njoki"},
 		},
-		receivers: []string{"CBD front desk"}, status: "ACTIVE",
+		receivers: []string{"CBD front desk"}, status: "DEPARTED",
 	},
 	{
 		plate: "KDR 118J", vehicleType: "VAN",
@@ -222,7 +222,7 @@ var eshipFleetRuns = []fleetRunSpec{
 			{name: "Dennis Kibet", msisdn: "+254722114413", role: "DRIVER", staffName: "Dennis Kibet"},
 			{name: "Ann Wanjiru", msisdn: "+254722114414", role: "TOUT", staffName: "Ann Wanjiru"},
 		},
-		receivers: []string{"Thika receiving team"}, status: "ACTIVE",
+		receivers: []string{"Thika receiving team"}, status: "DEPARTED",
 	},
 	{
 		plate: "KDS 452K", vehicleType: "VAN",
@@ -271,7 +271,7 @@ var eshipFleetRuns = []fleetRunSpec{
 			{name: "Mary Wambui", msisdn: "+254722114403", role: "TOUT", staffName: "Mary Wambui"},
 			{name: "John Kiprop", msisdn: "+254722114404", role: "LOADER", staffName: "John Kiprop"},
 		},
-		receivers: []string{"Mombasa receiving team"}, status: "ACTIVE",
+		receivers: []string{"Mombasa receiving team"}, status: "DEPARTED",
 	},
 	{
 		plate: "KEM 088Z", vehicleType: "TRUCK",
@@ -283,7 +283,7 @@ var eshipFleetRuns = []fleetRunSpec{
 			{name: "Alice Moraa", msisdn: "+254722114409", role: "DRIVER", staffName: "Alice Moraa"},
 			{name: "Tom Ochieng", msisdn: "+254722114410", role: "LOADER", staffName: "Tom Ochieng"},
 		},
-		receivers: []string{"Kisumu receiving team"}, status: "ACTIVE",
+		receivers: []string{"Kisumu receiving team"}, status: "DEPARTED",
 	},
 	{
 		plate: "KEP 663X", vehicleType: "VAN",
@@ -294,7 +294,7 @@ var eshipFleetRuns = []fleetRunSpec{
 			{name: "Dennis Kibet", msisdn: "+254722114413", role: "DRIVER", staffName: "Dennis Kibet"},
 			{name: "Ann Wanjiru", msisdn: "+254722114414", role: "TOUT", staffName: "Ann Wanjiru"},
 		},
-		receivers: []string{"Eldoret receiving team"}, status: "ACTIVE",
+		receivers: []string{"Eldoret receiving team"}, status: "DEPARTED",
 	},
 	{
 		plate: "KEQ 410C", vehicleType: "PICKUP",
@@ -305,7 +305,7 @@ var eshipFleetRuns = []fleetRunSpec{
 			{name: "Irene Nyakundi", msisdn: "+254722114416", role: "DRIVER", staffName: "Irene Nyakundi"},
 			{name: "Paul Mwangi", msisdn: "+254722114417", role: "TOUT", staffName: "Paul Mwangi"},
 		},
-		receivers: []string{"CBD front desk"}, status: "ACTIVE",
+		receivers: []string{"CBD front desk"}, status: "DEPARTED",
 	},
 }
 
@@ -403,30 +403,91 @@ func SeedDemoDispatchFleet(ctx context.Context, pool *pgxpool.Pool) error {
 	}
 	rows.Close()
 
+	// ── Routes ── the company's own map (ADR-0006). Seeded so the demo
+	// shows a dispatcher picking a planned leg rather than typing one,
+	// and so a three-stop route exists to demonstrate that a leg is a
+	// consecutive pair of stops rather than a whole journey.
+	demoRoutes := []struct {
+		name  string
+		code  string
+		stops []string
+	}{
+		{"Nairobi — Nakuru", "NBO-NKR", []string{"ESOQO Shippers – CBD Counter", "ESOQO Shippers – Nakuru Hub"}},
+		{"Nairobi — Thika", "NBO-THK", []string{"ESOQO Shippers – CBD Counter", "ESOQO Shippers – Thika Counter"}},
+		// Three stops = two legs. A parcel can ride the first vehicle to
+		// Kabiria and a second one onward, which is exactly what
+		// parcel_shipment_item already records as two rows.
+		{"Nairobi — Kabiria — Nakuru", "NBO-KBR-NKR", []string{
+			"ESOQO Shippers – CBD Counter", "ESOQO Shippers – Kabiria Hub", "ESOQO Shippers – Nakuru Hub",
+		}},
+	}
+	routeCount := 0
+	for _, rt := range demoRoutes {
+		stopIDs := make([]string, 0, len(rt.stops))
+		for _, name := range rt.stops {
+			if id := stationIDByName[name]; id != "" {
+				stopIDs = append(stopIDs, id)
+			}
+		}
+		// A station missing from this tenant means the route cannot be
+		// built; skip rather than seeding a one-stop non-journey.
+		if len(stopIDs) < 2 {
+			continue
+		}
+		var routeID string
+		err := pool.QueryRow(ctx, `SELECT id FROM parcel_route WHERE "parcelOrgId" = $1 AND code = $2`, orgID, rt.code).Scan(&routeID)
+		if err != nil {
+			if err := pool.QueryRow(ctx, `
+				INSERT INTO parcel_route ("parcelOrgId", name, code, active)
+				VALUES ($1, $2, $3, true) RETURNING id`, orgID, rt.name, rt.code).Scan(&routeID); err != nil {
+				return fmt.Errorf("route %s: %w", rt.code, err)
+			}
+		}
+		// Rewritten every seed so reordering a demo route in the fixture
+		// above actually shows up, the same way SaveRoute does it.
+		if _, err := pool.Exec(ctx, `DELETE FROM parcel_route_stop WHERE "routeId" = $1`, routeID); err != nil {
+			return fmt.Errorf("route stops %s: %w", rt.code, err)
+		}
+		for i, stationID := range stopIDs {
+			if _, err := pool.Exec(ctx, `
+				INSERT INTO parcel_route_stop ("routeId", sequence, "stationId")
+				VALUES ($1, $2, $3)`, routeID, i, stationID); err != nil {
+				return fmt.Errorf("route stop %s/%d: %w", rt.code, i, err)
+			}
+		}
+		routeCount++
+	}
+
 	for _, r := range eshipFleetRuns {
 		if _, ok := corridorWaypoints[r.corridor]; !ok {
 			return fmt.Errorf("run %s: unknown corridor %s", r.plate, r.corridor)
 		}
-		var dispatchID string
-		err := pool.QueryRow(ctx, `SELECT id FROM parcel_dispatch WHERE "parcelOrgId" = $1 AND "vehiclePlate" = $2`, orgID, r.plate).Scan(&dispatchID)
+		var runID string
+		err := pool.QueryRow(ctx, `SELECT id FROM parcel_shipment WHERE "parcelOrgId" = $1 AND "vehiclePlate" = $2`, orgID, r.plate).Scan(&runID)
 		if err != nil {
 			originID := stationIDByName[r.origin]
 			destID := stationIDByName[r.dest]
-			err = pool.QueryRow(ctx, `INSERT INTO parcel_dispatch (id, "parcelOrgId", "vehiclePlate", "vehicleType",
-				"originStationId", "destinationStationId", status, notes, "createdAt")
-				VALUES (gen_random_uuid(), $1, $2, $3, $4, $5, $6, $7, now() - ($8::float || ' minutes')::interval) RETURNING id`,
+			// originLabel/destinationLabel are NOT NULL on the merged run
+			// table and are a snapshot of the station name (ADR-0006), so
+			// they are filled from the station rather than left out.
+			err = pool.QueryRow(ctx, `INSERT INTO parcel_shipment (id, "parcelOrgId", "vehiclePlate", "vehicleType",
+				"originStationId", "destinationStationId", status, notes, "createdAt",
+				"originLabel", "destinationLabel")
+				VALUES (gen_random_uuid(), $1, $2, $3, $4, $5, $6, $7, now() - ($8::float || ' minutes')::interval,
+				COALESCE((SELECT name FROM parcel_agent WHERE id = $4), 'Origin'),
+				COALESCE((SELECT name FROM parcel_agent WHERE id = $5), 'Destination')) RETURNING id`,
 				orgID, r.plate, r.vehicleType, nullableStr(originID), nullableStr(destID),
-				r.status, nullableStr(r.notes), r.startedMinsAgo).Scan(&dispatchID)
+				r.status, nullableStr(r.notes), r.startedMinsAgo).Scan(&runID)
 			if err != nil {
 				return fmt.Errorf("dispatch %s: %w", r.plate, err)
 			}
 		}
 		// Crew and receiving team are refreshed every run so the board
 		// shows the current roster story, not the first seed's.
-		if _, err := pool.Exec(ctx, `DELETE FROM parcel_dispatch_crew WHERE "dispatchId" = $1`, dispatchID); err != nil {
+		if _, err := pool.Exec(ctx, `DELETE FROM parcel_run_crew WHERE "runId" = $1`, runID); err != nil {
 			return fmt.Errorf("crew clear %s: %w", r.plate, err)
 		}
-		if _, err := pool.Exec(ctx, `DELETE FROM parcel_dispatch_receiver WHERE "dispatchId" = $1`, dispatchID); err != nil {
+		if _, err := pool.Exec(ctx, `DELETE FROM parcel_run_receiver WHERE "runId" = $1`, runID); err != nil {
 			return fmt.Errorf("receivers clear %s: %w", r.plate, err)
 		}
 		for _, c := range r.crew {
@@ -437,8 +498,8 @@ func SeedDemoDispatchFleet(ctx context.Context, pool *pgxpool.Pool) error {
 					staffID = &id
 				}
 			}
-			if _, err := pool.Exec(ctx, `INSERT INTO parcel_dispatch_crew ("dispatchId", name, msisdn, role, "customRole", "staffId")
-				VALUES ($1, $2, $3, $4, $5, $6)`, dispatchID, c.name, nullableStr(c.msisdn), role, custom, staffID); err != nil {
+			if _, err := pool.Exec(ctx, `INSERT INTO parcel_run_crew ("runId", name, msisdn, role, "customRole", "staffId")
+				VALUES ($1, $2, $3, $4, $5, $6)`, runID, c.name, nullableStr(c.msisdn), role, custom, staffID); err != nil {
 				return fmt.Errorf("crew %s: %w", c.name, err)
 			}
 		}
@@ -447,14 +508,14 @@ func SeedDemoDispatchFleet(ctx context.Context, pool *pgxpool.Pool) error {
 			if id, ok := staffIDByName[rcv]; ok {
 				staffID = &id
 			}
-			if _, err := pool.Exec(ctx, `INSERT INTO parcel_dispatch_receiver ("dispatchId", name, "staffId")
-				VALUES ($1, $2, $3)`, dispatchID, rcv, staffID); err != nil {
+			if _, err := pool.Exec(ctx, `INSERT INTO parcel_run_receiver ("runId", name, "staffId")
+				VALUES ($1, $2, $3)`, runID, rcv, staffID); err != nil {
 				return fmt.Errorf("receiver %s: %w", rcv, err)
 			}
 		}
 		// Replace the trail wholesale — re-seeding replays the same
 		// journey rather than stacking a second one on top.
-		if _, err := pool.Exec(ctx, `DELETE FROM parcel_dispatch_ping WHERE "dispatchId" = $1`, dispatchID); err != nil {
+		if _, err := pool.Exec(ctx, `DELETE FROM parcel_run_ping WHERE "runId" = $1`, runID); err != nil {
 			return fmt.Errorf("clear trail %s: %w", r.plate, err)
 		}
 		type ping struct{ lat, lng, minsAgo float64 }
@@ -494,36 +555,226 @@ func SeedDemoDispatchFleet(ctx context.Context, pool *pgxpool.Pool) error {
 			if p.minsAgo < 0 {
 				p.minsAgo = 0
 			}
-			if _, err := pool.Exec(ctx, `INSERT INTO parcel_dispatch_ping ("dispatchId", lat, lng, at)
+			if _, err := pool.Exec(ctx, `INSERT INTO parcel_run_ping ("runId", lat, lng, at)
 				VALUES ($1, $2, $3, now() - ($4::float || ' minutes')::interval)`,
-				dispatchID, p.lat, p.lng, p.minsAgo); err != nil {
+				runID, p.lat, p.lng, p.minsAgo); err != nil {
 				return fmt.Errorf("ping %s: %w", r.plate, err)
 			}
 		}
 		curLat, curLng := corridorPoint(r.corridor, r.progress, 999)
 		switch r.status {
 		case "ARRIVED":
-			if _, err := pool.Exec(ctx, `UPDATE parcel_dispatch SET status='ARRIVED',
+			if _, err := pool.Exec(ctx, `UPDATE parcel_shipment SET status='ARRIVED',
 				"currentLat"=$2, "currentLng"=$3, "currentAt"=now() - ($4::float || ' minutes')::interval,
 				"arrivedAt"=now() - ($5::float || ' minutes')::interval,
-				"receivedBy"=COALESCE("receivedBy", (SELECT string_agg(name, ', ') FROM parcel_dispatch_receiver WHERE "dispatchId"=$1))
-				WHERE id=$1`, dispatchID, curLat, curLng, r.lastSeenMinsAgo, r.arrivedMinsAgo); err != nil {
+				"receivedBy"=COALESCE("receivedBy", (SELECT string_agg(name, ', ') FROM parcel_run_receiver WHERE "runId"=$1))
+				WHERE id=$1`, runID, curLat, curLng, r.lastSeenMinsAgo, r.arrivedMinsAgo); err != nil {
 				return fmt.Errorf("arrive %s: %w", r.plate, err)
 			}
 		case "CANCELLED":
-			_, _ = pool.Exec(ctx, `UPDATE parcel_dispatch SET status='CANCELLED', "currentLat"=NULL, "currentLng"=NULL, "currentAt"=NULL WHERE id=$1`, dispatchID)
+			_, _ = pool.Exec(ctx, `UPDATE parcel_shipment SET status='CANCELLED', "currentLat"=NULL, "currentLng"=NULL, "currentAt"=NULL WHERE id=$1`, runID)
 		default:
-			if _, err := pool.Exec(ctx, `UPDATE parcel_dispatch SET status='ACTIVE',
+			if _, err := pool.Exec(ctx, `UPDATE parcel_shipment SET status='DEPARTED',
 				"currentLat"=$2, "currentLng"=$3, "currentAt"=now() - ($4::float || ' minutes')::interval,
 				"arrivedAt"=NULL, "receivedBy"=NULL WHERE id=$1`,
-				dispatchID, curLat, curLng, r.lastSeenMinsAgo); err != nil {
+				runID, curLat, curLng, r.lastSeenMinsAgo); err != nil {
 				return fmt.Errorf("position %s: %w", r.plate, err)
 			}
 		}
 	}
 
-	fmt.Printf("  dispatch fleet: esoqo-shippers (%d runs)\n", len(eshipFleetRuns))
+	fmt.Printf("  dispatch fleet: esoqo-shippers (%d runs, %d routes)\n", len(eshipFleetRuns), routeCount)
+
+	// Cargo last: the showcase plants ~24 parcels and the loop above
+	// plants ~15 runs, and without this step the two never meet — the
+	// board shows lorries with nothing aboard and parcels with no fleet.
+	if loading, aboard, err := seedDispatchCargo(ctx, pool, orgID, stationIDByName, staffIDByName); err != nil {
+		return err
+	} else {
+		fmt.Printf("  dispatch cargo: %d loading, %d aboard departed runs\n", loading, aboard)
+	}
 	return nil
+}
+
+// seedDispatchCargo puts the showcase parcels onto the fleet, so the
+// board's "parcels aboard" figure and the manifests are real.
+//
+// Two halves, matching the two halves of the loading rule
+// (dbx.LoadParcelOntoOrgShipment — LOADING only):
+//
+//   - parcels waiting at the counter go onto a dedicated LOADING shed
+//     run (created here, reset here every seed), and move to IN_TRANSIT
+//     as part of loading — the same transition the scanner performs.
+//   - parcels already IN_TRANSIT with no manifest row join a DEPARTED
+//     run's manifest, round-robin, but only when they have no manifest
+//     row anywhere yet: additive, never rewriting a document or
+//     stealing a box a tester already moved.
+//
+// Returns (loading count, departed-aboard count).
+func seedDispatchCargo(ctx context.Context, pool *pgxpool.Pool, orgID string, stationIDByName, staffIDByName map[string]string) (int, int, error) {
+	// ── The shed run ──
+	const shedPlate = "KDB 900L"
+	var shedRunID string
+	if err := pool.QueryRow(ctx, `SELECT id FROM parcel_shipment WHERE "parcelOrgId" = $1 AND "vehiclePlate" = $2`, orgID, shedPlate).Scan(&shedRunID); err != nil {
+		originID := stationIDByName["ESOQO Shippers – Kabiria Hub"]
+		destID := stationIDByName["ESOQO Shippers – CBD Counter"]
+		err = pool.QueryRow(ctx, `INSERT INTO parcel_shipment (id, "parcelOrgId", "vehiclePlate", "vehicleType",
+			"originStationId", "destinationStationId", status, notes, "createdAt",
+			"originLabel", "destinationLabel")
+			VALUES (gen_random_uuid(), $1, $2, 'VAN', $3, $4, 'LOADING', $5, now(),
+			COALESCE((SELECT name FROM parcel_agent WHERE id = $3), 'Origin'),
+			COALESCE((SELECT name FROM parcel_agent WHERE id = $4), 'Destination')) RETURNING id`,
+			orgID, shedPlate, nullableStr(originID), nullableStr(destID),
+			nullableStr("Shed run — scan the counter parcels onto this one")).Scan(&shedRunID)
+		if err != nil {
+			return 0, 0, fmt.Errorf("shed run %s: %w", shedPlate, err)
+		}
+	}
+	// This plate is the demo's loading run, so it is reset to the shed
+	// every seed — a tester setting it off must not permanently strand
+	// the "load a parcel" story, the same way the loop above rewrites
+	// every other run's status and trail.
+	if _, err := pool.Exec(ctx, `UPDATE parcel_shipment SET status='LOADING',
+		"currentLat"=NULL, "currentLng"=NULL, "currentAt"=NULL,
+		"arrivedAt"=NULL, "receivedBy"=NULL WHERE id=$1`, shedRunID); err != nil {
+		return 0, 0, fmt.Errorf("shed reset %s: %w", shedPlate, err)
+	}
+	if _, err := pool.Exec(ctx, `DELETE FROM parcel_run_crew WHERE "runId" = $1`, shedRunID); err != nil {
+		return 0, 0, fmt.Errorf("shed crew clear %s: %w", shedPlate, err)
+	}
+	var shedStaff *string
+	if id, ok := staffIDByName["Kiki Viki"]; ok {
+		shedStaff = &id
+	}
+	if _, err := pool.Exec(ctx, `INSERT INTO parcel_run_crew ("runId", name, msisdn, role, "staffId")
+		VALUES ($1, 'Kiki Viki', '+254728387694', 'DRIVER', $2)`, shedRunID, shedStaff); err != nil {
+		return 0, 0, fmt.Errorf("shed crew %s: %w", shedPlate, err)
+	}
+	// The shed manifest is rewritten wholesale (like the trails above):
+	// everything waiting at the counter goes on, in code order — plus
+	// whatever the last seed already put on, which is IN_TRANSIT by now
+	// and would otherwise fall off the manifest on a reseed.
+	keptRows, err := pool.Query(ctx, `SELECT i."parcelId", p.code FROM parcel_shipment_item i
+		JOIN parcel p ON p.id = i."parcelId" WHERE i."shipmentId" = $1 ORDER BY p.code`, shedRunID)
+	if err != nil {
+		return 0, 0, fmt.Errorf("shed manifest read %s: %w", shedPlate, err)
+	}
+	type keptParcel struct{ id, code string }
+	var keptList []keptParcel
+	kept := map[string]bool{}
+	for keptRows.Next() {
+		var kp keptParcel
+		if err := keptRows.Scan(&kp.id, &kp.code); err != nil {
+			keptRows.Close()
+			return 0, 0, err
+		}
+		keptList = append(keptList, kp)
+		kept[kp.id] = true
+	}
+	keptRows.Close()
+	if err := keptRows.Err(); err != nil {
+		return 0, 0, err
+	}
+	if _, err := pool.Exec(ctx, `DELETE FROM parcel_shipment_item WHERE "shipmentId" = $1`, shedRunID); err != nil {
+		return 0, 0, fmt.Errorf("shed manifest clear %s: %w", shedPlate, err)
+	}
+	rows, err := pool.Query(ctx, `SELECT id, code FROM parcel
+		WHERE "parcelOrgId" = $1 AND status = 'RECEIVED_AT_COUNTER' ORDER BY code`, orgID)
+	if err != nil {
+		return 0, 0, err
+	}
+	loading := 0
+	loadOne := func(parcelID, code string, moveToTransit bool) error {
+		if _, err := pool.Exec(ctx, `INSERT INTO parcel_shipment_item (id, "shipmentId", "parcelId", "loadedAt")
+			VALUES (gen_random_uuid(), $1, $2, now())`, shedRunID, parcelID); err != nil {
+			return fmt.Errorf("load %s: %w", code, err)
+		}
+		if moveToTransit {
+			if _, err := pool.Exec(ctx, `UPDATE parcel SET status = 'IN_TRANSIT' WHERE id = $1`, parcelID); err != nil {
+				return fmt.Errorf("transit %s: %w", code, err)
+			}
+			_, _ = pool.Exec(ctx, `INSERT INTO parcel_handoff (id, "parcelId", status, "createdAt")
+				VALUES (gen_random_uuid(), $1, 'IN_TRANSIT', now())`, parcelID)
+		}
+		loading++
+		return nil
+	}
+	for _, kp := range keptList {
+		if err := loadOne(kp.id, kp.code, false); err != nil {
+			rows.Close()
+			return 0, 0, err
+		}
+	}
+	for rows.Next() {
+		var parcelID, code string
+		if err := rows.Scan(&parcelID, &code); err != nil {
+			rows.Close()
+			return 0, 0, err
+		}
+		if kept[parcelID] {
+			continue
+		}
+		if err := loadOne(parcelID, code, true); err != nil {
+			rows.Close()
+			return 0, 0, err
+		}
+	}
+	rows.Close()
+	if err := rows.Err(); err != nil {
+		return 0, 0, err
+	}
+
+	// ── Departed manifests ──
+	departedRows, err := pool.Query(ctx, `SELECT id FROM parcel_shipment
+		WHERE "parcelOrgId" = $1 AND status = 'DEPARTED' ORDER BY "createdAt"`, orgID)
+	if err != nil {
+		return loading, 0, err
+	}
+	var departedIDs []string
+	for departedRows.Next() {
+		var id string
+		if err := departedRows.Scan(&id); err != nil {
+			departedRows.Close()
+			return loading, 0, err
+		}
+		departedIDs = append(departedIDs, id)
+	}
+	departedRows.Close()
+	if err := departedRows.Err(); err != nil {
+		return loading, 0, err
+	}
+	aboard := 0
+	if len(departedIDs) > 0 {
+		unattached, err := pool.Query(ctx, `SELECT p.id, p.code FROM parcel p
+			WHERE p."parcelOrgId" = $1 AND p.status = 'IN_TRANSIT'
+			  AND NOT EXISTS (SELECT 1 FROM parcel_shipment_item i WHERE i."parcelId" = p.id)
+			ORDER BY p.code`, orgID)
+		if err != nil {
+			return loading, 0, err
+		}
+		i := 0
+		for unattached.Next() {
+			var parcelID, code string
+			if err := unattached.Scan(&parcelID, &code); err != nil {
+				unattached.Close()
+				return loading, aboard, err
+			}
+			runID := departedIDs[i%len(departedIDs)]
+			if _, err := pool.Exec(ctx, `INSERT INTO parcel_shipment_item (id, "shipmentId", "parcelId", "loadedAt")
+				VALUES (gen_random_uuid(), $1, $2, now())
+				ON CONFLICT ("shipmentId", "parcelId") DO NOTHING`, runID, parcelID); err != nil {
+				unattached.Close()
+				return loading, aboard, fmt.Errorf("manifest %s: %w", code, err)
+			}
+			aboard++
+			i++
+		}
+		unattached.Close()
+		if err := unattached.Err(); err != nil {
+			return loading, aboard, err
+		}
+	}
+	return loading, aboard, nil
 }
 
 func nullableStr(s string) *string {

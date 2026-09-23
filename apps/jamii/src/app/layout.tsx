@@ -1,34 +1,73 @@
-import type { Metadata, Viewport } from 'next';
-import { IBM_Plex_Mono, IBM_Plex_Sans, Outfit } from 'next/font/google';
-import { RouteAnnouncer, SkipLinks, LiveRegion } from '@esoqo/a11y';
-import { IconSprite } from '@esoqo/ui';
-import '@esoqo/ui/tokens.css';
-import '@esoqo/ui/ui.css';
-import './jamii.css';
+import type { Metadata, Viewport } from "next";
+import { IBM_Plex_Mono, IBM_Plex_Sans, Outfit } from "next/font/google";
+import { RouteAnnouncer, SkipLinks, LiveRegion } from "@esoqo/a11y";
+import { IconSprite } from "@esoqo/ui";
+import "@esoqo/ui/tokens.css";
+import "@esoqo/ui/ui.css";
+import "./jamii.css";
 
-const plexSans = IBM_Plex_Sans({ subsets: ['latin'], weight: ['400', '500', '600', '700'], variable: '--font-plex-sans', display: 'swap' });
-const plexMono = IBM_Plex_Mono({ subsets: ['latin'], weight: ['400', '500', '600'], variable: '--font-plex-mono', display: 'swap' });
-const outfit = Outfit({ subsets: ['latin'], weight: ['500', '600', '700', '800'], variable: '--font-outfit', display: 'swap' });
+const plexSans = IBM_Plex_Sans({
+  subsets: ["latin"],
+  weight: ["400", "500", "600", "700"],
+  variable: "--font-plex-sans",
+  display: "swap",
+});
+const plexMono = IBM_Plex_Mono({
+  subsets: ["latin"],
+  weight: ["400", "500", "600"],
+  variable: "--font-plex-mono",
+  display: "swap",
+});
+const outfit = Outfit({
+  subsets: ["latin"],
+  weight: ["500", "600", "700", "800"],
+  variable: "--font-outfit",
+  display: "swap",
+});
 
 export const metadata: Metadata = {
-  title: { default: 'Our Jamii · CECF Community Pages', template: '%s · Our Jamii' },
-  description: 'A mini-site and crowdfunding page for community impact groups, from CECF.',
+  title: {
+    default: "Our Jamii · CECF Community Pages",
+    template: "%s · Our Jamii",
+  },
+  description:
+    "A mini-site and crowdfunding page for community impact groups, from CECF.",
+  manifest: "/manifest.webmanifest",
+  icons: {
+    icon: [
+      { url: "/favicon-16x16.png", sizes: "16x16", type: "image/png" },
+      { url: "/favicon-32x32.png", sizes: "32x32", type: "image/png" },
+      { url: "/icon-192.png", sizes: "192x192", type: "image/png" },
+      { url: "/favicon.ico", sizes: "any" },
+    ],
+    apple: "/apple-touch-icon.png",
+  },
 };
 
 export const viewport: Viewport = {
-  width: 'device-width',
+  width: "device-width",
   initialScale: 1,
-  themeColor: '#16233B',
+  themeColor: "#16233B",
 };
 
-export default function RootLayout({ children }: { children: React.ReactNode }) {
+export default function RootLayout({
+  children,
+}: {
+  children: React.ReactNode;
+}) {
   return (
-    <html lang="en" suppressHydrationWarning className={`${plexSans.variable} ${plexMono.variable} ${outfit.variable}`}>
+    <html
+      lang="en"
+      suppressHydrationWarning
+      className={`${plexSans.variable} ${plexMono.variable} ${outfit.variable}`}
+    >
       <body>
         <IconSprite />
         <SkipLinks />
         <LiveRegion>
-          <main id="main" tabIndex={-1}>{children}</main>
+          <main id="main" tabIndex={-1}>
+            {children}
+          </main>
         </LiveRegion>
         <RouteAnnouncer />
       </body>

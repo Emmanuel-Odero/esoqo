@@ -7,6 +7,7 @@ This document explains the technical changes made to simplify the courier counte
 ## Problems Identified
 
 Users found the counter interface:
+
 1. **Too complex** - Multiple overlapping features, scattered workflows
 2. **Aesthetically intimidating** - Cluttered interface with too much text
 3. **Disorganized** - Related features scattered across tabs
@@ -14,142 +15,167 @@ Users found the counter interface:
 
 ## Changes Made
 
-### 1. Tab Navigation (`OrgCounterClient.tsx`)
+### 1. Page Layout & Navigation (`OrgCounterClient.tsx`)
 
 #### Before:
-- Complex `counter-task-nav` class with grid layout
-- Three tabs: Receive, New Booking, Label Stock
-- Waiting count displayed inline in button text
-- No visual distinction for active state
+
+- No page header
+- Complex tab navigation with verbose styling
+- Inconsistent section organization
 
 #### After:
-- Clean tab-switch component with pill-style navigation
-- Two primary tabs: Receive, New Shipment (Labels always visible)
-- Waiting count displayed as badge with green background
-- Clear active state with shadow and background color
+
+- Clear page header with title and subtitle
+- Clean pill-style tab navigation with consistent styling
+- Badge counts with better visual hierarchy
+- Active tabs use white background with shadow
 
 ```typescript
-// Before
-<nav className="counter-task-nav">
-  {canCarry && <button className={view === "receive" ? "is-active" : ""}>...</button>}
-  ...
-</nav>
-
-// After
-<div className="task-switch" style={{ borderRadius: "12px", padding: "8px" }}>
-  {canCarry && (
-    <button style={{
-      background: view === "receive" ? "#fff" : "transparent",
-      boxShadow: view === "receive" ? "var(--sh-s)" : "none"
-    }}>
-      ...
-    </button>
-  )}
-  ...
+// Added page header
+<div style={{ marginBottom: 24 }}>
+  <h1 style={{ margin: 0, fontSize: "1.5rem", fontWeight: 800, color: "var(--navy)" }}>
+    Counter
+  </h1>
+  <p className="sub" style={{ margin: "6px 0 0", fontSize: ".9rem" }}>
+    Manage shipments, receive parcels, and print labels
+  </p>
 </div>
 ```
 
-### 2. Scan Everything Bar (`ScanEverythingBar.tsx`)
+### 2. Shipment Panel Redesign
 
 #### Before:
-- Plain card with label and input
-- Multiple buttons (Go, Scan, Choose Label)
-- Complex routing logic mixed with UI
-- Status messages mixed with form elements
+
+- Mixed inline styles with no clear structure
+- Fields scattered without grouping
+- Excessive visual noise with decorative elements
 
 #### After:
-- Clean header section with icon and purpose
-- Unified input and action buttons
-- Simplified routing logic
-- Clear status messages below form
+
+- Clean fieldset-based layout following DispatchBoard patterns
+- Consistent `sectionStyle`, `gridStyle`, and `sectionTitleStyle` objects
+- Grouped fields: Vehicle, Journey, Driver & Crew
+- Clear visual hierarchy with uppercase section titles
 
 ```typescript
-// Before
-<div className="card counter-scanner">
-  <label htmlFor="scan-everything">Scan or type a code</label>
-  <p>Scan a ticket, label, or parcel code...</p>
-  <form>
-    <input id="scan-everything" ... />
-    <button>Go</button>
-    <ScanButton />
-    <button>Choose label</button>
-  </form>
-  {status && <p>...</p>}
-</div>
+const sectionStyle: React.CSSProperties = {
+  border: "1px solid var(--line)",
+  borderRadius: "var(--r-md)",
+  padding: "16px 18px",
+  background: "var(--paper)",
+};
 
-// After
-<div style={{ borderRadius: "12px", padding: "20px" }}>
-  <div style={{ display: "flex", alignItems: "center" }}>
-    <Icon name="qr" />
-    <h3>Quick Scan</h3>
-    <p>Scan a code to get started</p>
-  </div>
-  <form>
-    <input placeholder="Scan code here..." />
-    <button>Scan</button>
-    <ScanButton />
-    <button>Choose Label</button>
-  </form>
-  {status && <p>{status.text}</p>}
-</div>
+const sectionTitleStyle: React.CSSProperties = {
+  margin: 0,
+  fontSize: ".72rem",
+  fontWeight: 700,
+  letterSpacing: ".08em",
+  textTransform: "uppercase",
+  color: "var(--tx-2)",
+  marginBottom: "12px",
+};
 ```
 
-### 3. Visual Improvements
+### 3. Active Shipment View
 
-#### Color Palette
-- **Primary action**: `#1F9F63` (Esoqo green)
-- **Active state**: White background with shadow
-- **Hover**: Color transitions for feedback
-- **Status messages**: Color-coded (green for success, red for errors)
+#### Before:
 
-#### Spacing
-- Increased padding from `18px` to `20px`
-- Consistent margins between sections
-- Better whitespace usage
+- Dense header with mixed information
+- KPI buried in layout
+- Multiple background colors creating visual noise
 
-#### Typography
-- Clear headers with hierarchy
-- Simplified labels
-- Reduced technical jargon in status messages
+#### After:
 
-### 4. Error Handling Improvements
+- Clean header with vehicle info and status pill
+- Prominent KPI card with green background
+- Consolidated scan bar with cleaner styling
+- Clear action buttons with consistent hierarchy
 
-#### Scanner Error Messages
+### 4. Front Desk Worklist (`FrontDeskClient.tsx`)
 
-**Before**: Generic error messages that didn't explain root cause
+#### Before:
 
-**After**: Detailed, actionable error messages for common scenarios:
+- Table-based layout with many columns
+- Verbose row styling
+- Receipt card with excessive decoration
 
-- **Security context errors**: Explains HTTPS/localhost requirement with IP address instructions
-- **Permission errors**: Step-by-step guide to enabling camera
-- **No camera found**: Lists possible causes and alternatives
-- **Busy camera**: Troubleshooting steps
+#### After:
 
-```typescript
-// Before
-"Camera permission was denied. Reload and try again."
+- Card-based list with cleaner rows
+- Consolidated receiver and destination on one line
+- Cleaner receipt card with simplified header
+- Compact offline queue banner
 
-// After
-"Camera permission was denied.
+### 5. Scan Everything Bar (`ScanEverythingBar.tsx`)
 
-To fix this:
-1. Open your browser settings
-2. Find 'Site settings' or 'Permissions'
-3. Search for this site and enable camera access
-4. Reload the page"
-```
+#### Before:
+
+- Large padding (28px)
+- Multiple button styles
+- Verbose header with icon and description
+
+#### After:
+
+- Compact padding (20px)
+- Unified button heights
+- Simplified header with icon in green circle
+- Cleaner label picker popover
+
+## Design Patterns Applied
+
+### From DispatchBoard Component:
+
+- Fieldset organization for form sections
+- Consistent section title styling (uppercase, small, tracked)
+- Grid layouts with `repeat(auto-fit, minmax(170px, 1fr))`
+- Pill badges for status indicators
+
+### From Pricing Editor:
+
+- Inline editing patterns
+- Clean table styling
+- Minimal chrome
+
+### From Design Tokens:
+
+- Consistent use of `var(--r-md)`, `var(--r-sm)`, `var(--r-lg)` for border radius
+- Consistent shadows: `var(--sh-s)` for cards
+- Consistent spacing using `var(--sp-*)` scale
 
 ## Files Modified
 
 1. **`apps/app/src/app/parcel-org/counter/OrgCounterClient.tsx`**
-   - Tab navigation component
-   - Added badge counts for waiting parcels
-   - Improved visual hierarchy
+   - Added page header
+   - Redesigned tab navigation
+   - Simplified ShipmentPanel with fieldsets
+   - Cleaned up active shipment view
+   - Updated labels section header
 
-2. **`apps/app/src/app/parcel-org/counter/ScanEverythingBar.tsx`**
-   - Simplified scan interface
-   - Improved status messages
-   - Better visual organization
+2. **`apps/app/src/app/parcel-org/counter/FrontDeskClient.tsx`**
+   - Converted table to card-based list
+   - Simplified receipt card
+   - Compact offline queue banner
+   - Cleaner success state
+
+3. **`apps/app/src/app/parcel-org/counter/ScanEverythingBar.tsx`**
+   - Compact header and input
+   - Unified button styling
+   - Cleaner label picker
+
+## Visual Improvements Summary
+
+| Element        | Before           | After                  |
+| -------------- | ---------------- | ---------------------- |
+| Page header    | None             | Clear title + subtitle |
+| Tab navigation | Verbose          | Pill-style, compact    |
+| Form sections  | Scattered fields | Fieldset groupings     |
+| Status pills   | Multiple styles  | Consistent pills       |
+| Worklist       | Table            | Card-based list        |
+| Scan bar       | Large padding    | Compact, focused       |
+| KPI display    | Inline           | Prominent card         |
+
+- Improved status messages
+- Better visual organization
 
 3. **`apps/app/src/app/parcel-org/ScanButton.tsx`**
    - Added error display area
@@ -161,6 +187,7 @@ To fix this:
 ### State Management
 
 The component uses local state for:
+
 - `view`: Current tab (`'receive' | 'book' | 'labels'`)
 - `scanText`: Input field value
 - `scanStatus`: Status message
@@ -171,11 +198,11 @@ The component uses local state for:
 ```typescript
 async function submit(raw: string) {
   const target = (extractParcelCode(raw.trim()) || raw.trim()).toUpperCase();
-  
-  if (target.startsWith('PKG-')) {
+
+  if (target.startsWith("PKG-")) {
     // Label - route to booking
     onLoadLabel(target);
-  } else if (target.startsWith('TCK-')) {
+  } else if (target.startsWith("TCK-")) {
     // Ticket - route to receiving
     await runReceive(target);
   } else {
@@ -224,6 +251,7 @@ async function submit(raw: string) {
 ## Future Improvements
 
 Potential enhancements:
+
 1. Quick actions toolbar
 2. Recent customers sidebar
 3. Workflow shortcuts

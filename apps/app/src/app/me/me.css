@@ -19,26 +19,31 @@
   border-bottom:1px solid var(--line);
 }
 .appbar-in {
-  max-width:1120px; margin:0 auto; min-height:62px;
+  max-width:1120px; margin:0 auto; min-height:64px;
   padding:calc(6px + var(--safe-t)) max(20px,var(--safe-r)) 6px max(20px,var(--safe-l));
-  display:flex; align-items:center; gap:12px;
+  display:flex; align-items:center; gap:8px;
 }
-.appbar .appbrand {
-  display:inline-flex; align-items:center; gap:10px; margin-right:auto;
-  min-height:44px;
-}
+/* The wordmark is now the brand anchor only — the workspace name and
+   what kind of workspace it is moved into the switcher beside it, so
+   the bar states "which Esoqo surface" once instead of twice. */
+.appbar .appbrand { display:inline-flex; align-items:center; min-height:44px; flex:none }
 .appbar .appbrand .lock { font-size:21px }
-.appbar-name {
-  font-family:var(--font-display); font-weight:700; font-size:1.02rem;
-  letter-spacing:-.01em; color:var(--navy); line-height:1.1;
+/* Phones: the wordmark and its divider go so the switcher (which
+   carries a monogram of its own) keeps a readable name beside the tabs
+   on a 360px screen. */
+@media (max-width:560px) {
+  .appbar .appbrand, .appbar .appbar-div { display:none }
 }
-.appbar-name small { display:block; font-family:var(--font-mono); font-weight:600;
-  font-size:.58rem; letter-spacing:.14em; text-transform:uppercase; color:var(--tx-2); margin-top:1px }
+
+/* The switcher takes the slack the wordmark used to hold, so the tabs
+   and More sit together at the bar's trailing edge: identity leads,
+   navigation follows, actions close. */
+.appbar .wsw-root { margin-right:auto }
 
 /* Desktop primary tabs — plain links with an understated active state. */
 .headnav { display:none }
 @media (min-width:820px) {
-  .headnav { display:flex; align-items:center; gap:2px; margin-right:auto }
+  .headnav { display:flex; align-items:center; gap:2px }
   .headnav a {
     display:inline-flex; align-items:center; gap:7px; padding:0 13px;
     font-size:.9rem; font-weight:600; color:var(--tx-2); border-radius:8px;
@@ -166,6 +171,87 @@
 .hero h1 { font-size:clamp(1.4rem,4vw,1.8rem); font-weight:700; margin:8px 0 6px; letter-spacing:-.02em }
 .hero .lead { margin:0; color:var(--tx-2) }
 
+/* ── home: greeting + standing, one band ────────────────────────
+   Replaces the old .mehead + .standing pair. A single surface with
+   real depth reads as the top of a product rather than a page title
+   followed by a widget; the tinted right rail is where the eye lands
+   for "how am I doing", which is the only number in it. */
+.me-hero {
+  display:flex; align-items:stretch; gap:0; flex-wrap:wrap;
+  border:1px solid var(--line); border-radius:var(--r-xl); background:#fff;
+  box-shadow:var(--sh-s); overflow:hidden; margin:0 0 18px;
+}
+.me-hero-copy { flex:1 1 320px; min-width:0; padding:24px 26px 22px }
+.me-hero-copy .kicker { color:var(--green); margin-bottom:6px }
+.me-hero h1 {
+  font-size:clamp(1.6rem,3.2vw,2.15rem); line-height:1.06;
+  font-weight:700; letter-spacing:-.032em; margin:0;
+}
+.me-hero-lead { color:var(--tx-2); margin:8px 0 0; max-width:48ch; font-size:.95rem }
+.me-hero-cta { margin-top:18px }
+
+/* The meter rail. Its own tint separates "what this page is" from
+   "how complete it is" without a second card's worth of border. */
+.me-meter {
+  flex:0 1 250px; min-width:0;
+  display:flex; align-items:center; gap:16px;
+  padding:24px 26px;
+  background:linear-gradient(150deg,#F4FBF7,#E9F4EE);
+  border-left:1px solid var(--line);
+}
+.me-meter-copy { min-width:0 }
+.me-meter-copy strong {
+  display:block; font-family:var(--font-mono); font-weight:600;
+  font-size:.6rem; letter-spacing:.14em; text-transform:uppercase; color:var(--green);
+}
+.me-meter-copy span { display:block; color:var(--tx-2); font-size:.86rem; margin-top:4px }
+
+.ring { width:70px; height:70px; flex:none; position:relative }
+.ring svg { transform:rotate(-90deg); display:block }
+.ring-label {
+  position:absolute; inset:0; display:grid; place-items:center;
+  font-family:var(--font-mono); font-weight:600; font-size:.9rem; color:var(--navy);
+}
+
+/* ── home: the four jobs, before the numbers ─────────────────── */
+.quick-row { display:grid; grid-template-columns:repeat(2,1fr); gap:10px; margin:0 0 18px }
+.quick {
+  display:flex; align-items:center; gap:11px; min-width:0;
+  padding:12px 14px; border:1px solid var(--line); border-radius:var(--r-lg);
+  background:#fff; box-shadow:var(--sh-s); min-height:62px;
+  transition:border-color var(--dur-fast), box-shadow var(--dur-fast), transform var(--dur-fast);
+}
+.quick:hover { border-color:#9BCBB0; box-shadow:var(--sh-m); transform:translateY(-1px) }
+.quick:focus-visible { outline:3px solid rgba(31,161,99,.28); outline-offset:3px }
+.quick-ic {
+  flex:none; width:36px; height:36px; border-radius:10px; display:grid; place-items:center;
+  background:var(--green-t); color:var(--green);
+}
+.quick-t { min-width:0; flex:1; line-height:1.25 }
+.quick-t strong { display:block; font-size:.92rem; font-weight:700; color:var(--navy) }
+.quick-t small { display:block; font-size:.76rem; color:var(--tx-2);
+  white-space:nowrap; overflow:hidden; text-overflow:ellipsis }
+.quick-go { flex:none; color:var(--tx-3) }
+.quick:hover .quick-go { color:var(--green) }
+/* auto-fit, not repeat(4): the Treasury card only exists for somebody
+   who is in a group, so this row is three items about as often as four
+   — fixed tracks left a column-wide hole at the end for everyone else. */
+@media (min-width:820px) { .quick-row { grid-template-columns:repeat(auto-fit,minmax(210px,1fr)) } }
+
+/* ── home: where else you work ──────────────────────────────── */
+.wsl { list-style:none; margin:0; padding:0 }
+.wsl-row {
+  display:flex; align-items:center; gap:12px;
+  padding:12px 0; border-bottom:1px solid var(--line);
+}
+.wsl-row:last-child { border-bottom:0 }
+.wsl-row .wsw-mark { width:34px; height:34px; border-radius:10px }
+.wsl-id { flex:1; min-width:0; line-height:1.25 }
+.wsl-id strong { display:block; font-size:.93rem; font-weight:700; color:var(--navy);
+  overflow-wrap:anywhere }
+.wsl-id small { display:block; font-size:.79rem; color:var(--tx-2); margin-top:1px }
+.wsl-row .btn, .wsl-row .badge, .wsl-row form { flex:none }
+
 /* ── home: KPI tiles ────────────────────────────────────────── */
 .stat-grid { display:grid; grid-template-columns:repeat(2,1fr); gap:12px; margin:16px 0 20px }
 .tile {
@@ -185,7 +271,11 @@
 .tile .tile-v { font-weight:700; font-size:1.15rem; line-height:1.2; color:var(--navy);
   overflow-wrap:anywhere }
 .tile .tile-h { font-size:.78rem; color:var(--tx-2); margin-top:3px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap }
-@media (min-width:820px) { .stat-grid { grid-template-columns:repeat(4,1fr); margin-top:20px } }
+/* Same reason as .quick-row above — the Group balance tile is
+   conditional, so the row is three tiles for anybody without a group. */
+@media (min-width:820px) {
+  .stat-grid { grid-template-columns:repeat(auto-fit,minmax(210px,1fr)); margin-top:20px }
+}
 /* 320–380px phones: two tiles per row leaves ~150px each — long mono
    values (KES 1,234,567) either overflow or force sideways scroll.
    Tighten the tiles and let hints wrap instead of clipping. */
@@ -197,28 +287,12 @@
 }
 
 /* Content cards — white objects on the paper canvas. */
-.dash-cols { display:grid; gap:14px; margin-bottom:14px }
+/* align-items:start, or the shorter card in a pair stretches to the
+   taller one's height and ends in a half-screen of white — "Who you
+   are" has five rows beside a ten-row checklist. */
+.dash-cols { display:grid; gap:14px; margin-bottom:14px; align-items:start }
 @media (min-width:980px) { .dash-cols { grid-template-columns:1fr 1fr } }
 .dash-cols .mcard { margin-bottom:0 }
-
-/* ── "your standing" completion card ────────────────────────── */
-.standing {
-  display:flex; align-items:center; gap:16px; flex-wrap:wrap;
-  padding:18px; border:1px solid var(--line); border-radius:var(--r-lg);
-  background:linear-gradient(115deg,#fff 58%,#F4FBF7); box-shadow:var(--sh-s);
-  margin:16px 0 0;
-}
-.standing .ring { margin-right:2px }
-.ring { width:58px; height:58px; flex:none; position:relative }
-.ring svg { transform:rotate(-90deg); display:block }
-.ring-label {
-  position:absolute; inset:0; display:grid; place-items:center;
-  font-family:var(--font-mono); font-weight:600; font-size:.84rem; color:var(--navy);
-}
-.standing-copy { flex:1; min-width:0 }
-.standing-copy h2 { font-size:1rem; font-weight:700; margin:0 0 3px }
-.standing-copy p { color:var(--tx-2); font-size:.88rem; margin:0; max-width:44ch }
-.standing .btn { white-space:nowrap }
 
 /* ── cards ──────────────────────────────────────────────────── */
 .mcard { border:1px solid var(--line); border-radius:var(--r-lg); background:#fff;
@@ -226,6 +300,9 @@
 .mcard h2 { font-size:.98rem; font-weight:700; margin:0 0 12px; display:flex; align-items:center; gap:9px }
 .mcard h2 .ic { color:var(--blue) }
 .mcard > p { max-width:62ch }
+/* The standing intro line inside a card — was three repeated inline
+   style objects on /me before it had a name. */
+.mcard-lede { margin:0 0 14px; color:var(--tx-2); font-size:.9rem; max-width:62ch }
 .mrow { display:flex; gap:14px; align-items:flex-start; padding:13px 0; border-bottom:1px solid var(--line) }
 .mrow:last-child { border-bottom:0 }
 .mrow .k { color:var(--tx-2); font-size:.88rem; width:150px; flex:none }
@@ -297,17 +374,53 @@
   .balance-hero .v { overflow-wrap:anywhere }
   .mcard { padding:18px }
   .mcard .btn { width:100%; justify-content:center }
-  .standing { gap:12px; padding:16px }
-  /* The CTA's intrinsic width (~220px) plus the ring leaves nothing
-     for the copy — but the copy's min-width:0 lets it shrink to zero
-     instead of forcing a wrap, collapsing the text to one word per
-     line. A 100% basis puts the button on its own full-width row. */
-  .standing .btn { flex:1 1 100%; margin-top:4px }
   .tile .tile-v { font-size:1.05rem }
-  .standing { gap:12px; padding:16px }
-  .standing .ring { width:52px; height:52px; transform:scale(.9); transform-origin:left center }
   .paper { gap:10px }
+
+  /* The hero's two halves stack. The meter keeps its tint but becomes a
+     full-width footer strip under the copy rather than a 250px rail
+     squeezed beside it, and the CTA goes full width like every other
+     button at this size. */
+  .me-hero-copy { padding:20px 18px 18px; flex-basis:100% }
+  .me-hero-cta { width:100%; justify-content:center }
+  .me-meter { flex:1 1 100%; padding:16px 18px; border-left:0; border-top:1px solid var(--line) }
+  .ring { width:58px; height:58px }
+  .me-meter .ring svg { width:58px; height:58px }
+
+  /* Two-up quick actions on a 360px screen leaves ~150px per card,
+     which clips the hint to a word. One column, full-width targets. */
+  .quick-row { grid-template-columns:1fr; gap:8px }
+  .quick { min-height:58px }
+
+  /* A wrapped row here would leave the Open button orphaned under a
+     name; keeping it inline and letting the name wrap is the readable
+     order (who, then the way in). */
+  .wsl-row { flex-wrap:wrap }
+  .wsl-row .btn { width:auto }
 }
+
+/* ── coming up strip (home) ─────────────────────────────────── */
+.me-coming { border-color:#BFE0CE; background:linear-gradient(120deg,#fff 60%,var(--green-t)) }
+.coming-list { list-style:none; margin:0; padding:0 }
+.coming-list li { display:flex; align-items:center; gap:12px; padding:11px 0; border-bottom:1px solid var(--line) }
+.coming-list li:last-child { border-bottom:0 }
+.coming-ic { flex:none; width:34px; height:34px; border-radius:10px; display:grid; place-items:center; background:var(--blue-t); color:var(--blue) }
+.coming-ic.owe { background:var(--amber-t); color:var(--amber) }
+.coming-t { flex:1; min-width:0; line-height:1.3 }
+.coming-t strong { display:block; font-size:.92rem; color:var(--navy); overflow:hidden; text-overflow:ellipsis; white-space:nowrap }
+.coming-t small { display:block; font-size:.78rem; color:var(--tx-2); overflow:hidden; text-overflow:ellipsis; white-space:nowrap }
+
+/* ── tickets register (filters + pager) ───────────────────────── */
+.tix-summary { display:flex; gap:8px; flex-wrap:wrap; margin-bottom:12px }
+.tix-chip { display:inline-flex; align-items:center; gap:7px; padding:7px 12px; border-radius:999px; background:#fff; border:1px solid var(--line); font-size:.8rem; font-weight:600; color:var(--tx-2) }
+.tix-chip.is-warn { background:var(--amber-t); border-color:#E8D2A0; color:var(--amber) }
+.tix-chip.is-mute { background:var(--paper) }
+.tix-filters { display:flex; gap:8px; flex-wrap:wrap; margin-bottom:14px }
+.tix-filters .inp { min-height:40px; padding:8px 11px; font-size:.88rem }
+.tix-search { flex:1 1 220px; min-width:0 }
+.tix-pager { display:flex; align-items:center; justify-content:center; gap:14px; padding:6px 0 14px; font-size:.82rem; color:var(--tx-2) }
+.tix-browse { margin:4px 0 0; font-size:.87rem }
+.tix-browse a { color:var(--blue); font-weight:600 }
 
 /* ── navigation skeleton ────────────────────────────────────── */
 .skel { padding:6px 0 24px }
@@ -322,12 +435,17 @@
   background:linear-gradient(100deg, var(--paper) 40%, #EAF1F6 50%, var(--paper) 60%);
   background-size:220% 100%; animation:skel-shimmer 1.3s ease-in-out infinite }
 .skel-line + .skel-line, .skel-title + .skel-line { margin-top:10px }
+/* Mirrors .me-hero, so the shift from loading to loaded is a fill and
+   not a jump — same radius, same two-part split, same ring size. */
 .skel-standing {
-  display:flex; align-items:center; gap:16px; margin:22px 0 16px; padding:16px;
-  border:1px solid var(--line); border-radius:var(--r-lg);
+  display:flex; align-items:center; gap:18px; margin:0 0 18px; padding:24px 26px;
+  border:1px solid var(--line); border-radius:var(--r-xl);
 }
-.skel-ring { width:62px; height:62px; border-radius:50%; flex:none;
+.skel-ring { width:70px; height:70px; border-radius:50%; flex:none;
   background:conic-gradient(var(--line) 0deg 290deg, #E4EEF5 290deg 360deg) }
+.skel-quick { display:grid; grid-template-columns:1fr; gap:10px; margin-bottom:18px }
+.skel-quick > div { height:62px; border:1px solid var(--line); border-radius:var(--r-lg) }
+@media (min-width:820px) { .skel-quick { grid-template-columns:repeat(4,1fr) } }
 .skel-grid { display:grid; grid-template-columns:repeat(2,1fr); gap:12px; margin-bottom:16px }
 .skel-tile { border:1px solid var(--line); border-radius:var(--r-lg); padding:14px; display:flex;
   flex-direction:column; gap:9px }

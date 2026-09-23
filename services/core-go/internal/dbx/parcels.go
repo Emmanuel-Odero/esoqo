@@ -13,6 +13,7 @@ import (
 	"errors"
 	"fmt"
 	"log"
+	"sort"
 	"strconv"
 	"strings"
 	"time"
@@ -151,6 +152,21 @@ type BookParcelInput struct {
 	// pickup settles with the courier who collects it — this flag just
 	// means "not online", not "specifically at a desk".
 	PayAtCounter bool
+
+	// The sender's own declaration — see Parcel.senderDeclaredContents
+	// and the bookParcelRequest field comments for why these are a
+	// separate, weaker fact from ContentsDeclaredByStaffID above rather
+	// than a widening of it.
+	//
+	// The two booleans become timestamps in SQL. They arrive as booleans
+	// because that is genuinely all the client knows ("the box was
+	// ticked"); the *when* is the server's to say, for the same reason
+	// no other timestamp in this struct is client-supplied.
+	SenderDeclaredContents *string
+	LawfulContentsAttested bool
+	TermsAccepted          bool
+	TermsVersion           *string
+	CarrierTermsVersion    *string
 }
 
 // isForeignLabelCode reports whether code was printed outside Esoqo.
@@ -287,7 +303,9 @@ func BookParcel(ctx context.Context, pool *pgxpool.Pool, in BookParcelInput) (pa
 				"lengthCm", "widthCm", "heightCm",
 				"contentsDeclaredAt", "contentsDeclaredByStaffId",
 				"originMethod", "paymentMethod", "slaDeadlineAt",
-				status, "createdAt", "serviceTicketNumber"
+				status, "createdAt", "serviceTicketNumber",
+				"senderDeclaredContents", "lawfulContentsAttestedAt",
+				"termsAcceptedAt", "termsVersion", "carrierTermsVersion"
 			) VALUES (
 				gen_random_uuid(), $1, $2, $3, $4, $5, $6, $7, $8, $9, $10,
 				$11::"ParcelType", $12, $13, $14::"ParcelTransportMode", $15, $16,
@@ -304,7 +322,17 @@ func BookParcel(ctx context.Context, pool *pgxpool.Pool, in BookParcelInput) (pa
 					ORDER BY r."parcelOrgId" NULLS LAST
 					LIMIT 1
 				) * interval '1 hour' END,
-				$32::"ParcelStatus", now(), $33
+				$32::"ParcelStatus", now(), $33,
+				-- The booleans become timestamps here rather than in Go,
+				-- so the recorded moment is the same now() the row itself
+				-- is stamped with. A version is only kept alongside an
+				-- acceptance: "v3" with no termsAcceptedAt would claim an
+				-- agreement nobody made.
+				$34,
+				CASE WHEN $35::boolean THEN now() ELSE NULL END,
+				CASE WHEN $36::boolean THEN now() ELSE NULL END,
+				CASE WHEN $36::boolean THEN $37 ELSE NULL END,
+				CASE WHEN $36::boolean THEN $38 ELSE NULL END
 			) RETURNING id`,
 			useCode, deliveryCode, in.SenderPartyID, in.SenderName, in.SenderMsisdn,
 			in.ReceiverName, in.ReceiverMsisdn, in.OriginLabel, in.DestinationLabel, in.Notes,
@@ -314,7 +342,9 @@ func BookParcel(ctx context.Context, pool *pgxpool.Pool, in BookParcelInput) (pa
 			in.ParcelOrgID,
 			in.OriginLat, in.OriginLng, in.DestinationLat, in.DestinationLng,
 			in.LengthCm, in.WidthCm, in.HeightCm, in.ContentsDeclaredByStaffID,
-			originMethod, paymentMethod, status, serviceTicketNumber).
+			originMethod, paymentMethod, status, serviceTicketNumber,
+			in.SenderDeclaredContents, in.LawfulContentsAttested,
+			in.TermsAccepted, in.TermsVersion, in.CarrierTermsVersion).
 			Scan(&parcelID)
 	}
 
@@ -347,7 +377,16 @@ func BookParcel(ctx context.Context, pool *pgxpool.Pool, in BookParcelInput) (pa
 			FROM parcel_label_stock WHERE code = $1 AND "usedAt" IS NULL FOR UPDATE`,
 			code).Scan(&stockID, &stockOrgID, &voidedAt, &voidedReason)
 		if errors.Is(lockErr, pgx.ErrNoRows) {
-			return "", "", "", "", &ParcelError{"BAD_INPUT", "That label code isn't a known, unused pre-printed label"}
+			// LABEL_ALREADY_SPENT, not BAD_INPUT, because one caller
+			// treats this as success: the offline counter queue replays a
+			// booking it never saw the reply for, and "that label is no
+			// longer unused" is how it learns the parcel already exists
+			// (see packages/ui/src/parcelOfflineQueue.ts). That client
+			// used to regex this sentence — a copy-edit here silently
+			// broke its dedupe and stranded a queued parcel that had in
+			// fact shipped. The code is the contract now; the prose is
+			// free to change.
+			return "", "", "", "", &ParcelError{"LABEL_ALREADY_SPENT", "That label code isn't a known, unused pre-printed label"}
 		}
 		if lockErr != nil {
 			return "", "", "", "", lockErr
@@ -902,6 +941,76 @@ func ConfirmParcelPaymentByCheckoutID(ctx context.Context, pool *pgxpool.Pool, c
 	return code, true, nil
 }
 
+// ConfirmParcelCashPayment — the counter-cash payment path: a staff
+// member confirming the sender physically handed over the dispatch
+// fee, rather than an STK/points round trip. Same shape as
+// ConfirmParcelPaymentByCheckoutID (idempotent on status, same
+// SETTLEMENT/PARCEL_REVENUE ledger posting, same loyalty earn, same
+// frozen revenue split, same SLA-deadline rule) — looked up by parcel
+// id (an admin action, not a webhook) rather than a checkout request,
+// and with no mpesaReceiptCode to record. staffID is who confirmed it,
+// for the same audit reason refundedByStaffId/cancelledByStaffId exist.
+func ConfirmParcelCashPayment(ctx context.Context, pool *pgxpool.Pool, parcelID, staffID string, loyaltyEnabled bool) (code string, err error) {
+	var status, priceKesText string
+	var senderPartyID *string
+	err = pool.QueryRow(ctx, `
+		SELECT code, status::text, "priceKes"::text, "senderPartyId" FROM parcel WHERE id = $1`, parcelID).
+		Scan(&code, &status, &priceKesText, &senderPartyID)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return "", &ParcelError{"NOT_FOUND", "That parcel was not found"}
+	}
+	if err != nil {
+		return "", err
+	}
+	if status != "DRAFT_PENDING_PAYMENT" {
+		return "", &ParcelError{"BAD_INPUT", "This parcel is not awaiting payment"}
+	}
+	priceKes, err := strconv.ParseFloat(priceKesText, 64)
+	if err != nil {
+		return "", err
+	}
+	if priceKes <= 0 {
+		return "", &ParcelError{"BAD_INPUT", "Choose a price before confirming payment"}
+	}
+
+	settlementAcct, err := ledger.EnsureAccount(ctx, pool, nil, "SETTLEMENT", "KES")
+	if err != nil {
+		return "", err
+	}
+	revenueAcct, err := ledger.EnsureAccount(ctx, pool, nil, "PARCEL_REVENUE", "KES")
+	if err != nil {
+		return "", err
+	}
+	if _, err := ledger.PostEntry(ctx, pool,
+		"parcel:"+parcelID, "Parcel delivery payment (cash)", "core-go:parcel:"+parcelID,
+		[]ledger.Posting{{AccountID: settlementAcct, AmountCents: ledger.CentsFromKES(priceKes)}, {AccountID: revenueAcct, AmountCents: ledger.CentsFromKES(-priceKes)}}); err != nil {
+		return "", err
+	}
+
+	if senderPartyID != nil {
+		_ = loyalty.EarnForSpend(ctx, pool, *senderPartyID, priceKes, "parcel:"+parcelID, loyaltyEnabled)
+	}
+
+	if _, err := pool.Exec(ctx, `
+		UPDATE parcel SET "paidAt" = now(), status = 'BOOKED', "paymentMethod" = 'CASH', "paidByStaffId" = $1,
+		       "slaDeadlineAt" = now() + (
+		           SELECT r."slaHours" FROM parcel_pricing_rule r
+		           WHERE r."parcelType" = parcel."parcelType"
+		             AND (r."parcelOrgId" IS NULL OR r."parcelOrgId" = parcel."parcelOrgId")
+		           ORDER BY r."parcelOrgId" NULLS LAST
+		           LIMIT 1
+		       ) * interval '1 hour'
+		WHERE id = $2`, staffID, parcelID); err != nil {
+		return "", err
+	}
+	// Frozen here, on the one transition that makes a parcel real money —
+	// same rule ConfirmParcelPaymentByCheckoutID's own comment describes.
+	if err := writeParcelRevenueSplit(ctx, pool, parcelID, priceKes); err != nil {
+		return "", err
+	}
+	return code, nil
+}
+
 // PayParcelWithPoints — the ESOKO_POINTS payment path, settled inline
 // (no STK round trip), same shape store checkout's VOUCHER method
 // already follows. Only the party that booked the parcel can spend
@@ -1122,15 +1231,55 @@ func writeParcelRevenueSplit(ctx context.Context, pool *pgxpool.Pool, parcelID s
 	return err
 }
 
+// DeliveryCodeDigits is the length of a newly issued delivery code.
+//
+// Six DIGITS, not the six mixed letters-and-digits this used to mint.
+// The code's whole job is to survive a trip through the physical world:
+// it is read off an SMS by a receiver, often spoken down a phone to a
+// clerk, and typed by that clerk on a counter handset. Letters cost on
+// every one of those legs — "is that an M or an N", upper or lower, and
+// a full QWERTY keyboard on a phone where a numeric pad would do. A
+// digits-only code opens the system numeric keypad (inputMode="numeric"
+// on the counter's entry field), reads aloud unambiguously in any
+// language spoken at the desk, and needs no case handling at all.
+//
+// The cost is entropy: 10^6 rather than 32^6, about a thousandth of the
+// space. That is acceptable ONLY because handleDeliverParcel now locks
+// a parcel's code after DeliveryCodeMaxAttempts wrong tries — without
+// that throttle a courier holding a parcel could simply enumerate the
+// million and launder a diverted box as a clean DELIVERY_CODE handover
+// rather than the photo-and-name STAFF_OVERRIDE that leaves a trail.
+// The two changes are one decision; neither is safe to revert alone.
+//
+// Codes already issued stay valid: DeliverParcel compares against the
+// stored value with EqualFold and never re-derives the format, so every
+// alphanumeric code in flight keeps working until its parcel lands.
+const DeliveryCodeDigits = 6
+
+// DeliveryCodeMaxAttempts — wrong delivery codes tolerated per parcel
+// before the handover has to fall back to an auditable route (OTP to
+// the number on file, or a staff override with photo and name).
+const DeliveryCodeMaxAttempts = 5
+
 func generateDeliveryCode() (string, error) {
-	b := make([]byte, 6)
-	if _, err := cryptorand.Read(b); err != nil {
-		return "", err
-	}
-	const alphabet = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789"
-	out := make([]byte, 6)
+	const digits = "0123456789"
+	out := make([]byte, DeliveryCodeDigits)
+	// Rejection sampling, not modulo. 256 divides evenly by the old
+	// 32-character alphabet, so the previous `% len(alphabet)` was
+	// unbiased by luck; 256 % 10 is 6, so the same trick would make
+	// 0–5 measurably likelier than 6–9 in every position. On a code
+	// this short, a skewed digit distribution is real entropy lost.
 	for i := range out {
-		out[i] = alphabet[int(b[i])%len(alphabet)]
+		for {
+			var b [1]byte
+			if _, err := cryptorand.Read(b[:]); err != nil {
+				return "", err
+			}
+			if b[0] < 250 { // 250 = 25 * 10, the largest multiple of 10 that fits
+				out[i] = digits[int(b[0])%10]
+				break
+			}
+		}
 	}
 	return string(out), nil
 }
@@ -1231,6 +1380,11 @@ type ParcelStatusView struct {
 	// ordinary phone camera — sees whose label they're holding and that
 	// Esoqo manages it. Nil for the shared Esoqo pool.
 	OrgName *string `json:"orgName"`
+	// OrgLogoUrl — the same company's logo, alongside its name, so a
+	// scan from an ordinary phone camera can show the co-brand mark
+	// next to "managed by Esoqo" rather than a name alone. Nil exactly
+	// when OrgName is nil (shared Esoqo pool, no company to brand).
+	OrgLogoUrl *string `json:"orgLogoUrl"`
 
 	// Events — the full custody timeline, oldest first, guest-safe: a
 	// time and a stage label, never a holder's name or phone. Lets the
@@ -1248,6 +1402,12 @@ type ParcelTrackEvent struct {
 	At     time.Time `json:"at"`
 	Status string    `json:"status"`
 	Label  string    `json:"label"`
+	// Severity — INFO | WARNING | CRITICAL. Every custody leg is INFO:
+	// a leg exists precisely because something went right. It matters
+	// for the parcel_event rows merged in alongside them, which include
+	// things that went wrong, and which the web timeline drew as green
+	// ticks until this field existed because a tick was all it had.
+	Severity string `json:"severity"`
 }
 
 // trackEventLabel maps a custody leg's resulting status to a guest-safe
@@ -1289,22 +1449,61 @@ func ListParcelTrackEvents(ctx context.Context, pool *pgxpool.Pool, parcelID str
 			return nil, err
 		}
 		e.Label = trackEventLabel(e.Status)
+		e.Severity = "INFO"
+		out = append(out, e)
+	}
+	return out, rows.Err()
+}
+
+// listPublicParcelEvents — the parcel_event rows a guest may see, which
+// is exactly those with a publicLabel (see the model's comment on why
+// visibility and wording are one column). Status is left empty: these
+// are not custody legs and do not move the parcel between states, and
+// filling it with something plausible would have the client's stepper
+// draw a stage that never happened.
+func listPublicParcelEvents(ctx context.Context, pool *pgxpool.Pool, parcelID string) ([]ParcelTrackEvent, error) {
+	rows, err := pool.Query(ctx, `
+		SELECT "createdAt", "publicLabel", severity::text
+		FROM parcel_event
+		WHERE "parcelId" = $1 AND "publicLabel" IS NOT NULL
+		ORDER BY "createdAt" ASC`, parcelID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var out []ParcelTrackEvent
+	for rows.Next() {
+		var e ParcelTrackEvent
+		if err := rows.Scan(&e.At, &e.Label, &e.Severity); err != nil {
+			return nil, err
+		}
 		out = append(out, e)
 	}
 	return out, rows.Err()
 }
 
 // buildParcelTrackEvents — the full public timeline: booking, every
-// custody leg, then delivery. Best-effort on the legs: a lookup failure
-// must not lose the whole status response.
+// custody leg, every public non-custody event, then delivery, in time
+// order. Best-effort on both lookups: a failure must not lose the whole
+// status response.
 func buildParcelTrackEvents(ctx context.Context, pool *pgxpool.Pool, parcelID string, createdAt time.Time, deliveredAt *time.Time) []ParcelTrackEvent {
-	events := []ParcelTrackEvent{{At: createdAt, Status: "BOOKED", Label: "Booked"}}
+	events := []ParcelTrackEvent{{At: createdAt, Status: "BOOKED", Label: "Booked", Severity: "INFO"}}
 	if legs, err := ListParcelTrackEvents(ctx, pool, parcelID); err == nil {
 		events = append(events, legs...)
 	}
-	if deliveredAt != nil {
-		events = append(events, ParcelTrackEvent{At: *deliveredAt, Status: "DELIVERED", Label: "Delivered"})
+	if extra, err := listPublicParcelEvents(ctx, pool, parcelID); err == nil {
+		events = append(events, extra...)
 	}
+	if deliveredAt != nil {
+		events = append(events, ParcelTrackEvent{At: *deliveredAt, Status: "DELIVERED", Label: "Delivered", Severity: "INFO"})
+	}
+	// Sorted rather than merged, because three already-sorted sources
+	// interleave: a lockout happens between two custody legs, and a
+	// timeline that listed every failure after every hand-over would
+	// read as though the parcel moved first and the trouble came later.
+	// Stable, so same-instant rows keep source order — booking before
+	// its own first leg, delivery last.
+	sort.SliceStable(events, func(i, j int) bool { return events[i].At.Before(events[j].At) })
 	return events
 }
 
@@ -1338,6 +1537,8 @@ type ParcelLabelInfo struct {
 	LengthCm        *float64  `json:"lengthCm"`
 	WidthCm         *float64  `json:"widthCm"`
 	HeightCm        *float64  `json:"heightCm"`
+	RouteID         *string   `json:"routeId"`
+	RouteLabel      *string   `json:"routeLabel"`
 	AttachedAt      time.Time `json:"attachedAt"`
 }
 
@@ -1367,7 +1568,7 @@ func GetParcelStatus(ctx context.Context, pool *pgxpool.Pool, code string) (*Par
 		       p."podPhotoUrl", p."podReceivedByName", p."podMethod",
 		       a.name, a.msisdn, a."locationHint", a."openingHours",
 		       a.lat::text, a.lng::text, a."holdingFeeKes"::text,
-		       o.name
+		       o.name, o."logoUrl"
 		FROM parcel p
 		LEFT JOIN parcel_agent a ON a.id = p."destinationAgentId"
 		LEFT JOIN parcel_org o ON o.id = p."parcelOrgId"
@@ -1379,7 +1580,7 @@ func GetParcelStatus(ctx context.Context, pool *pgxpool.Pool, code string) (*Par
 			&v.DeliveryAttempts, &v.LastAttemptAt, &v.LastAttemptReason,
 			&v.PodPhotoURL, &v.PodReceivedByName, &v.PodMethod,
 			&agentName, &agentMsisdn, &agentHint, &agentHours,
-			&agentLat, &agentLng, &agentFee, &v.OrgName)
+			&agentLat, &agentLng, &agentFee, &v.OrgName, &v.OrgLogoUrl)
 	if err == nil {
 		if v.LastAttemptReason != nil {
 			// Resolved server-side rather than left to each client to map:
@@ -1424,13 +1625,13 @@ func GetParcelStatus(ctx context.Context, pool *pgxpool.Pool, code string) (*Par
 	serr := pool.QueryRow(ctx, `
 		SELECT s.code, s."createdAt", s."itemDescription", s.destination, s."senderName", s."senderMsisdn",
 		       s."receiverName", s."receiverMsisdn", s."itemType", s."weightRangeKg", s."infoAttachedAt",
-		       s."lengthCm"::float8, s."widthCm"::float8, s."heightCm"::float8, o.name
+		       s."lengthCm"::float8, s."widthCm"::float8, s."heightCm"::float8, o.name, o."logoUrl"
 		FROM parcel_label_stock s
 		LEFT JOIN parcel_org o ON o.id = s."parcelOrgId"
 		WHERE s.code = $1`, code).
 		Scan(&stock.Code, &createdAt, &itemDescription, &info.Destination, &info.SenderName,
 			&info.SenderMsisdn, &info.ReceiverName, &info.ReceiverMsisdn, &info.ItemType, &info.WeightRangeKg, &infoAttachedAt,
-			&info.LengthCm, &info.WidthCm, &info.HeightCm, &stock.OrgName)
+			&info.LengthCm, &info.WidthCm, &info.HeightCm, &stock.OrgName, &stock.OrgLogoUrl)
 	if errors.Is(serr, pgx.ErrNoRows) {
 		return nil, nil
 	}
@@ -1773,6 +1974,12 @@ type ParcelLabelInfoInput struct {
 	LengthCm *float64
 	WidthCm  *float64
 	HeightCm *float64
+	// The company's operating corridor this label prints with. RouteID
+	// is set when a real ParcelRoute was picked; RouteLabel is the
+	// snapshot actually printed either way — see the schema's own
+	// comment on ParcelLabelStock.routeLabel.
+	RouteID    *string
+	RouteLabel *string
 }
 
 // AttachParcelLabelInfo writes structured info onto a pre-printed
@@ -1800,11 +2007,12 @@ func AttachParcelLabelInfo(ctx context.Context, pool *pgxpool.Pool, code string,
 		SET "itemDescription" = $1, "destination" = $2, "senderName" = $3, "senderMsisdn" = $4,
 		    "receiverName" = $5, "receiverMsisdn" = $6, "itemType" = $7, "weightRangeKg" = $8,
 		    "lengthCm" = $11, "widthCm" = $12, "heightCm" = $13,
+		    "routeId" = $14, "routeLabel" = $15,
 		    "infoAttachedAt" = now(), "infoAttachedByStaffId" = $9
 		WHERE code = $10 AND "usedAt" IS NULL AND "voidedAt" IS NULL`,
 		in.ItemDescription, in.Destination, in.SenderName, in.SenderMsisdn,
 		in.ReceiverName, in.ReceiverMsisdn, in.ItemType, in.WeightRangeKg, staffID, code,
-		in.LengthCm, in.WidthCm, in.HeightCm)
+		in.LengthCm, in.WidthCm, in.HeightCm, in.RouteID, in.RouteLabel)
 	if err != nil {
 		return err
 	}
@@ -1832,6 +2040,10 @@ type ParcelLabelRegisterRow struct {
 	ItemDescription *string    `json:"itemDescription"`
 	Destination     *string    `json:"destination"`
 	SenderName      *string    `json:"senderName"`
+	SenderMsisdn    *string    `json:"senderMsisdn"`
+	ReceiverName    *string    `json:"receiverName"`
+	ReceiverMsisdn  *string    `json:"receiverMsisdn"`
+	RouteLabel      *string    `json:"routeLabel"`
 	InfoAttachedAt  *time.Time `json:"infoAttachedAt"`
 	UsedAt          *time.Time `json:"usedAt"`
 	VoidedAt        *time.Time `json:"voidedAt"`
@@ -1888,7 +2100,7 @@ func ListParcelLabelRegister(
 	var where string
 	effectiveState := state
 	if state == "all" {
-		where = `s."voidedAt" IS NULL OR s."voidedAt" IS NOT NULL`
+		where = `TRUE`
 	} else {
 		var ok bool
 		where, ok = ParcelLabelStates[state]
@@ -1904,13 +2116,14 @@ func ListParcelLabelRegister(
 		order = `s."createdAt" DESC`
 	}
 	rows, err := pool.Query(ctx, `
-		SELECT s.code, s."createdAt", s."itemDescription", s.destination, s."senderName",
+		SELECT s.code, s."createdAt", s."itemDescription", s.destination, s."senderName", s."senderMsisdn",
+		       s."receiverName", s."receiverMsisdn",
 		       s."infoAttachedAt", s."usedAt", s."voidedAt", s."voidedReason",
-		       s."batchId"::text, o.name,
+		       s."batchId"::text, o.name, s."routeLabel",
 		       COALESCE(s."parcelOrgId"::text, ''), COALESCE(s."batchId"::text, '')
 		FROM parcel_label_stock s
 		LEFT JOIN parcel_org o ON o.id = s."parcelOrgId"
-		WHERE `+where+`
+		WHERE (`+where+`)
 		  AND s."parcelOrgId" IS NOT DISTINCT FROM $1::uuid
 		ORDER BY `+order+`
 		LIMIT $2`, orgID, limit)
@@ -1922,9 +2135,10 @@ func ListParcelLabelRegister(
 	for rows.Next() {
 		var r ParcelLabelRegisterRow
 		var batchRaw string
-		if err := rows.Scan(&r.Code, &r.CreatedAt, &r.ItemDescription, &r.Destination, &r.SenderName,
+		if err := rows.Scan(&r.Code, &r.CreatedAt, &r.ItemDescription, &r.Destination, &r.SenderName, &r.SenderMsisdn,
+			&r.ReceiverName, &r.ReceiverMsisdn,
 			&r.InfoAttachedAt, &r.UsedAt, &r.VoidedAt, &r.VoidedReason,
-			&r.BatchID, &r.OrgName, &r.ParcelOrgID, &batchRaw); err != nil {
+			&r.BatchID, &r.OrgName, &r.RouteLabel, &r.ParcelOrgID, &batchRaw); err != nil {
 			return nil, err
 		}
 		if state == "all" {
@@ -1958,7 +2172,7 @@ func CountParcelLabelStates(
 		var n int
 		if err := pool.QueryRow(ctx, `
 			SELECT count(*) FROM parcel_label_stock
-			WHERE `+where+` AND "parcelOrgId" IS NOT DISTINCT FROM $1::uuid`, orgID).Scan(&n); err != nil {
+			WHERE (`+where+`) AND "parcelOrgId" IS NOT DISTINCT FROM $1::uuid`, orgID).Scan(&n); err != nil {
 			return nil, err
 		}
 		counts[state] = n
@@ -1981,6 +2195,43 @@ type ParcelLabelBatchRow struct {
 	Used         int       `json:"used"`
 	Voided       int       `json:"voided"`
 	VoidedReason *string   `json:"voidedReason"`
+}
+
+// ParcelLabelRouteOption is one of a company's own defined routes, as
+// the label-info picker offers it — just enough to display and to
+// snapshot onto a label, not the full stop-by-stop Route dbx.ListRoutes
+// returns for the company's own route-management screen.
+type ParcelLabelRouteOption struct {
+	ID     string  `json:"id"`
+	Name   string  `json:"name"`
+	Code   *string `json:"code"`
+	Active bool    `json:"active"`
+}
+
+// AdminListParcelRoutes — a company's active routes, for admin to pick
+// from when attaching a route to a label. Unlike ListRoutes (the
+// company's own self-service route manager) this never assembles
+// stops: a label only ever prints the route's name, so there is
+// nothing here for a stop list to serve.
+func AdminListParcelRoutes(ctx context.Context, pool *pgxpool.Pool, orgID string) ([]ParcelLabelRouteOption, error) {
+	rows, err := pool.Query(ctx, `
+		SELECT id, name, code, active
+		FROM parcel_route
+		WHERE "parcelOrgId" = $1
+		ORDER BY active DESC, name`, orgID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	out := []ParcelLabelRouteOption{}
+	for rows.Next() {
+		var r ParcelLabelRouteOption
+		if err := rows.Scan(&r.ID, &r.Name, &r.Code, &r.Active); err != nil {
+			return nil, err
+		}
+		out = append(out, r)
+	}
+	return out, rows.Err()
 }
 
 // ListParcelLabelBatches — the pads, newest first, scoped to one
@@ -2079,6 +2330,73 @@ func VoidParcelLabelBatch(
 // rest. [orgID] scopes exactly like the batch variant: nil is the
 // shared Esoqo pool, non-nil is one company's pad, and a code from
 // another pad is never touched.
+// DeleteParcelLabelsByCodes permanently removes labels that are still
+// fully blank — never attached, never used, never withdrawn. Unlike
+// VoidParcelLabelsByCodes this is a real DELETE, for genuinely
+// mistaken or test batches an admin wants gone rather than recorded as
+// withdrawn; anything with history on it (attached, spent or already
+// voided) is silently excluded from the match rather than erred on, so
+// a mixed selection deletes what it can and leaves the rest for
+// Withdraw.
+//
+// [orgID] scopes the act to the caller's own stock, same as void.
+func DeleteParcelLabelsByCodes(
+	ctx context.Context, pool *pgxpool.Pool, codes []string, orgID *string,
+) (deleted int, err error) {
+	clean := make([]string, 0, len(codes))
+	seen := map[string]struct{}{}
+	for _, c := range codes {
+		u := strings.ToUpper(strings.TrimSpace(c))
+		if u == "" {
+			continue
+		}
+		if _, dup := seen[u]; dup {
+			continue
+		}
+		seen[u] = struct{}{}
+		clean = append(clean, u)
+	}
+	if len(clean) == 0 {
+		return 0, &ParcelError{"BAD_INPUT", "Select at least one label"}
+	}
+	if len(clean) > 200 {
+		return 0, &ParcelError{"BAD_INPUT", "Delete at most 200 labels at once"}
+	}
+	tag, err := pool.Exec(ctx, `
+		DELETE FROM parcel_label_stock
+		WHERE upper(code) = ANY($1)
+		  AND "parcelOrgId" IS NOT DISTINCT FROM $2::uuid
+		  AND "usedAt" IS NULL AND "voidedAt" IS NULL AND "infoAttachedAt" IS NULL`,
+		clean, orgID)
+	if err != nil {
+		return 0, err
+	}
+	return int(tag.RowsAffected()), nil
+}
+
+// DeleteParcelLabelBatch permanently removes every still-blank label in
+// a batch. Same "touch only what's untouched" rule as
+// DeleteParcelLabelsByCodes: attached, spent or already-voided rows in
+// the batch are left exactly where they are.
+func DeleteParcelLabelBatch(
+	ctx context.Context, pool *pgxpool.Pool, batchID string, orgID *string,
+) (deleted int, err error) {
+	tag, err := pool.Exec(ctx, `
+		DELETE FROM parcel_label_stock
+		WHERE "batchId" = $1::uuid
+		  AND "parcelOrgId" IS NOT DISTINCT FROM $2::uuid
+		  AND "usedAt" IS NULL AND "voidedAt" IS NULL AND "infoAttachedAt" IS NULL`,
+		batchID, orgID)
+	if err != nil {
+		return 0, err
+	}
+	n := int(tag.RowsAffected())
+	if n == 0 {
+		return 0, &ParcelError{"NOT_FOUND", "No deletable labels in that batch"}
+	}
+	return n, nil
+}
+
 func VoidParcelLabelsByCodes(
 	ctx context.Context, pool *pgxpool.Pool, codes []string, orgID *string, reason string, staffID *string,
 ) (voided int, err error) {
@@ -2140,11 +2458,13 @@ func GetParcelLabelStockInfo(ctx context.Context, pool *pgxpool.Pool, code strin
 	err := pool.QueryRow(ctx, `
 		SELECT "usedAt" IS NOT NULL, "itemDescription", destination, "senderName", "senderMsisdn",
 		       "receiverName", "receiverMsisdn", "itemType", "weightRangeKg", "infoAttachedAt",
-		       "lengthCm"::float8, "widthCm"::float8, "heightCm"::float8
+		       "lengthCm"::float8, "widthCm"::float8, "heightCm"::float8,
+		       "routeId"::text, "routeLabel"
 		FROM parcel_label_stock WHERE code = $1`, code).
 		Scan(&used, &itemDescription, &info.Destination, &info.SenderName, &info.SenderMsisdn,
 			&info.ReceiverName, &info.ReceiverMsisdn, &info.ItemType, &info.WeightRangeKg, &attachedAt,
-			&info.LengthCm, &info.WidthCm, &info.HeightCm)
+			&info.LengthCm, &info.WidthCm, &info.HeightCm,
+			&info.RouteID, &info.RouteLabel)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return nil, &ParcelError{"NOT_FOUND", "That label code isn't a known pre-printed label"}
 	}
@@ -2581,12 +2901,29 @@ type DeliverProof struct {
 // OTP code, for the same reason allowCodeless is a boolean: this
 // function has no business re-deriving an authorization decision
 // another layer already made.
-func DeliverParcel(ctx context.Context, pool *pgxpool.Pool, code, deliveryCode, deliveredByPartyID string, proof DeliverProof, allowCodeless, otpVerified bool) error {
-	var parcelID, status, storedDeliveryCode string
-	var currentHolder *string
+// receiverSelfConfirm is the third of the same shape, and the only one
+// that changes who may call at all. The handler sets it after
+// VerifyReceiverCode passed and a receiver token was spent, which means
+// the caller is not staff and is holding nothing — so this branch, and
+// only this branch, skips the current-holder check below.
+//
+// That is a real weakening, and it is fenced accordingly: refused for
+// any status but HELD_AT_AGENT, and for any parcel with COD still
+// outstanding. A parcel on an agent's shelf is collected in person at a
+// shop with somebody behind the counter, which is the same fact the
+// AGENT_COLLECTION branch already leans on. A parcel in transit has no
+// such witness, and letting whoever holds the label and the code close
+// it from anywhere would make the weakest proof in the system also the
+// easiest one to reach. Courier pay is held rather than accrued for the
+// same reason — see the tail of this function.
+func DeliverParcel(ctx context.Context, pool *pgxpool.Pool, code, deliveryCode, deliveredByPartyID string, proof DeliverProof, allowCodeless, otpVerified, receiverSelfConfirm bool) error {
+	var parcelID, status, storedDeliveryCode, codStatus string
+	var currentHolder, codAmount *string
 	err := pool.QueryRow(ctx, `
-		SELECT id, status::text, "deliveryCode", "currentHolderPartyId" FROM parcel WHERE code = $1`, code).
-		Scan(&parcelID, &status, &storedDeliveryCode, &currentHolder)
+		SELECT id, status::text, "deliveryCode", "currentHolderPartyId",
+		       "codAmountKes"::text, "codStatus"
+		FROM parcel WHERE code = $1`, code).
+		Scan(&parcelID, &status, &storedDeliveryCode, &currentHolder, &codAmount, &codStatus)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return &ParcelError{"NOT_FOUND", "That parcel was not found"}
 	}
@@ -2602,8 +2939,31 @@ func DeliverParcel(ctx context.Context, pool *pgxpool.Pool, code, deliveryCode, 
 	if status == "CANCELLED" || status == "RETURNED_TO_SENDER" {
 		return &ParcelError{"BAD_INPUT", "This parcel's journey is already closed"}
 	}
-	if currentHolder == nil || *currentHolder != deliveredByPartyID {
+	// The receiver closing their own collection is the one caller who is
+	// not holding the parcel by definition — they are standing at the
+	// counter it is sitting on. Every other path still has to prove
+	// custody: a courier who never scanned the parcel cannot
+	// short-circuit the chain.
+	if !receiverSelfConfirm && (currentHolder == nil || *currentHolder != deliveredByPartyID) {
 		return &ParcelError{"FORBIDDEN", "You aren't holding this parcel"}
+	}
+	if receiverSelfConfirm {
+		// Both checks here rather than in the method switch below, so
+		// they are stated before any authentication branch can be taken
+		// and cannot be reached around by a caller who also happens to
+		// know the code.
+		if status != "HELD_AT_AGENT" {
+			return &ParcelError{"BAD_INPUT", "You can only confirm collection once the parcel is waiting at a pickup point"}
+		}
+		// COD is the buyer's money changing hands in person. A parcel
+		// closed from a phone collects nothing, and marking it delivered
+		// would strand the seller's goods money in PENDING behind a
+		// parcel the system believes is finished. Shares codIsOutstanding
+		// with CanReceiverSelfConfirm so the button and the write cannot
+		// disagree about what "COD due" means.
+		if codIsOutstanding(codAmount, codStatus) {
+			return &ParcelError{"COD_DUE", "There's cash to pay on this parcel — the agent has to complete the handover"}
+		}
 	}
 
 	// A parcel sitting on an agent's shelf is collected by the receiver
@@ -2614,6 +2974,13 @@ func DeliverParcel(ctx context.Context, pool *pgxpool.Pool, code, deliveryCode, 
 	// their code never arrived.
 	codeMatches := strings.EqualFold(strings.TrimSpace(deliveryCode), storedDeliveryCode)
 	switch {
+	// Checked before the plain code match, because a self-confirming
+	// receiver has necessarily just produced a matching code too — and
+	// recording that as DELIVERY_CODE would claim a courier stood there
+	// and took it, which is exactly the fact this method exists to say
+	// did not happen.
+	case receiverSelfConfirm:
+		proof.Method = "RECEIVER_SELF_AGENT"
 	case codeMatches:
 		proof.Method = "DELIVERY_CODE"
 	case status == "HELD_AT_AGENT" && strings.TrimSpace(deliveryCode) == "":
@@ -2662,6 +3029,39 @@ func DeliverParcel(ctx context.Context, pool *pgxpool.Pool, code, deliveryCode, 
 	// so the retry came back ALREADY_DELIVERED and neither the sender's
 	// nor the receiver's confirmation SMS ever fired. Logged, because an
 	// unpaid accrual still needs someone to notice and replay it.
+	//
+	// Except on a self-confirmed collection, where the accrual waits.
+	// Everywhere else a member of staff was physically present to assert
+	// the parcel changed hands, which is what makes an irreversible
+	// accrual safe. Here nobody was, so the pay sits behind a hold that
+	// staff (or a later sweep) release deliberately — the window in
+	// which a fraudulent close can still be caught before money moves.
+	if receiverSelfConfirm {
+		if _, err := pool.Exec(ctx, `
+			UPDATE parcel SET "courierEarningsHeldUntil" = now() + interval '24 hours'
+			WHERE id = $1`, parcelID); err != nil {
+			log.Printf("parcel %s self-confirmed but the earnings hold failed to set: %v", parcelID, err)
+		}
+		// Non-fatal for the same reason the accrual is: the parcel has
+		// physically changed hands, and failing the call over a history
+		// row would report a delivered parcel as undelivered.
+		if err := AppendParcelEvent(ctx, pool, parcelEventInput{
+			ParcelID: parcelID, Kind: "RECEIVER_SELF_CONFIRMED", Severity: "INFO",
+			PublicLabel: strPtr("Receiver confirmed collection"),
+			StaffDetail: "Collected at the pickup point and confirmed by the receiver — no staff witness",
+			ActorType:   "GUEST",
+		}); err != nil {
+			log.Printf("parcel %s self-confirmed but the event row failed: %v", parcelID, err)
+		}
+		if err := AppendParcelEvent(ctx, pool, parcelEventInput{
+			ParcelID: parcelID, Kind: "COURIER_EARNINGS_HELD", Severity: "INFO",
+			StaffDetail: "Courier earnings held 24h pending review of a self-confirmed delivery",
+			ActorType:   "SYSTEM",
+		}); err != nil {
+			log.Printf("parcel %s earnings-hold event failed: %v", parcelID, err)
+		}
+		return nil
+	}
 	if err := AccrueCourierEarnings(ctx, pool, parcelID); err != nil {
 		log.Printf("parcel %s delivered but courier earnings accrual failed (replayable): %v", parcelID, err)
 	}
@@ -2835,6 +3235,25 @@ type AdminParcelRow struct {
 	// own "Confirm received" button, same as it gates the sender/
 	// receiver SMS: shown only while there's still something to confirm.
 	IntakeConfirmedAt *time.Time
+
+	// Receiver self-authentication — the receiver proving from their own
+	// phone that they are the receiver, by typing the delivery code (see
+	// dbx/parcel_receiver_auth.go). Three wrong tries locks the parcel;
+	// admin can allow two more or mint a replacement code, for any
+	// carrier including Esoqo-operated ones that have no company console
+	// of their own to act from.
+	//
+	// No delivery code on this row, current or otherwise. Admin needs to
+	// know a parcel is stuck and to be able to unstick it; reading the
+	// secret is not part of either, and the replacement goes out by SMS.
+	ReceiverAuthAttempts     int
+	ReceiverAuthLockedAt     *time.Time
+	ReceiverAuthHardLockedAt *time.Time
+	DeliveryCodeVersion      int
+	// CourierEarningsHeldUntil — set when a receiver closed their own
+	// collection at a pickup point, with no staff witness. See
+	// DeliverParcel's tail.
+	CourierEarningsHeldUntil *time.Time
 }
 
 // AdminParcelStats is the parcels operations dashboard's whole
@@ -2868,6 +3287,17 @@ type AdminParcelStats struct {
 	// returned to the sender. The end of the unhappy path, which
 	// previously had no counter because it had no status.
 	AwaitingReturn int `json:"awaitingReturn"`
+	// ReceiverLocked — the receiver cannot get past the delivery code
+	// and the parcel has stopped until somebody grants more tries or
+	// issues a new one. Its own counter rather than part of
+	// FailedDeliveries, which counts a different failure: there the
+	// courier reached the door and nobody took the box; here the box is
+	// exactly where it should be and the person collecting it cannot
+	// prove they are that person.
+	ReceiverLocked int `json:"receiverLocked"`
+	// EarningsHeld — self-confirmed collections whose courier pay is
+	// waiting on somebody to look at it.
+	EarningsHeld int `json:"earningsHeld"`
 }
 
 // ParcelQueues are the named worklists the operations dashboard's KPI
@@ -2899,6 +3329,16 @@ var ParcelQueues = map[string]string{
 	"stale-at-agent":   `p.status = 'HELD_AT_AGENT' AND p."agentHeldSince" < now() - interval '5 days'`,
 	"awaiting-return":  `p.status = 'FAILED_DELIVERY' AND p."deliveryAttempts" >= 3`,
 	"in-flight":        `p.status IN ('BOOKED', 'RECEIVED_AT_COUNTER', 'PICKED_UP', 'IN_TRANSIT')`,
+	// A receiver who cannot get past the delivery code. Its own queue
+	// rather than folded into failed-delivery, which means something
+	// different — there the courier reached the door and nobody took
+	// the box; here the box is sitting exactly where it should be and
+	// the person collecting it cannot prove they are the person
+	// collecting it. Different cause, different fix, different queue.
+	"receiver-locked": `p."receiverAuthLockedAt" IS NOT NULL OR p."receiverAuthHardLockedAt" IS NOT NULL`,
+	// Deliveries a receiver closed themselves at a pickup point, with
+	// the courier's pay still held pending somebody looking at it.
+	"earnings-held": `p."courierEarningsHeldUntil" IS NOT NULL`,
 }
 
 // ParcelQueueWhere resolves a queue key to its predicate. An unknown
@@ -2976,6 +3416,8 @@ func GetAdminParcelStats(ctx context.Context, pool *pgxpool.Pool) (*AdminParcelS
 		"failed-delivery":    &stats.FailedDeliveries,
 		"stale-at-agent":     &stats.StaleAtAgent,
 		"awaiting-return":    &stats.AwaitingReturn,
+		"receiver-locked":    &stats.ReceiverLocked,
+		"earnings-held":      &stats.EarningsHeld,
 	} {
 		if err := countQueue(ctx, pool, queue, into); err != nil {
 			return nil, err
@@ -2999,6 +3441,9 @@ type AdminParcelListParams struct {
 	Q *string
 	// Queue is a key into ParcelQueues, or nil for no queue filter.
 	Queue *string
+	// ParcelOrgID scopes to one courier company's parcels, or nil for
+	// every company plus Esoqo-direct.
+	ParcelOrgID *string
 	// Oldest sorts by dwell — longest-waiting first.
 	//
 	// This is the right default for a *queue* and the wrong one for the
@@ -3056,6 +3501,8 @@ func AdminListParcels(ctx context.Context, pool *pgxpool.Pool, p AdminParcelList
 		       p."declaredValueKes"::text, ct.name,
 		       p."parcelOrgId"::text, po.name, p."platformFeeKes"::text, p."orgEarningsKes"::text,
 		       p."intakeConfirmedAt",
+		       p."receiverAuthAttempts", p."receiverAuthLockedAt", p."receiverAuthHardLockedAt",
+		       p."deliveryCodeVersion", p."courierEarningsHeldUntil",
 		       count(*) OVER ()
 		FROM parcel p
 		LEFT JOIN person pr ON pr."partyId" = p."assignedCollectorPartyId"
@@ -3064,10 +3511,11 @@ func AdminListParcels(ctx context.Context, pool *pgxpool.Pool, p AdminParcelList
 		LEFT JOIN parcel_org po ON po.id = p."parcelOrgId"
 		WHERE ($1::text IS NULL OR p.status::text = $1)
 		  AND ($2::text IS NULL OR p."senderName" ILIKE '%'||$2||'%' OR p."receiverName" ILIKE '%'||$2||'%' OR p.code ILIKE '%'||$2||'%')
+		  AND ($3::uuid IS NULL OR p."parcelOrgId" = $3::uuid)
 		  AND (` + queueWhere + `)
 		ORDER BY ` + order + `
-		LIMIT $3 OFFSET $4`
-	rows, err := pool.Query(ctx, query, p.Status, p.Q, p.Limit, p.Offset)
+		LIMIT $4 OFFSET $5`
+	rows, err := pool.Query(ctx, query, p.Status, p.Q, p.ParcelOrgID, p.Limit, p.Offset)
 	if err != nil {
 		return nil, 0, err
 	}
@@ -3091,6 +3539,8 @@ func AdminListParcels(ctx context.Context, pool *pgxpool.Pool, p AdminParcelList
 			&r.DeclaredValueKes, &r.CoverageTierName,
 			&r.ParcelOrgID, &r.ParcelOrgName, &r.PlatformFeeKes, &r.OrgEarningsKes,
 			&r.IntakeConfirmedAt,
+			&r.ReceiverAuthAttempts, &r.ReceiverAuthLockedAt, &r.ReceiverAuthHardLockedAt,
+			&r.DeliveryCodeVersion, &r.CourierEarningsHeldUntil,
 			&total); err != nil {
 			return nil, 0, err
 		}
@@ -3389,6 +3839,31 @@ func UpdateParcelDetails(ctx context.Context, pool *pgxpool.Pool, parcelID, rece
 	}
 	if tag.RowsAffected() == 0 {
 		return &ParcelError{"BAD_INPUT", "Only a draft or paid, not-yet-picked-up parcel can be edited"}
+	}
+	return nil
+}
+
+// UpdateOwnParcelDetails is UpdateParcelDetails' sender-facing twin: the
+// same correction (receiver name/phone, destination, notes) before a
+// courier has taken custody, but scoped by code + senderPartyId instead
+// of an admin's parcelID, so a sender can fix a wrong receiver number
+// themselves instead of waiting on staff. A guest booking has no
+// senderPartyId to match, so guests still have to go through staff —
+// consistent with PayParcelWithPoints drawing the same line.
+func UpdateOwnParcelDetails(ctx context.Context, pool *pgxpool.Pool, code, partyID, receiverName, receiverMsisdn, destinationLabel string, notes *string) error {
+	if strings.TrimSpace(receiverName) == "" || strings.TrimSpace(receiverMsisdn) == "" || strings.TrimSpace(destinationLabel) == "" {
+		return &ParcelError{"BAD_INPUT", "Receiver name, phone and destination are required"}
+	}
+	tag, err := pool.Exec(ctx, `
+		UPDATE parcel SET "receiverName" = $1, "receiverMsisdn" = $2, "destinationLabel" = $3, notes = $4
+		WHERE code = $5 AND "senderPartyId" = $6
+		  AND status IN ('DRAFT_PENDING_PAYMENT', 'BOOKED', 'RECEIVED_AT_COUNTER')`,
+		receiverName, receiverMsisdn, destinationLabel, notes, code, partyID)
+	if err != nil {
+		return err
+	}
+	if tag.RowsAffected() == 0 {
+		return &ParcelError{"BAD_INPUT", "Only a draft or paid, not-yet-picked-up parcel you booked can be edited"}
 	}
 	return nil
 }

@@ -59,6 +59,43 @@ header { position:sticky; top:0; z-index:90; background:rgba(255,255,255,.95);
 .btn-sm { padding:9px 17px; font-size:.87rem; min-height:38px }
 .row { display:flex; gap:11px; flex-wrap:wrap; align-items:center }
 
+/* The real parcel sticker on the tracking result — see @esoqo/ui's
+   ScaledLabel, which measures this wrapper's own width and fits the
+   label to it so it never overflows a phone. */
+.track-label { margin:14px 0 0 }
+
+/* Send-a-parcel form's progress rail — the existing section headings
+   turned into a visible, sticky "how far am I" signal, no navigation
+   gating (the form stays one long scroll — see SendParcelForm's own
+   comment on why a gated step wasn't the fix last time this shipped). */
+.pf-rail { position:sticky; top:64px; z-index:70; display:flex; gap:6px;
+  background:#fff; padding:10px 0; margin-bottom:14px; border-bottom:1px solid var(--line) }
+.pf-rail-step { flex:1; display:flex; flex-direction:column; gap:6px; align-items:center;
+  font-size:.72rem; color:var(--tx-2); text-align:center }
+.pf-rail-dot { width:100%; height:4px; border-radius:99px; background:var(--line); transition:background .25s ease }
+.pf-rail-step.done .pf-rail-dot { background:var(--green) }
+.pf-rail-step.done { color:var(--green) }
+
+/* The little check that fades into a section heading once its own
+   fields validate — the "done" micro-affirmation, reusing the same
+   check-circle language ChoiceCard already renders for a selected
+   option, not a new visual vocabulary. */
+.pf-h3-done { display:inline-flex; margin-left:8px; color:var(--green);
+  opacity:0; transform:scale(.6); transition:opacity .2s ease, transform .2s ease; vertical-align:middle }
+.pf-h3-done.on { opacity:1; transform:scale(1) }
+
+/* Collapsible sections on the tracking page — timeline + printable
+   sticker default closed so a phone-camera scan lands on a status
+   that fits one screen, not a page to scroll through. Native
+   details/summary: no JS state, free keyboard/AT support. */
+.track-more { margin-top:16px; border-top:1px solid var(--line); padding-top:12px }
+.track-more summary { cursor:pointer; font-weight:600; font-size:.9rem; color:var(--tx-2);
+  list-style:none; display:flex; align-items:center; gap:6px }
+.track-more summary::-webkit-details-marker { display:none }
+.track-more summary::before { content:"›"; display:inline-block; transition:transform .15s ease; font-size:1.1em }
+.track-more[open] summary::before { transform:rotate(90deg) }
+.track-more[open] summary { margin-bottom:4px }
+
 /* hero */
 .hero { position:relative; background:var(--navy); color:#fff; overflow:hidden; padding:74px 0 100px }
 .hero-bg { position:absolute; inset:0; z-index:0 }
@@ -144,10 +181,10 @@ header { position:sticky; top:0; z-index:90; background:rgba(255,255,255,.95);
 .icbox-sm { width:30px; height:30px; border-radius:8px }
 .shead { display:flex; gap:16px; align-items:flex-start; margin-bottom:22px }
 .tbl { border:1px solid var(--line); border-radius:10px; overflow:hidden; background:#fff }
-.tbl .th { display:grid; padding:12px 20px; background:var(--blue-t); font-family:var(--font-mono);
-  font-size:.67rem; letter-spacing:.12em; text-transform:uppercase; color:var(--tx-2); gap:12px }
-.tbl .tr { display:grid; padding:14px 20px; border-top:1px solid var(--line);
-  gap:12px; align-items:center; font-size:.93rem }
+.tbl .th { display:grid; padding:6px 12px; background:var(--blue-t); font-family:var(--font-mono);
+  font-size:.62rem; letter-spacing:.1em; text-transform:uppercase; color:var(--tx-2); gap:8px }
+.tbl .tr { display:grid; padding:7px 12px; border-top:1px solid var(--line);
+  gap:8px; align-items:center; font-size:.84rem; line-height:1.35 }
 .tbl .tr:hover { background:var(--paper) }
 .sub { color:var(--tx-2); font-size:.86rem }
 .sec-tint { background:var(--paper) }

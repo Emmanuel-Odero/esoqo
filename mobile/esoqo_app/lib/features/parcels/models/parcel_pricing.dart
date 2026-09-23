@@ -184,3 +184,31 @@ class ParcelCoverageTier {
   /// smaller number than the sender typed.
   final bool capsDeclaredAmount;
 }
+
+/// The company-wide cash-on-delivery cap and handling fee — wire type
+/// matching dbx.ParcelCodPolicy (GET /v1/parcels/cod-policy, public).
+/// A booking form reads this before offering COD at all, so a seller
+/// hits "that's above the limit" before submitting rather than after.
+class ParcelCodPolicy {
+  ParcelCodPolicy({
+    required this.enabled,
+    required this.maxAmountKes,
+    required this.handlingFeePct,
+  });
+
+  factory ParcelCodPolicy.fromJson(Map<String, dynamic> json) =>
+      ParcelCodPolicy(
+        enabled: json['enabled'] as bool? ?? false,
+        maxAmountKes: Money.fromJson(json['maxAmountKes']) ?? Money.zero,
+        handlingFeePct: (json['handlingFeePct'] as num?)?.toDouble() ?? 0,
+      );
+
+  final bool enabled;
+  final Money maxAmountKes;
+
+  /// Deducted from what the seller is eventually paid out, not from
+  /// what the buyer hands over at the door — see handleGetCodPolicy's
+  /// own comment on why this ships with the policy rather than being a
+  /// surprise at settlement.
+  final double handlingFeePct;
+}

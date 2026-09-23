@@ -3327,6 +3327,35 @@ model Parcel {
   contentsDeclaredAt        DateTime?
   contentsDeclaredByStaffId String?   @db.Uuid
 
+  /// What the SENDER themselves asserted at booking — deliberately not
+  /// the contentsDeclaredAt pair above, which means something stronger
+  /// and narrower: "a named member of staff asked this person about
+  /// prohibited items, face to face". A self-service booking can never
+  /// produce that fact, and widening the staff pair to cover a web
+  /// checkbox would quietly destroy the only column that currently
+  /// says a human did the asking.
+  ///
+  /// These four are the weaker but still useful thing: the sender
+  /// described the contents, put a value on them, and ticked that they
+  /// are lawful and that they accept both sets of terms. Timestamps and
+  /// a version rather than booleans, for the reason the staff pair
+  /// already gives — in a dispute, "which terms, and when" is the whole
+  /// question, and a bare true answers none of it.
+  ///
+  /// termsVersion is Esoqo's own; carrierTermsVersion is the carrying
+  /// company's, captured separately because they are two different
+  /// promises made by two different legal entities and a claim may turn
+  /// on only one of them. Both null on a staff-entered booking, which
+  /// records consent through contentsDeclaredByStaffId instead. The
+  /// declared VALUE lives in declaredValueKes further down — it is the
+  /// same number cover is priced from, and duplicating it here would
+  /// invite the two copies to disagree.
+  senderDeclaredContents   String?
+  lawfulContentsAttestedAt DateTime?
+  termsAcceptedAt          DateTime?
+  termsVersion             String?
+  carrierTermsVersion      String?
+
   /// Condition when we took it in, as podPhotoUrl is condition when we
   /// handed it over. The pair brackets our custody — a damage dispute
   /// is settled by comparing them, and with only the second one every
@@ -3370,6 +3399,11 @@ model Parcel {
   /// own mpesaReceiptCode columns already play. Null for ESOKO_POINTS.
   mpesaReceiptCode         String?
   paidAt                   DateTime?
+  /// Set only for a CASH payment — who at the counter confirmed the
+  /// cash was actually handed over, same audit shape as
+  /// refundedByStaffId/cancelledByStaffId below. Null for MPESA_STK
+  /// and ESOKO_POINTS, which confirm themselves.
+  paidByStaffId            String?   @db.Uuid
 
   /// Who's coming to collect it and when, set by an admin scheduling a
   /// pickup — distinct from currentHolderPartyId, which only changes
@@ -3453,6 +3487,46 @@ model Parcel {
   lastAttemptAt     DateTime?
   lastAttemptReason String?
 
+  /// The receiver proving, from their own phone, that they are the
+  /// receiver — by typing the deliveryCode only they were sent (see
+  /// dbx.VerifyReceiverCode). Distinct from the courier-side throttle
+  /// in handleDeliverParcel, which is Redis-only and fails open on
+  /// purpose: that one guards a staff endpoint and a lost counter
+  /// merely means a clerk gets more tries. This counter is escalation
+  /// state. Staff have to see it, act on it, and have their grant
+  /// survive a Redis restart, so it lives on the row.
+  ///
+  /// Three attempts, then receiverAuthLockedAt and an alert to the
+  /// carrying company. Staff may grant receiverAuthExtraGranted more
+  /// (two, once). Burning those sets receiverAuthHardLockedAt, which
+  /// nothing but a reissue clears — at that point the code is assumed
+  /// compromised or lost and guessing further proves nothing.
+  receiverAuthAttempts     Int       @default(0)
+  receiverAuthLockedAt     DateTime?
+  receiverAuthExtraGranted Int       @default(0)
+  receiverAuthHardLockedAt DateTime?
+
+  /// Bumped every time dbx.ReissueDeliveryCode mints a replacement.
+  /// The version is what makes a reissue legible after the fact: the
+  /// code column itself only ever holds the current value, so without
+  /// this a timeline entry saying "a new code was issued" has nothing
+  /// to count. deliveryCodeIssuedAt is null for every parcel booked
+  /// before reissue existed, which reads correctly as "the original".
+  deliveryCodeVersion  Int       @default(1)
+  deliveryCodeIssuedAt DateTime?
+
+  /// Set when a receiver closes their own parcel at an agent's counter
+  /// (podMethod RECEIVER_SELF_AGENT). Every other delivery accrues
+  /// courier pay the instant it commits (see dbx.AccrueCourierEarnings)
+  /// because a member of staff was physically present to assert it
+  /// happened. A self-confirmed one has no such witness, so the pay
+  /// waits out a hold and is released deliberately — by staff, or by a
+  /// sweep once this passes. A fraudulent self-confirm is then a thing
+  /// somebody can still catch before money moves, rather than an
+  /// irreversible accrual (which is exactly what AccrueCourierEarnings
+  /// is, by design).
+  courierEarningsHeldUntil DateTime?
+
   /// What the sender says the contents are worth, and the coverage tier
   /// they bought against it (see ParcelCoverageTier). Both null on a
   /// booking with no cover — the default. coverageFeeKes is copied in
@@ -3486,6 +3560,7 @@ model Parcel {
   labelStockEntries  ParcelLabelStock[]
   deliveryAttemptLog ParcelDeliveryAttempt[]
   shipmentItems      ParcelShipmentItem[]
+  events             ParcelEvent[]
   reminderCount      Int                     @default(0)
   lastReminderAt     DateTime?
 
@@ -3784,6 +3859,17 @@ model ParcelLabelStock {
   infoAttachedAt        DateTime?
   infoAttachedByStaffId String?   @db.Uuid
 
+  /// The company's operating corridor this label prints with — e.g.
+  /// "Nairobi -> Mombasa". routeId is set when a real ParcelRoute was
+  /// picked; routeLabel is always set (a snapshot of that route's name,
+  /// or a typed "From -> To" when no defined route fit) so the printed
+  /// text survives the route being renamed or deleted later — the same
+  /// snapshot-plus-live-reference shape ParcelShipment.originLabel/
+  /// destinationLabel already uses against the same table.
+  routeId    String?      @db.Uuid
+  route      ParcelRoute? @relation(fields: [routeId], references: [id], onDelete: SetNull)
+  routeLabel String?
+
   /// Both partial, matching the migration: "what can this company
   /// still use" and "void this batch" only ever ask about live stock,
   /// so spent and voided rows are dead weight in them.
@@ -4006,13 +4092,15 @@ model ParcelOrg {
   updatedAt        DateTime @updatedAt
   createdByStaffId String?  @db.Uuid
 
-  staff        ParcelOrgStaff[]
-  parcels      Parcel[]
-  stations     ParcelAgent[]
-  couriers     ParcelCourier[]
-  pricingRules ParcelPricingRule[]
-  labelStock   ParcelLabelStock[]
-  dispatches   ParcelDispatch[]
+  staff          ParcelOrgStaff[]
+  parcels        Parcel[]
+  stations       ParcelAgent[]
+  couriers       ParcelCourier[]
+  pricingRules   ParcelPricingRule[]
+  labelStock     ParcelLabelStock[]
+  runs           ParcelShipment[]
+  routes         ParcelRoute[]
+  counterTickets ParcelCounterTicket[]
 
   @@index([enterpriseId])
   @@index([status])
@@ -4068,8 +4156,75 @@ model ParcelOrgStaff {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
+  claimedCounterTickets ParcelCounterTicket[]
+
   @@index([orgId])
   @@map("parcel_org_staff")
+}
+
+/// How a walk-in customer's service ticket came to exist — the one
+/// endpoint (POST .../counter-tickets) serves a kiosk at the counter,
+/// a web form opened from a counter QR on the customer's own phone,
+/// and the Esoqo mobile app alike; this is the only thing that differs
+/// between them.
+enum ParcelCounterTicketChannel {
+  KIOSK
+  WEB_QR
+  APP
+}
+
+/// WAITING is the only state that shows up in a clerk's live queue.
+/// CLAIMED means a clerk is actively serving it — not that a Parcel
+/// exists yet, since a claimed ticket still has to go through the
+/// ordinary booking/label-binding flow same as any counter intake.
+/// EXPIRED is a customer who walked off or a stale kiosk session,
+/// aged out rather than left WAITING forever.
+enum ParcelCounterTicketStatus {
+  WAITING
+  CLAIMED
+  EXPIRED
+  CANCELLED
+}
+
+/// A walk-in's place in line, minted the moment they ask for service
+/// rather than when a clerk starts on them — the ticket number is the
+/// one thing they're handed before any parcel details exist (same
+/// pre-intake role Parcel.serviceTicketNumber already plays for a
+/// booking that's further along). Deliberately its own model rather
+/// than an early Parcel row: BookParcel requires full sender/receiver/
+/// type data up front (see its own comment), but a ticket only ever
+/// needs a phone number to exist.
+///
+/// draftDetails holds whatever the customer filled into the send-parcel
+/// form while waiting (see apps/web's SendParcelForm autosave) — a
+/// free-form JSON blob the clerk's intake screen prefills from at claim
+/// time, never validated or read by anything else here.
+model ParcelCounterTicket {
+  id    String    @id @default(uuid()) @db.Uuid
+  orgId String    @db.Uuid
+  org   ParcelOrg @relation(fields: [orgId], references: [id], onDelete: Cascade)
+
+  /// "TCK-…" — same fleetqr.PrefixServiceTicket pool Parcel.serviceTicketNumber
+  /// mints from, so a ticket and a pre-intake parcel are never
+  /// confusable at a glance by their prefix alone.
+  serviceTicketNumber String                     @unique
+  msisdn              String
+  channel             ParcelCounterTicketChannel
+  status              ParcelCounterTicketStatus  @default(WAITING)
+
+  draftDetails Json?
+
+  claimedByStaffId String?         @db.Uuid
+  claimedByStaff   ParcelOrgStaff? @relation(fields: [claimedByStaffId], references: [id], onDelete: SetNull)
+  claimedAt        DateTime?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  /// The live queue is always "WAITING tickets for org X, oldest
+  /// first" — this index is that query.
+  @@index([orgId, status, createdAt])
+  @@map("parcel_counter_ticket")
 }
 
 /// Admin-owned pricing config, one row per ParcelType — same
@@ -4173,6 +4328,83 @@ model ParcelHandoff {
   @@map("parcel_handoff")
 }
 
+/// What kind of thing happened. Deliberately narrow at birth — this is
+/// a history table, and a history table whose vocabulary is "anything"
+/// degrades into a log nobody can query. Add a value when a new fact
+/// needs to be *shown* somewhere, not merely recorded.
+enum ParcelEventKind {
+  RECEIVER_AUTH_PASSED
+  RECEIVER_AUTH_FAILED
+  RECEIVER_AUTH_LOCKED
+  RECEIVER_AUTH_RETRY_GRANTED
+  RECEIVER_AUTH_HARD_LOCKED
+  DELIVERY_CODE_REISSUED
+  RECEIVER_SELF_CONFIRMED
+  COURIER_EARNINGS_HELD
+  COURIER_EARNINGS_RELEASED
+}
+
+/// How loudly to render it. The public timeline drew every entry as a
+/// green tick until this existed, which was fine while every entry was
+/// a custody leg that had genuinely gone right, and actively misleading
+/// the moment a failure could appear there.
+enum ParcelEventSeverity {
+  INFO
+  WARNING
+  CRITICAL
+}
+
+/// One thing that happened to a parcel which is not a custody transfer,
+/// append-only. ParcelHandoff next door answers "who had it, when";
+/// this answers everything else the timeline needs to say — a receiver
+/// failing to authenticate, a code being reissued, courier pay being
+/// held.
+///
+/// It exists because there was previously nowhere to put such a fact.
+/// dbx.buildParcelTrackEvents synthesized the entire public timeline
+/// out of parcel_handoff rows plus a booked/delivered bookend, so a
+/// non-custody event was literally unrepresentable, and
+/// Parcel.exceptionNote — the nearest thing — is a single overwritable
+/// slot, not a history.
+///
+/// publicLabel is the visibility switch and the wording in one field:
+/// NULL means the row never leaves staff surfaces, and a non-null value
+/// is the exact sentence a guest sees. One field rather than a boolean
+/// plus a string because the two can't safely disagree — a row marked
+/// public with nothing to say would render as a blank line in a
+/// stranger's tracking page. staffDetail carries what the public label
+/// must not: attempt counts, actor identity, the reason.
+model ParcelEvent {
+  id       String @id @default(uuid()) @db.Uuid
+  parcelId String @db.Uuid
+  parcel   Parcel @relation(fields: [parcelId], references: [id], onDelete: Cascade)
+
+  kind     ParcelEventKind
+  severity ParcelEventSeverity @default(INFO)
+
+  publicLabel String?
+  staffDetail String?
+
+  /// GUEST | STAFF | SYSTEM. Plain string for the same reason
+  /// Parcel.podMethod is one: the set of things that can act on a
+  /// parcel grows by a word far more often than it needs a migration.
+  /// actorPartyId is set only for STAFF; a guest has no Party by
+  /// definition, which is the whole premise of the flow that writes
+  /// most of these rows.
+  actorType    String
+  actorPartyId String? @db.Uuid
+  /// Kept for the failure rows specifically. Someone working out
+  /// whether a locked parcel was a confused receiver or a sweep needs
+  /// to know whether the five attempts came from one address or five,
+  /// and nothing else on the row can tell them.
+  actorIp      String?
+
+  createdAt DateTime @default(now())
+
+  @@index([parcelId, createdAt])
+  @@map("parcel_event")
+}
+
 /// A physical line-haul movement. The manifest is separate from Parcel so
 /// loading and offloading have their own actors, timestamps, and exceptions.
 model ParcelShipment {
@@ -4183,16 +4415,53 @@ model ParcelShipment {
   vehiclePlate     String?
   driverPartyId    String?   @db.Uuid
   conductorPartyId String?   @db.Uuid
-  status           String    @default("OPEN")
+  status           String    @default("LOADING")
   startedAt        DateTime?
   arrivedAt        DateTime?
   endedAt          DateTime?
   createdAt        DateTime  @default(now())
   createdByStaffId String?   @db.Uuid
 
-  items ParcelShipmentItem[]
+  /// Which courier company's run this is. NULL = Esoqo-operated, the
+  /// same convention Parcel.parcelOrgId already uses. Every org-scoped
+  /// read filters on it, so an unowned shipment is invisible to every
+  /// company rather than visible to all of them.
+  parcelOrgId String?    @db.Uuid
+  parcelOrg   ParcelOrg? @relation(fields: [parcelOrgId], references: [id], onDelete: SetNull)
+
+  /// The journey half, merged in from parcel_dispatch (ADR-0006). One
+  /// lorry used to be two rows in two tables with no key between them:
+  /// this side owned the cargo and knew places only as free text, while
+  /// parcel_dispatch owned the stations, crew and GPS trail and had no
+  /// parcels at all.
+  ///
+  /// originLabel/destinationLabel above are now a SNAPSHOT, not the
+  /// truth: a run that happened is a historical record, and a station
+  /// renamed in March must not rewrite what a manifest printed in
+  /// January said. The station links are the live reference.
+  routeId              String?      @db.Uuid
+  route                ParcelRoute? @relation(fields: [routeId], references: [id], onDelete: SetNull)
+  originStationId      String?      @db.Uuid
+  originStation        ParcelAgent? @relation("runOrigin", fields: [originStationId], references: [id], onDelete: SetNull)
+  destinationStationId String?      @db.Uuid
+  destinationStation   ParcelAgent? @relation("runDestination", fields: [destinationStationId], references: [id], onDelete: SetNull)
+
+  vehicleType String?
+  notes       String?
+  /// Last reported position; ParcelRunPing behind it keeps the trail.
+  currentLat  Float?
+  currentLng  Float?
+  currentAt   DateTime?
+  /// Who signed the run in at the far end.
+  receivedBy  String?
+
+  items     ParcelShipmentItem[]
+  crew      ParcelRunCrew[]
+  receivers ParcelRunReceiver[]
+  pings     ParcelRunPing[]
 
   @@index([status])
+  @@index([routeId, createdAt(sort: Desc)], map: "parcel_shipment_route_idx")
   @@map("parcel_shipment")
 }
 
@@ -4335,60 +4604,24 @@ model ParcelAgent {
   /// just can't say who is accountable.
   managerStaffId String? @db.Uuid
 
-  destinationParcels   Parcel[]         @relation("parcelDestinationAgent")
-  stationStaff         ParcelOrgStaff[] @relation("parcelStationStaff")
-  dispatchOrigins      ParcelDispatch[] @relation("dispatchOrigin")
-  dispatchDestinations ParcelDispatch[] @relation("dispatchDestination")
+  destinationParcels Parcel[]          @relation("parcelDestinationAgent")
+  stationStaff       ParcelOrgStaff[]  @relation("parcelStationStaff")
+  runOrigins         ParcelShipment[]  @relation("runOrigin")
+  runDestinations    ParcelShipment[]  @relation("runDestination")
+  routeStops         ParcelRouteStop[]
 
   @@index([zoneId, active])
   @@map("parcel_agent")
 }
 
-/// One run of one of a courier company's own vehicles — the "fleet" the
-/// dispatch board shows. A tenant-level run, not parcel-level state:
-/// the company loads crew and parcels onto it, drives an origin →
-/// destination leg, and the receiving team at the far end checks it in.
-/// ACTIVE until checked in (ARRIVED, receivedBy naming who signed) or
-/// called off (CANCELLED). currentLat/currentLng is the last reported
-/// position; ParcelDispatchPing behind it keeps the trail.
-model ParcelDispatch {
-  id          String    @id @default(uuid()) @db.Uuid
-  parcelOrgId String    @db.Uuid
-  org         ParcelOrg @relation(fields: [parcelOrgId], references: [id], onDelete: Cascade)
-
-  vehiclePlate         String
-  vehicleType          String       @default("VAN")
-  originStationId      String?      @db.Uuid
-  originStation        ParcelAgent? @relation("dispatchOrigin", fields: [originStationId], references: [id], onDelete: SetNull)
-  destinationStationId String?      @db.Uuid
-  destinationStation   ParcelAgent? @relation("dispatchDestination", fields: [destinationStationId], references: [id], onDelete: SetNull)
-
-  status           String    @default("ACTIVE")
-  notes            String?
-  currentLat       Float?
-  currentLng       Float?
-  currentAt        DateTime?
-  createdByStaffId String?   @db.Uuid
-  arrivedAt        DateTime?
-  receivedBy       String?
-  createdAt        DateTime  @default(now())
-
-  crew      ParcelDispatchCrew[]
-  receivers ParcelDispatchReceiver[]
-  pings     ParcelDispatchPing[]
-
-  @@index([parcelOrgId, status])
-  @@map("parcel_dispatch")
-}
-
-/// One person aboard a dispatch run — driver, tout, loader, or a custom
-/// title. role is a plain string with customRole for free text, the same
+/// One person aboard a run — driver, tout, loader, or a custom title.
+/// role is a plain string with customRole for free text, the same
 /// convention ParcelOrgStaff.role follows; staffId links the roster row
 /// when the crew member was picked from the team.
-model ParcelDispatchCrew {
-  id         String         @id @default(uuid()) @db.Uuid
-  dispatchId String         @db.Uuid
-  dispatch   ParcelDispatch @relation(fields: [dispatchId], references: [id], onDelete: Cascade)
+model ParcelRunCrew {
+  id    String         @id @default(uuid()) @db.Uuid
+  runId String         @db.Uuid
+  run   ParcelShipment @relation(fields: [runId], references: [id], onDelete: Cascade)
 
   name       String
   msisdn     String?
@@ -4396,39 +4629,84 @@ model ParcelDispatchCrew {
   customRole String?
   staffId    String? @db.Uuid
 
-  @@index([dispatchId])
-  @@map("parcel_dispatch_crew")
+  @@index([runId], map: "parcel_run_crew_run_idx")
+  @@map("parcel_run_crew")
 }
 
 /// One of the receiving team waiting at the destination to check the run
 /// in on arrival. staffId links the roster where possible; name is a
 /// snapshot so the run still reads sensibly if the roster changes later.
-model ParcelDispatchReceiver {
-  id         String         @id @default(uuid()) @db.Uuid
-  dispatchId String         @db.Uuid
-  dispatch   ParcelDispatch @relation(fields: [dispatchId], references: [id], onDelete: Cascade)
+model ParcelRunReceiver {
+  id    String         @id @default(uuid()) @db.Uuid
+  runId String         @db.Uuid
+  run   ParcelShipment @relation(fields: [runId], references: [id], onDelete: Cascade)
 
   name    String
   staffId String? @db.Uuid
 
-  @@index([dispatchId])
-  @@map("parcel_dispatch_receiver")
+  @@index([runId], map: "parcel_run_receiver_run_idx")
+  @@map("parcel_run_receiver")
 }
 
-/// Position reports for a dispatch run — the trail the live map draws.
-/// Unbounded growth is capped on write (see dbx.ReportDispatchPosition):
-/// only recent points are ever read back.
-model ParcelDispatchPing {
-  id         String         @id @default(uuid()) @db.Uuid
-  dispatchId String         @db.Uuid
-  dispatch   ParcelDispatch @relation(fields: [dispatchId], references: [id], onDelete: Cascade)
+/// Position reports for a run — the trail the live map draws. Unbounded
+/// growth is capped on write (see dbx.ReportRunPosition): only recent
+/// points are ever read back.
+model ParcelRunPing {
+  id    String         @id @default(uuid()) @db.Uuid
+  runId String         @db.Uuid
+  run   ParcelShipment @relation(fields: [runId], references: [id], onDelete: Cascade)
 
   lat Float
   lng Float
   at  DateTime @default(now())
 
-  @@index([dispatchId, at(sort: Desc)])
-  @@map("parcel_dispatch_ping")
+  @@index([runId, at(sort: Desc)], map: "parcel_run_ping_run_at_idx")
+  @@map("parcel_run_ping")
+}
+
+/// An ordered list of stations a company serves — its own map, and the
+/// thing a rate card can finally key on (ADR-0006). A run may cite a
+/// route or stand alone: an ad-hoc vehicle at the door has to be
+/// openable without a manager defining a route first.
+model ParcelRoute {
+  id          String    @id @default(uuid()) @db.Uuid
+  parcelOrgId String    @db.Uuid
+  org         ParcelOrg @relation(fields: [parcelOrgId], references: [id], onDelete: Cascade)
+
+  name   String
+  /// Short form for manifests and labels ("NBO-KSM"). Unique within one
+  /// company's own book, not across the platform.
+  code   String?
+  active Boolean @default(true)
+
+  createdAt DateTime @default(now())
+
+  stops      ParcelRouteStop[]
+  runs       ParcelShipment[]
+  labelStock ParcelLabelStock[]
+
+  @@index([parcelOrgId, active], map: "parcel_route_org_idx")
+  @@map("parcel_route")
+}
+
+/// One stop on a route. sequence is dense and 0-based within a route; a
+/// LEG is simply a consecutive pair of stops, which is why there is no
+/// leg table — a parcel riding two vehicles is already expressible as
+/// two ParcelShipmentItem rows with load/offload times.
+model ParcelRouteStop {
+  id      String      @id @default(uuid()) @db.Uuid
+  routeId String      @db.Uuid
+  route   ParcelRoute @relation(fields: [routeId], references: [id], onDelete: Cascade)
+
+  sequence  Int
+  /// Restrict, not SetNull: a stop with no station is not a stop, and
+  /// blanking one would renumber a route under a dispatcher mid-journey.
+  stationId String      @db.Uuid
+  station   ParcelAgent @relation(fields: [stationId], references: [id], onDelete: Restrict)
+
+  @@unique([routeId, sequence], map: "parcel_route_stop_route_seq_key")
+  @@index([stationId], map: "parcel_route_stop_station_idx")
+  @@map("parcel_route_stop")
 }
 
 /// Admin-editable cover levels a sender can buy against declared value
@@ -4585,6 +4863,7 @@ model TicketOrg {
   shortRoutes ShortRoute[]
   trips       Trip[]
   staffGrants OrgStaffGrant[]
+  luggage     LuggageTag[]
 
   @@index([enterpriseId])
   @@index([status])
@@ -5128,7 +5407,10 @@ model Ticket {
 
   createdAt DateTime @default(now())
 
-  addons TicketAddon[]
+  addons  TicketAddon[]
+  /// Bags this passenger checked in — see LuggageTag.ticketId. Optional
+  /// on that side: plenty of passengers board without a digital ticket.
+  luggage LuggageTag[]
 
   @@index([bookingId])
   @@index([status])
@@ -5190,6 +5472,9 @@ model CrewMember {
   drivenTrips    Trip[]                  @relation("TripDriver")
   conductedTrips Trip[]                  @relation("TripConductor")
   declarations   CollectionDeclaration[]
+  /// Bags this crew member put aboard / handed back — see LuggageTag.
+  luggageBoarded LuggageTag[]            @relation("LuggageBoardedBy")
+  luggageClaimed LuggageTag[]            @relation("LuggageClaimedBy")
   /// PIN logins linked to this person — see TicketOrgStaff.crewMemberId.
   staffLogins    TicketOrgStaff[]
   /// SUBJECT staff grants linked to this person — see
@@ -5222,7 +5507,9 @@ model FareStage {
   shortRoute   ShortRoute @relation(fields: [shortRouteId], references: [id], onDelete: Cascade)
 
   /// Parcels booked to come off at this stage — see Parcel.dropStageId.
-  parcelDrops Parcel[]
+  parcelDrops  Parcel[]
+  /// Passenger bags coming off here — see LuggageTag.dropStageId.
+  luggageDrops LuggageTag[]
 
   name    String
   order   Int
@@ -5289,6 +5576,8 @@ model Trip {
   /// Parcels riding this trip — see Parcel.tripId. A passenger trip
   /// doubles as freight capacity that would otherwise travel empty.
   parcels      Parcel[]
+  /// Passenger luggage tagged onto this run — see LuggageTag.tripId.
+  luggage      LuggageTag[]
 
   @@index([orgId, status])
   @@index([vehicleId, status])
@@ -5363,6 +5652,159 @@ model CollectionDeclaration {
   @@index([tripId])
   @@index([crewId])
   @@map("collection_declaration")
+}
+
+/// Where a bag is in its one short life.
+///
+/// Four states, not a parcel's eight, because a bag's journey is a
+/// bracket rather than a chain: it goes on at boarding and comes off at
+/// alighting, on one vehicle, with its owner sitting a few feet away.
+/// UNCLAIMED is the only state nobody intends — it is set in bulk at
+/// trip close for anything still aboard, which is what turns a pile of
+/// forgotten bags into a worklist while the crew is still holding them.
+enum LuggageStatus {
+  /// Tagged at the desk or the stage, not yet scanned onto a vehicle.
+  TAGGED
+  /// Scanned aboard. The normal state for the length of a trip.
+  ABOARD
+  /// Handed back to the passenger.
+  CLAIMED
+  /// Still aboard when the trip closed. Not an error state — a signal.
+  UNCLAIMED
+}
+
+/// How a bag was handed back — the honest record of a handover.
+///
+/// A boolean ("claimed: true") would flatten four materially different
+/// events into one. STUB_SCAN is the designed path. OVERRIDE is a crew
+/// member deciding, with a reason, to release a bag to someone who
+/// cannot produce the stub — which will happen, and which the system's
+/// job is to record rather than prevent. A month of override reasons is
+/// the best available list of what to fix next.
+enum LuggageClaimMethod {
+  /// The passenger's tear-off stub was scanned. The designed path.
+  STUB_SCAN
+  /// The code was read off the stub and typed — a dead phone, a torn
+  /// stub, a scanner that will not focus in the dark.
+  CODE_TYPED
+  /// Matched against the passenger's own ticket rather than a stub.
+  TICKET_MATCH
+  /// Released without a matching stub. Demands a reason; surfaces on
+  /// the trip's close-out.
+  OVERRIDE
+}
+
+/// One piece of passenger luggage, tagged onto one trip.
+///
+/// Deliberately NOT a Parcel, though the two share their pads
+/// (ParcelLabelStock), their code minting (fleetqr) and their scanner
+/// (/v1/scan/resolve). The operational shapes barely overlap:
+///
+///   - a parcel's receiver is a third party at the far end; a bag's
+///     "receiver" is the person who handed it over, sitting in seat 14;
+///   - a parcel's custody is a chain across couriers, agents and legs;
+///     a bag's is a bracket on one vehicle;
+///   - a parcel has a price, an SLA and a delivery code; a bag usually
+///     rides free with the ticket and is claimed with a stub;
+///   - a parcel's dominant failure is "never delivered"; a bag's is
+///     "taken by the wrong passenger at an intermediate stage".
+///
+/// Parcel carries ~60 columns, of which ~50 are meaningless here
+/// (receiverMsisdn, deliveryCode, COD, zones, coverage, payout splits,
+/// slaDeadlineAt). Routing bags through it would mean a filter on every
+/// parcel query and an exception to every parcel invariant, forever, to
+/// save one migration now.
+model LuggageTag {
+  id String @id @default(uuid()) @db.Uuid
+
+  /// LUG-… — checksummed, because this code is read aloud off a paper
+  /// stub and typed by hand far more often than a parcel code is: the
+  /// person asking is standing at a counter looking at it.
+  code String @unique
+
+  /// The vehicle run this bag is riding. Required, unlike a parcel's
+  /// optional tripId: a bag with no trip is not something this system
+  /// can help with, and allowing it would slowly recreate the parcel
+  /// product badly.
+  tripId String @db.Uuid
+  trip   Trip   @relation(fields: [tripId], references: [id], onDelete: Cascade)
+
+  orgId String    @db.Uuid
+  org   TicketOrg @relation(fields: [orgId], references: [id], onDelete: Cascade)
+
+  /// The passenger's ticket, when they hold one. Optional on purpose —
+  /// plenty of people board and pay cash, and a luggage system that
+  /// refuses them is one the crew stops using by lunchtime.
+  ticketId String? @db.Uuid
+  ticket   Ticket? @relation(fields: [ticketId], references: [id])
+
+  /// Always captured, ticket or not. Only the surname and initial are
+  /// printed on the tag (see the print component): enough for a
+  /// conductor to call over a crowd, not enough to be a PII leak on
+  /// adhesive.
+  passengerName   String
+  passengerMsisdn String?
+
+  /// "2 of 3". The highest-value pair of columns here: it is what makes
+  /// a missing bag visible at the moment of claiming rather than three
+  /// hours later on a phone call. Pieces tagged together share a
+  /// groupId so the claim screen can say "one still aboard".
+  pieceNo    Int     @default(1)
+  pieceCount Int     @default(1)
+  /// Null for a single-piece tag. Set for every piece of a multi-piece
+  /// group, including the first, so "the others in this group" is one
+  /// indexed lookup rather than a join on passenger name.
+  groupId    String? @db.Uuid
+
+  /// Which stage it comes off at, when the route has named stages.
+  /// Null means it rides to the terminus.
+  dropStageId      String?    @db.Uuid
+  dropStage        FareStage? @relation(fields: [dropStageId], references: [id])
+  /// What prints in the largest type on the tag. Copied at tagging
+  /// rather than read live off dropStage, the same freeze-the-promise
+  /// rule Parcel.transportMode follows: the tag is already physically
+  /// on the bag, and a later rename of a stage must not make the
+  /// printed word disagree with the record.
+  destinationLabel String
+
+  /// Only recorded when an excess-weight fee actually applies — this is
+  /// not a rate card and must not grow into one. The fee posts through
+  /// the existing ledger like any other money.
+  weightKg     Decimal? @db.Decimal(6, 2)
+  excessFeeKes Decimal? @db.Decimal(10, 2)
+
+  /// One photo at boarding. The whole damage dispute, settled — the
+  /// same bracket logic Parcel.intakePhotoUrl/podPhotoUrl provides,
+  /// collapsed to one end because a bag is handed back to the person
+  /// who watched it go on.
+  photoUrl String?
+
+  status LuggageStatus @default(TAGGED)
+
+  boardedAt       DateTime?
+  boardedByCrewId String?     @db.Uuid
+  boardedByCrew   CrewMember? @relation("LuggageBoardedBy", fields: [boardedByCrewId], references: [id])
+
+  claimedAt           DateTime?
+  claimedByCrewId     String?             @db.Uuid
+  claimedByCrew       CrewMember?         @relation("LuggageClaimedBy", fields: [claimedByCrewId], references: [id])
+  claimMethod         LuggageClaimMethod?
+  /// Required by dbx.ClaimLuggage whenever claimMethod is OVERRIDE, and
+  /// null otherwise. A release with no stub and no reason is the thing
+  /// this column exists to make impossible to record silently.
+  claimOverrideReason String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  /// The boarding scan's hot path: "everything still aboard this trip",
+  /// which is also the close-out sweep and the claim screen's sibling
+  /// lookup.
+  @@index([tripId, status])
+  @@index([orgId, createdAt])
+  @@index([groupId])
+  @@index([ticketId])
+  @@map("luggage_tag")
 }
 
 /// PRIMARY = esoko.app/o/{slug}; CUSTOM = the org's own domain

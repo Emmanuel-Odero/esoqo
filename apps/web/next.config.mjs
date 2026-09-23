@@ -1,7 +1,24 @@
+import path from "node:path";
+import { fileURLToPath } from "node:url";
+
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
+
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   reactStrictMode: true,
   poweredByHeader: false,
+
+  /**
+   * Container builds. `standalone` emits .next/standalone with only the
+   * traced runtime dependencies, so the deploy image carries neither the
+   * pnpm store nor the monorepo source — roughly 200MB instead of 2GB.
+   *
+   * outputFileTracingRoot must be the workspace root: pnpm hoists
+   * @esoqo/* and their deps to the root node_modules, and without this
+   * Next traces from the app directory and silently omits them.
+   */
+  output: "standalone",
+  outputFileTracingRoot: path.join(__dirname, "../../"),
   transpilePackages: ['@esoqo/ui', '@esoqo/a11y', '@esoqo/domain'],
   typedRoutes: true,
 
@@ -45,7 +62,13 @@ const nextConfig = {
         { key: 'X-Frame-Options', value: 'DENY' },
         { key: 'X-Content-Type-Options', value: 'nosniff' },
         { key: 'Referrer-Policy', value: 'strict-origin-when-cross-origin' },
-        { key: 'Permissions-Policy', value: 'camera=(), microphone=(), geolocation=(self)' },
+        // `camera=()` (an empty allowlist) forbids camera use on the
+        // page itself, not just in embedded iframes — with it set, the
+        // browser rejects getUserMedia outright (no permission prompt
+        // ever appears) everywhere CameraScanner is used on this site
+        // (/scan, the guest tracker). `(self)` keeps third-party iframes
+        // blocked while allowing the page's own scanner to ask.
+        { key: 'Permissions-Policy', value: 'camera=(self), microphone=(), geolocation=(self)' },
         { key: 'Strict-Transport-Security', value: 'max-age=63072000; includeSubDomains; preload' },
         { key: 'Cross-Origin-Opener-Policy', value: 'same-origin' },
       ],

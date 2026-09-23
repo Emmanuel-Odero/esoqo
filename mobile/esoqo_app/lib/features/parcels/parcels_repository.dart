@@ -103,6 +103,54 @@ class ParcelsRepository {
     );
   }
 
+  /// PATCH /v1/parcels/:code — the sender's own fix for a wrong
+  /// receiver name/number or destination, before a courier has taken
+  /// custody. Full overwrite, same convention as attaching label info:
+  /// the caller resends every field, not a partial patch.
+  Future<void> updateOwnDetails({
+    required String code,
+    required String receiverName,
+    required String receiverMsisdn,
+    required String destinationLabel,
+    String? notes,
+  }) {
+    return _api.patch('/v1/parcels/${Uri.encodeComponent(code)}', {
+      'receiverName': receiverName,
+      'receiverMsisdn': receiverMsisdn,
+      'destinationLabel': destinationLabel,
+      if (notes != null && notes.isNotEmpty) 'notes': notes,
+    });
+  }
+
+  /// GET /v1/parcels/cod-policy — public, so the booking form knows
+  /// whether to offer cash-on-delivery at all and what cap to show
+  /// before the server re-enforces it.
+  Future<ParcelCodPolicy> getCodPolicy() async {
+    final res = await _api.get('/v1/parcels/cod-policy');
+    return ParcelCodPolicy.fromJson(res);
+  }
+
+  /// POST /v1/parcels/:code/cod — declares what the buyer owes for the
+  /// goods on a still-draft parcel. [collectDeliveryFee] true bundles
+  /// the dispatch fee into the cash collected at the door, which is
+  /// what lets [confirmCod] make the booking real with nothing prepaid.
+  Future<void> setCod({
+    required String code,
+    required double codAmountKes,
+    required bool collectDeliveryFee,
+  }) {
+    return _api.post('/v1/parcels/${Uri.encodeComponent(code)}/cod', {
+      'codAmountKes': codAmountKes,
+      'codCollectDeliveryFee': collectDeliveryFee,
+    });
+  }
+
+  /// POST /v1/parcels/:code/cod/confirm — the COD equivalent of paying:
+  /// turns a draft BOOKED with no money having moved yet.
+  Future<void> confirmCod(String code) {
+    return _api.post('/v1/parcels/${Uri.encodeComponent(code)}/cod/confirm');
+  }
+
   /// GET /v1/parcels/pricing?parcelType= — public, needed before the
   /// sender has even booked, let alone signed in. Passing both zone ids
   /// folds the distance surcharge into the returned band (and adds

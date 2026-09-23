@@ -53,7 +53,7 @@ export function WithdrawalRequestForm({ orgId, leadMinutes }: { orgId: string; l
       <div className="fld">
         <label className="lab" htmlFor="wd-msisdn">Their phone number (optional)</label>
         <input className="inp" id="wd-msisdn" value={payeeMsisdn}
-          onChange={(e) => setPayeeMsisdn(e.target.value)} placeholder="+254 7…" />
+          onChange={(e) => setPayeeMsisdn(e.target.value)} placeholder="07XX XXX XXX" />
       </div>
       {error && <p className="err" role="alert"><Icon name="alert-circle" size={15} />{error}</p>}
       {opensAt && !error && (

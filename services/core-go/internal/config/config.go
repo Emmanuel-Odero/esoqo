@@ -37,7 +37,15 @@ func CurrentAppEnv() AppEnv {
 type Config struct {
 	Port        string
 	DatabaseURL string
-	RedisURL    string
+	// DirectDatabaseURL — a connection that bypasses any transaction-mode
+	// connection pooler in front of DatabaseURL (dev's pgbouncer; see
+	// docker-compose.yml's own comment on it), for the one thing that
+	// needs a stable session: Postgres LISTEN/NOTIFY behind the counter
+	// ticket queue's live push. Falls back to DatabaseURL when unset —
+	// production has no pooler in front of Postgres today, so the two
+	// are the same connection string there.
+	DirectDatabaseURL string
+	RedisURL          string
 
 	// CORS — see httpapi.Server.corsMiddleware's own comment; only
 	// matters for the Flutter *web* target, native apps ignore it.
@@ -235,9 +243,12 @@ func Load() Config {
 
 	var missing []string
 
+	databaseURL := getenv("DATABASE_URL", "postgres://esoqo:esoqo@localhost:6432/esoqo?sslmode=disable")
+
 	cfg := Config{
 		Port:               getenv("PORT", "4100"),
-		DatabaseURL:        getenv("DATABASE_URL", "postgres://esoqo:esoqo@localhost:6432/esoqo?sslmode=disable"),
+		DatabaseURL:        databaseURL,
+		DirectDatabaseURL:  getenv("DIRECT_DATABASE_URL", databaseURL),
 		RedisURL:           getenv("REDIS_URL", "redis://localhost:6379"),
 		CORSAllowedOrigins: corsOrigins,
 		TrustedProxyHops:   getenvInt("TRUSTED_PROXY_HOPS", 1),

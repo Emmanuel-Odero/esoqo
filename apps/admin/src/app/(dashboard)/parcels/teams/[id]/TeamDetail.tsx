@@ -181,7 +181,7 @@ function AddMemberForm({ teamId }: { teamId: string }) {
             <input value={name} onChange={(e) => setName(e.target.value)} style={FIELD} />
           </label>
           <label className="sub">Phone
-            <input value={msisdn} onChange={(e) => setMsisdn(e.target.value)} placeholder="+2547XXXXXXXX" style={FIELD} />
+            <input value={msisdn} onChange={(e) => setMsisdn(e.target.value)} placeholder="07XX XXX XXX" style={FIELD} />
           </label>
           <RoleField value={role} onChange={setRole} />
           <button className="btn btn-p btn-sm" onClick={submit} disabled={pending}>{pending ? 'Adding…' : 'Add'}</button>

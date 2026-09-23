@@ -131,6 +131,24 @@ export interface BookParcelInput {
   // true — see dbx.BookParcelInput.PayAtCounter's own comment for why
   // this is no longer restricted to a walk-in drop-off.
   payAtCounter?: boolean;
+
+  // The sender's own declaration of what's in the box. Distinct from
+  // the staff-only `contentsDeclared` flag core-go refuses from a guest
+  // booking — that one asserts a named clerk asked in person, which a
+  // web form cannot claim. These are recorded in their own columns as
+  // the sender's statement (see Parcel.senderDeclaredContents).
+  //
+  // declaredValueKes has always been accepted by the API and was simply
+  // never sent from this form; it doubles as the figure any cover would
+  // be priced against.
+  senderDeclaredContents?: string;
+  declaredValueKes?: number;
+  lawfulContentsAttested?: boolean;
+  termsAccepted?: boolean;
+  /** Which wording of the terms the form actually showed. Sent because
+   *  the server cannot know it, and "they accepted the terms" without a
+   *  version is worth very little in a dispute. */
+  termsVersion?: string;
 }
 
 /** Creates the booking — always PAY_AT_COUNTER from this form (see
@@ -167,6 +185,14 @@ export async function actionBookParcel(
         originMethod: input.originMethod ?? null,
         parcelOrgId: input.parcelOrgId ?? null,
         payAtCounter: input.payAtCounter ?? false,
+        senderDeclaredContents: input.senderDeclaredContents?.trim() || null,
+        // Sent as a number core-go parses into money.Amount. Null
+        // rather than 0 when unset: zero is a claim about worth, absent
+        // is the absence of one, and cover pricing reads this column.
+        declaredValueKes: Number.isFinite(input.declaredValueKes) ? input.declaredValueKes : null,
+        lawfulContentsAttested: input.lawfulContentsAttested ?? false,
+        termsAccepted: input.termsAccepted ?? false,
+        termsVersion: input.termsVersion ?? null,
       }),
     });
     const normalized = normalizePublicBookingResponse(json);
@@ -269,6 +295,9 @@ export interface ParcelStatusView {
    *  what lets a scan answer "whose label is this" with a company name
    *  and "managed by Esoqo". Null for shared-pool stock. */
   orgName?: string | null;
+  /** That same company's logo, alongside its name. Null whenever
+   *  orgName is null (shared Esoqo pool, no company to brand). */
+  orgLogoUrl?: string | null;
 }
 
 /** One line of the public custody timeline. `label` is the server's own
@@ -278,6 +307,13 @@ export interface ParcelTrackEventView {
   at: string;
   status: string;
   label: string;
+  /** INFO | WARNING | CRITICAL. Every custody leg is INFO — a leg
+   *  exists because something went right. It matters for the
+   *  non-custody rows merged in beside them (a receiver locking
+   *  themselves out, a code being reissued), which the timeline drew as
+   *  green ticks until this existed. Optional so a response from an
+   *  older core-go still renders. */
+  severity?: 'INFO' | 'WARNING' | 'CRITICAL';
 }
 
 /** Where the parcel is right now. Deliberately anonymous — no courier
@@ -429,4 +465,107 @@ export async function actionVerifyParcelClaim(
   } catch (e) {
     return { ok: false, error: e instanceof Error ? e.message : 'That code did not match' };
   }
+}
+
+// ── The other way in: possession of the delivery code ────────────────
+//
+// The mirror of the claim pair above. That one proves "I'm a party to
+// this parcel" by the PHONE and then hands the receiver their delivery
+// code; this proves the same thing by the CODE. Both exist because the
+// assumption each rests on is the one that fails in the other's case: a
+// receiver whose SMS never arrived has no phone route, and a receiver
+// whose sender read the code down the line has no need of one.
+
+/** What a receiver-tier verification returns. `canSelfConfirm` is the
+ *  server's answer, not a guess from the status — it mirrors the same
+ *  two guards dbx.DeliverParcel enforces, and `selfConfirmReason` is
+ *  what to tell somebody when the answer is no. */
+export interface ReceiverAuthSuccess {
+  ok: true;
+  parcel: ParcelPartyView;
+  receiverToken: string;
+  canSelfConfirm: boolean;
+  selfConfirmReason: string;
+}
+
+/** Failure carries core-go's error CODE, not just its message: the
+ *  panel renders three genuinely different states (keep trying, locked,
+ *  hard locked) and string-matching a sentence to tell them apart is
+ *  how a copy edit becomes a bug. */
+export interface ReceiverAuthFailure {
+  ok: false;
+  code: 'WRONG_CODE' | 'RECEIVER_LOCKED' | 'RECEIVER_HARD_LOCKED' | 'OTHER';
+  error: string;
+}
+
+/** goFetch collapses every failure to a message. This keeps the code,
+ *  which is the whole point here. */
+async function goFetchCoded<T>(
+  path: string, init: RequestInit,
+): Promise<{ ok: true; data: T } | { ok: false; code: string; message: string }> {
+  let res: Response;
+  try {
+    res = await fetch(`${CORE_GO_URL}${path}`, {
+      ...init,
+      headers: { 'Content-Type': 'application/json', ...init.headers },
+      cache: 'no-store',
+      signal: AbortSignal.timeout(15000),
+    });
+  } catch {
+    return { ok: false, code: 'OTHER', message: UNAVAILABLE };
+  }
+  const json = (await res.json().catch(() => null)) as (T & GoErrorBody) | null;
+  if (!res.ok || !json) {
+    return {
+      ok: false,
+      code: json?.error?.code ?? 'OTHER',
+      message: goMessage(json ?? null, UNAVAILABLE),
+    };
+  }
+  return { ok: true, data: json as T };
+}
+
+/**
+ * Prove you are the receiver by typing the private delivery code.
+ *
+ * Three attempts, counted on the parcel itself rather than per browser
+ * — see dbx.VerifyReceiverCode. A fourth is refused for everyone until
+ * the carrying company grants more or issues a new code.
+ */
+export async function actionVerifyReceiverCode(
+  code: string, deliveryCode: string,
+): Promise<ReceiverAuthSuccess | ReceiverAuthFailure> {
+  const res = await goFetchCoded<{
+    parcel: ParcelPartyView;
+    receiverToken: string;
+    canSelfConfirm: boolean;
+    selfConfirmReason: string;
+  }>(
+    `/v1/parcels/${encodeURIComponent(code)}/receiver/verify`,
+    { method: 'POST', body: JSON.stringify({ deliveryCode: deliveryCode.trim() }) },
+  );
+  if (!res.ok) {
+    const known = ['WRONG_CODE', 'RECEIVER_LOCKED', 'RECEIVER_HARD_LOCKED'] as const;
+    const match = known.find((k) => k === res.code);
+    return { ok: false, code: match ?? 'OTHER', error: res.message };
+  }
+  return { ok: true, ...res.data };
+}
+
+/**
+ * Close the parcel yourself, at the pickup point.
+ *
+ * Spends the single-use token minted by the verify above. Every guard
+ * that matters (waiting at an agent, no cash outstanding) is re-checked
+ * by core-go — this can only ever fail safe.
+ */
+export async function actionReceiverSelfConfirm(
+  code: string, receiverToken: string,
+): Promise<{ ok: true } | { ok: false; error: string }> {
+  const res = await goFetchCoded<{ delivered: boolean }>(
+    `/v1/parcels/${encodeURIComponent(code)}/receiver/confirm`,
+    { method: 'POST', body: JSON.stringify({ receiverToken }) },
+  );
+  if (!res.ok) return { ok: false, error: res.message };
+  return { ok: true };
 }

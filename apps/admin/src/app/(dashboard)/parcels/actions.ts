@@ -6,7 +6,9 @@ import {
   type UpdateParcelPricingRuleInput,
 } from "@esoqo/db";
 import { requireStaff } from "@/lib/session";
-import { adminGo } from "@/lib/go-ticketing";
+import { adminGo, GoRequestError } from "@/lib/go-ticketing";
+import type { AdminParcelRow } from "./ParcelsTable";
+export type { AdminParcelRow } from "./ParcelsTable";
 
 export type Result = { ok: true } | { ok: false; error: string };
 
@@ -359,6 +361,27 @@ export async function actionMarkParcelRefunded(
   }
 }
 
+/** The counter-cash counterpart to the sender's own M-Pesa/points pay
+ *  step — confirms cash actually changed hands and books the parcel. */
+export async function actionConfirmParcelCashPayment(
+  parcelId: string,
+): Promise<Result> {
+  try {
+    await requireStaff();
+    await adminGo(`/v1/admin/parcels/${parcelId}/pay-cash`, { method: "POST" });
+    revalidatePath("/parcels");
+    return { ok: true };
+  } catch (e) {
+    return {
+      ok: false,
+      error:
+        e instanceof Error
+          ? e.message
+          : "Could not confirm that cash payment",
+    };
+  }
+}
+
 export interface HandoffRow {
   FromName: string | null;
   ToName: string;
@@ -414,6 +437,78 @@ export async function actionClearParcelException(
     return {
       ok: false,
       error: e instanceof Error ? e.message : "Could not clear that exception",
+    };
+  }
+}
+
+// ── Unsticking a receiver who can't get past the delivery code ───────
+//
+// A superset of the same three verbs the carrying company's own
+// console has: admin can resolve a stuck parcel for ANY carrier,
+// including Esoqo-operated ones, which have no company console to act
+// from at all. Keyed on the parcel id because this app works in ids
+// throughout; core-go resolves the code.
+
+/** Allow two more verification attempts. Refused once the parcel is
+ *  hard locked — at that point only a new code moves it. */
+export async function actionGrantReceiverAuthRetry(
+  parcelId: string,
+): Promise<Result> {
+  try {
+    await requireStaff();
+    await adminGo(`/v1/admin/parcels/${parcelId}/receiver-auth/grant-retry`, {
+      method: "POST",
+    });
+    revalidatePath("/parcels");
+    return { ok: true };
+  } catch (e) {
+    return {
+      ok: false,
+      error: e instanceof Error ? e.message : "Could not allow more tries",
+    };
+  }
+}
+
+/** Mint a new delivery code and clear every lock.
+ *
+ *  The code is never returned here and never rendered in this console.
+ *  core-go texts it to the receiver and the sender; showing it on an
+ *  operator's screen would make the one secret in this flow readable
+ *  by anyone passing the desk. */
+export async function actionReissueDeliveryCode(
+  parcelId: string,
+): Promise<Result> {
+  try {
+    await requireStaff();
+    await adminGo(`/v1/admin/parcels/${parcelId}/delivery-code/reissue`, {
+      method: "POST",
+    });
+    revalidatePath("/parcels");
+    return { ok: true };
+  } catch (e) {
+    return {
+      ok: false,
+      error: e instanceof Error ? e.message : "Could not issue a new code",
+    };
+  }
+}
+
+/** Pay out a delivery the receiver closed themselves at a pickup point,
+ *  which held the accrual because no staff member witnessed it. */
+export async function actionReleaseHeldCourierEarnings(
+  parcelId: string,
+): Promise<Result> {
+  try {
+    await requireStaff();
+    await adminGo(`/v1/admin/parcels/${parcelId}/courier-earnings/release`, {
+      method: "POST",
+    });
+    revalidatePath("/parcels");
+    return { ok: true };
+  } catch (e) {
+    return {
+      ok: false,
+      error: e instanceof Error ? e.message : "Could not release those earnings",
     };
   }
 }
@@ -806,8 +901,12 @@ export async function actionCreateParcelOrg(
       );
     }
     if (input.contactPhone) {
-      const { sendSms } = await import("@esoqo/auth");
-      await sendSms(input.contactPhone, message, "PARCEL_COMPANY_CREATED");
+      const { normaliseMsisdn } = await import("@esoqo/domain");
+      const msisdn = normaliseMsisdn(input.contactPhone);
+      if (msisdn) {
+        const { sendSms } = await import("@esoqo/auth");
+        await sendSms(msisdn, message, "PARCEL_COMPANY_CREATED");
+      }
     }
     revalidatePath("/parcels/companies");
     return { ok: true };
@@ -1570,6 +1669,10 @@ export interface ParcelLabelRegisterRow {
   itemDescription: string | null;
   destination: string | null;
   senderName: string | null;
+  senderMsisdn: string | null;
+  receiverName: string | null;
+  receiverMsisdn: string | null;
+  routeLabel: string | null;
   infoAttachedAt: string | null;
   usedAt: string | null;
   voidedAt: string | null;
@@ -1627,6 +1730,27 @@ export async function actionListParcelLabelBatches(
     `/v1/admin/parcels/labels/batches?${params}`,
   );
   return batches ?? [];
+}
+
+export interface ParcelLabelRouteOption {
+  id: string;
+  name: string;
+  code: string | null;
+  active: boolean;
+}
+
+/** A courier company's own defined routes, for the label-info route
+ *  picker — see LabelInfoModal. Routes belong to a company; there is
+ *  no list for the shared Esoqo pool. */
+export async function actionListParcelRoutes(
+  parcelOrgId: string,
+): Promise<ParcelLabelRouteOption[]> {
+  await requireStaff();
+  const params = new URLSearchParams({ parcelOrgId });
+  const { routes } = await adminGo<{ routes: ParcelLabelRouteOption[] | null }>(
+    `/v1/admin/parcels/routes?${params}`,
+  );
+  return routes ?? [];
 }
 
 /**
@@ -1692,6 +1816,84 @@ export async function actionVoidParcelLabels(
   }
 }
 
+/**
+ * Permanently remove every still-blank label in a batch — the hard
+ * delete a test/mistaken batch needs, as opposed to Withdraw's
+ * "recorded and kept for the audit trail". Attached, spent or
+ * already-voided codes in the batch are left exactly where they are.
+ */
+export async function actionDeleteParcelLabelBatch(
+  batchId: string,
+  parcelOrgId?: string,
+): Promise<{ ok: true; deleted: number } | { ok: false; error: string }> {
+  try {
+    await requireStaff();
+    const { deleted } = await adminGo<{ deleted: number }>(
+      `/v1/admin/parcels/labels/batches/${encodeURIComponent(batchId)}`,
+      {
+        method: "DELETE",
+        body: JSON.stringify({ parcelOrgId: parcelOrgId || undefined }),
+      },
+    );
+    revalidatePath("/parcels/labels");
+    return { ok: true, deleted };
+  } catch (e) {
+    return {
+      ok: false,
+      error: e instanceof Error ? e.message : "Could not delete that batch",
+    };
+  }
+}
+
+/**
+ * Permanently remove an explicit selection of still-blank labels.
+ * Server-side guarded to blank rows only — attached, spent or
+ * withdrawn codes in the selection are silently skipped, so a mixed
+ * selection deletes what it can.
+ */
+export async function actionDeleteParcelLabels(
+  codes: string[],
+  parcelOrgId?: string,
+): Promise<{ ok: true; deleted: number } | { ok: false; error: string }> {
+  try {
+    await requireStaff();
+    const { deleted } = await adminGo<{ deleted: number }>(
+      `/v1/admin/parcels/labels`,
+      {
+        method: "DELETE",
+        body: JSON.stringify({ codes, parcelOrgId: parcelOrgId || undefined }),
+      },
+    );
+    revalidatePath("/parcels/labels");
+    return { ok: true, deleted };
+  } catch (e) {
+    return {
+      ok: false,
+      error: e instanceof Error ? e.message : "Could not delete those labels",
+    };
+  }
+}
+
+/**
+ * A courier company's own parcels, for its profile page — the same
+ * admin parcels list the ops console uses, scoped down to one company
+ * instead of everyone's.
+ */
+export async function actionListParcelsForOrg(
+  parcelOrgId: string,
+  opts?: { limit?: number; offset?: number },
+): Promise<{ parcels: AdminParcelRow[]; total: number }> {
+  await requireStaff();
+  const params = new URLSearchParams({
+    parcelOrgId, limit: String(opts?.limit ?? 20), offset: String(opts?.offset ?? 0),
+  });
+  const { parcels, total } = await adminGo<{
+    parcels: AdminParcelRow[] | null;
+    total: number;
+  }>(`/v1/admin/parcels?${params}`);
+  return { parcels: parcels ?? [], total };
+}
+
 // Structured info attached to a pre-printed label — item, destination,
 // sender/receiver name and contact, item type, weight range — the
 // moment it's actually stuck on a physical item, independent of (and
@@ -1713,6 +1915,12 @@ export interface ParcelLabelInfoInput {
   lengthCm?: number;
   widthCm?: number;
   heightCm?: number;
+  /** Set when a real ParcelRoute was picked. */
+  routeId?: string;
+  /** The route text actually printed — the picked route's name, or a
+   *  typed "From -> To" when "Other" was chosen. Always sent alongside
+   *  routeId (or alone, with routeId omitted) — see LabelInfoModal. */
+  routeLabel?: string;
 }
 
 /**
@@ -1752,7 +1960,8 @@ export interface CounterBookingInput {
 export async function actionCounterBookParcel(
   input: CounterBookingInput,
 ): Promise<
-  { ok: true; code: string; parcelId: string } | { ok: false; error: string }
+  | { ok: true; code: string; parcelId: string }
+  | { ok: false; error: string; errorCode?: string }
 > {
   try {
     await requireStaff();
@@ -1776,6 +1985,10 @@ export async function actionCounterBookParcel(
     return {
       ok: false,
       error: e instanceof Error ? e.message : "Could not book that parcel",
+      // Forwarded so the offline queue can branch on LABEL_ALREADY_SPENT
+      // rather than on the message text — see GoRequestError. Named
+      // errorCode because the success shape's `code` is a parcel code.
+      ...(e instanceof GoRequestError ? { errorCode: e.code } : {}),
     };
   }
 }

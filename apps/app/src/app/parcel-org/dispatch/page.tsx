@@ -1,7 +1,7 @@
 import type { Metadata } from 'next';
 import { redirect } from 'next/navigation';
 import { ParcelOrgUnauthorised, getParcelOrgMe } from '@/lib/parcel-org-session';
-import { listDispatches, listOrgStaff, listOrgStations } from '../actions';
+import { listDispatches, listOrgRoutes, listOrgStaff, listOrgStations } from '../actions';
 import { DispatchBoard } from './DispatchBoard';
 
 export const dynamic = 'force-dynamic';
@@ -28,10 +28,13 @@ export default async function DispatchPage() {
 
   if (!me.capabilities.includes('parcelorg.dispatch')) redirect('/parcel-org');
 
-  const [runs, stations, staff] = await Promise.all([
+  const [runs, stations, staff, routes] = await Promise.all([
     listDispatches(true),
     listOrgStations(),
     listOrgStaff(),
+    // Empty for a dispatcher without parcelorg.write — they can still
+    // open an ad-hoc run, they just can't pick from a planned list.
+    listOrgRoutes().catch(() => []),
   ]);
 
   return (
@@ -47,7 +50,9 @@ export default async function DispatchPage() {
 
       {/* Auto-refresh lives once in parcel-org/layout.tsx (DropoffPoll) —
           it used to be mounted here AND on the dashboard. */}
-      <DispatchBoard initialRuns={runs} stations={stations} staff={staff} orgName={me.org.name} />
+      <DispatchBoard initialRuns={runs} stations={stations} staff={staff} routes={routes} orgName={me.org.name} />
+
     </>
   );
 }
+

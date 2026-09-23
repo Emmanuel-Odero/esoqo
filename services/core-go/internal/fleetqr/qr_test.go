@@ -84,13 +84,51 @@ func flipChar(c byte) string {
 }
 
 func TestPrefixRegistry(t *testing.T) {
-	for _, p := range []Prefix{PrefixTrip, PrefixBus, PrefixVoucher, PrefixTicket, PrefixPickup, PrefixPaymentID} {
+	for _, p := range []Prefix{
+		PrefixTrip, PrefixBus, PrefixVoucher, PrefixTicket, PrefixPickup,
+		PrefixPaymentID, PrefixParcel, PrefixServiceTicket, PrefixLuggage,
+	} {
 		if !ValidPrefix(p) {
 			t.Fatalf("prefix %q must be registered", p)
 		}
 	}
 	if ValidPrefix("XYZ") {
 		t.Fatal("unknown prefix must not validate")
+	}
+}
+
+// A LUG- code is typed by hand off a paper stub more than any other
+// code in the product, so its checksum is the difference between a
+// mistyped character failing loudly at the scanner and a lookup that
+// quietly finds nothing while a passenger waits.
+func TestLuggageCodesAreCheckedShape(t *testing.T) {
+	seen := map[string]bool{}
+	for i := 0; i < 200; i++ {
+		code := ShortCodeChecked(PrefixLuggage, LuggageCodeLen)
+		if !CheckedShape(PrefixLuggage, code, LuggageCodeLen) {
+			t.Fatalf("minted luggage code %q must satisfy its own checksum", code)
+		}
+		if seen[code] {
+			t.Fatalf("duplicate luggage code %q in 200 mints", code)
+		}
+		seen[code] = true
+	}
+}
+
+func TestLuggageChecksumRejectsASingleWrongCharacter(t *testing.T) {
+	code := ShortCodeChecked(PrefixLuggage, LuggageCodeLen)
+	// Swap one character of the random segment for a different one from
+	// the alphabet — the fat-finger case this guards.
+	body := []byte(code)
+	idx := len("LUG-")
+	for _, c := range []byte(Alphabet) {
+		if c != body[idx] {
+			body[idx] = c
+			break
+		}
+	}
+	if CheckedShape(PrefixLuggage, string(body), LuggageCodeLen) {
+		t.Fatalf("a single mistyped character must not pass the checksum: %q -> %q", code, body)
 	}
 }
 

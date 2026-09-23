@@ -275,7 +275,7 @@ export function BookingForm(
         <label className="sub" style={{ display: 'block', marginBottom: 6 }} htmlFor="bk-phone">Phone number</label>
         <input id="bk-phone" className="mono" inputMode="tel" style={{
           width: '100%', padding: '10px 14px', border: '1.5px solid var(--line)', borderRadius: 8, fontSize: '.95rem',
-        }} value={msisdn} onChange={(e) => setMsisdn(e.target.value)} readOnly={signedIn} placeholder="+254 7…" />
+        }} value={msisdn} onChange={(e) => setMsisdn(e.target.value)} readOnly={signedIn} placeholder="07XX XXX XXX" />
         <p className="sub" style={{ margin: '6px 0 0', fontSize: '.8rem' }}>The M-Pesa prompt and your ticket go here.</p>
       </div>
 

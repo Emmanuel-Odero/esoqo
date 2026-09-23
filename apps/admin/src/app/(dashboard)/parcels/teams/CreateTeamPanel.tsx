@@ -57,7 +57,7 @@ export function CreateTeamPanel() {
               <input value={managerName} onChange={(e) => setManagerName(e.target.value)} style={{ ...FIELD, width: '100%' }} />
             </label>
             <label className="sub" style={{ flex: 1 }}>Manager phone
-              <input value={managerMsisdn} onChange={(e) => setManagerMsisdn(e.target.value)} placeholder="+2547XXXXXXXX"
+              <input value={managerMsisdn} onChange={(e) => setManagerMsisdn(e.target.value)} placeholder="07XX XXX XXX"
                 style={{ ...FIELD, width: '100%' }} />
             </label>
           </div>

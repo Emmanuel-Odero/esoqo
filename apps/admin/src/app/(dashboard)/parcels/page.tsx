@@ -35,6 +35,14 @@ interface AdminParcelStats {
   failedDeliveries: number;
   staleAtAgent: number;
   awaitingReturn: number;
+  /** The receiver cannot get past the delivery code and the parcel has
+   *  stopped. Its own count, not part of failedDeliveries: there the
+   *  courier reached the door and nobody took the box; here the box is
+   *  exactly where it should be and the person collecting it cannot
+   *  prove they are that person. */
+  receiverLocked: number;
+  /** Self-confirmed collections whose courier pay is still held. */
+  earningsHeld: number;
 }
 
 const PAGE_SIZE = 50;
@@ -47,6 +55,7 @@ export default async function ParcelsPage(
   const canCancel = ctx.capabilities.includes('*') || ctx.capabilities.includes('parcels.cancel');
   const canRefund = ctx.capabilities.includes('*') || ctx.capabilities.includes('parcels.refund');
   const canEdit = ctx.capabilities.includes('*') || ctx.capabilities.includes('parcels.edit');
+  const canConfirmPayment = ctx.capabilities.includes('*') || ctx.capabilities.includes('parcels.confirmCashPayment');
   const { status, q, queue, page } = await searchParams;
 
   const pageNumber = Math.max(1, Number(page) || 1);
@@ -114,10 +123,19 @@ export default async function ParcelsPage(
           sub="On a pickup-point shelf over 5 days — blocking a slot" tone="a" />
         <QueueTile queue="awaiting-return" active={queue} label="Ready to return" count={stats.awaitingReturn}
           sub="Three or more failed attempts — decide or send back" tone="r" />
+        {/* The receiver-side failure, which had no tile because it had
+            no state: a receiver who ran out of tries used to hit a
+            Redis counter nobody could see and a parcel that quietly
+            stopped. */}
+        <QueueTile queue="receiver-locked" active={queue} label="Receiver locked out" count={stats.receiverLocked}
+          sub="Wrong delivery code too many times — allow more tries or reissue" tone="r" />
+        <QueueTile queue="earnings-held" active={queue} label="Courier pay held" count={stats.earningsHeld}
+          sub="Closed by the receiver with no staff witness — review and release" tone="a" />
       </div>
 
       {(stats.staleDrafts > 0 || stats.overdueCollections > 0 || stats.refundsOwed > 0
-        || stats.overdueDeliveries > 0 || stats.awaitingReturn > 0 || stats.staleAtAgent > 0) && (
+        || stats.overdueDeliveries > 0 || stats.awaitingReturn > 0 || stats.staleAtAgent > 0
+        || stats.receiverLocked > 0) && (
         <div className="chain" style={{ background: 'var(--amber-t)', border: '1px solid #E8D2A0', color: 'var(--amber)', marginBottom: 16 }}>
           <Icon name="alert-triangle" size={18} />
           <span>
@@ -149,6 +167,7 @@ export default async function ParcelsPage(
       <ParcelsTable
         parcels={parcels ?? []} statusLabel={STATUS_LABEL}
         canAssign={canAssign} canCancel={canCancel} canRefund={canRefund} canEdit={canEdit}
+        canConfirmPayment={canConfirmPayment}
         total={total} page={pageNumber} pageSize={PAGE_SIZE}
         baseQuery={{ status, q, queue }}
       />

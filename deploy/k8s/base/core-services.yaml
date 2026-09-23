@@ -1,0 +1,118 @@
+# ════════════════════════════════════════════════════════════════════
+#  The two backend services.
+#
+#  core-service (Fastify, TypeScript) and core-go (Gin, Go) are separate
+#  planes, not a migration in progress — see
+#  docs/adr/0004-language-allocation.md. core-go serves the mobile REST
+#  API; core-service serves the domain API, payment callbacks and the
+#  Jamii custom-domain reconciler.
+#
+#  Both expose /health (a cheap reachability ping, safe for liveness)
+#  and /ready (which walks the audit chain — readiness only). Pointing
+#  livenessProbe at /ready would turn a single broken audit link into a
+#  cluster-wide restart loop; the services' own source comments call
+#  this out, so the split is preserved here.
+# ════════════════════════════════════════════════════════════════════
+
+# ── core-service ────────────────────────────────────────────────────
+apiVersion: v1
+kind: Service
+metadata:
+  name: core-service
+  labels: { app.kubernetes.io/name: core-service, app.kubernetes.io/part-of: esoqo }
+spec:
+  ports: [{ name: http, port: 80, targetPort: 4000 }]
+  selector: { app.kubernetes.io/name: core-service }
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: core-service
+  labels: { app.kubernetes.io/name: core-service, app.kubernetes.io/part-of: esoqo }
+spec:
+  replicas: 2
+  strategy:
+    rollingUpdate: { maxSurge: 1, maxUnavailable: 0 }
+  selector:
+    matchLabels: { app.kubernetes.io/name: core-service }
+  template:
+    metadata:
+      labels: { app.kubernetes.io/name: core-service, app.kubernetes.io/part-of: esoqo }
+    spec:
+      securityContext: { runAsNonRoot: true, runAsUser: 1001 }
+      containers:
+        - name: core-service
+          image: ghcr.io/emmanuel-odero/esoqo-core-service:latest
+          ports: [{ name: http, containerPort: 4000 }]
+          envFrom:
+            - configMapRef: { name: esoqo-config }
+            - secretRef: { name: esoqo-db }
+            - secretRef: { name: esoqo-secrets }
+          startupProbe:
+            httpGet: { path: /health, port: http }
+            periodSeconds: 5
+            failureThreshold: 30 # tsx compiles on first import — slow boot
+          readinessProbe:
+            httpGet: { path: /ready, port: http }
+            periodSeconds: 15
+            timeoutSeconds: 5
+          livenessProbe:
+            httpGet: { path: /health, port: http }
+            periodSeconds: 20
+            timeoutSeconds: 5
+            failureThreshold: 3
+          resources:
+            requests: { cpu: 100m, memory: 256Mi }
+            limits: { memory: 768Mi }
+---
+# ── core-go ─────────────────────────────────────────────────────────
+apiVersion: v1
+kind: Service
+metadata:
+  name: core-go
+  labels: { app.kubernetes.io/name: core-go, app.kubernetes.io/part-of: esoqo }
+spec:
+  ports: [{ name: http, port: 80, targetPort: 4100 }]
+  selector: { app.kubernetes.io/name: core-go }
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: core-go
+  labels: { app.kubernetes.io/name: core-go, app.kubernetes.io/part-of: esoqo }
+spec:
+  replicas: 2
+  strategy:
+    rollingUpdate: { maxSurge: 1, maxUnavailable: 0 }
+  selector:
+    matchLabels: { app.kubernetes.io/name: core-go }
+  template:
+    metadata:
+      labels: { app.kubernetes.io/name: core-go, app.kubernetes.io/part-of: esoqo }
+    spec:
+      containers:
+        - name: core-go
+          image: ghcr.io/emmanuel-odero/esoqo-core-go:latest
+          ports: [{ name: http, containerPort: 4100 }]
+          envFrom:
+            - configMapRef: { name: esoqo-config }
+            - secretRef: { name: esoqo-db }
+            - secretRef: { name: esoqo-secrets }
+          # A static binary with no interpreter warm-up — it is either
+          # listening within a couple of seconds or it has crashed.
+          startupProbe:
+            httpGet: { path: /health, port: http }
+            periodSeconds: 3
+            failureThreshold: 10
+          readinessProbe:
+            httpGet: { path: /ready, port: http }
+            periodSeconds: 15
+            timeoutSeconds: 5
+          livenessProbe:
+            httpGet: { path: /health, port: http }
+            periodSeconds: 20
+            timeoutSeconds: 5
+            failureThreshold: 3
+          resources:
+            requests: { cpu: 50m, memory: 64Mi }
+            limits: { memory: 256Mi }

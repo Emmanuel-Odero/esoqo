@@ -1,11 +1,12 @@
 'use client';
 import { displayKES, toCentsOrZero } from '@esoqo/domain';
-import { Icon } from '@esoqo/ui';
+import { dropPointFor, Icon, PrintStyles, ScaledLabel } from '@esoqo/ui';
 import type { AwaitingIntakeView, ParcelStatusView } from './actions';
 import {
   etaText, humanTime, isOffTimeline, statusLabel, statusMessage, statusTone, timelineFor,
 } from './parcel-format';
 import { ClaimPanel } from './ClaimPanel';
+import { ReceiverAuthPanel } from './ReceiverAuthPanel';
 import { TrackingMap } from './TrackingMap';
 
 /**
@@ -50,7 +51,7 @@ export function ParcelStatusPanel({ parcel }: { parcel: ParcelStatusView | Await
   return (
     <div>
       <div className="row" style={{ justifyContent: 'space-between', alignItems: 'flex-start', gap: 12 }}>
-        <div>
+        <div style={{ flex: 1, minWidth: 0 }}>
           <p className="mono" style={{ margin: 0, fontWeight: 800, fontSize: '1.05rem', letterSpacing: '.04em' }}>
             {parcel.code}
           </p>
@@ -81,63 +82,96 @@ export function ParcelStatusPanel({ parcel }: { parcel: ParcelStatusView | Await
       {/* A parcel that's off the happy path gets a card explaining why
           instead of a timeline of dots that would all read "hasn't
           happened yet" for something that already has. */}
-      {offTimeline ? (
-        <OffTimelineCard parcel={parcel} />
-      ) : events.length > 1 ? (
-        <EventsTimeline events={events} />
-      ) : (
-        <ol style={{ listStyle: 'none', margin: '20px 0 0', padding: 0 }}>
-          {stages.map(([status, label], i) => {
-            const reached = reachedIndex >= 0 && i <= reachedIndex;
-            return (
-              <li key={status} style={{ display: 'flex', gap: 12, alignItems: 'flex-start' }}>
-                <span style={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
-                  {/* An empty ring rather than an icon for the unreached
-                      steps — the sprite has no hollow-circle glyph, and
-                      a ring reads as "not yet" more clearly than a
-                      greyed-out tick would anyway. */}
-                  {reached ? (
-                    <Icon name="check-circle" size={18} />
-                  ) : (
-                    <span aria-hidden style={{
-                      width: 18, height: 18, borderRadius: '50%',
-                      border: '1.5px solid var(--line)', flexShrink: 0,
-                    }} />
-                  )}
-                  {i < stages.length - 1 && (
-                    <span aria-hidden style={{
-                      width: 2, height: 26,
-                      background: reached ? 'var(--brand, currentColor)' : 'var(--line)',
-                      opacity: reached ? 0.4 : 1,
-                    }} />
-                  )}
-                </span>
-                <span style={{ paddingBottom: 12, fontWeight: reached ? 600 : 400, opacity: reached ? 1 : 0.55 }}>
-                  {label}
-                </span>
-              </li>
-            );
-          })}
-        </ol>
-      )}
+      {offTimeline && <OffTimelineCard parcel={parcel} />}
 
-      {parcel.status === 'DELIVERED' && <ProofOfDelivery parcel={parcel} />}
+      {/* Everything above is the one-glance answer: status, next step,
+          where to go. The full history and the printable sticker are
+          real content but not what a phone camera scan needs first —
+          collapsed by default so this page fits a phone screen without
+          scrolling, one tap away for whoever wants more. */}
+      <details className="track-more">
+        <summary>Full timeline</summary>
+        {events.length > 1 ? (
+          <EventsTimeline events={events} />
+        ) : (
+          <ol style={{ listStyle: 'none', margin: '14px 0 0', padding: 0 }}>
+            {stages.map(([status, label], i) => {
+              const reached = reachedIndex >= 0 && i <= reachedIndex;
+              return (
+                <li key={status} style={{ display: 'flex', gap: 12, alignItems: 'flex-start' }}>
+                  <span style={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
+                    {/* An empty ring rather than an icon for the unreached
+                        steps — the sprite has no hollow-circle glyph, and
+                        a ring reads as "not yet" more clearly than a
+                        greyed-out tick would anyway. */}
+                    {reached ? (
+                      <Icon name="check-circle" size={18} />
+                    ) : (
+                      <span aria-hidden style={{
+                        width: 18, height: 18, borderRadius: '50%',
+                        border: '1.5px solid var(--line)', flexShrink: 0,
+                      }} />
+                    )}
+                    {i < stages.length - 1 && (
+                      <span aria-hidden style={{
+                        width: 2, height: 26,
+                        background: reached ? 'var(--brand, currentColor)' : 'var(--line)',
+                        opacity: reached ? 0.4 : 1,
+                      }} />
+                    )}
+                  </span>
+                  <span style={{ paddingBottom: 12, fontWeight: reached ? 600 : 400, opacity: reached ? 1 : 0.55 }}>
+                    {label}
+                  </span>
+                </li>
+              );
+            })}
+          </ol>
+        )}
 
-      <dl style={{ margin: '16px 0 0', display: 'grid', gap: 6 }}>
-        {parcel.priceKes && (
-          <Row label="Paid" value={`KES ${Number(parcel.priceKes).toLocaleString('en-KE')}`} mono />
-        )}
-        <Row label="Booked" value={humanTime(parcel.createdAt)} />
-        {parcel.intakeConfirmedAt && (
-          <Row label="Received" value={humanTime(parcel.intakeConfirmedAt)} />
-        )}
-        {parcel.deliveredAt && <Row label="Delivered" value={humanTime(parcel.deliveredAt)} />}
-      </dl>
+        {parcel.status === 'DELIVERED' && <ProofOfDelivery parcel={parcel} />}
+
+        <dl style={{ margin: '16px 0 0', display: 'grid', gap: 6 }}>
+          {parcel.priceKes && (
+            <Row label="Paid" value={`KES ${Number(parcel.priceKes).toLocaleString('en-KE')}`} mono />
+          )}
+          <Row label="Booked" value={humanTime(parcel.createdAt)} />
+          {parcel.intakeConfirmedAt && (
+            <Row label="Received" value={humanTime(parcel.intakeConfirmedAt)} />
+          )}
+          {parcel.deliveredAt && <Row label="Delivered" value={humanTime(parcel.deliveredAt)} />}
+        </dl>
+      </details>
+
+      <details className="track-more">
+        <summary>Printable label</summary>
+        {/* The real sticker, not a bare QR — same design as the courier
+            portal's own label preview. No `sig`: the guest-safe status
+            projection this page renders doesn't carry the label's
+            signature, so this shows as an unverified — but still fully
+            scannable — label (see PrintableLabel's own comment on that
+            fallback). */}
+        <div className="track-label">
+          <ScaledLabel
+            code={parcel.code}
+            route={dropPointFor(parcel.destinationLabel)}
+            orgName={parcel.orgName ?? undefined}
+          />
+          <PrintStyles />
+        </div>
+      </details>
 
       {/* Everything above is what a stranger holding the code sees.
-          This is the door for the two people it actually belongs to —
-          opened by proving they hold the phone on the parcel, not the
-          code, which anyone who handled the box also holds. */}
+          These two are the door for the people it actually belongs to,
+          and they ask for different proof on purpose: the delivery code
+          only the receiver was sent, or the phone number already on the
+          parcel. Neither is the tracking code, which anyone who handled
+          the box also holds.
+
+          Receiver-first, because that is who is standing in front of a
+          counter wanting in — the sender is usually at a desk with time
+          to wait for a text. */}
+      <ReceiverAuthPanel code={parcel.code} />
       <ClaimPanel code={parcel.code} />
     </div>
   );
@@ -192,31 +226,50 @@ function AgentCard({ agent }: { agent: NonNullable<ParcelStatusView['agent']> })
 }
 
 /**
- * The full custody history, straight from the server: booking, counter
- * receipt, each hand-over, delivery — each with its time. This is what
- * answers "where has it been and when", which the single-status view
- * never could. Every entry here already happened, so all are ticked.
+ * The full history, straight from the server: booking, counter receipt,
+ * each hand-over, delivery — plus the things that happened between them
+ * which are not custody at all, like a receiver locking themselves out
+ * of the delivery code or a new code being issued.
+ *
+ * Every entry used to be drawn as a green tick, on the reasoning that
+ * everything on the list had already happened and so had gone right.
+ * That held while the list was custody legs only. It stopped holding
+ * the moment a failure could appear here, and a tick beside "Receiver
+ * authentication failed" is not a cosmetic problem — it tells a worried
+ * sender the opposite of the truth. Hence severity, which the server
+ * sets per row.
  */
+const EVENT_MARK = {
+  INFO: { icon: 'check-circle', color: undefined },
+  WARNING: { icon: 'alert-triangle', color: 'var(--amber, #9a6700)' },
+  CRITICAL: { icon: 'alert-circle', color: 'var(--red, #b42318)' },
+} as const;
+
 function EventsTimeline({ events }: { events: NonNullable<ParcelStatusView['events']> }) {
   return (
     <ol style={{ listStyle: 'none', margin: '20px 0 0', padding: 0 }}>
-      {events.map((e, i) => (
-        <li key={`${e.at}-${i}`} style={{ display: 'flex', gap: 12, alignItems: 'flex-start' }}>
-          <span style={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
-            <Icon name="check-circle" size={18} />
-            {i < events.length - 1 && (
-              <span aria-hidden style={{
-                width: 2, height: 26,
-                background: 'var(--brand, currentColor)', opacity: 0.4,
-              }} />
-            )}
-          </span>
-          <span style={{ paddingBottom: 12 }}>
-            <span style={{ display: 'block', fontWeight: 600 }}>{e.label}</span>
-            <span className="sub" style={{ fontSize: '.85rem' }}>{humanTime(e.at)}</span>
-          </span>
-        </li>
-      ))}
+      {events.map((e, i) => {
+        // Defaulting to INFO keeps a response from an older core-go
+        // (no severity field at all) rendering exactly as it did before.
+        const mark = EVENT_MARK[e.severity ?? 'INFO'] ?? EVENT_MARK.INFO;
+        return (
+          <li key={`${e.at}-${i}`} style={{ display: 'flex', gap: 12, alignItems: 'flex-start' }}>
+            <span style={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
+              <Icon name={mark.icon} size={18} style={mark.color ? { color: mark.color } : undefined} />
+              {i < events.length - 1 && (
+                <span aria-hidden style={{
+                  width: 2, height: 26,
+                  background: 'var(--brand, currentColor)', opacity: 0.4,
+                }} />
+              )}
+            </span>
+            <span style={{ paddingBottom: 12 }}>
+              <span style={{ display: 'block', fontWeight: 600, color: mark.color }}>{e.label}</span>
+              <span className="sub" style={{ fontSize: '.85rem' }}>{humanTime(e.at)}</span>
+            </span>
+          </li>
+        );
+      })}
     </ol>
   );
 }
@@ -294,8 +347,16 @@ function PreLabelPanel({ parcel }: { parcel: ParcelStatusView }) {
   return (
     <div>
       <div className="row" style={{ justifyContent: 'space-between', alignItems: 'flex-start', gap: 12 }}>
-        <p className="mono" style={{ margin: 0, fontWeight: 800, fontSize: '1.05rem' }}>{parcel.code}</p>
+        <p className="mono" style={{ margin: 0, fontWeight: 800, fontSize: '1.05rem', flex: 1 }}>{parcel.code}</p>
         <StatusPill status="LABEL_PRINTED" />
+      </div>
+      <div className="track-label">
+        <ScaledLabel
+          code={parcel.code}
+          route={dropPointFor(info?.destination)}
+          orgName={parcel.orgName ?? undefined}
+        />
+        <PrintStyles />
       </div>
       {info ? (
         <>

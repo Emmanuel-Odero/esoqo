@@ -62,6 +62,12 @@ func (s *Server) handleResolveScan(c *gin.Context) {
 		out["certificate"] = hit.Certificate
 	case dbx.ScanKindParcel:
 		out["parcel"] = hit.Parcel
+	case dbx.ScanKindLuggage:
+		// Guest-safe by construction — ResolveLuggageByCode reduces the
+		// passenger to a surname and initial before it ever gets here,
+		// because a luggage stub is a bearer credential that lives in a
+		// coat pocket and whoever holds it may scan it.
+		out["luggage"] = hit.Luggage
 	}
 	c.JSON(http.StatusOK, out)
 }

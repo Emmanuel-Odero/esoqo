@@ -257,7 +257,7 @@
 .sf-kicker { display:flex; align-items:center; gap:8px; font-family:var(--font-mono); font-size:.68rem;
   letter-spacing:.18em; text-transform:uppercase; color:#AFC6DC; margin:0 0 7px; font-weight:700 }
 .sf-dot { width:8px; height:8px; border-radius:99px; box-shadow:0 0 0 3px color-mix(in srgb, currentColor 25%, transparent) }
-.sf-logo { width:64px; height:64px; border-radius:18px; flex:none; object-fit:cover; background:#fff;
+.sf-logo { width:120px; height:120px; border-radius:18px; flex:none; object-fit:contain; background:#fff;
   box-shadow:0 10px 26px rgba(2,18,32,.4) }
 .sf-tagline { margin:10px 0 0; font-size:1.02rem; color:#CFE3F2; max-width:54ch; line-height:1.55 }
 .sf-hero h1 { color:#fff; font-size:clamp(1.7rem,4.6vw,2.45rem); margin:0; line-height:1.08 }
@@ -289,7 +289,7 @@
 .sf-bar-id { display:flex; align-items:center; gap:10px; color:var(--navy); flex:none; min-width:0 }
 .sf-bar-id b { font-size:.92rem; font-weight:700; white-space:nowrap; overflow:hidden;
   text-overflow:ellipsis; max-width:220px }
-.sf-bar-logo { width:36px; height:36px; border-radius:10px; object-fit:cover; flex:none; background:#fff;
+.sf-bar-logo { width:60px; height:60px; border-radius:10px; object-fit:contain; flex:none; background:#fff;
   border:1px solid var(--line) }
 .sf-bar-mono { display:grid; place-items:center; font-family:var(--font-mono); font-weight:800;
   font-size:.82rem; color:#fff; border:0 }
@@ -415,7 +415,7 @@
 .sf-foot-grid { display:grid; grid-template-columns:1.5fr 1fr 1fr 1fr; gap:30px; padding-bottom:32px;
   border-bottom:1px solid rgba(255,255,255,.12) }
 .sf-foot-brand { display:flex; align-items:center; gap:12px; min-width:0 }
-.sf-foot-logo { width:46px; height:46px; border-radius:13px; object-fit:cover; flex:none; background:#fff }
+.sf-foot-logo { width:100px; height:100px; border-radius:13px; object-fit:contain; flex:none; background:#fff }
 .sf-foot-mono { display:grid; place-items:center; font-family:var(--font-mono); font-weight:800;
   font-size:.95rem; color:#fff }
 .sf-foot-brand b { display:block; font-size:1rem; font-family:var(--font-display); letter-spacing:-.01em }

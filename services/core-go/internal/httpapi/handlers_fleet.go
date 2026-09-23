@@ -330,12 +330,25 @@ func (s *Server) handleCloseTrip(c *gin.Context) {
 			return
 		}
 	}
-	if err := dbx.CloseTrip(c.Request.Context(), s.Pool, ctxFromGin(c), c.Param("id"), req.Note, req.EndStatus); err != nil {
+	unclaimed, err := dbx.CloseTrip(c.Request.Context(), s.Pool, ctxFromGin(c), c.Param("id"), req.Note, req.EndStatus)
+	if err != nil {
 		writeFleetError(c, err)
 		return
 	}
-	s.recordFleetAudit(c, "fleet.trip.closed", "trip", c.Param("id"), map[string]interface{}{"endStatus": req.EndStatus})
-	c.JSON(http.StatusOK, gin.H{"ok": true})
+	s.recordFleetAudit(c, "fleet.trip.closed", "trip", c.Param("id"), map[string]interface{}{
+		"endStatus": req.EndStatus,
+		// Audited because uncollected luggage is the kind of fact a
+		// dispute three weeks later turns on, and the close-out screen
+		// showing it is not a record of anything.
+		"unclaimedLuggage": len(unclaimed),
+	})
+	// unclaimedLuggage is always an array, never null, so the close-out
+	// screen can render a list without a nil check on a path it reaches
+	// at the end of every single shift.
+	if unclaimed == nil {
+		unclaimed = []*dbx.LuggageTag{}
+	}
+	c.JSON(http.StatusOK, gin.H{"ok": true, "unclaimedLuggage": unclaimed})
 }
 
 // ── pings ────────────────────────────────────────────────────────

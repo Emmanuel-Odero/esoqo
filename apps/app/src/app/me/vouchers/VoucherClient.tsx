@@ -40,7 +40,7 @@ export function VoucherClient({ initial }: { initial: Voucher[] }) {
         <div className="fld"><label className="lab">Amount KES</label>
           <input className="inp" value={amount} onChange={(e) => setAmount(e.target.value)} placeholder="200" /></div>
         <div className="fld"><label className="lab">Gift to (optional phone)</label>
-          <input className="inp" value={recipient} onChange={(e) => setRecipient(e.target.value)} placeholder="+254…" /></div>
+          <input className="inp" value={recipient} onChange={(e) => setRecipient(e.target.value)} placeholder="07XX XXX XXX" /></div>
         <div className="fld"><label className="lab">Load with</label>
           <select className="inp" value={method} onChange={(e) => setMethod(e.target.value)}>
             <option value="MPESA_STK">M-Pesa</option><option value="LOYALTY">Loyalty points</option>

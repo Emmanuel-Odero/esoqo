@@ -3,15 +3,12 @@ import { redirect } from "next/navigation";
 import {
   ParcelOrgUnauthorised,
   getParcelOrgMe,
-  parcelOrgFetch,
-  type OrgParcelRow,
 } from "@/lib/parcel-org-session";
-import {
-  listOrgCounterPricing,
-  listOrgLabelBatches,
-  listOrgLabels,
-} from "../actions";
+import { listOrgCounterPricing } from "../actions";
+import { CustomParcelPanel } from "../CustomParcelPanel";
 import { OrgCounterClient } from "./OrgCounterClient";
+import { listCounterTicketQueue } from "../counter-queue/actions";
+import { CounterQueueClient } from "../counter-queue/CounterQueueClient";
 
 export const dynamic = "force-dynamic";
 export const metadata: Metadata = {
@@ -20,46 +17,30 @@ export const metadata: Metadata = {
 };
 
 /**
- * The company's own counter: taking a parcel in over its desk.
+ * The company's own counter: selling a parcel's carriage over its desk.
  *
- * One screen, both jobs — how it used to be split is why the two pages
- * ever existed separately, and why the two scan boxes (PKG- label vs
- * TCK- ticket) ever sat apart. A single scan bar sits on top and routes
- * every code by what it is: ticket → custody at the desk, label →
- * booking form below. See ScanEverythingBar's own comment for the
- * routing, FrontDeskClient's for the desk, and OrgCounterClient for
- * how the desk and the booking form are wired behind the one box.
+ * One job, stated as a sentence the page can finish — this is where you
+ * BOOK. Quote it, take the sender's and receiver's details, measure it,
+ * print its sticker.
  *
- * `?code=` lands here pre-loaded — the labels register's "Book" button
+ * `?code=` lands here pre-loaded — the label register's "Book" button
  * sends it over, so a sticker on a box the handler already wrote on is
  * one gesture away from a booking.
  *
- * Both halves stay capability-gated, the same way the two pages each
- * were: the booking form needs parcelorg.dispatch (a rider has no
- * business minting bookings), the front-desk worklist parcelorg.carry
- * (the person waiting on a self-drop-off). A carry-only session — a
- * rider standing at the desk — gets the scanner and worklist without
- * the booking form. core-go refuses the underlying calls
- * independently, so a hand-typed URL gets nothing either.
+ * Three jobs that used to share this page have gone elsewhere: receiving
+ * a drop-off to the Scanner, vehicle runs to Dispatch, and label stock
+ * to Settings. See OrgCounterClient for why each. That also means this
+ * page no longer opens for a carry-only session: a rider has no business
+ * minting bookings, and there is nothing else here for them. core-go
+ * refuses the underlying calls independently (see ADR-0003), so a
+ * hand-typed URL gets nothing either.
  */
 export default async function ParcelOrgCounterPage({
   searchParams,
 }: {
-  searchParams: Promise<{ code?: string; tab?: string; state?: string }>;
+  searchParams: Promise<{ code?: string }>;
 }) {
-  const { code, tab, state } = await searchParams;
-  const initialTab = code
-    ? "book"
-    : tab === "labels"
-      ? "labels"
-      : tab === "book"
-        ? "book"
-        : "receive";
-  const labelState = ["all", "blank", "filled", "spent", "voided"].includes(
-    state ?? "",
-  )
-    ? state!
-    : "blank";
+  const { code } = await searchParams;
 
   let me: Awaited<ReturnType<typeof getParcelOrgMe>>;
   try {
@@ -73,19 +54,16 @@ export default async function ParcelOrgCounterPage({
   }
 
   const canDispatch = me.capabilities.includes("parcelorg.dispatch");
-  const canCarry = me.capabilities.includes("parcelorg.carry");
-  if (!canDispatch && !canCarry) redirect("/parcel-org");
+  const canWrite = me.capabilities.includes("parcelorg.write");
+  // parcelorg.intake — INTAKE_CLERK's own bundle (see
+  // authsvc.ParcelStaffCapabilities) — reaches this page too: serving
+  // the walk-in queue and booking the parcel that follows IS the
+  // intake job, same as dispatch desk staff minting a booking directly.
+  const canIntake = me.capabilities.includes("parcelorg.intake");
+  if (!canDispatch && !canIntake) redirect("/parcel-org");
 
-  const [pricing, waiting, labelRegister, labelBatches] = await Promise.all([
-    canDispatch ? listOrgCounterPricing(me.org.id) : Promise.resolve([]),
-    canCarry
-      ? parcelOrgFetch<{ parcels: OrgParcelRow[] | null }>(
-          "/v1/parcel-orgs/me/parcels?status=BOOKED&originMethod=SELF_DROPOFF",
-        ).then((r) => r.parcels ?? [])
-      : Promise.resolve([]),
-    listOrgLabels(labelState),
-    listOrgLabelBatches(),
-  ]);
+  const pricing = await listOrgCounterPricing(me.org.id);
+  const queue = canIntake ? await listCounterTicketQueue() : null;
   const divisor = Number(process.env.PARCEL_VOLUMETRIC_DIVISOR) || 5000;
 
   return (
@@ -95,26 +73,32 @@ export default async function ParcelOrgCounterPage({
           <p className="kicker">{me.org.name}</p>
           <h1>Counter</h1>
           <p>
-            Scan a ticket, label, or parcel code to start. Receive a drop-off,
-            create a new booking, or manage label stock — one scanner routes
-            every code to the right tab below.
+            Book a parcel over the desk. A box already in someone&rsquo;s hands
+            belongs on the Scanner.
           </p>
         </div>
+        {/* Bulk/custom intake — booking by any other name, so its
+            trigger lives beside the booking desk's own actions. It used
+            to render inline on the page (and, earlier still, on the
+            parcels register); now it's a dialog, so choosing it doesn't
+            cost every counter session a second form to scroll past. */}
+        {canWrite && (
+          <div className="actions">
+            <CustomParcelPanel />
+          </div>
+        )}
       </div>
+      {queue?.ok && (
+        <div style={{ marginBottom: 20 }}>
+          <CounterQueueClient initial={queue.tickets} />
+        </div>
+      )}
       <OrgCounterClient
         initialCode={code}
-        initialTab={initialTab}
-        labelState={labelState}
         pricing={pricing}
         volumetricDivisor={divisor}
-        waiting={waiting}
         orgName={me.org.name}
         orgLogoUrl={me.org.logoUrl ?? undefined}
-        canDispatch={canDispatch}
-        canCarry={canCarry}
-        labels={labelRegister.labels}
-        labelCounts={labelRegister.counts}
-        labelBatches={labelBatches}
       />
     </>
   );

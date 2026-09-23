@@ -36,9 +36,9 @@ import type { CounterBookInput } from './ParcelCounterTypes';
  * differs (each portal's own booking action).
  */
 
-const DB_NAME = 'esoqo-counter';
-const STORE = 'pending-bookings';
-const DB_VERSION = 1;
+import { offlineSupported, STORE_BOOKINGS, tx as dbTx } from './offlineDb';
+
+export { offlineSupported };
 
 export interface QueuedBooking<T extends { existingCode?: string } = CounterBookInput> {
   /** The pre-printed code. Also the primary key, which is what makes
@@ -51,36 +51,10 @@ export interface QueuedBooking<T extends { existingCode?: string } = CounterBook
   lastError?: string;
 }
 
-function openDb(): Promise<IDBDatabase> {
-  return new Promise((resolve, reject) => {
-    const req = indexedDB.open(DB_NAME, DB_VERSION);
-    req.onupgradeneeded = () => {
-      const db = req.result;
-      if (!db.objectStoreNames.contains(STORE)) {
-        db.createObjectStore(STORE, { keyPath: 'code' });
-      }
-    };
-    req.onsuccess = () => resolve(req.result);
-    req.onerror = () => reject(req.error);
-  });
-}
-
+/** The database and its version live in ./offlineDb — see that file on
+ *  why two modules must not each open it with their own version. */
 function tx<T>(mode: IDBTransactionMode, run: (store: IDBObjectStore) => IDBRequest<T>): Promise<T> {
-  return openDb().then((db) => new Promise<T>((resolve, reject) => {
-    const t = db.transaction(STORE, mode);
-    const req = run(t.objectStore(STORE));
-    req.onsuccess = () => resolve(req.result);
-    req.onerror = () => reject(req.error);
-    t.oncomplete = () => db.close();
-  }));
-}
-
-/** Whether this browser can queue at all. Private-mode Safari and some
- *  locked-down installs have no IndexedDB, and a counter that silently
- *  believed it was queueing would be worse than one that admits it
- *  cannot. */
-export function offlineSupported(): boolean {
-  return typeof indexedDB !== 'undefined';
+  return dbTx(STORE_BOOKINGS, mode, run);
 }
 
 export async function queueBooking<T extends { existingCode?: string }>(input: T): Promise<void> {
@@ -143,7 +117,7 @@ export interface FlushResult {
  * can clear) is worse at a counter.
  */
 export async function flushQueue<T extends { existingCode?: string }>(
-  submit: (input: T) => Promise<{ ok: true; code: string } | { ok: false; error: string }>,
+  submit: (input: T) => Promise<{ ok: true; code: string } | { ok: false; error: string; errorCode?: string }>,
 ): Promise<FlushResult> {
   const result: FlushResult = { synced: [], stuck: [] };
   if (!offlineSupported()) return result;
@@ -162,7 +136,7 @@ export async function flushQueue<T extends { existingCode?: string }>(
       result.synced.push(entry.code);
       continue;
     }
-    if (alreadySpent(res.error)) {
+    if (alreadySpent(res)) {
       await remove(entry.code);
       result.synced.push(entry.code);
       continue;
@@ -175,9 +149,32 @@ export async function flushQueue<T extends { existingCode?: string }>(
   return result;
 }
 
-/** Matched on core-go's own wording for a spent code. Brittle by
- *  nature; kept to one place so it is one line to fix, and the failure
- *  mode of a miss is a visible stuck item rather than a lost parcel. */
-function alreadySpent(error: string): boolean {
-  return /unused pre-printed label/i.test(error);
+/** core-go's error code for "that label is no longer an unused
+ *  pre-printed label" — returned by both booking paths' stock lookup
+ *  (dbx.BookParcel's ExistingCode branch and dbx.importOrgParcelWithLabel)
+ *  and mapped to 409, not 400, precisely because of this caller. */
+export const LABEL_ALREADY_SPENT = 'LABEL_ALREADY_SPENT';
+
+/**
+ * Did this rejection mean the label was already spent — i.e. our own
+ * earlier attempt reached the server and we never saw the reply?
+ *
+ * Decided on the error *code*, which is a contract core-go states
+ * deliberately and has a test pinning (internal/httpapi/
+ * parcel_error_status_test.go). This used to match the error *sentence*
+ * with `/unused pre-printed label/i`, which worked but was one
+ * copy-edit away from silently failing — and the two server paths
+ * worded it differently ("…pre-printed label" vs "…pre-printed
+ * labels"), so one of them matched only because the other's wording
+ * happened to be a substring.
+ *
+ * The prose fallback stays for one narrow reason: a counter's browser
+ * tab can outlive a deploy, so a client built before the code existed
+ * may still be flushing a queue against a server that now sends it, or
+ * the reverse. Dropping the regex would turn that window into stranded
+ * parcels. It can go once no pre-code client is plausibly still open.
+ */
+export function alreadySpent(res: { error: string; errorCode?: string }): boolean {
+  if (res.errorCode) return res.errorCode === LABEL_ALREADY_SPENT;
+  return /unused pre-printed label/i.test(res.error);
 }

@@ -42,12 +42,26 @@ const (
 	// deliberately distinct from PKG so the two can never be confused
 	// side by side on a printed slip or a counter screen.
 	PrefixServiceTicket Prefix = "TCK"
+	// PrefixLuggage — a passenger's bag tag. Minted checksummed (see
+	// LuggageCodeLen): a luggage code is read aloud off a paper stub and
+	// typed by hand far more often than a parcel code is, because the
+	// person asking for it is standing at a counter looking at it in bad
+	// light. The checksum turns a fat-fingered character into an
+	// immediate "not a code" instead of a lookup that quietly misses.
+	PrefixLuggage Prefix = "LUG"
 )
+
+// LuggageCodeLen — random characters in a LUG- code, before the
+// checksum character ShortCodeChecked appends. 31^6 ≈ 887M, the same
+// space TRIP-/VCH- draw from, which is many orders of magnitude more
+// than a national bus fleet's bags will ever occupy — and every mint
+// retries on unique-violation anyway.
+const LuggageCodeLen = 6
 
 // ValidPrefix reports whether p is a registered code prefix.
 func ValidPrefix(p Prefix) bool {
 	switch p {
-	case PrefixTrip, PrefixBus, PrefixVoucher, PrefixTicket, PrefixPickup, PrefixPaymentID, PrefixParcel, PrefixServiceTicket:
+	case PrefixTrip, PrefixBus, PrefixVoucher, PrefixTicket, PrefixPickup, PrefixPaymentID, PrefixParcel, PrefixServiceTicket, PrefixLuggage:
 		return true
 	}
 	return false

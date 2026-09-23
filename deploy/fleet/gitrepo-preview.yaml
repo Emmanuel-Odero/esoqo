@@ -1,0 +1,44 @@
+# ════════════════════════════════════════════════════════════════════
+#  Fleet GitRepo — preview.
+#
+#  Apply this ONCE, into the `fleet-default` namespace of the Rancher
+#  LOCAL cluster (the one running Rancher itself), not into the
+#  downstream cluster where the workloads land. Fleet's controller lives
+#  upstream and pushes down.
+#
+#      kubectl apply -f deploy/fleet/gitrepo-preview.yaml
+#
+#  After this, deployment is entirely git-driven: a commit to
+#  preview that changes deploy/k8s/** is a deploy. Nothing else
+#  should ever `kubectl apply` into esoqo-preview — if it does, Fleet
+#  will revert it on the next poll, which is the point.
+# ════════════════════════════════════════════════════════════════════
+apiVersion: fleet.cattle.io/v1alpha1
+kind: GitRepo
+metadata:
+  name: esoqo-preview
+  namespace: fleet-default
+spec:
+  repo: https://github.com/Emmanuel-Odero/esoko-254
+  branch: preview
+  paths:
+    - deploy/k8s/overlays/preview
+
+  # The repo is private, so Fleet needs credentials. Create the secret
+  # first — see docs/deployment/README.md § "Bootstrapping Fleet".
+  clientSecretName: esoqo-git-credentials
+
+  pollingInterval: 60s
+
+  # Which downstream cluster(s) this lands on. Label the target cluster
+  # in Rancher with `env=preview` rather than naming it here, so
+  # replacing the cluster does not mean editing this file.
+  targets:
+    - name: preview
+      clusterSelector:
+        matchLabels:
+          env: preview
+
+  # Fleet will not just report drift, it will correct it.
+  correctDrift:
+    enabled: true

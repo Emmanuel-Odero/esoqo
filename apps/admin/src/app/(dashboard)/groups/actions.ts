@@ -41,7 +41,7 @@ export async function actionSearchPeople(orgPartyId: string, q: string) {
  * (`notice.notify === null`) is the documented normal case for a paper
  * roster — there is simply nobody to tell yet.
  */
-async function tellThemTheyWereAdded(notice: MemberAddedNotice) {
+export async function tellThemTheyWereAdded(notice: MemberAddedNotice) {
   if (!notice.notify) return;
   try {
     if (notice.notify.channel === 'sms') {

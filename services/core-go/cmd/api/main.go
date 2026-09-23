@@ -36,6 +36,15 @@ func main() {
 	}
 	defer pool.Close()
 
+	// A second, small pool for Postgres LISTEN — see
+	// config.Config.DirectDatabaseURL's own comment on why this can't
+	// just reuse pool above.
+	notifyPool, err := dbx.NewPool(ctx, cfg.DirectDatabaseURL)
+	if err != nil {
+		log.Fatalf("core-go: could not open a direct postgres connection: %v", err)
+	}
+	defer notifyPool.Close()
+
 	rdb, err := redisclient.New(cfg.RedisURL)
 	if err != nil {
 		log.Fatalf("core-go: could not connect to redis: %v", err)
@@ -52,7 +61,7 @@ func main() {
 	// misconfigured deploy from texting people a broken URL.
 	notify.SetTrackingBaseURL(cfg.PublicTrackingBaseURL)
 
-	server := httpapi.NewServer(cfg, pool, rdb)
+	server := httpapi.NewServer(cfg, pool, notifyPool, rdb)
 	httpServer := &http.Server{
 		Addr:              ":" + cfg.Port,
 		Handler:           server.Router(),

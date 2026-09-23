@@ -3,6 +3,8 @@ import Link from 'next/link';
 import { Logo } from '@esoqo/ui';
 import { getDisplayPrefs } from '@esoqo/db';
 import { requireSubject } from '@/lib/session';
+import { listWorkspaces } from '@/lib/workspaces';
+import { WorkspaceSwitcher } from '@/components/WorkspaceSwitcher';
 import { PrefsApplier } from './PrefsApplier';
 import { ShellNav, type NavItem } from './ShellNav';
 import './me.css';
@@ -26,20 +28,27 @@ const MORE: NavItem[] = [
 
 export default async function MeLayout({ children }: { children: React.ReactNode }) {
   const ctx = await requireSubject();
-  const prefs = await getDisplayPrefs(ctx);
+  const [prefs, workspaces] = await Promise.all([getDisplayPrefs(ctx), listWorkspaces()]);
 
   return (
     <div className="me">
       <PrefsApplier prefs={prefs} />
       <header className="appbar">
         <div className="appbar-in">
+          {/* Wordmark, then the workspace identity. The bar used to spell
+              "Esoqo / Your record" as static text; that second line is
+              now the switcher's own subtitle, so the same information
+              carries the way out to a company the person works for. */}
           <Link href="/me" className="appbrand" aria-label="Esoqo home">
             <Logo />
-            <span className="appbar-name">
-              Esoqo
-              <small>Your record</small>
-            </span>
           </Link>
+          <span className="appbar-div" aria-hidden="true" />
+          <WorkspaceSwitcher
+            workspaces={workspaces}
+            currentKey="personal"
+            fallbackName="Esoqo"
+            fallbackSubtitle="Your own record"
+          />
           <ShellNav items={PRIMARY} more={MORE} />
         </div>
       </header>

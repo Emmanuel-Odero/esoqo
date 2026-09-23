@@ -68,6 +68,10 @@ export interface FleetTrip {
   VehiclePlate: string;
   DriverName: string | null;
   ConductorName: string | null;
+  /** Which short route this run is on, when it is on one. Already on the
+   *  wire (dbx.Trip.ShortRouteID) — declared here because the luggage
+   *  desk needs it to know which drop-point chips to offer. */
+  ShortRouteID: string | null;
   Status: string;
   StartedAt: string;
   EndedAt: string | null;

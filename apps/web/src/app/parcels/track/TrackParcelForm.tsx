@@ -1,9 +1,8 @@
 'use client';
 import { useCallback, useState, useTransition } from 'react';
-import { Icon } from '@esoqo/ui';
+import { CameraScanner, Icon } from '@esoqo/ui';
 import { actionCheckParcelStatus, type AwaitingIntakeView, type ParcelStatusView } from '../actions';
 import { ParcelStatusPanel } from '../ParcelStatusPanel';
-import { ParcelScanner } from './ParcelScanner';
 import { StaffPanel } from './StaffPanel';
 
 // Status wording, the timeline and the result layout all live in
@@ -66,7 +65,7 @@ export function TrackParcelForm() {
       </div>
 
       <div style={{ marginTop: 10 }}>
-        <ParcelScanner onScan={handleScan} />
+        <CameraScanner onScan={handleScan} hint="Point your camera at the parcel's QR or barcode label." />
       </div>
 
       {error && (

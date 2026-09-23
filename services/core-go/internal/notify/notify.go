@@ -489,6 +489,61 @@ func ParcelAtAgent(code, agentName, locationHint, openingHours, deliveryCode str
 	return withTrack(msg, code)
 }
 
+// ── Receiver self-authentication ─────────────────────────────────────
+//
+// The four messages around a receiver failing to prove, from their own
+// phone, that they are the receiver (see dbx.VerifyReceiverCode).
+//
+// None of them carries a tracking link for the two locked states. The
+// link is useless to the person who is stuck — they have just come from
+// that page — and these two go to a dispatch desk and a sender, neither
+// of whom needs to be sent back to the guest tracking view to act.
+
+// ParcelReceiverAuthLocked goes to the carrying company's dispatch
+// desk, which is the only party that can do anything about it. Says
+// what happened and what the desk's options are, because a message
+// that only reports a problem generates a phone call to Esoqo.
+func ParcelReceiverAuthLocked(code string) string {
+	return fmt.Sprintf(
+		"ESOQO PARCEL: Parcel %s is locked - the receiver failed to verify 3 times. Allow 2 more tries or issue a new code in your console.",
+		code)
+}
+
+// ParcelReceiverAuthHardLocked goes to the SENDER, not the receiver.
+//
+// Deliberate, and the sharpest choice in this group: at a hard lock we
+// no longer believe whoever has been typing is the receiver. Texting
+// the receiver's number would either tell an impostor how far they got,
+// or tell a genuine receiver something they can do nothing about. The
+// sender holds the original code, knows who they sent it to, and is the
+// one person able to say "that is not them" or "ring them, it's 4821".
+func ParcelReceiverAuthHardLocked(code, receiverName string) string {
+	return fmt.Sprintf(
+		"ESOQO PARCEL: %s could not verify the delivery code for parcel %s. Please contact them. A new code must be issued by the courier.",
+		trunc(receiverName), code)
+}
+
+// ParcelDeliveryCodeReissued goes to the receiver with the replacement.
+// Says the old one is dead, because a receiver holding two codes will
+// otherwise try the first one they find and burn an attempt on it.
+func ParcelDeliveryCodeReissued(code, newDeliveryCode string) string {
+	return withTrack(fmt.Sprintf(
+		"ESOQO PARCEL: New delivery code for parcel %s is %s. Your previous code no longer works.",
+		code, newDeliveryCode), code)
+}
+
+// ParcelDeliveryCodeReissuedToSender gives the sender the same new code.
+//
+// Both parties, because relaying the code is what the sender has always
+// done here (ListMyParcels returns deliveryCode to the sender's own
+// list for exactly this reason) and because a reissue usually happens
+// precisely when the receiver's SMS is what failed in the first place.
+func ParcelDeliveryCodeReissuedToSender(code, newDeliveryCode, receiverName string) string {
+	return withTrack(fmt.Sprintf(
+		"ESOQO PARCEL: Parcel %s has a new delivery code: %s. Pass it to %s - their old code no longer works.",
+		code, newDeliveryCode, trunc(receiverName)), code)
+}
+
 // ParcelPickupReminder is sent only from the collection queue. The count is
 // included so repeated reminders remain auditable to the receiver and staff.
 func ParcelPickupReminder(code string, reminderCount int) string {
@@ -607,11 +662,16 @@ func ParcelDelivered(code, destinationLabel string, deliveredAt time.Time) strin
 		code, trunc(destinationLabel), deliveredAt.Format("15:04 on 2 Jan")), code)
 }
 
-// ParcelReceived — receiver's side of the same delivery event.
+// ParcelReceived — receiver's side of the same delivery event: the
+// final confirmation that this parcel reached them, specifically.
+// Carries the tracking link like every other courier message here (see
+// withTrack) — previously written but never called from a handler, so
+// a receiver's own successful collection went unacknowledged even
+// though the sender got ParcelDelivered for the identical event.
 func ParcelReceived(code, senderName string, deliveredAt time.Time) string {
-	return fmt.Sprintf(
+	return withTrack(fmt.Sprintf(
 		"ESOQO PARCEL: You received parcel %s from %s at %s. Thanks for using Esoqo.",
-		code, trunc(senderName), deliveredAt.Format("15:04 on 2 Jan"))
+		code, trunc(senderName), deliveredAt.Format("15:04 on 2 Jan")), code)
 }
 
 // ParcelCancelled — sent to the sender when an admin cancels a draft

@@ -42,7 +42,7 @@ export function SetPinForm() {
       <>
         <div className="fld">
           <label className="lab" htmlFor="msisdn"><Icon name="phone" size={15} />Phone number</label>
-          <input className="inp mono" id="msisdn" value={msisdn} onChange={(e) => setMsisdn(e.target.value)} inputMode="tel" />
+          <input className="inp mono" id="msisdn" value={msisdn} onChange={(e) => setMsisdn(e.target.value)} inputMode="tel" placeholder="07XX XXX XXX" />
           <p className="hint">The number your Esoqo account is registered under.</p>
         </div>
         {error && <div className="note n-red" style={{ marginBottom: 16 }}><div><p>{error}</p></div></div>}

@@ -1,0 +1,55 @@
+# ════════════════════════════════════════════════════════════════════
+#  cert-manager ClusterIssuers.
+#
+#  Cluster-scoped, applied once by hand — NOT via Fleet. They are shared
+#  by both environments, so putting them in either overlay would make
+#  one environment's bundle own the other's certificates.
+#
+#      kubectl apply -f deploy/cluster/cluster-issuer.yaml
+#
+#  Prerequisite: cert-manager itself must be installed on the cluster.
+#  In Rancher: Apps → Charts → cert-manager (enable the CRDs option).
+#
+#  ⚠  Use letsencrypt-staging while DNS is still settling. Let's Encrypt
+#  rate-limits production issuance to 5 failures per account/hostname
+#  per hour, and a wrong A record burns through that fast — then the
+#  real certificate cannot be issued for an hour no matter what you fix.
+#  Staging has effectively no limit; its certs are untrusted by browsers,
+#  which is exactly what you want while proving the plumbing works.
+# ════════════════════════════════════════════════════════════════════
+apiVersion: cert-manager.io/v1
+kind: ClusterIssuer
+metadata:
+  name: letsencrypt-staging
+spec:
+  acme:
+    server: https://acme-staging-v02.api.letsencrypt.org/directory
+    email: emmanuelodero808@gmail.com
+    privateKeySecretRef:
+      name: letsencrypt-staging-account-key
+    solvers:
+      - http01:
+          ingress:
+            ingressClassName: nginx
+---
+apiVersion: cert-manager.io/v1
+kind: ClusterIssuer
+metadata:
+  name: letsencrypt-prod
+spec:
+  acme:
+    server: https://acme-v02.api.letsencrypt.org/directory
+    # Expiry warnings go here. A dead address means the first warning
+    # anyone sees is the outage.
+    email: emmanuelodero808@gmail.com
+    privateKeySecretRef:
+      name: letsencrypt-prod-account-key
+    solvers:
+      # HTTP-01, not DNS-01: it needs no registrar API credentials, and
+      # the domain is at Namecheap, for which cert-manager ships no
+      # solver. The tradeoff is that wildcard certificates are
+      # impossible — hence the explicit host lists in both overlays'
+      # ingress.yaml. See docs/deployment/README.md § "TLS and wildcards".
+      - http01:
+          ingress:
+            ingressClassName: nginx

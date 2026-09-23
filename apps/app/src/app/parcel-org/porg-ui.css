@@ -1,0 +1,643 @@
+/* ══════════════════════════════════════════════════════════════
+   Courier portal — the shared component layer.
+
+   Dispatch, Money, Counter and Settings were each styled inline, at
+   the call site: 145 style={{…}} props between them, every panel
+   inventing its own padding, every input its own border. That is what
+   made those pages read as older than the register beside them — not
+   the colours, which were always the tokens, but the absence of any
+   agreed shape for a panel, a field, or a figure.
+
+   Everything here is built from tokens.css. No literal colours, no
+   magic radii. A page should be able to say WHAT something is
+   (.pfield, .pstat, .ppanel) and never how it is drawn.
+
+   Reads as one system with parcel-org.css, which keeps the shell and
+   the register; this file is the furniture inside them.
+   ══════════════════════════════════════════════════════════════ */
+
+/* ── panel: the standard surface ────────────────────────────────
+   A slightly larger radius and a two-stage shadow than .card, because
+   these carry whole workflows rather than a table. */
+.ppanel {
+  background: #fff;
+  border: 1px solid var(--line);
+  border-radius: var(--r-xl);
+  box-shadow: var(--sh-s);
+  min-width: 0;
+  overflow: hidden;
+}
+.ppanel + .ppanel { margin-top: var(--sp-4) }
+
+.ppanel-head {
+  display: flex; align-items: flex-start; gap: var(--sp-4); flex-wrap: wrap;
+  padding: var(--sp-5) var(--sp-6);
+  border-bottom: 1px solid var(--line);
+  background: linear-gradient(180deg, #fff, var(--paper));
+}
+.ppanel-head > div:first-child { flex: 1 1 260px; min-width: 0 }
+.ppanel-head h2, .ppanel-head h3 {
+  margin: 0; font-family: var(--font-display);
+  font-size: 1.02rem; font-weight: 700; letter-spacing: -.01em; color: var(--navy);
+}
+.ppanel-head p { margin: 4px 0 0; font-size: .86rem; color: var(--tx-2); max-width: 62ch }
+.ppanel-head-actions { display: flex; gap: var(--sp-2); flex-wrap: wrap; margin-left: auto }
+.ppanel-body { padding: var(--sp-6) }
+.ppanel-body > :first-child { margin-top: 0 }
+.ppanel-body > :last-child { margin-bottom: 0 }
+/* A body that is only a table gets no padding — the table draws its
+   own gutters and doubling them looks like a mistake. */
+.ppanel-body.is-flush { padding: 0 }
+
+/* ── section: a titled group inside a panel ───────────────────── */
+.psection { border: 0; margin: 0; padding: 0 }
+.psection + .psection { margin-top: var(--sp-6); padding-top: var(--sp-6); border-top: 1px solid var(--line) }
+.psection-title {
+  margin: 0 0 var(--sp-3); padding: 0;
+  font-family: var(--font-mono); font-size: .64rem; font-weight: 500;
+  letter-spacing: .12em; text-transform: uppercase; color: var(--tx-3);
+}
+
+/* ── fields ─────────────────────────────────────────────────────
+   One shape for every control in the portal. The old inline inputs
+   used 1.5px borders and 6px radii in some files and 1px/8px in
+   others, which is the kind of difference nobody can name but
+   everybody feels. */
+.pfield { display: grid; gap: 5px; min-width: 0 }
+.pfield > span, .pfield > label { font-size: .82rem; font-weight: 600; color: var(--tx-2) }
+.pfield em, .pfield .phint {
+  font-style: normal; font-size: .76rem; color: var(--tx-3); line-height: 1.45;
+}
+
+.pinput, .pfield input:not([type='checkbox']):not([type='radio']), .pfield select, .pfield textarea {
+  width: 100%; min-width: 0; box-sizing: border-box;
+  padding: 10px 12px;
+  border: 1px solid var(--line); border-radius: var(--r-sm);
+  background: #fff; color: var(--tx);
+  font: inherit; font-size: .92rem;
+  transition: border-color var(--dur-fast), box-shadow var(--dur-fast);
+  /* iOS zooms the page when a focused control is under 16px. 0.92rem
+     is under it on most roots, so hold the phone size at 16px. */
+}
+.pinput:hover, .pfield input:hover, .pfield select:hover { border-color: var(--blue-2) }
+.pinput:focus, .pfield input:focus, .pfield select:focus, .pfield textarea:focus {
+  outline: 0; border-color: var(--green-2);
+  box-shadow: 0 0 0 3px rgba(31, 161, 99, .18);
+}
+.pinput:disabled, .pfield input:disabled, .pfield select:disabled {
+  background: var(--paper); color: var(--tx-3); cursor: not-allowed;
+}
+.pfield select { appearance: none; padding-right: 34px;
+  background-image: linear-gradient(45deg, transparent 50%, var(--tx-2) 50%),
+                    linear-gradient(135deg, var(--tx-2) 50%, transparent 50%);
+  background-position: calc(100% - 17px) 55%, calc(100% - 12px) 55%;
+  background-size: 5px 5px, 5px 5px; background-repeat: no-repeat;
+}
+.pfield-check { display: flex; align-items: flex-start; gap: var(--sp-3) }
+.pfield-check input { width: 18px; height: 18px; flex: none; margin-top: 2px; accent-color: var(--green-2) }
+.pfield-check span { font-size: .88rem; color: var(--tx); font-weight: 500 }
+
+/* ── grid: the one responsive form layout ───────────────────────
+   auto-fit + minmax, so a form reflows by available width rather
+   than by a breakpoint somebody has to remember to update. */
+.pgrid { display: grid; gap: var(--sp-4); grid-template-columns: repeat(auto-fit, minmax(210px, 1fr)) }
+.pgrid-2 { grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)) }
+.pgrid-wide { grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)) }
+.pgrid-end { align-items: end }
+.pgrid-full { grid-column: 1 / -1 }
+
+/* ── stats: a figure that means something ───────────────────────
+   Money's whole purpose is a number a manager trusts, so the number
+   is the loudest thing on it and the label explains rather than
+   decorates. */
+.pstats { display: grid; gap: var(--sp-3); grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)) }
+.pstat {
+  padding: var(--sp-5); border: 1px solid var(--line); border-radius: var(--r-lg);
+  background: #fff; min-width: 0;
+}
+.pstat-k {
+  display: block; font-family: var(--font-mono); font-size: .6rem; font-weight: 500;
+  letter-spacing: .14em; text-transform: uppercase; color: var(--tx-3);
+}
+.pstat-v {
+  display: block; margin-top: 6px; font-family: var(--font-display); font-weight: 800;
+  font-size: clamp(1.4rem, 3.4vw, 1.85rem); line-height: 1.08; letter-spacing: -.03em;
+  color: var(--navy); overflow-wrap: anywhere;
+}
+.pstat-h { display: block; margin-top: 5px; font-size: .79rem; color: var(--tx-2) }
+/* The one figure the page exists for. */
+.pstat.is-lead { background: linear-gradient(150deg, #F4FBF7, #E4F1EA); border-color: #BFE0CE }
+.pstat.is-lead .pstat-k { color: var(--green) }
+
+/* ── toolbar ────────────────────────────────────────────────────── */
+.ptoolbar {
+  display: flex; align-items: center; gap: var(--sp-3); flex-wrap: wrap;
+  margin-bottom: var(--sp-4);
+}
+.ptoolbar-spacer { margin-left: auto }
+
+/* ── empty state ────────────────────────────────────────────────
+   Says what would be here and how to make it appear. An empty panel
+   that only says "nothing yet" makes the user wonder if it broke. */
+.pempty {
+  display: grid; justify-items: center; gap: var(--sp-2);
+  padding: var(--sp-8) var(--sp-5); text-align: center;
+  color: var(--tx-2); font-size: .9rem;
+}
+.pempty-icon {
+  width: 44px; height: 44px; display: grid; place-items: center;
+  border-radius: var(--r-pill); background: var(--paper); color: var(--tx-3);
+  margin-bottom: var(--sp-1);
+}
+.pempty strong { color: var(--navy); font-size: .96rem; font-weight: 700 }
+.pempty p { margin: 0; max-width: 46ch }
+
+/* ── inline feedback ────────────────────────────────────────────── */
+.pnote {
+  display: flex; align-items: flex-start; gap: var(--sp-2);
+  padding: 10px 13px; border-radius: var(--r-sm);
+  font-size: .86rem; line-height: 1.5;
+}
+.pnote svg { flex: none; margin-top: 2px }
+.pnote-ok { background: var(--green-t); border: 1px solid #BFE0CE; color: var(--green) }
+.pnote-warn { background: var(--amber-t); border: 1px solid #F0D3A8; color: var(--amber) }
+.pnote-bad { background: var(--red-t); border: 1px solid #F3D2CF; color: var(--red) }
+
+/* ── list rows: a repeated record that is not a table ───────────── */
+.plist { list-style: none; margin: 0; padding: 0; display: grid; gap: var(--sp-2) }
+.plist > li {
+  display: flex; align-items: center; gap: var(--sp-4); min-width: 0;
+  padding: 13px var(--sp-4);
+  border: 1px solid var(--line); border-radius: var(--r-lg); background: #fff;
+  transition: border-color var(--dur-fast), box-shadow var(--dur-fast);
+}
+.plist > li:hover { border-color: #C4D4E1; box-shadow: var(--sh-s) }
+.plist-main { flex: 1 1 auto; min-width: 0; display: grid; gap: 3px }
+.plist-title { font-weight: 700; color: var(--navy); display: flex; align-items: center; gap: var(--sp-2); flex-wrap: wrap }
+.plist-sub { font-size: .82rem; color: var(--tx-2); overflow-wrap: anywhere }
+.plist-actions { display: flex; gap: var(--sp-2); flex: none; flex-wrap: wrap }
+
+/* ── responsive ─────────────────────────────────────────────────
+   The component layer reflows by content width (auto-fit above), so
+   these breakpoints only handle what geometry alone cannot: chrome
+   padding, and rows that must become stacks to stay tappable. */
+@media (max-width: 720px) {
+  .ppanel { border-radius: var(--r-lg) }
+  .ppanel-head { padding: var(--sp-4) var(--sp-5) }
+  .ppanel-body { padding: var(--sp-5) }
+  .ppanel-head-actions { margin-left: 0; width: 100% }
+  .ppanel-head-actions .btn { flex: 1 1 auto; justify-content: center }
+}
+@media (max-width: 560px) {
+  /* A toolbar's trailing control stops trailing: pushed right on a
+     narrow screen it ends up alone on its own line, reading as though
+     it belongs to nothing. */
+  .ptoolbar-spacer { margin-left: 0 }
+  .ppanel-head { padding: var(--sp-4) }
+  .ppanel-body { padding: var(--sp-4) }
+  .pstat { padding: var(--sp-4) }
+  .pstats { grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: var(--sp-2) }
+  /* 16px prevents iOS zooming the whole page on focus. */
+  .pinput, .pfield input:not([type='checkbox']), .pfield select, .pfield textarea { font-size: 16px }
+  /* A row with actions becomes a stack: side-by-side leaves the label
+     truncated to nothing and the buttons under 44px. */
+  .plist > li { flex-wrap: wrap; gap: var(--sp-3) }
+  .plist-main { flex: 1 1 100% }
+  .plist-actions { width: 100% }
+  .plist-actions .btn { flex: 1 1 auto; justify-content: center; min-height: 40px }
+  .ptoolbar > .btn { flex: 1 1 auto; justify-content: center }
+  .ptoolbar > .pfield-check { flex: 1 1 100%; align-items: center }
+}
+
+/* ══════════════════════════════════════════════════════════════
+   Dispatch — the run board.
+   ══════════════════════════════════════════════════════════════ */
+
+/* A boxed section inside a form panel: grouped fields that belong
+   together (Vehicle, Journey, Crew) need a visible container, unlike
+   the bare .psection used where a rule is enough. */
+.psection.is-boxed {
+  padding: var(--sp-4) var(--sp-5);
+  border: 1px solid var(--line); border-radius: var(--r-lg);
+  background: var(--paper);
+}
+.psection.is-boxed + .psection.is-boxed { margin-top: var(--sp-4); padding-top: var(--sp-4); border-top: 1px solid var(--line) }
+.porg-run-form-body { display: grid; gap: var(--sp-4) }
+.porg-run-form-actions { margin: var(--sp-1) 0 0; align-items: center }
+.porg-run-form-actions .sub { font-size: .82rem }
+.porg-run-toggle span { font-size: .84rem; color: var(--tx-2); font-weight: 500 }
+
+/* Runs. A card per vehicle: the plate and its state read first, the
+   leg second, the load and its paperwork on the right where the eye
+   lands after the status pill. */
+.porg-runs-grid { display: grid; gap: var(--sp-3); margin-top: var(--sp-4) }
+.porg-run {
+  padding: var(--sp-5);
+  border: 1px solid var(--line); border-radius: var(--r-xl); background: #fff;
+  box-shadow: var(--sh-s); min-width: 0;
+  transition: border-color var(--dur-fast), box-shadow var(--dur-fast);
+}
+.porg-run:hover { border-color: #C4D4E1; box-shadow: var(--sh-m) }
+.porg-run.is-selected { border-color: var(--blue-2); box-shadow: 0 0 0 3px rgba(15, 92, 158, .12) }
+/* A hairline of state down the leading edge: scanning a column of runs
+   for the one that is still loading should not need the pill read. */
+.porg-run { border-left: 3px solid var(--line) }
+.porg-run[data-status='LOADING'] { border-left-color: var(--amber-light) }
+.porg-run[data-status='DEPARTED'] { border-left-color: var(--green-2) }
+.porg-run[data-status='ARRIVED'] { border-left-color: var(--blue-2) }
+.porg-run[data-status='CANCELLED'] { border-left-color: var(--line) }
+
+.porg-run-top { display: flex; gap: var(--sp-4); align-items: flex-start; flex-wrap: wrap }
+.porg-run-main { flex: 1 1 260px; min-width: 0 }
+.porg-run-plate { display: flex; align-items: center; gap: var(--sp-2); flex-wrap: wrap }
+.porg-run-plate .mono { font-size: 1.1rem; font-weight: 800; letter-spacing: -.01em; color: var(--navy) }
+.porg-run-leg {
+  display: flex; align-items: center; gap: var(--sp-2); flex-wrap: wrap;
+  margin: var(--sp-2) 0 0; font-size: .92rem; font-weight: 600; color: var(--tx);
+}
+.porg-run-leg svg { color: var(--tx-3); flex: none }
+.porg-run-meta { margin: 4px 0 0; font-size: .82rem; color: var(--tx-2) }
+
+.porg-run-side { display: flex; align-items: center; gap: var(--sp-3); flex: none; flex-wrap: wrap }
+/* The number the merge exists to make answerable, so it is a figure
+   rather than another pill in the row. */
+.porg-run-load {
+  display: inline-flex; align-items: baseline; gap: 6px;
+  padding: 8px 13px; border-radius: var(--r-md);
+  background: var(--blue-t); color: var(--blue); font-size: .78rem; font-weight: 600;
+}
+.porg-run-load b { font-size: 1.15rem; font-weight: 800; line-height: 1 }
+.porg-run-btns { display: flex; gap: var(--sp-2); flex-wrap: wrap }
+
+@media (max-width: 640px) {
+  .porg-run { padding: var(--sp-4) }
+  .porg-run-side { width: 100%; justify-content: space-between }
+  .porg-run-btns { flex: 1 1 auto; justify-content: flex-end }
+  .porg-run-btns .btn { flex: 1 1 auto; justify-content: center; min-height: 40px }
+  .psection.is-boxed { padding: var(--sp-4) }
+}
+
+/* ── dispatch toolbar: search + status chips ────────────────────
+   The board's find control. One query drives the map, the inspector
+   and the cards together, so the three can never disagree. */
+.porg-dispatch-toolbar { align-items: center }
+.porg-search-wrap {
+  position: relative;
+  flex: 1 1 280px; max-width: 460px; min-width: 220px;
+}
+.porg-search {
+  display: flex; align-items: center; gap: 8px;
+  padding: 0 8px 0 12px;
+  border: 1.5px solid var(--line); border-radius: var(--r-md);
+  background: #fff; color: var(--tx-3);
+}
+.porg-search:focus-within { border-color: var(--green-2); box-shadow: 0 0 0 3px rgba(31, 161, 99, .18) }
+.porg-search-input {
+  flex: 1 1 auto; min-width: 0; border: 0; background: none;
+  padding: 11px 0; font: inherit; font-size: .92rem; color: var(--tx);
+}
+.porg-search-input:focus { outline: 0 }
+.porg-search-clear {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 30px; height: 30px; flex: none;
+  border: 0; border-radius: var(--r-pill); background: none;
+  color: var(--tx-3); cursor: pointer;
+}
+.porg-search-clear:hover { background: var(--paper); color: var(--tx) }
+/* The jump list under the search box: matching runs with their leg
+   and state, keyboard-walkable, one tap to inspect. */
+.porg-search-pop {
+  position: absolute; z-index: 120; top: calc(100% + 6px); left: 0; right: 0;
+  margin: 0; padding: 6px; list-style: none;
+  background: #fff; border: 1px solid var(--line); border-radius: var(--r-lg);
+  box-shadow: var(--sh-l); max-height: min(380px, 60dvh); overflow-y: auto;
+}
+.porg-search-pop > li { border-radius: var(--r-sm) }
+.porg-search-pop > li > button {
+  display: flex; align-items: center; gap: 10px; width: 100%;
+  padding: 9px 10px; border: 0; background: none; cursor: pointer;
+  font: inherit; text-align: left; border-radius: var(--r-sm); color: var(--tx);
+}
+.porg-search-pop > li.is-active > button { background: var(--paper) }
+.porg-search-pop .mono { font-weight: 800; color: var(--navy); flex: none }
+.porg-search-leg {
+  flex: 1 1 auto; min-width: 0; overflow: hidden;
+  text-overflow: ellipsis; white-space: nowrap;
+  font-size: .82rem; color: var(--tx-2);
+}
+.porg-search-none { padding: 12px; font-size: .86rem; color: var(--tx-2) }
+.porg-search-more { padding: 8px 10px; font-size: .78rem; color: var(--tx-3) }
+.porg-status-chips { display: flex; gap: 6px; flex-wrap: wrap }
+.porg-chip {
+  padding: 8px 13px; min-height: 38px;
+  border: 1px solid var(--line); border-radius: var(--r-pill);
+  background: #fff; color: var(--tx-2);
+  font: inherit; font-size: .82rem; font-weight: 600; cursor: pointer;
+}
+.porg-chip:hover { border-color: var(--blue-2); color: var(--navy) }
+.porg-chip.is-on { background: var(--navy); border-color: var(--navy); color: #fff }
+.porg-search-count { margin: -8px 0 var(--sp-3); font-size: .85rem }
+/* scanner.css owns .linkbtn on the scan pages; the board needs the
+   same affordance without importing that whole layer. */
+.porg-search-count .linkbtn, .linkbtn {
+  display: inline-flex; align-items: center; gap: 6px;
+  border: 0; background: none; padding: 4px 0; min-height: 36px;
+  font-family: inherit; font-size: .86rem; font-weight: 600;
+  color: var(--blue); cursor: pointer;
+}
+.linkbtn:hover { text-decoration: underline }
+
+/* ── run modal: "Open a run" as a dialog ────────────────────────
+   Was an inline panel that shoved the board down the page and kept
+   its submit against the card edge. Now an overlay dialog: scrim +
+   sheet, bottom-docked on phones where the thumb is. */
+.porg-modal-scrim {
+  position: fixed; inset: 0; z-index: 300;
+  display: flex; align-items: flex-start; justify-content: center;
+  padding: 24px 16px;
+  overflow-y: auto;
+  background: rgba(10, 46, 77, .45);
+  backdrop-filter: blur(2px);
+  animation: porg-modal-fade var(--dur) var(--ease-out);
+}
+.porg-modal {
+  width: min(760px, 100%);
+  max-height: calc(100dvh - 48px);
+  display: flex; flex-direction: column;
+  background: #fff; border-radius: var(--r-xl); box-shadow: var(--sh-l);
+  animation: porg-modal-in var(--dur) var(--ease-out);
+}
+@keyframes porg-modal-fade { from { opacity: 0 } to { opacity: 1 } }
+@keyframes porg-modal-in { from { transform: translateY(16px); opacity: .6 } to { transform: none; opacity: 1 } }
+.porg-modal-bar {
+  display: flex; align-items: center; justify-content: space-between; gap: var(--sp-3);
+  padding: var(--sp-4) var(--sp-5);
+  padding-top: calc(var(--sp-4) + var(--safe-t));
+  border-bottom: 1px solid var(--line);
+}
+.porg-modal-bar strong { font-size: 1rem; color: var(--navy) }
+.porg-modal-body { overflow-y: auto; padding: var(--sp-5) var(--sp-6) var(--sp-6) }
+.porg-modal-body .ppanel { border: 0; box-shadow: none; border-radius: 0 }
+.porg-modal-body .ppanel-head { background: none; border-bottom: 0; padding: 0 0 var(--sp-2) }
+.porg-modal-body .ppanel-head h2 { display: none; }
+.porg-modal-body .ppanel-body { padding: 0 }
+@media (max-width: 560px) {
+  .porg-modal-scrim { align-items: flex-end; padding: 0 }
+  .porg-modal {
+    width: 100%; max-height: 94dvh;
+    border-radius: var(--r-xl) var(--r-xl) 0 0;
+    animation: pdrawer-up var(--dur) var(--ease-out);
+  }
+  .porg-modal-bar, .porg-modal-body { padding-left: var(--sp-4); padding-right: var(--sp-4) }
+  .porg-modal-body .btn-p { width: 100%; justify-content: center; min-height: 48px }
+  .porg-search-wrap { flex: 1 1 100%; max-width: none }
+  .porg-chip { flex: 1 1 auto; justify-content: center; min-height: 44px }
+}
+
+/* ── fleet map section ──────────────────────────────────────────
+   Header (title + live counts + layer toggles), the map card, the
+   legend, and the runs with no GPS yet. A loading run has no
+   position by definition — the list below the map is where it lives
+   until it sets off, so no run ever vanishes from this section. */
+.porg-map { margin-top: var(--sp-4) }
+.porg-map-head {
+  display: flex; align-items: flex-end; justify-content: space-between;
+  gap: var(--sp-3); flex-wrap: wrap; margin-bottom: var(--sp-3);
+}
+.porg-map-head h2 {
+  margin: 0; font-family: var(--font-display);
+  font-size: 1.02rem; font-weight: 700; letter-spacing: -.01em; color: var(--navy);
+}
+.porg-map-head .sub { margin: 4px 0 0; font-size: .85rem }
+.porg-map-toggles { display: flex; gap: var(--sp-3); flex-wrap: wrap; align-items: center }
+.porg-map-toggles .btn { min-height: 38px }
+.btn-o.is-on { border-color: var(--amber); color: var(--amber); }
+/* Second control row: layers + size live under the Hide/Lock row so
+   the two jobs never blur into one strip. */
+.porg-map-layers { margin-bottom: var(--sp-3); }
+.porg-map-card { padding: 0; overflow: hidden }
+.porg-map-card .leaflet-container { height: min(440px, 62dvh); width: 100%; z-index: 0 }
+/* Locked camera: no zoom buttons, default cursor. The gesture
+   handlers themselves are disabled in LockControl — this only
+   removes the chrome that would promise otherwise. */
+.porg-map.is-locked .leaflet-control-zoom { display: none }
+.porg-map.is-locked .leaflet-container { cursor: default }
+.porg-map.is-locked .leaflet-grab { cursor: default }
+.porg-map-legend {
+  display: flex; gap: 14px; flex-wrap: wrap;
+  padding: 10px 14px; border-top: 1px solid var(--line);
+}
+.porg-map-legend > span { display: inline-flex; gap: 6px; align-items: center }
+.porg-legend-line { width: 22px; height: 4px; border-radius: 2px; display: inline-block }
+.porg-legend-dot {
+  width: 14px; height: 14px; border-radius: 50%;
+  background: #2E7D32; color: #fff; font-size: 9px; font-weight: 800;
+  display: inline-flex; align-items: center; justify-content: center; font-style: normal;
+  flex: none;
+}
+.porg-map-nogps { margin-top: var(--sp-3) }
+.porg-map-nogps > li.is-selected { border-color: var(--blue-2); box-shadow: 0 0 0 3px rgba(15, 92, 158, .12) }
+
+/* ── open-a-run pickers: roster first, typing last ───────────────
+   Crew and receivers are picked from the team they already belong
+   to — name, phone and roster link arrive with the tap. */
+.porg-crew-row {
+  padding: var(--sp-3) var(--sp-4);
+  border: 1px solid var(--line); border-radius: var(--r-lg);
+  background: #fff;
+}
+.porg-crew-head {
+  display: flex; align-items: center; gap: 8px; flex-wrap: wrap;
+  margin-bottom: 8px;
+}
+.porg-crew-head strong { color: var(--navy); font-size: .92rem }
+.porg-crew-grid {
+  display: grid; gap: 8px; align-items: end;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+}
+.porg-crew-remove { justify-self: start; }
+.porg-pick { margin-top: var(--sp-4); display: grid; gap: 8px }
+.porg-pick-list {
+  list-style: none; margin: 0; padding: 0; display: grid; gap: 6px;
+  max-height: 220px; overflow-y: auto;
+  border: 1px solid var(--line); border-radius: var(--r-lg);
+  padding: 8px; background: #fff;
+}
+.porg-pick-list > li {
+  display: flex; align-items: center; gap: var(--sp-3);
+  padding: 8px 10px; border-radius: var(--r-sm);
+}
+.porg-pick-list > li:hover { background: var(--paper) }
+.porg-pick-list .plist-main { flex: 1 1 auto; min-width: 0; display: grid; gap: 2px }
+.porg-pick-list .plist-title { font-weight: 700; color: var(--navy); font-size: .9rem }
+.porg-pick-list .plist-sub { font-size: .8rem; color: var(--tx-2) }
+.porg-pick-list .btn { flex: none }
+.porg-pick-empty { padding: 10px; }
+.porg-receiver-check {
+  display: flex; gap: 6px; align-items: center;
+  border: 1px solid var(--line); border-radius: 8px; padding: 6px 10px;
+}
+.porg-receiver-check:has(input:checked) { border-color: var(--green-2); background: var(--green-t, #F4FBF7) }
+
+/* ── loading availability notes on a run ────────────────────────
+   The sign on the door (the server is the lock): only LOADING runs
+   accept parcels, and setting off closes loading for good. */
+.porg-load-note { margin: 0 0 12px }
+.porg-load-note a { color: inherit; font-weight: 700 }
+.porg-load-locked { background: var(--paper); border: 1px solid var(--line); color: var(--tx-2) }
+
+/* ══════════════════════════════════════════════════════════════
+   Money, Rates — figures and ranges.
+   ══════════════════════════════════════════════════════════════ */
+.porg-money-stats { margin-bottom: var(--sp-5) }
+.porg-money-count { margin-bottom: var(--sp-4) }
+
+.porg-rates > li.is-editing { align-items: stretch }
+.porg-rates-edit { max-width: 420px; margin-top: var(--sp-3) }
+.porg-rate-range {
+  flex: none; padding: 7px 12px; border-radius: var(--r-md);
+  background: var(--paper); color: var(--navy);
+  font-size: .88rem; font-weight: 700; white-space: nowrap;
+}
+@media (max-width: 560px) {
+  /* The range is the row's point — keep it above the buttons rather
+     than letting it wrap into the action strip. */
+  .porg-rate-range { width: 100%; text-align: center }
+}
+
+/* ══════════════════════════════════════════════════════════════
+   Settings — team, stations, security.
+   ══════════════════════════════════════════════════════════════ */
+
+/* A row that has become a form stops being a row: the flex layout
+   would squeeze a whole staff form into the leftover space beside the
+   action buttons. */
+.plist > li.is-editing { display: block; padding: var(--sp-5); background: var(--paper) }
+.plist > li.is-editing:hover { box-shadow: none; border-color: var(--line) }
+
+.porg-team, .porg-stations, .porg-routes { display: grid; gap: var(--sp-4) }
+.porg-staff-form { display: grid; gap: var(--sp-4) }
+.porg-station-form { margin-bottom: var(--sp-2) }
+
+.plist-title a { color: var(--navy); text-decoration: none }
+.plist-title a:hover { text-decoration: underline }
+
+/* PIN fields are short and fixed-width by nature — a 4–6 digit box
+   stretched across a desktop panel looks broken. */
+.porg-pin-fields { display: grid; gap: var(--sp-4); max-width: 300px }
+.porg-pin-fields input { letter-spacing: .3em; font-size: 1.05rem }
+
+/* ══════════════════════════════════════════════════════════════
+   Counter — the custom-parcel dialog body.
+   ══════════════════════════════════════════════════════════════ */
+.porg-custom-body { display: grid; gap: var(--sp-4) }
+
+/* The shared CounterForm from @esoqo/ui brings its own layout; this
+   only gives it room to breathe under the page head. */
+.porg-counter-form { margin-bottom: var(--sp-5) }
+
+/* ══════════════════════════════════════════════════════════════
+   Parcel drawer — see it, then act on it.
+
+   A row's verb ("Assign", "Confirm") used to fire against a record the
+   operator could only partly see. This is the record, with the verbs
+   underneath it. See ParcelDrawer.tsx for why it is a drawer.
+   ══════════════════════════════════════════════════════════════ */
+.pdrawer-scrim {
+  position: fixed; inset: 0; z-index: 200;
+  display: flex; justify-content: flex-end;
+  background: rgba(10, 46, 77, .38);
+  backdrop-filter: blur(2px);
+  animation: pdrawer-fade var(--dur) var(--ease-out);
+}
+.pdrawer {
+  display: flex; flex-direction: column;
+  width: min(460px, 100%); max-height: 100%;
+  background: #fff; box-shadow: var(--sh-l);
+  animation: pdrawer-in var(--dur) var(--ease-out);
+}
+@keyframes pdrawer-fade { from { opacity: 0 } to { opacity: 1 } }
+@keyframes pdrawer-in { from { transform: translateX(24px); opacity: .6 } to { transform: none; opacity: 1 } }
+
+.pdrawer-head {
+  display: flex; align-items: flex-start; gap: var(--sp-3);
+  padding: var(--sp-5) var(--sp-5) var(--sp-4);
+  border-bottom: 1px solid var(--line);
+  padding-top: calc(var(--sp-5) + var(--safe-t));
+}
+.pdrawer-head > div:first-child { flex: 1; min-width: 0 }
+.pdrawer-head > .btn { flex: none }
+.pdrawer-code { display: block; font-size: 1.2rem; font-weight: 800; color: var(--navy); letter-spacing: -.01em }
+.pdrawer-pills { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 7px }
+
+/* The facts scroll; the head and the verbs do not, so the action a
+   clerk came for never scrolls out of reach on a long record. */
+/* align-content:start matters — the body flexes to fill the drawer, and
+   a grid with auto rows hands its spare height to the rows, which pushed
+   the three blocks apart into isolated islands on a tall screen. */
+.pdrawer-body {
+  flex: 1 1 auto; overflow-y: auto; padding: var(--sp-5);
+  display: grid; gap: var(--sp-5); align-content: start;
+}
+.pdrawer-block h3 {
+  margin: 0 0 var(--sp-3); font-family: var(--font-mono);
+  font-size: .62rem; font-weight: 500; letter-spacing: .12em;
+  text-transform: uppercase; color: var(--tx-3);
+}
+.pdrawer-dl { display: grid; gap: var(--sp-3); margin: 0 }
+.pdrawer-dl > div { display: grid; grid-template-columns: 116px minmax(0, 1fr); gap: var(--sp-3); align-items: baseline }
+.pdrawer-dl dt { font-size: .82rem; color: var(--tx-2) }
+.pdrawer-dl dd { margin: 0; font-size: .92rem; font-weight: 600; color: var(--tx); overflow-wrap: anywhere }
+.pdrawer-dl dd .sub {
+  display: block; font-weight: 400; font-size: .82rem;
+  /* The page's 1.62 body line-height is right for prose and much too
+     loose for a value stacked under its own label. */
+  line-height: 1.35; margin-top: 2px;
+}
+.pdrawer-late { color: var(--red) }
+
+/* The real sticker — see @esoqo/ui's ScaledLabel, which measures this
+   wrapper's own width and fits the label to it, so it never overflows
+   the drawer on a narrow phone. */
+.pdrawer-label { display: flex; justify-content: center; padding: 2px 0 6px }
+
+.pdrawer-foot {
+  flex: none; padding: var(--sp-4) var(--sp-5);
+  padding-bottom: calc(var(--sp-4) + var(--safe-b));
+  border-top: 1px solid var(--line); background: var(--paper);
+  display: grid; gap: var(--sp-3);
+}
+.pdrawer-foot .sub { margin: 0; font-size: .85rem }
+.pdrawer-foot .ptoolbar { margin: 0 }
+
+/* Several verbs side by side, wrapping rather than squeezing — the
+   receiver-lockout footer offers up to three, and a desk at 1024px
+   should not get three half-width buttons with clipped labels. The
+   narrow-screen rule below already stretches .pdrawer-foot .btn to
+   full width, which stacks these correctly on a phone. */
+.porg-verbs { display: flex; flex-wrap: wrap; gap: var(--sp-2) }
+
+/* A row that opens a record is a control, so it looks like one. */
+.pdrawer-open {
+  display: inline-flex; align-items: center; gap: 6px;
+  padding: 0; border: 0; background: none; cursor: pointer;
+  font: inherit; font-weight: 700; color: var(--navy); text-align: left;
+}
+.pdrawer-open:hover { text-decoration: underline }
+.pdrawer-open:focus-visible { outline: 3px solid rgba(31, 161, 99, .28); outline-offset: 3px; border-radius: var(--r-xs) }
+
+@media (max-width: 560px) {
+  /* A bottom sheet: a 460px side panel on a 390px phone is just a
+     page that arrived from the wrong direction, and the thumb is at
+     the bottom of the screen, not the right of it. */
+  .pdrawer-scrim { align-items: flex-end; justify-content: center }
+  .pdrawer {
+    width: 100%; max-height: 92dvh;
+    border-radius: var(--r-xl) var(--r-xl) 0 0;
+    animation: pdrawer-up var(--dur) var(--ease-out);
+  }
+  @keyframes pdrawer-up { from { transform: translateY(28px); opacity: .6 } to { transform: none; opacity: 1 } }
+  .pdrawer-head, .pdrawer-body, .pdrawer-foot { padding-left: var(--sp-4); padding-right: var(--sp-4) }
+  .pdrawer-dl > div { grid-template-columns: 100px minmax(0, 1fr) }
+  .pdrawer-foot .btn { width: 100%; justify-content: center; min-height: 44px }
+}

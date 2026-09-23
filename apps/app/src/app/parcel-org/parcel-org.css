@@ -26,43 +26,68 @@
   background:#fff; border-bottom:1px solid var(--line);
 }
 .porgbar-in {
-  max-width:1180px; margin:0 auto; min-height:62px;
+  max-width:1180px; margin:0 auto; min-height:64px;
   padding:calc(6px + var(--safe-t)) max(20px,var(--safe-r)) 6px max(20px,var(--safe-l));
-  display:flex; align-items:center; gap:16px; flex-wrap:wrap;
+  display:flex; align-items:center; gap:8px; flex-wrap:wrap;
 }
-.porgbrand { display:inline-flex; align-items:center; gap:10px; min-height:44px }
+/* Wordmark only. The company's name and "Courier company" now come
+   from the shared WorkspaceSwitcher beside it — the same control, in
+   the same slot, as /me and the organiser console, which is what makes
+   crossing between them feel like one product rather than three. */
+.porgbrand { display:inline-flex; align-items:center; min-height:44px; flex:none }
 .porgbrand .lock { font-size:21px }
-.porg-name {
-  font-family:var(--font-display); font-weight:700; font-size:1.02rem;
-  letter-spacing:-.01em; color:var(--navy); line-height:1.1;
-}
-.porg-name small { display:block; font-family:var(--font-mono); font-weight:600;
-  font-size:.58rem; letter-spacing:.14em; text-transform:uppercase; color:var(--tx-2); margin-top:1px }
+.porgbar-in .wsw { max-width:250px }
 
 /* A single horizontally-scrollable strip, never a wrapped block: six
    tabs on a 360px phone wrapped into three cramped rows before, and the
    active tab was never marked. Scrolling keeps one row and lets the
    thumb swipe; the scrollbar is hidden because the content is obviously
    cut off at the edge. */
+.porgnav-container {
+  position: relative; display: flex; align-items: center;
+  margin-left: 8px; flex: 1 1 auto; min-width: 0;
+  padding-right: 6px; /* Reserve space for scroll indicators on mobile */
+}
 .porgnav {
-  display:flex; align-items:center; gap:2px; margin-left:8px;
-  flex-wrap:nowrap; overflow-x:auto; scrollbar-width:none;
+  display:flex; align-items:center; gap:1px; 
+  flex-wrap:nowrap; overflow-x:auto; overflow-y:hidden; scrollbar-width:none;
   -webkit-overflow-scrolling:touch; scroll-behavior:smooth;
+  width: 100%; position: relative; mask-image: linear-gradient(to right, transparent 0%, black 12px, black 88%, transparent 100%);
+  -webkit-mask-image: linear-gradient(to right, transparent 0%, black 12px, black 88%, transparent 100%);
 }
 .porgnav::-webkit-scrollbar { display:none }
 .porgnav a, .porgnav button {
-  display:inline-flex; align-items:center; gap:7px; padding:0 13px;
-  font-size:.88rem; font-weight:600; color:var(--tx-2); border-radius:8px;
+  display:inline-flex; align-items:center; gap:6px; padding:0 12px;
+  font-size:.87rem; font-weight:600; color:var(--tx-2); border-radius:6px;
   white-space:nowrap; min-height:40px; border:0; background:none; cursor:pointer;
-  font-family:inherit; flex:0 0 auto;
+  font-family:inherit; flex:0 0 auto; transition:color var(--dur-fast), background var(--dur-fast);
 }
 .porgnav a:hover, .porgnav button:hover { background:var(--paper); color:var(--navy) }
-.porgnav a[aria-current="page"] { color:var(--navy); background:var(--green-t) }
+.porgnav a[aria-current="page"] { color:var(--navy); background:var(--green-t); font-weight:700 }
+.porgnav a:focus-visible, .porgnav button:focus-visible { outline:2px solid var(--green); outline-offset:-2px }
 .porgnav-badge {
-  font-family:var(--font-mono); font-size:.62rem; font-weight:600; line-height:1;
+  font-family:var(--font-mono); font-size:.6rem; font-weight:600; line-height:1;
   background:var(--amber-t); color:var(--amber); border-radius:999px;
-  padding:3px 6px; margin-left:2px;
+  padding:2px 5px; margin-left:2px;
 }
+
+/* Scroll indicators — transparent chevrons showing more content is available */
+.porgnav-scroll {
+  position: absolute; top: 50%; transform: translateY(-50%);
+  font-size: 18px; font-weight: 300; color: var(--green);
+  pointer-events: none; user-select: none; letter-spacing: 1px;
+  display: flex; align-items: center; justify-content: center;
+  width: 36px; height: 40px; opacity: 0.6;
+}
+.porgnav-scroll-left {
+  left: 0; background: linear-gradient(to right, rgba(255,255,255,0.95), rgba(255,255,255,0.3));
+  padding-right: 8px;
+}
+.porgnav-scroll-right {
+  right: 0; background: linear-gradient(to left, rgba(255,255,255,0.95), rgba(255,255,255,0.3));
+  padding-left: 8px;
+}
+.porgnav-scroll:hover { opacity: 1; color: var(--green) }
 
 /* Sign out sits outside the nav flow as its own bordered button — same
    trailing-action placement as /org/[orgId]'s header (.btn btn-o
@@ -82,70 +107,115 @@
 .head p { color:var(--tx-2); margin:6px 0 0; max-width:70ch }
 .head .actions { margin-left:auto; display:flex; gap:10px; flex-wrap:wrap }
 
-/* The dashboard puts the three high-frequency jobs before the report
-   data. Each is a full-row target: practical on a mounted tablet and
-   clear enough that a new desk worker need not hunt through navigation. */
-.courier-actions { display:grid; grid-template-columns:repeat(3,1fr); gap:12px; margin:0 0 22px }
-.courier-action { min-width:0; display:flex; align-items:center; gap:11px; padding:14px;
-  background:rgba(255,255,255,.88); border:1px solid var(--line); border-radius:var(--r-lg);
-  box-shadow:var(--sh-s); color:var(--tx); transition:transform var(--dur-fast),box-shadow var(--dur-fast),border-color var(--dur-fast) }
-.courier-action:hover { color:var(--tx); border-color:#9BCBB0; box-shadow:var(--sh-m); transform:translateY(-1px) }
-.courier-action:focus-visible { outline:3px solid rgba(31,161,99,.28); outline-offset:3px }
-.courier-action strong,.courier-action small { display:block }
-.courier-action strong { font-size:.9rem; margin-bottom:2px }
-.courier-action small { color:var(--tx-2); font-size:.76rem; line-height:1.35 }
-.courier-action-icon { width:38px; height:38px; flex:none; display:grid; place-items:center; border-radius:10px }
-.courier-action-icon.green { color:var(--green); background:var(--green-t) }
-.courier-action-icon.blue { color:var(--blue); background:var(--blue-t) }
-.courier-action-icon.amber { color:var(--amber); background:var(--amber-t) }
-.courier-action-arrow { flex:none; margin-left:auto; color:var(--tx-3) }
+/* ── dashboard hero ──────────────────────────────────────────────
+   The old .head put the company name, the page title and two buttons
+   on one bare row with nothing to sit on. This is the same content as
+   one object, with the day's money beside it for whoever is allowed
+   to see it — the one figure a manager opens this page for. Mirrors
+   /me's .me-hero so a person who works for a courier and keeps their
+   own record recognises the same shape in both. */
+.porg-hero {
+  display:flex; align-items:stretch; flex-wrap:wrap;
+  border:1px solid var(--line); border-radius:var(--r-xl); background:#fff;
+  box-shadow:var(--sh-s); overflow:hidden; margin:0 0 16px;
+}
+.porg-hero-copy { flex:1 1 340px; min-width:0; padding:24px 26px 22px }
+.porg-hero-copy .kicker { display:flex; align-items:center; gap:10px; flex-wrap:wrap }
+.porg-hero-state { text-transform:none; letter-spacing:0 }
+.porg-hero h1 {
+  font-size:clamp(1.55rem,3vw,2.05rem); line-height:1.06;
+  letter-spacing:-.032em; font-weight:700; margin:0;
+}
+.porg-hero p { color:var(--tx-2); margin:8px 0 0; max-width:62ch; font-size:.94rem }
+.porg-hero-actions { display:flex; gap:10px; flex-wrap:wrap; margin-top:18px }
 
-.dashboard-scanner { position:relative; overflow:hidden; padding:18px; margin-bottom:16px;
-  border-color:#BFE0CE; background:linear-gradient(120deg,#fff 55%,var(--green-t)) }
-.dashboard-scanner::after { content:''; position:absolute; width:130px; height:130px; border-radius:50%;
-  right:-52px; top:-65px; background:rgba(31,161,99,.08); pointer-events:none }
-.dashboard-scanner > * { position:relative; z-index:1 }
-.scan-title-icon { width:32px; height:32px; border-radius:9px; display:grid; place-items:center;
-  color:var(--green); background:var(--green-t) }
+.porg-today {
+  flex:0 1 240px; min-width:0; display:flex; flex-direction:column; justify-content:center;
+  padding:24px 26px; border-left:1px solid var(--line);
+  background:linear-gradient(150deg,#F4FBF7,#E9F4EE);
+}
+.porg-today-k { font-family:var(--font-mono); font-size:.6rem; letter-spacing:.14em;
+  text-transform:uppercase; color:var(--green); font-weight:600 }
+.porg-today-v { font-family:var(--font-display); font-weight:800; font-size:clamp(1.5rem,4vw,1.95rem);
+  letter-spacing:-.03em; color:var(--navy); line-height:1.1; margin-top:4px; overflow-wrap:anywhere }
+.porg-today-h { font-size:.79rem; color:var(--tx-2); margin-top:4px }
 
-/* Counter work is intentionally one task at a time. The scan box remains
-   fixed above this switch, while the chosen workspace gets the full page. */
-.task-switch { display:flex; gap:3px; width:fit-content; padding:4px; margin:0 0 14px;
-  background:var(--paper); border:1px solid var(--line); border-radius:10px }
-.task-switch button { min-height:36px; padding:0 14px; border:0; border-radius:7px;
-  background:transparent; color:var(--tx-2); font:600 .86rem/1 var(--font-body); cursor:pointer }
-.task-switch button.is-active { background:#fff; color:var(--navy); box-shadow:var(--sh-s) }
-.task-switch button:focus-visible { outline:3px solid rgba(31,161,99,.28); outline-offset:2px }
-.counter-scanner { border-color:#BFE0CE; background:linear-gradient(110deg,#fff 60%,var(--green-t)) }
-.label-picker-popover { margin-top:12px; padding:12px; border:1px solid #BFE0CE; border-radius:10px; background:#fff; box-shadow:var(--sh-s) }
-.label-picker-popover > label { display:block; margin-bottom:5px; font-weight:600 }
-.label-picker-popover > input { width:100%; box-sizing:border-box; padding:9px 10px; border:1.5px solid var(--line); border-radius:7px }
-.label-picker-results { display:flex; gap:8px; overflow-x:auto; padding:10px 1px 2px; scrollbar-width:thin }
-.label-picker-results > .sub { margin:4px 0; white-space:nowrap }
-.empty-label { width:41mm; height:23.5mm; flex:0 0 41mm; overflow:hidden; padding:0; border:1px solid var(--line);
-  border-radius:7px; background:#fff; cursor:pointer; text-align:left; transition:border-color var(--dur-fast),box-shadow var(--dur-fast) }
-.empty-label:hover { border-color:var(--green); box-shadow:var(--sh-s) }
-.empty-label:focus-visible { outline:3px solid rgba(31,161,99,.28); outline-offset:2px }
-.empty-label-preview { display:block; width:90mm; height:50mm; transform:scale(.43); transform-origin:top left; pointer-events:none }
-.counter-task-nav { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:8px; margin:0 0 14px }
-.counter-task-nav button { display:flex; align-items:center; gap:9px; padding:11px 12px; text-align:left; border:1px solid var(--line); border-radius:10px;
-  background:#fff; color:var(--tx-2); cursor:pointer; font-family:inherit }
-.counter-task-nav button > svg { flex:none; color:var(--green) }
-.counter-task-nav button span,.counter-task-nav button small { display:block }
-.counter-task-nav button span { font-size:.86rem; font-weight:700; color:var(--navy) }
-.counter-task-nav button small { margin-top:2px; font-size:.72rem; font-weight:400; color:var(--tx-2) }
-.counter-task-nav button.is-active { border-color:#8DCAA8; background:var(--green-t); box-shadow:inset 3px 0 var(--green) }
-.counter-task-nav button:focus-visible { outline:3px solid rgba(31,161,99,.28); outline-offset:2px }
-.counter-workspace-head { display:flex; align-items:end; justify-content:space-between; gap:12px; margin:4px 0 16px }
-.counter-workspace-head h2 { margin:0; font-size:1.18rem; letter-spacing:-.02em }
-.counter-workspace-head p:not(.kicker) { margin:4px 0 0; color:var(--tx-2); font-size:.88rem }
+/* The attention band carries its own way in now — reading "3 parcels
+   couldn't be delivered" and then having to build the filter by hand
+   was the gap between knowing and doing. */
+.porg-attention {
+  background:var(--amber-t); border:1px solid #E8D2A0; color:var(--amber);
+  flex-wrap:wrap;
+}
+.porg-attention span { flex:1; min-width:180px }
+.porg-attention .btn { flex:none; background:#fff }
+/* Export trouble — a capped or failed CSV, said out loud rather than
+   left for somebody to discover in a spreadsheet. */
+.porg-export-note { display: flex; align-items: center; gap: 8px; margin: 10px 0 0;
+  padding: 9px 12px; border: 1px solid #F0D3A8; border-radius: var(--r-sm);
+  background: #FDF6EA; color: var(--navy); font-size: .86rem }
 
-.dashboard-kpis { grid-template-columns:repeat(4,1fr); margin-bottom:18px }
+/* Runs loading, under the dispatch board — the manifest's way in. */
+.porg-runs { margin-top: 28px; padding-top: 22px; border-top: 1px solid var(--line) }
+.porg-runs-head h2 { margin: 0; font-size: 1.05rem; font-weight: 700; color: var(--navy) }
+.porg-runs-head .sub { margin: 4px 0 14px; font-size: .88rem }
+.porg-runs-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px }
+.porg-runs-list li { display: flex; align-items: center; gap: 14px; padding: 11px 14px;
+  border: 1px solid var(--line); border-radius: var(--r-sm); background: var(--paper) }
+.porg-run-id { flex: 1; min-width: 0 }
+.porg-run-id .mono { font-weight: 700; color: var(--navy) }
+.porg-run-id .sub { display: block; font-size: .8rem }
+.porg-run-n { flex: none; font-size: .84rem; color: var(--tx-2) }
+@media (max-width: 560px) {
+  .porg-runs-list li { flex-wrap: wrap }
+  .porg-run-id { flex: 1 1 100% }
+}
+
+/* Settings sub-nav — sections of one page, so it reads as a quiet
+   strip under the Settings title rather than a second main nav
+   competing with the portal bar above it. Scrolls sideways on a phone
+   for the same reason .porgnav does: seven tabs never fit, and wrapping
+   them into three rows buries the content. */
+.porgset-nav {
+  display:flex; gap:2px; margin:0 0 var(--sp-6); padding-bottom:2px;
+  border-bottom:1px solid var(--line);
+  overflow-x:auto; scrollbar-width:none; -webkit-overflow-scrolling:touch;
+}
+.porgset-nav::-webkit-scrollbar { display:none }
+.porgset-nav a {
+  display:inline-flex; align-items:center; gap:7px; flex:none;
+  padding:11px 15px; margin-bottom:-1px;
+  border-bottom:2px solid transparent; border-radius:var(--r-sm) var(--r-sm) 0 0;
+  color:var(--tx-2); font:600 .88rem/1 var(--font-body);
+  text-decoration:none; white-space:nowrap;
+  transition:color var(--dur-fast), background var(--dur-fast), border-color var(--dur-fast);
+}
+.porgset-nav a:hover { color:var(--navy); background:var(--paper) }
+.porgset-nav a[aria-current='page'] { color:var(--navy); border-bottom-color:var(--green-2) }
+.porgset-nav a[aria-current='page'] svg { color:var(--green) }
+.porgset-nav a:focus-visible { outline:3px solid rgba(31,161,99,.28); outline-offset:-3px }
+
+/* Each section brings its own heading from when it was a page; inside
+   Settings the shell owns the title, so they step down a level. */
+.porgset-body .head { margin-bottom:var(--sp-5) }
+.porgset-body .head h1 { font-size:1.18rem; letter-spacing:-.015em }
+.porgset-body .head p { font-size:.88rem }
+
+@media (max-width:560px) {
+  .porgset-nav { margin-bottom:var(--sp-5) }
+  .porgset-nav a { padding:11px 12px; font-size:.84rem }
+}
+
+/* The worklist under the scanner: senders who said they'd walk in. It
+   is secondary to the scan box by construction — see scan/page.tsx. */
+.scan-waiting { margin-top:28px; padding-top:22px; border-top:1px solid var(--line) }
+.scan-waiting h2 { margin:0; font-size:1.05rem; font-weight:700; color:var(--navy) }
+.scan-waiting .sub { margin:4px 0 14px; font-size:.88rem }
 
 /* ── kpi row ────────────────────────────────────────────────────── */
 .kpis { display:grid; grid-template-columns:repeat(auto-fit,minmax(180px,1fr)); gap:14px; margin-bottom:22px }
 .kpi { background:#fff; border:1px solid var(--line); border-radius:var(--r-lg); padding:16px 18px;
-  position:relative; overflow:hidden }
+  position:relative; overflow:hidden; min-width:0; color:var(--tx); display:block }
 .kpi::after { content:''; position:absolute; left:0; top:0; bottom:0; width:3px; background:var(--line) }
 .kpi.g::after { background:var(--green) } .kpi.b::after { background:var(--blue) }
 .kpi.a::after { background:var(--amber) } .kpi.r::after { background:var(--red) }
@@ -155,15 +225,141 @@
   text-transform:uppercase; color:var(--tx-3); margin-top:5px; display:block }
 .kpi .sub { font-size:.79rem; color:var(--tx-2); margin-top:5px; display:block }
 
+/* A tile that filters the register below says so by behaving like a
+   control: it lifts, and its arrow appears on approach. The tiles that
+   can't filter (delivered TODAY — a date window, not a status) stay
+   flat, which is the honest difference between them. */
+.kpi-link { cursor:pointer; padding-right:34px;
+  transition:border-color var(--dur-fast), box-shadow var(--dur-fast), transform var(--dur-fast) }
+.kpi-link:hover { border-color:var(--navy); box-shadow:var(--sh-m); transform:translateY(-1px) }
+.kpi-link:focus-visible { outline:3px solid rgba(31,161,99,.28); outline-offset:3px }
+.kpi-go { position:absolute; right:12px; top:16px; color:var(--tx-3);
+  opacity:0; transition:opacity var(--dur-fast) }
+.kpi-link:hover .kpi-go, .kpi-link:focus-visible .kpi-go { opacity:1 }
+.kpi-link[aria-current="true"] { border-color:var(--navy); box-shadow:var(--sh-m) }
+.kpi-link[aria-current="true"] .kpi-go { opacity:1; color:var(--navy) }
+
+/* Non-zero and somebody has to act — the number itself takes the tone,
+   so the board reads at arm's length from a mounted tablet. */
+.kpi.is-urgent.a .n { color:var(--amber) }
+.kpi.is-urgent.r .n { color:var(--red) }
+
+/* The dashboard's board gets explicit tracks rather than .kpis'
+   auto-fit — tiles auto-fitting to five-and-a-stray no longer read as
+   one glance. MUST stay after .kpis: both are one class deep, so source
+   order is what decides this. */
+.dashboard-kpis { grid-template-columns:repeat(3,1fr); margin-bottom:18px }
+@media (min-width:1040px) { .dashboard-kpis { grid-template-columns:repeat(6,1fr) } }
+/* Seven tiles can't sit 6-across without stranding one on its own row,
+   and 7-across in an 1180px column squeezes every tile to ~150px.
+   Four columns (4+3) keeps every tile readable at desktop width. */
+@media (min-width:1040px) {
+  .dashboard-kpis-7 { grid-template-columns:repeat(4,1fr) }
+}
+
+/* Optimized tablet breakpoint for mid-range devices */
+@media (min-width:768px) and (max-width:1039px) {
+  .dashboard-kpis { grid-template-columns:repeat(3,1fr); gap:12px }
+  .porg-hero { display:flex; align-items:stretch; flex-wrap:wrap }
+  .porg-hero-copy { flex:1 1 280px; padding:20px }
+  .porg-today { flex:0 1 240px; padding:20px }
+}
+
+/* ── throughput strip ─────────────────────────────────────────── */
+.porg-trends { margin-bottom:18px; padding:18px 20px 14px }
+.porg-trends h2 { font-size:1.05rem; margin:2px 0 0; letter-spacing:-.02em }
+.porg-trends-head { display:flex; align-items:flex-end; justify-content:space-between; gap:12px; flex-wrap:wrap; margin-bottom:10px }
+.porg-trends-legend { display:flex; gap:16px; font-size:.82rem; color:var(--tx-2); flex-wrap:wrap }
+.porg-trends-legend .dot { display:inline-block; width:9px; height:9px; border-radius:50%; margin-right:6px }
+.dot-booked { background:var(--blue) }
+.dot-delivered { background:var(--green) }
+.porg-spark { width:100%; height:64px; display:block }
+.porg-trends-days { display:flex; justify-content:space-between; font-family:var(--font-mono); font-size:.62rem; letter-spacing:.06em; text-transform:uppercase; color:var(--tx-3); margin-top:6px }
+
+/* ── saved views ──────────────────────────────────────────────── */
+.porg-views { margin-bottom:12px }
+.porg-views-row { display:flex; gap:8px; flex-wrap:wrap }
+.porg-view {
+  display:inline-flex; align-items:center; gap:6px; padding:7px 12px;
+  border:1px solid var(--line); border-radius:999px; background:#fff;
+  font-size:.8rem; font-weight:600; color:var(--tx-2);
+}
+.porg-view:hover { border-color:var(--navy); color:var(--navy) }
+.porg-view-custom { padding-right:6px }
+.porg-view-custom a { color:inherit }
+.porg-view-custom button { border:0; background:none; cursor:pointer; color:var(--tx-3); display:grid; place-items:center; padding:4px }
+.porg-views-save { display:flex; gap:8px; margin-top:8px; flex-wrap:wrap }
+.porg-views-save input { min-height:38px; padding:7px 10px; border:1.5px solid var(--line); border-radius:8px; font:inherit; font-size:.86rem }
+.porg-views-pin { margin-top:8px; border:0; background:none; cursor:pointer; color:var(--blue); font:600 .82rem/1 var(--font-body); display:inline-flex; align-items:center; gap:6px }
+.porg-views-pin:hover { text-decoration:underline }
+
+/* ── register toolbar / pagination ────────────────────────────── */
+.porg-reg-toolbar {
+  display:flex; align-items:center; justify-content:space-between; gap:10px;
+  padding:12px 16px; border-bottom:1px solid var(--line); flex-wrap:wrap;
+}
+.porg-range { font-size:.78rem; color:var(--tx-2) }
+.porg-reg-tools { display:flex; align-items:center; gap:8px; flex-wrap:wrap }
+.porg-perpage select { min-height:34px; border:1.5px solid var(--line); border-radius:8px; background:#fff; font:600 .8rem var(--font-body); padding:4px 8px }
+.th-sort { color:inherit }
+.th-sort:hover { color:var(--navy); text-decoration:underline }
+.porg-pager { display:flex; align-items:center; justify-content:center; gap:14px; padding:14px 16px }
+.porg-page { font-size:.8rem; color:var(--tx-2) }
+.porg-pager .is-disabled { opacity:.4; pointer-events:none }
+.porg-reg-card.is-compact .tbl td { padding:6px 8px }
+.porg-check { display:inline-flex; align-items:center; gap:7px; font-size:.85rem; font-weight:600; color:var(--tx-2); white-space:nowrap }
+.porg-check input { width:17px; height:17px; accent-color:var(--red) }
+
+/* ── the register ───────────────────────────────────────────────── */
+.porg-register-head { display:flex; align-items:baseline; gap:14px; margin:0 0 12px; flex-wrap:wrap }
+.porg-register-head h2 { font-size:1.12rem; letter-spacing:-.02em; margin:0 }
+.porg-applied {
+  display:inline-flex; align-items:center; gap:7px;
+  padding:5px 6px 5px 10px; border-radius:var(--r-pill);
+  background:var(--blue-t); color:var(--blue);
+  font-size:.79rem; font-weight:600;
+}
+.porg-applied-n {
+  font-family:var(--font-mono); font-size:.7rem; font-weight:600;
+  background:#fff; border-radius:var(--r-pill); padding:2px 8px;
+}
+.porg-clear {
+  display:inline-flex; align-items:center; gap:6px; margin-left:auto;
+  font-size:.83rem; font-weight:600; color:var(--blue);
+}
+.porg-clear:hover { text-decoration:underline }
+.porg-filters { display:flex; gap:8px; margin-bottom:14px; flex-wrap:wrap; align-items:stretch }
+.porg-filters .inp { min-height:40px; padding:8px 11px; font-size:.9rem; width:auto }
+.porg-search { flex:1 1 220px; min-width:120px; max-width:380px }
+.porg-status { flex:0 0 auto }
+
+/* Mobile-friendly form inputs */
+.porg-filters .inp, .porg-filters select { 
+  border-radius:var(--r-md); 
+  border:1.5px solid var(--line); 
+  transition:border-color var(--dur-fast), box-shadow var(--dur-fast);
+}
+.porg-filters .inp:focus, .porg-filters select:focus { 
+  border-color:var(--green); 
+  box-shadow:0 0 0 3px rgba(31,161,99,0.1);
+  outline:none;
+}
+.porg-filters .btn { 
+  border-radius:var(--r-md); 
+  min-height:40px;
+  font-weight:600;
+  transition:all var(--dur-fast);
+}
+
 /* ── cards & tables ─────────────────────────────────────────────── */
 .card { background:#fff; border:1px solid var(--line); border-radius:var(--r-lg); padding:20px; min-width:0 }
 .card:has(table.tbl) { overflow-x:auto; -webkit-overflow-scrolling:touch }
 
-.tbl { width:100%; border-collapse:collapse; font-size:.9rem }
-.tbl th { text-align:left; font-family:var(--font-mono); font-size:.62rem; letter-spacing:.1em;
-  text-transform:uppercase; color:var(--tx-3); font-weight:500; padding:9px 10px;
+.tbl { width:100%; border-collapse:collapse; font-size:.82rem; line-height:1.35 }
+.tbl th { text-align:left; font-family:var(--font-mono); font-size:.6rem; letter-spacing:.09em;
+  text-transform:uppercase; color:var(--tx-3); font-weight:500; padding:6px 8px;
   border-bottom:1px solid var(--line); white-space:nowrap }
-.tbl td { padding:12px 10px; border-bottom:1px solid var(--line); vertical-align:top }
+.tbl td { padding:6px 8px; border-bottom:1px solid var(--line); vertical-align:middle }
 .tbl tr:last-child td { border-bottom:0 }
 .tbl tbody tr:hover { background:var(--paper) }
 
@@ -193,69 +389,210 @@
 @media (max-width:900px) {
   /* Brand + sign out on the first row; the nav drops to its own
      full-width, swipeable second row under a hairline. */
-  .porgbar-in { padding-left:16px; padding-right:16px; gap:10px }
-  .porgnav {
-    order:3; width:100%; margin:4px 0 0; padding:6px 0 2px;
-    border-top:1px solid var(--line); justify-content:flex-start;
-    scroll-padding-left:16px;
+  .porgbar-in { padding-left:14px; padding-right:14px; gap:8px }
+  .porgnav-container {
+    order: 3; width: 100%; margin: 4px 0 0; padding: 4px 0 2px;
+    border-top: 1px solid var(--line); margin-left: 0;
   }
-  .porgnav a { min-height:38px; padding:0 12px }
+  .porgnav {
+    justify-content:flex-start;
+    scroll-padding-left:14px;
+  }
+  .porgnav a { min-height:36px; padding:0 11px; font-size:.82rem }
+  .porgnav-badge { font-size:.58rem; padding:2px 5px }
+  .porgnav-scroll {
+    position: fixed; top: auto; transform: none;
+    width: 24px; height: 24px; font-size: 16px;
+  }
+  .porgnav-scroll-left {
+    left: 14px; bottom: 6px; background: none; padding: 0;
+  }
+  .porgnav-scroll-right {
+    right: 14px; bottom: 6px; background: none; padding: 0;
+  }
   .kpis { grid-template-columns:repeat(2,1fr) }
-  .dashboard-kpis { grid-template-columns:repeat(2,1fr) }
-  .courier-actions { grid-template-columns:repeat(2,1fr) }
-  .task-switch { width:100% }
-  .counter-task-nav { grid-template-columns:1fr }
+  .dashboard-kpis { grid-template-columns:repeat(2,1fr); gap:12px }
+  .kpi { padding:14px 13px }
+  
+  /* The hero's money rail becomes a full-width footer strip rather than
+     a 240px column fighting the copy for a tablet's width. */
+  .porg-hero-copy { flex-basis:100%; padding:18px 20px }
+  .porg-hero h1 { font-size:1.6rem }
+  .porg-hero p { font-size:.9rem }
+  .porg-today { flex:1 1 100%; padding:14px 20px; border-left:0; border-top:1px solid var(--line);
+    flex-direction:row; align-items:baseline; gap:12px; flex-wrap:wrap }
+  .porg-today-v { font-size:1.7rem }
+  .porg-today-h { margin-top:0; margin-left:auto }
+  
+  /* Filters improvements */
+  .porg-filters { gap:8px; margin-bottom:12px }
+  .porg-search { flex:1 1 100%; max-width:none; min-height:38px }
+  .porg-status { flex:0 1 auto; min-height:38px }
+  
+  /* Tighter spacing on smaller tablets */
+  .porg-wrap { padding:20px 16px 48px }
+  .card { padding:14px }
+  .porg-attention { gap:10px; padding:11px 14px; font-size:.85rem }
 }
 @media (max-width:560px) {
-  .kpis { grid-template-columns:1fr; gap:10px }
+  /* Two KPI tiles per row, not one: the board's job is a single glance
+     at the whole shift, and one-per-row turns it into six screens of
+     scrolling before the register is even visible. */
+  .kpis { grid-template-columns:repeat(2,1fr); gap:10px }
+  .dashboard-kpis { grid-template-columns:1fr }
+  .kpi { padding:14px 13px; min-height:auto }
+  .kpi .n { font-size:1.55rem; line-height:1 }
+  .kpi .l { font-size:.58rem; margin-top:6px }
+  .kpi .sub { font-size:.75rem; margin-top:4px }
+  .kpi-link { padding-right:13px }
+  .kpi-go { display:none }
+  .kpi-link:hover { transform:none }
+  
+  /* Hero section improvements */
+  .porg-hero { flex-direction:column; border-radius:var(--r-lg); gap:0 }
+  .porg-hero-copy { flex-basis:auto; padding:16px 14px }
+  .porg-hero-copy .kicker { gap:6px; align-items:flex-start; flex-wrap:wrap }
+  .porg-hero-copy .pill { font-size:.65rem; padding:3px 8px }
+  .porg-hero-copy h1 { font-size:1.4rem; letter-spacing:-.025em; margin:6px 0 0 }
+  .porg-hero-copy p { font-size:.84rem; margin:6px 0 0; max-width:none }
+  .porg-hero-actions { 
+    gap:6px; 
+    margin-top:12px;
+    display:grid;
+    grid-template-columns:1fr;
+    width:100%;
+  }
+  .porg-hero-actions .btn { 
+    width:100%; 
+    min-height:42px; 
+    font-size:.85rem; 
+    padding:10px 12px;
+    display:flex;
+    align-items:center;
+    justify-content:center;
+    gap:6px;
+  }
+  .porg-today { 
+    flex:1 1 auto; 
+    padding:12px 14px; 
+    border-left:0; 
+    border-top:1px solid var(--line); 
+    flex-direction:column; 
+    align-items:flex-start; 
+    gap:4px;
+    justify-content:flex-start;
+  }
+  .porg-today-k { font-size:.5rem; letter-spacing:.12em }
+  .porg-today-v { font-size:1.4rem; letter-spacing:-.025em; margin-top:2px }
+  .porg-today-h { font-size:.72rem; margin-top:0 }
+  
+  /* Filters and search */
+  .porg-filters { gap:6px; margin-bottom:12px; align-items:stretch }
+  .porg-filters .btn { width:100%; justify-content:center; min-height:40px; font-size:.85rem; padding:8px 10px }
+  .porg-search { flex:1 1 100%; max-width:none; min-height:40px }
+  .porg-status { flex:1 1 100%; max-width:none; min-height:40px }
+  .porg-search .inp, .porg-status .inp, .porg-status select { 
+    font-size:.88rem; 
+    padding:9px 10px; 
+    width:100%;
+    box-sizing:border-box;
+  }
+  
+  /* Register toolbar improvements */
+  .porg-reg-toolbar { padding:10px 12px; gap:8px }
+  .porg-range { font-size:.75rem }
+  .porg-reg-tools { gap:6px }
+  .porg-perpage select { min-height:36px; font-size:.78rem; padding:4px 6px }
+  .porg-reg-tools .btn { min-height:36px; font-size:.8rem; padding:6px 10px }
+  
+  /* Attention band */
+  .porg-attention { gap:8px; padding:10px 12px; font-size:.82rem }
+  .porg-attention span { min-width:160px }
+  .porg-attention .btn { padding:8px 12px }
+  
+  /* General improvements */
   .head h1 { font-size:1.3rem }
-  .porg-wrap { padding:18px 16px 48px }
-  .card { padding:16px }
-  .porgbar-in { gap:8px }
-  .porg-name { font-size:.92rem }
-  .porg-name small { font-size:.54rem }
-  .porg-signout .btn { padding-inline:10px }
-  .porgnav a { font-size:.84rem; gap:6px; padding:0 10px }
+  .head p { font-size:.86rem }
+  .head h2 { font-size:1rem }
+  .porg-wrap { padding:16px 12px 48px }
+  .card { padding:14px; border-radius:var(--r-md) }
+  .porgbar-in { gap:8px; padding:6px 12px 6px 12px }
+  
+  /* The wordmark goes so the company name keeps room beside Sign out on
+     a 360px screen; the switcher's monogram carries the brand slot. */
+  .porgbrand, .porgbar-in .appbar-div { display:none }
+  .porgbar-in .wsw { max-width:none; flex:1 }
+  .porg-signout { margin-left:auto }
+  .porg-signout .btn { padding-inline:8px; font-size:.8rem; min-height:36px }
+  
+  /* Navigation improvements */
+  .porgnav a { font-size:.8rem; gap:5px; padding:0 9px; min-height:36px }
+  .porgnav-badge { font-size:.56rem; padding:2px 5px }
+  
+  /* Register head improvements */
+  .porg-register-head { gap:10px; margin-bottom:10px }
+  .porg-register-head h2 { font-size:1rem }
+  .porg-applied { gap:6px; padding:4px 8px; font-size:.75rem }
+  .porg-clear { font-size:.78rem; gap:5px }
+  
   .head .actions { width:100% }
   .head .actions .btn { flex:1 1 140px }
-  .courier-actions { grid-template-columns:1fr; gap:9px }
-  .courier-action { min-height:68px; padding:13px }
-  .dashboard-scanner { padding:16px }
-  /* The Counter tab switch carries its geometry inline (48px targets,
-     24px side padding per tab) for the desktop desk — three tabs need
-     ~450px and a 360px phone has 328. These beat the inline styles so
-     Receive / New Shipment / Labels share one row instead of forcing
-     the page sideways; targets stay ≥44px. */
-  .task-switch { width:100% !important; box-sizing:border-box; margin-bottom:20px !important }
-  .task-switch > button {
-    flex:1 1 0 !important; min-width:0 !important; justify-content:center !important;
-    padding:10px 8px !important; font-size:.82rem !important; gap:6px !important;
-    min-height:44px !important;
-  }
-  .task-switch > button > span { min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap }
-  .task-switch > button > span > span { margin-left:4px !important; padding:2px 6px !important }
-  .task-switch > button svg { flex:none }
+  
   /* Roster, stations and label registers keep full columns behind a
      touch scroll instead of squashing — except the parcels register,
      which already restacks into labelled cards below. */
   table.tbl:not(.parcel-table) { min-width:560px }
+  
   /* A horizontal table is hard to use on a phone and hiding the status
      is worse. Parcel rows become labelled, stacked cards instead. */
   .card:has(.parcel-table) { overflow:visible; padding:0; border:0; background:transparent; box-shadow:none }
   .parcel-table, .parcel-table tbody, .parcel-table tr, .parcel-table td { display:block; width:100% }
   .parcel-table thead { position:absolute; width:1px; height:1px; padding:0; overflow:hidden; clip:rect(0,0,0,0); white-space:nowrap; border:0 }
-  .parcel-table tr { padding:15px 16px; margin-bottom:10px; border:1px solid var(--line); border-radius:var(--r-lg); background:#fff; box-shadow:var(--sh-s) }
-  .parcel-table td { display:grid; grid-template-columns:104px minmax(0,1fr); gap:10px; padding:8px 0; border:0; text-align:left !important }
-  .parcel-table td::before { content:attr(data-label); color:var(--tx-3); font-family:var(--font-mono); font-size:.61rem; letter-spacing:.08em; text-transform:uppercase; padding-top:2px }
+  .parcel-table tr { padding:13px 14px; margin-bottom:10px; border:1px solid var(--line); border-radius:var(--r-md); background:#fff; box-shadow:var(--sh-s) }
+  .parcel-table td { display:grid; grid-template-columns:90px minmax(0,1fr); gap:8px; padding:7px 0; border:0; text-align:left !important; font-size:.8rem }
+  .parcel-table td::before { content:attr(data-label); color:var(--tx-3); font-family:var(--font-mono); font-size:.58rem; letter-spacing:.08em; text-transform:uppercase; padding-top:1px; font-weight:600 }
   .parcel-table td[data-label="Parcel"]::before { content:'' }
-  .parcel-table td[data-label="Parcel"] { display:block; padding-top:0 }
-  .parcel-table td[data-label="Actions"] { display:block; padding-top:10px; border-top:1px solid var(--line) }
+  .parcel-table td[data-label="Parcel"] { display:block; padding-top:0; grid-template-columns:none }
+  .parcel-table td[data-label="Actions"] { display:block; padding-top:10px; border-top:1px solid var(--line); grid-template-columns:none }
 }
 
-/* The icon + label + badge row needs ~450px; phones give ~330. Below
-   480px the icons go so the WORDS survive — "New S…" tells a desk
-   worker nothing, while the text labels carry the meaning. */
-@media (max-width:480px) {
-  .task-switch > button { font-size:.78rem !important; padding:10px 6px !important }
-  .task-switch > button > svg { display:none !important }
-}
+
+/* Routes — the company's own map, edited as an ordered list because
+   that is what a route is. Origin/destination fields would describe a
+   two-stop route and quietly make longer ones unrepresentable. */
+.porgroutes-bar { display:flex; align-items:center; gap:12px; margin-bottom:16px; flex-wrap:wrap }
+.porgroutes-empty { padding:22px; border:1px dashed var(--line); border-radius:var(--r-sm);
+  color:var(--tx-2); text-align:center; max-width:60ch }
+.porgroutes-list { list-style:none; margin:0; padding:0; display:grid; gap:8px }
+.porgroutes-list li { display:flex; align-items:center; gap:14px; padding:12px 14px;
+  border:1px solid var(--line); border-radius:var(--r-sm); background:var(--paper) }
+.porgroutes-id { flex:1; min-width:0; display:grid; gap:3px }
+.porgroutes-name { display:flex; align-items:center; gap:8px; font-weight:700; color:var(--navy) }
+.porgroutes-code { font-size:.78rem; padding:2px 7px; border-radius:999px;
+  background:var(--blue-t); color:var(--blue) }
+
+.porgroutes-editor { max-width:640px }
+.porgroutes-editor h2 { margin:0 0 14px; font-size:1.1rem; color:var(--navy) }
+.porgroutes-editor h3 { margin:22px 0 8px; font-size:.78rem; font-weight:700;
+  letter-spacing:.06em; text-transform:uppercase; color:var(--tx-2) }
+.porgroutes-fields { display:grid; gap:12px }
+.porgroutes-fields label { display:grid; gap:4px; font-size:.84rem; color:var(--tx-2) }
+.porgroutes-fields input { padding:9px 11px; border:1px solid var(--line);
+  border-radius:var(--r-sm); font:inherit }
+.porgroutes-check { display:flex !important; align-items:center; gap:9px }
+.porgroutes-check input { width:auto }
+
+/* Numbered, because the number IS the data — stop 3 of 5 is what makes
+   a leg addressable. */
+.porgroutes-stops { list-style:none; margin:0; padding:0; display:grid; gap:6px }
+.porgroutes-stops li { display:flex; align-items:center; gap:10px; padding:9px 12px;
+  border:1px solid var(--line); border-radius:var(--r-sm); background:var(--paper) }
+.porgroutes-seq { flex:none; width:24px; height:24px; display:grid; place-items:center;
+  border-radius:999px; background:var(--navy); color:#fff; font-size:.74rem; font-weight:700 }
+.porgroutes-stop { flex:1; min-width:0; font-weight:600; color:var(--navy) }
+.porgroutes-moves { display:flex; gap:4px; flex:none }
+.porgroutes-add { display:grid; gap:4px; margin-top:14px; font-size:.84rem; color:var(--tx-2) }
+.porgroutes-add select { padding:9px 11px; border:1px solid var(--line);
+  border-radius:var(--r-sm); font:inherit }
+.porgroutes-actions { display:flex; gap:8px; margin-top:20px; flex-wrap:wrap }
+.porgroutes-del { margin-left:auto; color:var(--red); border-color:#E7C3C3 }

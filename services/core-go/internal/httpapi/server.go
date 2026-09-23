@@ -23,12 +23,19 @@ import (
 )
 
 type Server struct {
-	Cfg     config.Config
-	Pool    *pgxpool.Pool
-	Redis   *redis.Client
-	OTP     *authsvc.OtpService
-	Session *authsvc.SessionService
-	OrgCtx  *authsvc.OrgContextService
+	Cfg   config.Config
+	Pool  *pgxpool.Pool
+	Redis *redis.Client
+	// NotifyPool — a connection pool built from cfg.DirectDatabaseURL,
+	// used only for Postgres LISTEN (the counter ticket queue's live
+	// push; see streamCounterTicketEvents). Kept separate from Pool
+	// because Pool may run through a transaction-mode connection pooler
+	// (dev's pgbouncer) that silently breaks LISTEN — see
+	// config.Config.DirectDatabaseURL's own comment.
+	NotifyPool *pgxpool.Pool
+	OTP        *authsvc.OtpService
+	Session    *authsvc.SessionService
+	OrgCtx     *authsvc.OrgContextService
 
 	// StaffLockout bounds PIN guesses on ticket-staff sign-in, which has
 	// no per-account failure column of its own.
@@ -41,14 +48,15 @@ type Server struct {
 	Storage storage.Store
 }
 
-func NewServer(cfg config.Config, pool *pgxpool.Pool, rdb *redis.Client) *Server {
+func NewServer(cfg config.Config, pool, notifyPool *pgxpool.Pool, rdb *redis.Client) *Server {
 	return &Server{
-		Cfg:     cfg,
-		Pool:    pool,
-		Redis:   rdb,
-		OTP:     authsvc.NewOtpService(rdb, cfg.OTPPepper, cfg.OTPDailySpendCapKES, cfg.OTPRateLimitPerHour),
-		Session: authsvc.NewSessionService(rdb),
-		OrgCtx:  authsvc.NewOrgContextService(rdb, time.Duration(cfg.OrgContextActivationDays)*24*time.Hour),
+		Cfg:        cfg,
+		Pool:       pool,
+		NotifyPool: notifyPool,
+		Redis:      rdb,
+		OTP:        authsvc.NewOtpService(rdb, cfg.OTPPepper, cfg.OTPDailySpendCapKES, cfg.OTPRateLimitPerHour),
+		Session:    authsvc.NewSessionService(rdb),
+		OrgCtx:     authsvc.NewOrgContextService(rdb, time.Duration(cfg.OrgContextActivationDays)*24*time.Hour),
 		// 10 tries an hour: comfortably above a tired operator fumbling a
 		// PIN at the start of a shift, far below anything that makes
 		// guessing a 4-digit secret worthwhile.
@@ -208,6 +216,15 @@ func (s *Server) Router() *gin.Engine {
 		v1.GET("/fleet/trips/:id/collections", s.authRequired(), s.handleTripCollections)
 		v1.GET("/fleet/my-trip", s.authRequired(), s.handleMyActiveTrip)
 
+		// Passenger luggage. Under /fleet/ because a bag belongs to a
+		// vehicle run, not to the parcel network — see
+		// handlers_luggage.go's header and LuggageTag's schema comment on
+		// why these are not parcel routes.
+		v1.POST("/fleet/luggage", s.authRequired(), s.handleTagLuggage)
+		v1.POST("/fleet/luggage/:code/board", s.authRequired(), s.handleBoardLuggage)
+		v1.POST("/fleet/luggage/:code/claim", s.authRequired(), s.handleClaimLuggage)
+		v1.GET("/fleet/trips/:id/luggage", s.authRequired(), s.handleListTripLuggage)
+
 		v1.POST("/fares", s.rateLimit("pay:fare", 40, time.Hour), s.handleCreateFare)
 		v1.GET("/fares/:id", s.handleGetFare)
 		v1.GET("/fares/:id/status", s.handleFareStatus)
@@ -256,7 +273,15 @@ func (s *Server) Router() *gin.Engine {
 		v1.POST("/me/voucher-batches", s.rateLimit("pay:voucherbatch", 20, time.Hour), s.authRequired(), s.handleIssueAllowanceBatch)
 		v1.GET("/me/voucher-batches", s.authRequired(), s.handleListVoucherBatches)
 
-		v1.POST("/parcels", s.handleBookParcel)
+		// Unauthenticated by design (ADR-0003: sending a parcel never
+		// requires an account), and until now unlimited as well — the
+		// only public write in this file with no bucket at all. Limited
+		// now that the web form is a single screen a guest can submit in
+		// seconds: making booking faster for a sender makes it equally
+		// faster for anyone minting junk rows. Generous enough that a
+		// shop booking a morning's parcels from one connection never
+		// notices.
+		v1.POST("/parcels", s.rateLimit("book:parcel", 20, time.Hour), s.handleBookParcel)
 		v1.GET("/parcels/pricing", s.handleGetParcelPricing)
 		v1.GET("/parcels/zones", s.handleListParcelZones)
 		// Public for the same reason pricing and zones are: the booking
@@ -267,6 +292,16 @@ func (s *Server) Router() *gin.Engine {
 		// this off myself" needs to see which companies accept a
 		// walk-in before booking, let alone signing in.
 		v1.GET("/parcels/stations", s.handleListWalkInStations)
+		// Walk-in counter tickets. Public — same boundary as booking and
+		// the station picker above: a kiosk, a counter-QR web form and
+		// the app all mint/poll these before anyone has signed in. Rate
+		// limited on create only; the id itself is the bearer credential
+		// for everything after (see dbx.GetCounterTicket's own comment).
+		v1.POST("/parcels/counter-tickets",
+			s.rateLimit("book:counterticket", 30, time.Hour), s.handleCreateCounterTicket)
+		v1.GET("/parcels/counter-tickets/:id", s.handleGetCounterTicket)
+		v1.GET("/parcels/counter-tickets/:id/stream", s.handleStreamCounterTicket)
+		v1.PATCH("/parcels/counter-tickets/:id/draft", s.handlePatchCounterTicketDraft)
 		v1.GET("/parcels/coverage", s.handleListCoverageTiers)
 		// Cash on delivery. The policy is public so a booking form knows
 		// whether to offer it at all; setting and confirming COD sit on
@@ -307,11 +342,24 @@ func (s *Server) Router() *gin.Engine {
 		// a rider or running late, stations.
 		v1.GET("/parcel-orgs/me/live", s.authRequired(), s.handleGetOrgLive)
 		v1.GET("/parcel-orgs/me/parcels", s.authRequired(), s.handleListMyOrgParcels)
+		v1.GET("/parcel-orgs/me/trends", s.authRequired(), s.handleParcelOrgTrends)
 		// Register a parcel the company already tracks in another system,
 		// so it can be managed and tracked here too — see
 		// handleImportOrgParcel.
 		v1.POST("/parcel-orgs/me/parcels", s.authRequired(), s.handleImportOrgParcel)
 		v1.POST("/parcel-orgs/me/parcels/:code/assign", s.authRequired(), s.handleAssignOrgParcel)
+		// Resolving a receiver who can't get past the delivery code —
+		// the company's own escalation queue. Grant two more tries, or
+		// (once that's been burned, or the code is simply gone) mint a
+		// replacement and text both parties. Release is the other half
+		// of a self-confirmed collection: the courier pay DeliverParcel
+		// held rather than accrued.
+		v1.POST("/parcel-orgs/me/parcels/:code/receiver-auth/grant-retry",
+			s.authRequired(), s.handleOrgGrantReceiverAuthRetry)
+		v1.POST("/parcel-orgs/me/parcels/:code/delivery-code/reissue",
+			s.authRequired(), s.handleOrgReissueDeliveryCode)
+		v1.POST("/parcel-orgs/me/parcels/:code/courier-earnings/release",
+			s.authRequired(), s.handleOrgReleaseHeldEarnings)
 		v1.POST("/parcel-orgs/me/cod/remit", s.authRequired(), s.handleOrgRemitCod)
 		// A company's own label stock — minting, the register, and
 		// withdrawing a stolen pad, all scoped to the session's org.
@@ -322,6 +370,13 @@ func (s *Server) Router() *gin.Engine {
 		// see handleAttachOrgLabelInfo's own comment.
 		v1.GET("/parcel-orgs/me/labels/search", s.authRequired(), s.handleSearchOrgLabels)
 		v1.GET("/parcel-orgs/me/labels", s.authRequired(), s.handleOrgListLabelRegister)
+		// The walk-in counter queue: every WAITING ticket for the
+		// session's own org, oldest first, plus its live SSE stream and
+		// the "Serve" action that claims one. See
+		// handlers_parcel_counter_tickets.go.
+		v1.GET("/parcel-orgs/me/counter-tickets/queue", s.authRequired(), s.handleListCounterTicketQueue)
+		v1.GET("/parcel-orgs/me/counter-tickets/stream", s.authRequired(), s.handleStreamCounterTicketQueue)
+		v1.POST("/parcel-orgs/me/counter-tickets/:id/claim", s.authRequired(), s.handleClaimCounterTicket)
 		// Scan/lookup a code against the company's own stock, and attach
 		// field notes to a printed label. The static "info" segment is
 		// load-bearing: see handleAttachOrgLabelInfo's own comment.
@@ -354,15 +409,54 @@ func (s *Server) Router() *gin.Engine {
 		// The dispatch board — a company's own runs: vehicle, crew,
 		// leg and receiving team. The static segments sit above :id
 		// for the same reason the label routes do (see above).
-		v1.GET("/parcel-orgs/me/dispatch", s.authRequired(), s.handleListDispatches)
-		v1.POST("/parcel-orgs/me/dispatch", s.authRequired(), s.handleCreateDispatch)
-		v1.GET("/parcel-orgs/me/dispatch/:id", s.authRequired(), s.handleGetDispatch)
-		v1.POST("/parcel-orgs/me/dispatch/:id/position", s.authRequired(), s.handleReportDispatchPosition)
-		v1.POST("/parcel-orgs/me/dispatch/:id/arrive", s.authRequired(), s.handleArriveDispatch)
-		v1.POST("/parcel-orgs/me/dispatch/:id/cancel", s.authRequired(), s.handleCancelDispatch)
+		// The company's own vehicle runs — the manifest side of dispatch.
+		// A parcel only reports IN_TRANSIT by being loaded onto one of
+		// these (see dbx.LoadParcelOntoOrgShipment), so the counter's
+		// "receive and load" has something real to put a box on.
+		// ── Runs ──
+		//
+		// One record since ADR-0006. /me/runs is canonical; the two older
+		// prefixes below resolve to the same handlers because a rider's
+		// installed PWA may still hold either, and renaming a route by
+		// breaking it strands exactly the people who cannot easily update.
+		//
+		// The two halves were split by what each model happened to own:
+		// "shipments" knew the cargo, "dispatch" knew the journey. Both
+		// now read parcel_shipment.
+		v1.GET("/parcel-orgs/me/runs", s.authRequired(), s.handleListRuns)
+		v1.POST("/parcel-orgs/me/runs", s.authRequired(), s.handleCreateRun)
+		v1.GET("/parcel-orgs/me/runs/:id", s.authRequired(), s.handleGetRun)
+		v1.GET("/parcel-orgs/me/runs/:id/manifest", s.authRequired(), s.handleGetMyOrgShipmentManifest)
+		v1.POST("/parcel-orgs/me/runs/:id/load", s.authRequired(), s.handleLoadOntoMyOrgShipment)
+		v1.POST("/parcel-orgs/me/runs/:id/start", s.authRequired(), s.handleStartMyOrgShipment)
+		v1.POST("/parcel-orgs/me/runs/:id/position", s.authRequired(), s.handleReportRunPosition)
+		v1.POST("/parcel-orgs/me/runs/:id/arrive", s.authRequired(), s.handleArriveRun)
+		v1.POST("/parcel-orgs/me/runs/:id/cancel", s.authRequired(), s.handleCancelRun)
+
+		// Compatibility aliases. /me/shipments kept the loading picker's
+		// shape (handleListMyOrgShipments returns the picker row, not the
+		// full run) because the Scanner still reads exactly that.
+		v1.GET("/parcel-orgs/me/shipments", s.authRequired(), s.handleListMyOrgShipments)
+		v1.POST("/parcel-orgs/me/shipments", s.authRequired(), s.handleCreateMyOrgShipment)
+		v1.GET("/parcel-orgs/me/shipments/:id/manifest", s.authRequired(), s.handleGetMyOrgShipmentManifest)
+		v1.POST("/parcel-orgs/me/shipments/:id/load", s.authRequired(), s.handleLoadOntoMyOrgShipment)
+		v1.POST("/parcel-orgs/me/shipments/:id/start", s.authRequired(), s.handleStartMyOrgShipment)
+		v1.GET("/parcel-orgs/me/dispatch", s.authRequired(), s.handleListRuns)
+		v1.POST("/parcel-orgs/me/dispatch", s.authRequired(), s.handleCreateRun)
+		v1.GET("/parcel-orgs/me/dispatch/:id", s.authRequired(), s.handleGetRun)
+		v1.POST("/parcel-orgs/me/dispatch/:id/position", s.authRequired(), s.handleReportRunPosition)
+		v1.POST("/parcel-orgs/me/dispatch/:id/arrive", s.authRequired(), s.handleArriveRun)
+		v1.POST("/parcel-orgs/me/dispatch/:id/cancel", s.authRequired(), s.handleCancelRun)
+
+		// ── Routes ── the company's own map: which stations, in what order.
+		v1.GET("/parcel-orgs/me/routes", s.authRequired(), s.handleListMyOrgRoutes)
+		v1.POST("/parcel-orgs/me/routes", s.authRequired(), s.handleSaveMyOrgRoute)
+		v1.POST("/parcel-orgs/me/routes/:id", s.authRequired(), s.handleSaveMyOrgRoute)
+		v1.DELETE("/parcel-orgs/me/routes/:id", s.authRequired(), s.handleDeleteMyOrgRoute)
 		v1.POST("/parcels/:code/price", s.handleSetParcelPrice)
 		v1.POST("/parcels/:code/settle-counter", s.authRequired(), s.handleSettleCounterParcel)
 		v1.POST("/parcels/:code/pay", s.rateLimit("pay:parcel", 30, time.Hour), s.handlePayParcel)
+		v1.PATCH("/parcels/:code", s.authRequired(), s.handleUpdateOwnParcelDetails)
 		v1.GET("/parcels/:code/status", s.handleGetParcelStatus)
 		// Public and code-gated like /status above — the live position
 		// is deliberately anonymous (see dbx.CourierPosition).
@@ -383,6 +477,23 @@ func (s *Server) Router() *gin.Engine {
 			s.rateLimit("claim:parcel", 10, time.Hour), s.handleRequestParcelClaimOtp)
 		v1.POST("/parcels/:code/claim/verify",
 			s.rateLimit("claim:parcelverify", 20, time.Hour), s.handleVerifyParcelClaim)
+		// The other route to the same place, by the code rather than the
+		// phone (see handlers_parcel_receiver.go). Public for the same
+		// reason the claim pair is: the person standing at an agent's
+		// counter has no account and is not going to make one.
+		//
+		// Rate-limited per IP even though the real gate is the
+		// three-attempt counter on the parcel row. The two cover
+		// different attacks: the row counter stops guessing at ONE
+		// parcel, the IP limit stops one host walking a list of codes
+		// photographed off a shelf, which a per-parcel counter cannot see
+		// by construction. Confirm is limited harder than verify — there
+		// is no honest reason to close more than a handful of parcels
+		// from one address in an hour.
+		v1.POST("/parcels/:code/receiver/verify",
+			s.rateLimit("receiver-auth:parcel", 15, time.Hour), s.handleVerifyReceiverCode)
+		v1.POST("/parcels/:code/receiver/confirm",
+			s.rateLimit("receiver-confirm:parcel", 10, time.Hour), s.handleReceiverSelfConfirm)
 		v1.POST("/parcels/:code/receipt/otp", s.handleRequestParcelReceiptOtp)
 		v1.POST("/parcels/:code/receipt/confirm", s.handleConfirmParcelReceipt)
 		v1.GET("/parcels/:code/handoffs", s.authRequired(), s.handleListParcelHandoffs)
@@ -435,10 +546,22 @@ func (s *Server) Router() *gin.Engine {
 		v1.POST("/admin/parcels/bulk-assign", s.authRequired(), s.handleBulkAssignParcels)
 		v1.POST("/admin/parcels/:id/cancel", s.authRequired(), s.handleCancelParcel)
 		v1.POST("/admin/parcels/:id/refund", s.authRequired(), s.handleMarkParcelRefunded)
+		v1.POST("/admin/parcels/:id/pay-cash", s.authRequired(), s.handleConfirmParcelCashPayment)
 		v1.PATCH("/admin/parcels/:id", s.authRequired(), s.handleUpdateParcelDetails)
 		v1.POST("/admin/parcels/:id/exception", s.authRequired(), s.handleFlagParcelException)
 		v1.POST("/admin/parcels/:id/exception/clear", s.authRequired(), s.handleClearParcelException)
 		v1.GET("/admin/parcels/:id/handoffs", s.authRequired(), s.handleAdminListParcelHandoffs)
+		// The same three receiver-auth resolutions the company console
+		// has, as a superset: admin can unstick any carrier's parcel,
+		// including an Esoqo-operated one that has no company console to
+		// act from. Keyed on the parcel uuid because the admin app works
+		// in ids throughout.
+		v1.POST("/admin/parcels/:id/receiver-auth/grant-retry",
+			s.authRequired(), s.handleAdminGrantReceiverAuthRetry)
+		v1.POST("/admin/parcels/:id/delivery-code/reissue",
+			s.authRequired(), s.handleAdminReissueDeliveryCode)
+		v1.POST("/admin/parcels/:id/courier-earnings/release",
+			s.authRequired(), s.handleAdminReleaseHeldEarnings)
 
 		v1.GET("/admin/parcels/couriers/candidates", s.authRequired(), s.handleAdminSearchOnboardCandidates)
 		v1.GET("/admin/parcels/couriers", s.authRequired(), s.handleAdminListCouriers)
@@ -532,8 +655,11 @@ func (s *Server) Router() *gin.Engine {
 		v1.GET("/admin/parcels/parties", s.authRequired(), s.handleAdminSearchCounterParties)
 		v1.GET("/admin/parcels/labels/register", s.authRequired(), s.handleAdminListParcelLabelRegister)
 		v1.GET("/admin/parcels/labels/batches", s.authRequired(), s.handleAdminListParcelLabelBatches)
+		v1.GET("/admin/parcels/routes", s.authRequired(), s.handleAdminListParcelRoutes)
 		v1.POST("/admin/parcels/labels/void", s.authRequired(), s.handleVoidParcelLabels)
 		v1.POST("/admin/parcels/labels/batches/:id/void", s.authRequired(), s.handleVoidParcelLabelBatch)
+		v1.DELETE("/admin/parcels/labels", s.authRequired(), s.handleDeleteParcelLabels)
+		v1.DELETE("/admin/parcels/labels/batches/:id", s.authRequired(), s.handleDeleteParcelLabelBatch)
 	}
 
 	// Two routes, one handler. Daraja publishes no signature, HMAC or

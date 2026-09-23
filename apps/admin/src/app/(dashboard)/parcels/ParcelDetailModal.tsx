@@ -1,16 +1,18 @@
 'use client';
 
 import { useEffect, useState, useTransition } from 'react';
-import { Icon } from '@esoqo/ui';
+import { Icon, type IconName } from '@esoqo/ui';
 import { useAnnounce } from '@esoqo/a11y';
 import {
   actionAssignParcelCollector, actionSearchCollectors, actionCancelParcel, actionMarkParcelRefunded,
   actionGetParcelHandoffs, actionFlagParcelException, actionClearParcelException, actionUpdateParcelDetails,
-  actionConfirmParcelIntake,
+  actionConfirmParcelIntake, actionConfirmParcelCashPayment,
+  actionGrantReceiverAuthRetry, actionReissueDeliveryCode, actionReleaseHeldCourierEarnings,
   type CollectorLite, type HandoffRow,
 } from './actions';
 import type { AdminParcelRow } from './ParcelsTable';
 import { ParcelLabelPrint } from './ParcelLabelPrint';
+import { ContactButtons } from '@/components/ContactButtons';
 
 const CANCELLABLE = new Set(['DRAFT_PENDING_PAYMENT', 'BOOKED', 'RECEIVED_AT_COUNTER']);
 const FLAGGABLE = new Set(['RECEIVED_AT_COUNTER', 'PICKED_UP', 'IN_TRANSIT']);
@@ -36,13 +38,17 @@ type Panel = 'edit' | 'assign' | 'cancel' | 'flag' | 'label' | null;
  *  - Delete-ish: cancel the parcel, clear a resolved exception.
  */
 export function ParcelDetailModal({
-  parcel, statusLabel, canAssign, canCancel, canRefund, canEdit, onClose,
+  parcel, statusLabel, canAssign, canCancel, canRefund, canEdit, canConfirmPayment, onClose,
 }: {
   parcel: AdminParcelRow; statusLabel: Record<string, string>;
-  canAssign: boolean; canCancel: boolean; canRefund: boolean; canEdit: boolean;
+  canAssign: boolean; canCancel: boolean; canRefund: boolean; canEdit: boolean; canConfirmPayment: boolean;
   onClose: () => void;
 }) {
-  const [panel, setPanel] = useState<Panel>(null);
+  // Defaults open, not a click-through: the whole point of surfacing
+  // the label here is that whoever's looking at the record can see
+  // the actual sticker — full QR + barcode, at real size — without an
+  // extra tap for every parcel they check.
+  const [panel, setPanel] = useState<Panel>(LABELABLE.has(parcel.Status) ? 'label' : null);
   const [handoffs, setHandoffs] = useState<HandoffRow[] | null>(null);
   const [handoffsLoading, setHandoffsLoading] = useState(true);
 
@@ -52,13 +58,13 @@ export function ParcelDetailModal({
     return () => { cancelled = true; };
   }, [parcel.ID]);
 
-  const canManage = canAssign || canCancel || canRefund || canEdit;
+  const canManage = canAssign || canCancel || canRefund || canEdit || canConfirmPayment;
 
   return (
     <div className="scrim" role="presentation" onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}>
       <div className="modal" role="dialog" aria-modal="true" aria-labelledby="pd-title">
         <div className="modal-hd">
-          <div>
+          <div style={{ flex: 1, minWidth: 0 }}>
             <h2 id="pd-title" className="mono">{parcel.Code}</h2>
             <p className="sub" style={{ margin: '2px 0 0' }}>
               <span className={`pill ${parcel.Status === 'DRAFT_PENDING_PAYMENT' ? 'p-warn' : parcel.Status === 'CANCELLED' ? 'p-bad' : parcel.Status === 'DELIVERED' ? 'p-ok' : 'p-info'}`}>
@@ -102,6 +108,9 @@ export function ParcelDetailModal({
                     <Icon name="truck" size={13} />{parcel.AssignedCollectorName ? 'Reschedule collection' : 'Schedule collection'}
                   </button>
                 )}
+                {canConfirmPayment && parcel.Status === 'DRAFT_PENDING_PAYMENT' && (
+                  <ConfirmCashPaymentButton parcelId={parcel.ID} priceKes={parcel.PriceKes} />
+                )}
                 {canRefund && parcel.RefundStatus === 'PENDING' && <RefundButton parcelId={parcel.ID} />}
                 {canCancel && !parcel.ExceptionNote && FLAGGABLE.has(parcel.Status) && (
                   <button className="btn btn-o btn-sm" style={{ color: 'var(--amber)' }} onClick={() => setPanel(panel === 'flag' ? null : 'flag')}>
@@ -109,6 +118,30 @@ export function ParcelDetailModal({
                   </button>
                 )}
                 {canCancel && parcel.ExceptionNote && <ClearExceptionButton parcelId={parcel.ID} />}
+                {/* Escalating, and only the step the parcel is at:
+                    offering "new code" beside "two more tries" invites
+                    an operator to reissue on a receiver who merely
+                    mistyped a digit, which burns two SMS and kills a
+                    code they may be about to get right. */}
+                {canAssign && parcel.ReceiverAuthLockedAt && !parcel.ReceiverAuthHardLockedAt && (
+                  <ReceiverAuthButton
+                    parcelId={parcel.ID} label="Allow two more tries" icon="refresh"
+                    done="Two more tries allowed" action={actionGrantReceiverAuthRetry}
+                  />
+                )}
+                {canCancel && (parcel.ReceiverAuthLockedAt || parcel.ReceiverAuthHardLockedAt) && (
+                  <ReceiverAuthButton
+                    parcelId={parcel.ID} label="Issue a new delivery code" icon="key"
+                    done="New delivery code texted to the sender and receiver"
+                    action={actionReissueDeliveryCode}
+                  />
+                )}
+                {canCancel && parcel.CourierEarningsHeldUntil && (
+                  <ReceiverAuthButton
+                    parcelId={parcel.ID} label="Release courier pay" icon="coins"
+                    done="Courier earnings released" action={actionReleaseHeldCourierEarnings}
+                  />
+                )}
                 {canCancel && CANCELLABLE.has(parcel.Status) && (
                   <button className="btn btn-o btn-sm" style={{ color: 'var(--red)' }} onClick={() => setPanel(panel === 'cancel' ? null : 'cancel')}>
                     <Icon name="close" size={13} />Cancel parcel
@@ -139,8 +172,14 @@ function DetailSections({
   return (
     <table className="tbl">
       <tbody>
-        <Row label="Sender">{parcel.SenderName} <span className="sub">· {parcel.SenderMsisdn}</span></Row>
-        <Row label="Receiver">{parcel.ReceiverName} <span className="sub">· {parcel.ReceiverMsisdn}</span></Row>
+        <Row label="Sender">
+          {parcel.SenderName} <span className="sub">· {parcel.SenderMsisdn}</span>
+          <ContactButtons msisdn={parcel.SenderMsisdn} />
+        </Row>
+        <Row label="Receiver">
+          {parcel.ReceiverName} <span className="sub">· {parcel.ReceiverMsisdn}</span>
+          <ContactButtons msisdn={parcel.ReceiverMsisdn} />
+        </Row>
         <Row label="Route">{parcel.OriginLabel} → {parcel.DestinationLabel}</Row>
         {parcel.Notes && <Row label="Notes">{parcel.Notes}</Row>}
         <Row label="Type">{parcel.ParcelType.replace(/_/g, ' ')}</Row>
@@ -189,6 +228,44 @@ function DetailSections({
               <Icon name="alert-triangle" size={12} />{parcel.ExceptionNote}
             </span>
             {parcel.ExceptionFlaggedAt && <span className="sub" style={{ display: 'block' }}>Flagged {new Date(parcel.ExceptionFlaggedAt).toLocaleString('en-KE')}</span>}
+          </Row>
+        )}
+        {/* The receiver's own side of the code. Distinct from delivery
+            attempts below, which is a courier reaching a door and
+            finding nobody: here the parcel is exactly where it should
+            be and the person collecting it cannot prove who they are. */}
+        {(parcel.ReceiverAuthAttempts > 0 || parcel.ReceiverAuthLockedAt
+          || parcel.ReceiverAuthHardLockedAt || parcel.DeliveryCodeVersion > 1) && (
+          <Row label="Receiver verification">
+            <span className={`pill ${parcel.ReceiverAuthHardLockedAt ? 'p-bad' : parcel.ReceiverAuthLockedAt ? 'p-warn' : 'p-info'}`}>
+              <Icon name="lock" size={12} />
+              {parcel.ReceiverAuthHardLockedAt
+                ? 'Hard locked — needs a new code'
+                : parcel.ReceiverAuthLockedAt
+                  ? 'Locked out'
+                  : `${parcel.ReceiverAuthAttempts} wrong ${parcel.ReceiverAuthAttempts === 1 ? 'code' : 'codes'}`}
+            </span>
+            {(parcel.ReceiverAuthHardLockedAt ?? parcel.ReceiverAuthLockedAt) && (
+              <span className="sub" style={{ display: 'block' }}>
+                Since {new Date((parcel.ReceiverAuthHardLockedAt ?? parcel.ReceiverAuthLockedAt)!).toLocaleString('en-KE')}
+                {' · '}{parcel.ReceiverAuthAttempts} wrong codes
+              </span>
+            )}
+            {parcel.DeliveryCodeVersion > 1 && (
+              <span className="sub" style={{ display: 'block' }}>
+                Delivery code reissued {parcel.DeliveryCodeVersion - 1}×
+              </span>
+            )}
+          </Row>
+        )}
+        {parcel.CourierEarningsHeldUntil && (
+          <Row label="Courier pay held">
+            <span className="pill p-warn">
+              until {new Date(parcel.CourierEarningsHeldUntil).toLocaleString('en-KE')}
+            </span>
+            <span className="sub" style={{ display: 'block' }}>
+              The receiver closed this themselves at a pickup point — no staff witness.
+            </span>
           </Row>
         )}
         {parcel.Status === 'CANCELLED' && (
@@ -507,6 +584,45 @@ function ConfirmIntakeButton({ code }: { code: string }) {
   );
 }
 
+/** Cash paid at the counter — a stronger two-step confirm than most
+ *  buttons here get, showing the exact amount being confirmed before
+ *  anything happens: this is the one click that makes a parcel real
+ *  money, same weight as the M-Pesa/points transitions it stands in
+ *  for, and staff should see the figure they're vouching for matches
+ *  what was actually handed over. */
+function ConfirmCashPaymentButton({ parcelId, priceKes }: { parcelId: string; priceKes: string | null }) {
+  const [confirming, setConfirming] = useState(false);
+  const [pending, startTransition] = useTransition();
+  const [error, setError] = useState<string | null>(null);
+  const announce = useAnnounce();
+
+  if (!confirming) {
+    return (
+      <button className="btn btn-o btn-sm" style={{ color: 'var(--green)' }} onClick={() => setConfirming(true)}>
+        <Icon name="coins" size={13} />Confirm cash payment
+      </button>
+    );
+  }
+  return (
+    <span style={{ display: 'inline-flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
+      <span className="sub" style={{ fontSize: '.82rem' }}>
+        Confirm KES {priceKes ? Number(priceKes).toLocaleString('en-KE') : '0'} received in cash?
+      </span>
+      <button className="btn btn-p btn-sm" disabled={pending}
+        onClick={() => startTransition(async () => {
+          const result = await actionConfirmParcelCashPayment(parcelId);
+          if (!result.ok) { setError(result.error); return; }
+          announce('Cash payment confirmed — parcel booked', 'assertive');
+          setConfirming(false);
+        })}>
+        {pending ? 'Confirming…' : 'Yes, confirm'}
+      </button>
+      <button className="btn btn-o btn-sm" onClick={() => { setConfirming(false); setError(null); }}>Cancel</button>
+      <ActionError error={error} />
+    </span>
+  );
+}
+
 function RefundButton({ parcelId }: { parcelId: string }) {
   const [pending, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
@@ -539,6 +655,36 @@ function ClearExceptionButton({ parcelId }: { parcelId: string }) {
           else announce('Exception cleared', 'assertive');
         })}>
         <Icon name="check" size={13} />{pending ? 'Clearing…' : 'Clear exception'}
+      </button>
+      <ActionError error={error} />
+    </span>
+  );
+}
+
+/** The three receiver-verification verbs share a shape — one POST, no
+ *  input, a confirmation to announce — so they share a button rather
+ *  than three near-identical copies of ClearExceptionButton. */
+function ReceiverAuthButton({
+  parcelId, label, icon, done, action,
+}: {
+  parcelId: string;
+  label: string;
+  icon: IconName;
+  done: string;
+  action: (parcelId: string) => Promise<{ ok: true } | { ok: false; error: string }>;
+}) {
+  const [pending, startTransition] = useTransition();
+  const [error, setError] = useState<string | null>(null);
+  const announce = useAnnounce();
+  return (
+    <span>
+      <button className="btn btn-o btn-sm" disabled={pending}
+        onClick={() => startTransition(async () => {
+          const result = await action(parcelId);
+          if (!result.ok) setError(result.error);
+          else announce(done, 'assertive');
+        })}>
+        <Icon name={icon} size={13} />{pending ? 'Working…' : label}
       </button>
       <ActionError error={error} />
     </span>

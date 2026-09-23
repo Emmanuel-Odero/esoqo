@@ -1,0 +1,77 @@
+# ════════════════════════════════════════════════════════════════════
+#  production ingress — esoko.global
+#
+#  Same explicit-host / HTTP-01 reasoning as the preview overlay; see
+#  the header there.
+#
+#  The apex (esoko.global) needs an A record, not a CNAME — DNS forbids
+#  a CNAME at a zone apex alongside the zone's SOA/NS records, and some
+#  registrars' "URL redirect" workaround breaks the ACME challenge.
+# ════════════════════════════════════════════════════════════════════
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: esoqo
+  annotations:
+    cert-manager.io/cluster-issuer: letsencrypt-prod
+    nginx.ingress.kubernetes.io/proxy-body-size: "12m"
+    nginx.ingress.kubernetes.io/proxy-read-timeout: "60"
+    # www → apex, so the canonical origin is unambiguous for cookies,
+    # CORS and SEO alike.
+    nginx.ingress.kubernetes.io/from-to-www-redirect: "true"
+spec:
+  ingressClassName: nginx
+  tls:
+    - secretName: esoqo-production-tls
+      hosts:
+        - esoko.global
+        - www.esoko.global
+        - app.esoko.global
+        - admin.esoko.global
+        - store.esoko.global
+        - jamii.esoko.global
+  rules:
+    - host: esoko.global
+      http:
+        paths:
+          - { path: /, pathType: Prefix, backend: { service: { name: web, port: { number: 80 } } } }
+    - host: app.esoko.global
+      http:
+        paths:
+          - { path: /, pathType: Prefix, backend: { service: { name: app, port: { number: 80 } } } }
+    - host: admin.esoko.global
+      http:
+        paths:
+          - { path: /, pathType: Prefix, backend: { service: { name: admin, port: { number: 80 } } } }
+    - host: store.esoko.global
+      http:
+        paths:
+          - { path: /, pathType: Prefix, backend: { service: { name: store, port: { number: 80 } } } }
+    - host: jamii.esoko.global
+      http:
+        paths:
+          - { path: /, pathType: Prefix, backend: { service: { name: jamii, port: { number: 80 } } } }
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: esoqo-api
+  annotations:
+    cert-manager.io/cluster-issuer: letsencrypt-prod
+    nginx.ingress.kubernetes.io/proxy-body-size: "2m"
+spec:
+  ingressClassName: nginx
+  tls:
+    - secretName: esoqo-production-api-tls
+      hosts:
+        - api.esoko.global
+        - mobile.esoko.global
+  rules:
+    - host: api.esoko.global
+      http:
+        paths:
+          - { path: /, pathType: Prefix, backend: { service: { name: core-service, port: { number: 80 } } } }
+    - host: mobile.esoko.global
+      http:
+        paths:
+          - { path: /, pathType: Prefix, backend: { service: { name: core-go, port: { number: 80 } } } }

@@ -1,0 +1,84 @@
+# ════════════════════════════════════════════════════════════════════
+#  Database restore — a template, applied by hand during an incident.
+#
+#  Deliberately NOT part of any overlay and NOT managed by Fleet. This
+#  destroys data. It should be impossible to run by accident, and
+#  impossible for a git commit to trigger.
+#
+#  BEFORE running, in this order:
+#
+#    1. Pause Fleet, or drift correction will scale the apps back up
+#       underneath the restore:
+#         kubectl -n fleet-default patch gitrepo esoqo-<env> \
+#           --type merge -p '{"spec":{"paused":true}}'
+#
+#    2. Stop everything that writes:
+#         kubectl -n esoqo-<env> scale deploy --all --replicas=0
+#
+#    3. Set BACKUP_FILE below to the dump you actually want. List them
+#       first — see docs/deployment/README.md § "Backups and restore".
+#
+#  THEN:
+#         kubectl -n esoqo-<env> apply -f deploy/scripts/restore-job.yaml
+#         kubectl -n esoqo-<env> logs -f job/postgres-restore
+#
+#  AFTER, in this order: scale the apps back up, unpause Fleet, delete
+#  this Job. A paused GitRepo is a cluster that has silently stopped
+#  deploying — do not leave it that way.
+# ════════════════════════════════════════════════════════════════════
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: postgres-restore
+spec:
+  backoffLimit: 0 # never retry a destructive operation automatically
+  template:
+    spec:
+      restartPolicy: Never
+      containers:
+        - name: restore
+          image: postgres:16-alpine
+          env:
+            # ⚠  EDIT THIS to the dump you want to restore.
+            - name: BACKUP_FILE
+              value: /backups/esoqo-CHANGEME.dump
+            # Direct, not pooled: pg_restore runs DDL in one long
+            # transaction, which transaction-pooled PgBouncer breaks apart.
+            - name: DIRECT_DATABASE_URL
+              valueFrom: { secretKeyRef: { name: esoqo-db, key: DIRECT_DATABASE_URL } }
+          command: ["sh", "-c"]
+          args:
+            - |
+              set -euo pipefail
+
+              if [ ! -f "$BACKUP_FILE" ]; then
+                echo "no such backup: $BACKUP_FILE" >&2
+                echo "available:" >&2
+                ls -lh /backups >&2
+                exit 1
+              fi
+
+              # Prove the dump is readable before dropping anything. A
+              # corrupt dump discovered after --clean has run means the
+              # old data is gone and the new data never arrived.
+              echo "verifying $BACKUP_FILE ..."
+              pg_restore --list "$BACKUP_FILE" > /dev/null
+              echo "dump is readable"
+
+              # --clean --if-exists drops each object before recreating
+              # it. --no-owner because the restoring role owns everything
+              # afterwards regardless of who owned it in the dump.
+              pg_restore \
+                --clean --if-exists --no-owner \
+                --exit-on-error \
+                --dbname="$DIRECT_DATABASE_URL" \
+                "$BACKUP_FILE"
+
+              echo "restore complete"
+          volumeMounts: [{ name: backups, mountPath: /backups }]
+          resources:
+            requests: { cpu: 200m, memory: 512Mi }
+            limits: { memory: 2Gi }
+      volumes:
+        - name: backups
+          persistentVolumeClaim: { claimName: postgres-backups }

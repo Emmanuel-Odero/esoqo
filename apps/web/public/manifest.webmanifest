@@ -1,0 +1,42 @@
+{
+  "name": "Esoqo — business records simplified",
+  "short_name": "Esoqo",
+  "description": "Registrations, permits, licences and trading records for Kenya's traders, groups and businesses",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#FFFFFF", 
+  "theme_color": "#0A2E4D",
+  "icons": [
+    {
+      "src": "/favicon-32x32.png",
+      "sizes": "32x32",
+      "type": "image/png"
+    },
+    {
+      "src": "/apple-touch-icon.png",
+      "sizes": "180x180",
+      "type": "image/png"
+    },
+    {
+      "src": "/icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png"
+    },
+    {
+      "src": "/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png"
+    },
+    {
+      "src": "/maskable-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "maskable"
+    },
+    {
+      "src": "/favicon.ico",
+      "sizes": "16x16 32x32",
+      "type": "image/x-icon"
+    }
+  ]
+}

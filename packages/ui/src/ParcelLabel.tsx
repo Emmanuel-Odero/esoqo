@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 
 /**
  * A parcel label — just the code, its QR and its Code128 barcode.
@@ -34,8 +34,8 @@ export const LABEL_GAP_MM = 6;
 // down to the mm sizes above via CSS stays crisp instead of blurring.
 // 3–4x the eventual display size at 96dpi covers a typical 300dpi
 // print engine's upscaling without visibly softening either code.
-const QR_PIXELS = 380; // → displayed at 32mm
-const BARCODE_HEIGHT_PIXELS = 110; // → displayed at 16mm
+const QR_PIXELS = 380; // → displayed at 24mm (~4x downscale)
+const BARCODE_HEIGHT_PIXELS = 110; // → displayed at 11mm
 
 // A real shipping-label layout, not a cramped grid cell: QR on the
 // left (the thing someone's actually going to scan with a phone —
@@ -105,6 +105,47 @@ export function trackingUrlFor(code: string, sig?: string): string {
   return sig ? `${base}/p/${code}?k=${sig}` : `${base}/t/${code}`;
 }
 
+/** How many characters of a drop point survive onto the label. Enough
+ *  for "MACHAKOS JUNCTION", short enough to stay legible at 5.5mm. */
+const DROP_POINT_MAX = 18;
+
+/**
+ * The drop point, as it is safe and useful to print large.
+ *
+ * A counter clerk types `destinationLabel` as free prose, because prose
+ * is what a courier actually reads — "Westlands, opposite Sarit". Two
+ * things follow, and they pull in opposite directions:
+ *
+ *   - A handler with no scanner sorting eleven boxes at a stage needs to
+ *     know which come off *here*, at arm's length, in bad light. That
+ *     argues for printing it big.
+ *   - That same prose can be most of a street address, and a label rides
+ *     in the open on a box. Printing it verbatim and large would put a
+ *     receiver's location on adhesive — exactly the exposure this
+ *     component's header comment removed sender/receiver details to
+ *     avoid.
+ *
+ * So only the leading locality survives: the text up to the first comma
+ * or dash, uppercased and capped. "Westlands, opposite Sarit" prints
+ * WESTLANDS. That is the routing decision a handler makes — which is
+ * operational information — with the navigational detail left behind the
+ * scan, where the person who needs it already has to look.
+ *
+ * Returns undefined for anything that reduces to nothing, so the caller
+ * prints the blank write-on rule rather than an empty band.
+ */
+export function dropPointFor(label?: string | null): string | undefined {
+  if (!label) return undefined;
+  // Split on the separators people actually use between "where" and
+  // "where exactly" — a comma, a dash, or a slash.
+  const head = label.split(/[,\-/(]/)[0]?.trim() ?? '';
+  if (!head) return undefined;
+  const upper = head.toUpperCase().replace(/\s+/g, ' ');
+  return upper.length > DROP_POINT_MAX
+    ? `${upper.slice(0, DROP_POINT_MAX - 1).trimEnd()}…`
+    : upper;
+}
+
 /**
  * The label as it prints.
  *
@@ -122,29 +163,43 @@ export function trackingUrlFor(code: string, sig?: string): string {
  * existed.
  */
 export function PrintableLabel({
-  code, sig, route, orgName, orgLogoUrl, esoqoLogoUrl,
+  code, sig, route, orgName, orgLogoUrl, esoqoLogoUrl, onReady,
 }: {
   code: string; sig?: string;
-  /** "KISUMU ▸ NAIROBI", when it's known. The single most useful thing
-   *  to someone sorting a pile of boxes at 5am is where each one is
-   *  going, readable at arm's length without scanning anything. Blank
-   *  stock prints an empty band to be written on by hand, which is the
-   *  honest workflow. */
+  /** Fires once, the moment this label's QR and barcode have both
+   *  actually finished drawing — see the component's own comment on
+   *  why a bulk print needs this. */
+  onReady?: () => void;
+  /** Where this box is going — "KISUMU ▸ NAIROBI" from an admin print,
+   *  or a bare drop point like "NAKURU" from a counter booking. The
+   *  single most useful thing to someone sorting a pile of boxes at 5am
+   *  is where each one comes off, readable at arm's length without
+   *  scanning anything, so this gets its own band rather than competing
+   *  with the logos in the header.
+   *
+   *  Pass a counter's free-text `destinationLabel` through dropPointFor
+   *  first — it is prose that can contain a street address, and this
+   *  band is printed large on something that rides in the open.
+   *
+   *  Blank stock prints an empty rule to be written on by hand, which is
+   *  the honest workflow. */
   route?: string;
   /** The courier company this pad was issued to, when it was issued to
-   *  one. Prints as "{company} · Managed by Esoqo" under the route
-   *  band, so anyone holding the box — scanner or not — sees whose
-   *  label it is and who stands behind it. Omitted for shared-pool
-   *  stock, which belongs to no company. */
+   *  one. Prints centred in the header, alongside its logo — the pad
+   *  owner's own mark and name are what someone picking up the box
+   *  should see first. Omitted for shared-pool stock, which belongs to
+   *  no company. */
   orgName?: string;
-  /** Company logo URL (served via /img/:key). Rendered centered in the
-   *  header brand band at a fixed mm size — never overlaid on the QR or
-   *  barcode pixels, so scannability is unaffected. Falls back to text
-   *  orgName when absent; Esoqo branding always remains. */
+  /** Company logo URL (served via /img/:key). Rendered centred in the
+   *  header band next to the company name, at a fixed mm size — never
+   *  overlaid on the QR or barcode pixels, so scannability is
+   *  unaffected. */
   orgLogoUrl?: string;
-  /** Esoqo master logo URL. Falls back to the BRAND wordmark when
-   *  absent (no logo configured yet), so labels print with our branding
-   *  by default. */
+  /** Esoqo's own full-name logo (not just a mark — the wordmark image
+   *  itself). Prints once, centred in the trust footer between "Managed
+   *  by Esoqo" and the tracking link — the header band is the pad
+   *  owner's alone, see orgName/orgLogoUrl above. Falls back to the
+   *  BRAND wordmark as plain text when absent. */
   esoqoLogoUrl?: string;
 }) {
   const qrSrc = useCodeImage(async (canvas) => {
@@ -158,74 +213,87 @@ export function PrintableLabel({
     });
   }, [code]);
 
+  // Both codes are drawn asynchronously (dynamic import + canvas draw
+  // each) — fine for one label on screen, but a bulk print of 50-100
+  // fires that many canvas draws at once, competing for the same main
+  // thread. Printing (window.print()) has no idea any of this is still
+  // in flight, so a bulk job used to reliably beat some fraction of
+  // labels to the punch — printed with blank QR/barcode boxes where
+  // the draw simply hadn't finished yet, which is what actually reads
+  // as "losing styling and position" once cut apart. onReady lets a
+  // caller printing many of these at once hold the print trigger until
+  // every single one has actually finished drawing.
+  const ready = qrSrc !== null && barcodeSrc !== null;
+  const firedReady = useRef(false);
+  useEffect(() => {
+    if (ready && !firedReady.current) {
+      firedReady.current = true;
+      onReady?.();
+    }
+  }, [ready, onReady]);
+
   return (
     <div
       className="print-label"
       style={{
-        display: 'flex', flexDirection: 'column', gap: '1.5mm',
+        display: 'flex', flexDirection: 'column', gap: '1mm',
         width: `${LABEL_WIDTH_MM}mm`, height: `${LABEL_HEIGHT_MM}mm`,
         padding: '2.5mm 3mm', boxSizing: 'border-box',
-        // A dashed cut-guide, not a solid box — this is what actually
-        // gets cut apart into individual stickers, so the border
-        // itself needs to read as "cut along here", not as part of
-        // the label's own design.
-        border: '1px dashed #999', borderRadius: '2mm',
+        borderRadius: '2mm',
       }}
     >
-      {/* Brand + route band. Logos live here in the header — fixed mm
-          sizes, never touching QR/barcode pixels — so a phone camera or
-          gun reads clean codes. Company logo centered (the pad owner),
-          Esoqo mark left (who stands behind it). Text fallbacks keep
-          every label printable with Esoqo branding alone. */}
+      {/* Brand band: the pad owner, centred — logo and name together
+          when a logo is on file; just the name, styled large enough to
+          carry the header on its own, when it isn't. No Esoqo branding
+          here — this band is the company's, Esoqo's own mark lives in
+          the trust footer below instead. */}
       <div style={{
-        display: 'flex', justifyContent: 'space-between', alignItems: 'center',
-        borderBottom: '0.4mm solid #111', paddingBottom: '1mm', gap: '2mm',
-        minHeight: '7mm',
+        display: 'flex', justifyContent: 'center', alignItems: 'center', gap: '1.5mm',
+        borderBottom: '0.4mm solid #111', paddingBottom: '1mm', minHeight: '7mm',
       }}>
-        <span style={{ display: 'flex', alignItems: 'center', gap: '1.5mm', minWidth: 0 }}>
-          {esoqoLogoUrl ? (
-            <img src={esoqoLogoUrl} alt="Esoqo"
-              onError={(e) => { (e.currentTarget as HTMLImageElement).style.display = 'none'; }}
-              style={{ height: '5.5mm', maxWidth: '18mm', objectFit: 'contain' }} />
-          ) : (
-            <strong style={{ fontSize: '3.6mm', letterSpacing: '.02em', lineHeight: 1 }}>{BRAND}</strong>
-          )}
-          {orgLogoUrl && (
-            <img src={orgLogoUrl} alt={orgName ?? 'Company logo'}
-              onError={(e) => { (e.currentTarget as HTMLImageElement).style.display = 'none'; }}
-              style={{ height: '6.5mm', maxWidth: '30mm', objectFit: 'contain' }} />
-          )}
-        </span>
-        <span style={{
-          fontSize: '3.4mm', fontWeight: 700, letterSpacing: '.04em', lineHeight: 1,
-          overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
-          // Blank stock prints an empty rule to be written on in the
-          // field — which is what actually happens, rather than
-          // pretending the route is known at print time.
-          borderBottom: route ? 'none' : '0.3mm solid #bbb', minWidth: '28mm', textAlign: 'right',
-        }}>
-          {route ?? ' '}
-        </span>
+        {orgLogoUrl && (
+          <img src={orgLogoUrl} alt={orgName ?? 'Company logo'}
+            onError={(e) => { (e.currentTarget as HTMLImageElement).style.display = 'none'; }}
+            style={{ height: '6.5mm', maxWidth: '22mm', objectFit: 'contain', flexShrink: 0 }} />
+        )}
+        <strong style={{
+          fontSize: orgLogoUrl ? '2.9mm' : '4.4mm', letterSpacing: '.02em', lineHeight: 1,
+          overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: '60mm',
+        }}>{orgName ?? BRAND}</strong>
       </div>
-      {/* Company band. Only on company-issued stock: whose pad this is
-          and who manages it, readable without scanning anything. */}
-      {orgName && (
-        <div style={{
-          fontSize: '2.8mm', fontWeight: 700, letterSpacing: '.03em', lineHeight: 1,
-          overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
-        }}>
-          {orgName} · Managed by {BRAND}
-        </div>
-      )}
+
+      {/* The drop-point band.
+          Full width, 5.5mm, the largest type on the label — because
+          "which of these boxes comes off here" is the decision made a
+          hundred times a trip, by someone holding a torch rather than a
+          scanner. Deliberately the drop point alone and never the full
+          address (see dropPointFor): routing information, not a
+          receiver's location.
+          Blank stock prints an empty rule to be written on in the field,
+          which is what actually happens rather than pretending the
+          destination is known at print time. */}
+      <div style={{
+        fontSize: route ? '5.5mm' : '3mm', fontWeight: 800, letterSpacing: '.02em',
+        lineHeight: 1.05, minHeight: '6mm', display: 'flex', alignItems: 'center',
+        overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+        borderBottom: route ? 'none' : '0.3mm solid #bbb',
+      }}>
+        {route ?? ' '}
+      </div>
 
       <div style={{ display: 'flex', flexDirection: 'row', alignItems: 'center', gap: '3mm', flex: 1, minHeight: 0 }}>
-        <div style={{ width: '27mm', height: '27mm', flexShrink: 0 }}>
+        {/* 22mm, down from 24mm, to fund a properly-legible footer logo
+            below without pushing the label past its fixed 50mm height.
+            Still comfortably scannable: QR_PIXELS is 380, so this is
+            still roughly a 4x downscale at 96dpi and the modules stay
+            crisp through a 300dpi print engine. */}
+        <div style={{ width: '21mm', height: '21mm', flexShrink: 0 }}>
           {qrSrc && <img src={qrSrc} alt={`Tracking QR code for ${code}`} width={QR_PIXELS} height={QR_PIXELS}
             style={{ width: '100%', height: '100%', objectFit: 'contain' }} />}
         </div>
-        <div style={{ display: 'flex', flexDirection: 'column', justifyContent: 'center', gap: '2mm', minWidth: 0, flex: 1 }}>
+        <div style={{ display: 'flex', flexDirection: 'column', justifyContent: 'center', gap: '1.5mm', minWidth: 0, flex: 1 }}>
           <strong className="mono" style={{ fontSize: '4.6mm', lineHeight: 1 }}>{code}</strong>
-          <div style={{ width: '100%', height: '11mm' }}>
+          <div style={{ width: '100%', height: '10mm' }}>
             {barcodeSrc && <img src={barcodeSrc} alt={`Barcode for ${code}`}
               style={{ width: '100%', height: '100%', objectFit: 'contain' }} />}
           </div>
@@ -233,16 +301,33 @@ export function PrintableLabel({
         </div>
       </div>
 
-      {/* The trust footer. Small, always present, and the only thing on
-          the label that makes the signature visible to a person — "scan
-          it, and if it isn't ours it says so" is a claim worth printing
-          precisely because it is checkable. */}
+      {/* The trust footer — three parts. Left: the genuineness check and
+          "Managed by Esoqo", as plain text (who stands behind the label,
+          and whether that's checkable). Centre: Esoqo's own full-name
+          logo — sized to be legible without crowding the text either
+          side of it, which is why it's capped small even though it's
+          the one full wordmark image on the whole label. Right: the
+          tracking link. Text sides get `flex: 1` so they share the
+          remaining width evenly and don't crush the centred logo. */}
       <div style={{
         display: 'flex', justifyContent: 'space-between', alignItems: 'center',
-        borderTop: '0.3mm solid #ddd', paddingTop: '0.8mm', fontSize: '2.3mm', color: '#555', lineHeight: 1,
+        borderTop: '0.3mm solid #ddd', paddingTop: '0.8mm', fontSize: '2.1mm', color: '#555', lineHeight: 1, gap: '1.5mm',
       }}>
-        <span>{sig ? `✓ genuine ${BRAND} label` : `${BRAND} label`}</span>
-        <span>{TRACK_HOST}</span>
+        <span style={{ flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+          {sig ? '✓ genuine' : 'unverified'} · Managed by {BRAND}
+        </span>
+        <span style={{ flexShrink: 0, display: 'flex', alignItems: 'center' }}>
+          {esoqoLogoUrl ? (
+            <img src={esoqoLogoUrl} alt={BRAND}
+              onError={(e) => { (e.currentTarget as HTMLImageElement).style.display = 'none'; }}
+              style={{ height: '6mm', maxWidth: '28mm', objectFit: 'contain' }} />
+          ) : (
+            <strong style={{ fontSize: '2.6mm' }}>{BRAND}</strong>
+          )}
+        </span>
+        <span style={{ flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', textAlign: 'right' }}>
+          {TRACK_HOST}
+        </span>
       </div>
     </div>
   );
@@ -294,14 +379,56 @@ export function PrintStyles() {
       __html: `
       @media print {
         @page { size: portrait; margin: 10mm; }
+        body { position: relative; }
         body * { visibility: hidden; }
         .print-label, .print-label *,
         .print-label-page, .print-label-page *,
+        .print-sheet-root, .print-sheet-root *,
         .print-modal-escape, .print-modal-escape * { visibility: visible; }
         .print-modal-escape { position: fixed; top: 0; left: 0; }
+        /* visibility:hidden hides everything else without removing
+           it from layout, so whatever precedes a print target in the
+           DOM (page chrome, cards, controls) still reserves its own
+           height and pushes the target down from the sheet's true top
+           edge. A single position:fixed escape (above) is fine for
+           one always-one-page label, but is wrong for a POSSIBLY
+           multi-page batch: fixed-positioned boxes are defined to
+           repeat on every printed page rather than paginate, which
+           would print every page's labels stacked on page one. Using
+           position:absolute instead — anchored to body, made
+           positioned just above — keeps the group's pages in normal
+           flow relative to EACH OTHER (so page-break-after below still
+           separates them) while pulling the whole group to start at
+           the sheet's real top-left regardless of what's hidden above
+           it. */
+        .print-sheet-root { position: absolute; top: 0; left: 0; width: 100%; }
         .print-label-page { page-break-after: always; break-after: page; }
         .print-label-page:last-child { page-break-after: auto; break-after: auto; }
         .print-label { break-inside: avoid; page-break-inside: avoid; }
+        /* ScaledLabel fits a preview to whatever on-screen container
+           it's in — including shrinking below 90×50mm on a narrow
+           phone. That transform must never reach paper: a preview
+           scaled down to fit a small screen is not a smaller sticker. */
+        .esoqo-scaled-label { transform: none !important; }
+        /* LabelPrintSheet's on-screen "paper" framing — a bordered,
+           shadowed box pre-shrunk by previewScale so a whole page
+           fits a card — is exactly that: an on-screen affordance. Print
+           already gets a real page with a real margin from @page
+           above; printing this box verbatim would shrink every label to
+           a fraction of its true 90×50mm size AND double up the page
+           margin (a literal 210mm-wide box, complete with its own
+           padding standing in for that margin, inside a canvas @page
+           already inset by 10mm). Resetting --lp-scale to 1 restores
+           true size (every mm dimension in LabelPrintSheet reads the
+           scale through this variable); stripping the frame's own
+           box model lets the grid flow naturally inside the page's own
+           margin instead of nesting a second one inside it. */
+        .lp-sheet-scale {
+          --lp-scale: 1 !important;
+          width: auto !important; height: auto !important; aspect-ratio: auto !important;
+          max-width: none !important; border: none !important; box-shadow: none !important;
+          padding: 0 !important; background: none !important; overflow: visible !important;
+        }
       }
     `,
     }} />

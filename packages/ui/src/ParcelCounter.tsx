@@ -2,7 +2,8 @@
 
 import { forwardRef, useCallback, useEffect, useImperativeHandle, useRef, useState } from 'react';
 import { Icon } from './Icon';
-import { PrintableLabel, PrintStyles } from './ParcelLabel';
+import { Modal } from './Modal';
+import { dropPointFor, PrintableLabel, PrintStyles } from './ParcelLabel';
 import {
   flushQueue, listQueued, offlineSupported, queueBooking, type QueuedBooking,
 } from './parcelOfflineQueue';
@@ -14,11 +15,15 @@ import type {
 /**
  * The Counter — taking a parcel in over a desk.
  *
- * One view, not a wizard. Counter work is measured in seconds per
- * customer and every route transition is a stall — which is also why
- * the scan field holds focus from mount and a handheld scanner (which
- * is just a keyboard that types fast and hits Enter) submits it without
- * anyone touching the mouse.
+ * One view, not a wizard, but also not one long page: the resting state
+ * is just the scan bar and two quick actions, and the Who/What/Measure
+ * fields live in a dialog that opens the moment there is something to
+ * fill in. A clerk between customers sees a short page, not a form they
+ * have to scroll past. Counter work is measured in seconds per customer
+ * and every route transition is a stall — which is also why the scan
+ * field holds focus from mount and a handheld scanner (which is just a
+ * keyboard that types fast and hits Enter) submits it without anyone
+ * touching the mouse, straight into that dialog.
  *
  * The deeper idea: "attach info to a label" and "book a parcel" were
  * two features with two vocabularies for one physical act — a handler
@@ -93,6 +98,11 @@ export const CounterForm = forwardRef<CounterFormHandle, {
   const [error, setError] = useState<string | null>(null);
   const [done, setDone] = useState<{ code: string; kind: 'booked' | 'held' | 'queued' } | null>(null);
   const [busy, setBusy] = useState(false);
+  // Whether the Who/What/Measure dialog is open. A fresh scan of a
+  // blank/held label opens it automatically; so does the "New booking"
+  // quick action. Cancelling it just hides it again — whatever was
+  // typed, and any loaded label, is still there to resume.
+  const [composing, setComposing] = useState(false);
   const [intakeConfirmed, setIntakeConfirmed] = useState(false);
   const [confirmingIntake, setConfirmingIntake] = useState(false);
   const [confirmError, setConfirmError] = useState<string | null>(null);
@@ -152,6 +162,7 @@ export const CounterForm = forwardRef<CounterFormHandle, {
     if (result.parcel) {
       setParcelRef(result.parcel);
       setLoadedCode(null);
+      setComposing(false);
       setNotice(
         `${target} is already ${PARCEL_STATUS_LABEL[result.parcel.status] ?? 'booked'}. ` +
         `Open it to track — or scan a blank label to book the next one.`,
@@ -164,6 +175,8 @@ export const CounterForm = forwardRef<CounterFormHandle, {
     const info = result.info;
     if (!info) {
       setNotice(`${target} is a blank label. Fill it in below.`);
+      setComposing(true);
+      say(`Loaded ${target}`, 'polite');
       return;
     }
     // Resuming: whatever the field already recorded is pre-filled, so a
@@ -180,6 +193,7 @@ export const CounterForm = forwardRef<CounterFormHandle, {
     setLengthCm(info.lengthCm != null ? String(info.lengthCm) : '');
     setWidthCm(info.widthCm != null ? String(info.widthCm) : '');
     setHeightCm(info.heightCm != null ? String(info.heightCm) : '');
+    setComposing(true);
     say(`Loaded ${target}`, 'polite');
   }, [actions, say]);
 
@@ -218,6 +232,26 @@ export const CounterForm = forwardRef<CounterFormHandle, {
     return v.trim() !== '' && Number.isFinite(n) && n > 0 ? n : undefined;
   }
 
+  // Anything worth not losing if the clerk backs out of the dialog —
+  // decides whether the idle view offers "New booking" or "Continue
+  // booking" for the next tap.
+  const hasDraft = Boolean(
+    loadedCode || senderName.trim() || senderMsisdn.trim() || receiverName.trim() ||
+    receiverMsisdn.trim() || originLabel.trim() || destinationLabel.trim() ||
+    itemDescription.trim() || weightKg.trim() || lengthCm.trim(),
+  );
+
+  function detach() {
+    setLoadedCode(null);
+    setCode('');
+    setNotice(null);
+    setSenderName(''); setSenderMsisdn(''); setReceiverName(''); setReceiverMsisdn('');
+    setOriginLabel(''); setDestinationLabel(''); setItemType(''); setItemDescription('');
+    setWeightKg(''); setLengthCm(''); setWidthCm(''); setHeightCm('');
+    setDeclaredValue(''); setParcelType(''); setContentsDeclared(false);
+    setComposing(false);
+  }
+
   function labelInfo(): CounterLabelInfo & { itemDescription: string } {
     return {
       itemDescription: itemDescription.trim(),
@@ -243,6 +277,7 @@ export const CounterForm = forwardRef<CounterFormHandle, {
       if (!res.ok) { setError(res.error); return; }
       setDone({ code: loadedCode, kind: 'held' });
       setDoneSig(undefined);
+      setComposing(false);
       say(`Saved ${loadedCode}`, 'assertive');
     });
   }
@@ -281,6 +316,7 @@ export const CounterForm = forwardRef<CounterFormHandle, {
       setDoneSig(undefined);
       setIntakeConfirmed(false);
       setConfirmError(null);
+      setComposing(false);
       say(`Booked ${res.code}`, 'assertive');
     }).catch(async () => {
       // The network went away mid-submit. A counter cannot answer that
@@ -299,6 +335,7 @@ export const CounterForm = forwardRef<CounterFormHandle, {
         await queueBooking(input);
         setDone({ code: loadedCode, kind: 'queued' });
         setDoneSig(undefined);
+        setComposing(false);
         say(`${loadedCode} held offline`, 'assertive');
       } catch (e) {
         setError(e instanceof Error ? e.message : 'Could not hold that booking offline.');
@@ -354,7 +391,20 @@ export const CounterForm = forwardRef<CounterFormHandle, {
             genuine. */}
         {done.kind === 'booked' && (
           <div className="print-modal-escape" style={{ marginTop: 16 }}>
-            <PrintableLabel code={done.code} sig={doneSig} orgName={orgName} orgLogoUrl={orgLogoUrl} />
+            {/* route: the drop point, from what the clerk just typed into
+                "To". This label goes straight onto a box that will be
+                sorted by people without scanners, and the destination was
+                sitting in this form's own state the whole time — it just
+                never reached the sticker. dropPointFor keeps it to the
+                locality, so a free-text address never prints large on
+                something that rides in the open. */}
+            <PrintableLabel
+              code={done.code}
+              sig={doneSig}
+              route={dropPointFor(destinationLabel)}
+              orgName={orgName}
+              orgLogoUrl={orgLogoUrl}
+            />
           </div>
         )}
         <div style={{ display: 'flex', gap: 8, justifyContent: 'center', marginTop: 16, flexWrap: 'wrap' }}>
@@ -382,45 +432,24 @@ export const CounterForm = forwardRef<CounterFormHandle, {
       {/* ── Scan ─────────────────────────────────────────────── */}
       {/* Hidden when a unified scanner above this form already owns
           scanning (see the scanbox prop): the same load path still runs
-          through the ref's scan(), and the feedback below (loaded chip,
-          parcel notice) says what came in. */}
+          through the ref's scan(), and the feedback below (parcel
+          notice, idle state) says what came in. This bar is the whole
+          resting page — a scanner gun is a keyboard that types fast and
+          hits Enter, so the fastest path from box to booking is never
+          more than this one field away. */}
       {scanbox !== false && (
-      <form onSubmit={(e) => { e.preventDefault(); void load(code); }} style={{ marginBottom: 16 }}>
-        <label className="sub" style={{ display: 'block' }}>Label code
-          <div style={{ display: 'flex', gap: 8, marginTop: 2 }}>
-            <input
-              ref={scanRef} className="mono" value={code}
-              onChange={(e) => { setCode(e.target.value); setLoadedCode(null); setParcelRef(null); }}
-              placeholder="Scan the label, or type PKG-XXXXXX"
-              autoComplete="off" spellCheck={false}
-              style={{ flex: 1, padding: '10px 12px', fontSize: '1.05rem', border: '1.5px solid var(--line)', borderRadius: 8 }}
-            />
-            <button className="btn btn-o btn-sm" type="submit" disabled={loading}>
-              {loading ? 'Checking…' : 'Load'}
-            </button>
-          </div>
-        </label>
-        <p className="sub" style={{ margin: '6px 0 0', fontSize: '.8rem' }}>
-          A pre-printed label ties this booking to the sticker already on the box. Leave it blank
-          to mint a fresh code at the end instead.
-        </p>
+      <form onSubmit={(e) => { e.preventDefault(); void load(code); }} className="ctr-scan" style={{ marginBottom: 14 }}>
+        <input
+          ref={scanRef} className="mono" value={code}
+          onChange={(e) => { setCode(e.target.value); setLoadedCode(null); setParcelRef(null); }}
+          placeholder="Scan the label, or type PKG-XXXXXX"
+          aria-label="Label code"
+          autoComplete="off" spellCheck={false}
+        />
+        <button className="btn btn-o btn-sm" type="submit" disabled={loading}>
+          {loading ? 'Checking…' : 'Load'}
+        </button>
       </form>
-      )}
-
-      {/* The loaded sticker, pinned where the clerk can see it. The
-          chip is the persistent anchor for "this booking will bind to
-          THAT code"; the notice below explains what the code held.
-          Detaching mints a fresh code at booking instead. */}
-      {loadedCode && (
-        <div className="row" style={{ gap: 8, alignItems: 'center', flexWrap: 'wrap', margin: '2px 0 12px' }}>
-          <span className="pill p-info"><Icon name="qr" size={12} />{loadedCode}</span>
-          <span className="sub" style={{ fontSize: '.8rem' }}>
-            label loaded — the booking will be bound to this sticker.
-          </span>
-          <button type="button" className="btn btn-o btn-sm" onClick={() => setLoadedCode(null)}>
-            <Icon name="close" size={12} />Detach
-          </button>
-        </div>
       )}
 
       {/* A scanned code that turned out to be an existing parcel: the
@@ -433,140 +462,211 @@ export const CounterForm = forwardRef<CounterFormHandle, {
           <a className="btn btn-o btn-sm" href={links.parcelHref(parcelRef.code)}>Open parcel</a>
         </div>
       )}
-      {!parcelRef && notice && <div className="chain" style={{ marginBottom: 12 }}><Icon name="info" size={16} /><span>{notice}</span></div>}
 
-      <Section title="Who">
-        <Row>
-          <PartyField
-            label="Sender" name={senderName} msisdn={senderMsisdn}
-            onName={setSenderName} onMsisdn={setSenderMsisdn}
-            search={actions.searchParties}
-          />
-        </Row>
-        <Row>
-          <PartyField
-            label="Receiver" name={receiverName} msisdn={receiverMsisdn}
-            onName={setReceiverName} onMsisdn={setReceiverMsisdn}
-            search={actions.searchParties}
-          />
-        </Row>
-        <Row>
-          <Field label="From" value={originLabel} onChange={setOriginLabel} placeholder="e.g. Kisumu" />
-          <Field label="To" value={destinationLabel} onChange={setDestinationLabel} placeholder="e.g. Westlands, Nairobi" />
-        </Row>
-      </Section>
-
-      <Section title="What">
-        <Row>
-          <label className="sub" style={{ flex: 1 }}>Item type
-            <select value={itemType} onChange={(e) => setItemType(e.target.value)} style={INPUT}>
-              <option value="">—</option>
-              {ITEM_TYPES.map((t) => <option key={t} value={t}>{t}</option>)}
-            </select>
-          </label>
-          <Field label="Description" value={itemDescription} onChange={setItemDescription} placeholder="e.g. flat-pack shelf unit" />
-        </Row>
-      </Section>
-
-      <Section title="Measure">
-        {/* The rate card in one glance. A clerk who can see the whole
-            ladder — and which rung the box is climbing — can quote
-            before the numbers are in, and explain a jump without
-            sending the customer off to read terms. */}
-        {pricing.length > 0 && (
-          <div className="row" style={{ gap: 8, flexWrap: 'wrap', marginBottom: 10 }}>
-            {pricing.map((p) => {
-              const chosen = effectiveType === p.parcelType;
-              return (
-                <span
-                  key={p.parcelType}
-                  className={chosen ? 'pill p-info' : 'pill p-mute'}
-                  title={`${p.minWeightKg}–${p.maxWeightKg}kg — this is what ${p.weightLabel.toLowerCase()} charges`}
-                >
-                  {p.weightLabel}: KES {p.minKes}–{p.maxKes}
-                </span>
-              );
-            })}
-          </div>
-        )}
-        <Row>
-          <Field label="Weight (kg)" value={weightKg} onChange={setWeightKg} placeholder="0.0" type="number" />
-          <Field label="Length (cm)" value={lengthCm} onChange={setLengthCm} placeholder="0" type="number" />
-          <Field label="Width (cm)" value={widthCm} onChange={setWidthCm} placeholder="0" type="number" />
-          <Field label="Height (cm)" value={heightCm} onChange={setHeightCm} placeholder="0" type="number" />
-        </Row>
-        {/* Shown, never silent. A clerk who can see *why* the price
-            moved can explain it to the person holding the box; one who
-            only sees a bigger number will assume the system is wrong
-            and argue with it. */}
-        {volumetric > 0 && (
-          <p className="sub" style={{ margin: '8px 0 0', display: 'flex', alignItems: 'center', gap: 6 }}>
-            {bulkRules && <Icon name="alert-triangle" size={14} />}
-            Volumetric {volumetric}kg
-            {bulkRules
-              ? ` — bulkier than it is heavy, so it is charged as ${chargeable}kg, not ${actual || 0}kg.`
-              : ` — less than its actual ${actual}kg, so weight decides the price.`}
-          </p>
-        )}
-        <Row>
-          <label className="sub" style={{ flex: 1 }}>Weight bracket
-            <select value={effectiveType} onChange={(e) => setParcelType(e.target.value)} style={INPUT}>
-              <option value="">—</option>
-              {pricing.map((p) => (
-                <option key={p.parcelType} value={p.parcelType}>
-                  {p.weightLabel} ({p.minWeightKg}–{p.maxWeightKg}kg)
-                </option>
-              ))}
-            </select>
-          </label>
-          <Field label="Declared value (KES)" value={declaredValue} onChange={setDeclaredValue} placeholder="0" type="number" />
-        </Row>
-        {bracket && !parcelType && chargeable > 0 && (
-          <p className="sub" style={{ margin: '6px 0 0' }}>
-            {chargeable}kg puts this in <strong>{bracket.weightLabel}</strong> — change it above if that is wrong.
-          </p>
-        )}
-      </Section>
-
-      {/* A positive affirmation, recorded against the clerk who made
-          it — see the intake migration on why this is a person and a
-          time rather than a boolean. */}
-      <label style={{ display: 'flex', gap: 8, alignItems: 'flex-start', margin: '4px 0 16px' }}>
-        <input type="checkbox" checked={contentsDeclared} onChange={(e) => setContentsDeclared(e.target.checked)}
-          style={{ marginTop: 3 }} />
-        <span className="sub">
-          I asked the sender about prohibited items and they confirmed there are none.
-          This is recorded against your account.
-        </span>
-      </label>
-
-      <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap', borderTop: '1px solid var(--line)', paddingTop: 14 }}>
-        <button className="btn btn-p btn-sm" disabled={busy} onClick={book}>
-          {busy ? 'Working…' : 'Book parcel'}
-        </button>
-        {/* The early exit. Only offered when there's a label to hold it
-            against — without a code there is nowhere for a partial
-            record to live. */}
-        {loadedCode && (
-          <button className="btn btn-o btn-sm" disabled={busy} onClick={holdAsLabel}>
-            Save to label only
-          </button>
-        )}
-        <span className="sub" style={{ fontSize: '.8rem' }}>
-          Booking creates a draft — price and payment come next, as they always have.
-        </span>
-      </div>
-      {error && (
+      {/* Scan-syntax errors ("printed outside Esoqo") happen before the
+          dialog ever opens, so they surface right here — not buried
+          behind a modal the clerk hasn't opened yet. */}
+      {!composing && error && (
         /printed outside Esoqo|Only Esoqo PKG/i.test(error) ? (
-          <div role="alert" className="chain bad" style={{ marginTop: 10 }}>
+          <div role="alert" className="chain bad" style={{ marginBottom: 12 }}>
             <span>{error}</span>
             <a className="btn btn-o btn-sm" href={links.labelsHref} style={{ marginLeft: 8 }}>
               Print a fresh label
             </a>
           </div>
         ) : (
-          <p role="alert" style={{ color: 'var(--red)', margin: '10px 0 0' }}>{error}</p>
+          <p role="alert" style={{ color: 'var(--red)', margin: '0 0 12px' }}>{error}</p>
         )
+      )}
+
+      {/* The idle state — everything between customers. Two quick
+          actions and nothing to scroll past: the Who/What/Measure
+          fields only exist once there's something to put in them. */}
+      {!parcelRef && !composing && (
+        <div className="ctr-empty">
+          <Icon name={loadedCode ? 'qr' : 'package'} size={28} />
+          <h3>{loadedCode ? `${loadedCode} loaded` : hasDraft ? 'Booking in progress' : 'Ready for the next customer'}</h3>
+          <p>
+            {loadedCode
+              ? notice ?? 'Scanned and ready — continue to fill in the details.'
+              : hasDraft
+                ? 'Pick up where you left off, or clear it and start over.'
+                : 'Scan a pre-printed label above, or start a booking without one.'}
+          </p>
+          <div className="ctr-empty-actions">
+            <button type="button" className="btn btn-p btn-sm" onClick={() => setComposing(true)}>
+              {loadedCode || hasDraft ? 'Continue booking' : 'New booking'}
+            </button>
+            {hasDraft && (
+              <button type="button" className="btn btn-o btn-sm" onClick={detach}>
+                <Icon name="close" size={12} />{loadedCode ? 'Detach label' : 'Clear'}
+              </button>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* ── Who / What / Measure ─────────────────────────────── */}
+      {/* Pulled into a dialog rather than stacked on the page: the
+          resting page above stays short, and everything a clerk needs
+          to finish this one booking — fields through to Book — is in
+          one place they don't have to scroll to find. */}
+      {composing && (
+        <Modal
+          title={loadedCode ? `Booking — ${loadedCode}` : 'New booking'}
+          subtitle={!parcelRef && notice ? notice : undefined}
+          size="lg"
+          onClose={() => setComposing(false)}
+          footer={(
+            <>
+              <button className="btn btn-p btn-sm" disabled={busy} onClick={book}>
+                {busy ? 'Working…' : 'Book parcel'}
+              </button>
+              {/* The early exit. Only offered when there's a label to
+                  hold it against — without a code there is nowhere for
+                  a partial record to live. */}
+              {loadedCode && (
+                <button className="btn btn-o btn-sm" disabled={busy} onClick={holdAsLabel}>
+                  Save to label only
+                </button>
+              )}
+              <button className="btn btn-o btn-sm" disabled={busy} onClick={() => setComposing(false)}>
+                Cancel
+              </button>
+              <span className="sub" style={{ fontSize: '.78rem', marginLeft: 'auto' }}>
+                Creates a draft — price and payment come next.
+              </span>
+            </>
+          )}
+        >
+          {loadedCode && (
+            <div className="row" style={{ gap: 8, alignItems: 'center', flexWrap: 'wrap', margin: '0 0 14px' }}>
+              <span className="pill p-info"><Icon name="qr" size={12} />{loadedCode}</span>
+              <span className="sub" style={{ fontSize: '.8rem' }}>booking will be bound to this sticker</span>
+              <button type="button" className="btn btn-o btn-sm" onClick={detach}>
+                <Icon name="close" size={12} />Detach
+              </button>
+            </div>
+          )}
+
+          <Section title="Who">
+            <Row>
+              <PartyField
+                label="Sender" name={senderName} msisdn={senderMsisdn}
+                onName={setSenderName} onMsisdn={setSenderMsisdn}
+                search={actions.searchParties}
+              />
+            </Row>
+            <Row>
+              <PartyField
+                label="Receiver" name={receiverName} msisdn={receiverMsisdn}
+                onName={setReceiverName} onMsisdn={setReceiverMsisdn}
+                search={actions.searchParties}
+              />
+            </Row>
+            <Row>
+              <Field label="From" value={originLabel} onChange={setOriginLabel} placeholder="e.g. Kisumu" />
+              <Field label="To" value={destinationLabel} onChange={setDestinationLabel} placeholder="e.g. Westlands, Nairobi" />
+            </Row>
+          </Section>
+
+          <Section title="What">
+            <Row>
+              <label className="sub" style={{ flex: 1, minWidth: 140 }}>Item type
+                <select value={itemType} onChange={(e) => setItemType(e.target.value)} style={INPUT}>
+                  <option value="">—</option>
+                  {ITEM_TYPES.map((t) => <option key={t} value={t}>{t}</option>)}
+                </select>
+              </label>
+              <Field label="Description" value={itemDescription} onChange={setItemDescription} placeholder="e.g. flat-pack shelf unit" />
+            </Row>
+          </Section>
+
+          <Section title="Measure">
+            {/* The rate card in one glance. A clerk who can see the
+                whole ladder — and which rung the box is climbing — can
+                quote before the numbers are in, and explain a jump
+                without sending the customer off to read terms. */}
+            {pricing.length > 0 && (
+              <div className="row" style={{ gap: 8, flexWrap: 'wrap', marginBottom: 10 }}>
+                {pricing.map((p) => {
+                  const chosen = effectiveType === p.parcelType;
+                  return (
+                    <span
+                      key={p.parcelType}
+                      className={chosen ? 'pill p-info' : 'pill p-mute'}
+                      title={`${p.minWeightKg}–${p.maxWeightKg}kg — this is what ${p.weightLabel.toLowerCase()} charges`}
+                    >
+                      {p.weightLabel}: KES {p.minKes}–{p.maxKes}
+                    </span>
+                  );
+                })}
+              </div>
+            )}
+            <Row>
+              <Field label="Weight (kg)" value={weightKg} onChange={setWeightKg} placeholder="0.0" type="number" />
+              <Field label="Length (cm)" value={lengthCm} onChange={setLengthCm} placeholder="0" type="number" />
+              <Field label="Width (cm)" value={widthCm} onChange={setWidthCm} placeholder="0" type="number" />
+              <Field label="Height (cm)" value={heightCm} onChange={setHeightCm} placeholder="0" type="number" />
+            </Row>
+            {/* Shown, never silent. A clerk who can see *why* the price
+                moved can explain it to the person holding the box; one
+                who only sees a bigger number will assume the system is
+                wrong and argue with it. */}
+            {volumetric > 0 && (
+              <p className="sub" style={{ margin: '8px 0 0', display: 'flex', alignItems: 'center', gap: 6 }}>
+                {bulkRules && <Icon name="alert-triangle" size={14} />}
+                Volumetric {volumetric}kg
+                {bulkRules
+                  ? ` — bulkier than it is heavy, so it is charged as ${chargeable}kg, not ${actual || 0}kg.`
+                  : ` — less than its actual ${actual}kg, so weight decides the price.`}
+              </p>
+            )}
+            <Row>
+              <label className="sub" style={{ flex: 1, minWidth: 140 }}>Weight bracket
+                <select value={effectiveType} onChange={(e) => setParcelType(e.target.value)} style={INPUT}>
+                  <option value="">—</option>
+                  {pricing.map((p) => (
+                    <option key={p.parcelType} value={p.parcelType}>
+                      {p.weightLabel} ({p.minWeightKg}–{p.maxWeightKg}kg)
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <Field label="Declared value (KES)" value={declaredValue} onChange={setDeclaredValue} placeholder="0" type="number" />
+            </Row>
+            {bracket && !parcelType && chargeable > 0 && (
+              <p className="sub" style={{ margin: '6px 0 0' }}>
+                {chargeable}kg puts this in <strong>{bracket.weightLabel}</strong> — change it above if that is wrong.
+              </p>
+            )}
+          </Section>
+
+          {/* A positive affirmation, recorded against the clerk who
+              made it — see the intake migration on why this is a
+              person and a time rather than a boolean. */}
+          <label style={{ display: 'flex', gap: 8, alignItems: 'flex-start', margin: '4px 0 0' }}>
+            <input type="checkbox" checked={contentsDeclared} onChange={(e) => setContentsDeclared(e.target.checked)}
+              style={{ marginTop: 3 }} />
+            <span className="sub">
+              I asked the sender about prohibited items and they confirmed there are none.
+              This is recorded against your account.
+            </span>
+          </label>
+
+          {error && (
+            /printed outside Esoqo|Only Esoqo PKG/i.test(error) ? (
+              <div role="alert" className="chain bad" style={{ marginTop: 14 }}>
+                <span>{error}</span>
+                <a className="btn btn-o btn-sm" href={links.labelsHref} style={{ marginLeft: 8 }}>
+                  Print a fresh label
+                </a>
+              </div>
+            ) : (
+              <p role="alert" style={{ color: 'var(--red)', margin: '14px 0 0' }}>{error}</p>
+            )
+          )}
+        </Modal>
       )}
     </div>
   );
@@ -705,7 +805,7 @@ function Section({ title, children }: { title: string; children: React.ReactNode
 }
 
 function Row({ children }: { children: React.ReactNode }) {
-  return <div style={{ display: 'flex', gap: 10, marginBottom: 8, flexWrap: 'wrap' }}>{children}</div>;
+  return <div className="ctr-grid" style={{ marginBottom: 8 }}>{children}</div>;
 }
 
 /**

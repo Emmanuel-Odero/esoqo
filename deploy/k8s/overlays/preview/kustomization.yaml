@@ -1,0 +1,81 @@
+# ════════════════════════════════════════════════════════════════════
+#  preview overlay — deployed from branch preview.
+#
+#  The `images` block below is the deploy trigger. CI builds and pushes
+#  an image per app, then rewrites the newTag values here and commits.
+#  Fleet sees the commit and rolls the cluster. So a deploy is a commit,
+#  and a rollback is `git revert` — there is no out-of-band "deploy"
+#  action that leaves git disagreeing with the cluster.
+# ════════════════════════════════════════════════════════════════════
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+namespace: preview
+
+# No namespace.yaml here. `preview` and `production` are created and
+# owned by Rancher, which stamps them with project-membership
+# annotations (field.cattle.io/projectId and friends) that the RBAC
+# depends on. A Namespace manifest in this overlay would make Fleet
+# assert ownership and strip those annotations on the next sync,
+# quietly ejecting the namespace from its Rancher project.
+resources:
+- ../../base
+- ingress.yaml
+- config.yaml
+
+# No includeSelectors key — it defaults to false, which is what we want.
+# `commonLabels` would instead inject into spec.selector.matchLabels,
+# which Kubernetes makes immutable after creation. Verified: the rendered
+# web Deployment selector is {app.kubernetes.io/name: web} only.
+labels:
+- pairs:
+    app.kubernetes.io/instance: preview
+
+# Written by `kustomize edit set image` from build-and-push.sh or CI.
+# The newName lines are kustomize's own doing and are redundant here
+# (name and newName match) — harmless, and hand-removing them just
+# means the next edit puts them back.
+images:
+- name: ghcr.io/emmanuel-odero/esoqo-admin
+  newName: ghcr.io/emmanuel-odero/esoqo-admin
+  newTag: e05cf4a35a52
+- name: ghcr.io/emmanuel-odero/esoqo-app
+  newName: ghcr.io/emmanuel-odero/esoqo-app
+  newTag: e05cf4a35a52
+- name: ghcr.io/emmanuel-odero/esoqo-core-go
+  newName: ghcr.io/emmanuel-odero/esoqo-core-go
+  newTag: e05cf4a35a52
+- name: ghcr.io/emmanuel-odero/esoqo-core-service
+  newName: ghcr.io/emmanuel-odero/esoqo-core-service
+  newTag: e05cf4a35a52
+- name: ghcr.io/emmanuel-odero/esoqo-jamii
+  newName: ghcr.io/emmanuel-odero/esoqo-jamii
+  newTag: e05cf4a35a52
+- name: ghcr.io/emmanuel-odero/esoqo-store
+  newName: ghcr.io/emmanuel-odero/esoqo-store
+  newTag: e05cf4a35a52
+- name: ghcr.io/emmanuel-odero/esoqo-web
+  newName: ghcr.io/emmanuel-odero/esoqo-web
+  newTag: e05cf4a35a52
+
+patches:
+# preview carries no real traffic — one replica each is enough, and it
+# halves what the cluster has to schedule.
+- patch: |
+    - op: replace
+      path: /spec/replicas
+      value: 1
+  target:
+    kind: Deployment
+    labelSelector: app.kubernetes.io/part-of=esoqo
+# Redundant with the selector above (pgbouncer carries that label too),
+# but kept explicit: with a single PgBouncer replica the whole
+# DEFAULT_POOL_SIZE is available to it, and anyone raising the replica
+# count needs to see that decision here rather than infer it.
+- patch: |
+    - op: replace
+      path: /spec/replicas
+      value: 1
+  target:
+    kind: Deployment
+    name: pgbouncer

@@ -71,6 +71,9 @@ func (s *Server) handleAdminListParcels(c *gin.Context) {
 		// browsing wants. Either can be overridden with ?sort=.
 		params.Oldest = true
 	}
+	if v := c.Query("parcelOrgId"); v != "" {
+		params.ParcelOrgID = &v
+	}
 	switch c.Query("sort") {
 	case "oldest":
 		params.Oldest = true
@@ -476,6 +479,45 @@ func (s *Server) handleClearParcelException(c *gin.Context) {
 // actually processed it out of band (see dbx.MarkParcelRefunded) —
 // previously CancelParcel's NeedsManualRefund flag was mentioned once
 // in an SMS and then never tracked again.
+// handleConfirmParcelCashPayment — POST /v1/admin/parcels/:id/pay-cash.
+// The counter-cash counterpart to the sender's own M-Pesa/points pay
+// step — a staff member confirming cash actually changed hands. Its
+// own capability, same trust tier as refund: handling money, not
+// dispatch.
+func (s *Server) handleConfirmParcelCashPayment(c *gin.Context) {
+	ctx := ctxFromGin(c)
+	if err := authsvc.RequireCapability(ctx, "parcels.confirmCashPayment", nil); err != nil {
+		writeParcelAdminError(c, err)
+		return
+	}
+	parcelID := c.Param("id")
+	code, err := dbx.ConfirmParcelCashPayment(c.Request.Context(), s.Pool, parcelID, ctx.ActorID, s.Cfg.LoyaltyEarnEnabled)
+	if err != nil {
+		writeParcelAdminError(c, err)
+		return
+	}
+
+	var actorID *string
+	if ctx.ActorID != "" {
+		actorID = &ctx.ActorID
+	}
+	var ip *string
+	if v := clientIP(c); v != "" {
+		ip = &v
+	}
+	targetType := "parcel"
+	_, _ = audit.RecordAudit(c.Request.Context(), s.Pool, s.Cfg.AuditChainSeed,
+		audit.CtxLike{ActorType: string(ctx.ActorType), ActorID: actorID, IP: ip},
+		audit.Input{
+			Action:     "parcel.cash_payment_confirmed",
+			TargetType: &targetType,
+			TargetID:   &parcelID,
+			Payload:    map[string]interface{}{"code": code},
+		})
+
+	c.JSON(http.StatusOK, gin.H{"code": code, "status": "BOOKED", "paymentMethod": "CASH"})
+}
+
 func (s *Server) handleMarkParcelRefunded(c *gin.Context) {
 	ctx := ctxFromGin(c)
 	if err := authsvc.RequireCapability(ctx, "parcels.refund", nil); err != nil {
@@ -984,6 +1026,29 @@ func (s *Server) handleAdminListParcelLabelBatches(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"batches": rows})
 }
 
+// handleAdminListParcelRoutes — GET /v1/admin/parcels/routes?parcelOrgId=.
+// The label-info route picker's source: a company's own defined
+// routes, active first. Requires parcelOrgId — routes belong to a
+// company, unlike labels there is no "Esoqo pool" routes list.
+func (s *Server) handleAdminListParcelRoutes(c *gin.Context) {
+	ctx := ctxFromGin(c)
+	if err := authsvc.RequireCapability(ctx, "parcels.read", nil); err != nil {
+		writeParcelAdminError(c, err)
+		return
+	}
+	orgID := c.Query("parcelOrgId")
+	if orgID == "" {
+		c.JSON(http.StatusOK, gin.H{"routes": []dbx.ParcelLabelRouteOption{}})
+		return
+	}
+	rows, err := dbx.AdminListParcelRoutes(c.Request.Context(), s.Pool, orgID)
+	if err != nil {
+		writeError(c, http.StatusInternalServerError, "LIST_FAILED", "Could not load routes")
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"routes": rows})
+}
+
 type voidParcelLabelBatchRequest struct {
 	Reason      string  `json:"reason" binding:"required"`
 	ParcelOrgID *string `json:"parcelOrgId"`
@@ -1041,6 +1106,91 @@ func (s *Server) handleVoidParcelLabelBatch(c *gin.Context) {
 			Payload:    map[string]interface{}{"reason": req.Reason, "voided": voided},
 		})
 	c.JSON(http.StatusOK, gin.H{"voided": voided})
+}
+
+type deleteParcelLabelBatchRequest struct {
+	ParcelOrgID *string `json:"parcelOrgId"`
+}
+
+// handleDeleteParcelLabelBatch — DELETE /v1/admin/parcels/labels/batches/:id.
+//
+// The hard-delete counterpart to handleVoidParcelLabelBatch, for a
+// batch that shouldn't have existed at all (test run, misconfigured
+// mint) rather than one that needs a recorded reason it was pulled
+// from circulation. Only labels still fully blank are removed — same
+// trust tier (parcels.assign) as void.
+func (s *Server) handleDeleteParcelLabelBatch(c *gin.Context) {
+	ctx := ctxFromGin(c)
+	if err := authsvc.RequireCapability(ctx, "parcels.assign", nil); err != nil {
+		writeParcelAdminError(c, err)
+		return
+	}
+	var req deleteParcelLabelBatchRequest
+	_ = c.ShouldBindJSON(&req)
+	var orgID *string
+	if req.ParcelOrgID != nil && strings.TrimSpace(*req.ParcelOrgID) != "" {
+		trimmed := strings.TrimSpace(*req.ParcelOrgID)
+		orgID = &trimmed
+	}
+	batchID := c.Param("id")
+	deleted, err := dbx.DeleteParcelLabelBatch(c.Request.Context(), s.Pool, batchID, orgID)
+	if err != nil {
+		writeParcelAdminError(c, err)
+		return
+	}
+	var actorID *string
+	if ctx.ActorID != "" {
+		actorID = &ctx.ActorID
+	}
+	var ip *string
+	if v := clientIP(c); v != "" {
+		ip = &v
+	}
+	targetType := "parcel_label_batch"
+	_, _ = audit.RecordAudit(c.Request.Context(), s.Pool, s.Cfg.AuditChainSeed,
+		audit.CtxLike{ActorType: string(ctx.ActorType), ActorID: actorID, IP: ip},
+		audit.Input{
+			Action:     "parcel.label_batch_deleted",
+			TargetType: &targetType,
+			TargetID:   &batchID,
+			Payload:    map[string]interface{}{"deleted": deleted},
+		})
+	c.JSON(http.StatusOK, gin.H{"deleted": deleted})
+}
+
+type deleteParcelLabelsRequest struct {
+	Codes       []string `json:"codes" binding:"required"`
+	ParcelOrgID *string  `json:"parcelOrgId"`
+}
+
+// handleDeleteParcelLabels — DELETE /v1/admin/parcels/labels.
+//
+// The hard-delete counterpart to handleVoidParcelLabels: permanently
+// removes a selection of still-blank labels rather than recording them
+// as withdrawn. Attached, spent or already-voided codes in the
+// selection are silently left alone — see DeleteParcelLabelsByCodes.
+func (s *Server) handleDeleteParcelLabels(c *gin.Context) {
+	ctx := ctxFromGin(c)
+	if err := authsvc.RequireCapability(ctx, "parcels.assign", nil); err != nil {
+		writeParcelAdminError(c, err)
+		return
+	}
+	var req deleteParcelLabelsRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		writeError(c, http.StatusBadRequest, "INVALID_REQUEST", err.Error())
+		return
+	}
+	var orgID *string
+	if req.ParcelOrgID != nil && strings.TrimSpace(*req.ParcelOrgID) != "" {
+		trimmed := strings.TrimSpace(*req.ParcelOrgID)
+		orgID = &trimmed
+	}
+	deleted, err := dbx.DeleteParcelLabelsByCodes(c.Request.Context(), s.Pool, req.Codes, orgID)
+	if err != nil {
+		writeParcelAdminError(c, err)
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"deleted": deleted})
 }
 
 type voidParcelLabelsRequest struct {
@@ -1130,6 +1280,8 @@ type attachParcelLabelInfoRequest struct {
 	LengthCm         *float64 `json:"lengthCm"`
 	WidthCm          *float64 `json:"widthCm"`
 	HeightCm         *float64 `json:"heightCm"`
+	RouteID          *string  `json:"routeId"`
+	RouteLabel       *string  `json:"routeLabel"`
 }
 
 // handleAttachParcelLabelInfo — POST /v1/admin/parcels/labels/:code/info.
@@ -1145,6 +1297,12 @@ func (s *Server) handleAttachParcelLabelInfo(c *gin.Context) {
 	var req attachParcelLabelInfoRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
 		writeError(c, http.StatusBadRequest, "INVALID_REQUEST", err.Error())
+		return
+	}
+	if !optionalMsisdn(c, &req.SenderMsisdn, "Sender phone") {
+		return
+	}
+	if !optionalMsisdn(c, &req.ReceiverMsisdn, "Receiver phone") {
 		return
 	}
 	var staffID *string
@@ -1164,6 +1322,8 @@ func (s *Server) handleAttachParcelLabelInfo(c *gin.Context) {
 		LengthCm:        req.LengthCm,
 		WidthCm:         req.WidthCm,
 		HeightCm:        req.HeightCm,
+		RouteID:         req.RouteID,
+		RouteLabel:      req.RouteLabel,
 	}
 	if err := dbx.AttachParcelLabelInfo(c.Request.Context(), s.Pool, c.Param("code"), in, staffID); err != nil {
 		writeParcelAdminError(c, err)

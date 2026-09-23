@@ -27,7 +27,7 @@ func TestRouterRegistersWithoutConflict(t *testing.T) {
 	// Nil pool and client are fine: Router() only wires handlers, it
 	// never dials anything. A handler that did would fail its own test,
 	// not this one.
-	s := NewServer(config.Config{}, nil, nil)
+	s := NewServer(config.Config{}, nil, nil, nil)
 
 	defer func() {
 		if r := recover(); r != nil {
@@ -47,6 +47,7 @@ func TestRouterRegistersWithoutConflict(t *testing.T) {
 		"POST /v1/parcel-orgs/staff/signin": false,
 		"GET /v1/parcel-orgs/by-slug/:slug": false,
 		"GET /v1/parcel-orgs/me/parcels":    false,
+		"GET /v1/parcel-orgs/me/trends":    false,
 		"GET /v1/admin/parcels/orgs":        false,
 		"POST /v1/admin/parcels/:id/org":    false,
 		// COD adds a third static sibling under /parcels/:code/... and a

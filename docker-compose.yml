@@ -290,6 +290,12 @@ services:
       # pgbouncer=true/connection_limit — which pgbouncer itself rejects —
       # can't be reused verbatim from the TS services' DATABASE_URL.
       DATABASE_URL: postgresql://esoko:esoko_dev_only@pgbouncer:5432/esoko?sslmode=disable
+      # pgbouncer above runs POOL_MODE=transaction, which silently
+      # breaks Postgres LISTEN/NOTIFY (a listening client has to keep
+      # one physical backend connection open, which transaction pooling
+      # never guarantees) — the counter ticket queue's live push needs
+      # a connection straight to postgres for that one thing.
+      DIRECT_DATABASE_URL: postgresql://esoko:esoko_dev_only@postgres:5432/esoko?sslmode=disable
       REDIS_URL: redis://redis:6379
       SMS_PROVIDER: "${SMS_PROVIDER:-console}"
       SMS_TEST_ENV: "${SMS_TEST_ENV:-}"

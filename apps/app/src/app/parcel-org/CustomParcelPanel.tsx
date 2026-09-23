@@ -1,10 +1,11 @@
 'use client';
 
 import { useEffect, useRef, useState, useTransition } from 'react';
-import { Icon } from '@esoqo/ui';
-import { addCustomParcel, searchOrgLabels } from './actions';
+import { Icon, Modal } from '@esoqo/ui';
+import { addCustomParcel, listOrgLabels, resolveOrgLabel, searchOrgLabels } from './actions';
 import type { OrgLabelSearchRow } from '@/lib/parcel-org-session';
 import { setFormActive } from './form-activity';
+import { ScanButton } from './ScanButton';
 
 const PARCEL_TYPES: [value: string, label: string][] = [
   ['ENVELOPE_DOCUMENT', 'Envelope / document'],
@@ -14,25 +15,9 @@ const PARCEL_TYPES: [value: string, label: string][] = [
   ['HEAVY_OVERSIZE', 'Heavy / oversize'],
 ];
 
-const inputStyle: React.CSSProperties = {
-  width: '100%', marginTop: 4, padding: '9px 11px',
-  border: '1.5px solid var(--line)', borderRadius: 8, fontSize: '.92rem',
-};
 
-const sectionStyle: React.CSSProperties = {
-  border: '1px solid var(--line)', borderRadius: 10, padding: '12px 14px',
-  background: 'var(--paper)',
-};
 
-const sectionTitleStyle: React.CSSProperties = {
-  margin: 0, fontSize: '.72rem', fontWeight: 700, letterSpacing: '.08em',
-  textTransform: 'uppercase', color: 'var(--tx-2)',
-};
 
-const gridStyle: React.CSSProperties = {
-  display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(170px, 1fr))',
-  gap: 10, marginTop: 8,
-};
 
 /**
  * Add a parcel with your own number — for work that starts on paper or
@@ -40,9 +25,14 @@ const gridStyle: React.CSSProperties = {
  * number stays on the parcel and is searchable; Esoqo mints a tracking
  * code for it and shows it back so it can go on the box.
  *
+ * Lives in a dialog, not stacked on the page: it's a distinct workflow
+ * from desk booking (own numbering, own paper trail) and used far less
+ * often, so it shouldn't cost every counter session a scroll past a
+ * second full form it isn't using.
+ *
  * The draft survives a dashboard refresh (see DropoffPoll): every
  * keystroke is mirrored to localStorage and restored on mount, so even
- * if the page subtree remounts under an open form nothing typed is
+ * if the page subtree remounts under an open dialog nothing typed is
  * ever lost. A successful save or an explicit Close clears it.
  */
 const DRAFT_KEY = 'parcel-org:custom-parcel-draft';
@@ -120,6 +110,16 @@ export function CustomParcelPanel() {
   const [labelSearching, setLabelSearching] = useState(false);
   const [labelPickerOpen, setLabelPickerOpen] = useState(false);
   const labelSeq = useRef(0);
+  // A scan hands back whatever the camera read, not a label this
+  // company actually owns and can still spend — the type-ahead search
+  // and browse list are already scoped to that set (see searchOrgLabels/
+  // listOrgLabels), but a scan skips straight to a full code with no
+  // such check. Left unchecked, that full code was only ever caught at
+  // Save, after a clerk had already typed out the whole shipment —
+  // this re-checks it the moment it's scanned instead.
+  const [labelChecking, setLabelChecking] = useState(false);
+  const [labelCheckError, setLabelCheckError] = useState<string | null>(null);
+  const labelCheckSeq = useRef(0);
   const [error, setError] = useState<string | null>(null);
   const [minted, setMinted] = useState<string | null>(null);
   const [pending, startTransition] = useTransition();
@@ -152,11 +152,32 @@ export function CustomParcelPanel() {
   // Tail search over the company's own unused labels, debounced. The
   // sequence guard drops out-of-order responses, so a slow earlier
   // keystroke can never overwrite a newer one.
+  //
+  // An empty tail with the picker open isn't "no query yet" — it's
+  // "show me what's available to pick from", so it lists the register's
+  // own blank labels (see listOrgLabels('blank'), same data Settings →
+  // Labels shows) instead of leaving the dropdown empty until someone
+  // starts typing. Undebounced: opening the picker is the trigger, not
+  // a keystroke.
   useEffect(() => {
     const tail = labelTail.trim();
-    if (!labelPickerOpen || tail.length === 0) {
+    if (!labelPickerOpen) {
       setLabelResults(null);
       setLabelSearching(false);
+      return;
+    }
+    if (tail.length === 0) {
+      setLabelSearching(true);
+      const seq = ++labelSeq.current;
+      void listOrgLabels('blank').then(({ labels }) => {
+        if (labelSeq.current !== seq) return;
+        setLabelResults(labels.map((l) => ({ code: l.code, createdAt: l.createdAt })));
+        setLabelSearching(false);
+      }).catch(() => {
+        if (labelSeq.current !== seq) return;
+        setLabelResults([]);
+        setLabelSearching(false);
+      });
       return;
     }
     setLabelSearching(true);
@@ -173,7 +194,7 @@ export function CustomParcelPanel() {
       });
     }, 250);
     return () => window.clearTimeout(id);
-  }, [labelTail, labelPickerOpen ]);
+  }, [labelTail, labelPickerOpen]);
 
   function clearDraft() {
     try {
@@ -188,7 +209,42 @@ export function CustomParcelPanel() {
     setReceiverName(''); setReceiverMsisdn(''); setOriginLabel(''); setDestinationLabel('');
     setParcelType('SMALL'); setWeightKg(''); setFragile(false); setNotes('');
     setLabelCode(''); setLabelTail(''); setLabelResults(null); setLabelPickerOpen(false);
+    setLabelChecking(false); setLabelCheckError(null);
     clearDraft();
+  }
+
+  // A scanned code is checked against the company's own register before
+  // it's accepted — same states Save itself would reject on
+  // (dbx.importOrgParcelWithLabel): already spent, withdrawn, or not
+  // found under this company at all. `blank` and `filled` both pass —
+  // Save accepts either (a label can have field notes attached before
+  // it's ever booked against).
+  function handleScannedLabel(code: string) {
+    setLabelCheckError(null);
+    setLabelChecking(true);
+    const seq = ++labelCheckSeq.current;
+    void resolveOrgLabel(code).then((res) => {
+      if (labelCheckSeq.current !== seq) return;
+      setLabelChecking(false);
+      if (!res.ok) {
+        setLabelCheckError(`${code}: ${res.error}`);
+        return;
+      }
+      if (res.label.state === 'spent') {
+        setLabelCheckError(`${code} has already been used on another parcel.`);
+        return;
+      }
+      if (res.label.state === 'voided') {
+        setLabelCheckError(`${code} has been withdrawn and can't be used.`);
+        return;
+      }
+      setLabelCode(code);
+      setLabelTail(''); setLabelResults(null); setLabelPickerOpen(false);
+    }).catch(() => {
+      if (labelCheckSeq.current !== seq) return;
+      setLabelChecking(false);
+      setLabelCheckError(`Could not check ${code} — try again.`);
+    });
   }
 
   const ready = number.trim() && senderName.trim() && senderMsisdn.trim()
@@ -213,47 +269,46 @@ export function CustomParcelPanel() {
 
   if (!open) {
     return (
-      <button className="btn btn-o btn-sm" onClick={() => setOpen(true)} style={{ marginBottom: 16 }}>
-        <Icon name="plus" size={14} />Add a custom parcel
+      <button type="button" className="btn btn-o btn-sm" onClick={() => setOpen(true)}>
+        <Icon name="plus" size={16} />Add a custom parcel
       </button>
     );
   }
 
   return (
-    <section className="card" style={{ marginBottom: 18, padding: 18 }}>
-      <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 12, marginBottom: 4 }}>
-        <div>
-          <h2 style={{ margin: 0, fontSize: '1.05rem' }}>Add a custom parcel</h2>
-          <p className="sub" style={{ margin: '4px 0 0', maxWidth: '70ch' }}>
-            Use your own parcel number — it stays on the parcel and is searchable here. Esoqo
-            gives it a tracking code so you can manage and track it like any other.
-            Only Esoqo PKG-… labels scan: your old self-printed stickers are retired —
-            attach one of your Esoqo labels below so the box scans.
-          </p>
-        </div>
-        <button className="btn btn-o btn-sm" aria-label="Close" disabled={pending}
-          onClick={() => { reset(); setOpen(false); setError(null); setMinted(null); }}>
-          <Icon name="close" size={14} />
-        </button>
-      </div>
-
-      {minted && (
-        <div className="chain ok" style={{ margin: '14px 0 0' }}>
-          <Icon name="check-circle" size={16} />
-          <span>Saved. Tracking code: <strong className="mono">{minted}</strong></span>
-        </div>
+    <Modal
+      title="Add a custom parcel"
+      subtitle="Use your own parcel number — it stays on the parcel and is searchable here. Esoqo gives it a tracking code so you can manage and track it like any other. Only Esoqo PKG-… labels scan: attach one of your Esoqo labels below so the box scans."
+      size="lg"
+      onClose={() => { reset(); setOpen(false); setError(null); setMinted(null); }}
+      footer={(
+        <>
+          <button className="btn btn-p" disabled={pending || !ready} onClick={save}>
+            <Icon name="check" size={16} />{pending ? 'Saving…' : 'Save parcel'}
+          </button>
+          <button className="btn btn-o" disabled={pending}
+            onClick={() => { reset(); setOpen(false); setError(null); }}>
+            Cancel
+          </button>
+        </>
       )}
-
-      <div style={{ display: 'grid', gap: 12, marginTop: 14 }}>
-        <fieldset style={sectionStyle}>
-          <h3 style={sectionTitleStyle}>Parcel number</h3>
-          <div style={gridStyle}>
-            <label className="sub">Your number
-              <input style={inputStyle} className="mono" value={number} placeholder="e.g. SWIFT-00471"
+    >
+      <div className="porg-custom-body">
+        {minted && (
+          <p className="pnote pnote-ok" role="status">
+            <Icon name="check-circle" size={16} />
+            <span>Saved. Tracking code: <strong className="mono">{minted}</strong></span>
+          </p>
+        )}
+        <fieldset className="psection is-boxed">
+          <h3 className="psection-title">Parcel number</h3>
+          <div className="pgrid">
+            <label className="pfield"><span>Your number</span>
+              <input className="mono" value={number} placeholder="e.g. SWIFT-00471"
                 onChange={(e) => setNumber(e.target.value)} />
             </label>
-            <label className="sub">Parcel type
-              <select style={inputStyle} value={parcelType} onChange={(e) => setParcelType(e.target.value)}>
+            <label className="pfield"><span>Parcel type</span>
+              <select value={parcelType} onChange={(e) => setParcelType(e.target.value)}>
                 {PARCEL_TYPES.map(([v, l]) => <option key={v} value={v}>{l}</option>)}
               </select>
             </label>
@@ -263,85 +318,83 @@ export function CustomParcelPanel() {
         <LabelPicker
           tail={labelTail}
           onTail={(v) => { setLabelTail(v.toUpperCase()); setLabelPickerOpen(true); }}
+          onFocus={() => setLabelPickerOpen(true)}
           results={labelResults}
           searching={labelSearching}
           pickerOpen={labelPickerOpen}
           selected={labelCode}
-          onSelect={(code) => { setLabelCode(code); setLabelPickerOpen(false); setLabelTail(''); setLabelResults(null); }}
-          onClear={() => { setLabelCode(''); setLabelTail(''); setLabelResults(null); }}
+          onSelect={(code) => { setLabelCode(code); setLabelPickerOpen(false); setLabelTail(''); setLabelResults(null); setLabelCheckError(null); }}
+          onScan={handleScannedLabel}
+          checking={labelChecking}
+          checkError={labelCheckError}
+          onClear={() => { setLabelCode(''); setLabelTail(''); setLabelResults(null); setLabelCheckError(null); }}
           onClose={() => setLabelPickerOpen(false)}
         />
 
-        <fieldset style={sectionStyle}>
-          <h3 style={sectionTitleStyle}>Sender</h3>
-          <div style={gridStyle}>
-            <label className="sub">Name
-              <input style={inputStyle} value={senderName} onChange={(e) => setSenderName(e.target.value)} />
+        <fieldset className="psection is-boxed">
+          <h3 className="psection-title">Sender</h3>
+          <div className="pgrid">
+            <label className="pfield"><span>Name</span>
+              <input value={senderName} onChange={(e) => setSenderName(e.target.value)} />
             </label>
-            <label className="sub">Phone
-              <input style={inputStyle} className="mono" value={senderMsisdn} placeholder="07…" inputMode="tel"
+            <label className="pfield"><span>Phone</span>
+              <input className="mono" value={senderMsisdn} placeholder="07…" inputMode="tel"
                 onChange={(e) => setSenderMsisdn(e.target.value)} />
             </label>
           </div>
         </fieldset>
 
-        <fieldset style={sectionStyle}>
-          <h3 style={sectionTitleStyle}>Receiver</h3>
-          <div style={gridStyle}>
-            <label className="sub">Name
-              <input style={inputStyle} value={receiverName} onChange={(e) => setReceiverName(e.target.value)} />
+        <fieldset className="psection is-boxed">
+          <h3 className="psection-title">Receiver</h3>
+          <div className="pgrid">
+            <label className="pfield"><span>Name</span>
+              <input value={receiverName} onChange={(e) => setReceiverName(e.target.value)} />
             </label>
-            <label className="sub">Phone
-              <input style={inputStyle} className="mono" value={receiverMsisdn} placeholder="07…" inputMode="tel"
+            <label className="pfield"><span>Phone</span>
+              <input className="mono" value={receiverMsisdn} placeholder="07…" inputMode="tel"
                 onChange={(e) => setReceiverMsisdn(e.target.value)} />
             </label>
           </div>
         </fieldset>
 
-        <fieldset style={sectionStyle}>
-          <h3 style={sectionTitleStyle}>Journey</h3>
-          <div style={gridStyle}>
-            <label className="sub">From
-              <input style={inputStyle} value={originLabel} placeholder="e.g. Nairobi CBD"
+        <fieldset className="psection is-boxed">
+          <h3 className="psection-title">Journey</h3>
+          <div className="pgrid">
+            <label className="pfield"><span>From</span>
+              <input value={originLabel} placeholder="e.g. Nairobi CBD"
                 onChange={(e) => setOriginLabel(e.target.value)} />
             </label>
-            <label className="sub">To
-              <input style={inputStyle} value={destinationLabel} placeholder="e.g. Nakuru"
+            <label className="pfield"><span>To</span>
+              <input value={destinationLabel} placeholder="e.g. Nakuru"
                 onChange={(e) => setDestinationLabel(e.target.value)} />
             </label>
           </div>
         </fieldset>
 
-        <fieldset style={sectionStyle}>
-          <h3 style={sectionTitleStyle}>Package</h3>
-          <div style={gridStyle}>
-            <label className="sub">Weight (kg, optional)
-              <input style={inputStyle} className="mono" value={weightKg} inputMode="decimal"
+        <fieldset className="psection is-boxed">
+          <h3 className="psection-title">Package</h3>
+          <div className="pgrid">
+            <label className="pfield"><span>Weight (kg, optional)</span>
+              <input className="mono" value={weightKg} inputMode="decimal"
                 onChange={(e) => setWeightKg(e.target.value.replace(/[^\d.]/g, ''))} />
             </label>
-            <label className="sub">Notes (optional)
-              <input style={inputStyle} value={notes} onChange={(e) => setNotes(e.target.value)} />
+            <label className="pfield"><span>Notes (optional)</span>
+              <input value={notes} onChange={(e) => setNotes(e.target.value)} />
             </label>
           </div>
-          <label className="sub" style={{ display: 'flex', gap: 8, alignItems: 'center', marginTop: 10 }}>
+          <label className="pfield-check" style={{ marginTop: 10 }}>
             <input type="checkbox" checked={fragile} onChange={(e) => setFragile(e.target.checked)} />
-            Fragile — handle with care
+            <span>Fragile — handle with care</span>
           </label>
         </fieldset>
-      </div>
 
-      {error && <p role="alert" className="sub" style={{ color: 'var(--red)', marginTop: 12 }}>{error}</p>}
-
-      <div className="row" style={{ gap: 8, marginTop: 14, flexWrap: 'wrap' }}>
-        <button className="btn btn-p btn-sm" disabled={pending || !ready} onClick={save}>
-          {pending ? 'Saving…' : 'Save parcel'}
-        </button>
-        <button className="btn btn-o btn-sm" disabled={pending}
-          onClick={() => { reset(); setOpen(false); setError(null); }}>
-          Close
-        </button>
+        {error && (
+          <p role="alert" className="pnote pnote-bad">
+            <Icon name="alert-circle" size={16} /><span>{error}</span>
+          </p>
+        )}
       </div>
-    </section>
+    </Modal>
   );
 }
 
@@ -353,21 +406,31 @@ export function CustomParcelPanel() {
  * sticker held at arm's length.
  */
 function LabelPicker({
-  tail, onTail, results, searching, pickerOpen, selected, onSelect, onClear, onClose,
+  tail, onTail, onFocus, results, searching, pickerOpen, selected, onSelect, onScan,
+  checking, checkError, onClear, onClose,
 }: {
   tail: string;
   onTail: (v: string) => void;
+  onFocus: () => void;
   results: OrgLabelSearchRow[] | null;
   searching: boolean;
   pickerOpen: boolean;
   selected: string;
   onSelect: (code: string) => void;
+  /** A scan hands back a raw code that hasn't been checked against the
+   *  register yet — see this file's own handleScannedLabel. Kept apart
+   *  from onSelect (a dropdown pick, already known-good) so a scanned
+   *  code gets verified before it's accepted rather than after Save. */
+  onScan: (code: string) => void;
+  checking: boolean;
+  checkError: string | null;
   onClear: () => void;
   onClose: () => void;
 }) {
+  const browsing = tail.trim().length === 0;
   return (
-    <fieldset style={sectionStyle}>
-      <h3 style={sectionTitleStyle}>Parcel label (optional)</h3>
+    <fieldset className="psection is-boxed">
+      <h3 className="psection-title">Parcel label (optional)</h3>
       <p className="sub" style={{ margin: '6px 0 0' }}>
         Sticking one of your pre-printed labels on this box? Its code becomes the
         tracking code. Leave this empty and Esoqo mints one instead.
@@ -382,17 +445,35 @@ function LabelPicker({
         </div>
       ) : (
         <div style={{ position: 'relative', marginTop: 8 }}>
-          <input
-            style={inputStyle} className="mono" value={tail}
-            placeholder="Type any characters, e.g. YZN…"
-            aria-label="Find a label by any characters in its code"
-            autoComplete="off"
-            onChange={(e) => onTail(e.target.value)}
-            onBlur={() => window.setTimeout(onClose, 150)}
-          />
-          {pickerOpen && tail.trim() && (
+          <div className="row" style={{ gap: 8, alignItems: 'stretch' }}>
+            <input
+              className="pinput mono" value={tail}
+              placeholder="Tap to browse, or type any characters, e.g. YZN…"
+              aria-label="Browse or find a label by any characters in its code"
+              autoComplete="off"
+              style={{ flex: 1 }}
+              onChange={(e) => onTail(e.target.value)}
+              onFocus={onFocus}
+              onBlur={() => window.setTimeout(onClose, 150)}
+            />
+            <ScanButton onScan={onScan} />
+          </div>
+          {checking && (
+            <p className="sub" style={{ margin: '6px 0 0', fontSize: '.8rem', display: 'flex', alignItems: 'center', gap: 6 }}>
+              <Icon name="loader" size={14} />Checking that label…
+            </p>
+          )}
+          {checkError && !checking && (
+            <p role="alert" style={{
+              color: 'var(--red, #b42318)', display: 'flex', alignItems: 'center', gap: 6,
+              margin: '6px 0 0', fontSize: '.8rem',
+            }}>
+              <Icon name="alert-circle" size={14} />{checkError}
+            </p>
+          )}
+          {pickerOpen && (
             <div
-              role="listbox" aria-label="Matching labels"
+              role="listbox" aria-label={browsing ? 'Available labels' : 'Matching labels'}
               style={{
                 position: 'absolute', zIndex: 5, left: 0, right: 0, top: '100%',
                 background: 'var(--bg, #fff)', border: '1.5px solid var(--line)',
@@ -401,22 +482,52 @@ function LabelPicker({
               }}
             >
               {searching || results === null ? (
-                <p className="sub" style={{ margin: 0, padding: '10px 12px' }}>Searching your labels…</p>
+                <p className="sub" style={{ margin: 0, padding: '10px 12px' }}>
+                  {browsing ? 'Loading your unused labels…' : 'Searching your labels…'}
+                </p>
               ) : results.length === 0 ? (
                 <p className="sub" style={{ margin: 0, padding: '10px 12px' }}>
-                  No unused label contains “{tail.trim().toUpperCase()}”. Check the sticker, or leave
-                  this empty to mint a fresh code.
+                  {browsing
+                    ? 'No unused pre-printed labels on file. Leave this empty to mint a fresh code.'
+                    : `No unused label contains "${tail.trim().toUpperCase()}". Check the sticker, or leave this empty to mint a fresh code.`}
                 </p>
               ) : (
-                results.map((r) => (
-                  <TailOption key={r.code} code={r.code} tail={tail.trim().toUpperCase()} onSelect={onSelect} />
-                ))
+                <>
+                  {browsing && (
+                    <p className="sub" style={{ margin: 0, padding: '8px 12px 4px', fontSize: '.72rem' }}>
+                      {results.length} unused label{results.length === 1 ? '' : 's'} — newest first. Keep typing to narrow it down.
+                    </p>
+                  )}
+                  {results.map((r) => (
+                    browsing
+                      ? <BrowseOption key={r.code} code={r.code} onSelect={onSelect} />
+                      : <TailOption key={r.code} code={r.code} tail={tail.trim().toUpperCase()} onSelect={onSelect} />
+                  ))}
+                </>
               )}
             </div>
           )}
         </div>
       )}
     </fieldset>
+  );
+}
+
+/** One row in the plain browse list — no fragment to highlight, since
+ *  nothing was typed yet. */
+function BrowseOption({ code, onSelect }: { code: string; onSelect: (code: string) => void }) {
+  return (
+    <button
+      type="button" role="option" aria-selected="false"
+      className="mono"
+      style={{
+        display: 'block', width: '100%', textAlign: 'left', padding: '8px 12px',
+        border: 'none', background: 'transparent', cursor: 'pointer', fontSize: '.9rem',
+      }}
+      onMouseDown={(e) => { e.preventDefault(); onSelect(code); }}
+    >
+      {code}
+    </button>
   );
 }
 

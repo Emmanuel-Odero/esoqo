@@ -3,6 +3,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:url_launcher/url_launcher.dart';
 
+import '../../core/api/api_exception.dart';
 import '../../core/auth/auth_controller.dart';
 import '../../core/auth/auth_state.dart';
 import '../../core/money/money.dart';
@@ -37,9 +38,19 @@ final parcelHandoffHistoryProvider = FutureProvider.autoDispose
 /// ParcelsHubScreen) — never fetched from the server here, since the
 /// public status endpoint never returns it.
 class ParcelStatusScreen extends ConsumerWidget {
-  const ParcelStatusScreen({super.key, required this.code, this.deliveryCode});
+  const ParcelStatusScreen({
+    super.key,
+    required this.code,
+    this.deliveryCode,
+    this.isSender = false,
+  });
   final String code;
   final String? deliveryCode;
+  // Only ever passed true from a screen that already knows this account
+  // booked the parcel (ParcelsHubScreen's Sending tab, or straight after
+  // booking) — never derived here, since the guest-safe status view
+  // deliberately carries no sender/receiver identity to check against.
+  final bool isSender;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -323,6 +334,30 @@ class ParcelStatusScreen extends ConsumerWidget {
                       ),
                     ),
                   ],
+                  if (isSender &&
+                      const {
+                        'DRAFT_PENDING_PAYMENT',
+                        'BOOKED',
+                        'RECEIVED_AT_COUNTER',
+                      }.contains(s.status)) ...[
+                    const SizedBox(height: EsoqoSpacing.s4),
+                    EsoqoButton.secondary(
+                      label: 'Fix receiver details',
+                      icon: Icons.edit_outlined,
+                      onPressed: () async {
+                        final saved = await showDialog<bool>(
+                          context: context,
+                          builder: (_) => _EditReceiverDialog(
+                            code: s.code,
+                            destinationLabel: s.destinationLabel,
+                          ),
+                        );
+                        if (saved == true) {
+                          ref.invalidate(parcelStatusProvider(code));
+                        }
+                      },
+                    ),
+                  ],
                   if (deliveryCode != null) ...[
                     const SizedBox(height: EsoqoSpacing.s5),
                     EsoqoCard(
@@ -394,6 +429,106 @@ class ParcelStatusScreen extends ConsumerWidget {
         Padding(
           padding: const EdgeInsets.only(bottom: EsoqoSpacing.s3),
           child: Text(stage.$2, style: TextStyle(color: color, fontWeight: FontWeight.w600)),
+        ),
+      ],
+    );
+  }
+}
+
+/// Fixes a wrong receiver name/phone or destination before a courier
+/// has taken custody — calls PATCH /v1/parcels/:code
+/// (dbx.UpdateOwnParcelDetails), the sender's own self-serve version of
+/// what used to require asking staff to edit it. Full overwrite, same
+/// as the server expects: all three fields required every time, not a
+/// partial patch.
+///
+/// Receiver name/phone start blank rather than pre-filled — the
+/// guest-safe status view this screen reads from deliberately carries
+/// no receiver PII (see ParcelStatusView's own comment), so there is
+/// nothing to pre-fill with. The sender already knows who they're
+/// sending to; re-entering it here is the cost of fixing a typo without
+/// staff.
+class _EditReceiverDialog extends ConsumerStatefulWidget {
+  const _EditReceiverDialog({required this.code, required this.destinationLabel});
+  final String code;
+  final String destinationLabel;
+
+  @override
+  ConsumerState<_EditReceiverDialog> createState() => _EditReceiverDialogState();
+}
+
+class _EditReceiverDialogState extends ConsumerState<_EditReceiverDialog> {
+  late final _receiverName = TextEditingController();
+  late final _receiverMsisdn = TextEditingController();
+  late final _destination = TextEditingController(text: widget.destinationLabel);
+  bool _saving = false;
+  String? _error;
+
+  @override
+  void dispose() {
+    _receiverName.dispose();
+    _receiverMsisdn.dispose();
+    _destination.dispose();
+    super.dispose();
+  }
+
+  Future<void> _save() async {
+    if (_receiverName.text.trim().isEmpty ||
+        _receiverMsisdn.text.trim().isEmpty ||
+        _destination.text.trim().isEmpty) {
+      setState(() => _error = 'All three fields are required.');
+      return;
+    }
+    setState(() {
+      _saving = true;
+      _error = null;
+    });
+    try {
+      await ref.read(parcelsRepositoryProvider).updateOwnDetails(
+            code: widget.code,
+            receiverName: _receiverName.text.trim(),
+            receiverMsisdn: _receiverMsisdn.text.trim(),
+            destinationLabel: _destination.text.trim(),
+          );
+      if (mounted) Navigator.of(context).pop(true);
+    } on ApiException catch (e) {
+      if (mounted) setState(() => _error = e.message);
+    } finally {
+      if (mounted) setState(() => _saving = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AlertDialog(
+      title: const Text('Fix receiver details'),
+      content: SingleChildScrollView(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            EsoqoField.name(controller: _receiverName, label: "Their correct name"),
+            const SizedBox(height: EsoqoSpacing.s3),
+            EsoqoField.phone(controller: _receiverMsisdn, label: "Their correct phone"),
+            const SizedBox(height: EsoqoSpacing.s3),
+            EsoqoField.text(controller: _destination, label: 'Destination'),
+            if (_error != null) ...[
+              const SizedBox(height: EsoqoSpacing.s2),
+              Text(_error!, style: TextStyle(color: Theme.of(context).colorScheme.error)),
+            ],
+          ],
+        ),
+      ),
+      actions: [
+        TextButton(
+          onPressed: _saving ? null : () => Navigator.of(context).pop(false),
+          child: const Text('Cancel'),
+        ),
+        EsoqoButton.primary(
+          expand: false,
+          label: 'Save',
+          loading: _saving,
+          onPressed: _save,
         ),
       ],
     );

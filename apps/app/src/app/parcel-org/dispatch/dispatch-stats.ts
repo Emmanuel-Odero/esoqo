@@ -27,7 +27,8 @@ export interface TrailSegment {
 
 /** Consecutive ping pairs with distance, duration and speed. A null
  *  speed means the two reports share a timestamp — unmeasurable, not zero. */
-export function trailSegments(trail: DispatchPing[]): TrailSegment[] {
+export function trailSegments(trail: DispatchPing[] | null | undefined): TrailSegment[] {
+  if (!Array.isArray(trail)) return [];
   const out: TrailSegment[] = [];
   for (let i = 0; i + 1 < trail.length; i++) {
     const from = trail[i];
@@ -58,7 +59,8 @@ export interface RecordedStop {
 
 /** A stop is consecutive reports within ~250m spanning 5+ minutes —
  *  the vehicle standing still with its phone on, not GPS wobble. */
-export function recordedStops(trail: DispatchPing[]): RecordedStop[] {
+export function recordedStops(trail: DispatchPing[] | null | undefined): RecordedStop[] {
+  if (!Array.isArray(trail)) return [];
   const stops: RecordedStop[] = [];
   let cluster: DispatchPing[] = [];
   const flush = () => {
@@ -85,10 +87,13 @@ export function recordedStops(trail: DispatchPing[]): RecordedStop[] {
   return stops;
 }
 
-/** "Active now" under 2 minutes, otherwise "8 min ago" / "2 h ago". */
-export function lastSeenLabel(iso: string | null): string {
+/** "Active now" under 2 minutes, otherwise "8 min ago" / "2 h ago".
+ *  `now` is injectable so live labels can tick from one clock — and so
+ *  server rendering can pass a fixed snapshot instead of its own
+ *  Date.now() (see useNow in DispatchBoard). */
+export function lastSeenLabel(iso: string | null, now: number = Date.now()): string {
   if (!iso) return 'No position yet';
-  const mins = Math.max(0, Math.round((Date.now() - new Date(iso).getTime()) / 60000));
+  const mins = Math.max(0, Math.round((now - new Date(iso).getTime()) / 60000));
   if (mins < 2) return 'Active now';
   if (mins < 60) return `${mins} min ago`;
   const h = Math.floor(mins / 60);
@@ -96,16 +101,17 @@ export function lastSeenLabel(iso: string | null): string {
   return m === 0 ? `${h} h ago` : `${h} h ${m} min ago`;
 }
 
-export function lastSeenTone(iso: string | null): 'g' | 'a' | 'r' | undefined {
+export function lastSeenTone(iso: string | null, now: number = Date.now()): 'g' | 'a' | 'r' | undefined {
   if (!iso) return undefined;
-  const mins = (Date.now() - new Date(iso).getTime()) / 60000;
+  const mins = (now - new Date(iso).getTime()) / 60000;
   if (mins < 10) return 'g';
   if (mins < 45) return 'a';
   return 'r';
 }
 
 /** Last measurable segment speed, newest first. */
-export function currentSpeedKmh(trail: DispatchPing[]): number | null {
+export function currentSpeedKmh(trail: DispatchPing[] | null | undefined): number | null {
+  if (!Array.isArray(trail)) return null;
   for (let i = trail.length - 2; i >= 0; i--) {
     const a = trail[i];
     const b = trail[i + 1];
@@ -129,7 +135,15 @@ export function journeyProgress(run: DispatchRun): number | null {
   return Math.min(1, Math.max(0, 1 - left / total));
 }
 
+/** Straight-line km from the run's latest position to its destination.
+ *  Label it honestly wherever shown ("straight line") — roads are
+ *  longer, and a dispatcher planning fuel on this number should know. */
+export function remainingStraightKm(run: DispatchRun): number | null {
+  if (!run.destination || run.currentLat === null || run.currentLng === null) return null;
+  return haversineKm(run.currentLat, run.currentLng, run.destination.lat, run.destination.lng);
+}
+
 /** Total travelled distance along the recorded trail. */
-export function distanceCoveredKm(trail: DispatchPing[]): number {
+export function distanceCoveredKm(trail: DispatchPing[] | null | undefined): number {
   return trailSegments(trail).reduce((s, seg) => s + seg.km, 0);
 }

@@ -24,12 +24,33 @@ __pycache__/
 .venv/
 venv/
 
+# mkcert-generated local dev TLS cert/key for --experimental-https
+certificates/
+
 # ─── secrets ──────────────────────────────────────────────
 .env
 .env.local
 .env.*.local
 .env.production
 .env.development
+
+# Filled-in copies of deploy/scripts/secrets.env.template. The template
+# itself is tracked; anything matching this pattern holds real cluster
+# credentials and must not be.
+*.secrets.env
+secrets.env
+
+# Locally built Go binary. The deployed one is built inside
+# services/core-go/Dockerfile, never copied from a developer's machine.
+services/core-go/bin/
+
+# Kubeconfigs. A downloaded Rancher kubeconfig carries a bearer token
+# with full cluster authority — committing one hands the cluster to
+# anyone who can read the repo. Kept here rather than only in ~/.kube
+# because the file is easy to drop into the working tree by accident.
+.kube/
+*.kubeconfig
+kubeconfig*.y*ml
 
 # ─── IDE / editor ─────────────────────────────────────────
 .idea/

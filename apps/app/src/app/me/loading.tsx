@@ -6,16 +6,20 @@
 export default function MeLoading() {
   return (
     <div className="skel" role="status" aria-label="Loading your record">
-      <div className="skel-kicker" />
-      <div className="skel-title" />
-      <div className="skel-line" style={{ width: '72%' }} />
-
+      {/* The hero carries the title now, so the skeleton's title lives
+          inside the band rather than above it — otherwise the heading
+          visibly jumps down one block on hydrate. */}
       <div className="skel-standing">
-        <span className="skel-ring" />
         <div style={{ flex: 1, minWidth: 0 }}>
-          <div className="skel-line" style={{ width: '52%', height: 14 }} />
-          <div className="skel-line" style={{ width: '88%' }} />
+          <div className="skel-kicker" />
+          <div className="skel-title" />
+          <div className="skel-line" style={{ width: '82%' }} />
         </div>
+        <span className="skel-ring" />
+      </div>
+
+      <div className="skel-quick">
+        {[0, 1, 2, 3].map((i) => <div key={i} />)}
       </div>
 
       <div className="skel-grid">

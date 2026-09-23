@@ -346,12 +346,13 @@ func seedShowcaseForOrg(ctx context.Context, pool *pgxpool.Pool, cfg showcaseOrg
 				"paidAt"=COALESCE("paidAt", now() - ($15::float || ' days')::interval),
 				"deliveryAttempts"=GREATEST("deliveryAttempts",$16), "lastAttemptReason"=COALESCE("lastAttemptReason",$17),
 				"codAmountKes"=COALESCE("codAmountKes",$18), "codStatus"=CASE WHEN "codStatus"='NOT_APPLICABLE' THEN $19 ELSE "codStatus" END,
-				"destinationAgentId"=COALESCE("destinationAgentId",$20::uuid)
-				WHERE id=$21`,
+				"destinationAgentId"=COALESCE("destinationAgentId",$20::uuid),
+				"intakeConfirmedAt"=CASE WHEN $8 = 'BOOKED' THEN NULL ELSE COALESCE("intakeConfirmedAt", now() - ($21::float || ' days')::interval + interval '30 minutes') END
+				WHERE id=$22`,
 				p.senderName, p.senderMsisdn, p.receiverName, p.receiverMsisdn,
 				p.origin, p.dest, p.parcelType, p.status, p.originMethod,
 				holderParty(p.holderMsisdn), orgID, p.priceKES, platformFee, orgEarnings, paidAgo,
-				p.deliveryAttempts, p.lastAttemptReason, p.codAmountKES, codStatus, agentID, existing)
+				p.deliveryAttempts, p.lastAttemptReason, p.codAmountKES, codStatus, agentID, p.createdDaysAgo, existing)
 			if err != nil {
 				return fmt.Errorf("update parcel %s: %w", p.code, err)
 			}
@@ -385,7 +386,7 @@ func seedShowcaseForOrg(ctx context.Context, pool *pgxpool.Pool, cfg showcaseOrg
 				"deliveryAttempts", "lastAttemptReason",
 				"codAmountKes", "codStatus", "destinationAgentId", "parcelOrgId",
 				"externalRef", "externalSource",
-				"createdAt", "slaDeadlineAt", "deliveredAt", "agentHeldSince")
+				"createdAt", "slaDeadlineAt", "deliveredAt", "agentHeldSince", "intakeConfirmedAt")
 			VALUES (gen_random_uuid(), $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11,
 				$12::"ParcelType", 'BODA', 'MPESA_STK', $13, $14, $15,
 				now() - ($16::float || ' days')::interval,
@@ -394,7 +395,8 @@ func seedShowcaseForOrg(ctx context.Context, pool *pgxpool.Pool, cfg showcaseOrg
 				now() - ($26::float || ' days')::interval,
 				now() - ($26::float || ' days')::interval + (COALESCE($27::float, 48) || ' hours')::interval,
 				CASE WHEN $28::float IS NULL THEN NULL ELSE now() - ($28::float || ' days')::interval END,
-				CASE WHEN $29::float IS NULL THEN NULL ELSE now() - ($29::float || ' days')::interval END)
+				CASE WHEN $29::float IS NULL THEN NULL ELSE now() - ($29::float || ' days')::interval END,
+				CASE WHEN $18 = 'BOOKED' THEN NULL ELSE now() - ($26::float || ' days')::interval + interval '30 minutes' END)
 			RETURNING id`,
 			p.code, p.deliveryCode, p.ticket,
 			p.senderName, p.senderMsisdn, p.receiverName, p.receiverMsisdn,
@@ -433,31 +435,34 @@ func seedShowcaseForOrg(ctx context.Context, pool *pgxpool.Pool, cfg showcaseOrg
 
 	// One active dispatch run so the dispatch board + live map have a
 	// vehicle to draw, not just dots.
-	var dispatchID string
-	_ = pool.QueryRow(ctx, `SELECT id FROM parcel_dispatch WHERE "parcelOrgId"=$1 AND status='ACTIVE' LIMIT 1`, orgID).Scan(&dispatchID)
-	if dispatchID == "" {
+	var runID string
+	_ = pool.QueryRow(ctx, `SELECT id FROM parcel_shipment WHERE "parcelOrgId"=$1 AND status='DEPARTED' LIMIT 1`, orgID).Scan(&runID)
+	if runID == "" {
 		stationA := stationIDByName[cfg.stationA]
 		stationB := stationIDByName[cfg.stationB]
-		err := pool.QueryRow(ctx, `INSERT INTO parcel_dispatch (id, "parcelOrgId", "vehiclePlate", "vehicleType",
-			"originStationId", "destinationStationId", status, notes, "currentLat", "currentLng", "currentAt", "createdAt")
-			VALUES (gen_random_uuid(), $1, $2, 'VAN', $3, $4, 'ACTIVE',
-			$5, $6, $7, now(), now()) RETURNING id`,
-			orgID, cfg.dispatchPlate, stationA, stationB, cfg.dispatchNotes, cfg.dispatchLat, cfg.dispatchLng).Scan(&dispatchID)
+		err := pool.QueryRow(ctx, `INSERT INTO parcel_shipment (id, "parcelOrgId", "vehiclePlate", "vehicleType",
+			"originStationId", "destinationStationId", status, notes, "currentLat", "currentLng", "currentAt", "createdAt",
+			"originLabel", "destinationLabel")
+			VALUES (gen_random_uuid(), $1, $2, 'VAN', $3, $4, 'DEPARTED',
+			$5, $6, $7, now(), now(),
+			COALESCE((SELECT name FROM parcel_agent WHERE id = $3), 'Origin'),
+			COALESCE((SELECT name FROM parcel_agent WHERE id = $4), 'Destination')) RETURNING id`,
+			orgID, cfg.dispatchPlate, stationA, stationB, cfg.dispatchNotes, cfg.dispatchLat, cfg.dispatchLng).Scan(&runID)
 		if err != nil {
 			return fmt.Errorf("dispatch: %w", err)
 		}
 		var crewStaff, receiverStaff string
 		_ = pool.QueryRow(ctx, `SELECT id FROM parcel_org_staff WHERE "orgId"=$1 AND name=$2`, orgID, cfg.crewName).Scan(&crewStaff)
 		_ = pool.QueryRow(ctx, `SELECT id FROM parcel_org_staff WHERE "orgId"=$1 AND name=$2`, orgID, cfg.receiverName).Scan(&receiverStaff)
-		_, _ = pool.Exec(ctx, `INSERT INTO parcel_dispatch_crew (id, "dispatchId", name, role, "staffId")
-			VALUES (gen_random_uuid(), $1, $2, 'DRIVER', $3) ON CONFLICT DO NOTHING`, dispatchID, cfg.crewName, nullableUUID(crewStaff))
-		_, _ = pool.Exec(ctx, `INSERT INTO parcel_dispatch_receiver (id, "dispatchId", name, "staffId")
-			VALUES (gen_random_uuid(), $1, $2, $3) ON CONFLICT DO NOTHING`, dispatchID, cfg.receiverName, nullableUUID(receiverStaff))
+		_, _ = pool.Exec(ctx, `INSERT INTO parcel_run_crew (id, "runId", name, role, "staffId")
+			VALUES (gen_random_uuid(), $1, $2, 'DRIVER', $3) ON CONFLICT DO NOTHING`, runID, cfg.crewName, nullableUUID(crewStaff))
+		_, _ = pool.Exec(ctx, `INSERT INTO parcel_run_receiver (id, "runId", name, "staffId")
+			VALUES (gen_random_uuid(), $1, $2, $3) ON CONFLICT DO NOTHING`, runID, cfg.receiverName, nullableUUID(receiverStaff))
 	}
-	if dispatchID != "" {
-		_, _ = pool.Exec(ctx, `INSERT INTO parcel_dispatch_ping (id, "dispatchId", lat, lng, at)
+	if runID != "" {
+		_, _ = pool.Exec(ctx, `INSERT INTO parcel_run_ping (id, "runId", lat, lng, at)
 			VALUES (gen_random_uuid(), $1, $2, $3, now()),
-			       (gen_random_uuid(), $1, $2, $3, now() - interval '12 minutes')`, dispatchID, cfg.dispatchLat, cfg.dispatchLng)
+			       (gen_random_uuid(), $1, $2, $3, now() - interval '12 minutes')`, runID, cfg.dispatchLat, cfg.dispatchLng)
 	}
 
 	// Label stock so the counter's label picker isn't empty — and so
