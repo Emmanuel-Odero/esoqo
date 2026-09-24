@@ -22,7 +22,7 @@ export function CreateOrgForm({ enterprises }: { enterprises: EnterpriseOption[]
       const r = await actionCreateTicketOrg({ enterpriseId, name, vertical });
       if (r.ok) {
         announce('Organiser created.', 'polite');
-        router.push(`/org/${r.data.orgId}`);
+        router.push(`/org/ticket/${r.data.orgId}`);
       } else {
         setError(r.error);
         announce(r.error, 'assertive');

@@ -19,7 +19,7 @@ interface OrgRow {
 
 /**
  * The switchboard between "I'm a customer" and "I run an organiser".
- * Every owned TicketOrg links out to its full console at /org/[orgId] —
+ * Every owned TicketOrg links out to its full console at /org/ticket/[orgId] —
  * this page itself stays a directory, same job Group's picker does for
  * treasury. The directory comes from core-go (GET /v1/me/orgs); the
  * enterprises picker still comes from the party record.
@@ -55,7 +55,7 @@ export default async function MyOrganiser() {
               <span className="v">
                 {org.Vertical === 'TRANSPORT' ? 'Transport' : 'Events'} · {org.Status.toLowerCase()}
                 {' — '}
-                <Link href={`/org/${org.ID}`}>Open console</Link>
+                <Link href={`/org/ticket/${org.ID}`}>Open console</Link>
               </span>
             </div>
           ))}

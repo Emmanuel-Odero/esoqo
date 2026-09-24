@@ -70,5 +70,5 @@ export async function ticketStaffSignIn(orgSlug: string, raw: unknown): Promise<
     capabilities: [...TICKETING_STAFF_CAPABILITIES[role]],
   }, json.token);
 
-  redirect(`/org/${json.orgId}`);
+  redirect(`/org/ticket/${json.orgId}`);
 }
