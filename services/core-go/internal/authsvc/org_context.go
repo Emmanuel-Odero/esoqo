@@ -1,104 +1,173 @@
 package authsvc
 
 import (
-	"context"
-	"encoding/json"
-	"time"
+	"fmt"
 
-	"github.com/redis/go-redis/v9"
+	"github.com/esoqo/core-go/internal/orgtypes"
+	"github.com/gin-gonic/gin"
 )
 
-// Package doc: docs/proposals/esoqo-unified-crew-identity.md.
-//
-// OrgContextService is the live, OTP-gated switch a SUBJECT flips to
-// briefly also hold org-staff (SCANNER/MANAGER/ADMIN/CREW) capabilities
-// for one org — the thing that lets a crew member's own Esoqo account
-// carry both "myself" and "on duty for Acme Tours" without a second
-// login, while keeping the two separated by an explicit re-verification
-// step. Deliberately Redis-backed and TTL-bound like SessionService, not
-// folded into the session token itself: an activation should be able to
-// lapse (or be killed by an org admin) independent of the underlying
-// sign-in staying valid.
-//
-// Presence of a live key here is necessary but not sufficient — every
-// caller must also re-check the OrgStaffGrant's status in Postgres
-// before trusting it (see dbx.GetOrgStaffGrant), so a suspension takes
-// effect immediately even if this key hasn't expired yet.
-
-// DefaultActivationTTL — used only where a caller doesn't supply its
-// own (tests, anything constructing a service directly). Production and
-// dev both go through config.Config.OrgContextActivationDays instead —
-// see NewOrgContextService.
-const DefaultActivationTTL = 60 * 24 * time.Hour
-
-type OrgContextActivation struct {
-	PartyID     string `json:"partyId"`
-	OrgID       string `json:"orgId"`
-	Role        string `json:"role"`
-	ActivatedAt int64  `json:"activatedAt"`
+// OrgContextError represents an error in org context operations.
+type OrgContextError struct {
+	Code    string
+	Message string
 }
 
-type OrgContextService struct {
-	rdb *redis.Client
-	// ttl — how long an activated org context lasts before the next
-	// org-scoped action requires OTP again, win or lose. Deliberately no
-	// PIN-only fast path for reactivation: every lapse, suspension or
-	// not, needs OTP. Configurable (config.Config.
-	// OrgContextActivationDays) rather than the original design's fixed
-	// shift-length window — see that field's own comment for why.
-	ttl time.Duration
+func (e *OrgContextError) Error() string {
+	return e.Message
 }
 
-func NewOrgContextService(rdb *redis.Client, ttl time.Duration) *OrgContextService {
-	if ttl <= 0 {
-		ttl = DefaultActivationTTL
+// ExtractOrgFromContext extracts organization information from a request context.
+// This is the generic replacement for courier-specific orgCtx() helpers.
+//
+// It verifies:
+// 1. The session has an OrgID (staff is scoped to an org)
+// 2. The OrgType is valid and registered
+// 3. The caller has the required capability (if specified)
+//
+// Returns the OrgID if all checks pass, or "" with an error written to the response.
+func ExtractOrgFromContext(
+	c *gin.Context,
+	ctx Ctx,
+	requiredCapability string,
+) string {
+	// Check: Does this session have an org?
+	if ctx.OrgID == "" {
+		// Support backward compat: check for ParcelOrgID
+		if ctx.ParcelOrgID != "" {
+			ctx.OrgID = ctx.ParcelOrgID
+			ctx.OrgType = "courier"
+		} else if ctx.TicketOrgID != "" {
+			ctx.OrgID = ctx.TicketOrgID
+			ctx.OrgType = "ticket"
+		} else {
+			// Not an org-scoped session
+			writeOrgContextError(c, &OrgContextError{
+				Code:    "NOT_ORG_STAFF",
+				Message: "This operation requires an organization staff session",
+			})
+			return ""
+		}
 	}
-	return &OrgContextService{rdb: rdb, ttl: ttl}
+
+	// Check: Is the OrgType valid?
+	if ctx.OrgType == "" {
+		// Fallback: assume courier for backward compat
+		if ctx.ParcelOrgID != "" {
+			ctx.OrgType = "courier"
+		} else if ctx.TicketOrgID != "" {
+			ctx.OrgType = "ticket"
+		} else {
+			writeOrgContextError(c, &OrgContextError{
+				Code:    "INVALID_ORG_TYPE",
+				Message: "Organization type is not set in session",
+			})
+			return ""
+		}
+	}
+
+	// Check: Is this a known org type?
+	if _, err := orgtypes.GetByString(ctx.OrgType); err != nil {
+		writeOrgContextError(c, &OrgContextError{
+			Code:    "UNKNOWN_ORG_TYPE",
+			Message: fmt.Sprintf("Unknown organization type: %s", ctx.OrgType),
+		})
+		return ""
+	}
+
+	// Check: Does caller have required capability?
+	if requiredCapability != "" {
+		if !hasOrgCapability(ctx, requiredCapability) {
+			writeOrgContextError(c, &OrgContextError{
+				Code:    "INSUFFICIENT_PERMISSION",
+				Message: "Your role doesn't allow that operation",
+			})
+			return ""
+		}
+	}
+
+	return ctx.OrgID
 }
 
-func orgContextKey(partyID, orgID string) string {
-	return "orgctx:" + partyID + ":" + orgID
+// hasOrgCapability checks if the context has a specific org capability.
+// It handles the org-type-prefixed capability naming automatically.
+func hasOrgCapability(ctx Ctx, capability string) bool {
+	if ctx.OrgType == "" {
+		return false
+	}
+
+	// Build the full capability name with org-type prefix
+	// Example: ("courier", "read") -> "parcelorg.read"
+	orgTypeDef, err := orgtypes.GetByString(ctx.OrgType)
+	if err != nil {
+		return false
+	}
+
+	fullCapability := orgTypeDef.CapabilityPrefix + "." + capability
+
+	// Check if context has this capability
+	for _, cap := range ctx.Capabilities {
+		if cap == fullCapability {
+			return true
+		}
+	}
+
+	return false
 }
 
-// TTL — exposed so handlers can tell the client how long an activation
-// will actually last (see handleOrgContextActivateVerify's response).
-func (s *OrgContextService) TTL() time.Duration { return s.ttl }
+// GetOrgContext returns the organization metadata from the Ctx.
+// Useful for logging, audit trails, and operation scoping.
+func GetOrgContext(ctx Ctx) *OrgContextData {
+	return &OrgContextData{
+		OrgID:      ctx.OrgID,
+		OrgType:    ctx.OrgType,
+		StaffID:    ctx.ActorID,
+		PartyID:    ctx.PartyID,
+		Profile:    ctx.SessionProfile,
+		Verified:   ctx.Verified,
+		ExpiresAt:  ctx.ExpiresAt,
+	}
+}
 
-// Activate — called only after a fresh OTP verification. role is
-// recorded for convenience/audit but is never trusted on its own; every
-// consumer re-reads the grant's current role/status from Postgres.
-func (s *OrgContextService) Activate(ctx context.Context, partyID, orgID, role string) error {
-	data, err := json.Marshal(OrgContextActivation{
-		PartyID: partyID, OrgID: orgID, Role: role, ActivatedAt: time.Now().UnixMilli(),
+// OrgContextData holds organization context for operations.
+type OrgContextData struct {
+	OrgID     string
+	OrgType   string
+	StaffID   string
+	PartyID   string
+	Profile   string
+	Verified  bool
+	ExpiresAt int64
+}
+
+// IsOrgScoped checks if a Ctx is scoped to an organization.
+func IsOrgScoped(ctx Ctx) bool {
+	return ctx.OrgID != "" || ctx.ParcelOrgID != "" || ctx.TicketOrgID != ""
+}
+
+// writeOrgContextError writes an org context error to the response.
+// Uses a format compatible with the existing error handling.
+func writeOrgContextError(c *gin.Context, err *OrgContextError) {
+	c.JSON(403, gin.H{
+		"code":    err.Code,
+		"message": err.Message,
 	})
-	if err != nil {
-		return err
-	}
-	return s.rdb.Set(ctx, orgContextKey(partyID, orgID), data, s.ttl).Err()
 }
 
-// Get returns the live activation, or nil if none/lapsed. Callers must
-// still confirm the grant is active in Postgres — this only proves a
-// switch happened, not that it's still allowed to have.
-func (s *OrgContextService) Get(ctx context.Context, partyID, orgID string) (*OrgContextActivation, error) {
-	raw, err := s.rdb.Get(ctx, orgContextKey(partyID, orgID)).Result()
-	if err == redis.Nil {
-		return nil, nil
+// VerifyOrgOwnership verifies that a given staff member belongs to the given org
+// in the current session context.
+func VerifyOrgOwnership(ctx Ctx, requestedOrgID string) bool {
+	if ctx.OrgID != requestedOrgID {
+		return false
 	}
-	if err != nil {
-		return nil, err
-	}
-	var a OrgContextActivation
-	if json.Unmarshal([]byte(raw), &a) != nil {
-		return nil, nil
-	}
-	return &a, nil
+	return ctx.Verified
 }
 
-// Deactivate — an org admin suspending a crew member calls this
-// immediately, so a live session loses staff capabilities on its very
-// next request rather than waiting out the TTL. Also used when a person
-// deliberately switches back to "just me".
-func (s *OrgContextService) Deactivate(ctx context.Context, partyID, orgID string) error {
-	return s.rdb.Del(ctx, orgContextKey(partyID, orgID)).Err()
+// MustBeOrgScoped is a middleware-style helper that panics if the context
+// is not org-scoped. Used in tests and helpers that assume org context.
+func MustBeOrgScoped(ctx Ctx) *OrgContextData {
+	if !IsOrgScoped(ctx) {
+		panic("context is not org-scoped")
+	}
+	return GetOrgContext(ctx)
 }

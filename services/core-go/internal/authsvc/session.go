@@ -53,7 +53,18 @@ type SessionData struct {
 	// ParcelOrgID scopes an AGENT session to one courier company, the
 	// exact role TicketOrgID plays for organiser staff. Set only by
 	// parcel-company PIN sign-in; empty everywhere else.
-	ParcelOrgID  string   `json:"parcelOrgId,omitempty"`
+	// DEPRECATED: Use OrgID + OrgType instead for new org types.
+	ParcelOrgID string `json:"parcelOrgId,omitempty"`
+
+	// OrgType identifies what kind of organization this session is scoped to
+	// (courier, hotel, eatery, chama, etc.). Introduced in genericization.
+	// Only set when OrgID is set.
+	OrgType string `json:"orgType,omitempty"`
+
+	// SessionProfile defines the type of session (shift, session, readonly).
+	// Controls TTL behavior and cookie security properties.
+	SessionProfile string `json:"sessionProfile,omitempty"`
+
 	Capabilities []string `json:"capabilities"`
 	IssuedAt     int64    `json:"issuedAt"`
 
@@ -215,16 +226,18 @@ func (s *SessionService) CtxFromToken(ctx context.Context, token, ip string) (*C
 		caps = CapabilitiesForRole(RoleSubject)
 	}
 	return &Ctx{
-		ActorType:    data.ActorType,
-		ActorID:      data.ActorID,
-		Capabilities: caps,
-		PartyID:      data.PartyID,
-		OrgID:        data.OrgID,
-		StoreID:      data.StoreID,
-		TicketOrgID:  data.TicketOrgID,
-		ParcelOrgID:  data.ParcelOrgID,
-		IP:           ip,
-		Verified:     true,
-		ExpiresAt:    data.ExpiresAt,
+		ActorType:      data.ActorType,
+		ActorID:        data.ActorID,
+		Capabilities:   caps,
+		PartyID:        data.PartyID,
+		OrgID:          data.OrgID,
+		StoreID:        data.StoreID,
+		TicketOrgID:    data.TicketOrgID,
+		ParcelOrgID:    data.ParcelOrgID,
+		OrgType:        data.OrgType,
+		SessionProfile: data.SessionProfile,
+		IP:             ip,
+		Verified:       true,
+		ExpiresAt:      data.ExpiresAt,
 	}, nil
 }

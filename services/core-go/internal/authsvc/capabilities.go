@@ -28,7 +28,9 @@ type Ctx struct {
 	OrgID        string
 	StoreID      string
 	TicketOrgID  string
-	ParcelOrgID  string
+	ParcelOrgID  string // DEPRECATED: Use OrgID + OrgType instead
+	OrgType      string // NEW: Identifies the organization type (courier, hotel, eatery, etc.)
+	SessionProfile string // NEW: Session profile (shift, session, readonly)
 	IP           string
 	Verified     bool
 	// ExpiresAt — unix millis this session's own TTL runs out, carried
