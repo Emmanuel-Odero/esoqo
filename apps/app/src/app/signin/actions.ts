@@ -13,7 +13,28 @@ async function clientIp(): Promise<string> {
   return clientIpFrom((n) => h.get(n)) ?? 'unknown';
 }
 
-const CORE_GO_URL = process.env.CORE_GO_API_URL ?? 'http://localhost:4100';
+/**
+ * core-go sits behind Docker's bridge network — reachable at `core-go:4100`
+ * from inside the compose stack, but only at `localhost:4100` on the bare
+ * host (an unresolvable `core-go` there is exactly what surfaces as a raw
+ * "fetch failed" TypeError). Try the configured URL twice on fresh
+ * connections, then a loopback form of it as a last resort.
+ */
+const CORE_GO_HOSTS = (() => {
+  const base = process.env.CORE_GO_API_URL ?? 'http://localhost:4100';
+  const hosts = [base, base];
+  try {
+    const url = new URL(base);
+    if (!['localhost', '127.0.0.1', '::1'].includes(url.hostname)) {
+      const loopback = new URL(base);
+      loopback.hostname = '127.0.0.1';
+      hosts.push(loopback.toString());
+    }
+  } catch {
+    /* keep the configured base as-is */
+  }
+  return hosts;
+})();
 
 /**
  * Subject OTP/PIN/session now live in services/core-go — see
@@ -30,22 +51,41 @@ const CORE_GO_URL = process.env.CORE_GO_API_URL ?? 'http://localhost:4100';
 async function coreGoFetch<T>(path: string, body: unknown): Promise<
   { ok: true; data: T } | { ok: false; status: number; code: string; message: string }
 > {
-  const res = await fetch(`${CORE_GO_URL}${path}`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(body),
-    cache: 'no-store',
-  });
-  const json = await res.json().catch(() => ({}));
-  if (!res.ok) {
-    return {
-      ok: false,
-      status: res.status,
-      code: json?.error?.code ?? 'UNKNOWN',
-      message: json?.error?.message ?? 'Something went wrong',
-    };
+  // Each candidate host gets one fresh-connection fetch — an idle
+  // keep-alive socket is occasionally torn down by Docker Desktop's NAT,
+  // which surfaces as a bare "fetch failed" TypeError (see CORE_GO_HOSTS).
+  // If every attempt fails, degrade to a typed failure instead of leaking
+  // the TypeError out of the Server Action.
+  let lastError: unknown;
+  for (const base of CORE_GO_HOSTS) {
+    try {
+      const res = await fetch(`${base}${path}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+        cache: 'no-store',
+      });
+      const json = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        return {
+          ok: false,
+          status: res.status,
+          code: json?.error?.code ?? 'UNKNOWN',
+          message: json?.error?.message ?? 'Something went wrong',
+        };
+      }
+      return { ok: true, data: json as T };
+    } catch (e) {
+      lastError = e;
+    }
   }
-  return { ok: true, data: json as T };
+  console.warn(`[core-go] ${path} unreachable after ${CORE_GO_HOSTS.length} attempt(s):`, lastError);
+  return {
+    ok: false,
+    status: 0,
+    code: 'UNAVAILABLE',
+    message: 'Could not reach the sign-in service, try again in a moment.',
+  };
 }
 
 async function startSessionFromToken(token: string) {
@@ -83,6 +123,9 @@ export async function actionSignIn(raw: unknown): Promise<ActionResult<{ next: s
   const result = await coreGoFetch<{ token: string }>('/v1/auth/sign-in', { identifier, pin });
   if (!result.ok) {
     if (result.code === 'ACCOUNT_FROZEN') return { ok: false, error: result.message };
+    // status 0 is the "core-go unreachable" path — don't present an
+    // unavailable service as a wrong identifier.
+    if (result.status === 0) return { ok: false, error: result.message };
     return { ok: false, error: result.message, field: 'identifier' };
   }
 
