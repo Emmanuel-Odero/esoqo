@@ -1,9 +1,12 @@
 import { redirect } from 'next/navigation';
 import { listMyStores } from '@esoqo/db';
+import { Icon } from '@esoqo/ui';
 import { requireSubject } from '@/lib/session';
 import { DashSidebar } from '@/components/DashSidebar';
 import { MobileNavToggle } from '@/components/MobileNavToggle';
 import { SignOutButton } from '@/components/SignOutButton';
+
+const APP_URL = process.env.NEXT_PUBLIC_APP_URL ?? 'http://localhost:3001';
 
 export default async function ShellLayout({ children }: { children: React.ReactNode }) {
   const ctx = await requireSubject();
@@ -20,6 +23,9 @@ export default async function ShellLayout({ children }: { children: React.ReactN
           <MobileNavToggle />
           <span className="brand"><span className="dot" />{store.name}</span>
           <span className="user">
+            <a href={`${APP_URL}/me`} className="btn btn-o btn-sm" title="Back to your Esoqo account">
+              <Icon name="arrow-left" size={13} />Esoqo
+            </a>
             <span className="avatar">{(store.name ?? 'ES').slice(0, 2).toUpperCase()}</span>
             <span className="slug mono" style={{ fontSize: '.72rem' }}>esoko.global/@{store.slug}</span>
             <SignOutButton />
