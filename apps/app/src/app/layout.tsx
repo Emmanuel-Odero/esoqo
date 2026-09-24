@@ -12,6 +12,7 @@ import "@esoqo/ui/ui.css";
 import "./app.css";
 import { ServiceWorkerRegister } from "@/components/ServiceWorkerRegister";
 import { ConnectivityBanner } from "@/components/ConnectivityBanner";
+import { DevPerfGuard } from "@/components/DevPerfGuard";
 
 /**
  * One font per role, loaded once and reused everywhere:
@@ -106,6 +107,7 @@ export default function RootLayout({
         </LiveRegion>
         <RouteAnnouncer />
         <ServiceWorkerRegister />
+        <DevPerfGuard />
       </body>
     </html>
   );
