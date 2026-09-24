@@ -137,7 +137,7 @@ func (s *Server) Router() *gin.Engine {
 		v1.POST("/bookings/:id/balance", s.rateLimit("pay:balance", 30, time.Hour), s.handlePayBookingBalance)
 		v1.GET("/bookings/:id", s.handleGetBooking)
 		v1.GET("/me/tickets", s.authRequired(), s.handleListMyBookings)
-		v1.GET("/me/orgs", s.authRequired(), s.handleListMyOrgs)
+		v1.GET("/me/orgs", s.authRequired(), s.handleListMyAllOrgs)
 		v1.GET("/me/org-grants", s.authRequired(), s.handleListMyOrgGrants)
 		// The subject-side counterpart to /me/orgs (ticketing companies
 		// they own): the courier companies they are staff of, so a
@@ -148,6 +148,33 @@ func (s *Server) Router() *gin.Engine {
 		// person's own, after checking they hold an active staff row on
 		// that company.
 		v1.POST("/me/parcel-orgs/activate", s.authRequired(), s.handleActivateParcelOrg)
+
+		// Generic org portal data endpoints (for /org/[type]/[id])
+		v1.GET("/orgs/:orgId/portal", s.authRequired(), s.handleGetOrgPortalData)
+		v1.GET("/orgs/:orgId/metadata", s.authRequired(), s.handleListOrgMetadata)
+		v1.PATCH("/orgs/:orgId/metadata", s.authRequired(), s.handleUpdateOrgMetadata)
+
+		// Generic staff sign-in and sign-out (all org types)
+		v1.POST("/orgs/staff/signin", s.rateLimit("auth:orgstaff", 20, time.Hour), s.handleOrgStaffSignIn)
+		v1.POST("/orgs/me/signout", s.authRequired(), s.handleSignOutOrg)
+
+		// Generic org me endpoint (for unified portal layout)
+		v1.GET("/orgs/:orgId/me", s.authRequired(), s.handleGetOrgMe)
+		v1.GET("/orgs/me/staff", s.authRequired(), s.handleListGenericOrgStaff)
+		v1.GET("/orgs/me/config/:configKey", s.authRequired(), s.handleGetOrgConfig)
+		v1.GET("/orgs/me/configs", s.authRequired(), s.handleListOrgConfigs)
+
+		// Hotel org type routes
+		v1.GET("/hotels/:orgId/dashboard", s.authRequired(), s.handleGetHotelDashboard)
+		v1.GET("/hotels/:orgId/rooms", s.authRequired(), s.handleListHotelRooms)
+		v1.POST("/hotels/:orgId/rooms", s.authRequired(), s.handleCreateHotelRoom)
+		v1.PATCH("/hotels/:orgId/rooms/:number/status", s.authRequired(), s.handleUpdateHotelRoomStatus)
+		v1.GET("/hotels/:orgId/reservations", s.authRequired(), s.handleListHotelReservations)
+		v1.POST("/hotels/:orgId/reservations", s.authRequired(), s.handleCreateHotelReservation)
+		v1.POST("/hotels/:orgId/reservations/:reservationId/checkin", s.authRequired(), s.handleCheckInGuest)
+		v1.POST("/hotels/:orgId/reservations/:reservationId/checkout", s.authRequired(), s.handleCheckOutGuest)
+		v1.GET("/hotels/:orgId/staff", s.authRequired(), s.handleListHotelStaff)
+
 		v1.POST("/org-context/activate/request", s.authRequired(), s.handleOrgContextActivateRequest)
 		v1.POST("/org-context/activate/verify", s.authRequired(), s.handleOrgContextActivateVerify)
 		v1.POST("/org-context/deactivate", s.authRequired(), s.handleOrgContextDeactivate)
