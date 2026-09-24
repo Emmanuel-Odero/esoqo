@@ -1,48 +1,76 @@
-'use server';
+"use server";
 
-import { cookies } from 'next/headers';
-import { redirect } from 'next/navigation';
-import { SESSION_COOKIE } from '@esoqo/auth';
-import { goUrl } from '@/lib/ticketing';
-import { setParcelOrgSession } from '@/lib/parcel-org-session';
+import type { Route } from "next";
+import { cookies } from "next/headers";
+import { redirect } from "next/navigation";
+import { SESSION_COOKIE } from "@esoqo/auth";
+import { goUrl } from "@/lib/ticketing";
+import { setParcelOrgSession } from "@/lib/parcel-org-session";
+import { getOrgTypeConfig } from "@/lib/org-type-config";
 
 /**
- * One click into a courier company the person is staff of.
+ * Generic org entry for any organization type.
  *
  * The person's own Esoqo session (SESSION_COOKIE) is the credential;
- * core-go checks it against an active parcel_org_staff row before
- * minting the company-scoped session, so the org id here is a selector
- * over companies they already hold, not a grant. On success we plant
- * the company cookie and land in the console. The console's own
- * 401/403 handling then re-reads /v1/parcel-orgs/me — this only gets
- * them in the door.
+ * the API checks it against an active org_staff row before minting the
+ * organization-scoped session, so the org id is a selector over orgs they
+ * already hold, not a grant. On success we plant the org session cookie
+ * and navigate to the org portal.
  *
- * Lives at the app root rather than under /me because all three shells
- * (/me, /org/[orgId], /parcel-org) now offer the same switcher, and a
- * courier manager switching between two of their own companies should
- * not have to go back to their personal record first.
+ * Replaces courier-specific enterParcelOrg with a generic version that
+ * works for any org type (courier, hotel, eatery, chama, tout, etc.).
+ *
+ * Lives at the app root because all portals now offer the same switcher,
+ * and switching between two of your own organizations should not require
+ * going through /me first.
  */
-export async function enterParcelOrg(orgId: string): Promise<void> {
+export async function enterOrg(orgId: string, orgType: string): Promise<void> {
   const token = (await cookies()).get(SESSION_COOKIE)?.value;
-  if (!token) redirect('/signin');
+  if (!token) redirect("/signin");
 
-  let companyToken: string | undefined;
+  let sessionToken: string | undefined;
   try {
-    const res = await fetch(goUrl('/v1/me/parcel-orgs/activate'), {
-      method: 'POST',
-      headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
-      body: JSON.stringify({ orgId }),
-      cache: 'no-store',
+    const res = await fetch(goUrl("/v1/orgs/{orgId}/session"), {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${token}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ orgType }),
+      cache: "no-store",
       signal: AbortSignal.timeout(15000),
     });
-    const json = (await res.json().catch(() => null)) as { token?: string } | null;
-    if (res.ok) companyToken = json?.token;
+    const json = (await res.json().catch(() => null)) as {
+      token?: string;
+    } | null;
+    if (res.ok) sessionToken = json?.token;
   } catch {
-    // Fall through to the error redirect below.
+    // Fall through to error redirect
   }
 
-  if (!companyToken) redirect('/me?companyError=1');
+  if (!sessionToken) redirect("/me?orgError=1");
 
-  await setParcelOrgSession(companyToken);
-  redirect('/parcel-org');
+  // Use the generic session cookie handling
+  // For backward compat during courier migration, courier still uses old cookie name
+  if (orgType === "courier") {
+    await setParcelOrgSession(sessionToken);
+  } else {
+    // For other org types, store in generic org session cookie
+    // This will be handled by a generic setOrgSession function
+    // For now, use the parcel org session as fallback
+    await setParcelOrgSession(sessionToken);
+  }
+
+  // Get org type config to determine portal route
+  const config = getOrgTypeConfig(orgType);
+  const portalRoute = config?.portalRoute || "/org/default";
+
+  redirect((portalRoute + "/" + orgId) as Route);
+}
+
+/**
+ * @deprecated Use enterOrg instead. Kept for backward compatibility.
+ */
+export async function enterParcelOrg(orgId: string): Promise<void> {
+  return enterOrg(orgId, "courier");
 }

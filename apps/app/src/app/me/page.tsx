@@ -8,7 +8,7 @@ import { formatMsisdn } from '@esoqo/domain';
 import { requireSubject } from '@/lib/session';
 import { listWorkspaces } from '@/lib/workspaces';
 import { goUrl, type GoMyBooking } from '@/lib/ticketing';
-import { enterParcelOrg } from '@/app/workspace-actions';
+import { enterOrg } from '@/app/workspace-actions';
 
 export const dynamic = 'force-dynamic';
 
@@ -292,7 +292,7 @@ export default async function MePage(
             {otherWorkspaces.map((w) => (
               <li className="wsl-row" key={w.key}>
                 <span className={`wsw-mark wsw-${w.kind}`} aria-hidden="true">
-                  <Icon name={w.kind === 'courier' ? 'truck' : 'calendar'} size={16} />
+                  <Icon name={w.orgType === 'courier' ? 'truck' : 'calendar'} size={16} />
                 </span>
                 <span className="wsl-id">
                   <strong>{w.name}</strong>
@@ -305,7 +305,7 @@ export default async function MePage(
                     Open <Icon name="arrow-right" size={15} />
                   </Link>
                 ) : (
-                  <form action={enterParcelOrg.bind(null, w.id)}>
+                  <form action={enterOrg.bind(null, w.id, w.orgType ?? 'courier')}>
                     <button type="submit" className="btn btn-o btn-sm">
                       Open <Icon name="arrow-right" size={15} />
                     </button>

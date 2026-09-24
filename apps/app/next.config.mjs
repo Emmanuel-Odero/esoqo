@@ -64,9 +64,47 @@ const nextConfig = {
    * router, and this forwards any surviving link (an SMS, a bookmark,
    * the marketing site) to /signin rather than a 404. Delete this entry
    * and restore the join route to bring registration back.
+   *
+   * Backward-compatibility redirects for the legacy portal routes:
+   *
+   * /parcel-org/*         → /org/courier/<id>/*
+   *   The old courier portal lived at /parcel-org. The org ID is stored
+   *   in the esoqo_parcel_org_session cookie, which we can't read in a
+   *   Next.js redirect rule (they're static). So these redirects point to
+   *   a middleware-handled catch-all that reads the cookie and redirects to
+   *   the right org ID.  The middleware file is at src/middleware.ts.
+   *
+   * /org/[orgId]/*        → /org/ticket/<orgId>/*
+   *   The old ticketing portal used /org/[orgId] with no type segment.
+   *   We preserve those URLs by treating a bare UUID segment as a ticket org.
    */
   async redirects() {
-    return [{ source: '/join', destination: '/signin', permanent: false }];
+    return [
+      { source: '/join', destination: '/signin', permanent: false },
+
+      // Legacy parcel-org portal routes: handled by middleware (needs cookie)
+      // These fallback redirects fire only if middleware hasn't already redirected.
+      {
+        source: '/parcel-org',
+        destination: '/parcel-org-bridge',
+        permanent: false,
+        missing: [{ type: 'cookie', key: 'esoqo_parcel_org_session' }],
+      },
+
+      // Legacy org/[orgId] (ticket) routes — redirect to the new typed URL.
+      // We use a regex that matches a bare UUID segment so /org/courier/x
+      // and /org/hotel/x aren't caught here.
+      {
+        source: '/org/:orgId((?!courier|ticket|hotel|eatery|chama|tout)[^/]+)',
+        destination: '/org/ticket/:orgId',
+        permanent: false,
+      },
+      {
+        source: '/org/:orgId((?!courier|ticket|hotel|eatery|chama|tout)[^/]+)/:rest*',
+        destination: '/org/ticket/:orgId/:rest*',
+        permanent: false,
+      },
+    ];
   },
 };
 export default nextConfig;

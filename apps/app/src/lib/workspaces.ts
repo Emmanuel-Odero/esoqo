@@ -1,98 +1,159 @@
-import 'server-only';
-import { cookies } from 'next/headers';
-import { cache } from 'react';
-import { SESSION_COOKIE } from '@esoqo/auth';
-import { goUrl } from './ticketing';
-import { getMyParcelOrgs } from './my-parcel-orgs';
+import "server-only";
+import { cookies } from "next/headers";
+import { cache } from "react";
+import { SESSION_COOKIE } from "@esoqo/auth";
+import { listMyStores } from "@esoqo/db";
+import { goUrl } from "./ticketing";
+import { getCtx } from "./session";
+import { getOrgTypeConfig, type WorkspaceKind } from "./org-type-config";
 
 /**
- * Every place one signed-in person can be working, in one list.
+ * Generic workspace interface that works for all org types.
  *
- * Before this, "which hats do I wear" was scattered: courier companies
- * only appeared in a card two thirds down /me, ticket organisers only on
- * /me/organiser, and once inside either console there was no way back
- * except signing out — which on the courier side threw away a shift
- * session a rider might not be able to re-mint. A person who runs a
- * matatu SACCO, a parcel company and their own record had to remember
- * three URLs.
- *
- * All three kinds are read with the PERSON's own bearer, never a
- * company-scoped one, so this list is "who am I on the books of" and
- * nothing more. Entering a courier company still mints its own session
- * (see enterParcelOrg) — listing a company here grants nothing.
+ * This replaces the courier-specific WorkspaceKind enum with a flexible
+ * system that supports any org type (courier, hotel, eatery, chama, tout, etc.)
+ * without component logic changes.
  */
-export type WorkspaceKind = 'personal' | 'ticket' | 'courier';
-
 export interface Workspace {
-  /** Stable React key and the value pages pass as `currentKey`. */
+  /** Stable React key (format: "kind:id" or "personal") */
   key: string;
+
+  /** Workspace kind: 'personal' or 'managed' (for any org type) */
   kind: WorkspaceKind;
+
+  /** Organization ID (empty for personal) */
   id: string;
+
+  /** Organization name */
   name: string;
-  /** What this workspace is, in the person's own words. */
+
+  /** Display subtitle (org type label) */
   subtitle: string;
+
+  /** Organization type (courier, hotel, eatery, chama, etc.) */
+  orgType?: string;
+
   /**
-   * A plain link when the session already covers it (personal, ticket
-   * organisers). Null for courier companies: entering one needs a
-   * company-scoped session minted first, so those rows submit the
-   * enterParcelOrg action instead of navigating.
+   * Navigation href if available (direct entry).
+   * Null if session needs to be minted first.
    */
   href: string | null;
-  /** A company that isn't trading yet is listed but can't be opened. */
+
+  /** Whether this workspace can currently be entered */
   enterable: boolean;
-  /** Why it can't be opened, or the person's role in it. */
+
+  /** Why it can't be opened, or the person's role in it */
   note?: string;
+
+  /** Session profile (shift, session, readonly) for timing info */
+  sessionProfile?: string;
 }
 
-interface TicketOrgRow {
-  ID: string;
-  Name: string;
-  Slug: string;
-  Vertical: string;
-  Status: string;
+/**
+ * Response from /v1/me/orgs API endpoint.
+ */
+interface MyOrgResponse {
+  id: string;
+  type: string;
+  name: string;
+  slug: string;
+  status: string;
+  role: string;
 }
 
 export const PERSONAL_WORKSPACE: Workspace = {
-  key: 'personal',
-  kind: 'personal',
-  id: '',
-  name: 'Esoqo',
-  subtitle: 'Your own record',
-  href: '/me',
+  key: "personal",
+  kind: "personal",
+  id: "",
+  name: "Esoqo",
+  subtitle: "Your own record",
+  href: "/me",
   enterable: true,
 };
 
-/** Ticket organisers this person owns — core-go's GET /v1/me/orgs. */
-async function listTicketOrgs(token: string): Promise<Workspace[]> {
+/**
+ * Fetch all organizations a person is staff of (generic endpoint).
+ * Works for all org types through a single API call.
+ */
+async function listMyOrgs(token: string): Promise<Workspace[]> {
   try {
-    const res = await fetch(goUrl('/v1/me/orgs'), {
+    const res = await fetch(goUrl("/v1/me/orgs"), {
       headers: { Authorization: `Bearer ${token}` },
-      cache: 'no-store',
+      cache: "no-store",
       signal: AbortSignal.timeout(10000),
     });
     if (!res.ok) return [];
-    const json = (await res.json().catch(() => null)) as { orgs?: TicketOrgRow[] | null } | null;
-    return (json?.orgs ?? []).map((o) => ({
-      key: `ticket:${o.ID}`,
-      kind: 'ticket' as const,
-      id: o.ID,
-      name: o.Name,
-      subtitle: o.Vertical === 'TRANSPORT' ? 'Transport organiser' : 'Events organiser',
-      href: `/org/${o.ID}`,
-      enterable: true,
-      note: o.Status === 'ACTIVE' ? undefined : o.Status.toLowerCase(),
-    }));
+
+    const json = (await res.json().catch(() => null)) as {
+      orgs?: MyOrgResponse[] | null;
+    } | null;
+
+    return (json?.orgs ?? []).map((org): Workspace => {
+      const config = getOrgTypeConfig(org.type);
+
+      return {
+        key: `${org.type}:${org.id}`,
+        kind: "managed",
+        id: org.id,
+        name: org.name,
+        orgType: org.type,
+        subtitle: config?.label ?? org.type,
+        href:
+          config && config.entryType === "direct"
+            ? config.portalRoute + "/" + org.id
+            : null,
+        enterable: org.status === "ACTIVE",
+        note:
+          org.status === "ACTIVE"
+            ? org.role.toLowerCase().replace(/_/g, " ")
+            : "not active yet",
+        sessionProfile: config?.sessionProfile,
+      };
+    });
   } catch {
     return [];
   }
 }
 
 /**
+ * A signed-in person's estores. Unlike courier/hotel/eatery orgs, a
+ * Store has no org_staff row and needs no session minted — it's owned
+ * directly by the person's own Party (via Enterprise), and apps/store's
+ * dashboard already trusts the same SESSION_COOKIE. So this is a direct
+ * link, same shape as PERSONAL_WORKSPACE, not a WorkspaceEnter button.
+ *
+ * apps/store's dashboard shows only the first store on the account, so
+ * one or many stores still collapse to a single switcher entry — there
+ * is nowhere in the URL yet to pick a specific one.
+ */
+async function listMyStoreWorkspaces(): Promise<Workspace[]> {
+  const ctx = await getCtx();
+  if (ctx.actorType !== "SUBJECT" || !ctx.partyId) return [];
+
+  const stores = await listMyStores(ctx).catch(() => []);
+  if (stores.length === 0) return [];
+
+  const storeUrl = process.env.NEXT_PUBLIC_STORE_URL ?? "http://localhost:3003";
+
+  return [
+    {
+      key: "store",
+      kind: "managed",
+      id: stores[0]!.id,
+      name: stores.length === 1 ? stores[0]!.name : "Your stores",
+      subtitle: "Online store",
+      href: `${storeUrl}/dashboard`,
+      enterable: true,
+      note: stores.length > 1 ? `${stores.length} stores` : undefined,
+    },
+  ];
+}
+
+/**
  * Best-effort throughout: a switcher that fails to render because one
- * optional backend read timed out would strand somebody mid-shift. Each
- * source degrades to [] on its own, so a courier outage still leaves the
- * organisers listed and vice versa. Cached per request — the shell
- * renders this once per navigation across three different layouts.
+ * optional backend read timed out would strand somebody mid-shift. The
+ * generic API endpoint returns all org types, so a single outage affects
+ * all orgs, but that's acceptable for best-effort. Cached per request.
  */
 export const listWorkspaces = cache(async (): Promise<Workspace[]> => {
   const token = (await cookies()).get(SESSION_COOKIE)?.value;
@@ -101,27 +162,10 @@ export const listWorkspaces = cache(async (): Promise<Workspace[]> => {
   // there is nothing of their own to switch to.
   if (!token) return [];
 
-  const [ticketOrgs, courierOrgs] = await Promise.all([
-    listTicketOrgs(token),
-    getMyParcelOrgs(),
+  const [orgs, stores] = await Promise.all([
+    listMyOrgs(token),
+    listMyStoreWorkspaces(),
   ]);
 
-  return [
-    PERSONAL_WORKSPACE,
-    ...ticketOrgs,
-    ...courierOrgs.map((o): Workspace => ({
-      key: `courier:${o.orgId}`,
-      kind: 'courier',
-      id: o.orgId,
-      name: o.name,
-      subtitle: 'Courier company',
-      href: null,
-      enterable: o.status === 'ACTIVE',
-      // INTAKE_CLERK is a database enum, not a job title anybody says
-      // out loud — "intake clerk" is.
-      note: o.status === 'ACTIVE'
-        ? o.role.toLowerCase().replace(/_/g, ' ')
-        : 'not trading yet',
-    })),
-  ];
+  return [PERSONAL_WORKSPACE, ...orgs, ...stores];
 });

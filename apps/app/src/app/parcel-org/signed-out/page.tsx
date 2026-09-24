@@ -30,7 +30,7 @@ export const metadata: Metadata = {
  * is now the fallback, not the only answer.
  */
 export default async function ParcelOrgSignedOutPage() {
-  const companies = (await listWorkspaces()).filter((w) => w.kind === 'courier' && w.enterable);
+  const companies = (await listWorkspaces()).filter((w) => w.orgType === 'courier' && w.enterable);
 
   return (
     <div className="auth-wrap">
