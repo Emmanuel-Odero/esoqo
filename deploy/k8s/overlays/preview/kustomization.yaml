@@ -38,29 +38,33 @@ labels:
 images:
 - name: ghcr.io/emmanuel-odero/esoqo-admin
   newName: ghcr.io/emmanuel-odero/esoqo-admin
-  newTag: e05cf4a35a52
+  newTag: eb4daaffc215
 - name: ghcr.io/emmanuel-odero/esoqo-app
   newName: ghcr.io/emmanuel-odero/esoqo-app
-  newTag: e05cf4a35a52
+  newTag: eb4daaffc215
 - name: ghcr.io/emmanuel-odero/esoqo-core-go
   newName: ghcr.io/emmanuel-odero/esoqo-core-go
-  newTag: e05cf4a35a52
+  newTag: eb4daaffc215
 - name: ghcr.io/emmanuel-odero/esoqo-core-service
   newName: ghcr.io/emmanuel-odero/esoqo-core-service
-  newTag: e05cf4a35a52
+  newTag: eb4daaffc215
 - name: ghcr.io/emmanuel-odero/esoqo-jamii
   newName: ghcr.io/emmanuel-odero/esoqo-jamii
-  newTag: e05cf4a35a52
+  newTag: eb4daaffc215
 - name: ghcr.io/emmanuel-odero/esoqo-store
   newName: ghcr.io/emmanuel-odero/esoqo-store
-  newTag: e05cf4a35a52
+  newTag: eb4daaffc215
 - name: ghcr.io/emmanuel-odero/esoqo-web
   newName: ghcr.io/emmanuel-odero/esoqo-web
-  newTag: e05cf4a35a52
+  newTag: eb4daaffc215
 
-patches:
 # preview carries no real traffic — one replica each is enough, and it
 # halves what the cluster has to schedule.
+# Redundant with the selector above (pgbouncer carries that label too),
+# but kept explicit: with a single PgBouncer replica the whole
+# DEFAULT_POOL_SIZE is available to it, and anyone raising the replica
+# count needs to see that decision here rather than infer it.
+patches:
 - patch: |
     - op: replace
       path: /spec/replicas
@@ -68,10 +72,6 @@ patches:
   target:
     kind: Deployment
     labelSelector: app.kubernetes.io/part-of=esoqo
-# Redundant with the selector above (pgbouncer carries that label too),
-# but kept explicit: with a single PgBouncer replica the whole
-# DEFAULT_POOL_SIZE is available to it, and anyone raising the replica
-# count needs to see that decision here rather than infer it.
 - patch: |
     - op: replace
       path: /spec/replicas
