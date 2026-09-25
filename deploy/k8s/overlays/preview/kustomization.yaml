@@ -10,10 +10,10 @@
 apiVersion: kustomize.config.k8s.io/v1beta1
 kind: Kustomization
 
-namespace: preview
+namespace: esoqo-preview
 
-# No namespace.yaml here. `preview` and `production` are created and
-# owned by Rancher, which stamps them with project-membership
+# No namespace.yaml here. `esoqo-preview` and `esoqo-production` are
+# created and owned by Rancher, which stamps them with project-membership
 # annotations (field.cattle.io/projectId and friends) that the RBAC
 # depends on. A Namespace manifest in this overlay would make Fleet
 # assert ownership and strip those annotations on the next sync,
