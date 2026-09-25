@@ -49,8 +49,8 @@ SELECT
         'logoUrl',           po."logoUrl",
         'brandAccent',       po."brandAccent",
         'commissionPct',     po."commissionPct",
-        'settlementDays',    po."settlementDays",
-        'allowsWalkIn',      po."allowsWalkIn",
+        'settlementPhone',   po."settlementPhone",
+        'acceptsWalkIn',     po."acceptsWalkIn",
         'migratedFrom',      'parcel_org',
         'migratedAt',        now()
     ),
