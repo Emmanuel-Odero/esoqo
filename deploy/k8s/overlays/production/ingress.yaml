@@ -20,7 +20,7 @@ metadata:
     # CORS and SEO alike.
     nginx.ingress.kubernetes.io/from-to-www-redirect: "true"
 spec:
-  ingressClassName: nginx
+  ingressClassName: traefik
   tls:
     - secretName: esoqo-production-tls
       hosts:
@@ -60,7 +60,7 @@ metadata:
     cert-manager.io/cluster-issuer: letsencrypt-prod
     nginx.ingress.kubernetes.io/proxy-body-size: "2m"
 spec:
-  ingressClassName: nginx
+  ingressClassName: traefik
   tls:
     - secretName: esoqo-production-api-tls
       hosts:

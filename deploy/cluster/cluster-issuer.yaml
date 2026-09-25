@@ -30,7 +30,7 @@ spec:
     solvers:
       - http01:
           ingress:
-            ingressClassName: nginx
+            ingressClassName: traefik
 ---
 apiVersion: cert-manager.io/v1
 kind: ClusterIssuer
@@ -52,4 +52,4 @@ spec:
       # ingress.yaml. See docs/deployment/README.md § "TLS and wildcards".
       - http01:
           ingress:
-            ingressClassName: nginx
+            ingressClassName: traefik

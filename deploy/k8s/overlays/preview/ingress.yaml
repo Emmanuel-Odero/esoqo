@@ -31,7 +31,7 @@ metadata:
     nginx.ingress.kubernetes.io/configuration-snippet: |
       more_set_headers "X-Robots-Tag: noindex, nofollow";
 spec:
-  ingressClassName: nginx
+  ingressClassName: traefik
   tls:
     - secretName: esoqo-preview-tls
       hosts:
@@ -74,7 +74,7 @@ metadata:
     cert-manager.io/cluster-issuer: letsencrypt-prod
     nginx.ingress.kubernetes.io/proxy-body-size: "2m"
 spec:
-  ingressClassName: nginx
+  ingressClassName: traefik
   tls:
     - secretName: esoqo-preview-api-tls
       hosts:
