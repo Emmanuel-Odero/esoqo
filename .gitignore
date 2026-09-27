@@ -27,6 +27,9 @@ venv/
 # mkcert-generated local dev TLS cert/key for --experimental-https
 certificates/
 
+# ─── never committed, local-only (e.g. patent filings) ────
+.private/
+
 # ─── secrets ──────────────────────────────────────────────
 .env
 .env.local
