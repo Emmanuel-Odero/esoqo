@@ -32,12 +32,45 @@ func EnsureEsoqoPaymentId(ctx context.Context, pool *pgxpool.Pool, partyID, msis
 	if err := ensureMsisdnVerifiedAttestation(ctx, pool, partyID, msisdn); err != nil {
 		return "", err
 	}
+	return insertPaymentIDCode(ctx, pool, partyID)
+}
 
-	// The old 4-digit format (ESK-1000-KE..ESK-9999-KE) gives only 9,000
-	// codes — it would exhaust at a ten-thousandth of a million-user
-	// launch. New codes draw from the full 31-char unambiguous alphabet:
-	// ESK-XXXXXX-KE is ~8.87×10^8 shapes, unique-constrained, re-rolled
-	// on a clash. Old codes keep resolving; they're just no longer minted.
+// EnsureBusinessPaymentID is the organisation-shaped counterpart of
+// EnsureEsoqoPaymentId, and the difference is the whole point of it.
+//
+// A business is what customers pay, so it needs a code — and it can
+// never satisfy EnsureEsoqoPaymentId, which mints only against an
+// MSISDN_VERIFIED attestation. An ORGANISATION has no phone number to
+// verify, so requiring that attestation here would mean a business could
+// never be paid, and quietly writing one with an empty MSISDN would be
+// worse: a fabricated trust claim on the record.
+//
+// A business's standing comes from its Membership — who is on it, and
+// whether they are an officer — so no attestation is written here. See
+// issueBusinessEsoqoPaymentId in packages/db, which is the
+// capability-checked version of the same rule.
+//
+// Like its counterpart, idempotent: returns the existing code if the
+// business already has one, so re-seeding never invalidates a printed QR
+// stand.
+func EnsureBusinessPaymentID(ctx context.Context, pool *pgxpool.Pool, partyID string) (string, error) {
+	var existing string
+	err := pool.QueryRow(ctx, `SELECT code FROM esoko_payment_id WHERE "partyId" = $1`, partyID).Scan(&existing)
+	if err == nil {
+		return existing, nil
+	}
+	if !errors.Is(err, pgx.ErrNoRows) {
+		return "", err
+	}
+	return insertPaymentIDCode(ctx, pool, partyID)
+}
+
+// insertPaymentIDCode mints and stores a code, treating the unique
+// constraint as the only authority on collisions. Deliberately does not
+// pre-check for a clash: a check-then-insert leaves a window in which a
+// concurrent minter can take the code, and the loser then sees a raw
+// 23505. Five attempts against ~8.9e8 shapes is not a real limit.
+func insertPaymentIDCode(ctx context.Context, pool *pgxpool.Pool, partyID string) (string, error) {
 	for attempt := 0; attempt < 5; attempt++ {
 		code, err := generatePaymentIdCode()
 		if err != nil {
@@ -57,6 +90,12 @@ func EnsureEsoqoPaymentId(ctx context.Context, pool *pgxpool.Pool, partyID, msis
 	return "", errors.New("could not allocate a Payment ID — try again")
 }
 
+// The old 4-digit format (ESK-1000-KE..ESK-9999-KE) gives only 9,000
+// codes — it would exhaust at a ten-thousandth of a million-user launch.
+// New codes draw from the full 31-char unambiguous alphabet:
+// ESK-XXXXXX-KE is ~8.87×10^8 shapes, unique-constrained, re-rolled
+// on a clash. Old codes keep resolving; they're just no longer minted,
+// and pay-code.ts accepts both shapes for the same reason.
 func generatePaymentIdCode() (string, error) {
 	return "ESK-" + fleetqr.RandomSegment(6) + "-KE", nil
 }

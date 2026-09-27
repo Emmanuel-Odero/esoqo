@@ -109,5 +109,14 @@ func main() {
 		log.Fatalf("seed: dispatch fleet: %v", err)
 	}
 
+	// Every seeded organisation needs an Esoqo Payment ID before /pay can
+	// resolve it, and the seeding that created those organisations had no
+	// way to mint one. Runs last so it also covers organisations planted
+	// by the steps above.
+	log.Println("issuing Esoqo Payment IDs for seeded businesses…")
+	if err := seed.SeedBusinessPaymentIDs(ctx, pool); err != nil {
+		log.Fatalf("seed: business payment ids: %v", err)
+	}
+
 	log.Println("\nNo real registrations, parties or prices were seeded — reference data and clearly-labelled \"Demo\" content only.")
 }

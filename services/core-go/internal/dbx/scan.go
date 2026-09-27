@@ -494,9 +494,19 @@ func ResolveOrderByPickupCode(ctx context.Context, pool *pgxpool.Pool, code stri
 // to know they're paying the right entity.
 func ResolvePartyByPaymentID(ctx context.Context, pool *pgxpool.Pool, code string) (*PartyHit, error) {
 	var h PartyHit
+	// The name chain is person-then-organisation, per
+	// docs/proposals/universal-scan-and-code-mint.md §party. Both joins
+	// are needed: a business Party has no `person` row, so with only the
+	// person join every business resolved to the fallback and a shop
+	// would have rendered to a customer as "Esoqo member" — the exact
+	// case a customer cannot tell from a personal payment. An
+	// ORGANISATION also cannot hold MSISDN_VERIFIED, so `Verified` is
+	// false for a business by construction and the UI must not read
+	// that as "suspicious".
 	err := pool.QueryRow(ctx, `
 		SELECT p.code,
-		       COALESCE(pe."knownAs", pe."officialName", 'Esoqo member'),
+		       COALESCE(pe."knownAs", pe."officialName",
+		                org."knownAs", org."officialName", 'Withheld'),
 		       EXISTS (
 		         SELECT 1 FROM attestation a
 		         WHERE a."subjectId" = pa.id
@@ -507,6 +517,7 @@ func ResolvePartyByPaymentID(ctx context.Context, pool *pgxpool.Pool, code strin
 		FROM esoko_payment_id p
 		JOIN party pa ON pa.id = p."partyId"
 		LEFT JOIN person pe ON pe."partyId" = pa.id
+		LEFT JOIN organisation org ON org."partyId" = pa.id
 		WHERE p.code = $1
 		LIMIT 1`, strings.ToUpper(strings.TrimSpace(code))).
 		Scan(&h.EsoqoID, &h.DisplayName, &h.Verified, &h.Organisation)
