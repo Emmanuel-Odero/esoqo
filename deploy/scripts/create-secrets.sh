@@ -113,6 +113,15 @@ DATABASE_URL="postgresql://${POSTGRES_USER}:${PG_PASS_ENC}@pgbouncer:6432/${POST
 DIRECT_DATABASE_URL="postgresql://${POSTGRES_USER}:${PG_PASS_ENC}@postgres:5432/${POSTGRES_DB}"
 REDIS_URL="redis://:${REDIS_PASS_ENC}@redis:6379"
 
+# core-go's driver (pgx) is not Prisma: it forwards every query-string
+# param straight through as a Postgres startup parameter, so Prisma's own
+# pgbouncer=true/connection_limit hints make PgBouncer reject the
+# connection outright, and pgx additionally attempts TLS unless told not
+# to. docker-compose.yml documents the same split for local dev — these
+# two keys are its in-cluster equivalent, consumed only by core-go.
+CORE_GO_DATABASE_URL="postgresql://${POSTGRES_USER}:${PG_PASS_ENC}@pgbouncer:6432/${POSTGRES_DB}?sslmode=disable"
+CORE_GO_DIRECT_DATABASE_URL="postgresql://${POSTGRES_USER}:${PG_PASS_ENC}@postgres:5432/${POSTGRES_DB}?sslmode=disable"
+
 kubectl create secret generic esoqo-db \
   --namespace "$NAMESPACE" \
   --from-literal=POSTGRES_USER="$POSTGRES_USER" \
@@ -122,6 +131,8 @@ kubectl create secret generic esoqo-db \
   --from-literal=REDIS_PASSWORD="$REDIS_PASSWORD" \
   --from-literal=DATABASE_URL="$DATABASE_URL" \
   --from-literal=DIRECT_DATABASE_URL="$DIRECT_DATABASE_URL" \
+  --from-literal=CORE_GO_DATABASE_URL="$CORE_GO_DATABASE_URL" \
+  --from-literal=CORE_GO_DIRECT_DATABASE_URL="$CORE_GO_DIRECT_DATABASE_URL" \
   --from-literal=REDIS_URL="$REDIS_URL" \
   --dry-run=client -o yaml | kubectl apply -f -
 

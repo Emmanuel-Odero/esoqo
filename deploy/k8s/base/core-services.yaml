@@ -98,6 +98,18 @@ spec:
             - configMapRef: { name: esoqo-config }
             - secretRef: { name: esoqo-db }
             - secretRef: { name: esoqo-secrets }
+          # core-go's driver (pgx) is not Prisma: it forwards every
+          # query-string param straight through as a Postgres startup
+          # parameter, so DATABASE_URL's pgbouncer=true/connection_limit
+          # hints (meant for Prisma) make PgBouncer reject the connection
+          # outright, and pgx separately attempts TLS unless told not to.
+          # These two overrides win over the envFrom values above —
+          # env: always takes precedence over envFrom: for the same key.
+          env:
+            - name: DATABASE_URL
+              valueFrom: { secretKeyRef: { name: esoqo-db, key: CORE_GO_DATABASE_URL } }
+            - name: DIRECT_DATABASE_URL
+              valueFrom: { secretKeyRef: { name: esoqo-db, key: CORE_GO_DIRECT_DATABASE_URL } }
           # A static binary with no interpreter warm-up — it is either
           # listening within a couple of seconds or it has crashed.
           startupProbe:
