@@ -34,9 +34,11 @@ images:
   newName: ghcr.io/emmanuel-odero/esoqo-app
   newTag: ec93f264f3e4
 - name: ghcr.io/emmanuel-odero/esoqo-core-go
-  newTag: eb4daaffc215
+  newName: ghcr.io/emmanuel-odero/esoqo-core-go
+  newTag: ec93f264f3e4
 - name: ghcr.io/emmanuel-odero/esoqo-core-service
-  newTag: eb4daaffc215
+  newName: ghcr.io/emmanuel-odero/esoqo-core-service
+  newTag: ec93f264f3e4
 - name: ghcr.io/emmanuel-odero/esoqo-jamii
   newName: ghcr.io/emmanuel-odero/esoqo-jamii
   newTag: ec93f264f3e4
