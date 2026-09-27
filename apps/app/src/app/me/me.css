@@ -171,17 +171,16 @@
 .hero h1 { font-size:clamp(1.4rem,4vw,1.8rem); font-weight:700; margin:8px 0 6px; letter-spacing:-.02em }
 .hero .lead { margin:0; color:var(--tx-2) }
 
-/* ── home: greeting + standing, one band ────────────────────────
-   Replaces the old .mehead + .standing pair. A single surface with
-   real depth reads as the top of a product rather than a page title
-   followed by a widget; the tinted right rail is where the eye lands
-   for "how am I doing", which is the only number in it. */
+/* ── home: greeting, one band ────────────────────────────────────
+   Replaces the old .mehead + .standing pair, and later the standing
+   ring beside it — a returning treasurer or ticket-holder doesn't
+   open the app to see a compliance score. Just the greeting, the
+   one-line lead, and the single next thing worth doing. */
 .me-hero {
-  display:flex; align-items:stretch; gap:0; flex-wrap:wrap;
   border:1px solid var(--line); border-radius:var(--r-xl); background:#fff;
   box-shadow:var(--sh-s); overflow:hidden; margin:0 0 18px;
 }
-.me-hero-copy { flex:1 1 320px; min-width:0; padding:24px 26px 22px }
+.me-hero-copy { padding:24px 26px 22px }
 .me-hero-copy .kicker { color:var(--green); margin-bottom:6px }
 .me-hero h1 {
   font-size:clamp(1.6rem,3.2vw,2.15rem); line-height:1.06;
@@ -189,29 +188,6 @@
 }
 .me-hero-lead { color:var(--tx-2); margin:8px 0 0; max-width:48ch; font-size:.95rem }
 .me-hero-cta { margin-top:18px }
-
-/* The meter rail. Its own tint separates "what this page is" from
-   "how complete it is" without a second card's worth of border. */
-.me-meter {
-  flex:0 1 250px; min-width:0;
-  display:flex; align-items:center; gap:16px;
-  padding:24px 26px;
-  background:linear-gradient(150deg,#F4FBF7,#E9F4EE);
-  border-left:1px solid var(--line);
-}
-.me-meter-copy { min-width:0 }
-.me-meter-copy strong {
-  display:block; font-family:var(--font-mono); font-weight:600;
-  font-size:.6rem; letter-spacing:.14em; text-transform:uppercase; color:var(--green);
-}
-.me-meter-copy span { display:block; color:var(--tx-2); font-size:.86rem; margin-top:4px }
-
-.ring { width:70px; height:70px; flex:none; position:relative }
-.ring svg { transform:rotate(-90deg); display:block }
-.ring-label {
-  position:absolute; inset:0; display:grid; place-items:center;
-  font-family:var(--font-mono); font-weight:600; font-size:.9rem; color:var(--navy);
-}
 
 /* ── home: the four jobs, before the numbers ─────────────────── */
 .quick-row { display:grid; grid-template-columns:repeat(2,1fr); gap:10px; margin:0 0 18px }
@@ -363,6 +339,34 @@
 .sig-note { display:flex; align-items:center; gap:10px; font-size:.9rem; margin-top:12px;
   padding:12px 14px; background:#fff; border:1px solid var(--line); border-radius:var(--r-sm) }
 
+/* ── wallet: cards (vouchers + loyalty) ───────────────────────── */
+.cards-grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(200px,1fr)); gap:12px }
+.wcard {
+  position:relative; border-radius:var(--r-lg); padding:16px 18px; color:#fff;
+  min-height:128px; display:flex; flex-direction:column; justify-content:space-between;
+  box-shadow:var(--sh-s); overflow:hidden; border:0; text-align:left; font-family:inherit;
+}
+.wcard.loyalty { background:linear-gradient(135deg,var(--navy),var(--navy-3)) }
+.wcard.voucher { background:linear-gradient(135deg,var(--green),var(--green-2)) }
+.wcard-sub { display:block; font-family:var(--font-mono); font-size:.62rem; letter-spacing:.1em;
+  text-transform:uppercase; opacity:.78 }
+.wcard-label { font-weight:700; font-size:.95rem; margin-top:4px; line-height:1.25 }
+.wcard-bal { font-family:var(--font-mono); font-size:1.3rem; font-weight:600 }
+.wcard-code { font-family:var(--font-mono); font-size:.72rem; opacity:.78; margin-top:2px }
+.wcard-topup {
+  align-self:flex-start; margin-top:8px; padding:5px 11px; border-radius:999px;
+  background:rgba(255,255,255,.18); color:#fff; border:1px solid rgba(255,255,255,.35);
+  font-size:.76rem; font-weight:600; cursor:pointer; min-height:auto;
+}
+.wcard-topup-form { display:flex; gap:6px; margin-top:8px; flex-wrap:wrap }
+.wcard-topup-form .inp { flex:1 1 100px; min-width:0; background:rgba(255,255,255,.92) }
+.wcard-msg { flex-basis:100%; font-size:.74rem; margin:2px 0 0; opacity:.9 }
+.wcard-new {
+  align-items:center; justify-content:center; gap:8px; color:var(--tx-2);
+  background:var(--paper); border:1.5px dashed var(--line); cursor:pointer;
+}
+.wcard-new:hover { border-color:var(--green); color:var(--green) }
+
 /* ── responsive density ─────────────────────────────────────── */
 @media (max-width:560px) {
   .me .wrap { padding-top:20px }
@@ -377,15 +381,8 @@
   .tile .tile-v { font-size:1.05rem }
   .paper { gap:10px }
 
-  /* The hero's two halves stack. The meter keeps its tint but becomes a
-     full-width footer strip under the copy rather than a 250px rail
-     squeezed beside it, and the CTA goes full width like every other
-     button at this size. */
-  .me-hero-copy { padding:20px 18px 18px; flex-basis:100% }
+  .me-hero-copy { padding:20px 18px 18px }
   .me-hero-cta { width:100%; justify-content:center }
-  .me-meter { flex:1 1 100%; padding:16px 18px; border-left:0; border-top:1px solid var(--line) }
-  .ring { width:58px; height:58px }
-  .me-meter .ring svg { width:58px; height:58px }
 
   /* Two-up quick actions on a 360px screen leaves ~150px per card,
      which clips the hint to a word. One column, full-width targets. */
@@ -441,8 +438,6 @@
   display:flex; align-items:center; gap:18px; margin:0 0 18px; padding:24px 26px;
   border:1px solid var(--line); border-radius:var(--r-xl);
 }
-.skel-ring { width:70px; height:70px; border-radius:50%; flex:none;
-  background:conic-gradient(var(--line) 0deg 290deg, #E4EEF5 290deg 360deg) }
 .skel-quick { display:grid; grid-template-columns:1fr; gap:10px; margin-bottom:18px }
 .skel-quick > div { height:62px; border:1px solid var(--line); border-radius:var(--r-lg) }
 @media (min-width:820px) { .skel-quick { grid-template-columns:repeat(4,1fr) } }
