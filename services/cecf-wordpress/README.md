@@ -58,7 +58,12 @@ pnpm --filter @esoqo/cecf-sage-theme dev     # Vite dev server
 pnpm --filter @esoqo/cecf-sage-theme build
 ```
 
-## Deployment (Render)
+## Deployment (Render — not yet migrated)
+
+The rest of the stack (web/app/admin/store/jamii/core-service/core-go) moved
+off Render onto a Rancher-managed k8s cluster in Sept 2026 — see
+`CONTRIBUTING.md` and `docs/deployment/README.md`. `cecf-wordpress` was not
+part of that move and still runs on Render as described below.
 
 Two blueprint entries in the root `render.yaml`, not a separate blueprint:
 
