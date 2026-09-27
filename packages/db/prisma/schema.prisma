@@ -115,6 +115,7 @@ model Party {
   orgStaffGrantsSuspended OrgStaffGrant[]   @relation("OrgStaffGrantSuspendedBy")
   businessPaymentsAsPayee BusinessPayment[] @relation("BusinessPaymentPayee")
   parkingLots             ParkingLot[]
+  walletTopUps            WalletTopUp[]     @relation("WalletTopUpParty")
 
   // ── Group treasury ──
   meetingsCalled          Meeting[]                    @relation("MeetingCalledBy")
@@ -690,6 +691,7 @@ model JournalEntry {
   voucherEntry      VoucherLedgerEntry?
   billContribution  BillContribution?
   businessPayment   BusinessPayment?
+  walletTopUp       WalletTopUp?
 
   @@index([occurredAt])
   @@map("journal_entry")
@@ -3052,6 +3054,46 @@ model BusinessPayment {
   @@index([payeePartyId, status])
   @@index([status, createdAt])
   @@map("business_payment")
+}
+
+enum WalletTopUpStatus {
+  PENDING
+  CONFIRMED
+  FAILED
+}
+
+/// Cash a person adds to their own personal WALLET Account (see
+/// AccountKind.WALLET) via M-Pesa STK push. Same shape as
+/// BusinessPayment on purpose — write-then-push-then-confirm, one
+/// balanced JournalEntry per confirmation, confirmed exactly once by
+/// mpesaCheckoutRequestId — this is a payment into an account the
+/// person themselves owns rather than a business's, nothing else about
+/// the settlement mechanics differs.
+model WalletTopUp {
+  id String @id @default(uuid()) @db.Uuid
+
+  partyId String @db.Uuid
+  party   Party  @relation("WalletTopUpParty", fields: [partyId], references: [id])
+
+  /// E.164 — required for the same reason BusinessPayment.payerMsisdn
+  /// is: an STK push cannot reach anyone without one.
+  msisdn    String
+  amountKes Decimal @db.Decimal(12, 2)
+
+  status        WalletTopUpStatus @default(PENDING)
+  failureReason String?
+
+  mpesaCheckoutRequestId String?       @unique
+  mpesaReceiptCode       String?
+  journalEntryId         String?       @unique @db.Uuid
+  journalEntry           JournalEntry? @relation(fields: [journalEntryId], references: [id])
+
+  createdAt   DateTime  @default(now())
+  confirmedAt DateTime?
+
+  @@index([partyId, status])
+  @@index([status, createdAt])
+  @@map("wallet_top_up")
 }
 
 enum ParkingSessionStatus {

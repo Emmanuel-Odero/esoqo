@@ -32,6 +32,20 @@ export async function getMyRecord(ctx: Ctx) {
   });
 }
 
+/** Derived, never stored — same mechanism as group treasury (getGroupBalance
+ *  in dal/treasury.ts), pointed at the caller's own WALLET account instead
+ *  of an org's GROUP_SAVINGS account. No membership check: it's their own
+ *  money, `entity.read:own` is the whole gate. */
+export async function getWalletBalance(ctx: Ctx): Promise<number> {
+  if (!ctx.partyId) return 0;
+  requireCapability(ctx, 'entity.read', { partyId: ctx.partyId });
+
+  const account = await prisma.account.findFirst({ where: { partyId: ctx.partyId, kind: 'WALLET' } });
+  if (!account) return 0;
+  const sum = await prisma.posting.aggregate({ where: { accountId: account.id }, _sum: { amount: true } });
+  return Number(sum._sum.amount ?? 0);
+}
+
 export async function listMyConsents(ctx: Ctx) {
   if (!ctx.partyId) return [];
   requireCapability(ctx, 'consent.read', { partyId: ctx.partyId });
