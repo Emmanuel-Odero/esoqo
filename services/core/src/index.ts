@@ -7,9 +7,13 @@ import {
   verifyChain, confirmStoreOrderPayment, confirmRegistrationPaymentByCheckoutId,
   confirmRegistrationPaymentByPesapalOrderId,
   confirmDonationPayment, failDonationPayment,
-  StoreOrderError, DonationError,
+  confirmBusinessPayment, failBusinessPayment,
+  StoreOrderError, DonationError, BusinessPaymentError,
 } from '@esoqo/db';
-import { appEnv, donorThankYouSms, adminDonationAlertSms } from '@esoqo/domain';
+import {
+  appEnv, donorThankYouSms, adminDonationAlertSms,
+  payerPaymentReceiptSms, businessPaymentAlertSms,
+} from '@esoqo/domain';
 // Subpath import, not the '@esoqo/auth' barrel — the barrel's index.ts
 // also re-exports pin.ts/session.ts/redis.ts/etc., which DO carry the
 // `server-only` marker and throw outside a Next.js bundling context.
@@ -83,14 +87,14 @@ app.get('/ready', async (_req, reply) => {
  * need, and the first genuine consumer of this service beyond /health
  * and /ready.
  *
- * A single checkout can only ever belong to one of three things here —
- * store checkout, a registration fee, or an Our Jamii donation — so
- * this tries the store order first and falls through to registration,
- * then donation, only on a NOT_FOUND from the attempt before it.
- * Ticketing bookings and short-route fares are confirmed by
- * services/core-go (sole writer since the console migration) and are
- * forwarded there below — Go's confirms are idempotent, so a callback
- * seen by both services can never double-post.
+ * A single checkout can only ever belong to one of the things here —
+ * store checkout, a registration fee, an Our Jamii donation, or a /pay
+ * business payment — so this tries the store order first and falls
+ * through to registration, donation, then business, only on a NOT_FOUND
+ * from the attempt before it. Ticketing bookings and short-route fares
+ * are confirmed by services/core-go (sole writer since the console
+ * migration) and are forwarded there below — Go's confirms are
+ * idempotent, so a callback seen by both services can never double-post.
  */
 /**
  * Daraja authenticates nothing — no signature, no HMAC, no documented
@@ -128,15 +132,24 @@ const handleStkCallback = async (
   if (!parsed.succeeded) {
     app.log.info({ checkoutRequestId: parsed.checkoutRequestId, reason: parsed.resultDescription },
       'STK push not completed');
-    // Donations only for now — store/registration/booking checkouts still
-    // silently time out on their own waiting screens when a push fails.
-    // That's a real gap but a separate fix from what was asked for here;
-    // flagged rather than expanded into silently on this pass.
-    try {
-      await failDonationPayment(parsed.checkoutRequestId, parsed.resultDescription);
-    } catch (e) {
-      if (!(e instanceof DonationError && e.code === 'NOT_FOUND')) {
-        app.log.error({ err: e, checkoutRequestId: parsed.checkoutRequestId }, 'failed to record donation failure');
+    // A cancelled or timed-out push still has to be recorded, or the
+    // payer's screen spins until it gives up and the business is left
+    // with a pending row and no idea whether the money is coming.
+    // Donations and /pay business payments both handle their own
+    // failures; store/registration/booking checkouts still silently time
+    // out on their own waiting screens. That's a real gap but a separate
+    // fix from what was asked for here; flagged rather than expanded into
+    // silently on this pass.
+    for (const [fail, code, what] of [
+      [failDonationPayment, DonationError, 'donation'],
+      [failBusinessPayment, BusinessPaymentError, 'business payment'],
+    ] as const) {
+      try {
+        await fail(parsed.checkoutRequestId, parsed.resultDescription);
+      } catch (e) {
+        if (!(e instanceof code && e.code === 'NOT_FOUND')) {
+          app.log.error({ err: e, checkoutRequestId: parsed.checkoutRequestId }, `failed to record ${what} failure`);
+        }
       }
     }
     return reply.send({ ok: true }); // acknowledged — nothing to post
@@ -180,6 +193,52 @@ const handleStkCallback = async (
       // Still 200 — Safaricom retries on non-2xx, and a retry storm on
       // an already-broken match helps no one. Logged for a human.
       app.log.error({ err: e, checkoutRequestId: parsed.checkoutRequestId }, 'failed to confirm donation payment');
+      return reply.send({ ok: true });
+    }
+  }
+
+  // A /pay business payment: the payer's receipt and the business's
+  // "you were paid" alert. Last of the TS confirmers because it is the
+  // newest and the least likely to be any given callback.
+  try {
+    const result = await confirmBusinessPayment(parsed.checkoutRequestId, parsed.mpesaReceiptCode ?? '');
+    if (result.justConfirmed && result.notify) {
+      const n = result.notify;
+      // Both sends are best-effort, and independent of each other: the
+      // payer is told what they paid for, the business is told money
+      // arrived, and neither failure should suppress the other or fail
+      // the webhook. The payment is already confirmed and the ledger
+      // already balanced by the time we get here.
+      const results = await Promise.allSettled([
+        sendSms(n.payerMsisdn, payerPaymentReceiptSms({
+          amountKes: n.amountKes,
+          businessName: n.businessName,
+          receiptCode: n.receiptCode,
+          mpesaReceiptCode: n.mpesaReceiptCode,
+        }), 'business-payment-receipt'),
+        ...n.businessMsisdns.map((to) => sendSms(
+          to,
+          businessPaymentAlertSms({
+            amountKes: n.amountKes,
+            businessName: n.businessName,
+            receiptCode: n.receiptCode,
+            mpesaReceiptCode: n.mpesaReceiptCode,
+            payerMsisdn: n.payerMsisdn,
+          }),
+          'business-payment-alert',
+        )),
+      ]);
+      for (const r of results) {
+        if (r.status === 'rejected') {
+          app.log.error({ err: r.reason, checkoutRequestId: parsed.checkoutRequestId },
+            'failed to send a business payment SMS');
+        }
+      }
+    }
+    return reply.send({ ok: true });
+  } catch (e) {
+    if (!(e instanceof BusinessPaymentError && e.code === 'NOT_FOUND')) {
+      app.log.error({ err: e, checkoutRequestId: parsed.checkoutRequestId }, 'failed to confirm business payment');
       return reply.send({ ok: true });
     }
   }
