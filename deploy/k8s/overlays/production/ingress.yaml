@@ -89,3 +89,34 @@ spec:
       http:
         paths:
           - { path: /, pathType: Prefix, backend: { service: { name: core-go, port: { number: 80 } } } }
+---
+# ════════════════════════════════════════════════════════════════════
+#  esoko.global — the retired domain. Routed to the `web` backend only
+#  so apps/web/proxy.ts can 301 it to the equivalent esoqo.com URL; no
+#  other app needs a rule here since app/admin/store/jamii/api/mobile
+#  were never custom-domained on esoko.global in the first place (they
+#  were Render-internal only). Separate Ingress/cert from esoqo.com's
+#  own — different domain, different certificate.
+# ════════════════════════════════════════════════════════════════════
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: esoko-global-redirect
+  annotations:
+    cert-manager.io/issuer: letsencrypt-prod
+spec:
+  ingressClassName: traefik
+  tls:
+    - secretName: esoko-global-tls
+      hosts:
+        - esoko.global
+        - www.esoko.global
+  rules:
+    - host: esoko.global
+      http:
+        paths:
+          - { path: /, pathType: Prefix, backend: { service: { name: web, port: { number: 80 } } } }
+    - host: www.esoko.global
+      http:
+        paths:
+          - { path: /, pathType: Prefix, backend: { service: { name: web, port: { number: 80 } } } }
