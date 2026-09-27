@@ -76,36 +76,19 @@ it logs the prompt and auto-confirms locally instead of calling Safaricom.
 
 ## Deployed
 
-Live on Render — `esoqo-web`, `esoqo-app`, `esoqo-admin` and `esoqo-core`
-each deploy from the **`render`** branch against one shared `esoqo-db`
-Postgres instance. `render.yaml` is the infra-as-code definition.
-**`apps/store` has no Render service yet** — the merchant storefront and
-PoS terminal run locally (`:3003`) but aren't reachable in production
-until one is added.
+**Moved off Render onto a Kubernetes cluster (Rancher), 2026-09-27.**
+All 7 workloads (`web`, `app`, `admin`, `store`, `jamii`, `core-service`,
+`core-go`) now run there — `apps/store` is live in production for the
+first time, having never had a Render service at all. `esoko.global`
+301-redirects to the new canonical domain, `esoqo.com`; Render's
+services still exist but receive no traffic and are pending
+decommission.
 
-`render` does not track `main` automatically — merging to `main` does not
-deploy anything by itself. Fast-forward `render` to `main` and push it to
-trigger a real deploy:
-
-```bash
-git checkout render && git merge --ff-only main && git push origin render
-```
-
-**Migrations do not run automatically either.** Render's build command only
-runs `prisma generate` (regenerates the client's types) — never
-`prisma migrate deploy`. A schema change that reaches `render` without a
-manually-run `migrate deploy` against production first will build and deploy
-fine, then throw on the very first query that touches the new column or
-table — this has actually happened, more than once. After any migration
-lands on `render`, before trusting the deploy:
-
-```bash
-DATABASE_URL="<production DATABASE_URL, from Render → esoqo-db → Connect>" \
-  pnpm --filter @esoqo/db exec prisma migrate deploy
-```
-
-Always take a backup first for anything beyond a trivial additive migration —
-`pg_dump` against the same URL, or a snapshot from the Render dashboard.
+See **`CONTRIBUTING.md`** for the full engineer's guide — branch model
+(`preview`/`production`), how a change actually gets deployed today
+(GitHub Actions is currently broken at the platform level; deploys are
+manual), and how migrations work. See **`docs/deployment/README.md`**
+for the deeper cluster/TLS/backup runbook.
 
 Active feature branches merge to `main` first; commerce/marketplace work
 specifically lands on **`estore`** before either — see that branch for
