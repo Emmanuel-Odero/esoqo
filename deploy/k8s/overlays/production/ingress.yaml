@@ -13,11 +13,21 @@ kind: Ingress
 metadata:
   name: esoqo
   annotations:
-    cert-manager.io/cluster-issuer: letsencrypt-prod
+    cert-manager.io/issuer: letsencrypt-prod
     nginx.ingress.kubernetes.io/proxy-body-size: "12m"
     nginx.ingress.kubernetes.io/proxy-read-timeout: "60"
-    # www → apex, so the canonical origin is unambiguous for cookies,
-    # CORS and SEO alike.
+    # www → apex is the intent (canonical origin for cookies, CORS and
+    # SEO), but nginx.ingress.kubernetes.io/from-to-www-redirect is an
+    # nginx-ingress-only annotation — it silently no-ops on this
+    # cluster's Traefik controller, and there was no `host:
+    # www.esoqo.com` rule below either, so www.esoqo.com 404'd outright
+    # (confirmed 2026-09-27). This account has no RBAC for Traefik's
+    # Middleware CRD (`kubectl auth can-i create middlewares.traefik.io`
+    # → no), which is the correct way to do a real 301 here. Routing
+    # www to the same `web` backend as the apex is the fallback: it
+    # serves instead of 404ing, but is not a redirect — two hostnames
+    # both serve real content with no canonical-URL signal to browsers
+    # or crawlers. Fix properly once Middleware access exists.
     nginx.ingress.kubernetes.io/from-to-www-redirect: "true"
 spec:
   ingressClassName: traefik
@@ -32,6 +42,10 @@ spec:
         - jamii.esoqo.com
   rules:
     - host: esoqo.com
+      http:
+        paths:
+          - { path: /, pathType: Prefix, backend: { service: { name: web, port: { number: 80 } } } }
+    - host: www.esoqo.com
       http:
         paths:
           - { path: /, pathType: Prefix, backend: { service: { name: web, port: { number: 80 } } } }
@@ -57,7 +71,7 @@ kind: Ingress
 metadata:
   name: esoqo-api
   annotations:
-    cert-manager.io/cluster-issuer: letsencrypt-prod
+    cert-manager.io/issuer: letsencrypt-prod
     nginx.ingress.kubernetes.io/proxy-body-size: "2m"
 spec:
   ingressClassName: traefik
@@ -75,3 +89,34 @@ spec:
       http:
         paths:
           - { path: /, pathType: Prefix, backend: { service: { name: core-go, port: { number: 80 } } } }
+---
+# ════════════════════════════════════════════════════════════════════
+#  esoko.global — the retired domain. Routed to the `web` backend only
+#  so apps/web/proxy.ts can 301 it to the equivalent esoqo.com URL; no
+#  other app needs a rule here since app/admin/store/jamii/api/mobile
+#  were never custom-domained on esoko.global in the first place (they
+#  were Render-internal only). Separate Ingress/cert from esoqo.com's
+#  own — different domain, different certificate.
+# ════════════════════════════════════════════════════════════════════
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: esoko-global-redirect
+  annotations:
+    cert-manager.io/issuer: letsencrypt-prod
+spec:
+  ingressClassName: traefik
+  tls:
+    - secretName: esoko-global-tls
+      hosts:
+        - esoko.global
+        - www.esoko.global
+  rules:
+    - host: esoko.global
+      http:
+        paths:
+          - { path: /, pathType: Prefix, backend: { service: { name: web, port: { number: 80 } } } }
+    - host: www.esoko.global
+      http:
+        paths:
+          - { path: /, pathType: Prefix, backend: { service: { name: web, port: { number: 80 } } } }

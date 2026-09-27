@@ -17,61 +17,72 @@ namespace: esoqo-production
 # No namespace.yaml — see the preview overlay's kustomization.yaml.
 # Rancher owns these namespaces and their project annotations.
 resources:
-  - ../../base
-  - ingress.yaml
-  - config.yaml
+- ../../base
+- ingress.yaml
+- config.yaml
+- issuer.yaml
 
 labels:
-  - includeSelectors: false # see base/kustomization.yaml
-    pairs:
-      app.kubernetes.io/instance: production
+- pairs:
+    app.kubernetes.io/instance: production
 
 images:
-  - name: ghcr.io/emmanuel-odero/esoqo-web
-    newTag: eb4daaffc215
-  - name: ghcr.io/emmanuel-odero/esoqo-app
-    newTag: eb4daaffc215
-  - name: ghcr.io/emmanuel-odero/esoqo-admin
-    newTag: eb4daaffc215
-  - name: ghcr.io/emmanuel-odero/esoqo-store
-    newTag: eb4daaffc215
-  - name: ghcr.io/emmanuel-odero/esoqo-jamii
-    newTag: eb4daaffc215
-  - name: ghcr.io/emmanuel-odero/esoqo-core-service
-    newTag: eb4daaffc215
-  - name: ghcr.io/emmanuel-odero/esoqo-core-go
-    newTag: eb4daaffc215
+- name: ghcr.io/emmanuel-odero/esoqo-admin
+  newName: ghcr.io/emmanuel-odero/esoqo-admin
+  newTag: ec93f264f3e4
+- name: ghcr.io/emmanuel-odero/esoqo-app
+  newName: ghcr.io/emmanuel-odero/esoqo-app
+  newTag: ec93f264f3e4
+- name: ghcr.io/emmanuel-odero/esoqo-core-go
+  newName: ghcr.io/emmanuel-odero/esoqo-core-go
+  newTag: ec93f264f3e4
+- name: ghcr.io/emmanuel-odero/esoqo-core-service
+  newName: ghcr.io/emmanuel-odero/esoqo-core-service
+  newTag: ec93f264f3e4
+- name: ghcr.io/emmanuel-odero/esoqo-jamii
+  newName: ghcr.io/emmanuel-odero/esoqo-jamii
+  newTag: ec93f264f3e4
+- name: ghcr.io/emmanuel-odero/esoqo-store
+  newName: ghcr.io/emmanuel-odero/esoqo-store
+  newTag: ec93f264f3e4
+- name: ghcr.io/emmanuel-odero/esoqo-web
+  newName: ghcr.io/emmanuel-odero/esoqo-web
+  newTag: f49805be3eaa
 
-patches:
   # Give Postgres real headroom. The base's 20Gi/2Gi is sized for a
   # preview environment; a volumeClaimTemplate cannot be shrunk later,
   # and on most CSI drivers cannot be grown in place without a manual
   # resize, so this is set correctly once here.
-  - target: { kind: StatefulSet, name: postgres }
-    patch: |
-      - op: replace
-        path: /spec/template/spec/containers/0/resources/requests/cpu
-        value: 500m
-      - op: replace
-        path: /spec/template/spec/containers/0/resources/requests/memory
-        value: 2Gi
-      - op: replace
-        path: /spec/template/spec/containers/0/resources/limits/memory
-        value: 6Gi
-      - op: replace
-        path: /spec/volumeClaimTemplates/0/spec/resources/requests/storage
-        value: 100Gi
 
   # A PodDisruptionBudget is not enough on its own — spread the replicas
   # so a single node drain cannot take a whole app down.
-  - target: { kind: Deployment, labelSelector: "app.kubernetes.io/part-of=esoqo" }
-    patch: |
-      - op: add
-        path: /spec/template/spec/topologySpreadConstraints
-        value:
-          - maxSkew: 1
-            topologyKey: kubernetes.io/hostname
-            whenUnsatisfiable: ScheduleAnyway
-            labelSelector:
-              matchLabels:
-                app.kubernetes.io/part-of: esoqo
+patches:
+- patch: |
+    - op: replace
+      path: /spec/template/spec/containers/0/resources/requests/cpu
+      value: 500m
+    - op: replace
+      path: /spec/template/spec/containers/0/resources/requests/memory
+      value: 2Gi
+    - op: replace
+      path: /spec/template/spec/containers/0/resources/limits/memory
+      value: 6Gi
+    - op: replace
+      path: /spec/volumeClaimTemplates/0/spec/resources/requests/storage
+      value: 100Gi
+  target:
+    kind: StatefulSet
+    name: postgres
+- patch: |
+    - op: add
+      path: /spec/template/spec/topologySpreadConstraints
+      value:
+        - maxSkew: 1
+          topologyKey: kubernetes.io/hostname
+          whenUnsatisfiable: ScheduleAnyway
+          labelSelector:
+            matchLabels:
+              app.kubernetes.io/part-of: esoqo
+  target:
+    kind: Deployment
+    labelSelector: app.kubernetes.io/part-of=esoqo

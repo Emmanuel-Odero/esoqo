@@ -36,7 +36,7 @@ case "$ENVIRONMENT" in
     JAMII_ORIGIN="https://jamii.preview.esoko.global"
     ;;
   production)
-    BRANCH="live"
+    BRANCH="production"
     OVERLAY="deploy/k8s/overlays/production"
     WEB_URL="https://esoqo.com"
     APP_URL="https://app.esoqo.com"
@@ -94,24 +94,6 @@ fi
 read -r -p "Build and push 7 images? [y/N] " confirm
 [[ "$confirm" == "y" || "$confirm" == "Y" ]] || { echo "aborted"; exit 1; }
 
-# Registry pushes fail transiently — a dropped connection partway
-# through a 600MB layer is routine, and without a retry one blip leaves
-# the release half-pushed: some images at the new tag, some not, and an
-# overlay about to be pinned to tags that do not all exist. Retrying is
-# safe because a push is idempotent; already-uploaded layers are skipped.
-push_with_retry() {
-  local ref="$1"
-  for attempt in 1 2 3; do
-    if docker push "$ref"; then
-      return 0
-    fi
-    echo "  push failed (attempt $attempt/3) — retrying in $((attempt * 10))s"
-    sleep $((attempt * 10))
-  done
-  echo "error: could not push $ref after 3 attempts" >&2
-  return 1
-}
-
 build() {
   local name="$1" dockerfile="$2"; shift 2
   local image="$REGISTRY/$OWNER/esoqo-$name"
@@ -120,14 +102,29 @@ build() {
   # Both tags: the SHA is what the overlay pins and what makes "which
   # commit is running?" answerable; the moving $ENVIRONMENT tag is for
   # humans doing a quick `docker pull`.
-  docker build \
-    --file "$dockerfile" \
-    --tag "$image:$TAG" \
-    --tag "$image:$ENVIRONMENT" \
-    "$@" \
-    .
-  push_with_retry "$image:$TAG"
-  push_with_retry "$image:$ENVIRONMENT"
+  #
+  # --platform linux/amd64 explicitly: a plain `docker build` targets
+  # the host architecture, and on Apple Silicon that produces an arm64
+  # image the (amd64) cluster cannot run — every pod comes up with
+  # "no match for platform in manifest". buildx --push builds and
+  # pushes in one step, which plain `docker build` + `docker push`
+  # cannot do for a foreign platform (there is no local image to push).
+  for attempt in 1 2 3; do
+    if docker buildx build \
+      --platform linux/amd64 \
+      --file "$dockerfile" \
+      --tag "$image:$TAG" \
+      --tag "$image:$ENVIRONMENT" \
+      --push \
+      "$@" \
+      .; then
+      return 0
+    fi
+    echo "  build/push failed (attempt $attempt/3) — retrying in $((attempt * 10))s"
+    sleep $((attempt * 10))
+  done
+  echo "error: could not build/push $image after 3 attempts" >&2
+  return 1
 }
 
 NEXT_ARGS=(
