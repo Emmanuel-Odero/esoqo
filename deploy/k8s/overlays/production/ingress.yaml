@@ -13,7 +13,7 @@ kind: Ingress
 metadata:
   name: esoqo
   annotations:
-    cert-manager.io/cluster-issuer: letsencrypt-prod
+    cert-manager.io/issuer: letsencrypt-staging
     nginx.ingress.kubernetes.io/proxy-body-size: "12m"
     nginx.ingress.kubernetes.io/proxy-read-timeout: "60"
     # www → apex, so the canonical origin is unambiguous for cookies,
@@ -57,7 +57,7 @@ kind: Ingress
 metadata:
   name: esoqo-api
   annotations:
-    cert-manager.io/cluster-issuer: letsencrypt-prod
+    cert-manager.io/issuer: letsencrypt-staging
     nginx.ingress.kubernetes.io/proxy-body-size: "2m"
 spec:
   ingressClassName: traefik

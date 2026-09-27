@@ -1,0 +1,44 @@
+# ════════════════════════════════════════════════════════════════════
+#  Namespaced cert-manager Issuers, scoped to esoqo-production.
+#
+#  deploy/cluster/cluster-issuer.yaml (ClusterIssuer, cluster-scoped)
+#  was the original design, but creating a ClusterIssuer needs
+#  cluster-admin — access this Rancher account has never had. A
+#  namespaced Issuer needs only namespace-level rights (same as every
+#  other object in this overlay) and cert-manager treats it identically
+#  otherwise: same ACME account flow, same HTTP-01 solver.
+#
+#  ⚠  Use letsencrypt-staging while proving the solver chain works.
+#  Let's Encrypt rate-limits production issuance to 5 failures per
+#  account/hostname per hour — staging has effectively no limit, and
+#  its certs are untrusted by browsers on purpose.
+# ════════════════════════════════════════════════════════════════════
+apiVersion: cert-manager.io/v1
+kind: Issuer
+metadata:
+  name: letsencrypt-staging
+spec:
+  acme:
+    server: https://acme-staging-v02.api.letsencrypt.org/directory
+    email: emmanuelodero808@gmail.com
+    privateKeySecretRef:
+      name: letsencrypt-staging-account-key
+    solvers:
+      - http01:
+          ingress:
+            ingressClassName: traefik
+---
+apiVersion: cert-manager.io/v1
+kind: Issuer
+metadata:
+  name: letsencrypt-prod
+spec:
+  acme:
+    server: https://acme-v02.api.letsencrypt.org/directory
+    email: emmanuelodero808@gmail.com
+    privateKeySecretRef:
+      name: letsencrypt-prod-account-key
+    solvers:
+      - http01:
+          ingress:
+            ingressClassName: traefik
