@@ -334,6 +334,22 @@ function ResultCard({ result, code, onReset, onRetry }: {
           <p className="sub" style={{ margin: '10px 0 0', fontSize: '.85rem' }}>
             {p.organisation ? 'A business on Esoqo.' : 'Pay this person from the Esoqo app.'}
           </p>
+          {p.organisation && (
+            // A business stand is the one thing scanned on this page
+            // that the customer wants to *do* something with, so it
+            // gets a way in. The usual case never reaches here — a
+            // camera pointed at the business's printed QR opens
+            // /pay directly — but someone scanning the plain text code
+            // in the app should not have to go and retype it.
+            <Link
+              className="btn btn-p btn-block"
+              style={{ marginTop: 14 }}
+              href={`/pay?to=${encodeURIComponent(p.esoqoId)}`}
+            >
+              <Icon name="coins" size={16} />
+              Pay this business
+            </Link>
+          )}
         </ResultShell>
       );
     }

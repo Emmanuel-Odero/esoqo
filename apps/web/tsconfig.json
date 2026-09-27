@@ -1,6 +1,17 @@
 {
   "extends": "../../packages/config/tsconfig.next.json",
-  "compilerOptions": { "baseUrl": ".", "paths": { "@/*": ["./src/*"] } },
+  "compilerOptions": {
+    "baseUrl": ".",
+    "paths": { "@/*": ["./src/*"] },
+    // Node runs the .test.ts files directly (see the `test` script), and
+    // ESM requires a real extension in an import specifier — so those
+    // files import "./thing.ts", which tsc rejects unless this is on. The
+    // base config already sets noEmit, which is the precondition for it,
+    // so this only teaches the checker about an import style the runtime
+    // genuinely requires. It is scoped to this app rather than the shared
+    // base because only this app runs tests that way.
+    "allowImportingTsExtensions": true
+  },
   "include": ["next-env.d.ts", "**/*.ts", "**/*.tsx", ".next/types/**/*.ts"],
   "exclude": ["node_modules"]
 }

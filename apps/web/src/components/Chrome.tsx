@@ -2,6 +2,7 @@
 
 import * as React from "react";
 import Link from "next/link";
+import type { Route } from "next";
 import { usePathname } from "next/navigation";
 import { Icon } from "@esoqo/ui";
 
@@ -9,17 +10,18 @@ import { Icon } from "@esoqo/ui";
  *  logo already links home, but that's an icon-only affordance; "Home"
  *  gets its own labelled entry so getting back to the landing page
  *  doesn't depend on recognising the logo as a link. */
-export const NAV = [
+export const NAV: readonly (readonly [Route, string])[] = [
   ["/", "Home"],
   ["/discover", "Shops"],
   ["/tickets", "Tickets"],
   ["/parcels", "Parcels"],
   ["/prices", "Prices"],
+  ["/pay", "Pay"],
   ["/counties", "Counties"],
   ["/institutions", "Institutions"],
   ["/verify", "Verify"],
   ["/help", "Help"],
-] as const;
+];
 
 const APP = process.env.NEXT_PUBLIC_APP_URL ?? "http://localhost:3001";
 
@@ -177,6 +179,7 @@ export function Footer() {
           <div>
             <h2>Tools</h2>
             <Link href="/prices">Market prices</Link>
+            <Link href="/pay">Pay anyone</Link>
             <Link href="/parcels/send">Send a parcel</Link>
             <Link href="/parcels/track">Track a parcel</Link>
             <Link href="/parcels/points">Drop-off &amp; pickup points</Link>
