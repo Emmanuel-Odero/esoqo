@@ -36,4 +36,22 @@ else
   echo "==> dependencies up to date, skipping install"
 fi
 
+# The generated Prisma client lands in the root node_modules volume, so it
+# survives restarts — which is the problem. A schema edit does not touch
+# pnpm-lock.yaml, so the install above is *correctly* skipped, and the
+# container then boots a stale client that starts fine and fails at runtime
+# with "Unknown argument" / "Field does not exist" errors that read as bugs
+# in your own code. Key the stamp on the schema as well as the lockfile, so
+# a Prisma version bump invalidates the generated client too.
+GEN_STAMP=/app/node_modules/.prisma-generate-stamp
+GEN_KEY=$(cat /app/pnpm-lock.yaml /app/packages/db/prisma/schema.prisma | sha1sum | cut -d' ' -f1)
+
+if [ ! -f "$GEN_STAMP" ] || [ "$(cat "$GEN_STAMP")" != "$GEN_KEY" ]; then
+  echo "==> generating Prisma client (schema or lockfile changed, or first boot)"
+  (cd /app/packages/db && pnpm exec prisma generate)
+  echo "$GEN_KEY" > "$GEN_STAMP"
+else
+  echo "==> Prisma client up to date, skipping generate"
+fi
+
 exec pnpm "${DEV_TASK:-dev}"
