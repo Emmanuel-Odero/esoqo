@@ -54,16 +54,61 @@ export function mpesaProvider(): 'console' | 'sandbox' | 'production' {
   return appEnv() === 'LOCAL_TEST_PROD' ? 'sandbox' : 'console';
 }
 
-const PROVIDER = mpesaProvider();
+export type MpesaErrorCode = 'INVALID_MSISDN' | 'DARAJA_ERROR' | 'NOT_CONFIGURED';
 
 export class MpesaError extends Error {
-  constructor(
-    msg: string,
-    public readonly code: 'INVALID_MSISDN' | 'DARAJA_ERROR' | 'NOT_CONFIGURED',
-  ) {
+  // Assigned in the body rather than as a constructor parameter property:
+  // `public readonly code` is TypeScript-only syntax that node's
+  // strip-only type removal cannot handle, and this package's tests run on
+  // plain `node --test`. Erasable syntax only, so the tests can exercise
+  // the real module instead of a stand-in.
+  readonly code: MpesaErrorCode;
+
+  constructor(msg: string, code: MpesaErrorCode) {
     super(msg);
     this.name = 'MpesaError';
+    this.code = code;
   }
+}
+
+/**
+ * Daraja's JSON, read the way a network actually delivers it.
+ *
+ * `res.json()` is the wrong tool here, and not by a small margin: a
+ * gateway 502, a corporate proxy, a captive portal or an ngrok interstitial
+ * all answer with HTML, and `res.json()` answers a SyntaxError. That is
+ * not an MpesaError, so it sails straight past the provider's own error
+ * handling and lands in the caller's generic "we could not start that
+ * payment" — which is what you get when Daraja is perfectly healthy and
+ * the real cause is a proxy three hops away.
+ *
+ * So the status and a snippet of whatever came back always survive into
+ * the error, and a non-2xx is reported as Daraja's own answer rather than
+ * as a parse failure. The snippet is collapsed and length-capped because
+ * this message can reach a customer.
+ */
+async function readDarajaJson(res: Response, what: string): Promise<Record<string, unknown>> {
+  const text = await res.text().catch(() => '');
+  const snippet = text.replace(/\s+/g, ' ').trim().slice(0, 180);
+  let data: Record<string, unknown>;
+  try {
+    data = text ? (JSON.parse(text) as Record<string, unknown>) : {};
+  } catch {
+    throw new MpesaError(
+      `Safaricom returned ${res.status} ${res.statusText || ''} for ${what}, not JSON`
+        + `${snippet ? `: ${snippet}` : ' (empty body)'}`
+        + '. That usually means a proxy or gateway in front of the request.',
+      'DARAJA_ERROR',
+    );
+  }
+  if (!res.ok) {
+    const said = data.errorMessage ?? data.ResponseDescription ?? data.CustomerMessage;
+    throw new MpesaError(
+      said ? String(said) : `Safaricom refused the ${what} (HTTP ${res.status})`,
+      'DARAJA_ERROR',
+    );
+  }
+  return data;
 }
 
 function assertValidMsisdn(msisdn: string) {
@@ -93,7 +138,15 @@ export interface StkPushResult {
 export async function initiateStkPush(req: StkPushRequest): Promise<StkPushResult> {
   assertValidMsisdn(req.msisdn);
 
-  if (PROVIDER === 'console') {
+  // Resolved per call, not once at module load. A module-level constant
+  // here is a switch nobody can see: edit MPESA_PROVIDER in .env, and a
+  // server that is already running keeps the old mode in memory and
+  // carries on quietly. The dangerous direction is a box left on console
+  // after being switched to sandbox — every payment auto-confirms,
+  // nothing reaches Safaricom, and the day looks successful.
+  const provider = mpesaProvider();
+
+  if (provider === 'console') {
     // Mimics the ~1.5s round trip a real STK push takes to reach the
     // phone and be approved, so the UI's waiting state is exercised
     // honestly instead of resolving instantly.
@@ -117,11 +170,11 @@ export async function initiateStkPush(req: StkPushRequest): Promise<StkPushResul
     };
   }
 
-  if (PROVIDER === 'sandbox') {
+  if (provider === 'sandbox') {
     return initiateDarajaStkPush(req, SANDBOX_BASE);
   }
 
-  // PROVIDER === 'production' — same Daraja STK push call as sandbox,
+  // provider === 'production' — same Daraja STK push call as sandbox,
   // against Safaricom's live base URL. Real money moves the moment this
   // succeeds, so it only ever runs where mpesaProvider() allows it:
   // never in development, and in a deployed environment only once
@@ -142,9 +195,12 @@ async function getDarajaAccessToken(base: string): Promise<string> {
   const res = await fetch(`${base}/oauth/v1/generate?grant_type=client_credentials`, {
     headers: { Authorization: `Basic ${auth}` },
   });
-  if (!res.ok) throw new MpesaError('Could not authenticate with Daraja', 'DARAJA_ERROR');
-  const data = (await res.json()) as { access_token: string };
-  return data.access_token;
+  const data = await readDarajaJson(res, 'the access token request');
+  const token = data.access_token;
+  if (typeof token !== 'string' || !token) {
+    throw new MpesaError('Safaricom authenticated but sent no access token', 'DARAJA_ERROR');
+  }
+  return token;
 }
 
 function darajaTimestamp(): string {
@@ -162,6 +218,27 @@ async function initiateDarajaStkPush(req: StkPushRequest, base: string): Promise
       'MPESA_SHORTCODE/MPESA_PASSKEY/MPESA_CALLBACK_URL are not set',
       'NOT_CONFIGURED',
     );
+  }
+
+  // Daraja publishes no signature on its callbacks, so the shared secret
+  // *is* the authentication: core only accepts a callback whose final
+  // path segment matches it. The secret therefore has to be the last
+  // segment of the URL we hand Safaricom — which is exactly the part
+  // that is easy to leave off, and the failure is silent from here
+  // (the push succeeds) and only visible much later as every callback
+  // 404ing. Refuse the push instead, at the one moment we can still say
+  // something useful about it.
+  const secret = process.env.MPESA_CALLBACK_SECRET;
+  if (secret) {
+    const tail = callbackUrl.replace(/\/+$/, '').split('/').pop();
+    if (tail !== secret) {
+      throw new MpesaError(
+        'MPESA_CALLBACK_SECRET is not the last path segment of MPESA_CALLBACK_URL, so Safaricom ' +
+          'would be posting to a URL that core rejects. Append the secret to the URL: ' +
+          `${callbackUrl.replace(/\/+$/, '')}/${secret}`,
+        'NOT_CONFIGURED',
+      );
+    }
   }
 
   const token = await getDarajaAccessToken(base);
@@ -187,14 +264,24 @@ async function initiateDarajaStkPush(req: StkPushRequest, base: string): Promise
     }),
   });
 
-  const data = (await res.json()) as {
+  const data = (await readDarajaJson(res, 'the STK push')) as {
     CheckoutRequestID?: string;
     MerchantRequestID?: string;
     ResponseDescription?: string;
-    errorMessage?: string;
   };
-  if (!res.ok || !data.CheckoutRequestID) {
-    throw new MpesaError(data.errorMessage ?? 'Daraja rejected the STK push request', 'DARAJA_ERROR');
+  if (!data.CheckoutRequestID) {
+    // A 200 with no checkout id means the prompt never reached the phone.
+    // Accepting it would leave the payer staring at a waiting screen that
+    // can never resolve.
+    //
+    // Daraja's own ResponseDescription is quoted but never used as the
+    // message: on exactly this response it says "Success", and a customer
+    // told "Success" while no prompt was ever sent is worse than useless.
+    const said = data.ResponseDescription ? ` Safaricom said: ${data.ResponseDescription}.` : '';
+    throw new MpesaError(
+      `Safaricom accepted the request but sent no checkout id, so no payment prompt reached your phone.${said}`,
+      'DARAJA_ERROR',
+    );
   }
 
   return {
@@ -202,6 +289,125 @@ async function initiateDarajaStkPush(req: StkPushRequest, base: string): Promise
     merchantRequestId: data.MerchantRequestID ?? data.CheckoutRequestID,
     responseDescription: data.ResponseDescription ?? 'Accepted',
     autoConfirmed: false,
+  };
+}
+
+/* ── asking Safaricom what happened ──────────────────────────────────── */
+
+/**
+ * What a query can tell us. Note what is missing: there is no "failed"
+ * verdict available from a *transport* problem, and that is deliberate.
+ *
+ * STK push is asynchronous. The customer's phone decides the outcome, and
+ * the only way we learn it is the callback — which is a request from
+ * Safaricom's servers to a URL that is, in practice, a developer's
+ * laptop behind a free tunnel. When that leg breaks, the payment is stuck
+ * PENDING and the payer is told nothing, which is the worst possible
+ * outcome: not "failed", but unknowable, with real money possibly taken.
+ *
+ * So we ask Safaricom directly. This endpoint is the only way to find out
+ * without the callback, and it is why FAILED is only ever returned when
+ * Safaricom has actually said the payment did not go through.
+ */
+export type StkQueryState =
+  /** The customer has not finished deciding. Ask again later. */
+  | 'PENDING'
+  /** Safaricom confirmed the money moved. */
+  | 'COMPLETED'
+  /** Safaricom said it did not: declined, cancelled, or timed out. */
+  | 'FAILED'
+  /** Too early to tell, or Safaricom would not answer. NOT a failure. */
+  | 'UNKNOWN';
+
+export interface StkQueryResult {
+  state: StkQueryState;
+  resultDescription: string;
+  mpesaReceiptCode?: string;
+  amountKes?: number;
+}
+
+export async function queryStkPush(checkoutRequestId: string): Promise<StkQueryResult> {
+  const id = checkoutRequestId.trim();
+  if (!id) return { state: 'UNKNOWN', resultDescription: 'No checkout id to query' };
+
+  // Nothing to ask: console mode never talks to Safaricom, so there is no
+  // remote state and inventing a verdict would be a lie.
+  if (mpesaProvider() === 'console') {
+    return { state: 'UNKNOWN', resultDescription: 'Console mode — no M-Pesa to ask' };
+  }
+
+  const base = mpesaProvider() === 'sandbox' ? SANDBOX_BASE : PRODUCTION_BASE;
+  const shortcode = process.env.MPESA_SHORTCODE;
+  const passkey = process.env.MPESA_PASSKEY;
+  if (!shortcode || !passkey) {
+    throw new MpesaError('MPESA_SHORTCODE/MPESA_PASSKEY are not set', 'NOT_CONFIGURED');
+  }
+
+  const token = await getDarajaAccessToken(base);
+  const timestamp = darajaTimestamp();
+  const password = Buffer.from(`${shortcode}${passkey}${timestamp}`).toString('base64');
+
+  const res = await fetch(`${base}/mpesa/stkpushquery/v1/query`, {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      BusinessShortCode: shortcode,
+      Password: password,
+      Timestamp: timestamp,
+      CheckoutRequestID: id,
+    }),
+  });
+
+  const data = (await readDarajaJson(res, 'the STK push status query')) as {
+    ResponseCode?: string;
+    ResponseDescription?: string;
+    ResultCode?: string;
+    ResultDesc?: string;
+    CallbackMetadata?: { Item?: { Name: string; Value: unknown }[] };
+  };
+
+  const item = (name: string): string | undefined => {
+    const found = (data.CallbackMetadata?.Item ?? []).find((i) => i.Name === name)?.Value;
+    return found === undefined || found === null ? undefined : String(found);
+  };
+
+  // ResponseCode is about the *query request*; ResultCode is about the
+  // *payment*. A query that itself was refused (too soon after the push,
+  // or Safaricom has not finished processing) leaves ResultCode absent,
+  // and that is emphatically not a failed payment.
+  if (data.ResponseCode !== '0') {
+    return {
+      state: 'UNKNOWN',
+      resultDescription: data.ResponseDescription ?? 'Safaricom would not answer the status query yet',
+    };
+  }
+
+  if (data.ResultCode === '0') {
+    const receipt = item('MpesaReceiptNumber');
+    const amount = Number(item('Amount'));
+    return {
+      state: 'COMPLETED',
+      resultDescription: data.ResultDesc ?? 'Completed',
+      mpesaReceiptCode: receipt,
+      amountKes: Number.isFinite(amount) ? amount : undefined,
+    };
+  }
+
+  // Only a real code is a verdict. Daraja answers a push it is still
+  // working on with ResponseCode 0 and an EMPTY ResultCode, and reading
+  // that as "not 0, therefore failed" would tell a customer who is busy
+  // approving the prompt that their payment was declined.
+  const code = (data.ResultCode ?? '').trim();
+  if (!code) {
+    return {
+      state: 'UNKNOWN',
+      resultDescription: data.ResponseDescription ?? 'Safaricom has not finished processing this payment',
+    };
+  }
+
+  return {
+    state: 'FAILED',
+    resultDescription: data.ResultDesc ?? data.ResponseDescription ?? 'The payment was not completed',
   };
 }
 

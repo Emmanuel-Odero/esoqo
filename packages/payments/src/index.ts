@@ -1,4 +1,11 @@
-export { initiateStkPush, parseStkCallback, mpesaProvider, MpesaError } from './mpesa';
+export {
+  initiateStkPush,
+  queryStkPush,
+  parseStkCallback,
+  mpesaProvider,
+  MpesaError,
+} from './mpesa';
+export type { StkQueryResult, StkQueryState } from './mpesa';
 export type { StkPushRequest, StkPushResult, StkCallbackResult } from './mpesa';
 
 export {
