@@ -236,6 +236,166 @@ GitHub → Settings → Branches → add a rule for `live`:
 Then add a `DEPLOY_BOT_TOKEN` secret (a PAT that may push to the
 protected branch), so the tag-bump commit can land.
 
+### 3.9 First bootstrap of `preview` (Sept 2026) — what actually happened
+
+§3.1–§3.8 describe the intended one-time setup. None of it had been done
+when `preview` was first brought up, and the account available for the
+job turned out not to have the rights §3.1 assumes. This section is a
+record of the actual path taken — read it before repeating any of §3.1–§3.8
+by hand, because some of their assumptions are wrong for this cluster as
+provisioned today.
+
+**Fleet was never installed.** `GET /v1/fleet.cattle.io.gitrepos` against
+the Rancher API returned a flat `404` — not "no GitRepo yet", but "the CRD
+doesn't exist". Nothing in §1's git-driven model was running; every
+image tag sitting in the overlay was inert until something applied it by
+hand.
+
+**The available Rancher account was project-scoped, not cluster-admin.**
+`kubectl auth whoami` identified it as `genericoidc_group://esoqo`, and
+`kubectl auth can-i create deployments --all-namespaces` printed `no`.
+`can-i create deployments -n esoqo-preview` printed `yes` — full
+namespace-admin, but nothing cluster-scoped (no ClusterIssuers, no
+IngressClasses, no Fleet CRDs, no cluster labels). §3.1's preflight
+should include the namespace-scoped check too:
+
+```bash
+kubectl auth can-i create deployments -n esoqo-preview
+```
+
+If that's `yes` but the cluster-wide one is `no`, you're in the same
+position this bootstrap was: able to ship into the namespace, unable to
+do any of §3.1–§3.4. Bootstrapping Fleet properly is still an open item —
+it needs a cluster-admin kubeconfig, which nobody had at the time.
+
+**The real namespace is `esoqo-preview`, not `preview`.** Whoever
+provisioned the Rancher project ahead of time named the namespaces
+`esoqo-preview` / `esoqo-production`, not the bare `preview` / `production`
+that `deploy/k8s/overlays/*/kustomization.yaml` and most commands in this
+doc assume. The preview overlay's `namespace:` field has been corrected
+to match; commands elsewhere in this doc that say `-n preview` need the
+same substitution until the doc itself is fully reconciled.
+
+**The ingress class is Traefik, not nginx** — confirmed empirically, not
+just inferred from "k3s ships Traefik" (§9a). An `Ingress` with
+`ingressClassName: nginx` got a generic, controller-less 404 from every
+node; patching it to `traefik` routed correctly to a live backend within
+seconds. Both overlays and `deploy/cluster/cluster-issuer.yaml` have been
+updated. §9a's table of lost nginx-annotation behavior (body size limit,
+www-redirect, noindex) still applies and is not yet re-implemented as
+Traefik `Middleware` resources.
+
+**Deploys went in via `kubectl apply`, not Fleet — by necessity, and
+through the browser.** With no cluster-admin kubeconfig available, there
+was no way to get a stable local `kubectl` session either (Rancher only
+issues kubeconfigs scoped to what the requesting account can already do,
+which was namespace-only). Everything was applied through Rancher's own
+UI, in the `local` cluster's cluster-explorer:
+
+- The embedded **kubectl shell** (terminal icon, top nav) works for
+  short commands, but its websocket disconnects silently and often —
+  including mid-command, with no error — which makes it unfit for
+  anything long enough to matter (a `kubectl create secret` with a
+  connection string, say).
+- **Import YAML** (upload icon, top nav → "Read from File") proved
+  completely reliable by comparison: pick a `Default Namespace`, upload
+  or paste a manifest, click Import. It performs a real `kubectl apply`
+  server-side, has no line-length or duration limit, and doesn't share
+  the shell's disconnect problem. For anything beyond a one-line
+  command, render the manifest locally and import it this way rather
+  than typing it into the shell.
+- Secret values were computed locally (`openssl rand -hex 24/32` per
+  `secrets.env.template`), then either applied as a small `Secret`
+  manifest via Import YAML, or patched onto the existing secret with
+  `kubectl patch secret ... --type merge -p '{"data": {...}}'` — merge
+  patch only touches the keys named, so it can't accidentally wipe
+  unrelated ones the way a full re-`apply` of a partial Secret might.
+- `deploy/scripts/create-secrets.sh` could not be run as-is — it expects
+  an interactive `kubectl config current-context` confirmation from a
+  real terminal, which the browser shell can't reliably hold open for.
+  The secrets it would have created were built by hand, matching its
+  logic exactly (see the script for the `DATABASE_URL` /
+  `DIRECT_DATABASE_URL` construction).
+- One-off diagnostic or repair work (see below) went in as scratch
+  `Job` manifests running `postgres:16-alpine`, importing the SQL as a
+  base64-encoded `echo | base64 -d | psql` one-liner — the same
+  Import-YAML path, not the shell.
+
+**Images built locally came out `arm64`-only, and the cluster is
+`amd64`.** GitHub Actions is broken for this account (returns
+`startup_failure` before any job is created — unrelated to this deploy,
+not billing, not the workflow YAML) so `build-and-push.sh` ran from a
+laptop instead. Plain `docker build` targets the host architecture, and
+the laptop is Apple Silicon. The symptom was
+`no match for platform in manifest: not found` in every app pod's
+events. Fix: rebuild explicitly for the cluster's architecture and push
+under the same tag —
+
+```bash
+docker buildx build --platform linux/amd64 \
+  --file docker/Dockerfile.next --tag ghcr.io/emmanuel-odero/esoqo-web:<tag> \
+  --push --build-arg APP=web --build-arg PORT=3000 .
+```
+
+— repeated per image. `build-and-push.sh` does not do this yet; if a
+future run needs a non-native architecture, add `--platform` there
+rather than rediscovering this by hand.
+
+**Two real application bugs were hit and fixed, not deploy
+misconfiguration:**
+
+1. `packages/db/prisma/migrations/20260924000000_migrate_parcel_orgs_to_generic/migration.sql`
+   referenced `po."settlementDays"` and `po."allowsWalkIn"` — neither
+   column exists on `ParcelOrg` (the real ones are `settlementPhone` and
+   `acceptsWalkIn`). `prisma migrate deploy` failed on this, the last of
+   113 migrations, with a cascading `current transaction is aborted`
+   that hid the real error; the actual `column ... does not exist` only
+   showed up running the SQL directly against Postgres. Fixed in place
+   in the migration file — it had never successfully applied anywhere,
+   so editing it is safe (Prisma treats an unapplied migration's
+   checksum as free to change).
+
+   Because a prior failed attempt had already written a `failed` row for
+   this migration into `_prisma_migrations`, the fix couldn't just be
+   re-run through `migrate deploy` — Prisma refuses to proceed past a
+   `P3009` "found failed migrations" state. The unblock was: run the
+   corrected SQL directly, then replace the `_prisma_migrations` row
+   with one recording it as applied, using the sha256 checksum of the
+   now-fixed file (the same value `prisma migrate resolve --applied`
+   would compute). A subsequent full `prisma migrate deploy` run then
+   confirmed all 113 migrations apply cleanly against a fresh database
+   using this fix.
+
+2. `core-go` was in a permanent `CrashLoopBackOff`:
+   `10.43.151.51:6432 (pgbouncer): server error: FATAL: unsupported
+   startup parameter: connection_limit`. `core-go`'s Postgres driver
+   (`pgx`) is not Prisma — it forwards every `DATABASE_URL` query-string
+   parameter straight through as a real wire-protocol startup parameter,
+   so Prisma's own `pgbouncer=true&connection_limit=10` hints made
+   PgBouncer reject the connection outright, and `pgx` separately
+   attempts TLS unless told `sslmode=disable`.
+   `docker-compose.yml` already documents and works around exactly this
+   for local dev (`core-go` gets its own `DATABASE_URL` there); the k8s
+   manifests never got the equivalent. Fixed by adding
+   `CORE_GO_DATABASE_URL` / `CORE_GO_DIRECT_DATABASE_URL` to
+   `create-secrets.sh`'s output and overriding `core-go`'s `env:` in
+   `deploy/k8s/base/core-services.yaml` to use them (`env:` wins over
+   `envFrom:` for the same key, so this doesn't disturb `core-service`,
+   which still reads the Prisma-flavored `DATABASE_URL` via `envFrom`).
+
+**End state:** all 7 workloads (`web`, `app`, `admin`, `store`, `jamii`,
+`core-service`, `core-go`) `Running` and passing `/health`; all 113
+migrations applied; every `*.preview.esoko.global` hostname routing
+correctly over plain HTTP. **Not done:** TLS — the `letsencrypt-prod`
+ClusterIssuer does not exist on the cluster (confirmed via
+`CertificateRequest` status: `Referenced "ClusterIssuer" not found`),
+and creating one is cluster-scoped, i.e. blocked on the same missing
+cluster-admin access as Fleet itself. `kubectl apply -f
+deploy/cluster/cluster-issuer.yaml` from an admin kubeconfig is all that's
+needed once one is available. Also not done, and out of scope for a
+preview bootstrap: the Fleet/GitOps install itself (§3.3–§3.4), the
+production DNS cutover, and the Postgres data migration off Render.
+
 ---
 
 ## 4. Routine deploy to preview
