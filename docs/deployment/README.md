@@ -4,6 +4,15 @@ This is the operational runbook for both environments. It is meant to be
 followed literally — if a step here is wrong, fix the step, not just the
 cluster.
 
+> **Read `CONTRIBUTING.md` §3 first.** The GitOps flow this file
+> describes (push → Actions builds images → Fleet applies them) is not
+> currently operating — GitHub Actions is broken at the platform level
+> and Fleet's actual connection state is unconfirmed. Every real deploy
+> right now is `deploy/scripts/build-and-push.sh` followed by a manual
+> `kubectl apply -k`. The architecture below is still the intended
+> target state and the manifests are correct; just don't expect a git
+> push alone to do anything to the cluster yet.
+
 ---
 
 ## 1. The model in one paragraph
@@ -99,7 +108,7 @@ In Rancher (<https://rancher.2lovelaces.io/>), on the target cluster:
 3. **Install cert-manager.** Apps → Charts → cert-manager, with the
    "Install CRDs" option enabled.
 
-### 3.2 ClusterIssuers
+### 3.2 ClusterIssuers — superseded, see below
 
 ```bash
 kubectl apply -f deploy/cluster/cluster-issuer.yaml
@@ -107,6 +116,20 @@ kubectl apply -f deploy/cluster/cluster-issuer.yaml
 
 Both `letsencrypt-staging` and `letsencrypt-prod` are created. Start on
 staging — see [§9](#9-tls-and-wildcards).
+
+**This needs cluster-admin and the account available for day-to-day
+work has never had it** (confirmed 2026-09-27 — same finding as §3.9's
+account). `ClusterIssuer` is cluster-scoped; a namespace-scoped account
+can't create, read, or even list it, which is why this looked like a
+silent, unexplained TLS failure for days rather than a permissions
+error. **The actual fix in place on both environments now is a
+namespaced `Issuer`** — same ACME account flow, same HTTP-01 solver,
+needs only the same per-namespace rights as everything else in the
+overlay. See `deploy/k8s/overlays/{preview,production}/issuer.yaml` and
+the ingress annotation `cert-manager.io/issuer` (not
+`cluster-issuer`). If you ever do get a cluster-admin kubeconfig, the
+`ClusterIssuer` approach above still works and is arguably cleaner
+long-term — but don't assume you have the access to use it.
 
 ### 3.3 Git credentials for Fleet
 
@@ -211,11 +234,11 @@ cannot pull them. Use a pull secret.
 Create the pull secret in each namespace:
 
 ```bash
-kubectl -n preview create secret docker-registry ghcr \
+kubectl -n esoqo-preview create secret docker-registry ghcr \
   --docker-server=ghcr.io \
   --docker-username=Emmanuel-Odero \
   --docker-password='<PAT with read:packages>'
-kubectl -n preview patch serviceaccount default \
+kubectl -n esoqo-preview patch serviceaccount default \
   -p '{"imagePullSecrets":[{"name":"ghcr"}]}'
 ```
 
@@ -273,7 +296,7 @@ provisioned the Rancher project ahead of time named the namespaces
 `esoqo-preview` / `esoqo-production`, not the bare `preview` / `production`
 that `deploy/k8s/overlays/*/kustomization.yaml` and most commands in this
 doc assume. The preview overlay's `namespace:` field has been corrected
-to match; commands elsewhere in this doc that say `-n preview` need the
+to match; commands elsewhere in this doc that say `-n esoqo-preview` need the
 same substitution until the doc itself is fully reconciled.
 
 **The ingress class is Traefik, not nginx** — confirmed empirically, not
@@ -417,8 +440,8 @@ That is the whole procedure. Then watch:
    `Modified` → `Ready` within the 60s poll.
 3. Confirm:
    ```bash
-   kubectl -n preview get pods
-   kubectl -n preview rollout status deploy/web --timeout=5m
+   kubectl -n esoqo-preview get pods
+   kubectl -n esoqo-preview rollout status deploy/web --timeout=5m
    curl -sS https://preview.esoko.global/api/health
    ```
 
@@ -446,8 +469,8 @@ and walk all 108 Prisma migrations. Give it 20 minutes before concluding
 anything is wrong, and watch the migration Job specifically:
 
 ```bash
-kubectl -n preview get jobs
-kubectl -n preview logs -l app.kubernetes.io/name=migrate -f
+kubectl -n esoqo-preview get jobs
+kubectl -n esoqo-preview logs -l app.kubernetes.io/name=migrate -f
 ```
 
 ---
@@ -459,29 +482,36 @@ built from a branch that preview has not run.
 
 ```bash
 # 1. confirm preview is actually healthy — not just deployed
-kubectl -n preview get pods
+kubectl -n esoqo-preview get pods
 curl -sS https://preview.esoko.global/api/health
 
-# 2. promote
-git checkout live && git pull
-git merge --ff-only preview    # refuses if they have diverged
+# 2. promote — the deploy branch is `production`, not `live`.
+#    (`live` exists in the remote as a stale near-duplicate from an
+#    earlier naming choice; don't use it.)
+git checkout production && git pull
+git merge --ff-only preview    # refuses if they have diverged — see
+                                # CONTRIBUTING.md §2, they currently have
 git push
 ```
 
-If `--ff-only` refuses, the branches have diverged and something was
-committed to `live` directly. Resolve that deliberately — do not
-force it.
+If `--ff-only` refuses, the branches have diverged. Resolve that
+deliberately — do not force it. See `CONTRIBUTING.md` §2 for the
+current, real divergence as of 2026-09-27.
 
-Pushing to `live` triggers the same pipeline against the
-production overlay. Because `NEXT_PUBLIC_*` differ, the images are
-**rebuilt**, not copied — see [§7](#7-why-images-are-not-promoted).
+Pushing to `production` is supposed to trigger the same pipeline
+against the production overlay, rebuilding images because
+`NEXT_PUBLIC_*` differ — see [§7](#7-why-images-are-not-promoted) — but
+per the note at the top of this file, nothing is actually watching that
+push right now. Run `deploy/scripts/build-and-push.sh production` and
+`kubectl apply -k deploy/k8s/overlays/production` yourself; see
+`CONTRIBUTING.md` §5.
 
 Then verify, in this order:
 
 ```bash
-kubectl -n production rollout status deploy/web --timeout=10m
-curl -sS https://esoko.global/api/health
-curl -sS https://api.esoko.global/ready      # walks the audit chain
+kubectl -n esoqo-production rollout status deploy/web --timeout=10m
+curl -sS https://esoqo.com/api/health
+curl -sS https://api.esoqo.com/ready      # walks the audit chain
 ```
 
 ---
@@ -505,7 +535,7 @@ directly and then immediately commit the equivalent revert (otherwise
 Fleet's drift correction undoes you within the minute):
 
 ```bash
-kubectl -n production rollout undo deploy/web
+kubectl -n esoqo-production rollout undo deploy/web
 ```
 
 > A revert rolls back **code**, not **schema**. If the bad release
@@ -550,7 +580,7 @@ across two releases:
 Read from old. Deploy. Backfill:
 
 ```bash
-kubectl -n production exec -it deploy/core-service -- \
+kubectl -n esoqo-production exec -it deploy/core-service -- \
   pnpm --filter @esoqo/db backfill:<script>
 ```
 
@@ -564,15 +594,25 @@ manual backup ([§10](#10-backups-and-restore)).
 
 ## 9. TLS and wildcards
 
-Certificates are issued by cert-manager over ACME **HTTP-01**. That
-needs nothing but a publicly reachable ingress — no registrar API
-credentials — which matters because the domain is at Namecheap and
-cert-manager ships no Namecheap DNS solver.
+Certificates are issued by cert-manager over ACME **HTTP-01**, via a
+namespaced `Issuer` per environment (see §3.2 — not a `ClusterIssuer`,
+despite what the annotation name below suggests it should be).
+HTTP-01 needs nothing but a publicly reachable ingress — no registrar
+API credentials.
+
+**DNS moved to Cloudflare 2026-09-27** (both `esoqo.com` and
+`esoko.global` — `preview.esoko.global` is still on Namecheap's own DNS
+as of this writing). Cloudflare manages the zone, but records are kept
+**DNS-only (grey-cloud)**, not proxied — cert-manager's HTTP-01
+challenge and Cloudflare's proxy don't mix, and proxying would also
+break the plain host-based routing the ingress relies on. If you ever
+add a record for a new subdomain, make sure it's grey-cloud.
 
 The tradeoff: **HTTP-01 cannot issue wildcard certificates.** Hence the
-explicit host lists in both overlays' `ingress.yaml`. DNS is still
-wildcard, so adding a sixth app means adding a rule and a `tls.hosts`
-entry — and no DNS change.
+explicit host lists in both overlays' `ingress.yaml`. Adding a new app
+means adding both an ingress rule *and* a DNS A record — no more free
+wildcard coverage now that DNS isn't a bare `*.preview` A record on
+Namecheap.
 
 **Start on staging.** Let's Encrypt rate-limits production issuance to 5
 failures per hostname per hour, and a wrong A record burns through that
@@ -580,37 +620,54 @@ in minutes — after which the real certificate cannot issue for an hour
 no matter what you fix. Swap the annotation in `ingress.yaml`:
 
 ```yaml
-cert-manager.io/cluster-issuer: letsencrypt-staging
+cert-manager.io/issuer: letsencrypt-staging
 ```
 
 Deploy, confirm a certificate is issued (the browser will warn — that is
 expected and correct for staging), then switch to `letsencrypt-prod`.
+In practice this takes well under two minutes per environment once DNS
+actually resolves to the cluster.
 
 Check progress:
 
 ```bash
-kubectl -n preview get certificate
-kubectl -n preview describe certificate preview-tls
-kubectl -n preview get challenge   # empty once issued
+kubectl -n esoqo-preview get certificate
+kubectl -n esoqo-preview describe certificate esoqo-preview-tls
+kubectl -n esoqo-preview get challenge   # empty once issued
 ```
 
+**If a Certificate stays `False` with events that never appear at
+all** (not even a `DoesNotExist`/`Issuing` message updating) — check
+whether the Ingress it's attached to predates ever being applied via
+`kubectl apply` (e.g. it was originally created through Rancher's
+browser Import-YAML flow). If so, the live object can end up with
+*both* `cert-manager.io/cluster-issuer` and `cert-manager.io/issuer`
+annotations set simultaneously — `kubectl apply`'s merge only *adds*
+keys present in the new manifest, it can't remove one the live object
+already has that your file no longer mentions. cert-manager then keeps
+honoring the stale `cluster-issuer` key. Fix by deleting it explicitly:
+`kubectl annotate ingress <name> -n <ns> cert-manager.io/cluster-issuer-`
+(trailing dash = delete).
+
 If a wildcard certificate ever becomes necessary — many dynamic Jamii
-subdomains, say — the path is to move the zone's DNS to Cloudflare (a
-token already exists for Jamii custom domains) and switch the solver to
-`dns01`.
+subdomains, say — switch the solver to `dns01` now that the zone is
+already on Cloudflare (a token already exists for Jamii custom
+domains).
 
 ---
 
-## 9a. If the cluster runs Traefik, not nginx
+## 9a. The cluster runs Traefik, not nginx
 
-k3s ships Traefik by default, and this cluster is k3s. Both overlays'
-`ingress.yaml` sets `ingressClassName: nginx` and carries
-`nginx.ingress.kubernetes.io/*` annotations.
+k3s ships Traefik by default, and this cluster is k3s. **Both overlays'
+`ingress.yaml` already set `ingressClassName: traefik`** — confirmed
+empirically during preview's bootstrap (an `nginx` class got a
+controller-less 404 from every node; `traefik` routed within seconds)
+and unchanged since. This used to be a hypothetical "if" in this doc;
+it no longer is.
 
-The dangerous part is not the class name — a wrong class produces an
-Ingress that never gets an address, which is loud. It is the
-**annotations, which Traefik silently ignores**. Nothing errors; the
-behaviour just isn't there:
+What's still true and still bites: the manifests carry legacy
+`nginx.ingress.kubernetes.io/*` annotations that **Traefik silently
+ignores**. Nothing errors; the behaviour just isn't there:
 
 | Intent | nginx annotation | Traefik equivalent |
 |---|---|---|
@@ -623,15 +680,16 @@ a 413 from the proxy, and `apps/app` is built around 10MB document
 uploads. Traefik's own default body limit is unlimited, so in practice
 uploads work — but nothing is enforcing the 12MB ceiling either.
 
-To switch, change `ingressClassName` to `traefik` in both overlays and
-add a Middleware per behaviour you actually need, referenced by
-`traefik.ingress.kubernetes.io/router.middlewares:
-<namespace>-<middleware>@kubernetescrd`.
-
-Installing ingress-nginx alongside Traefik is also fine — k3s supports
-multiple controllers, and keeping nginx means the manifests work as
-written. Decide based on what else on the cluster already depends on
-Traefik.
+**The Traefik `Middleware` CRD needs cluster-scoped RBAC the
+namespace-only account doesn't have** (`kubectl auth can-i create
+middlewares.traefik.io` → `no`, confirmed 2026-09-27) — same shape of
+problem as `ClusterIssuer` in §3.2. Until that access exists, the
+practical workaround for the `www` case is routing `www.esoqo.com` to
+the same backend as the apex directly in `ingress.yaml` (already done)
+rather than a real 301 — it serves instead of 404ing, but both
+hostnames now serve identical content with no canonical-URL signal to
+browsers or crawlers. Fix properly (a real `Middleware`-based redirect)
+once cluster-admin access exists.
 
 `deploy/scripts/preflight.sh` reports the available IngressClasses, so
 run it before assuming either way.
@@ -646,7 +704,7 @@ never costs you the previous good one.
 Take one manually before any risky migration:
 
 ```bash
-kubectl -n production create job --from=cronjob/postgres-backup \
+kubectl -n esoqo-production create job --from=cronjob/postgres-backup \
   manual-$(date +%s)
 ```
 
@@ -655,7 +713,7 @@ CronJob's pods, so this runs a throwaway pod against it rather than
 exec'ing into a running workload:
 
 ```bash
-kubectl -n production run backup-ls --rm -it --restart=Never \
+kubectl -n esoqo-production run backup-ls --rm -it --restart=Never \
   --image=busybox --overrides='{
     "spec": {
       "containers": [{
@@ -681,18 +739,18 @@ kubectl -n fleet-default patch gitrepo production \
   --type merge -p '{"spec":{"paused":true}}'
 
 # 2. stop everything that writes
-kubectl -n production scale deploy --all --replicas=0
+kubectl -n esoqo-production scale deploy --all --replicas=0
 
 # 3. edit BACKUP_FILE in the manifest, then run it. The Job verifies
 #    the dump is readable BEFORE it drops anything.
-kubectl -n production apply -f deploy/scripts/restore-job.yaml
-kubectl -n production logs -f job/postgres-restore
+kubectl -n esoqo-production apply -f deploy/scripts/restore-job.yaml
+kubectl -n esoqo-production logs -f job/postgres-restore
 
 # 4. bring it back, then unpause, then clean up
-kubectl -n production scale deploy --all --replicas=2
+kubectl -n esoqo-production scale deploy --all --replicas=2
 kubectl -n fleet-default patch gitrepo production \
   --type merge -p '{"spec":{"paused":false}}'
-kubectl -n production delete job postgres-restore
+kubectl -n esoqo-production delete job postgres-restore
 ```
 
 **Unpause the moment you are done.** A paused GitRepo is a cluster that
@@ -762,10 +820,10 @@ overlay's `config.yaml`. They must match; change both.
 ### Useful commands
 
 ```bash
-kubectl -n preview get pods -w
-kubectl -n preview logs -f deploy/web
-kubectl -n preview describe pod <pod>          # events explain pending
-kubectl -n preview exec -it postgres-0 -- psql -U esoko -d esoko
+kubectl -n esoqo-preview get pods -w
+kubectl -n esoqo-preview logs -f deploy/web
+kubectl -n esoqo-preview describe pod <pod>          # events explain pending
+kubectl -n esoqo-preview exec -it postgres-0 -- psql -U esoko -d esoko
 
 # force Fleet to re-sync now rather than at the next poll
 kubectl -n fleet-default annotate gitrepo preview \
@@ -778,8 +836,12 @@ kubectl -n fleet-default annotate gitrepo preview \
 
 - **Secrets** are created by hand with `create-secrets.sh`. A cloned
   repo must not be enough to reach the database.
-- **ClusterIssuers and ingress-nginx** are cluster-scoped and shared, so
-  neither environment's bundle should own them.
-- **DNS** is at Namecheap with no API integration. Records are added by
-  hand, and they change roughly never.
+- **`ClusterIssuer` and the Traefik `Middleware` CRD** are cluster-scoped
+  and the day-to-day account has no RBAC for them — see §3.2 and §9a.
+  Namespaced `Issuer` is the working substitute for TLS; there is no
+  substitute yet for the `www` redirect.
+- **DNS** is on Cloudflare (`esoqo.com`, `esoko.global`) or Namecheap
+  (`preview.esoko.global`, unmigrated) with no automation from this
+  repo either way. Records are added by hand via the Cloudflare/
+  Namecheap dashboards, and mostly don't change.
 - **Database restores** require a human deciding to lose data.
