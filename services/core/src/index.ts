@@ -8,6 +8,7 @@ import {
   confirmRegistrationPaymentByPesapalOrderId,
   confirmDonationPayment, failDonationPayment,
   confirmBusinessPayment, failBusinessPayment,
+  confirmWalletTopUp, WalletTopUpError,
   StoreOrderError, DonationError, BusinessPaymentError,
 } from '@esoqo/db';
 import {
@@ -239,6 +240,21 @@ const handleStkCallback = async (
   } catch (e) {
     if (!(e instanceof BusinessPaymentError && e.code === 'NOT_FOUND')) {
       app.log.error({ err: e, checkoutRequestId: parsed.checkoutRequestId }, 'failed to confirm business payment');
+      return reply.send({ ok: true });
+    }
+  }
+
+  // A personal Wallet top-up. Last of the TS confirmers, same reason as
+  // business payment above — newest, least likely to match. No SMS here
+  // yet (unlike business payment's receipt+alert pair): a top-up has no
+  // second party to notify, and the wallet balance itself is the receipt
+  // next time the page loads.
+  try {
+    await confirmWalletTopUp(parsed.checkoutRequestId, parsed.mpesaReceiptCode ?? '');
+    return reply.send({ ok: true });
+  } catch (e) {
+    if (!(e instanceof WalletTopUpError && e.code === 'NOT_FOUND')) {
+      app.log.error({ err: e, checkoutRequestId: parsed.checkoutRequestId }, 'failed to confirm wallet top-up');
       return reply.send({ ok: true });
     }
   }

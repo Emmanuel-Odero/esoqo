@@ -220,6 +220,33 @@ export interface GoSeatMap {
   seats: { label: string; ticketClassId: string }[];
 }
 
+/**
+ * A row from GET /v1/me/bills. Unlike every other Go shape in this
+ * file, `dbx.BillRow` (services/core-go/internal/dbx/bills.go) carries
+ * no JSON struct tags, so Go's default encoding/json marshaling emits
+ * the field names verbatim — PascalCase, not the camelCase every
+ * hand-tagged Go response elsewhere in this file uses. Do not
+ * "normalise" these to camelCase; that would just stop matching the
+ * wire format.
+ */
+export interface GoBill {
+  ID: string;
+  Label: string;
+  Category: string;
+  AccountRef: string | null;
+  AmountKES: string | null;
+  Cycle: 'MONTHLY' | 'WEEKLY' | 'ONE_TIME';
+  NextDueAt: string;
+  ReminderDaysBefore: number;
+  Status: string;
+  TargetKES: string | null;
+  AutoPayEnabled: boolean;
+  DaysUntilDue: number;
+  Overdue: boolean;
+  DueSoon: boolean;
+  RaisedKES: string;
+}
+
 export interface GoMyBooking {
   id: string;
   status: string;
