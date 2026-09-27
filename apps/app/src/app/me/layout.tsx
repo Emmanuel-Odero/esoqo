@@ -9,21 +9,24 @@ import { PrefsApplier } from './PrefsApplier';
 import { ShellNav, type NavItem } from './ShellNav';
 import './me.css';
 
-export const metadata: Metadata = { title: { default: 'Your record', template: '%s · Esoqo' } };
+export const metadata: Metadata = { title: { default: 'Your profile', template: '%s · Esoqo' } };
 
+// Wallet takes the primary slot Tickets used to hold — money is the more
+// frequent reason somebody opens this bar. Tickets moves into More rather
+// than off the map; Vouchers & loyalty stop being their own door because
+// they're now a section inside Wallet, not a separate destination.
 const PRIMARY: NavItem[] = [
-  { href: '/me', icon: 'user', label: 'Record' },
+  { href: '/me', icon: 'user', label: 'Profile' },
   { href: '/me/group', icon: 'users', label: 'Group' },
   { href: '/me/payments', icon: 'coins', label: 'Payments' },
-  { href: '/me/tickets', icon: 'qr', label: 'Tickets' },
-  { href: '/me/documents', icon: 'document', label: 'Documents' },
+  { href: '/me/wallet', icon: 'bank', label: 'Wallet' },
 ];
 
 const MORE: NavItem[] = [
+  { href: '/me/tickets', icon: 'qr', label: 'Tickets' },
   { href: '/me/organiser', icon: 'calendar', label: 'Sell tickets (events & transport)' },
-  { href: '/me/vouchers', icon: 'tag', label: 'Vouchers & loyalty' },
   { href: '/me/consents', icon: 'eye', label: 'Who can see your info' },
-  { href: '/me/settings', icon: 'grid', label: 'How this looks' },
+  { href: '/me/settings', icon: 'grid', label: 'Settings' },
 ];
 
 export default async function MeLayout({ children }: { children: React.ReactNode }) {
@@ -47,7 +50,7 @@ export default async function MeLayout({ children }: { children: React.ReactNode
             workspaces={workspaces}
             currentKey="personal"
             fallbackName="Esoqo"
-            fallbackSubtitle="Your own record"
+            fallbackSubtitle="Your own profile"
           />
           <ShellNav items={PRIMARY} more={MORE} />
         </div>

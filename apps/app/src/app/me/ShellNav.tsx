@@ -66,7 +66,7 @@ export function ShellNav({ items, more }: { items: NavItem[]; more: NavItem[] })
   return (
     <>
       {/* Desktop primary tabs, inline in the header bar. */}
-      <nav className="headnav" aria-label="Your record">
+      <nav className="headnav" aria-label="Your profile">
         {items.map(({ href, icon, label }) => (
           <Link key={href} href={href} aria-current={isActive(href) ? 'page' : undefined}>
             <Icon name={icon} size={17} />{label}
@@ -82,7 +82,7 @@ export function ShellNav({ items, more }: { items: NavItem[]; more: NavItem[] })
       </button>
 
       {/* Mobile bottom tab bar. */}
-      <nav className="tabbar" aria-label="Your record">
+      <nav className="tabbar" aria-label="Your profile">
         {items.map(({ href, icon, label }) => (
           <Link key={href} href={href} aria-current={isActive(href) ? 'page' : undefined}>
             <Icon name={icon} size={20} />

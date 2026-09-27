@@ -177,7 +177,7 @@ export function TicketsClient({ bookings }: { bookings: GoMyBooking[] }) {
         </>
       )}
       <p className="tix-browse">
-        <Link href="/me/vouchers">Vouchers &amp; loyalty →</Link>
+        <Link href="/me/wallet">Wallet, vouchers &amp; loyalty →</Link>
       </p>
     </>
   );
