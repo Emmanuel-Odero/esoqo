@@ -1,0 +1,38 @@
+# ════════════════════════════════════════════════════════════════════
+#  Namespaced cert-manager Issuers, scoped to esoqo-preview.
+#
+#  See the production overlay's issuer.yaml for the full reasoning: a
+#  ClusterIssuer needs cluster-admin, which this Rancher account has
+#  never had, but a namespaced Issuer needs only the same
+#  namespace-level rights as every other object in this overlay and
+#  cert-manager treats it identically otherwise.
+# ════════════════════════════════════════════════════════════════════
+apiVersion: cert-manager.io/v1
+kind: Issuer
+metadata:
+  name: letsencrypt-staging
+spec:
+  acme:
+    server: https://acme-staging-v02.api.letsencrypt.org/directory
+    email: emmanuelodero808@gmail.com
+    privateKeySecretRef:
+      name: letsencrypt-staging-account-key
+    solvers:
+      - http01:
+          ingress:
+            ingressClassName: traefik
+---
+apiVersion: cert-manager.io/v1
+kind: Issuer
+metadata:
+  name: letsencrypt-prod
+spec:
+  acme:
+    server: https://acme-v02.api.letsencrypt.org/directory
+    email: emmanuelodero808@gmail.com
+    privateKeySecretRef:
+      name: letsencrypt-prod-account-key
+    solvers:
+      - http01:
+          ingress:
+            ingressClassName: traefik
