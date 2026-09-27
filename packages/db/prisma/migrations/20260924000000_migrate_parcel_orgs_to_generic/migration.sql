@@ -121,12 +121,12 @@ SELECT
     NULL,                                          -- ticket_org has no enterpriseId
     to_."name",
     to_."slug",
-    CASE to_."status"
-        WHEN 'LIVE'    THEN 'ACTIVE'
-        WHEN 'DRAFT'   THEN 'DRAFT'
-        WHEN 'ARCHIVED'THEN 'SUSPENDED'
-        ELSE to_."status"
-    END,
+    -- status passes through unchanged, as it does for parcel_org above.
+    -- "org"."status" is TEXT and TicketOrgStatus is already
+    -- (DRAFT, ACTIVE, SUSPENDED), so there is nothing to translate — and
+    -- a CASE that mapped a 'LIVE' literal would fail outright, since
+    -- 'LIVE' is not a value of that enum to begin with.
+    to_."status"::TEXT,
     jsonb_build_object(
         'vertical',     to_."vertical",            -- EVENT or TRANSPORT
         'logoUrl',      to_."logoUrl",
@@ -138,10 +138,14 @@ SELECT
 FROM "ticket_org" to_
 ON CONFLICT ("id") DO NOTHING;
 
--- ── 4. Migrate ticket org staff grants → org_staff ───────────────────────
+-- ── 4. Migrate ticket org staff → org_staff ─────────────────────────────
 --
--- ticket_org_staff_grant stores (orgId, partyId, role, active).
--- Map to org_staff using a synthetic UUID derived from orgId+partyId.
+-- The source is ticket_org_staff (orgId, name, role, active, createdAt,
+-- updatedAt) — there is no ticket_org_staff_grant table, and
+-- ticket_org_staff carries no partyId at all, so a staff member here is
+-- a crew member of the org rather than a registered party. org_staff.partyId
+-- is nullable for exactly that reason, and the source row's own id is
+-- carried across so the legacy and generic rows stay joinable.
 
 INSERT INTO "org_staff" (
     "id",
@@ -156,24 +160,22 @@ INSERT INTO "org_staff" (
     "updatedAt"
 )
 SELECT
-    -- Deterministic UUID from (orgId, partyId) so re-runs are idempotent
-    gen_random_uuid(),
+    tsg."id",                                      -- keeps the two rows joinable
     tsg."orgId",
-    tsg."partyId",
-    COALESCE(p."name", 'Staff Member'),            -- resolve from party table
+    NULL,                                          -- crew member, not a party
+    tsg."name",
     UPPER(tsg."role"),
     ARRAY[]::TEXT[],
     tsg."active",
     false,
     tsg."createdAt",
     tsg."updatedAt"
-FROM "ticket_org_staff_grant" tsg
-LEFT JOIN "party" p ON p."id" = tsg."partyId"
+FROM "ticket_org_staff" tsg
 WHERE EXISTS (SELECT 1 FROM "org" WHERE "id" = tsg."orgId" AND "type" = 'ticket')
-  -- Skip if we already have a staff row for this party+org combo
+  -- Skip if this grant is already present
   AND NOT EXISTS (
     SELECT 1 FROM "org_staff"
-    WHERE "orgId" = tsg."orgId" AND "partyId" = tsg."partyId"
+    WHERE "id" = tsg."id"
   );
 
 -- ── 5. Record migration stats in org_config ──────────────────────────────
