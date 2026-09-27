@@ -1,6 +1,7 @@
-import { randomInt } from 'node:crypto';
+import { mintEsoqoCode } from '@esoqo/domain';
+import type { MemberRole } from '@prisma/client';
 import { prisma } from '../client';
-import { requireCapability, type Ctx } from '../capabilities';
+import { requireCapability, AuthorisationError, type Ctx } from '../capabilities';
 import { recordAudit } from '../audit';
 
 /**
@@ -24,12 +25,42 @@ export class PaymentIdError extends Error {
   }
 }
 
-function generateCode(): string {
-  return `ESK-${randomInt(1000, 9999)}-KE`;
+/**
+ * Allocates a code, treating the unique constraint as the only source
+ * of truth.
+ *
+ * This used to pre-check for a clash and retry, which is the shape
+ * core-go's retryUnique does too — but a check-then-insert leaves a
+ * window between the two statements in which a concurrent minter can
+ * take the code, and the loser then surfaces a raw P2002 to the user.
+ * Letting the database arbitrate and re-rolling only on 23505 closes
+ * the window. Five attempts against ~8.9×10^8 shapes is not a
+ * meaningful limit; running out means something is badly wrong.
+ */
+export async function allocateEsoqoCode(partyId: string): Promise<string> {
+  for (let attempt = 0; attempt < 5; attempt++) {
+    const code = mintEsoqoCode();
+    try {
+      return (await prisma.esoqoPaymentId.create({ data: { partyId, code } })).code;
+    } catch (err) {
+      if (!isUniqueViolation(err)) throw err;
+    }
+  }
+  throw new PaymentIdError('Could not allocate a Payment ID — try again', 'ALREADY_ISSUED');
+}
+
+export function isUniqueViolation(err: unknown): boolean {
+  return typeof err === 'object' && err !== null
+    && 'code' in err && (err as { code?: unknown }).code === 'P2002';
 }
 
 /** Issues a Payment ID once the subject holds MSISDN_VERIFIED — the
- *  same verification the sign-in/registration flow already produces. */
+ *  same verification the sign-in/registration flow already produces.
+ *
+ *  Person-only by construction: the attestation it requires is a claim
+ *  about a phone number, and an ORGANISATION has none. A business's ID
+ *  is issued by issueBusinessEsoqoPaymentId instead, on the strength of
+ *  an officer's membership rather than the org's own phone. */
 export async function issueEsoqoPaymentId(ctx: Ctx) {
   requireCapability(ctx, 'paymentid.issue', { partyId: ctx.partyId });
   if (!ctx.partyId) throw new Error('Sign in required');
@@ -44,27 +75,133 @@ export async function issueEsoqoPaymentId(ctx: Ctx) {
     throw new PaymentIdError('Verify your phone number before activating a Payment ID', 'NOT_VERIFIED');
   }
 
-  // Extremely low collision odds at pilot scale (9000 codes); retried
-  // once on the rare clash rather than looping indefinitely.
-  for (let attempt = 0; attempt < 3; attempt++) {
-    const code = generateCode();
-    const clash = await prisma.esoqoPaymentId.findUnique({ where: { code } });
-    if (clash) continue;
-
-    const issued = await prisma.esoqoPaymentId.create({ data: { partyId: ctx.partyId, code } });
-    await recordAudit(ctx, {
-      action: 'paymentid.issued', targetType: 'esoko_payment_id', targetId: ctx.partyId,
-      payload: { code },
-    });
-    return issued;
-  }
-  throw new Error('Could not allocate a Payment ID — try again');
+  const code = await allocateEsoqoCode(ctx.partyId);
+  await recordAudit(ctx, {
+    action: 'paymentid.issued', targetType: 'esoko_payment_id', targetId: ctx.partyId,
+    payload: { code },
+  });
+  return prisma.esoqoPaymentId.findUniqueOrThrow({ where: { partyId: ctx.partyId } });
 }
 
 export async function getMyPaymentId(ctx: Ctx) {
   if (!ctx.partyId) return null;
   requireCapability(ctx, 'entity.read', { partyId: ctx.partyId });
   return prisma.esoqoPaymentId.findUnique({ where: { partyId: ctx.partyId } });
+}
+
+/* ── Business payment IDs ────────────────────────────────────
+ *
+ * A business is what customers pay, so it needs a Payment ID of its
+ * own — and it can never hold the MSISDN_VERIFIED attestation that
+ * issueEsoqoPaymentId requires, because an ORGANISATION has no phone
+ * number. The trust question is not "is this organisation verified" but
+ * "is this person one of its owners", which is already answered by
+ * Membership. So the authorisation here is membership-shaped rather
+ * than attestation-shaped, deliberately.
+ */
+
+const BUSINESS_OFFICER_ROLES: MemberRole[] = ['CHAIRPERSON', 'TREASURER', 'SECRETARY'];
+
+/** The person a business registered under: registration.ts records them
+ *  as role OTHER + customRole 'Owner' rather than inventing a new enum
+ *  member, so the label has to be matched — case- and
+ *  whitespace-tolerantly, because it is typed by hand elsewhere. */
+function isOwnerLabel(customRole: string | null | undefined): boolean {
+  return (customRole ?? '').trim().toLowerCase() === 'owner';
+}
+
+/**
+ * Issues a business's Esoqo Payment ID. Idempotent — returns the code
+ * already on file rather than minting a second one.
+ *
+ * Requires `membership.write` scoped to the caller's own party: staff
+ * hold it unqualified and may act on any business, while a member of
+ * the public may only act on a business they are an officer or owner of.
+ * The business must already exist, and must not be soft-deleted.
+ */
+export async function issueBusinessEsoqoPaymentId(ctx: Ctx, orgPartyId: string) {
+  requireCapability(ctx, 'membership.write', { partyId: ctx.partyId });
+
+  const org = await prisma.party.findFirst({
+    where: { id: orgPartyId, kind: 'ORGANISATION', deletedAt: null, organisation: { isNot: null } },
+    select: { id: true },
+  });
+  if (!org) {
+    throw new PaymentIdError("That business wasn't found", 'NOT_VERIFIED');
+  }
+
+  if (ctx.actorType !== 'STAFF') {
+    if (!ctx.partyId) throw new AuthorisationError('membership.write', ctx);
+    const officer = await prisma.membership.findFirst({
+      where: {
+        orgId: orgPartyId,
+        personId: ctx.partyId,
+        exitedAt: null,
+        status: 'ACTIVE',
+        OR: [{ role: { in: BUSINESS_OFFICER_ROLES } }, { customRole: { not: null } }],
+      },
+      select: { id: true, role: true, customRole: true },
+    });
+    const isOfficer = officer && (BUSINESS_OFFICER_ROLES.includes(officer.role) || isOwnerLabel(officer.customRole));
+    if (!isOfficer) throw new AuthorisationError('membership.write', ctx);
+  }
+
+  const existing = await prisma.esoqoPaymentId.findUnique({ where: { partyId: orgPartyId } });
+  if (existing) return existing;
+
+  const code = await allocateEsoqoCode(orgPartyId);
+  await recordAudit(ctx, {
+    action: 'paymentid.issued', targetType: 'esoko_payment_id', targetId: orgPartyId,
+    payload: { code, forKind: 'ORGANISATION' },
+  });
+  return prisma.esoqoPaymentId.findUniqueOrThrow({ where: { partyId: orgPartyId } });
+}
+
+/**
+ * Issues a Payment ID to every existing organisation that lacks one.
+ *
+ * Business IDs only became possible in the first place once
+ * completeRegistration started minting one, which leaves every business
+ * registered before that — and every one the demo/reference seeds plant
+ * — with a registered business and no way to be paid. They were never
+ * refusing to take money; nothing ever gave them a handle.
+ *
+ * Deliberately ungated on the caller's own membership: this is an
+ * operator backfill over the whole table, in the same spirit as
+ * backfillRegistrationDocuments, and a per-org membership check would
+ * make it impossible to run. Requires registration.write, which is a
+ * staff capability — a member of the public cannot reach it.
+ *
+ * Idempotent, and safe to re-run: organisations that already have an ID
+ * are skipped rather than re-minted.
+ */
+export async function backfillBusinessEsoqoPaymentIds(ctx: Ctx) {
+  requireCapability(ctx, 'registration.write');
+
+  const withoutId = await prisma.party.findMany({
+    where: {
+      kind: 'ORGANISATION',
+      deletedAt: null,
+      esoqoPaymentId: { is: null },
+      organisation: { isNot: null },
+    },
+    select: { id: true, organisation: { select: { officialName: true } } },
+  });
+
+  const issued: { partyId: string; name: string; code: string }[] = [];
+  for (const org of withoutId) {
+    const code = await allocateEsoqoCode(org.id);
+    issued.push({ partyId: org.id, name: org.organisation?.officialName ?? org.id, code });
+  }
+
+  if (issued.length > 0) {
+    await recordAudit(ctx, {
+      action: 'paymentid.backfilled', targetType: 'esoko_payment_id',
+      targetId: `${issued.length}-businesses`,
+      payload: { count: issued.length, parties: issued },
+    });
+  }
+  return issued;
 }
 
 /* ── Group Credit Insight snapshot (v1) ──────────────────────

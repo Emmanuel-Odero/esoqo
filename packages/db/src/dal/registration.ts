@@ -1,4 +1,5 @@
 
+import { mintEsoqoCode } from '@esoqo/domain';
 import { prisma } from '../client';
 import { requireCapability, systemCtx, type Ctx } from '../capabilities';
 import { recordAudit } from '../audit';
@@ -415,6 +416,26 @@ export async function completeRegistration(ctx: Ctx, id: string) {
 
       await tx.membership.create({
         data: { personId: personPartyId, orgId: bizPartyId, role: 'OTHER', customRole: 'Owner' },
+      });
+
+      // A business that cannot be paid is not registered as far as any
+      // till is concerned, so it gets an Esoqo Payment ID the moment it
+      // exists — a customer's printed QR has to resolve on the day the
+      // stand goes up, not after some later approval step nobody has
+      // built yet.
+      //
+      // The trust question is answered by the owner membership created
+      // immediately above, not by an MSISDN_VERIFIED attestation:
+      // an ORGANISATION has no phone number to attest to, which is
+      // exactly why issueEsoqoPaymentId refuses it and this does not.
+      //
+      // No collision retry, unlike allocateEsoqoCode: both the party and
+      // the code were drawn seconds ago, and a unique violation here
+      // would mean 1-in-10^8 bad luck rather than a contended code.
+      // Letting it fail loudly is better than silently paying for a
+      // registration that would not complete.
+      await tx.esoqoPaymentId.create({
+        data: { partyId: bizPartyId, code: mintEsoqoCode() },
       });
     }
 

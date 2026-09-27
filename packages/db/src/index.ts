@@ -44,6 +44,32 @@ export {
   listActiveMediaAssets, listMediaAssetsForStaff, setMediaAssetActive, updateMediaAssetLabel,
 } from './dal/jamii-media';
 export * from './capabilities';
+// Business payments made through the public /pay page. Re-exported
+// explicitly rather than via the './dal' barrel for the same reason the
+// donation block above is: services/core (plain tsx/Node ESM, not a
+// bundler) imports confirmBusinessPayment for the Daraja callback, and a
+// name several `export *` hops deep does not reliably resolve there.
+export {
+  findPayableBusinesses, findPayableGroups, lookupPayee, lookupPayeeByPlate, createBusinessPayment,
+  attachBusinessPaymentCheckoutRequestId, confirmBusinessPayment, failBusinessPayment,
+  failBusinessPaymentById,
+  getBusinessPayment, BusinessPaymentError, MAX_PAYMENT_KES,
+} from './dal/business-payment';
+export type {
+  PayableBusiness, PayableLookup, CreateBusinessPaymentInput,
+  BusinessPaymentNotifyInfo, ConfirmBusinessPaymentResult,
+} from './dal/business-payment';
+// Parking, named explicitly for the same reason: the Next.js pay pages
+// import checkInParking and the checkout quote, and services/core needs
+// them to settle a stay without going through a bundler.
+export {
+  createParkingLot, findParkingLot, checkInParking, getParkingSession,
+  quoteParkingCheckout, quoteParkingStay, listUnpaidParkingSessions,
+  voidParkingSession, resolveParkingCharge, ParkingError,
+} from './dal/parking';
+export type {
+  ParkingLotView, ParkingSessionView, ParkingCharge, CheckInInput,
+} from './dal/parking';
 export type { VerifyResult } from './dal/reference';
 export * from './storage';
 // compressImage deliberately does NOT get re-exported here — every app
@@ -63,4 +89,5 @@ export type {
   SupportTicketStatus, SupportTicketCategory,
   TicketVertical, TicketOrgStatus, ListingStatus, ScheduleStatus, SeatStatus,
   BookingStatus, BookingPaymentMethod, TicketStatus,
+  BusinessPaymentStatus,
 } from '@prisma/client';

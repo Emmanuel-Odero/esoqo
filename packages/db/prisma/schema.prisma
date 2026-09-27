@@ -113,6 +113,8 @@ model Party {
   orgStaffGrants          OrgStaffGrant[]   @relation("OrgStaffGrantParty")
   orgStaffGrantsGranted   OrgStaffGrant[]   @relation("OrgStaffGrantGrantedBy")
   orgStaffGrantsSuspended OrgStaffGrant[]   @relation("OrgStaffGrantSuspendedBy")
+  businessPaymentsAsPayee BusinessPayment[] @relation("BusinessPaymentPayee")
+  parkingLots             ParkingLot[]
 
   // ── Group treasury ──
   meetingsCalled          Meeting[]                    @relation("MeetingCalledBy")
@@ -639,6 +641,12 @@ enum AccountKind {
   /// account would make those two revenue streams unseparable after the
   /// fact. See dbx.postFareLedgerEntry.
   FARE_REVENUE
+  /// One per business Organisation that has been paid through the public
+  /// /pay page. Where BusinessPayment posts — the ORGANISATION-side
+  /// mirror of STORE_REVENUE, deliberately its own kind rather than a
+  /// reuse of STORE_REVENUE so "money taken at a till" and "money a
+  /// customer sent to a QR on a wall" stay separable in the ledger.
+  BUSINESS_REVENUE
 }
 
 model Account {
@@ -681,6 +689,7 @@ model JournalEntry {
   farePayment       FarePayment?
   voucherEntry      VoucherLedgerEntry?
   billContribution  BillContribution?
+  businessPayment   BusinessPayment?
 
   @@index([occurredAt])
   @@map("journal_entry")
@@ -2955,6 +2964,213 @@ model EsoqoPaymentId {
 
   @@index([code])
   @@map("esoko_payment_id")
+}
+
+enum BusinessPaymentStatus {
+  PENDING
+  CONFIRMED
+  FAILED
+}
+
+/// A payment from anybody to a business, made through the public /pay
+/// page: the business owner enters their Esoqo business ID (the
+/// EsoqoPaymentId above), the printed QR encodes a pay link, and whoever
+/// scans it chooses the amount and pays from their own phone.
+///
+/// Why this is its own table rather than a Donation or a StoreOrder:
+/// neither has a payee. A Donation has a campaign, a StoreOrder has a
+/// store with its own revenue split and delivery flow. This has one
+/// thing — money arriving at a named business — and it needs none of
+/// the order, delivery or campaign machinery. It is also the only one
+/// of the three where the *payer* is usually anonymous and the *payee*
+/// is the customer: the person standing at a QR is the one with no
+/// account.
+model BusinessPayment {
+  id String @id @default(uuid()) @db.Uuid
+
+  /// The business being paid — the ORGANISATION Party whose
+  /// EsoqoPaymentId was on the QR. A payment can only ever point at a
+  /// party that actually has an issued, unsuspended ID; there is no
+  /// "unverified payee" state here, because the lookup that produced
+  /// this id already refused those (see findPayableBusiness).
+  payeePartyId String @db.Uuid
+  payeeParty   Party  @relation("BusinessPaymentPayee", fields: [payeePartyId], references: [id])
+  /// Snapshot of the ESK-…-KE code and the name as they read at the
+  /// moment of payment. A receipt must keep saying what it said when it
+  /// was issued even if the business is later renamed, suspended, or
+  /// erased — same reason Donation stores donorName.
+  payeeEsoqoId String
+  payeeName    String
+
+  /// The payer's number in E.164. Required, not optional: an STK push
+  /// cannot reach anyone without one, and a payment nobody can be
+  /// receipted is a payment nobody can chase.
+  payerMsisdn  String
+  payerName    String?
+  /// The payer's own Esoqo Payment ID, when they had one to hand. Purely
+  /// for their receipt ("paid as ESK-…") — never a lookup key, and never
+  /// required.
+  payerEsoqoId String?
+
+  amountKes Decimal @db.Decimal(12, 2)
+  /// Free text the payer typed on the payment page. Clamped at the
+  /// boundary; a note is a courtesy to the business, not a field with
+  /// rules.
+  note      String?
+
+  status        BusinessPaymentStatus @default(PENDING)
+  /// Safaricom's ResultDesc when the STK push didn't succeed — "Request
+  /// cancelled by user", "The balance is insufficient", a timeout, etc.
+  /// Shown back to the payer so a failed payment doesn't just spin
+  /// forever with no explanation (same precedent as Donation).
+  failureReason String?
+
+  mpesaCheckoutRequestId String?       @unique
+  mpesaReceiptCode       String?
+  /// Esoqo's own reference for this payment, e.g. "BP-7K3H92XQ" — what
+  /// the payer and the business quote to each other, and what appears in
+  /// both SMS messages. Deliberately distinct from mpesaReceiptCode:
+  /// Safaricom's number is not ours to hand out, and a payer needs one
+  /// reference we can look up in a week.
+  receiptCode            String?       @unique
+  journalEntryId         String?       @unique @db.Uuid
+  journalEntry           JournalEntry? @relation(fields: [journalEntryId], references: [id])
+
+  /// Set when this payment settles a parking session, and only then.
+  /// A parking charge is an ordinary payment to an ordinary payee — same
+  /// STK push, same Safaricom callback, same balanced entry against the
+  /// lot operator's revenue account — so it is deliberately NOT a second
+  /// payment pipeline. The only thing that makes it a parking payment is
+  /// that the payer was quoted a figure by a machine and expects that
+  /// exact figure, which is what this link lets the session check.
+  parkingSessionId String?         @unique @db.Uuid
+  parkingSession   ParkingSession? @relation(fields: [parkingSessionId], references: [id])
+
+  createdAt   DateTime  @default(now())
+  confirmedAt DateTime?
+
+  @@index([payeePartyId, status])
+  @@index([status, createdAt])
+  @@map("business_payment")
+}
+
+enum ParkingSessionStatus {
+  /// Parked. No money has been quoted, because the stay has not ended.
+  OPEN
+  /// Checked out and quoted. The amount is fixed, and a payment is
+  /// expected — or, if the driver walks away, never arrives.
+  QUOTED
+  /// Settled. Reached only by a confirmed BusinessPayment, never set
+  /// directly, so a session cannot claim to be paid without the ledger
+  /// having been written.
+  PAID
+  /// Voided by the lot — a blocked bay, a tow, a mis-keyed check-in.
+  /// Keeps the row, because "why does this ticket not work" needs an
+  /// answer.
+  VOIDED
+}
+
+/// A car park, and the QR printed at its entrance.
+///
+/// A lot is not a payee. It is a *place* that belongs to a payee: the
+/// operating company's Organisation Party, which already carries the
+/// Esoqo Payment ID and the revenue account. That is the whole reason a
+/// parking charge needs no new account kind and no new money path — it
+/// is a BusinessPayment whose payee happens to be a car park's owner.
+model ParkingLot {
+  id String @id @default(uuid()) @db.Uuid
+
+  /// The ORGANISATION Party that runs this lot and receives the fees.
+  /// Paid parties only: a lot whose operator has no live Esoqo Payment
+  /// ID cannot take money, and `payablePartyId` in the DAL refuses it at
+  /// check-in rather than quoting a rate nobody can pay.
+  partyId String @db.Uuid
+  party   Party  @relation(fields: [partyId], references: [id])
+
+  /// Short code the printed QR encodes, e.g. "PRK-4KX9-2J". Minted from
+  /// the same unambiguous alphabet as every other human-typable code in
+  /// the product, because this one is read aloud at an entrance by
+  /// somebody standing in the rain.
+  code    String  @unique
+  name    String
+  county  String?
+  address String?
+
+  /// Charge per commenced hour, whole shillings. Snapshotted onto each
+  /// session at check-in, so raising the tariff never retroactively
+  /// changes what somebody already parked under.
+  ratePerHourKes Int
+  /// Free minutes before charging starts. Almost every Kenyan car park
+  /// has one, and making the driver guess it would be a support line.
+  graceMinutes   Int     @default(0)
+  /// Ceiling for one stay. A driver who leaves their car overnight
+  /// should not discover the multiplication on checkout.
+  maxPerDayKes   Int?
+  active         Boolean @default(true)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  sessions ParkingSession[]
+
+  @@index([partyId])
+  @@index([active])
+  @@map("parking_lot")
+}
+
+/// One vehicle's stay: checked in at an entrance, quoted at checkout.
+///
+/// Deliberately never holds money. The amount lives on the
+/// BusinessPayment that settles it, which is what makes "a session says
+/// PAID" and "the ledger has the entry" the same statement rather than
+/// two that can disagree.
+model ParkingSession {
+  id    String     @id @default(uuid()) @db.Uuid
+  lotId String     @db.Uuid
+  lot   ParkingLot @relation(fields: [lotId], references: [id], onDelete: Cascade)
+
+  /// The code texted to the driver at check-in, e.g. "PRT-7QW2-4X", and
+  /// the only thing they need at checkout. Uniqueness is enforced by
+  /// the database, and every mint retries on collision.
+  ticketCode String  @unique
+  /// Optional. Typed by the attendant or the driver; never required,
+  /// because not everyone in a car park knows or wants to give their
+  /// plate to a stranger's phone camera.
+  plateNo    String?
+  /// E.164. Required for the same reason BusinessPayment.payerMsisdn is:
+  /// the ticket goes here and the STK push has nowhere else to go.
+  msisdn     String
+
+  status ParkingSessionStatus @default(OPEN)
+
+  checkedInAt    DateTime  @default(now())
+  checkedOutAt   DateTime?
+  /// Set when checkout produced a figure, i.e. when status became
+  /// QUOTED. Null before then — an unquoted stay has no amount, and
+  /// inventing one early is how a disputed exit gets started.
+  quotedAt       DateTime?
+  /// Rate as it stood at check-in, for the same reason the lot's own
+  /// rate is never edited mid-stay.
+  ratePerHourKes Int
+  graceMinutes   Int       @default(0)
+  maxPerDayKes   Int?
+  /// Commenced hours actually charged, and the total. Both null while
+  /// the session is OPEN.
+  billedMinutes  Int?
+  amountKes      Decimal?  @db.Decimal(12, 2)
+
+  /// The settling payment. One-to-one, and nullable: a QUOTED session
+  /// with no payment is a driver who did not pay, which is a real state
+  /// the lot has to be able to see.
+  payment BusinessPayment?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([lotId, status])
+  @@index([lotId, checkedInAt])
+  @@index([msisdn, status])
+  @@map("parking_session")
 }
 
 /// A SNAPSHOT, not a live score — same reasoning as balances being
