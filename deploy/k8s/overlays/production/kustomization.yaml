@@ -47,7 +47,7 @@ images:
   newTag: ec93f264f3e4
 - name: ghcr.io/emmanuel-odero/esoqo-web
   newName: ghcr.io/emmanuel-odero/esoqo-web
-  newTag: 19b30f016ba6
+  newTag: f49805be3eaa
 
   # Give Postgres real headroom. The base's 20Gi/2Gi is sized for a
   # preview environment; a volumeClaimTemplate cannot be shrunk later,
