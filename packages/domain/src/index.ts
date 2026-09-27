@@ -27,6 +27,21 @@ export {
 } from './group-alerts-notify';
 export * from './store-notify';
 export { saleReceiptSms } from './store-notify';
+export * from './pay-code';
+export * from './business-payment-notify';
+export * from './pay-targets';
+export * from './parking-code';
+export * from './parking-notify';
+// Re-exported directly, same reason as cecf-ingest above: services/core
+// imports these under plain tsx/Node ESM, which doesn't reliably resolve
+// a name several `export *` hops deep in this barrel.
+export { payerPaymentReceiptSms, businessPaymentAlertSms } from './business-payment-notify';
+export { parkingCheckInSms, parkingPaidSms } from './parking-notify';
+export { extractEsoqoId, isEsoqoIdShape, buildPayLink, buildShortPayLink } from './pay-code';
+export {
+  mintParkingLotCode, mintParkingTicketCode, isParkingCodeShape,
+  normaliseParkingCode, buildParkingLink,
+} from './parking-code';
 export * from './sms';
 export { sms, gsmSafe, fit, firstName, smsKes, smsSegments, smsEncoding, smsUnits } from './sms';
 export * from './rich-text';
