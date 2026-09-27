@@ -57,7 +57,7 @@ spec:
             # Prisma sends both on connect and PgBouncer rejects unknown
             # startup parameters outright — without this every Prisma
             # connection fails at handshake with a cryptic error.
-            - { name: IGNORE_STARTUP_PARAMETERS, value: extra_float_digits,options }
+            - { name: IGNORE_STARTUP_PARAMETERS, value: "extra_float_digits,options" }
           readinessProbe:
             tcpSocket: { port: 5432 }
             initialDelaySeconds: 5

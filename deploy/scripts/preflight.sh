@@ -17,8 +17,8 @@ set -uo pipefail   # deliberately not -e: every check must run, so the
 
 ENVIRONMENT="${1:-}"
 case "$ENVIRONMENT" in
-  preview)    NAMESPACE=preview;    APEX=preview.esoko.global ;;
-  production) NAMESPACE=production; APEX=esoko.global ;;
+  preview)    NAMESPACE=esoqo-preview;    APEX=preview.esoko.global ;;
+  production) NAMESPACE=esoqo-production; APEX=esoqo.com ;;
   *) echo "usage: $0 <preview|production>" >&2; exit 64 ;;
 esac
 

@@ -12,7 +12,7 @@
 apiVersion: kustomize.config.k8s.io/v1beta1
 kind: Kustomization
 
-namespace: production
+namespace: esoqo-production
 
 # No namespace.yaml — see the preview overlay's kustomization.yaml.
 # Rancher owns these namespaces and their project annotations.
@@ -28,19 +28,19 @@ labels:
 
 images:
   - name: ghcr.io/emmanuel-odero/esoqo-web
-    newTag: bootstrap
+    newTag: eb4daaffc215
   - name: ghcr.io/emmanuel-odero/esoqo-app
-    newTag: bootstrap
+    newTag: eb4daaffc215
   - name: ghcr.io/emmanuel-odero/esoqo-admin
-    newTag: bootstrap
+    newTag: eb4daaffc215
   - name: ghcr.io/emmanuel-odero/esoqo-store
-    newTag: bootstrap
+    newTag: eb4daaffc215
   - name: ghcr.io/emmanuel-odero/esoqo-jamii
-    newTag: bootstrap
+    newTag: eb4daaffc215
   - name: ghcr.io/emmanuel-odero/esoqo-core-service
-    newTag: bootstrap
+    newTag: eb4daaffc215
   - name: ghcr.io/emmanuel-odero/esoqo-core-go
-    newTag: bootstrap
+    newTag: eb4daaffc215
 
 patches:
   # Give Postgres real headroom. The base's 20Gi/2Gi is sized for a

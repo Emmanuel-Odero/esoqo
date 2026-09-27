@@ -31,8 +31,8 @@ if [[ -z "$ENVIRONMENT" || -z "$ENV_FILE" ]]; then
 fi
 
 case "$ENVIRONMENT" in
-  preview)    NAMESPACE=preview ;;
-  production) NAMESPACE=production ;;
+  preview)    NAMESPACE=esoqo-preview ;;
+  production) NAMESPACE=esoqo-production ;;
   *) echo "error: environment must be 'preview' or 'production', got '$ENVIRONMENT'" >&2; exit 64 ;;
 esac
 

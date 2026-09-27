@@ -23,7 +23,7 @@ metadata:
   namespace: fleet-default
 spec:
   repo: https://github.com/Emmanuel-Odero/esoko-254
-  branch: live
+  branch: production
   paths:
     - deploy/k8s/overlays/production
 
