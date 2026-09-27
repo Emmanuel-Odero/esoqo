@@ -45,7 +45,7 @@ export function StoreDirectory({ rows, total, canModerate }: { rows: StoreRow[];
                   <span className="sub" style={{ display: 'block' }}>{s.productCount} products · {s.orderCount} orders</span>
                 </td>
                 <td>{s.owner}</td>
-                <td className="mono">{s.routingMode === 'SUBDOMAIN' ? `${s.slug}.esoko.global` : `esoko.global/@${s.slug}`}</td>
+                <td className="mono">{s.routingMode === 'SUBDOMAIN' ? `${s.slug}.esoqo.com` : `esoqo.com/@${s.slug}`}</td>
                 <td>{s.posEnabled ? 'Yes' : 'No'}</td>
                 <td><span className={`pill ${STATUS_PILL[s.status]}`}>{STATUS_LABEL[s.status]}</span></td>
                 <td style={{ textAlign: 'right', whiteSpace: 'nowrap' }}>

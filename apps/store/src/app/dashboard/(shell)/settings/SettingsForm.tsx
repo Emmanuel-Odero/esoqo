@@ -51,7 +51,7 @@ export function SettingsForm({ storeId, initial }: {
         <div className="fld">
           <p className="lab">Web address</p>
           <p className="mono" style={{ fontSize: '.86rem', color: 'var(--tx-2)' }}>
-            {initial.routingMode === 'SUBDOMAIN' ? `${initial.slug}.esoko.global` : `esoko.global/@${initial.slug}`}
+            {initial.routingMode === 'SUBDOMAIN' ? `${initial.slug}.esoqo.com` : `esoqo.com/@${initial.slug}`}
           </p>
         </div>
       </div>

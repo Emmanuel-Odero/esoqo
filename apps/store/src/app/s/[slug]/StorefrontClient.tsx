@@ -248,7 +248,7 @@ export function StorefrontClient({ store, products, fulfilmentOptions }: {
               <div className="sf-ident-txt">
                 <p className="sf-kicker"><span className="sf-dot" style={{ background: theme.accent }} />Esoqo store</p>
                 <h1>{store.name}</h1>
-                <p className="addr mono">esoko.global/@{store.slug}</p>
+                <p className="addr mono">esoqo.com/@{store.slug}</p>
                 {store.tagline && <p className="sf-tagline">{store.tagline}</p>}
               </div>
             </div>
@@ -464,7 +464,7 @@ export function StorefrontClient({ store, products, fulfilmentOptions }: {
               )}
               <div>
                 <b>{store.name}</b>
-                <span>esoko.global/@{store.slug}</span>
+                <span>esoqo.com/@{store.slug}</span>
               </div>
             </div>
             {hasContact && (

@@ -1,10 +1,10 @@
 # ════════════════════════════════════════════════════════════════════
-#  production ingress — esoko.global
+#  production ingress — esoqo.com
 #
 #  Same explicit-host / HTTP-01 reasoning as the preview overlay; see
 #  the header there.
 #
-#  The apex (esoko.global) needs an A record, not a CNAME — DNS forbids
+#  The apex (esoqo.com) needs an A record, not a CNAME — DNS forbids
 #  a CNAME at a zone apex alongside the zone's SOA/NS records, and some
 #  registrars' "URL redirect" workaround breaks the ACME challenge.
 # ════════════════════════════════════════════════════════════════════
@@ -24,30 +24,30 @@ spec:
   tls:
     - secretName: esoqo-production-tls
       hosts:
-        - esoko.global
-        - www.esoko.global
-        - app.esoko.global
-        - admin.esoko.global
-        - store.esoko.global
-        - jamii.esoko.global
+        - esoqo.com
+        - www.esoqo.com
+        - app.esoqo.com
+        - admin.esoqo.com
+        - store.esoqo.com
+        - jamii.esoqo.com
   rules:
-    - host: esoko.global
+    - host: esoqo.com
       http:
         paths:
           - { path: /, pathType: Prefix, backend: { service: { name: web, port: { number: 80 } } } }
-    - host: app.esoko.global
+    - host: app.esoqo.com
       http:
         paths:
           - { path: /, pathType: Prefix, backend: { service: { name: app, port: { number: 80 } } } }
-    - host: admin.esoko.global
+    - host: admin.esoqo.com
       http:
         paths:
           - { path: /, pathType: Prefix, backend: { service: { name: admin, port: { number: 80 } } } }
-    - host: store.esoko.global
+    - host: store.esoqo.com
       http:
         paths:
           - { path: /, pathType: Prefix, backend: { service: { name: store, port: { number: 80 } } } }
-    - host: jamii.esoko.global
+    - host: jamii.esoqo.com
       http:
         paths:
           - { path: /, pathType: Prefix, backend: { service: { name: jamii, port: { number: 80 } } } }
@@ -64,14 +64,14 @@ spec:
   tls:
     - secretName: esoqo-production-api-tls
       hosts:
-        - api.esoko.global
-        - mobile.esoko.global
+        - api.esoqo.com
+        - mobile.esoqo.com
   rules:
-    - host: api.esoko.global
+    - host: api.esoqo.com
       http:
         paths:
           - { path: /, pathType: Prefix, backend: { service: { name: core-service, port: { number: 80 } } } }
-    - host: mobile.esoko.global
+    - host: mobile.esoqo.com
       http:
         paths:
           - { path: /, pathType: Prefix, backend: { service: { name: core-go, port: { number: 80 } } } }

@@ -87,11 +87,11 @@ export function StoreWizard({ enterprises, pricing }: { enterprises: Enterprise[
           <p className="qs">Both are yours to keep — pick what fits your budget.</p>
           <div className="opts">
             <button type="button" className="opt" aria-pressed={routingMode === 'PATH'} onClick={() => setRoutingMode('PATH')}>
-              <div><span className="t">esoko.global/@{slug}</span><span className="d">Included with every store</span></div>
+              <div><span className="t">esoqo.com/@{slug}</span><span className="d">Included with every store</span></div>
               <span className="price">Free</span>
             </button>
             <button type="button" className="opt" aria-pressed={routingMode === 'SUBDOMAIN'} onClick={() => setRoutingMode('SUBDOMAIN')}>
-              <div><span className="t">{slug}.esoko.global</span><span className="d">Your own address, easier to say on air or in print</span></div>
+              <div><span className="t">{slug}.esoqo.com</span><span className="d">Your own address, easier to say on air or in print</span></div>
               <span className="price">{kes(subdomainSetup)}<small>one-time + {kes(subdomainMonthly)}/mo</small></span>
             </button>
           </div>
@@ -138,7 +138,7 @@ export function StoreWizard({ enterprises, pricing }: { enterprises: Enterprise[
             <div className="review-line"><span>Store name</span><b>{name || '—'}</b></div>
             <div className="review-line"><span>Tagline</span><b>{tagline || '—'}</b></div>
             <div className="review-line"><span>Contact number</span><b className="mono">{contactPhone || '—'}</b></div>
-            <div className="review-line"><span>Address</span><b>{routingMode === 'PATH' ? `esoko.global/@${slug} — Free` : `${slug}.esoko.global — ${kes(subdomainSetup)} + ${kes(subdomainMonthly)}/mo`}</b></div>
+            <div className="review-line"><span>Address</span><b>{routingMode === 'PATH' ? `esoqo.com/@${slug} — Free` : `${slug}.esoqo.com — ${kes(subdomainSetup)} + ${kes(subdomainMonthly)}/mo`}</b></div>
             <div className="review-line"><span>Theme</span><b>{THEMES.find((t) => t.key === themeKey)?.name}</b></div>
             <div className="review-line"><span>PoS terminal</span><b>{posEnabled ? `Added — ${kes(posMonthly)}/mo` : 'Not added'}</b></div>
             <div className="review-total"><span>Due today</span><span>{kes(dueToday)}</span></div>

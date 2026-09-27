@@ -44,7 +44,7 @@ export default async function PosLayout({ children }: { children: React.ReactNod
           <span className="brand"><span className="dot" />{store.name}</span>
           <span className="user">
             <span className="avatar">{(store.name ?? 'ES').slice(0, 2).toUpperCase()}</span>
-            <span className="slug mono" style={{ fontSize: '.72rem' }}>esoko.global/@{store.slug}</span>
+            <span className="slug mono" style={{ fontSize: '.72rem' }}>esoqo.com/@{store.slug}</span>
             <SignOutButton />
           </span>
         </header>

@@ -93,10 +93,10 @@ jobs:
             live)
               echo "env_name=production"                                 >> "$GITHUB_OUTPUT"
               echo "overlay=deploy/k8s/overlays/production"              >> "$GITHUB_OUTPUT"
-              echo "web_url=https://esoko.global"                        >> "$GITHUB_OUTPUT"
-              echo "app_url=https://app.esoko.global"                    >> "$GITHUB_OUTPUT"
-              echo "store_url=https://store.esoko.global"                >> "$GITHUB_OUTPUT"
-              echo "jamii_origin=https://jamii.esoko.global"             >> "$GITHUB_OUTPUT"
+              echo "web_url=https://esoqo.com"                          >> "$GITHUB_OUTPUT"
+              echo "app_url=https://app.esoqo.com"                       >> "$GITHUB_OUTPUT"
+              echo "store_url=https://store.esoqo.com"                   >> "$GITHUB_OUTPUT"
+              echo "jamii_origin=https://jamii.esoqo.com"                >> "$GITHUB_OUTPUT"
               ;;
             *)
               echo "::error::${GITHUB_REF_NAME} is not a deployable branch"

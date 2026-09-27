@@ -27,7 +27,7 @@ export default async function ShellLayout({ children }: { children: React.ReactN
               <Icon name="arrow-left" size={13} />Esoqo
             </a>
             <span className="avatar">{(store.name ?? 'ES').slice(0, 2).toUpperCase()}</span>
-            <span className="slug mono" style={{ fontSize: '.72rem' }}>esoko.global/@{store.slug}</span>
+            <span className="slug mono" style={{ fontSize: '.72rem' }}>esoqo.com/@{store.slug}</span>
             <SignOutButton />
           </span>
         </header>

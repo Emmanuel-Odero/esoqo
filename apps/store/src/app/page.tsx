@@ -35,7 +35,7 @@ const PILLARS: readonly {
 
 const STEPS: readonly { number: string; title: string; body: string }[] = [
   { number: '01', title: 'Name the business', body: 'Choose the name customers should see and add a short description of what you do.' },
-  { number: '02', title: 'Choose an address', body: 'Start with a free esoko.global/@name address, or ask about a custom web address.' },
+  { number: '02', title: 'Choose an address', body: 'Start with a free esoqo.com/@name address, or ask about a custom web address.' },
   { number: '03', title: 'Make it yours', body: 'Pick a look, add a logo and describe your work in your own words.' },
   { number: '04', title: 'Add the till', body: 'Turn on the PoS terminal when you want to ring up sales in person too.' },
   { number: '05', title: 'Open the doors', body: 'Review the details, confirm any current charges and start sharing your shop.' },
@@ -49,7 +49,7 @@ const SELLERS: readonly { icon: IconName; title: string; body: string; tag: stri
 ];
 
 const FAQS: readonly { question: string; answer: string }[] = [
-  { question: 'Do I need a website to start?', answer: 'No. Every store starts with an esoko.global/@name address that you can share by SMS, WhatsApp or on your usual social channels.' },
+  { question: 'Do I need a website to start?', answer: 'No. Every store starts with an esoqo.com/@name address that you can share by SMS, WhatsApp or on your usual social channels.' },
   { question: 'Can I sell in person as well as online?', answer: 'Yes. The PoS terminal is optional and lets you ring up cash and M-Pesa sales while keeping them with the same business record.' },
   { question: 'What happens when a payment does not confirm?', answer: 'Esoqo does not quietly treat an unconfirmed payment as paid. The order stays visible in your dashboard so you know what needs attention.' },
   { question: 'Can I change my catalogue later?', answer: 'Always. Add products, adjust prices, change stock and update the story customers read whenever your work changes.' },
@@ -119,7 +119,7 @@ export default function Home() {
               <span className="snapshot-mark">NF</span>
               <div>
                 <strong>Nia Floral House</strong>
-                <span>esoko.global/@niafloral</span>
+                <span>esoqo.com/@niafloral</span>
               </div>
             </div>
             <div className="snapshot-status"><span>Open for orders</span><b>09:41</b></div>
@@ -219,13 +219,13 @@ export default function Home() {
                     <p>“A clear catalogue is a shortcut to trust.”</p>
                   </div>
                   <ul className="check-list">
-                    <li><Icon name="check" size={15} /><span><strong>Share anywhere.</strong> Send your esoko.global address by SMS, WhatsApp or print it on a card.</span></li>
+                    <li><Icon name="check" size={15} /><span><strong>Share anywhere.</strong> Send your esoqo.com address by SMS, WhatsApp or print it on a card.</span></li>
                     <li><Icon name="check" size={15} /><span><strong>Keep payment familiar.</strong> Customers confirm with M-Pesa, with the same details shown before they pay.</span></li>
                     <li><Icon name="check" size={15} /><span><strong>Show the real state.</strong> Products, options, stock and fulfilment choices stay in the open.</span></li>
                   </ul>
                 </div>
                 <div className="storefront-preview" aria-label="Example storefront preview">
-                  <div className="preview-window-bar"><span /><span /><span /><b>esoko.global/@niafloral</b></div>
+                  <div className="preview-window-bar"><span /><span /><span /><b>esoqo.com/@niafloral</b></div>
                   <div className="preview-cover">
                     <div className="preview-cover-copy"><span>FRESH THIS MORNING</span><strong>Flowers for the people who matter.</strong></div>
                     <div className="preview-cover-mark">NF</div>

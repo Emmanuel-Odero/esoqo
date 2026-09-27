@@ -21,22 +21,22 @@ data:
   LOG_LEVEL: info
 
   # ── Public origins ────────────────────────────────────────────────
-  NEXT_PUBLIC_WEB_URL: https://esoko.global
-  NEXT_PUBLIC_APP_URL: https://app.esoko.global
-  NEXT_PUBLIC_STORE_URL: https://store.esoko.global
-  PUBLIC_TRACKING_BASE_URL: https://esoko.global/parcels/track
+  NEXT_PUBLIC_WEB_URL: https://esoqo.com
+  NEXT_PUBLIC_APP_URL: https://app.esoqo.com
+  NEXT_PUBLIC_STORE_URL: https://store.esoqo.com
+  PUBLIC_TRACKING_BASE_URL: https://esoqo.com/parcels/track
 
   # ── Service-to-service (in-cluster DNS; never leaves the cluster) ──
   CORE_API_URL: http://core-service
   CORE_GO_API_URL: http://core-go
 
   CORS_ALLOWED_ORIGINS: >-
-    https://esoko.global,https://www.esoko.global,https://app.esoko.global,https://admin.esoko.global,https://store.esoko.global,https://jamii.esoko.global
+    https://esoqo.com,https://www.esoqo.com,https://app.esoqo.com,https://admin.esoqo.com,https://store.esoqo.com,https://jamii.esoqo.com
 
   # ── Jamii community sites ─────────────────────────────────────────
-  JAMII_PRIMARY_HOSTS: jamii.esoko.global
-  NEXT_PUBLIC_JAMII_PRIMARY_ORIGIN: https://jamii.esoko.global
-  NEXT_PUBLIC_JAMII_DOMAIN_TARGET: jamii.esoko.global
+  JAMII_PRIMARY_HOSTS: jamii.esoqo.com
+  NEXT_PUBLIC_JAMII_PRIMARY_ORIGIN: https://jamii.esoqo.com
+  NEXT_PUBLIC_JAMII_DOMAIN_TARGET: jamii.esoqo.com
 
   # ── Providers — LIVE ──────────────────────────────────────────────
   # All three gates take console|sandbox|production (packages/payments/
@@ -46,10 +46,10 @@ data:
   SMS_PROVIDER: production
   SMS_SENDER_ID: ESOQO
   EMAIL_PROVIDER: smtp
-  EMAIL_FROM: Esoqo <no-reply@esoko.global>
+  EMAIL_FROM: Esoqo <no-reply@esoqo.com>
   MPESA_PROVIDER: production
   PESAPAL_PROVIDER: production
-  PESAPAL_IPN_URL: https://api.esoko.global/webhooks/pesapal/ipn
+  PESAPAL_IPN_URL: https://api.esoqo.com/webhooks/pesapal/ipn
 
   # MPESA_CALLBACK_URL is deliberately NOT here. Daraja signs nothing,
   # so the callback is authenticated solely by living at a URL only

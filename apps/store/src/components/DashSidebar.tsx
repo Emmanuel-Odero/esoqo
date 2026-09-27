@@ -56,7 +56,7 @@ export function DashSidebar({ store }: { store: { name: string; slug: string } |
             <span className="mk">{(store?.name ?? 'ES').slice(0, 2).toUpperCase()}</span>
             <div>
               <strong>{store?.name ?? 'Your store'}</strong>
-              <span>{store ? `esoko.global/@${store.slug}` : 'Not opened yet'}</span>
+              <span>{store ? `esoqo.com/@${store.slug}` : 'Not opened yet'}</span>
             </div>
           </div>
           <button type="button" className="nav-close" onClick={() => setOpen(false)} aria-label="Close menu">

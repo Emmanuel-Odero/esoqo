@@ -72,7 +72,7 @@ export function StoreDetailPanel({
         <div>
           <span className="sub" style={{ display: 'block', marginBottom: 6 }}>Address</span>
           <p className="mono" style={{ margin: 0, paddingTop: 10 }}>
-            {store.routingMode === 'SUBDOMAIN' ? `${store.slug}.esoko.global` : `esoko.global/@${store.slug}`}
+            {store.routingMode === 'SUBDOMAIN' ? `${store.slug}.esoqo.com` : `esoqo.com/@${store.slug}`}
           </p>
         </div>
       </div>

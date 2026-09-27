@@ -38,10 +38,10 @@ case "$ENVIRONMENT" in
   production)
     BRANCH="live"
     OVERLAY="deploy/k8s/overlays/production"
-    WEB_URL="https://esoko.global"
-    APP_URL="https://app.esoko.global"
-    STORE_URL="https://store.esoko.global"
-    JAMII_ORIGIN="https://jamii.esoko.global"
+    WEB_URL="https://esoqo.com"
+    APP_URL="https://app.esoqo.com"
+    STORE_URL="https://store.esoqo.com"
+    JAMII_ORIGIN="https://jamii.esoqo.com"
     ;;
   *)
     echo "usage: $0 <preview|production>" >&2

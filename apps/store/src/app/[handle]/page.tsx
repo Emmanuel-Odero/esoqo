@@ -17,7 +17,7 @@ export async function generateMetadata({ params }: { params: Promise<{ handle: s
   return slug ? storefrontMetadata(slug) : {};
 }
 
-/** Serves the free `esoko.global/@slug` address. Any other top-level
+/** Serves the free `esoqo.com/@slug` address. Any other top-level
  *  segment that isn't a real static route (/dashboard, /signin, /pos)
  *  falls through to here too, and is correctly a 404. */
 export default async function HandlePage({ params }: { params: Promise<{ handle: string }> }) {
