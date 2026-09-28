@@ -116,6 +116,18 @@ model Party {
   businessPaymentsAsPayee BusinessPayment[] @relation("BusinessPaymentPayee")
   parkingLots             ParkingLot[]
   walletTopUps            WalletTopUp[]     @relation("WalletTopUpParty")
+  groupActivityEvents     GroupActivityEvent[] @relation("GroupActivityActor")
+  signatoryFeesForMe      SignatoryFeePayment[] @relation("SignatoryFeePerson")
+  signatoryFeesIAdded     SignatoryFeePayment[] @relation("SignatoryFeeAddedBy")
+  proposalsTargetingMe    GroupProposal[]       @relation("ProposalTarget")
+  proposalsIProposed      GroupProposal[]       @relation("ProposalProposedBy")
+  proposalVotes           GroupProposalVote[]   @relation("ProposalVoter")
+  projectsCreated         GroupProject[]        @relation("ProjectCreatedBy")
+  projectSignerships      GroupProjectSigner[]  @relation("ProjectSignerParty")
+  projectContributions    GroupProjectContribution[] @relation("ProjectContributionParty")
+  projectContributionsConfirmed GroupProjectContribution[] @relation("ProjectContributionConfirmedBy")
+  projectWithdrawalsRequested GroupProjectWithdrawal[] @relation("ProjectWithdrawalRequestedBy")
+  projectWithdrawalVotes  GroupProjectWithdrawalVote[] @relation("ProjectWithdrawalVoter")
 
   // ── Group treasury ──
   meetingsCalled          Meeting[]                    @relation("MeetingCalledBy")
@@ -212,6 +224,10 @@ model Organisation {
   signers            GroupSigner[]
   contributions      GroupContribution[]
   withdrawalRequests WithdrawalRequest[]
+  activityEvents     GroupActivityEvent[]
+  signatoryFeePayments SignatoryFeePayment[]
+  proposals          GroupProposal[]
+  projects           GroupProject[]
 
   // Only meaningful when kind is MALL — the stores it hosts as tenants.
   mallTenancies MallTenancy[] @relation("MallTenancies")
@@ -692,6 +708,9 @@ model JournalEntry {
   billContribution  BillContribution?
   businessPayment   BusinessPayment?
   walletTopUp       WalletTopUp?
+  signatoryFeePayment SignatoryFeePayment?
+  projectContribution GroupProjectContribution?
+  projectWithdrawal GroupProjectWithdrawal?
 
   @@index([occurredAt])
   @@map("journal_entry")
@@ -2834,9 +2853,86 @@ model GroupSigner {
   /// and attributed; they just stop counting toward new thresholds.
   removedAt DateTime?
 
+  /// Independent toggles, not one fixed "signatory" role — a group can
+  /// have a signer who only approves withdrawals and another who also
+  /// runs the roster. requestWithdrawal/signWithdrawal still gate on
+  /// membership in the effective-signer list (see getEffectiveSignerIds);
+  /// approveWithdrawals is what makes that list membership meaningful
+  /// once a group has moved off the officer-fallback default.
+  approveWithdrawals    Boolean @default(true)
+  addMembers            Boolean @default(false)
+  removeMembers         Boolean @default(false)
+  /// Can add/remove other signers and change their permissions. At
+  /// least one active signer per org must hold this — addGroupSigner/
+  /// removeGroupSigner/setGroupSignerPermissions all enforce it, so a
+  /// group can never end up with nobody able to change who signs.
+  manageSignatories     Boolean @default(false)
+  editTreasurySettings  Boolean @default(false)
+  notifyOnContributions Boolean @default(false)
+  notifyOnWithdrawals   Boolean @default(true)
+
   @@unique([orgId, personId])
   @@index([orgId, removedAt])
   @@map("group_signer")
+}
+
+enum SignatoryFeeMethod {
+  /// The new signatory pays KES 50 themselves, by M-Pesa STK, before
+  /// their signer row activates.
+  STK_NEW_SIGNER
+  /// The officer adding the signatory pays it personally, by M-Pesa STK.
+  STK_OFFICER
+  /// Debited immediately from the group's own treasury balance — no
+  /// STK, no standby window; a platform service fee, not a withdrawal
+  /// a member could object to signing off on.
+  GROUP_TREASURY
+}
+
+enum SignatoryFeeStatus {
+  PENDING
+  CONFIRMED
+  FAILED
+}
+
+/// KES 50, charged for every signatory beyond a group's first 5 free
+/// ones (see countActiveSigners/FREE_SIGNER_LIMIT). Real platform
+/// revenue — credited to the shared FEE_INCOME account exactly like any
+/// other service fee (see _commerce-ledger.ts's findOrCreateAccount
+/// pattern), not to the group's own treasury or the new signer's wallet.
+/// For STK_* methods the GroupSigner row this fee is for doesn't exist
+/// yet when the row is created — pendingPermissions carries what to
+/// create once the payment confirms (see confirmSignatoryFeePayment).
+model SignatoryFeePayment {
+  id String @id @default(uuid()) @db.Uuid
+
+  orgId    String       @db.Uuid
+  org      Organisation @relation(fields: [orgId], references: [partyId], onDelete: Cascade)
+  personId String       @db.Uuid
+  person   Party        @relation("SignatoryFeePerson", fields: [personId], references: [id])
+
+  addedById String @db.Uuid
+  addedBy   Party  @relation("SignatoryFeeAddedBy", fields: [addedById], references: [id])
+
+  method    SignatoryFeeMethod
+  amountKes Decimal            @default(50) @db.Decimal(12, 2)
+  status    SignatoryFeeStatus @default(PENDING)
+
+  /// The permission toggles to apply to the new GroupSigner row once
+  /// this fee confirms — see the GroupSigner model above for the field
+  /// list this mirrors.
+  pendingPermissions Json
+
+  failureReason          String?
+  mpesaCheckoutRequestId String?             @unique
+  mpesaReceiptCode       String?
+  journalEntryId         String?             @unique @db.Uuid
+  journalEntry           JournalEntry?       @relation(fields: [journalEntryId], references: [id])
+
+  createdAt   DateTime  @default(now())
+  confirmedAt DateTime?
+
+  @@index([orgId, status])
+  @@map("signatory_fee_payment")
 }
 
 /// A declaration is not money — same rule as RegistrationPayment. Only
@@ -2926,6 +3022,243 @@ model WithdrawalRequest {
   @@index([orgId, status])
   @@index([standbyOpensAt])
   @@map("withdrawal_request")
+}
+
+enum ProposalKind {
+  ADD_MEMBER
+  REMOVE_MEMBER
+}
+
+enum ProposalStatus {
+  OPEN
+  PASSED
+  REJECTED
+}
+
+/// A decision put to the group's signatories rather than taken by one
+/// officer — "vote on proposed decisions eg add/remove a member". Scoped
+/// to membership changes for now (the two kinds requested); withdrawal
+/// already has its own multisig flow via WithdrawalRequest and isn't
+/// duplicated here.
+model GroupProposal {
+  id    String         @id @default(uuid()) @db.Uuid
+  orgId String         @db.Uuid
+  org   Organisation   @relation(fields: [orgId], references: [partyId], onDelete: Cascade)
+  kind  ProposalKind
+
+  /// REMOVE_MEMBER: the member being voted out. ADD_MEMBER: null until
+  /// the person exists on Esoqo — see targetMsisdn/targetName.
+  targetPersonId String? @db.Uuid
+  targetPerson   Party?  @relation("ProposalTarget", fields: [targetPersonId], references: [id])
+  /// ADD_MEMBER only — who's being proposed, before they're a Party.
+  targetMsisdn String?
+  targetName   String?
+
+  proposedById String @db.Uuid
+  proposedBy   Party  @relation("ProposalProposedBy", fields: [proposedById], references: [id])
+
+  /// Snapshotted at creation, same reason WithdrawalRequest snapshots
+  /// requiredSigners — a later policy change shouldn't reach back into
+  /// a vote already in progress.
+  requiredApprovals Int
+  status            ProposalStatus @default(OPEN)
+  createdAt         DateTime       @default(now())
+  decidedAt         DateTime?
+
+  votes GroupProposalVote[]
+
+  @@index([orgId, status])
+  @@map("group_proposal")
+}
+
+model GroupProposalVote {
+  id         String        @id @default(uuid()) @db.Uuid
+  proposalId String        @db.Uuid
+  proposal   GroupProposal @relation(fields: [proposalId], references: [id], onDelete: Cascade)
+  voterId    String        @db.Uuid
+  voter      Party         @relation("ProposalVoter", fields: [voterId], references: [id])
+  decision   ApprovalDecision
+  votedAt    DateTime      @default(now())
+
+  @@unique([proposalId, voterId])
+  @@map("group_proposal_vote")
+}
+
+enum ProjectStatus {
+  ACTIVE
+  CLOSED
+}
+
+enum ProjectContributionStatus {
+  DECLARED
+  CONFIRMED
+}
+
+enum ProjectWithdrawalStatus {
+  PENDING_SIGNATURES
+  EXECUTED
+  REJECTED
+}
+
+/// A named funding kitty inside a group — "Grace funeral", "Midai
+/// wedding" — with its own target, its own contributors, and its own
+/// signatories, distinct from the group's everyday treasury signers.
+/// Real cash still lives in the group's one GROUP_SAVINGS account (see
+/// dal/treasury.ts's findOrCreateGroupSavingsAccount) — a project is an
+/// earmark on that same pool, not a second bank account, the same
+/// relationship BillContribution has to BILL_FUNDING. "Raised" is
+/// always derived from confirmed GroupProjectContribution rows, never
+/// stored.
+model GroupProject {
+  id     String       @id @default(uuid()) @db.Uuid
+  orgId  String       @db.Uuid
+  org    Organisation @relation(fields: [orgId], references: [partyId], onDelete: Cascade)
+  title  String
+  purpose String?
+  targetKes Decimal?  @db.Decimal(12, 2)
+  status ProjectStatus @default(ACTIVE)
+
+  createdById String @db.Uuid
+  createdBy   Party  @relation("ProjectCreatedBy", fields: [createdById], references: [id])
+  createdAt   DateTime @default(now())
+
+  /// Snapshotted at project creation, same reason WithdrawalRequest and
+  /// GroupProposal each snapshot their own threshold.
+  requiredApprovals Int @default(1)
+
+  signers     GroupProjectSigner[]
+  contributions GroupProjectContribution[]
+  withdrawals GroupProjectWithdrawal[]
+
+  @@index([orgId, status])
+  @@map("group_project")
+}
+
+/// Who can approve a withdrawal from this one project's kitty — separate
+/// from the group's own GroupSigner list, so a funeral kitty can be
+/// signed off by the bereaved family's chosen people even if none of
+/// them sit on the group's main treasury signer list.
+model GroupProjectSigner {
+  id        String       @id @default(uuid()) @db.Uuid
+  projectId String       @db.Uuid
+  project   GroupProject @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  personId  String       @db.Uuid
+  person    Party        @relation("ProjectSignerParty", fields: [personId], references: [id])
+  addedAt   DateTime     @default(now())
+  removedAt DateTime?
+
+  @@unique([projectId, personId])
+  @@map("group_project_signer")
+}
+
+/// A declaration is not money — same rule as GroupContribution. Only
+/// confirmation posts the JournalEntry crediting the group's own
+/// GROUP_SAVINGS account; "raised" is the sum of CONFIRMED rows.
+model GroupProjectContribution {
+  id            String                    @id @default(uuid()) @db.Uuid
+  projectId     String                    @db.Uuid
+  project       GroupProject              @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  contributorId String                    @db.Uuid
+  contributor   Party                     @relation("ProjectContributionParty", fields: [contributorId], references: [id])
+  amountKes     Decimal                   @db.Decimal(12, 2)
+  status        ProjectContributionStatus @default(DECLARED)
+  reference     String?
+
+  declaredAt    DateTime  @default(now())
+  confirmedAt   DateTime?
+  confirmedById String?   @db.Uuid
+  confirmedBy   Party?    @relation("ProjectContributionConfirmedBy", fields: [confirmedById], references: [id])
+
+  journalEntryId String?       @unique @db.Uuid
+  journalEntry   JournalEntry? @relation(fields: [journalEntryId], references: [id])
+
+  @@index([projectId, status])
+  @@map("group_project_contribution")
+}
+
+/// A withdrawal from one project's kitty — voted on by GroupProjectSigner
+/// rows (falling back to the project's creator alone if none are
+/// configured), not the group's own GroupSigner list. Deliberately
+/// simpler than WithdrawalRequest's broadcast/standby-window ceremony —
+/// a kitty this scoped doesn't carry the same cooling-off requirement
+/// the whole group's treasury does; it settles the moment enough of its
+/// own signers approve, the same instant-tally shape GroupProposal uses.
+model GroupProjectWithdrawal {
+  id        String       @id @default(uuid()) @db.Uuid
+  projectId String       @db.Uuid
+  project   GroupProject @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  requestedById String @db.Uuid
+  requestedBy   Party  @relation("ProjectWithdrawalRequestedBy", fields: [requestedById], references: [id])
+
+  amountKes Decimal @db.Decimal(12, 2)
+  purpose   String
+  payeeName String
+
+  requiredApprovals Int
+  status            ProjectWithdrawalStatus @default(PENDING_SIGNATURES)
+  createdAt         DateTime                @default(now())
+  decidedAt         DateTime?
+
+  journalEntryId String?       @unique @db.Uuid
+  journalEntry   JournalEntry? @relation(fields: [journalEntryId], references: [id])
+
+  votes GroupProjectWithdrawalVote[]
+
+  @@index([projectId, status])
+  @@map("group_project_withdrawal")
+}
+
+model GroupProjectWithdrawalVote {
+  id           String                 @id @default(uuid()) @db.Uuid
+  withdrawalId String                 @db.Uuid
+  withdrawal   GroupProjectWithdrawal @relation(fields: [withdrawalId], references: [id], onDelete: Cascade)
+  voterId      String                 @db.Uuid
+  voter        Party                  @relation("ProjectWithdrawalVoter", fields: [voterId], references: [id])
+  decision     ApprovalDecision
+  votedAt      DateTime               @default(now())
+
+  @@unique([withdrawalId, voterId])
+  @@map("group_project_withdrawal_vote")
+}
+
+enum GroupActivityKind {
+  MEMBER_JOINED
+  MEMBER_REMOVED
+  CONTRIBUTION_CONFIRMED
+  WITHDRAWAL_REQUESTED
+  WITHDRAWAL_SIGNED
+  WITHDRAWAL_EXECUTED
+  WITHDRAWAL_REJECTED
+  WITHDRAWAL_EXPIRED
+}
+
+/// A group's activity feed — "in-app to all" half of every notification
+/// this schema sends by SMS to a narrower audience (signers, officers).
+/// SMS costs money per recipient; a feed row costs nothing and reaches
+/// everyone who opens the group, which is why "notify everyone" here
+/// means "write one row", not "text everyone". Read-only from the app's
+/// perspective: nothing ever updates a row once written, so there is no
+/// read/unread state to reconcile — see the backlog item this doubles as
+/// ("a group activity feed, not a members list and a ledger as two
+/// separate pages").
+model GroupActivityEvent {
+  id     String            @id @default(uuid()) @db.Uuid
+  orgId  String            @db.Uuid
+  org    Organisation      @relation(fields: [orgId], references: [partyId], onDelete: Cascade)
+  kind   GroupActivityKind
+  /// Who caused it — null for system-driven events (an expired
+  /// withdrawal, nobody "did" that).
+  actorId String? @db.Uuid
+  actor   Party?  @relation("GroupActivityActor", fields: [actorId], references: [id])
+  /// Precomputed, human-readable, e.g. "Amina requested KES 5,000 for
+  /// fertiliser". Rendered as-is — no template lookup at read time, so
+  /// a copy change later doesn't rewrite history.
+  summary String
+  createdAt DateTime @default(now())
+
+  @@index([orgId, createdAt])
+  @@map("group_activity_event")
 }
 
 /// One signer's decision. Deliberately mirrors PaymentApproval rather

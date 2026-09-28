@@ -53,6 +53,7 @@ export * from './treasury';
 export * from './payment-id';
 export * from './business-payment';
 export * from './wallet-topup';
+export * from './group-projects';
 export * from './parking';
 // Ticketing reads/writes (ticketing, seat-map, ticket-customer, addon)
 // moved to services/core-go — see dbx/ticket_orgs.go, ticketing.go,

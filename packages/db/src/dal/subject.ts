@@ -28,6 +28,7 @@ export async function getMyRecord(ctx: Ctx) {
       documents: { where: { deletedAt: null }, orderBy: { uploadedAt: 'desc' } },
       registration: { include: { payment: { include: { approvals: true } } } },
       accounts: true,
+      esoqoPaymentId: true,
     },
   });
 }

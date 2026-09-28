@@ -426,6 +426,10 @@ export interface InviteMemberResult {
   orgName: string;
   /** > 0 when the invitee lands PENDING behind a join fee. */
   joinFeeKes: number;
+  /** The officer sending the invite, by name — so the invitee sees who
+   *  actually added them, not just "Esoqo". Null on the rare account
+   *  with no name on file yet; the SMS degrades gracefully for that case. */
+  inviterName: string | null;
 }
 
 /**
@@ -477,6 +481,10 @@ export async function inviteMember(
   // Only read the fee when it's actually going to gate them — a free
   // group has no number worth putting in the message.
   const joinFeeKes = status === 'PENDING' ? await groupJoinFeeKes(orgPartyId) : 0;
+  const inviter = ctx.partyId
+    ? await prisma.person.findUnique({ where: { partyId: ctx.partyId }, select: { officialName: true, knownAs: true } })
+    : null;
+  const inviterName = inviter ? (inviter.knownAs || inviter.officialName) : null;
   const existingPerson = await prisma.person.findFirst({
     where: msisdn ? { msisdn } : { email: email! },
   });
@@ -497,7 +505,7 @@ export async function inviteMember(
       targetType: 'membership', targetId: m.id,
       payload: { orgPartyId, personId: existingPerson.partyId, role, status },
     });
-    return { membership: m, notify, orgName, joinFeeKes };
+    return { membership: m, notify, orgName, joinFeeKes, inviterName };
   }
 
   const officialName = input.officialName?.trim();
@@ -516,7 +524,7 @@ export async function inviteMember(
     }, tx as never);
     return m;
   });
-  return { membership, notify, orgName, joinFeeKes };
+  return { membership, notify, orgName, joinFeeKes, inviterName };
 }
 
 export async function setMemberRole(
