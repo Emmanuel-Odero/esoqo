@@ -11,21 +11,20 @@ import './me.css';
 
 export const metadata: Metadata = { title: { default: 'Your profile', template: '%s · Esoqo' } };
 
-// Wallet takes the primary slot Tickets used to hold — money is the more
-// frequent reason somebody opens this bar. Tickets moves into More rather
-// than off the map; Vouchers & loyalty stop being their own door because
-// they're now a section inside Wallet, not a separate destination.
+// Labels are plain verbs, not product jargon.
+// Money beats tickets for frequency — Wallet holds the primary slot; tickets
+// live in More where they're one tap away but not competing for attention.
 const PRIMARY: NavItem[] = [
-  { href: '/me', icon: 'user', label: 'Profile' },
+  { href: '/me', icon: 'user', label: 'Home' },
   { href: '/me/group', icon: 'users', label: 'Group' },
-  { href: '/me/payments', icon: 'coins', label: 'Payments' },
   { href: '/me/wallet', icon: 'bank', label: 'Wallet' },
+  { href: '/me/payments', icon: 'coins', label: 'Fee' },
 ];
 
 const MORE: NavItem[] = [
-  { href: '/me/tickets', icon: 'qr', label: 'Tickets' },
-  { href: '/me/organiser', icon: 'calendar', label: 'Sell tickets (events & transport)' },
-  { href: '/me/consents', icon: 'eye', label: 'Who can see your info' },
+  { href: '/me/tickets', icon: 'qr', label: 'My tickets' },
+  { href: '/me/organiser', icon: 'calendar', label: 'Sell tickets' },
+  { href: '/me/consents', icon: 'eye', label: 'Privacy' },
   { href: '/me/settings', icon: 'grid', label: 'Settings' },
 ];
 

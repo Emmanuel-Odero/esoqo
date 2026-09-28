@@ -66,26 +66,38 @@ export function ShellNav({ items, more }: { items: NavItem[]; more: NavItem[] })
   return (
     <>
       {/* Desktop primary tabs, inline in the header bar. */}
-      <nav className="headnav" aria-label="Your profile">
+      <nav className="headnav" aria-label="Primary">
         {items.map(({ href, icon, label }) => (
-          <Link key={href} href={href} aria-current={isActive(href) ? 'page' : undefined}>
-            <Icon name={icon} size={17} />{label}
+          <Link
+            key={href}
+            href={href}
+            aria-current={isActive(href) ? 'page' : undefined}
+            aria-label={label}
+          >
+            <Icon name={icon} size={16} aria-hidden="true" />{label}
           </Link>
         ))}
       </nav>
 
       {/* More — opens the sheet on every screen size. */}
-      <button type="button" ref={moreBtnRef} className="morebtn" aria-expanded={open}
-        aria-controls="more-sheet" onClick={toggle}>
-        <Icon name="grid" size={16} />
+      <button
+        type="button"
+        ref={moreBtnRef}
+        className="morebtn"
+        aria-expanded={open}
+        aria-controls="more-sheet"
+        aria-label={open ? 'Close more menu' : 'Open more menu'}
+        onClick={toggle}
+      >
+        <Icon name="grid" size={15} aria-hidden="true" />
         <span>{open ? 'Close' : 'More'}</span>
       </button>
 
-      {/* Mobile bottom tab bar. */}
-      <nav className="tabbar" aria-label="Your profile">
+      {/* Mobile bottom tab bar — thumbs, not eyes. */}
+      <nav className="tabbar" aria-label="Primary">
         {items.map(({ href, icon, label }) => (
-          <Link key={href} href={href} aria-current={isActive(href) ? 'page' : undefined}>
-            <Icon name={icon} size={20} />
+          <Link key={href} href={href} aria-current={isActive(href) ? 'page' : undefined} aria-label={label}>
+            <Icon name={icon} size={19} aria-hidden="true" />
             <span>{label}</span>
           </Link>
         ))}
@@ -93,28 +105,27 @@ export function ShellNav({ items, more }: { items: NavItem[]; more: NavItem[] })
 
       {open && (
         <div className="sheet-scrim" onClick={toggle} role="presentation">
-          <div className="sheet" id="more-sheet" role="dialog" aria-modal="true" aria-label="More" ref={sheetRef}>
+          <div className="sheet" id="more-sheet" role="dialog" aria-modal="true" aria-label="More options" ref={sheetRef}>
             <div className="sheet-handle" aria-hidden="true" />
             <p className="kicker" style={{ margin: '4px 0 10px' }}>More</p>
             {more.map(({ href, icon, label }) => (
-              <Link key={href} href={href} className="sheet-row" onClick={() => setOpen(false)}>
-                <span className="icbox"><Icon name={icon} size={17} /></span>
+              <Link key={href} href={href} className="sheet-row" onClick={() => setOpen(false)} aria-label={label}>
+                <span className="icbox" aria-hidden="true"><Icon name={icon} size={16} /></span>
                 <span>{label}</span>
-                <Icon name="chevron-right" size={17} className="chev" />
+                <Icon name="chevron-right" size={16} className="chev" aria-hidden="true" />
               </Link>
             ))}
             <div className="sheet-sep" role="separator" />
             {/* A form, not a link: signing out changes state, so it must
                 not be reachable by GET (see the route's own comment). */}
             <form action="/signout" method="post">
-              <button type="submit" className="sheet-row danger">
-                <span className="icbox"><Icon name="close" size={17} /></span>
+              <button type="submit" className="sheet-row danger" aria-label="Sign out of Esoqo">
+                <span className="icbox" aria-hidden="true"><Icon name="close" size={16} /></span>
                 <span>Sign out</span>
               </button>
             </form>
             <p className="hint" style={{ margin: '14px 6px 0' }}>
-              Signed out devices stop seeing your record immediately. Your PIN never leaves your
-              handset.
+              Signing out hides your record on this device. Your PIN never leaves your phone.
             </p>
           </div>
         </div>
