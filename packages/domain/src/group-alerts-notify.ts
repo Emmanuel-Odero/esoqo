@@ -8,7 +8,7 @@
  * name is clamped with `fit` and the budgets are set so the worst case
  * still lands in one GSM-7 segment. See sms.ts for why that matters.
  */
-import { sms, fit, smsKes } from './sms';
+import { sms, fit, firstName, smsKes } from './sms';
 
 export interface StalledGroupContext {
   officialName: string;
@@ -33,21 +33,33 @@ export function contributionGapSms(ctx: StalledGroupContext): string {
  * Sent to someone an officer has just added to a group.
  *
  * This is a cold message — the recipient did not ask for it and may not
- * know Esoqo at all. So: greet, say who added them, and give exactly
- * one action with a reason to take it. The old copy offered two ("Sign
- * in or set your PIN"), which is one more decision than a stranger will
- * make, and promised nothing in return for taking either.
+ * know Esoqo at all. So: greet, name the person who actually added them
+ * (a chairperson or treasurer is someone you trust; "Esoqo" alone is a
+ * stranger's app), say plainly that this is a savings group, and give
+ * exactly one action with a reason to take it. The old copy named
+ * neither the inviter nor what a chama membership even is — a stranger
+ * reading it had no way to tell this apart from spam.
+ *
+ * `inviterName` is optional: inviteMember's existing-vs-new-person
+ * branch can invite someone who signs in before the inviter's own name
+ * has been confirmed on their record, so this degrades to the old
+ * "you have been added" phrasing rather than printing "undefined".
  */
-export function groupInviteSms(orgName: string, opts: { joinFeeKes?: number } = {}): string {
+export function groupInviteSms(
+  orgName: string,
+  opts: { joinFeeKes?: number; inviterName?: string } = {},
+): string {
+  const by = opts.inviterName ? firstName(opts.inviterName) : null;
+  const added = by ? sms`${by} added you to` : sms`You have been added to`;
   // A group that charges a join fee leaves the membership PENDING (see
   // resolveJoinStatus in packages/db/src/dal/groups.ts), so the plain
   // "sign in and see balances" promise above would be a lie: they'd sign
   // in, see nothing, and have no idea why. Name the fee and the one
   // action that clears it instead.
   if (opts.joinFeeKes && opts.joinFeeKes > 0) {
-    return sms`Karibu! You have been added to ${fit(orgName, 38)} on Esoqo. Sign in on this number and pay the ${smsKes(opts.joinFeeKes)} join fee to take your place.`;
+    return sms`Karibu! ${added} ${fit(orgName, 30)} on Esoqo. Sign in on this number and pay the ${smsKes(opts.joinFeeKes)} join fee to take your place.`;
   }
-  return sms`Karibu! You have been added to ${fit(orgName, 55)} on Esoqo. Sign in with this number to see contributions and balances.`;
+  return sms`Karibu! ${added} ${fit(orgName, 45)}, a savings group on Esoqo. Sign in with this number to see contributions and balances.`;
 }
 
 /* ── contributions ────────────────────────────────────────────────
@@ -96,4 +108,29 @@ export interface ContributionConfirmedContext {
  */
 export function contributionConfirmedSms(ctx: ContributionConfirmedContext): string {
   return sms`${smsKes(ctx.amountKes)} from ${fit(ctx.contributorName, 20)} credited to ${fit(ctx.orgName, 28)}, new balance ${smsKes(ctx.newBalanceKes)} - ref ${ctx.reference}`;
+}
+
+/* ── withdrawals ──────────────────────────────────────────────────
+ *
+ * Every contribution event above has had an SMS since the templates
+ * existed; withdrawal — money actually leaving a group's account —
+ * had none until now. Scoped to signers only, not every member: they
+ * are the ones with something to do, and SMS is billed per recipient
+ * to a group that may have 20+ people. Everyone else finds out via the
+ * free in-app activity feed (see GroupActivityEvent).
+ */
+
+export interface WithdrawalRequestedContext {
+  orgName: string;
+  amountKes: number;
+  purpose: string;
+  requesterName: string;
+}
+
+/** Sent to every effective signer the moment an officer proposes a
+ *  withdrawal — they are the audience with a signature to give, and the
+ *  standby window is already counting down whether or not they notice
+ *  from inside the app. */
+export function withdrawalRequestedSms(ctx: WithdrawalRequestedContext): string {
+  return sms`${fit(ctx.requesterName, 16)} proposed a ${smsKes(ctx.amountKes)} withdrawal from ${fit(ctx.orgName, 24)} for ${fit(ctx.purpose, 40)}. Sign in to approve or reject.`;
 }

@@ -6,7 +6,7 @@ import {
 import { donorThankYouSms, adminDonationAlertSms } from './donation-notify';
 import {
   contributionGapSms, groupInviteSms,
-  contributionDeclaredSms, contributionConfirmedSms,
+  contributionDeclaredSms, contributionConfirmedSms, withdrawalRequestedSms,
 } from './group-alerts-notify';
 import { saleReceiptSms } from './store-notify';
 
@@ -164,12 +164,17 @@ describe('every template fits one GSM-7 segment at worst case', () => {
     })],
     ['groupInviteSms', groupInviteSms(LONG_ORG)],
     ['groupInviteSms (join fee)', groupInviteSms(LONG_ORG, { joinFeeKes: BIG_MONEY })],
+    ['groupInviteSms (with inviter)', groupInviteSms(LONG_ORG, { inviterName: LONG_NAME })],
+    ['groupInviteSms (with inviter, join fee)', groupInviteSms(LONG_ORG, { inviterName: LONG_NAME, joinFeeKes: BIG_MONEY })],
     ['contributionDeclaredSms', contributionDeclaredSms({
       amountKes: BIG_MONEY, method: 'MPESA', reference: 'a1b2c3d4',
     })],
     ['contributionConfirmedSms', contributionConfirmedSms({
       amountKes: BIG_MONEY, contributorName: LONG_NAME, orgName: LONG_ORG,
       newBalanceKes: BIG_MONEY, reference: 'a1b2c3d4',
+    })],
+    ['withdrawalRequestedSms', withdrawalRequestedSms({
+      orgName: LONG_ORG, amountKes: BIG_MONEY, purpose: LONG_CAMPAIGN, requesterName: LONG_NAME,
     })],
     ['saleReceiptSms', saleReceiptSms({
       storeName: 'Mama Njeri’s Duka la Mboga na Vyakula',
@@ -244,7 +249,7 @@ describe('copy reads the way it is meant to', () => {
 
   it('gives the group invite exactly one action', () => {
     const message = groupInviteSms('Kilimo Cha Wanawake');
-    expect(message).toBe('Karibu! You have been added to Kilimo Cha Wanawake on Esoqo. Sign in with this number to see contributions and balances.');
+    expect(message).toBe('Karibu! You have been added to Kilimo Cha Wanawake, a savings group on Esoqo. Sign in with this number to see contributions and balances.');
     expect(message).not.toContain(' or ');
   });
 
@@ -256,6 +261,13 @@ describe('copy reads the way it is meant to', () => {
     expect(paid).toContain('Kilimo Cha Wanawake');
     // A fee of zero is no fee — it must not produce "KES 0 join fee".
     expect(groupInviteSms('Kilimo Cha Wanawake', { joinFeeKes: 0 })).toBe(free);
+  });
+
+  it('names the inviter so a stranger is not just told "Esoqo" added them', () => {
+    const named = groupInviteSms('Kilimo Cha Wanawake', { inviterName: 'Grace Wambui' });
+    expect(named).toBe('Karibu! Grace added you to Kilimo Cha Wanawake, a savings group on Esoqo. Sign in with this number to see contributions and balances.');
+    // No inviter on file degrades to the old phrasing rather than "undefined".
+    expect(groupInviteSms('Kilimo Cha Wanawake')).not.toContain('undefined');
   });
 
   it('tells the contributor their declaration is recorded but not yet money', () => {

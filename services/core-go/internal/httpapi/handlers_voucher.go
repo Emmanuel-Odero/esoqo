@@ -174,6 +174,9 @@ type loadVoucherRequest struct {
 	AmountKES   money.Amount `json:"amountKes" binding:"required"`
 	Method      string       `json:"method" binding:"required"`
 	BuyerMsisdn string       `json:"buyerMsisdn"`
+	// Set only when Method is "VOUCHER" — the caller's other voucher to
+	// move balance out of. See dbx.TransferVoucherBalance.
+	FromVoucherID string `json:"fromVoucherId"`
 }
 
 // POST /v1/vouchers/:id/load — top up via M-Pesa or loyalty.
@@ -204,6 +207,19 @@ func (s *Server) handleLoadVoucher(c *gin.Context) {
 			return
 		}
 		s.sendVoucherCreditedSms(c, v.ID, req.AmountKES.KES(), "points")
+		c.JSON(http.StatusOK, gin.H{"voucher": voucherToJSON(refreshed, s.Cfg.FleetQrSecret)})
+		return
+	}
+	if method == "VOUCHER" {
+		if strings.TrimSpace(req.FromVoucherID) == "" {
+			writeError(c, http.StatusBadRequest, "INVALID_REQUEST", "Choose which voucher to load from")
+			return
+		}
+		refreshed, err := dbx.TransferVoucherBalance(c.Request.Context(), s.Pool, ctx, req.FromVoucherID, v.ID, loyalty.PointsForKES(req.AmountKES.KES()))
+		if err != nil {
+			writeFleetError(c, err)
+			return
+		}
 		c.JSON(http.StatusOK, gin.H{"voucher": voucherToJSON(refreshed, s.Cfg.FleetQrSecret)})
 		return
 	}

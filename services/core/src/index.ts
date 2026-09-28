@@ -9,6 +9,7 @@ import {
   confirmDonationPayment, failDonationPayment,
   confirmBusinessPayment, failBusinessPayment,
   confirmWalletTopUp, WalletTopUpError,
+  confirmSignatoryFeePayment, TreasuryError,
   StoreOrderError, DonationError, BusinessPaymentError,
 } from '@esoqo/db';
 import {
@@ -255,6 +256,18 @@ const handleStkCallback = async (
   } catch (e) {
     if (!(e instanceof WalletTopUpError && e.code === 'NOT_FOUND')) {
       app.log.error({ err: e, checkoutRequestId: parsed.checkoutRequestId }, 'failed to confirm wallet top-up');
+      return reply.send({ ok: true });
+    }
+  }
+
+  // A signatory-fee STK payment (STK_NEW_SIGNER / STK_OFFICER). Last of
+  // the TS confirmers, same reasoning as wallet top-up above.
+  try {
+    await confirmSignatoryFeePayment(parsed.checkoutRequestId, parsed.mpesaReceiptCode ?? '');
+    return reply.send({ ok: true });
+  } catch (e) {
+    if (!(e instanceof TreasuryError && e.code === 'NOT_FOUND')) {
+      app.log.error({ err: e, checkoutRequestId: parsed.checkoutRequestId }, 'failed to confirm signatory fee payment');
       return reply.send({ ok: true });
     }
   }

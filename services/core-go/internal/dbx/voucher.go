@@ -131,7 +131,7 @@ func VoucherBalance(ctx context.Context, pool *pgxpool.Pool, voucherID string) (
 	var bal int
 	err := pool.QueryRow(ctx, `
 		SELECT COALESCE(SUM(points),0)::int FROM voucher_ledger_entry
-		WHERE "voucherId" = $1 AND kind IN ('LOAD_MPESA','LOAD_LOYALTY','SPEND','ADJUST','GIFT_CREATE')`,
+		WHERE "voucherId" = $1 AND kind IN ('LOAD_MPESA','LOAD_LOYALTY','SPEND','ADJUST','GIFT_CREATE','TRANSFER_OUT','TRANSFER_IN')`,
 		voucherID).Scan(&bal)
 	return bal, err
 }
@@ -368,6 +368,68 @@ func LoadVoucherWithLoyalty(ctx context.Context, pool *pgxpool.Pool, c authsvc.C
 		return nil, err
 	}
 	return GetVoucher(ctx, pool, voucherID)
+}
+
+// TransferVoucherBalance moves points from one of the caller's own
+// vouchers into another — the "load one voucher from another" case a
+// pure M-Pesa/loyalty load can't cover. No money enters or leaves the
+// platform, so unlike LOAD_MPESA/LOAD_LOYALTY this never touches the
+// journal: it is two ledger rows sharing one refId, exactly the same
+// "debit here, credit there, both rows or neither" shape SpendVoucher
+// and the load paths already use, just against each other instead of
+// an external source. Both vouchers must belong to the caller — this
+// is a person moving their own money between their own purpose
+// buckets, not a gift to someone else's voucher (GiftCreate already
+// covers "hand someone a new voucher").
+func TransferVoucherBalance(ctx context.Context, pool *pgxpool.Pool, c authsvc.Ctx, fromVoucherID, toVoucherID string, points int) (*Voucher, error) {
+	if points <= 0 {
+		return nil, &FleetError{"BAD_INPUT", "Enter an amount above zero"}
+	}
+	if fromVoucherID == toVoucherID {
+		return nil, &FleetError{"BAD_INPUT", "Choose a different voucher to load from"}
+	}
+	from, err := GetVoucher(ctx, pool, fromVoucherID)
+	if err != nil {
+		return nil, err
+	}
+	to, err := GetVoucher(ctx, pool, toVoucherID)
+	if err != nil {
+		return nil, err
+	}
+	if from.OwnerPartyID != c.PartyID || to.OwnerPartyID != c.PartyID {
+		return nil, ErrVoucherNotOwner
+	}
+	if from.Status != "ACTIVE" || to.Status != "ACTIVE" {
+		return nil, ErrVoucherFrozen
+	}
+	bal, err := VoucherBalance(ctx, pool, fromVoucherID)
+	if err != nil {
+		return nil, err
+	}
+	if bal < points {
+		return nil, ErrVoucherInsufficient
+	}
+
+	tx, err := pool.Begin(ctx)
+	if err != nil {
+		return nil, err
+	}
+	defer tx.Rollback(ctx)
+
+	refID := "voucher-transfer:" + fromVoucherID + ":" + toVoucherID + ":" + time.Now().Format(time.RFC3339Nano)
+	kes := loyalty.KesForPoints(points)
+	if _, err := tx.Exec(ctx, `INSERT INTO voucher_ledger_entry (id, "voucherId", points, "kesEquiv", kind, "refId", "createdAt") VALUES (gen_random_uuid(), $1, $2, $3, 'TRANSFER_OUT', $4, now())`,
+		fromVoucherID, -points, kes, refID); err != nil {
+		return nil, err
+	}
+	if _, err := tx.Exec(ctx, `INSERT INTO voucher_ledger_entry (id, "voucherId", points, "kesEquiv", kind, "refId", "createdAt") VALUES (gen_random_uuid(), $1, $2, $3, 'TRANSFER_IN', $4, now())`,
+		toVoucherID, points, kes, refID); err != nil {
+		return nil, err
+	}
+	if err := tx.Commit(ctx); err != nil {
+		return nil, err
+	}
+	return GetVoucher(ctx, pool, toVoucherID)
 }
 
 // SpendVoucher debits points for a purpose-checked purchase. Must run in
