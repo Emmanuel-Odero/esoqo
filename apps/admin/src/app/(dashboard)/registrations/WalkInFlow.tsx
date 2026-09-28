@@ -11,6 +11,10 @@ interface FormData {
   joiningAs: 'me' | 'group' | 'biz';
   officialName: string;
   knownAs: string;
+  firstName: string;
+  middleName: string;
+  surname: string;
+  dateOfBirth: string;
   msisdn: string;
   email: string;
   county: string;
@@ -33,7 +37,9 @@ interface FormData {
 
 const INIT: FormData = {
   joiningAs: 'me',
-  officialName: '', knownAs: '', msisdn: '+254 7', email: '',
+  officialName: '', knownAs: '',
+  firstName: '', middleName: '', surname: '', dateOfBirth: '',
+  msisdn: '+254 7', email: '',
   county: '', ward: '', workRaw: '',
   orgName: '', orgKnownAs: '', orgRole: '', memberCount: '',
   hasRegisteredBusiness: '', registrationNo: '',
@@ -84,8 +90,12 @@ export default function WalkInFlow({
     start(async () => {
       const r = await actionCreateWalkIn({
         joiningAs: f.joiningAs,
-        officialName: f.officialName,
+        officialName: [f.firstName, f.middleName, f.surname].filter(Boolean).join(' '),
         knownAs: f.knownAs || undefined,
+        firstName: f.firstName,
+        middleName: f.middleName || undefined,
+        surname: f.surname,
+        dateOfBirth: f.dateOfBirth ? new Date(f.dateOfBirth) : undefined,
         msisdn: f.msisdn,
         email: f.email || undefined,
         county: f.county,
@@ -176,7 +186,7 @@ export default function WalkInFlow({
 function canProceed(step: Step, f: FormData): boolean {
   switch (step) {
     case 'joining': return true;
-    case 'personal': return f.officialName.trim().length > 0;
+    case 'personal': return f.firstName.trim().length > 0 && f.surname.trim().length > 0;
     case 'contact': return f.msisdn.trim().length >= 10 && f.county.length > 0;
     case 'work': return true;
     case 'standing': return true;
@@ -240,13 +250,37 @@ function PersonalStep({ f, update }: { f: FormData; update: (k: keyof FormData, 
 
   return (
     <div>
-      <p className="sub" style={{ marginBottom: 16 }}>Full name as it appears on their national ID.</p>
+      <p className="sub" style={{ marginBottom: 16 }}>
+        Names as they appear on their national ID. First name and surname are required;
+        middle name only if their ID has one.
+      </p>
 
       <div style={{ marginBottom: 14 }}>
-        <label className="sub" htmlFor="wi-officialName" style={{ display: 'block', marginBottom: 6 }}>Official name *</label>
-        <input id="wi-officialName" className="inp" style={{ width: '100%' }}
-          value={f.officialName} placeholder="As written on their ID"
-          onChange={(e) => update('officialName', e.target.value)} />
+        <label className="sub" htmlFor="wi-firstName" style={{ display: 'block', marginBottom: 6 }}>First name *</label>
+        <input id="wi-firstName" className="inp" style={{ width: '100%' }}
+          value={f.firstName} placeholder="e.g. Wanjiru"
+          onChange={(e) => update('firstName', e.target.value)} />
+      </div>
+
+      <div style={{ marginBottom: 14 }}>
+        <label className="sub" htmlFor="wi-middleName" style={{ display: 'block', marginBottom: 6 }}>Middle name (optional)</label>
+        <input id="wi-middleName" className="inp" style={{ width: '100%' }}
+          value={f.middleName} placeholder="e.g. Wanjiku"
+          onChange={(e) => update('middleName', e.target.value)} />
+      </div>
+
+      <div style={{ marginBottom: 14 }}>
+        <label className="sub" htmlFor="wi-surname" style={{ display: 'block', marginBottom: 6 }}>Surname *</label>
+        <input id="wi-surname" className="inp" style={{ width: '100%' }}
+          value={f.surname} placeholder="e.g. Kamau"
+          onChange={(e) => update('surname', e.target.value)} />
+      </div>
+
+      <div style={{ marginBottom: 14 }}>
+        <label className="sub" htmlFor="wi-dateOfBirth" style={{ display: 'block', marginBottom: 6 }}>Date of birth (optional)</label>
+        <input id="wi-dateOfBirth" className="inp" type="date" style={{ width: '100%' }}
+          value={f.dateOfBirth}
+          onChange={(e) => update('dateOfBirth', e.target.value)} />
       </div>
 
       <div style={{ marginBottom: 14 }}>
@@ -468,9 +502,10 @@ function PreferencesStep({ f, update }: { f: FormData; update: (k: keyof FormDat
 function ReviewStep({ f }: { f: FormData }) {
   const items: [string, string][] = [
     ['Joining as', f.joiningAs === 'me' ? 'Individual' : f.joiningAs === 'group' ? 'Group' : 'Business'],
-    ['Official name', f.officialName],
+    ['Official name', [f.firstName, f.middleName, f.surname].filter(Boolean).join(' ')],
   ];
   if (f.knownAs) items.push(['Known as', f.knownAs]);
+  if (f.dateOfBirth) items.push(['Date of birth', f.dateOfBirth]);
   if (f.orgName) items.push(['Group name', f.orgName]);
   if (f.orgRole) items.push(['Role', f.orgRole]);
   if (f.memberCount) items.push(['Group members', f.memberCount]);
