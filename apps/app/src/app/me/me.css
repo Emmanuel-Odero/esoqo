@@ -262,28 +262,87 @@
   .tile .tile-h { white-space:normal; overflow:visible }
 }
 
-/* Content cards — white objects on the paper canvas. */
-/* align-items:start, or the shorter card in a pair stretches to the
-   taller one's height and ends in a half-screen of white — "Who you
-   are" has five rows beside a ten-row checklist. */
+/* Content cards — white objects on the paper canvas.
+   Premium refinement: slightly larger radius, premium shadow, subtle
+   hover for interactive cards, and a --elevated variant for forms. */
 .dash-cols { display:grid; gap:14px; margin-bottom:14px; align-items:start }
 @media (min-width:980px) { .dash-cols { grid-template-columns:1fr 1fr } }
 .dash-cols .mcard { margin-bottom:0 }
 
-/* ── cards ──────────────────────────────────────────────────── */
-.mcard { border:1px solid var(--line); border-radius:var(--r-lg); background:#fff;
-  padding:20px; margin-bottom:14px; box-shadow:var(--sh-s) }
-.mcard h2 { font-size:.98rem; font-weight:700; margin:0 0 12px; display:flex; align-items:center; gap:9px }
+.mcard { border:1px solid var(--line); border-radius:var(--r-xl); background:#fff;
+  padding:20px 20px 18px; margin-bottom:14px; box-shadow:var(--sh-s);
+  transition:border-color var(--dur-fast), box-shadow var(--dur-fast) }
+.mcard:hover{ border-color:var(--line-2) }
+.mcard h2 { font-size:.98rem; font-weight:750; margin:0 0 12px; display:flex; align-items:center; gap:9px; letter-spacing:-.01em }
 .mcard h2 .ic { color:var(--blue) }
 .mcard > p { max-width:62ch }
-/* The standing intro line inside a card — was three repeated inline
-   style objects on /me before it had a name. */
-.mcard-lede { margin:0 0 14px; color:var(--tx-2); font-size:.9rem; max-width:62ch }
+.mcard-lede { margin:0 0 14px; color:var(--tx-2); font-size:.9rem; max-width:62ch; line-height:1.5 }
+.mcard--premium{
+  background:var(--grad-paper-premium); border-color:#E2ECF5; box-shadow:var(--sh-premium);
+}
+.mcard--action{ background:var(--surface-2); border-style:dashed; border-color:#C8D8E6 }
+.mcard--action:focus-within{ border-color:var(--green); border-style:solid; background:#fff }
 .mrow { display:flex; gap:14px; align-items:flex-start; padding:13px 0; border-bottom:1px solid var(--line) }
 .mrow:last-child { border-bottom:0 }
-.mrow .k { color:var(--tx-2); font-size:.88rem; width:150px; flex:none }
-.mrow .v { font-weight:600; font-size:.92rem }
+.mrow .k { color:var(--tx-2); font-size:.84rem; width:150px; flex:none; font-weight:500 }
+.mrow .v { font-weight:650; font-size:.92rem }
 .mcard .btn { margin-top:4px }
+
+/* Group premium — directory card, detail header */
+.group-grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(280px,1fr)); gap:12px; margin-bottom:16px }
+.group-card {
+  display:flex; align-items:center; gap:14px; padding:16px 16px;
+  background:#fff; border:1px solid var(--line); border-radius:var(--r-xl);
+  box-shadow:var(--sh-s); text-decoration:none; transition:all var(--dur-fast);
+  min-width:0;
+}
+.group-card:hover{ border-color:var(--green); box-shadow:var(--sh-card-hover); transform:translateY(-1px) }
+.group-monogram{
+  flex:none; width:44px; height:44px; border-radius:12px; display:grid; place-items:center;
+  background:var(--green-t); color:var(--green); font-weight:800; font-size:1rem; letter-spacing:-.02em;
+  border:1px solid #CDE8D9;
+}
+.group-card-t{ flex:1; min-width:0; line-height:1.3 }
+.group-card-t strong{ display:block; font-size:.96rem; font-weight:700; color:var(--navy); overflow:hidden; text-overflow:ellipsis; white-space:nowrap }
+.group-card-t small{ display:block; font-size:.78rem; color:var(--tx-2); margin-top:2px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap }
+
+.group-hero {
+  display:flex; gap:14px; align-items:flex-start; padding:18px 20px;
+  background:#fff; border:1px solid var(--line); border-radius:var(--r-xl);
+  box-shadow:var(--sh-s); margin-bottom:14px;
+}
+.group-hero-ic{
+  flex:none; width:48px; height:48px; border-radius:14px; display:grid; place-items:center;
+  background:var(--green-t); color:var(--green); border:1px solid #CDE8D9;
+}
+.group-hero-copy h1{ margin:0; font-size:clamp(1.35rem,3.2vw,1.75rem); font-weight:800; letter-spacing:-.02em }
+.group-hero-copy .lead{ margin:4px 0 0; color:var(--tx-2); font-size:.92rem }
+.group-hero-meta{ display:flex; gap:8px; flex-wrap:wrap; margin-top:10px }
+
+/* Premium treasury — withdrawal priority card */
+.withdrawal-card{
+  position:relative; overflow:hidden;
+  padding:16px; border:1px solid var(--line); border-radius:var(--r-lg);
+  background:#fff; box-shadow:var(--sh-s); margin:0 0 10px;
+}
+.withdrawal-card--urgent{ border-color:#E8D2A0; background:linear-gradient(180deg,#FFFCF0 0%,#fff 100%) }
+.withdrawal-progress{
+  height:6px; background:var(--paper); border-radius:999px; overflow:hidden; margin:10px 0 2px;
+}
+.withdrawal-progress > span{ display:block; height:100%; border-radius:999px; transition:width .35s var(--ease-out) }
+
+/* Activity timeline — premium vertical line */
+.activity-timeline{ position:relative; padding-left:22px }
+.activity-timeline::before{
+  content:''; position:absolute; left:7px; top:8px; bottom:8px; width:2px;
+  background:linear-gradient(180deg,var(--line) 0%, transparent 100%); border-radius:2px;
+}
+.activity-dot{
+  position:absolute; left:0; top:14px; width:14px; height:14px; border-radius:50%;
+  background:#fff; border:2px solid var(--line); display:grid; place-items:center;
+}
+.activity-dot.ok{ border-color:var(--green); background:var(--green-t) }
+.activity-dot.soon{ border-color:var(--amber); background:var(--amber-t) }
 
 /* ── badges ─────────────────────────────────────────────────── */
 .badge { font-family:var(--font-mono); font-size:.66rem; padding:4px 9px; border-radius:5px;
@@ -325,47 +384,156 @@
 .prefopts button[aria-pressed="true"] { border-color:var(--green); background:var(--green-t);
   color:var(--green); font-weight:600 }
 
-/* ── treasury ───────────────────────────────────────────────── */
+/* ── treasury ─────────────────────────────────────────────────
+   Premium: the balance is the truth the group trusts. Light variant for
+   wallet (personal), deep navy variant for group treasury (shared).
+   Both get subtle depth so the number feels minted, not printed. */
 .balance-hero {
-  padding:18px; border:1px solid #BFE0CE; background:linear-gradient(160deg,#F3FBF6,#E7F4ED);
-  border-radius:var(--r-lg); margin-bottom:16px;
+  position:relative; overflow:hidden;
+  padding:22px 22px 18px; border:1px solid #BFE0CE;
+  background:linear-gradient(160deg,#F3FBF6 0%,#E7F4ED 100%);
+  border-radius:var(--r-xl); margin-bottom:16px;
+  box-shadow:var(--sh-premium);
 }
-.balance-hero .k { font-family:var(--font-mono); font-size:.68rem; text-transform:uppercase;
-  letter-spacing:.12em; color:var(--green); font-weight:600 }
-.balance-hero .v { font-family:var(--font-mono); font-size:clamp(1.6rem,7vw,2.1rem);
-  font-weight:600; color:var(--navy); letter-spacing:-.01em; line-height:1.1; margin-top:2px }
-.balance-hero .h { color:var(--tx-2); font-size:.86rem; margin-top:2px }
+.balance-hero::before {
+  content:''; position:absolute; inset:0; pointer-events:none; opacity:.5;
+  background:radial-gradient(520px 220px at 92% 0%, rgba(31,161,99,.10), transparent 62%);
+}
+.balance-hero .k { position:relative; font-family:var(--font-mono); font-size:.66rem; text-transform:uppercase;
+  letter-spacing:.13em; color:var(--green); font-weight:700 }
+.balance-hero .v { position:relative; font-family:var(--font-mono); font-size:clamp(1.7rem,6.5vw,2.35rem);
+  font-weight:700; color:var(--navy); letter-spacing:-.02em; line-height:1.06; margin-top:4px }
+.balance-hero .h { position:relative; color:var(--tx-2); font-size:.84rem; margin-top:6px; line-height:1.4 }
+.balance-hero .balance-actions { position:relative; display:flex; gap:8px; flex-wrap:wrap; margin-top:14px }
+.balance-hero .balance-meta { position:relative; display:flex; gap:10px; flex-wrap:wrap; margin-top:10px }
+.balance-hero .balance-meta span {
+  display:inline-flex; align-items:center; gap:6px;
+  font-size:.76rem; font-weight:600; color:var(--tx-2);
+  background:rgba(255,255,255,.78); border:1px solid rgba(220,229,236,.9);
+  padding:5px 10px; border-radius:999px;
+}
+
+/* Dark premium variant — for shared group money. Feels like a vault. */
+.balance-hero--dark {
+  background:var(--grad-navy); border-color:rgba(255,255,255,.10); color:#fff;
+  box-shadow:0 16px 48px rgba(8,30,51,.28),0 4px 16px rgba(8,30,51,.18);
+}
+.balance-hero--dark::before {
+  background:
+    radial-gradient(560px 260px at 88% -10%, rgba(31,161,99,.22), transparent 62%),
+    radial-gradient(420px 220px at 12% 110%, rgba(15,92,158,.28), transparent 65%);
+  opacity:1;
+}
+.balance-hero--dark .k { color:rgba(255,255,255,.72); letter-spacing:.14em }
+.balance-hero--dark .v { color:#fff; text-shadow:0 1px 12px rgba(0,0,0,.18) }
+.balance-hero--dark .h { color:rgba(255,255,255,.78) }
+.balance-hero--dark .balance-meta span {
+  background:rgba(255,255,255,.10); border-color:rgba(255,255,255,.16);
+  color:rgba(255,255,255,.88); backdrop-filter:blur(8px);
+}
+.balance-hero--dark .btn-p { background:#fff; color:var(--navy); border-color:#fff }
+.balance-hero--dark .btn-p:hover { background:var(--paper); }
+.balance-hero--dark .btn-o { background:rgba(255,255,255,.10); color:#fff; border-color:rgba(255,255,255,.22) }
+.balance-hero--dark .btn-o:hover { background:rgba(255,255,255,.16); border-color:rgba(255,255,255,.32) }
 
 .sig-note { display:flex; align-items:center; gap:10px; font-size:.9rem; margin-top:12px;
   padding:12px 14px; background:#fff; border:1px solid var(--line); border-radius:var(--r-sm) }
 
-/* ── wallet: cards (vouchers + loyalty) ───────────────────────── */
-.cards-grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(200px,1fr)); gap:12px }
+/* ── premium stat strip (wallet overview, group glance) ──────────── */
+.premium-stats {
+  display:grid; grid-template-columns:repeat(3,1fr); gap:10px; margin:0 0 16px;
+}
+.premium-stats .pstat {
+  display:flex; flex-direction:column; gap:3px; padding:14px 14px 12px;
+  background:#fff; border:1px solid var(--line); border-radius:var(--r-lg);
+  box-shadow:var(--sh-s); min-width:0;
+}
+.premium-stats .pstat-k {
+  font-family:var(--font-mono); font-size:.62rem; letter-spacing:.09em;
+  text-transform:uppercase; color:var(--tx-2); font-weight:600;
+}
+.premium-stats .pstat-v { font-weight:750; font-size:1.05rem; color:var(--navy); line-height:1.15 }
+.premium-stats .pstat-h { font-size:.76rem; color:var(--tx-2); white-space:nowrap; overflow:hidden; text-overflow:ellipsis }
+@media (max-width:560px){ .premium-stats{ grid-template-columns:1fr; } }
+
+/* ── wallet tabs — dedicated purpose per tab ─────────────────────
+   Wallet has 2 jobs: "my cards" and "what I owe". Tabs keep each
+   job in its own dedicated space rather than one tall scroll of
+   repeated card+form+list. */
+.wallet-tabs {
+  display:flex; gap:6px; padding:4px; margin:16px 0 14px;
+  background:var(--paper); border:1px solid var(--line); border-radius:999px;
+  width:fit-content; max-width:100%; overflow:auto; scrollbar-width:none;
+}
+.wallet-tabs::-webkit-scrollbar{ display:none }
+.wallet-tab {
+  display:inline-flex; align-items:center; gap:7px; padding:8px 16px;
+  border-radius:999px; border:1.5px solid transparent; background:transparent;
+  font-family:inherit; font-size:.84rem; font-weight:650; color:var(--tx-2);
+  cursor:pointer; white-space:nowrap; min-height:36px; transition:all var(--dur-fast);
+}
+.wallet-tab[aria-selected="true"] {
+  background:#fff; border-color:var(--line); box-shadow:var(--sh-s); color:var(--navy);
+}
+.wallet-tab:hover{ color:var(--navy) }
+.wallet-tab:focus-visible{ outline:3px solid rgba(31,161,99,.28); outline-offset:2px }
+
+/* ── wallet: cards (vouchers + loyalty) — premium material ───────── */
+.cards-grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(218px,1fr)); gap:14px }
 .wcard {
-  position:relative; border-radius:var(--r-lg); padding:16px 18px; color:#fff;
-  min-height:128px; display:flex; flex-direction:column; justify-content:space-between;
-  box-shadow:var(--sh-s); overflow:hidden; border:0; text-align:left; font-family:inherit;
+  position:relative; border-radius:var(--r-xl); padding:18px 18px 16px; color:#fff;
+  min-height:142px; display:flex; flex-direction:column; justify-content:space-between;
+  box-shadow:var(--sh-premium); overflow:hidden; border:1px solid rgba(255,255,255,.10);
+  text-align:left; font-family:inherit; transition:transform var(--dur-fast), box-shadow var(--dur-fast), border-color var(--dur-fast);
 }
-.wcard.loyalty { background:linear-gradient(135deg,var(--navy),var(--navy-3)) }
-.wcard.voucher { background:linear-gradient(135deg,var(--green),var(--green-2)) }
-.wcard-sub { display:block; font-family:var(--font-mono); font-size:.62rem; letter-spacing:.1em;
-  text-transform:uppercase; opacity:.78 }
-.wcard-label { font-weight:700; font-size:.95rem; margin-top:4px; line-height:1.25 }
-.wcard-bal { font-family:var(--font-mono); font-size:1.3rem; font-weight:600 }
-.wcard-code { font-family:var(--font-mono); font-size:.72rem; opacity:.78; margin-top:2px }
+.wcard:hover{ transform:translateY(-2px); box-shadow:var(--sh-card-hover) }
+.wcard::after{
+  content:''; position:absolute; inset:0; pointer-events:none; opacity:.9;
+  background:radial-gradient(420px 180px at 92% 0%, rgba(255,255,255,.14), transparent 58%);
+}
+.wcard.loyalty { background:linear-gradient(135deg,#0A2E4D 0%,#143A5E 55%,#1B4A73 100%) }
+.wcard.voucher { background:linear-gradient(135deg,#0F6B42 0%,#12794A 48%,#1FA163 100%) }
+.wcard.voucher.is-default { background:linear-gradient(135deg,#0E6A41 0%,#12814E 52%,#1FA163 100%); border-color:rgba(255,255,255,.14) }
+.wcard.voucher.is-default::before {
+  content:'DEFAULT'; position:absolute; top:12px; right:12px;
+  font-family:var(--font-mono); font-size:.56rem; letter-spacing:.10em;
+  background:rgba(255,255,255,.16); border:1px solid rgba(255,255,255,.22);
+  padding:3px 7px; border-radius:999px; opacity:1;
+}
+.wcard-sub { position:relative; display:block; font-family:var(--font-mono); font-size:.60rem; letter-spacing:.11em;
+  text-transform:uppercase; opacity:.82; font-weight:600 }
+.wcard-label { position:relative; font-weight:750; font-size:.98rem; margin-top:4px; line-height:1.25; letter-spacing:-.01em }
+.wcard-bal { position:relative; font-family:var(--font-mono); font-size:1.36rem; font-weight:700; letter-spacing:-.02em }
+.wcard-code { position:relative; font-family:var(--font-mono); font-size:.70rem; opacity:.80; margin-top:2px; letter-spacing:.02em }
 .wcard-topup {
-  align-self:flex-start; margin-top:8px; padding:5px 11px; border-radius:999px;
-  background:rgba(255,255,255,.18); color:#fff; border:1px solid rgba(255,255,255,.35);
-  font-size:.76rem; font-weight:600; cursor:pointer; min-height:auto;
+  position:relative; align-self:flex-start; margin-top:10px; padding:6px 12px; border-radius:999px;
+  background:rgba(255,255,255,.16); color:#fff; border:1px solid rgba(255,255,255,.30);
+  font-size:.76rem; font-weight:650; cursor:pointer; min-height:auto; backdrop-filter:blur(6px);
+  transition:background var(--dur-fast), border-color var(--dur-fast);
 }
-.wcard-topup-form { display:flex; gap:6px; margin-top:8px; flex-wrap:wrap }
-.wcard-topup-form .inp { flex:1 1 100px; min-width:0; background:rgba(255,255,255,.92) }
-.wcard-msg { flex-basis:100%; font-size:.74rem; margin:2px 0 0; opacity:.9 }
+.wcard-topup:hover{ background:rgba(255,255,255,.22); border-color:rgba(255,255,255,.42) }
+.wcard-topup-form { position:relative; display:flex; gap:8px; margin-top:10px; flex-wrap:wrap; z-index:1 }
+.wcard-topup-form .inp { flex:1 1 120px; min-width:0; background:rgba(255,255,255,.96); border-color:rgba(255,255,255,.0); border-radius:10px }
+.wcard-topup-form .inp:focus{ outline:3px solid rgba(255,255,255,.32) }
+.wcard-msg { flex-basis:100%; font-size:.76rem; margin:4px 0 0; opacity:.94; color:#fff }
 .wcard-new {
-  align-items:center; justify-content:center; gap:8px; color:var(--tx-2);
-  background:var(--paper); border:1.5px dashed var(--line); cursor:pointer;
+  align-items:center; justify-content:center; gap:10px; color:var(--tx-2);
+  background:linear-gradient(180deg,#FFFFFF 0%, #F8FBFC 100%); border:1.5px dashed #C8D8E6; cursor:pointer;
 }
-.wcard-new:hover { border-color:var(--green); color:var(--green) }
+.wcard-new:hover { border-color:var(--green); color:var(--green); background:#fff }
+
+/* ── premium bill row ───────────────────────────────────────────── */
+.bill-row-premium {
+  display:flex; align-items:center; gap:12px; padding:14px 0; border-bottom:1px solid var(--line);
+}
+.bill-row-premium:last-child{ border-bottom:0 }
+.bill-ic {
+  flex:none; width:36px; height:36px; border-radius:10px; display:grid; place-items:center;
+  font-size:15px;
+}
+.bill-ic.overdue{ background:var(--red-t); color:var(--red) }
+.bill-ic.soon{ background:var(--amber-t); color:var(--amber) }
+.bill-ic.ok{ background:var(--green-t); color:var(--green) }
 
 /* ── responsive density ─────────────────────────────────────── */
 @media (max-width:560px) {

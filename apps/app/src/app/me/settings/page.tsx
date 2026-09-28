@@ -4,6 +4,7 @@ import { formatMsisdn } from '@esoqo/domain';
 import { requireSubject } from '@/lib/session';
 import { PrefsPanel } from './PrefsPanel';
 import { CloseAccountPanel } from './CloseAccountPanel';
+import { EsoqoIdCard } from './EsoqoIdCard';
 
 export const dynamic = 'force-dynamic';
 
@@ -81,6 +82,8 @@ export default async function SettingsPage() {
           )}
         </section>
       )}
+
+      {me?.esoqoPaymentId && <EsoqoIdCard code={me.esoqoPaymentId.code} />}
 
       <section className="mcard">
         <h2><Icon name="certificate" size={18} />Confirmations</h2>

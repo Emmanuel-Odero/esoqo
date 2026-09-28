@@ -13,19 +13,29 @@
   --green:#12794A; --green-2:#1FA163; --green-t:#E7F4ED;
   --red:#CE2B2B; --red-t:#FCEDEC;
   --amber:#9A6105; --amber-t:#FDF4E3;
-  --paper:#F4F7FA; --line:#DCE5EC;
+  --paper:#F4F7FA; --line:#DCE5EC; --line-2:#E8EFF5;
   --tx:#12283A; --tx-2:#57718A; --tx-3:#5A7695;
+  /* Premium surface — subtle elevated backdrops */
+  --surface:#FFFFFF; --surface-2:#F9FBFD; --surface-3:#EEF4F8;
 
   /* Category/ticket gradient accents — mobile-only decorative palette.
-     No per-category gradients exist on the web today. */
+      No per-category gradients exist on the web today. */
   --green-light:#2E9E5B; --amber-light:#E0A233; --amber-deep:#B9790F;
   --pink:#C65DA6; --pink-dark:#8E3D77; --purple:#7C3D8E; --amber-warm:#B8781A;
+  /* Premium accents — gold for treasury, subtle sheen */
+  --gold:#C9A86A; --gold-t:#FDF6E8; --navy-premium:#081E33;
+  --grad-navy:linear-gradient(135deg,#0A2E4D 0%,#123F65 55%,#123A5E 100%);
+  --grad-green-premium:linear-gradient(135deg,#0F6B42 0%,#12794A 45%,#1FA163 100%);
+  --grad-paper-premium:linear-gradient(180deg,#FFFFFF 0%,#F8FBFC 100%);
 
   --w:1160px;
 
   --sh-s:0 1px 2px rgba(10,46,77,.05),0 4px 14px rgba(10,46,77,.05);
   --sh-m:0 8px 28px rgba(10,46,77,.10);
   --sh-l:0 24px 60px rgba(10,46,77,.18);
+  /* Premium elevation — softer, deeper, more expensive */
+  --sh-premium:0 1px 3px rgba(10,46,77,.06),0 12px 40px rgba(10,46,77,.10),0 2px 10px rgba(10,46,77,.04);
+  --sh-card-hover:0 8px 32px rgba(10,46,77,.12),0 2px 8px rgba(10,46,77,.06);
 
   /* Elevation — one step stronger than the equivalent shadow, used only
      where elements genuinely float above the page (sheets, bars). */

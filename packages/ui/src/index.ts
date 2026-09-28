@@ -49,3 +49,4 @@ export {
   queueCustody, listQueuedCustody, pendingCustodyCount, flushCustody, discardCustody,
   type CustodyIntent, type CustodyFlushResult, type QueuedCustody,
 } from './custodyQueue';
+export { QrCode } from './QrCode';
