@@ -24,11 +24,11 @@ export function ContributionForm({ orgId }: { orgId: string }) {
   }
 
   return (
-    <div className="mcard">
+    <div className="mcard mcard--premium">
       <h2><Icon name="coins" size={18} />Declare a contribution</h2>
-      <p style={{ color: 'var(--tx-2)', fontSize: '.9rem', margin: '0 0 14px' }}>
+      <p style={{ color: 'var(--tx-2)', fontSize: '.9rem', margin: '0 0 14px', lineHeight: 1.5 }}>
         Say what you paid — in cash at a meeting, or by M-Pesa to the treasurer. An officer confirms
-        it before it counts toward the group's balance.
+        it before it counts toward the vault.
       </p>
       <div className="fld">
         <label className="lab" htmlFor="ct-amt">Amount (KES)</label>

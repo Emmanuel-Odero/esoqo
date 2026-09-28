@@ -30,38 +30,48 @@ export default async function MyGroups() {
   return (
     <>
       <header className="hero" style={{ padding: '4px 0 14px' }}>
-        <p className="kicker">Group</p>
+        <p className="kicker">Your chama &amp; circles</p>
         <h1>Your groups</h1>
+        <p className="lead" style={{ maxWidth: 560 }}>Each group has one dedicated home — roster, activity and governance. Money lives in its Treasury, not scattered here.</p>
       </header>
 
       {memberships.length === 0 ? (
-        <div className="mcard" style={{ marginBottom: 16 }}>
-          <div className="mempty">
-            <span className="ico"><Icon name="users" size={22} /></span>
-            <h2 style={{ marginBottom: 7 }}>You are not in a group on Esoqo</h2>
-            <p style={{ margin: 0 }}>
-              If your chama is already here, its treasurer can add you. Dial *483*77# and choose 4
-              to ask. Otherwise, start one below.
+        <div className="mcard mcard--premium" style={{ marginBottom: 16, textAlign: 'center', padding: '28px 20px' }}>
+          <div className="mempty" style={{ padding: '8px 0 0' }}>
+            <span className="ico" style={{ width: 56, height: 56, borderRadius: 16, background: 'var(--green-t)', color: 'var(--green)', border: '1px solid #CDE8D9' }}><Icon name="users" size={26} /></span>
+            <h2 style={{ marginBottom: 7, fontSize: '1.05rem' }}>You are not in a group yet</h2>
+            <p style={{ margin: '0 auto', maxWidth: 420, color: 'var(--tx-2)', fontSize: '.92rem', lineHeight: 1.5 }}>
+              If your chama is already on Esoqo, its treasurer can add you by phone. Otherwise, start one below — you become its chairperson and first signatory instantly.
+            </p>
+            <p style={{ margin: '14px 0 0', display: 'inline-flex', alignItems: 'center', gap: 8, fontSize: '.82rem', color: 'var(--tx-2)', background: 'var(--paper)', border: '1px solid var(--line)', padding: '7px 12px', borderRadius: 999 }}>
+              <Icon name="keypad" size={13} /> Dial <strong className="mono" style={{ color: 'var(--navy)' }}>*483*77#</strong> → 4 to ask
             </p>
           </div>
         </div>
       ) : (
-        <section className="mcard" style={{ marginBottom: 16 }}>
-          {memberships.map((m) => (
-            <Link key={m.orgId} href={`/me/group/${m.orgId}` as Route} className="mrow" style={{ textDecoration: 'none' }}>
-              <span style={{ flex: 1, minWidth: 0 }}>
-                <span className="v" style={{ display: 'block' }}>
-                  {m.org.knownAs || m.org.officialName}
-                  {m.status === 'PENDING' && <span className="badge b-warn" style={{ marginLeft: 8 }}>Pending</span>}
-                </span>
-                <span className="hint" style={{ display: 'block', marginTop: 2 }}>
-                  {m.role === 'OTHER' ? (m.customRole || 'Other') : m.role.toLowerCase()} · {m.org.party.county}
-                </span>
-              </span>
-              <Icon name="chevron-right" size={16} />
-            </Link>
-          ))}
-        </section>
+        <>
+          <div className="premium-stats" aria-label="Groups at a glance">
+            <div className="pstat"><span className="pstat-k">Groups</span><span className="pstat-v">{memberships.length}</span><span className="pstat-h">{memberships.filter((m) => m.status === 'PENDING').length ? `${memberships.filter((m) => m.status === 'PENDING').length} pending join fee` : 'All active'}</span></div>
+            <div className="pstat"><span className="pstat-k">Your role</span><span className="pstat-v" style={{ fontSize: '.98rem' }}>{memberships[0] ? (memberships[0].role === 'OTHER' ? (memberships[0].customRole || 'Other') : memberships[0].role.toLowerCase()) : '—'}</span><span className="pstat-h">Primary group</span></div>
+            <div className="pstat"><span className="pstat-k">Treasury</span><span className="pstat-v" style={{ fontSize: '.92rem' }}>Separate</span><span className="pstat-h">One vault per group</span></div>
+          </div>
+          <div className="group-grid">
+            {memberships.map((m) => {
+              const name = m.org.knownAs || m.org.officialName;
+              const initial = name.trim().charAt(0).toUpperCase() || 'G';
+              return (
+                <Link key={m.orgId} href={`/me/group/${m.orgId}` as Route} className="group-card">
+                  <span className="group-monogram" aria-hidden="true">{initial}</span>
+                  <span className="group-card-t">
+                    <strong>{name} {m.status === 'PENDING' && <span className="badge b-warn" style={{ marginLeft: 6, verticalAlign: 'middle' }}>Pending</span>}</strong>
+                    <small>{m.role === 'OTHER' ? (m.customRole || 'Other') : m.role.toLowerCase()} · {m.org.party.county} · {m.org._count.members} members</small>
+                  </span>
+                  <Icon name="chevron-right" size={16} style={{ color: 'var(--tx-3)', flex: 'none' }} />
+                </Link>
+              );
+            })}
+          </div>
+        </>
       )}
 
       <CreateGroupForm kindOptions={GROUP_KIND_OPTIONS} />

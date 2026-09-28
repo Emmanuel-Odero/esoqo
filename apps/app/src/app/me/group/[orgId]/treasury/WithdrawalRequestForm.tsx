@@ -29,11 +29,10 @@ export function WithdrawalRequestForm({ orgId, leadMinutes }: { orgId: string; l
   }
 
   return (
-    <div className="mcard">
+    <div className="mcard mcard--premium">
       <h2><Icon name="bank" size={18} />Propose a withdrawal</h2>
-      <p style={{ color: 'var(--tx-2)', fontSize: '.9rem', margin: '0 0 14px' }}>
-        Every signer sees this the moment you send it, and has at least {leadMinutes} active-hours
-        minutes to sign before it can go through. One rejection stops it immediately.
+      <p style={{ color: 'var(--tx-2)', fontSize: '.9rem', margin: '0 0 14px', lineHeight: 1.5 }}>
+        Every signer is notified at once, and has at least {leadMinutes} active-hours to sign before it can execute. One rejection stops it immediately.
       </p>
       <div className="fld">
         <label className="lab" htmlFor="wd-amt">Amount (KES)</label>

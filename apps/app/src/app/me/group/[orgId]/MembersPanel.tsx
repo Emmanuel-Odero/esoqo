@@ -92,7 +92,8 @@ function InviteForm({ orgId }: { orgId: string }) {
       {error && <p className="err" role="alert"><Icon name="alert-circle" size={15} />{error}</p>}
       {done && !error && (
         <p style={{ color: 'var(--green)', fontSize: '.88rem', margin: '0 0 12px' }}>
-          <Icon name="check" size={14} /> Invited.
+          <Icon name="check" size={14} /> Invited — they&rsquo;ll get a text naming you and this group,
+          with what to do next.
         </p>
       )}
       <button

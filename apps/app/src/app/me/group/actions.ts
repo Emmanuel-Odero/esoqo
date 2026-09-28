@@ -2,6 +2,9 @@
 import { revalidatePath } from 'next/cache';
 import {
   createOwnGroup, inviteMember, setMemberRole, removeMember,
+  createProposal, castProposalVote,
+  createGroupProject, declareProjectContribution, confirmProjectContribution,
+  requestProjectWithdrawal, voteProjectWithdrawal,
 } from '@esoqo/db';
 import { sendSms, sendEmail } from '@esoqo/auth';
 import {
@@ -54,7 +57,7 @@ export async function actionInviteMember(raw: unknown) {
   if (!parsed.success) return { ok: false as const, error: parsed.error.issues[0]?.message ?? 'Check what you entered' };
   try {
     const ctx = await requireSubject();
-    const { notify, orgName, joinFeeKes } = await inviteMember(
+    const { notify, orgName, joinFeeKes, inviterName } = await inviteMember(
       ctx, parsed.data.orgId,
       { msisdn: parsed.data.msisdn || undefined, email: parsed.data.email || undefined, officialName: parsed.data.officialName },
       parsed.data.role as never, parsed.data.customRole,
@@ -62,11 +65,15 @@ export async function actionInviteMember(raw: unknown) {
 
     try {
       if (notify.channel === 'sms') {
-        await sendSms(notify.to, groupInviteSms(orgName, { joinFeeKes }), 'group-invite');
+        await sendSms(notify.to, groupInviteSms(orgName, { joinFeeKes, inviterName: inviterName ?? undefined }), 'group-invite');
       } else {
+        const by = inviterName ? `${inviterName} has invited you` : "You've been invited";
         await sendEmail(
           notify.to, `You've been invited to ${orgName} on Esoqo`,
-          `You've been invited to join ${orgName} on Esoqo.\n\n`
+          `${by} to join ${orgName}, a savings group on Esoqo.\n\n`
+          + (joinFeeKes > 0
+            ? `This group asks for a one-time KES ${joinFeeKes.toLocaleString('en-KE')} join fee, payable once you're signed in.\n\n`
+            : '')
           + 'Esoqo accounts sign in with a phone number, not this email — once one is added to your record '
           + '(ask whoever invited you, or add it yourself once you have an account), you can sign in and set a PIN.',
         );
@@ -105,6 +112,95 @@ export async function actionRemoveMember(raw: unknown) {
     await removeMember(ctx, parsed.data.membershipId, parsed.data.reason);
     revalidatePath('/me/group', 'layout');
     return { ok: true as const, data: undefined };
+  } catch (e) {
+    console.error(e);
+    return { ok: false as const, error: toSafeErrorMessage(e, FALLBACK) };
+  }
+}
+
+export async function actionCreateProposal(input: {
+  orgId: string; kind: 'ADD_MEMBER' | 'REMOVE_MEMBER';
+  targetPersonId?: string; targetMsisdn?: string; targetName?: string;
+}) {
+  try {
+    const ctx = await requireSubject();
+    await createProposal(ctx, input);
+    revalidatePath('/me/group', 'layout');
+    return { ok: true as const };
+  } catch (e) {
+    console.error(e);
+    return { ok: false as const, error: toSafeErrorMessage(e, FALLBACK) };
+  }
+}
+
+export async function actionCastProposalVote(proposalId: string, decision: 'APPROVE' | 'REJECT') {
+  try {
+    const ctx = await requireSubject();
+    const result = await castProposalVote(ctx, proposalId, decision);
+    revalidatePath('/me/group', 'layout');
+    return { ok: true as const, data: result };
+  } catch (e) {
+    console.error(e);
+    return { ok: false as const, error: toSafeErrorMessage(e, FALLBACK) };
+  }
+}
+
+export async function actionCreateProject(
+  orgId: string, title: string, purpose: string | undefined, targetKes: number | undefined, signerIds: string[],
+) {
+  try {
+    const ctx = await requireSubject();
+    await createGroupProject(ctx, { orgId, title, purpose, targetKes, signerIds });
+    revalidatePath('/me/group', 'layout');
+    return { ok: true as const };
+  } catch (e) {
+    console.error(e);
+    return { ok: false as const, error: toSafeErrorMessage(e, FALLBACK) };
+  }
+}
+
+export async function actionDeclareProjectContribution(projectId: string, amountKes: number) {
+  try {
+    const ctx = await requireSubject();
+    await declareProjectContribution(ctx, projectId, { amountKes });
+    revalidatePath('/me/group', 'layout');
+    return { ok: true as const };
+  } catch (e) {
+    console.error(e);
+    return { ok: false as const, error: toSafeErrorMessage(e, FALLBACK) };
+  }
+}
+
+export async function actionConfirmProjectContribution(contributionId: string) {
+  try {
+    const ctx = await requireSubject();
+    await confirmProjectContribution(ctx, contributionId);
+    revalidatePath('/me/group', 'layout');
+    return { ok: true as const };
+  } catch (e) {
+    console.error(e);
+    return { ok: false as const, error: toSafeErrorMessage(e, FALLBACK) };
+  }
+}
+
+export async function actionRequestProjectWithdrawal(projectId: string, amountKes: number, purpose: string, payeeName: string) {
+  try {
+    const ctx = await requireSubject();
+    await requestProjectWithdrawal(ctx, projectId, { amountKes, purpose, payeeName });
+    revalidatePath('/me/group', 'layout');
+    return { ok: true as const };
+  } catch (e) {
+    console.error(e);
+    return { ok: false as const, error: toSafeErrorMessage(e, FALLBACK) };
+  }
+}
+
+export async function actionVoteProjectWithdrawal(withdrawalId: string, decision: 'APPROVE' | 'REJECT') {
+  try {
+    const ctx = await requireSubject();
+    const result = await voteProjectWithdrawal(ctx, withdrawalId, decision);
+    revalidatePath('/me/group', 'layout');
+    return { ok: true as const, data: result };
   } catch (e) {
     console.error(e);
     return { ok: false as const, error: toSafeErrorMessage(e, FALLBACK) };

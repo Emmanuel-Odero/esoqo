@@ -4,12 +4,17 @@ import {
   declareContribution, confirmContribution, requestWithdrawal, signWithdrawal,
   createJoinFeePayment, setTreasuryPolicy,
   getContributionNotifyDetail, activeMemberMsisdns,
+  getWithdrawalNotifyDetail, effectiveSignerMsisdns,
+  addSignatory, setGroupSignerPermissions, removeGroupSigner,
+  attachSignatoryFeeCheckoutRequestId, confirmSignatoryFeePayment, failSignatoryFeePaymentById,
+  type SignerPermissions,
 } from '@esoqo/db';
 import { sendSms } from '@esoqo/auth';
+import { initiateStkPush, MpesaError } from '@esoqo/payments';
 import {
   declareContributionSchema, requestWithdrawalSchema, signWithdrawalSchema,
   createJoinFeePaymentSchema, setTreasuryPolicySchema, toSafeErrorMessage,
-  contributionDeclaredSms, contributionConfirmedSms,
+  contributionDeclaredSms, contributionConfirmedSms, withdrawalRequestedSms,
 } from '@esoqo/domain';
 import { requireSubject } from '@/lib/session';
 
@@ -94,12 +99,38 @@ export async function actionConfirmContribution(contributionId: string) {
   }
 }
 
+/**
+ * Withdrawals used to notify nobody — a member found out money was
+ * moving only by opening the treasury page and looking. Signers are the
+ * one audience with something to do (sign or reject before the standby
+ * window closes), so they're the one audience billed SMS; everyone else
+ * finds out from the free activity feed the DAL already wrote to.
+ */
+async function notifyWithdrawalRequested(withdrawalId: string) {
+  try {
+    const detail = await getWithdrawalNotifyDetail(withdrawalId);
+    if (!detail) return;
+    const message = withdrawalRequestedSms({
+      orgName: detail.orgName, amountKes: detail.amountKes,
+      purpose: detail.purpose, requesterName: detail.requesterName,
+    });
+    const recipients = await effectiveSignerMsisdns(detail.orgId);
+    await Promise.all(recipients.map((to) =>
+      sendSms(to, message, 'treasury-withdrawal').catch((e) => {
+        console.error('[treasury] withdrawal-requested notification failed for one signer', e);
+      })));
+  } catch (e) {
+    console.error('[treasury] withdrawal-requested notification failed', e);
+  }
+}
+
 export async function actionRequestWithdrawal(raw: unknown) {
   const parsed = requestWithdrawalSchema.safeParse(raw);
   if (!parsed.success) return { ok: false as const, error: parsed.error.issues[0]?.message ?? 'Check what you entered' };
   try {
     const ctx = await requireSubject();
     const withdrawal = await requestWithdrawal(ctx, parsed.data);
+    await notifyWithdrawalRequested(withdrawal.id);
     revalidatePath('/me/group', 'layout');
     return { ok: true as const, data: { standbyOpensAt: withdrawal.standbyOpensAt.toISOString() } };
   } catch (e) {
@@ -151,5 +182,74 @@ export async function actionSignWithdrawal(raw: unknown) {
       ok: false as const,
       error: toSafeErrorMessage(e, "That signature didn't go through. Please try again."),
     };
+  }
+}
+
+/**
+ * Adding a signatory beyond the first five free ones needs real money
+ * to move before the signer row exists (see addSignatory's DAL doc) —
+ * same write-then-push-then-confirm order as wallet top-up and
+ * business payments, for the same reason: the fee row is created first
+ * so a crash between here and Safaricom can't lose track of it.
+ */
+export async function actionAddSignatory(
+  orgId: string, personId: string, permissions: SignerPermissions, feeMethod: 'STK_NEW_SIGNER' | 'STK_OFFICER' | 'GROUP_TREASURY',
+) {
+  try {
+    const ctx = await requireSubject();
+    const result = await addSignatory(ctx, orgId, personId, permissions, feeMethod);
+    if (result.status === 'ADDED') {
+      revalidatePath('/me/group', 'layout');
+      return { ok: true as const, data: { status: 'ADDED' as const } };
+    }
+
+    // FEE_PENDING: an STK push is needed before the row is created.
+    if (!result.payerMsisdn) {
+      return { ok: false as const, error: 'No phone number on file to send the M-Pesa prompt to.' };
+    }
+    let push;
+    try {
+      push = await initiateStkPush({
+        msisdn: result.payerMsisdn, amountKes: 50,
+        accountReference: 'ESOQO SIGNATORY', description: 'Signatory fee',
+      });
+    } catch (e) {
+      await failSignatoryFeePaymentById(result.feeId, e instanceof MpesaError ? e.message : 'M-Pesa declined to send the prompt').catch(() => {});
+      return { ok: false as const, error: e instanceof MpesaError ? e.message : FALLBACK };
+    }
+    await attachSignatoryFeeCheckoutRequestId(result.feeId, push.checkoutRequestId);
+    if (push.autoConfirmed) {
+      await confirmSignatoryFeePayment(push.checkoutRequestId, push.mpesaReceiptCode ?? '');
+      revalidatePath('/me/group', 'layout');
+      return { ok: true as const, data: { status: 'ADDED' as const } };
+    }
+    return { ok: true as const, data: { status: 'FEE_PENDING' as const, msisdn: result.payerMsisdn } };
+  } catch (e) {
+    console.error(e);
+    return { ok: false as const, error: toSafeErrorMessage(e, FALLBACK) };
+  }
+}
+
+export async function actionSetGroupSignerPermissions(orgId: string, personId: string, permissions: Partial<SignerPermissions>) {
+  try {
+    const ctx = await requireSubject();
+    await setGroupSignerPermissions(ctx, orgId, personId, permissions);
+    revalidatePath('/me/group', 'layout');
+    return { ok: true as const };
+  } catch (e) {
+    console.error(e);
+    return { ok: false as const, error: toSafeErrorMessage(e, FALLBACK) };
+  }
+}
+
+export async function actionRemoveGroupSigner(orgId: string, personId: string) {
+  try {
+    const ctx = await requireSubject();
+    await removeGroupSigner(ctx, orgId, personId);
+    revalidatePath('/me/group', 'layout');
+    return { ok: true as const };
+  } catch (e) {
+    console.error(e);
+    return { ok: false as const, error: toSafeErrorMessage(e, FALLBACK) };
   }
 }
