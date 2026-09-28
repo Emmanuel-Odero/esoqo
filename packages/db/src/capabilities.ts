@@ -72,6 +72,29 @@ export function anonCtx(ip?: string | null): Ctx {
   return { actorType: 'SYSTEM', actorId: null, capabilities: [], ip, __verified: true };
 }
 
+/**
+ * The self-serve /join flow's context — an unauthenticated visitor
+ * registering themselves, before any Party/session exists for them to
+ * be SUBJECT-authenticated as. Deliberately least-privilege: exactly the
+ * three registration.* actions the join wizard's server actions need
+ * (start, update fields as steps complete, mark msisdn verified) plus
+ * document.write so the ID photos can attach to the in-progress
+ * registration. Never grant more here — once completeRegistration
+ * returns a partyId, the rest of the flow (issuing an esoqo ID, saving
+ * the national ID record) should build a real SUBJECT ctx for that
+ * party instead, the same shape a signed-in session produces
+ * (see capabilitiesForRole('SUBJECT') in packages/auth/src/session.ts).
+ */
+export function publicJoinCtx(ip?: string | null): Ctx {
+  return {
+    actorType: 'SYSTEM',
+    actorId: 'public-join',
+    capabilities: ['registration.create', 'registration.read', 'registration.write', 'document.write'],
+    ip,
+    __verified: true,
+  };
+}
+
 function matches(held: Capability, wanted: Capability, ctx: Ctx, opts?: Record<string, unknown>) {
   if (held === '*') return true;
   if (held === wanted) return true;

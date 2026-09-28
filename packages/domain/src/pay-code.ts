@@ -43,6 +43,7 @@
  * only the database knows that, and only the lookup does.
  */
 import { randomAlphabetString, UNAMBIGUOUS_ALPHABET } from './random-code';
+import { isSystemHandleShape } from './handle-code';
 
 const ESK_CURRENT = `[ABCDEFGHJKMNPQRSTUVWXYZ23456789]{6}`;
 const ESK_LEGACY = `[0-9]{4}`;
@@ -81,16 +82,30 @@ export function mintEsoqoCode(): string {
   return `ESK-${randomAlphabetString(ESK_CODE_ALPHABET, ESK_CODE_LENGTH)}-KE`;
 }
 
-/** Whether a string is shaped like an Esoqo Payment ID. Not a lookup —
- *  it answers "could this be one", so callers can decide whether to go
+/** Whether a string is shaped like an Esoqo ID — either the legacy/current
+ *  `ESK-XXXX-KE` payment-code shape, or the newer human-friendly handle
+ *  shape from handle-code.ts (e.g. "mutukuka482"). Not a lookup — it
+ *  answers "could this be one", so callers can decide whether to go
  *  looking or fall through to a name search. */
 export function isEsoqoIdShape(raw: string): boolean {
-  return ESK_SHAPE.test(raw.trim().toUpperCase());
+  const trimmed = raw.trim();
+  return ESK_SHAPE.test(trimmed.toUpperCase()) || isSystemHandleShape(trimmed);
+}
+
+/** The canonical case for a shape-matched id: ESK- codes are upper-case,
+ *  handles are lower-case — the two shapes never collide (an ESK- code
+ *  always contains a literal hyphen; a handle never does), so trying the
+ *  ESK shape first is unambiguous. Returns '' if neither shape matches. */
+function canonicalEsoqoId(raw: string): string {
+  const trimmed = raw.trim();
+  if (ESK_SHAPE.test(trimmed.toUpperCase())) return trimmed.toUpperCase();
+  if (isSystemHandleShape(trimmed)) return trimmed.toLowerCase();
+  return '';
 }
 
 /**
- * Normalises scanned, typed or pasted input to a bare upper-case Esoqo
- * Payment ID, or '' when the input isn't one.
+ * Normalises scanned, typed or pasted input to a bare, canonically-cased
+ * Esoqo ID, or '' when the input isn't one.
  *
  * Three shapes arrive and all three are legitimate:
  *  - a bare code, from a scanner gun or someone reading the stand;
@@ -103,7 +118,7 @@ export function isEsoqoIdShape(raw: string): boolean {
  *
  * A pay link is read from its `to` query parameter first, falling back
  * to the last path segment, so `/pay?to=ESK-4471-KE` and a future
- * `/pay/ESK-4471-KE` both work without changing this function.
+ * `/pay/mutukuka482` both work without changing this function.
  *
  * A string that merely looks URL-ish but won't parse falls through and
  * is tested as a code, on the grounds that returning nothing helps
@@ -117,13 +132,15 @@ export function extractEsoqoId(raw: string): string {
     try {
       const url = new URL(trimmed);
       const fromQuery = (url.searchParams.get('to') ?? url.searchParams.get('party') ?? '').trim();
-      if (isEsoqoIdShape(fromQuery)) return fromQuery.toUpperCase();
+      const fromQueryCanonical = canonicalEsoqoId(fromQuery);
+      if (fromQueryCanonical) return fromQueryCanonical;
 
       const segments = url.pathname.split('/').filter(Boolean);
       const last = segments[segments.length - 1];
       if (last) {
-        const decoded = decodeURIComponent(last).trim().toUpperCase();
-        if (isEsoqoIdShape(decoded)) return decoded;
+        const decoded = decodeURIComponent(last).trim();
+        const decodedCanonical = canonicalEsoqoId(decoded);
+        if (decodedCanonical) return decodedCanonical;
       }
       return '';
     } catch {
@@ -131,8 +148,7 @@ export function extractEsoqoId(raw: string): string {
     }
   }
 
-  const upper = trimmed.toUpperCase();
-  return isEsoqoIdShape(upper) ? upper : '';
+  return canonicalEsoqoId(trimmed);
 }
 
 /**

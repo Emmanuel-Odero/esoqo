@@ -1,4 +1,4 @@
-import { mintEsoqoCode } from '@esoqo/domain';
+import { mintEsoqoCode, generateSystemHandle } from '@esoqo/domain';
 import type { MemberRole } from '@prisma/client';
 import { prisma } from '../client';
 import { requireCapability, AuthorisationError, type Ctx } from '../capabilities';
@@ -54,6 +54,32 @@ export function isUniqueViolation(err: unknown): boolean {
     && 'code' in err && (err as { code?: unknown }).code === 'P2002';
 }
 
+/**
+ * Allocates a free, human-friendly esoqo ID built from a person's own
+ * names — the replacement for allocateEsoqoCode's opaque ESK- shape.
+ * Same retry-on-P2002 shape: the database is the only arbiter of
+ * uniqueness, so a clash just re-rolls rather than being pre-checked.
+ *
+ * `names` should be the 2-3 official names captured at registration
+ * (firstName/middleName/surname). A person with none on file (older
+ * data, or a record that only ever had a freeform officialName) falls
+ * back to that string's words, so this never has nothing to work with.
+ */
+export async function allocateEsoqoHandle(partyId: string, names: string[]): Promise<string> {
+  const usable = names.filter((n) => n?.trim());
+  for (let attempt = 0; attempt < 5; attempt++) {
+    const code = generateSystemHandle(usable);
+    try {
+      return (await prisma.esoqoPaymentId.create({
+        data: { partyId, code, source: 'SYSTEM_GENERATED' },
+      })).code;
+    } catch (err) {
+      if (!isUniqueViolation(err)) throw err;
+    }
+  }
+  throw new PaymentIdError('Could not allocate an esoqo ID — try again', 'ALREADY_ISSUED');
+}
+
 /** Issues a Payment ID once the subject holds MSISDN_VERIFIED — the
  *  same verification the sign-in/registration flow already produces.
  *
@@ -75,7 +101,8 @@ export async function issueEsoqoPaymentId(ctx: Ctx) {
     throw new PaymentIdError('Verify your phone number before activating a Payment ID', 'NOT_VERIFIED');
   }
 
-  const code = await allocateEsoqoCode(ctx.partyId);
+  const names = await namesForPerson(ctx.partyId);
+  const code = await allocateEsoqoHandle(ctx.partyId, names);
   await recordAudit(ctx, {
     action: 'paymentid.issued', targetType: 'esoko_payment_id', targetId: ctx.partyId,
     payload: { code },
@@ -83,10 +110,32 @@ export async function issueEsoqoPaymentId(ctx: Ctx) {
   return prisma.esoqoPaymentId.findUniqueOrThrow({ where: { partyId: ctx.partyId } });
 }
 
+/** The 2-3 names a person's handle draws from — split fields when
+ *  present, falling back to splitting the freeform officialName for
+ *  older records that predate the split. */
+async function namesForPerson(partyId: string): Promise<string[]> {
+  const person = await prisma.person.findUnique({
+    where: { partyId },
+    select: { firstName: true, middleName: true, surname: true, officialName: true },
+  });
+  return person?.firstName
+    ? [person.firstName, person.middleName, person.surname].filter((n): n is string => Boolean(n))
+    : (person?.officialName ?? '').split(/\s+/).filter(Boolean);
+}
+
 export async function getMyPaymentId(ctx: Ctx) {
   if (!ctx.partyId) return null;
   requireCapability(ctx, 'entity.read', { partyId: ctx.partyId });
-  return prisma.esoqoPaymentId.findUnique({ where: { partyId: ctx.partyId } });
+  const existing = await prisma.esoqoPaymentId.findUnique({ where: { partyId: ctx.partyId } });
+  if (!existing) return null;
+
+  // Lazy renewal check — see reclaimExpiredHandleIfNeeded's doc comment:
+  // nothing here runs on a schedule, so an expired premium handle past
+  // its grace window is only ever replaced on the next read like this one.
+  const { reclaimExpiredHandleIfNeeded } = await import('./esoqo-id-purchase');
+  const reclaimed = await reclaimExpiredHandleIfNeeded(ctx, existing, await namesForPerson(ctx.partyId));
+  if (reclaimed) return prisma.esoqoPaymentId.findUnique({ where: { partyId: ctx.partyId } });
+  return existing;
 }
 
 /* ── Business payment IDs ────────────────────────────────────

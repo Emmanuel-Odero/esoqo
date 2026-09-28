@@ -90,44 +90,44 @@ model Party {
   /// Which front door this Party first registered through. See SourceSystem.
   sourceSystem SourceSystem @default(ESOKO)
 
-  person                  Person?
-  organisation            Organisation?
-  enterprises             Enterprise[]
-  memberships             Membership[]      @relation("MemberParty")
-  accounts                Account[]
-  attestations            Attestation[]     @relation("AttestationSubject")
-  consentsGiven           ConsentGrant[]    @relation("ConsentSubject")
-  documents               Document[]
-  registration            Registration?
-  groupJoinRegistrations  Registration[]    @relation("RegistrationGroupParty")
-  bizJoinRegistrations    Registration[]    @relation("RegistrationBizParty")
-  storeOrdersAsBuyer      StoreOrder[]
-  storeCustomerLinks      StoreCustomer[]
-  donationsAsDonor        Donation[]
-  jamiiTeamMemberships    JamiiTeamMember[]
-  jamiiApplications       JamiiInterest[]
-  bookingsAsBuyer         Booking[]
-  supportTicketsRaised    SupportTicket[]
-  bills                   Bill[]
-  savedStores             SavedStore[]
-  orgStaffGrants          OrgStaffGrant[]   @relation("OrgStaffGrantParty")
-  orgStaffGrantsGranted   OrgStaffGrant[]   @relation("OrgStaffGrantGrantedBy")
-  orgStaffGrantsSuspended OrgStaffGrant[]   @relation("OrgStaffGrantSuspendedBy")
-  businessPaymentsAsPayee BusinessPayment[] @relation("BusinessPaymentPayee")
-  parkingLots             ParkingLot[]
-  walletTopUps            WalletTopUp[]     @relation("WalletTopUpParty")
-  groupActivityEvents     GroupActivityEvent[] @relation("GroupActivityActor")
-  signatoryFeesForMe      SignatoryFeePayment[] @relation("SignatoryFeePerson")
-  signatoryFeesIAdded     SignatoryFeePayment[] @relation("SignatoryFeeAddedBy")
-  proposalsTargetingMe    GroupProposal[]       @relation("ProposalTarget")
-  proposalsIProposed      GroupProposal[]       @relation("ProposalProposedBy")
-  proposalVotes           GroupProposalVote[]   @relation("ProposalVoter")
-  projectsCreated         GroupProject[]        @relation("ProjectCreatedBy")
-  projectSignerships      GroupProjectSigner[]  @relation("ProjectSignerParty")
-  projectContributions    GroupProjectContribution[] @relation("ProjectContributionParty")
-  projectContributionsConfirmed GroupProjectContribution[] @relation("ProjectContributionConfirmedBy")
-  projectWithdrawalsRequested GroupProjectWithdrawal[] @relation("ProjectWithdrawalRequestedBy")
-  projectWithdrawalVotes  GroupProjectWithdrawalVote[] @relation("ProjectWithdrawalVoter")
+  person                        Person?
+  organisation                  Organisation?
+  enterprises                   Enterprise[]
+  memberships                   Membership[]                 @relation("MemberParty")
+  accounts                      Account[]
+  attestations                  Attestation[]                @relation("AttestationSubject")
+  consentsGiven                 ConsentGrant[]               @relation("ConsentSubject")
+  documents                     Document[]
+  registration                  Registration?
+  groupJoinRegistrations        Registration[]               @relation("RegistrationGroupParty")
+  bizJoinRegistrations          Registration[]               @relation("RegistrationBizParty")
+  storeOrdersAsBuyer            StoreOrder[]
+  storeCustomerLinks            StoreCustomer[]
+  donationsAsDonor              Donation[]
+  jamiiTeamMemberships          JamiiTeamMember[]
+  jamiiApplications             JamiiInterest[]
+  bookingsAsBuyer               Booking[]
+  supportTicketsRaised          SupportTicket[]
+  bills                         Bill[]
+  savedStores                   SavedStore[]
+  orgStaffGrants                OrgStaffGrant[]              @relation("OrgStaffGrantParty")
+  orgStaffGrantsGranted         OrgStaffGrant[]              @relation("OrgStaffGrantGrantedBy")
+  orgStaffGrantsSuspended       OrgStaffGrant[]              @relation("OrgStaffGrantSuspendedBy")
+  businessPaymentsAsPayee       BusinessPayment[]            @relation("BusinessPaymentPayee")
+  parkingLots                   ParkingLot[]
+  walletTopUps                  WalletTopUp[]                @relation("WalletTopUpParty")
+  groupActivityEvents           GroupActivityEvent[]         @relation("GroupActivityActor")
+  signatoryFeesForMe            SignatoryFeePayment[]        @relation("SignatoryFeePerson")
+  signatoryFeesIAdded           SignatoryFeePayment[]        @relation("SignatoryFeeAddedBy")
+  proposalsTargetingMe          GroupProposal[]              @relation("ProposalTarget")
+  proposalsIProposed            GroupProposal[]              @relation("ProposalProposedBy")
+  proposalVotes                 GroupProposalVote[]          @relation("ProposalVoter")
+  projectsCreated               GroupProject[]               @relation("ProjectCreatedBy")
+  projectSignerships            GroupProjectSigner[]         @relation("ProjectSignerParty")
+  projectContributions          GroupProjectContribution[]   @relation("ProjectContributionParty")
+  projectContributionsConfirmed GroupProjectContribution[]   @relation("ProjectContributionConfirmedBy")
+  projectWithdrawalsRequested   GroupProjectWithdrawal[]     @relation("ProjectWithdrawalRequestedBy")
+  projectWithdrawalVotes        GroupProjectWithdrawalVote[] @relation("ProjectWithdrawalVoter")
 
   // ── Group treasury ──
   meetingsCalled          Meeting[]                    @relation("MeetingCalledBy")
@@ -139,6 +139,7 @@ model Party {
   withdrawalsRequested    WithdrawalRequest[]          @relation("WithdrawalRequestedBy")
   withdrawalSignatures    WithdrawalSignature[]        @relation("WithdrawalSignerParty")
   esoqoPaymentId          EsoqoPaymentId?
+  esoqoIdPurchases        EsoqoIdPurchase[]
   creditInsightSnapshots  GroupCreditInsightSnapshot[]
 
   @@index([county, kind])
@@ -150,19 +151,37 @@ model Person {
   partyId String @id @db.Uuid
   party   Party  @relation(fields: [partyId], references: [id], onDelete: Cascade)
 
-  /// Name as written on the national ID. Used only when a credential is issued.
+  /// Name as written on the national ID, kept as a derived display string —
+  /// `[firstName, middleName, surname].filter(Boolean).join(' ')`, written
+  /// at the same time as the three fields below. Every existing reader
+  /// (admin search, registration table, jamii pages) reads this column;
+  /// new code should read firstName/middleName/surname directly instead.
   officialName   String
   /// What people actually call them. This is what the product uses day to day.
   knownAs        String?
+  /// The three-name split the esoqo ID generator draws from. Two of the
+  /// three are compulsory (firstName, surname); middleName is optional —
+  /// not everyone's ID carries one.
+  firstName      String?
+  middleName     String?
+  surname        String?
   /// MSISDN in E.164. THE identifier for anyone who can log in, dial
   /// USSD or receive SMS. Null means a staff-added member with no phone
   /// on file yet — pending until someone fills it in.
-  msisdn         String? @unique
-  /// SHA-256 of the national ID number. The raw number is never stored.
-  nationalIdHash String? @unique
-  email          String? @db.Citext
+  msisdn         String?   @unique
+  /// SHA-256 of the national ID number. The raw number is never stored
+  /// here — see NationalIdRecord for the separate, explicitly consented
+  /// vault that holds the raw number for display/KYC purposes.
+  nationalIdHash String?   @unique
+  email          String?   @db.Citext
   gender         String?
   yearOfBirth    Int?
+  /// Full date of birth, captured once ID-card scanning or a DOB field is
+  /// filled in at registration. yearOfBirth is kept for older records and
+  /// existing consumers; this is the source of truth going forward.
+  dateOfBirth    DateTime? @db.Date
+
+  nationalIdRecord NationalIdRecord?
 
   msisdnVerifiedAt DateTime?
   emailVerifiedAt  DateTime?
@@ -183,6 +202,39 @@ model Person {
   /// already exists, and that is a data-cleanup decision, not this one.
   @@index([email])
   @@map("person")
+}
+
+/// The explicit, consented vault for what a scanned national ID card
+/// actually says — separate from Person.nationalIdHash, which stays a
+/// one-way SHA-256 used only for the platform's existing dedupe check.
+/// idNumberEnc/serialNumberEnc are AES-256-GCM (see packages/db/src/crypto.ts
+/// encryptPii/decryptPii) — the first reversible-PII storage in this
+/// schema, so every decrypt read goes through a DAL function that calls
+/// recordAudit. frontDocumentId/backDocumentId point at the existing
+/// Document model (plain string FKs, same pattern Document.reviewedById
+/// already uses, so no reverse relation array is required on Document).
+model NationalIdRecord {
+  partyId String @id @db.Uuid
+  person  Person @relation(fields: [partyId], references: [partyId], onDelete: Cascade)
+
+  idNumberEnc     Bytes
+  serialNumberEnc Bytes?
+  sex             String?
+  districtOfBirth String?
+  dateOfIssue     DateTime? @db.Date
+
+  frontDocumentId String? @db.Uuid
+  backDocumentId  String? @db.Uuid
+
+  /// Set once staff (or, later, an automated OCR match) confirms this
+  /// record against the Person's existing nationalIdHash — this is what
+  /// finally issues the long-dormant NATIONAL_ID_CONFIRMED attestation.
+  verifiedAt DateTime?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@map("national_id_record")
 }
 
 model Organisation {
@@ -219,15 +271,15 @@ model Organisation {
   jamiiPage JamiiPage?
 
   // ── Group treasury ──
-  meetings           Meeting[]
-  treasuryPolicy     GroupTreasuryPolicy?
-  signers            GroupSigner[]
-  contributions      GroupContribution[]
-  withdrawalRequests WithdrawalRequest[]
-  activityEvents     GroupActivityEvent[]
+  meetings             Meeting[]
+  treasuryPolicy       GroupTreasuryPolicy?
+  signers              GroupSigner[]
+  contributions        GroupContribution[]
+  withdrawalRequests   WithdrawalRequest[]
+  activityEvents       GroupActivityEvent[]
   signatoryFeePayments SignatoryFeePayment[]
-  proposals          GroupProposal[]
-  projects           GroupProject[]
+  proposals            GroupProposal[]
+  projects             GroupProject[]
 
   // Only meaningful when kind is MALL — the stores it hosts as tenants.
   mallTenancies MallTenancy[] @relation("MallTenancies")
@@ -696,21 +748,22 @@ model JournalEntry {
   /// Idempotency key. M-Pesa callbacks arrive late, twice, or never.
   idempotencyKey String?  @unique
 
-  postings          Posting[]
-  storeOrder        StoreOrder?
-  groupContribution GroupContribution?
-  withdrawalRequest WithdrawalRequest?
-  posSale           PosSale?
-  donation          Donation?
-  booking           Booking?
-  farePayment       FarePayment?
-  voucherEntry      VoucherLedgerEntry?
-  billContribution  BillContribution?
-  businessPayment   BusinessPayment?
-  walletTopUp       WalletTopUp?
+  postings            Posting[]
+  storeOrder          StoreOrder?
+  groupContribution   GroupContribution?
+  withdrawalRequest   WithdrawalRequest?
+  posSale             PosSale?
+  donation            Donation?
+  booking             Booking?
+  farePayment         FarePayment?
+  voucherEntry        VoucherLedgerEntry?
+  billContribution    BillContribution?
+  businessPayment     BusinessPayment?
+  walletTopUp         WalletTopUp?
   signatoryFeePayment SignatoryFeePayment?
   projectContribution GroupProjectContribution?
-  projectWithdrawal GroupProjectWithdrawal?
+  projectWithdrawal   GroupProjectWithdrawal?
+  esoqoIdPurchase     EsoqoIdPurchase?
 
   @@index([occurredAt])
   @@map("journal_entry")
@@ -785,8 +838,15 @@ model Registration {
   joiningAs             String // me | group | biz
   officialName          String?
   knownAs               String?
+  /// Three-name split mirroring Person — see completeRegistration, which
+  /// carries these onto the Person it creates and derives officialName
+  /// from them rather than trusting a single freeform field.
+  firstName             String?
+  middleName            String?
+  surname               String?
+  dateOfBirth           DateTime? @db.Date
   msisdn                String?
-  email                 String? @db.Citext
+  email                 String?   @db.Citext
   county                String?
   ward                  String?
   workRaw               String?
@@ -801,8 +861,8 @@ model Registration {
   groupName             String?
   /// Set when the joiner picked an existing group from the search, not
   /// just typed a name — this is what actually links them via Membership.
-  groupPartyId          String? @db.Uuid
-  groupParty            Party?  @relation("RegistrationGroupParty", fields: [groupPartyId], references: [id])
+  groupPartyId          String?   @db.Uuid
+  groupParty            Party?    @relation("RegistrationGroupParty", fields: [groupPartyId], references: [id])
   /// "group" | "self" — only asked when belongsToGroup is "yes".
   feeCoverage           String?
   hasKraPin             String?
@@ -844,6 +904,10 @@ model Registration {
   ussdSetupChoice  String? // now | later
   msisdnVerifiedAt DateTime?
   emailSentAt      DateTime?
+  /// Mirrors msisdnVerifiedAt — set by markEmailVerified, the email-OTP
+  /// counterpart to markMsisdnVerified. Together these two are what let
+  /// completeRegistration accept an email-only registration.
+  emailVerifiedAt  DateTime?
 
   agentId   String? @db.Uuid
   language  String  @default("en")
@@ -2923,10 +2987,10 @@ model SignatoryFeePayment {
   pendingPermissions Json
 
   failureReason          String?
-  mpesaCheckoutRequestId String?             @unique
+  mpesaCheckoutRequestId String?       @unique
   mpesaReceiptCode       String?
-  journalEntryId         String?             @unique @db.Uuid
-  journalEntry           JournalEntry?       @relation(fields: [journalEntryId], references: [id])
+  journalEntryId         String?       @unique @db.Uuid
+  journalEntry           JournalEntry? @relation(fields: [journalEntryId], references: [id])
 
   createdAt   DateTime  @default(now())
   confirmedAt DateTime?
@@ -3041,9 +3105,9 @@ enum ProposalStatus {
 /// already has its own multisig flow via WithdrawalRequest and isn't
 /// duplicated here.
 model GroupProposal {
-  id    String         @id @default(uuid()) @db.Uuid
-  orgId String         @db.Uuid
-  org   Organisation   @relation(fields: [orgId], references: [partyId], onDelete: Cascade)
+  id    String       @id @default(uuid()) @db.Uuid
+  orgId String       @db.Uuid
+  org   Organisation @relation(fields: [orgId], references: [partyId], onDelete: Cascade)
   kind  ProposalKind
 
   /// REMOVE_MEMBER: the member being voted out. ADD_MEMBER: null until
@@ -3051,8 +3115,8 @@ model GroupProposal {
   targetPersonId String? @db.Uuid
   targetPerson   Party?  @relation("ProposalTarget", fields: [targetPersonId], references: [id])
   /// ADD_MEMBER only — who's being proposed, before they're a Party.
-  targetMsisdn String?
-  targetName   String?
+  targetMsisdn   String?
+  targetName     String?
 
   proposedById String @db.Uuid
   proposedBy   Party  @relation("ProposalProposedBy", fields: [proposedById], references: [id])
@@ -3072,13 +3136,13 @@ model GroupProposal {
 }
 
 model GroupProposalVote {
-  id         String        @id @default(uuid()) @db.Uuid
-  proposalId String        @db.Uuid
-  proposal   GroupProposal @relation(fields: [proposalId], references: [id], onDelete: Cascade)
-  voterId    String        @db.Uuid
-  voter      Party         @relation("ProposalVoter", fields: [voterId], references: [id])
+  id         String           @id @default(uuid()) @db.Uuid
+  proposalId String           @db.Uuid
+  proposal   GroupProposal    @relation(fields: [proposalId], references: [id], onDelete: Cascade)
+  voterId    String           @db.Uuid
+  voter      Party            @relation("ProposalVoter", fields: [voterId], references: [id])
   decision   ApprovalDecision
-  votedAt    DateTime      @default(now())
+  votedAt    DateTime         @default(now())
 
   @@unique([proposalId, voterId])
   @@map("group_proposal_vote")
@@ -3110,25 +3174,25 @@ enum ProjectWithdrawalStatus {
 /// always derived from confirmed GroupProjectContribution rows, never
 /// stored.
 model GroupProject {
-  id     String       @id @default(uuid()) @db.Uuid
-  orgId  String       @db.Uuid
-  org    Organisation @relation(fields: [orgId], references: [partyId], onDelete: Cascade)
-  title  String
-  purpose String?
-  targetKes Decimal?  @db.Decimal(12, 2)
-  status ProjectStatus @default(ACTIVE)
+  id        String        @id @default(uuid()) @db.Uuid
+  orgId     String        @db.Uuid
+  org       Organisation  @relation(fields: [orgId], references: [partyId], onDelete: Cascade)
+  title     String
+  purpose   String?
+  targetKes Decimal?      @db.Decimal(12, 2)
+  status    ProjectStatus @default(ACTIVE)
 
-  createdById String @db.Uuid
-  createdBy   Party  @relation("ProjectCreatedBy", fields: [createdById], references: [id])
+  createdById String   @db.Uuid
+  createdBy   Party    @relation("ProjectCreatedBy", fields: [createdById], references: [id])
   createdAt   DateTime @default(now())
 
   /// Snapshotted at project creation, same reason WithdrawalRequest and
   /// GroupProposal each snapshot their own threshold.
   requiredApprovals Int @default(1)
 
-  signers     GroupProjectSigner[]
+  signers       GroupProjectSigner[]
   contributions GroupProjectContribution[]
-  withdrawals GroupProjectWithdrawal[]
+  withdrawals   GroupProjectWithdrawal[]
 
   @@index([orgId, status])
   @@map("group_project")
@@ -3243,19 +3307,19 @@ enum GroupActivityKind {
 /// ("a group activity feed, not a members list and a ledger as two
 /// separate pages").
 model GroupActivityEvent {
-  id     String            @id @default(uuid()) @db.Uuid
-  orgId  String            @db.Uuid
-  org    Organisation      @relation(fields: [orgId], references: [partyId], onDelete: Cascade)
-  kind   GroupActivityKind
+  id        String            @id @default(uuid()) @db.Uuid
+  orgId     String            @db.Uuid
+  org       Organisation      @relation(fields: [orgId], references: [partyId], onDelete: Cascade)
+  kind      GroupActivityKind
   /// Who caused it — null for system-driven events (an expired
   /// withdrawal, nobody "did" that).
-  actorId String? @db.Uuid
-  actor   Party?  @relation("GroupActivityActor", fields: [actorId], references: [id])
+  actorId   String?           @db.Uuid
+  actor     Party?            @relation("GroupActivityActor", fields: [actorId], references: [id])
   /// Precomputed, human-readable, e.g. "Amina requested KES 5,000 for
   /// fertiliser". Rendered as-is — no template lookup at read time, so
   /// a copy change later doesn't rewrite history.
-  summary String
-  createdAt DateTime @default(now())
+  summary   String
+  createdAt DateTime          @default(now())
 
   @@index([orgId, createdAt])
   @@map("group_activity_event")
@@ -3289,16 +3353,89 @@ model WithdrawalSignature {
 /// A short, verified, portable payment handle — issued once a Party
 /// holds at least MSISDN_VERIFIED (see Attestation), reusing the
 /// existing trust primitive rather than inventing a new one.
+/// Where an EsoqoPaymentId's code came from. SYSTEM_GENERATED is the free
+/// default everyone gets; the PREMIUM_* values are bought handles (see
+/// EsoqoIdPurchase) and carry a premiumExpiresAt.
+enum EsoqoIdSource {
+  SYSTEM_GENERATED
+  PREMIUM_FULL_NAME
+  PREMIUM_CUSTOM
+  PREMIUM_PHONE
+  PREMIUM_EMAIL
+}
+
 model EsoqoPaymentId {
-  partyId     String    @id @db.Uuid
-  party       Party     @relation(fields: [partyId], references: [id], onDelete: Cascade)
-  /// e.g. "ESK-4471-KE" — human-typeable, verified-unique.
-  code        String    @unique
-  activatedAt DateTime  @default(now())
-  suspendedAt DateTime?
+  partyId          String        @id @db.Uuid
+  party            Party         @relation(fields: [partyId], references: [id], onDelete: Cascade)
+  /// Either the legacy "ESK-4471-KE" shape (still minted nowhere, but
+  /// still resolvable — see pay-code.ts) or the newer human-friendly
+  /// handle shape from handle-code.ts, e.g. "mutukuka482".
+  code             String        @unique
+  /// SYSTEM_GENERATED handles never expire; premium ones do, and are
+  /// checked lazily on read (see isHandleExpired) rather than on a
+  /// schedule — nothing in this codebase runs on a cron.
+  source           EsoqoIdSource @default(SYSTEM_GENERATED)
+  premiumExpiresAt DateTime?
+  activatedAt      DateTime      @default(now())
+  suspendedAt      DateTime?
+
+  purchases EsoqoIdPurchase[]
 
   @@index([code])
   @@map("esoko_payment_id")
+}
+
+enum EsoqoIdPurchaseKind {
+  FULL_NAME
+  CUSTOM_DIGITS
+  PHONE
+  EMAIL
+  RENEWAL
+}
+
+enum EsoqoIdPurchaseStatus {
+  PENDING
+  CONFIRMED
+  FAILED
+}
+
+/// A person buying a nicer esoqo ID than the free system-generated one —
+/// their full name, a custom digit string, their phone number, or their
+/// email, each sold annually. Real platform revenue, same shape and same
+/// FEE_INCOME posting as SignatoryFeePayment above, not pass-through.
+///
+/// Gated behind the ESOQO_ID_PREMIUM_ENABLED flag until pricing per kind
+/// is decided — this model and its allocator exist so Phase 3 work isn't
+/// blocked on that decision, not because the purchase flow is live.
+model EsoqoIdPurchase {
+  id String @id @default(uuid()) @db.Uuid
+
+  partyId        String         @db.Uuid
+  party          Party          @relation(fields: [partyId], references: [id], onDelete: Cascade)
+  esoqoId        String         @db.Uuid
+  esoqoPaymentId EsoqoPaymentId @relation(fields: [esoqoId], references: [partyId], onDelete: Cascade)
+
+  kind            EsoqoIdPurchaseKind
+  /// What they're asking to reserve — the literal handle string, e.g.
+  /// their full name lowercased, or the custom digits they chose.
+  requestedHandle String
+  amountKes       Decimal               @db.Decimal(12, 2)
+  status          EsoqoIdPurchaseStatus @default(PENDING)
+
+  failureReason          String?
+  mpesaCheckoutRequestId String?       @unique
+  mpesaReceiptCode       String?
+  journalEntryId         String?       @unique @db.Uuid
+  journalEntry           JournalEntry? @relation(fields: [journalEntryId], references: [id])
+
+  createdAt   DateTime  @default(now())
+  confirmedAt DateTime?
+  /// One year from confirmedAt. Checked lazily wherever the handle is
+  /// read (see isHandleExpired) — nothing here runs on a schedule.
+  expiresAt   DateTime?
+
+  @@index([partyId, status])
+  @@map("esoqo_id_purchase")
 }
 
 enum BusinessPaymentStatus {

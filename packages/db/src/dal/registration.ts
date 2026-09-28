@@ -40,6 +40,10 @@ export interface StartRegistrationInput {
 export interface UpdateRegistrationInput {
   officialName?: string;
   knownAs?: string;
+  firstName?: string;
+  middleName?: string;
+  surname?: string;
+  dateOfBirth?: Date;
   msisdn?: string;
   email?: string;
   county?: string;
@@ -259,6 +263,23 @@ export async function markMsisdnVerified(ctx: Ctx, id: string) {
   return reg;
 }
 
+/** Email counterpart to markMsisdnVerified — set once whatever channel
+ *  confirms an emailed code has done so. completeRegistration accepts
+ *  either this or msisdnVerifiedAt as satisfying "verify a contact". */
+export async function markEmailVerified(ctx: Ctx, id: string) {
+  requireCapability(ctx, 'registration.write', { registrationId: id });
+  const reg = await prisma.registration.update({
+    where: { id },
+    data: { status: 'VERIFIED', emailVerifiedAt: new Date() },
+  });
+  await recordAudit(ctx, {
+    action: 'registration.email_verified',
+    targetType: 'registration',
+    targetId: id,
+  });
+  return reg;
+}
+
 /**
  * Converts a completed registration into a real Party.
  *
@@ -273,9 +294,17 @@ export async function completeRegistration(ctx: Ctx, id: string) {
     const reg = await tx.registration.findUnique({ where: { id } });
     if (!reg) throw new Error('Registration not found');
     if (reg.status === 'COMPLETE') return { registration: reg, partyId: reg.partyId! };
-    if (!reg.msisdn) throw new Error('Cannot complete without a phone number');
     if (!reg.county) throw new Error('Cannot complete without a county');
     if (!reg.officialName) throw new Error('Cannot complete without an official name');
+
+    // At least one of phone/email, and it must be the one actually
+    // verified during this flow — a typed-but-unconfirmed contact is not
+    // enough to finish, same reasoning as requiring officialName above.
+    const msisdnVerified = Boolean(reg.msisdn && reg.msisdnVerifiedAt);
+    const emailVerified = Boolean(reg.email && reg.emailVerifiedAt);
+    if (!msisdnVerified && !emailVerified) {
+      throw new Error('Verify a phone number or email before completing registration');
+    }
 
     // A phone already on file never blocks completion — it's common for
     // one handset to be shared (a family line, a group's contact number),
@@ -292,7 +321,25 @@ export async function completeRegistration(ctx: Ctx, id: string) {
     // The freshly typed name is deliberately NOT written back onto the
     // existing Person: an anonymous form is not a trustworthy channel
     // for amending someone else's legal-name record.
-    const existingPerson = await tx.person.findUnique({ where: { msisdn: reg.msisdn } });
+    //
+    // Lookup prefers msisdn (the sign-in identifier UserCredential/OTP are
+    // keyed on) when present; an email-only registration — new now that
+    // verification can be satisfied by email alone — falls back to
+    // matching on email instead, since there's no phone to match on.
+    const existingPerson = reg.msisdn
+      ? await tx.person.findUnique({ where: { msisdn: reg.msisdn } })
+      : reg.email
+        ? await tx.person.findFirst({ where: { email: reg.email } })
+        : null;
+
+    // The esoqo ID generator wants 2-3 discrete names, not one freeform
+    // string — reg.firstName/surname are only populated when the newer
+    // split-name form ran; officialName is kept as the derived display
+    // string either way.
+    const names = [reg.firstName, reg.middleName, reg.surname].filter(
+      (n): n is string => Boolean(n?.trim()),
+    );
+    const derivedOfficialName = names.length > 0 ? names.join(' ') : reg.officialName;
 
     // 1 · the person — reuse if we matched one, otherwise create
     let personPartyId: string;
@@ -307,11 +354,17 @@ export async function completeRegistration(ctx: Ctx, id: string) {
           ward: reg.ward,
           person: {
             create: {
-              officialName: reg.officialName,
+              officialName: derivedOfficialName,
               knownAs: reg.knownAs,
+              firstName: reg.firstName,
+              middleName: reg.middleName,
+              surname: reg.surname,
+              dateOfBirth: reg.dateOfBirth,
+              yearOfBirth: reg.dateOfBirth ? reg.dateOfBirth.getFullYear() : undefined,
               msisdn: reg.msisdn,
               email: reg.email,
               msisdnVerifiedAt: reg.msisdnVerifiedAt,
+              emailVerifiedAt: reg.emailVerifiedAt,
             },
           },
           accounts: { create: [{ kind: 'WALLET', currency: 'KES' }] },

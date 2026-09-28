@@ -28,6 +28,8 @@ export {
 export * from './store-notify';
 export { saleReceiptSms } from './store-notify';
 export * from './pay-code';
+export * from './handle-code';
+export * from './national-id-ocr';
 export * from './business-payment-notify';
 export * from './pay-targets';
 export * from './parking-code';
