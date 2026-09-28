@@ -1,6 +1,6 @@
 'use client';
 import { useState, useTransition } from 'react';
-import { Icon } from '@esoqo/ui';
+import { Icon, Modal } from '@esoqo/ui';
 import { useAnnounce } from '@esoqo/a11y';
 import { actionAddSignatory, actionSetGroupSignerPermissions, actionRemoveGroupSigner } from './actions';
 
@@ -50,16 +50,16 @@ export function SignatoriesPanel({ orgId, signers, nonSigners, canManage, office
 
   return (
     <section className="mcard">
-      <h2><Icon name="shield" size={18} />Signatories</h2>
+      <h2><Icon name="shield" size={18} />Who can approve payments</h2>
       {signers.length === 0 ? (
         <p className="mcard-lede">
-          Nobody&rsquo;s been formally added yet, so {officerFallback.join(', ') || 'your officers'} sign
-          by default. Add your first signatory to give them their own permissions instead of the
-          officer-role default.
+          Nobody&rsquo;s been added yet, so {officerFallback.join(', ') || 'your officers'} approve
+          by default. Add people below to choose exactly who can approve, instead of leaving it to
+          their officer role.
         </p>
       ) : (
         <p className="mcard-lede">
-          {signers.length} of your group&rsquo;s people stand behind every withdrawal. The first{' '}
+          {signers.length} {signers.length === 1 ? 'person' : 'people'} can approve a payment out. The first{' '}
           {FREE_SIGNER_LIMIT} are free — {freeLeft > 0
             ? `${freeLeft} more before a KES ${SIGNATORY_FEE_KES} fee applies.`
             : `adding another costs KES ${SIGNATORY_FEE_KES}, settled however you choose.`}
@@ -73,13 +73,14 @@ export function SignatoriesPanel({ orgId, signers, nonSigners, canManage, office
       </ul>
 
       {canManage && (
-        showAdd
-          ? <AddSignatoryForm orgId={orgId} nonSigners={nonSigners} atLimit={freeLeft === 0} onDone={() => setShowAdd(false)} />
-          : (
-            <button type="button" className="btn btn-o" style={{ marginTop: 12 }} onClick={() => setShowAdd(true)} disabled={nonSigners.length === 0}>
-              <Icon name="plus" size={15} />Add a signatory
-            </button>
-          )
+        <>
+          <button type="button" className="btn btn-o" style={{ marginTop: 12 }} onClick={() => setShowAdd(true)} disabled={nonSigners.length === 0}>
+            <Icon name="plus" size={15} />Add someone
+          </button>
+          {showAdd && (
+            <AddSignatoryForm orgId={orgId} nonSigners={nonSigners} atLimit={freeLeft === 0} onDone={() => setShowAdd(false)} />
+          )}
+        </>
       )}
     </section>
   );
@@ -188,19 +189,28 @@ function AddSignatoryForm({ orgId, nonSigners, atLimit, onDone }: {
 
   if (sent) {
     return (
-      <div className="mcard" style={{ marginTop: 14, background: 'var(--paper)' }}>
+      <Modal title="STK prompt sent" onClose={onDone} footer={<button type="button" className="btn btn-o" onClick={onDone}>Close</button>}>
         <p style={{ margin: 0 }}>
-          <Icon name="check" size={14} /> STK prompt sent to {sent} — this person becomes a signatory
+          <Icon name="check" size={14} /> Sent to {sent} — this person becomes a signatory
           once the KES {SIGNATORY_FEE_KES} fee is confirmed.
         </p>
-        <button type="button" className="btn btn-o btn-sm" style={{ marginTop: 10 }} onClick={onDone}>Close</button>
-      </div>
+      </Modal>
     );
   }
 
   return (
-    <div className="mcard" style={{ marginTop: 14, background: 'var(--paper)' }}>
-      <h2 style={{ fontSize: '.95rem' }}>Add a signatory</h2>
+    <Modal
+      title="Add a signatory"
+      onClose={onDone}
+      footer={(
+        <>
+          <button type="button" className="btn btn-o" disabled={pending} onClick={onDone}>Cancel</button>
+          <button type="button" className="btn btn-p" disabled={pending || !personId} onClick={submit}>
+            {pending ? 'Adding…' : 'Add signatory'}
+          </button>
+        </>
+      )}
+    >
       <div className="fld"><label className="lab">Who</label>
         <select className="inp" value={personId} onChange={(e) => setPersonId(e.target.value)}>
           {nonSigners.map((m) => <option key={m.personId} value={m.personId}>{m.name}</option>)}
@@ -227,12 +237,6 @@ function AddSignatoryForm({ orgId, nonSigners, atLimit, onDone }: {
         </div>
       )}
       {error && <p className="err" role="alert"><Icon name="alert-circle" size={15} />{error}</p>}
-      <div className="row">
-        <button type="button" className="btn btn-p btn-sm" disabled={pending || !personId} onClick={submit}>
-          {pending ? 'Adding…' : 'Add signatory'}
-        </button>
-        <button type="button" className="btn btn-o btn-sm" disabled={pending} onClick={onDone}>Cancel</button>
-      </div>
-    </div>
+    </Modal>
   );
 }

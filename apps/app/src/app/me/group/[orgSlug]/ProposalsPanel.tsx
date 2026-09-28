@@ -36,7 +36,7 @@ export function ProposalsPanel({ orgId, proposals, iAmSigner, members }: {
   return (
     <section className="mcard">
       <h2><Icon name="scales" size={18} />Proposals</h2>
-      <p className="mcard-lede">Adding or removing a member goes to a vote among your group&rsquo;s signatories.</p>
+      <p className="mcard-lede">Adding or removing a member goes to a vote among the people who can approve payments.</p>
 
       {open.length === 0 && decided.length === 0 && <p className="hint">No proposals yet.</p>}
 
