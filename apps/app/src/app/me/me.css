@@ -13,8 +13,14 @@
 
 .me {
   min-height: 100dvh;
-  padding-bottom: calc(76px + var(--safe-b));
   background: var(--paper);
+}
+/* Bottom padding only matters while the fixed tabbar (mobile-only,
+   hidden ≥820px) can overlap the last card — reserving it at desktop
+   widths just left dead space below content with nothing there to
+   protect against. */
+@media (max-width: 819px) {
+  .me { padding-bottom: calc(76px + var(--safe-b)); }
 }
 
 /* ── header: single bar, 52px, flat ─────────────────────── */
@@ -173,14 +179,17 @@
   box-shadow: inset 0 1px 0 rgba(255,255,255,.6), inset 0 0 0 1px rgba(20,32,43,.04);
 }
 
-/* ── bento grid: main + sticky aside (desktop) ───────────── */
+/* ── bento grid: single column at every width ────────────── */
 .me-grid {
   display: grid; gap: 14px;
 }
-@media (min-width: 980px) {
-  .me-grid { grid-template-columns: minmax(0, 1fr) 360px; align-items: start }
-  .me-aside { position: sticky; top: 66px }
-}
+/* .me-aside used to become a sticky right-hand column at ≥980px, which
+   left .me-main to fill however much height it had on its own — the
+   empty space below a short main column on a tall desktop viewport.
+   One column at every width instead. Wallet/My tickets/Settings
+   (.me-main's quick-row) stay first in DOM order, same as always;
+   "At a glance" (.me-aside) follows right after, rather than being
+   sent to a separate sticky column. */
 .me-main { display: flex; flex-direction: column; gap: 14px; min-width: 0 }
 .me-aside { display: flex; flex-direction: column; gap: 14px; min-width: 0 }
 
@@ -194,8 +203,12 @@
 .desk-aside, .money-aside { display: flex; flex-direction: column; gap: 14px; min-width: 0 }
 
 /* ── primary actions: minimal cards ──────────────────────── */
+/* Always 3 columns — Wallet / My tickets / Settings read as one row at
+   any width, rather than collapsing to 2 or 1 column and pushing them
+   apart vertically on a narrow screen. A 4th card (Group balance, when
+   there's a group) just wraps onto its own row in the same 3 columns. */
 .quick-row {
-  display: grid; grid-template-columns: repeat(2, 1fr); gap: 10px;
+  display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px;
 }
 .quick {
   display: flex; align-items: center; gap: 11px; min-width: 0;
@@ -216,8 +229,14 @@
 .quick-t small { display: block; font-size: .74rem; color: var(--tx-2); white-space: nowrap; overflow: hidden; text-overflow: ellipsis }
 .quick-go { flex: none; color: var(--tx-3) }
 .quick:hover .quick-go { color: var(--green) }
-@media (min-width: 820px) { .quick-row { grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)) } }
-@media (max-width: 560px) { .quick-row { grid-template-columns: 1fr; gap: 8px } }
+/* Still 3 columns below 560px — just tighter, and the hint line drops
+   off first since it's the least essential part of the label. */
+@media (max-width: 560px) {
+  .quick-row { gap: 6px }
+  .quick { flex-direction: column; align-items: flex-start; gap: 6px; padding: 10px 8px; min-height: 0 }
+  .quick-t small { display: none }
+  .quick-go { display: none }
+}
 
 /* ── where else you work ─────────────────────────────────── */
 .wsl { list-style: none; margin: 0; padding: 0 }
