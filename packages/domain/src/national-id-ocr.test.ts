@@ -1,5 +1,7 @@
 import { describe, it, expect } from 'vitest';
-import { parseKenyanIdText } from './national-id-ocr';
+import {
+  parseKenyanIdText, countyForDistrict, filledNationalIdFields, splitFullNames,
+} from './national-id-ocr';
 
 const SAMPLE_FRONT = `
 REPUBLIC OF KENYA
@@ -69,5 +71,86 @@ describe('parseKenyanIdText', () => {
 
   it('does not crash on empty input', () => {
     expect(parseKenyanIdText('')).toEqual({});
+  });
+
+  it('reads place of issue, which no field on the form stores directly', () => {
+    const r = parseKenyanIdText('PLACE OF ISSUE\nTHIKA\nDATE OF ISSUE\n15.03.2015');
+    expect(r.placeOfIssue).toBe('Thika');
+  });
+});
+
+describe('county derivation', () => {
+  it('prefills the county for a district that kept its name', () => {
+    expect(parseKenyanIdText(SAMPLE_FRONT).county).toBe('Nairobi');
+  });
+
+  it('maps an old district onto the county that absorbed it', () => {
+    expect(countyForDistrict('THIKA')).toBe('Kiambu');
+    expect(countyForDistrict('KITALE')).toBe('Trans Nzoia');
+    expect(countyForDistrict('KAPENGURIA')).toBe('West Pokot');
+  });
+
+  it('matches a two-word county before falling back to one word', () => {
+    // "Trans" alone means nothing; "Elgeyo" alone would miss Marakwet.
+    expect(countyForDistrict('TRANS NZOIA')).toBe('Trans Nzoia');
+    expect(countyForDistrict('ELGEYO MARAKWET')).toBe('Elgeyo Marakwet');
+    expect(countyForDistrict('TAITA TAVETA')).toBe('Taita Taveta');
+  });
+
+  it('tolerates the qualifiers real cards print after the district', () => {
+    expect(countyForDistrict('THIKA MUNICIPALITY')).toBe('Kiambu');
+    expect(countyForDistrict('NAIROBI WEST')).toBe('Nairobi');
+  });
+
+  it('survives the punctuation OCR sprinkles into a district line', () => {
+    expect(countyForDistrict('K1AMBU')).toBeUndefined(); // a misread is not a guess
+    expect(countyForDistrict('KIAMBU.')).toBe('Kiambu');
+  });
+
+  it('falls back to place of issue only when district of birth gave nothing', () => {
+    const both = parseKenyanIdText(
+      'DISTRICT OF BIRTH\nTHIKA\nPLACE OF ISSUE\nMOMBASA',
+    );
+    expect(both.county).toBe('Kiambu');
+
+    const issueOnly = parseKenyanIdText('PLACE OF ISSUE\nMOMBASA');
+    expect(issueOnly.county).toBe('Mombasa');
+  });
+
+  it('leaves the county unset rather than guessing', () => {
+    expect(countyForDistrict('SOMEWHERE ELSE')).toBeUndefined();
+    expect(countyForDistrict('')).toBeUndefined();
+    expect(countyForDistrict(null)).toBeUndefined();
+    expect(parseKenyanIdText(SAMPLE_BACK).county).toBeUndefined();
+  });
+});
+
+describe('filledNationalIdFields', () => {
+  it('lists only what the scan actually produced', () => {
+    const filled = filledNationalIdFields(parseKenyanIdText(SAMPLE_FRONT));
+    expect(filled).toContain('firstName');
+    expect(filled).toContain('county');
+    expect(filled).not.toContain('serialNumber');
+    expect(filled).not.toContain('dateOfIssue');
+  });
+
+  it('is empty when nothing was read, so the form can say so honestly', () => {
+    expect(filledNationalIdFields(parseKenyanIdText('nothing useful here'))).toEqual([]);
+  });
+});
+
+describe('splitFullNames', () => {
+  it('splits a stored single name string back into the three form fields', () => {
+    expect(splitFullNames('Jane Wanjiru Kamau')).toEqual({
+      firstName: 'Jane', middleName: 'Wanjiru', surname: 'Kamau',
+    });
+  });
+
+  it('puts everything between first and last into the middle name', () => {
+    expect(splitFullNames('JANE A B KAMAU').middleName).toBe('A B');
+  });
+
+  it('leaves surname unset for a one-word name rather than duplicating it', () => {
+    expect(splitFullNames('Jane')).toEqual({ firstName: 'Jane' });
   });
 });

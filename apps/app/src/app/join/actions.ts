@@ -8,6 +8,7 @@ import {
 } from '@esoqo/db';
 import {
   issueOtp, verifyOtp, OtpError, checkRateLimit, RateLimitError, capabilitiesForRole,
+  consumeInviteToken,
 } from '@esoqo/auth';
 import { msisdnSchema, otpCodeSchema, clientIpFrom, toSafeErrorMessage } from '@esoqo/domain';
 import type { Ctx } from '@esoqo/db';
@@ -195,6 +196,12 @@ export async function actionCompleteJoin(
     idNumber?: string; serialNumber?: string; sex?: string;
     districtOfBirth?: string; dateOfIssue?: string;
     frontDocumentId?: string; backDocumentId?: string;
+    /** Present when this signup came from a chama invite link. Spent on
+     *  success so the link stops prefilling a form for an account that
+     *  now exists. Nothing about the membership depends on it: the group
+     *  is joined to the Person completeRegistration matched by phone
+     *  number, which the invite created before the SMS ever went out. */
+    inviteToken?: string;
   },
 ): Promise<ActionResult<JoinCompleteResult>> {
   const ip = await clientIp();
@@ -220,6 +227,7 @@ export async function actionCompleteJoin(
     }
 
     const esoqoPaymentId = await issueEsoqoPaymentId(subjectCtx);
+    await consumeInviteToken(idDetails.inviteToken);
     return { ok: true, data: { esoqoId: esoqoPaymentId.code } };
   } catch (e) {
     return { ok: false, error: toSafeErrorMessage(e, "Couldn't finish your signup. Please try again.") };

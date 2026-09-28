@@ -75,7 +75,11 @@ button, a, input, select, textarea {
 
 /* ── forms ──────────────────────────────────────────────────── */
 .fld { margin-bottom:15px }
-.lab { display:flex; align-items:center; gap:6px; font-weight:600; font-size:.88rem; margin-bottom:6px }
+/* flex-wrap so a label that carries badges ("optional", "from your ID")
+   in a narrow column drops the badges to their own line rather than
+   squeezing the label text into a three-line column of single words. */
+.lab { display:flex; align-items:center; gap:6px; flex-wrap:wrap;
+  font-weight:600; font-size:.88rem; margin-bottom:6px }
 .lab .op { font-weight:400; color:var(--tx-3); font-size:.85em }
 .inp { width:100%; padding:13px 14px; border:1.5px solid var(--line); border-radius:var(--r-sm);
   font-size:1rem; font-family:inherit; background:#fff; color:var(--tx); min-height:48px }
@@ -222,6 +226,88 @@ button, a, input, select, textarea {
 .auth-alt .icbox { grid-row:span 2; margin-top:2px }
 .auth-alt h2 { font-size:1rem; margin:2px 0 4px }
 .auth-alt p { font-size:.9rem; color:var(--tx-2); margin:0 }
+
+/* ── /join: ID scan and review ──────────────────────────────────
+   .grid2 was used by the join wizard before it was ever defined here, so
+   the two ID sides stacked at every width. Two columns where there is
+   room, one on a phone — which is where most of these scans happen. */
+.grid2 { display:grid; gap:14px; grid-template-columns:1fr }
+@media (min-width:560px) { .grid2 { grid-template-columns:1fr 1fr } }
+
+/* OCR progress. The pass takes seconds on a mid-range phone with nothing
+   else on screen, and a static "Reading your ID…" for that long reads as
+   a hang — someone who reloads loses the photos they just took. */
+.joinocr { border:1px solid var(--line); border-radius:var(--r-sm); padding:14px 16px;
+  background:var(--paper); display:flex; flex-direction:column; gap:9px }
+.joinocr-lab { display:flex; align-items:center; gap:7px; margin:0; font-weight:600; font-size:.92rem }
+.joinocr-bar { height:7px; border-radius:99px; background:var(--line); overflow:hidden }
+.joinocr-bar span { display:block; height:100%; border-radius:99px; background:var(--green);
+  transition:width var(--dur-fast) linear }
+
+/* Where you are in the signup, and how much is left. The middle step is
+   a long form; someone who cannot see it is the long one will reasonably
+   assume two more like it are coming and leave. */
+.jsteps { list-style:none; display:flex; gap:8px; padding:0; margin:0 0 20px }
+.jsteps li { flex:1; display:flex; flex-direction:column; gap:6px; min-width:0 }
+.jsteps .bar { height:4px; border-radius:99px; background:var(--line) }
+.jsteps-lab { display:flex; align-items:center; gap:4px; font-size:.74rem;
+  font-weight:600; color:var(--tx-3); letter-spacing:.02em }
+.jsteps li.done .bar { background:var(--green) }
+.jsteps li.done .jsteps-lab { color:var(--green) }
+.jsteps li.on .bar { background:var(--green) }
+.jsteps li.on .jsteps-lab { color:var(--navy) }
+
+/* A named group of fields with a line saying why it is asked. Same
+   thirteen inputs, five small finite asks instead of one long column. */
+.jsec { border:1px solid var(--line); border-radius:var(--r-lg); background:#fff;
+  padding:16px 16px 2px; margin-bottom:14px }
+.jsec-h { display:flex; align-items:center; gap:10px; margin:0 0 5px }
+.jsec-h h2 { font-size:1rem; font-weight:700; margin:0; color:var(--navy) }
+.jsec-ic { width:30px; height:30px; border-radius:9px; flex:none; display:grid;
+  place-items:center; background:var(--green-t); color:var(--green) }
+.jsec-intro { font-size:.85rem; color:var(--tx-2); margin:0 0 14px; line-height:1.45 }
+
+/* .labpills / .optpill live in @esoqo/ui's ui.css — IdCardScanner marks
+   its optional side with the same badge, and a shared component must not
+   depend on one app's stylesheet to look right. */
+
+/* "from your ID" marker on a prefilled field. Text as well as colour:
+   which fields were machine-read is information a screen reader needs
+   too, not decoration. */
+.scanpill { display:inline-flex; align-items:center; gap:4px;
+  font-size:.68rem; font-weight:600; letter-spacing:.02em; text-transform:uppercase;
+  color:var(--green); background:var(--green-t); border:1px solid #BFE3CE;
+  border-radius:99px; padding:2px 7px; flex:none }
+
+/* What is still missing, each one a jump to the field it is about — the
+   alternative is a disabled button and no explanation. */
+.jproblems { margin:2px 0 0; padding-left:18px; font-size:.9rem }
+.jproblems li { margin-top:3px }
+.jproblems .linkish { color:inherit; text-align:left }
+
+/* The six digits are the whole content of the screen — size them like it. */
+.joincode { font-size:1.5rem; letter-spacing:.35em; text-align:center; font-weight:700 }
+
+/* The captured photos, still reachable from the review step — checking a
+   digit against the card should not mean going back a step and risking
+   the scan. */
+.joinphotos { margin-bottom:16px }
+.joinphotos-toggle { display:flex; align-items:center; gap:7px; width:100%; padding:10px 12px;
+  border:1px solid var(--line); border-radius:var(--r-sm); background:#fff; cursor:pointer;
+  font-family:inherit; font-size:.88rem; font-weight:600; color:var(--tx); text-align:left }
+.joinphotos-toggle .hint { margin:0 0 0 auto; font-weight:400 }
+.joinphotos-toggle:hover { border-color:var(--green) }
+.joinphotos-grid { display:grid; gap:10px; margin-top:10px }
+.joinphotos-grid img { width:100%; border:1px solid var(--line); border-radius:var(--r-sm); display:block }
+@media (min-width:560px) { .joinphotos-grid { grid-template-columns:1fr 1fr } }
+@media (min-width:560px) { .joinphotos-grid .btn { grid-column:1 / -1 } }
+
+/* An inline "do this instead" inside a sentence: a real button for
+   keyboard and screen-reader users, styled as the link it reads as.
+   display:inline (not the button default of inline-block) so it wraps
+   with the sentence rather than being shunted whole onto its own line. */
+.linkish { display:inline; background:none; border:0; padding:0; font:inherit;
+  color:var(--green); font-weight:600; text-decoration:underline; cursor:pointer }
 
 /* ── document upload ── */
 .upzone { border:2px dashed var(--line); border-radius:var(--r-md); background:var(--paper);

@@ -13,6 +13,7 @@ export {
 export { Notice } from './Notice';
 export { Modal } from './Modal';
 export { CameraScanner } from './CameraScanner';
+export { IdCardScanner } from './IdCardScanner';
 export {
   ParcelCapabilityPicker, PARCEL_CAPABILITIES, RIDER_BASELINE,
   type ParcelCapabilityOption,
