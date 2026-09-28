@@ -55,7 +55,7 @@ export function ConsentList({ grants }: { grants: Grant[] }) {
   return (
     <>
       {active.length > 0 && (
-        <div className="mcard">
+        <div className="mcard mcard--premium">
           <h2><Icon name="eye" size={18} />Currently allowed ({active.length})</h2>
           {active.map((g) => (
             <div className="mrow" key={g.id} style={{ alignItems: 'flex-start' }}>

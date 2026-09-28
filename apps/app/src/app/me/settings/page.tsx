@@ -44,11 +44,35 @@ export default async function SettingsPage() {
   const has = (t: string) => attestations.find((a) => a.claimType === t);
   const docs = me?.documents ?? [];
 
+  const confirmedCount = CREDENTIALS.filter(([type]) => has(type)).length;
+  const acceptedDocs = docs.filter((d) => d.status === 'ACCEPTED').length;
+
   return (
     <>
-      <div className="mehead">
-        <h1>Settings</h1>
-        <p>Who you are, what Esoqo has confirmed, the files behind it, and how this looks.</p>
+      <header className="hero" style={{ padding: '4px 0 14px' }}>
+        <p className="kicker">Settings</p>
+        <h1>Who you are</h1>
+        <p className="lead" style={{ maxWidth: 560 }}>
+          What Esoqo has confirmed, the files behind it, and how this looks — nothing here touches your balance or your group.
+        </p>
+      </header>
+
+      <div className="premium-stats" aria-label="Settings at a glance">
+        <div className="pstat">
+          <span className="pstat-k">Confirmed</span>
+          <span className="pstat-v">{confirmedCount} of {CREDENTIALS.length}</span>
+          <span className="pstat-h">Identity &amp; credentials</span>
+        </div>
+        <div className="pstat">
+          <span className="pstat-k">Files</span>
+          <span className="pstat-v">{docs.length}</span>
+          <span className="pstat-h">{docs.length ? `${acceptedDocs} accepted` : 'None uploaded'}</span>
+        </div>
+        <div className="pstat">
+          <span className="pstat-k">Esoqo ID</span>
+          <span className="pstat-v" style={{ fontSize: '.92rem' }}>{me?.esoqoPaymentId ? 'Active' : 'Not set'}</span>
+          <span className="pstat-h">How people pay you</span>
+        </div>
       </div>
 
       {p && (

@@ -25,14 +25,14 @@ export default async function MyPayments() {
   if (!pay || pay.status === 'NOT_DECLARED') {
     return (
       <>
-        <div className="mehead">
+        <header className="hero" style={{ padding: '4px 0 14px' }}>
           <p className="kicker">Registration</p>
           <h1>Your payment</h1>
-          <p>Registration fees, and where each one has got to. Booking payments live with each booking under <a href="/me/tickets">Tickets</a>.</p>
-        </div>
-        <div className="mcard">
+          <p className="lead">Registration fees, and where each one has got to. Booking payments live with each booking under <a href="/me/tickets">Tickets</a>.</p>
+        </header>
+        <div className="mcard mcard--premium">
           <div className="mempty">
-            <span className="ico"><Icon name="coins" size={22} /></span>
+            <span className="ico" style={{ background: 'var(--amber-t)', color: 'var(--amber)' }}><Icon name="coins" size={22} /></span>
             <h2 style={{ marginBottom: 7 }}>Nothing recorded</h2>
             <p style={{ margin: 0 }}>
               You have not told Esoqo about a registration payment. You can pay whenever
@@ -49,36 +49,47 @@ export default async function MyPayments() {
   const rejected = pay.status === 'REJECTED';
   const confirmed = pay.status === 'CONFIRMED' || pay.status === 'WAIVED';
 
+  const tone = confirmed ? 'ok' : rejected ? 'bad' : 'pending';
+
   return (
     <>
-      <div className="mehead">
+      <header className="hero" style={{ padding: '4px 0 14px' }}>
         <p className="kicker">Registration</p>
         <h1>Your payment</h1>
-        <p>Registration fee, and where it has got to. Booking payments live with each booking under <a href="/me/tickets">Tickets</a>.</p>
+        <p className="lead">Registration fee, and where it has got to. Booking payments live with each booking under <a href="/me/tickets">Tickets</a>.</p>
+      </header>
+
+      <section className={`status-hero status-hero--${tone}`} aria-label="Payment status">
+        <span className="status-hero-ic" aria-hidden="true">
+          <Icon name={confirmed ? 'check-circle' : rejected ? 'alert-circle' : 'clock'} size={22} />
+        </span>
+        <span className="status-hero-t">
+          <span className="k">{confirmed ? 'Received and confirmed' : rejected ? 'We could not find this payment' : 'Being checked'}</span>
+          {pay.amountKes && <span className="v mono">KES {Number(pay.amountKes).toLocaleString('en-KE')}</span>}
+        </span>
+      </section>
+
+      <div className="premium-stats" aria-label="Payment details">
+        <div className="pstat">
+          <span className="pstat-k">Reference</span>
+          <span className="pstat-v mono" style={{ fontSize: '.92rem' }}>{pay.reference ?? '—'}</span>
+          <span className="pstat-h">What you told us</span>
+        </div>
+        <div className="pstat">
+          <span className="pstat-k">Method</span>
+          <span className="pstat-v" style={{ fontSize: '.92rem' }}>{pay.method?.replace(/_/g, ' ').toLowerCase() ?? '—'}</span>
+          <span className="pstat-h">How you paid</span>
+        </div>
+        <div className="pstat">
+          <span className="pstat-k">Declared</span>
+          <span className="pstat-v" style={{ fontSize: '.92rem' }}>{pay.declaredAt?.toLocaleDateString('en-KE') ?? '—'}</span>
+          <span className="pstat-h">When you told us</span>
+        </div>
       </div>
 
-      <div className="mcard">
-        <h2>
-          <Icon name={confirmed ? 'check-circle' : rejected ? 'alert-circle' : 'clock'} size={18}
-            style={{ color: confirmed ? 'var(--green)' : rejected ? 'var(--red)' : 'var(--amber)' }} />
-          {confirmed ? 'Received and confirmed'
-            : rejected ? 'We could not find this payment'
-            : 'Being checked'}
-        </h2>
-
-        <div className="mrow"><span className="k">Reference</span>
-          <span className="v mono">{pay.reference ?? '—'}</span></div>
-        <div className="mrow"><span className="k">Method</span>
-          <span className="v">{pay.method?.replace(/_/g, ' ').toLowerCase() ?? '—'}</span></div>
-        {pay.amountKes && (
-          <div className="mrow"><span className="k">Amount</span>
-            <span className="v mono">KES {Number(pay.amountKes).toLocaleString('en-KE')}</span></div>
-        )}
-        <div className="mrow"><span className="k">You told us</span>
-          <span className="v">{pay.declaredAt?.toLocaleDateString('en-KE') ?? '—'}</span></div>
-
-        {!confirmed && !rejected && (
-          <div className="note n-amber" style={{ marginTop: 14 }}>
+      {!confirmed && !rejected && (
+        <div className="mcard">
+          <div className="note n-amber">
             <div>
               <p>
                 <strong>{approvals} of {PAYMENT_APPROVAL_THRESHOLD} checks done.</strong>{' '}
@@ -87,10 +98,12 @@ export default async function MyPayments() {
               </p>
             </div>
           </div>
-        )}
+        </div>
+      )}
 
-        {rejected && (
-          <div className="note n-red" style={{ marginTop: 14 }}>
+      {rejected && (
+        <div className="mcard">
+          <div className="note n-red">
             <div>
               <p>
                 Esoqo could not match this reference to a payment. That is often a mistyped code
@@ -99,8 +112,8 @@ export default async function MyPayments() {
               </p>
             </div>
           </div>
-        )}
-      </div>
+        </div>
+      )}
     </>
   );
 }

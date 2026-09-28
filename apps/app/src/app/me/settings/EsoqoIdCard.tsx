@@ -26,7 +26,7 @@ export function EsoqoIdCard({ code }: { code: string }) {
   }
 
   return (
-    <section className="mcard">
+    <section className="mcard mcard--premium">
       <h2><Icon name="qr" size={18} />Your Esoqo ID</h2>
       <p className="mcard-lede">
         What anyone pays you with — on the <code className="mono">/pay</code> page, or by scanning

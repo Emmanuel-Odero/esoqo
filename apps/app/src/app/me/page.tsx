@@ -3,8 +3,15 @@ import type { Route } from 'next';
 import { cookies } from 'next/headers';
 import { Icon, type IconName } from '@esoqo/ui';
 import { SESSION_COOKIE } from '@esoqo/auth';
-import { getMyRecord, getGroupBalance, getWalletBalance, listMyConsents, PAYMENT_APPROVAL_THRESHOLD } from '@esoqo/db';
+import {
+  getMyRecord,
+  getGroupBalance,
+  getWalletBalance,
+  listMyConsents,
+  PAYMENT_APPROVAL_THRESHOLD,
+} from '@esoqo/db';
 import { requireSubject } from '@/lib/session';
+import { orgSlug } from '@/lib/groupSlug';
 import { listWorkspaces } from '@/lib/workspaces';
 import { goUrl, type GoMyBooking } from '@/lib/ticketing';
 import { enterOrg } from '@/app/workspace-actions';
@@ -12,36 +19,22 @@ import { enterOrg } from '@/app/workspace-actions';
 export const dynamic = 'force-dynamic';
 
 /**
- * Dashboard home — what somebody actually uses Esoqo for, at a glance.
+ * Home — minimal, in priority order:
+ *  1. Mast: who you are + one next step (one tap)
+ *  2. Needs you today (trips / pay) — only when there is something
+ *  3. Quick: the 3–4 places you tap most, plain language
+ *  4. Aside: your money & status, always visible on desktop
+ *  5. Where you work — discoverable, not noisy
  *
- * Layers of intent, in the order somebody actually asks them:
- *  1. "Where am I?"           — the greeting band and one primary CTA.
- *  2. "What needs me today?"  — trips coming up, dues outstanding.
- *  3. "What do I do next?"    — the quick-action row, the jobs people
- *                              come back for.
- *  4. "How are things?"       — the KPI tiles, every one a door.
- *  5. "Where else do I work?" — the workspaces card, the same list the
- *                              header switcher carries, spelled out once
- *                              here so it's discoverable the first time.
- *
- * This used to open on a "papers confirmed" checklist — a credit-file
- * framing left over from an earlier pivot that told a returning group
- * treasurer or ticket-holder nothing about what they'd come to do. That
- * checklist still exists (Esoqo does confirm claims), it just isn't the
- * front door any more — it, the uploaded-files list, and the identity
- * card all moved to /me/settings. Every tile here is a real link;
- * nothing leads nowhere.
- */
-
-/**
- * Time of day in Nairobi, not on the server. A dashboard that says "good
- * evening" at 9am because the box runs UTC undoes in one word the care
- * everything else on the page takes.
+ * Language is kept plain and verb-led so a first-time user in a bright
+ * market gets it without learning product jargon.
  */
 function greeting(): string {
   const hour = Number(
     new Intl.DateTimeFormat('en-GB', {
-      timeZone: 'Africa/Nairobi', hour: 'numeric', hour12: false,
+      timeZone: 'Africa/Nairobi',
+      hour: 'numeric',
+      hour12: false,
     }).format(new Date()),
   );
   if (hour < 12) return 'Good morning';
@@ -49,9 +42,11 @@ function greeting(): string {
   return 'Good evening';
 }
 
-export default async function MePage(
-  { searchParams }: { searchParams: Promise<{ companyError?: string }> },
-) {
+export default async function MePage({
+  searchParams,
+}: {
+  searchParams: Promise<{ companyError?: string }>;
+}) {
   const { companyError } = await searchParams;
   const ctx = await requireSubject();
   const me = await getMyRecord(ctx);
@@ -60,18 +55,15 @@ export default async function MePage(
   const p = me.person!;
   const membership = me.memberships[0];
   const orgId = membership?.orgId ?? null;
+  const groupSlug = membership ? orgSlug(membership.org.officialName, membership.orgId) : null;
 
-  // listWorkspaces() is already resolved for the header switcher — the
-  // cache() around it makes this a free read, not a second round trip.
   const token = (await cookies()).get(SESSION_COOKIE)?.value;
   const [balance, walletBalance, grants, workspaces, bookings] = await Promise.all([
     orgId ? getGroupBalance(ctx, orgId) : Promise.resolve(null),
     getWalletBalance(ctx),
     listMyConsents(ctx),
     listWorkspaces(),
-    // Best-effort: the "Coming up" strip below. A failed bookings read
-    // degrades to no strip, never a failed dashboard.
-    (token
+    token
       ? fetch(goUrl('/v1/me/bookings'), {
           headers: { Authorization: `Bearer ${token}` },
           cache: 'no-store',
@@ -79,7 +71,7 @@ export default async function MePage(
           .then((r) => (r.ok ? r.json() : { bookings: [] }))
           .then((j) => ((j?.bookings ?? []) as GoMyBooking[]))
           .catch(() => [] as GoMyBooking[])
-      : Promise.resolve([] as GoMyBooking[])),
+      : Promise.resolve([] as GoMyBooking[]),
   ]);
 
   const activeGrants = grants.filter((g) => !g.revokedAt && g.expiresAt > new Date());
@@ -87,246 +79,295 @@ export default async function MePage(
 
   const pay = me.registration?.payment;
   const payApproved = (pay?.approvals ?? []).filter((a) => a.decision === 'APPROVE').length;
-
   const givenName = (p.knownAs || p.officialName || 'friend').split(' ')[0];
 
-  let payTile: { v: string; h: string };
-  if (!pay || pay.status === 'NOT_DECLARED') payTile = { v: 'Not recorded', h: 'Add it when you pay' };
-  else if (pay.status === 'CONFIRMED' || pay.status === 'WAIVED')
-    payTile = { v: 'Confirmed', h: pay.amountKes ? `KES ${Number(pay.amountKes).toLocaleString('en-KE')} received` : 'Received' };
-  else if (pay.status === 'REJECTED') payTile = { v: 'Not found', h: 'We could not match it' };
-  else payTile = { v: 'Being checked', h: `${payApproved} of ${PAYMENT_APPROVAL_THRESHOLD} checks done` };
+  let payTitle: string;
+  let payHint: string;
+  if (!pay || pay.status === 'NOT_DECLARED') {
+    payTitle = 'Not yet';
+    payHint = 'Pay when ready';
+  } else if (pay.status === 'CONFIRMED' || pay.status === 'WAIVED') {
+    payTitle = 'Confirmed';
+    payHint = pay.amountKes ? `KES ${Number(pay.amountKes).toLocaleString('en-KE')} received` : 'Received';
+  } else if (pay.status === 'REJECTED') {
+    payTitle = 'Not found';
+    payHint = 'We could not match it';
+  } else {
+    payTitle = 'Checking';
+    payHint = `${payApproved} of ${PAYMENT_APPROVAL_THRESHOLD} checks done`;
+  }
 
-  // Money leads when there's a group (that's why people open the app);
-  // an upcoming trip or an outstanding balance leads when there isn't;
-  // failing both, the invitation is to look around rather than to close
-  // a compliance gap — see the file header for why that used to be the
-  // default and no longer is.
   const primaryCta = membership
-    ? { label: 'Open your group treasury', href: `/me/group/${orgId}/treasury` as Route }
-    : { label: bookings.length > 0 ? 'See your tickets' : 'Explore tickets', href: '/me/tickets' as const };
+    ? {
+        label: 'Open group balance',
+        hint: `Group balance KES ${(balance ?? 0).toLocaleString('en-KE')}`,
+        href: `/me/group/${groupSlug}/treasury` as Route,
+      }
+    : {
+        label: bookings.length > 0 ? 'View your tickets' : 'Find tickets',
+        hint: bookings.length > 0 ? `${bookings.length} booking${bookings.length === 1 ? '' : 's'}` : 'Events & transport',
+        href: '/me/tickets' as Route,
+      };
 
-  // The jobs people come back for. Group leads when they have one (money
-  // is why they open the app); personal Wallet — cash, vouchers, loyalty,
-  // bills all in one place — leads otherwise.
-  const quick: { href: Route; icon: IconName; label: string; hint: string }[] = [
+  const quick: { href: Route; icon: IconName; label: string; hint: string; ariaLabel: string }[] = [
     ...(membership
-      ? [{
-          href: `/me/group/${orgId}/treasury` as Route,
-          icon: 'bank' as const,
-          label: 'Treasury',
-          hint: 'Contribute or withdraw',
-        }]
+      ? [
+          {
+            href: `/me/group/${groupSlug}/treasury` as Route,
+            icon: 'bank' as const,
+            label: 'Group balance',
+            hint: 'Pay in or request',
+            ariaLabel: `Group balance, KES ${(balance ?? 0).toLocaleString('en-KE')}`,
+          },
+        ]
       : []),
-    { href: '/me/wallet', icon: 'bank', label: 'Wallet', hint: 'Balance, vouchers, bills' },
-    { href: '/me/tickets', icon: 'qr', label: 'Tickets', hint: 'Show a travel pass' },
-    { href: '/me/settings', icon: 'grid', label: 'Settings', hint: 'Your details and confirmations' },
+    {
+      href: '/me/wallet' as Route,
+      icon: 'bank',
+      label: 'Wallet',
+      hint: `KES ${walletBalance.toLocaleString('en-KE')} available`,
+      ariaLabel: `Wallet, KES ${walletBalance.toLocaleString('en-KE')} available`,
+    },
+    {
+      href: '/me/tickets' as Route,
+      icon: 'qr',
+      label: 'My tickets',
+      hint: bookings.length ? `${bookings.length} booking${bookings.length === 1 ? '' : 's'}` : 'Your trips',
+      ariaLabel: `My tickets, ${bookings.length} bookings`,
+    },
+    {
+      href: '/me/settings' as Route,
+      icon: 'grid',
+      label: 'Settings',
+      hint: 'Your details',
+      ariaLabel: 'Settings, your details and privacy',
+    },
   ];
+
+  const needsToday = (() => {
+    const now = Date.now();
+    const upcoming = bookings
+      .filter((b) => new Date(b.departAt).getTime() >= now && b.status !== 'CANCELLED' && b.status !== 'REFUNDED')
+      .sort((a, b) => +new Date(a.departAt) - +new Date(b.departAt))
+      .slice(0, 2);
+    const owing = bookings.filter((b) => b.status === 'PENDING_PAYMENT' || b.status === 'PARTIALLY_PAID').slice(0, 2);
+    return { upcoming, owing, hasAny: upcoming.length > 0 || owing.length > 0 };
+  })();
 
   return (
     <>
-      {/* ── greeting, one band ──
-          States where you are and the single next thing worth doing.
-          No standing meter here any more — a returning treasurer or
-          ticket-holder doesn't open the app to see a compliance score,
-          and putting one first told them Esoqo thought they should. */}
-      <section className="me-hero" aria-label="Welcome">
-        <div className="me-hero-copy">
-          <p className="kicker">{greeting()}, {givenName}</p>
-          <h1>Your profile</h1>
-          <p className="me-hero-lead">
-            Everything Esoqo holds about you — nobody else sees any of it unless you say so.
+      {/* Mast — type on paper, not a box. One line says where, one says next. */}
+      <header className="me-mast" aria-label="Welcome">
+        <div className="me-mast-copy">
+          <p className="kicker">
+            {greeting()}, {givenName}
           </p>
-          <Link href={primaryCta.href} className="btn btn-p btn-sm me-hero-cta">
-            {primaryCta.label} <Icon name="arrow-right" size={15} />
-          </Link>
+          <h1>Home</h1>
+          <p className="me-mast-lead">Your balance, trips, and groups — all in one place.</p>
         </div>
-      </section>
+        <Link
+          href={primaryCta.href}
+          className="btn btn-p me-mast-cta"
+          aria-label={`${primaryCta.label}, ${primaryCta.hint}`}
+        >
+          {primaryCta.label} <Icon name="arrow-right" size={15} aria-hidden="true" />
+        </Link>
+      </header>
 
-      {/* ── needs you today: the week ahead, before the jobs ──
-          Next two departures + anything awaiting payment, newest first;
-          nothing when there's nothing. This is the half of the page
-          that changes day to day, so it leads — the jobs below are the
-          same four every time. */}
-      {(() => {
-        const now = Date.now();
-        const upcomingTrips = bookings
-          .filter((b) => new Date(b.departAt).getTime() >= now && b.status !== 'CANCELLED' && b.status !== 'REFUNDED')
-          .sort((a, b) => +new Date(a.departAt) - +new Date(b.departAt))
-          .slice(0, 2);
-        const owing = bookings.filter((b) => b.status === 'PENDING_PAYMENT' || b.status === 'PARTIALLY_PAID').slice(0, 2);
-        if (upcomingTrips.length === 0 && owing.length === 0) return null;
-        return (
-          <section className="mcard me-coming" aria-label="Needs you today">
-            <h2><Icon name="calendar" size={18} />Needs you today</h2>
-            <ul className="coming-list">
-              {upcomingTrips.map((b) => (
-                <li key={b.id}>
-                  <span className="coming-ic"><Icon name={b.vertical === 'TRANSPORT' ? 'truck' : 'calendar'} size={15} /></span>
-                  <span className="coming-t">
-                    <strong>{b.listingTitle}</strong>
-                    <small>{new Date(b.departAt).toLocaleString('en-KE', { timeZone: 'Africa/Nairobi', weekday: 'short', day: 'numeric', month: 'short', hour: 'numeric', minute: '2-digit' })} · {b.orgName}</small>
-                  </span>
-                  <Link className="btn btn-o btn-sm" href="/me/tickets">Open</Link>
-                </li>
-              ))}
-              {owing.map((b) => {
-                const balanceDue = Math.max(0, Number(b.totalKes) - Number(b.amountPaidKes));
-                return (
-                  <li key={`owe-${b.id}`} className="is-owe">
-                    <span className="coming-ic owe"><Icon name="coins" size={15} /></span>
-                    <span className="coming-t">
-                      <strong>KES {balanceDue.toLocaleString('en-KE')} still to pay</strong>
-                      <small>{b.listingTitle} · {b.orgName}</small>
+      <div className="me-grid">
+        <div className="me-main">
+          {needsToday.hasAny && (
+            <section className="mcard me-coming" aria-label="Needs your attention">
+              <h2>
+                <Icon name="calendar" size={16} aria-hidden="true" /> Needs your attention
+              </h2>
+              <ul className="coming-list">
+                {needsToday.upcoming.map((b) => (
+                  <li key={b.id}>
+                    <span className="coming-ic" aria-hidden="true">
+                      <Icon name={b.vertical === 'TRANSPORT' ? 'truck' : 'calendar'} size={14} />
                     </span>
-                    <Link className="btn btn-o btn-sm" href="/me/tickets">Pay</Link>
+                    <span className="coming-t">
+                      <strong>{b.listingTitle}</strong>
+                      <small>
+                        {new Date(b.departAt).toLocaleString('en-KE', {
+                          timeZone: 'Africa/Nairobi',
+                          weekday: 'short',
+                          day: 'numeric',
+                          month: 'short',
+                          hour: 'numeric',
+                          minute: '2-digit',
+                        })}{' '}
+                        · {b.orgName}
+                      </small>
+                    </span>
+                    <Link className="btn btn-o btn-sm" href="/me/tickets" aria-label={`Open ticket ${b.listingTitle}`}>
+                      Open
+                    </Link>
                   </li>
-                );
-              })}
-            </ul>
-          </section>
-        );
-      })()}
-
-      {/* ── the jobs, before the numbers ── */}
-      <nav className="quick-row" aria-label="Services">
-        {quick.map((q) => (
-          <Link key={q.href} href={q.href} className="quick">
-            <span className="quick-ic"><Icon name={q.icon} size={18} /></span>
-            <span className="quick-t">
-              <strong>{q.label}</strong>
-              <small>{q.hint}</small>
-            </span>
-            <Icon name="chevron-right" size={16} className="quick-go" />
-          </Link>
-        ))}
-      </nav>
-
-      {/* ── tap-throughs: every box is a door ── */}
-      <section className="stat-grid" aria-label="At a glance">
-        <Link className="tile" href="/me/wallet">
-          <span className="icbox" style={{ background: 'var(--green-t)', color: 'var(--green)' }}>
-            <Icon name="bank" size={17} />
-          </span>
-          <span className="tile-k">Wallet</span>
-          <span className="tile-v mono">KES {walletBalance.toLocaleString('en-KE')}</span>
-          <span className="tile-h">Add money, vouchers, bills</span>
-        </Link>
-        {membership && (
-          <Link className="tile" href={`/me/group/${membership.orgId}/treasury` as Route}>
-            <span className="icbox" style={{ background: 'var(--green-t)', color: 'var(--green)' }}>
-              <Icon name="bank" size={17} />
-            </span>
-            <span className="tile-k">Group balance</span>
-            <span className="tile-v mono">KES {(balance ?? 0).toLocaleString('en-KE')}</span>
-            <span className="tile-h">Open treasury</span>
-          </Link>
-        )}
-        <Link className="tile" href="/me/payments">
-          <span className="icbox" style={{ background: 'var(--amber-t)', color: 'var(--amber)' }}>
-            <Icon name="coins" size={17} />
-          </span>
-          <span className="tile-k">Your payment</span>
-          <span className="tile-v">{payTile.v}</span>
-          <span className="tile-h">{payTile.h}</span>
-        </Link>
-        <Link className="tile" href="/me/consents">
-          <span className="icbox" style={{ background: 'var(--blue-t)', color: 'var(--blue)' }}>
-            <Icon name="eye" size={17} />
-          </span>
-          <span className="tile-k">Who can see</span>
-          <span className="tile-v">{activeGrants.length ? `${activeGrants.length} allowed` : 'Nobody'}</span>
-          <span className="tile-h">Change it any time</span>
-        </Link>
-      </section>
-
-      {/* ── where else you work ──
-          Courier companies and ticket organisers in one list, because to
-          the person they are the same fact: somewhere other than here
-          that they can be. The header switcher does this from every
-          screen; this card is how somebody finds out it exists. */}
-      {otherWorkspaces.length > 0 && (
-        <section className="mcard" aria-label="Where you work">
-          <h2><Icon name="grid" size={18} />Where you work</h2>
-          {companyError && (
-            <p className="err" role="alert" style={{ margin: '0 0 10px' }}>
-              <Icon name="alert-circle" size={14} /> We couldn&rsquo;t open that company just now. Try again.
-            </p>
+                ))}
+                {needsToday.owing.map((b) => {
+                  const due = Math.max(0, Number(b.totalKes) - Number(b.amountPaidKes));
+                  return (
+                    <li key={`owe-${b.id}`} className="is-owe">
+                      <span className="coming-ic owe" aria-hidden="true">
+                        <Icon name="coins" size={14} />
+                      </span>
+                      <span className="coming-t">
+                        <strong>KES {due.toLocaleString('en-KE')} to pay</strong>
+                        <small>
+                          {b.listingTitle} · {b.orgName}
+                        </small>
+                      </span>
+                      <Link className="btn btn-o btn-sm" href="/me/tickets" aria-label={`Pay KES ${due.toLocaleString('en-KE')} for ${b.listingTitle}`}>
+                        Pay
+                      </Link>
+                    </li>
+                  );
+                })}
+              </ul>
+            </section>
           )}
-          <p className="mcard-lede">
-            Your profile and these are separate places, and you stay signed in to all of them.
-            Cross between them any time from the name at the top of the screen.
-          </p>
-          <ul className="wsl">
-            {otherWorkspaces.map((w) => (
-              <li className="wsl-row" key={w.key}>
-                <span className={`wsw-mark wsw-${w.kind}`} aria-hidden="true">
-                  <Icon name={w.orgType === 'courier' ? 'truck' : 'calendar'} size={16} />
-                </span>
-                <span className="wsl-id">
-                  <strong>{w.name}</strong>
-                  <small>{w.note ? `${w.subtitle} · ${w.note}` : w.subtitle}</small>
-                </span>
-                {!w.enterable ? (
-                  <span className="badge b-warn">Not trading yet</span>
-                ) : w.href ? (
-                  <Link className="btn btn-o btn-sm" href={w.href as Route}>
-                    Open <Icon name="arrow-right" size={15} />
-                  </Link>
-                ) : (
-                  <form action={enterOrg.bind(null, w.id, w.orgType ?? 'courier')}>
-                    <button type="submit" className="btn btn-o btn-sm">
-                      Open <Icon name="arrow-right" size={15} />
-                    </button>
-                  </form>
-                )}
-              </li>
-            ))}
-          </ul>
-        </section>
-      )}
 
-      {/* ── trust + group: summaries only. The full grant list lives on
-          /me/consents and the full membership + money on
-          /me/group/[orgId] and its treasury page — this home used to
-          re-render both in full, so the same permissions and the same
-          group appeared twice. Tiles at the top carry the counts; these
-          rows carry the doors. */}
-      {/* Paired only when there IS a group — a lone half-width card
-          beside an empty column reads as something that failed to
-          load. */}
-      <div className={membership ? 'dash-cols' : undefined}>
-        <section className="mcard">
-          <h2><Icon name="eye" size={18} />Who can see this</h2>
-          <p className="mcard-lede">
-            {activeGrants.length === 0
-              ? 'Nobody. You have granted no access — not a bank, not a buyer, not a county.'
-              : `${activeGrants.length} ${activeGrants.length === 1 ? 'organisation can' : 'organisations can'} see parts of your profile. Change it any time.`}
-          </p>
-          <Link className="btn btn-o" href="/me/consents">
-            <Icon name="arrow-right" size={15} />Manage permissions
-          </Link>
-        </section>
-
-        {membership && (
-          <section className="mcard">
-            <h2><Icon name="users" size={18} />Your group</h2>
-            <p className="mcard-lede">
-              {membership.org.officialName} ·{' '}
-              {membership.role === 'OTHER' ? (membership.customRole || 'Other') : membership.role.toLowerCase()} ·{' '}
-              {membership.org._count.members} members ·{' '}
-              <span className="mono">KES {(balance ?? 0).toLocaleString('en-KE')}</span> held
-            </p>
-            <div className="row">
-              <Link className="btn btn-p btn-sm" href={`/me/group/${membership.orgId}/treasury` as Route}>
-                <Icon name="bank" size={16} />Open treasury
+          <nav className="quick-row" aria-label="Primary actions">
+            {quick.map((q) => (
+              <Link key={q.href} href={q.href} className="quick" aria-label={q.ariaLabel}>
+                <span className="quick-ic" aria-hidden="true">
+                  <Icon name={q.icon} size={16} />
+                </span>
+                <span className="quick-t">
+                  <strong>{q.label}</strong>
+                  <small>{q.hint}</small>
+                </span>
+                <Icon name="chevron-right" size={14} className="quick-go" aria-hidden="true" />
               </Link>
-              <Link className="btn btn-o btn-sm" href={`/me/group/${membership.orgId}` as Route}>
-                <Icon name="users" size={16} />Group details
+            ))}
+          </nav>
+
+          {otherWorkspaces.length > 0 && (
+            <section className="mcard" aria-label="Your workplaces">
+              <h2>
+                <Icon name="grid" size={16} aria-hidden="true" /> Your workplaces
+              </h2>
+              {companyError && (
+                <p className="err" role="alert" style={{ margin: '0 0 8px' }}>
+                  <Icon name="alert-circle" size={13} aria-hidden="true" /> Couldn&apos;t open that workplace. Try again.
+                </p>
+              )}
+              <p className="mcard-lede">Switch anytime from the name at the top — you stay signed in everywhere.</p>
+              <ul className="wsl">
+                {otherWorkspaces.map((w) => (
+                  <li className="wsl-row" key={w.key}>
+                    <span className={`wsw-mark wsw-${w.kind}`} aria-hidden="true">
+                      <Icon name={w.orgType === 'courier' ? 'truck' : 'calendar'} size={14} />
+                    </span>
+                    <span className="wsl-id">
+                      <strong>{w.name}</strong>
+                      <small>{w.note ? `${w.subtitle} · ${w.note}` : w.subtitle}</small>
+                    </span>
+                    {!w.enterable ? (
+                      <span className="badge b-warn">Not ready</span>
+                    ) : w.href ? (
+                      <Link className="btn btn-o btn-sm" href={w.href as Route} aria-label={`Open ${w.name}`}>
+                        Open <Icon name="arrow-right" size={14} aria-hidden="true" />
+                      </Link>
+                    ) : (
+                      <form action={enterOrg.bind(null, w.id, w.orgType ?? 'courier')}>
+                        <button type="submit" className="btn btn-o btn-sm" aria-label={`Open ${w.name}`}>
+                          Open <Icon name="arrow-right" size={14} aria-hidden="true" />
+                        </button>
+                      </form>
+                    )}
+                  </li>
+                ))}
+              </ul>
+            </section>
+          )}
+
+          {membership && (
+            <section className="mcard" aria-label="Your group">
+              <h2>
+                <Icon name="users" size={16} aria-hidden="true" /> Your group
+              </h2>
+              <p className="mcard-lede">
+                {membership.org.officialName} · {membership.role === 'OTHER' ? membership.customRole || 'Other' : membership.role.toLowerCase()} ·{' '}
+                {membership.org._count.members} members · <span className="mono">KES {(balance ?? 0).toLocaleString('en-KE')}</span> held
+              </p>
+              <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                <Link className="btn btn-p btn-sm" href={`/me/group/${groupSlug}/treasury` as Route} aria-label={`Open group balance for ${membership.org.officialName}`}>
+                  <Icon name="bank" size={15} aria-hidden="true" /> Group balance
+                </Link>
+                <Link className="btn btn-o btn-sm" href={`/me/group/${groupSlug}` as Route} aria-label={`View details for ${membership.org.officialName}`}>
+                  <Icon name="users" size={15} aria-hidden="true" /> Details
+                </Link>
+              </div>
+            </section>
+          )}
+        </div>
+
+        <aside className="me-aside" aria-label="Overview">
+          <section className="desk-card" aria-label="At a glance">
+            <h3>
+              <Icon name="grid" size={14} aria-hidden="true" /> At a glance
+            </h3>
+            <div className="desk-kpi">
+              <Link className="desk-kpi-row" href="/me/wallet" aria-label={`Wallet, KES ${walletBalance.toLocaleString('en-KE')}`}>
+                <span className="icbox" style={{ background: 'var(--green-t)', color: 'var(--green)' }} aria-hidden="true">
+                  <Icon name="bank" size={14} />
+                </span>
+                <span className="desk-kpi-t">
+                  <strong>Wallet</strong>
+                  <small>Wallet · vouchers · bills</small>
+                </span>
+                <span className="desk-kpi-v mono" aria-hidden="true">
+                  {walletBalance.toLocaleString('en-KE')}
+                </span>
+              </Link>
+              {membership && (
+                <Link
+                  className="desk-kpi-row"
+                  href={`/me/group/${groupSlug}/treasury` as Route}
+                  aria-label={`Group balance, KES ${(balance ?? 0).toLocaleString('en-KE')}`}
+                >
+                  <span className="icbox" style={{ background: 'var(--green-t)', color: 'var(--green)' }} aria-hidden="true">
+                    <Icon name="bank" size={14} />
+                  </span>
+                  <span className="desk-kpi-t">
+                    <strong>Group balance</strong>
+                    <small>Your group&apos;s balance</small>
+                  </span>
+                  <span className="desk-kpi-v mono" aria-hidden="true">
+                    {(balance ?? 0).toLocaleString('en-KE')}
+                  </span>
+                </Link>
+              )}
+              <Link className="desk-kpi-row" href="/me/payments" aria-label={`Registration fee, ${payTitle}, ${payHint}`}>
+                <span className="icbox" style={{ background: 'var(--amber-t)', color: 'var(--amber)' }} aria-hidden="true">
+                  <Icon name="coins" size={14} />
+                </span>
+                <span className="desk-kpi-t">
+                  <strong>Registration fee</strong>
+                  <small>{payHint}</small>
+                </span>
+                <span className="desk-kpi-v" style={{ fontSize: '.76rem' }} aria-hidden="true">
+                  {payTitle}
+                </span>
+              </Link>
+              <Link className="desk-kpi-row" href="/me/consents" aria-label={`Privacy, ${activeGrants.length ? `${activeGrants.length} active` : 'No one can see your info'}`}>
+                <span className="icbox" style={{ background: 'var(--blue-t)', color: 'var(--blue)' }} aria-hidden="true">
+                  <Icon name="eye" size={14} />
+                </span>
+                <span className="desk-kpi-t">
+                  <strong>Privacy</strong>
+                  <small>Who can see your info</small>
+                </span>
+                <span className="desk-kpi-v" style={{ fontSize: '.76rem' }} aria-hidden="true">
+                  {activeGrants.length ? `${activeGrants.length} active` : 'Private'}
+                </span>
               </Link>
             </div>
           </section>
-        )}
+        </aside>
       </div>
     </>
   );

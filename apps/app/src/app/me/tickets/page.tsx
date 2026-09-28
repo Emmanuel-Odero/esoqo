@@ -30,12 +30,13 @@ export default async function MyTickets() {
 
   return (
     <>
-      <div className="mehead">
+      <header className="hero" style={{ padding: '4px 0 14px' }}>
+        <p className="kicker">Tickets</p>
         <h1>Your tickets</h1>
-        <p>Events and transport bookings on this account — search, filter, newest first.</p>
-      </div>
+        <p className="lead">Events and transport bookings on this account — search, filter, newest first.</p>
+      </header>
 
-      <div className="mcard" style={{ marginBottom: 16 }}>
+      <div className="mcard mcard--premium" style={{ marginBottom: 16 }}>
         <a href={`${process.env.NEXT_PUBLIC_WEB_URL ?? 'http://localhost:3000'}/tickets`} className="btn btn-o btn-block">
           <Icon name="search" size={16} />Browse events &amp; transport
         </a>

@@ -23,7 +23,7 @@ export function WalletShell({
   const [tab, setTab] = useState<'cards' | 'bills'>('cards');
   const dueSoon = bills.filter((b) => b.DueSoon || b.Overdue).length;
   return (
-    <>
+    <div id="wallet-panel">
       <div className="wallet-tabs" role="tablist" aria-label="Wallet sections">
         <button
           type="button"
@@ -51,6 +51,6 @@ export function WalletShell({
       ) : (
         <BillsClient initial={bills} />
       )}
-    </>
+    </div>
   );
 }
