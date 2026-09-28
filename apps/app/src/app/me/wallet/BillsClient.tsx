@@ -11,22 +11,36 @@ export function BillsClient({ initial }: { initial: GoBill[] }) {
   const [showNew, setShowNew] = useState(false);
   const sorted = [...initial].sort((a, b) => a.DaysUntilDue - b.DaysUntilDue);
 
+  const overdue = sorted.filter((b) => b.Overdue).length;
+  const dueSoon = sorted.filter((b) => b.DueSoon).length;
   return (
-    <section className="mcard">
-      <h2><Icon name="calendar" size={18} />Bills</h2>
-      <p className="mcard-lede">
-        Track what you owe and when — Esoqo reminds you, it doesn&rsquo;t pay the biller for you.
-      </p>
+    <section className="mcard mcard--premium">
+      <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 12 }}>
+        <div>
+          <h2 style={{ marginBottom: 6 }}><Icon name="calendar" size={18} />Bills</h2>
+          <p className="mcard-lede" style={{ margin: 0 }}>
+            A reminder, not a payment — Esoqo nudges you, you pay the biller yourself.
+          </p>
+        </div>
+        {sorted.length > 0 && (
+          <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', flex: 'none' }}>
+            {overdue > 0 && <span className="badge b-bad">{overdue} overdue</span>}
+            {dueSoon > 0 && <span className="badge b-warn">{dueSoon} due soon</span>}
+            {overdue === 0 && dueSoon === 0 && <span className="badge b-ok">All clear</span>}
+          </div>
+        )}
+      </div>
 
       {sorted.length === 0 && !showNew && (
-        <div className="mempty">
+        <div className="mempty" style={{ marginTop: 12 }}>
           <span className="ico"><Icon name="calendar" size={22} /></span>
-          <p style={{ margin: 0 }}>No bills tracked yet.</p>
+          <h3 style={{ fontSize: '.98rem', margin: '0 0 6px', fontWeight: 700 }}>Nothing to track yet</h3>
+          <p style={{ margin: 0, fontSize: '.88rem', maxWidth: 360 }}>Add rent, electricity, school fees or any recurring bill — we&apos;ll remind you before it&apos;s due.</p>
         </div>
       )}
 
       {sorted.length > 0 && (
-        <ul className="papers">
+        <ul className="papers" style={{ marginTop: 14 }}>
           {sorted.map((b) => <BillRow key={b.ID} b={b} />)}
         </ul>
       )}
@@ -34,7 +48,7 @@ export function BillsClient({ initial }: { initial: GoBill[] }) {
       {showNew
         ? <NewBillForm onDone={() => setShowNew(false)} />
         : (
-          <button type="button" className="btn btn-o" style={{ marginTop: 12 }} onClick={() => setShowNew(true)}>
+          <button type="button" className="btn btn-o" style={{ marginTop: 16 }} onClick={() => setShowNew(true)}>
             <Icon name="plus" size={15} />Add a bill
           </button>
         )}
@@ -137,7 +151,7 @@ function NewBillForm({ onDone }: { onDone: () => void }) {
   }
 
   return (
-    <div className="mcard" style={{ marginTop: 14, background: 'var(--paper)' }}>
+    <div className="mcard mcard--action" style={{ marginTop: 16 }}>
       <h2 style={{ fontSize: '.95rem' }}>New bill</h2>
       <div className="fld"><label className="lab">Name</label>
         <input className="inp" value={label} onChange={(e) => setLabel(e.target.value)} placeholder="Landlord rent" /></div>

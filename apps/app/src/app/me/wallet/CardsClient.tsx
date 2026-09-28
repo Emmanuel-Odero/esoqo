@@ -11,56 +11,73 @@ type Voucher = {
   balanceKes: string;
 };
 
+/** GENERAL is the one purpose core-go never restricts spending on (see
+ *  SpendVoucher in dbx/voucher.go) — it's the account's own "spend
+ *  anywhere, anytime" card. Named "Voucher" here rather than "General",
+ *  which read as one option among four with no hint it was different in
+ *  kind from the other three, not just in name. */
 const PURPOSE_LABEL: Record<string, string> = {
-  FARE: 'Fare', RENT: 'Rent', SHOPPING: 'Shopping', GENERAL: 'General',
+  GENERAL: 'Voucher', FARE: 'Fare only', RENT: 'Rent only', SHOPPING: 'Shopping only',
 };
+const LOCKED_PURPOSES = ['FARE', 'RENT', 'SHOPPING'];
 
 /**
- * The "cards" in the wallet — purpose-locked vouchers and the loyalty
- * balance, each its own tile rather than a plain list row. Same data
- * and actions the old /me/vouchers page had (real core-go balances,
- * real M-Pesa top-up); this is the refinement pass, not new plumbing.
+ * The "cards" in the wallet — the default spend-anywhere Voucher(s)
+ * first, then purpose-locked vouchers, then loyalty. Same data and
+ * actions the old /me/vouchers page had (real core-go balances, real
+ * M-Pesa top-up, and now real voucher-to-voucher transfers); this is
+ * the refinement pass, not new plumbing.
  */
 export function CardsClient({ initial, loyalty }: {
   initial: Voucher[];
   loyalty: { totalPoints?: number; kesEquiv?: number };
 }) {
   const [showNew, setShowNew] = useState(false);
+  const sorted = [...initial].sort((a, b) => (a.purpose === 'GENERAL' ? -1 : b.purpose === 'GENERAL' ? 1 : 0));
 
   return (
-    <section className="mcard">
-      <h2><Icon name="tag" size={18} />Your cards</h2>
-      <p className="mcard-lede">Loyalty points and purpose-locked vouchers — kept separate from cash on purpose.</p>
+    <section className="mcard mcard--premium">
+      <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 12, marginBottom: 14 }}>
+        <div>
+          <h2 style={{ marginBottom: 6 }}><Icon name="tag" size={18} />Your cards</h2>
+          <p className="mcard-lede" style={{ margin: 0 }}>
+            Voucher = cash you&apos;ve set aside, spendable anywhere. Locked cards (fare, rent, shopping) only spend on that one thing.
+          </p>
+        </div>
+        <span className="badge b-mute" style={{ flex: 'none' }}>{sorted.length} voucher{sorted.length === 1 ? '' : 's'} · {loyalty.totalPoints ?? 0} pts</span>
+      </div>
 
       <div className="cards-grid">
-        <div className="wcard loyalty">
+        <div className="wcard loyalty" aria-label="Loyalty balance">
           <div>
-            <span className="wcard-sub">Loyalty</span>
-            <div className="wcard-label">10% back on every confirmed spend</div>
+            <span className="wcard-sub">Loyalty · 10% back</span>
+            <div className="wcard-label">Every confirmed spend earns</div>
           </div>
           <div>
             <div className="wcard-bal">{loyalty.totalPoints ?? 0} pts</div>
-            <div className="wcard-code">≈ KES {loyalty.kesEquiv ?? 0}</div>
+            <div className="wcard-code">≈ KES {loyalty.kesEquiv ?? 0} · use as M-Pesa</div>
           </div>
         </div>
 
-        {initial.map((v) => <VoucherCard key={v.id} v={v} />)}
+        {sorted.map((v) => <VoucherCard key={v.id} v={v} others={initial.filter((o) => o.id !== v.id)} />)}
 
-        <button type="button" className="wcard wcard-new" onClick={() => setShowNew(true)}>
+        <button type="button" className="wcard wcard-new" onClick={() => setShowNew(true)} aria-label="Create new card">
           <Icon name="plus-circle" size={22} />
-          <span>New voucher</span>
+          <span style={{ fontWeight: 700, fontSize: '.92rem' }}>{initial.length === 0 ? 'Get your first voucher' : 'New card'}</span>
+          <small style={{ fontSize: '.76rem', opacity: .7 }}>{initial.length === 0 ? 'Spend anywhere, anytime' : 'Voucher or locked'}</small>
         </button>
       </div>
 
-      {showNew && <NewVoucherForm onDone={() => setShowNew(false)} />}
+      {showNew && <NewVoucherForm hasExisting={initial.length > 0} onDone={() => setShowNew(false)} />}
     </section>
   );
 }
 
-function VoucherCard({ v }: { v: Voucher }) {
+function VoucherCard({ v, others }: { v: Voucher; others: Voucher[] }) {
   const [open, setOpen] = useState(false);
+  const isDefault = v.purpose === 'GENERAL';
   return (
-    <div className="wcard voucher">
+    <div className={`wcard voucher ${isDefault ? 'is-default' : ''}`}>
       <div>
         <span className="wcard-sub">{PURPOSE_LABEL[v.purpose] ?? v.purpose}</span>
         <div className="wcard-label">{v.label}</div>
@@ -72,26 +89,46 @@ function VoucherCard({ v }: { v: Voucher }) {
       <button type="button" className="wcard-topup" onClick={() => setOpen((o) => !o)}>
         {open ? 'Close' : 'Top up'}
       </button>
-      {open && <VoucherTopUp id={v.id} />}
+      {open && <VoucherTopUp id={v.id} others={others} />}
     </div>
   );
 }
 
-function VoucherTopUp({ id }: { id: string }) {
+function VoucherTopUp({ id, others }: { id: string; others: Voucher[] }) {
   const [amount, setAmount] = useState('');
+  const [source, setSource] = useState('MPESA_STK');
   const [pending, start] = useTransition();
   const [msg, setMsg] = useState<string | null>(null);
   const announce = useAnnounce();
+
+  function submit() {
+    start(async () => {
+      const isVoucher = source.startsWith('voucher:');
+      const r = await actionLoadVoucher(id, {
+        amountKes: Number(amount),
+        method: isVoucher ? 'VOUCHER' : source,
+        fromVoucherId: isVoucher ? source.slice('voucher:'.length) : undefined,
+      });
+      const text = r.ok
+        ? (isVoucher ? 'Moved.' : source === 'LOYALTY' ? 'Loaded from your loyalty points.' : 'STK sent — enter PIN.')
+        : r.error;
+      setMsg(text);
+      announce(text, r.ok ? 'polite' : 'assertive');
+    });
+  }
+
   return (
     <div className="wcard-topup-form" onClick={(e) => e.stopPropagation()}>
+      <select className="inp" value={source} onChange={(e) => setSource(e.target.value)} style={{ flex: '1 1 100%' }}>
+        <option value="MPESA_STK">From M-Pesa</option>
+        <option value="LOYALTY">From loyalty points</option>
+        {others.map((o) => (
+          <option key={o.id} value={`voucher:${o.id}`}>From {o.label} (KES {displayKES(o.balanceKes)})</option>
+        ))}
+      </select>
       <input className="inp" value={amount} onChange={(e) => setAmount(e.target.value)}
         placeholder="Amount KES" inputMode="decimal" />
-      <button type="button" className="btn btn-sm" disabled={pending || !amount} onClick={() => start(async () => {
-        const r = await actionLoadVoucher(id, { amountKes: Number(amount), method: 'MPESA_STK' });
-        const text = r.ok ? 'STK sent — enter PIN.' : r.error;
-        setMsg(text);
-        announce(text, r.ok ? 'polite' : 'assertive');
-      })}>
+      <button type="button" className="btn btn-sm" disabled={pending || !amount} onClick={submit}>
         Send
       </button>
       {msg && <p className="wcard-msg">{msg}</p>}
@@ -99,9 +136,9 @@ function VoucherTopUp({ id }: { id: string }) {
   );
 }
 
-function NewVoucherForm({ onDone }: { onDone: () => void }) {
+function NewVoucherForm({ hasExisting, onDone }: { hasExisting: boolean; onDone: () => void }) {
   const [label, setLabel] = useState('');
-  const [purpose, setPurpose] = useState('FARE');
+  const [purpose, setPurpose] = useState('GENERAL');
   const [amount, setAmount] = useState('');
   const [recipient, setRecipient] = useState('');
   const [error, setError] = useState<string | null>(null);
@@ -112,10 +149,11 @@ function NewVoucherForm({ onDone }: { onDone: () => void }) {
     setError(null);
     start(async () => {
       const r = await actionCreateVoucher({
-        label, purpose, amountKes: Number(amount), recipientMsisdn: recipient, loadMethod: 'MPESA_STK',
+        label: label.trim() || (purpose === 'GENERAL' ? 'Voucher' : PURPOSE_LABEL[purpose]),
+        purpose, amountKes: Number(amount), recipientMsisdn: recipient, loadMethod: 'MPESA_STK',
       });
       if (r.ok) {
-        announce('Voucher created.', 'polite');
+        announce('Created.', 'polite');
         onDone();
       } else {
         setError(r.error);
@@ -125,22 +163,30 @@ function NewVoucherForm({ onDone }: { onDone: () => void }) {
   }
 
   return (
-    <div className="mcard" style={{ marginTop: 14, background: 'var(--paper)' }}>
-      <h2 style={{ fontSize: '.95rem' }}>New voucher</h2>
-      <div className="fld"><label className="lab">Label</label>
-        <input className="inp" value={label} onChange={(e) => setLabel(e.target.value)} placeholder="School run" /></div>
-      <div className="fld"><label className="lab">Purpose (locked once created)</label>
+    <div className="mcard mcard--action" style={{ marginTop: 16 }}>
+      <h2 style={{ fontSize: '.95rem' }}>{purpose === 'GENERAL' ? 'New voucher' : 'New purpose-locked card'}</h2>
+      <div className="fld"><label className="lab">Kind</label>
         <select className="inp" value={purpose} onChange={(e) => setPurpose(e.target.value)}>
-          <option>FARE</option><option>RENT</option><option>SHOPPING</option><option>GENERAL</option>
-        </select></div>
+          <option value="GENERAL">Voucher — spend anywhere, any time</option>
+          {LOCKED_PURPOSES.map((p) => <option key={p} value={p}>{PURPOSE_LABEL[p]}</option>)}
+        </select>
+      </div>
+      <div className="fld"><label className="lab">Label (optional)</label>
+        <input className="inp" value={label} onChange={(e) => setLabel(e.target.value)}
+          placeholder={purpose === 'GENERAL' ? 'Voucher' : 'School run'} /></div>
+      {!hasExisting && purpose === 'GENERAL' && (
+        <p className="hint" style={{ margin: '0 0 12px' }}>
+          This is the card you&rsquo;ll use most — a balance you can spend on anything, any time.
+        </p>
+      )}
       <div className="fld"><label className="lab">Load with (KES)</label>
         <input className="inp" value={amount} onChange={(e) => setAmount(e.target.value)} placeholder="200" inputMode="decimal" /></div>
       <div className="fld"><label className="lab">Gift to (optional phone)</label>
         <input className="inp" value={recipient} onChange={(e) => setRecipient(e.target.value)} placeholder="07XX XXX XXX" /></div>
       {error && <p className="err" role="alert"><Icon name="alert-circle" size={15} />{error}</p>}
       <div className="row">
-        <button type="button" className="btn btn-p btn-sm" disabled={pending || !label.trim() || !amount.trim()} onClick={submit}>
-          {pending ? 'Creating…' : 'Create voucher'}
+        <button type="button" className="btn btn-p btn-sm" disabled={pending || !amount.trim()} onClick={submit}>
+          {pending ? 'Creating…' : 'Create'}
         </button>
         <button type="button" className="btn btn-o btn-sm" disabled={pending} onClick={onDone}>Cancel</button>
       </div>
