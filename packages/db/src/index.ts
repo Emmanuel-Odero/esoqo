@@ -71,6 +71,7 @@ export type {
   ParkingLotView, ParkingSessionView, ParkingCharge, CheckInInput,
 } from './dal/parking';
 export type { VerifyResult } from './dal/reference';
+export { feeForAmount, listFeeBands, createFeeBand, deleteFeeBand } from './dal/fees';
 export * from './storage';
 // compressImage deliberately does NOT get re-exported here — every app
 // in the monorepo imports something from '@esoqo/db' (the main entry
@@ -90,4 +91,5 @@ export type {
   TicketVertical, TicketOrgStatus, ListingStatus, ScheduleStatus, SeatStatus,
   BookingStatus, BookingPaymentMethod, TicketStatus,
   BusinessPaymentStatus,
+  TransactionFeeKind,
 } from '@prisma/client';
