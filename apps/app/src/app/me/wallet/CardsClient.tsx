@@ -3,7 +3,7 @@ import { useState, useTransition } from 'react';
 import { Icon } from '@esoqo/ui';
 import { displayKES } from '@esoqo/domain';
 import { useAnnounce } from '@esoqo/a11y';
-import { actionCreateVoucher, actionLoadVoucher } from './actions';
+import { actionCreateVoucher, actionLoadVoucher, actionPayBusinessFromVoucher } from './actions';
 
 type Voucher = {
   id: string; label: string; purpose: string; status: string;
@@ -73,9 +73,16 @@ export function CardsClient({ initial, loyalty }: {
   );
 }
 
+// A locked FARE/RENT card is refused server-side for a business payment
+// (see SpendVoucher's purpose check in core-go) — only offer the action
+// where it can actually succeed, rather than let someone hit "Pay
+// business" and learn the refusal after typing an amount.
+const PAYABLE_TO_BUSINESS = ['GENERAL', 'SHOPPING'];
+
 function VoucherCard({ v, others }: { v: Voucher; others: Voucher[] }) {
-  const [open, setOpen] = useState(false);
+  const [mode, setMode] = useState<'closed' | 'topup' | 'pay'>('closed');
   const isDefault = v.purpose === 'GENERAL';
+  const canPayBusiness = PAYABLE_TO_BUSINESS.includes(v.purpose);
   return (
     <div className={`wcard voucher ${isDefault ? 'is-default' : ''}`}>
       <div>
@@ -86,10 +93,49 @@ function VoucherCard({ v, others }: { v: Voucher; others: Voucher[] }) {
         <div className="wcard-bal">KES {displayKES(v.balanceKes)}</div>
         <div className="wcard-code">{v.shortCode} · {v.balancePoints} pts</div>
       </div>
-      <button type="button" className="wcard-topup" onClick={() => setOpen((o) => !o)}>
-        {open ? 'Close' : 'Top up'}
+      <div style={{ display: 'flex', gap: 6 }}>
+        <button type="button" className="wcard-topup" onClick={() => setMode((m) => (m === 'topup' ? 'closed' : 'topup'))}>
+          {mode === 'topup' ? 'Close' : 'Top up'}
+        </button>
+        {canPayBusiness && (
+          <button type="button" className="wcard-topup" onClick={() => setMode((m) => (m === 'pay' ? 'closed' : 'pay'))}>
+            {mode === 'pay' ? 'Close' : 'Pay business'}
+          </button>
+        )}
+      </div>
+      {mode === 'topup' && <VoucherTopUp id={v.id} others={others} />}
+      {mode === 'pay' && <VoucherPayBusiness id={v.id} />}
+    </div>
+  );
+}
+
+function VoucherPayBusiness({ id }: { id: string }) {
+  const [businessId, setBusinessId] = useState('');
+  const [amount, setAmount] = useState('');
+  const [pending, start] = useTransition();
+  const [msg, setMsg] = useState<string | null>(null);
+  const announce = useAnnounce();
+
+  function submit() {
+    start(async () => {
+      const r = await actionPayBusinessFromVoucher(id, businessId, Number(amount));
+      const text = r.ok ? `Paid ${r.businessName}.` : r.error;
+      setMsg(text);
+      announce(text, r.ok ? 'polite' : 'assertive');
+      if (r.ok) { setBusinessId(''); setAmount(''); }
+    });
+  }
+
+  return (
+    <div className="wcard-topup-form" onClick={(e) => e.stopPropagation()}>
+      <input className="inp" value={businessId} onChange={(e) => setBusinessId(e.target.value)}
+        placeholder="Business's Esoqo ID" style={{ flex: '1 1 100%' }} />
+      <input className="inp" value={amount} onChange={(e) => setAmount(e.target.value)}
+        placeholder="Amount KES" inputMode="decimal" />
+      <button type="button" className="btn btn-sm" disabled={pending || !amount || !businessId.trim()} onClick={submit}>
+        Pay
       </button>
-      {open && <VoucherTopUp id={v.id} others={others} />}
+      {msg && <p className="wcard-msg">{msg}</p>}
     </div>
   );
 }

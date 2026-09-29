@@ -211,6 +211,31 @@ export async function actionLoadVoucher(id: string, raw: unknown) {
   }
 }
 
+/**
+ * Spend a voucher's balance to pay a business — no M-Pesa leg, same
+ * closed-loop shape the store checkout's VOUCHER payment method already
+ * uses (see SettleStoreOrderVoucher in core-go), generalised to any
+ * business. refId is generated here, once per submit, so a network-level
+ * retry of this same request cannot post twice — see SpendVoucher's own
+ * idempotency-by-refId guarantee.
+ */
+export async function actionPayBusinessFromVoucher(voucherId: string, businessId: string, amountKes: number) {
+  if (!businessId.trim()) return { ok: false as const, error: "Enter the business's Esoqo ID" };
+  const amount = Number(amountKes);
+  if (!Number.isFinite(amount) || amount <= 0) return { ok: false as const, error: 'Enter an amount above zero' };
+  try {
+    const t = await token();
+    const res = await goFetch(`/v1/vouchers/${voucherId}/pay-business`, t, {
+      method: 'POST',
+      body: JSON.stringify({ businessId: businessId.trim(), amountKes: amount, refId: crypto.randomUUID() }),
+    });
+    revalidatePath('/me/wallet');
+    return { ok: true as const, businessName: (res as { businessName?: string }).businessName ?? businessId };
+  } catch (e) {
+    return { ok: false as const, error: e instanceof Error ? e.message : 'Could not complete that payment.' };
+  }
+}
+
 // ── bills ─────────────────────────────────────────────────────────
 
 export async function actionCreateBill(raw: {
