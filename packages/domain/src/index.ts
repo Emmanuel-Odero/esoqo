@@ -58,4 +58,9 @@ export * from './parcel-code';
 export * from './safe-redirect';
 export * from './wallet';
 export * from './wallet-notify';
+// Re-exported directly, same reason as donation-notify/business-payment-notify
+// above: services/core's Daraja B2C webhook (plain tsx/Node ESM) imports
+// walletWithdrawalConfirmedSms directly, and that doesn't reliably resolve
+// through a bare `export *` there.
+export { walletWithdrawalConfirmedSms, walletWithdrawalFailedSms } from './wallet-notify';
 export { appEnv, isProduction, isTestingProduction } from './env';

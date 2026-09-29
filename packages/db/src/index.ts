@@ -44,6 +44,18 @@ export {
   listActiveMediaAssets, listMediaAssetsForStaff, setMediaAssetActive, updateMediaAssetLabel,
 } from './dal/jamii-media';
 export * from './capabilities';
+// Wallet top-up and group-treasury signatory fees. Named explicitly for
+// the same reason as everything else in this block: services/core's
+// Daraja webhook (plain tsx/Node ESM, not a bundler) imports these
+// directly, and — discovered while restarting the service for this
+// session's own wallet-withdrawal work — a name reached only via
+// `export * from './dal'` does not reliably resolve there once the dal
+// barrel is large enough. This was already true for these two before
+// this session touched anything; confirmWalletTopUp/confirmSignatoryFeePayment
+// are both real M-Pesa-webhook confirmation paths, so leaving them
+// barrel-only was a live bug, not just a latent one.
+export { confirmWalletTopUp, failWalletTopUpById, WalletTopUpError } from './dal/wallet-topup';
+export { confirmSignatoryFeePayment, TreasuryError } from './dal/treasury';
 // Business payments made through the public /pay page. Re-exported
 // explicitly rather than via the './dal' barrel for the same reason the
 // donation block above is: services/core (plain tsx/Node ESM, not a
