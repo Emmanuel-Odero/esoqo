@@ -178,6 +178,11 @@ export const CAPABILITY_CATALOGUE = [
     ['payment.approve', 'SIGN a payment approval'],
     ['payment.waive', 'Waive a registration fee'],
   ]},
+  { group: 'Wallet', items: [
+    ['wallet.withdraw', "Cash out a WALLET balance to the holder's own registration M-Pesa number"],
+    ['wallet.transfer', 'Send money to another Esoqo handle from a WALLET balance'],
+    ['wallet.thirdpartypayout', 'Pay an arbitrary M-Pesa number from a WALLET balance — gated behind THIRDPARTY_PAYOUT_ENABLED'],
+  ]},
   { group: 'Credentials', items: [
     ['attestation.issue', 'Issue any credential'],
     ['attestation.revoke', 'Revoke a credential'],
@@ -317,6 +322,7 @@ export const PAYMENT_APPROVAL_THRESHOLD =
 export const ROLE_PRESETS = {
   SUBJECT: ['entity.read:own', 'entity.write:own', 'consent.read:own', 'consent.write:own',
             'document.read:own', 'document.write:own', 'wallet.read:own',
+            'wallet.withdraw:own', 'wallet.transfer:own', 'wallet.thirdpartypayout:own',
             'store.read', 'store.write:own', 'product.write:own',
             'order.read:own', 'order.fulfil:own', 'pos.sell:own',
             'inventory.write:own', 'customer.read:own', 'customer.write:own',

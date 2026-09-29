@@ -71,7 +71,25 @@ export type {
   ParkingLotView, ParkingSessionView, ParkingCharge, CheckInInput,
 } from './dal/parking';
 export type { VerifyResult } from './dal/reference';
+// Wallet withdrawal (B2C payout). Named explicitly, same reason as
+// business-payment/parking above: services/core's Daraja B2C result
+// callback (plain tsx/Node ESM) imports confirmWalletWithdrawal directly.
+export {
+  createWalletWithdrawal, attachWalletWithdrawalConversationId,
+  confirmWalletWithdrawal, failWalletWithdrawalById, WalletWithdrawalError,
+} from './dal/wallet-withdrawal';
+export type { ConfirmWalletWithdrawalResult } from './dal/wallet-withdrawal';
 export { feeForAmount, listFeeBands, createFeeBand, deleteFeeBand } from './dal/fees';
+// Third-party payout (gated, dark — see dal/thirdparty-payout.ts). Named
+// explicitly for the same reason as wallet withdrawal above: the B2C
+// result callback (plain tsx/Node ESM) needs confirmThirdPartyPayout
+// wired in ready for the day the flag flips, even with no UI caller yet.
+export {
+  createThirdPartyPayout, attachThirdPartyPayoutConversationId,
+  confirmThirdPartyPayout, failThirdPartyPayoutById, ThirdPartyPayoutError,
+  THIRDPARTY_PAYOUT_LIMITS,
+} from './dal/thirdparty-payout';
+export type { ConfirmThirdPartyPayoutResult } from './dal/thirdparty-payout';
 export * from './storage';
 // compressImage deliberately does NOT get re-exported here — every app
 // in the monorepo imports something from '@esoqo/db' (the main entry

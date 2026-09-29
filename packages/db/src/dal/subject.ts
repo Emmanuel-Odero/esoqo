@@ -47,6 +47,17 @@ export async function getWalletBalance(ctx: Ctx): Promise<number> {
   return Number(sum._sum.amount ?? 0);
 }
 
+/** The number a wallet withdrawal will always be sent to — read-only
+ *  display so the withdrawal UI can show it before the person commits to
+ *  an amount, without pulling in getMyRecord's much heavier include set
+ *  just for one field. */
+export async function getMyMsisdn(ctx: Ctx): Promise<string | null> {
+  if (!ctx.partyId) return null;
+  requireCapability(ctx, 'entity.read', { partyId: ctx.partyId });
+  const person = await prisma.person.findUnique({ where: { partyId: ctx.partyId }, select: { msisdn: true } });
+  return person?.msisdn ?? null;
+}
+
 export async function listMyConsents(ctx: Ctx) {
   if (!ctx.partyId) return [];
   requireCapability(ctx, 'consent.read', { partyId: ctx.partyId });

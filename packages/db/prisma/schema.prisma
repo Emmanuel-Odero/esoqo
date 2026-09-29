@@ -116,6 +116,10 @@ model Party {
   businessPaymentsAsPayee       BusinessPayment[]            @relation("BusinessPaymentPayee")
   parkingLots                   ParkingLot[]
   walletTopUps                  WalletTopUp[]                @relation("WalletTopUpParty")
+  walletWithdrawals              WalletWithdrawal[]           @relation("WalletWithdrawalParty")
+  esoqoTransfersSent             EsoqoTransfer[]              @relation("EsoqoTransferSender")
+  esoqoTransfersReceived         EsoqoTransfer[]              @relation("EsoqoTransferReceiver")
+  thirdPartyPayouts               ThirdPartyPayout[]           @relation("ThirdPartyPayoutParty")
   groupActivityEvents           GroupActivityEvent[]         @relation("GroupActivityActor")
   signatoryFeesForMe            SignatoryFeePayment[]        @relation("SignatoryFeePerson")
   signatoryFeesIAdded           SignatoryFeePayment[]        @relation("SignatoryFeeAddedBy")
@@ -760,6 +764,9 @@ model JournalEntry {
   billContribution    BillContribution?
   businessPayment     BusinessPayment?
   walletTopUp         WalletTopUp?
+  walletWithdrawal    WalletWithdrawal?
+  esoqoTransfer       EsoqoTransfer?
+  thirdPartyPayout    ThirdPartyPayout?
   signatoryFeePayment SignatoryFeePayment?
   projectContribution GroupProjectContribution?
   projectWithdrawal   GroupProjectWithdrawal?
@@ -3563,6 +3570,42 @@ model BusinessPayment {
   @@map("business_payment")
 }
 
+/// A person paying another Esoqo party — person or business — straight
+/// from their WALLET balance, by handle/phone/email, with no M-Pesa leg.
+/// No PENDING state: unlike BusinessPayment/WalletTopUp/WalletWithdrawal
+/// there is nothing external to wait on, so this is created and its
+/// ledger entry posted in one transaction (see createEsoqoTransfer in
+/// dal/esoqo-transfer.ts). feeKes is always 0 today — TransactionFeeBand
+/// has no kind for internal transfers, so this is free by construction,
+/// the differentiator over an M-Pesa-to-M-Pesa send.
+model EsoqoTransfer {
+  id String @id @default(uuid()) @db.Uuid
+
+  senderPartyId String @db.Uuid
+  sender        Party  @relation("EsoqoTransferSender", fields: [senderPartyId], references: [id])
+
+  receiverPartyId String @db.Uuid
+  receiver        Party  @relation("EsoqoTransferReceiver", fields: [receiverPartyId], references: [id])
+
+  /// Snapshot of the handle typed/scanned at send time — same "freeze
+  /// what it said" rule BusinessPayment.payeeEsoqoId already follows.
+  receiverEsoqoId String
+  receiverName    String
+
+  amountKes Decimal @db.Decimal(12, 2)
+  feeKes    Decimal @default(0) @db.Decimal(12, 2)
+  note      String?
+
+  journalEntryId String?       @unique @db.Uuid
+  journalEntry   JournalEntry? @relation(fields: [journalEntryId], references: [id])
+
+  createdAt DateTime @default(now())
+
+  @@index([senderPartyId, createdAt])
+  @@index([receiverPartyId, createdAt])
+  @@map("esoqo_transfer")
+}
+
 enum WalletTopUpStatus {
   PENDING
   CONFIRMED
@@ -3601,6 +3644,100 @@ model WalletTopUp {
   @@index([partyId, status])
   @@index([status, createdAt])
   @@map("wallet_top_up")
+}
+
+enum WalletWithdrawalStatus {
+  PENDING
+  CONFIRMED
+  FAILED
+}
+
+/// Cashing a WALLET balance back out to M-Pesa via Daraja B2C — the
+/// reverse of WalletTopUp. `msisdn` is ALWAYS a snapshot of the party's
+/// own Person.msisdn at request time, never a caller-supplied value: the
+/// one invariant that makes a withdrawal safe is that stolen wallet float
+/// cannot be cashed out to a different number than the one that was
+/// verified at registration. See createWalletWithdrawal in
+/// dal/wallet-withdrawal.ts.
+model WalletWithdrawal {
+  id String @id @default(uuid()) @db.Uuid
+
+  partyId String @db.Uuid
+  party   Party  @relation("WalletWithdrawalParty", fields: [partyId], references: [id])
+
+  msisdn String
+
+  amountKes    Decimal @db.Decimal(12, 2)
+  /// From TransactionFeeBand[kind=WALLET_WITHDRAWAL] at request time —
+  /// frozen here the same way BusinessPayment.payeeEsoqoId freezes what a
+  /// receipt said, so a later tariff change never rewrites history.
+  feeKes       Decimal @db.Decimal(12, 2)
+  /// amountKes - feeKes — what the B2C payout actually carries.
+  netPayoutKes Decimal @db.Decimal(12, 2)
+
+  status        WalletWithdrawalStatus @default(PENDING)
+  failureReason String?
+
+  /// Daraja B2C's idempotency key — the ConversationID returned when the
+  /// payout request is accepted, the B2C equivalent of
+  /// WalletTopUp.mpesaCheckoutRequestId.
+  mpesaConversationId String?       @unique
+  mpesaTransactionId  String?
+  journalEntryId      String?       @unique @db.Uuid
+  journalEntry        JournalEntry? @relation(fields: [journalEntryId], references: [id])
+
+  createdAt   DateTime  @default(now())
+  confirmedAt DateTime?
+
+  @@index([partyId, status])
+  @@index([status, createdAt])
+  @@map("wallet_withdrawal")
+}
+
+enum ThirdPartyPayoutStatus {
+  PENDING
+  CONFIRMED
+  FAILED
+}
+
+/// A wallet holder paying an arbitrary M-Pesa number that is NOT another
+/// Esoqo party — the one money-movement feature this schema supports
+/// that is not closed-loop even generously read. See
+/// docs/proposals/money-representation.md's "Step 1c addendum": gated
+/// behind THIRDPARTY_PAYOUT_ENABLED (default off) in
+/// dal/thirdparty-payout.ts, same pattern EsoqoIdPurchase already uses
+/// for ESOQO_ID_PREMIUM_ENABLED, until this specific feature gets its own
+/// legal sign-off. `payeeMsisdn` is the one legitimate case in this whole
+/// money-movement surface where a caller-supplied number is allowed —
+/// unlike WalletWithdrawal, the payee is deliberately not the sender.
+model ThirdPartyPayout {
+  id String @id @default(uuid()) @db.Uuid
+
+  partyId String @db.Uuid
+  party   Party  @relation("ThirdPartyPayoutParty", fields: [partyId], references: [id])
+
+  payeeMsisdn String
+
+  amountKes    Decimal @db.Decimal(12, 2)
+  /// From TransactionFeeBand[kind=THIRDPARTY_PAYOUT] at request time.
+  feeKes       Decimal @db.Decimal(12, 2)
+  netPayoutKes Decimal @db.Decimal(12, 2)
+
+  status        ThirdPartyPayoutStatus @default(PENDING)
+  failureReason String?
+
+  mpesaConversationId String?       @unique
+  mpesaTransactionId  String?
+  journalEntryId      String?       @unique @db.Uuid
+  journalEntry        JournalEntry? @relation(fields: [journalEntryId], references: [id])
+
+  createdAt   DateTime  @default(now())
+  confirmedAt DateTime?
+
+  @@index([partyId, status])
+  @@index([partyId, createdAt])
+  @@index([status, createdAt])
+  @@map("thirdparty_payout")
 }
 
 enum ParkingSessionStatus {
