@@ -2,12 +2,19 @@
 import { revalidatePath } from 'next/cache';
 import { cookies } from 'next/headers';
 import { SESSION_COOKIE } from '@esoqo/auth';
-import { createVoucherSchema, loadVoucherSchema } from '@esoqo/domain';
+import { createVoucherSchema, loadVoucherSchema, transferSentSms, transferReceivedSms } from '@esoqo/domain';
 import {
   createWalletTopUp, attachWalletTopUpCheckoutRequestId, confirmWalletTopUp, failWalletTopUpById,
   WalletTopUpError,
+  createWalletWithdrawal, attachWalletWithdrawalConversationId, confirmWalletWithdrawal,
+  failWalletWithdrawalById, WalletWithdrawalError,
+  createEsoqoTransfer, EsoqoTransferError,
 } from '@esoqo/db';
-import { initiateStkPush, MpesaError } from '@esoqo/payments';
+import { initiateStkPush, initiateB2CPayment, MpesaError } from '@esoqo/payments';
+// sendSms is under the auth package's non-'server-only' subpath, same
+// reason services/core's webhook imports it that way — see that file's
+// own header comment.
+import { sendSms } from '@esoqo/auth/sms';
 import { goFetch } from '@/lib/ticketing';
 import { requireSubject } from '@/lib/session';
 
@@ -58,6 +65,107 @@ export async function actionTopUpWallet(input: { amountKes: number; msisdn: stri
       return { status: 'REJECTED', message: e.message };
     }
     console.error('wallet top-up failed', e, { topUpId });
+    return { status: 'ERROR', message: 'Something went wrong. Try again in a moment.' };
+  }
+}
+
+// ── wallet withdrawal ──────────────────────────────────────────────
+
+export type WithdrawWalletResult =
+  | { status: 'STARTED'; withdrawalId: string; msisdn: string; feeKes: number; netPayoutKes: number; alreadyConfirmed: boolean }
+  | { status: 'REJECTED'; message: string }
+  | { status: 'ERROR'; message: string };
+
+/**
+ * Same order as actionTopUpWallet: the row is written (with msisdn
+ * resolved server-side from the caller's own registration, never from
+ * this action's input) before the B2C push is attempted, so a crash in
+ * between cannot lose the record of money the person believes left their
+ * wallet.
+ */
+export async function actionWithdrawWallet(input: { amountKes: number }): Promise<WithdrawWalletResult> {
+  const ctx = await requireSubject();
+  let withdrawalId: string | null = null;
+  try {
+    const withdrawal = await createWalletWithdrawal(ctx, input);
+    withdrawalId = withdrawal.id;
+
+    const push = await initiateB2CPayment({
+      msisdn: withdrawal.msisdn,
+      amountKes: Number(withdrawal.netPayoutKes),
+      remarks: 'Esoqo wallet withdrawal',
+    });
+    await attachWalletWithdrawalConversationId(withdrawal.id, push.conversationId);
+
+    const feeKes = Number(withdrawal.feeKes);
+    const netPayoutKes = Number(withdrawal.netPayoutKes);
+
+    if (!push.autoConfirmed) {
+      return { status: 'STARTED', withdrawalId: withdrawal.id, msisdn: withdrawal.msisdn, feeKes, netPayoutKes, alreadyConfirmed: false };
+    }
+    await confirmWalletWithdrawal(push.conversationId, push.mpesaTransactionId ?? '');
+    revalidatePath('/me/wallet');
+    revalidatePath('/me');
+    return { status: 'STARTED', withdrawalId: withdrawal.id, msisdn: withdrawal.msisdn, feeKes, netPayoutKes, alreadyConfirmed: true };
+  } catch (e: unknown) {
+    if (e instanceof WalletWithdrawalError) return { status: 'REJECTED', message: e.message };
+    if (e instanceof MpesaError) {
+      if (withdrawalId) {
+        await failWalletWithdrawalById(withdrawalId, `M-Pesa declined the payout: ${e.message}`).catch(() => {});
+      }
+      return { status: 'REJECTED', message: e.message };
+    }
+    console.error('wallet withdrawal failed', e, { withdrawalId });
+    return { status: 'ERROR', message: 'Something went wrong. Try again in a moment.' };
+  }
+}
+
+// ── Esoqo-to-Esoqo transfer ──────────────────────────────────────────
+
+export type SendMoneyResult =
+  | { status: 'SENT'; transferId: string; receiverName: string; amountKes: number }
+  | { status: 'REJECTED'; message: string }
+  | { status: 'ERROR'; message: string };
+
+/**
+ * Settles synchronously — there is no M-Pesa leg to wait on, so unlike
+ * actionTopUpWallet/actionWithdrawWallet this either succeeds completely
+ * (ledger posted, both parties notified) or fails completely, in one call.
+ */
+export async function actionSendMoney(input: { toIdentifier: string; amountKes: number; note?: string }): Promise<SendMoneyResult> {
+  const ctx = await requireSubject();
+  try {
+    const { transfer, notify } = await createEsoqoTransfer(ctx, input);
+
+    // Best-effort, same reason /pay's notifySms is: the transfer is
+    // already confirmed and the ledger already balanced by the time this
+    // runs, so an SMS provider hiccup must not change the outcome.
+    const sends: Promise<unknown>[] = [];
+    if (notify.senderMsisdn) {
+      sends.push(sendSms(
+        notify.senderMsisdn,
+        transferSentSms({ amountKes: notify.amountKes, counterpartyName: notify.receiverName }),
+        'esoqo-transfer-sent',
+      ));
+    }
+    for (const to of notify.receiverMsisdns) {
+      sends.push(sendSms(
+        to,
+        transferReceivedSms({ amountKes: notify.amountKes, counterpartyName: notify.senderName, note: notify.note }),
+        'esoqo-transfer-received',
+      ));
+    }
+    const results = await Promise.allSettled(sends);
+    for (const r of results) {
+      if (r.status === 'rejected') console.error('esoqo transfer SMS failed', r.reason, { transferId: transfer.id });
+    }
+
+    revalidatePath('/me/wallet');
+    revalidatePath('/me');
+    return { status: 'SENT', transferId: transfer.id, receiverName: notify.receiverName, amountKes: notify.amountKes };
+  } catch (e: unknown) {
+    if (e instanceof EsoqoTransferError) return { status: 'REJECTED', message: e.message };
+    console.error('esoqo transfer failed', e);
     return { status: 'ERROR', message: 'Something went wrong. Try again in a moment.' };
   }
 }

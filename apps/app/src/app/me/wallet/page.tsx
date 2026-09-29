@@ -1,10 +1,12 @@
 import { cookies } from 'next/headers';
 import { SESSION_COOKIE } from '@esoqo/auth';
-import { getWalletBalance } from '@esoqo/db';
+import { getWalletBalance, getMyMsisdn } from '@esoqo/db';
 import { requireSubject } from '@/lib/session';
 import { goFetch, type GoBill } from '@/lib/ticketing';
 import { Icon } from '@esoqo/ui';
 import { WalletTopUp } from './WalletTopUp';
+import { WalletWithdraw } from './WalletWithdraw';
+import { WalletSend } from './WalletSend';
 import { WalletShell } from './WalletShell';
 import { CardsClient } from './CardsClient';
 import { BillsClient } from './BillsClient';
@@ -41,8 +43,9 @@ async function loadWalletExtras(token: string) {
 export default async function WalletPage() {
   const ctx = await requireSubject();
   const token = (await cookies()).get(SESSION_COOKIE)?.value ?? '';
-  const [walletBalance, extras] = await Promise.all([
+  const [walletBalance, registeredMsisdn, extras] = await Promise.all([
     getWalletBalance(ctx),
+    getMyMsisdn(ctx),
     token ? loadWalletExtras(token) : Promise.resolve({ vouchers: [], loyalty: {}, bills: [] }),
   ]);
 
@@ -78,6 +81,8 @@ export default async function WalletPage() {
           <div className="balance-hero-side">
             <div className="balance-actions">
               <WalletTopUp />
+              <WalletSend balanceKes={walletBalance} />
+              {registeredMsisdn && <WalletWithdraw registeredMsisdn={registeredMsisdn} balanceKes={walletBalance} />}
             </div>
             <div className="balance-meta" aria-label="Wallet overview">
               <span><Icon name="tag" size={12} aria-hidden="true" />{cardsCount} {cardsCount === 1 ? 'card' : 'cards'} · {loyaltyPts} pts</span>
