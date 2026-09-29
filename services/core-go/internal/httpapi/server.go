@@ -267,6 +267,7 @@ func (s *Server) Router() *gin.Engine {
 		v1.GET("/vouchers/resolve", s.handleResolveVoucher)
 		v1.GET("/me/vouchers", s.authRequired(), s.handleListMyVouchers)
 		v1.POST("/vouchers/:id/freeze", s.authRequired(), s.handleFreezeVoucher)
+		v1.POST("/vouchers/:id/pay-business", s.rateLimit("pay:voucherbusiness", 30, time.Hour), s.authRequired(), s.handleSpendVoucherAtBusiness)
 		v1.GET("/me/loyalty", s.authRequired(), s.handleMyLoyalty)
 
 		v1.GET("/admin/fraud/summary", s.authRequired(), s.handleFraudSummary)
