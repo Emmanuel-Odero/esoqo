@@ -1,8 +1,8 @@
 'use client';
-import { useState, useTransition } from 'react';
+import { useState, useTransition, useEffect } from 'react';
 import { Icon, Modal } from '@esoqo/ui';
 import { useAnnounce } from '@esoqo/a11y';
-import { actionWithdrawWallet } from './actions';
+import { actionWithdrawWallet, actionQuoteWithdrawalFee } from './actions';
 
 /** `registeredMsisdn` is shown read-only, never editable — the whole
  *  point of a withdrawal is that it can only ever go to the number the
@@ -11,13 +11,24 @@ import { actionWithdrawWallet } from './actions';
 export function WalletWithdraw({ registeredMsisdn, balanceKes }: { registeredMsisdn: string; balanceKes: number }) {
   const [open, setOpen] = useState(false);
   const [amount, setAmount] = useState('');
+  const [quote, setQuote] = useState<{ feeKes: number; netPayoutKes: number } | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [sent, setSent] = useState<{ feeKes: number; netPayoutKes: number } | null>(null);
   const [pending, start] = useTransition();
   const announce = useAnnounce();
 
+  // Debounced live quote — so the fee is known before committing, not a
+  // surprise on the confirmation screen after the money has moved.
+  useEffect(() => {
+    if (!amount.trim() || sent) { setQuote(null); return; }
+    const id = setTimeout(() => {
+      actionQuoteWithdrawalFee(Number(amount)).then(setQuote).catch(() => setQuote(null));
+    }, 350);
+    return () => clearTimeout(id);
+  }, [amount, sent]);
+
   function close() {
-    setOpen(false); setError(null); setSent(null); setAmount('');
+    setOpen(false); setError(null); setSent(null); setAmount(''); setQuote(null);
   }
 
   function submit() {
@@ -74,6 +85,13 @@ export function WalletWithdraw({ registeredMsisdn, balanceKes }: { registeredMsi
                 <input className="inp mono" id="ww-amt" inputMode="decimal" value={amount}
                   onChange={(e) => setAmount(e.target.value)} placeholder="500" autoFocus />
               </div>
+              {quote && (
+                <p className="hint" style={{ margin: '8px 0 0' }}>
+                  {quote.feeKes > 0
+                    ? <>Fee: <strong className="mono">KES {quote.feeKes.toLocaleString('en-KE')}</strong> — you&apos;ll receive <strong className="mono">KES {quote.netPayoutKes.toLocaleString('en-KE')}</strong>.</>
+                    : <>No fee — you&apos;ll receive <strong className="mono">KES {quote.netPayoutKes.toLocaleString('en-KE')}</strong>.</>}
+                </p>
+              )}
               {error && <p className="err" role="alert"><Icon name="alert-circle" size={15} />{error}</p>}
             </>
           )}

@@ -9,6 +9,7 @@ import {
   createWalletWithdrawal, attachWalletWithdrawalConversationId, confirmWalletWithdrawal,
   failWalletWithdrawalById, WalletWithdrawalError,
   createEsoqoTransfer, EsoqoTransferError,
+  feeForAmount,
 } from '@esoqo/db';
 import { initiateStkPush, initiateB2CPayment, MpesaError } from '@esoqo/payments';
 // sendSms is under the auth package's non-'server-only' subpath, same
@@ -70,6 +71,18 @@ export async function actionTopUpWallet(input: { amountKes: number; msisdn: stri
 }
 
 // ── wallet withdrawal ──────────────────────────────────────────────
+
+/** A quote only — no row written, no auth beyond being signed in. Lets
+ *  the withdraw form show the fee/net-payout split before the person
+ *  commits to an amount, instead of only after actionWithdrawWallet has
+ *  already moved money. */
+export async function actionQuoteWithdrawalFee(amountKes: number): Promise<{ feeKes: number; netPayoutKes: number } | null> {
+  await requireSubject();
+  const amount = Number(amountKes);
+  if (!Number.isFinite(amount) || amount <= 0) return null;
+  const feeKes = await feeForAmount('WALLET_WITHDRAWAL', amount);
+  return { feeKes, netPayoutKes: amount - feeKes };
+}
 
 export type WithdrawWalletResult =
   | { status: 'STARTED'; withdrawalId: string; msisdn: string; feeKes: number; netPayoutKes: number; alreadyConfirmed: boolean }
