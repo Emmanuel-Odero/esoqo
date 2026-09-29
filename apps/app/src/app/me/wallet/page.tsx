@@ -1,6 +1,6 @@
 import { cookies } from 'next/headers';
 import { SESSION_COOKIE } from '@esoqo/auth';
-import { getWalletBalance, getMyMsisdn } from '@esoqo/db';
+import { getWalletBalance, getMyMsisdn, getWalletActivity } from '@esoqo/db';
 import { requireSubject } from '@/lib/session';
 import { goFetch, type GoBill } from '@/lib/ticketing';
 import { Icon } from '@esoqo/ui';
@@ -8,6 +8,7 @@ import { WalletTopUp } from './WalletTopUp';
 import { WalletWithdraw } from './WalletWithdraw';
 import { WalletSend } from './WalletSend';
 import { WalletShell } from './WalletShell';
+import { WalletActivity } from './WalletActivity';
 import { CardsClient } from './CardsClient';
 import { BillsClient } from './BillsClient';
 
@@ -43,9 +44,10 @@ async function loadWalletExtras(token: string) {
 export default async function WalletPage() {
   const ctx = await requireSubject();
   const token = (await cookies()).get(SESSION_COOKIE)?.value ?? '';
-  const [walletBalance, registeredMsisdn, extras] = await Promise.all([
+  const [walletBalance, registeredMsisdn, activity, extras] = await Promise.all([
     getWalletBalance(ctx),
     getMyMsisdn(ctx),
+    getWalletActivity(ctx),
     token ? loadWalletExtras(token) : Promise.resolve({ vouchers: [], loyalty: {}, bills: [] }),
   ]);
 
@@ -76,7 +78,7 @@ export default async function WalletPage() {
           <div>
             <span className="k">Available</span>
             <span className="v mono">KES {walletBalance.toLocaleString('en-KE')}</span>
-            <span className="h">Vouchers spend anywhere; loyalty earns 10% back. Bills are reminders only.</span>
+            <span className="h">Send to any Esoqo handle free, or withdraw to your M-Pesa. Vouchers spend anywhere; loyalty earns 10% back.</span>
           </div>
           <div className="balance-hero-side">
             <div className="balance-actions">
@@ -101,6 +103,10 @@ export default async function WalletPage() {
         <div className="wallet-desktop-bills" aria-label="Bills">
           <BillsClient initial={extras.bills} />
         </div>
+      </div>
+
+      <div style={{ marginTop: 14 }}>
+        <WalletActivity items={activity} />
       </div>
 
       <p className="hint" style={{ marginTop: 12, fontSize: '.82rem' }}>
