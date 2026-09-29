@@ -18,6 +18,7 @@ const NAV: { group: string; items: [string, IconName, string, string][] }[] = [
     ['/', 'chart', 'Overview', 'report.read'],
     ['/registrations', 'users', 'Registrations', 'registration.read'],
     ['/payments', 'coins', 'Payments', 'payment.read'],
+    ['/payments/fees', 'coins', 'Transaction fees', 'pricing.read'],
     ['/documents', 'document', 'Documents', 'document.read'],
     ['/groups', 'handshake', 'Groups', 'party.read'],
     ['/sectors', 'trend-up', 'Sectors', 'report.read'],
