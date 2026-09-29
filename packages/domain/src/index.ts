@@ -56,4 +56,6 @@ export * from './env';
 export * from './client-ip';
 export * from './parcel-code';
 export * from './safe-redirect';
+export * from './wallet';
+export * from './wallet-notify';
 export { appEnv, isProduction, isTestingProduction } from './env';
