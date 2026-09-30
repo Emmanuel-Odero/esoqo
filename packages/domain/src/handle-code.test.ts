@@ -1,5 +1,8 @@
 import { describe, it, expect } from 'vitest';
-import { generateSystemHandle, isSystemHandleShape, HANDLE_DIGIT_LENGTH } from './handle-code';
+import {
+  generateSystemHandle, generateHandleCandidates, isSystemHandleShape, HANDLE_DIGIT_LENGTH,
+  HANDLE_CANDIDATE_COUNT,
+} from './handle-code';
 import { isEsoqoIdShape, extractEsoqoId } from './pay-code';
 
 describe('generateSystemHandle', () => {
@@ -31,6 +34,31 @@ describe('generateSystemHandle', () => {
     // Not a uniqueness guarantee (that's the DB's job) — just confirms
     // the generator isn't degenerately narrow.
     expect(seen.size).toBeGreaterThan(400);
+  });
+
+  it('never exceeds 11 characters — 8 for the name, 3 for the digits', () => {
+    const names = ['Wanjiru', 'Nyambura', 'Wambui'];
+    for (let i = 0; i < 200; i++) {
+      expect(generateSystemHandle(names).length).toBeLessThanOrEqual(11);
+    }
+  });
+
+  it('still respects the cap for very long legal names', () => {
+    const handle = generateSystemHandle(['Nyambura', 'Wanjikuruthi']);
+    expect(handle.length).toBeLessThanOrEqual(11);
+  });
+});
+
+describe('generateHandleCandidates', () => {
+  it('returns HANDLE_CANDIDATE_COUNT distinct, validly-shaped candidates', () => {
+    const candidates = generateHandleCandidates(['John', 'Mutuku', 'Kamau']);
+    expect(candidates).toHaveLength(HANDLE_CANDIDATE_COUNT);
+    expect(new Set(candidates).size).toBe(HANDLE_CANDIDATE_COUNT);
+    for (const c of candidates) expect(isSystemHandleShape(c)).toBe(true);
+  });
+
+  it('honours a smaller requested count', () => {
+    expect(generateHandleCandidates(['Solo'], 1)).toHaveLength(1);
   });
 });
 
