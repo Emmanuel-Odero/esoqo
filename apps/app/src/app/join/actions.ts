@@ -3,7 +3,8 @@
 import { headers } from 'next/headers';
 import {
   startRegistration, updateRegistration, markMsisdnVerified, completeRegistration,
-  createDocument, saveNationalIdRecord, issueEsoqoPaymentId, publicJoinCtx,
+  createDocument, saveNationalIdRecord, previewMyEsoqoHandleCandidates, confirmMyEsoqoHandle,
+  getRegistration, publicJoinCtx,
   sniff, makeStorageKey, safeName, sha256, putObject, MAX_BYTES,
 } from '@esoqo/db';
 import {
@@ -179,17 +180,23 @@ export async function actionVerifyJoinOtp(
 }
 
 export interface JoinCompleteResult {
-  esoqoId: string;
+  /** Up to HANDLE_CANDIDATE_COUNT candidate esoqo IDs for the person to
+   *  choose from — see actionConfirmHandle. Empty only if a handle
+   *  somehow already exists (re-run of an already-completed join). */
+  candidates: string[];
 }
 
 /**
- * Finishes the registration and immediately activates the new person's
- * esoqo ID and national ID record. Builds a real SUBJECT ctx for the
- * party completeRegistration just created — the same shape a signed-in
- * session produces (see ctxFromToken, packages/auth/src/session.ts) —
- * rather than reusing publicJoinCtx past this point, since everything
- * after this belongs to that specific person, not to "anyone filling in
- * the join form".
+ * Finishes the registration, saves the national ID record, and previews
+ * a few candidate esoqo IDs — it deliberately stops short of minting
+ * one. The person picks among candidates in the next step
+ * (actionConfirmHandle), rather than the ID being assigned silently.
+ *
+ * Builds a real SUBJECT ctx for the party completeRegistration just
+ * created — the same shape a signed-in session produces (see
+ * ctxFromToken, packages/auth/src/session.ts) — rather than reusing
+ * publicJoinCtx past this point, since everything after this belongs to
+ * that specific person, not to "anyone filling in the join form".
  */
 export async function actionCompleteJoin(
   registrationId: string, idDetails: {
@@ -226,10 +233,46 @@ export async function actionCompleteJoin(
       });
     }
 
-    const esoqoPaymentId = await issueEsoqoPaymentId(subjectCtx);
+    const { existing, candidates } = await previewMyEsoqoHandleCandidates(subjectCtx);
     await consumeInviteToken(idDetails.inviteToken);
-    return { ok: true, data: { esoqoId: esoqoPaymentId.code } };
+    return { ok: true, data: { candidates: existing ? [] : candidates } };
   } catch (e) {
     return { ok: false, error: toSafeErrorMessage(e, "Couldn't finish your signup. Please try again.") };
+  }
+}
+
+export interface ConfirmHandleResult {
+  esoqoId: string;
+}
+
+/**
+ * Reserves whichever candidate actionCompleteJoin offered. Takes
+ * registrationId, not partyId — registrationId is the identifier this
+ * whole flow already trusts the caller with (see markMsisdnVerified
+ * above), whereas a bare partyId round-tripped through the client would
+ * let anyone claim a handle for any completed registration. The
+ * Registration row's own partyId (set by completeRegistration) is the
+ * only place this looks it up from.
+ */
+export async function actionConfirmHandle(
+  registrationId: string, chosenHandle: string,
+): Promise<ActionResult<ConfirmHandleResult>> {
+  const ip = await clientIp();
+  const joinCtx = publicJoinCtx(ip);
+
+  try {
+    const registration = await getRegistration(joinCtx, registrationId);
+    if (!registration?.partyId || registration.status !== 'COMPLETE') {
+      return { ok: false, error: 'That signup is not ready for a handle yet' };
+    }
+    const subjectCtx: Ctx = {
+      actorType: 'SUBJECT', actorId: registration.partyId, partyId: registration.partyId,
+      capabilities: capabilitiesForRole('SUBJECT'), ip, __verified: true,
+    };
+
+    const esoqoPaymentId = await confirmMyEsoqoHandle(subjectCtx, chosenHandle);
+    return { ok: true, data: { esoqoId: esoqoPaymentId.code } };
+  } catch (e) {
+    return { ok: false, error: toSafeErrorMessage(e, "Couldn't confirm that esoqo ID. Try another one.") };
   }
 }

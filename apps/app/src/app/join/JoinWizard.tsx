@@ -5,11 +5,11 @@ import { Icon, IdCardScanner } from '@esoqo/ui';
 import { parseKenyanIdText, filledNationalIdFields, type ParsedNationalId } from '@esoqo/domain';
 import {
   actionStartJoin, actionUploadJoinDocument, actionSendJoinOtp, actionVerifyJoinOtp,
-  actionCompleteJoin, type JoinDetails,
+  actionCompleteJoin, actionConfirmHandle, type JoinDetails,
 } from './actions';
 import { DetailsForm } from './DetailsForm';
 
-type Step = 'capture' | 'extracting' | 'details' | 'otp' | 'done';
+type Step = 'capture' | 'extracting' | 'details' | 'otp' | 'pick-handle' | 'done';
 
 /** The chama invite this signup is finishing, when there is one — read
  *  server-side from the `?i=` token in page.tsx. */
@@ -95,6 +95,8 @@ export function JoinWizard({ invite = null }: { invite?: JoinInvite | null }) {
   const [backDocumentId, setBackDocumentId] = useState<string | undefined>(undefined);
   const [uploadWarning, setUploadWarning] = useState<string | null>(null);
   const [code, setCode] = useState('');
+  const [handleCandidates, setHandleCandidates] = useState<string[]>([]);
+  const [chosenHandle, setChosenHandle] = useState<string | null>(null);
   const [esoqoId, setEsoqoId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [pending, start] = useTransition();
@@ -198,7 +200,27 @@ export function JoinWizard({ invite = null }: { invite?: JoinInvite | null }) {
         inviteToken: invite?.token,
       });
       if (!done.ok) { setError(done.error); return; }
-      setEsoqoId(done.data.esoqoId);
+
+      // No candidates back (already-issued edge case) skips straight to
+      // 'done' with nothing to pick — otherwise the person chooses.
+      if (done.data.candidates.length === 0) { setStep('done'); return; }
+      setHandleCandidates(done.data.candidates);
+      setStep('pick-handle');
+    });
+  }
+
+  function pickHandle(handle: string) {
+    if (!registrationId) return;
+    setError(null);
+    setChosenHandle(handle);
+    start(async () => {
+      const res = await actionConfirmHandle(registrationId, handle);
+      if (!res.ok) {
+        setError(res.error);
+        setChosenHandle(null);
+        return;
+      }
+      setEsoqoId(res.data.esoqoId);
       setStep('done');
     });
   }
@@ -321,6 +343,41 @@ export function JoinWizard({ invite = null }: { invite?: JoinInvite | null }) {
     );
   }
 
+  if (step === 'pick-handle') {
+    return (
+      <div>
+        <Steps step={step} />
+        <h2 style={{ marginTop: 12 }}>Pick your esoqo ID</h2>
+        <p className="sub" style={{ marginBottom: 14 }}>
+          This is the handle people use to pay or find you. Choose one — it can&apos;t be changed later.
+        </p>
+        <div role="radiogroup" aria-label="Candidate esoqo IDs">
+          {handleCandidates.map((handle) => (
+            <button
+              key={handle}
+              type="button"
+              role="radio"
+              aria-checked={chosenHandle === handle}
+              disabled={pending}
+              onClick={() => pickHandle(handle)}
+              className="btn"
+              style={{
+                width: '100%', textAlign: 'left', marginBottom: 10,
+                display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+              }}
+            >
+              <span className="mono" style={{ fontSize: '1.1rem', fontWeight: 700 }}>{handle}</span>
+              {chosenHandle === handle && pending
+                ? <Icon name="loader" size={16} />
+                : <Icon name="arrow-right" size={16} />}
+            </button>
+          ))}
+        </div>
+        {error && <div className="note n-red" style={{ marginTop: 8 }} role="alert"><div><p>{error}</p></div></div>}
+      </div>
+    );
+  }
+
   return (
     <div style={{ textAlign: 'center' }}>
       <Icon name="check-circle" size={40} />
@@ -363,7 +420,7 @@ function Steps({ step }: { step: Step }) {
   // does not exist.
   const current = step === 'extracting' ? 'capture' : step;
   const index = WIZARD_STEPS.findIndex((s) => s.key === current);
-  const position = current === 'done' ? WIZARD_STEPS.length : index;
+  const position = current === 'done' || current === 'pick-handle' ? WIZARD_STEPS.length : index;
 
   return (
     <ol className="jsteps" aria-label={`Step ${position + 1} of ${WIZARD_STEPS.length}`}>
