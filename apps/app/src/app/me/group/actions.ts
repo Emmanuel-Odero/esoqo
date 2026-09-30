@@ -5,6 +5,8 @@ import {
   createProposal, castProposalVote,
   createGroupProject, declareProjectContribution, confirmProjectContribution,
   requestProjectWithdrawal, voteProjectWithdrawal,
+  applyForBusinessHandle, confirmBusinessEsoqoHandle,
+  sniff, makeStorageKey, safeName, sha256, putObject, MAX_BYTES,
 } from '@esoqo/db';
 import { sendSms, sendEmail } from '@esoqo/auth';
 import {
@@ -201,6 +203,66 @@ export async function actionVoteProjectWithdrawal(withdrawalId: string, decision
     const result = await voteProjectWithdrawal(ctx, withdrawalId, decision);
     revalidatePath('/me/group', 'layout');
     return { ok: true as const, data: result };
+  } catch (e) {
+    console.error(e);
+    return { ok: false as const, error: toSafeErrorMessage(e, FALLBACK) };
+  }
+}
+
+/**
+ * An officer applying for this org's own esoqo ID handle — e.g. a shop
+ * wanting its exact trading name rather than the random mnemonic every
+ * org otherwise gets. Documents go up the same way the join wizard's ID
+ * photos do (sniff → storage key → put → hash), then hand off to
+ * applyForBusinessHandle, which is what actually checks the caller is
+ * entitled to act for this org (see assertBusinessOfficer).
+ */
+export async function actionApplyForOrgHandle(form: FormData) {
+  try {
+    const ctx = await requireSubject();
+    const orgId = String(form.get('orgId') ?? '');
+    if (!orgId) return { ok: false as const, error: 'Missing organisation' };
+
+    const files = form.getAll('files').filter((f): f is File => f instanceof File);
+    if (files.length === 0) return { ok: false as const, error: 'Attach at least one document' };
+
+    const documents = [];
+    for (const file of files) {
+      if (file.size > MAX_BYTES) return { ok: false as const, error: `${file.name} is larger than 10 MB` };
+      const buf = Buffer.from(await file.arrayBuffer());
+      const check = sniff(buf, file.type, file.name);
+      if (!check.ok || !check.mime) return { ok: false as const, error: check.reason ?? `We can't accept ${file.name}` };
+
+      const storageKey = makeStorageKey(check.mime);
+      await putObject(storageKey, buf);
+      documents.push({
+        title: file.name.slice(0, 160),
+        kind: 'HANDLE_APPLICATION_EVIDENCE',
+        storageKey,
+        originalName: safeName(file.name),
+        mimeType: check.mime,
+        sizeBytes: buf.length,
+        sha256: sha256(buf),
+      });
+    }
+
+    await applyForBusinessHandle(ctx, orgId, documents);
+    revalidatePath('/me/group', 'layout');
+    return { ok: true as const, data: undefined };
+  } catch (e) {
+    console.error(e);
+    return { ok: false as const, error: toSafeErrorMessage(e, FALLBACK) };
+  }
+}
+
+/** Reserves whichever candidate the handle panel showed — see
+ *  confirmBusinessEsoqoHandle for the re-check-everything shape. */
+export async function actionConfirmOrgHandle(orgId: string, handle: string) {
+  try {
+    const ctx = await requireSubject();
+    const paymentId = await confirmBusinessEsoqoHandle(ctx, orgId, handle);
+    revalidatePath('/me/group', 'layout');
+    return { ok: true as const, data: { code: paymentId.code } };
   } catch (e) {
     console.error(e);
     return { ok: false as const, error: toSafeErrorMessage(e, FALLBACK) };

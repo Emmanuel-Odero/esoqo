@@ -4,12 +4,14 @@ import type { Route } from 'next';
 import { Icon } from '@esoqo/ui';
 import {
   getMyRecord, listMyGroupMembers, getTreasuryPolicy, listGroupActivity, listProposals, listGroupProjects,
+  getOrgHandleStatus,
 } from '@esoqo/db';
 import { requireSubject } from '@/lib/session';
 import { orgSlug, idSuffixFromSlug } from '@/lib/groupSlug';
 import { MembersPanel, type MemberRow } from './MembersPanel';
 import { ProposalsPanel, type ProposalRow } from './ProposalsPanel';
 import { ProjectsPanel, type ProjectRow } from './ProjectsPanel';
+import { HandlePanel, type HandleStatus } from './HandlePanel';
 
 const OFFICER_ROLES = new Set(['CHAIRPERSON', 'TREASURER', 'SECRETARY']);
 
@@ -81,12 +83,16 @@ export default async function GroupDetail({ params }: { params: Promise<{ orgSlu
     );
   }
 
-  const [memberRows, policy, activity, proposalRows, projectRows] = await Promise.all([
+  const [memberRows, policy, activity, proposalRows, projectRows, handleStatus] = await Promise.all([
     listMyGroupMembers(ctx, orgId),
     getTreasuryPolicy(ctx, orgId),
     listGroupActivity(ctx, orgId, 12),
     listProposals(ctx, orgId, 10),
     listGroupProjects(ctx, orgId),
+    // Non-null only for someone entitled to act for this org (see
+    // assertBusinessOfficer) — a plain member simply doesn't see the
+    // handle panel, the same way they don't see the invite form below.
+    getOrgHandleStatus(ctx, orgId).catch((): HandleStatus | null => null),
   ]);
 
   const members: MemberRow[] = memberRows.map((r) => ({
@@ -191,6 +197,11 @@ export default async function GroupDetail({ params }: { params: Promise<{ orgSlu
               </ul>
             </section>
           )}
+
+          {/* handleStatus is only ever non-null once assertBusinessOfficer
+              (inside getOrgHandleStatus above) has already let this caller
+              through — no separate isOfficer gate needed here. */}
+          {handleStatus && <HandlePanel orgId={orgId} status={handleStatus} />}
 
           <ProjectsPanel orgId={orgId} projects={projects} members={removableMembers} isOfficer={isOfficer} />
 
