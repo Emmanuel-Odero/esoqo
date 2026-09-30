@@ -2739,8 +2739,9 @@ model Donation {
 
   mpesaCheckoutRequestId String?       @unique
   mpesaReceiptCode       String?
-  /// The ESK-##### code shown to the donor — our own reference,
-  /// independent of the M-Pesa receipt.
+  /// The DN260929XXXXXX code shown to the donor — our own reference
+  /// (see generateTransactionCode in @esoqo/domain), independent of the
+  /// M-Pesa receipt.
   receiptCode            String?       @unique
   journalEntryId         String?       @unique @db.Uuid
   journalEntry           JournalEntry? @relation(fields: [journalEntryId], references: [id])
@@ -3549,11 +3550,12 @@ model BusinessPayment {
 
   mpesaCheckoutRequestId String?       @unique
   mpesaReceiptCode       String?
-  /// Esoqo's own reference for this payment, e.g. "BP-7K3H92XQ" — what
-  /// the payer and the business quote to each other, and what appears in
-  /// both SMS messages. Deliberately distinct from mpesaReceiptCode:
-  /// Safaricom's number is not ours to hand out, and a payer needs one
-  /// reference we can look up in a week.
+  /// Esoqo's own reference for this payment, e.g. "BP2609298KX3FQ"
+  /// (see generateTransactionCode in @esoqo/domain) — what the payer and
+  /// the business quote to each other, and what appears in both SMS
+  /// messages. Deliberately distinct from mpesaReceiptCode: Safaricom's
+  /// number is not ours to hand out, and a payer needs one reference we
+  /// can look up in a week.
   receiptCode            String?       @unique
   journalEntryId         String?       @unique @db.Uuid
   journalEntry           JournalEntry? @relation(fields: [journalEntryId], references: [id])
@@ -3602,6 +3604,25 @@ model EsoqoTransfer {
   feeKes    Decimal @default(0) @db.Decimal(12, 2)
   note      String?
 
+  /// This transfer's own customer-facing reference — see
+  /// generateTransactionCode in @esoqo/domain. Minted at creation
+  /// (settlement is synchronous, so there is no separate PENDING moment
+  /// to defer it to) and included in both parties' SMS receipts.
+  /// Nullable only for the same reason every other receiptCode/reference
+  /// column here is: a transfer that existed before this column did has
+  /// nothing to backfill it with.
+  referenceCode String? @unique
+  /// A client-supplied dedupe key (e.g. a UUID the app generates once per
+  /// tap of "Send"), so a network retry or a double-tap on a slow
+  /// connection cannot post the same transfer twice. Unlike
+  /// WalletTopUp/WalletWithdrawal, which get this for free from
+  /// mpesaCheckoutRequestId/mpesaConversationId, a transfer has no
+  /// external system in the loop to dedupe against — see
+  /// createEsoqoTransfer in dal/esoqo-transfer.ts. Null is a caller that
+  /// didn't supply one (an older client build); still safe, just not
+  /// retry-proof.
+  idempotencyKey String? @unique
+
   journalEntryId String?       @unique @db.Uuid
   journalEntry   JournalEntry? @relation(fields: [journalEntryId], references: [id])
 
@@ -3639,6 +3660,12 @@ model WalletTopUp {
   status        WalletTopUpStatus @default(PENDING)
   failureReason String?
 
+  /// Our own customer-facing reference — see generateTransactionCode in
+  /// @esoqo/domain. Minted at creation, before the STK push even goes
+  /// out, so it's there to quote for support even if the push never
+  /// completes. Distinct from mpesaReceiptCode, which Safaricom controls
+  /// and only exists once the push is confirmed.
+  referenceCode          String?       @unique
   mpesaCheckoutRequestId String?       @unique
   mpesaReceiptCode       String?
   journalEntryId         String?       @unique @db.Uuid
@@ -3683,6 +3710,10 @@ model WalletWithdrawal {
 
   status        WalletWithdrawalStatus @default(PENDING)
   failureReason String?
+
+  /// Our own customer-facing reference — see WalletTopUp.referenceCode
+  /// for why this is minted at creation rather than confirmation.
+  referenceCode String? @unique
 
   /// Daraja B2C's idempotency key — the ConversationID returned when the
   /// payout request is accepted, the B2C equivalent of

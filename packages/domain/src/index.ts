@@ -29,6 +29,13 @@ export * from './store-notify';
 export { saleReceiptSms } from './store-notify';
 export * from './pay-code';
 export * from './handle-code';
+export * from './transaction-code';
+// Re-exported directly as well, same reason as cecf-ingest/donation-notify
+// above: @esoqo/db's confirmBusinessPayment/confirmDonationPayment/
+// createWalletTopUp/etc. call these, and those DAL functions run under
+// plain tsx/Node ESM when services/core is the caller (the production
+// M-Pesa/B2C webhook path) — not just under a bundler.
+export { generateTransactionCode, isTransactionCodeValid, TRANSACTION_CODE_KINDS } from './transaction-code';
 export * from './national-id-ocr';
 export * from './business-payment-notify';
 export * from './pay-targets';
@@ -62,5 +69,8 @@ export * from './wallet-notify';
 // above: services/core's Daraja B2C webhook (plain tsx/Node ESM) imports
 // walletWithdrawalConfirmedSms directly, and that doesn't reliably resolve
 // through a bare `export *` there.
-export { walletWithdrawalConfirmedSms, walletWithdrawalFailedSms } from './wallet-notify';
+export {
+  walletWithdrawalConfirmedSms, walletWithdrawalFailedSms,
+  walletTopUpConfirmedSms, walletTopUpFailedSms,
+} from './wallet-notify';
 export { appEnv, isProduction, isTestingProduction } from './env';
