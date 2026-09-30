@@ -73,6 +73,11 @@ export interface WalletActivityItem {
    *  the counterparty's name for a transfer. */
   counterparty: string;
   note: string | null;
+  /** The M-Pesa receipt/transaction code — what someone would quote to
+   *  support or reconcile against their M-Pesa statement. Null for a
+   *  transfer (settles synchronously via journal entry, no M-Pesa leg to
+   *  reference) or a top-up/withdrawal not yet CONFIRMED. */
+  reference: string | null;
   createdAt: Date;
 }
 
@@ -112,19 +117,23 @@ export async function getWalletActivity(ctx: Ctx, take = 20): Promise<WalletActi
   const items: WalletActivityItem[] = [
     ...topups.map((t) => ({
       id: t.id, kind: 'TOPUP' as const, amountKes: Number(t.amountKes), feeKes: 0,
-      status: t.status, counterparty: t.msisdn, note: null, createdAt: t.createdAt,
+      status: t.status, counterparty: t.msisdn, note: null,
+      reference: t.mpesaReceiptCode, createdAt: t.createdAt,
     })),
     ...withdrawals.map((w) => ({
       id: w.id, kind: 'WITHDRAWAL' as const, amountKes: Number(w.amountKes), feeKes: Number(w.feeKes),
-      status: w.status, counterparty: w.msisdn, note: null, createdAt: w.createdAt,
+      status: w.status, counterparty: w.msisdn, note: null,
+      reference: w.mpesaTransactionId, createdAt: w.createdAt,
     })),
     ...sent.map((t) => ({
       id: t.id, kind: 'TRANSFER_SENT' as const, amountKes: Number(t.amountKes), feeKes: Number(t.feeKes),
-      status: 'CONFIRMED', counterparty: t.receiverName, note: t.note, createdAt: t.createdAt,
+      status: 'CONFIRMED', counterparty: t.receiverName, note: t.note,
+      reference: null, createdAt: t.createdAt,
     })),
     ...received.map((t) => ({
       id: t.id, kind: 'TRANSFER_RECEIVED' as const, amountKes: Number(t.amountKes), feeKes: 0,
-      status: 'CONFIRMED', counterparty: senderName(t.senderPartyId), note: t.note, createdAt: t.createdAt,
+      status: 'CONFIRMED', counterparty: senderName(t.senderPartyId), note: t.note,
+      reference: null, createdAt: t.createdAt,
     })),
   ];
 

@@ -49,6 +49,7 @@ export function WalletActivity({ items }: { items: WalletActivityItem[] }) {
                     {new Date(a.createdAt).toLocaleDateString('en-KE', { day: 'numeric', month: 'short' })}
                     {a.feeKes > 0 ? ` · KES ${a.feeKes.toLocaleString('en-KE')} fee` : ''}
                     {a.note ? ` · "${a.note}"` : ''}
+                    {a.reference ? ` · Ref ${a.reference}` : ''}
                   </span>
                 </span>
                 <span style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 4 }}>
