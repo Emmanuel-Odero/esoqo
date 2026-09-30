@@ -1,6 +1,8 @@
+import { generateTransactionCode, TRANSACTION_CODE_KINDS } from '@esoqo/domain';
 import { prisma } from '../client';
 import { requireCapability, systemCtx, type Ctx } from '../capabilities';
 import { recordAudit } from '../audit';
+import { isUniqueViolation } from './payment-id';
 import type { DonationStatus, Prisma } from '@prisma/client';
 
 export class DonationError extends Error {
@@ -8,10 +10,6 @@ export class DonationError extends Error {
     super(msg);
     this.name = 'DonationError';
   }
-}
-
-function receiptCode(): string {
-  return `ESK-${(40000 + Math.floor(Math.random() * 9999)).toString()}`;
 }
 
 async function findOrCreateSettlementAccount(tx: Prisma.TransactionClient) {
@@ -123,36 +121,48 @@ export async function confirmDonationPayment(checkoutRequestId: string, mpesaRec
   if (!donation.campaign.accountId) throw new Error('Campaign has no ledger account — this should never happen');
 
   const existingEntry = await prisma.journalEntry.findUnique({ where: { idempotencyKey: checkoutRequestId } });
-  const code = receiptCode();
 
-  const updated = await prisma.$transaction(async (tx) => {
-    let entryId = existingEntry?.id;
-    if (!existingEntry) {
-      const settlement = await findOrCreateSettlementAccount(tx);
-      const entry = await tx.journalEntry.create({
-        data: {
-          reference: `DONATION-${donation.id}`,
-          description: `Donation to ${donation.campaign.title}`,
-          idempotencyKey: checkoutRequestId,
-          postings: {
-            create: [
-              { accountId: donation.campaign.accountId!, amount: Number(donation.amountKes) },
-              { accountId: settlement.id, amount: -Number(donation.amountKes) },
-            ],
+  // Re-rolled on each attempt if the receiptCode collides — see the same
+  // retry shape in confirmBusinessPayment (dal/business-payment.ts).
+  let code = '';
+  let updated: Awaited<ReturnType<typeof prisma.donation.update>> | undefined;
+  for (let attempt = 0; attempt < 5 && !updated; attempt++) {
+    code = generateTransactionCode(TRANSACTION_CODE_KINDS.DONATION);
+    try {
+      updated = await prisma.$transaction(async (tx) => {
+        let entryId = existingEntry?.id;
+        if (!existingEntry) {
+          const settlement = await findOrCreateSettlementAccount(tx);
+          const entry = await tx.journalEntry.create({
+            data: {
+              reference: `DONATION-${donation.id}`,
+              description: `Donation to ${donation.campaign.title}`,
+              idempotencyKey: checkoutRequestId,
+              postings: {
+                create: [
+                  { accountId: donation.campaign.accountId!, amount: Number(donation.amountKes) },
+                  { accountId: settlement.id, amount: -Number(donation.amountKes) },
+                ],
+              },
+            },
+          });
+          entryId = entry.id;
+        }
+
+        return tx.donation.update({
+          where: { id: donation.id },
+          data: {
+            status: 'CONFIRMED', confirmedAt: new Date(),
+            mpesaReceiptCode, receiptCode: code, journalEntryId: entryId,
           },
-        },
+        });
       });
-      entryId = entry.id;
+    } catch (e) {
+      if (isUniqueViolation(e) && attempt < 4) continue;
+      throw e;
     }
-
-    return tx.donation.update({
-      where: { id: donation.id },
-      data: {
-        status: 'CONFIRMED', confirmedAt: new Date(),
-        mpesaReceiptCode, receiptCode: code, journalEntryId: entryId,
-      },
-    });
-  });
+  }
+  if (!updated) throw new Error('Could not confirm this donation — try again');
 
   await recordAudit(systemCtx('mpesa-callback'), {
     action: 'donation.confirmed', targetType: 'donation', targetId: donation.id,

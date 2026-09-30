@@ -1,9 +1,9 @@
-import { randomBytes } from 'node:crypto';
-import { extractEsoqoId, isGroupKind, normaliseMsisdn } from '@esoqo/domain';
+import { extractEsoqoId, isGroupKind, normaliseMsisdn, generateTransactionCode, TRANSACTION_CODE_KINDS } from '@esoqo/domain';
 import { MpesaError, queryStkPush, type StkQueryResult } from '@esoqo/payments';
 import { prisma } from '../client';
 import { systemCtx, type Ctx } from '../capabilities';
 import { recordAudit } from '../audit';
+import { isUniqueViolation } from './payment-id';
 import type { Prisma } from '@prisma/client';
 
 /** How long after the push before it is worth asking Safaricom anything.
@@ -460,10 +460,6 @@ export async function attachBusinessPaymentCheckoutRequestId(paymentId: string, 
   });
 }
 
-function receiptCode(): string {
-  return `BP-${randomBytes(5).toString('hex').toUpperCase()}`;
-}
-
 async function businessRevenueAccountId(tx: Prisma.TransactionClient, payeePartyId: string): Promise<string> {
   const existing = await tx.account.findFirst({
     where: { partyId: payeePartyId, kind: 'BUSINESS_REVENUE', currency: 'KES' },
@@ -591,16 +587,23 @@ export async function confirmBusinessPayment(
   }
 
   const amount = Number(payment.amountKes);
-  const code = receiptCode();
 
   // Thrown to abandon the transaction when another confirmer got there
   // first. Rolling back is the point: the loser must leave no journal
   // entry behind, or one payment would post twice.
   const LOST_RACE = Symbol('business payment already confirmed');
 
-  let updated: ConfirmBusinessPaymentResult['payment'];
-  try {
-    updated = await prisma.$transaction(async (tx) => {
+  // Re-rolled on each attempt: a receiptCode collision (astronomically
+  // unlikely at 31^5 entropy, but the unique constraint is the real
+  // guarantee, not the odds) must retry with a *new* code, not the same
+  // one — same "let the database arbitrate" rule allocateEsoqoCode
+  // follows for Esoqo Payment IDs.
+  let code = '';
+  let updated: ConfirmBusinessPaymentResult['payment'] | undefined;
+  for (let attempt = 0; attempt < 5 && !updated; attempt++) {
+    code = generateTransactionCode(TRANSACTION_CODE_KINDS.BUSINESS_PAYMENT);
+    try {
+      updated = await prisma.$transaction(async (tx) => {
       // Claim the row before anything else, atomically. Two paths can now
       // confirm the same payment at the same moment — Safaricom's callback
       // and the waiting screen's own status query — and a read-then-write
@@ -658,15 +661,20 @@ export async function confirmBusinessPayment(
       }
       return updated;
       });
-    });
-  } catch (e) {
-    if (e !== LOST_RACE) throw e;
-    // Someone else confirmed this payment first — almost always the
-    // callback arriving while our own status query was in flight. Report
-    // the replay honestly so no second receipt goes out.
-    const settled = await prisma.businessPayment.findUnique({ where: { id: payment.id } });
-    return { payment: settled!, justConfirmed: false };
+      });
+    } catch (e) {
+      if (e === LOST_RACE) {
+        // Someone else confirmed this payment first — almost always the
+        // callback arriving while our own status query was in flight.
+        // Report the replay honestly so no second receipt goes out.
+        const settled = await prisma.businessPayment.findUnique({ where: { id: payment.id } });
+        return { payment: settled!, justConfirmed: false };
+      }
+      if (isUniqueViolation(e) && attempt < 4) continue; // receiptCode collision — re-roll and retry
+      throw e;
+    }
   }
+  if (!updated) throw new Error('Could not confirm this payment — try again');
 
   await recordAudit(systemCtx('mpesa-callback'), {
     action: 'business_payment.confirmed',

@@ -1,9 +1,11 @@
+import { generateTransactionCode, TRANSACTION_CODE_KINDS } from '@esoqo/domain';
 import { prisma } from '../client';
 import { requireCapability, systemCtx, type Ctx } from '../capabilities';
 import { recordAudit } from '../audit';
 import { feeForAmount } from './fees';
 import { walletAccountId, settlementAccountId, feeIncomeAccountId } from './wallet-shared';
 import { getWalletBalance } from './subject';
+import { isUniqueViolation } from './payment-id';
 
 /**
  * Cashing a WALLET balance back out to M-Pesa via Daraja B2C — the reverse
@@ -61,18 +63,27 @@ export async function createWalletWithdrawal(ctx: Ctx, input: { amountKes: numbe
     throw new WalletWithdrawalError('The fee for that amount leaves nothing to send — try a larger amount', 'AMOUNT_INVALID');
   }
 
-  const withdrawal = await prisma.walletWithdrawal.create({
-    data: { partyId: ctx.partyId, msisdn, amountKes: amount, feeKes, netPayoutKes },
-  });
-
-  await recordAudit(ctx, {
-    action: 'wallet.withdrawal_requested',
-    targetType: 'wallet_withdrawal',
-    targetId: withdrawal.id,
-    payload: { amountKes: amount, feeKes, netPayoutKes },
-  });
-
-  return withdrawal;
+  // Minted before the B2C push, same reasoning as createWalletTopUp:
+  // there is a reference to quote for support even if the push is never
+  // confirmed.
+  for (let attempt = 0; attempt < 5; attempt++) {
+    const referenceCode = generateTransactionCode(TRANSACTION_CODE_KINDS.WALLET_WITHDRAWAL);
+    try {
+      const withdrawal = await prisma.walletWithdrawal.create({
+        data: { partyId: ctx.partyId, msisdn, amountKes: amount, feeKes, netPayoutKes, referenceCode },
+      });
+      await recordAudit(ctx, {
+        action: 'wallet.withdrawal_requested',
+        targetType: 'wallet_withdrawal',
+        targetId: withdrawal.id,
+        payload: { amountKes: amount, feeKes, netPayoutKes, referenceCode },
+      });
+      return withdrawal;
+    } catch (e) {
+      if (!isUniqueViolation(e) || attempt === 4) throw e;
+    }
+  }
+  throw new Error('Could not start this withdrawal — try again');
 }
 
 export async function attachWalletWithdrawalConversationId(withdrawalId: string, conversationId: string) {

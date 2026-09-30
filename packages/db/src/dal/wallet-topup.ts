@@ -1,7 +1,8 @@
-import { normaliseMsisdn } from '@esoqo/domain';
+import { normaliseMsisdn, generateTransactionCode, TRANSACTION_CODE_KINDS } from '@esoqo/domain';
 import { prisma } from '../client';
 import { requireCapability, systemCtx, type Ctx } from '../capabilities';
 import { recordAudit } from '../audit';
+import { isUniqueViolation } from './payment-id';
 import type { Prisma } from '@prisma/client';
 
 /**
@@ -39,17 +40,30 @@ export async function createWalletTopUp(ctx: Ctx, input: { amountKes: number; ms
   const msisdn = normaliseMsisdn(input.msisdn);
   if (!msisdn) throw new WalletTopUpError('Enter the M-Pesa number to pay from', 'INVALID_MSISDN');
 
-  const topUp = await prisma.walletTopUp.create({
-    data: { partyId: ctx.partyId, msisdn, amountKes: amount },
-  });
-
-  await recordAudit(ctx, {
-    action: 'wallet_top_up.created',
-    targetType: 'wallet_top_up',
-    targetId: topUp.id,
-    payload: { amountKes: amount },
-  });
-  return topUp;
+  // Minted here, before the STK push even goes out, so there is a
+  // reference to quote for support even if the push is never confirmed —
+  // see WalletTopUp.referenceCode's doc comment. Retried on collision the
+  // same way allocateEsoqoCode retries a minted code: the unique
+  // constraint is the real guarantee, this loop just gives it a few
+  // chances to find a free one.
+  for (let attempt = 0; attempt < 5; attempt++) {
+    const referenceCode = generateTransactionCode(TRANSACTION_CODE_KINDS.WALLET_TOPUP);
+    try {
+      const topUp = await prisma.walletTopUp.create({
+        data: { partyId: ctx.partyId, msisdn, amountKes: amount, referenceCode },
+      });
+      await recordAudit(ctx, {
+        action: 'wallet_top_up.created',
+        targetType: 'wallet_top_up',
+        targetId: topUp.id,
+        payload: { amountKes: amount, referenceCode },
+      });
+      return topUp;
+    } catch (e) {
+      if (!isUniqueViolation(e) || attempt === 4) throw e;
+    }
+  }
+  throw new Error('Could not start this top-up — try again');
 }
 
 export async function attachWalletTopUpCheckoutRequestId(topUpId: string, checkoutRequestId: string) {
