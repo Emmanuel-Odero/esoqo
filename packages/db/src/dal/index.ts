@@ -56,6 +56,7 @@ export * from './attestation';
 export * from './treasury';
 export * from './payment-id';
 export * from './esoqo-id-purchase';
+export * from './handle-application';
 export * from './national-id';
 export * from './business-payment';
 export * from './wallet-topup';

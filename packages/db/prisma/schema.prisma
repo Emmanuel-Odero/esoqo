@@ -517,6 +517,12 @@ enum ClaimType {
   /// CECF staff reviewed a Jamii page's registration + treasurer-ID
   /// documents and are satisfied the org is who its page says it is.
   ORG_PAGE_VERIFIED
+  /// Staff reviewed the legitimacy documents a business, chama or other
+  /// organisation submitted when applying for its own esoqo ID handle
+  /// (e.g. one matching its trading name) and approved the application.
+  /// See dal/handle-application.ts. Distinct from ORG_PAGE_VERIFIED,
+  /// which is about a Jamii community page, not a payment handle.
+  HANDLE_APPLICATION_APPROVED
 }
 
 enum AttestationMethod {

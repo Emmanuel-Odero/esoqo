@@ -186,6 +186,8 @@ export const CAPABILITY_CATALOGUE = [
   { group: 'Credentials', items: [
     ['attestation.issue', 'Issue any credential'],
     ['attestation.revoke', 'Revoke a credential'],
+    ['attestation.issue:HANDLE_APPLICATION_APPROVED',
+      "Approve a business/chama/organisation's application for its own esoqo ID handle"],
   ]},
   { group: 'Oversight', items: [
     ['report.read', 'View reports and analytics'],
@@ -381,7 +383,7 @@ export const ROLE_PRESETS = {
 
   REGISTRAR: ['registration.read', 'registration.create', 'registration.write',
               'party.read', 'party.write', 'party.credential', 'membership.write',
-              'document.read', 'document.review',
+              'document.read', 'document.review', 'attestation.issue:HANDLE_APPLICATION_APPROVED',
               'payment.read', 'payment.record', 'report.read'],
 
   FINANCE_APPROVER: ['registration.read', 'party.read', 'payment.read',
@@ -390,6 +392,7 @@ export const ROLE_PRESETS = {
   ESOKO_OPS: ['registration.read', 'registration.write', 'registration.void',
               'registration.export', 'party.read', 'party.write', 'party.pii',
               'party.credential', 'membership.write', 'document.read', 'document.review', 'document.delete',
+              'attestation.issue:HANDLE_APPLICATION_APPROVED',
               'payment.read', 'payment.record', 'audit.read', 'report.read',
               'duplicate.review', 'consent.read', 'staff.read',
               'store.read', 'store.write', 'store.moderate', 'order.read', 'order.reroute',
