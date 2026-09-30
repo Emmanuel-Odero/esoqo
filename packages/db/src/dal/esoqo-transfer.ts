@@ -1,4 +1,4 @@
-import { extractEsoqoId, normaliseMsisdn } from '@esoqo/domain';
+import { extractEsoqoId, normaliseMsisdn, generateTransactionCode, TRANSACTION_CODE_KINDS } from '@esoqo/domain';
 import type { Prisma, PartyKind } from '@prisma/client';
 import { prisma } from '../client';
 import { requireCapability, anonCtx, type Ctx } from '../capabilities';
@@ -6,6 +6,7 @@ import { recordAudit } from '../audit';
 import { getWalletBalance } from './subject';
 import { findPayableBusinesses } from './business-payment';
 import { walletAccountId, businessRevenueAccountId } from './wallet-shared';
+import { isUniqueViolation } from './payment-id';
 
 /**
  * Esoqo-to-Esoqo transfer by handle — a person paying another person, or a
@@ -115,6 +116,16 @@ export interface CreateEsoqoTransferInput {
   toIdentifier: string;
   amountKes: number;
   note?: string | null;
+  /** A key the client mints once per tap of "Send" (a UUID is fine) and
+   *  resends unchanged on any retry of the same attempt — a network
+   *  retry or a double-tap on a slow connection must not post the same
+   *  transfer twice. Unlike WalletTopUp/WalletWithdrawal, which get this
+   *  for free from Safaricom's own checkoutRequestId/conversationId, a
+   *  transfer has no external system in the loop to dedupe against, so
+   *  the client has to supply one. Optional only so an older client
+   *  build doesn't hard-fail; omitting it just means a retry isn't
+   *  guarded. */
+  idempotencyKey?: string | null;
 }
 
 const NOTE_MAX = 140;
@@ -133,6 +144,7 @@ export interface EsoqoTransferNotifyInfo {
   receiverMsisdns: string[];
   amountKes: number;
   note: string | null;
+  referenceCode: string;
 }
 
 async function receiverMsisdnsFor(target: TransferTarget): Promise<string[]> {
@@ -150,9 +162,51 @@ async function receiverMsisdnsFor(target: TransferTarget): Promise<string[]> {
 
 export async function createEsoqoTransfer(
   ctx: Ctx, input: CreateEsoqoTransferInput,
-): Promise<{ transfer: Awaited<ReturnType<typeof prisma.esoqoTransfer.create>>; notify: EsoqoTransferNotifyInfo }> {
+): Promise<{
+  transfer: Awaited<ReturnType<typeof prisma.esoqoTransfer.create>>;
+  notify: EsoqoTransferNotifyInfo;
+  /** False on an idempotent replay (the same idempotencyKey posted
+   *  before) — callers use this to skip sending the SMS receipts a
+   *  second time, the same way confirmBusinessPayment's justConfirmed
+   *  tells its callers not to re-thank a payer. */
+  justCreated: boolean;
+}> {
   if (!ctx.partyId) throw new EsoqoTransferError('Sign in required', 'NOT_FOUND');
   requireCapability(ctx, 'wallet.transfer', { partyId: ctx.partyId });
+
+  // A retry of an already-posted transfer replays the same result rather
+  // than moving money twice — same "the idempotency key is the lock"
+  // rule confirmWalletTopUp gets for free from mpesaCheckoutRequestId.
+  const idempotencyKey = input.idempotencyKey?.trim() || null;
+  if (idempotencyKey) {
+    const existing = await prisma.esoqoTransfer.findUnique({ where: { idempotencyKey } });
+    if (existing) {
+      const target = await prisma.party.findUnique({
+        where: { id: existing.receiverPartyId }, select: targetSelect,
+      });
+      const sender = await prisma.party.findUnique({
+        where: { id: existing.senderPartyId },
+        select: { person: { select: { knownAs: true, officialName: true, msisdn: true } } },
+      });
+      const resolvedTarget = toTarget(target) ?? { partyId: existing.receiverPartyId, esoqoId: existing.receiverEsoqoId, name: existing.receiverName, kind: 'ORGANISATION' as PartyKind };
+      return {
+        transfer: existing,
+        notify: {
+          senderPartyId: existing.senderPartyId,
+          senderName: sender?.person?.knownAs || sender?.person?.officialName || 'An Esoqo user',
+          senderMsisdn: sender?.person?.msisdn ?? null,
+          receiverPartyId: existing.receiverPartyId,
+          receiverName: existing.receiverName,
+          receiverKind: resolvedTarget.kind,
+          receiverMsisdns: await receiverMsisdnsFor(resolvedTarget),
+          amountKes: Number(existing.amountKes),
+          note: existing.note,
+          referenceCode: existing.referenceCode ?? '',
+        },
+        justCreated: false,
+      };
+    }
+  }
 
   const amount = Number(input.amountKes);
   if (!Number.isFinite(amount) || amount <= 0) {
@@ -182,45 +236,79 @@ export async function createEsoqoTransfer(
   const senderName = sender?.person?.knownAs || sender?.person?.officialName || 'An Esoqo user';
   const note = input.note?.trim().slice(0, NOTE_MAX) || null;
 
-  const transfer = await prisma.$transaction(async (tx) => {
-    const created = await tx.esoqoTransfer.create({
-      data: {
-        senderPartyId: ctx.partyId!,
-        receiverPartyId: target.partyId,
-        receiverEsoqoId: target.esoqoId,
-        receiverName: target.name,
-        amountKes: amount,
-        feeKes: 0,
-        note,
-      },
-    });
+  // Re-rolled on a referenceCode collision, same shape as
+  // confirmBusinessPayment's retry — the unique constraint is the real
+  // guarantee, this loop just gives it a few tries to find a free one.
+  let referenceCode = '';
+  let transfer: Awaited<ReturnType<typeof prisma.esoqoTransfer.create>> | undefined;
+  for (let attempt = 0; attempt < 5 && !transfer; attempt++) {
+    referenceCode = generateTransactionCode(TRANSACTION_CODE_KINDS.WALLET_TRANSFER);
+    try {
+      transfer = await prisma.$transaction(async (tx) => {
+        const created = await tx.esoqoTransfer.create({
+          data: {
+            senderPartyId: ctx.partyId!,
+            receiverPartyId: target.partyId,
+            receiverEsoqoId: target.esoqoId,
+            receiverName: target.name,
+            amountKes: amount,
+            feeKes: 0,
+            note,
+            referenceCode,
+            idempotencyKey,
+          },
+        });
 
-    const [senderAccount, receiverAccount] = await Promise.all([
-      walletAccountId(tx, ctx.partyId!),
-      target.kind === 'ORGANISATION' ? businessRevenueAccountId(tx, target.partyId) : walletAccountId(tx, target.partyId),
-    ]);
+        const [senderAccount, receiverAccount] = await Promise.all([
+          walletAccountId(tx, ctx.partyId!),
+          target.kind === 'ORGANISATION' ? businessRevenueAccountId(tx, target.partyId) : walletAccountId(tx, target.partyId),
+        ]);
 
-    const entry = await tx.journalEntry.create({
-      data: {
-        reference: `ESOQO-TRANSFER-${created.id}`,
-        description: `Transfer to ${target.name}`,
-        postings: {
-          create: [
-            { accountId: senderAccount, amount: -amount },
-            { accountId: receiverAccount, amount },
-          ],
-        },
-      },
-    });
+        const entry = await tx.journalEntry.create({
+          data: {
+            reference: `ESOQO-TRANSFER-${created.id}`,
+            description: `Transfer to ${target.name}`,
+            postings: {
+              create: [
+                { accountId: senderAccount, amount: -amount },
+                { accountId: receiverAccount, amount },
+              ],
+            },
+          },
+        });
 
-    return tx.esoqoTransfer.update({ where: { id: created.id }, data: { journalEntryId: entry.id } });
-  });
+        return tx.esoqoTransfer.update({ where: { id: created.id }, data: { journalEntryId: entry.id } });
+      });
+    } catch (e) {
+      // A referenceCode clash re-rolls; an idempotencyKey clash means a
+      // concurrent call with the same key beat this one to it — replay
+      // its result rather than erroring, the same as the up-front check.
+      if (idempotencyKey && isUniqueViolation(e)) {
+        const existing = await prisma.esoqoTransfer.findUnique({ where: { idempotencyKey } });
+        if (existing) {
+          const receiverMsisdns = await receiverMsisdnsFor(target);
+          return {
+            transfer: existing,
+            notify: {
+              senderPartyId: ctx.partyId, senderName, senderMsisdn: sender?.person?.msisdn ?? null,
+              receiverPartyId: target.partyId, receiverName: target.name, receiverKind: target.kind,
+              receiverMsisdns, amountKes: amount, note, referenceCode: existing.referenceCode ?? '',
+            },
+            justCreated: false,
+          };
+        }
+      }
+      if (isUniqueViolation(e) && attempt < 4) continue;
+      throw e;
+    }
+  }
+  if (!transfer) throw new Error('Could not send this transfer — try again');
 
   await recordAudit(ctx, {
     action: 'wallet.transferred',
     targetType: 'esoqo_transfer',
     targetId: transfer.id,
-    payload: { receiverPartyId: target.partyId, receiverEsoqoId: target.esoqoId, amountKes: amount },
+    payload: { receiverPartyId: target.partyId, receiverEsoqoId: target.esoqoId, amountKes: amount, referenceCode },
   });
 
   const receiverMsisdns = await receiverMsisdnsFor(target);
@@ -237,7 +325,9 @@ export async function createEsoqoTransfer(
       receiverMsisdns,
       amountKes: amount,
       note,
+      referenceCode,
     },
+    justCreated: true,
   };
 }
 

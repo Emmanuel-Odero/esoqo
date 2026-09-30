@@ -14,14 +14,27 @@ export function WalletSend({ balanceKes }: { balanceKes: number }) {
   const [pending, start] = useTransition();
   const announce = useAnnounce();
 
+  // One key per compose, reused unchanged across a retry of the *same*
+  // send — so a slow network retry or a double-tap on "Send" can't post
+  // the transfer twice (see idempotencyKey on createEsoqoTransfer). Only
+  // regenerated when the modal opens fresh or is closed, i.e. only when
+  // this is genuinely a new send.
+  const [idempotencyKey, setIdempotencyKey] = useState(() => crypto.randomUUID());
+
+  function openModal() {
+    setIdempotencyKey(crypto.randomUUID());
+    setOpen(true);
+  }
+
   function close() {
     setOpen(false); setError(null); setSent(null); setToIdentifier(''); setAmount(''); setNote('');
+    setIdempotencyKey(crypto.randomUUID());
   }
 
   function submit() {
     setError(null);
     start(async () => {
-      const r = await actionSendMoney({ toIdentifier, amountKes: Number(amount), note: note.trim() || undefined });
+      const r = await actionSendMoney({ toIdentifier, amountKes: Number(amount), note: note.trim() || undefined, idempotencyKey });
       if (r.status === 'SENT') {
         setSent({ receiverName: r.receiverName, amountKes: r.amountKes });
         announce(`KES ${r.amountKes.toLocaleString('en-KE')} sent to ${r.receiverName}.`, 'polite');
@@ -34,7 +47,7 @@ export function WalletSend({ balanceKes }: { balanceKes: number }) {
 
   return (
     <>
-      <button type="button" className="btn btn-o btn-sm" onClick={() => setOpen(true)}>
+      <button type="button" className="btn btn-o btn-sm" onClick={openModal}>
         <Icon name="send" size={15} />Send
       </button>
 

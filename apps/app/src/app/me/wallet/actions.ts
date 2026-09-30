@@ -145,32 +145,42 @@ export type SendMoneyResult =
  * actionTopUpWallet/actionWithdrawWallet this either succeeds completely
  * (ledger posted, both parties notified) or fails completely, in one call.
  */
-export async function actionSendMoney(input: { toIdentifier: string; amountKes: number; note?: string }): Promise<SendMoneyResult> {
+export async function actionSendMoney(
+  input: { toIdentifier: string; amountKes: number; note?: string; idempotencyKey?: string },
+): Promise<SendMoneyResult> {
   const ctx = await requireSubject();
   try {
-    const { transfer, notify } = await createEsoqoTransfer(ctx, input);
+    const { transfer, notify, justCreated } = await createEsoqoTransfer(ctx, input);
 
-    // Best-effort, same reason /pay's notifySms is: the transfer is
-    // already confirmed and the ledger already balanced by the time this
-    // runs, so an SMS provider hiccup must not change the outcome.
-    const sends: Promise<unknown>[] = [];
-    if (notify.senderMsisdn) {
-      sends.push(sendSms(
-        notify.senderMsisdn,
-        transferSentSms({ amountKes: notify.amountKes, counterpartyName: notify.receiverName }),
-        'esoqo-transfer-sent',
-      ));
-    }
-    for (const to of notify.receiverMsisdns) {
-      sends.push(sendSms(
-        to,
-        transferReceivedSms({ amountKes: notify.amountKes, counterpartyName: notify.senderName, note: notify.note }),
-        'esoqo-transfer-received',
-      ));
-    }
-    const results = await Promise.allSettled(sends);
-    for (const r of results) {
-      if (r.status === 'rejected') console.error('esoqo transfer SMS failed', r.reason, { transferId: transfer.id });
+    // Skipped on a replay (the same idempotencyKey posted before) — the
+    // transfer already happened and both parties were already texted the
+    // first time; a retry re-sending the SMS would just be confusing.
+    if (justCreated) {
+      // Best-effort, same reason /pay's notifySms is: the transfer is
+      // already confirmed and the ledger already balanced by the time this
+      // runs, so an SMS provider hiccup must not change the outcome.
+      const sends: Promise<unknown>[] = [];
+      if (notify.senderMsisdn) {
+        sends.push(sendSms(
+          notify.senderMsisdn,
+          transferSentSms({ amountKes: notify.amountKes, counterpartyName: notify.receiverName, referenceCode: notify.referenceCode }),
+          'esoqo-transfer-sent',
+        ));
+      }
+      for (const to of notify.receiverMsisdns) {
+        sends.push(sendSms(
+          to,
+          transferReceivedSms({
+            amountKes: notify.amountKes, counterpartyName: notify.senderName, note: notify.note,
+            referenceCode: notify.referenceCode,
+          }),
+          'esoqo-transfer-received',
+        ));
+      }
+      const results = await Promise.allSettled(sends);
+      for (const r of results) {
+        if (r.status === 'rejected') console.error('esoqo transfer SMS failed', r.reason, { transferId: transfer.id });
+      }
     }
 
     revalidatePath('/me/wallet');
