@@ -17,7 +17,7 @@ import {
 import {
   appEnv, donorThankYouSms, adminDonationAlertSms,
   payerPaymentReceiptSms, businessPaymentAlertSms,
-  walletWithdrawalConfirmedSms,
+  walletWithdrawalConfirmedSms, walletTopUpConfirmedSms,
 } from '@esoqo/domain';
 // Subpath import, not the '@esoqo/auth' barrel — the barrel's index.ts
 // also re-exports pin.ts/session.ts/redis.ts/etc., which DO carry the
@@ -249,12 +249,24 @@ const handleStkCallback = async (
   }
 
   // A personal Wallet top-up. Last of the TS confirmers, same reason as
-  // business payment above — newest, least likely to match. No SMS here
-  // yet (unlike business payment's receipt+alert pair): a top-up has no
-  // second party to notify, and the wallet balance itself is the receipt
-  // next time the page loads.
+  // business payment above — newest, least likely to match. A top-up has
+  // no second party to notify (unlike business payment's receipt+alert
+  // pair), but the person themselves still gets one message carrying
+  // Esoqo's own reference code — the balance updating is confirmation
+  // enough next time the page loads, but a code to quote support or
+  // reconcile against isn't visible anywhere else until then.
   try {
-    await confirmWalletTopUp(parsed.checkoutRequestId, parsed.mpesaReceiptCode ?? '');
+    const result = await confirmWalletTopUp(parsed.checkoutRequestId, parsed.mpesaReceiptCode ?? '');
+    if (result.justConfirmed && result.topUp.referenceCode) {
+      const t = result.topUp;
+      try {
+        await sendSms(t.msisdn, walletTopUpConfirmedSms({
+          amountKes: Number(t.amountKes), referenceCode: t.referenceCode!,
+        }), 'wallet-topup-confirmed');
+      } catch (e) {
+        app.log.error({ err: e, checkoutRequestId: parsed.checkoutRequestId }, 'failed to send wallet top-up SMS');
+      }
+    }
     return reply.send({ ok: true });
   } catch (e) {
     if (!(e instanceof WalletTopUpError && e.code === 'NOT_FOUND')) {
@@ -343,6 +355,7 @@ const handleB2CResultCallback = async (
         await sendSms(w.msisdn, walletWithdrawalConfirmedSms({
           amountKes: Number(w.amountKes), feeKes: Number(w.feeKes),
           netPayoutKes: Number(w.netPayoutKes), msisdn: w.msisdn,
+          referenceCode: w.referenceCode ?? '',
         }), 'wallet-withdrawal-confirmed');
       } catch (e) {
         app.log.error({ err: e, conversationId: parsed.conversationId }, 'failed to send wallet withdrawal SMS');
