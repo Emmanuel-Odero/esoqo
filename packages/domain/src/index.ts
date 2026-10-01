@@ -27,6 +27,8 @@ export {
 } from './group-alerts-notify';
 export * from './store-notify';
 export { saleReceiptSms } from './store-notify';
+export * from './receipt-notify';
+export { purchaseReceiptSms } from './receipt-notify';
 export * from './pay-code';
 export * from './handle-code';
 export * from './transaction-code';

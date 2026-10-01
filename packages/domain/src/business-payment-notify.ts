@@ -14,12 +14,16 @@
  * it, and references they can quote to the business. What Esoqo adds
  * on top of Safaricom's own confirmation is the Esoqo receipt code.
  *
- * There is deliberately no link in it. The only pay link that exists
- * leads back to the form that asks for money again, so a shopper
+ * There is deliberately no *pay* link in it. The only pay link that
+ * exists leads back to the form that asks for money again, so a shopper
  * holding a receipt for a payment they already made would be one tap
- * from starting a second one — and every character it consumed was a
- * character not spent on the receipt itself. (The parking receipt
- * dropped its link for exactly this reason before this one did.)
+ * from starting a second one. (The parking receipt dropped its link for
+ * exactly this reason before this one did.) A *verify* link is a
+ * different thing — read-only, no amount field, cannot start a second
+ * payment — so once a payment mints a Receipt (see issueReceiptFor in
+ * dal/receipt.ts) its verify code rides along as `receiptVerifyCode`
+ * below and the clause is appended. Parking never sets it: it settles
+ * through parkingPaidSms instead, which never had a Receipt to link to.
  *
  * `businessPaymentAlertSms` goes to the business owner. The amount is
  * the news; a payer's phone number is the reply address if something
@@ -61,6 +65,13 @@ export interface BusinessPaymentNotifyContext {
   mpesaReceiptCode?: string | null;
   /** The payer's own number, for the business's alert only. */
   payerMsisdn?: string | null;
+  /** The verify-page code of the Receipt this payment minted (see
+   *  issueReceiptFor in dal/receipt.ts) — a THIRD reference, distinct
+   *  from both codes above, only ever present on the payer's copy.
+   *  Absent for a parking payment (parkingPaidSms is its own template)
+   *  and for a payment whose Receipt failed to mint for some reason;
+   *  the clause is dropped whole rather than sent broken. */
+  receiptVerifyCode?: string | null;
 }
 
 /**
@@ -79,10 +90,20 @@ function withMpesaCode(message: string, code: string | null | undefined): string
   return `${message} M-Pesa ${fit(clean, 12)}.`;
 }
 
+/** The verify-page clause, or nothing — see receiptVerifyCode's own doc
+ *  comment on BusinessPaymentNotifyContext for why this one but not the
+ *  pay link. Dropped whole when absent, same "no bare field" rule
+ *  withMpesaCode follows just above. */
+function withVerifyLink(message: string, code: string | null | undefined): string {
+  const clean = code?.trim();
+  if (!clean) return message;
+  return `${message} View: esoqo.co.ke/verify/${fit(clean, 20)}`;
+}
+
 /** To the payer, once their payment is confirmed. */
 export function payerPaymentReceiptSms(ctx: BusinessPaymentNotifyContext): string {
   const message = sms`Esoqo: ${smsKes(ctx.amountKes)} paid to ${fit(ctx.businessName, 34)}. Receipt ${fit(ctx.receiptCode, 20)}.`;
-  return withMpesaCode(message, ctx.mpesaReceiptCode);
+  return withVerifyLink(withMpesaCode(message, ctx.mpesaReceiptCode), ctx.receiptVerifyCode);
 }
 
 /**

@@ -15,18 +15,32 @@ describe('payerPaymentReceiptSms', () => {
       .toBe('Esoqo: KES 500 paid to Mama Mboga Kitchen. Receipt BP-7K3H92XQ. M-Pesa UIQRI7ZKTH.');
   });
 
-  // The receipt carries no link at all, and that is the point rather
-  // than an omission. The only pay link that exists lands on the form
-  // that asks for money again, so a shopper holding a receipt for a
-  // payment they already made would be one tap from starting a second
-  // one. Locked here so a well-meaning "let's add a link back" does not
-  // quietly undo it.
-  it('carries no pay link, because the only link asks for money again', () => {
+  // No PAY link when receiptVerifyCode is absent — the only pay link
+  // that exists leads back to the form that asks for money again, so a
+  // shopper holding a receipt for a payment they already made would be
+  // one tap from starting a second one. Locked here so a well-meaning
+  // "let's add a link back" does not quietly undo it.
+  it('carries no pay link, because the only pay link asks for money again', () => {
     const message = payerPaymentReceiptSms(base);
     expect(message).not.toContain('http');
     expect(message).not.toContain('Keep');
     expect(message).not.toContain('pay');
     expect(message).toBe('Esoqo: KES 500 paid to Mama Mboga Kitchen. Receipt BP-7K3H92XQ. M-Pesa UIQRI7ZKTH.');
+  });
+
+  // A VERIFY link is different — read-only, no amount field, cannot
+  // start a second payment — so it's appended whenever the payment
+  // minted a Receipt to link to.
+  it('appends a verify link when a receiptVerifyCode is given', () => {
+    const message = payerPaymentReceiptSms({ ...base, receiptVerifyCode: 'RC2609298KX3FQ' });
+    expect(message).toBe('Esoqo: KES 500 paid to Mama Mboga Kitchen. Receipt BP-7K3H92XQ. M-Pesa UIQRI7ZKTH. View: esoqo.co.ke/verify/RC2609298KX3FQ');
+  });
+
+  it('omits the verify clause entirely when there is no receiptVerifyCode', () => {
+    for (const missing of [null, undefined, '', '   ']) {
+      const message = payerPaymentReceiptSms({ ...base, receiptVerifyCode: missing });
+      expect(message).not.toContain('verify');
+    }
   });
 
   // The characters the link used to take are now available to the
@@ -94,6 +108,9 @@ describe('business-payment copy fits one GSM-7 segment at worst case', () => {
     })],
     ['payerPaymentReceiptSms (no M-Pesa code)', payerPaymentReceiptSms({
       ...base, amountKes: BIG_MONEY, businessName: LONG_NAME, mpesaReceiptCode: null,
+    })],
+    ['payerPaymentReceiptSms (with verify link)', payerPaymentReceiptSms({
+      ...base, amountKes: BIG_MONEY, businessName: LONG_NAME, receiptVerifyCode: 'RC2609298KX3FQ',
     })],
     ['businessPaymentAlertSms', businessPaymentAlertSms({
       ...base, amountKes: BIG_MONEY, businessName: LONG_NAME, payerMsisdn: '+254712345678',
