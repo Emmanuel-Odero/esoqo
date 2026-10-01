@@ -54,20 +54,80 @@ export const TRANSACTION_CODE_KINDS = {
   BUSINESS_PAYMENT: 'BP',
   DONATION: 'DN',
   PARKING: 'PK',
+  RECEIPT: 'RC',
 } as const;
 
 export type TransactionCodeKind = (typeof TRANSACTION_CODE_KINDS)[keyof typeof TRANSACTION_CODE_KINDS];
 
+/**
+ * What each kind is, in a sentence a stranger can act on. The two-letter
+ * prefix is deliberately self-describing (see TRANSACTION_CODE_KINDS),
+ * which only pays off if something turns it back into words — this is
+ * what the /verify page uses to answer "I typed a BP- code, what do I do
+ * with that?" instead of the far less useful "no certificate with that
+ * code," which is what any lookup that only knows about receipts and
+ * certificates would say.
+ */
+export const TRANSACTION_CODE_KIND_LABELS: Record<TransactionCodeKind, string> = {
+  [TRANSACTION_CODE_KINDS.WALLET_TOPUP]: 'a wallet top-up',
+  [TRANSACTION_CODE_KINDS.WALLET_WITHDRAWAL]: 'a wallet withdrawal',
+  [TRANSACTION_CODE_KINDS.WALLET_TRANSFER]: 'an Esoqo transfer',
+  [TRANSACTION_CODE_KINDS.BUSINESS_PAYMENT]: 'a business payment',
+  [TRANSACTION_CODE_KINDS.DONATION]: 'a donation',
+  [TRANSACTION_CODE_KINDS.PARKING]: 'a parking payment',
+  [TRANSACTION_CODE_KINDS.RECEIPT]: 'a receipt',
+};
+
+/** The kind a code names, read off its first two characters — or null
+ *  when it isn't a transaction code at all. Reads the prefix directly
+ *  rather than going through isTransactionCodeValid, because a lookup
+ *  that has to decide *which table to search* needs the kind to be
+ *  knowable even from a mistyped code: the checksum is a typo-catcher,
+ *  not a router, and routing on it means a single mistyped character
+ *  sends a shopper to the wrong lookup entirely. */
+export function transactionCodeKind(raw: string): TransactionCodeKind | null {
+  const prefix = raw.trim().toUpperCase().slice(0, 2);
+  const kinds: string[] = Object.values(TRANSACTION_CODE_KINDS);
+  return kinds.includes(prefix) ? (prefix as TransactionCodeKind) : null;
+}
+
 const ENTROPY_LENGTH = 5;
 
-/** Digits plus the same unambiguous letters/digits the entropy block
- *  draws from — one alphabet so the checksum can walk every character in
- *  KIND+DATE+ENTROPY, not just the letters. */
-const CHECKSUM_ALPHABET = `0123456789${UNAMBIGUOUS_ALPHABET}`;
+/**
+ * Digits plus the same unambiguous letters/digits the entropy block
+ * draws from — one alphabet so the checksum can walk every character in
+ * KIND+DATE+ENTROPY, not just the letters.
+ *
+ * `'01' + UNAMBIGUOUS_ALPHABET` rather than `'0123456789' +
+ * UNAMBIGUOUS_ALPHABET`: the latter (this file's original version) is a
+ * 41-CHARACTER STRING with only 33 DISTINCT characters — '2'..'9' each
+ * appear twice, once in the leading digit run and again inside
+ * UNAMBIGUOUS_ALPHABET. `indexOf` always resolves to the first
+ * occurrence, so that duplication was harmless for reading a character
+ * IN (every real character still gets one fixed index); the bug was
+ * checkChar rendering its OUTPUT through that same 41-slot string —
+ * `sum % 41` landing on residue r (2..9) and residue r+31 both render
+ * the identical digit, so two different sums alias to the same check
+ * character. Measured: ~1% of single-character mistypes were silently
+ * accepted. The fix below is this 33-unique-character alphabet
+ * (digits '0' and '1' aren't in UNAMBIGUOUS_ALPHABET, so `'01' + ...`
+ * has no repeats) plus a modulus and weighting scheme sized to it — see
+ * checkChar.
+ */
+const CHECKSUM_ALPHABET = `01${UNAMBIGUOUS_ALPHABET}`;
+const CHECKSUM_MODULUS = CHECKSUM_ALPHABET.length; // 33 — every character in it is unique.
 
 /**
- * Position-weighted sum of `body` mod 41 (CHECKSUM_ALPHABET.length).
- * Not a cryptographic MAC — its only job is catching the kind of
+ * Per-position weights for checkChar, each coprime to CHECKSUM_MODULUS
+ * (33 = 3 × 11, so anything not a multiple of 3 or 11). `body` is never
+ * longer than 13 (KIND 2 + DATE 6 + ENTROPY 5), so 13 entries is enough
+ * without cycling.
+ */
+const CHECKSUM_WEIGHTS = [1, 2, 4, 5, 7, 8, 10, 13, 14, 16, 17, 19, 20];
+
+/**
+ * Position-weighted sum of `body` mod CHECKSUM_MODULUS. Not a
+ * cryptographic MAC — its only job is catching the kind of
  * single-character slip or adjacent swap a person makes reading a code
  * off a phone screen or typing it into a USSD prompt.
  *
@@ -75,23 +135,28 @@ const CHECKSUM_ALPHABET = `0123456789${UNAMBIGUOUS_ALPHABET}`;
  * over the base" transform, even though that is the classic answer:
  * Luhn's fold step (subtract base-1 when the doubled value overflows)
  * only happens to be an injective map of the digit space for base 10 —
- * it is not injective in general, and isn't for our 41-symbol alphabet
- * (a first attempt at this used it and a test caught a real blind spot:
- * two different characters at the same position could produce the same
- * folded value, so swapping between them left the checksum unchanged).
- * A plain per-position weight avoids the fold entirely. Because 41 is
- * prime, every weight 1..40 is automatically coprime to it, which
- * guarantees changing any single character changes `sum mod 41` — no
- * silent blind spot, and no case-by-case proof needed per weight.
+ * it is not injective in general (a first attempt at this used it and a
+ * test caught a real blind spot: two different characters at the same
+ * position could produce the same folded value).
+ *
+ * The guarantee here: `idx(body[i])` always lands in `[0, MODULUS-1]`
+ * (CHECKSUM_ALPHABET has exactly MODULUS unique characters — see its
+ * own comment for why the previous version's 41-slot, 33-symbol
+ * version broke this), and CHECKSUM_WEIGHTS[i] is coprime to MODULUS,
+ * hence invertible mod MODULUS. So for any two distinct indices a≠b in
+ * that range, `(a-b) * weight mod MODULUS` is nonzero — a≡b would be
+ * required, and a,b are both already in-range and unequal — meaning
+ * changing the character at any one position always changes `sum mod
+ * MODULUS`, unconditionally, not just for a sampled set of weights.
  */
 function checkChar(body: string): string {
   let sum = 0;
   for (let i = 0; i < body.length; i++) {
     const idx = CHECKSUM_ALPHABET.indexOf(body[i]!);
     if (idx === -1) continue; // shouldn't happen; skip rather than throw on odd input
-    sum += idx * (i + 1);
+    sum += idx * CHECKSUM_WEIGHTS[i % CHECKSUM_WEIGHTS.length]!;
   }
-  return CHECKSUM_ALPHABET[sum % CHECKSUM_ALPHABET.length]!;
+  return CHECKSUM_ALPHABET[sum % CHECKSUM_MODULUS]!;
 }
 
 function datePart(date: Date): string {
@@ -119,6 +184,17 @@ const TOTAL_LEN = KIND_LEN + DATE_LEN + ENTROPY_LENGTH + 1; // 14
 const SHAPE = new RegExp(
   `^[A-Z]{${KIND_LEN}}[0-9]{${DATE_LEN}}[${UNAMBIGUOUS_ALPHABET}]{${ENTROPY_LENGTH}}[${CHECKSUM_ALPHABET}]$`,
 );
+
+/** Shape only, no checksum — "could this be one", not "is this one
+ *  correct". Exported because a page that echoes the code it was handed
+ *  (the /verify/[code] heading) needs exactly this weaker question: a
+ *  mistyped code should still be shown back to the person who mistyped
+ *  it, but an arbitrary URL path segment must not be rendered as if it
+ *  were a credential. isTransactionCodeValid below answers the stronger
+ *  question and is the wrong tool for that. */
+export function isTransactionCodeShape(raw: string): boolean {
+  return SHAPE.test(raw.trim().toUpperCase());
+}
 
 /** Shape *and* checksum — unlike isSystemHandleShape/isEsoqoIdShape,
  *  which only answer "could this be one," a transaction code carries
