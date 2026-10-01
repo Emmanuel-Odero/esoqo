@@ -133,26 +133,50 @@ func ValidateBalanced(postings []Posting) error {
 // the same replay guard the M-Pesa callback idempotency relies on
 // elsewhere (JournalEntry.idempotencyKey is unique).
 func PostEntry(ctx context.Context, pool *pgxpool.Pool, reference, description, idempotencyKey string, postings []Posting) (journalEntryID string, err error) {
+	tx, err := pool.Begin(ctx)
+	if err != nil {
+		return "", err
+	}
+	defer tx.Rollback(ctx)
+	id, err := PostEntryTx(ctx, tx, reference, description, idempotencyKey, postings)
+	if err != nil {
+		return "", err
+	}
+	if err := tx.Commit(ctx); err != nil {
+		return "", err
+	}
+	return id, nil
+}
+
+// PostEntryTx is the in-caller's-transaction variant of PostEntry: the
+// supervisor of this entry gets to decide when it commits. The two
+// exist because callers that flip a status row and post money in the
+// same breath need those two writes to commit atomically — the ledger
+// must never record a settlement the parcel rows deny (or vice versa),
+// and a PostEntry that only ever took a pool could not offer that, so a
+// caller was forced into a read-then-act gap or a post-then-flip order
+// that a crash in between permanently damaged.
+//
+// The idempotency check and the insert share the caller's transaction,
+// so two replaying callers serialized on it still produce exactly one
+// entry. Callers must not hold an open tx across PostEntryTx after an
+// error — rollback is the caller's responsibility, matching PostEntry's
+// own deferred rollback.
+func PostEntryTx(ctx context.Context, tx pgx.Tx, reference, description, idempotencyKey string, postings []Posting) (journalEntryID string, err error) {
 	// Balance first: an unbalanced entry is a programming error, and
-	// there is no reason to spend a connection discovering that.
+	// there is no reason to spend a transaction discovering that.
 	if err := ValidateBalanced(postings); err != nil {
 		return "", err
 	}
 
 	var existing string
-	err = pool.QueryRow(ctx, `SELECT id FROM journal_entry WHERE "idempotencyKey" = $1`, idempotencyKey).Scan(&existing)
+	err = tx.QueryRow(ctx, `SELECT id FROM journal_entry WHERE "idempotencyKey" = $1`, idempotencyKey).Scan(&existing)
 	if err == nil {
 		return existing, nil // already posted — replayed callback, not an error
 	}
 	if !errors.Is(err, pgx.ErrNoRows) {
 		return "", err
 	}
-
-	tx, err := pool.Begin(ctx)
-	if err != nil {
-		return "", err
-	}
-	defer tx.Rollback(ctx)
 
 	err = tx.QueryRow(ctx, `
 		INSERT INTO journal_entry (id, reference, description, "occurredAt", "recordedAt", "idempotencyKey")
@@ -169,10 +193,6 @@ func PostEntry(ctx context.Context, pool *pgxpool.Pool, reference, description, 
 		if err != nil {
 			return "", err
 		}
-	}
-
-	if err := tx.Commit(ctx); err != nil {
-		return "", err
 	}
 	return journalEntryID, nil
 }
