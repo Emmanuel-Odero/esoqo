@@ -60,6 +60,43 @@ export function isUniqueViolation(err: unknown): boolean {
 }
 
 /**
+ * Which unique constraint a P2002 actually tripped, or null when the
+ * error isn't a unique violation at all.
+ *
+ * `isUniqueViolation` answers "did the database reject this as a
+ * duplicate?", which is the only question a caller needs if every unique
+ * constraint it could hit is one a fresh random value would satisfy. It
+ * stops being enough the moment a table carries a unique constraint over
+ * a value the *caller* supplied: re-rolling a random code cannot possibly
+ * fix a clash on someone else's id, so retrying just burns N transactions
+ * and then reports a generic failure for a condition that needed no
+ * retry at all. mintReceipt in dal/receipt.ts is the case that matters —
+ * Receipt.businessPaymentId is unique, so two callers minting for the
+ * same payment collide on a column neither of them controls.
+ *
+ * Prisma puts the target in `meta.target`, as a bare field name for a
+ * column index ('receiptCode') or a constraint name for a named one.
+ * Both shapes, plus a composite index, are handled; anything unrecognised
+ * returns null, so a caller that cannot identify the constraint must
+ * treat it as "not retryable" rather than guessing.
+ */
+export function uniqueViolationTarget(err: unknown): string | null {
+  if (!isUniqueViolation(err)) return null;
+  const target = (err as { meta?: { target?: unknown } }).meta?.target;
+  if (typeof target === 'string') return target;
+  if (Array.isArray(target) && target.every((t) => typeof t === 'string')) return (target as string[]).join(',');
+  return null;
+}
+
+/** True when a P2002 was tripped by one of `columns` — the caller's way
+ *  of saying "re-rolling is worth a try". Anything it can't positively
+ *  identify is false. */
+export function isUniqueViolationOn(err: unknown, columns: string[]): boolean {
+  const target = uniqueViolationTarget(err);
+  return target !== null && columns.includes(target);
+}
+
+/**
  * Allocates a free, human-friendly esoqo ID built from a person's own
  * names — the replacement for allocateEsoqoCode's opaque ESK- shape.
  * Same retry-on-P2002 shape: the database is the only arbiter of

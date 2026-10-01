@@ -116,10 +116,10 @@ model Party {
   businessPaymentsAsPayee       BusinessPayment[]            @relation("BusinessPaymentPayee")
   parkingLots                   ParkingLot[]
   walletTopUps                  WalletTopUp[]                @relation("WalletTopUpParty")
-  walletWithdrawals              WalletWithdrawal[]           @relation("WalletWithdrawalParty")
-  esoqoTransfersSent             EsoqoTransfer[]              @relation("EsoqoTransferSender")
-  esoqoTransfersReceived         EsoqoTransfer[]              @relation("EsoqoTransferReceiver")
-  thirdPartyPayouts               ThirdPartyPayout[]           @relation("ThirdPartyPayoutParty")
+  walletWithdrawals             WalletWithdrawal[]           @relation("WalletWithdrawalParty")
+  esoqoTransfersSent            EsoqoTransfer[]              @relation("EsoqoTransferSender")
+  esoqoTransfersReceived        EsoqoTransfer[]              @relation("EsoqoTransferReceiver")
+  thirdPartyPayouts             ThirdPartyPayout[]           @relation("ThirdPartyPayoutParty")
   groupActivityEvents           GroupActivityEvent[]         @relation("GroupActivityActor")
   signatoryFeesForMe            SignatoryFeePayment[]        @relation("SignatoryFeePerson")
   signatoryFeesIAdded           SignatoryFeePayment[]        @relation("SignatoryFeeAddedBy")
@@ -1259,6 +1259,7 @@ model Product {
   images         ProductImage[]
   orderItems     StoreOrderItem[]
   posSaleItems   PosSaleItem[]
+  receiptItems   ReceiptItem[]
   staffNotes     ProductStaffNote[]
   stockPurchases StockPurchase[]
   stockLocations StockLocation[]
@@ -1324,6 +1325,7 @@ model ProductVariant {
 
   posItems       PosSaleItem[]
   orderItems     StoreOrderItem[]
+  receiptItems   ReceiptItem[]
   stockPurchases StockPurchase[]
   stockLocations StockLocation[]
 
@@ -1897,28 +1899,85 @@ model PosRefund {
 /// enabled, makes the receipt compliant with Kenya's VAT Act 2013 (as
 /// amended) and the count published under the eTIMS regime.
 model Receipt {
-  id      String @id @default(uuid()) @db.Uuid
-  storeId String @db.Uuid
-  store   Store  @relation(fields: [storeId], references: [id], onDelete: Cascade)
+  id      String  @id @default(uuid()) @db.Uuid
+  /// Null only for a BusinessPayment-backed receipt whose payee doesn't
+  /// map to exactly one ACTIVE store (a chama, or an enterprise running
+  /// several) — still verifiable, just not itemizable from a dashboard.
+  storeId String? @db.Uuid
+  /// SetNull, not Cascade: a receipt is a customer-facing record — the
+  /// /verify link stays live for a shopper who kept it, even if the
+  /// store that issued it is later deleted. Cascade (this column's
+  /// original rule, from when storeId was still required) would have
+  /// silently taken every receipt down with the store.
+  store   Store?  @relation(fields: [storeId], references: [id], onDelete: SetNull)
 
   /// Human-facing, sequential per store: e.g. 000147.
-  receiptNo   String      @unique
-  saleId      String?     @db.Uuid
-  sale        PosSale?    @relation(fields: [saleId], references: [id])
-  orderId     String?     @db.Uuid
-  order       StoreOrder? @relation(fields: [orderId], references: [id])
-  totalKes    Decimal     @db.Decimal(12, 2)
+  receiptNo         String           @unique
+  /// Public verify-page code, e.g. "RC2609298KX3FQ" (see
+  /// generateTransactionCode in @esoqo/domain). Distinct from receiptNo:
+  /// that one is the printed-slip label, this is the credential-shaped
+  /// value a buyer types or scans at /verify. Nullable only because a
+  /// receipt issued before this column existed has nothing to backfill.
+  receiptCode       String?          @unique
+  saleId            String?          @db.Uuid
+  sale              PosSale?         @relation(fields: [saleId], references: [id])
+  orderId           String?          @db.Uuid
+  order             StoreOrder?      @relation(fields: [orderId], references: [id])
+  /// The third source a receipt can point to: a payment made through the
+  /// public /pay page with no item list at the time it was paid. Its
+  /// items (if any) live in ReceiptItem below, not on a sale/order — see
+  /// addReceiptItems in dal/receipt.ts.
+  businessPaymentId String?          @unique @db.Uuid
+  businessPayment   BusinessPayment? @relation(fields: [businessPaymentId], references: [id])
+  items             ReceiptItem[]
+  /// Set the moment addReceiptItems successfully claims this receipt —
+  /// the atomic guard against two concurrent submits both passing the
+  /// "does it have items yet" check before either has written a row.
+  /// `items.length > 0` alone is checked outside any transaction and is
+  /// a plain read-then-write race; this column is claimed with an
+  /// `updateMany({ where: { itemizedAt: null } })` inside the same
+  /// transaction that writes the items, the same "claim the row before
+  /// anything else, atomically" pattern confirmBusinessPayment already
+  /// uses on BusinessPayment.status. Exactly one concurrent caller can
+  /// match that WHERE clause; the other finds nothing to update.
+  itemizedAt        DateTime?
+  totalKes          Decimal          @db.Decimal(12, 2)
   /// KRA eTIMS serial for fiscal receipts — null when eTIMS is off.
-  etimsSerial String?
+  etimsSerial       String?
   /// PRINT | SMS | WHATSAPP
-  channel     String
+  channel           String
   /// SMS/WhatsApp target (the customer's msisdn); null for a printed copy.
-  sentTo      String?
-  issuedAt    DateTime    @default(now())
+  sentTo            String?
+  issuedAt          DateTime         @default(now())
 
   @@index([storeId, issuedAt])
   @@index([saleId])
   @@map("receipt")
+}
+
+/// Items attached after the fact to a BusinessPayment-backed Receipt —
+/// the shopkeeper's dashboard filling in "what this KES 500 that already
+/// arrived was actually for", matched against their own store's
+/// Product/ProductVariant. A PosSale/StoreOrder receipt never gets rows
+/// here; it already has its own items via sale.items/order.items (see
+/// getReceipt in dal/receipt.ts) — this table exists only because a bare
+/// BusinessPayment has neither.
+model ReceiptItem {
+  id           String          @id @default(uuid()) @db.Uuid
+  receiptId    String          @db.Uuid
+  receipt      Receipt         @relation(fields: [receiptId], references: [id], onDelete: Cascade)
+  productId    String          @db.Uuid
+  product      Product         @relation(fields: [productId], references: [id])
+  variantId    String?         @db.Uuid
+  variant      ProductVariant? @relation(fields: [variantId], references: [id])
+  quantity     Int
+  /// What this line was actually sold for — snapshot at itemization
+  /// time, same reasoning as PosSaleItem.unitPriceKes: a later catalog
+  /// price edit must never rewrite what this receipt said.
+  unitPriceKes Decimal         @db.Decimal(12, 2)
+
+  @@index([receiptId])
+  @@map("receipt_item")
 }
 
 /// Pricing is data, not code — every fee shown anywhere in the store
@@ -2062,10 +2121,10 @@ model StaffUser {
   createdAt      DateTime  @default(now())
   updatedAt      DateTime  @updatedAt
 
-  approvals               PaymentApproval[]
-  pricingRulesUpdated     PricingRule[]
-  parcelPricingRulesSet   ParcelPricingRule[]   @relation("parcelPricingRulesSet")
-  transactionFeeBandsSet  TransactionFeeBand[]
+  approvals              PaymentApproval[]
+  pricingRulesUpdated    PricingRule[]
+  parcelPricingRulesSet  ParcelPricingRule[]  @relation("parcelPricingRulesSet")
+  transactionFeeBandsSet TransactionFeeBand[]
 
   @@index([active, rolePreset])
   @@map("staff_user")
@@ -3573,6 +3632,11 @@ model BusinessPayment {
   createdAt   DateTime  @default(now())
   confirmedAt DateTime?
 
+  /// The Receipt this payment mints once confirmed (non-parking only —
+  /// see issueReceiptFor in dal/receipt.ts). Optional side of the
+  /// relation; Receipt.businessPaymentId carries the actual FK.
+  receipt Receipt?
+
   @@index([payeePartyId, status])
   @@index([status, createdAt])
   @@map("business_payment")
@@ -3611,7 +3675,7 @@ model EsoqoTransfer {
   /// Nullable only for the same reason every other receiptCode/reference
   /// column here is: a transfer that existed before this column did has
   /// nothing to backfill it with.
-  referenceCode String? @unique
+  referenceCode  String? @unique
   /// A client-supplied dedupe key (e.g. a UUID the app generates once per
   /// tap of "Send"), so a network retry or a double-tap on a slow
   /// connection cannot post the same transfer twice. Unlike
