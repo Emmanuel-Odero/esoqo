@@ -16,7 +16,7 @@ import {
 } from '@esoqo/db';
 import {
   appEnv, donorThankYouSms, adminDonationAlertSms,
-  payerPaymentReceiptSms, businessPaymentAlertSms,
+  payerPaymentReceiptSms, businessPaymentAlertSms, purchaseReceiptSms,
   walletWithdrawalConfirmedSms, walletTopUpConfirmedSms,
 } from '@esoqo/domain';
 // Subpath import, not the '@esoqo/auth' barrel — the barrel's index.ts
@@ -161,7 +161,17 @@ const handleStkCallback = async (
   }
 
   try {
-    await confirmStoreOrderPayment(parsed.checkoutRequestId, parsed.mpesaReceiptCode ?? '');
+    const order = await confirmStoreOrderPayment(parsed.checkoutRequestId, parsed.mpesaReceiptCode ?? '');
+    // Best-effort, same as every other confirmer below: the order is
+    // already PAID and the ledger already posted by the time we get
+    // here, so an SMS provider hiccup must not fail the webhook.
+    if (order.receipt?.sentTo && order.receipt.receiptCode) {
+      await sendSms(
+        order.receipt.sentTo,
+        purchaseReceiptSms({ storeName: order.receipt.storeName ?? 'Esoqo', amountKes: Number(order.receipt.totalKes), receiptCode: order.receipt.receiptCode }),
+        'purchase-receipt',
+      ).catch((err) => app.log.error({ err, checkoutRequestId: parsed.checkoutRequestId }, 'failed to send order receipt SMS'));
+    }
     return reply.send({ ok: true });
   } catch (e) {
     if (!(e instanceof StoreOrderError && e.code === 'NOT_FOUND')) {
@@ -220,6 +230,7 @@ const handleStkCallback = async (
           businessName: n.businessName,
           receiptCode: n.receiptCode,
           mpesaReceiptCode: n.mpesaReceiptCode,
+          receiptVerifyCode: n.receiptVerifyCode,
         }), 'business-payment-receipt'),
         ...n.businessMsisdns.map((to) => sendSms(
           to,

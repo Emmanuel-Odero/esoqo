@@ -189,6 +189,7 @@ async function notifySms(
         businessName: n.businessName,
         receiptCode: n.receiptCode,
         mpesaReceiptCode: n.mpesaReceiptCode,
+        receiptVerifyCode: n.receiptVerifyCode,
       }),
       'business-payment-receipt',
     ),
