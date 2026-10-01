@@ -3826,12 +3826,27 @@ func CancelParcel(ctx context.Context, pool *pgxpool.Pool, parcelID, cancelledBy
 	if strings.TrimSpace(reason) == "" {
 		return nil, &ParcelError{"BAD_INPUT", "A cancellation reason is required"}
 	}
+	// The status gate, the points refund and the status write are one
+	// transaction. Two admins cancelling at once is the easy case — both
+	// read a live parcel, both credit the sender their points, both
+	// succeed. The worse case needs no concurrency at all: the refund
+	// used to be posted before the parcel write, so any failure between
+	// them (or a crash) left the points refunded and the parcel still
+	// BOOKED, about to be delivered. Both sides of that read as correct
+	// and no sweep can find it. FOR UPDATE on the parcel serialises the
+	// gate; the status predicate keeps it exactly-once.
+	tx, err := pool.Begin(ctx)
+	if err != nil {
+		return nil, err
+	}
+	defer func() { _ = tx.Rollback(ctx) }()
+
 	var code, status, senderName, senderMsisdn string
 	var priceKesText, paymentMethod *string
 	var senderPartyID *string
-	err := pool.QueryRow(ctx, `
+	err = tx.QueryRow(ctx, `
 		SELECT code, status::text, "senderName", "senderMsisdn", "priceKes"::text, "paymentMethod", "senderPartyId"
-		FROM parcel WHERE id = $1`, parcelID).
+		FROM parcel WHERE id = $1 FOR UPDATE`, parcelID).
 		Scan(&code, &status, &senderName, &senderMsisdn, &priceKesText, &paymentMethod, &senderPartyID)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return nil, &ParcelError{"NOT_FOUND", "That parcel was not found"}
@@ -3860,7 +3875,7 @@ func CancelParcel(ctx context.Context, pool *pgxpool.Pool, parcelID, cancelledBy
 					return nil, perr
 				}
 				points := loyalty.PointsForKES(priceKes)
-				if err := loyalty.RefundToParty(ctx, pool, *senderPartyID, points, "parcel-cancel:"+parcelID); err != nil {
+				if err := loyalty.RefundToPartyTx(ctx, tx, *senderPartyID, points, "parcel-cancel:"+parcelID); err != nil {
 					return nil, err
 				}
 				result.PointsRefunded = true
@@ -3874,10 +3889,13 @@ func CancelParcel(ctx context.Context, pool *pgxpool.Pool, parcelID, cancelledBy
 		}
 	}
 
-	if _, err := pool.Exec(ctx, `
+	if _, err := tx.Exec(ctx, `
 		UPDATE parcel SET status = 'CANCELLED', "cancelledAt" = now(), "cancellationReason" = $1, "cancelledByStaffId" = $2,
 		       "refundStatus" = $3, "refundedAt" = $4
-		WHERE id = $5`, reason, cancelledByStaffID, refundStatus, refundedAt, parcelID); err != nil {
+		WHERE id = $5 AND status = $6`, reason, cancelledByStaffID, refundStatus, refundedAt, parcelID, status); err != nil {
+		return nil, err
+	}
+	if err := tx.Commit(ctx); err != nil {
 		return nil, err
 	}
 	return result, nil

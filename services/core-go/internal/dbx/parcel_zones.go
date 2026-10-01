@@ -99,7 +99,32 @@ func GetParcelZone(ctx context.Context, pool *pgxpool.Pool, id string) (*ParcelZ
 	return z, err
 }
 
+// validateZoneCoords keeps a zone's point on the globe.
+//
+// A zone's lat/lng is not decoration: it is the coordinate every price
+// and every "is this the same neighbourhood" comparison is measured
+// from, so a zone stored at lat=900 or lng=4000 does not break loudly —
+// it silently quotes distances to everywhere, quietly sorts to whichever
+// end of the list it happens to fall at, and is invisible to anyone
+// reading the admin screen, which shows a map of the world rather than
+// the number.
+//
+// Decimal(9,6) will happily hold 900.000000, so the column type is not
+// the check that matters; the range is.
+func validateZoneCoords(lat, lng float64) *ParcelError {
+	if lat < -90 || lat > 90 {
+		return &ParcelError{"BAD_INPUT", "That latitude is off the globe — it must be between -90 and 90"}
+	}
+	if lng < -180 || lng > 180 {
+		return &ParcelError{"BAD_INPUT", "That longitude is off the globe — it must be between -180 and 180"}
+	}
+	return nil
+}
+
 func CreateParcelZone(ctx context.Context, pool *pgxpool.Pool, name string, lat, lng float64) (string, error) {
+	if e := validateZoneCoords(lat, lng); e != nil {
+		return "", e
+	}
 	var id string
 	err := pool.QueryRow(ctx, `
 		INSERT INTO parcel_zone (id, name, lat, lng, active, "createdAt")
@@ -108,6 +133,9 @@ func CreateParcelZone(ctx context.Context, pool *pgxpool.Pool, name string, lat,
 }
 
 func UpdateParcelZone(ctx context.Context, pool *pgxpool.Pool, id, name string, lat, lng float64, active bool) error {
+	if e := validateZoneCoords(lat, lng); e != nil {
+		return e
+	}
 	tag, err := pool.Exec(ctx, `
 		UPDATE parcel_zone SET name = $1, lat = $2, lng = $3, active = $4 WHERE id = $5`,
 		name, lat, lng, active, id)

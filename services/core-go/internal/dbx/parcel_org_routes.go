@@ -210,10 +210,17 @@ func SaveRoute(ctx context.Context, pool *pgxpool.Pool, orgID, routeID string, i
 // originLabel/destinationLabel snapshot survives regardless — see the
 // snapshot note in ADR-0006.
 func DeleteRoute(ctx context.Context, pool *pgxpool.Pool, orgID, routeID string) error {
+	// Scoped to the caller's org. Unscoped, a manager passing another
+	// company's route id got "there are runs still out on this route"
+	// back where their own route gives "that route isn't one of yours" —
+	// a two-word oracle confirming that id exists and is running. With
+	// the predicate a foreign id simply counts zero and falls through to
+	// the NOT_FOUND the DELETE already returns.
 	var open int
 	if err := pool.QueryRow(ctx, `
 		SELECT count(*) FROM parcel_shipment
-		WHERE "routeId" = $1 AND status IN ('LOADING', 'DEPARTED')`, routeID).Scan(&open); err != nil {
+		WHERE "routeId" = $1 AND "parcelOrgId" = $2 AND status IN ('LOADING', 'DEPARTED')`,
+		routeID, orgID).Scan(&open); err != nil {
 		return err
 	}
 	if open > 0 {

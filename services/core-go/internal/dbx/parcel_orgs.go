@@ -1979,8 +1979,25 @@ func AssignParcelToOrg(ctx context.Context, pool *pgxpool.Pool, parcelID string,
 	if status != "DRAFT_PENDING_PAYMENT" && status != "BOOKED" {
 		return &ParcelError{"BAD_INPUT", "This parcel is already on its way"}
 	}
-	_, err = pool.Exec(ctx, `UPDATE parcel SET "parcelOrgId" = $1 WHERE id = $2`, orgID, parcelID)
-	return err
+	// The statuses this checked are carried into the UPDATE rather than
+	// checked and then forgotten. Two dispatchers tapping "assign" at the
+	// same moment both read a DRAFT, both write, and the parcel ends up on
+	// whichever courier's write landed last — with the losing dispatch
+	// having been told it worked, and a rider dispatched to a counter that
+	// has already been told the box belongs to somebody else. The
+	// predicate turns the loser into a refusal instead of a silent
+	// overwrite.
+	tag, err := pool.Exec(ctx, `
+		UPDATE parcel SET "parcelOrgId" = $1
+		WHERE id = $2 AND ("paidAt" IS NULL) AND status::text = ANY($3)`,
+		orgID, parcelID, []string{"DRAFT_PENDING_PAYMENT", "BOOKED"})
+	if err != nil {
+		return err
+	}
+	if tag.RowsAffected() == 0 {
+		return &ParcelError{"CONFLICT", "That parcel moved on before it could be assigned — reload and try again"}
+	}
+	return nil
 }
 
 // AssignOrgParcel — a dispatcher handing one of their own parcels to
