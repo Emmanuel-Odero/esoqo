@@ -62,6 +62,7 @@ export * from './business-payment';
 export * from './wallet-topup';
 export * from './group-projects';
 export * from './parking';
+export * from './health';
 // Ticketing reads/writes (ticketing, seat-map, ticket-customer, addon)
 // moved to services/core-go — see dbx/ticket_orgs.go, ticketing.go,
 // ticketing_installment.go and fleet.go. This barrel intentionally no

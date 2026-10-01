@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { prisma } from '@esoqo/db';
+import { pingDatabase } from '@esoqo/db';
 
 /**
  * Render's restart probe for this service (render.yaml's
@@ -15,9 +15,12 @@ import { prisma } from '@esoqo/db';
 export const dynamic = 'force-dynamic'; // never served from the build cache
 
 export async function GET() {
-  try {
-    await prisma.$queryRaw`SELECT 1`;
-  } catch {
+  const health = await pingDatabase();
+  if (!health.reachable) {
+    // The driver's own message is NOT forwarded. It can carry a
+    // hostname, a port, or a fragment of the connection string, and this
+    // response is stored by Render and readable by anyone who can reach
+    // the service. The stable `reason` is the whole point of the probe.
     return NextResponse.json({ ok: false, reason: 'database_unreachable' }, { status: 503 });
   }
   return NextResponse.json({ ok: true });
