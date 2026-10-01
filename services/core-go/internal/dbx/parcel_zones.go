@@ -153,12 +153,28 @@ func GetParcelDistanceRate(ctx context.Context, pool *pgxpool.Pool) (*ParcelDist
 // SetParcelDistanceRate — admin editing the single global rate. Only
 // one row is ever meant to exist; this upserts it rather than growing a
 // history table nothing reads.
+//
+// The DELETE and INSERT are two Execs inside one transaction. A
+// multi-statement string would fail outright — pgx sends strings with
+// arguments through the extended protocol, and Postgres rejects more
+// than one command per prepared statement — and even if it ran, a crash
+// between the DELETE and the INSERT would leave the platform briefly
+// unpriced. The tx makes the swap atomic.
 func SetParcelDistanceRate(ctx context.Context, pool *pgxpool.Pool, perKmKes, minChargeableKm float64, staffID string) error {
-	_, err := pool.Exec(ctx, `
-		DELETE FROM parcel_distance_rate;
+	tx, err := pool.Begin(ctx)
+	if err != nil {
+		return err
+	}
+	defer func() { _ = tx.Rollback(ctx) }()
+	if _, err := tx.Exec(ctx, `DELETE FROM parcel_distance_rate`); err != nil {
+		return err
+	}
+	if _, err := tx.Exec(ctx, `
 		INSERT INTO parcel_distance_rate (id, "perKmKes", "minChargeableKm", "updatedAt", "updatedById")
-		VALUES (gen_random_uuid(), $1, $2, now(), $3)`, perKmKes, minChargeableKm, staffID)
-	return err
+		VALUES (gen_random_uuid(), $1, $2, now(), $3)`, perKmKes, minChargeableKm, staffID); err != nil {
+		return err
+	}
+	return tx.Commit(ctx)
 }
 
 // DistanceSurchargeKes — the additive amount HaversineKm(zones) *

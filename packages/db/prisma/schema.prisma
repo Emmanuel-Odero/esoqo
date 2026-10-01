@@ -4924,6 +4924,35 @@ model ParcelCodRemittance {
   @@map("parcel_cod_remittance")
 }
 
+/// One batch of COD money paid out from the platform SETTLEMENT account
+/// to a seller. The money-out side of ParcelCodRemittance: where a
+/// remittance records a rider handing cash in, this records an operator
+/// (by staffId) paying that cash out to the seller who owns the goods.
+/// A settlement with no actor is a fraud you cannot begin to chase, so
+/// settledByStaffId is mandatory and the exact parcel ids in the batch
+/// are frozen here — the per-parcel codSettledAt columns say WHEN each
+/// parcel was settled, this row says WHO did it and for HOW MUCH.
+model ParcelCodSettlement {
+  id String @id @default(uuid()) @db.Uuid
+
+  /// The seller who was paid.
+  senderPartyId String @db.Uuid
+  /// Which staff member ran the settlement. Mandatory — every money-out
+  /// movement needs a name on it.
+  settledByStaffId String @db.Uuid
+  /// Net paid to the seller (gross less the handling fees).
+  paidKes Decimal @db.Decimal(12, 2)
+  /// Total handling fees withheld across the batch.
+  feeKes Decimal @db.Decimal(12, 2)
+  /// The parcel ids in this batch, frozen at settlement time.
+  parcelIds String[]
+
+  createdAt DateTime @default(now())
+
+  @@index([senderPartyId, createdAt])
+  @@map("parcel_cod_settlement")
+}
+
 /// The one global, admin-editable cash-on-delivery policy — same
 /// single-row shape ParcelDistanceRate uses, and the same explicit
 /// deferral: there is deliberately no per-company or per-seller

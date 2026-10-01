@@ -103,13 +103,27 @@ func SetCourierTariff(ctx context.Context, pool *pgxpool.Pool, t ParcelCourierTa
 	// Delete-then-insert, exactly as SetParcelDistanceRate and
 	// SetCodPolicy do — one row is ever meant to exist, and a history
 	// table nothing reads would only make "what is the rate" ambiguous.
-	_, err := pool.Exec(ctx, `
-		DELETE FROM parcel_courier_tariff;
+	//
+	// Two Execs in one transaction rather than a multi-statement string:
+	// pgx sends strings with arguments through the extended protocol,
+	// which Postgres rejects for multiple commands, and the tx keeps the
+	// DELETE and INSERT from ever being seen as an empty rate.
+	tx, err := pool.Begin(ctx)
+	if err != nil {
+		return err
+	}
+	defer func() { _ = tx.Rollback(ctx) }()
+	if _, err := tx.Exec(ctx, `DELETE FROM parcel_courier_tariff`); err != nil {
+		return err
+	}
+	if _, err := tx.Exec(ctx, `
 		INSERT INTO parcel_courier_tariff
 			(id, "perDeliveryKes", "pctOfPrice", "maxPerDeliveryKes", "updatedAt", "updatedById")
 		VALUES (gen_random_uuid(), $1, $2, $3, now(), $4)`,
-		t.PerDeliveryKes, t.PctOfPrice, t.MaxPerDeliveryKes, staffID)
-	return err
+		t.PerDeliveryKes.String(), t.PctOfPrice, t.MaxPerDeliveryKes.String(), staffID); err != nil {
+		return err
+	}
+	return tx.Commit(ctx)
 }
 
 // ── Accrual ──────────────────────────────────────────────────────────

@@ -1017,9 +1017,27 @@ func ConfirmParcelCashPayment(ctx context.Context, pool *pgxpool.Pool, parcelID,
 // their own points on it — a guest booking (senderPartyId nil) can
 // never match, so this cleanly forces guests onto MPESA_STK instead.
 func PayParcelWithPoints(ctx context.Context, pool *pgxpool.Pool, code, partyID string) error {
+	// The points debit and the parcel's move to BOOKED are one
+	// transaction. Split apart they double-charge: a sender tapping
+	// "pay with points" twice (or two tabs racing) sees the status read
+	// as DRAFT_PENDING_PAYMENT both times, and SpendFromParty's
+	// balance check is itself a read-then-insert with no lock — so the
+	// same parcel's points are spent twice while only one of the
+	// attempts finds the status to flip. The debit's own check (bal <
+	// points) is racy in the same way, letting a balance go negative
+	// against its own rule. FOR UPDATE on the parcel serialises the two
+	// attempts; the second sees BOOKED and is refused before it can
+	// debit.
+	tx, err := pool.Begin(ctx)
+	if err != nil {
+		return err
+	}
+	defer func() { _ = tx.Rollback(ctx) }()
+
 	var parcelID, status, priceKesText string
-	err := pool.QueryRow(ctx, `
-		SELECT id, status::text, "priceKes"::text FROM parcel WHERE code = $1 AND "senderPartyId" = $2`, code, partyID).
+	err = tx.QueryRow(ctx, `
+		SELECT id, status::text, "priceKes"::text
+		FROM parcel WHERE code = $1 AND "senderPartyId" = $2 FOR UPDATE`, code, partyID).
 		Scan(&parcelID, &status, &priceKesText)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return &ParcelError{"NOT_FOUND", "That parcel was not found"}
@@ -1038,13 +1056,13 @@ func PayParcelWithPoints(ctx context.Context, pool *pgxpool.Pool, code, partyID 
 		return &ParcelError{"BAD_INPUT", "Choose a price before paying"}
 	}
 	points := loyalty.PointsForKES(priceKes)
-	if err := loyalty.SpendFromParty(ctx, pool, partyID, points, "parcel:"+code); err != nil {
+	if err := loyalty.SpendFromPartyTx(ctx, tx, partyID, points, "parcel:"+code); err != nil {
 		if errors.Is(err, loyalty.ErrInsufficientLoyalty) {
 			return &ParcelError{"INSUFFICIENT_POINTS", "Not enough Esoqo points for this parcel"}
 		}
 		return err
 	}
-	if _, err := pool.Exec(ctx, `
+	if _, err := tx.Exec(ctx, `
 		UPDATE parcel SET "paymentMethod" = 'ESOKO_POINTS', "paidAt" = now(), status = 'BOOKED',
 		       "slaDeadlineAt" = now() + (
 		           SELECT r."slaHours" FROM parcel_pricing_rule r
@@ -1053,10 +1071,13 @@ func PayParcelWithPoints(ctx context.Context, pool *pgxpool.Pool, code, partyID 
 		           ORDER BY r."parcelOrgId" NULLS LAST
 		           LIMIT 1
 		       ) * interval '1 hour'
-		WHERE code = $1`, code); err != nil {
+		WHERE code = $1 AND status = 'DRAFT_PENDING_PAYMENT'`, code); err != nil {
 		return err
 	}
-	return writeParcelRevenueSplit(ctx, pool, parcelID, priceKes)
+	if err := writeParcelRevenueSplitTx(ctx, tx, parcelID, priceKes); err != nil {
+		return err
+	}
+	return tx.Commit(ctx)
 }
 
 // SettleCounterParcel records the money actually taken, in person, for
@@ -1215,6 +1236,25 @@ func parcelOrgCommission(ctx context.Context, pool *pgxpool.Pool, parcelID strin
 	return orgID, commissionPct, err
 }
 
+// parcelOrgCommissionTx is parcelOrgCommission on a caller's transaction,
+// so the commission rate that gets frozen is read from the same
+// snapshot the split is written in.
+func parcelOrgCommissionTx(ctx context.Context, tx pgx.Tx, parcelID string) (orgID *string, commissionPct float64, err error) {
+	var commissionText *string
+	err = tx.QueryRow(ctx, `
+		SELECT p."parcelOrgId"::text, o."commissionPct"::text
+		FROM parcel p LEFT JOIN parcel_org o ON o.id = p."parcelOrgId"
+		WHERE p.id = $1`, parcelID).Scan(&orgID, &commissionText)
+	if err != nil {
+		return nil, 0, err
+	}
+	if orgID == nil || commissionText == nil {
+		return nil, 0, nil
+	}
+	commissionPct, err = parseFloatOrZero(*commissionText)
+	return orgID, commissionPct, err
+}
+
 // writeParcelRevenueSplit stores the frozen split. A no-op for an
 // Esoqo-operated parcel, where the whole price is already Esoqo's and
 // writing a "split" of 100/0 would be a fiction that later reports
@@ -1226,6 +1266,24 @@ func writeParcelRevenueSplit(ctx context.Context, pool *pgxpool.Pool, parcelID s
 	}
 	platformFee, orgEarnings := SplitParcelRevenue(priceKes, commissionPct)
 	_, err = pool.Exec(ctx, `
+		UPDATE parcel SET "platformFeeKes" = $1, "orgEarningsKes" = $2 WHERE id = $3`,
+		platformFee, orgEarnings, parcelID)
+	return err
+}
+
+// writeParcelRevenueSplitTx is writeParcelRevenueSplit inside the
+// caller's transaction. The split is frozen on the same transition that
+// makes the parcel real money, so it has to be in the same commit as the
+// payment — a crash between them left a paid parcel with no revenue
+// split, and nothing replays it: the money is taken and the courier
+// company's share is simply never recorded.
+func writeParcelRevenueSplitTx(ctx context.Context, tx pgx.Tx, parcelID string, priceKes float64) error {
+	orgID, commissionPct, err := parcelOrgCommissionTx(ctx, tx, parcelID)
+	if err != nil || orgID == nil {
+		return err
+	}
+	platformFee, orgEarnings := SplitParcelRevenue(priceKes, commissionPct)
+	_, err = tx.Exec(ctx, `
 		UPDATE parcel SET "platformFeeKes" = $1, "orgEarningsKes" = $2 WHERE id = $3`,
 		platformFee, orgEarnings, parcelID)
 	return err
