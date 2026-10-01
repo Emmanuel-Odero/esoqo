@@ -2975,12 +2975,26 @@ type DeliverProof struct {
 // easiest one to reach. Courier pay is held rather than accrued for the
 // same reason — see the tail of this function.
 func DeliverParcel(ctx context.Context, pool *pgxpool.Pool, code, deliveryCode, deliveredByPartyID string, proof DeliverProof, allowCodeless, otpVerified, receiverSelfConfirm bool) error {
+	// State guard and the write must be atomic: two couriers scanning
+	// the same parcel at once would both read a not-yet-DELIVERED row,
+	// both pass every check, and both claim the delivery — the second
+	// payer of a parcel that changed hands once. FOR UPDATE locks the
+	// row so the second reads the winner's committed state and is
+	// rejected as ALREADY_DELIVERED, and the UPDATE's own status
+	// predicate is belt-and-braces against a state changed after last
+	// commit of this query but before the UPDATE executes.
+	tx, err := pool.Begin(ctx)
+	if err != nil {
+		return err
+	}
+	defer func() { _ = tx.Rollback(ctx) }()
+
 	var parcelID, status, storedDeliveryCode, codStatus string
 	var currentHolder, codAmount *string
-	err := pool.QueryRow(ctx, `
+	err = tx.QueryRow(ctx, `
 		SELECT id, status::text, "deliveryCode", "currentHolderPartyId",
 		       "codAmountKes"::text, "codStatus"
-		FROM parcel WHERE code = $1`, code).
+		FROM parcel WHERE code = $1 FOR UPDATE`, code).
 		Scan(&parcelID, &status, &storedDeliveryCode, &currentHolder, &codAmount, &codStatus)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return &ParcelError{"NOT_FOUND", "That parcel was not found"}
@@ -3065,13 +3079,21 @@ func DeliverParcel(ctx context.Context, pool *pgxpool.Pool, code, deliveryCode, 
 		return &ParcelError{"WRONG_CODE", "That delivery code doesn't match"}
 	}
 
-	if _, err := pool.Exec(ctx, `
+	if _, err := tx.Exec(ctx, `
 		UPDATE parcel SET
 			status = 'DELIVERED', "deliveredAt" = now(),
 			"podPhotoUrl" = $1, "podLat" = $2, "podLng" = $3,
 			"podReceivedByName" = $4, "podMethod" = $5
-		WHERE id = $6`,
-		proof.PhotoURL, proof.Lat, proof.Lng, proof.ReceivedByName, proof.Method, parcelID); err != nil {
+		WHERE id = $6 AND status = $7`,
+		proof.PhotoURL, proof.Lat, proof.Lng, proof.ReceivedByName, proof.Method, parcelID, status); err != nil {
+		return err
+	}
+	// The state read was locked and the write guarded by the same
+	// predicate, so the parcel is now DELIVERED exactly once. Commit
+	// here, before the deliberately non-fatal side effects below, so a
+	// failed accrual or event row can never roll back a delivery that
+	// already physically happened.
+	if err := tx.Commit(ctx); err != nil {
 		return err
 	}
 	// The job is done, so the courier has earned. Deliberately after the
@@ -3647,18 +3669,10 @@ func SearchCollectorParties(ctx context.Context, pool *pgxpool.Pool, q string) (
 // handler-layer concern, same as pickup/delivery — see
 // handlers_admin_parcels.go).
 func AssignParcelCollector(ctx context.Context, pool *pgxpool.Pool, parcelID, collectorPartyID string, scheduledAt time.Time, note *string) (code, collectorName, collectorMsisdn, senderMsisdn, senderName, originLabel string, err error) {
-	var status string
-	err = pool.QueryRow(ctx, `SELECT status::text, code, "senderMsisdn", "senderName", "originLabel" FROM parcel WHERE id = $1`, parcelID).
-		Scan(&status, &code, &senderMsisdn, &senderName, &originLabel)
-	if errors.Is(err, pgx.ErrNoRows) {
-		return "", "", "", "", "", "", &ParcelError{"NOT_FOUND", "That parcel was not found"}
-	}
-	if err != nil {
-		return "", "", "", "", "", "", err
-	}
-	if status != "BOOKED" && status != "RECEIVED_AT_COUNTER" {
-		return "", "", "", "", "", "", &ParcelError{"BAD_INPUT", "Only a paid, booked parcel can be scheduled for collection"}
-	}
+	// The collector's identity and courier status depend only on the
+	// collector, not on the parcel, so they're resolved before the
+	// transaction opens — leaving the tx scoped to exactly the read the
+	// write depends on and the write itself.
 	var collectorMsisdnPtr *string
 	err = pool.QueryRow(ctx, `SELECT COALESCE("knownAs", "officialName"), msisdn FROM person WHERE "partyId" = $1`, collectorPartyID).
 		Scan(&collectorName, &collectorMsisdnPtr)
@@ -3680,9 +3694,36 @@ func AssignParcelCollector(ctx context.Context, pool *pgxpool.Pool, parcelID, co
 	} else if !active {
 		return "", "", "", "", "", "", &ParcelError{"BAD_INPUT", "That person isn't an active courier"}
 	}
-	if _, err := pool.Exec(ctx, `
-		UPDATE parcel SET "assignedCollectorPartyId" = $1, "collectionScheduledAt" = $2, "collectionNote" = $3 WHERE id = $4`,
+
+	// The status read gates the write, but a gate read outside the
+	// write's transaction is only a suggestion — a cancel or a
+	// re-assignment racing in between would schedule a courier on a
+	// parcel that is no longer eligible. Same FOR UPDATE + status
+	// predicate shape as the other parcel-state transitions.
+	tx, err := pool.Begin(ctx)
+	if err != nil {
+		return "", "", "", "", "", "", err
+	}
+	defer func() { _ = tx.Rollback(ctx) }()
+
+	var status string
+	err = tx.QueryRow(ctx, `SELECT status::text, code, "senderMsisdn", "senderName", "originLabel" FROM parcel WHERE id = $1 FOR UPDATE`, parcelID).
+		Scan(&status, &code, &senderMsisdn, &senderName, &originLabel)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return "", "", "", "", "", "", &ParcelError{"NOT_FOUND", "That parcel was not found"}
+	}
+	if err != nil {
+		return "", "", "", "", "", "", err
+	}
+	if status != "BOOKED" && status != "RECEIVED_AT_COUNTER" {
+		return "", "", "", "", "", "", &ParcelError{"BAD_INPUT", "Only a paid, booked parcel can be scheduled for collection"}
+	}
+	if _, err := tx.Exec(ctx, `
+		UPDATE parcel SET "assignedCollectorPartyId" = $1, "collectionScheduledAt" = $2, "collectionNote" = $3 WHERE id = $4 AND status IN ('BOOKED','RECEIVED_AT_COUNTER')`,
 		collectorPartyID, scheduledAt, note, parcelID); err != nil {
+		return "", "", "", "", "", "", err
+	}
+	if err := tx.Commit(ctx); err != nil {
 		return "", "", "", "", "", "", err
 	}
 	return code, collectorName, collectorMsisdn, senderMsisdn, senderName, originLabel, nil
@@ -3716,15 +3757,14 @@ type ParcelIntakeConfirmResult struct {
 func ConfirmParcelIntake(ctx context.Context, pool *pgxpool.Pool, code, staffID string) (*ParcelIntakeConfirmResult, error) {
 	var v ParcelIntakeConfirmResult
 	var status string
-	var alreadyConfirmed bool
 	err := pool.QueryRow(ctx, `
 		SELECT p.status::text, p."senderMsisdn", p."senderName", p."receiverName", p."receiverMsisdn",
-		       p."originLabel", po.name, p."intakeConfirmedAt" IS NOT NULL
+		       p."originLabel", po.name
 		FROM parcel p
 		LEFT JOIN parcel_org po ON po.id = p."parcelOrgId"
 		WHERE p.code = $1`, code).
 		Scan(&status, &v.SenderMsisdn, &v.SenderName, &v.ReceiverName, &v.ReceiverMsisdn,
-			&v.OriginLabel, &v.CarrierOrgName, &alreadyConfirmed)
+			&v.OriginLabel, &v.CarrierOrgName)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return nil, &ParcelError{"NOT_FOUND", "That parcel was not found"}
 	}
@@ -3734,13 +3774,21 @@ func ConfirmParcelIntake(ctx context.Context, pool *pgxpool.Pool, code, staffID 
 	if status != "BOOKED" {
 		return nil, &ParcelError{"BAD_INPUT", "Only a booked parcel can be confirmed received"}
 	}
-	if alreadyConfirmed {
-		return nil, &ParcelError{"BAD_INPUT", "This parcel's intake was already confirmed"}
-	}
-	if _, err := pool.Exec(ctx, `
-		UPDATE parcel SET "intakeConfirmedAt" = now(), "intakeConfirmedByStaffId" = $1 WHERE code = $2`,
-		staffID, code); err != nil {
+	// The gate and the write are a single conditional UPDATE instead of
+	// a read-then-write: two clerks double-confirming at once both read
+	// "not yet confirmed" and both pass, unless the status itself —
+	// alreadyConfirmed was a read-time fact, not a lock — is re-checked
+	// where the write happens (see finding 5). RowsAffected on the
+	// `intakeConfirmedAt IS NULL` predicate picks exactly one winner.
+	res, err := pool.Exec(ctx, `
+		UPDATE parcel SET "intakeConfirmedAt" = now(), "intakeConfirmedByStaffId" = $1
+		WHERE code = $2 AND status = 'BOOKED' AND "intakeConfirmedAt" IS NULL`,
+		staffID, code)
+	if err != nil {
 		return nil, err
+	}
+	if res.RowsAffected() == 0 {
+		return nil, &ParcelError{"BAD_INPUT", "This parcel's intake was already confirmed"}
 	}
 	return &v, nil
 }
@@ -4061,10 +4109,26 @@ func ConfirmParcelReceipt(ctx context.Context, pool *pgxpool.Pool, otp *authsvc.
 	if !ok {
 		return "", "", "", &ParcelError{"WRONG_CODE", "That code is not right"}
 	}
-	if _, err := pool.Exec(ctx, `
+	// The UPDATE is conditional and its result is checked, so the receipt
+	// is confirmed by whoever got there first rather than by whoever
+	// checked last. Without this, two requests carrying the same valid code
+	// both read an unconfirmed parcel, both spend the OTP, both write — or
+	// one writes and the other silently writes nothing and reports
+	// success — and the handler on the other end sends the sender a
+	// "your parcel arrived" text twice for one delivery.
+	tag, err := pool.Exec(ctx, `
 		UPDATE parcel SET "receiptConfirmedAt" = now(), "receiptConditionRating" = $1, "receiptFeedback" = $2
-		WHERE id = $3`, rating, feedback, parcelID); err != nil {
+		WHERE id = $3 AND status = 'DELIVERED' AND "receiptConfirmedAt" IS NULL`, rating, feedback, parcelID)
+	if err != nil {
 		return "", "", "", err
+	}
+	if tag.RowsAffected() == 0 {
+		// The parcel moved on between the read above and this write —
+		// another request confirmed the receipt, or the parcel was
+		// cancelled. Not the caller's fault, so not an error worth a
+		// scary shape, but it must not be reported as a fresh
+		// confirmation.
+		return "", "", "", &ParcelError{"CONFLICT", "That receipt was just confirmed — someone else got there first"}
 	}
 	return senderMsisdn, senderName, receiverName, nil
 }
@@ -4157,10 +4221,19 @@ func MarkParcelRefunded(ctx context.Context, pool *pgxpool.Pool, parcelID, staff
 	if refundStatus != "PENDING" {
 		return "", "", "", nil, &ParcelError{"BAD_INPUT", "This parcel has no refund pending"}
 	}
-	if _, err := pool.Exec(ctx, `
-		UPDATE parcel SET "refundStatus" = 'REFUNDED', "refundedAt" = now(), "refundedByStaffId" = $1 WHERE id = $2`,
-		staffID, parcelID); err != nil {
+	// Conditional UPDATE: two admins closing out the same refund at once
+	// would both read PENDING and both succeed — the second would be
+	// acting on a refund already closed and the duplicate is gone only
+	// because earlier code read instead of locked. The refundStatus
+	// predicate keeps the transition exactly-once (see finding 5).
+	res, err := pool.Exec(ctx, `
+		UPDATE parcel SET "refundStatus" = 'REFUNDED', "refundedAt" = now(), "refundedByStaffId" = $1
+		WHERE id = $2 AND "refundStatus" = 'PENDING'`, staffID, parcelID)
+	if err != nil {
 		return "", "", "", nil, err
+	}
+	if res.RowsAffected() == 0 {
+		return "", "", "", nil, &ParcelError{"BAD_INPUT", "This parcel has no refund pending"}
 	}
 	return code, senderMsisdn, senderName, priceKes, nil
 }
