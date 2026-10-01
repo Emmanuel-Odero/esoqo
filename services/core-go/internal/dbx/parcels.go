@@ -268,7 +268,7 @@ func BookParcel(ctx context.Context, pool *pgxpool.Pool, in BookParcelInput) (pa
 		}
 	}
 
-	deliveryCode, err = generateDeliveryCode()
+	deliveryCode, err = generateUniqueDeliveryCode(ctx, pool)
 	if err != nil {
 		return "", "", "", "", err
 	}
@@ -770,12 +770,25 @@ func ParcelPriceBand(ctx context.Context, pool *pgxpool.Pool, in PriceBandInput)
 }
 
 func SetParcelPrice(ctx context.Context, pool *pgxpool.Pool, code string, priceKes float64, bargainReason *string) error {
+	// Read, validate, write must be one transaction: without it, a
+	// sender pays the old quoted price between the status read here and
+	// the UPDATE, and this function then rewrites priceKes on a parcel
+	// that is no longer DRAFT_PENDING_PAYMENT — the sender or the
+	// platform is owed money that the record no longer shows. The status
+	// predicate on the UPDATE makes a post-payment rewrite impossible
+	// even in the lost race.
+	tx, err := pool.Begin(ctx)
+	if err != nil {
+		return err
+	}
+	defer func() { _ = tx.Rollback(ctx) }()
+
 	var status, parcelType string
 	var originZoneID, destinationZoneID, destinationAgentID, coverageFeeText, parcelOrgID *string
-	err := pool.QueryRow(ctx, `
+	err = tx.QueryRow(ctx, `
 		SELECT status::text, "parcelType"::text, "originZoneId"::text, "destinationZoneId"::text,
 		       "destinationAgentId"::text, "coverageFeeKes"::text, "parcelOrgId"::text
-		FROM parcel WHERE code = $1`, code).
+		FROM parcel WHERE code = $1 FOR UPDATE`, code).
 		Scan(&status, &parcelType, &originZoneID, &destinationZoneID, &destinationAgentID,
 			&coverageFeeText, &parcelOrgID)
 	if errors.Is(err, pgx.ErrNoRows) {
@@ -829,38 +842,132 @@ func SetParcelPrice(ctx context.Context, pool *pgxpool.Pool, code string, priceK
 		}
 	}
 
-	_, err = pool.Exec(ctx, `UPDATE parcel SET "priceKes" = $1, "bargainReason" = $2 WHERE code = $3`, priceKes, bargainReason, code)
-	return err
+	// Written as a decimal string from the exact cents that were just
+	// validated, so the row cannot disagree with the price the pricing
+	// rules reviewed.
+	if _, err = tx.Exec(ctx, `
+		UPDATE parcel SET "priceKes" = $1::numeric, "bargainReason" = $2
+		WHERE code = $3 AND status = 'DRAFT_PENDING_PAYMENT'`,
+		price.Decimal(), bargainReason, code); err != nil {
+		return err
+	}
+	return tx.Commit(ctx)
 }
 
 // GetParcelForPayment — the small "code → priceKes, status" lookup
 // handlePayParcel needs to start an STK push without pulling in the
-// whole ParcelStatusView.
-func GetParcelForPayment(ctx context.Context, pool *pgxpool.Pool, code string) (priceKes float64, status string, err error) {
+// whole ParcelStatusView. paymentInFlight says whether an STK push is
+// already out for this parcel: true means the customer's phone is
+// sitting on a payment prompt right now, and pushing a second one makes
+// them pay twice.
+//
+// A courtesy check, not the guard. It saves the caller a pointless round
+// trip and gives the sender a clearer message than a conflict, but two
+// requests can both read it as false — hence ReserveParcelPayment, which
+// is the check that actually decides. Nothing here should be treated as
+// securing anything on its own.
+func GetParcelForPayment(ctx context.Context, pool *pgxpool.Pool, code string) (priceKes float64, status string, paymentInFlight bool, err error) {
 	var priceKesText *string
-	err = pool.QueryRow(ctx, `SELECT "priceKes"::text, status::text FROM parcel WHERE code = $1`, code).
-		Scan(&priceKesText, &status)
+	var checkoutID *string
+	err = pool.QueryRow(ctx, `SELECT "priceKes"::text, status::text, "paymentCheckoutRequestId" FROM parcel WHERE code = $1`, code).
+		Scan(&priceKesText, &status, &checkoutID)
 	if errors.Is(err, pgx.ErrNoRows) {
-		return 0, "", &ParcelError{"NOT_FOUND", "That parcel was not found"}
+		return 0, "", false, &ParcelError{"NOT_FOUND", "That parcel was not found"}
 	}
 	if err != nil {
-		return 0, "", err
+		return 0, "", false, err
 	}
+	paymentInFlight = checkoutID != nil && strings.TrimSpace(*checkoutID) != ""
 	if priceKesText != nil {
 		priceKes, err = strconv.ParseFloat(*priceKesText, 64)
 		if err != nil {
-			return 0, "", err
+			return 0, "", false, err
 		}
 	}
-	return priceKes, status, nil
+	return priceKes, status, paymentInFlight, nil
+}
+
+// ReserveParcelPayment claims the one-shot right to push an STK prompt
+// for this parcel, and returns the token proving the claim.
+//
+// The ordering this exists to enforce: claim BEFORE the push, not after.
+// Read-check-push-attach is a race with a phone call in the middle of it,
+// and two concurrent requests — a double-tap, or a client retrying on a
+// slow connection — both pass the read, both push, and the loser only
+// discovers it lost when its attach is refused, by which time Safaricom
+// has already put a second payment prompt on the customer's handset.
+// Completing both prompts charges them twice for one parcel, and the
+// first checkout's webhook is orphaned by the attach, so the parcel is
+// credited once and paid for twice.
+//
+// The token is written into paymentCheckoutRequestId in place of the
+// Safaricom id, so it occupies the same slot and every existing guard —
+// GetParcelForPayment's in-flight check, the sweep's IS NOT NULL —
+// covers a pending reservation without knowing anything new. It is
+// replaced by the real checkout id on success and cleared on failure.
+//
+// The UNIQUE constraint on the column does the actual mutual exclusion:
+// a second concurrent claim collides on it rather than both writing.
+func ReserveParcelPayment(ctx context.Context, pool *pgxpool.Pool, code string) (reservation string, err error) {
+	tag, err := pool.Exec(ctx, `
+		UPDATE parcel SET "paymentCheckoutRequestId" = gen_random_uuid()::text,
+		       "paymentReservationAt" = now()
+		WHERE code = $1 AND status = 'DRAFT_PENDING_PAYMENT' AND "paymentCheckoutRequestId" IS NULL`, code)
+	if err != nil {
+		return "", err
+	}
+	if tag.RowsAffected() == 0 {
+		return "", &ParcelError{"CONFLICT", "A payment is already in progress for this parcel — finish it on your phone"}
+	}
+	// Read back rather than generating the token in Go: the value has to
+	// be the one that actually landed, or the release below would target
+	// a row that never matched.
+	err = pool.QueryRow(ctx, `
+		SELECT "paymentCheckoutRequestId" FROM parcel
+		WHERE code = $1 AND status = 'DRAFT_PENDING_PAYMENT' AND "paymentReservationAt" IS NOT NULL`, code).
+		Scan(&reservation)
+	if err != nil {
+		return "", err
+	}
+	return reservation, nil
+}
+
+// ReleaseParcelPaymentReservation gives the slot back when the push
+// never happened — a typo'd phone number, Daraja down, a config missing.
+//
+// Matched on the reservation token rather than on NULL, so a slow push
+// that has meanwhile been superseded cannot have its successor's
+// reservation cleared out from under it by its own failure path.
+func ReleaseParcelPaymentReservation(ctx context.Context, pool *pgxpool.Pool, code, reservation string) error {
+	_, err := pool.Exec(ctx, `
+		UPDATE parcel SET "paymentCheckoutRequestId" = NULL, "paymentReservationAt" = NULL
+		WHERE code = $1 AND "paymentCheckoutRequestId" = $2`, code, reservation)
+	return err
 }
 
 // AttachParcelPaymentCheckoutID — same "stash the STK checkout id so
 // the webhook can find its way back" role as
 // store.AttachOrderCheckoutRequestID.
-func AttachParcelPaymentCheckoutID(ctx context.Context, pool *pgxpool.Pool, code, checkoutRequestID string) error {
-	_, err := pool.Exec(ctx, `UPDATE parcel SET "paymentMethod" = 'MPESA_STK', "paymentCheckoutRequestId" = $1 WHERE code = $2`, checkoutRequestID, code)
-	return err
+//
+// Swaps the caller's own reservation for the Safaricom id. The match is
+// on the reservation rather than on IS NULL: the slot is already occupied
+// by design, so the original "refuse if anything is there" predicate
+// would refuse every push. Matching the token instead is what makes the
+// attach a completion rather than a claim — a request whose reservation
+// was already released and re-taken by someone else cannot land here.
+func AttachParcelPaymentCheckoutID(ctx context.Context, pool *pgxpool.Pool, code, reservation, checkoutRequestID string) error {
+	tag, err := pool.Exec(ctx, `
+		UPDATE parcel SET "paymentMethod" = 'MPESA_STK', "paymentCheckoutRequestId" = $1,
+		       "paymentReservationAt" = NULL
+		WHERE code = $2 AND status = 'DRAFT_PENDING_PAYMENT' AND "paymentCheckoutRequestId" = $3`,
+		checkoutRequestID, code, reservation)
+	if err != nil {
+		return err
+	}
+	if tag.RowsAffected() == 0 {
+		return &ParcelError{"CONFLICT", "That payment attempt was superseded — start again"}
+	}
+	return nil
 }
 
 // ErrParcelPaymentNotFound lets the STK callback dispatcher
@@ -880,11 +987,27 @@ var ErrParcelPaymentNotFound = errors.New("no parcel for that checkout request")
 // send the payment-confirmation SMS exactly once (see
 // handlers_parcels.go / handlers_payments_webhook.go).
 func ConfirmParcelPaymentByCheckoutID(ctx context.Context, pool *pgxpool.Pool, checkoutRequestID, mpesaReceiptCode string, loyaltyEnabled bool) (code string, justConfirmed bool, err error) {
+	// The read, the ledger entry and the status flip are one
+	// transaction. The idempotency here rests entirely on the parcel
+	// row — the webhook is a third party that retries, so two callbacks
+	// for the same checkout arriving at once is routine, not exotic.
+	// Without the lock both read DRAFT_PENDING_PAYMENT and both post
+	// the same payment to the ledger. The ledger's own idempotency key
+	// ("core-go:parcel:"+parcelID) saves the second entry, but only by
+	// luck of ordering: with the post outside the transaction the first
+	// commit is not visible to the second read, so the guard is the row
+	// lock, not the key.
+	tx, err := pool.Begin(ctx)
+	if err != nil {
+		return "", false, err
+	}
+	defer func() { _ = tx.Rollback(ctx) }()
+
 	var parcelID, status, priceKesText string
 	var senderPartyID *string
-	err = pool.QueryRow(ctx, `
+	err = tx.QueryRow(ctx, `
 		SELECT id, code, status::text, "priceKes"::text, "senderPartyId" FROM parcel
-		WHERE "paymentCheckoutRequestId" = $1`, checkoutRequestID).
+		WHERE "paymentCheckoutRequestId" = $1 FOR UPDATE`, checkoutRequestID).
 		Scan(&parcelID, &code, &status, &priceKesText, &senderPartyID)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return "", false, ErrParcelPaymentNotFound
@@ -908,7 +1031,7 @@ func ConfirmParcelPaymentByCheckoutID(ctx context.Context, pool *pgxpool.Pool, c
 	if err != nil {
 		return "", false, err
 	}
-	if _, err := ledger.PostEntry(ctx, pool,
+	if _, err := ledger.PostEntryTx(ctx, tx,
 		"parcel:"+parcelID, "Parcel delivery payment", "core-go:parcel:"+parcelID,
 		[]ledger.Posting{{AccountID: settlementAcct, AmountCents: ledger.CentsFromKES(priceKes)}, {AccountID: revenueAcct, AmountCents: ledger.CentsFromKES(-priceKes)}}); err != nil {
 		return "", false, err
@@ -922,7 +1045,7 @@ func ConfirmParcelPaymentByCheckoutID(ctx context.Context, pool *pgxpool.Pool, c
 	if mpesaReceiptCode != "" {
 		receiptCol = &mpesaReceiptCode
 	}
-	if _, err := pool.Exec(ctx, `
+	if _, err := tx.Exec(ctx, `
 		UPDATE parcel SET "paidAt" = now(), status = 'BOOKED', "mpesaReceiptCode" = $1,
 		       "slaDeadlineAt" = now() + (
 		           SELECT r."slaHours" FROM parcel_pricing_rule r
@@ -931,11 +1054,14 @@ func ConfirmParcelPaymentByCheckoutID(ctx context.Context, pool *pgxpool.Pool, c
 		           ORDER BY r."parcelOrgId" NULLS LAST
 		           LIMIT 1
 		       ) * interval '1 hour'
-		WHERE id = $2`, receiptCol, parcelID); err != nil {
+		WHERE id = $2 AND status = 'DRAFT_PENDING_PAYMENT'`, receiptCol, parcelID); err != nil {
 		return "", false, err
 	}
 	// Frozen here, on the one transition that makes a parcel real money.
-	if err := writeParcelRevenueSplit(ctx, pool, parcelID, priceKes); err != nil {
+	if err := writeParcelRevenueSplitTx(ctx, tx, parcelID, priceKes); err != nil {
+		return "", false, err
+	}
+	if err := tx.Commit(ctx); err != nil {
 		return "", false, err
 	}
 	return code, true, nil
@@ -1319,6 +1445,86 @@ const DeliveryCodeDigits = 6
 // the number on file, or a staff override with photo and name).
 const DeliveryCodeMaxAttempts = 5
 
+// DeliveryCodeThrottle is how long a spent allowance stays spent. Long
+// enough that guessing cannot simply wait the wall out between bursts;
+// short enough that a courier who burned the allowance on a genuinely
+// illegible code is not locked out of their own round all afternoon.
+// The lockout expires rather than being cleared by anything: the point
+// is that the only ways forward are the OTP and staff-override routes,
+// which is also what the message tells them.
+const DeliveryCodeThrottle = 6 * time.Hour
+
+// DeliveryCodeTriesLeft reports how many wrong codes may still be
+// guessed against code, and whether the allowance is currently spent.
+//
+// A missing parcel is reported as (DeliveryCodeMaxAttempts, false)
+// rather than an error: the caller is about to ask DeliverParcel the
+// same question anyway and will get the real answer — NOT_FOUND — from
+// there, so there is nothing to fail over here, and guessing which
+// errors are load-bearing is how a throttle ends up bypassable.
+func DeliveryCodeTriesLeft(ctx context.Context, pool *pgxpool.Pool, code string) (left int, locked bool, err error) {
+	var failures int
+	var lockedUntil *time.Time
+	err = pool.QueryRow(ctx, `
+		SELECT "deliveryCodeFailures", "deliveryCodeLockedUntil" FROM parcel WHERE code = $1`, code).
+		Scan(&failures, &lockedUntil)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return DeliveryCodeMaxAttempts, false, nil
+	}
+	if err != nil {
+		return 0, false, err
+	}
+	if lockedUntil != nil && lockedUntil.After(time.Now()) {
+		return 0, true, nil
+	}
+	if left = DeliveryCodeMaxAttempts - failures; left < 0 {
+		left = 0
+	}
+	return left, false, nil
+}
+
+// RecordDeliveryCodeFailure counts one wrong guess against the parcel
+// and returns how many tries remain, zero meaning the allowance is now
+// spent and the timestamp it is spent until has been set.
+//
+// Atomic in one statement rather than read-then-write: two guesses
+// racing must cost two, not one. A counter that can be lost by a
+// concurrent read is a counter with a bigger hole in it than the one
+// this replaces.
+func RecordDeliveryCodeFailure(ctx context.Context, pool *pgxpool.Pool, code string) (left int, err error) {
+	err = pool.QueryRow(ctx, `
+		UPDATE parcel
+		SET "deliveryCodeFailures" = "deliveryCodeFailures" + 1,
+		    "deliveryCodeLockedUntil" = CASE
+		        WHEN "deliveryCodeFailures" + 1 >= $2 THEN now() + make_interval(secs => $3::double precision)
+		        ELSE "deliveryCodeLockedUntil"
+		    END
+		WHERE code = $1
+		RETURNING $2 - "deliveryCodeFailures"`, code, DeliveryCodeMaxAttempts, int64(DeliveryCodeThrottle/time.Second)).
+		Scan(&left)
+	if errors.Is(err, pgx.ErrNoRows) {
+		// Nobody to count against — DeliverParcel reports NOT_FOUND.
+		return DeliveryCodeMaxAttempts, nil
+	}
+	if err != nil {
+		return 0, err
+	}
+	if left < 0 {
+		left = 0
+	}
+	return left, nil
+}
+
+// ClearDeliveryCodeFailures wipes the counter once a code has been
+// accepted, so a receiver who mistyped twice and then read it correctly
+// leaves no spent allowance behind them.
+func ClearDeliveryCodeFailures(ctx context.Context, pool *pgxpool.Pool, code string) error {
+	_, err := pool.Exec(ctx, `
+		UPDATE parcel SET "deliveryCodeFailures" = 0, "deliveryCodeLockedUntil" = NULL
+		WHERE code = $1 AND "deliveryCodeFailures" > 0`, code)
+	return err
+}
+
 func generateDeliveryCode() (string, error) {
 	const digits = "0123456789"
 	out := make([]byte, DeliveryCodeDigits)
@@ -1340,6 +1546,61 @@ func generateDeliveryCode() (string, error) {
 		}
 	}
 	return string(out), nil
+}
+
+// deliveryCodeLookupTries — how many times to re-roll a code that is
+// already on a parcel. Four is far more than the arithmetic needs: the
+// expected number of collisions at a million in-flight codes is about
+// one, so four attempts fails only when something is systematically
+// wrong rather than by chance.
+const deliveryCodeLookupTries = 4
+
+// generateUniqueDeliveryCode re-rolls until the code is unused.
+//
+// generateDeliveryCode on its own is a fair dice roll into a space of
+// 10^6, and that is the whole problem: collisions are not rare at
+// volume. By the birthday bound, a thousand parcels in flight already
+// collide about half the time, and ten thousand collide almost surely.
+// Two receivers then hold the same six digits, which is a credential
+// nobody can reason about — support cannot tell them apart, and "the code
+// on the label doesn't work" becomes true for exactly one of them.
+//
+// This checks and re-rolls rather than adding a UNIQUE constraint,
+// which is the better instrument and can't be used here: the constraint
+// can only be applied once the column holds no duplicates, and it very
+// probably doesn't after years of unconstrained six-digit codes. Making
+// that migration legal means rewriting codes already texted to receivers
+// and printed on labels — silently invalidating credentials people are
+// holding. Until the column has been audited, a re-roll loop gets the
+// invariant for new codes without touching live ones.
+//
+// Not atomic, so it is not a guarantee under concurrent booking — two
+// transactions can still land the same digits in the same instant. That
+// is accepted deliberately rather than papered over with an advisory
+// lock: the check is one indexed lookup on a column that is already
+// scanned, and the residual window is microseconds wide against a
+// collision that would otherwise be certain. Revisit when the constraint
+// can be applied.
+func generateUniqueDeliveryCode(ctx context.Context, q pgxTx) (string, error) {
+	for attempt := 0; attempt < deliveryCodeLookupTries; attempt++ {
+		candidate, err := generateDeliveryCode()
+		if err != nil {
+			return "", err
+		}
+		var taken bool
+		if err := q.QueryRow(ctx,
+			`SELECT EXISTS (SELECT 1 FROM parcel WHERE "deliveryCode" = $1)`, candidate,
+		).Scan(&taken); err != nil {
+			return "", err
+		}
+		if !taken {
+			return candidate, nil
+		}
+	}
+	// Four collisions in a row is not the birthday bound misbehaving, it
+	// is the column full of codes from a format this function no longer
+	// mints. Say so rather than returning a duplicate.
+	return "", &ParcelError{"CONFLICT", "Could not issue a delivery code just now — try again in a moment"}
 }
 
 // ParcelStatusView is the guest-safe status pill projection anyone
@@ -1378,9 +1639,11 @@ type ParcelStatusView struct {
 	// IntakeConfirmedAt — when the box was first physically received
 	// (a counter receipt or the first pickup). Exposed on this
 	// guest-safe view so the tracker can date its "received" stage; a
-	// timestamp carries no PII. handleGetParcelStatus still uses its
-	// presence to decide whether the caller gets this full view at all,
-	// or the reduced pre-intake stub.
+	// timestamp carries no PII. handleGetParcelStatus uses its presence
+	// to decide whether the caller gets this full view at all: unset
+	// means nothing has been taken in yet, so the PII-bearing fields
+	// (agent contact details, POD, cancellation reason, the custody
+	// timeline, the receiver's address) are stripped before responding.
 	IntakeConfirmedAt *time.Time `json:"intakeConfirmedAt"`
 
 	// Failed-attempt summary. A receiver who was out needs to know an
@@ -1614,9 +1877,11 @@ func GetParcelStatus(ctx context.Context, pool *pgxpool.Pool, code string) (*Par
 	// Matches by the real code or by serviceTicketNumber — a sender who
 	// only has the ticket number (the only thing they were ever given
 	// pre-intake, see Parcel.serviceTicketNumber's own comment) still
-	// needs some way to check in. handleGetParcelStatus is what actually
-	// enforces the pre-intake reduction; this just has to find the row
-	// either way.
+	// needs some way to check in. This function builds the full view
+	// either way; handleGetParcelStatus is what decides the caller is
+	// entitled to it, blanking the pre-intake PII when intakeConfirmedAt
+	// is unset. A ticket number is a deliberately weaker credential than
+	// the tracking code, which is the whole reason that gate exists.
 	err := pool.QueryRow(ctx, `
 		SELECT p.id, p.code, p.status::text, p."originLabel", p."destinationLabel", p."parcelType"::text,
 		       p."priceKes"::text, p."collectionScheduledAt", p."createdAt", p."deliveredAt",
@@ -1707,6 +1972,66 @@ func GetParcelStatus(ctx context.Context, pool *pgxpool.Pool, code string) (*Par
 		stock.PreLabelInfo = &info
 	}
 	return &stock, nil
+}
+
+// ReduceParcelStatusForUnintaken strips everything a tracking response
+// must not carry while the parcel has not been physically received.
+//
+// Applied by BOTH callers of the guest-safe tracking view — the tracking
+// endpoint and the universal scan resolver — because a reduction enforced
+// at one door is not a reduction: GetParcelStatus is reachable from
+// /scan/resolve with no session and no code-shape requirement, so
+// leaving that path un-reduced hands back exactly the fields this exists
+// to withhold. It lives here rather than in the handler so the two doors
+// cannot drift apart.
+//
+// Why it is needed at all: before intake, the parcel has been described
+// but not received, so none of the stripped fields can be true yet — and
+// the credential standing in for the tracking code is the
+// serviceTicketNumber, six characters from a 30-symbol alphabet, handed
+// to whoever submitted the booking form. See
+// Parcel.serviceTicketNumber's own comment for why the real code is
+// withheld until intake.
+// Returns a reduced COPY, never the input, and always a copy even when
+// there is nothing to strip — so a caller can hand it a cached view and
+// mutate the result without either surprise. Copying an untouched parcel
+// costs a struct; returning the input under one condition and a copy
+// under the other is a contract nobody reads twice.
+func ReduceParcelStatusForUnintaken(v *ParcelStatusView) *ParcelStatusView {
+	if v == nil {
+		return nil
+	}
+	out := *v
+	if v.IntakeConfirmedAt != nil {
+		return &out
+	}
+	// Code, the actual escalation. GetParcelStatus matches on either the
+	// real tracking code or the serviceTicketNumber, and returns the
+	// tracking code in both cases — so querying with the ticket number,
+	// the credential a self-service booking actually hands back, quietly
+	// returned the stronger credential it was supposed to substitute for.
+	// The 1-in-a-million lookup is not a control: the endpoint is
+	// unauthenticated and unlimited, and this is the same endpoint
+	// /scan/resolve reaches.
+	out.Code = ""
+	out.Agent = nil
+	out.PodPhotoURL = nil
+	out.PodReceivedByName = nil
+	out.PodMethod = nil
+	out.CancellationReason = nil
+	out.CancelledAt = nil
+	out.LastAttemptReason = nil
+	out.LastAttemptText = nil
+	out.LastAttemptAt = nil
+	out.DeliveryAttempts = 0
+	out.ReceiptConfirmedAt = nil
+	out.Events = nil
+	// The destination is the receiver's address, typed in by the sender
+	// and never verified against whoever actually collects.
+	out.DestinationLabel = ""
+	out.PriceKes = nil
+	out.SlaDeadlineAt = nil
+	return &out
 }
 
 // PartyParcelActivityRow is one line on "your parcels" — a staff
@@ -3145,6 +3470,27 @@ func DeliverParcel(ctx context.Context, pool *pgxpool.Pool, code, deliveryCode, 
 	if err := AccrueCourierEarnings(ctx, pool, parcelID); err != nil {
 		log.Printf("parcel %s delivered but courier earnings accrual failed (replayable): %v", parcelID, err)
 	}
+	// The hand-over itself, on the branch that actually has a staff
+	// witness. This was the one delivery path that recorded nothing:
+	// every event this table held was about authenticating the receiver,
+	// so a parcel delivered in front of a clerk with a POD photo, a GPS
+	// fix and a named receiver left no row saying it was delivered — the
+	// best-evidenced delivery in the system was the one invisible in its
+	// own history.
+	//
+	// Non-fatal for the same reason the accrual is, and written after the
+	// commit for the same reason: the parcel has physically changed hands,
+	// and reporting a delivered parcel as undelivered because a history
+	// insert failed is worse than a gap an admin can backfill. Logged so
+	// the gap is discoverable.
+	if err := AppendParcelEvent(ctx, pool, parcelEventInput{
+		ParcelID: parcelID, Kind: "DELIVERED_STAFF_WITNESSED", Severity: "INFO",
+		PublicLabel: strPtr("Delivered"),
+		StaffDetail: "Handed over with a staff witness present",
+		ActorType:   "STAFF",
+	}); err != nil {
+		log.Printf("parcel %s delivered but the delivered-event row failed (replayable): %v", parcelID, err)
+	}
 	return nil
 }
 
@@ -4161,10 +4507,51 @@ func ConfirmParcelReceipt(ctx context.Context, pool *pgxpool.Pool, otp *authsvc.
 // real sender). Meant to run from a periodic sweep (see
 // cmd/api/main.go's ticker), same shape SweepDueWithdrawals follows.
 func SweepStaleParcelDrafts(ctx context.Context, pool *pgxpool.Pool) (int64, error) {
+	// Reclaim dead reservations FIRST, or the cancel below can never see
+	// these parcels again.
+	//
+	// ReserveParcelPayment claims the slot before the push so two
+	// concurrent requests can't both send a prompt. A process that dies
+	// between the claim and the attach leaves a token that no push will
+	// complete and no caller can release, and because the cancel below
+	// also keys on paymentCheckoutRequestId being null, such a parcel
+	// would be neither payable nor sweepable — permanently stuck, with no
+	// error anywhere.
+	//
+	// paymentReservationAt is non-null only while the column holds a local
+	// token, so this distinguishes "a push is being attempted" from "a
+	// push exists and its callback may still be coming" — and only the
+	// first is reclaimed. Twenty minutes is far longer than the Daraja
+	// round trip it brackets, so a slow push is never stolen from; the
+	// cost of being wrong in the other direction is one duplicate prompt,
+	// which the reservation still prevents.
+	if _, err := pool.Exec(ctx, `
+		UPDATE parcel
+		SET "paymentCheckoutRequestId" = NULL, "paymentReservationAt" = NULL
+		WHERE status = 'DRAFT_PENDING_PAYMENT'
+		  AND "paymentReservationAt" IS NOT NULL
+		  AND "paymentReservationAt" < now() - interval '20 minutes'`); err != nil {
+		return 0, err
+	}
+
+	// paymentCheckoutRequestId IS NULL is what keeps the sweep away from
+	// a parcel with an STK push already out. Without it, a sender who
+	// sat on the payment prompt for over 24h (or whose callback was
+	// merely slow) comes back to a CANCELLED parcel with money
+	// Safaricom already taken: the sweep's own comment claims "nothing
+	// was ever paid", which is false the moment a push exists. The
+	// callback then matches a CANCELLED parcel, ConfirmParcelPaymentByCheckoutID
+	// reads a non-DRAFT status and returns justConfirmed=false, and the
+	// taken money is credited to nobody with no record that it was ever
+	// owed. Such a parcel ages out on its own once the callback lands or
+	// never does, which is strictly better than cancelling a live
+	// payment.
 	tag, err := pool.Exec(ctx, `
 		UPDATE parcel SET status = 'CANCELLED', "cancelledAt" = now(),
 		       "cancellationReason" = 'Abandoned — payment never completed'
-		WHERE status = 'DRAFT_PENDING_PAYMENT' AND "createdAt" < now() - interval '24 hours'`)
+		WHERE status = 'DRAFT_PENDING_PAYMENT'
+		  AND "createdAt" < now() - interval '24 hours'
+		  AND "paymentCheckoutRequestId" IS NULL`)
 	if err != nil {
 		return 0, err
 	}

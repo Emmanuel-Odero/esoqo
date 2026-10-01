@@ -4396,6 +4396,22 @@ model Parcel {
   /// Without the index that lookup was a sequential scan of the whole
   /// parcel table — the only one of the nine payment domains missing it.
   paymentCheckoutRequestId String?   @unique
+  /// When the current value of paymentCheckoutRequestId was a LOCAL
+  /// reservation rather than a Safaricom checkout id — i.e. the window
+  /// inside dbx.ReserveParcelPayment and
+  /// dbx.AttachParcelPaymentCheckoutID, during which a push is being
+  /// attempted.
+  ///
+  /// Null whenever the column holds a real checkout id. Exists because
+  /// claiming the slot before the push leaves a failure mode the old
+  /// shape didn't have: a process that dies between the two writes
+  /// strands a token that no push will ever complete and no caller can
+  /// release, leaving the parcel permanently unpayable and, because the
+  /// sweep also skips non-null checkout ids, permanently unsweepable too.
+  /// With a timestamp the sweep can reclaim a reservation older than any
+  /// plausible push, which is a much smaller loss than an unpayable
+  /// parcel. See SweepStaleParcelDrafts.
+  paymentReservationAt DateTime?
   /// Set only for an MPESA_STK payment, once confirmed (see
   /// dbx.ConfirmParcelPaymentByCheckoutID) — same "quote the actual
   /// transaction back to the payer" role fare_payment/booking_payment's
