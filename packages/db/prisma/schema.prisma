@@ -4235,8 +4235,10 @@ model Parcel {
   /// This is the number they show at the counter instead — a bearer
   /// credential scoped to "prove you're the one who booked this," not
   /// "track this parcel" (see handleGetParcelStatus's own pre-intake
-  /// lookup). Once intakeConfirmedAt is set, the SMS pair fires and
-  /// this number is retired from active use — `code` takes over.
+  /// reduction, which strips every PII-bearing field from the tracking
+  /// response while intakeConfirmedAt is unset). Once intakeConfirmedAt
+  /// is set, the SMS pair fires and this number is retired from active
+  /// use — `code` takes over.
   serviceTicketNumber String @unique
 
   /// Null for a guest booking — senderName/senderMsisdn are always

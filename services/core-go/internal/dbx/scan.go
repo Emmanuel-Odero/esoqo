@@ -412,7 +412,14 @@ func resolveShortCode(ctx context.Context, pool *pgxpool.Pool, kind, code, qrSec
 		}
 	case ScanKindParcel:
 		if p, err := GetParcelStatus(ctx, pool, code); err == nil && p != nil {
-			return hit(kind, p)
+			// Reduced for the same reason the tracking endpoint reduces
+			// it: this resolver is unauthenticated, accepts a code of
+			// any shape, and every projection here is described as
+			// guest-safe above. Returning the raw view made that a claim
+			// about this branch rather than a fact, since the tracking
+			// endpoint's own reduction lived in its handler and never
+			// reached this caller.
+			return hit(kind, ReduceParcelStatusForUnintaken(p))
 		}
 	case ScanKindLuggage:
 		// Guest-safe by construction: a luggage stub lives in a coat
