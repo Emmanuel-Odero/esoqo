@@ -4506,12 +4506,30 @@ model Parcel {
   lastAttemptAt     DateTime?
   lastAttemptReason String?
 
+  /// Wrong delivery codes guessed against THIS parcel, and when the
+  /// allowance ran out. Deliberately a column on the parcel rather than a
+  /// Redis key: the code is six digits (DeliveryCodeDigits), so the
+  /// courier holding the box can enumerate a million combinations in
+  /// seconds, and a lockout that lives in a cache which reports "zero
+  /// failures" whenever the cache is missing is a lockout that does not
+  /// exist during exactly the incident it exists for. Postgres is already
+  /// the thing deciding whether the code was right, so the counter lives
+  /// where that decision is made and fails closed with everything else.
+  ///
+  /// Reset on a successful delivery (ClearDeliveryCodeFailures) so a
+  /// receiver who fumbled twice and then read it correctly leaves no
+  /// trap behind.
+  deliveryCodeFailures    Int       @default(0)
+  deliveryCodeLockedUntil DateTime?
+
   /// The receiver proving, from their own phone, that they are the
   /// receiver — by typing the deliveryCode only they were sent (see
-  /// dbx.VerifyReceiverCode). Distinct from the courier-side throttle
-  /// in handleDeliverParcel, which is Redis-only and fails open on
-  /// purpose: that one guards a staff endpoint and a lost counter
-  /// merely means a clerk gets more tries. This counter is escalation
+  /// dbx.VerifyReceiverCode). Distinct from the delivery-code throttle
+  /// on deliveryCodeFailures below: that one is the courier-side guess
+  /// counter and now lives in Postgres, because a Redis counter that
+  /// reports zero when Redis is absent takes the whole wall with it and
+  /// a six-digit code becomes enumerable exactly when the guard is
+  /// needed. This counter is escalation
   /// state. Staff have to see it, act on it, and have their grant
   /// survive a Redis restart, so it lives on the row.
   ///
@@ -5388,6 +5406,15 @@ enum ParcelEventKind {
   RECEIVER_AUTH_HARD_LOCKED
   DELIVERY_CODE_REISSUED
   RECEIVER_SELF_CONFIRMED
+  /// A staff-witnessed delivery. The one kind here describing the
+  /// parcel's actual journey rather than the authentication around it,
+  /// and the reason this enum isn't purely about auth: every row above
+  /// it records somebody trying to prove who they were, and nothing
+  /// recorded the hand-over itself. A delivery dispute with a POD photo,
+  /// a GPS fix and a named receiver — and no event row saying the parcel
+  /// was delivered — is the shape of evidence that makes a table nobody
+  /// queries look like a table that lost the fact.
+  DELIVERED_STAFF_WITNESSED
   COURIER_EARNINGS_HELD
   COURIER_EARNINGS_RELEASED
 }

@@ -1795,7 +1795,7 @@ func ImportOrgParcel(ctx context.Context, pool *pgxpool.Pool, orgID string, in I
 		return "", "", &ParcelError{"BAD_INPUT", "Choose a valid parcel type"}
 	}
 
-	deliveryCode, err := generateDeliveryCode()
+	deliveryCode, err := generateUniqueDeliveryCode(ctx, pool)
 	if err != nil {
 		return "", "", err
 	}
