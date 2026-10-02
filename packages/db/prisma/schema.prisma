@@ -4211,7 +4211,14 @@ model Parcel {
   /// ever typed by the receiver at final handoff (see
   /// dbx.DeliverParcel). Proof of receipt, same "a code the last
   /// person types in" shape a pickup code closes a retail order with.
-  deliveryCode String
+  ///
+  /// Unique, because a code that two parcels share does not identify a
+  /// parcel and therefore is not proof of receipt for either. The
+  /// constraint was added after the fact (migration
+  /// 20261001130000_parcel_delivery_code_unique) rather than declared
+  /// here, since the showcase seed had been minting colliding pairs
+  /// and the data had to be corrected first.
+  deliveryCode String @unique
 
   /// The parcel's number in whatever system its owner used before Esoqo
   /// — a courier company importing parcels it already tracks elsewhere

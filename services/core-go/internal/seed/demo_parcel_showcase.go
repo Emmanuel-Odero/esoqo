@@ -275,10 +275,28 @@ func seedShowcaseForOrg(ctx context.Context, pool *pgxpool.Pool, cfg showcaseOrg
 		return &id
 	}
 
+	// The delivery code is a credential now, so it cannot be copied from
+	// the template: two seeded orgs sharing one would violate the unique
+	// index added in 20261001130000_parcel_delivery_code_unique, and
+	// before that index it quietly meant the same code opened two
+	// different parcels. Deriving it from the parcel's own code keeps the
+	// code six digits, keeps it stable across re-seeds (it is a pure
+	// function of the parcel code, which is the seed's upsert key), and
+	// makes it distinct per org without a counter that would drift.
+	deliveryCodeFor := func(parcelCode string) string {
+		var h uint32 = 2166136261 // FNV-1a offset basis
+		for i := 0; i < len(parcelCode); i++ {
+			h ^= uint32(parcelCode[i])
+			h *= 16777619
+		}
+		return fmt.Sprintf("%06d", h%1000000)
+	}
+
 	remap := func(p showcaseParcel) showcaseParcel {
 		out := p
 		out.code = strings.Replace(p.code, "PKG-DEMO-", cfg.codePrefix, 1)
 		out.ticket = strings.Replace(p.ticket, "TCK-DEMO-", cfg.ticketPrefix, 1)
+		out.deliveryCode = deliveryCodeFor(out.code)
 		if cfg.holderOverride != "" && out.holderMsisdn != "" {
 			out.holderMsisdn = cfg.holderOverride
 		}
