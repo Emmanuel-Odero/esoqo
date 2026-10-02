@@ -24,6 +24,7 @@
     "backfill:jamii-site-pages": "tsx prisma/backfill-jamii-site-pages.ts",
     "studio": "prisma studio",
     "audit:verify": "tsx --env-file-if-exists=../../.env src/scripts/verify-chain.ts",
+    "audit:parcel-delivery-codes": "tsx --env-file-if-exists=../../.env scripts/audit-parcel-delivery-codes.ts",
     "verify:business-payment": "tsx --env-file-if-exists=../../.env scripts/verify-business-payment.ts",
     "verify:parking": "tsx --env-file-if-exists=../../.env scripts/verify-parking.ts",
     "verify:receipt": "tsx --env-file-if-exists=../../.env scripts/verify-receipt.ts",
