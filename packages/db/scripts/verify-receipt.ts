@@ -96,7 +96,7 @@ async function main() {
     // first call's row rather than inserting a second one.
     const repeatPayment = await prisma.businessPayment.create({
       data: {
-        payeePartyId: owner.id, payeeEsoqoId: 'ESK-PROBE-KE', payeeName: store.name,
+        payeePartyId: owner.id, payeeEsoqoId: 'probepay482', payeeName: store.name,
         payerMsisdn: '+254712000041', payerName: 'Repeat Buyer', amountKes: 250, status: 'CONFIRMED',
       },
     });
@@ -130,7 +130,7 @@ async function main() {
     console.log('\n== a bare BusinessPayment receipt, awaiting items ==');
     const payment = await prisma.businessPayment.create({
       data: {
-        payeePartyId: owner.id, payeeEsoqoId: 'ESK-PROBE-KE', payeeName: store.name,
+        payeePartyId: owner.id, payeeEsoqoId: 'probepay482', payeeName: store.name,
         payerMsisdn: '+254712000040', payerName: 'Jane Wanjiku', amountKes: 500, status: 'CONFIRMED',
       },
     });
@@ -178,7 +178,7 @@ async function main() {
     // validation exists rather than relying on the total to catch it.
     const shapePayment = await prisma.businessPayment.create({
       data: {
-        payeePartyId: owner.id, payeeEsoqoId: 'ESK-PROBE-KE', payeeName: store.name,
+        payeePartyId: owner.id, payeeEsoqoId: 'probepay482', payeeName: store.name,
         payerMsisdn: '+254712000042', payerName: 'Shape Tester', amountKes: 500, status: 'CONFIRMED',
       },
     });
@@ -235,7 +235,7 @@ async function main() {
     // off the same pre-transaction read, landing on 37 instead of 34.
     const dupePayment = await prisma.businessPayment.create({
       data: {
-        payeePartyId: owner.id, payeeEsoqoId: 'ESK-PROBE-KE', payeeName: store.name,
+        payeePartyId: owner.id, payeeEsoqoId: 'probepay482', payeeName: store.name,
         payerMsisdn: '+254712000043', payerName: 'Dupe Buyer', amountKes: 500, status: 'CONFIRMED',
       },
     });
@@ -261,7 +261,7 @@ async function main() {
     // items yet" before either has written one.
     const racePayment = await prisma.businessPayment.create({
       data: {
-        payeePartyId: owner.id, payeeEsoqoId: 'ESK-PROBE-KE', payeeName: store.name,
+        payeePartyId: owner.id, payeeEsoqoId: 'probepay482', payeeName: store.name,
         payerMsisdn: '+254712000044', payerName: 'Race Buyer', amountKes: 500, status: 'CONFIRMED',
       },
     });

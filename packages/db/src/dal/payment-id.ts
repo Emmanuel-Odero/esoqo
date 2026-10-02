@@ -1,5 +1,6 @@
 import {
-  mintEsoqoCode, generateSystemHandle, generateHandleCandidates, isSystemHandleShape,
+  mintHandle, personHandleCandidates, orgHandleCandidates, randomHandleDigits,
+  generateHandleCandidates, isSystemHandleShape,
 } from '@esoqo/domain';
 import type { MemberRole } from '@prisma/client';
 import { prisma } from '../client';
@@ -28,30 +29,6 @@ export class PaymentIdError extends Error {
     super(msg);
     this.name = 'PaymentIdError';
   }
-}
-
-/**
- * Allocates a code, treating the unique constraint as the only source
- * of truth.
- *
- * This used to pre-check for a clash and retry, which is the shape
- * core-go's retryUnique does too — but a check-then-insert leaves a
- * window between the two statements in which a concurrent minter can
- * take the code, and the loser then surfaces a raw P2002 to the user.
- * Letting the database arbitrate and re-rolling only on 23505 closes
- * the window. Five attempts against ~8.9×10^8 shapes is not a
- * meaningful limit; running out means something is badly wrong.
- */
-export async function allocateEsoqoCode(partyId: string): Promise<string> {
-  for (let attempt = 0; attempt < 5; attempt++) {
-    const code = mintEsoqoCode();
-    try {
-      return (await prisma.esoqoPaymentId.create({ data: { partyId, code } })).code;
-    } catch (err) {
-      if (!isUniqueViolation(err)) throw err;
-    }
-  }
-  throw new PaymentIdError('Could not allocate a Payment ID — try again', 'ALREADY_ISSUED');
 }
 
 export function isUniqueViolation(err: unknown): boolean {
@@ -98,28 +75,92 @@ export function isUniqueViolationOn(err: unknown, columns: string[]): boolean {
 
 /**
  * Allocates a free, human-friendly esoqo ID built from a person's own
- * names — the replacement for allocateEsoqoCode's opaque ESK- shape.
- * Same retry-on-P2002 shape: the database is the only arbiter of
- * uniqueness, so a clash just re-rolls rather than being pre-checked.
+ * names. The database is the only arbiter of uniqueness — the insert
+ * races rather than pre-checking for a clash, because a check-then-insert
+ * leaves a window in which a concurrent minter takes the code and the
+ * loser surfaces a raw P2002.
  *
- * `names` should be the 2-3 official names captured at registration
- * (firstName/middleName/surname). A person with none on file (older
- * data, or a record that only ever had a freeform officialName) falls
- * back to that string's words, so this never has nothing to work with.
+ * The retry budget is spent across every mnemonic the names yield
+ * (personHandleCandidates) rather than re-rolling one. The old ESK- codes
+ * had ~8.9×10^8 fully-random shapes and could not realistically exhaust;
+ * a name-derived handle has no such room — the letters come from the
+ * names, so every "John Kamau" shares `johnkama`/`kamaujoh` and their
+ * 1,000 three-digit tails are a ceiling that grows with the user base.
+ *
+ * `names` should be the official names captured at registration
+ * (firstName/middleName/surname).
  */
 export async function allocateEsoqoHandle(partyId: string, names: string[]): Promise<string> {
   const usable = names.filter((n) => n?.trim());
-  for (let attempt = 0; attempt < 5; attempt++) {
-    const code = generateSystemHandle(usable);
-    try {
-      return (await prisma.esoqoPaymentId.create({
-        data: { partyId, code, source: 'SYSTEM_GENERATED' },
-      })).code;
-    } catch (err) {
-      if (!isUniqueViolation(err)) throw err;
-    }
+  if (personHandleCandidates(usable).length === 0) {
+    throw new PaymentIdError(
+      'Could not derive an esoqo ID — this person has no usable name', 'NOT_VERIFIED',
+    );
   }
+
+  let lastErr: unknown;
+  const [code, ok] = await mintHandle(personHandleCandidates(usable), async (candidate) => {
+    try {
+      await prisma.esoqoPaymentId.create({
+        data: { partyId, code: candidate, source: 'SYSTEM_GENERATED' },
+      });
+      return true;
+    } catch (err) {
+      lastErr = err;
+      if (!isUniqueViolation(err)) throw err;
+      return false;
+    }
+  });
+  if (ok) return code;
+  if (lastErr && !isUniqueViolation(lastErr)) throw lastErr;
   throw new PaymentIdError('Could not allocate an esoqo ID — try again', 'ALREADY_ISSUED');
+}
+
+/**
+ * The organisation counterpart of allocateEsoqoHandle.
+ *
+ * An organisation has no forename/surname, only a name that is a phrase,
+ * so the candidates come from orgHandleCandidates — which never cuts a
+ * token mid-word on the first attempt, for the reason documented there.
+ */
+export async function allocateEsoqoOrgHandle(
+  partyId: string, officialName: string, knownAs?: string | null,
+  client: Pick<typeof prisma, 'esoqoPaymentId'> = prisma,
+): Promise<string> {
+  const candidates = orgHandleCandidates(officialName, knownAs);
+  if (candidates.length === 0) {
+    throw new PaymentIdError(
+      "Could not derive an esoqo ID — this organisation's name has no usable words", 'NOT_VERIFIED',
+    );
+  }
+
+  let lastErr: unknown;
+  const [code, ok] = await mintHandle(candidates, async (candidate) => {
+    try {
+      await client.esoqoPaymentId.create({
+        data: { partyId, code: candidate, source: 'SYSTEM_GENERATED' },
+      });
+      return true;
+    } catch (err) {
+      lastErr = err;
+      if (!isUniqueViolation(err)) throw err;
+      return false;
+    }
+  });
+  if (ok) return code;
+  if (lastErr && !isUniqueViolation(lastErr)) throw lastErr;
+  throw new PaymentIdError('Could not allocate an esoqo ID — try again', 'ALREADY_ISSUED');
+}
+
+/** Distinct full handles an officer can be shown for an organisation, built
+ *  from the same candidate order allocateEsoqoOrgHandle would try. */
+function orgHandleCandidatesForDisplay(officialName: string, knownAs?: string | null, count = 3): string[] {
+  const out: string[] = [];
+  for (const mnemonic of orgHandleCandidates(officialName, knownAs)) {
+    if (out.length >= count) break;
+    out.push(mnemonic + randomHandleDigits());
+  }
+  return out;
 }
 
 /** Issues a Payment ID once the subject holds MSISDN_VERIFIED — the
@@ -310,7 +351,7 @@ export async function assertBusinessOfficer(ctx: Ctx, orgPartyId: string): Promi
 export async function issueBusinessEsoqoPaymentId(ctx: Ctx, orgPartyId: string) {
   const org = await prisma.party.findFirst({
     where: { id: orgPartyId, kind: 'ORGANISATION', deletedAt: null, organisation: { isNot: null } },
-    select: { id: true },
+    select: { id: true, organisation: { select: { officialName: true, knownAs: true } } },
   });
   if (!org) {
     throw new PaymentIdError("That business wasn't found", 'NOT_VERIFIED');
@@ -321,7 +362,9 @@ export async function issueBusinessEsoqoPaymentId(ctx: Ctx, orgPartyId: string) 
   const existing = await prisma.esoqoPaymentId.findUnique({ where: { partyId: orgPartyId } });
   if (existing) return existing;
 
-  const code = await allocateEsoqoCode(orgPartyId);
+  const code = await allocateEsoqoOrgHandle(
+    orgPartyId, org.organisation?.officialName ?? '', org.organisation?.knownAs,
+  );
   await recordAudit(ctx, {
     action: 'paymentid.issued', targetType: 'esoko_payment_id', targetId: orgPartyId,
     payload: { code, forKind: 'ORGANISATION' },
@@ -332,8 +375,7 @@ export async function issueBusinessEsoqoPaymentId(ctx: Ctx, orgPartyId: string) 
 /**
  * The org-equivalent of previewMyEsoqoHandleCandidates / confirmMyEsoqoHandle
  * — a mnemonic handle built from the organisation's own name, offered as
- * a few candidates for an officer to choose from, instead of the legacy
- * opaque ESK- code issueBusinessEsoqoPaymentId still mints.
+ * a few candidates for an officer to choose from.
  *
  * Gated on HANDLE_APPLICATION_APPROVED (see dal/handle-application.ts):
  * unlike a person's handle, which only needs a verified phone, a
@@ -354,9 +396,13 @@ export async function previewBusinessHandleCandidates(ctx: Ctx, orgPartyId: stri
     throw new PaymentIdError('Apply with your legitimacy documents before claiming a handle', 'NOT_APPROVED');
   }
 
-  const org = await prisma.organisation.findUnique({ where: { partyId: orgPartyId }, select: { officialName: true } });
-  const names = (org?.officialName ?? '').split(/\s+/).filter(Boolean);
-  return { existing: null, candidates: generateHandleCandidates(names) };
+  const org = await prisma.organisation.findUnique({
+    where: { partyId: orgPartyId }, select: { officialName: true, knownAs: true },
+  });
+  return {
+    existing: null,
+    candidates: orgHandleCandidatesForDisplay(org?.officialName ?? '', org?.knownAs),
+  };
 }
 
 /**
@@ -383,9 +429,14 @@ export async function getOrgHandleStatus(ctx: Ctx, orgPartyId: string) {
     return { code: existing.code, applicationStatus: 'ISSUED' as const, candidates: [] as string[] };
   }
   if (approved) {
-    const org = await prisma.organisation.findUnique({ where: { partyId: orgPartyId }, select: { officialName: true } });
-    const names = (org?.officialName ?? '').split(/\s+/).filter(Boolean);
-    return { code: null, applicationStatus: 'APPROVED' as const, candidates: generateHandleCandidates(names) };
+    const org = await prisma.organisation.findUnique({
+      where: { partyId: orgPartyId }, select: { officialName: true, knownAs: true },
+    });
+    return {
+      code: null,
+      applicationStatus: 'APPROVED' as const,
+      candidates: orgHandleCandidatesForDisplay(org?.officialName ?? '', org?.knownAs),
+    };
   }
   if (anyDocument) {
     return { code: null, applicationStatus: 'PENDING' as const, candidates: [] as string[] };
@@ -456,13 +507,33 @@ export async function backfillBusinessEsoqoPaymentIds(ctx: Ctx) {
       esoqoPaymentId: { is: null },
       organisation: { isNot: null },
     },
-    select: { id: true, organisation: { select: { officialName: true } } },
+    select: { id: true, organisation: { select: { officialName: true, knownAs: true } } },
   });
 
   const issued: { partyId: string; name: string; code: string }[] = [];
+  const skipped: { partyId: string; reason: string }[] = [];
   for (const org of withoutId) {
-    const code = await allocateEsoqoCode(org.id);
-    issued.push({ partyId: org.id, name: org.organisation?.officialName ?? org.id, code });
+    const name = org.organisation?.officialName ?? '';
+    try {
+      const code = await allocateEsoqoOrgHandle(org.id, name, org.organisation?.knownAs);
+      issued.push({ partyId: org.id, name: name || org.id, code });
+    } catch (err) {
+      // A backfill that aborts on the first nameless organisation mints
+      // nothing for anyone after it, so collect the failures and let the
+      // caller decide what to repair.
+      if (err instanceof PaymentIdError) {
+        skipped.push({ partyId: org.id, reason: err.message });
+        continue;
+      }
+      throw err;
+    }
+  }
+  if (skipped.length > 0) {
+    await recordAudit(ctx, {
+      action: 'paymentid.backfill_skipped', targetType: 'esoko_payment_id',
+      targetId: `${skipped.length}-businesses`,
+      payload: { count: skipped.length, parties: skipped },
+    });
   }
 
   if (issued.length > 0) {

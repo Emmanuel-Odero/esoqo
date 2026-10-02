@@ -61,7 +61,7 @@ async function sweep() {
     await prisma.account.deleteMany({ where: { partyId: id } });
     await prisma.esoqoPaymentId.deleteMany({ where: { partyId: id } });
   }
-  await prisma.esoqoPaymentId.deleteMany({ where: { code: { startsWith: 'ESK-PRBPRK' } } });
+  await prisma.esoqoPaymentId.deleteMany({ where: { code: { startsWith: 'prbprk' } } });
   await prisma.party.deleteMany({ where: { id: { in: parties.map((p) => p.id) } } });
 }
 
@@ -104,7 +104,7 @@ async function main() {
     data: {
       kind: 'ORGANISATION', county: 'Nairobi',
       organisation: { create: { kind: 'BUSINESS', officialName: 'Probe Parking Lots Ltd', knownAs: 'Probe Parking' } },
-      esoqoPaymentId: { create: { code: 'ESK-PRBPRK1-KE' } },
+      esoqoPaymentId: { create: { code: 'prbprk1482' } },
     },
   });
   // A second operator, for the "the lot must be the payee" check.
@@ -112,7 +112,7 @@ async function main() {
     data: {
       kind: 'ORGANISATION', county: 'Nairobi',
       organisation: { create: { kind: 'BUSINESS', officialName: 'Probe Parking Other Ltd' } },
-      esoqoPaymentId: { create: { code: 'ESK-PRBPRK2-KE' } },
+      esoqoPaymentId: { create: { code: 'prbprk2482' } },
     },
   });
 
@@ -135,7 +135,7 @@ async function main() {
   check('found in lower case', (await findParkingLot(lot.code.toLowerCase()))?.code === lot.code);
   check('found with a query string on the QR', (await findParkingLot(`${lot.code}?utm=qr`))?.code === lot.code);
   check('an unknown lot is null, not a throw', (await findParkingLot('PRK-0000-00')) === null);
-  check('a business ID is not a lot', (await findParkingLot('ESK-HWQHDU-KE')) === null);
+  check('a business ID is not a lot', (await findParkingLot('probhwqhdu482')) === null);
   check('nonsense is null', (await findParkingLot('hello')) === null);
 
   // A lot whose operator has lost its Payment ID must not read as

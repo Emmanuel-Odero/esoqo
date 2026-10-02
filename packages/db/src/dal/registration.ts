@@ -1,6 +1,6 @@
 
-import { mintEsoqoCode } from '@esoqo/domain';
 import { prisma } from '../client';
+import { allocateEsoqoOrgHandle } from './payment-id';
 import { requireCapability, systemCtx, type Ctx } from '../capabilities';
 import { recordAudit } from '../audit';
 import type {
@@ -297,6 +297,16 @@ export async function completeRegistration(ctx: Ctx, id: string) {
     if (!reg.county) throw new Error('Cannot complete without a county');
     if (!reg.officialName) throw new Error('Cannot complete without an official name');
 
+    // A person's esoqo handle is derived from their names, so firstName
+    // and surname are compulsory and officialName alone is not enough.
+    // Completing with one freeform name would mint a handle built from a
+    // single word ("john482") or fail outright, and either way the person
+    // ends up with an identifier nobody can read back to them. middleName
+    // stays optional.
+    if (!reg.firstName?.trim() || !reg.surname?.trim()) {
+      throw new Error('Cannot complete without a first name and a surname');
+    }
+
     // At least one of phone/email, and it must be the one actually
     // verified during this flow — a typed-but-unconfirmed contact is not
     // enough to finish, same reasoning as requiring officialName above.
@@ -421,6 +431,11 @@ export async function completeRegistration(ctx: Ctx, id: string) {
       await tx.membership.create({
         data: { personId: personPartyId, orgId: orgParty.id, role: toMemberRole(reg.orgRole) },
       });
+
+      // A group gets its handle at creation, same as a business above —
+      // a group that exists but cannot be paid or recognised on a printed
+      // stand is half-registered.
+      await allocateEsoqoOrgHandle(orgParty.id, reg.orgName!, null, tx as never);
     }
 
     // 2b · a brand-new business, mirrors 2 — bizName set and no
@@ -482,14 +497,10 @@ export async function completeRegistration(ctx: Ctx, id: string) {
       // an ORGANISATION has no phone number to attest to, which is
       // exactly why issueEsoqoPaymentId refuses it and this does not.
       //
-      // No collision retry, unlike allocateEsoqoCode: both the party and
-      // the code were drawn seconds ago, and a unique violation here
-      // would mean 1-in-10^8 bad luck rather than a contended code.
-      // Letting it fail loudly is better than silently paying for a
-      // registration that would not complete.
-      await tx.esoqoPaymentId.create({
-        data: { partyId: bizPartyId, code: mintEsoqoCode() },
-      });
+      // Derived from the business's own name, allocated on the same
+      // transaction as the business itself — minting outside it would
+      // leave a payment ID pointing at an org a rollback erased.
+      await allocateEsoqoOrgHandle(bizPartyId, reg.bizName, null, tx as never);
     }
 
     // 2c · linking to an org already picked via search — a group, a

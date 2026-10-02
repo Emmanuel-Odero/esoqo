@@ -77,7 +77,7 @@ const NOTE_MAX = 140;
 /** What a payer is allowed to see about the business they're paying. */
 export interface PayableBusiness {
   partyId: string;
-  /** The issued Esoqo Payment ID — ESK-4471-KE. The thing they type or
+  /** The issued Esoqo Payment ID — a handle like "johnmutu482". The thing they type or
    *  the thing in the QR. */
   esoqoId: string;
   name: string;

@@ -3,6 +3,7 @@ import { requireCapability, AuthorisationError, type Ctx } from '../capabilities
 import { recordAudit } from '../audit';
 import { normaliseMsisdn } from '@esoqo/domain';
 import type { MemberRole, OrgKind } from '@prisma/client';
+import { allocateEsoqoOrgHandle } from './payment-id';
 
 /** Group membership management — both the admin side (staff, unqualified
  *  membership.write) and the self-serve side (a group's own officers,
@@ -209,9 +210,17 @@ export async function createOwnGroup(
       data: { personId: ctx.partyId!, orgId: p.id, role: 'CHAIRPERSON' },
     });
 
+    // The group is given its Esoqo handle here, at creation — the same
+    // moment a business gets one in completeRegistration. Allocated on
+    // this transaction so a rollback cannot leave a payment ID pointing at
+    // a group that no longer exists.
+    const handle = await allocateEsoqoOrgHandle(
+      p.id, officialName, input.knownAs?.trim() || null, tx as never,
+    );
+
     await recordAudit(ctx, {
       action: 'group.created', targetType: 'organisation', targetId: p.id,
-      payload: { kind: input.orgKind, officialName, county: input.county, self_serve: true },
+      payload: { kind: input.orgKind, officialName, county: input.county, handle, self_serve: true },
     }, tx as never);
     await recordAudit(ctx, {
       action: 'membership.added', targetType: 'membership', targetId: m.id,
