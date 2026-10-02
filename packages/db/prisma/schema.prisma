@@ -3477,9 +3477,9 @@ enum EsoqoIdSource {
 model EsoqoPaymentId {
   partyId          String        @id @db.Uuid
   party            Party         @relation(fields: [partyId], references: [id], onDelete: Cascade)
-  /// Either the legacy "ESK-4471-KE" shape (still minted nowhere, but
-  /// still resolvable — see pay-code.ts) or the newer human-friendly
-  /// handle shape from handle-code.ts, e.g. "mutukuka482".
+  /// Always the human-friendly handle shape from handle-code.ts, e.g.
+  /// "mutukuka482". The old "ESK-4471-KE" code shape is retired and no
+  /// longer accepted anywhere — mint or parse.
   code             String        @unique
   /// SYSTEM_GENERATED handles never expire; premium ones do, and are
   /// checked lazily on read (see isHandleExpired) rather than on a
