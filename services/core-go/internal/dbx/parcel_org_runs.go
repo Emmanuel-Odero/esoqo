@@ -688,30 +688,79 @@ func CancelRun(ctx context.Context, pool *pgxpool.Pool, orgID, runID string) err
 		return &ParcelError{"NOT_FOUND", "That run isn't active — or isn't one of yours"}
 	}
 
-	// The still-loaded parcels go back to RECEIVED_AT_COUNTER: the box is
-	// physically at the origin station, no run is carrying it, and that
-	// is the state the ops queue's "ready_to_load" is built to pick up
-	// again. Writing a LOADING row per parcel instead would need a
-	// synthetic shipment nobody is ever going to dispatch; returning
-	// them to a status that means "awaiting a run" is the state the rest
-	// of the vertical already knows how to move them out of.
+	// Cargo is released in one of two ways, and which one is correct
+	// depends on whether the run had actually left. Both used to be the
+	// second one, unconditionally.
+	//
+	// A LOADING run never departed: its boxes are sitting at the origin
+	// station and "received at counter" is the truth. They go back to
+	// RECEIVED_AT_COUNTER, which is also the state the ops queue's
+	// ready_to_load is built to pick up again.
+	//
+	// A DEPARTED run was on the road. Its boxes are somewhere between the
+	// two stations — not at the origin, and not necessarily at the
+	// destination either. Rewinding them to RECEIVED_AT_COUNTER asserted a
+	// location nobody had observed, and did it silently: the parcel's
+	// public tracker would go from "in transit, courier en route" back to
+	// "received at Kilimani Hub", so a sender would be told their box was
+	// waiting at the depot when the vehicle was halfway to Westlands. The
+	// parcel is also no longer claimable by this run, so nobody would
+	// touch it again without a platform admin intervening.
+	//
+	// So departed cargo is left where it is and made someone's problem
+	// explicitly: the parcel keeps its status (it really is still moving,
+	// or still sitting in a vehicle nobody has accounted for), and the
+	// manifest item is stamped as an exception rather than quietly
+	// offloaded. That routes it to the ops queue's arrival_exception,
+	// which is built to find exactly "an item with an exception and no
+	// offload" — so the boxes surface to a human instead of to nobody.
+	//
+	// This is the one place in the vertical where a status change is a
+	// product decision rather than a mechanical consequence, and it is
+	// deliberately the conservative one: claiming less about where a box
+	// is beats asserting a location the system does not know.
 	if _, err := tx.Exec(ctx, `
 		UPDATE parcel p SET status = 'RECEIVED_AT_COUNTER'
 		FROM parcel_shipment_item i
 		WHERE i."shipmentId" = $1 AND i."parcelId" = p.id
 		  AND i."loadedAt" IS NOT NULL AND i."offloadedAt" IS NULL
-		  AND p.status = 'IN_TRANSIT'`, runID); err != nil {
+		  AND p.status = 'IN_TRANSIT'
+		  AND EXISTS (
+			SELECT 1 FROM parcel_shipment s
+			WHERE s.id = $1 AND s."startedAt" IS NULL
+		  )`, runID); err != nil {
 		return err
 	}
 
 	// The manifest items are closed out rather than left open: an item
-	// with loadedAt and no offloadedAt is exactly what the "arrival
-	// exception" and per-run outstanding counts are built to find, so a
-	// called-off run would report forever as a run with boxes still on
-	// board. Marked offloaded (not deleted) so the load it records
-	// survives for the audit trail.
+	// with loadedAt and no offloadedAt is exactly what the per-run
+	// outstanding counts are built to find, so a called-off run would
+	// otherwise report forever as a run with boxes still on board.
+	// Marked offloaded (not deleted) so the load it records survives for
+	// the audit trail.
+	//
+	// Departed cargo is the exception to the exception: it is stamped
+	// exceptionCode = 'RUN_CANCELLED' and deliberately left un-offloaded,
+	// which is what puts it in the arrival_exception queue. Offloading it
+	// here would hide the very thing an operator needs to see.
 	if _, err := tx.Exec(ctx, `
-		UPDATE parcel_shipment_item SET "offloadedAt" = COALESCE("offloadedAt", now())
+		UPDATE parcel_shipment_item SET
+			"offloadedAt"  = CASE WHEN EXISTS (
+			                    SELECT 1 FROM parcel_shipment s
+			                    WHERE s.id = $1 AND s."startedAt" IS NULL)
+			                  THEN COALESCE("offloadedAt", now())
+			                  ELSE "offloadedAt" END,
+			"exceptionCode" = CASE WHEN EXISTS (
+			                    SELECT 1 FROM parcel_shipment s
+			                    WHERE s.id = $1 AND s."startedAt" IS NOT NULL)
+			                  THEN COALESCE("exceptionCode", 'RUN_CANCELLED')
+			                  ELSE "exceptionCode" END,
+			"exceptionNote" = CASE WHEN EXISTS (
+			                    SELECT 1 FROM parcel_shipment s
+			                    WHERE s.id = $1 AND s."startedAt" IS NOT NULL)
+			                  THEN COALESCE("exceptionNote",
+			                       'Run cancelled after departure — cargo location unconfirmed, needs recount')
+			                  ELSE "exceptionNote" END
 		WHERE "shipmentId" = $1 AND "loadedAt" IS NOT NULL AND "offloadedAt" IS NULL`, runID); err != nil {
 		return err
 	}
