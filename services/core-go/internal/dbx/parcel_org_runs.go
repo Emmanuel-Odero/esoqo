@@ -111,28 +111,28 @@ type RunPing struct {
 }
 
 type Dispatch struct {
-	ID                 string            `json:"id"`
-	VehiclePlate       string            `json:"vehiclePlate"`
-	VehicleType        string            `json:"vehicleType"`
-	Origin             *RunStation  `json:"origin"`
-	Destination        *RunStation  `json:"destination"`
-	Status             string            `json:"status"`
-	Notes              *string           `json:"notes"`
-	CurrentLat         *float64          `json:"currentLat"`
-	CurrentLng         *float64          `json:"currentLng"`
-	CurrentAt          *string           `json:"currentAt"`
-	ArrivedAt          *string           `json:"arrivedAt"`
-	ReceivedBy         *string           `json:"receivedBy"`
-	CreatedAt          string            `json:"createdAt"`
+	ID           string      `json:"id"`
+	VehiclePlate string      `json:"vehiclePlate"`
+	VehicleType  string      `json:"vehicleType"`
+	Origin       *RunStation `json:"origin"`
+	Destination  *RunStation `json:"destination"`
+	Status       string      `json:"status"`
+	Notes        *string     `json:"notes"`
+	CurrentLat   *float64    `json:"currentLat"`
+	CurrentLng   *float64    `json:"currentLng"`
+	CurrentAt    *string     `json:"currentAt"`
+	ArrivedAt    *string     `json:"arrivedAt"`
+	ReceivedBy   *string     `json:"receivedBy"`
+	CreatedAt    string      `json:"createdAt"`
 	// The route followed, when one was chosen. Nil for an ad-hoc run.
-	RouteID            *string           `json:"routeId"`
-	RouteName          *string           `json:"routeName"`
+	RouteID   *string `json:"routeId"`
+	RouteName *string `json:"routeName"`
 	// How many parcels are aboard — the number the merge exists to make
 	// answerable from the board. A dispatch could never report it.
-	Loaded             int               `json:"loaded"`
-	Crew               []RunCrew    `json:"crew"`
-	Receivers          []RunReceiver `json:"receivers"`
-	Trail              []RunPing    `json:"trail"`
+	Loaded    int           `json:"loaded"`
+	Crew      []RunCrew     `json:"crew"`
+	Receivers []RunReceiver `json:"receivers"`
+	Trail     []RunPing     `json:"trail"`
 }
 
 type RunCrewInput struct {
@@ -157,11 +157,11 @@ type CreateRunInput struct {
 	// an ad-hoc run — a vehicle at the door that nobody scheduled — and
 	// must stay possible, or the counter stops during exactly the rush
 	// the ad-hoc run exists to absorb (ADR-0006).
-	RouteID *string
-	Notes                *string
-	Crew                 []RunCrewInput
-	Receivers            []RunReceiverInput
-	CreatedByStaffID     *string
+	RouteID          *string
+	Notes            *string
+	Crew             []RunCrewInput
+	Receivers        []RunReceiverInput
+	CreatedByStaffID *string
 }
 
 // runVehicleTypes — the console's vehicle picker. Free text would let

@@ -154,13 +154,13 @@ type ParcelPartyView struct {
 	// contact card if the page is left open or forwarded — the same
 	// judgement ParcelLabel.ReceiverPhoneLast4 already makes about what
 	// rides in the open.
-	CounterpartyName      string  `json:"counterpartyName"`
+	CounterpartyName       string `json:"counterpartyName"`
 	CounterpartyPhoneLast4 string `json:"counterpartyPhoneLast4"`
 
 	// Sender-only: what this cost and whether it has been paid back.
-	PriceKesOwn    *string `json:"priceKesOwn,omitempty"`
-	PaymentMethod  *string `json:"paymentMethod,omitempty"`
-	RefundStatus   *string `json:"refundStatus,omitempty"`
+	PriceKesOwn   *string `json:"priceKesOwn,omitempty"`
+	PaymentMethod *string `json:"paymentMethod,omitempty"`
+	RefundStatus  *string `json:"refundStatus,omitempty"`
 
 	// Receiver-only: where to go and what to bring. The exact pin is
 	// here and never on the public view — it is more precise than the
