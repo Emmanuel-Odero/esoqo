@@ -275,28 +275,25 @@ func seedShowcaseForOrg(ctx context.Context, pool *pgxpool.Pool, cfg showcaseOrg
 		return &id
 	}
 
-	// The delivery code is a credential now, so it cannot be copied from
-	// the template: two seeded orgs sharing one would violate the unique
-	// index added in 20261001130000_parcel_delivery_code_unique, and
-	// before that index it quietly meant the same code opened two
-	// different parcels. Deriving it from the parcel's own code keeps the
-	// code six digits, keeps it stable across re-seeds (it is a pure
-	// function of the parcel code, which is the seed's upsert key), and
-	// makes it distinct per org without a counter that would drift.
-	deliveryCodeFor := func(parcelCode string) string {
-		var h uint32 = 2166136261 // FNV-1a offset basis
-		for i := 0; i < len(parcelCode); i++ {
-			h ^= uint32(parcelCode[i])
-			h *= 16777619
-		}
-		return fmt.Sprintf("%06d", h%1000000)
-	}
+	// Codes handed out during this run. The database is the authority on
+	// what is taken, but the rows this same run has already written are
+	// only visible to it one statement at a time, so a seed that inserts
+	// two parcels with the same code in one pass can read as "free" for
+	// both unless it also remembers what it just handed out.
+	handedCodes := map[string]bool{}
 
-	remap := func(p showcaseParcel) showcaseParcel {
+	remap := func(p showcaseParcel) (showcaseParcel, error) {
 		out := p
 		out.code = strings.Replace(p.code, "PKG-DEMO-", cfg.codePrefix, 1)
 		out.ticket = strings.Replace(p.ticket, "TCK-DEMO-", cfg.ticketPrefix, 1)
-		out.deliveryCode = deliveryCodeFor(out.code)
+		// The code is reserved before the parcel row is written, so a
+		// collision walks forward from the derived digits rather than
+		// aborting the seed on the unique index.
+		deliveryCode, err := reserveShowcaseDeliveryCode(ctx, pool, out.code, handedCodes)
+		if err != nil {
+			return out, err
+		}
+		out.deliveryCode = deliveryCode
 		if cfg.holderOverride != "" && out.holderMsisdn != "" {
 			out.holderMsisdn = cfg.holderOverride
 		}
@@ -323,11 +320,14 @@ func seedShowcaseForOrg(ctx context.Context, pool *pgxpool.Pool, cfg showcaseOrg
 			)
 			out.origin, out.dest = area.Replace(out.origin), area.Replace(out.dest)
 		}
-		return out
+		return out, nil
 	}
 
 	for _, tpl := range showcaseParcels {
-		p := remap(tpl)
+		p, err := remap(tpl)
+		if err != nil {
+			return err
+		}
 		platformFee := p.priceKES * commissionPct / 100
 		orgEarnings := p.priceKES - platformFee
 		paidAgo := p.createdDaysAgo - 0.05
@@ -344,7 +344,7 @@ func seedShowcaseForOrg(ctx context.Context, pool *pgxpool.Pool, cfg showcaseOrg
 			codStatus = "PENDING"
 		}
 		var existing string
-		err := pool.QueryRow(ctx, `SELECT id FROM parcel WHERE code = $1`, p.code).Scan(&existing)
+		err = pool.QueryRow(ctx, `SELECT id FROM parcel WHERE code = $1`, p.code).Scan(&existing)
 		if err == nil {
 			// Refresh the tour-facing fields; never stomp money already
 			// settled by a real flow, only backfill nulls.
