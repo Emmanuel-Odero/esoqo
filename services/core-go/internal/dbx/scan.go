@@ -12,6 +12,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/esoqo/core-go/internal/fleetqr"
+	"github.com/esoqo/core-go/internal/handlecode"
 )
 
 // Scan kinds — one dispatcher for every physical code in the Esoqo
@@ -160,7 +161,6 @@ var shortCodePrefixes = []struct {
 	{prefix: "VCH-", kind: ScanKindVoucher, checkedLen: 6},
 	{prefix: "TKT-", kind: ScanKindTicket},
 	{prefix: "PKP-", kind: ScanKindOrder},
-	{prefix: "ESK-", kind: ScanKindParty},
 	{prefix: "PKG-", kind: ScanKindParcel, checkedLen: 6},
 	// Checked, like BUS-/TRIP-/VCH-/PKG-: a LUG- code is read aloud off
 	// a paper stub and typed by hand more than any other code here, so
@@ -230,9 +230,10 @@ type OrderHit struct {
 	ReadyAt    *string `json:"readyAt"`
 }
 
-// PartyHit resolves an Esoqo Payment ID (ESK-…-KE): the public handle
-// card — what a peer or a same-store register sees when the card's QR
-// is pointed at them, before any payment happens.
+// PartyHit resolves an Esoqo Payment ID (a name-derived handle such as
+// "johnmutu482"): the public handle card — what a peer or a same-store
+// register sees when the card's QR is pointed at them, before any payment
+// happens.
 type PartyHit struct {
 	EsoqoID      string `json:"esoqoId"`
 	DisplayName  string `json:"displayName"`
@@ -337,6 +338,19 @@ func ResolveScan(ctx context.Context, pool *pgxpool.Pool, raw, qrSecret string, 
 			return unknownHit(), nil
 		}
 		if h := resolveShortCode(ctx, pool, reg.kind, code, qrSecret); h != nil {
+			return h, nil
+		}
+		return unknownHit(), nil
+	}
+
+	// A handle is the one scan target with no registered prefix — it is
+	// read straight off a printed stand as bare lowercase-and-digits, so
+	// there is nothing for the loop above to match on. Route it by shape
+	// instead, before the SKU fallback below: a handle is a deliberately
+	// narrow shape and a far more deliberate thing to point a camera at
+	// than a shelf barcode, so when both could match, the handle wins.
+	if handlecode.IsSystemHandleShape(code) {
+		if h := resolveShortCode(ctx, pool, ScanKindParty, code, qrSecret); h != nil {
 			return h, nil
 		}
 		return unknownHit(), nil
@@ -495,9 +509,9 @@ func ResolveOrderByPickupCode(ctx context.Context, pool *pgxpool.Pool, code stri
 	}, nil
 }
 
-// ResolvePartyByPaymentID — ESK-…-KE → the public payment card: who
-// holds it, whether the number is verified, and whether it's a person
-// or a business. No msisdn, no contact detail — just enough for a peer
+// ResolvePartyByPaymentID — a handle (e.g. "johnmutu482") → the public
+// payment card: who holds it, whether the number is verified, and whether
+// it's a person or a business. No msisdn, no contact detail — just enough for a peer
 // to know they're paying the right entity.
 func ResolvePartyByPaymentID(ctx context.Context, pool *pgxpool.Pool, code string) (*PartyHit, error) {
 	var h PartyHit

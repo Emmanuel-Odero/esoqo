@@ -312,7 +312,7 @@ func (s *Server) handleMe(c *gin.Context) {
 		return
 	}
 
-	// Lazily provisions a short "ESK-####-KE" Esoqo ID the first time a
+	// Lazily provisions a name-derived esoqo handle the first time a
 	// profile is fetched — every account gets one, without a separate
 	// "activate" step, since core-go already verified the phone via OTP
 	// before this session existed. See dbx.EnsureEsoqoPaymentId.

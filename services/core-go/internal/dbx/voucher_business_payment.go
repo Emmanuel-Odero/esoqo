@@ -34,9 +34,9 @@ type VoucherBusinessPaymentResult struct {
 // resolvePayableBusiness mirrors the guarantees dal/business-payment.ts's
 // findPayableBusinesses enforces on the TS side — not deleted, an actual
 // ORGANISATION, and an issued, unsuspended Esoqo Payment ID — trying the
-// identifier as typed, upper-cased (the legacy ESK-…-KE shape) and
-// lower-cased (the newer handle shape) so a scanner's stray case doesn't
-// miss a real match.
+// identifier as typed, upper-cased and lower-cased so a scanner's stray
+// case doesn't miss a real match. Handles are minted lower-case, so the
+// lower-cased variant is the one that normally lands.
 func resolvePayableBusiness(ctx context.Context, pool *pgxpool.Pool, identifier string) (partyID, name string, err error) {
 	raw := strings.TrimSpace(identifier)
 	if raw == "" {

@@ -602,7 +602,7 @@ type ParcelOrgStaff struct {
 	IsContact bool    `json:"isContact"`
 	PartyID   *string `json:"partyId"`
 	StationID *string `json:"stationId"`
-	// Msisdn / EsoqoID — the phone and the ESK-… handle this person can
+	// Msisdn / EsoqoID — the phone and the esoqo handle this person can
 	// sign in with, joined out from their Party. Surfaced so an admin can
 	// read a login back to someone who forgot it, and so the roster shows
 	// a credential actually exists rather than a bare uuid. Both nil for
@@ -819,8 +819,8 @@ type OrgLiveParcel struct {
 // OrgLiveView — everything the company's live dispatch map needs in one
 // round trip, plus the stations that anchor it.
 type OrgLiveView struct {
-	Riders   []OrgLiveRider    `json:"riders"`
-	Parcels  []OrgLiveParcel   `json:"parcels"`
+	Riders   []OrgLiveRider     `json:"riders"`
+	Parcels  []OrgLiveParcel    `json:"parcels"`
 	Stations []ParcelOrgStation `json:"stations"`
 }
 
@@ -926,12 +926,12 @@ type OrgParcelLabel struct {
 	LengthCm      *float64 `json:"lengthCm"`
 	WidthCm       *float64 `json:"widthCm"`
 	HeightCm      *float64 `json:"heightCm"`
-	UsedAt          *string `json:"usedAt"`
-	VoidedAt        *string `json:"voidedAt"`
-	VoidedReason    *string `json:"voidedReason"`
-	ParcelID        *string `json:"parcelId"`
-	ParcelCode      *string `json:"parcelCode"`
-	ParcelStatus    *string `json:"parcelStatus"`
+	UsedAt        *string  `json:"usedAt"`
+	VoidedAt      *string  `json:"voidedAt"`
+	VoidedReason  *string  `json:"voidedReason"`
+	ParcelID      *string  `json:"parcelId"`
+	ParcelCode    *string  `json:"parcelCode"`
+	ParcelStatus  *string  `json:"parcelStatus"`
 	// Batch run + QR signature, so a resolved label reprints genuine
 	// without a second fetch. Signed by the handler (secret owner).
 	BatchID *string `json:"batchId"`

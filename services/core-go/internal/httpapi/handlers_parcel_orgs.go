@@ -1540,7 +1540,7 @@ func (s *Server) handleAdminUpsertParcelOrgStaff(c *gin.Context) {
 		}
 		partyID = &resolvedPartyID
 		// Mint their Esoqo ID now that staff are vouching for the number.
-		// Without this an invited manager had a Party but no ESK-… handle,
+		// Without this an invited manager had a Party but no esoqo handle,
 		// so the roster showed no code and they alone couldn't use the
 		// "sign in with an Esoqo ID" path. Best-effort: a failed mint must
 		// not stop the invite that's already on its way.
@@ -1574,7 +1574,7 @@ func (s *Server) handleAdminUpsertParcelOrgStaff(c *gin.Context) {
 
 // handleAdminIssueParcelOrgStaffID — POST
 // /v1/admin/parcels/orgs/:id/staff/:staffId/issue-id. Mints (or returns)
-// the ESK-… handle a roster member signs in with, so an admin can read
+// the esoqo handle a roster member signs in with, so an admin can read
 // it back to them. Needed because staff created before the invite flow
 // minted IDs have a Party and a phone but no code at all, which is
 // exactly the "I can't see their Esoqo ID" gap. Idempotent — a member

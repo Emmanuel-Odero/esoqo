@@ -18,26 +18,25 @@ import (
 // Alphabet is the unambiguous code alphabet: no 0/O, 1/I or L — the
 // characters most often mistyped on a keypad or USSD handset. Every
 // human-typable short code in the product (trip, voucher, ticket,
-// pickup, payment id) draws from this same set so one resolver grammar
+// pickup, parcel) draws from this same set so one resolver grammar
 // covers them all.
 const Alphabet = "ABCDEFGHJKMNPQRSTUVWXYZ23456789"
 
 // Prefix is one registered code kind. A short-code prefix is the first
 // thing a scanner sees — BUS-/TRIP- (boarding), VCH- (vouchers),
-// TKT- (event tickets), PKP- (store pickup), ESK- (payment id) — so
+// TKT- (event tickets), PKP- (store pickup), PKG- (parcels) — so
 // every mint MUST go through a registered prefix to keep the smuggler
 // exact. Prefixes are uppercase by convention.
 type Prefix string
 
 // Registered prefixes — the single namespace table for short codes.
 const (
-	PrefixTrip      Prefix = "TRIP" // trip token, rotated per trip
-	PrefixBus       Prefix = "BUS"  // passenger-facing boarding code
-	PrefixVoucher   Prefix = "VCH"
-	PrefixTicket    Prefix = "TKT"
-	PrefixPickup    Prefix = "PKP"
-	PrefixPaymentID Prefix = "ESK"
-	PrefixParcel    Prefix = "PKG"
+	PrefixTrip    Prefix = "TRIP" // trip token, rotated per trip
+	PrefixBus     Prefix = "BUS"  // passenger-facing boarding code
+	PrefixVoucher Prefix = "VCH"
+	PrefixTicket  Prefix = "TKT"
+	PrefixPickup  Prefix = "PKP"
+	PrefixParcel  Prefix = "PKG"
 	// PrefixServiceTicket — Parcel.serviceTicketNumber's own prefix,
 	// deliberately distinct from PKG so the two can never be confused
 	// side by side on a printed slip or a counter screen.
@@ -61,7 +60,7 @@ const LuggageCodeLen = 6
 // ValidPrefix reports whether p is a registered code prefix.
 func ValidPrefix(p Prefix) bool {
 	switch p {
-	case PrefixTrip, PrefixBus, PrefixVoucher, PrefixTicket, PrefixPickup, PrefixPaymentID, PrefixParcel, PrefixServiceTicket, PrefixLuggage:
+	case PrefixTrip, PrefixBus, PrefixVoucher, PrefixTicket, PrefixPickup, PrefixParcel, PrefixServiceTicket, PrefixLuggage:
 		return true
 	}
 	return false
