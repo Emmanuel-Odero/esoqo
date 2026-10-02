@@ -203,9 +203,17 @@ func (s *OtpService) IssueOtp(ctx context.Context, msisdn string, purpose OtpPur
 	pipe.Expire(ctx, sendCountKey, time.Hour)
 	// The spend reservation was already taken above — incrementing again
 	// here would double-count every send against the cap.
-	if _, err := pipe.Exec(ctx); err != nil {
+	results, err := pipe.Exec(ctx)
+	if err != nil {
 		releaseSpend()
-		return nil, err
+		// If Redis transaction failed (e.g., memory limit reached, connection lost),
+		// don't proceed to send SMS. This ensures we never send a code that wasn't
+		// successfully stored, which would cause immediate "That code has expired" errors.
+		return nil, fmt.Errorf("failed to store OTP: %w", err)
+	}
+	if len(results) == 0 {
+		releaseSpend()
+		return nil, fmt.Errorf("failed to store OTP: empty transaction results")
 	}
 
 	if SmsProvider() == "console" {
