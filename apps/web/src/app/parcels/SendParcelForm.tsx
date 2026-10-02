@@ -1,25 +1,27 @@
-'use client';
-import { toCentsOrZero } from '@esoqo/domain';
-import { useEffect, useMemo, useRef, useState, useTransition } from 'react';
-import { useRouter } from 'next/navigation';
-import { Icon } from '@esoqo/ui';
+"use client";
+import { toCentsOrZero } from "@esoqo/domain";
+import { useEffect, useMemo, useRef, useState, useTransition } from "react";
+import { useRouter } from "next/navigation";
+import { Icon } from "@esoqo/ui";
 import {
   actionBookParcel,
-  type ParcelPricingView, type ParcelZoneView,
-  type ParcelAgentView, type WalkInStationView,
-} from './actions';
-import { actionSaveCounterTicketDraft } from './counter-ticket-actions';
+  type ParcelPricingView,
+  type ParcelZoneView,
+  type ParcelAgentView,
+  type WalkInStationView,
+} from "./actions";
+import { actionSaveCounterTicketDraft } from "./counter-ticket-actions";
 
 /** The 5 brackets from the standard rate card — id is the wire value
  *  core-go expects, label is what the sender sees. Mirrors
  *  mobile/esoqo_app's parcel_models.dart parcelTypes exactly, so the
  *  same booking picks read identically across app and web. */
 const PARCEL_TYPES = [
-  ['ENVELOPE_DOCUMENT', 'Envelope / Document'],
-  ['SMALL', 'Small parcel'],
-  ['MEDIUM', 'Medium parcel'],
-  ['LARGE', 'Large parcel'],
-  ['HEAVY_OVERSIZE', 'Heavy / Oversize'],
+  ["ENVELOPE_DOCUMENT", "Envelope / Document"],
+  ["SMALL", "Small parcel"],
+  ["MEDIUM", "Medium parcel"],
+  ["LARGE", "Large parcel"],
+  ["HEAVY_OVERSIZE", "Heavy / Oversize"],
 ] as const;
 
 /**
@@ -42,7 +44,7 @@ const PARCEL_TYPES = [
  * information reaches them — which at a counter, reading a number off
  * a customer's phone, is rarely top to bottom.
  */
-type Stage = 'form' | 'success';
+type Stage = "form" | "success";
 
 /** Which wording of Esoqo's shipping terms this form showed.
  *
@@ -50,17 +52,24 @@ type Stage = 'form' | 'success';
  * dispute "they accepted the terms" is worth very little next to "they
  * accepted THIS text, on this date". Bump whenever the terms change;
  * do not reuse a version for altered wording. */
-const TERMS_VERSION = '2026-09-01';
+const TERMS_VERSION = "2026-09-01";
 
 const fieldStyle: React.CSSProperties = {
-  width: '100%', padding: '10px 14px', border: '1.5px solid var(--line)', borderRadius: 8, fontSize: '.95rem',
+  width: "100%",
+  padding: "10px 14px",
+  border: "1.5px solid var(--line)",
+  borderRadius: 8,
+  fontSize: ".95rem",
 };
 
 /** A quiet eyebrow above the first heading — what this card is, before
  *  the first question. It used to count steps; there is one now. */
 const STEP_EYEBROW: React.CSSProperties = {
-  margin: '0 0 4px', fontSize: '.72rem', letterSpacing: '.12em',
-  textTransform: 'uppercase', fontFamily: 'var(--font-mono)',
+  margin: "0 0 4px",
+  fontSize: ".72rem",
+  letterSpacing: ".12em",
+  textTransform: "uppercase",
+  fontFamily: "var(--font-mono)",
 };
 
 /** Remembers the last sender/receiver typed on THIS device, so a
@@ -68,17 +77,20 @@ const STEP_EYEBROW: React.CSSProperties = {
  *  Deliberately not account-based: this page is guest-only by design
  *  (see this file's own top comment), so localStorage — not a session
  *  — is the only "who was here before" this page is allowed to know. */
-const LAST_PARTY_KEY = 'esoqo:send-parcel:last-party';
+const LAST_PARTY_KEY = "esoqo:send-parcel:last-party";
 
 interface LastParty {
-  senderName: string; senderMsisdn: string; receiverName: string; receiverMsisdn: string;
+  senderName: string;
+  senderMsisdn: string;
+  receiverName: string;
+  receiverMsisdn: string;
 }
 
 function loadLastParty(): LastParty | null {
   try {
-    if (typeof window === 'undefined') return null;
+    if (typeof window === "undefined") return null;
     const raw = window.localStorage.getItem(LAST_PARTY_KEY);
-    return raw ? JSON.parse(raw) as LastParty : null;
+    return raw ? (JSON.parse(raw) as LastParty) : null;
   } catch {
     return null;
   }
@@ -98,52 +110,74 @@ function saveLastParty(p: LastParty) {
  *  and read back both here (resuming the form) and by the clerk's own
  *  claim screen (CounterQueueClient) — one shape, two readers. */
 interface SendParcelDraft {
-  senderName: string; senderMsisdn: string; receiverName: string; receiverMsisdn: string;
-  parcelType: string; weightKg: string; fragile: boolean;
-  originLabel: string; destinationLabel: string;
-  declaredContents: string; declaredValue: string; notes: string;
+  senderName: string;
+  senderMsisdn: string;
+  receiverName: string;
+  receiverMsisdn: string;
+  parcelType: string;
+  weightKg: string;
+  fragile: boolean;
+  originLabel: string;
+  destinationLabel: string;
+  declaredContents: string;
+  declaredValue: string;
+  notes: string;
 }
 
-export function SendParcelForm(
-  { pricing, zones, agents, stations, ticketId, initialDraft }:
-  {
-    pricing: ParcelPricingView[]; zones: ParcelZoneView[];
-    agents: ParcelAgentView[]; stations: WalkInStationView[];
-    /** Set when this form was opened from a counter ticket's "fill in
-     *  details while you wait" link. In this mode the form never books
-     *  anything itself — a clerk does that at the counter once the
-     *  ticket is claimed — it only autosaves into the ticket's own
-     *  draftDetails and hands the sender back to their ticket screen. */
-    ticketId?: string;
-    initialDraft?: Record<string, unknown> | null;
-  },
-) {
+export function SendParcelForm({
+  pricing,
+  zones,
+  agents,
+  stations,
+  ticketId,
+  initialDraft,
+}: {
+  pricing: ParcelPricingView[];
+  zones: ParcelZoneView[];
+  agents: ParcelAgentView[];
+  stations: WalkInStationView[];
+  /** Set when this form was opened from a counter ticket's "fill in
+   *  details while you wait" link. In this mode the form never books
+   *  anything itself — a clerk does that at the counter once the
+   *  ticket is claimed — it only autosaves into the ticket's own
+   *  draftDetails and hands the sender back to their ticket screen. */
+  ticketId?: string;
+  initialDraft?: Record<string, unknown> | null;
+}) {
   const router = useRouter();
   const draft = initialDraft as Partial<SendParcelDraft> | null | undefined;
   // ── What's being sent, and where ────────────────────────────────────
-  const [parcelType, setParcelType] = useState<string>(draft?.parcelType || PARCEL_TYPES[0][0]);
-  const [weightKg, setWeightKg] = useState(draft?.weightKg ?? '');
+  const [parcelType, setParcelType] = useState<string>(
+    draft?.parcelType || PARCEL_TYPES[0][0],
+  );
+  const [weightKg, setWeightKg] = useState(draft?.weightKg ?? "");
   const [fragile, setFragile] = useState(draft?.fragile ?? false);
-  const [originLabel, setOriginLabel] = useState(draft?.originLabel ?? '');
-  const [destinationLabel, setDestinationLabel] = useState(draft?.destinationLabel ?? '');
-  const [originZoneId, setOriginZoneId] = useState('');
-  const [destinationZoneId, setDestinationZoneId] = useState('');
+  const [originLabel, setOriginLabel] = useState(draft?.originLabel ?? "");
+  const [destinationLabel, setDestinationLabel] = useState(
+    draft?.destinationLabel ?? "",
+  );
+  const [originZoneId, setOriginZoneId] = useState("");
+  const [destinationZoneId, setDestinationZoneId] = useState("");
 
   // ── How it reaches a courier's hands in the first place ─────────────
   // SCHEDULED_PICKUP is the only path that existed before walk-in
   // stations did, so it stays the default — a sender who says nothing
   // gets exactly the flow they'd have gotten before this shipped.
-  const [originMethod, setOriginMethod] = useState<'SCHEDULED_PICKUP' | 'SELF_DROPOFF'>('SCHEDULED_PICKUP');
-  const [dropoffStationId, setDropoffStationId] = useState('');
+  const [originMethod, setOriginMethod] = useState<
+    "SCHEDULED_PICKUP" | "SELF_DROPOFF"
+  >("SCHEDULED_PICKUP");
+  const [dropoffStationId, setDropoffStationId] = useState("");
   const chosenStation = useMemo(
     () => stations.find((s) => s.id === dropoffStationId) ?? null,
     [stations, dropoffStationId],
   );
-  const isSelfDropoff = originMethod === 'SELF_DROPOFF';
+  const isSelfDropoff = originMethod === "SELF_DROPOFF";
 
   // ── How it gets there ───────────────────────────────────────────────
-  const [deliveryMode, setDeliveryMode] = useState<'DOORSTEP' | 'AGENT'>('DOORSTEP');
-  const [destinationAgentId, setDestinationAgentId] = useState('');
+  const [deliveryMode, setDeliveryMode] = useState<"DOORSTEP" | "AGENT">(
+    "DOORSTEP",
+  );
+  const [destinationAgentId, setDestinationAgentId] = useState("");
   const chosenAgent = useMemo(
     () => agents.find((a) => a.id === destinationAgentId) ?? null,
     [agents, destinationAgentId],
@@ -154,11 +188,19 @@ export function SendParcelForm(
   // what THIS sender already typed for THIS parcel, more specific than
   // "who sent something last time".
   const lastParty = useMemo(() => (draft ? null : loadLastParty()), [draft]);
-  const [senderName, setSenderName] = useState(draft?.senderName ?? lastParty?.senderName ?? '');
-  const [senderMsisdn, setSenderMsisdn] = useState(draft?.senderMsisdn ?? lastParty?.senderMsisdn ?? '');
-  const [receiverName, setReceiverName] = useState(draft?.receiverName ?? lastParty?.receiverName ?? '');
-  const [receiverMsisdn, setReceiverMsisdn] = useState(draft?.receiverMsisdn ?? lastParty?.receiverMsisdn ?? '');
-  const [notes, setNotes] = useState(draft?.notes ?? '');
+  const [senderName, setSenderName] = useState(
+    draft?.senderName ?? lastParty?.senderName ?? "",
+  );
+  const [senderMsisdn, setSenderMsisdn] = useState(
+    draft?.senderMsisdn ?? lastParty?.senderMsisdn ?? "",
+  );
+  const [receiverName, setReceiverName] = useState(
+    draft?.receiverName ?? lastParty?.receiverName ?? "",
+  );
+  const [receiverMsisdn, setReceiverMsisdn] = useState(
+    draft?.receiverMsisdn ?? lastParty?.receiverMsisdn ?? "",
+  );
+  const [notes, setNotes] = useState(draft?.notes ?? "");
 
   // ── What's actually in the box ──────────────────────────────────────
   // The declaration a shipping booking has always needed and this form
@@ -166,18 +208,24 @@ export function SendParcelForm(
   // flag, which asserts that a clerk asked the question in person — a
   // web form cannot claim that, so these are recorded as the sender's
   // own statement instead (see Parcel.senderDeclaredContents).
-  const [declaredContents, setDeclaredContents] = useState(draft?.declaredContents ?? '');
-  const [declaredValue, setDeclaredValue] = useState(draft?.declaredValue ?? '');
+  const [declaredContents, setDeclaredContents] = useState(
+    draft?.declaredContents ?? "",
+  );
+  const [declaredValue, setDeclaredValue] = useState(
+    draft?.declaredValue ?? "",
+  );
   const [lawfulAttested, setLawfulAttested] = useState(false);
   const [termsAccepted, setTermsAccepted] = useState(false);
 
-  const [stage, setStage] = useState<Stage>('form');
+  const [stage, setStage] = useState<Stage>("form");
   const [error, setError] = useState<string | null>(null);
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
   const [pending, start] = useTransition();
 
   const [code, setCode] = useState<string | null>(null);
-  const [serviceTicketNumber, setServiceTicketNumber] = useState<string | null>(null);
+  const [serviceTicketNumber, setServiceTicketNumber] = useState<string | null>(
+    null,
+  );
   const [deliveryCode, setDeliveryCode] = useState<string | null>(null);
 
   // Typing a weight auto-picks the matching bracket, same as the mobile
@@ -203,17 +251,38 @@ export function SendParcelForm(
     if (savingRef.current) clearTimeout(savingRef.current);
     savingRef.current = setTimeout(() => {
       const payload: SendParcelDraft = {
-        senderName, senderMsisdn, receiverName, receiverMsisdn,
-        parcelType, weightKg, fragile, originLabel, destinationLabel,
-        declaredContents, declaredValue, notes,
+        senderName,
+        senderMsisdn,
+        receiverName,
+        receiverMsisdn,
+        parcelType,
+        weightKg,
+        fragile,
+        originLabel,
+        destinationLabel,
+        declaredContents,
+        declaredValue,
+        notes,
       };
       void actionSaveCounterTicketDraft(ticketId, payload);
     }, 900);
-    return () => { if (savingRef.current) clearTimeout(savingRef.current); };
+    return () => {
+      if (savingRef.current) clearTimeout(savingRef.current);
+    };
   }, [
-    ticketId, senderName, senderMsisdn, receiverName, receiverMsisdn,
-    parcelType, weightKg, fragile, originLabel, destinationLabel,
-    declaredContents, declaredValue, notes,
+    ticketId,
+    senderName,
+    senderMsisdn,
+    receiverName,
+    receiverMsisdn,
+    parcelType,
+    weightKg,
+    fragile,
+    originLabel,
+    destinationLabel,
+    declaredContents,
+    declaredValue,
+    notes,
   ]);
 
   // ── The progress rail ────────────────────────────────────────────────
@@ -224,19 +293,39 @@ export function SendParcelForm(
   // real requirement of their own ("what are you sending" always has a
   // default type) aren't given a dot — a step that's always "done"
   // isn't a meaningful signal.
-  const doneWho = Boolean(senderName.trim() && senderMsisdn.trim() && receiverName.trim() && receiverMsisdn.trim());
+  const doneWho = Boolean(
+    senderName.trim() &&
+    senderMsisdn.trim() &&
+    receiverName.trim() &&
+    receiverMsisdn.trim(),
+  );
   const doneWhere = Boolean(originLabel.trim() && destinationLabel.trim());
-  const donePickup = originMethod === 'SCHEDULED_PICKUP' || Boolean(dropoffStationId);
-  const doneDelivery = deliveryMode === 'DOORSTEP' || Boolean(destinationAgentId);
+  const donePickup =
+    originMethod === "SCHEDULED_PICKUP" || Boolean(dropoffStationId);
+  const doneDelivery =
+    deliveryMode === "DOORSTEP" || Boolean(destinationAgentId);
   const doneContents = Boolean(
-    declaredContents.trim() && declaredValue.trim() && lawfulAttested && termsAccepted,
+    declaredContents.trim() &&
+    declaredValue.trim() &&
+    lawfulAttested &&
+    termsAccepted,
   );
   const railSteps = [
-    { key: 'who', label: 'Who', done: doneWho, show: true },
-    { key: 'where', label: 'Where', done: doneWhere, show: true },
-    { key: 'pickup', label: 'Pickup', done: donePickup, show: stations.length > 0 },
-    { key: 'delivery', label: 'Delivery', done: doneDelivery, show: agents.length > 0 },
-    { key: 'contents', label: "What's inside", done: doneContents, show: true },
+    { key: "who", label: "Who", done: doneWho, show: true },
+    { key: "where", label: "Where", done: doneWhere, show: true },
+    {
+      key: "pickup",
+      label: "Pickup",
+      done: donePickup,
+      show: stations.length > 0,
+    },
+    {
+      key: "delivery",
+      label: "Delivery",
+      done: doneDelivery,
+      show: agents.length > 0,
+    },
+    { key: "contents", label: "What's inside", done: doneContents, show: true },
   ].filter((s) => s.show);
 
   /** The one and only write. No price is quoted or charged — the fee is
@@ -248,24 +337,28 @@ export function SendParcelForm(
    *  looking. */
   function submitBooking() {
     const errs: Record<string, string> = {};
-    if (!senderName.trim()) errs.senderName = 'We need your name';
-    if (!senderMsisdn.trim()) errs.senderMsisdn = 'We need your phone number';
+    if (!senderName.trim()) errs.senderName = "We need your name";
+    if (!senderMsisdn.trim()) errs.senderMsisdn = "We need your phone number";
     if (!receiverName.trim()) errs.receiverName = "We need the receiver's name";
-    if (!receiverMsisdn.trim()) errs.receiverMsisdn = "We need the receiver's phone number";
-    if (!originLabel.trim()) errs.origin = 'Where is it being collected from?';
-    if (!destinationLabel.trim()) errs.destination = 'Where is it going?';
-    if (deliveryMode === 'AGENT' && !destinationAgentId) errs.agent = 'Choose a pickup point';
-    if (originMethod === 'SELF_DROPOFF' && !dropoffStationId) errs.station = 'Choose which station you’re dropping this off at';
+    if (!receiverMsisdn.trim())
+      errs.receiverMsisdn = "We need the receiver's phone number";
+    if (!originLabel.trim()) errs.origin = "Where is it being collected from?";
+    if (!destinationLabel.trim()) errs.destination = "Where is it going?";
+    if (deliveryMode === "AGENT" && !destinationAgentId)
+      errs.agent = "Choose a pickup point";
+    if (originMethod === "SELF_DROPOFF" && !dropoffStationId)
+      errs.station = "Choose which station you’re dropping this off at";
     // Required, not optional. A courier is legally answerable for what
     // it carries, and "the sender didn't say" is not a defence — which
     // is the whole reason this form asking nothing at all was a gap.
-    if (!declaredContents.trim()) errs.contents = 'Say what is inside';
-    if (!declaredValue.trim()) errs.value = 'Roughly what is it worth?';
-    if (!lawfulAttested) errs.lawful = 'Please confirm the contents are legal to send';
-    if (!termsAccepted) errs.terms = 'Please accept the terms to book';
+    if (!declaredContents.trim()) errs.contents = "Say what is inside";
+    if (!declaredValue.trim()) errs.value = "Roughly what is it worth?";
+    if (!lawfulAttested)
+      errs.lawful = "Please confirm the contents are legal to send";
+    if (!termsAccepted) errs.terms = "Please accept the terms to book";
     setFieldErrors(errs);
     if (Object.keys(errs).length > 0) {
-      setError('Some details are missing — check the highlighted fields.');
+      setError("Some details are missing — check the highlighted fields.");
       return;
     }
 
@@ -280,9 +373,18 @@ export function SendParcelForm(
     if (ticketId) {
       start(async () => {
         await actionSaveCounterTicketDraft(ticketId, {
-          senderName, senderMsisdn, receiverName, receiverMsisdn,
-          parcelType, weightKg, fragile, originLabel, destinationLabel,
-          declaredContents, declaredValue, notes,
+          senderName,
+          senderMsisdn,
+          receiverName,
+          receiverMsisdn,
+          parcelType,
+          weightKg,
+          fragile,
+          originLabel,
+          destinationLabel,
+          declaredContents,
+          declaredValue,
+          notes,
         } satisfies SendParcelDraft);
         router.push(`/parcels/counter-ticket/${ticketId}`);
       });
@@ -291,12 +393,22 @@ export function SendParcelForm(
 
     start(async () => {
       const booked = await actionBookParcel({
-        senderName, senderMsisdn, receiverName, receiverMsisdn,
-        originLabel, destinationLabel, parcelType,
-        weightKg: weightKg ? Number(weightKg) : undefined, fragile, notes,
+        senderName,
+        senderMsisdn,
+        receiverName,
+        receiverMsisdn,
+        originLabel,
+        destinationLabel,
+        parcelType,
+        weightKg: weightKg ? Number(weightKg) : undefined,
+        fragile,
+        notes,
         originZoneId: originZoneId || undefined,
         destinationZoneId: destinationZoneId || undefined,
-        destinationAgentId: deliveryMode === 'AGENT' ? (destinationAgentId || undefined) : undefined,
+        destinationAgentId:
+          deliveryMode === "AGENT"
+            ? destinationAgentId || undefined
+            : undefined,
         originMethod,
         parcelOrgId: isSelfDropoff ? dropoffStationId : undefined,
         senderDeclaredContents: declaredContents.trim(),
@@ -310,27 +422,41 @@ export function SendParcelForm(
         // with the courier.
         payAtCounter: true,
       });
-      if (!booked.ok) { setError(booked.error); return; }
+      if (!booked.ok) {
+        setError(booked.error);
+        return;
+      }
       saveLastParty({ senderName, senderMsisdn, receiverName, receiverMsisdn });
       setCode(booked.code);
       setServiceTicketNumber(booked.serviceTicketNumber);
       setDeliveryCode(booked.deliveryCode);
-      setStage('success');
+      setStage("success");
     });
   }
 
   // ── Terminal stage ──────────────────────────────────────────────────
 
-  if (stage === 'success') {
+  if (stage === "success") {
     return (
-      <div className="card" style={{ textAlign: 'center' }}>
-        <div className="pf-rail" aria-hidden style={{ position: 'static', marginBottom: 18 }}>
+      <div className="card" style={{ textAlign: "center" }}>
+        <div
+          className="pf-rail"
+          aria-hidden
+          style={{ position: "static", marginBottom: 18 }}
+        >
           {railSteps.map((s) => (
-            <div key={s.key} className="pf-rail-step done"><span className="pf-rail-dot" />{s.label}</div>
+            <div key={s.key} className="pf-rail-step done">
+              <span className="pf-rail-dot" />
+              {s.label}
+            </div>
           ))}
         </div>
-        <span className="icbox icbox-g" style={{ margin: '0 auto 14px' }}><Icon name="check-circle" size={22} /></span>
-        <h3 style={{ marginBottom: 6 }}>{isSelfDropoff ? 'Drop-off submitted' : 'Booking confirmed'}</h3>
+        <span className="icbox icbox-g" style={{ margin: "0 auto 14px" }}>
+          <Icon name="check-circle" size={22} />
+        </span>
+        <h3 style={{ marginBottom: 6 }}>
+          {isSelfDropoff ? "Drop-off submitted" : "Booking confirmed"}
+        </h3>
         {isSelfDropoff ? (
           // The row already exists as a real, BOOKED parcel the moment
           // this call returns (dbx.BookParcel — PayAtCounter skips
@@ -346,49 +472,127 @@ export function SendParcelForm(
           // the SMS pair and the receiver's own delivery code all wait
           // for the clerk's actual "box in hand" scan.
           <>
-            <p className="sub" style={{ margin: '0 0 14px' }}>
-              {`We've told ${chosenStation?.name ?? 'the station'} to expect you.`}
+            <p className="sub" style={{ margin: "0 0 14px" }}>
+              {`We've told ${chosenStation?.name ?? "the station"} to expect you.`}
             </p>
-            <div style={{ textAlign: 'left', border: '1px solid var(--line)', borderRadius: 10, padding: 14, marginBottom: 14 }}>
-              <p className="sub" style={{ margin: '0 0 4px', fontSize: '.8rem' }}>Your service ticket</p>
-              <p className="mono" style={{ margin: 0, fontSize: '1.3rem', fontWeight: 800, letterSpacing: '.06em' }}>{serviceTicketNumber}</p>
-              <p className="sub" style={{ margin: '8px 0 0', fontSize: '.82rem' }}>
-                {`Give this to the clerk at ${chosenStation?.name ?? 'the station'} — it's already waiting on their desk list, ready for them to check the box in.`}
+            <div
+              style={{
+                textAlign: "left",
+                border: "1px solid var(--line)",
+                borderRadius: 10,
+                padding: 14,
+                marginBottom: 14,
+              }}
+            >
+              <p
+                className="sub"
+                style={{ margin: "0 0 4px", fontSize: ".8rem" }}
+              >
+                Your service ticket
+              </p>
+              <p
+                className="mono"
+                style={{
+                  margin: 0,
+                  fontSize: "1.3rem",
+                  fontWeight: 800,
+                  letterSpacing: ".06em",
+                }}
+              >
+                {serviceTicketNumber}
+              </p>
+              <p
+                className="sub"
+                style={{ margin: "8px 0 0", fontSize: ".82rem" }}
+              >
+                {`Give this to the clerk at ${chosenStation?.name ?? "the station"} — it's already waiting on their desk list, ready for them to check the box in.`}
               </p>
             </div>
-            <div style={{ textAlign: 'left', border: '1px solid var(--line)', borderRadius: 10, padding: 14 }}>
-              <p className="sub" style={{ margin: 0, fontSize: '.85rem' }}>
-                {`Nothing to pay online — settle the fee at ${chosenStation?.name ?? 'the station'} when you drop this off. We'll text you your real tracking link, and ${receiverName} their delivery code, the moment the clerk confirms they have it in hand.`}
+            <div
+              style={{
+                textAlign: "left",
+                border: "1px solid var(--line)",
+                borderRadius: 10,
+                padding: 14,
+              }}
+            >
+              <p className="sub" style={{ margin: 0, fontSize: ".85rem" }}>
+                {`Nothing to pay online — settle the fee at ${chosenStation?.name ?? "the station"} when you drop this off. We'll text you your real tracking link, and ${receiverName} their delivery code, the moment the clerk confirms they have it in hand.`}
               </p>
             </div>
           </>
         ) : (
           <>
-            <p className="sub" style={{ margin: '0 0 10px' }}>
+            <p className="sub" style={{ margin: "0 0 10px" }}>
               Parcel tracking code
             </p>
-            <p className="mono" style={{ margin: '0 0 18px', fontWeight: 800, letterSpacing: '.06em', fontSize: '1.5rem' }}>
+            <p
+              className="mono"
+              style={{
+                margin: "0 0 18px",
+                fontWeight: 800,
+                letterSpacing: ".06em",
+                fontSize: "1.5rem",
+              }}
+            >
               {code}
             </p>
             {serviceTicketNumber && (
-              <p className="sub" style={{ margin: '0 0 18px', fontSize: '.82rem' }}>
-                Service ticket <span className="mono" style={{ fontWeight: 700 }}>{serviceTicketNumber}</span>
+              <p
+                className="sub"
+                style={{ margin: "0 0 18px", fontSize: ".82rem" }}
+              >
+                Service ticket{" "}
+                <span className="mono" style={{ fontWeight: 700 }}>
+                  {serviceTicketNumber}
+                </span>
               </p>
             )}
-            <div style={{ textAlign: 'left', border: '1px solid var(--line)', borderRadius: 10, padding: 14, marginBottom: 14 }}>
-              <p className="sub" style={{ margin: '0 0 4px', fontSize: '.8rem' }}>Delivery code — for your receiver</p>
-              <p className="mono" style={{ margin: 0, fontSize: '1.3rem', fontWeight: 800, letterSpacing: '.06em' }}>{deliveryCode}</p>
-              <p className="sub" style={{ margin: '8px 0 0', fontSize: '.82rem' }}>
+            <div
+              style={{
+                textAlign: "left",
+                border: "1px solid var(--line)",
+                borderRadius: 10,
+                padding: 14,
+                marginBottom: 14,
+              }}
+            >
+              <p
+                className="sub"
+                style={{ margin: "0 0 4px", fontSize: ".8rem" }}
+              >
+                Delivery code — for your receiver
+              </p>
+              <p
+                className="mono"
+                style={{
+                  margin: 0,
+                  fontSize: "1.3rem",
+                  fontWeight: 800,
+                  letterSpacing: ".06em",
+                }}
+              >
+                {deliveryCode}
+              </p>
+              <p
+                className="sub"
+                style={{ margin: "8px 0 0", fontSize: ".82rem" }}
+              >
                 {`We text this to ${receiverName} once a courier picks it up — they give it to the courier to receive the parcel. You can also pass it on yourself if you'd rather.`}
               </p>
             </div>
-            <p className="sub" style={{ fontSize: '.85rem', marginBottom: 14 }}>
-              Nothing to pay online — settle the fee with the courier when they collect it.
+            <p className="sub" style={{ fontSize: ".85rem", marginBottom: 14 }}>
+              Nothing to pay online — settle the fee with the courier when they
+              collect it.
             </p>
             {chosenAgent && (
-              <p className="sub" style={{ fontSize: '.85rem', marginBottom: 14 }}>
-                {receiverName} collects it from <strong>{chosenAgent.name}</strong> — {chosenAgent.locationHint}.
-                We&apos;ll text them the moment it lands there.
+              <p
+                className="sub"
+                style={{ fontSize: ".85rem", marginBottom: 14 }}
+              >
+                {receiverName} collects it from{" "}
+                <strong>{chosenAgent.name}</strong> — {chosenAgent.locationHint}
+                . We&apos;ll text them the moment it lands there.
               </p>
             )}
             {/* No /t/<code> link here — the real tracking code doesn't
@@ -396,8 +600,9 @@ export function SendParcelForm(
                 comment above). We text it the moment a courier picks
                 this up; until then the service ticket number above is
                 the only thing to hold onto. */}
-            <p className="sub" style={{ fontSize: '.85rem' }}>
-              Keep this tracking code handy. You can track the parcel immediately on the public parcel page.
+            <p className="sub" style={{ fontSize: ".85rem" }}>
+              Keep this tracking code handy. You can track the parcel
+              immediately on the public parcel page.
             </p>
           </>
         )}
@@ -411,16 +616,24 @@ export function SendParcelForm(
     <div className="card">
       <div className="pf-rail" role="status" aria-label="Form progress">
         {railSteps.map((s) => (
-          <div key={s.key} className={`pf-rail-step${s.done ? ' done' : ''}`}>
+          <div
+            key={s.key}
+            className={s.done ? "pf-rail-step done" : "pf-rail-step"}
+          >
             <span className="pf-rail-dot" aria-hidden />
             {s.label}
           </div>
         ))}
       </div>
-      <p className="sub" style={STEP_EYEBROW}>Book a parcel</p>
-      <h3 style={{ marginBottom: 4 }}>Who is it for? <DoneMark on={doneWho} /></h3>
-      <p className="sub" style={{ margin: '0 0 16px', fontSize: '.85rem' }}>
-        Everything on one page — the fee is settled in person, with the agent or courier.
+      <p className="sub" style={STEP_EYEBROW}>
+        Book a parcel
+      </p>
+      <h3 style={{ marginBottom: 4 }}>
+        Who is it for? <DoneMark on={doneWho} />
+      </h3>
+      <p className="sub" style={{ margin: "0 0 16px", fontSize: ".85rem" }}>
+        Everything on one page — the fee is settled in person, with the agent or
+        courier.
       </p>
 
       {/* People first, details second. Names and numbers are what a
@@ -428,57 +641,139 @@ export function SendParcelForm(
           hub routing are decisions, and a form that opens with a
           decision reads as longer than it is. */}
       <FormRow>
-        <Field id="sd-name" label="Your name" value={senderName} onChange={setSenderName} error={fieldErrors.senderName} />
-        <Field id="sd-msisdn" label="Your phone" value={senderMsisdn} error={fieldErrors.senderMsisdn}
-          onChange={setSenderMsisdn} placeholder="07XX XXX XXX" />
+        <Field
+          id="sd-name"
+          label="Your name"
+          value={senderName}
+          onChange={setSenderName}
+          error={fieldErrors.senderName}
+        />
+        <Field
+          id="sd-msisdn"
+          label="Your phone"
+          value={senderMsisdn}
+          error={fieldErrors.senderMsisdn}
+          onChange={setSenderMsisdn}
+          placeholder="07XX XXX XXX"
+        />
       </FormRow>
       <FormRow>
-        <Field id="rc-name" label="Receiver's name" value={receiverName} onChange={setReceiverName} error={fieldErrors.receiverName} />
-        <Field id="rc-msisdn" label="Receiver's phone" value={receiverMsisdn} onChange={setReceiverMsisdn}
-          placeholder="07XX XXX XXX" error={fieldErrors.receiverMsisdn} />
+        <Field
+          id="rc-name"
+          label="Receiver's name"
+          value={receiverName}
+          onChange={setReceiverName}
+          error={fieldErrors.receiverName}
+        />
+        <Field
+          id="rc-msisdn"
+          label="Receiver's phone"
+          value={receiverMsisdn}
+          onChange={setReceiverMsisdn}
+          placeholder="07XX XXX XXX"
+          error={fieldErrors.receiverMsisdn}
+        />
       </FormRow>
-      <p className="sub" style={{ margin: '4px 0 0', fontSize: '.78rem' }}>
-        We text the receiver their delivery code and a tracking link — so make sure this number is right.
+      <p className="sub" style={{ margin: "4px 0 0", fontSize: ".78rem" }}>
+        We text the receiver their delivery code and a tracking link — so make
+        sure this number is right.
       </p>
 
-      <h3 style={{ margin: '22px 0 16px' }}>What are you sending?</h3>
+      <h3 style={{ margin: "22px 0 16px" }}>What are you sending?</h3>
 
       <FormRow>
         <div>
-          <label className="sub" htmlFor="ptype" style={{ display: 'block', marginBottom: 6 }}>Type</label>
-          <select id="ptype" style={fieldStyle} value={parcelType} onChange={(e) => setParcelType(e.target.value)}>
+          <label
+            className="sub"
+            htmlFor="ptype"
+            style={{ display: "block", marginBottom: 6 }}
+          >
+            Type
+          </label>
+          <select
+            id="ptype"
+            style={fieldStyle}
+            value={parcelType}
+            onChange={(e) => setParcelType(e.target.value)}
+          >
             {PARCEL_TYPES.map(([id, label]) => {
               const band = pricing.find((p) => p.parcelType === id);
               return (
                 <option key={id} value={id}>
-                  {label}{band ? ` — ${band.weightLabel}` : ''}
+                  {label}
+                  {band ? ` — ${band.weightLabel}` : ""}
                 </option>
               );
             })}
           </select>
         </div>
-        <Field id="weight" label="Weight in kg (optional)" value={weightKg}
-          onChange={(v) => setWeightKg(v.replace(/[^\d.]/g, ''))} placeholder="e.g. 2.5" />
+        <Field
+          id="weight"
+          label="Weight in kg (optional)"
+          value={weightKg}
+          onChange={(v) => setWeightKg(v.replace(/[^\d.]/g, ""))}
+          placeholder="e.g. 2.5"
+        />
       </FormRow>
-      <label className="sub" htmlFor="fragile" style={{ display: 'flex', gap: 8, alignItems: 'center', margin: '10px 0 0' }}>
-        <input id="fragile" type="checkbox" checked={fragile} onChange={(e) => setFragile(e.target.checked)} />
+      <label
+        className="sub"
+        htmlFor="fragile"
+        style={{
+          display: "flex",
+          gap: 8,
+          alignItems: "center",
+          margin: "10px 0 0",
+        }}
+      >
+        <input
+          id="fragile"
+          type="checkbox"
+          checked={fragile}
+          onChange={(e) => setFragile(e.target.checked)}
+        />
         Fragile — handle with care
       </label>
 
-      <h3 style={{ margin: '22px 0 16px' }}>Where it&apos;s going <DoneMark on={doneWhere} /></h3>
+      <h3 style={{ margin: "22px 0 16px" }}>
+        Where it&apos;s going <DoneMark on={doneWhere} />
+      </h3>
       <FormRow>
-        <Field id="origin" label="From" value={originLabel} onChange={setOriginLabel}
-          placeholder="e.g. Nyayo House, Nairobi" error={fieldErrors.origin} />
-        <Field id="dest" label="To" value={destinationLabel} onChange={setDestinationLabel}
-          placeholder="e.g. Kisumu bus stage" error={fieldErrors.destination} />
+        <Field
+          id="origin"
+          label="From"
+          value={originLabel}
+          onChange={setOriginLabel}
+          placeholder="e.g. Nyayo House, Nairobi"
+          error={fieldErrors.origin}
+        />
+        <Field
+          id="dest"
+          label="To"
+          value={destinationLabel}
+          onChange={setDestinationLabel}
+          placeholder="e.g. Kisumu bus stage"
+          error={fieldErrors.destination}
+        />
       </FormRow>
       {zones.length > 0 && (
         <>
           <FormRow>
-            <ZoneField id="origin-zone" label="Nearest hub to pickup" value={originZoneId} onChange={setOriginZoneId} zones={zones} />
-            <ZoneField id="dest-zone" label="Nearest hub to delivery" value={destinationZoneId} onChange={setDestinationZoneId} zones={zones} />
+            <ZoneField
+              id="origin-zone"
+              label="Nearest hub to pickup"
+              value={originZoneId}
+              onChange={setOriginZoneId}
+              zones={zones}
+            />
+            <ZoneField
+              id="dest-zone"
+              label="Nearest hub to delivery"
+              value={destinationZoneId}
+              onChange={setDestinationZoneId}
+              zones={zones}
+            />
           </FormRow>
-          <p className="sub" style={{ margin: '4px 0 0', fontSize: '.78rem' }}>
+          <p className="sub" style={{ margin: "4px 0 0", fontSize: ".78rem" }}>
             Helps us route this through the nearest hub on each side.
           </p>
         </>
@@ -490,34 +785,56 @@ export function SendParcelForm(
           company has actually opted in to taking walk-ins. */}
       {stations.length > 0 && (
         <>
-          <h3 style={{ margin: '22px 0 12px' }}>How will we get this from you? <DoneMark on={donePickup} /></h3>
-          <div style={{ display: 'grid', gap: 8 }}>
+          <h3 style={{ margin: "22px 0 12px" }}>
+            How will we get this from you? <DoneMark on={donePickup} />
+          </h3>
+          <div style={{ display: "grid", gap: 8 }}>
             <ChoiceCard
-              selected={originMethod === 'SCHEDULED_PICKUP'}
-              onClick={() => { setOriginMethod('SCHEDULED_PICKUP'); setDropoffStationId(''); }}
+              selected={originMethod === "SCHEDULED_PICKUP"}
+              onClick={() => {
+                setOriginMethod("SCHEDULED_PICKUP");
+                setDropoffStationId("");
+              }}
               title="Schedule a pickup"
               subtitle="A courier collects it from the address above."
             />
             <ChoiceCard
-              selected={originMethod === 'SELF_DROPOFF'}
-              onClick={() => setOriginMethod('SELF_DROPOFF')}
+              selected={originMethod === "SELF_DROPOFF"}
+              onClick={() => setOriginMethod("SELF_DROPOFF")}
               title="I'll drop it off myself"
               subtitle="Hand it over in person at a station — no waiting for a rider."
             />
           </div>
-          {originMethod === 'SELF_DROPOFF' && (
+          {originMethod === "SELF_DROPOFF" && (
             <div style={{ marginTop: 12 }}>
-              <label className="sub" htmlFor="station" style={{ display: 'block', marginBottom: 6 }}>Station</label>
-              <select id="station" style={fieldStyle} value={dropoffStationId}
-                onChange={(e) => setDropoffStationId(e.target.value)}>
+              <label
+                className="sub"
+                htmlFor="station"
+                style={{ display: "block", marginBottom: 6 }}
+              >
+                Station
+              </label>
+              <select
+                id="station"
+                style={fieldStyle}
+                value={dropoffStationId}
+                onChange={(e) => setDropoffStationId(e.target.value)}
+              >
                 <option value="">Choose where you're standing…</option>
                 {stations.map((s) => (
-                  <option key={s.id} value={s.id}>{s.name} — {s.locationHint}</option>
+                  <option key={s.id} value={s.id}>
+                    {s.name} — {s.locationHint}
+                  </option>
                 ))}
               </select>
-              {fieldErrors.station && <ErrorLine message={fieldErrors.station} />}
+              {fieldErrors.station && (
+                <ErrorLine message={fieldErrors.station} />
+              )}
               {chosenStation?.openingHours && (
-                <p className="sub" style={{ margin: '6px 0 0', fontSize: '.8rem' }}>
+                <p
+                  className="sub"
+                  style={{ margin: "6px 0 0", fontSize: ".8rem" }}
+                >
                   Open {chosenStation.openingHours}
                 </p>
               )}
@@ -531,37 +848,57 @@ export function SendParcelForm(
           priced; just what each option actually means for the receiver. */}
       {agents.length > 0 && (
         <>
-          <h3 style={{ margin: '22px 0 12px' }}>How should it be delivered? <DoneMark on={doneDelivery} /></h3>
-          <div style={{ display: 'grid', gap: 8 }}>
+          <h3 style={{ margin: "22px 0 12px" }}>
+            How should it be delivered? <DoneMark on={doneDelivery} />
+          </h3>
+          <div style={{ display: "grid", gap: 8 }}>
             <ChoiceCard
-              selected={deliveryMode === 'DOORSTEP'}
-              onClick={() => { setDeliveryMode('DOORSTEP'); setDestinationAgentId(''); }}
+              selected={deliveryMode === "DOORSTEP"}
+              onClick={() => {
+                setDeliveryMode("DOORSTEP");
+                setDestinationAgentId("");
+              }}
               title="To the door"
               subtitle="A courier brings it to the address above."
             />
             <ChoiceCard
-              selected={deliveryMode === 'AGENT'}
-              onClick={() => setDeliveryMode('AGENT')}
+              selected={deliveryMode === "AGENT"}
+              onClick={() => setDeliveryMode("AGENT")}
               title="Collect from a pickup point"
               subtitle="The receiver picks it up from a nearby shop instead."
             />
           </div>
-          {deliveryMode === 'AGENT' && (
+          {deliveryMode === "AGENT" && (
             <div style={{ marginTop: 12 }}>
-              <label className="sub" htmlFor="agent" style={{ display: 'block', marginBottom: 6 }}>Pickup point</label>
-              <select id="agent" style={fieldStyle} value={destinationAgentId}
-                onChange={(e) => setDestinationAgentId(e.target.value)}>
+              <label
+                className="sub"
+                htmlFor="agent"
+                style={{ display: "block", marginBottom: 6 }}
+              >
+                Pickup point
+              </label>
+              <select
+                id="agent"
+                style={fieldStyle}
+                value={destinationAgentId}
+                onChange={(e) => setDestinationAgentId(e.target.value)}
+              >
                 <option value="">Choose a shop…</option>
                 {agents.map((a) => (
                   <option key={a.id} value={a.id}>
                     {a.name} — {a.locationHint}
-                    {toCentsOrZero(a.holdingFeeKes) > 0 ? ' (a holding fee applies on collection)' : ''}
+                    {toCentsOrZero(a.holdingFeeKes) > 0
+                      ? " (a holding fee applies on collection)"
+                      : ""}
                   </option>
                 ))}
               </select>
               {fieldErrors.agent && <ErrorLine message={fieldErrors.agent} />}
               {chosenAgent?.openingHours && (
-                <p className="sub" style={{ margin: '6px 0 0', fontSize: '.8rem' }}>
+                <p
+                  className="sub"
+                  style={{ margin: "6px 0 0", fontSize: ".8rem" }}
+                >
                   Open {chosenAgent.openingHours}
                 </p>
               )}
@@ -579,36 +916,71 @@ export function SendParcelForm(
           core-go refuses from a guest booking because it means "a
           named clerk asked this person, face to face". This is the
           sender's own statement, stored in its own columns. */}
-      <h3 style={{ margin: '22px 0 12px' }}>What&apos;s inside? <DoneMark on={doneContents} /></h3>
+      <h3 style={{ margin: "22px 0 12px" }}>
+        What&apos;s inside? <DoneMark on={doneContents} />
+      </h3>
       <div style={{ marginBottom: 12 }}>
-        <label className="sub" htmlFor="contents" style={{ display: 'block', marginBottom: 6 }}>
+        <label
+          className="sub"
+          htmlFor="contents"
+          style={{ display: "block", marginBottom: 6 }}
+        >
           Describe the contents
         </label>
-        <input id="contents" style={fieldStyle} value={declaredContents}
+        <input
+          id="contents"
+          style={fieldStyle}
+          value={declaredContents}
           onChange={(e) => setDeclaredContents(e.target.value)}
-          placeholder="e.g. 2 pairs of shoes and a phone charger" />
+          placeholder="e.g. 2 pairs of shoes and a phone charger"
+        />
         {fieldErrors.contents && <ErrorLine message={fieldErrors.contents} />}
       </div>
       <div style={{ marginBottom: 12 }}>
-        <label className="sub" htmlFor="declared-value" style={{ display: 'block', marginBottom: 6 }}>
+        <label
+          className="sub"
+          htmlFor="declared-value"
+          style={{ display: "block", marginBottom: 6 }}
+        >
           Roughly what is it worth? (KES)
         </label>
-        <input id="declared-value" style={{ ...fieldStyle, maxWidth: 200 }} value={declaredValue}
+        <input
+          id="declared-value"
+          style={{ ...fieldStyle, maxWidth: 200 }}
+          value={declaredValue}
           inputMode="numeric"
-          onChange={(e) => setDeclaredValue(e.target.value.replace(/[^\d]/g, ''))}
-          placeholder="e.g. 4500" />
+          onChange={(e) =>
+            setDeclaredValue(e.target.value.replace(/[^\d]/g, ""))
+          }
+          placeholder="e.g. 4500"
+        />
         {fieldErrors.value && <ErrorLine message={fieldErrors.value} />}
-        <p className="sub" style={{ margin: '6px 0 0', fontSize: '.78rem' }}>
-          Used if anything goes wrong. Be honest — a figure nobody believes helps nobody.
+        <p className="sub" style={{ margin: "6px 0 0", fontSize: ".78rem" }}>
+          Used if anything goes wrong. Be honest — a figure nobody believes
+          helps nobody.
         </p>
       </div>
 
-      <label className="sub" htmlFor="lawful" style={{ display: 'flex', gap: 8, alignItems: 'flex-start', margin: '14px 0 0' }}>
-        <input id="lawful" type="checkbox" checked={lawfulAttested} style={{ marginTop: 3 }}
-          onChange={(e) => setLawfulAttested(e.target.checked)} />
+      <label
+        className="sub"
+        htmlFor="lawful"
+        style={{
+          display: "flex",
+          gap: 8,
+          alignItems: "flex-start",
+          margin: "14px 0 0",
+        }}
+      >
+        <input
+          id="lawful"
+          type="checkbox"
+          checked={lawfulAttested}
+          style={{ marginTop: 3 }}
+          onChange={(e) => setLawfulAttested(e.target.checked)}
+        />
         <span>
-          I confirm the contents are legal to send and contain no prohibited items —
-          no cash, weapons, drugs, explosives, or live animals.
+          I confirm the contents are legal to send and contain no prohibited
+          items — no cash, weapons, drugs, explosives, or live animals.
         </span>
       </label>
       {fieldErrors.lawful && <ErrorLine message={fieldErrors.lawful} />}
@@ -617,86 +989,205 @@ export function SendParcelForm(
           carrying company runs the truck, and a claim may turn on only
           one of them. Rolling them into "the terms" would be the kind
           of vagueness that becomes somebody's problem later. */}
-      <label className="sub" htmlFor="terms" style={{ display: 'flex', gap: 8, alignItems: 'flex-start', margin: '10px 0 0' }}>
-        <input id="terms" type="checkbox" checked={termsAccepted} style={{ marginTop: 3 }}
-          onChange={(e) => setTermsAccepted(e.target.checked)} />
+      <label
+        className="sub"
+        htmlFor="terms"
+        style={{
+          display: "flex",
+          gap: 8,
+          alignItems: "flex-start",
+          margin: "10px 0 0",
+        }}
+      >
+        <input
+          id="terms"
+          type="checkbox"
+          checked={termsAccepted}
+          style={{ marginTop: 3 }}
+          onChange={(e) => setTermsAccepted(e.target.checked)}
+        />
         <span>
-          I accept Esoqo&apos;s <a href="/help" target="_blank" rel="noreferrer">terms of service</a>{' '}
+          I accept Esoqo&apos;s{" "}
+          <a href="/help" target="_blank" rel="noreferrer">
+            terms of service
+          </a>{" "}
           and the shipping terms of the company that carries this parcel.
         </span>
       </label>
       {fieldErrors.terms && <ErrorLine message={fieldErrors.terms} />}
 
       <div style={{ marginTop: 18 }}>
-        <label className="sub" htmlFor="notes" style={{ display: 'block', marginBottom: 6 }}>
+        <label
+          className="sub"
+          htmlFor="notes"
+          style={{ display: "block", marginBottom: 6 }}
+        >
           Notes for the courier (optional)
         </label>
-        <textarea id="notes" style={{ ...fieldStyle, minHeight: 70, resize: 'vertical' }}
-          value={notes} onChange={(e) => setNotes(e.target.value)} placeholder="e.g. Call on arrival, gate 3" />
+        <textarea
+          id="notes"
+          style={{ ...fieldStyle, minHeight: 70, resize: "vertical" }}
+          value={notes}
+          onChange={(e) => setNotes(e.target.value)}
+          placeholder="e.g. Call on arrival, gate 3"
+        />
       </div>
 
-      <p className="sub" style={{ margin: '22px 0 0', fontSize: '.85rem', borderTop: '1px solid var(--line)', paddingTop: 16 }}>
-        {ticketId
-          ? "This is saved automatically as you type — your clerk picks up from here once they call your ticket."
-          : isSelfDropoff && chosenStation
-            ? <>Dropping off at <strong>{chosenStation.name}</strong> — {chosenStation.locationHint}. The fee is settled there, not here.</>
-            : 'Nothing to pay here — the fee is worked out and settled in person, with the agent or courier.'}
+      <p
+        className="sub"
+        style={{
+          margin: "22px 0 0",
+          fontSize: ".85rem",
+          borderTop: "1px solid var(--line)",
+          paddingTop: 16,
+        }}
+      >
+        {ticketId ? (
+          "This is saved automatically as you type — your clerk picks up from here once they call your ticket."
+        ) : isSelfDropoff && chosenStation ? (
+          <>
+            Dropping off at <strong>{chosenStation.name}</strong> —{" "}
+            {chosenStation.locationHint}. The fee is settled there, not here.
+          </>
+        ) : (
+          "Nothing to pay here — the fee is worked out and settled in person, with the agent or courier."
+        )}
       </p>
 
       {error && <ErrorLine message={error} />}
 
-      <button type="button" className="btn btn-p" style={{ width: '100%', marginTop: 16 }}
-        disabled={pending} onClick={submitBooking}>
+      <button
+        type="button"
+        className="btn btn-p"
+        style={{ width: "100%", marginTop: 16 }}
+        disabled={pending}
+        onClick={submitBooking}
+      >
         {pending
-          ? 'Saving…'
-          : ticketId ? 'Save & return to my ticket' : isSelfDropoff ? 'Book — pay at the counter' : 'Confirm booking'}
+          ? "Saving…"
+          : ticketId
+            ? "Save & return to my ticket"
+            : isSelfDropoff
+              ? "Book — pay at the counter"
+              : "Confirm booking"}
       </button>
-      <p className="sub" style={{ margin: '8px 0 0', fontSize: '.78rem', textAlign: 'center' }}>
+      <p
+        className="sub"
+        style={{ margin: "8px 0 0", fontSize: ".78rem", textAlign: "center" }}
+      >
         {ticketId
-          ? 'Nothing is booked until a clerk calls your ticket.'
+          ? "Nothing is booked until a clerk calls your ticket."
           : isSelfDropoff
-            ? 'Nothing to pay online — settle the fee at the counter when you drop this off.'
-            : 'Nothing to pay online — settle the fee with the courier when they collect it.'}
+            ? "Nothing to pay online — settle the fee at the counter when you drop this off."
+            : "Nothing to pay online — settle the fee with the courier when they collect it."}
       </p>
     </div>
   );
 }
 
 function FormRow({ children }: { children: React.ReactNode }) {
-  return <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginBottom: 12 }}>{children}</div>;
+  return (
+    <div
+      style={{
+        display: "grid",
+        gridTemplateColumns: "1fr 1fr",
+        gap: 12,
+        marginBottom: 12,
+      }}
+    >
+      {children}
+    </div>
+  );
 }
 
 /** Per-field errors rather than one "fill in every field above" line —
  *  a sender should never have to hunt for which box is the problem. */
-function Field(
-  { id, label, value, onChange, placeholder, error }:
-  { id: string; label: string; value: string; onChange: (v: string) => void; placeholder?: string; error?: string },
-) {
+function Field({
+  id,
+  label,
+  value,
+  onChange,
+  placeholder,
+  error,
+}: {
+  id: string;
+  label: string;
+  value: string;
+  onChange: (v: string) => void;
+  placeholder?: string;
+  error?: string;
+}) {
   return (
     <div>
-      <label className="sub" htmlFor={id} style={{ display: 'block', marginBottom: 6 }}>{label}</label>
-      <input id={id} value={value} placeholder={placeholder}
+      <label
+        className="sub"
+        htmlFor={id}
+        style={{ display: "block", marginBottom: 6 }}
+      >
+        {label}
+      </label>
+      <input
+        id={id}
+        value={value}
+        placeholder={placeholder}
         aria-invalid={error ? true : undefined}
         aria-describedby={error ? `${id}-err` : undefined}
-        style={{ ...fieldStyle, borderColor: error ? 'var(--red, #b42318)' : 'var(--line)' }}
-        onChange={(e) => onChange(e.target.value)} />
+        style={{
+          ...fieldStyle,
+          borderColor: error ? "var(--red, #b42318)" : "var(--line)",
+        }}
+        onChange={(e) => onChange(e.target.value)}
+      />
       {error && (
-        <p id={`${id}-err`} style={{ color: 'var(--red, #b42318)', fontSize: '.78rem', margin: '4px 0 0' }}>{error}</p>
+        <p
+          id={`${id}-err`}
+          style={{
+            color: "var(--red, #b42318)",
+            fontSize: ".78rem",
+            margin: "4px 0 0",
+          }}
+        >
+          {error}
+        </p>
       )}
     </div>
   );
 }
 
-function ZoneField(
-  { id, label, value, onChange, zones }:
-  { id: string; label: string; value: string; onChange: (v: string) => void; zones: ParcelZoneView[] },
-) {
+function ZoneField({
+  id,
+  label,
+  value,
+  onChange,
+  zones,
+}: {
+  id: string;
+  label: string;
+  value: string;
+  onChange: (v: string) => void;
+  zones: ParcelZoneView[];
+}) {
   return (
     <div>
-      <label className="sub" htmlFor={id} style={{ display: 'block', marginBottom: 6 }}>{label}</label>
-      <select id={id} style={fieldStyle} value={value} onChange={(e) => onChange(e.target.value)}>
+      <label
+        className="sub"
+        htmlFor={id}
+        style={{ display: "block", marginBottom: 6 }}
+      >
+        {label}
+      </label>
+      <select
+        id={id}
+        style={fieldStyle}
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+      >
         <option value="">Not sure / skip</option>
-        {zones.map((z) => <option key={z.id} value={z.id}>{z.name}</option>)}
+        {zones.map((z) => (
+          <option key={z.id} value={z.id}>
+            {z.name}
+          </option>
+        ))}
       </select>
     </div>
   );
@@ -704,23 +1195,58 @@ function ZoneField(
 
 /** One selectable option card — delivery mode, origin method. Same
  *  shape in both places so a choice always looks like a choice. */
-function ChoiceCard(
-  { title, subtitle, selected, onClick }:
-  { title: string; subtitle: string; selected: boolean; onClick: () => void },
-) {
+function ChoiceCard({
+  title,
+  subtitle,
+  selected,
+  onClick,
+}: {
+  title: string;
+  subtitle: string;
+  selected: boolean;
+  onClick: () => void;
+}) {
   return (
-    <button type="button" onClick={onClick} aria-pressed={selected} style={{
-      display: 'flex', alignItems: 'center', gap: 12, width: '100%', textAlign: 'left',
-      padding: 12, borderRadius: 10, cursor: 'pointer',
-      border: selected ? '1.5px solid var(--brand)' : '1px solid var(--line)',
-      background: selected ? 'var(--brand-t, rgba(0,0,0,.03))' : 'var(--bg-1, transparent)',
-    }}>
-      {selected
-        ? <Icon name="check-circle" size={18} />
-        : <span aria-hidden style={{ width: 18, height: 18, borderRadius: '50%', border: '1.5px solid var(--line)', flexShrink: 0 }} />}
+    <button
+      type="button"
+      onClick={onClick}
+      aria-pressed={selected}
+      style={{
+        display: "flex",
+        alignItems: "center",
+        gap: 12,
+        width: "100%",
+        textAlign: "left",
+        padding: 12,
+        borderRadius: 10,
+        cursor: "pointer",
+        border: selected ? "1.5px solid var(--brand)" : "1px solid var(--line)",
+        background: selected
+          ? "var(--brand-t, rgba(0,0,0,.03))"
+          : "var(--bg-1, transparent)",
+      }}
+    >
+      {selected ? (
+        <Icon name="check-circle" size={18} />
+      ) : (
+        <span
+          aria-hidden
+          style={{
+            width: 18,
+            height: 18,
+            borderRadius: "50%",
+            border: "1.5px solid var(--line)",
+            flexShrink: 0,
+          }}
+        />
+      )}
       <span style={{ flex: 1 }}>
-        <strong style={{ display: 'block', fontSize: '.92rem' }}>{title}</strong>
-        <span className="sub" style={{ fontSize: '.78rem' }}>{subtitle}</span>
+        <strong style={{ display: "block", fontSize: ".92rem" }}>
+          {title}
+        </strong>
+        <span className="sub" style={{ fontSize: ".78rem" }}>
+          {subtitle}
+        </span>
       </span>
     </button>
   );
@@ -730,7 +1256,7 @@ function ChoiceCard(
  *  .pf-h3-done in web.css for the transition itself. */
 function DoneMark({ on }: { on: boolean }) {
   return (
-    <span className={`pf-h3-done${on ? ' on' : ''}`} aria-hidden>
+    <span className={on ? "pf-h3-done on" : "pf-h3-done"} aria-hidden>
       <Icon name="check-circle" size={16} />
     </span>
   );
@@ -738,10 +1264,19 @@ function DoneMark({ on }: { on: boolean }) {
 
 function ErrorLine({ message }: { message: string }) {
   return (
-    <p role="alert" style={{
-      color: 'var(--red, #b42318)', display: 'flex', alignItems: 'center', gap: 6, margin: '14px 0 0', fontSize: '.85rem',
-    }}>
-      <Icon name="alert-circle" size={15} />{message}
+    <p
+      role="alert"
+      style={{
+        color: "var(--red, #b42318)",
+        display: "flex",
+        alignItems: "center",
+        gap: 6,
+        margin: "14px 0 0",
+        fontSize: ".85rem",
+      }}
+    >
+      <Icon name="alert-circle" size={15} />
+      {message}
     </p>
   );
 }
