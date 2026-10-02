@@ -3,9 +3,9 @@ import { redirect } from 'next/navigation';
 import { extractEsoqoId } from '@esoqo/domain';
 
 /**
- * The short form of a pay link: `/pay/ESK-ABC234-KE`.
+ * The short form of a pay link: `/pay/johnmutu482`.
  *
- * It exists for the SMS. The full `/pay?to=ESK-ABC234-KE` is 45
+ * It exists for the SMS. The full `/pay?to=johnmutu482` is 41
  * characters on a typical host, which does not fit in a receipt message
  * once the amount and the business name are in it — and the alternative
  * of clipping the URL to make room produces a link to a business whose

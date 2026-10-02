@@ -6,7 +6,7 @@ import { PayNav } from './PayNav';
  * to the hub.
  *
  * The one route this also covers that it should not really is
- * /pay/<ESK-ID>, the short link a printed QR points at. That page is a
+ * /pay/<esoqo-handle>, the short link a printed QR points at. That page is a
  * meta refresh, so the menu is on screen for the moment between arriving
  * and being forwarded — harmless, and not worth a second layout tree to
  * avoid.

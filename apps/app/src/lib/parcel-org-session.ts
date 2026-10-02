@@ -325,7 +325,7 @@ export interface ParcelOrgStaffRow {
   isContact: boolean;
   partyId: string | null;
   stationId: string | null;
-  /** The phone and the ESK-… handle this member signs in with — read
+  /** The phone and the esoqo handle this member signs in with — read
    *  back to someone who forgot, and shown so a manager can see a
    *  credential exists. Both null for an office-only login with no
    *  linked person. */
