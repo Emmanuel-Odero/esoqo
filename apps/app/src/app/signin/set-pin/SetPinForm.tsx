@@ -82,6 +82,64 @@ export function SetPinForm() {
 
   // Prevent hydration mismatch by not rendering conditional content until mounted
   if (!mounted) {
+    // If msisdn is in URL (from registration), we know the flow and can render
+    // the code/PIN form directly. Otherwise show the phone input.
+    if (msisdnFromUrl) {
+      return (
+        <>
+          <div className="fld">
+            <label className="lab" htmlFor="code">
+              <Icon name="keypad" size={15} />
+              Code
+            </label>
+            <input
+              className="inp mono"
+              id="code"
+              value={code}
+              onChange={(e) => setCode(e.target.value)}
+              inputMode="numeric"
+              maxLength={6}
+              autoComplete="one-time-code"
+            />
+            <p className="hint">It can take a minute to arrive.</p>
+          </div>
+          <div className="fld">
+            <label className="lab" htmlFor="pin">
+              <Icon name="lock" size={15} />
+              New PIN
+            </label>
+            <input
+              className="inp mono"
+              id="pin"
+              type="password"
+              value={pin}
+              onChange={(e) => setPin(e.target.value)}
+              inputMode="numeric"
+              maxLength={6}
+            />
+            <p className="hint">
+              Four to six digits — avoid 1234, 0000 or anything predictable.
+            </p>
+          </div>
+          <div className="fld">
+            <label className="lab" htmlFor="pinc">
+              <Icon name="lock" size={15} />
+              Confirm PIN
+            </label>
+            <input
+              className="inp mono"
+              id="pinc"
+              type="password"
+              value={pinConfirm}
+              onChange={(e) => setPinConfirm(e.target.value)}
+              inputMode="numeric"
+              maxLength={6}
+            />
+          </div>
+        </>
+      );
+    }
+
     return (
       <div className="fld">
         <label className="lab" htmlFor="msisdn">
