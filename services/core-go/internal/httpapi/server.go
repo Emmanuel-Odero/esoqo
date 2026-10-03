@@ -95,6 +95,7 @@ func (s *Server) Router() *gin.Engine {
 		auth.POST("/verify-otp", s.rateLimit("auth:verify", 30, time.Hour), s.handleVerifyOtp)
 		auth.POST("/sign-in", s.rateLimit("auth:signin", 30, time.Hour), s.handleSignIn)
 		auth.POST("/pin/reset", s.rateLimit("auth:pinreset", 20, time.Hour), s.handleResetPin)
+		auth.POST("/pin/set-without-code", s.rateLimit("auth:pinreset", 20, time.Hour), s.handleSetPinWithoutCode)
 		auth.POST("/set-pin", s.authRequired(), s.handleSetPin)
 		auth.POST("/sign-out", s.authRequired(), s.handleSignOut)
 

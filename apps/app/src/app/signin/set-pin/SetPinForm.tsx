@@ -19,7 +19,6 @@ export function SetPinForm() {
   const [pinConfirm, setPinConfirm] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [pending, startTransition] = useTransition();
-  const [otpSent, setOtpSent] = useState(false);
   const router = useRouter();
 
   // Handle client-side mounting
@@ -33,8 +32,7 @@ export function SetPinForm() {
 
   // Auto-send OTP when coming from registration
   useEffect(() => {
-    if (mounted && msisdnFromUrl && !otpSent && step === "code") {
-      setOtpSent(true);
+    if (mounted && msisdnFromUrl && step === "code") {
       startTransition(async () => {
         const result = await actionRequestPinCode({
           msisdn: msisdnFromUrl.replace(/\s+/g, ""),
@@ -46,7 +44,7 @@ export function SetPinForm() {
         }
       });
     }
-  }, [mounted, msisdnFromUrl, otpSent, step]);
+  }, [mounted, msisdnFromUrl, step]);
 
   function requestCode() {
     setError(null);
@@ -65,12 +63,20 @@ export function SetPinForm() {
   function submit() {
     setError(null);
     startTransition(async () => {
-      const result = await actionSetPin({
-        msisdn: msisdn.replace(/\s+/g, ""),
-        code,
-        pin,
-        pinConfirm,
-      });
+      // When coming from registration, we don't have a code - just send pin directly
+      // For forgot PIN flow, we send code with pin
+      const result = msisdnFromUrl
+        ? await actionSetPin({
+            msisdn: msisdn.replace(/\s+/g, ""),
+            pin,
+            pinConfirm,
+          })
+        : await actionSetPin({
+            msisdn: msisdn.replace(/\s+/g, ""),
+            code,
+            pin,
+            pinConfirm,
+          });
       if (!result.ok) {
         setError(result.error);
         return;
@@ -80,66 +86,67 @@ export function SetPinForm() {
     });
   }
 
+  // When coming from registration (msisdnFromUrl is present), phone is already verified
+  // so we skip the code verification and go straight to PIN entry
+  if (msisdnFromUrl) {
+    return (
+      <>
+        <div className="fld">
+          <label className="lab" htmlFor="pin">
+            <Icon name="lock" size={15} />
+            New PIN
+          </label>
+          <input
+            className="inp mono"
+            id="pin"
+            type="password"
+            value={pin}
+            onChange={(e) => setPin(e.target.value)}
+            inputMode="numeric"
+            maxLength={6}
+          />
+          <p className="hint">
+            Four to six digits — avoid 1234, 0000 or anything predictable.
+          </p>
+        </div>
+        <div className="fld">
+          <label className="lab" htmlFor="pinc">
+            <Icon name="lock" size={15} />
+            Confirm PIN
+          </label>
+          <input
+            className="inp mono"
+            id="pinc"
+            type="password"
+            value={pinConfirm}
+            onChange={(e) => setPinConfirm(e.target.value)}
+            inputMode="numeric"
+            maxLength={6}
+          />
+        </div>
+        {error && (
+          <div className="note n-red" style={{ marginBottom: 16 }}>
+            <div>
+              <p>{error}</p>
+            </div>
+          </div>
+        )}
+        <button
+          type="button"
+          className="btn btn-p"
+          style={{ width: "100%" }}
+          disabled={pending || !pin.trim() || !pinConfirm.trim()}
+          onClick={submit}
+        >
+          {pending ? "Setting PIN…" : "Set PIN & sign in"}{" "}
+          <Icon name="check" size={16} />
+        </button>
+      </>
+    );
+  }
+
   // Prevent hydration mismatch by not rendering conditional content until mounted
   if (!mounted) {
-    // If msisdn is in URL (from registration), we know the flow and can render
-    // the code/PIN form directly. Otherwise show the phone input.
-    if (msisdnFromUrl) {
-      return (
-        <>
-          <div className="fld">
-            <label className="lab" htmlFor="code">
-              <Icon name="keypad" size={15} />
-              Code
-            </label>
-            <input
-              className="inp mono"
-              id="code"
-              value={code}
-              onChange={(e) => setCode(e.target.value)}
-              inputMode="numeric"
-              maxLength={6}
-              autoComplete="one-time-code"
-            />
-            <p className="hint">It can take a minute to arrive.</p>
-          </div>
-          <div className="fld">
-            <label className="lab" htmlFor="pin">
-              <Icon name="lock" size={15} />
-              New PIN
-            </label>
-            <input
-              className="inp mono"
-              id="pin"
-              type="password"
-              value={pin}
-              onChange={(e) => setPin(e.target.value)}
-              inputMode="numeric"
-              maxLength={6}
-            />
-            <p className="hint">
-              Four to six digits — avoid 1234, 0000 or anything predictable.
-            </p>
-          </div>
-          <div className="fld">
-            <label className="lab" htmlFor="pinc">
-              <Icon name="lock" size={15} />
-              Confirm PIN
-            </label>
-            <input
-              className="inp mono"
-              id="pinc"
-              type="password"
-              value={pinConfirm}
-              onChange={(e) => setPinConfirm(e.target.value)}
-              inputMode="numeric"
-              maxLength={6}
-            />
-          </div>
-        </>
-      );
-    }
-
     return (
       <div className="fld">
         <label className="lab" htmlFor="msisdn">
@@ -200,17 +207,6 @@ export function SetPinForm() {
 
   return (
     <>
-      {msisdnFromUrl && (
-        <div className="note n-blue" style={{ marginBottom: 16 }}>
-          <Icon name="info" size={18} />
-          <div>
-            <p>
-              We sent a code to <strong className="mono">{msisdn}</strong> to
-              confirm it's you.
-            </p>
-          </div>
-        </div>
-      )}
       <div className="fld">
         <label className="lab" htmlFor="code">
           <Icon name="keypad" size={15} />
@@ -277,19 +273,17 @@ export function SetPinForm() {
         {pending ? "Setting PIN…" : "Set PIN & sign in"}{" "}
         <Icon name="check" size={16} />
       </button>
-      {!msisdnFromUrl && (
-        <button
-          type="button"
-          className="btn btn-o"
-          style={{ width: "100%", marginTop: 8 }}
-          onClick={() => {
-            setStep("phone");
-            setError(null);
-          }}
-        >
-          Use a different number
-        </button>
-      )}
+      <button
+        type="button"
+        className="btn btn-o"
+        style={{ width: "100%", marginTop: 8 }}
+        onClick={() => {
+          setStep("phone");
+          setError(null);
+        }}
+      >
+        Use a different number
+      </button>
     </>
   );
 }

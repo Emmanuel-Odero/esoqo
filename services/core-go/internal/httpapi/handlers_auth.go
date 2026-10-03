@@ -252,6 +252,49 @@ func (s *Server) handleResetPin(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"token": token})
 }
 
+// setPinWithoutCodeRequest is used when phone is already verified (e.g., after registration)
+type setPinWithoutCodeRequest struct {
+	Msisdn string `json:"msisdn" binding:"required"`
+	Pin    string `json:"pin" binding:"required"`
+}
+
+func (s *Server) handleSetPinWithoutCode(c *gin.Context) {
+	var req setPinWithoutCodeRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		writeError(c, http.StatusBadRequest, "INVALID_REQUEST", err.Error())
+		return
+	}
+	if !requireMsisdn(c, &req.Msisdn, "That phone number") {
+		return
+	}
+	if authsvc.IsWeakPin(req.Pin) {
+		writeError(c, http.StatusBadRequest, "WEAK_PIN", "Choose a less predictable PIN — not 1234, 0000 or a run of digits.")
+		return
+	}
+
+	hash, err := authsvc.HashPin(req.Pin)
+	if err != nil {
+		writeError(c, http.StatusBadRequest, "INVALID_PIN", err.Error())
+		return
+	}
+	partyID, err := dbx.SetSubjectPinByMsisdn(c.Request.Context(), s.Pool, req.Msisdn, hash)
+	if err != nil {
+		if err == dbx.ErrPersonNotFound {
+			writeError(c, http.StatusNotFound, "NOT_FOUND", "No Esoqo account found with that number")
+			return
+		}
+		writeError(c, http.StatusInternalServerError, "SET_PIN_FAILED", "Could not save PIN")
+		return
+	}
+
+	token, err := s.issueSubjectSession(c, partyID)
+	if err != nil {
+		writeError(c, http.StatusInternalServerError, "SESSION_CREATE_FAILED", "Could not start a session")
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"token": token})
+}
+
 // ── POST /v1/auth/set-pin (authenticated) ─────────────────────────────
 
 type setPinRequest struct {
