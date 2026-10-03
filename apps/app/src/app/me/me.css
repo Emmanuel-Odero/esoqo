@@ -472,3 +472,80 @@
   .mcard { padding: 14px }
   .mcard .btn { width: 100%; justify-content: center }
 }
+/* ── payment prompt (home page action for pending registration fees) ───── */
+.me-payment-prompt {
+  border-color: var(--amber-t);
+  background: var(--amber-t);
+}
+.me-payment-prompt-content {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 14px;
+}
+.me-payment-icon {
+  flex: none;
+  width: 36px;
+  height: 36px;
+  border-radius: 9px;
+  display: grid;
+  place-items: center;
+  background: #fff;
+  color: var(--amber);
+}
+.me-payment-text {
+  flex: 1;
+  min-width: 0;
+  line-height: 1.25;
+}
+.me-payment-text strong {
+  display: block;
+  font-size: .88rem;
+  font-weight: 700;
+  color: var(--navy);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.me-payment-text small {
+  display: block;
+  font-size: .74rem;
+  color: var(--tx-2);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.me-payment-prompt--empty {
+  border-color: var(--green-t);
+  background: var(--green-t);
+}
+.me-payment-prompt--empty .me-payment-icon {
+  background: #fff;
+  color: var(--green);
+}
+
+/* ── skeleton: mirrors me-mast + quick + grid — no jump ───── */
+.skel { padding: 6px 0 24px }
+.skel-line { height: 11px; border-radius: 99px; background: linear-gradient(100deg, var(--paper) 40%, #EAF1F6 50%, var(--paper) 60%); background-size: 220% 100%; animation: skel-shimmer 1.2s ease-in-out infinite }
+.skel-kicker { width: 92px; height: 9px; border-radius: 99px; background: var(--line) }
+.skel-title { width: 56%; height: 26px; border-radius: 9px; margin: 12px 0 8px; background: linear-gradient(100deg, var(--paper) 40%, #EAF1F6 50%, var(--paper) 60%); background-size: 220% 100%; animation: skel-shimmer 1.2s ease-in-out infinite }
+.skel-mast { border-bottom: 1px solid var(--line); padding: 6px 2px 16px; margin-bottom: 14px }
+.skel-quick { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 14px }
+.skel-quick > div { height: 64px; border: 1px solid var(--line); border-radius: 14px; background: #fff }
+@media (min-width: 820px) { .skel-quick { grid-template-columns: repeat(4, 1fr) } }
+@media (max-width: 560px) { .skel-quick { grid-template-columns: 1fr } }
+.skel-grid2 { display: grid; gap: 14px }
+@media (min-width: 980px) { .skel-grid2 { grid-template-columns: 1fr 360px } }
+.skel-card { border: 1px solid var(--line); border-radius: 14px; padding: 16px; background: #fff }
+.skel-row { display: flex; gap: 12px; align-items: center; padding: 11px 0; border-bottom: 1px solid var(--line) }
+.skel-row:last-child { border-bottom: 0 }
+@keyframes skel-shimmer { from { background-position: 160% 0 } to { background-position: -60% 0 } }
+
+/* responsive tweaks */
+@media (max-width: 560px) {
+  .me .wrap { padding-top: 16px }
+  .mrow { flex-direction: column; gap: 3px }
+  .mrow .k { width: auto }
+  .mcard { padding: 14px }
+  .mcard .btn { width: 100%; justify-content: center }
+}
