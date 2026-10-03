@@ -1,36 +1,43 @@
-import type { Metadata } from 'next';
-import Link from 'next/link';
-import { Logo } from '@esoqo/ui';
-import { getDisplayPrefs } from '@esoqo/db';
-import { requireSubject } from '@/lib/session';
-import { listWorkspaces } from '@/lib/workspaces';
-import { WorkspaceSwitcher } from '@/components/WorkspaceSwitcher';
-import { PrefsApplier } from './PrefsApplier';
-import { ShellNav, type NavItem } from './ShellNav';
-import './me.css';
+import type { Metadata } from "next";
+import Link from "next/link";
+import { Logo } from "@esoqo/ui";
+import { getDisplayPrefs } from "@esoqo/db";
+import { requireSubject } from "@/lib/session";
+import { listWorkspaces } from "@/lib/workspaces";
+import { WorkspaceSwitcher } from "@/components/WorkspaceSwitcher";
+import { PrefsApplier } from "./PrefsApplier";
+import { ShellNav, type NavItem } from "./ShellNav";
+import "./me.css";
 
-export const metadata: Metadata = { title: { default: 'Your profile', template: '%s · Esoqo' } };
+export const metadata: Metadata = {
+  title: { default: "Your profile", template: "%s · Esoqo" },
+};
 
 // Labels are plain verbs, not product jargon.
-// Money beats tickets for frequency — Wallet holds the primary slot; tickets
-// live in More where they're one tap away but not competing for attention.
+// Priority order: Home, Group (if applicable), Wallet (money), then More for less-frequent actions.
+// Note: Registration fee status now lives on the Home page (no separate Fee tab).
 const PRIMARY: NavItem[] = [
-  { href: '/me', icon: 'user', label: 'Home' },
-  { href: '/me/group', icon: 'users', label: 'Group' },
-  { href: '/me/wallet', icon: 'bank', label: 'Wallet' },
-  { href: '/me/payments', icon: 'coins', label: 'Fee' },
+  { href: "/me", icon: "user", label: "Home" },
+  { href: "/me/group", icon: "users", label: "Group" },
+  { href: "/me/wallet", icon: "bank", label: "Wallet" },
 ];
 
 const MORE: NavItem[] = [
-  { href: '/me/tickets', icon: 'qr', label: 'My tickets' },
-  { href: '/me/organiser', icon: 'calendar', label: 'Sell tickets' },
-  { href: '/me/consents', icon: 'eye', label: 'Privacy' },
-  { href: '/me/settings', icon: 'grid', label: 'Settings' },
+  { href: "/me/tickets", icon: "qr", label: "My tickets" },
+  { href: "/me/organiser", icon: "calendar", label: "Sell tickets" },
+  { href: "/me/settings", icon: "grid", label: "Settings" },
 ];
 
-export default async function MeLayout({ children }: { children: React.ReactNode }) {
+export default async function MeLayout({
+  children,
+}: {
+  children: React.ReactNode;
+}) {
   const ctx = await requireSubject();
-  const [prefs, workspaces] = await Promise.all([getDisplayPrefs(ctx), listWorkspaces()]);
+  const [prefs, workspaces] = await Promise.all([
+    getDisplayPrefs(ctx),
+    listWorkspaces(),
+  ]);
 
   return (
     <div className="me">
