@@ -1,11 +1,11 @@
-'use client';
+"use client";
 
-import { useState, type ReactNode } from 'react';
-import { Icon, type IconName } from '@esoqo/ui';
-import { useAnnounce } from '@esoqo/a11y';
-import { COUNTIES, normaliseMsisdn } from '@esoqo/domain';
-import type { JoinDetails } from './actions';
-import type { JoinInvite } from './JoinWizard';
+import { useState, useEffect, type ReactNode } from "react";
+import { Icon, type IconName } from "@esoqo/ui";
+import { useAnnounce } from "@esoqo/a11y";
+import { COUNTIES, normaliseMsisdn } from "@esoqo/domain";
+import type { JoinDetails } from "./actions";
+import type { JoinInvite } from "./JoinWizard";
 
 /**
  * The review step.
@@ -55,35 +55,83 @@ import type { JoinInvite } from './JoinWizard';
 /** The four fields registration genuinely cannot complete without — see
  *  actionStartJoin's own validation, which this mirrors so the person
  *  hears about a problem before a round trip rather than after. */
-const REQUIRED: Array<{ field: keyof JoinDetails; id: string; problem: string }> = [
-  { field: 'firstName', id: 'j-first', problem: 'Add your first name' },
-  { field: 'surname', id: 'j-surname', problem: 'Add your surname' },
-  { field: 'county', id: 'j-county', problem: 'Choose your county' },
-  { field: 'msisdn', id: 'j-msisdn', problem: 'Add a phone number we can text a code to' },
+const REQUIRED: Array<{
+  field: keyof JoinDetails;
+  id: string;
+  problem: string;
+}> = [
+  { field: "firstName", id: "j-first", problem: "Add your first name" },
+  { field: "surname", id: "j-surname", problem: "Add your surname" },
+  { field: "dateOfBirth", id: "j-dob", problem: "Add your date of birth" },
+  { field: "county", id: "j-county", problem: "Choose your county" },
+  {
+    field: "msisdn",
+    id: "j-msisdn",
+    problem: "Add a phone number we can text a code to",
+  },
 ];
+
+/** When coming from an invite, the phone number is locked to prevent
+ *  silently losing group membership by signing up on a different number. */
+function msisdnLocked(invite: JoinInvite | null, typedMsisdn: string): boolean {
+  if (!invite) return false;
+  const invitedMsisdn = invite.msisdn ? normaliseMsisdn(invite.msisdn) : null;
+  const normalized = normaliseMsisdn(typedMsisdn);
+  return Boolean(invitedMsisdn && normalized && invitedMsisdn !== normalized);
+}
 
 function problemsIn(details: JoinDetails): Map<keyof JoinDetails, string> {
   const out = new Map<keyof JoinDetails, string>();
   for (const { field, problem } of REQUIRED) {
-    const value = String(details[field] ?? '');
-    const ok = field === 'msisdn'
-      // Stripped of formatting a real Kenyan number has at least 10
-      // digits — counting them stops the "+254 7" the field starts out
-      // holding from passing as a filled-in number.
-      ? value.replace(/\D/g, '').length >= 10
-      : value.trim().length > 0;
+    const value = String(details[field] ?? "");
+    const ok =
+      field === "msisdn"
+        ? // Stripped of formatting a real Kenyan number has at least 10
+          // digits — counting them stops the "+254 7" the field starts out
+          // holding from passing as a filled-in number.
+          value.replace(/\D/g, "").length >= 10
+        : value.trim().length > 0;
     if (!ok) out.set(field, problem);
   }
+
+  // Age validation: must be 18 or older
+  if (details.dateOfBirth) {
+    const dob = new Date(details.dateOfBirth);
+    const today = new Date();
+    const age = today.getFullYear() - dob.getFullYear();
+    const monthDiff = today.getMonth() - dob.getMonth();
+    const dayDiff = today.getDate() - dob.getDate();
+
+    // Calculate exact age accounting for month and day
+    const exactAge =
+      monthDiff < 0 || (monthDiff === 0 && dayDiff < 0) ? age - 1 : age;
+
+    if (exactAge < 18) {
+      out.set("dateOfBirth", "You must be at least 18 years old to register");
+    }
+  }
+
   return out;
 }
 
 export function DetailsForm({
-  details, onChange, error, pending, onSubmit,
-  scanned, scanReport, frontPreview, backPreview, onRescan, invite,
+  details,
+  onChange,
+  error,
+  errorField,
+  pending,
+  onSubmit,
+  scanned,
+  scanReport,
+  frontPreview,
+  backPreview,
+  onRescan,
+  invite,
 }: {
   details: JoinDetails;
   onChange: (d: JoinDetails) => void;
   error: string | null;
+  errorField?: string | null;
   pending: boolean;
   onSubmit: () => void;
   /** Field names the scan filled in. Empty when it was skipped. */
@@ -102,27 +150,62 @@ export function DetailsForm({
   const [showProblems, setShowProblems] = useState(false);
   const announce = useAnnounce();
 
+  // When a server-side error arrives, show it and scroll to the field
+  useEffect(() => {
+    if (errorField) {
+      setShowProblems(true);
+      const el = document.getElementById(`j-${errorField}`);
+      if (el) {
+        // Give a brief moment for the error to render before scrolling
+        setTimeout(() => {
+          el.scrollIntoView({ block: "center", behavior: "smooth" });
+          el.focus({ preventScroll: true });
+          announce(`Error: ${error}`, "assertive");
+        }, 50);
+      }
+    }
+  }, [errorField, error, announce]);
+
   function set<K extends keyof JoinDetails>(key: K, value: JoinDetails[K]) {
     onChange({ ...details, [key]: value });
   }
 
   const problems = problemsIn(details);
-  const problemFor = (field: keyof JoinDetails) => (showProblems ? problems.get(field) : undefined);
+  const problemFor = (field: keyof JoinDetails) => {
+    // Show server-side field error if available, otherwise client-side validation
+    if (errorField && errorField === field && error) {
+      return error;
+    }
+    return showProblems ? problems.get(field) : undefined;
+  };
 
   function submit() {
+    // If coming from an invite, phone number must match the invite
+    if (msisdnLocked(invite, details.msisdn)) {
+      setShowProblems(true);
+      const el = document.getElementById("j-msisdn");
+      el?.scrollIntoView({ block: "center", behavior: "smooth" });
+      el?.focus({ preventScroll: true });
+      announce(
+        `Use the phone number you were invited on (${invite?.msisdn}) to keep your group membership`,
+        "assertive",
+      );
+      return;
+    }
+
     if (problems.size > 0) {
       setShowProblems(true);
       const first = REQUIRED.find((r) => problems.has(r.field));
       if (first) {
         const el = document.getElementById(first.id);
-        el?.scrollIntoView({ block: 'center', behavior: 'smooth' });
+        el?.scrollIntoView({ block: "center", behavior: "smooth" });
         el?.focus({ preventScroll: true });
       }
       announce(
         problems.size === 1
           ? `One thing left: ${[...problems.values()][0]}`
           : `${problems.size} things left before we can send your code`,
-        'assertive',
+        "assertive",
       );
       return;
     }
@@ -136,7 +219,9 @@ export function DetailsForm({
   // too quiet a way to lose your place, so it is said out loud here.
   const invitedMsisdn = invite?.msisdn ? normaliseMsisdn(invite.msisdn) : null;
   const typedMsisdn = normaliseMsisdn(details.msisdn);
-  const msisdnChanged = Boolean(invitedMsisdn && typedMsisdn && invitedMsisdn !== typedMsisdn);
+  const msisdnChanged = Boolean(
+    invitedMsisdn && typedMsisdn && invitedMsisdn !== typedMsisdn,
+  );
 
   return (
     <div>
@@ -145,18 +230,29 @@ export function DetailsForm({
       {(frontPreview || backPreview) && (
         <div className="joinphotos">
           <button
-            type="button" className="joinphotos-toggle" aria-expanded={photosOpen}
+            type="button"
+            className="joinphotos-toggle"
+            aria-expanded={photosOpen}
             onClick={() => setPhotosOpen((v) => !v)}
           >
-            <Icon name={photosOpen ? 'chevron-down' : 'chevron-right'} size={14} />
+            <Icon
+              name={photosOpen ? "chevron-down" : "chevron-right"}
+              size={14}
+            />
             Your ID photos
             <span className="hint">kept with your record</span>
           </button>
           {photosOpen && (
             <div className="joinphotos-grid">
-              {frontPreview && <img src={frontPreview} alt="Front of your ID" />}
+              {frontPreview && (
+                <img src={frontPreview} alt="Front of your ID" />
+              )}
               {backPreview && <img src={backPreview} alt="Back of your ID" />}
-              <button type="button" className="btn btn-o btn-sm" onClick={onRescan}>
+              <button
+                type="button"
+                className="btn btn-o btn-sm"
+                onClick={onRescan}
+              >
                 <Icon name="refresh" size={14} /> Retake or re-read
               </button>
             </div>
@@ -164,105 +260,214 @@ export function DetailsForm({
         </div>
       )}
 
-      <Section icon="user" title="Your name" intro="As it appears on your ID, so the two match later.">
-        <Field id="j-first" label="First name" scanned={scanned.has('firstName')} problem={problemFor('firstName')}>
+      <Section
+        icon="user"
+        title="Your name"
+        intro="As it appears on your ID, so the two match later."
+      >
+        <Field
+          id="j-first"
+          label="First name"
+          scanned={scanned.has("firstName")}
+          problem={problemFor("firstName")}
+        >
           {(p) => (
-            <input className="inp" id="j-first" value={details.firstName} autoComplete="given-name"
-              onChange={(e) => set('firstName', e.target.value)} {...p} />
+            <input
+              className="inp"
+              id="j-first"
+              value={details.firstName}
+              autoComplete="given-name"
+              onChange={(e) => set("firstName", e.target.value)}
+              {...p}
+            />
           )}
         </Field>
-        <Field id="j-middle" label="Middle name" optional scanned={scanned.has('middleName')}>
+        <Field
+          id="j-middle"
+          label="Middle name"
+          optional
+          scanned={scanned.has("middleName")}
+        >
           {(p) => (
-            <input className="inp" id="j-middle" value={details.middleName ?? ''} autoComplete="additional-name"
-              onChange={(e) => set('middleName', e.target.value)} {...p} />
+            <input
+              className="inp"
+              id="j-middle"
+              value={details.middleName ?? ""}
+              autoComplete="additional-name"
+              onChange={(e) => set("middleName", e.target.value)}
+              {...p}
+            />
           )}
         </Field>
-        <Field id="j-surname" label="Surname" scanned={scanned.has('surname')} problem={problemFor('surname')}>
+        <Field
+          id="j-surname"
+          label="Surname"
+          scanned={scanned.has("surname")}
+          problem={problemFor("surname")}
+        >
           {(p) => (
-            <input className="inp" id="j-surname" value={details.surname} autoComplete="family-name"
-              onChange={(e) => set('surname', e.target.value)} {...p} />
+            <input
+              className="inp"
+              id="j-surname"
+              value={details.surname}
+              autoComplete="family-name"
+              onChange={(e) => set("surname", e.target.value)}
+              {...p}
+            />
           )}
         </Field>
       </Section>
 
       <Section
-        icon="phone" title="How we reach you"
+        icon="phone"
+        title="How we reach you"
         intro="Your phone number is how you sign in to Esoqo, so this is the one to get right."
       >
         <Field
-          id="j-msisdn" label="Phone number" problem={problemFor('msisdn')}
+          id="j-msisdn"
+          label="Phone number"
+          problem={problemFor("msisdn")}
           hint="We'll text a six-digit code here to confirm it's you."
         >
           {(p) => (
-            <input className="inp mono" id="j-msisdn" value={details.msisdn} inputMode="tel" autoComplete="tel"
-              onChange={(e) => set('msisdn', e.target.value)} {...p} />
+            <input
+              className="inp mono"
+              id="j-msisdn"
+              value={details.msisdn}
+              inputMode="tel"
+              autoComplete="tel"
+              onChange={(e) => set("msisdn", e.target.value)}
+              {...p}
+            />
           )}
         </Field>
         {msisdnChanged && invite && (
-          <div className="note n-amber" style={{ marginBottom: 15 }}>
-            <Icon name="alert-triangle" size={18} />
+          <div className="note n-red" style={{ marginBottom: 15 }}>
+            <Icon name="alert-circle" size={18} />
             <div>
-              <strong>That&rsquo;s not the number you were invited on</strong>
+              <strong>
+                Use your invited phone number to keep your membership
+              </strong>
               <p>
-                Your place in {invite.orgName} is held against {invite.msisdn}. Signing up on a
-                different number will create an account without that membership &mdash; use the
-                invited number, or ask an officer to invite this one instead.
+                Your place in {invite.orgName} is held for {invite.msisdn}. You
+                must sign up on that same number, or ask an officer to send you
+                a new invite for this one.
               </p>
             </div>
           </div>
         )}
-        <Field id="j-email" label="Email" optional hint="Only used for receipts and notices. You can add it later.">
+        <Field
+          id="j-email"
+          label="Email"
+          optional
+          hint="Only used for receipts and notices. You can add it later."
+        >
           {(p) => (
-            <input className="inp" id="j-email" type="email" value={details.email ?? ''} autoComplete="email"
-              onChange={(e) => set('email', e.target.value)} {...p} />
+            <input
+              className="inp"
+              id="j-email"
+              type="email"
+              value={details.email ?? ""}
+              autoComplete="email"
+              onChange={(e) => set("email", e.target.value)}
+              {...p}
+            />
           )}
         </Field>
       </Section>
 
-      <Section icon="map" title="Where you are" intro="This is how we show you prices and groups near you.">
+      <Section
+        icon="map"
+        title="Where you are"
+        intro="This is how we show you prices and groups near you."
+      >
         <Field
-          id="j-county" label="County" scanned={scanned.has('county')} problem={problemFor('county')}
-          hint={scanned.has('county')
-            ? 'Worked out from the district on your ID, which is where you were born — change it if you live somewhere else now.'
-            : undefined}
+          id="j-county"
+          label="County"
+          scanned={scanned.has("county")}
+          problem={problemFor("county")}
+          hint={
+            scanned.has("county")
+              ? "Worked out from the district on your ID, which is where you were born — change it if you live somewhere else now."
+              : undefined
+          }
         >
           {(p) => (
-            <select className="inp" id="j-county" value={details.county}
-              onChange={(e) => set('county', e.target.value)} {...p}>
+            <select
+              className="inp"
+              id="j-county"
+              value={details.county}
+              onChange={(e) => set("county", e.target.value)}
+              {...p}
+            >
               <option value="">Choose your county…</option>
-              {COUNTIES.map((c) => <option key={c} value={c}>{c}</option>)}
+              {COUNTIES.map((c) => (
+                <option key={c} value={c}>
+                  {c}
+                </option>
+              ))}
             </select>
           )}
         </Field>
-        <Field id="j-ward" label="Ward or market" optional hint="Helpful if you trade somewhere in particular.">
+        <Field
+          id="j-ward"
+          label="Ward or market"
+          optional
+          hint="Helpful if you trade somewhere in particular."
+        >
           {(p) => (
-            <input className="inp" id="j-ward" value={details.ward ?? ''}
-              onChange={(e) => set('ward', e.target.value)} {...p} />
+            <input
+              className="inp"
+              id="j-ward"
+              value={details.ward ?? ""}
+              onChange={(e) => set("ward", e.target.value)}
+              {...p}
+            />
           )}
         </Field>
       </Section>
 
-      {/* Every field in this section is optional, so it is said once here
-          rather than badged six times — six "optional" pills next to six
-          "from your ID" pills is noise, and in the paired narrow columns
-          it crowds the labels off their own line. */}
+      {/* Every field in this section except date of birth is optional, so it is 
+          said once here rather than badged multiple times. Date of birth is 
+          required to verify age (18+). */}
       <Section
-        icon="document" title="From your ID card"
-        intro={scanReport && scanReport.read > 0
-          ? 'Read off the photo you took — worth a glance, since a scan gets it close rather than right. All optional: leave blank anything that did not come out.'
-          : 'All optional, but filling them in now saves you proving who you are later.'}
+        icon="document"
+        title="From your ID card"
+        intro={
+          scanReport && scanReport.read > 0
+            ? "Read off the photo you took — worth a glance, since a scan gets it close rather than right. Most are optional: leave blank anything that did not come out."
+            : "Most are optional, but filling them in now saves you proving who you are later."
+        }
       >
         <div className="grid2">
-          <Field id="j-dob" label="Date of birth" scanned={scanned.has('dateOfBirth')}>
+          <Field
+            id="j-dob"
+            label="Date of birth"
+            scanned={scanned.has("dateOfBirth")}
+            problem={problemFor("dateOfBirth")}
+            hint="You must be at least 18 years old to register"
+          >
             {(p) => (
-              <input className="inp" id="j-dob" type="date" value={details.dateOfBirth ?? ''}
-                onChange={(e) => set('dateOfBirth', e.target.value)} {...p} />
+              <input
+                className="inp"
+                id="j-dob"
+                type="date"
+                value={details.dateOfBirth ?? ""}
+                onChange={(e) => set("dateOfBirth", e.target.value)}
+                max={new Date().toISOString().split("T")[0]}
+                {...p}
+              />
             )}
           </Field>
-          <Field id="j-sex" label="Sex" scanned={scanned.has('sex')}>
+          <Field id="j-sex" label="Sex" scanned={scanned.has("sex")} optional>
             {(p) => (
-              <select className="inp" id="j-sex" value={details.sex ?? ''}
-                onChange={(e) => set('sex', e.target.value)} {...p}>
+              <select
+                className="inp"
+                id="j-sex"
+                value={details.sex ?? ""}
+                onChange={(e) => set("sex", e.target.value)}
+                {...p}
+              >
                 <option value="">Choose…</option>
                 <option value="MALE">Male</option>
                 <option value="FEMALE">Female</option>
@@ -271,34 +476,73 @@ export function DetailsForm({
           </Field>
         </div>
         <Field
-          id="j-idnum" label="ID number" scanned={scanned.has('idNumber')}
-          hint={scanned.has('idNumber')
-            ? 'Worth checking digit by digit — this is the one field a misread number is hardest to notice later.'
-            : undefined}
+          id="j-idnum"
+          label="ID number"
+          scanned={scanned.has("idNumber")}
+          hint={
+            scanned.has("idNumber")
+              ? "Worth checking digit by digit — this is the one field a misread number is hardest to notice later."
+              : undefined
+          }
         >
           {(p) => (
-            <input className="inp mono" id="j-idnum" value={details.idNumber ?? ''} inputMode="numeric"
-              onChange={(e) => set('idNumber', e.target.value)} {...p} />
+            <input
+              className="inp mono"
+              id="j-idnum"
+              value={details.idNumber ?? ""}
+              inputMode="numeric"
+              onChange={(e) => set("idNumber", e.target.value)}
+              {...p}
+            />
           )}
         </Field>
         <div className="grid2">
-          <Field id="j-serial" label="Serial number" scanned={scanned.has('serialNumber')}>
+          <Field
+            id="j-serial"
+            label="Serial number"
+            scanned={scanned.has("serialNumber")}
+          >
             {(p) => (
-              <input className="inp mono" id="j-serial" value={details.serialNumber ?? ''} inputMode="numeric"
-                onChange={(e) => set('serialNumber', e.target.value)} {...p} />
+              <input
+                className="inp mono"
+                id="j-serial"
+                value={details.serialNumber ?? ""}
+                inputMode="numeric"
+                onChange={(e) => set("serialNumber", e.target.value)}
+                {...p}
+              />
             )}
           </Field>
-          <Field id="j-issue" label="Date of issue" scanned={scanned.has('dateOfIssue')}>
+          <Field
+            id="j-issue"
+            label="Date of issue"
+            scanned={scanned.has("dateOfIssue")}
+          >
             {(p) => (
-              <input className="inp" id="j-issue" type="date" value={details.dateOfIssue ?? ''}
-                onChange={(e) => set('dateOfIssue', e.target.value)} {...p} />
+              <input
+                className="inp"
+                id="j-issue"
+                type="date"
+                value={details.dateOfIssue ?? ""}
+                onChange={(e) => set("dateOfIssue", e.target.value)}
+                {...p}
+              />
             )}
           </Field>
         </div>
-        <Field id="j-district" label="District of birth" scanned={scanned.has('districtOfBirth')}>
+        <Field
+          id="j-district"
+          label="District of birth"
+          scanned={scanned.has("districtOfBirth")}
+        >
           {(p) => (
-            <input className="inp" id="j-district" value={details.districtOfBirth ?? ''}
-              onChange={(e) => set('districtOfBirth', e.target.value)} {...p} />
+            <input
+              className="inp"
+              id="j-district"
+              value={details.districtOfBirth ?? ""}
+              onChange={(e) => set("districtOfBirth", e.target.value)}
+              {...p}
+            />
           )}
         </Field>
       </Section>
@@ -308,16 +552,25 @@ export function DetailsForm({
           <Icon name="alert-circle" size={18} />
           <div>
             <strong>
-              {problems.size === 1 ? 'One thing left' : `${problems.size} things left`}
+              {problems.size === 1
+                ? "One thing left"
+                : `${problems.size} things left`}
             </strong>
             <ul className="jproblems">
               {REQUIRED.filter((r) => problems.has(r.field)).map((r) => (
                 <li key={r.id}>
-                  <button type="button" className="linkish" onClick={() => {
-                    const el = document.getElementById(r.id);
-                    el?.scrollIntoView({ block: 'center', behavior: 'smooth' });
-                    el?.focus({ preventScroll: true });
-                  }}>
+                  <button
+                    type="button"
+                    className="linkish"
+                    onClick={() => {
+                      const el = document.getElementById(r.id);
+                      el?.scrollIntoView({
+                        block: "center",
+                        behavior: "smooth",
+                      });
+                      el?.focus({ preventScroll: true });
+                    }}
+                  >
                     {problems.get(r.field)}
                   </button>
                 </li>
@@ -327,12 +580,25 @@ export function DetailsForm({
         </div>
       )}
 
-      {error && <div className="note n-red" style={{ marginBottom: 16 }} role="alert"><div><p>{error}</p></div></div>}
+      {error && (
+        <div className="note n-red" style={{ marginBottom: 16 }} role="alert">
+          <div>
+            <p>{error}</p>
+          </div>
+        </div>
+      )}
 
-      <button type="button" className="btn btn-p" style={{ width: '100%' }} disabled={pending} onClick={submit}>
-        {pending ? 'Sending code…' : 'Send verification code'} <Icon name="send" size={16} />
+      <button
+        type="button"
+        className="btn btn-p"
+        style={{ width: "100%" }}
+        disabled={pending}
+        onClick={submit}
+      >
+        {pending ? "Sending code…" : "Send verification code"}{" "}
+        <Icon name="send" size={16} />
       </button>
-      <p className="hint" style={{ textAlign: 'center' }}>
+      <p className="hint" style={{ textAlign: "center" }}>
         Nothing is saved until you confirm the code we send you.
       </p>
     </div>
@@ -343,7 +609,10 @@ export function DetailsForm({
  *  Five small, obviously-finite asks read as far less work than one long
  *  undifferentiated column of the same thirteen inputs. */
 function Section({
-  icon, title, intro, children,
+  icon,
+  title,
+  intro,
+  children,
 }: {
   icon: IconName;
   title: string;
@@ -353,7 +622,9 @@ function Section({
   return (
     <section className="jsec">
       <div className="jsec-h">
-        <span className="jsec-ic" aria-hidden="true"><Icon name={icon} size={16} /></span>
+        <span className="jsec-ic" aria-hidden="true">
+          <Icon name={icon} size={16} />
+        </span>
         <h2>{title}</h2>
       </div>
       <p className="jsec-intro">{intro}</p>
@@ -374,7 +645,13 @@ function Section({
  * forget on one field out of thirteen.
  */
 function Field({
-  id, label, optional = false, scanned = false, hint, problem, children,
+  id,
+  label,
+  optional = false,
+  scanned = false,
+  hint,
+  problem,
+  children,
 }: {
   id: string;
   label: string;
@@ -384,13 +661,14 @@ function Field({
   hint?: string;
   problem?: string;
   children: (props: {
-    'aria-invalid'?: true;
-    'aria-describedby'?: string;
+    "aria-invalid"?: true;
+    "aria-describedby"?: string;
   }) => ReactNode;
 }) {
   const hintId = hint ? `${id}-hint` : undefined;
   const problemId = problem ? `${id}-problem` : undefined;
-  const describedBy = [problemId, hintId].filter(Boolean).join(' ') || undefined;
+  const describedBy =
+    [problemId, hintId].filter(Boolean).join(" ") || undefined;
 
   return (
     <div className="fld">
@@ -410,15 +688,20 @@ function Field({
         )}
       </label>
       {children({
-        ...(problem ? { 'aria-invalid': true as const } : {}),
-        ...(describedBy ? { 'aria-describedby': describedBy } : {}),
+        ...(problem ? { "aria-invalid": true as const } : {}),
+        ...(describedBy ? { "aria-describedby": describedBy } : {}),
       })}
       {problem && (
         <p className="err" id={problemId}>
-          <Icon name="alert-circle" size={14} />{problem}
+          <Icon name="alert-circle" size={14} />
+          {problem}
         </p>
       )}
-      {hint && <p className="hint" id={hintId}>{hint}</p>}
+      {hint && (
+        <p className="hint" id={hintId}>
+          {hint}
+        </p>
+      )}
     </div>
   );
 }
@@ -433,7 +716,8 @@ function Field({
  * was filled in.
  */
 function ScanSummary({
-  report, onRescan,
+  report,
+  onRescan,
 }: {
   report: { read: number; ranOcr: boolean } | null;
   onRescan: () => void;
@@ -441,9 +725,11 @@ function ScanSummary({
   if (!report) {
     return (
       <p className="sub" style={{ marginBottom: 16 }}>
-        Fill these in and we&apos;ll text a code to confirm your number.{' '}
-        <button type="button" className="linkish" onClick={onRescan}>Scan your ID instead</button>
-        {' '}if you&apos;d rather not type it all.
+        Fill these in and we&apos;ll text a code to confirm your number.{" "}
+        <button type="button" className="linkish" onClick={onRescan}>
+          Scan your ID instead
+        </button>{" "}
+        if you&apos;d rather not type it all.
       </p>
     );
   }
@@ -455,16 +741,21 @@ function ScanSummary({
         <div>
           <strong>
             {report.ranOcr
-              ? 'We couldn’t read anything off that photo'
-              : 'Reading your ID didn’t work on this device'}
+              ? "We couldn’t read anything off that photo"
+              : "Reading your ID didn’t work on this device"}
           </strong>
           <p>
             {report.ranOcr
-              ? 'Usually it is light or focus — a flat card in daylight, filling the frame, reads best.'
-              : 'Nothing is lost: your photos are still here and will be kept with your record.'}
-            {' '}You can try again or just type the details in.
+              ? "Usually it is light or focus — a flat card in daylight, filling the frame, reads best."
+              : "Nothing is lost: your photos are still here and will be kept with your record."}{" "}
+            You can try again or just type the details in.
           </p>
-          <button type="button" className="btn btn-o btn-sm" style={{ marginTop: 8 }} onClick={onRescan}>
+          <button
+            type="button"
+            className="btn btn-o btn-sm"
+            style={{ marginTop: 8 }}
+            onClick={onRescan}
+          >
             <Icon name="refresh" size={14} /> Try scanning again
           </button>
         </div>
@@ -477,11 +768,12 @@ function ScanSummary({
       <Icon name="check-circle" size={18} />
       <div>
         <strong>
-          We read {report.read} {report.read === 1 ? 'detail' : 'details'} off your ID
+          We read {report.read} {report.read === 1 ? "detail" : "details"} off
+          your ID
         </strong>
         <p>
-          They are marked <em>from your ID</em>{' '}below. Check them against the card and fix
-          anything wrong &mdash; a scan gets it close, not right.
+          They are marked <em>from your ID</em> below. Check them against the
+          card and fix anything wrong &mdash; a scan gets it close, not right.
         </p>
       </div>
     </div>

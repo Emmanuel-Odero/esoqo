@@ -105,6 +105,23 @@ export async function issueOtp(
     );
   }
 
+  // Check if there's already a valid OTP for this number and purpose
+  // to avoid sending duplicate codes within a short time window
+  const existingKey = key(msisdn, purpose);
+  const existing = await redis.hgetall(existingKey);
+  if (existing?.hash) {
+    const ttl = await redis.ttl(existingKey);
+    // If there's a valid code that still has more than 8 minutes left (80% of 10min),
+    // don't send a new one - return the existing expiration time instead
+    if (ttl > 480) {
+      const cooldownSeconds = 60; // Standard cooldown when reusing existing code
+      return {
+        expiresAt: new Date(Date.now() + ttl * 1000),
+        cooldownSeconds,
+      };
+    }
+  }
+
   // Per-number: 5 per hour. Per-IP: 20 per hour.
   try {
     await checkRateLimit(

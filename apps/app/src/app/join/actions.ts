@@ -1,18 +1,41 @@
-'use server';
+"use server";
 
-import { headers } from 'next/headers';
+import { headers } from "next/headers";
 import {
-  startRegistration, updateRegistration, markMsisdnVerified, completeRegistration,
-  createDocument, saveNationalIdRecord, previewMyEsoqoHandleCandidates, confirmMyEsoqoHandle,
-  getRegistration, publicJoinCtx,
-  sniff, makeStorageKey, safeName, sha256, putObject, MAX_BYTES,
-} from '@esoqo/db';
+  startRegistration,
+  updateRegistration,
+  markMsisdnVerified,
+  completeRegistration,
+  createDocument,
+  saveNationalIdRecord,
+  previewMyEsoqoHandleCandidates,
+  confirmMyEsoqoHandle,
+  getRegistration,
+  getPartyByMsisdn,
+  publicJoinCtx,
+  sniff,
+  makeStorageKey,
+  safeName,
+  sha256,
+  putObject,
+  MAX_BYTES,
+} from "@esoqo/db";
 import {
-  issueOtp, verifyOtp, OtpError, checkRateLimit, RateLimitError, capabilitiesForRole,
+  issueOtp,
+  verifyOtp,
+  OtpError,
+  checkRateLimit,
+  RateLimitError,
+  capabilitiesForRole,
   consumeInviteToken,
-} from '@esoqo/auth';
-import { msisdnSchema, otpCodeSchema, clientIpFrom, toSafeErrorMessage } from '@esoqo/domain';
-import type { Ctx } from '@esoqo/db';
+} from "@esoqo/auth";
+import {
+  msisdnSchema,
+  otpCodeSchema,
+  clientIpFrom,
+  toSafeErrorMessage,
+} from "@esoqo/domain";
+import type { Ctx } from "@esoqo/db";
 
 /**
  * The public self-serve signup flow — /join. Unlike apps/admin's
@@ -34,8 +57,7 @@ import type { Ctx } from '@esoqo/db';
  */
 
 export type ActionResult<T = void> =
-  | { ok: true; data: T }
-  | { ok: false; error: string; field?: string };
+  { ok: true; data: T } | { ok: false; error: string; field?: string };
 
 async function clientIp(): Promise<string | null> {
   const h = await headers();
@@ -65,21 +87,83 @@ export interface JoinDetails {
  * way the admin table's inline-edit does.
  */
 export async function actionStartJoin(
-  registrationId: string | null, details: JoinDetails,
+  registrationId: string | null,
+  details: JoinDetails,
 ): Promise<ActionResult<{ registrationId: string }>> {
   const msisdn = msisdnSchema.safeParse(details.msisdn);
-  if (!msisdn.success) return { ok: false, error: msisdn.error.issues[0]?.message ?? 'Enter a valid phone number', field: 'msisdn' };
+  if (!msisdn.success)
+    return {
+      ok: false,
+      error: msisdn.error.issues[0]?.message ?? "Enter a valid phone number",
+      field: "msisdn",
+    };
   if (!details.firstName.trim() || !details.surname.trim()) {
-    return { ok: false, error: 'First name and surname are required', field: 'firstName' };
+    return {
+      ok: false,
+      error: "First name and surname are required",
+      field: "firstName",
+    };
   }
 
+  // Check if phone number is already registered
   const ctx = publicJoinCtx(await clientIp());
   try {
-    const officialName = [details.firstName, details.middleName, details.surname].filter(Boolean).join(' ');
+    const existingParty = await getPartyByMsisdn(ctx, msisdn.data);
+    if (existingParty) {
+      return {
+        ok: false,
+        error:
+          "This phone number is already registered. Please sign in instead.",
+        field: "msisdn",
+      };
+    }
+  } catch (e) {
+    // If check fails (e.g., capability issue), log but don't block registration
+    console.error("[join] Failed to check existing msisdn:", e);
+  }
+
+  // Age validation: must be at least 18 years old
+  if (!details.dateOfBirth) {
+    return {
+      ok: false,
+      error: "Date of birth is required",
+      field: "dateOfBirth",
+    };
+  }
+
+  const dob = new Date(details.dateOfBirth);
+  const today = new Date();
+  const age = today.getFullYear() - dob.getFullYear();
+  const monthDiff = today.getMonth() - dob.getMonth();
+  const dayDiff = today.getDate() - dob.getDate();
+
+  // Calculate exact age accounting for month and day
+  const exactAge =
+    monthDiff < 0 || (monthDiff === 0 && dayDiff < 0) ? age - 1 : age;
+
+  if (exactAge < 18) {
+    return {
+      ok: false,
+      error: "You must be at least 18 years old to register",
+      field: "dateOfBirth",
+    };
+  }
+
+  try {
+    const officialName = [
+      details.firstName,
+      details.middleName,
+      details.surname,
+    ]
+      .filter(Boolean)
+      .join(" ");
     let id = registrationId;
     if (!id) {
       const reg = await startRegistration(ctx, {
-        joiningAs: 'me', officialName, path: 'SELF_WEB', ip: await clientIp(),
+        joiningAs: "me",
+        officialName,
+        path: "SELF_WEB",
+        ip: await clientIp(),
       });
       id = reg.id;
     }
@@ -88,7 +172,7 @@ export async function actionStartJoin(
       firstName: details.firstName.trim(),
       middleName: details.middleName?.trim() || undefined,
       surname: details.surname.trim(),
-      dateOfBirth: details.dateOfBirth ? new Date(details.dateOfBirth) : undefined,
+      dateOfBirth: new Date(details.dateOfBirth),
       county: details.county,
       ward: details.ward || undefined,
       msisdn: msisdn.data,
@@ -96,77 +180,119 @@ export async function actionStartJoin(
     });
     return { ok: true, data: { registrationId: id } };
   } catch (e) {
-    return { ok: false, error: toSafeErrorMessage(e, "That didn't save. Check your details and try again.") };
+    return {
+      ok: false,
+      error: toSafeErrorMessage(
+        e,
+        "That didn't save. Check your details and try again.",
+      ),
+    };
   }
 }
 
 /** Front/back ID photo upload — registrationId-scoped, exactly like
  *  admin's actionUploadWalkInDocument, just running as the visitor. */
-export async function actionUploadJoinDocument(form: FormData): Promise<
-  { ok: true; docId: string } | { ok: false; error: string }
-> {
+export async function actionUploadJoinDocument(
+  form: FormData,
+): Promise<{ ok: true; docId: string } | { ok: false; error: string }> {
   try {
     const ctx = publicJoinCtx(await clientIp());
-    const registrationId = String(form.get('registrationId') ?? '');
-    const side = String(form.get('side') ?? '');
-    const file = form.get('file');
+    const registrationId = String(form.get("registrationId") ?? "");
+    const side = String(form.get("side") ?? "");
+    const file = form.get("file");
 
-    if (!registrationId) return { ok: false, error: 'Start the form first' };
-    if (side !== 'front' && side !== 'back') return { ok: false, error: 'Unknown side' };
-    if (!(file instanceof File)) return { ok: false, error: 'No photo was attached' };
-    if (file.size > MAX_BYTES) return { ok: false, error: 'That photo is too large' };
+    if (!registrationId) return { ok: false, error: "Start the form first" };
+    if (side !== "front" && side !== "back")
+      return { ok: false, error: "Unknown side" };
+    if (!(file instanceof File))
+      return { ok: false, error: "No photo was attached" };
+    if (file.size > MAX_BYTES)
+      return { ok: false, error: "That photo is too large" };
 
     const buf = Buffer.from(await file.arrayBuffer());
     const check = sniff(buf, file.type, file.name);
-    if (!check.ok || !check.mime) return { ok: false, error: check.reason ?? "We couldn't accept that photo" };
+    if (!check.ok || !check.mime)
+      return {
+        ok: false,
+        error: check.reason ?? "We couldn't accept that photo",
+      };
 
     const storageKey = makeStorageKey(check.mime);
     await putObject(storageKey, buf);
     const doc = await createDocument(ctx, {
       registrationId,
-      title: side === 'front' ? 'National ID (front)' : 'National ID (back)',
-      kind: side === 'front' ? 'NATIONAL_ID_FRONT' : 'NATIONAL_ID_BACK',
-      storageKey, originalName: safeName(file.name),
-      mimeType: check.mime, sizeBytes: buf.length, sha256: sha256(buf),
+      title: side === "front" ? "National ID (front)" : "National ID (back)",
+      kind: side === "front" ? "NATIONAL_ID_FRONT" : "NATIONAL_ID_BACK",
+      storageKey,
+      originalName: safeName(file.name),
+      mimeType: check.mime,
+      sizeBytes: buf.length,
+      sha256: sha256(buf),
     });
     return { ok: true, docId: doc.id };
   } catch (e) {
-    return { ok: false, error: toSafeErrorMessage(e, "That photo didn't upload. Try again.") };
+    return {
+      ok: false,
+      error: toSafeErrorMessage(e, "That photo didn't upload. Try again."),
+    };
   }
 }
 
-export async function actionSendJoinOtp(msisdnRaw: string): Promise<ActionResult> {
+export async function actionSendJoinOtp(
+  msisdnRaw: string,
+): Promise<ActionResult> {
   const parsed = msisdnSchema.safeParse(msisdnRaw);
-  if (!parsed.success) return { ok: false, error: parsed.error.issues[0]?.message ?? 'Enter a valid number' };
+  if (!parsed.success)
+    return {
+      ok: false,
+      error: parsed.error.issues[0]?.message ?? "Enter a valid number",
+      field: "msisdn",
+    };
 
   try {
     await checkRateLimit(`join-otp:${await clientIp()}`, 10, 300);
   } catch (e) {
-    if (e instanceof RateLimitError) return { ok: false, error: 'Too many attempts. Try again in a few minutes.' };
+    if (e instanceof RateLimitError)
+      return {
+        ok: false,
+        error: "Too many attempts. Try again in a few minutes.",
+      };
     throw e;
   }
 
   try {
-    await issueOtp(parsed.data, 'REGISTRATION', await clientIp());
+    await issueOtp(parsed.data, "REGISTRATION", await clientIp());
     return { ok: true, data: undefined };
   } catch (e) {
     if (e instanceof OtpError) return { ok: false, error: e.message };
-    return { ok: false, error: toSafeErrorMessage(e, "Couldn't send a code. Try again.") };
+    return {
+      ok: false,
+      error: toSafeErrorMessage(e, "Couldn't send a code. Try again."),
+    };
   }
 }
 
 export async function actionVerifyJoinOtp(
-  registrationId: string, msisdnRaw: string, codeRaw: string,
+  registrationId: string,
+  msisdnRaw: string,
+  codeRaw: string,
 ): Promise<ActionResult> {
   const msisdn = msisdnSchema.safeParse(msisdnRaw);
   const code = otpCodeSchema.safeParse(codeRaw);
-  if (!msisdn.success) return { ok: false, error: 'Enter a valid phone number' };
-  if (!code.success) return { ok: false, error: code.error.issues[0]?.message ?? 'Enter the code' };
+  if (!msisdn.success)
+    return { ok: false, error: "Enter a valid phone number", field: "msisdn" };
+  if (!code.success)
+    return {
+      ok: false,
+      error: code.error.issues[0]?.message ?? "Enter the code",
+      field: "code",
+    };
 
   try {
-    await verifyOtp(msisdn.data, 'REGISTRATION', code.data);
+    await verifyOtp(msisdn.data, "REGISTRATION", code.data);
   } catch (e) {
-    if (e instanceof OtpError) return { ok: false, error: e.message, field: 'code' };
+    if (e instanceof OtpError)
+      return { ok: false, error: e.message, field: "code" };
     throw e;
   }
 
@@ -175,7 +301,10 @@ export async function actionVerifyJoinOtp(
     await markMsisdnVerified(ctx, registrationId);
     return { ok: true, data: undefined };
   } catch (e) {
-    return { ok: false, error: toSafeErrorMessage(e, "Couldn't confirm that. Try again.") };
+    return {
+      ok: false,
+      error: toSafeErrorMessage(e, "Couldn't confirm that. Try again."),
+    };
   }
 }
 
@@ -192,6 +321,10 @@ export interface JoinCompleteResult {
  * one. The person picks among candidates in the next step
  * (actionConfirmHandle), rather than the ID being assigned silently.
  *
+ * National ID documents are optional — users can complete registration
+ * without uploading their ID photos. If provided, the ID details and
+ * documents will be saved to the person's record.
+ *
  * Builds a real SUBJECT ctx for the party completeRegistration just
  * created — the same shape a signed-in session produces (see
  * ctxFromToken, packages/auth/src/session.ts) — rather than reusing
@@ -199,10 +332,15 @@ export interface JoinCompleteResult {
  * that specific person, not to "anyone filling in the join form".
  */
 export async function actionCompleteJoin(
-  registrationId: string, idDetails: {
-    idNumber?: string; serialNumber?: string; sex?: string;
-    districtOfBirth?: string; dateOfIssue?: string;
-    frontDocumentId?: string; backDocumentId?: string;
+  registrationId: string,
+  idDetails: {
+    idNumber?: string;
+    serialNumber?: string;
+    sex?: string;
+    districtOfBirth?: string;
+    dateOfIssue?: string;
+    frontDocumentId?: string;
+    backDocumentId?: string;
     /** Present when this signup came from a chama invite link. Spent on
      *  success so the link stops prefilling a form for an account that
      *  now exists. Nothing about the membership depends on it: the group
@@ -217,8 +355,12 @@ export async function actionCompleteJoin(
   try {
     const { partyId } = await completeRegistration(joinCtx, registrationId);
     const subjectCtx: Ctx = {
-      actorType: 'SUBJECT', actorId: partyId, partyId,
-      capabilities: capabilitiesForRole('SUBJECT'), ip, __verified: true,
+      actorType: "SUBJECT",
+      actorId: partyId,
+      partyId,
+      capabilities: capabilitiesForRole("SUBJECT"),
+      ip,
+      __verified: true,
     };
 
     if (idDetails.idNumber) {
@@ -227,17 +369,40 @@ export async function actionCompleteJoin(
         serialNumber: idDetails.serialNumber,
         sex: idDetails.sex,
         districtOfBirth: idDetails.districtOfBirth,
-        dateOfIssue: idDetails.dateOfIssue ? new Date(idDetails.dateOfIssue) : undefined,
+        dateOfIssue: idDetails.dateOfIssue
+          ? new Date(idDetails.dateOfIssue)
+          : undefined,
         frontDocumentId: idDetails.frontDocumentId,
         backDocumentId: idDetails.backDocumentId,
       });
     }
 
-    const { existing, candidates } = await previewMyEsoqoHandleCandidates(subjectCtx);
-    await consumeInviteToken(idDetails.inviteToken);
+    const { existing, candidates } =
+      await previewMyEsoqoHandleCandidates(subjectCtx);
+
+    // Consume invite token ONLY after all operations have succeeded.
+    // This is placed here (but still inside the try block for cleanup consistency)
+    // and any error during token consumption is caught and reported along
+    // with the successful signup. The account still exists even if token
+    // consumption fails — this is non-fatal to the user.
+    if (idDetails.inviteToken) {
+      try {
+        await consumeInviteToken(idDetails.inviteToken);
+      } catch (tokenError) {
+        // Log but don't fail — the signup itself succeeded
+        console.error("[join] Failed to consume invite token:", tokenError);
+      }
+    }
+
     return { ok: true, data: { candidates: existing ? [] : candidates } };
   } catch (e) {
-    return { ok: false, error: toSafeErrorMessage(e, "Couldn't finish your signup. Please try again.") };
+    return {
+      ok: false,
+      error: toSafeErrorMessage(
+        e,
+        "Couldn't finish your signup. Please try again.",
+      ),
+    };
   }
 }
 
@@ -255,24 +420,35 @@ export interface ConfirmHandleResult {
  * only place this looks it up from.
  */
 export async function actionConfirmHandle(
-  registrationId: string, chosenHandle: string,
+  registrationId: string,
+  chosenHandle: string,
 ): Promise<ActionResult<ConfirmHandleResult>> {
   const ip = await clientIp();
   const joinCtx = publicJoinCtx(ip);
 
   try {
     const registration = await getRegistration(joinCtx, registrationId);
-    if (!registration?.partyId || registration.status !== 'COMPLETE') {
-      return { ok: false, error: 'That signup is not ready for a handle yet' };
+    if (!registration?.partyId || registration.status !== "COMPLETE") {
+      return { ok: false, error: "That signup is not ready for a handle yet" };
     }
     const subjectCtx: Ctx = {
-      actorType: 'SUBJECT', actorId: registration.partyId, partyId: registration.partyId,
-      capabilities: capabilitiesForRole('SUBJECT'), ip, __verified: true,
+      actorType: "SUBJECT",
+      actorId: registration.partyId,
+      partyId: registration.partyId,
+      capabilities: capabilitiesForRole("SUBJECT"),
+      ip,
+      __verified: true,
     };
 
     const esoqoPaymentId = await confirmMyEsoqoHandle(subjectCtx, chosenHandle);
     return { ok: true, data: { esoqoId: esoqoPaymentId.code } };
   } catch (e) {
-    return { ok: false, error: toSafeErrorMessage(e, "Couldn't confirm that esoqo ID. Try another one.") };
+    return {
+      ok: false,
+      error: toSafeErrorMessage(
+        e,
+        "Couldn't confirm that esoqo ID. Try another one.",
+      ),
+    };
   }
 }
