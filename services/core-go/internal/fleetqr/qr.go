@@ -120,6 +120,47 @@ func WithCheck(segment string) string {
 	return segment + string(Alphabet[total])
 }
 
+// ServiceTicketForName mints a "firstname + number" service ticket —
+// JOHN-482 — so the clerk calling a walk-in sender forward at the
+// counter can read a name straight off the screen instead of an opaque
+// code. Falls back to the plain PrefixServiceTicket form when no usable
+// name is given (e.g. a staff-side import with no sender on the form).
+// No checksum: unlike a code someone types back in, this is read aloud,
+// never typed, so there is nothing for a checksum to protect against.
+func ServiceTicketForName(fullName string) string {
+	first := fullName
+	if i := strings.IndexAny(fullName, " \t"); i > 0 {
+		first = fullName[:i]
+	}
+	var letters strings.Builder
+	for _, r := range strings.ToUpper(strings.TrimSpace(first)) {
+		if r >= 'A' && r <= 'Z' {
+			letters.WriteRune(r)
+		}
+		if letters.Len() >= 10 {
+			break
+		}
+	}
+	if letters.Len() == 0 {
+		return ShortCodeChecked(PrefixServiceTicket, 6)
+	}
+	return letters.String() + "-" + randomDigits3()
+}
+
+// randomDigits3 returns 3 cryptographically random base-10 digits,
+// zero-padded — the "assigned number" half of ServiceTicketForName.
+func randomDigits3() string {
+	v, err := rand.Int(rand.Reader, big.NewInt(1000))
+	if err != nil {
+		return "000"
+	}
+	s := v.String()
+	if len(s) < 3 {
+		s = strings.Repeat("0", 3-len(s)) + s
+	}
+	return s
+}
+
 // ShortCodeChecked is [ShortCode] plus a trailing checksum character —
 // PREFIX-ABCDEFG. The random part is the same length as unchecked codes,
 // so the DB columns never change size, only the minted value.

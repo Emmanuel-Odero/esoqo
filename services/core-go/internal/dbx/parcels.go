@@ -275,9 +275,10 @@ func BookParcel(ctx context.Context, pool *pgxpool.Pool, in BookParcelInput) (pa
 	// serviceTicketNumber — minted unconditionally, on every booking
 	// path (fresh code or a pre-printed label). See its own schema
 	// comment: this, not the real tracking code, is what a self-service
-	// booking's response actually carries. Checksummed like every other
-	// short code someone might type back in at a counter.
-	serviceTicketNumber = fleetqr.ShortCodeChecked(fleetqr.PrefixServiceTicket, 6)
+	// booking's response actually carries. Firstname + an assigned
+	// number, not a checksummed code — a clerk calling someone forward
+	// at the counter reads this aloud, never types it back in.
+	serviceTicketNumber = fleetqr.ServiceTicketForName(in.SenderName)
 
 	insertParcel := func(useCode string) error {
 		// PayAtCounter skips the whole DRAFT_PENDING_PAYMENT -> price ->
@@ -465,7 +466,7 @@ func BookParcel(ctx context.Context, pool *pgxpool.Pool, in BookParcelInput) (pa
 		// Regenerated on every retry, not just `code` — a collision on
 		// either @unique column fails the same INSERT, and holding onto
 		// a stale ticket number across retries would just collide again.
-		serviceTicketNumber = fleetqr.ShortCodeChecked(fleetqr.PrefixServiceTicket, 6)
+		serviceTicketNumber = fleetqr.ServiceTicketForName(in.SenderName)
 		return insertParcel(code)
 	})
 	return parcelID, code, deliveryCode, serviceTicketNumber, err
