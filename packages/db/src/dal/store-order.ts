@@ -4,6 +4,7 @@ import { recordAudit } from '../audit';
 import { assertOwnsStore } from './store';
 import { postStoreSale } from './_commerce-ledger';
 import { findOrCreateCustomer, earnLoyaltyForSale } from './customer';
+import { issueReceiptFor } from './receipt';
 import type { StoreOrderPaymentMethod, StoreOrderStatus } from '@prisma/client';
 
 export class StoreOrderError extends Error {
@@ -158,7 +159,17 @@ export async function confirmStoreOrderPayment(checkoutRequestId: string, mpesaR
     include: { store: { include: { enterprise: true } } },
   });
   if (!order) throw new StoreOrderError('No order matches this payment', 'NOT_FOUND');
-  if (order.status !== 'PENDING_PAYMENT') return order;
+  if (order.status !== 'PENDING_PAYMENT') {
+    // A Daraja retry after the first callback already paid this order —
+    // possibly after this same handler minted a receipt and then threw
+    // on some later step, in an older build without the try/catch
+    // below. Recovering it here means a receipt that failed to mint on
+    // attempt one still gets a chance to surface on attempt two, rather
+    // than every replay finding "not PENDING_PAYMENT" and returning
+    // `receipt: null` forever.
+    const receipt = await prisma.receipt.findFirst({ where: { orderId: order.id }, orderBy: { issuedAt: 'desc' } });
+    return { ...order, receipt: receipt ? { ...receipt, storeName: order.store.name } : null };
+  }
 
   const entry = await postStoreSale({
     storeOwnerPartyId: order.store.enterprise.partyId,
@@ -184,7 +195,32 @@ export async function confirmStoreOrderPayment(checkoutRequestId: string, mpesaR
     payload: { mpesaReceiptCode },
   });
 
-  return updated;
+  // buyerMsisdn is always present on a StoreOrder, unlike a walk-in PoS
+  // sale — so this always mints a texted receipt, never a PRINT-only one.
+  //
+  // Best-effort, deliberately: the order is already PAID and the ledger
+  // entry above already committed. Letting a mint failure propagate
+  // would turn a webhook that already did its job into a non-2xx
+  // response, and Safaricom's retry would hit the `status !==
+  // 'PENDING_PAYMENT'` branch above — the exact case that branch's own
+  // receipt lookup now recovers from, but there is no reason to force a
+  // retry to do that recovery when this call can just try again itself.
+  let receipt: Awaited<ReturnType<typeof issueReceiptFor>> | null = null;
+  try {
+    receipt = await issueReceiptFor({
+      storeId: order.storeId,
+      orderId: order.id,
+      totalKes: Number(order.totalKes),
+      buyerMsisdn: order.buyerMsisdn,
+    });
+  } catch (e) {
+    await recordAudit(systemCtx('mpesa-callback'), {
+      action: 'store_order.receipt_failed', targetType: 'store_order', targetId: order.id,
+      payload: { error: e instanceof Error ? e.message : String(e) },
+    });
+  }
+
+  return { ...updated, receipt };
 }
 
 /**
@@ -204,7 +240,10 @@ export async function confirmStoreOrderCod(ctx: Ctx, orderId: string) {
   if (order.paymentMethod !== 'CASH_ON_DELIVERY') {
     throw new StoreOrderError('This order was paid with M-Pesa, not cash on delivery', 'PAYMENT_UNAVAILABLE');
   }
-  if (order.status !== 'PENDING_PAYMENT') return order;
+  if (order.status !== 'PENDING_PAYMENT') {
+    const receipt = await prisma.receipt.findFirst({ where: { orderId: order.id }, orderBy: { issuedAt: 'desc' } });
+    return { ...order, receipt: receipt ? { ...receipt, storeName: order.store.name } : null };
+  }
 
   const entry = await postStoreSale({
     storeOwnerPartyId: order.store.enterprise.partyId,
@@ -230,7 +269,24 @@ export async function confirmStoreOrderCod(ctx: Ctx, orderId: string) {
     payload: { paymentMethod: 'CASH_ON_DELIVERY' },
   });
 
-  return updated;
+  // Best-effort — see confirmStoreOrderPayment's identical guard for why
+  // a mint failure here must never propagate past an already-posted sale.
+  let receipt: Awaited<ReturnType<typeof issueReceiptFor>> | null = null;
+  try {
+    receipt = await issueReceiptFor({
+      storeId: order.storeId,
+      orderId: order.id,
+      totalKes: Number(order.totalKes),
+      buyerMsisdn: order.buyerMsisdn,
+    });
+  } catch (e) {
+    await recordAudit(ctx, {
+      action: 'store_order.receipt_failed', targetType: 'store_order', targetId: order.id,
+      payload: { error: e instanceof Error ? e.message : String(e) },
+    });
+  }
+
+  return { ...updated, receipt };
 }
 
 /** Order-status lookup for the buyer's own confirmation screen. No capability — order id is the secret. */

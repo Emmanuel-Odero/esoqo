@@ -4,6 +4,7 @@ import { recordAudit } from '../audit';
 import { assertOwnsStore } from './store';
 import { postStoreSale } from './_commerce-ledger';
 import { findOrCreateCustomer, chargeCustomerForSale, earnLoyaltyForSale } from './customer';
+import { issueReceiptFor } from './receipt';
 import type { PosPaymentMethod } from '@prisma/client';
 
 /** Stock at or below this after a sale gets flagged back to the terminal —
@@ -73,7 +74,18 @@ export async function recordPosSale(ctx: Ctx, storeId: string, input: PosSaleInp
   const store = await assertOwnsStore(ctx, storeId, 'pos.sell');
 
   const existing = await prisma.posSale.findUnique({ where: { clientSaleId: input.clientSaleId } });
-  if (existing) return { sale: existing, lowStock: [] as LowStockLine[] };
+  if (existing) {
+    // A replay (the offline outbox retrying a sync) must not mint a
+    // second receipt, but it must still be able to hand one back — the
+    // first attempt may have committed the sale and then thrown before
+    // (or while) minting the receipt, and without this lookup that
+    // receipt would never surface again on any later retry.
+    const receipt = await prisma.receipt.findFirst({ where: { saleId: existing.id }, orderBy: { issuedAt: 'desc' } });
+    return {
+      sale: existing, lowStock: [] as LowStockLine[],
+      receipt: receipt ? { ...receipt, storeName: store.name } : undefined,
+    };
+  }
 
   if (input.items.length === 0) throw new PosSaleError('A sale needs at least one item', 'EMPTY_SALE');
 
@@ -196,7 +208,32 @@ export async function recordPosSale(ctx: Ctx, storeId: string, input: PosSaleInp
     payload: { storeId, totalKes, discountKes: saleDiscountKes, paymentMethod: input.paymentMethod },
   });
 
-  return { sale, lowStock };
+  // A walk-in cash sale with no phone captured still gets a
+  // verifiable/printable Receipt — issueReceiptFor only sends an SMS
+  // when a number is actually known.
+  let buyerMsisdn = input.customerMsisdn ?? null;
+  if (!buyerMsisdn && customerId) {
+    const customer = await prisma.storeCustomer.findUnique({ where: { id: customerId }, select: { msisdn: true } });
+    buyerMsisdn = customer?.msisdn ?? null;
+  }
+  // Best-effort, deliberately: the sale and its ledger entry above are
+  // already committed. A receipt-mint failure here must never propagate
+  // and look like the sale itself failed — the PoS client's own catch
+  // treats ANY thrown error as "offline, queue it for retry", which
+  // would otherwise queue a sale that already happened and was already
+  // paid for, and the eventual retry would just hit the clientSaleId
+  // guard above and return with no receipt at all, forever.
+  let receipt: Awaited<ReturnType<typeof issueReceiptFor>> | undefined;
+  try {
+    receipt = await issueReceiptFor({ storeId, saleId: sale.id, totalKes, buyerMsisdn });
+  } catch (e) {
+    await recordAudit(ctx, {
+      action: 'pos_sale.receipt_failed', targetType: 'pos_sale', targetId: sale.id,
+      payload: { error: e instanceof Error ? e.message : String(e) },
+    });
+  }
+
+  return { sale, lowStock, receipt };
 }
 
 export async function listPosSales(ctx: Ctx, storeId: string, take = 50) {

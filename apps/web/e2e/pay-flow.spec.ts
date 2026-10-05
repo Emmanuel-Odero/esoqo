@@ -20,8 +20,8 @@ const BASE = process.env.PAY_BASE ?? `http://localhost:${PORT}`;
  * The business codes below are the ones the seed issues; if the seed
  * changes, so does this file.
  */
-const PAYEE = 'ESK-HWQHDU-KE';
-const PERSON = 'ESK-P8PZZ3-KE';
+const PAYEE = 'kilimani482';
+const PERSON = 'amina482';
 const PAYER = '0712345678';
 
 /** Nothing this file creates is left in the database.
@@ -54,7 +54,7 @@ test.describe('/pay', () => {
     await expect(page.getByRole('heading', { name: /Pay Kilimani Chama/ })).toBeVisible();
     await expect(page.getByText('BUSINESS FOUND')).toBeVisible();
     await expect(page.getByLabel('Amount (KES)')).toHaveValue('1500');
-    await expect(page.getByText('ESK-HWQHDU-KE').first()).toBeVisible();
+    await expect(page.getByText(PAYEE).first()).toBeVisible();
   });
 
   test('a payer pays with M-Pesa and gets a receipt', async ({ page }) => {

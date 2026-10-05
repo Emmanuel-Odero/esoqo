@@ -470,7 +470,7 @@ func (s *Server) handlePayParcel(c *gin.Context) {
 		writeError(c, http.StatusBadRequest, "INVALID_REQUEST", "msisdn is required for M-Pesa")
 		return
 	}
-	priceKes, status, err := dbx.GetParcelForPayment(c.Request.Context(), s.Pool, code)
+	priceKes, status, paymentInFlight, err := dbx.GetParcelForPayment(c.Request.Context(), s.Pool, code)
 	if err != nil {
 		writeParcelError(c, err)
 		return
@@ -481,6 +481,26 @@ func (s *Server) handlePayParcel(c *gin.Context) {
 	}
 	if priceKes <= 0 {
 		writeError(c, http.StatusBadRequest, "BAD_INPUT", "Choose a price before paying")
+		return
+	}
+	// A courtesy check, saving a round trip and giving a clearer message
+	// than the reservation's conflict would. NOT the guard: two requests
+	// can both read this as false, which is why the reservation below is
+	// taken before the push rather than after it.
+	if paymentInFlight {
+		writeError(c, http.StatusConflict, "CONFLICT", "A payment is already in progress for this parcel — finish it on your phone")
+		return
+	}
+
+	// Claim the right to push, before the push, so two concurrent
+	// requests can't both send one. Re-pushing is ordinary client
+	// behaviour on a slow connection, and once Safaricom has the prompt
+	// there is no walking it back: a second push means the sender is
+	// asked to pay twice and the first checkout's webhook is orphaned by
+	// the attach, so real money is taken and credited to nobody.
+	reservation, err := dbx.ReserveParcelPayment(c.Request.Context(), s.Pool, code)
+	if err != nil {
+		writeParcelError(c, err)
 		return
 	}
 
@@ -500,10 +520,23 @@ func (s *Server) handlePayParcel(c *gin.Context) {
 		} else {
 			log.Printf("parcel STK push failed for %s: %v", code, err)
 		}
+		// The push never reached the customer, so nothing is owed and the
+		// slot must go back — otherwise a typo'd phone number leaves the
+		// parcel permanently unpayable with no prompt anywhere and no way
+		// for the sender to tell that from somebody else being mid-payment.
+		if rerr := dbx.ReleaseParcelPaymentReservation(c.Request.Context(), s.Pool, code, reservation); rerr != nil {
+			log.Printf("parcel %s STK push failed and releasing the reservation failed too: %v", code, rerr)
+		}
 		writeError(c, http.StatusBadRequest, "STK_FAILED", message)
 		return
 	}
-	if err := dbx.AttachParcelPaymentCheckoutID(c.Request.Context(), s.Pool, code, stk.CheckoutRequestID); err != nil {
+	// Swaps our reservation for the Safaricom id, matched on the token so
+	// only the request that actually holds the slot can complete it.
+	if err := dbx.AttachParcelPaymentCheckoutID(c.Request.Context(), s.Pool, code, reservation, stk.CheckoutRequestID); err != nil {
+		if _, ok := err.(*dbx.ParcelError); ok {
+			writeParcelError(c, err)
+			return
+		}
 		writeError(c, http.StatusInternalServerError, "PAY_FAILED", "Could not start payment")
 		return
 	}
@@ -543,6 +576,12 @@ func (s *Server) handleGetParcelStatus(c *gin.Context) {
 	// printed before signing existed, which is ordinary and must not be
 	// shown as a forgery. Only a k= that was presented and did not match
 	// earns that.
+	//
+	// Runs BEFORE the reduction below, because it needs status.Code and
+	// the reduction blanks that. Verifying a signature against an empty
+	// string fails closed, which here would mean every scanned label on a
+	// not-yet-intaken parcel reported "forged" — turning a privacy control
+	// into a support ticket.
 	if k := c.Query("k"); k != "" {
 		orgID, batchID, ferr := dbx.LabelSigFields(c.Request.Context(), s.Pool, c.Param("code"))
 		if ferr == nil {
@@ -555,7 +594,30 @@ func (s *Server) handleGetParcelStatus(c *gin.Context) {
 	} else {
 		status.LabelVerdict = "unverified"
 	}
-	c.JSON(http.StatusOK, status)
+	// The pre-intake reduction, which three comments across dbx/parcels.go
+	// and the schema described as though it existed here. It didn't: this
+	// handler returned the full view, PII and all, for any code —
+	// including the serviceTicketNumber, which is what a self-service
+	// booking hands back and is a far weaker credential than the tracking
+	// code.
+	//
+	// What that exposed: the collection point's phone number and
+	// coordinates, the POD photo URL and the name of whoever signed for
+	// the box, the exact cancellation reason and the full custody
+	// timeline — to anyone holding a six-character ticket number on an
+	// unauthenticated endpoint. Pre-intake nothing has been collected and
+	// nobody has taken the parcel in, so none of it can be true yet.
+	//
+	// Last, after everything that needs the unreduced view, so it can't
+	// be a privacy control that quietly breaks a feature: it is the final
+	// step before serialisation rather than the first thing after the
+	// query.
+	//
+	// Applied here AND inside dbx.ResolveScan, because /scan/resolve is a
+	// second unauthenticated door to this exact projection with no
+	// code-shape requirement at all; a gate on one of the two doors is not
+	// a gate. The reduction itself lives in dbx so the two cannot drift.
+	c.JSON(http.StatusOK, dbx.ReduceParcelStatusForUnintaken(status))
 }
 
 // handleGetPartyParcelActivity — GET /v1/me/parcel-activity. One
@@ -862,17 +924,31 @@ func (s *Server) handleDeliverParcel(c *gin.Context) {
 	// a receiver who fumbles twice and then reads it correctly is no
 	// closer to a lockout than one who got it right first time.
 	//
+	// The counter is a column on the parcel, not a Redis key. It used to
+	// be one, and authsvc.FailedAttempts reports zero both when the
+	// client is nil and on any Redis error — so a cache blip, a
+	// deployment missing REDIS_URL, or a single eviction removed the
+	// wall entirely, which is the one condition under which a six-digit
+	// code must not be guessable. Counting next to the comparison it
+	// guards means it fails closed with the database that has to be
+	// reachable for a delivery to succeed anyway.
+	//
 	// OTP and override deliveries skip the gate entirely: neither is
 	// guessing the delivery code, and locking a parcel out of the two
 	// routes that exist precisely for "the code didn't arrive" would
 	// strand the receiver standing at the counter.
-	triesCode := "parcel-delivery-code:" + code
 	guessingCode := strings.TrimSpace(req.DeliveryCode) != "" && !otpVerified
-	if guessingCode &&
-		authsvc.FailedAttempts(c.Request.Context(), s.Redis, triesCode) >= dbx.DeliveryCodeMaxAttempts {
-		writeError(c, http.StatusTooManyRequests, "CODE_LOCKED",
-			"Too many wrong codes for this parcel. Send the receiver a one-time code instead, or hand over with a photo and their name.")
-		return
+	if guessingCode {
+		left, locked, terr := dbx.DeliveryCodeTriesLeft(c.Request.Context(), s.Pool, code)
+		if terr != nil {
+			writeError(c, http.StatusInternalServerError, "DELIVER_FAILED", "Could not load that parcel")
+			return
+		}
+		if locked || left <= 0 {
+			writeError(c, http.StatusTooManyRequests, "CODE_LOCKED",
+				"Too many wrong codes for this parcel. Send the receiver a one-time code instead, or hand over with a photo and their name.")
+			return
+		}
 	}
 
 	// receiverSelfConfirm is false and stays false on this route: this is
@@ -888,8 +964,11 @@ func (s *Server) handleDeliverParcel(c *gin.Context) {
 		// a clerk repeating a call that was never going to succeed.
 		var pe *dbx.ParcelError
 		if errors.As(err, &pe) && pe.Code == "WRONG_CODE" && guessingCode {
-			left := dbx.DeliveryCodeMaxAttempts -
-				authsvc.RecordFailure(c.Request.Context(), s.Redis, triesCode, time.Hour)
+			left, ferr := dbx.RecordDeliveryCodeFailure(c.Request.Context(), s.Pool, code)
+			if ferr != nil {
+				writeError(c, http.StatusInternalServerError, "DELIVER_FAILED", "Could not load that parcel")
+				return
+			}
 			if left <= 0 {
 				writeError(c, http.StatusTooManyRequests, "CODE_LOCKED",
 					"Too many wrong codes for this parcel. Send the receiver a one-time code instead, or hand over with a photo and their name.")
@@ -910,7 +989,9 @@ func (s *Server) handleDeliverParcel(c *gin.Context) {
 	}
 	// Delivered — nothing left to guess, so the counter goes rather than
 	// ageing out on its own.
-	authsvc.ClearFailures(c.Request.Context(), s.Redis, triesCode)
+	if guessingCode {
+		_ = dbx.ClearDeliveryCodeFailures(c.Request.Context(), s.Pool, code)
+	}
 
 	// After the hand-over, never before: a wrong delivery code must not
 	// be able to book a collection for goods that never changed hands.

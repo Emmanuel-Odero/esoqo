@@ -16,6 +16,42 @@ import (
 	"github.com/esoqo/core-go/internal/payments"
 )
 
+type spendVoucherAtBusinessRequest struct {
+	// The business's Esoqo ID — scanned or typed, same identifier the
+	// public /pay page accepts.
+	BusinessID string       `json:"businessId" binding:"required"`
+	AmountKES  money.Amount `json:"amountKes" binding:"required"`
+	// Caller-supplied idempotency key. A retry with the same value is a
+	// no-op (see SpendVoucher's own EXISTS check) rather than a second
+	// charge — the same guarantee refId gives every other SpendVoucher
+	// caller in dbx.
+	RefID string `json:"refId" binding:"required"`
+}
+
+// POST /v1/vouchers/:id/pay-business — spend a SHOPPING|GENERAL voucher's
+// balance to pay a business, no M-Pesa leg. Stays inside the closed loop
+// this platform already runs for a store checkout's VOUCHER payment
+// method (see dbx.SettleStoreOrderVoucher) — the only thing new is that
+// the payee is any Esoqo business, not one specific StoreOrder.
+func (s *Server) handleSpendVoucherAtBusiness(c *gin.Context) {
+	var req spendVoucherAtBusinessRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		writeError(c, http.StatusBadRequest, "INVALID_REQUEST", err.Error())
+		return
+	}
+	ctx := ctxFromGin(c)
+	result, err := dbx.SpendVoucherAtBusiness(c.Request.Context(), s.Pool, ctx, c.Param("id"), req.BusinessID, req.AmountKES.KES(), req.RefID)
+	if err != nil {
+		writeFleetError(c, err)
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{
+		"voucher":      voucherToJSON(result.Voucher, s.Cfg.FleetQrSecret),
+		"businessName": result.BusinessName,
+		"businessId":   result.BusinessID,
+	})
+}
+
 type createVoucherRequest struct {
 	Label           string       `json:"label"`
 	Purpose         string       `json:"purpose"`
@@ -174,6 +210,9 @@ type loadVoucherRequest struct {
 	AmountKES   money.Amount `json:"amountKes" binding:"required"`
 	Method      string       `json:"method" binding:"required"`
 	BuyerMsisdn string       `json:"buyerMsisdn"`
+	// Set only when Method is "VOUCHER" — the caller's other voucher to
+	// move balance out of. See dbx.TransferVoucherBalance.
+	FromVoucherID string `json:"fromVoucherId"`
 }
 
 // POST /v1/vouchers/:id/load — top up via M-Pesa or loyalty.
@@ -204,6 +243,19 @@ func (s *Server) handleLoadVoucher(c *gin.Context) {
 			return
 		}
 		s.sendVoucherCreditedSms(c, v.ID, req.AmountKES.KES(), "points")
+		c.JSON(http.StatusOK, gin.H{"voucher": voucherToJSON(refreshed, s.Cfg.FleetQrSecret)})
+		return
+	}
+	if method == "VOUCHER" {
+		if strings.TrimSpace(req.FromVoucherID) == "" {
+			writeError(c, http.StatusBadRequest, "INVALID_REQUEST", "Choose which voucher to load from")
+			return
+		}
+		refreshed, err := dbx.TransferVoucherBalance(c.Request.Context(), s.Pool, ctx, req.FromVoucherID, v.ID, loyalty.PointsForKES(req.AmountKES.KES()))
+		if err != nil {
+			writeFleetError(c, err)
+			return
+		}
 		c.JSON(http.StatusOK, gin.H{"voucher": voucherToJSON(refreshed, s.Cfg.FleetQrSecret)})
 		return
 	}

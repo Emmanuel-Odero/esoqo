@@ -7,10 +7,25 @@ import (
 	"strings"
 
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgxpool"
 
-	"github.com/esoqo/core-go/internal/fleetqr"
+	"github.com/esoqo/core-go/internal/handlecode"
 )
+
+// execer/querier let the payment-id mint run against either the pool or an
+// open transaction. Group creation has to allocate its handle inside the
+// same transaction that creates the group — minting on the pool would leave
+// an orphan esoko_payment_id row pointing at an organisation that a
+// rollback then erases, and would report success for a handle the caller
+// cannot reach.
+type execer interface {
+	Exec(ctx context.Context, sql string, args ...any) (pgconn.CommandTag, error)
+}
+
+type querier interface {
+	QueryRow(ctx context.Context, sql string, args ...any) pgx.Row
+}
 
 // EnsureEsoqoPaymentId ports packages/db/src/dal/payment-id.ts's
 // issueEsoqoPaymentId, minus the capability check (core-go already knows
@@ -29,10 +44,14 @@ func EnsureEsoqoPaymentId(ctx context.Context, pool *pgxpool.Pool, partyID, msis
 		return "", err
 	}
 
+	names, err := namesForParty(ctx, pool, partyID)
+	if err != nil {
+		return "", err
+	}
 	if err := ensureMsisdnVerifiedAttestation(ctx, pool, partyID, msisdn); err != nil {
 		return "", err
 	}
-	return insertPaymentIDCode(ctx, pool, partyID)
+	return insertPaymentIDCode(ctx, pool, partyID, names)
 }
 
 // EnsureBusinessPaymentID is the organisation-shaped counterpart of
@@ -62,42 +81,117 @@ func EnsureBusinessPaymentID(ctx context.Context, pool *pgxpool.Pool, partyID st
 	if !errors.Is(err, pgx.ErrNoRows) {
 		return "", err
 	}
-	return insertPaymentIDCode(ctx, pool, partyID)
+	names, err := namesForParty(ctx, pool, partyID)
+	if err != nil {
+		return "", err
+	}
+	return insertPaymentIDCode(ctx, pool, partyID, names)
 }
 
-// insertPaymentIDCode mints and stores a code, treating the unique
-// constraint as the only authority on collisions. Deliberately does not
-// pre-check for a clash: a check-then-insert leaves a window in which a
-// concurrent minter can take the code, and the loser then sees a raw
-// 23505. Five attempts against ~8.9e8 shapes is not a real limit.
-func insertPaymentIDCode(ctx context.Context, pool *pgxpool.Pool, partyID string) (string, error) {
-	for attempt := 0; attempt < 5; attempt++ {
-		code, err := generatePaymentIdCode()
-		if err != nil {
-			return "", err
-		}
-		_, err = pool.Exec(ctx, `
+// insertPaymentIDCode mints a name-derived handle and stores it, treating
+// the unique constraint as the only authority on collisions. Deliberately
+// does not pre-check for a clash: a check-then-insert leaves a window in
+// which a concurrent minter can take the code, and the loser then sees a
+// raw 23505.
+//
+// The retry budget is spent across several mnemonic candidates rather than
+// re-rolling one. The old ESK- codes had ~8.9e8 fully-random shapes and
+// could not realistically exhaust on five attempts; a name-derived handle
+// has no such room — the letters come from the names, so a popular pair
+// like John Kamau shares one mnemonic across every member, and its 1,000
+// three-digit tails are a ceiling that does grow with the user base.
+func insertPaymentIDCode(ctx context.Context, db execer, partyID string, names []string) (string, error) {
+	if len(handlecode.PersonHandleCandidates(names)) == 0 {
+		return "", errors.New("could not derive a Payment ID — this person has no usable name")
+	}
+	var lastErr error
+	code, ok := handlecode.MintHandle(handlecode.PersonHandleCandidates(names), func(candidate string) bool {
+		_, err := db.Exec(ctx, `
 			INSERT INTO esoko_payment_id ("partyId", code, "activatedAt")
-			VALUES ($1, $2, now())`, partyID, code)
+			VALUES ($1, $2, now())`, partyID, candidate)
 		if err == nil {
-			return code, nil
+			return true
 		}
-		if isUniqueViolation(err) {
-			continue // code clash — try another
-		}
-		return "", err
+		lastErr = err
+		return false
+	})
+	if ok {
+		return code, nil
+	}
+	if lastErr != nil && !isUniqueViolation(lastErr) {
+		return "", lastErr
 	}
 	return "", errors.New("could not allocate a Payment ID — try again")
 }
 
-// The old 4-digit format (ESK-1000-KE..ESK-9999-KE) gives only 9,000
-// codes — it would exhaust at a ten-thousandth of a million-user launch.
-// New codes draw from the full 31-char unambiguous alphabet:
-// ESK-XXXXXX-KE is ~8.87×10^8 shapes, unique-constrained, re-rolled
-// on a clash. Old codes keep resolving; they're just no longer minted,
-// and pay-code.ts accepts both shapes for the same reason.
-func generatePaymentIdCode() (string, error) {
-	return "ESK-" + fleetqr.RandomSegment(6) + "-KE", nil
+// insertOrgPaymentID stores an organisation's handle, derived from its
+// name. Each mnemonic candidate gets the digit tail re-rolled a bounded
+// number of times before moving to the next — an org name that is entirely
+// "chama" would otherwise burn the whole budget re-rolling one saturated
+// mnemonic while "wananchi" sat unused.
+func insertOrgPaymentID(ctx context.Context, db execer, partyID, officialName, knownAs string) error {
+	candidates := handlecode.OrgMnemonicCandidates(officialName, knownAs)
+	if len(candidates) == 0 {
+		return errors.New("could not derive a Payment ID — this organisation's name has no usable words")
+	}
+	var lastErr error
+	_, ok := handlecode.MintHandle(candidates, func(candidate string) bool {
+		_, err := db.Exec(ctx, `
+			INSERT INTO esoko_payment_id ("partyId", code, "activatedAt")
+			VALUES ($1, $2, now())`, partyID, candidate)
+		if err == nil {
+			return true
+		}
+		lastErr = err
+		return false
+	})
+	if ok {
+		return nil
+	}
+	if lastErr != nil && !isUniqueViolation(lastErr) {
+		return lastErr
+	}
+	return errors.New("could not allocate a Payment ID for this organisation — try again")
+}
+
+// namesForParty reads the party's own recorded names so the handle is
+// derived from the canonical record rather than from whatever a caller
+// happened to have in hand — a stale or partial name would otherwise mint
+// a handle that does not match the profile it is supposed to describe.
+//
+// A Person contributes firstName/middleName/surname (firstName and surname
+// are the compulsory pair; middleName often is not). An ORGANISATION has
+// only free-text officialName/knownAs, so it contributes those. Returned
+// newest-role-first: the generator draws the primary name at random anyway,
+// so order only matters for determinism, not meaning.
+//
+// A party with nothing usable yields an empty slice, which
+// GenerateSystemHandle rejects — the caller surfaces that rather than
+// minting a handle that says nothing about who it belongs to.
+func namesForParty(ctx context.Context, db querier, partyID string) ([]string, error) {
+	var names []string
+	err := db.QueryRow(ctx, `
+		SELECT ARRAY[
+			pe."firstName", pe."middleName", pe."surname",
+			org."officialName", org."knownAs"
+		]
+		FROM party pa
+		LEFT JOIN person pe ON pe."partyId" = pa.id
+		LEFT JOIN organisation org ON org."partyId" = pa.id
+		WHERE pa.id = $1`, partyID).Scan(&names)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return nil, &ParcelError{"NOT_FOUND", "That party does not exist"}
+	}
+	if err != nil {
+		return nil, err
+	}
+	out := make([]string, 0, len(names))
+	for _, n := range names {
+		if n = strings.TrimSpace(n); n != "" {
+			out = append(out, n)
+		}
+	}
+	return out, nil
 }
 
 // ensureMsisdnVerifiedAttestation mirrors registration.ts's exact
@@ -148,7 +242,10 @@ func GetEsoqoPaymentId(ctx context.Context, pool *pgxpool.Pool, partyID string) 
 // login without creating a second person record.
 func PartyIDByEsoqoID(ctx context.Context, pool *pgxpool.Pool, code string) (string, error) {
 	var partyID string
-	err := pool.QueryRow(ctx, `SELECT "partyId" FROM esoko_payment_id WHERE code = $1`, strings.ToUpper(strings.TrimSpace(code))).Scan(&partyID)
+	// Canonicalise to the stored shape rather than folding case blindly:
+	// handles are minted lower-case, so an uppercase fold made every one of
+	// them miss here.
+	err := pool.QueryRow(ctx, `SELECT "partyId" FROM esoko_payment_id WHERE code = $1`, handlecode.Canonicalize(code)).Scan(&partyID)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return "", &ParcelError{"NOT_FOUND", "That Esoqo ID was not found"}
 	}

@@ -106,7 +106,8 @@ function EsoqoIdLookup() {
       </label>
       <div className="row" style={{ gap: 8 }}>
         <input id="esoqo-id" className="mono" value={code}
-          placeholder="ESK-XXXX-KE" onChange={(e) => setCode(e.target.value.toUpperCase())}
+          placeholder="johnmutu482"
+          onChange={(e) => setCode(e.target.value.trim().toLowerCase())}
           onKeyDown={(e) => e.key === 'Enter' && lookup()}
           style={{ flex: 1, padding: '8px 10px', border: '1.5px solid var(--line)', borderRadius: 6 }} />
         <button className="btn btn-o btn-sm" disabled={pending || !code.trim()} onClick={lookup}>

@@ -33,6 +33,10 @@ export * from './shift';
 export * from './receipt';
 export * from './pricing';
 export * from './parcel-pricing';
+export * from './fees';
+export * from './wallet-withdrawal';
+export * from './esoqo-transfer';
+export * from './thirdparty-payout';
 export * from './auth-credential';
 export * from './jamii-page';
 export * from './jamii-page-block';
@@ -51,8 +55,14 @@ export * from './donation';
 export * from './attestation';
 export * from './treasury';
 export * from './payment-id';
+export * from './esoqo-id-purchase';
+export * from './handle-application';
+export * from './national-id';
 export * from './business-payment';
+export * from './wallet-topup';
+export * from './group-projects';
 export * from './parking';
+export * from './health';
 // Ticketing reads/writes (ticketing, seat-map, ticket-customer, addon)
 // moved to services/core-go — see dbx/ticket_orgs.go, ticketing.go,
 // ticketing_installment.go and fleet.go. This barrel intentionally no

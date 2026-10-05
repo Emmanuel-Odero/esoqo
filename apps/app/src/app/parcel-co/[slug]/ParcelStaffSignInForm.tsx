@@ -26,7 +26,7 @@ export function ParcelStaffSignInForm({ orgSlug }: { orgSlug: string }) {
       <div className="fld">
         <label className="lab" htmlFor="ps-name">Your name or Esoqo ID</label>
         <input
-          className="inp" id="ps-name" autoComplete="off" placeholder="Name or ESK-1234-KE"
+          className="inp" id="ps-name" autoComplete="off" placeholder="Name or johnmutu482"
           value={name} onChange={(e) => setName(e.target.value)}
         />
       </div>

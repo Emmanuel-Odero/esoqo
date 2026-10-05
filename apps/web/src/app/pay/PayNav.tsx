@@ -14,7 +14,7 @@ import { usePathname } from 'next/navigation';
  * back to the hub each time.
  *
  * Overview is deliberately first and matches only the exact hub path, so
- * that a scanned link landing on /pay/ESK-4471-KE does not light up
+ * that a scanned link landing on /pay/johnmutu482 does not light up
  * "Overview" as though the customer had chosen it.
  */
 const LINKS = [

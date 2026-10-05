@@ -40,16 +40,16 @@ type Org struct {
 
 // OrgStaff represents a staff member at an organization
 type OrgStaff struct {
-	ID                   string
-	OrgID                string
-	PartyID              *string
-	Name                 string
-	Role                 string
-	CustomCapabilities   []string
-	Active               bool
-	IsContact            bool
-	CreatedAt            string
-	UpdatedAt            string
+	ID                 string
+	OrgID              string
+	PartyID            *string
+	Name               string
+	Role               string
+	CustomCapabilities []string
+	Active             bool
+	IsContact          bool
+	CreatedAt          string
+	UpdatedAt          string
 }
 
 // OrgConfig represents a configuration entry for an organization

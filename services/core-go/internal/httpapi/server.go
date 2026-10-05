@@ -95,6 +95,7 @@ func (s *Server) Router() *gin.Engine {
 		auth.POST("/verify-otp", s.rateLimit("auth:verify", 30, time.Hour), s.handleVerifyOtp)
 		auth.POST("/sign-in", s.rateLimit("auth:signin", 30, time.Hour), s.handleSignIn)
 		auth.POST("/pin/reset", s.rateLimit("auth:pinreset", 20, time.Hour), s.handleResetPin)
+		auth.POST("/pin/set-without-code", s.rateLimit("auth:pinreset", 20, time.Hour), s.handleSetPinWithoutCode)
 		auth.POST("/set-pin", s.authRequired(), s.handleSetPin)
 		auth.POST("/sign-out", s.authRequired(), s.handleSignOut)
 
@@ -114,7 +115,8 @@ func (s *Server) Router() *gin.Engine {
 		v1.GET("/stores/:slug/usual", s.handleGetUsualProduct)
 		v1.GET("/products/:id", s.handleGetProduct)
 		v1.POST("/orders", s.rateLimit("pay:order", 30, time.Hour), s.handleCreateOrder)
-		v1.GET("/orders/:id", s.handleGetOrder)
+		v1.GET("/orders/:id",
+			s.rateLimit("pay:orderread", 60, time.Hour), s.handleGetOrder)
 		v1.GET("/me/orders", s.authRequired(), s.handleListMyOrders)
 		v1.GET("/me/saved-stores", s.authRequired(), s.handleListSavedStores)
 		v1.POST("/me/saved-stores/:storeId", s.authRequired(), s.handleSaveStore)
@@ -122,7 +124,8 @@ func (s *Server) Router() *gin.Engine {
 		v1.POST("/stores/orders/:id/ready", s.authRequired(), s.handleMarkOrderReady)
 		v1.POST("/stores/orders/:id/collect", s.authRequired(), s.handleConfirmOrderCollected)
 		v1.POST("/stores/orders/:id/dine-in-status", s.authRequired(), s.handleUpdateDineInStatus)
-		v1.POST("/orders/:id/tip", s.handleAddTip)
+		v1.POST("/orders/:id/tip",
+			s.rateLimit("pay:ordertip", 20, time.Hour), s.handleAddTip)
 		v1.GET("/stores/:slug/tables", s.authRequired(), s.handleListTableOrders)
 		v1.POST("/stores/:slug/tables/:table/assign", s.authRequired(), s.handleAssignTable)
 		v1.GET("/stores/:slug/cashiers", s.authRequired(), s.handleListCashiers)
@@ -135,7 +138,8 @@ func (s *Server) Router() *gin.Engine {
 		v1.POST("/bookings", s.rateLimit("pay:booking", 30, time.Hour), s.handleCreateBooking)
 		v1.POST("/bookings/installment", s.rateLimit("pay:installment", 30, time.Hour), s.handleOpenInstallmentPlan)
 		v1.POST("/bookings/:id/balance", s.rateLimit("pay:balance", 30, time.Hour), s.handlePayBookingBalance)
-		v1.GET("/bookings/:id", s.handleGetBooking)
+		v1.GET("/bookings/:id",
+			s.rateLimit("pay:bookingread", 60, time.Hour), s.handleGetBooking)
 		v1.GET("/me/tickets", s.authRequired(), s.handleListMyBookings)
 		v1.GET("/me/orgs", s.authRequired(), s.handleListMyAllOrgs)
 		v1.GET("/me/org-grants", s.authRequired(), s.handleListMyOrgGrants)
@@ -211,8 +215,10 @@ func (s *Server) Router() *gin.Engine {
 
 		v1.POST("/bookings/:id/cancel", s.authRequired(), s.handleCancelBooking)
 		v1.POST("/bookings/:id/retry", s.authRequired(), s.handleRetryBookingPayment)
-		v1.GET("/bookings/:id/status", s.handleGetBookingStatus)
-		v1.GET("/bookings/:id/balance-view", s.handleGetBookingBalanceView)
+		v1.GET("/bookings/:id/status",
+			s.rateLimit("pay:bookingstatus", 60, time.Hour), s.handleGetBookingStatus)
+		v1.GET("/bookings/:id/balance-view",
+			s.rateLimit("pay:bookingbalanceview", 60, time.Hour), s.handleGetBookingBalanceView)
 		v1.GET("/me/bookings", s.authRequired(), s.handleListMyBookingsRich)
 
 		v1.GET("/admin/ticketorgs", s.authRequired(), s.handleAdminListTicketOrgs)
@@ -256,17 +262,18 @@ func (s *Server) Router() *gin.Engine {
 		v1.GET("/fares/:id", s.handleGetFare)
 		v1.GET("/fares/:id/status", s.handleFareStatus)
 		v1.POST("/fares/verify", s.authRequired(), s.handleVerifyFare)
-		v1.GET("/trips/resolve", s.handleResolveTrip)
-		v1.GET("/scan/resolve", s.handleResolveScan)
+		v1.GET("/trips/resolve", s.rateLimit("resolve:trip", 60, time.Hour), s.handleResolveTrip)
+		v1.GET("/scan/resolve", s.rateLimit("scan:resolve", 60, time.Hour), s.handleResolveScan)
 		v1.GET("/fleet/trips/:id/qr", s.authRequired(), s.handleTripQr)
 		v1.GET("/me/fares", s.authRequired(), s.handleListMyFares)
 
 		v1.POST("/vouchers", s.authRequired(), s.handleCreateVoucher)
 		v1.POST("/vouchers/:id/load", s.rateLimit("pay:voucherload", 30, time.Hour), s.authRequired(), s.handleLoadVoucher)
 		v1.GET("/vouchers/:id/status", s.authRequired(), s.handleVoucherStatus)
-		v1.GET("/vouchers/resolve", s.handleResolveVoucher)
+		v1.GET("/vouchers/resolve", s.rateLimit("resolve:voucher", 60, time.Hour), s.handleResolveVoucher)
 		v1.GET("/me/vouchers", s.authRequired(), s.handleListMyVouchers)
 		v1.POST("/vouchers/:id/freeze", s.authRequired(), s.handleFreezeVoucher)
+		v1.POST("/vouchers/:id/pay-business", s.rateLimit("pay:voucherbusiness", 30, time.Hour), s.authRequired(), s.handleSpendVoucherAtBusiness)
 		v1.GET("/me/loyalty", s.authRequired(), s.handleMyLoyalty)
 
 		v1.GET("/admin/fraud/summary", s.authRequired(), s.handleFraudSummary)
@@ -319,6 +326,11 @@ func (s *Server) Router() *gin.Engine {
 		// this off myself" needs to see which companies accept a
 		// walk-in before booking, let alone signing in.
 		v1.GET("/parcels/stations", s.handleListWalkInStations)
+		// Same boundary again, one level deeper: once a sender has
+		// named which company's office they're standing in, this lets
+		// them search that SAME company's own branches as a destination
+		// — still public, still before anyone has signed in.
+		v1.GET("/parcels/org-stations", s.handleListPublicOrgStations)
 		// Walk-in counter tickets. Public — same boundary as booking and
 		// the station picker above: a kiosk, a counter-QR web form and
 		// the app all mint/poll these before anyone has signed in. Rate
@@ -326,9 +338,12 @@ func (s *Server) Router() *gin.Engine {
 		// for everything after (see dbx.GetCounterTicket's own comment).
 		v1.POST("/parcels/counter-tickets",
 			s.rateLimit("book:counterticket", 30, time.Hour), s.handleCreateCounterTicket)
-		v1.GET("/parcels/counter-tickets/:id", s.handleGetCounterTicket)
-		v1.GET("/parcels/counter-tickets/:id/stream", s.handleStreamCounterTicket)
-		v1.PATCH("/parcels/counter-tickets/:id/draft", s.handlePatchCounterTicketDraft)
+		v1.GET("/parcels/counter-tickets/:id",
+			s.rateLimit("counterticket:read", 60, time.Hour), s.handleGetCounterTicket)
+		v1.GET("/parcels/counter-tickets/:id/stream",
+			s.rateLimit("counterticket:stream", 60, time.Hour), s.handleStreamCounterTicket)
+		v1.PATCH("/parcels/counter-tickets/:id/draft",
+			s.rateLimit("counterticket:draft", 60, time.Hour), s.handlePatchCounterTicketDraft)
 		v1.GET("/parcels/coverage", s.handleListCoverageTiers)
 		// Cash on delivery. The policy is public so a booking form knows
 		// whether to offer it at all; setting and confirming COD sit on
@@ -342,8 +357,14 @@ func (s *Server) Router() *gin.Engine {
 		v1.POST("/parcels/:code/board", s.authRequired(), s.handleBoardParcelOnTrip)
 		v1.POST("/parcels/:code/drop", s.authRequired(), s.handleDropParcelFromTrip)
 		v1.GET("/parcels/cod-policy", s.handleGetCodPolicy)
-		v1.POST("/parcels/:code/cod", s.handleSetParcelCod)
-		v1.POST("/parcels/:code/cod/confirm", s.handleConfirmParcelCodBooking)
+		// Both COD writes are unauthenticated and keyed on the tracking
+		// code alone, so they need a bucket like any other public
+		// write — /cod/confirm texts the sender and starts an SLA clock,
+		// which makes it an SMS sender anyone holding a code can pull.
+		v1.POST("/parcels/:code/cod",
+			s.rateLimit("book:parcelcod", 20, time.Hour), s.handleSetParcelCod)
+		v1.POST("/parcels/:code/cod/confirm",
+			s.rateLimit("book:parcelcodconfirm", 10, time.Hour), s.handleConfirmParcelCodBooking)
 		// Collection normally rides inside /deliver — this is the repair
 		// path for a hand-over whose payment failed to record.
 		v1.POST("/parcels/:code/cod/collect", s.authRequired(), s.handleRecordCodCollection)
@@ -480,14 +501,26 @@ func (s *Server) Router() *gin.Engine {
 		v1.POST("/parcel-orgs/me/routes", s.authRequired(), s.handleSaveMyOrgRoute)
 		v1.POST("/parcel-orgs/me/routes/:id", s.authRequired(), s.handleSaveMyOrgRoute)
 		v1.DELETE("/parcel-orgs/me/routes/:id", s.authRequired(), s.handleDeleteMyOrgRoute)
-		v1.POST("/parcels/:code/price", s.handleSetParcelPrice)
+		// The third step of the guest booking flow (book, price, pay), and
+		// like the other two it is keyed on the tracking code alone. The
+		// server-side range check is what stops it being used to set an
+		// absurd price; this is what stops it being used to grind the
+		// quote against a list of codes.
+		v1.POST("/parcels/:code/price",
+			s.rateLimit("book:parcelprice", 30, time.Hour), s.handleSetParcelPrice)
 		v1.POST("/parcels/:code/settle-counter", s.authRequired(), s.handleSettleCounterParcel)
 		v1.POST("/parcels/:code/pay", s.rateLimit("pay:parcel", 30, time.Hour), s.handlePayParcel)
 		v1.PATCH("/parcels/:code", s.authRequired(), s.handleUpdateOwnParcelDetails)
-		v1.GET("/parcels/:code/status", s.handleGetParcelStatus)
+		v1.GET("/parcels/:code/status",
+			// Public, code-gated like /position below, and so the most
+			// tempting thing on the whole surface to grind: it accepts the
+			// serviceTicketNumber as well as the tracking code, is
+			// unauthenticated, and answered one code per request.
+			s.rateLimit("track:parcel", 60, time.Hour), s.handleGetParcelStatus)
 		// Public and code-gated like /status above — the live position
 		// is deliberately anonymous (see dbx.CourierPosition).
-		v1.GET("/parcels/:code/position", s.handleGetParcelCourierPosition)
+		v1.GET("/parcels/:code/position",
+			s.rateLimit("track:parcelposition", 60, time.Hour), s.handleGetParcelCourierPosition)
 		v1.GET("/parcels/:code/label", s.authRequired(), s.handleGetParcelLabel)
 		v1.POST("/parcels/:code/handoff", s.authRequired(), s.handleScanParcelHandoff)
 		v1.POST("/parcels/:code/deliver", s.authRequired(), s.handleDeliverParcel)
@@ -521,8 +554,16 @@ func (s *Server) Router() *gin.Engine {
 			s.rateLimit("receiver-auth:parcel", 15, time.Hour), s.handleVerifyReceiverCode)
 		v1.POST("/parcels/:code/receiver/confirm",
 			s.rateLimit("receiver-confirm:parcel", 10, time.Hour), s.handleReceiverSelfConfirm)
-		v1.POST("/parcels/:code/receipt/otp", s.handleRequestParcelReceiptOtp)
-		v1.POST("/parcels/:code/receipt/confirm", s.handleConfirmParcelReceipt)
+		// Public, same shape as the claim pair: the receiver confirming
+		// they got the box has no account and never will. Both routes are
+		// rate limited, and the OTP request harder than the confirm —
+		// requesting one costs an SMS to a number typed into a booking
+		// form, so walking a list of codes would spend other people's
+		// airtime and get the platform barred for it.
+		v1.POST("/parcels/:code/receipt/otp",
+			s.rateLimit("receipt:parcelotp", 5, time.Hour), s.handleRequestParcelReceiptOtp)
+		v1.POST("/parcels/:code/receipt/confirm",
+			s.rateLimit("receipt:parcelconfirm", 20, time.Hour), s.handleConfirmParcelReceipt)
 		v1.GET("/parcels/:code/handoffs", s.authRequired(), s.handleListParcelHandoffs)
 		v1.POST("/parcels/:code/claim", s.authRequired(), s.handleClaimParcel)
 		// The unhappy-path exits (see handlers_parcel_delivery.go). All
@@ -539,7 +580,8 @@ func (s *Server) Router() *gin.Engine {
 		// to see where their parcel was left, and the two people the
 		// code was ever given to. The bytes are still served through the
 		// handler (never a bucket URL) so this check is the only way in.
-		v1.GET("/parcels/:code/pod-photo", s.handleGetPodPhoto)
+		v1.GET("/parcels/:code/pod-photo",
+			s.rateLimit("track:parcelpod", 30, time.Hour), s.handleGetPodPhoto)
 		// Deliberately NOT under /parcels/... — gin's router can't mix a
 		// static "couriers" segment with the sibling :code wildcard at
 		// the same position in the same method's tree (every other

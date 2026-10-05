@@ -602,7 +602,7 @@ type ParcelOrgStaff struct {
 	IsContact bool    `json:"isContact"`
 	PartyID   *string `json:"partyId"`
 	StationID *string `json:"stationId"`
-	// Msisdn / EsoqoID — the phone and the ESK-… handle this person can
+	// Msisdn / EsoqoID — the phone and the esoqo handle this person can
 	// sign in with, joined out from their Party. Surfaced so an admin can
 	// read a login back to someone who forgot it, and so the roster shows
 	// a credential actually exists rather than a bare uuid. Both nil for
@@ -819,8 +819,8 @@ type OrgLiveParcel struct {
 // OrgLiveView — everything the company's live dispatch map needs in one
 // round trip, plus the stations that anchor it.
 type OrgLiveView struct {
-	Riders   []OrgLiveRider    `json:"riders"`
-	Parcels  []OrgLiveParcel   `json:"parcels"`
+	Riders   []OrgLiveRider     `json:"riders"`
+	Parcels  []OrgLiveParcel    `json:"parcels"`
 	Stations []ParcelOrgStation `json:"stations"`
 }
 
@@ -926,12 +926,12 @@ type OrgParcelLabel struct {
 	LengthCm      *float64 `json:"lengthCm"`
 	WidthCm       *float64 `json:"widthCm"`
 	HeightCm      *float64 `json:"heightCm"`
-	UsedAt          *string `json:"usedAt"`
-	VoidedAt        *string `json:"voidedAt"`
-	VoidedReason    *string `json:"voidedReason"`
-	ParcelID        *string `json:"parcelId"`
-	ParcelCode      *string `json:"parcelCode"`
-	ParcelStatus    *string `json:"parcelStatus"`
+	UsedAt        *string  `json:"usedAt"`
+	VoidedAt      *string  `json:"voidedAt"`
+	VoidedReason  *string  `json:"voidedReason"`
+	ParcelID      *string  `json:"parcelId"`
+	ParcelCode    *string  `json:"parcelCode"`
+	ParcelStatus  *string  `json:"parcelStatus"`
 	// Batch run + QR signature, so a resolved label reprints genuine
 	// without a second fetch. Signed by the handler (secret owner).
 	BatchID *string `json:"batchId"`
@@ -1185,6 +1185,45 @@ func ListParcelOrgStations(ctx context.Context, pool *pgxpool.Pool, orgID string
 		out = append(out, s)
 	}
 	return out, rows.Err()
+}
+
+// PublicOrgStation is the guest-facing projection of a ParcelOrgStation
+// — one of a courier company's own branch offices, offered as a
+// destination pick once a sender has already chosen that company at
+// the "which office are you at" step. No msisdn, capacity or manager —
+// a sender searching for where their parcel is going has no more
+// business seeing those than a WalkInStation's own guest picker does.
+type PublicOrgStation struct {
+	ID           string   `json:"id"`
+	Name         string   `json:"name"`
+	LocationHint string   `json:"locationHint"`
+	OpeningHours *string  `json:"openingHours"`
+	Lat          *float64 `json:"lat"`
+	Lng          *float64 `json:"lng"`
+}
+
+// ListPublicOrgStations — active branches of one named courier company,
+// for the guest destination search. Reuses ListParcelOrgStations' own
+// query (the staff "me/stations" register and this guest picker are the
+// same underlying rows, just projected differently) rather than a
+// second SQL statement to keep in sync.
+func ListPublicOrgStations(ctx context.Context, pool *pgxpool.Pool, orgID string) ([]PublicOrgStation, error) {
+	stations, err := ListParcelOrgStations(ctx, pool, orgID)
+	if err != nil {
+		return nil, err
+	}
+	out := make([]PublicOrgStation, 0, len(stations))
+	for _, s := range stations {
+		if !s.Active {
+			continue
+		}
+		lat, lng := s.Lat, s.Lng
+		out = append(out, PublicOrgStation{
+			ID: s.ID, Name: s.Name, LocationHint: s.LocationHint,
+			OpeningHours: s.OpeningHours, Lat: &lat, Lng: &lng,
+		})
+	}
+	return out, nil
 }
 
 // GetParcelOrgStation — one station, scoped by org so a detail fetch
@@ -1795,7 +1834,7 @@ func ImportOrgParcel(ctx context.Context, pool *pgxpool.Pool, orgID string, in I
 		return "", "", &ParcelError{"BAD_INPUT", "Choose a valid parcel type"}
 	}
 
-	deliveryCode, err := generateDeliveryCode()
+	deliveryCode, err := generateUniqueDeliveryCode(ctx, pool)
 	if err != nil {
 		return "", "", err
 	}
@@ -1979,8 +2018,25 @@ func AssignParcelToOrg(ctx context.Context, pool *pgxpool.Pool, parcelID string,
 	if status != "DRAFT_PENDING_PAYMENT" && status != "BOOKED" {
 		return &ParcelError{"BAD_INPUT", "This parcel is already on its way"}
 	}
-	_, err = pool.Exec(ctx, `UPDATE parcel SET "parcelOrgId" = $1 WHERE id = $2`, orgID, parcelID)
-	return err
+	// The statuses this checked are carried into the UPDATE rather than
+	// checked and then forgotten. Two dispatchers tapping "assign" at the
+	// same moment both read a DRAFT, both write, and the parcel ends up on
+	// whichever courier's write landed last — with the losing dispatch
+	// having been told it worked, and a rider dispatched to a counter that
+	// has already been told the box belongs to somebody else. The
+	// predicate turns the loser into a refusal instead of a silent
+	// overwrite.
+	tag, err := pool.Exec(ctx, `
+		UPDATE parcel SET "parcelOrgId" = $1
+		WHERE id = $2 AND ("paidAt" IS NULL) AND status::text = ANY($3)`,
+		orgID, parcelID, []string{"DRAFT_PENDING_PAYMENT", "BOOKED"})
+	if err != nil {
+		return err
+	}
+	if tag.RowsAffected() == 0 {
+		return &ParcelError{"CONFLICT", "That parcel moved on before it could be assigned — reload and try again"}
+	}
+	return nil
 }
 
 // AssignOrgParcel — a dispatcher handing one of their own parcels to

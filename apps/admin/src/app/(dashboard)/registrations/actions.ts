@@ -7,6 +7,7 @@ import {
   declarePayment, recordPayment, assignUserPin,
   assignPersonToGroup, setRegistrationGroupIntent, searchGroupsForStaff,
   sniff, makeStorageKey, safeName, sha256, putObject, MAX_BYTES,
+  saveNationalIdRecord, getDecryptedNationalId, confirmNationalId,
 } from '@esoqo/db';
 import { hashPin, generateTempPin } from '@esoqo/auth';
 import { toSafeErrorMessage } from '@esoqo/domain';
@@ -169,7 +170,9 @@ export async function actionAssignGroupIntent(registrationId: string, orgPartyId
 /** Walk-ins, phone calls, agent capture. */
 export async function actionCreateWalkIn(input: {
   joiningAs: 'me' | 'group' | 'biz';
-  officialName: string; knownAs?: string; msisdn?: string; email?: string;
+  officialName: string; knownAs?: string;
+  firstName?: string; middleName?: string; surname?: string; dateOfBirth?: Date;
+  msisdn?: string; email?: string;
   county: string; ward?: string; workRaw?: string;
   orgName?: string; orgKnownAs?: string; orgRole?: string; memberCount?: number;
   hasRegisteredBusiness?: string; registrationNo?: string;
@@ -282,5 +285,106 @@ export async function actionEraseParty(
   } catch (e) {
     console.error(e);
     return { ok: false, error: toSafeErrorMessage(e, 'Erasure failed. Confirm you hold the party.erase capability and the record is not already erased.') };
+  }
+}
+
+/* ── national ID capture (manual entry) ──────────────────────────
+ *
+ * Party-scoped, not registration-scoped — unlike WalkIn's document
+ * uploads, this only ever applies once a registration has completed
+ * and a real Person exists, since NationalIdRecord hangs off Person.
+ * No OCR here: front/back go through the same upload pipeline as any
+ * other document, and staff type what the card says — see national-id.ts
+ * for why, and for the follow-up this defers to.
+ */
+
+export async function actionUploadNationalIdImage(form: FormData): Promise<UploadResult> {
+  try {
+    const ctx = await requireStaff();
+    const partyId = String(form.get('partyId') ?? '');
+    const side = String(form.get('side') ?? '');
+    const file = form.get('file');
+
+    if (!partyId) return { ok: false, error: 'Person not found' };
+    if (side !== 'front' && side !== 'back') return { ok: false, error: 'Unknown side' };
+    if (!(file instanceof File)) return { ok: false, error: 'No file was attached' };
+    if (file.size > MAX_BYTES) return { ok: false, error: 'That file is larger than 10 MB' };
+
+    const buf = Buffer.from(await file.arrayBuffer());
+    const check = sniff(buf, file.type, file.name);
+    if (!check.ok || !check.mime) {
+      return { ok: false, error: check.reason ?? 'We cannot accept that file' };
+    }
+
+    const storageKey = makeStorageKey(check.mime);
+    await putObject(storageKey, buf);
+
+    const doc = await createDocument(ctx, {
+      partyId,
+      title: side === 'front' ? 'National ID (front)' : 'National ID (back)',
+      kind: side === 'front' ? 'NATIONAL_ID_FRONT' : 'NATIONAL_ID_BACK',
+      storageKey,
+      originalName: safeName(file.name),
+      mimeType: check.mime, sizeBytes: buf.length, sha256: sha256(buf),
+    });
+
+    return {
+      ok: true,
+      doc: { id: doc.id, title: doc.title, kind: doc.kind, mimeType: doc.mimeType, sizeBytes: doc.sizeBytes },
+    };
+  } catch (e) {
+    console.error(e);
+    return { ok: false, error: toSafeErrorMessage(e, "That upload didn't go through. Check the file and try again.") };
+  }
+}
+
+export interface SaveNationalIdInput {
+  idNumber: string; serialNumber?: string; sex?: string;
+  districtOfBirth?: string; dateOfIssue?: string;
+  frontDocumentId?: string; backDocumentId?: string;
+}
+
+export async function actionSaveNationalId(
+  partyId: string, input: SaveNationalIdInput,
+): Promise<{ ok: true } | { ok: false; error: string }> {
+  try {
+    const ctx = await requireStaff();
+    await saveNationalIdRecord(ctx, partyId, {
+      ...input,
+      dateOfIssue: input.dateOfIssue ? new Date(input.dateOfIssue) : undefined,
+    });
+    revalidatePath('/registrations');
+    return { ok: true };
+  } catch (e) {
+    console.error(e);
+    return { ok: false, error: toSafeErrorMessage(e, "That couldn't be saved. Check the fields and try again.") };
+  }
+}
+
+export async function actionGetNationalId(partyId: string) {
+  try {
+    const ctx = await requireStaff();
+    const record = await getDecryptedNationalId(ctx, partyId);
+    if (!record) return { ok: true as const, record: null };
+    return {
+      ok: true as const,
+      record: { ...record, dateOfIssue: record.dateOfIssue?.toISOString().slice(0, 10) ?? null, verifiedAt: record.verifiedAt?.toISOString() ?? null },
+    };
+  } catch (e) {
+    return { ok: false as const, error: toSafeErrorMessage(e, "Couldn't load the national ID record.") };
+  }
+}
+
+export async function actionConfirmNationalId(
+  partyId: string,
+): Promise<{ ok: true } | { ok: false; error: string }> {
+  try {
+    const ctx = await requireStaff();
+    await confirmNationalId(ctx, partyId);
+    revalidatePath('/registrations');
+    return { ok: true };
+  } catch (e) {
+    console.error(e);
+    return { ok: false, error: toSafeErrorMessage(e, "Couldn't confirm this national ID.") };
   }
 }

@@ -216,7 +216,7 @@ class _UniversalScanScreenState extends ConsumerState<UniversalScanScreen> {
                       child: EsoqoField.code(
                         controller: _code,
                         label: 'Code',
-                        hint: 'BUS- · VCH- · TKT- · PKP- · ESK-',
+                        hint: 'BUS- · VCH- · TKT- · PKP- · johnmutu482',
                         onSubmitted: _resolve,
                       ),
                     ),

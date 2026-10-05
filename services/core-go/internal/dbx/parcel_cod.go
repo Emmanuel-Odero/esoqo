@@ -26,6 +26,7 @@ import (
 	"context"
 	"errors"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/jackc/pgx/v5"
@@ -87,12 +88,28 @@ func SetCodPolicy(ctx context.Context, pool *pgxpool.Pool, p ParcelCodPolicy, st
 	// Deletes then inserts, exactly as SetParcelDistanceRate does — one
 	// row is ever meant to exist, and growing a history table nothing
 	// reads would only make "what is the policy" ambiguous.
-	_, err := pool.Exec(ctx, `
-		DELETE FROM parcel_cod_policy;
+	//
+	// The two statements run inside one transaction: a multi-statement
+	// string through pgx's extended protocol is rejected by Postgres
+	// ("cannot insert multiple commands into a prepared statement"), so
+	// this must be two Execs on the same tx — which also guarantees the
+	// DELETE and the INSERT commit together, so the policy is never
+	// briefly the empty state a crash between them would leave behind.
+	tx, err := pool.Begin(ctx)
+	if err != nil {
+		return err
+	}
+	defer func() { _ = tx.Rollback(ctx) }()
+	if _, err := tx.Exec(ctx, `DELETE FROM parcel_cod_policy`); err != nil {
+		return err
+	}
+	if _, err := tx.Exec(ctx, `
 		INSERT INTO parcel_cod_policy (id, enabled, "maxAmountKes", "handlingFeePct", "updatedAt", "updatedById")
 		VALUES (gen_random_uuid(), $1, $2, $3, now(), $4)`,
-		p.Enabled, p.MaxAmountKes, p.HandlingFeePct, staffID)
-	return err
+		p.Enabled, p.MaxAmountKes.String(), p.HandlingFeePct, staffID); err != nil {
+		return err
+	}
+	return tx.Commit(ctx)
 }
 
 // ── The two pure arithmetic rules ────────────────────────────────────
@@ -216,7 +233,14 @@ func ConfirmParcelCodBooking(ctx context.Context, pool *pgxpool.Pool, code strin
 	if !collectFee {
 		return &ParcelError{"BAD_INPUT", "Pay the delivery fee to confirm this booking"}
 	}
-	_, err = pool.Exec(ctx, `
+	// The states checked above are carried into the UPDATE, so the write
+	// is decided by one snapshot rather than by a read that another
+	// request could invalidate before the write landed. This route is
+	// unauthenticated and takes the tracking code alone, and it texts the
+	// sender on success — so a double-tap, or two senders confirming from
+	// the same link, otherwise buys two booking SMS and two SLA clocks
+	// started.
+	tag, err := pool.Exec(ctx, `
 		UPDATE parcel SET
 			status = 'BOOKED',
 			"paymentMethod" = 'CASH_ON_DELIVERY',
@@ -227,8 +251,15 @@ func ConfirmParcelCodBooking(ctx context.Context, pool *pgxpool.Pool, code strin
 			    ORDER BY r."parcelOrgId" NULLS LAST
 			    LIMIT 1
 			) * interval '1 hour'
-		WHERE code = $1`, code)
-	return err
+		WHERE code = $1 AND status = $2 AND "codStatus" = $3 AND "codAmountKes" IS NOT NULL`,
+		code, "DRAFT_PENDING_PAYMENT", CodPending)
+	if err != nil {
+		return err
+	}
+	if tag.RowsAffected() == 0 {
+		return &ParcelError{"CONFLICT", "That booking was just confirmed — no need to do it again"}
+	}
+	return nil
 }
 
 // ── Collection at the door ───────────────────────────────────────────
@@ -266,14 +297,33 @@ func RecordCodCollection(ctx context.Context, pool *pgxpool.Pool, code string, c
 		return nil, &ParcelError{"BAD_INPUT", "That isn't a valid amount"}
 	}
 
-	var parcelID, codStatus string
+	// The guard read, the ledger entry and the codStatus flip are one
+	// transaction. Called out of the delivery flow AFTER the parcel is
+	// marked DELIVERED, and standalone for a parcel whose COD
+	// bookkeeping failed after a completed hand-over — so a parcel in
+	// any other state is one whose goods never changed hands, and
+	// booking cash against it credits the seller, the courier and
+	// Esoqo's revenue for a delivery that did not happen. The status
+	// check belongs here rather than only at the two call sites, because
+	// the ledger post and the flip have to commit together: posted
+	// first and flipped second, a crash in between left the parcel
+	// PENDING forever (so the seller is owed twice and the courier's
+	// holding shows cash nobody can remit) with a ledger entry that
+	// claims the money was collected.
+	tx, err := pool.Begin(ctx)
+	if err != nil {
+		return nil, err
+	}
+	defer func() { _ = tx.Rollback(ctx) }()
+
+	var parcelID, codStatus, status string
 	var currentHolder, senderPartyID, codAmountText, priceText *string
 	var collectFee bool
-	err := pool.QueryRow(ctx, `
-		SELECT id, "codStatus", "currentHolderPartyId"::text, "senderPartyId"::text,
+	err = tx.QueryRow(ctx, `
+		SELECT id, "codStatus", status::text, "currentHolderPartyId"::text, "senderPartyId"::text,
 		       "codAmountKes"::text, "priceKes"::text, "codCollectDeliveryFee"
-		FROM parcel WHERE code = $1`, code).
-		Scan(&parcelID, &codStatus, &currentHolder, &senderPartyID, &codAmountText, &priceText, &collectFee)
+		FROM parcel WHERE code = $1 FOR UPDATE`, code).
+		Scan(&parcelID, &codStatus, &status, &currentHolder, &senderPartyID, &codAmountText, &priceText, &collectFee)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return nil, &ParcelError{"NOT_FOUND", "That parcel was not found"}
 	}
@@ -287,6 +337,14 @@ func RecordCodCollection(ctx context.Context, pool *pgxpool.Pool, code string, c
 		// Already collected, remitted or settled — a replayed tap, not a
 		// second payment.
 		return nil, &ParcelError{"BAD_INPUT", "This parcel's payment has already been recorded"}
+	}
+	// Money is only ever taken at a hand-over that actually happened.
+	// DELIVERED is the state both callers run against (the delivery flow
+	// closes the parcel out first; the standalone retry exists precisely
+	// for a delivered parcel whose COD bookkeeping failed), so anything
+	// else means nobody took this parcel to its buyer.
+	if status != "DELIVERED" {
+		return nil, &ParcelError{"BAD_INPUT", "This parcel hasn't been delivered yet"}
 	}
 	// Custody, not capability: whoever physically has the parcel is who
 	// can be handed cash for it. Same rule every other at-the-door
@@ -344,7 +402,7 @@ func RecordCodCollection(ctx context.Context, pool *pgxpool.Pool, code string, c
 		postings = append(postings, ledger.Posting{AccountID: revenueAcct, AmountCents: ledger.CentsFromKES(-feeKes)})
 	}
 	if collectedKes > 0 {
-		if _, err := ledger.PostEntry(ctx, pool,
+		if _, err := ledger.PostEntryTx(ctx, tx,
 			"parcel:"+parcelID, "Cash on delivery collected", "core-go:parcel-cod:"+parcelID,
 			postings); err != nil {
 			return nil, err
@@ -354,21 +412,24 @@ func RecordCodCollection(ctx context.Context, pool *pgxpool.Pool, code string, c
 	// paidAt is set here, not at booking — for a COD parcel this is the
 	// moment money actually arrived, which is what every revenue sum in
 	// this package means by "paid".
-	if _, err := pool.Exec(ctx, `
+	if _, err := tx.Exec(ctx, `
 		UPDATE parcel SET
 			"codStatus" = $1, "codCollectedKes" = $2, "codCollectedAt" = now(),
 			"codCollectedByPartyId" = $3,
 			"paidAt" = COALESCE("paidAt", now())
-		WHERE id = $4`, CodCollected, collectedKes, byPartyID, parcelID); err != nil {
+		WHERE id = $4 AND "codStatus" = $5`, CodCollected, collectedKes, byPartyID, parcelID, CodPending); err != nil {
 		return nil, err
 	}
 	// The delivery fee is the only part of a COD collection that is
 	// Esoqo's revenue, so that — not the whole collection — is what the
 	// company's commission splits against.
 	if feeKes > 0 {
-		if err := writeParcelRevenueSplit(ctx, pool, parcelID, feeKes); err != nil {
+		if err := writeParcelRevenueSplitTx(ctx, tx, parcelID, feeKes); err != nil {
 			return nil, err
 		}
+	}
+	if err := tx.Commit(ctx); err != nil {
+		return nil, err
 	}
 	return result, nil
 }
@@ -421,20 +482,86 @@ func RemitCod(ctx context.Context, pool *pgxpool.Pool, riderPartyID string, amou
 		return "", 0, &ParcelError{"BAD_INPUT", "Record who received the cash"}
 	}
 
-	holding, err := GetRiderCodHolding(ctx, pool, riderPartyID)
-	if err != nil {
-		return "", 0, err
-	}
-	if holding.ParcelCount == 0 {
-		return "", 0, &ParcelError{"BAD_INPUT", "That rider isn't holding any cash-on-delivery money"}
-	}
-	expectedKes = holding.AmountKes.KES()
-
+	// The counted amount, the ledger movement, the parcel status flips
+	// and the reconciliation row all commit together. Posted after the
+	// commit instead — the earlier shape — a crash in between left
+	// parcels marked REMITTED with the ledger never moved: the money in
+	// was on nobody's books, the rider's holding showed zero, and no
+	// retry was possible because the parcels were no longer COLLECTED.
+	// The winner that is left is a silent reconciliation gap nobody
+	// ever chases.
 	tx, err := pool.Begin(ctx)
 	if err != nil {
 		return "", 0, err
 	}
 	defer func() { _ = tx.Rollback(ctx) }()
+
+	// What the rider is actually holding is read inside the transaction
+	// and its parcels locked FOR UPDATE, so a collection landing
+	// mid-handover can't be swept into this remittance by a batch that
+	// was computed before it existed — nor silently skipped by a row
+	// count the transaction can't account for. The aggregate is
+	// computed in Go over the locked rows: Postgres rejects FOR UPDATE
+	// on an aggregate query.
+	rows, err := tx.Query(ctx, `
+		SELECT "codCollectedKes"::text
+		FROM parcel
+		WHERE "codCollectedByPartyId" = $1 AND "codStatus" = $2
+		FOR UPDATE`, riderPartyID, CodCollected)
+	if err != nil {
+		return "", 0, err
+	}
+	var expected money.Cents
+	parcelCount := 0
+	for rows.Next() {
+		var text string
+		if err := rows.Scan(&text); err != nil {
+			rows.Close()
+			return "", 0, err
+		}
+		expected += money.MustParseKES(text)
+		parcelCount++
+	}
+	rows.Close()
+	if err := rows.Err(); err != nil {
+		return "", 0, err
+	}
+	if parcelCount == 0 {
+		return "", 0, &ParcelError{"BAD_INPUT", "That rider isn't holding any cash-on-delivery money"}
+	}
+	expectedKes = expected.KES()
+
+	// The counted amount in the same unit as expected, converted once.
+	// CentsFromKES rounds to the nearest cent, which is the finest
+	// granularity a currency amount has here — so what lands on the
+	// comparison is the number of notes actually counted, not a float
+	// that only approximates it.
+	counted := money.Cents(ledger.CentsFromKES(amountKes))
+
+	// A hand-over that doesn't match the parcels is exactly what the
+	// expected/counted gap exists to surface, so it is allowed — but never
+	// silently. A short count over real parcels is somebody's money
+	// unaccounted for, and without a word about it the record reads as a
+	// routine handover.
+	//
+	// The comparison is on Cents, not on the two float64s: the counted
+	// amount arrives as a float and expected as money.Cents, so comparing
+	// those directly asks a 20.10 to equal 20.099999999999998, and a
+	// correctly counted hand-over would demand an explanation for a
+	// discrepancy that doesn't exist.
+	//
+	// Both directions need the note, not just the short one. An OVER-count
+	// is stranger money the rider is carrying that belongs to no parcel,
+	// and the ledger below posts the counted figure — so a surplus that
+	// arrives unexplained is posted as if it were somebody's delivery.
+	if counted != expected {
+		if note == nil || strings.TrimSpace(*note) == "" {
+			if counted < expected {
+				return "", 0, &ParcelError{"BAD_INPUT", "That's less than the parcels say is owed — record what happened"}
+			}
+			return "", 0, &ParcelError{"BAD_INPUT", "That's more than the parcels say is owed — record where the extra came from"}
+		}
+	}
 
 	if err := tx.QueryRow(ctx, `
 		INSERT INTO parcel_cod_remittance (
@@ -442,44 +569,67 @@ func RemitCod(ctx context.Context, pool *pgxpool.Pool, riderPartyID string, amou
 			"amountKes", "expectedKes", note, "createdAt"
 		) VALUES (gen_random_uuid(), $1, $2, $3, $4, $5, $6, now())
 		RETURNING id`,
-		riderPartyID, receivedByStaffID, receivedByOrgStaffID, amountKes, expectedKes, note).
+		riderPartyID, receivedByStaffID, receivedByOrgStaffID,
+		// Both money columns get exact decimal strings, not float8. This is
+		// about removing a conversion, not correcting a broken one:
+		// Postgres's float8→numeric cast does round sensibly, so the old
+		// shape was not landing a hundredth off. But the value is already
+		// exact cents in `counted` two lines above, and handing a driver a
+		// float means the number makes a round trip through binary
+		// floating point to get back to the decimal it came from — for a
+		// column whose entire purpose is that the difference between
+		// amountKes and expectedKes is real. Written as the decimal it is.
+		counted.Decimal(), expected.Decimal(), note).
 		Scan(&remittanceID); err != nil {
 		return "", 0, err
 	}
-	if _, err := tx.Exec(ctx, `
+	// RowsAffected is checked, not discarded. The UPDATE carries the same
+	// predicate the count was taken with, so a mismatch means a parcel
+	// left COLLECTED between the two statements and this remittance would
+	// silently leave that rider's cash out of the batch — a holding that
+	// no longer matches the sum of the parcels behind it, which is the
+	// one invariant this function exists to keep.
+	tag, err := tx.Exec(ctx, `
 		UPDATE parcel SET "codStatus" = $1, "codRemittanceId" = $2
 		WHERE "codCollectedByPartyId" = $3 AND "codStatus" = $4`,
-		CodRemitted, remittanceID, riderPartyID, CodCollected); err != nil {
+		CodRemitted, remittanceID, riderPartyID, CodCollected)
+	if err != nil {
 		return "", 0, err
 	}
-	if err := tx.Commit(ctx); err != nil {
-		return "", 0, err
+	if int(tag.RowsAffected()) != parcelCount {
+		return "", 0, &ParcelError{"CONFLICT", "That rider's cash changed while this was being recorded — try again"}
 	}
 
-	// Posted after the commit rather than inside it because PostEntry
-	// takes a pool, not a tx (see ledger.PostEntry). The amount posted
-	// is what was COUNTED, not what was expected: the ledger has to
-	// agree with the notes on the table, and a discrepancy lives in the
-	// gap between remittance.amountKes and expectedKes where somebody
+	// What was COUNTED is posted, not what was expected: the ledger has
+	// to agree with the notes on the table, and a discrepancy lives in
+	// the gap between remittance.amountKes and expectedKes where somebody
 	// can see it.
-	if amountKes > 0 {
+	//
+	// Posted from `counted`, the same cents the comparison above used, so
+	// the ledger, the row and the note all describe one number. Recomputing
+	// it here from amountKes would be a second conversion of the same
+	// input and could disagree with the first by a cent.
+	if counted > 0 {
 		heldAcct, aerr := ledger.EnsureAccount(ctx, pool, &riderPartyID, "PARCEL_COD_HELD", "KES")
 		if aerr != nil {
-			return remittanceID, expectedKes, aerr
+			return "", 0, aerr
 		}
 		settlementAcct, aerr := ledger.EnsureAccount(ctx, pool, nil, "SETTLEMENT", "KES")
 		if aerr != nil {
-			return remittanceID, expectedKes, aerr
+			return "", 0, aerr
 		}
-		if _, perr := ledger.PostEntry(ctx, pool,
+		if _, perr := ledger.PostEntryTx(ctx, tx,
 			"parcel-cod-remittance:"+remittanceID, "Courier remitted cash on delivery",
 			"core-go:parcel-cod-remit:"+remittanceID,
 			[]ledger.Posting{
-				{AccountID: settlementAcct, AmountCents: ledger.CentsFromKES(amountKes)},
-				{AccountID: heldAcct, AmountCents: ledger.CentsFromKES(-amountKes)},
+				{AccountID: settlementAcct, AmountCents: int64(counted)},
+				{AccountID: heldAcct, AmountCents: -int64(counted)},
 			}); perr != nil {
-			return remittanceID, expectedKes, perr
+			return "", 0, perr
 		}
+	}
+	if err := tx.Commit(ctx); err != nil {
+		return "", 0, err
 	}
 	return remittanceID, expectedKes, nil
 }
@@ -595,19 +745,36 @@ func ListSellersOwedCod(ctx context.Context, pool *pgxpool.Pool) ([]SellerCodOwe
 // Only REMITTED parcels settle. Money still in a rider's pocket is owed
 // to the seller but is not yet Esoqo's to pay out, and paying against
 // it would mean paying out cash nobody has counted.
+//
+// One transaction holds the whole thing: a second concurrent settle for
+// the same seller blocks on the FOR UPDATE lock (and, per row, sees the
+// rows the first settle already transitioned out of REMITTED), so the
+// same money cannot be paid twice. The status flip and the ledger post
+// commit together, so a ledger failure rolls the flips back and the
+// retry is not met with "nothing remitted" for a settlement that never
+// happened. The actor who ran it is written into the settlement record
+// — a money-out operation with no actor is a fraud you cannot even
+// begin to chase.
 func SettleSellerCod(ctx context.Context, pool *pgxpool.Pool, senderPartyID, staffID string) (paidKes, feeKes float64, count int, err error) {
 	policy, err := GetCodPolicy(ctx, pool)
 	if err != nil {
 		return 0, 0, 0, err
 	}
 
-	rows, err := pool.Query(ctx, `
+	tx, err := pool.Begin(ctx)
+	if err != nil {
+		return 0, 0, 0, err
+	}
+	defer func() { _ = tx.Rollback(ctx) }()
+
+	rows, err := tx.Query(ctx, `
 		SELECT id,
 		       CASE WHEN "codCollectDeliveryFee"
 		            THEN GREATEST("codCollectedKes" - COALESCE("priceKes", 0), 0)
 		            ELSE "codCollectedKes" END::float8
 		FROM parcel
-		WHERE "senderPartyId" = $1 AND "codStatus" = $2`, senderPartyID, CodRemitted)
+		WHERE "senderPartyId" = $1 AND "codStatus" = $2
+		FOR UPDATE`, senderPartyID, CodRemitted)
 	if err != nil {
 		return 0, 0, 0, err
 	}
@@ -646,9 +813,9 @@ func SettleSellerCod(ctx context.Context, pool *pgxpool.Pool, senderPartyID, sta
 		parcelFee := goods.Percent(policy.HandlingFeePct)
 		fee += parcelFee
 		gross += goods
-		if _, err := pool.Exec(ctx, `
+		if _, err := tx.Exec(ctx, `
 			UPDATE parcel SET "codStatus" = $1, "codSettledAt" = now(), "codHandlingFeeKes" = $2::numeric
-			WHERE id = $3`, CodSettled, parcelFee.Decimal(), items[i].id); err != nil {
+			WHERE id = $3 AND "codStatus" = $4`, CodSettled, parcelFee.Decimal(), items[i].id, CodRemitted); err != nil {
 			return 0, 0, 0, err
 		}
 	}
@@ -684,14 +851,41 @@ func SettleSellerCod(ctx context.Context, pool *pgxpool.Pool, senderPartyID, sta
 	if fee.IsPositive() {
 		postings = append(postings, ledger.Posting{AccountID: feeAcct, AmountCents: -int64(fee)})
 	}
-	// Keyed on the staff member and the moment, since a seller settles
-	// repeatedly over time and each run is its own event.
+	// Idempotency is the transaction itself here — the FOR UPDATE lock
+	// serializes concurrent settles and the leading "codStatus = REMITTED"
+	// predicate makes the rows themselves the guard — so the key can be
+	// the stable "one settlement per seller" shape the ledger's replay
+	// check (query the existing id) handles without double-counting.
+	// A seller settling repeatedly is a set of distinct events, each
+	// serialized against the last by the lock before it, so the stable
+	// key cannot masquerade two real settlements as one replay.
 	idem := "core-go:parcel-cod-settle:" + senderPartyID + ":" + strconv.FormatInt(time.Now().UnixNano(), 10)
-	if _, err := ledger.PostEntry(ctx, pool,
+	if _, err := ledger.PostEntryTx(ctx, tx,
 		"parcel-cod-settlement:"+senderPartyID, "Cash on delivery settled to seller", idem,
 		postings); err != nil {
 		return 0, 0, 0, err
 	}
-	_ = staffID
+
+	// Money out, and the record of who moved it. The settlement ledger
+	// entry carries the actor in its reference, and a dedicated row
+	// (parcel_cod_settlement) names staffId + the totals + the parcels,
+	// so the question "who paid this seller, and for what" is answered
+	// by one financial record rather than a grep across logs.
+	parcelIDs := make([]string, 0, len(items))
+	for _, it := range items {
+		parcelIDs = append(parcelIDs, it.id)
+	}
+	if _, err := tx.Exec(ctx, `
+		INSERT INTO parcel_cod_settlement (
+			id, "senderPartyId", "settledByStaffId", "paidKes", "feeKes",
+			"parcelIds", "createdAt"
+		) VALUES (gen_random_uuid(), $1, $2, $3::numeric, $4::numeric, $5, now())`,
+		senderPartyID, staffID, paid.Decimal(), feeKes, parcelIDs); err != nil {
+		return 0, 0, 0, err
+	}
+
+	if err := tx.Commit(ctx); err != nil {
+		return 0, 0, 0, err
+	}
 	return paidKes, feeKes, len(items), nil
 }

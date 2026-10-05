@@ -225,6 +225,55 @@ and Esoqo paying its own payables.
 This is a tripwire, not a control. Anyone can edit the allowlist; the point is
 that doing so shows up in a diff and has to be argued for.
 
+### Step 1c addendum — closed-loop position revisited (2026-09-29)
+
+The `WALLET` account kind (TypeScript layer — `packages/db`, `apps/app`) now
+supports two things this section's original framing said to keep out:
+
+- **Cash-out.** `WalletWithdrawal` — a person cashing their own `WALLET`
+  balance out to M-Pesa, locked to the MSISDN they registered with (never a
+  caller-supplied number).
+- **Peer-to-peer transfer.** `EsoqoTransfer` — a handle-to-handle payment,
+  person↔person or person↔business, straight from a `WALLET` balance, no
+  M-Pesa leg.
+
+This is a deliberate decision, not the accidental drift this section warns
+about. It followed a real regulatory read of the Central Bank of Kenya's
+*E-Money Regulation, 2013*: the definition of e-money (Clause 4 — "accepted as
+a means of payment by persons other than the issuer") already covers
+`BusinessPayment` and `WalletTopUp`, which pre-date this addendum and were
+never closed-loop in the CBK sense to begin with — a voucher/loyalty framing
+does not exempt a multi-merchant, cash-out-capable balance from that
+definition. The "small e-money issuer" carve-out (Clause 6) does not fit
+Esoqo's actual shape either — it caps accepting parties at 100, requires them
+to share premises or common ownership with the issuer, and caps individual
+transactions at KES 10,000, none of which describes an open network of
+unrelated registered businesses. Full e-money issuer authorization (Clause 5)
+is the honest target; core capital there is stated as KES 60,000,000 in the
+regulation text itself, which conflicts with at least one secondary source
+citing KES 1,000,000 — worth a Kenyan payments lawyer confirming the current
+figure across the 2013 Regulation, the 2014 NPS Regulations, and the draft
+2026 National Payment System Bill before this scales.
+
+What stays governed by `closed_loop_test.go` and unaffected by this: voucher
+cards and loyalty points (`VoucherCard`, `PartyLoyaltyEntry`), which remain
+genuinely closed-loop — spendable only inside Esoqo, never cashed out, never
+transferred person-to-person. Voucher-funded payment to a business
+(`SpendVoucherAtBusiness`, `POST /v1/vouchers/:id/pay-business`) was added
+alongside this addendum and stays inside that boundary — it is the exact
+shape `SettleStoreOrderVoucher`'s `VOUCHER` payment method already used for a
+store checkout, generalised to any business rather than one `StoreOrder`; both
+`TestStoredValueSurfaceStaysClosedLoop` and
+`TestNoStoredValueCashOutOrTransferRoutes` still pass.
+
+A fourth feature — paying an arbitrary M-Pesa number that is not an Esoqo
+party at all — was scoped in the same conversation and deliberately *not*
+built live: it is the one piece that reads as money-remittance rather than
+closed-loop commerce even under a generous view, and ships behind
+`THIRDPARTY_PAYOUT_ENABLED` (default off, DAL/payments plumbing only, no UI
+entry point) until that gets its own legal sign-off — the same gating pattern
+`EsoqoIdPurchase` already uses for `ESOQO_ID_PREMIUM_ENABLED`.
+
 ### Step 2 — Compute in decimal — **DONE for `dbx`**
 
 **`internal/money`** — the Go mirror of `mobile/esoqo_app/lib/core/money/money.dart`,

@@ -20,7 +20,7 @@ class EsoqoProfile {
       );
 
   final String partyId;
-  /// The short, human-typeable "ESK-####-KE" code — see
+  /// The short, human-typeable handle, e.g. "johnmutu482" — see
   /// dbx.EnsureEsoqoPaymentId. What the UI should actually show; partyId
   /// (a raw UUID) is an internal identifier, not something a person
   /// should ever need to read or type.

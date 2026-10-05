@@ -72,6 +72,29 @@ export function anonCtx(ip?: string | null): Ctx {
   return { actorType: 'SYSTEM', actorId: null, capabilities: [], ip, __verified: true };
 }
 
+/**
+ * The self-serve /join flow's context — an unauthenticated visitor
+ * registering themselves, before any Party/session exists for them to
+ * be SUBJECT-authenticated as. Deliberately least-privilege: exactly the
+ * three registration.* actions the join wizard's server actions need
+ * (start, update fields as steps complete, mark msisdn verified) plus
+ * document.write so the ID photos can attach to the in-progress
+ * registration. Never grant more here — once completeRegistration
+ * returns a partyId, the rest of the flow (issuing an esoqo ID, saving
+ * the national ID record) should build a real SUBJECT ctx for that
+ * party instead, the same shape a signed-in session produces
+ * (see capabilitiesForRole('SUBJECT') in packages/auth/src/session.ts).
+ */
+export function publicJoinCtx(ip?: string | null): Ctx {
+  return {
+    actorType: 'SYSTEM',
+    actorId: 'public-join',
+    capabilities: ['registration.create', 'registration.read', 'registration.write', 'document.write'],
+    ip,
+    __verified: true,
+  };
+}
+
 function matches(held: Capability, wanted: Capability, ctx: Ctx, opts?: Record<string, unknown>) {
   if (held === '*') return true;
   if (held === wanted) return true;
@@ -155,9 +178,16 @@ export const CAPABILITY_CATALOGUE = [
     ['payment.approve', 'SIGN a payment approval'],
     ['payment.waive', 'Waive a registration fee'],
   ]},
+  { group: 'Wallet', items: [
+    ['wallet.withdraw', "Cash out a WALLET balance to the holder's own registration M-Pesa number"],
+    ['wallet.transfer', 'Send money to another Esoqo handle from a WALLET balance'],
+    ['wallet.thirdpartypayout', 'Pay an arbitrary M-Pesa number from a WALLET balance — gated behind THIRDPARTY_PAYOUT_ENABLED'],
+  ]},
   { group: 'Credentials', items: [
     ['attestation.issue', 'Issue any credential'],
     ['attestation.revoke', 'Revoke a credential'],
+    ['attestation.issue:HANDLE_APPLICATION_APPROVED',
+      "Approve a business/chama/organisation's application for its own esoqo ID handle"],
   ]},
   { group: 'Oversight', items: [
     ['report.read', 'View reports and analytics'],
@@ -294,6 +324,7 @@ export const PAYMENT_APPROVAL_THRESHOLD =
 export const ROLE_PRESETS = {
   SUBJECT: ['entity.read:own', 'entity.write:own', 'consent.read:own', 'consent.write:own',
             'document.read:own', 'document.write:own', 'wallet.read:own',
+            'wallet.withdraw:own', 'wallet.transfer:own', 'wallet.thirdpartypayout:own',
             'store.read', 'store.write:own', 'product.write:own',
             'order.read:own', 'order.fulfil:own', 'pos.sell:own',
             'inventory.write:own', 'customer.read:own', 'customer.write:own',
@@ -352,7 +383,7 @@ export const ROLE_PRESETS = {
 
   REGISTRAR: ['registration.read', 'registration.create', 'registration.write',
               'party.read', 'party.write', 'party.credential', 'membership.write',
-              'document.read', 'document.review',
+              'document.read', 'document.review', 'attestation.issue:HANDLE_APPLICATION_APPROVED',
               'payment.read', 'payment.record', 'report.read'],
 
   FINANCE_APPROVER: ['registration.read', 'party.read', 'payment.read',
@@ -361,6 +392,7 @@ export const ROLE_PRESETS = {
   ESOKO_OPS: ['registration.read', 'registration.write', 'registration.void',
               'registration.export', 'party.read', 'party.write', 'party.pii',
               'party.credential', 'membership.write', 'document.read', 'document.review', 'document.delete',
+              'attestation.issue:HANDLE_APPLICATION_APPROVED',
               'payment.read', 'payment.record', 'audit.read', 'report.read',
               'duplicate.review', 'consent.read', 'staff.read',
               'store.read', 'store.write', 'store.moderate', 'order.read', 'order.reroute',

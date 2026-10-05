@@ -11,6 +11,7 @@ package loyalty
 import (
 	"context"
 
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
@@ -88,9 +89,41 @@ func RefundToParty(ctx context.Context, pool *pgxpool.Pool, partyID string, poin
 	return err
 }
 
+// RefundToPartyTx is RefundToParty inside a caller's transaction, so the
+// refund and the state change that earns it commit together.
+//
+// This is what makes CancelParcel safe. Refunded outside its
+// transaction — the shape RefundToParty alone gives — a crash before the
+// parcel's status write leaves the sender's points credited and the
+// parcel still live: the parcel ships AND the sender keeps back the
+// value of having paid for it in points. Nothing reconciles that,
+// because both sides individually look correct. The duplicate-refund
+// guard also moves inside the transaction, so a retried cancellation
+// cannot double-credit against the same refId.
+func RefundToPartyTx(ctx context.Context, tx pgx.Tx, partyID string, points int, refID string) error {
+	if partyID == "" || points <= 0 {
+		return nil
+	}
+	var exists bool
+	if err := tx.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM party_loyalty_entry WHERE "partyId" = $1 AND kind = 'REFUND' AND "refId" = $2)`, partyID, refID).Scan(&exists); err != nil {
+		return err
+	}
+	if exists {
+		return nil
+	}
+	_, err := tx.Exec(ctx, `INSERT INTO party_loyalty_entry (id, "partyId", points, kind, "refId", "createdAt") VALUES (gen_random_uuid(), $1, $2, 'REFUND', $3, now())`, partyID, points, refID)
+	return err
+}
+
 // SpendFromParty debits loyalty points for a voucher load. Fails when
 // balance is insufficient. Caller must hold the surrounding tx semantics;
 // this is a single INSERT guarded by a balance check.
+//
+// The check-then-insert here is only safe while nothing else debits the
+// same party at the same time — that is why PayParcelWithPoints uses
+// SpendFromPartyTx, which takes the balance's lock. Use this form only
+// where the caller's own transaction already serialises the party (see
+// voucher.go, whose load is single-shot).
 func SpendFromParty(ctx context.Context, pool *pgxpool.Pool, partyID string, points int, refID string) error {
 	var bal int
 	if err := pool.QueryRow(ctx, `SELECT COALESCE(SUM(points),0)::int FROM party_loyalty_entry WHERE "partyId" = $1`, partyID).Scan(&bal); err != nil {
@@ -100,5 +133,32 @@ func SpendFromParty(ctx context.Context, pool *pgxpool.Pool, partyID string, poi
 		return ErrInsufficientLoyalty
 	}
 	_, err := pool.Exec(ctx, `INSERT INTO party_loyalty_entry (id, "partyId", points, kind, "refId", "createdAt") VALUES (gen_random_uuid(), $1, $2, 'CONVERT_TO_VOUCHER', $3, now())`, partyID, -points, refID)
+	return err
+}
+
+// SpendFromPartyTx is SpendFromParty inside a caller-supplied
+// transaction, with the balance lock actually taken.
+//
+// FOR UPDATE on the party's own ledger rows is what makes the
+// check-then-insert atomic against a concurrent debit: without it two
+// spends can each read the same pre-spend balance, each pass the
+// `bal < points` test, and together overdraw a balance that was only
+// ever meant to cover one of them. Row locks on the entries don't stop a
+// brand-new balance from being read before either INSERT lands, so the
+// lock is taken on the party row itself.
+func SpendFromPartyTx(ctx context.Context, tx pgx.Tx, partyID string, points int, refID string) error {
+	// Serialise on the party row. Exists purely as the lock target; the
+	// real balance is still the sum of its entries.
+	if _, err := tx.Exec(ctx, `SELECT 1 FROM party WHERE id = $1 FOR UPDATE`, partyID); err != nil {
+		return err
+	}
+	var bal int
+	if err := tx.QueryRow(ctx, `SELECT COALESCE(SUM(points),0)::int FROM party_loyalty_entry WHERE "partyId" = $1`, partyID).Scan(&bal); err != nil {
+		return err
+	}
+	if bal < points {
+		return ErrInsufficientLoyalty
+	}
+	_, err := tx.Exec(ctx, `INSERT INTO party_loyalty_entry (id, "partyId", points, kind, "refId", "createdAt") VALUES (gen_random_uuid(), $1, $2, 'CONVERT_TO_VOUCHER', $3, now())`, partyID, -points, refID)
 	return err
 }

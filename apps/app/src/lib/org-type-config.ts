@@ -82,7 +82,7 @@ export const ORG_TYPE_CONFIG: Record<OrgTypeId, OrgTypeConfig> = {
     id: 'personal',
     label: 'Personal Account',
     category: 'personal',
-    description: 'Your own record and personal workspace',
+    description: 'Your own profile and personal workspace',
     kind: 'personal',
     order: 0,
     entryType: 'direct',

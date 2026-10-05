@@ -31,7 +31,7 @@ const COPY: Record<Mode, {
     title: 'Pay into a savings group',
     lead: 'Chamas, table-banking groups, SACCOs, co-operatives and associations — by name or by Esoqo ID.',
     field: 'Group name or Esoqo ID',
-    placeholder: 'Kilimani Chama or ESK-HWQHDU-KE',
+    placeholder: 'Kilimani Chama or johnmutu482',
     cta: 'Find the group',
     chips: ['Group name', 'Esoqo ID', 'Phone number', 'Email'],
     note: 'Only groups registered on Esoqo can be paid. Ask your treasurer for the group’s Esoqo ID.',

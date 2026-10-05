@@ -193,6 +193,15 @@ func (in ParcelAgentInput) validate() error {
 	if in.Lat == 0 && in.Lng == 0 {
 		return &ParcelError{"BAD_INPUT", "Set the shop's coordinates"}
 	}
+	// The 0,0 check above only catches the one coordinate nobody meant to
+	// type. An agent at lat=900 passes it, and then "nearest pickup point"
+	// — which is what decides which shop a receiver is told to walk to —
+	// measures to it from anywhere and puts every agent on the map in the
+	// wrong order. Same range check as a zone, for the same reason: the
+	// number feeds distance maths, so it has to be a real place.
+	if e := validateZoneCoords(in.Lat, in.Lng); e != nil {
+		return e
+	}
 	if in.Capacity <= 0 {
 		return &ParcelError{"BAD_INPUT", "Shelf capacity must be at least 1"}
 	}

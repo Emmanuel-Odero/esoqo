@@ -21,7 +21,7 @@ import {
 } from '../src/dal/business-payment';
 
 const ctx = anonCtx();
-const CODE = 'ESK-PRB7KM-KE';
+const CODE = 'probstore482';
 const OWNER_MSISDN = '+254712000001';
 let pass = 0; let fail = 0;
 const check = (label: string, ok: boolean, extra = '') => {
@@ -47,7 +47,7 @@ async function sweep(prefixes: string[], names: string[]) {
 }
 
 async function main() {
-  await sweep(['ESK-PRB', 'ESK-DBG'], ['Probe ', 'Dbg ']);
+  await sweep(['prob', 'dbg'], ['Probe ', 'Dbg ']);
 
   // ── fixture ──────────────────────────────────────────────────────────
   const org = await prisma.party.create({
@@ -71,7 +71,7 @@ async function main() {
     data: {
       kind: 'PERSON', county: 'Nairobi',
       person: { create: { officialName: 'Probe Individual' } },
-      esoqoPaymentId: { create: { code: 'ESK-PRBND2-KE' } },
+      esoqoPaymentId: { create: { code: 'probbundu482' } },
     },
   });
   // An org with no Payment ID — must NOT be payable.
@@ -91,7 +91,7 @@ async function main() {
     data: {
       kind: 'ORGANISATION', county: 'Nairobi',
       organisation: { create: { kind: 'SUPPLIER', officialName: 'Probe Hauliers Ltd', knownAs: 'Probe Hauliers' } },
-      esoqoPaymentId: { create: { code: 'ESK-PLT1-KE' } },
+      esoqoPaymentId: { create: { code: 'probpilau482' } },
     },
   });
   const carrierEnt = await prisma.enterprise.create({
@@ -140,7 +140,7 @@ async function main() {
     data: {
       kind: 'ORGANISATION', county: 'Nairobi',
       organisation: { create: { kind: 'CHAMA', officialName: 'Probe Sunrise Chama', knownAs: 'Probe Sunrise' } },
-      esoqoPaymentId: { create: { code: 'ESK-GRP1-KE' } },
+      esoqoPaymentId: { create: { code: 'probgroup482' } },
     },
   });
 
@@ -169,7 +169,7 @@ async function main() {
     console.log('\n== refusals ==');
     check('empty identifier -> EMPTY', (await lookupPayee(ctx, '   ')).status === 'EMPTY');
     check('nonsense -> NOT_FOUND', (await lookupPayee(ctx, 'zzzz-nothing-here')).status === 'NOT_FOUND');
-    const personIdLookup = await lookupPayee(ctx, 'ESK-PRBND2-KE');
+    const personIdLookup = await lookupPayee(ctx, 'probbundu482');
     check("a person's own ID -> NOT_PAYABLE", personIdLookup.status === 'NOT_PAYABLE', `got ${personIdLookup.status}`);
     check('an org with no ID is not payable by name',
       (await findPayableBusinesses(ctx, 'Probe Unregistered Duka')).length === 0);
@@ -205,7 +205,7 @@ async function main() {
     check('normalises the payer number', payment.payerMsisdn === '+254712000002');
     check('snapshots the payee code', payment.payeeEsoqoId === CODE);
     check('snapshots the payee name', payment.payeeName === 'Probe Test Kitchen');
-    check('normalises the payer Esoqo ID', payment.payerEsoqoId === 'ESK-PRBND2-KE');
+    check('normalises the payer Esoqo ID', payment.payerEsoqoId === 'probbundu482');
 
     for (const [label, input, code] of [
       ['zero amount', { amountKes: 0 }, 'AMOUNT_INVALID'],

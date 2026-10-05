@@ -59,12 +59,6 @@ const nextConfig = {
   },
 
   /**
-   * The self-serve /join registration flow is disabled for now — the app
-   * is sign-in only. The route itself has been removed from the app
-   * router, and this forwards any surviving link (an SMS, a bookmark,
-   * the marketing site) to /signin rather than a 404. Delete this entry
-   * and restore the join route to bring registration back.
-   *
    * Backward-compatibility redirects for the legacy portal routes:
    *
    * /parcel-org/*         → /org/courier/<id>/*
@@ -80,8 +74,6 @@ const nextConfig = {
    */
   async redirects() {
     return [
-      { source: '/join', destination: '/signin', permanent: false },
-
       // Legacy parcel-org portal routes: handled by middleware (needs cookie)
       // These fallback redirects fire only if middleware hasn't already redirected.
       {

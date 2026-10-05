@@ -13,6 +13,7 @@ export {
 export { Notice } from './Notice';
 export { Modal } from './Modal';
 export { CameraScanner } from './CameraScanner';
+export { IdCardScanner } from './IdCardScanner';
 export {
   ParcelCapabilityPicker, PARCEL_CAPABILITIES, RIDER_BASELINE,
   type ParcelCapabilityOption,
@@ -49,3 +50,4 @@ export {
   queueCustody, listQueuedCustody, pendingCustodyCount, flushCustody, discardCustody,
   type CustodyIntent, type CustodyFlushResult, type QueuedCustody,
 } from './custodyQueue';
+export { QrCode } from './QrCode';

@@ -1,7 +1,7 @@
 import type { MetadataRoute } from 'next';
 const BASE = process.env.NEXT_PUBLIC_WEB_URL ?? 'https://esoqo.co.ke';
 export default function sitemap(): MetadataRoute.Sitemap {
-  // /pay/<ESK-ID> and /pay/parking/<code> are deliberately absent. The
+  // /pay/<esoqo-handle> and /pay/parking/<code> are deliberately absent. The
   // first is a short link to one business and the second is a bearer
   // token for one car's bill — both work when followed, neither belongs
   // in a search index. They are noindex in their own metadata as well,
