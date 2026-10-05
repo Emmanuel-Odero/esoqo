@@ -607,6 +607,51 @@ func ensureDemoParcelOrg(ctx context.Context, pool *pgxpool.Pool, riderPartyID, 
 		  AND status IN ('DRAFT_PENDING_PAYMENT', 'BOOKED')`, orgID); err != nil {
 		return fmt.Errorf("parcel org backfill: %w", err)
 	}
+
+	// Also ensure the ESOQO Shippers company account exists in dev so the
+	// showcase, team roster and dispatch fleet steps can plant their data.
+	kikiPartyID, err := EnsurePersonParty(ctx, pool, "+254728387694", "Kiki Viki", "Kiki", "047", "112233")
+	if err != nil {
+		return fmt.Errorf("kiki party: %w", err)
+	}
+	eshipEnt, err := EnsureEnterprise(ctx, pool, kikiPartyID, "logistics")
+	if err != nil {
+		return fmt.Errorf("eship enterprise: %w", err)
+	}
+	var eshipOrgID string
+	if err := pool.QueryRow(ctx, `
+		INSERT INTO parcel_org (
+			id, "enterpriseId", name, slug, status, "contactPerson", "contactPhone",
+			"commissionPct", "createdAt", "updatedAt"
+		) VALUES (
+			gen_random_uuid(), $1, 'ESOQO Shippers', 'esoqo-shippers', 'ACTIVE',
+			'Kiki Viki', '+254728387694', 15, now(), now()
+		)
+		ON CONFLICT (slug) DO UPDATE SET status = 'ACTIVE', "updatedAt" = now()
+		RETURNING id`, eshipEnt).Scan(&eshipOrgID); err != nil {
+		return fmt.Errorf("eship org: %w", err)
+	}
+
+	kikiHash, err := authsvc.HashPin("112233")
+	if err != nil {
+		return fmt.Errorf("kiki pin hash: %w", err)
+	}
+	var kikiExisting string
+	err = pool.QueryRow(ctx, `
+		SELECT id FROM parcel_org_staff WHERE "orgId" = $1 AND lower(name) = lower($2)`,
+		eshipOrgID, "Kiki Viki").Scan(&kikiExisting)
+	if err == nil {
+		_, _ = pool.Exec(ctx, `
+			UPDATE parcel_org_staff SET "pinHash" = $1, role = 'MANAGER', active = true,
+			       "partyId" = $2, "updatedAt" = now()
+			WHERE id = $3`, kikiHash, kikiPartyID, kikiExisting)
+	} else if errors.Is(err, pgx.ErrNoRows) {
+		_, _ = pool.Exec(ctx, `
+			INSERT INTO parcel_org_staff (id, "orgId", name, "pinHash", role, active, "partyId", "createdAt", "updatedAt")
+			VALUES (gen_random_uuid(), $1, 'Kiki Viki', $2, 'MANAGER', true, $3, now(), now())`,
+			eshipOrgID, kikiHash, kikiPartyID)
+	}
+
 	return nil
 }
 
@@ -727,36 +772,36 @@ func ensureHighwayExpressRoute(ctx context.Context, pool *pgxpool.Pool, orgID st
 // Party scanned the code", not a capability).
 func ensureDemoParcels(ctx context.Context, pool *pgxpool.Pool, esther, amina, david, courierBrian, courierAlice string) error {
 	type spec struct {
-		code, deliveryCode, senderPartyID, senderName, senderMsisdn string
-		receiverName, receiverMsisdn, origin, dest                  string
-		status                                                      string
-		holderPartyID                                               *string
-		delivered                                                   bool
+		code, deliveryCode, ticket, senderPartyID, senderName, senderMsisdn string
+		receiverName, receiverMsisdn, origin, dest                          string
+		status                                                              string
+		holderPartyID                                                       *string
+		delivered                                                           bool
 	}
 	specs := []spec{
 		{
-			code: "PKG-DEMO001", deliveryCode: "112233",
+			code: "PKG-DEMO001", deliveryCode: "112233", ticket: "TCK-DEMO001",
 			senderPartyID: esther, senderName: "Demo Esther Muthoni", senderMsisdn: "+254700500017",
 			receiverName: "Demo David Kiprop", receiverMsisdn: "+254700500016",
 			origin: "Kilimani, opposite Yaya Centre", dest: "Ngara, David's Fashion Corner",
 			status: "BOOKED", holderPartyID: nil,
 		},
 		{
-			code: "PKG-DEMO002", deliveryCode: "445566",
+			code: "PKG-DEMO002", deliveryCode: "445566", ticket: "TCK-DEMO002",
 			senderPartyID: amina, senderName: "Demo Amina Wanjiru", senderMsisdn: "+254700500001",
 			receiverName: "Demo Brian Otieno", receiverMsisdn: "+254700500002",
 			origin: "Kilimani, Amina's Grocers", dest: "CBD, Brian's Electronics",
 			status: "PICKED_UP", holderPartyID: &amina,
 		},
 		{
-			code: "PKG-DEMO003", deliveryCode: "778899",
+			code: "PKG-DEMO003", deliveryCode: "778899", ticket: "TCK-DEMO003",
 			senderPartyID: david, senderName: "Demo David Kiprop", senderMsisdn: "+254700500016",
 			receiverName: "Demo Esther Muthoni", receiverMsisdn: "+254700500017",
 			origin: "Ngara, David's Fashion Corner", dest: "Kilimani, opposite Yaya Centre",
 			status: "IN_TRANSIT", holderPartyID: &courierBrian,
 		},
 		{
-			code: "PKG-DEMO004", deliveryCode: "990011",
+			code: "PKG-DEMO004", deliveryCode: "990011", ticket: "TCK-DEMO004",
 			senderPartyID: esther, senderName: "Demo Esther Muthoni", senderMsisdn: "+254700500017",
 			receiverName: "Demo Amina Wanjiru", receiverMsisdn: "+254700500001",
 			origin: "Kilimani, opposite Yaya Centre", dest: "Kilimani, Amina's Grocers",
@@ -769,7 +814,7 @@ func ensureDemoParcels(ctx context.Context, pool *pgxpool.Pool, esther, amina, d
 			// "access as a conductor" and "parcel handling" at once,
 			// since there is no separate parcel-handler role to seed
 			// for (see this function's own header comment).
-			code: "PKG-DEMO005", deliveryCode: "223344",
+			code: "PKG-DEMO005", deliveryCode: "223344", ticket: "TCK-DEMO005",
 			senderPartyID: david, senderName: "Demo David Kiprop", senderMsisdn: "+254700500016",
 			receiverName: "Demo Amina Wanjiru", receiverMsisdn: "+254700500001",
 			origin: "Ngara, David's Fashion Corner", dest: "Kilimani, Amina's Grocers",
@@ -784,13 +829,13 @@ func ensureDemoParcels(ctx context.Context, pool *pgxpool.Pool, esther, amina, d
 		}
 		var parcelID string
 		err = pool.QueryRow(ctx, `
-			INSERT INTO parcel (id, code, "deliveryCode", "senderPartyId", "senderName", "senderMsisdn",
+			INSERT INTO parcel (id, code, "deliveryCode", "serviceTicketNumber", "senderPartyId", "senderName", "senderMsisdn",
 				"receiverName", "receiverMsisdn", "originLabel", "destinationLabel", "parcelType",
 				"currentHolderPartyId", status, "createdAt", "deliveredAt")
-			VALUES (gen_random_uuid(), $1, $2, $3, $4, $5, $6, $7, $8, $9, 'SMALL'::"ParcelType", $10, $11::"ParcelStatus", now(),
-				CASE WHEN $12 THEN now() ELSE NULL END)
+			VALUES (gen_random_uuid(), $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, 'SMALL'::"ParcelType", $11, $12::"ParcelStatus", now(),
+				CASE WHEN $13 THEN now() ELSE NULL END)
 			RETURNING id`,
-			s.code, s.deliveryCode, s.senderPartyID, s.senderName, s.senderMsisdn,
+			s.code, s.deliveryCode, s.ticket, s.senderPartyID, s.senderName, s.senderMsisdn,
 			s.receiverName, s.receiverMsisdn, s.origin, s.dest, s.holderPartyID, s.status, s.delivered).Scan(&parcelID)
 		if err != nil {
 			return fmt.Errorf("parcel %s: %w", s.code, err)
