@@ -283,6 +283,27 @@ export const posSaleSchema = z.object({
 );
 export type PosSaleFormInput = z.infer<typeof posSaleSchema>;
 
+/**
+ * The lines a shopkeeper submits from the itemize screen (see
+ * addReceiptItems in dal/receipt.ts) — same shape and same bounds as
+ * posSaleItemSchema, minus the per-line discount a haggled sale needs
+ * and this screen doesn't. Boundary validation belongs at the Server
+ * Action, the same way syncPosSale validates with posSaleSchema before
+ * a client-supplied array ever reaches the DAL; addReceiptItems itself
+ * still re-checks quantity/price shape defensively (nothing upstream of
+ * a DAL function is trusted input on its own), but rejecting a negative
+ * price or a fractional quantity here means the merchant sees a form
+ * error instead of a generic "could not save these items" from deeper
+ * in the stack.
+ */
+export const receiptItemSchema = z.object({
+  productId: z.string().uuid(),
+  variantId: z.string().uuid().optional().nullable(),
+  quantity: z.number().int().positive(),
+  unitPriceKes: z.number().nonnegative().max(10_000_000),
+});
+export const receiptItemsSchema = z.array(receiptItemSchema).min(1, 'Add at least one item before saving');
+
 /** A contact a merchant buys from — kept once, reused across purchases. */
 export const supplierSchema = z.object({
   name: z.string().trim().min(2, 'Give the supplier a name').max(120),

@@ -12,7 +12,7 @@
  */
 import { prisma } from '../src/client';
 import { anonCtx } from '../src/capabilities';
-import { allocateEsoqoCode } from '../src/dal/payment-id';
+import { allocateEsoqoOrgHandle } from '../src/dal/payment-id';
 import { createParkingLot, findParkingLot } from '../src/dal/parking';
 
 const ctx = anonCtx();
@@ -51,7 +51,7 @@ async function main() {
   }
 
   if (!party.esoqoPaymentId) {
-    const code = await allocateEsoqoCode(party.id);
+    const code = await allocateEsoqoOrgHandle(party.id, ORG_NAME);
     console.log(`issued Esoqo Payment ID ${code}`);
   } else if (party.esoqoPaymentId.suspendedAt) {
     throw new Error('the demo operator’s Payment ID is suspended — parking cannot take money');

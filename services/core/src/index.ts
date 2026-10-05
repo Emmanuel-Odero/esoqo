@@ -8,18 +8,23 @@ import {
   confirmRegistrationPaymentByPesapalOrderId,
   confirmDonationPayment, failDonationPayment,
   confirmBusinessPayment, failBusinessPayment,
+  confirmWalletTopUp, WalletTopUpError,
+  confirmSignatoryFeePayment, TreasuryError,
+  confirmWalletWithdrawal, failWalletWithdrawalById, WalletWithdrawalError,
+  confirmThirdPartyPayout, failThirdPartyPayoutById, ThirdPartyPayoutError,
   StoreOrderError, DonationError, BusinessPaymentError,
 } from '@esoqo/db';
 import {
   appEnv, donorThankYouSms, adminDonationAlertSms,
-  payerPaymentReceiptSms, businessPaymentAlertSms,
+  payerPaymentReceiptSms, businessPaymentAlertSms, purchaseReceiptSms,
+  walletWithdrawalConfirmedSms, walletTopUpConfirmedSms,
 } from '@esoqo/domain';
 // Subpath import, not the '@esoqo/auth' barrel — the barrel's index.ts
 // also re-exports pin.ts/session.ts/redis.ts/etc., which DO carry the
 // `server-only` marker and throw outside a Next.js bundling context.
 // sms.ts itself deliberately doesn't (see its own header comment).
 import { sendSms } from '@esoqo/auth/sms';
-import { parseStkCallback, parsePesapalIpn, confirmPesapalOrder } from '@esoqo/payments';
+import { parseStkCallback, parsePesapalIpn, confirmPesapalOrder, parseB2CResultCallback } from '@esoqo/payments';
 import { cecfRoutes } from './routes/cecf';
 import { jamiiDomainsRoutes, runJamiiDomainReconcile } from './routes/jamii-domains';
 import { jamiiDomainProvider } from './lib/cloudflare-saas';
@@ -156,7 +161,17 @@ const handleStkCallback = async (
   }
 
   try {
-    await confirmStoreOrderPayment(parsed.checkoutRequestId, parsed.mpesaReceiptCode ?? '');
+    const order = await confirmStoreOrderPayment(parsed.checkoutRequestId, parsed.mpesaReceiptCode ?? '');
+    // Best-effort, same as every other confirmer below: the order is
+    // already PAID and the ledger already posted by the time we get
+    // here, so an SMS provider hiccup must not fail the webhook.
+    if (order.receipt?.sentTo && order.receipt.receiptCode) {
+      await sendSms(
+        order.receipt.sentTo,
+        purchaseReceiptSms({ storeName: order.receipt.storeName ?? 'Esoqo', amountKes: Number(order.receipt.totalKes), receiptCode: order.receipt.receiptCode }),
+        'purchase-receipt',
+      ).catch((err) => app.log.error({ err, checkoutRequestId: parsed.checkoutRequestId }, 'failed to send order receipt SMS'));
+    }
     return reply.send({ ok: true });
   } catch (e) {
     if (!(e instanceof StoreOrderError && e.code === 'NOT_FOUND')) {
@@ -215,6 +230,7 @@ const handleStkCallback = async (
           businessName: n.businessName,
           receiptCode: n.receiptCode,
           mpesaReceiptCode: n.mpesaReceiptCode,
+          receiptVerifyCode: n.receiptVerifyCode,
         }), 'business-payment-receipt'),
         ...n.businessMsisdns.map((to) => sendSms(
           to,
@@ -243,6 +259,45 @@ const handleStkCallback = async (
     }
   }
 
+  // A personal Wallet top-up. Last of the TS confirmers, same reason as
+  // business payment above — newest, least likely to match. A top-up has
+  // no second party to notify (unlike business payment's receipt+alert
+  // pair), but the person themselves still gets one message carrying
+  // Esoqo's own reference code — the balance updating is confirmation
+  // enough next time the page loads, but a code to quote support or
+  // reconcile against isn't visible anywhere else until then.
+  try {
+    const result = await confirmWalletTopUp(parsed.checkoutRequestId, parsed.mpesaReceiptCode ?? '');
+    if (result.justConfirmed && result.topUp.referenceCode) {
+      const t = result.topUp;
+      try {
+        await sendSms(t.msisdn, walletTopUpConfirmedSms({
+          amountKes: Number(t.amountKes), referenceCode: t.referenceCode!,
+        }), 'wallet-topup-confirmed');
+      } catch (e) {
+        app.log.error({ err: e, checkoutRequestId: parsed.checkoutRequestId }, 'failed to send wallet top-up SMS');
+      }
+    }
+    return reply.send({ ok: true });
+  } catch (e) {
+    if (!(e instanceof WalletTopUpError && e.code === 'NOT_FOUND')) {
+      app.log.error({ err: e, checkoutRequestId: parsed.checkoutRequestId }, 'failed to confirm wallet top-up');
+      return reply.send({ ok: true });
+    }
+  }
+
+  // A signatory-fee STK payment (STK_NEW_SIGNER / STK_OFFICER). Last of
+  // the TS confirmers, same reasoning as wallet top-up above.
+  try {
+    await confirmSignatoryFeePayment(parsed.checkoutRequestId, parsed.mpesaReceiptCode ?? '');
+    return reply.send({ ok: true });
+  } catch (e) {
+    if (!(e instanceof TreasuryError && e.code === 'NOT_FOUND')) {
+      app.log.error({ err: e, checkoutRequestId: parsed.checkoutRequestId }, 'failed to confirm signatory fee payment');
+      return reply.send({ ok: true });
+    }
+  }
+
   // Booking and fare callbacks are confirmed by core-go (the sole
   // writer for those tables since the console migration) — forward the
   // raw body there best-effort and still 200: Go's confirms are
@@ -256,6 +311,118 @@ const handleStkCallback = async (
 // anonymously, and so console/dev setups keep working.
 app.post('/webhooks/mpesa/stk-callback', handleStkCallback);
 app.post('/webhooks/mpesa/stk-callback/:token', handleStkCallback);
+
+/**
+ * Daraja's B2C result callback — a wallet withdrawal or (once enabled) a
+ * third-party payout settling. Same secret-path-segment gate as the STK
+ * callback above (reusing MPESA_CALLBACK_SECRET rather than a second
+ * secret nobody would remember to rotate in step with the first), but a
+ * different payload shape (see parseB2CResultCallback). Two possible
+ * owners share this one B2C conversation-id namespace — WalletWithdrawal
+ * and (once THIRDPARTY_PAYOUT_ENABLED) ThirdPartyPayout — so this tries
+ * the withdrawal first and falls through to the payout only on a
+ * NOT_FOUND, same "try the more common owner first" shape the STK
+ * callback above already uses across its five tables.
+ */
+const handleB2CResultCallback = async (
+  req: FastifyRequest<{ Params: { token?: string } }>,
+  reply: FastifyReply,
+) => {
+  const token = req.params?.token;
+  if (!callbackTokenOk(token)) {
+    app.log.warn({ ip: req.ip }, 'rejected M-Pesa B2C callback with bad/missing token');
+    return reply.code(404).send({ error: 'not found' });
+  }
+  const parsed = parseB2CResultCallback(req.body);
+  if (!parsed) {
+    app.log.warn({ body: req.body }, 'unrecognised M-Pesa B2C callback shape');
+    return reply.code(400).send({ ok: false });
+  }
+
+  if (!parsed.succeeded) {
+    try {
+      // conversationId, not a row id: failWalletWithdrawalById expects
+      // our own row id, and all this callback carries is Daraja's
+      // ConversationID — resolved via the same unique column each
+      // confirm function keys on.
+      const withdrawal = await prisma.walletWithdrawal.findUnique({ where: { mpesaConversationId: parsed.conversationId } });
+      if (withdrawal) {
+        await failWalletWithdrawalById(withdrawal.id, parsed.resultDescription);
+      } else {
+        const payout = await prisma.thirdPartyPayout.findUnique({ where: { mpesaConversationId: parsed.conversationId } });
+        if (payout) await failThirdPartyPayoutById(payout.id, parsed.resultDescription);
+      }
+    } catch (e) {
+      app.log.error({ err: e, conversationId: parsed.conversationId }, 'failed to record B2C payout failure');
+    }
+    return reply.send({ ok: true });
+  }
+
+  try {
+    const result = await confirmWalletWithdrawal(parsed.conversationId, parsed.mpesaTransactionId ?? '');
+    if (result.justConfirmed) {
+      const w = result.withdrawal;
+      try {
+        await sendSms(w.msisdn, walletWithdrawalConfirmedSms({
+          amountKes: Number(w.amountKes), feeKes: Number(w.feeKes),
+          netPayoutKes: Number(w.netPayoutKes), msisdn: w.msisdn,
+          referenceCode: w.referenceCode ?? '',
+        }), 'wallet-withdrawal-confirmed');
+      } catch (e) {
+        app.log.error({ err: e, conversationId: parsed.conversationId }, 'failed to send wallet withdrawal SMS');
+      }
+    }
+    return reply.send({ ok: true });
+  } catch (e) {
+    if (!(e instanceof WalletWithdrawalError && e.code === 'NOT_FOUND')) {
+      app.log.error({ err: e, conversationId: parsed.conversationId }, 'failed to confirm wallet withdrawal');
+      return reply.send({ ok: true });
+    }
+  }
+
+  // Dark until THIRDPARTY_PAYOUT_ENABLED flips — no route can produce a
+  // conversation id here yet, so this branch is unreachable in practice,
+  // but the plumbing is wired so flipping the flag doesn't also require
+  // a webhook change.
+  try {
+    await confirmThirdPartyPayout(parsed.conversationId, parsed.mpesaTransactionId ?? '');
+  } catch (e) {
+    if (!(e instanceof ThirdPartyPayoutError && e.code === 'NOT_FOUND')) {
+      app.log.error({ err: e, conversationId: parsed.conversationId }, 'failed to confirm third-party payout');
+    }
+  }
+  return reply.send({ ok: true });
+};
+
+app.post('/webhooks/mpesa/b2c-result', handleB2CResultCallback);
+app.post('/webhooks/mpesa/b2c-result/:token', handleB2CResultCallback);
+
+/**
+ * Daraja's B2C QueueTimeOutURL — the request itself never produced a
+ * result within Safaricom's own queue window. Not a "failed" verdict any
+ * more than STK's UNKNOWN is: treated as a same-shape failure here only
+ * because, unlike STK (where a customer can simply be asked to try
+ * again), a queued B2C request has no second, cheaper way to find out
+ * what happened — so it is marked FAILED and the money stays in the
+ * wallet, rather than left PENDING forever with no way to reconcile it.
+ */
+app.post('/webhooks/mpesa/b2c-timeout', async (req, reply) => {
+  const parsed = parseB2CResultCallback(req.body);
+  if (parsed) {
+    try {
+      const withdrawal = await prisma.walletWithdrawal.findUnique({ where: { mpesaConversationId: parsed.conversationId } });
+      if (withdrawal) {
+        await failWalletWithdrawalById(withdrawal.id, 'Timed out waiting for Safaricom');
+      } else {
+        const payout = await prisma.thirdPartyPayout.findUnique({ where: { mpesaConversationId: parsed.conversationId } });
+        if (payout) await failThirdPartyPayoutById(payout.id, 'Timed out waiting for Safaricom');
+      }
+    } catch (e) {
+      app.log.error({ err: e }, 'failed to record B2C payout timeout');
+    }
+  }
+  return reply.send({ ok: true });
+});
 
 /**
  * Strangler bridge: during the TS→Go migration both webhook routes are

@@ -86,7 +86,7 @@ func flipChar(c byte) string {
 func TestPrefixRegistry(t *testing.T) {
 	for _, p := range []Prefix{
 		PrefixTrip, PrefixBus, PrefixVoucher, PrefixTicket, PrefixPickup,
-		PrefixPaymentID, PrefixParcel, PrefixServiceTicket, PrefixLuggage,
+		PrefixParcel, PrefixServiceTicket, PrefixLuggage,
 	} {
 		if !ValidPrefix(p) {
 			t.Fatalf("prefix %q must be registered", p)

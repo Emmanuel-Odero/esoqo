@@ -41,13 +41,14 @@ export default async function MyOrganiser() {
 
   return (
     <>
-      <div className="mehead">
+      <header className="hero" style={{ padding: '4px 0 14px' }}>
+        <p className="kicker">Sell tickets</p>
         <h1>Sell tickets</h1>
-        <p>Run an event company, tour operator, or transport company on Esoqo.</p>
-      </div>
+        <p className="lead">Run an event company, tour operator, or transport company on Esoqo.</p>
+      </header>
 
       {orgs.length > 0 && (
-        <div className="mcard" style={{ marginBottom: 16 }}>
+        <div className="mcard mcard--premium" style={{ marginBottom: 16 }}>
           <h2><Icon name="building" size={18} />Your organisers</h2>
           {orgs.map((org) => (
             <div className="mrow" key={org.ID}>

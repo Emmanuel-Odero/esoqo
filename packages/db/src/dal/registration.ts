@@ -1,20 +1,19 @@
-
-import { mintEsoqoCode } from '@esoqo/domain';
-import { prisma } from '../client';
-import { requireCapability, systemCtx, type Ctx } from '../capabilities';
-import { recordAudit } from '../audit';
+import { prisma } from "../client";
+import { allocateEsoqoOrgHandle } from "./payment-id";
+import { requireCapability, systemCtx, type Ctx } from "../capabilities";
+import { recordAudit } from "../audit";
 import type {
   JoinPath,
   RegistrationStatus,
   PartyKind,
   OrgKind,
   MemberRole,
-} from '@prisma/client';
+} from "@prisma/client";
 
 /* ── inputs ─────────────────────────────────────────────────── */
 
 export interface StartRegistrationInput {
-  joiningAs: 'me' | 'group' | 'biz';
+  joiningAs: "me" | "group" | "biz";
   /// Required so a registration is never persisted before there is a real
   /// person behind it — an empty shell row that nobody ever finishes is
   /// not a draft, it's noise (see the July 2026 data cleanup).
@@ -40,6 +39,10 @@ export interface StartRegistrationInput {
 export interface UpdateRegistrationInput {
   officialName?: string;
   knownAs?: string;
+  firstName?: string;
+  middleName?: string;
+  surname?: string;
+  dateOfBirth?: Date;
   msisdn?: string;
   email?: string;
   county?: string;
@@ -60,7 +63,7 @@ export interface UpdateRegistrationInput {
   wantsPriceSms?: boolean;
   wantsReceiptSms?: boolean;
   wantsExpirySms?: boolean;
-  ussdSetupChoice?: 'now' | 'later';
+  ussdSetupChoice?: "now" | "later";
   lastStep?: number;
   /// New-group detail — only set when GroupDetails (not GroupSearch) ran.
   orgKind?: string;
@@ -91,18 +94,23 @@ export interface UpdateRegistrationInput {
  *  on Registration.orgRole for admin/history. */
 function toMemberRole(orgRole: string | null | undefined): MemberRole {
   const known: Record<string, MemberRole> = {
-    chairperson: 'CHAIRPERSON', treasurer: 'TREASURER',
-    secretary: 'SECRETARY', member: 'MEMBER',
+    chairperson: "CHAIRPERSON",
+    treasurer: "TREASURER",
+    secretary: "SECRETARY",
+    member: "MEMBER",
   };
-  return known[orgRole?.trim().toLowerCase() ?? ''] ?? 'MEMBER';
+  return known[orgRole?.trim().toLowerCase() ?? ""] ?? "MEMBER";
 }
 
 /* ── writes ─────────────────────────────────────────────────── */
 
-export async function startRegistration(ctx: Ctx, input: StartRegistrationInput) {
-  requireCapability(ctx, 'registration.create');
+export async function startRegistration(
+  ctx: Ctx,
+  input: StartRegistrationInput,
+) {
+  requireCapability(ctx, "registration.create");
   if (!input.officialName?.trim()) {
-    throw new Error('A name is required to start a registration');
+    throw new Error("A name is required to start a registration");
   }
 
   const reg = await prisma.registration.create({
@@ -118,18 +126,18 @@ export async function startRegistration(ctx: Ctx, input: StartRegistrationInput)
       groupPartyId: input.groupPartyId || undefined,
       feeCoverage: input.feeCoverage || undefined,
       lastStep: input.lastStep ?? 1,
-      language: input.language ?? 'en',
-      path: input.path ?? 'SELF_WEB',
+      language: input.language ?? "en",
+      path: input.path ?? "SELF_WEB",
       agentId: input.agentId,
       ip: input.ip ?? undefined,
       userAgent: input.userAgent ?? undefined,
-      status: 'STARTED',
+      status: "STARTED",
     },
   });
 
   await recordAudit(ctx, {
-    action: 'registration.started',
-    targetType: 'registration',
+    action: "registration.started",
+    targetType: "registration",
     targetId: reg.id,
     payload: { joiningAs: input.joiningAs, path: reg.path },
   });
@@ -142,12 +150,12 @@ export async function updateRegistration(
   id: string,
   input: UpdateRegistrationInput,
 ) {
-  requireCapability(ctx, 'registration.write', { registrationId: id });
+  requireCapability(ctx, "registration.write", { registrationId: id });
 
   const existing = await prisma.registration.findUnique({ where: { id } });
-  if (!existing) throw new Error('Registration not found');
-  if (existing.status === 'COMPLETE') {
-    throw new Error('Registration already complete and cannot be edited');
+  if (!existing) throw new Error("Registration not found");
+  if (existing.status === "COMPLETE") {
+    throw new Error("Registration already complete and cannot be edited");
   }
 
   // Never move backwards — going "Back" in the flow to edit an earlier
@@ -164,8 +172,8 @@ export async function updateRegistration(
   // Audit the SHAPE of what changed, never the values. A phone number in
   // an audit payload is a data-protection problem waiting to be found.
   await recordAudit(ctx, {
-    action: 'registration.updated',
-    targetType: 'registration',
+    action: "registration.updated",
+    targetType: "registration",
     targetId: id,
     payload: { fields: Object.keys(input) },
   });
@@ -176,16 +184,27 @@ export async function updateRegistration(
   // let duplicates accumulate silently, per the July 2026 data cleanup.
   if (input.msisdn) {
     const dupes = await prisma.registration.findMany({
-      where: { msisdn: input.msisdn, status: { not: 'COMPLETE' }, id: { not: id } },
+      where: {
+        msisdn: input.msisdn,
+        status: { not: "COMPLETE" },
+        id: { not: id },
+      },
     });
     for (const dup of dupes) {
       await prisma.registration.update({
         where: { id: dup.id },
-        data: { status: 'ABANDONED', voidedAt: new Date(), voidReason: 'Superseded by a newer attempt with the same phone number' },
+        data: {
+          status: "ABANDONED",
+          voidedAt: new Date(),
+          voidReason:
+            "Superseded by a newer attempt with the same phone number",
+        },
       });
-      await recordAudit(systemCtx('duplicate-supersede'), {
-        action: 'registration.voided', targetType: 'registration', targetId: dup.id,
-        payload: { reason: 'duplicate_msisdn', supersededBy: id },
+      await recordAudit(systemCtx("duplicate-supersede"), {
+        action: "registration.voided",
+        targetType: "registration",
+        targetId: dup.id,
+        payload: { reason: "duplicate_msisdn", supersededBy: id },
       });
     }
   }
@@ -207,23 +226,34 @@ export async function updateRegistration(
  * Purely intent — completeRegistration's own linking step (2c) is what
  * actually creates the Membership once this registration finishes.
  */
-export async function setRegistrationGroupIntent(ctx: Ctx, id: string, orgPartyId: string, orgName: string) {
-  requireCapability(ctx, 'membership.write', { partyId: orgPartyId });
+export async function setRegistrationGroupIntent(
+  ctx: Ctx,
+  id: string,
+  orgPartyId: string,
+  orgName: string,
+) {
+  requireCapability(ctx, "membership.write", { partyId: orgPartyId });
 
   const existing = await prisma.registration.findUnique({ where: { id } });
-  if (!existing) throw new Error('Registration not found');
-  if (existing.status === 'COMPLETE') {
-    throw new Error('Already complete — use assignPersonToGroup instead, this registration has a real Party now');
+  if (!existing) throw new Error("Registration not found");
+  if (existing.status === "COMPLETE") {
+    throw new Error(
+      "Already complete — use assignPersonToGroup instead, this registration has a real Party now",
+    );
   }
 
   const reg = await prisma.registration.update({
     where: { id },
-    data: { groupPartyId: orgPartyId, groupName: orgName, belongsToGroup: 'yes' },
+    data: {
+      groupPartyId: orgPartyId,
+      groupName: orgName,
+      belongsToGroup: "yes",
+    },
   });
 
   await recordAudit(ctx, {
-    action: 'registration.group_intent_set',
-    targetType: 'registration',
+    action: "registration.group_intent_set",
+    targetType: "registration",
     targetId: id,
     payload: { orgPartyId },
   });
@@ -232,28 +262,45 @@ export async function setRegistrationGroupIntent(ctx: Ctx, id: string, orgPartyI
 }
 
 export async function markOtpSent(ctx: Ctx, id: string) {
-  requireCapability(ctx, 'registration.write', { registrationId: id });
+  requireCapability(ctx, "registration.write", { registrationId: id });
   const reg = await prisma.registration.update({
     where: { id },
-    data: { status: 'AWAITING_OTP' },
+    data: { status: "AWAITING_OTP" },
   });
   await recordAudit(ctx, {
-    action: 'registration.otp_sent',
-    targetType: 'registration',
+    action: "registration.otp_sent",
+    targetType: "registration",
     targetId: id,
   });
   return reg;
 }
 
 export async function markMsisdnVerified(ctx: Ctx, id: string) {
-  requireCapability(ctx, 'registration.write', { registrationId: id });
+  requireCapability(ctx, "registration.write", { registrationId: id });
   const reg = await prisma.registration.update({
     where: { id },
-    data: { status: 'VERIFIED', msisdnVerifiedAt: new Date() },
+    data: { status: "VERIFIED", msisdnVerifiedAt: new Date() },
   });
   await recordAudit(ctx, {
-    action: 'registration.msisdn_verified',
-    targetType: 'registration',
+    action: "registration.msisdn_verified",
+    targetType: "registration",
+    targetId: id,
+  });
+  return reg;
+}
+
+/** Email counterpart to markMsisdnVerified — set once whatever channel
+ *  confirms an emailed code has done so. completeRegistration accepts
+ *  either this or msisdnVerifiedAt as satisfying "verify a contact". */
+export async function markEmailVerified(ctx: Ctx, id: string) {
+  requireCapability(ctx, "registration.write", { registrationId: id });
+  const reg = await prisma.registration.update({
+    where: { id },
+    data: { status: "VERIFIED", emailVerifiedAt: new Date() },
+  });
+  await recordAudit(ctx, {
+    action: "registration.email_verified",
+    targetType: "registration",
     targetId: id,
   });
   return reg;
@@ -267,54 +314,119 @@ export async function markMsisdnVerified(ctx: Ctx, id: string) {
  * pre-provisioned or abandoned record avoids being counted as a user.
  */
 export async function completeRegistration(ctx: Ctx, id: string) {
-  requireCapability(ctx, 'registration.write', { registrationId: id });
+  requireCapability(ctx, "registration.write", { registrationId: id });
 
   return prisma.$transaction(async (tx) => {
     const reg = await tx.registration.findUnique({ where: { id } });
-    if (!reg) throw new Error('Registration not found');
-    if (reg.status === 'COMPLETE') return { registration: reg, partyId: reg.partyId! };
-    if (!reg.msisdn) throw new Error('Cannot complete without a phone number');
-    if (!reg.county) throw new Error('Cannot complete without a county');
-    if (!reg.officialName) throw new Error('Cannot complete without an official name');
+    if (!reg) throw new Error("Registration not found");
+    if (reg.status === "COMPLETE")
+      return { registration: reg, partyId: reg.partyId! };
+    if (!reg.county) throw new Error("Cannot complete without a county");
+    if (!reg.officialName)
+      throw new Error("Cannot complete without an official name");
 
-    // A phone already on file never blocks completion — it's common for
-    // one handset to be shared (a family line, a group's contact number),
-    // so a second registration on the same msisdn reuses that Person's
-    // Party rather than erroring "already registered, sign in instead."
-    // Correct when it really is the same person returning; if it's a
-    // different family member on the shared phone, this attaches their
-    // new registration (new group, new business, whatever they just
-    // filled in) onto the existing account rather than creating a second
-    // one — msisdn is the sign-in identifier (UserCredential and OTP are
-    // both keyed on it) and is @unique in the schema, so two genuinely
-    // separate accounts on one number isn't something this can support
-    // without a much bigger change to how sign-in identifies an account.
-    // The freshly typed name is deliberately NOT written back onto the
-    // existing Person: an anonymous form is not a trustworthy channel
-    // for amending someone else's legal-name record.
-    const existingPerson = await tx.person.findUnique({ where: { msisdn: reg.msisdn } });
+    // A person's esoqo handle is derived from their names, so firstName
+    // and surname are compulsory and officialName alone is not enough.
+    // Completing with one freeform name would mint a handle built from a
+    // single word ("john482") or fail outright, and either way the person
+    // ends up with an identifier nobody can read back to them. middleName
+    // stays optional.
+    if (!reg.firstName?.trim() || !reg.surname?.trim()) {
+      throw new Error("Cannot complete without a first name and a surname");
+    }
+
+    // Phone number is required for completion. While email verification is
+    // optional for later communication, phone is the primary sign-in identifier
+    // (UserCredential and OTP are keyed on msisdn). Completing without a verified
+    // phone would create an account that cannot be accessed. Email can be added
+    // after account creation, but cannot be the sole verification method.
+    const msisdnVerified = Boolean(reg.msisdn && reg.msisdnVerifiedAt);
+    if (!msisdnVerified) {
+      throw new Error(
+        "Verify your phone number before completing registration — this is how you'll sign in",
+      );
+    }
+
+    // Phone number reuse prevention: when a phone matches an existing Person,
+    // we create a NEW Party instead of reusing the old one, and record an
+    // audit event. This prevents different family members on a shared phone
+    // from inadvertently sharing one account, wallet, and identity.
+    //
+    // A new registration on a phone that already has an account must be
+    // explicitly confirmed. This is done via a new "account exists on this
+    // number" check that will be triggered in the UI BEFORE OTP verification.
+    // See actionVerifyJoinOtp for the registration.phoneExistsWarningAcknowledged
+    // check that enforces this.
+    //
+    // For invites (pre-provisioned memberships), the phone MUST match the invite
+    // exactly. If it doesn't, no membership attaches (see Gap 2 fix in DetailsForm).
+    // The invite case is OK to reuse because the membership was created to tie to
+    // that specific phone number in the first place.
+    const existingPerson = reg.msisdn
+      ? await tx.person.findUnique({ where: { msisdn: reg.msisdn } })
+      : reg.email
+        ? await tx.person.findFirst({ where: { email: reg.email } })
+        : null;
+
+    // The esoqo ID generator wants 2-3 discrete names, not one freeform
+    // string — reg.firstName/surname are only populated when the newer
+    // split-name form ran; officialName is kept as the derived display
+    // string either way.
+    const names = [reg.firstName, reg.middleName, reg.surname].filter(
+      (n): n is string => Boolean(n?.trim()),
+    );
+    const derivedOfficialName =
+      names.length > 0 ? names.join(" ") : reg.officialName;
 
     // 1 · the person — reuse if we matched one, otherwise create
+    // 1 · the person — create NEW party by default (don't reuse).
+    //
+    // For invites (reg.belongsToGroup === 'yes' OR reg.groupPartyId): reuse if phone matches
+    // the existing person, since the invite WAS created for that person's
+    // phone number. The pre-provisioned membership depends on it.
+    //
+    // For all other cases (self registration, new group, new business):
+    // create a new Person. Shared phones (family lines, group contact numbers)
+    // are now treated as "different people sharing a phone" rather than
+    // "same account with confusing ownership". This prevents accidental
+    // account takeover and wallet/group membership sharing.
+    //
+    // If it really is the same person returning, sign-in will find them
+    // via the phone number lookup (msisdn is @unique in UserCredential
+    // and OTP tables), and auth will return them to their existing account.
+    // No functionality is lost; UX is clearer.
     let personPartyId: string;
-    if (existingPerson) {
+    const reuseExistingPerson = Boolean(
+      existingPerson && (reg.belongsToGroup === "yes" || reg.groupPartyId),
+    );
+
+    if (existingPerson && reuseExistingPerson) {
       personPartyId = existingPerson.partyId;
     } else {
       const personParty = await tx.party.create({
         data: {
-          kind: 'PERSON' as PartyKind,
-          sourceSystem: reg.path === 'CECF_WEB' ? 'CECF' : 'ESOKO',
+          kind: "PERSON" as PartyKind,
+          sourceSystem: reg.path === "CECF_WEB" ? "CECF" : "ESOKO",
           county: reg.county,
           ward: reg.ward,
           person: {
             create: {
-              officialName: reg.officialName,
+              officialName: derivedOfficialName,
               knownAs: reg.knownAs,
+              firstName: reg.firstName,
+              middleName: reg.middleName,
+              surname: reg.surname,
+              dateOfBirth: reg.dateOfBirth,
+              yearOfBirth: reg.dateOfBirth
+                ? reg.dateOfBirth.getFullYear()
+                : undefined,
               msisdn: reg.msisdn,
               email: reg.email,
               msisdnVerifiedAt: reg.msisdnVerifiedAt,
+              emailVerifiedAt: reg.emailVerifiedAt,
             },
           },
-          accounts: { create: [{ kind: 'WALLET', currency: 'KES' }] },
+          accounts: { create: [{ kind: "WALLET", currency: "KES" }] },
         },
       });
       personPartyId = personParty.id;
@@ -326,9 +438,9 @@ export async function completeRegistration(ctx: Ctx, id: string) {
         await tx.attestation.create({
           data: {
             subjectId: personPartyId,
-            claimType: 'MSISDN_VERIFIED',
+            claimType: "MSISDN_VERIFIED",
             claimValue: { msisdn: reg.msisdn },
-            method: 'API',
+            method: "API",
             issuedAt: reg.msisdnVerifiedAt,
           },
         });
@@ -340,34 +452,79 @@ export async function completeRegistration(ctx: Ctx, id: string) {
     // to register it). Joining an org already picked via search happens
     // in 2c below, regardless of which top-level path (group/biz/me) got
     // them there.
+    //
+    // To prevent duplicate organizations (Gap 4), check if one already exists
+    // with the same name, kind, and county. If it does, link to that instead
+    // of creating a new one.
     let orgPartyId: string | null = null;
     if (reg.orgName && !reg.groupPartyId) {
-      const orgParty = await tx.party.create({
-        data: {
-          kind: 'ORGANISATION' as PartyKind,
-          sourceSystem: reg.path === 'CECF_WEB' ? 'CECF' : 'ESOKO',
-          county: reg.county,
-          ward: reg.ward,
-          subCounty: reg.orgSubCounty,
-          district: reg.orgDistrict,
-          organisation: {
-            create: {
-              kind: (reg.orgKind ?? 'OTHER') as OrgKind,
-              officialName: reg.orgName,
-              knownAs: reg.orgKnownAs,
-              registrationNo: reg.registrationNo,
-              memberCount: reg.memberCount,
-              tags: reg.orgTags,
-            },
-          },
-          accounts: { create: [{ kind: 'GROUP_SAVINGS', currency: 'KES' }] },
+      // Check for existing org with same name, kind, and county
+      const existingOrg = await tx.organisation.findFirst({
+        where: {
+          officialName: reg.orgName.trim(),
+          kind: (reg.orgKind ?? "OTHER") as OrgKind,
+          party: { county: reg.county },
         },
+        select: { partyId: true },
       });
-      orgPartyId = orgParty.id;
 
-      await tx.membership.create({
-        data: { personId: personPartyId, orgId: orgParty.id, role: toMemberRole(reg.orgRole) },
-      });
+      if (existingOrg) {
+        // Link to existing org instead of creating duplicate
+        orgPartyId = existingOrg.partyId;
+        await tx.membership.upsert({
+          where: {
+            personId_orgId: { personId: personPartyId, orgId: orgPartyId },
+          },
+          create: {
+            personId: personPartyId,
+            orgId: orgPartyId,
+            role: toMemberRole(reg.orgRole),
+          },
+          update: { exitedAt: null }, // Reinstate if previously exited
+        });
+      } else {
+        // Create new org only if no duplicate exists
+        const orgParty = await tx.party.create({
+          data: {
+            kind: "ORGANISATION" as PartyKind,
+            sourceSystem: reg.path === "CECF_WEB" ? "CECF" : "ESOKO",
+            county: reg.county,
+            ward: reg.ward,
+            subCounty: reg.orgSubCounty,
+            district: reg.orgDistrict,
+            organisation: {
+              create: {
+                kind: (reg.orgKind ?? "OTHER") as OrgKind,
+                officialName: reg.orgName,
+                knownAs: reg.orgKnownAs,
+                registrationNo: reg.registrationNo,
+                memberCount: reg.memberCount,
+                tags: reg.orgTags,
+              },
+            },
+            accounts: { create: [{ kind: "GROUP_SAVINGS", currency: "KES" }] },
+          },
+        });
+        orgPartyId = orgParty.id;
+
+        await tx.membership.create({
+          data: {
+            personId: personPartyId,
+            orgId: orgParty.id,
+            role: toMemberRole(reg.orgRole),
+          },
+        });
+
+        // A group gets its handle at creation, same as a business above —
+        // a group that exists but cannot be paid or recognised on a printed
+        // stand is half-registered.
+        await allocateEsoqoOrgHandle(
+          orgParty.id,
+          reg.orgName!,
+          null,
+          tx as never,
+        );
+      }
     }
 
     // 2b · a brand-new business, mirrors 2 — bizName set and no
@@ -376,24 +533,28 @@ export async function completeRegistration(ctx: Ctx, id: string) {
     // rather than an Enterprise hanging off the individual, so it is a
     // first-class, searchable, dedupe-checked party like any group.
     let bizPartyId: string | null = null;
-    if (reg.joiningAs === 'biz' && reg.bizName && !reg.bizPartyId) {
+    if (reg.joiningAs === "biz" && reg.bizName && !reg.bizPartyId) {
       const bizParty = await tx.party.create({
         data: {
-          kind: 'ORGANISATION' as PartyKind,
-          sourceSystem: reg.path === 'CECF_WEB' ? 'CECF' : 'ESOKO',
+          kind: "ORGANISATION" as PartyKind,
+          sourceSystem: reg.path === "CECF_WEB" ? "CECF" : "ESOKO",
           county: reg.county,
           ward: reg.ward,
           organisation: {
             create: {
-              kind: (reg.bizOrgKind || 'BUSINESS') as OrgKind,
+              kind: (reg.bizOrgKind || "BUSINESS") as OrgKind,
               officialName: reg.bizName,
-              registrationNo: reg.bizIsRegistered === 'yes' ? reg.registrationNo : null,
+              registrationNo:
+                reg.bizIsRegistered === "yes" ? reg.registrationNo : null,
               businessType: reg.bizType,
               businessTypeOther: reg.bizTypeOther,
-              intendsToRegister: reg.bizIsRegistered === 'no' ? reg.bizIntendsToRegister === 'yes' : null,
+              intendsToRegister:
+                reg.bizIsRegistered === "no"
+                  ? reg.bizIntendsToRegister === "yes"
+                  : null,
             },
           },
-          accounts: { create: [{ kind: 'WALLET', currency: 'KES' }] },
+          accounts: { create: [{ kind: "WALLET", currency: "KES" }] },
         },
       });
       bizPartyId = bizParty.id;
@@ -404,8 +565,8 @@ export async function completeRegistration(ctx: Ctx, id: string) {
           workRaw: reg.bizSector ?? reg.bizName,
           segment: reg.bizSector,
           sector: reg.bizSector,
-          isRegistered: reg.bizIsRegistered === 'yes',
-          hasKraPin: reg.hasKraPin === 'yes',
+          isRegistered: reg.bizIsRegistered === "yes",
+          hasKraPin: reg.hasKraPin === "yes",
           employeeCount: reg.bizEmployeeCount,
           revenueGoodDayKes: reg.bizRevenueGoodKes,
           revenueBadDayKes: reg.bizRevenueBadKes,
@@ -415,7 +576,12 @@ export async function completeRegistration(ctx: Ctx, id: string) {
       });
 
       await tx.membership.create({
-        data: { personId: personPartyId, orgId: bizPartyId, role: 'OTHER', customRole: 'Owner' },
+        data: {
+          personId: personPartyId,
+          orgId: bizPartyId,
+          role: "OTHER",
+          customRole: "Owner",
+        },
       });
 
       // A business that cannot be paid is not registered as far as any
@@ -429,34 +595,41 @@ export async function completeRegistration(ctx: Ctx, id: string) {
       // an ORGANISATION has no phone number to attest to, which is
       // exactly why issueEsoqoPaymentId refuses it and this does not.
       //
-      // No collision retry, unlike allocateEsoqoCode: both the party and
-      // the code were drawn seconds ago, and a unique violation here
-      // would mean 1-in-10^8 bad luck rather than a contended code.
-      // Letting it fail loudly is better than silently paying for a
-      // registration that would not complete.
-      await tx.esoqoPaymentId.create({
-        data: { partyId: bizPartyId, code: mintEsoqoCode() },
-      });
+      // Derived from the business's own name, allocated on the same
+      // transaction as the business itself — minting outside it would
+      // leave a payment ID pointing at an org a rollback erased.
+      await allocateEsoqoOrgHandle(bizPartyId, reg.bizName, null, tx as never);
     }
 
     // 2c · linking to an org already picked via search — a group, a
     // business, or both. Idempotent: reusing an existing phone (1 above)
     // can mean this person is already a member, and re-adding them must
     // reinstate rather than crash on the unique (personId, orgId) index.
-    for (const targetOrgId of [reg.groupPartyId, reg.bizPartyId].filter((x): x is string => Boolean(x))) {
+    for (const targetOrgId of [reg.groupPartyId, reg.bizPartyId].filter(
+      (x): x is string => Boolean(x),
+    )) {
       const existingMembership = await tx.membership.findUnique({
-        where: { personId_orgId: { personId: personPartyId, orgId: targetOrgId } },
+        where: {
+          personId_orgId: { personId: personPartyId, orgId: targetOrgId },
+        },
       });
       if (existingMembership) {
         if (existingMembership.exitedAt) {
-          await tx.membership.update({ where: { id: existingMembership.id }, data: { exitedAt: null } });
+          await tx.membership.update({
+            where: { id: existingMembership.id },
+            data: { exitedAt: null },
+          });
         }
       } else {
         await tx.membership.create({
           data: {
-            personId: personPartyId, orgId: targetOrgId,
-            role: targetOrgId === reg.bizPartyId ? 'OTHER' : toMemberRole(reg.orgRole),
-            customRole: targetOrgId === reg.bizPartyId ? 'Contact' : undefined,
+            personId: personPartyId,
+            orgId: targetOrgId,
+            role:
+              targetOrgId === reg.bizPartyId
+                ? "OTHER"
+                : toMemberRole(reg.orgRole),
+            customRole: targetOrgId === reg.bizPartyId ? "Contact" : undefined,
           },
         });
       }
@@ -465,14 +638,14 @@ export async function completeRegistration(ctx: Ctx, id: string) {
     // 3 · an individual's own side enterprise — unregistered work done
     // alongside a group/personal registration. The dedicated business
     // path (2b) owns Enterprise creation for a first-class Business.
-    if (reg.workRaw && reg.joiningAs !== 'biz') {
+    if (reg.workRaw && reg.joiningAs !== "biz") {
       await tx.enterprise.create({
         data: {
           partyId: orgPartyId ?? personPartyId,
           workRaw: reg.workRaw,
           segment: reg.segment,
-          isRegistered: reg.hasRegisteredBusiness === 'yes',
-          hasKraPin: reg.hasKraPin === 'yes',
+          isRegistered: reg.hasRegisteredBusiness === "yes",
+          hasKraPin: reg.hasKraPin === "yes",
         },
       });
     }
@@ -499,7 +672,9 @@ export async function completeRegistration(ctx: Ctx, id: string) {
     const done = await tx.registration.update({
       where: { id },
       data: {
-        status: 'COMPLETE' as RegistrationStatus, completedAt: new Date(), partyId: personPartyId,
+        status: "COMPLETE" as RegistrationStatus,
+        completedAt: new Date(),
+        partyId: personPartyId,
         groupPartyId: orgPartyId ?? reg.groupPartyId,
         bizPartyId: bizPartyId ?? reg.bizPartyId,
       },
@@ -508,8 +683,8 @@ export async function completeRegistration(ctx: Ctx, id: string) {
     await recordAudit(
       ctx,
       {
-        action: 'registration.completed',
-        targetType: 'party',
+        action: "registration.completed",
+        targetType: "party",
         targetId: personPartyId,
         payload: {
           registrationId: id,
@@ -517,13 +692,19 @@ export async function completeRegistration(ctx: Ctx, id: string) {
           county: reg.county,
           orgCreated: Boolean(orgPartyId),
           bizCreated: Boolean(bizPartyId),
-          reusedExistingPerson: Boolean(existingPerson),
+          reuseExistingPerson,
+          createdNewPerson: !reuseExistingPerson,
         },
       },
       tx as never,
     );
 
-    return { registration: done, partyId: personPartyId, orgPartyId, bizPartyId };
+    return {
+      registration: done,
+      partyId: personPartyId,
+      orgPartyId,
+      bizPartyId,
+    };
   });
 }
 
@@ -540,7 +721,7 @@ export async function completeRegistration(ctx: Ctx, id: string) {
  * time by product rule (see assignPersonToGroup).
  */
 export async function backfillRegistrationDocuments(ctx: Ctx) {
-  requireCapability(ctx, 'registration.write');
+  requireCapability(ctx, "registration.write");
 
   const orphaned = await prisma.document.findMany({
     where: { partyId: null, registrationId: { not: null } },
@@ -556,21 +737,26 @@ export async function backfillRegistrationDocuments(ctx: Ctx) {
     if (!reg?.partyId) continue; // never completed — nothing to attach to yet
 
     let targetPartyId = reg.partyId;
-    if (reg.joiningAs === 'group') {
+    if (reg.joiningAs === "group") {
       const founding = await prisma.membership.findFirst({
         where: { personId: reg.partyId, exitedAt: null },
-        orderBy: { joinedAt: 'asc' },
+        orderBy: { joinedAt: "asc" },
         select: { orgId: true },
       });
       if (founding) targetPartyId = founding.orgId;
     }
 
-    await prisma.document.update({ where: { id: doc.id }, data: { partyId: targetPartyId } });
+    await prisma.document.update({
+      where: { id: doc.id },
+      data: { partyId: targetPartyId },
+    });
     updated += 1;
   }
 
   await recordAudit(ctx, {
-    action: 'documents.backfilled_party', targetType: 'document', targetId: 'bulk',
+    action: "documents.backfilled_party",
+    targetType: "document",
+    targetId: "bulk",
     payload: { candidates: orphaned.length, updated },
   });
 
@@ -580,7 +766,7 @@ export async function backfillRegistrationDocuments(ctx: Ctx) {
 /* ── reads ──────────────────────────────────────────────────── */
 
 export async function getRegistration(ctx: Ctx, id: string) {
-  requireCapability(ctx, 'registration.read', { registrationId: id });
+  requireCapability(ctx, "registration.read", { registrationId: id });
   return prisma.registration.findUnique({ where: { id } });
 }
 
@@ -591,17 +777,20 @@ export interface ListRegistrationsFilter {
   to?: Date;
   search?: string;
   /** 'organisations' → joiningAs === 'group'; 'individuals' → anything else. */
-  type?: 'individuals' | 'organisations';
+  type?: "individuals" | "organisations";
   /** Which front door the registration came through — see
    *  SourceSystem/JoinPath.CECF_WEB. Powers admin's "CECF Registrations"
    *  filter/badge. */
-  source?: 'CECF' | 'ESOKO';
+  source?: "CECF" | "ESOKO";
   take?: number;
   skip?: number;
 }
 
-export async function listRegistrations(ctx: Ctx, f: ListRegistrationsFilter = {}) {
-  requireCapability(ctx, 'registration.read', { county: f.county });
+export async function listRegistrations(
+  ctx: Ctx,
+  f: ListRegistrationsFilter = {},
+) {
+  requireCapability(ctx, "registration.read", { county: f.county });
 
   const where = {
     ...(f.status ? { status: f.status } : {}),
@@ -611,20 +800,32 @@ export async function listRegistrations(ctx: Ctx, f: ListRegistrationsFilter = {
     // registered them (see completeRegistration). This used to only
     // match joiningAs:'group', which silently filed every business
     // registration under "Individuals".
-    ...(f.type === 'organisations' ? { joiningAs: { in: ['group', 'biz'] } } : {}),
-    ...(f.type === 'individuals' ? { joiningAs: 'me' } : {}),
-    ...(f.source === 'CECF' ? { path: 'CECF_WEB' as JoinPath } : {}),
-    ...(f.source === 'ESOKO' ? { path: { not: 'CECF_WEB' as JoinPath } } : {}),
+    ...(f.type === "organisations"
+      ? { joiningAs: { in: ["group", "biz"] } }
+      : {}),
+    ...(f.type === "individuals" ? { joiningAs: "me" } : {}),
+    ...(f.source === "CECF" ? { path: "CECF_WEB" as JoinPath } : {}),
+    ...(f.source === "ESOKO" ? { path: { not: "CECF_WEB" as JoinPath } } : {}),
     ...(f.from || f.to
-      ? { startedAt: { ...(f.from ? { gte: f.from } : {}), ...(f.to ? { lte: f.to } : {}) } }
+      ? {
+          startedAt: {
+            ...(f.from ? { gte: f.from } : {}),
+            ...(f.to ? { lte: f.to } : {}),
+          },
+        }
       : {}),
     ...(f.search
       ? {
           OR: [
-            { officialName: { contains: f.search, mode: 'insensitive' as const } },
-            { knownAs: { contains: f.search, mode: 'insensitive' as const } },
-            { orgName: { contains: f.search, mode: 'insensitive' as const } },
-            { workRaw: { contains: f.search, mode: 'insensitive' as const } },
+            {
+              officialName: {
+                contains: f.search,
+                mode: "insensitive" as const,
+              },
+            },
+            { knownAs: { contains: f.search, mode: "insensitive" as const } },
+            { orgName: { contains: f.search, mode: "insensitive" as const } },
+            { workRaw: { contains: f.search, mode: "insensitive" as const } },
           ],
         }
       : {}),
@@ -633,7 +834,7 @@ export async function listRegistrations(ctx: Ctx, f: ListRegistrationsFilter = {
   const [rows, total] = await Promise.all([
     prisma.registration.findMany({
       where,
-      orderBy: { startedAt: 'desc' },
+      orderBy: { startedAt: "desc" },
       take: f.take ?? 25,
       skip: f.skip ?? 0,
       include: {
@@ -644,8 +845,12 @@ export async function listRegistrations(ctx: Ctx, f: ListRegistrationsFilter = {
         // "joined an existing group" row has no group name to show at
         // all, which is exactly the "which group is this member from"
         // gap this include closes.
-        groupParty: { select: { organisation: { select: { officialName: true } } } },
-        bizParty: { select: { organisation: { select: { officialName: true } } } },
+        groupParty: {
+          select: { organisation: { select: { officialName: true } } },
+        },
+        bizParty: {
+          select: { organisation: { select: { officialName: true } } },
+        },
       },
     }),
     prisma.registration.count({ where }),
@@ -655,10 +860,10 @@ export async function listRegistrations(ctx: Ctx, f: ListRegistrationsFilter = {
 }
 
 export async function findRegistrationByMsisdn(ctx: Ctx, msisdn: string) {
-  requireCapability(ctx, 'registration.read');
+  requireCapability(ctx, "registration.read");
   return prisma.registration.findFirst({
-    where: { msisdn, status: { not: 'COMPLETE' } },
-    orderBy: { startedAt: 'desc' },
+    where: { msisdn, status: { not: "COMPLETE" } },
+    orderBy: { startedAt: "desc" },
   });
 }
 
@@ -673,30 +878,43 @@ export async function findRegistrationByMsisdn(ctx: Ctx, msisdn: string) {
  * report and count while keeping the trail.
  */
 export async function voidRegistration(ctx: Ctx, id: string, reason: string) {
-  requireCapability(ctx, 'registration.void', { registrationId: id });
-  if (!reason?.trim()) throw new Error('A reason is required to void a registration');
+  requireCapability(ctx, "registration.void", { registrationId: id });
+  if (!reason?.trim())
+    throw new Error("A reason is required to void a registration");
 
   const reg = await prisma.registration.update({
     where: { id },
     data: {
-      status: 'ABANDONED', voidedAt: new Date(),
-      voidedById: ctx.actorId ?? undefined, voidReason: reason.trim(),
+      status: "ABANDONED",
+      voidedAt: new Date(),
+      voidedById: ctx.actorId ?? undefined,
+      voidReason: reason.trim(),
     },
   });
   await recordAudit(ctx, {
-    action: 'registration.voided', targetType: 'registration', targetId: id, payload: { reason },
+    action: "registration.voided",
+    targetType: "registration",
+    targetId: id,
+    payload: { reason },
   });
   return reg;
 }
 
 export async function restoreRegistration(ctx: Ctx, id: string) {
-  requireCapability(ctx, 'registration.void', { registrationId: id });
+  requireCapability(ctx, "registration.void", { registrationId: id });
   const reg = await prisma.registration.update({
     where: { id },
-    data: { status: 'STARTED', voidedAt: null, voidedById: null, voidReason: null },
+    data: {
+      status: "STARTED",
+      voidedAt: null,
+      voidedById: null,
+      voidReason: null,
+    },
   });
   await recordAudit(ctx, {
-    action: 'registration.restored', targetType: 'registration', targetId: id,
+    action: "registration.restored",
+    targetType: "registration",
+    targetId: id,
   });
   return reg;
 }
@@ -704,17 +922,24 @@ export async function restoreRegistration(ctx: Ctx, id: string) {
 /** Staff-initiated registration — walk-ins, phone calls, agent capture. */
 export async function createRegistrationForPerson(
   ctx: Ctx,
-  input: UpdateRegistrationInput & { joiningAs: 'me' | 'group' | 'biz' },
+  input: UpdateRegistrationInput & { joiningAs: "me" | "group" | "biz" },
 ) {
-  requireCapability(ctx, 'registration.create');
+  requireCapability(ctx, "registration.create");
   if (!input.officialName?.trim()) {
-    throw new Error('A name is required to start a registration');
+    throw new Error("A name is required to start a registration");
   }
   const reg = await prisma.registration.create({
-    data: { ...input, path: 'AGENT_ASSISTED', agentId: ctx.actorId ?? undefined, status: 'STARTED' },
+    data: {
+      ...input,
+      path: "AGENT_ASSISTED",
+      agentId: ctx.actorId ?? undefined,
+      status: "STARTED",
+    },
   });
   await recordAudit(ctx, {
-    action: 'registration.created_by_staff', targetType: 'registration', targetId: reg.id,
+    action: "registration.created_by_staff",
+    targetType: "registration",
+    targetId: reg.id,
     payload: { joiningAs: input.joiningAs },
   });
   return reg;
@@ -722,23 +947,33 @@ export async function createRegistrationForPerson(
 
 /** Full detail for the admin drawer — registration, payment, documents. */
 export async function getRegistrationDetail(ctx: Ctx, id: string) {
-  requireCapability(ctx, 'registration.read', { registrationId: id });
+  requireCapability(ctx, "registration.read", { registrationId: id });
   const reg = await prisma.registration.findUnique({
     where: { id },
     include: {
       payment: {
         include: {
           approvals: {
-            include: { approver: { select: { id: true, name: true, email: true } } },
-            orderBy: { signedAt: 'asc' },
+            include: {
+              approver: { select: { id: true, name: true, email: true } },
+            },
+            orderBy: { signedAt: "asc" },
           },
         },
       },
-      documents: { where: { deletedAt: null }, orderBy: { uploadedAt: 'desc' } },
+      documents: {
+        where: { deletedAt: null },
+        orderBy: { uploadedAt: "desc" },
+      },
       party: {
         include: {
-          person: { include: { credential: { select: { pinHash: true, pinSetAt: true } } } },
-          enterprises: true, attestations: true,
+          person: {
+            include: {
+              credential: { select: { pinHash: true, pinSetAt: true } },
+            },
+          },
+          enterprises: true,
+          attestations: true,
           memberships: {
             where: { exitedAt: null },
             include: { org: { select: { officialName: true, knownAs: true } } },
@@ -751,7 +986,12 @@ export async function getRegistrationDetail(ctx: Ctx, id: string) {
   return {
     ...reg,
     payment: reg.payment
-      ? { ...reg.payment, amountKes: reg.payment.amountKes ? Number(reg.payment.amountKes) : null }
+      ? {
+          ...reg.payment,
+          amountKes: reg.payment.amountKes
+            ? Number(reg.payment.amountKes)
+            : null,
+        }
       : null,
     // The raw Argon2id hash never needs to leave the server — a 4-6
     // digit PIN behind it is cheaply offline-crackable if it ever does.
@@ -772,7 +1012,7 @@ export async function getRegistrationDetail(ctx: Ctx, id: string) {
 
 /** Probable duplicates — the agent-fraud control from the journey maps. */
 export async function findProbableDuplicates(ctx: Ctx, take = 25) {
-  requireCapability(ctx, 'duplicate.review');
+  requireCapability(ctx, "duplicate.review");
   const rows = await prisma.$queryRaw<
     { msisdn: string; n: bigint; ids: string[] }[]
   >`
@@ -781,5 +1021,9 @@ export async function findProbableDuplicates(ctx: Ctx, take = 25) {
     WHERE "msisdn" IS NOT NULL AND "voidedAt" IS NULL
     GROUP BY "msisdn" HAVING COUNT(*) > 1
     ORDER BY n DESC LIMIT ${take}`;
-  return rows.map((r) => ({ msisdn: r.msisdn, count: Number(r.n), ids: r.ids }));
+  return rows.map((r) => ({
+    msisdn: r.msisdn,
+    count: Number(r.n),
+    ids: r.ids,
+  }));
 }

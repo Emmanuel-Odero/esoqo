@@ -196,6 +196,9 @@ export type CreateVoucherInput = z.infer<typeof createVoucherSchema>;
  */
 export const loadVoucherSchema = z.object({
   amountKes: kesSchema,
-  method: z.enum(['MPESA_STK', 'LOYALTY']),
+  method: z.enum(['MPESA_STK', 'LOYALTY', 'VOUCHER']),
+  /** Required when method is 'VOUCHER' — the caller's other voucher to
+   *  move balance out of. See TransferVoucherBalance in core-go. */
+  fromVoucherId: z.string().optional(),
 });
 export type LoadVoucherInput = z.infer<typeof loadVoucherSchema>;

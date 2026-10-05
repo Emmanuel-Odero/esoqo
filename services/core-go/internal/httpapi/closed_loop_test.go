@@ -9,8 +9,9 @@ import (
 	"github.com/esoqo/core-go/internal/config"
 )
 
-// Esoqo is not a mobile money platform, and three properties are what
-// keep it from becoming one by accident:
+// This guard covers VOUCHER CARDS AND LOYALTY POINTS specifically — the
+// Go-owned stored-value surface — and three properties keep that surface
+// from becoming mobile money by accident:
 //
 //  1. Stored value is CLOSED-LOOP — a voucher can be loaded and spent
 //     inside Esoqo, and that is all.
@@ -19,18 +20,22 @@ import (
 //  3. There is NO PEER-TO-PEER TRANSFER — no path moves value from one
 //     person to another.
 //
-// Holding customer funds is what draws regulatory attention (in Kenya,
-// CBK's remit under the National Payment Systems Act); adding any of the
-// three above is what changes the kind of thing Esoqo is. Today all
-// three hold. They hold by accident, though — nothing stops a
-// well-meaning "let users cash out their voucher" ticket from quietly
-// crossing the line in a sprint.
+// All three still hold for vouchers/loyalty. They no longer hold
+// platform-wide: the TypeScript-owned WALLET account kind
+// (packages/db/src/dal/wallet-withdrawal.ts, dal/esoqo-transfer.ts) added
+// wallet cash-out and handle-to-handle transfer deliberately, following a
+// real CBK regulatory read rather than by accident — see
+// docs/proposals/money-representation.md's "Step 1c addendum". This test
+// cannot see that surface (it inspects only this service's Gin router) and
+// does not need to change: its job is keeping voucher/loyalty additions to
+// *this* service just as deliberate as the wallet decision already was.
 //
-// This test makes crossing it deliberate. It is not a security control:
-// anyone can edit the allowlist. It is a tripwire that forces the change
-// to be argued for in a diff rather than discovered in an audit. If you
-// are here because this test failed, that is the test working — go and
-// get the legal position confirmed before you edit the list.
+// This test makes crossing this service's line deliberate. It is not a
+// security control: anyone can edit the allowlist. It is a tripwire that
+// forces the change to be argued for in a diff rather than discovered in
+// an audit. If you are here because this test failed, that is the test
+// working — go and get the legal position confirmed before you edit the
+// list.
 //
 // See docs/proposals/money-representation.md.
 
@@ -42,21 +47,28 @@ import (
 //	status  — read balance
 //	resolve — look a card up by QR/short code, to spend against it
 //	list    — a person's own cards
-//	freeze  — suspend a lost/stolen card
-//	batches — an employer pre-funding staff allowance cards
+//	freeze       — suspend a lost/stolen card
+//	pay-business — spend a SHOPPING|GENERAL card's balance at an Esoqo
+//	               business, the same closed-loop shape the store
+//	               checkout's VOUCHER payment method already used (see
+//	               dbx.SettleStoreOrderVoucher) — money never leaves the
+//	               platform, it moves from VOUCHER_FLOAT to the payee
+//	               business's own BUSINESS_REVENUE account.
+//	batches      — an employer pre-funding staff allowance cards
 //
 // Conspicuously absent, and required to stay absent: unload, redeem,
 // withdraw, cash-out, refund-to-mpesa, transfer, gift-balance.
 var closedLoopStoredValueRoutes = map[string]bool{
-	"POST /v1/vouchers":            true,
-	"POST /v1/vouchers/:id/load":   true,
-	"GET /v1/vouchers/:id/status":  true,
-	"GET /v1/vouchers/resolve":     true,
-	"GET /v1/me/vouchers":          true,
-	"POST /v1/vouchers/:id/freeze": true,
-	"POST /v1/me/voucher-batches":  true,
-	"GET /v1/me/voucher-batches":   true,
-	"GET /v1/me/points":            true,
+	"POST /v1/vouchers":                  true,
+	"POST /v1/vouchers/:id/load":         true,
+	"GET /v1/vouchers/:id/status":        true,
+	"GET /v1/vouchers/resolve":           true,
+	"GET /v1/me/vouchers":                true,
+	"POST /v1/vouchers/:id/freeze":       true,
+	"POST /v1/vouchers/:id/pay-business": true,
+	"POST /v1/me/voucher-batches":        true,
+	"GET /v1/me/voucher-batches":         true,
+	"GET /v1/me/points":                  true,
 }
 
 func TestStoredValueSurfaceStaysClosedLoop(t *testing.T) {

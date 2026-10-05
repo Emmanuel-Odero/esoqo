@@ -16,28 +16,32 @@
   border-radius: 2px; flex: none }
 .ui-mono { font-family: var(--font-mono); font-variant-numeric: tabular-nums }
 
-/* ── buttons (canonical: 8px radius, 46px min, scale-press) ── */
+/* ── buttons ── one shape, weighted by how often a thumb hits it: a
+   confident pill, not a boxy admin-template rectangle. Primary actions
+   carry real depth (a shadow that answers a real light source); secondary
+   actions stay quiet until touched. */
 .btn { display: inline-flex; align-items: center; justify-content: center; gap: 9px;
-  padding: 13px 24px; border-radius: var(--r-sm); font-weight: 600; font-size: .94rem;
+  padding: 13px 26px; border-radius: var(--r-pill); font-weight: 650; font-size: .93rem;
+  letter-spacing: -.005em;
   border: 1.5px solid transparent; cursor: pointer; font-family: inherit;
   min-height: 46px; line-height: 1.2; text-decoration: none; white-space: nowrap;
   transition: background var(--dur) var(--ease-out), border-color var(--dur) var(--ease-out),
-    box-shadow var(--dur) var(--ease-out), transform 100ms var(--ease-out) }
+    box-shadow var(--dur-slow) var(--ease-premium), transform var(--dur-slow) var(--ease-premium) }
 .btn:active:not(:disabled) { transform: scale(.97) }
-.btn-p { background: var(--green); color: #fff; border-color: var(--green);
-  box-shadow: 0 2px 8px rgba(18,121,74,.25) }
-.btn-p:hover:not(:disabled) { background: #0e6640; box-shadow: 0 4px 14px rgba(18,121,74,.35) }
-.btn-o { border-color: var(--line); color: var(--navy); background: #fff }
-.btn-o:hover:not(:disabled) { border-color: var(--navy); background: var(--paper) }
-.btn-w { border-color: rgba(255,255,255,.34); color: #fff; background: rgba(255,255,255,.08) }
+.btn-p { background: var(--grad-green-premium, var(--green)); color: #fff; border-color: transparent;
+  box-shadow: 0 1px 1px rgba(13,94,59,.3), 0 8px 20px -6px rgba(13,94,59,.45) }
+.btn-p:hover:not(:disabled) { box-shadow: 0 1px 1px rgba(13,94,59,.3), 0 14px 30px -8px rgba(13,94,59,.5); transform: translateY(-1.5px) }
+.btn-o { border-color: var(--line); color: var(--navy); background: #fff; box-shadow: var(--sh-xs) }
+.btn-o:hover:not(:disabled) { border-color: #C7BFA8; background: var(--surface-2); box-shadow: var(--sh-s) }
+.btn-w { border-color: rgba(255,255,255,.34); color: #fff; background: rgba(255,255,255,.08); backdrop-filter: blur(6px) }
 .btn-w:hover:not(:disabled) { background: rgba(255,255,255,.16) }
 .btn-d { background: var(--red); color: #fff; border-color: var(--red) }
 .btn-d:hover:not(:disabled) { background: #a81e1e }
-.btn-g { background: linear-gradient(135deg, var(--green), var(--green-2)); color: #fff;
-  border-color: transparent; box-shadow: 0 4px 16px rgba(18,121,74,.3) }
-.btn-g:hover:not(:disabled) { box-shadow: 0 6px 22px rgba(18,121,74,.4); transform: translateY(-1px) }
-.btn-sm { padding: 8px 15px; font-size: .85rem; min-height: 38px }
-.btn-lg { padding: 16px 32px; font-size: 1.02rem; min-height: 54px; border-radius: var(--r-md) }
+.btn-g { background: var(--grad-gold); color: #241708;
+  border-color: transparent; box-shadow: 0 1px 1px rgba(140,106,52,.35), 0 10px 24px -8px rgba(140,106,52,.5) }
+.btn-g:hover:not(:disabled) { box-shadow: 0 1px 1px rgba(140,106,52,.35), 0 16px 32px -8px rgba(140,106,52,.55); transform: translateY(-1.5px) }
+.btn-sm { padding: 8px 17px; font-size: .84rem; min-height: 38px }
+.btn-lg { padding: 16px 34px; font-size: 1.02rem; min-height: 54px }
 .btn-block { width: 100% }
 .btn:disabled { opacity: .45; cursor: not-allowed; transform: none; box-shadow: none }
 .btn:focus-visible { outline: 3px solid var(--blue-2); outline-offset: 3px }
@@ -52,10 +56,10 @@
   font-size: .88rem; margin-bottom: 6px; color: var(--tx) }
 .inp { width: 100%; padding: 12px 14px; border: 1.5px solid var(--line);
   border-radius: var(--r-sm); font-size: .97rem; font-family: inherit;
-  background: #fff; color: var(--tx); min-height: 46px;
-  transition: border-color var(--dur), box-shadow var(--dur) }
+  background: var(--surface-2); color: var(--tx); min-height: 46px;
+  transition: border-color var(--dur), box-shadow var(--dur), background var(--dur) }
 .inp::placeholder { color: var(--tx-3) }
-.inp:focus { outline: none; border-color: var(--green);
+.inp:focus { outline: none; border-color: var(--green); background: #fff;
   box-shadow: 0 0 0 3px rgba(31,161,99,.13) }
 .inp[aria-invalid="true"] { border-color: var(--red);
   box-shadow: 0 0 0 3px rgba(206,43,43,.12) }
@@ -64,8 +68,8 @@
   display: flex; align-items: center; gap: 5px }
 
 /* ── notices ── */
-.note { border-radius: var(--r-md); padding: 16px 20px; display: flex; gap: 14px;
-  align-items: flex-start; font-size: .92rem; margin-bottom: 24px }
+.note { border-radius: var(--r-lg); padding: 16px 20px; display: flex; gap: 14px;
+  align-items: flex-start; font-size: .92rem; margin-bottom: 24px; box-shadow: var(--sh-xs) }
 .note p { margin: 0 }
 .note strong { display: block; margin-bottom: 4px }
 .n-amber { background: var(--amber-t); border: 1px solid #f0ddb6 }
@@ -75,20 +79,22 @@
 
 /* ── cards ── */
 .card { background: #fff; border: 1px solid var(--line);
-  border-radius: 12px; padding: 20px; box-shadow: var(--sh-s);
-  transition: box-shadow var(--dur) var(--ease-out), transform var(--dur) var(--ease-out) }
-a.card:hover, .card-lift:hover { box-shadow: var(--sh-m); transform: translateY(-1px) }
+  border-radius: var(--r-lg); padding: 20px; box-shadow: var(--sh-s);
+  transition: box-shadow var(--dur-slow) var(--ease-premium), transform var(--dur-slow) var(--ease-premium),
+    border-color var(--dur) }
+a.card:hover, .card-lift:hover { box-shadow: var(--sh-card-hover); transform: translateY(-2px); border-color: var(--line-2) }
 .card-pad-lg { padding: 32px }
 .card-flat { box-shadow: none }
 
-/* ── pills / badges ── */
-.pill { display: inline-flex; align-items: center; gap: 5px; padding: 3px 10px;
-  border-radius: var(--r-pill); font-size: .74rem; font-weight: 700;
-  line-height: 1.5; white-space: nowrap }
-.pill.live, .pill-green { background: var(--green-t); color: var(--green) }
-.pill.draft, .pill-amber { background: var(--amber-t); color: var(--amber) }
-.pill.paused, .pill-red { background: var(--red-t); color: var(--red) }
-.pill-blue { background: var(--blue-t); color: var(--blue) }
+/* ── pills / badges — a hairline ring at low opacity plus a tinted fill,
+   not a flat solid chip: it reads as glass, not a form-builder default. ── */
+.pill { display: inline-flex; align-items: center; gap: 5px; padding: 4px 11px;
+  border-radius: var(--r-pill); font-size: .72rem; font-weight: 700;
+  line-height: 1.5; white-space: nowrap; border: 1px solid transparent }
+.pill.live, .pill-green { background: var(--green-t); color: var(--green); border-color: rgba(18,121,74,.16) }
+.pill.draft, .pill-amber { background: var(--amber-t); color: var(--amber); border-color: rgba(154,97,5,.18) }
+.pill.paused, .pill-red { background: var(--red-t); color: var(--red); border-color: rgba(206,43,43,.16) }
+.pill-blue { background: var(--blue-t); color: var(--blue); border-color: rgba(15,92,158,.16) }
 .pill-navy { background: var(--navy); color: #fff }
 .pill .pdot { width: 6px; height: 6px; border-radius: 50%; background: currentColor; flex: none }
 
@@ -120,11 +126,11 @@ table.ui-table { width: 100%; border-collapse: collapse; font-size: .84rem; line
 .skel-row { display: flex; gap: 12px; align-items: center }
 
 /* ── empty states ── */
-.empty { text-align: center; padding: 56px 24px; border: 1.5px dashed var(--line);
-  border-radius: 14px; background: var(--paper) }
-.empty-ic { width: 48px; height: 48px; border-radius: 14px; display: grid;
-  place-items: center; margin: 0 auto 16px; background: #fff;
-  border: 1px solid var(--line); color: var(--tx-3) }
+.empty { text-align: center; padding: 56px 24px; border: 1px solid var(--line);
+  border-radius: var(--r-xl); background: var(--grad-paper-premium) }
+.empty-ic { width: 52px; height: 52px; border-radius: var(--r-lg); display: grid;
+  place-items: center; margin: 0 auto 16px; background: var(--surface-3);
+  border: 1px solid var(--line); color: var(--tx-2); box-shadow: var(--sh-xs) }
 .empty h3 { margin: 0 0 6px }
 .empty p { color: var(--tx-2); font-size: .9rem; margin: 0 0 18px; max-width: 44ch;
   margin-left: auto; margin-right: auto }
@@ -199,6 +205,56 @@ table.ui-table { width: 100%; border-collapse: collapse; font-size: .84rem; line
   background: var(--red-t); border: 1px solid #f3d2cf; color: var(--red);
   border-radius: var(--r-sm); padding: 10px 12px; margin-top: 8px; font-size: .87rem }
 .cscan-err .btn { margin-left: auto }
+
+/* ── ID document capture (IdCardScanner) ──
+   The 1.58/1 aspect ratio is the ID-1 card the guide is drawn for (86 x
+   54 mm) — a square frame like .cscan-view above would have someone
+   shrink the card to fit and hand OCR a postage stamp of text. */
+/* Badges at the end of a field label. A field can be both optional and
+   machine-read (a middle name off an ID scan), so neither badge may claim
+   margin-left:auto for itself — the container does. */
+.labpills { margin-left: auto; display: inline-flex; align-items: center; gap: 6px; flex: none }
+.optpill { font-size: .72rem; font-weight: 500; color: var(--tx-3) }
+
+.idscan { display: flex; flex-direction: column; gap: 8px }
+.idscan-lab { display: flex; align-items: center; gap: 5px; margin: 0 }
+.idscan-frame { position: relative; width: 100%; aspect-ratio: 1.58 / 1;
+  border-radius: 12px; overflow: hidden; border: 1.5px solid var(--line);
+  background: #0b141d; box-shadow: var(--sh-m) }
+.idscan-frame video { width: 100%; height: 100%; object-fit: cover; display: block }
+.idscan-guide { position: absolute; inset: 9%; pointer-events: none }
+.idscan-guide span { position: absolute; width: 26px; height: 26px;
+  border: 3px solid #fff; border-radius: 5px; opacity: .95;
+  filter: drop-shadow(0 1px 3px rgba(0,0,0,.5)) }
+.idscan-guide span:nth-child(1) { top: 0; left: 0; border-right: 0; border-bottom: 0 }
+.idscan-guide span:nth-child(2) { top: 0; right: 0; border-left: 0; border-bottom: 0 }
+.idscan-guide span:nth-child(3) { bottom: 0; left: 0; border-right: 0; border-top: 0 }
+.idscan-guide span:nth-child(4) { bottom: 0; right: 0; border-left: 0; border-top: 0 }
+.idscan-loading { position: absolute; inset: 0; display: flex; flex-direction: column;
+  gap: 10px; align-items: center; justify-content: center; color: #fff;
+  font-size: .88rem; background: #0b141d }
+.idscan-pulse { width: 38px; height: 38px; border-radius: 50%;
+  border: 3px solid rgba(255,255,255,.25); border-top-color: #fff;
+  animation: ui-spin .8s linear infinite }
+.idscan-shot { width: 100%; aspect-ratio: 1.58 / 1; border-radius: 12px;
+  overflow: hidden; border: 1.5px solid var(--line); background: var(--paper) }
+.idscan-shot img { width: 100%; height: 100%; object-fit: cover; display: block }
+.idscan-empty { width: 100%; aspect-ratio: 1.58 / 1; display: flex; flex-direction: column;
+  gap: 6px; align-items: center; justify-content: center; text-align: center;
+  border: 1.5px dashed var(--line); border-radius: 12px; background: var(--paper);
+  color: var(--tx-3); padding: 12px }
+.idscan-empty p { margin: 0; font-size: .85rem; color: var(--tx-2); max-width: 26ch }
+.idscan-actions { display: flex; gap: 8px; flex-wrap: wrap }
+.idscan-actions .btn { flex: 1 1 auto; justify-content: center }
+.idscan-hint { margin: 0 }
+/* Visually gone but still focusable-by-proxy: the label is a real button
+   above, and a display:none input cannot be .click()ed on some browsers. */
+.idscan-file { position: absolute; width: 1px; height: 1px; padding: 0;
+  margin: -1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0 }
+.idscan-err { display: flex; align-items: center; gap: 8px; flex-wrap: wrap;
+  background: var(--red-t); border: 1px solid #f3d2cf; color: var(--red);
+  border-radius: var(--r-sm); padding: 10px 12px; font-size: .85rem }
+.idscan-err .btn { margin-left: auto; flex: 0 0 auto }
 
 /* ── counter (scan-first booking) ── */
 .ctr-scan { display: flex; gap: 8px; align-items: center }

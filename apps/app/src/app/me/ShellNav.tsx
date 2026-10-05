@@ -1,11 +1,11 @@
-'use client';
+"use client";
 
-import { useEffect, useRef, useState } from 'react';
-import Link from 'next/link';
-import { usePathname } from 'next/navigation';
-import type { Route } from 'next';
-import { Icon, type IconName } from '@esoqo/ui';
-import { useAnnounce } from '@esoqo/a11y';
+import { useEffect, useRef, useState } from "react";
+import Link from "next/link";
+import { usePathname } from "next/navigation";
+import type { Route } from "next";
+import { Icon, type IconName } from "@esoqo/ui";
+import { useAnnounce } from "@esoqo/a11y";
 
 export interface NavItem {
   href: Route;
@@ -24,7 +24,13 @@ export interface NavItem {
  * "More" opens a bottom sheet holding the trust + display screens and
  * sign out, on every screen size.
  */
-export function ShellNav({ items, more }: { items: NavItem[]; more: NavItem[] }) {
+export function ShellNav({
+  items,
+  more,
+}: {
+  items: NavItem[];
+  more: NavItem[];
+}) {
   const pathname = usePathname();
   const [open, setOpen] = useState(false);
   const [justOpened, setJustOpened] = useState(false);
@@ -37,87 +43,169 @@ export function ShellNav({ items, more }: { items: NavItem[]; more: NavItem[] })
   // would light up "Record" on every single tab at once. It gets an exact
   // match only; every other item keeps matching its own subtree too.
   const isActive = (href: string) =>
-    pathname === href || (href !== '/me' && pathname.startsWith(`${href}/`));
+    pathname === href || (href !== "/me" && pathname.startsWith(`${href}/`));
 
   // Keep focus inside the sheet while it's open; return it on close.
   useEffect(() => {
     if (!open || !justOpened) return;
-    const t = window.setTimeout(() => sheetRef.current?.querySelector<HTMLElement>('a,button')?.focus(), 0);
+    const t = window.setTimeout(
+      () => sheetRef.current?.querySelector<HTMLElement>("a,button")?.focus(),
+      0,
+    );
     return () => window.clearTimeout(t);
   }, [open, justOpened]);
 
   useEffect(() => {
     if (!open) return;
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') { setOpen(false); moreBtnRef.current?.focus(); }
+      if (e.key === "Escape") {
+        setOpen(false);
+        moreBtnRef.current?.focus();
+      }
     };
-    document.addEventListener('keydown', onKey);
-    return () => document.removeEventListener('keydown', onKey);
+    document.addEventListener("keydown", onKey);
+    return () => document.removeEventListener("keydown", onKey);
   }, [open]);
 
   function toggle() {
     const next = !open;
     setOpen(next);
     setJustOpened(next);
-    announce(next ? 'More menu opened' : 'More menu closed', 'polite');
+    announce(next ? "More menu opened" : "More menu closed", "polite");
     if (!next) moreBtnRef.current?.focus();
   }
 
   return (
     <>
       {/* Desktop primary tabs, inline in the header bar. */}
-      <nav className="headnav" aria-label="Your record">
+      <nav className="headnav" aria-label="Primary">
         {items.map(({ href, icon, label }) => (
-          <Link key={href} href={href} aria-current={isActive(href) ? 'page' : undefined}>
-            <Icon name={icon} size={17} />{label}
+          <Link
+            key={href}
+            href={href}
+            aria-current={isActive(href) ? "page" : undefined}
+            aria-label={label}
+          >
+            <Icon name={icon} size={16} aria-hidden="true" />
+            {label}
           </Link>
         ))}
+        {/* Settings is now always visible in desktop nav (not hidden in More) */}
+        {more.find((m) => m.href === "/me/settings") && (
+          <Link
+            key="/me/settings"
+            href="/me/settings"
+            aria-current={isActive("/me/settings") ? "page" : undefined}
+            aria-label="Settings"
+          >
+            <Icon name="grid" size={16} aria-hidden="true" />
+            Settings
+          </Link>
+        )}
       </nav>
 
-      {/* More — opens the sheet on every screen size. */}
-      <button type="button" ref={moreBtnRef} className="morebtn" aria-expanded={open}
-        aria-controls="more-sheet" onClick={toggle}>
-        <Icon name="grid" size={16} />
-        <span>{open ? 'Close' : 'More'}</span>
-      </button>
-
-      {/* Mobile bottom tab bar. */}
-      <nav className="tabbar" aria-label="Your record">
+      {/* Mobile bottom tab bar — thumbs, not eyes. Settings stays in main bar. */}
+      <nav className="tabbar" aria-label="Primary">
         {items.map(({ href, icon, label }) => (
-          <Link key={href} href={href} aria-current={isActive(href) ? 'page' : undefined}>
-            <Icon name={icon} size={20} />
+          <Link
+            key={href}
+            href={href}
+            aria-current={isActive(href) ? "page" : undefined}
+            aria-label={label}
+          >
+            <Icon name={icon} size={19} aria-hidden="true" />
             <span>{label}</span>
           </Link>
         ))}
+        {/* Settings tab on mobile - essential enough to be primary */}
+        {more.find((m) => m.href === "/me/settings") && (
+          <Link
+            key="/me/settings"
+            href="/me/settings"
+            aria-current={isActive("/me/settings") ? "page" : undefined}
+            aria-label="Settings"
+          >
+            <Icon name="grid" size={19} aria-hidden="true" />
+            <span>Settings</span>
+          </Link>
+        )}
       </nav>
 
-      {open && (
-        <div className="sheet-scrim" onClick={toggle} role="presentation">
-          <div className="sheet" id="more-sheet" role="dialog" aria-modal="true" aria-label="More" ref={sheetRef}>
-            <div className="sheet-handle" aria-hidden="true" />
-            <p className="kicker" style={{ margin: '4px 0 10px' }}>More</p>
-            {more.map(({ href, icon, label }) => (
-              <Link key={href} href={href} className="sheet-row" onClick={() => setOpen(false)}>
-                <span className="icbox"><Icon name={icon} size={17} /></span>
-                <span>{label}</span>
-                <Icon name="chevron-right" size={17} className="chev" />
-              </Link>
-            ))}
-            <div className="sheet-sep" role="separator" />
-            {/* A form, not a link: signing out changes state, so it must
-                not be reachable by GET (see the route's own comment). */}
-            <form action="/signout" method="post">
-              <button type="submit" className="sheet-row danger">
-                <span className="icbox"><Icon name="close" size={17} /></span>
-                <span>Sign out</span>
-              </button>
-            </form>
-            <p className="hint" style={{ margin: '14px 6px 0' }}>
-              Signed out devices stop seeing your record immediately. Your PIN never leaves your
-              handset.
-            </p>
-          </div>
-        </div>
+      {/* Only show "More" button if there are items beyond primary nav */}
+      {more.length > (more.find((m) => m.href === "/me/settings") ? 1 : 0) && (
+        <>
+          <button
+            type="button"
+            ref={moreBtnRef}
+            className="morebtn"
+            aria-expanded={open}
+            aria-controls="more-sheet"
+            aria-label={open ? "Close more menu" : "Open more menu"}
+            onClick={toggle}
+          >
+            <Icon name="grid" size={15} aria-hidden="true" />
+            <span>{open ? "Close" : "More"}</span>
+          </button>
+
+          {open && (
+            <div className="sheet-scrim" onClick={toggle} role="presentation">
+              <div
+                className="sheet"
+                id="more-sheet"
+                role="dialog"
+                aria-modal="true"
+                aria-label="More options"
+                ref={sheetRef}
+              >
+                <div className="sheet-handle" aria-hidden="true" />
+                <p className="kicker" style={{ margin: "4px 0 10px" }}>
+                  More
+                </p>
+                {more
+                  .filter((m) => m.href !== "/me/settings")
+                  .map(({ href, icon, label }) => (
+                    <Link
+                      key={href}
+                      href={href}
+                      className="sheet-row"
+                      onClick={() => setOpen(false)}
+                      aria-label={label}
+                    >
+                      <span className="icbox" aria-hidden="true">
+                        <Icon name={icon} size={16} />
+                      </span>
+                      <span>{label}</span>
+                      <Icon
+                        name="chevron-right"
+                        size={16}
+                        className="chev"
+                        aria-hidden="true"
+                      />
+                    </Link>
+                  ))}
+                <div className="sheet-sep" role="separator" />
+                {/* A form, not a link: signing out changes state, so it must
+                    not be reachable by GET (see the route's own comment). */}
+                <form action="/signout" method="post">
+                  <button
+                    type="submit"
+                    className="sheet-row danger"
+                    aria-label="Sign out of Esoqo"
+                  >
+                    <span className="icbox" aria-hidden="true">
+                      <Icon name="close" size={16} />
+                    </span>
+                    <span>Sign out</span>
+                  </button>
+                </form>
+                <p className="hint" style={{ margin: "14px 6px 0" }}>
+                  Signing out hides your record on this device. Your PIN never
+                  leaves your phone.
+                </p>
+              </div>
+            </div>
+          )}
+        </>
       )}
     </>
   );

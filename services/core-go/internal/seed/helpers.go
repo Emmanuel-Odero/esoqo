@@ -2,6 +2,7 @@ package seed
 
 import (
 	"context"
+	"fmt"
 	"os"
 	"strings"
 
@@ -95,4 +96,115 @@ func EnsureEnterprise(ctx context.Context, pool *pgxpool.Pool, partyID, workRaw 
 		VALUES (gen_random_uuid(), $1, $2, true, true, now())
 		RETURNING id`, partyID, workRaw).Scan(&id)
 	return id, err
+}
+
+// showcaseDeliveryCodeSpace — six digits, and the same space
+// dbx.generateDeliveryCode draws from. Kept as a named constant so the
+// seed's derivation cannot silently drift out of range if the other side
+// changes format.
+const showcaseDeliveryCodeSpace = 1000000
+
+// showcaseDeliveryCodeProbes — how many times to walk forward from the
+// derived code before giving up. One step is enough for any realistic
+// collision; the bound exists so a pathological input fails loudly
+// instead of spinning.
+const showcaseDeliveryCodeProbes = 64
+
+// reserveShowcaseDeliveryCode picks the delivery code for a seeded
+// parcel. Deriving it from the parcel's own code is what keeps the seed
+// idempotent — the code is a pure function of the parcel code, which is
+// the seed's upsert key, so a re-seed lands on the same digits instead
+// of invalidating a credential already printed on a demo label.
+//
+// The derivation is a hash, so it is not injective: two parcel codes can
+// land on the same six digits. With ~22 showcase parcels per org and
+// two orgs that is unlikely, but "unlikely" is doing real work in a
+// function whose failure mode is a unique-violation aborting the whole
+// seed run. So the derived code is a starting point, not an answer: if
+// it is taken, the next code in sequence is tried, and the one after
+// that. Stepping forward from a deterministic base keeps the result
+// stable for a given database state, which is the property that matters
+// for re-seeds — a seed that re-rolls randomly would rewrite codes on
+// every run.
+//
+// handed tracks what this run has already handed out. The database is
+// checked too, but it cannot see this run's own uncommitted intent, so
+// without it two parcels seeded back to back can both be told the same
+// code is free. A parcel that already exists keeps its stored code
+// rather than being probed again — that code is the one its label shows.
+func reserveShowcaseDeliveryCode(ctx context.Context, pool *pgxpool.Pool, parcelCode string, handed map[string]bool) (string, error) {
+	var existing string
+	err := pool.QueryRow(ctx, `SELECT "deliveryCode" FROM parcel WHERE code = $1`, parcelCode).Scan(&existing)
+	if err == nil && existing != "" {
+		// Keep the code this parcel already has. It is the one printed on
+		// its label, and re-deriving it would be the whole problem.
+		handed[existing] = true
+		return existing, nil
+	}
+
+	candidate, free, err := walkShowcaseDeliveryCode(parcelCode, handed, func(code string) (bool, error) {
+		var taken bool
+		if err := pool.QueryRow(ctx,
+			`SELECT EXISTS (SELECT 1 FROM parcel WHERE "deliveryCode" = $1)`, code,
+		).Scan(&taken); err != nil {
+			return false, err
+		}
+		return taken, nil
+	})
+	if err != nil {
+		return "", err
+	}
+	if !free {
+		return "", fmt.Errorf("no free delivery code for showcase parcel %s after %d probes", parcelCode, showcaseDeliveryCodeProbes)
+	}
+	handed[candidate] = true
+	return candidate, nil
+}
+
+// walkShowcaseDeliveryCode steps forward from the derived code until
+// taken reports the candidate free. Split out from the database call so
+// the walk — the part with the actual logic — is testable without a
+// live database.
+//
+// taken must consult both the parcel table and the codes handed out
+// earlier in this run; see reserveShowcaseDeliveryCode.
+func walkShowcaseDeliveryCode(parcelCode string, handed map[string]bool, taken func(code string) (bool, error)) (candidate string, free bool, err error) {
+	base := showcaseDeliveryCodeBase(parcelCode)
+	for probe := 0; probe < showcaseDeliveryCodeProbes; probe++ {
+		candidate = showcaseDeliveryCodeAt(base, probe)
+		// Checked before the database: a code this run already promised
+		// away is taken, and asking the table about it would only
+		// re-learn what is already known.
+		if handed[candidate] {
+			continue
+		}
+		isTaken, err := taken(candidate)
+		if err != nil {
+			return "", false, err
+		}
+		if isTaken {
+			continue
+		}
+		return candidate, true, nil
+	}
+	return "", false, nil
+}
+
+// showcaseDeliveryCodeAt — the probe-th candidate for a base, wrapping
+// at the end of the six-digit space so the walk can never emit an
+// eight-digit code.
+func showcaseDeliveryCodeAt(base, probe int) string {
+	return fmt.Sprintf("%06d", (base+probe)%showcaseDeliveryCodeSpace)
+}
+
+// showcaseDeliveryCodeBase — FNV-1a over the parcel code, folded into the
+// six-digit space. Deterministic by construction; the offset walk in
+// reserveShowcaseDeliveryCode is what handles the non-injective part.
+func showcaseDeliveryCodeBase(parcelCode string) int {
+	var h uint32 = 2166136261 // FNV-1a offset basis
+	for i := 0; i < len(parcelCode); i++ {
+		h ^= uint32(parcelCode[i])
+		h *= 16777619
+	}
+	return int(h % uint32(showcaseDeliveryCodeSpace))
 }

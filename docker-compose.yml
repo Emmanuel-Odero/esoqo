@@ -67,7 +67,7 @@ services:
     image: redis:7-alpine
     container_name: esoqo-redis
     restart: unless-stopped
-    command: redis-server --appendonly yes --maxmemory 384mb --maxmemory-policy noeviction
+    command: redis-server --appendonly yes --maxmemory 384mb --maxmemory-policy allkeys-lru
     ports:
       - "6379:6379"
     volumes:

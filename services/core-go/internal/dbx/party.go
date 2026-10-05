@@ -214,6 +214,68 @@ func EnsureEsoqoAccountForStaff(ctx context.Context, pool *pgxpool.Pool, name, m
 	return partyID, nil
 }
 
+// ErrParcelOrgForeignAccount — an org-scoped manager asked to write a
+// credential for a phone number that already belongs to an Esoqo account
+// outside their own roster. Typing a number is not ownership of the
+// account behind it; the only safe path is OTP-inviting that person, who
+// then links themselves under their own control.
+var ErrParcelOrgForeignAccount = errors.New("that phone already belongs to an Esoqo account outside your team")
+
+// EnsureParcelOrgStaffAccount — the org-scoped sibling of
+// EnsureEsoqoAccountForStaff. It resolves (or creates) the Person behind
+// a courier-company staffer's phone number and, when a PIN is supplied,
+// sets their Esoqo PIN credential.
+//
+// The one line that must never blur: EnsureEsoqoAccountForStaff will
+// happily find-and-take an EXISTING account for the number, because it
+// is used by platform admin onboarding where "the admin has vouched for
+// this number" is the whole trust model. A manager of ONE company has no
+// such authority — a phone number typed into the roster screen is not
+// proof the person behind it works here. So when the number already
+// resolves to an account, this helper only touches it if that account is
+// already linked to a staff row in the caller's own org (a re-issue, a
+// role change). A foreign account is refused outright and must come in
+// via the OTP-invite path instead.
+func EnsureParcelOrgStaffAccount(ctx context.Context, pool *pgxpool.Pool, orgID, name, msisdn, pinHash string) (partyID string, err error) {
+	existing, err := FindPersonByMsisdn(ctx, pool, msisdn)
+	if err != nil {
+		return "", err
+	}
+	if existing != nil {
+		onRoster, err := PartyIsParcelOrgStaff(ctx, pool, orgID, existing.PartyID)
+		if err != nil {
+			return "", err
+		}
+		if !onRoster {
+			return "", ErrParcelOrgForeignAccount
+		}
+		if pinHash != "" {
+			if err := UpsertPin(ctx, pool, existing.PartyID, pinHash); err != nil {
+				return "", err
+			}
+		}
+		return existing.PartyID, nil
+	}
+	// No account at this number anywhere — this org is where it comes
+	// into existence, claimed on the org's behalf exactly like the admin
+	// path claims one on Esoqo's behalf. Safe: there is nothing to take
+	// over, and the new account is bound to this org's roster below.
+	return EnsureEsoqoAccountForStaff(ctx, pool, name, msisdn, pinHash)
+}
+
+// PartyIsParcelOrgStaff reports whether partyID is already linked to a
+// staff row in orgID — the only pre-existing account an org-scoped
+// manager may write a credential for, and the only partyID a manager
+// may point a roster row at.
+func PartyIsParcelOrgStaff(ctx context.Context, pool *pgxpool.Pool, orgID, partyID string) (bool, error) {
+	var exists bool
+	err := pool.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM parcel_org_staff WHERE "orgId" = $1 AND "partyId" = $2)`, orgID, partyID).Scan(&exists)
+	if err != nil {
+		return false, err
+	}
+	return exists, nil
+}
+
 // ErrPersonNotFound mirrors auth-credential.ts's SetPinError('NOT_FOUND') —
 // the PIN-reset flow only ever sets a PIN for a Person that already
 // exists (they proved control of the number via OTP first); it never

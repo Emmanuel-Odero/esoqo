@@ -36,6 +36,12 @@ type GroupSummary struct {
 // CHAIRPERSON, not a bare MEMBER, so getEffectiveSignerIds' officer
 // fallback makes them a signer from the moment the group exists, no
 // separate signer-setup step.
+//
+// The group is also given its Esoqo handle here, at creation, the same as
+// any other payable party. It is allocated inside this transaction on
+// purpose: a handle minted on the pool would outlive a rollback that erased
+// the organisation, stranding an esoko_payment_id row on a party id nothing
+// can reach.
 func CreateOwnGroup(ctx context.Context, pool *pgxpool.Pool, founderPartyID, orgKind, officialName, knownAs, county string) (string, error) {
 	officialName = strings.TrimSpace(officialName)
 	if officialName == "" {
@@ -83,6 +89,10 @@ func CreateOwnGroup(ctx context.Context, pool *pgxpool.Pool, founderPartyID, org
 		INSERT INTO membership (id, "personId", "orgId", role, status, "joinedAt")
 		VALUES (gen_random_uuid(), $1, $2, 'CHAIRPERSON', 'ACTIVE', now())`, founderPartyID, orgID)
 	if err != nil {
+		return "", err
+	}
+
+	if err := insertOrgPaymentID(ctx, tx, orgID, officialName, knownAs); err != nil {
 		return "", err
 	}
 

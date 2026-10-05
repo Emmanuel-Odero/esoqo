@@ -985,7 +985,7 @@ export interface ParcelOrgStaffRow {
   isContact: boolean;
   partyId: string | null;
   stationId: string | null;
-  /** The phone and the ESK-… handle this person signs in with — the two
+  /** The phone and the esoqo handle this person signs in with — the two
    *  credentials an admin reads back to someone locked out. */
   msisdn: string | null;
   esoqoId: string | null;
@@ -1066,7 +1066,7 @@ export async function actionListParcelOrgStaff(
   return staff ?? [];
 }
 
-/** Mint (or read back) the ESK-… handle a roster member signs in with.
+/** Mint (or read back) the esoqo handle a roster member signs in with.
  *  Needed for members created before the invite flow minted IDs — they
  *  have a Party and a phone but no code, which is the "can't see their
  *  Esoqo ID" gap. Idempotent on the server. */

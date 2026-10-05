@@ -13,39 +13,77 @@
   --green:#12794A; --green-2:#1FA163; --green-t:#E7F4ED;
   --red:#CE2B2B; --red-t:#FCEDEC;
   --amber:#9A6105; --amber-t:#FDF4E3;
-  --paper:#F4F7FA; --line:#DCE5EC;
-  --tx:#12283A; --tx-2:#57718A; --tx-3:#5A7695;
+  --paper:#F6F4EF; --line:#E4DFD3; --line-2:#ECE7DB;
+  --tx:#14202B; --tx-2:#5C6B78; --tx-3:#8A96A0;
+  /* Premium surface — warm, slightly off-white, so flat white cards
+     never sit directly on a flat white page (the single biggest tell
+     of a template-default UI). */
+  --surface:#FFFFFF; --surface-2:#FBFAF6; --surface-3:#F1EEE5;
 
   /* Category/ticket gradient accents — mobile-only decorative palette.
-     No per-category gradients exist on the web today. */
+      No per-category gradients exist on the web today. */
   --green-light:#2E9E5B; --amber-light:#E0A233; --amber-deep:#B9790F;
   --pink:#C65DA6; --pink-dark:#8E3D77; --purple:#7C3D8E; --amber-warm:#B8781A;
+  /* House accent — a warm bronze/gold used sparingly for the things that
+     are genuinely singular on a screen (a treasury vault, an ID card,
+     a primary balance) — never for routine UI chrome. Overusing this is
+     the fastest way to make it look cheap again. */
+  --gold:#B4884A; --gold-2:#D9B876; --gold-t:#FBF4E6; --navy-premium:#071627;
+  --grad-navy:linear-gradient(150deg,#081D33 0%,#0F3155 50%,#123A5E 100%);
+  --grad-green-premium:linear-gradient(150deg,#0D5E3B 0%,#12794A 48%,#22A96A 100%);
+  --grad-gold:linear-gradient(150deg,#8C6A34 0%,#B4884A 45%,#D9B876 100%);
+  --grad-paper-premium:linear-gradient(165deg,#FFFFFF 0%,#FAF8F3 100%);
+  --grad-wash:radial-gradient(1200px 480px at 15% -10%, rgba(18,121,74,.05), transparent 60%),
+    radial-gradient(900px 420px at 100% 0%, rgba(15,92,158,.045), transparent 55%);
 
   --w:1160px;
 
-  --sh-s:0 1px 2px rgba(10,46,77,.05),0 4px 14px rgba(10,46,77,.05);
-  --sh-m:0 8px 28px rgba(10,46,77,.10);
-  --sh-l:0 24px 60px rgba(10,46,77,.18);
+  /* Shadow scale — every value carries two layers: a tight, dark
+     "contact" shadow close to the surface, and a soft, faint "ambient"
+     shadow that fades over a much longer distance. That pairing is what
+     reads as an object resting under real light rather than a CSS
+     drop-shadow filter; a single fuzzy shadow is the tell of a
+     default-theme card. */
+  --sh-xs:0 1px 2px rgba(20,32,43,.05);
+  --sh-s:0 1px 1px rgba(20,32,43,.04),0 6px 16px -4px rgba(20,32,43,.07);
+  --sh-m:0 2px 6px rgba(20,32,43,.06),0 16px 36px -8px rgba(20,32,43,.14);
+  --sh-l:0 8px 16px rgba(20,32,43,.08),0 32px 72px -16px rgba(20,32,43,.24);
+  /* Premium elevation — the resting state for hero/vault surfaces:
+     deep, soft, slightly warm, with a hairline inner highlight so the
+     top edge catches light like an enamelled or lacquered object. */
+  --sh-premium:0 1px 1px rgba(20,32,43,.05),0 2px 6px rgba(20,32,43,.05),
+    0 20px 48px -12px rgba(20,32,43,.16), inset 0 1px 0 rgba(255,255,255,.6);
+  --sh-card-hover:0 2px 8px rgba(20,32,43,.08),0 28px 56px -16px rgba(20,32,43,.22),
+    inset 0 1px 0 rgba(255,255,255,.7);
+  --sh-dark:0 1px 0 rgba(255,255,255,.06) inset,0 24px 64px -16px rgba(3,10,18,.55);
 
   /* Elevation — one step stronger than the equivalent shadow, used only
      where elements genuinely float above the page (sheets, bars). */
-  --e-1:0 1px 0 rgba(10,46,77,.04);
-  --e-2:0 2px 8px rgba(10,46,77,.08);
-  --e-3:0 12px 32px rgba(10,46,77,.16);
+  --e-1:0 1px 0 rgba(20,32,43,.04);
+  --e-2:0 2px 8px rgba(20,32,43,.08);
+  --e-3:0 20px 48px rgba(20,32,43,.20);
 
   /* Spacing scale — 4px grid, stepped for rhythm rather than absolute
      values, so density can be tuned in one place. */
   --sp-1:4px; --sp-2:8px; --sp-3:12px; --sp-4:16px;
   --sp-5:20px; --sp-6:24px; --sp-7:32px; --sp-8:40px; --sp-9:56px;
 
-  /* Radius scale */
-  --r-xs:6px; --r-sm:8px; --r-md:10px; --r-lg:14px; --r-xl:20px; --r-2xl:28px;
+  /* Radius scale — one step rounder across the board than a typical
+     admin-template default (8/4/2), which is part of what makes those
+     kits read as interchangeable. */
+  --r-xs:8px; --r-sm:11px; --r-md:13px; --r-lg:16px; --r-xl:22px; --r-2xl:30px;
   --r-pill:999px;
 
   /* Motion tokens — every transition in the product should be one of
-     these, so reduced-motion and speed stay consistent. */
+     these, so reduced-motion and speed stay consistent.
+     --ease-out is for reactive, in-place feedback (hover, press) —
+     fast and linear-feeling. --ease-premium is for anything that
+     enters, leaves, or travels (modals, sheets, page transitions) —
+     a physical-inertia curve (fast acceleration, long elegant
+     deceleration) so motion reads as weighted rather than mechanical. */
   --dur-fast:120ms; --dur:200ms; --dur-slow:320ms;
   --ease-out:cubic-bezier(.2,.8,.3,1);
+  --ease-premium:cubic-bezier(.16,1,.3,1);
 
   /* Breakpoints — match the media queries used across apps. */
   --bp-md:820px;
@@ -83,17 +121,20 @@ html[data-contrast="high"] {
 *,*::before,*::after { box-sizing:border-box }
 html { scroll-behavior:smooth; scroll-padding-top:126px; -webkit-text-size-adjust:100% }
 body {
-  margin:0; background:#fff; color:var(--tx);
+  margin:0; background:var(--surface); color:var(--tx);
   font-family:var(--font-body);
   font-size:calc(16.5px * var(--font-scale));
   line-height:var(--line-height);
   letter-spacing:var(--letter-spacing);
-  -webkit-font-smoothing:antialiased;
+  -webkit-font-smoothing:antialiased; text-rendering:optimizeLegibility;
 }
-h1,h2,h3 { font-family:var(--font-display); letter-spacing:-.028em; margin:0; font-weight:800; line-height:1.1 }
-h1 { font-size:clamp(1.9rem,4vw,2.7rem) }
-h2 { font-size:clamp(1.35rem,2.5vw,1.85rem) }
-h3 { font-size:1.04rem; font-weight:700 }
+/* Display type sits noticeably tighter and heavier than body copy — the
+   gap between the two registers is what makes headings read as
+   typeset rather than the browser's default bold-and-bigger. */
+h1,h2,h3 { font-family:var(--font-display); letter-spacing:-.033em; margin:0; font-weight:750; line-height:1.05 }
+h1 { font-size:clamp(2rem,4.2vw,2.9rem) }
+h2 { font-size:clamp(1.3rem,2.4vw,1.7rem) }
+h3 { font-size:1.02rem; font-weight:650 }
 a { color:inherit; text-decoration:none }
 img { display:block; max-width:100% }
 

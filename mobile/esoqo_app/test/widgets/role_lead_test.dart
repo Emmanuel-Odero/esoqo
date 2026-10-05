@@ -24,7 +24,7 @@ Future<void> _pump(
         body: EsoqoRoleLead(
           role: role,
           displayName: 'Wanjiku',
-          esoqoId: 'ESK-4821-KE',
+          esoqoId: 'johnmutu482',
           detail: detail,
           primaryLabel: primaryLabel,
           onPrimary: onPrimary,
@@ -59,7 +59,7 @@ void main() {
     );
     expect(find.text('Hello,'), findsOneWidget);
     expect(find.text('Wanjiku'), findsOneWidget);
-    expect(find.text('ESK-4821-KE'), findsOneWidget);
+    expect(find.text('johnmutu482'), findsOneWidget);
     expect(_leadColour(tester), EsoqoColors.navy);
   });
 
@@ -73,7 +73,7 @@ void main() {
     expect(find.text('Super Metro'), findsOneWidget);
     // The person's own name and id belong to the personal surface.
     expect(find.text('Wanjiku'), findsNothing);
-    expect(find.text('ESK-4821-KE'), findsNothing);
+    expect(find.text('johnmutu482'), findsNothing);
   });
 
   testWidgets('institutional roles are blue, per Rule 3', (tester) async {

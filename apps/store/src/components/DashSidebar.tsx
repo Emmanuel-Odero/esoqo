@@ -11,6 +11,7 @@ const NAV: [string, IconName, string][] = [
   ['/dashboard/products', 'box', 'Products'],
   ['/dashboard/stock', 'truck', 'Stock & suppliers'],
   ['/dashboard/orders', 'basket', 'Orders'],
+  ['/dashboard/receipts', 'print', 'Receipts'],
   ['/dashboard/pos', 'keypad', 'PoS terminal'],
   ['/dashboard/shifts', 'clock', 'Shifts'],
   ['/dashboard/cashiers', 'key', 'Cashiers'],
