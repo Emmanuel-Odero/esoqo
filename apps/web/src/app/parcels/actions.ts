@@ -91,6 +91,26 @@ export async function actionListWalkInStations(): Promise<WalkInStationView[]> {
   }
 }
 
+/** One of a named courier company's own branches — the destination
+ *  search once a sender has already picked which office they're
+ *  standing in. See GET /v1/parcels/org-stations. */
+export interface PublicOrgStationView {
+  id: string; name: string; locationHint: string;
+  openingHours: string | null; lat: number | null; lng: number | null;
+}
+
+export async function actionListOrgStations(orgId: string): Promise<PublicOrgStationView[]> {
+  if (!orgId) return [];
+  try {
+    const { stations } = await goFetch<{ stations: PublicOrgStationView[] | null }>(
+      `/v1/parcels/org-stations?orgId=${encodeURIComponent(orgId)}`,
+    );
+    return stations ?? [];
+  } catch {
+    return [];
+  }
+}
+
 /** Every parcel type's price band at once — same one-call shape the
  *  mobile booking form uses to match a typed weight to a bracket
  *  client-side, without a round trip per keystroke. */

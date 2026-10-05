@@ -326,6 +326,11 @@ func (s *Server) Router() *gin.Engine {
 		// this off myself" needs to see which companies accept a
 		// walk-in before booking, let alone signing in.
 		v1.GET("/parcels/stations", s.handleListWalkInStations)
+		// Same boundary again, one level deeper: once a sender has
+		// named which company's office they're standing in, this lets
+		// them search that SAME company's own branches as a destination
+		// — still public, still before anyone has signed in.
+		v1.GET("/parcels/org-stations", s.handleListPublicOrgStations)
 		// Walk-in counter tickets. Public — same boundary as booking and
 		// the station picker above: a kiosk, a counter-QR web form and
 		// the app all mint/poll these before anyone has signed in. Rate

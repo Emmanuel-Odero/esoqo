@@ -1187,6 +1187,45 @@ func ListParcelOrgStations(ctx context.Context, pool *pgxpool.Pool, orgID string
 	return out, rows.Err()
 }
 
+// PublicOrgStation is the guest-facing projection of a ParcelOrgStation
+// — one of a courier company's own branch offices, offered as a
+// destination pick once a sender has already chosen that company at
+// the "which office are you at" step. No msisdn, capacity or manager —
+// a sender searching for where their parcel is going has no more
+// business seeing those than a WalkInStation's own guest picker does.
+type PublicOrgStation struct {
+	ID           string   `json:"id"`
+	Name         string   `json:"name"`
+	LocationHint string   `json:"locationHint"`
+	OpeningHours *string  `json:"openingHours"`
+	Lat          *float64 `json:"lat"`
+	Lng          *float64 `json:"lng"`
+}
+
+// ListPublicOrgStations — active branches of one named courier company,
+// for the guest destination search. Reuses ListParcelOrgStations' own
+// query (the staff "me/stations" register and this guest picker are the
+// same underlying rows, just projected differently) rather than a
+// second SQL statement to keep in sync.
+func ListPublicOrgStations(ctx context.Context, pool *pgxpool.Pool, orgID string) ([]PublicOrgStation, error) {
+	stations, err := ListParcelOrgStations(ctx, pool, orgID)
+	if err != nil {
+		return nil, err
+	}
+	out := make([]PublicOrgStation, 0, len(stations))
+	for _, s := range stations {
+		if !s.Active {
+			continue
+		}
+		lat, lng := s.Lat, s.Lng
+		out = append(out, PublicOrgStation{
+			ID: s.ID, Name: s.Name, LocationHint: s.LocationHint,
+			OpeningHours: s.OpeningHours, Lat: &lat, Lng: &lng,
+		})
+	}
+	return out, nil
+}
+
 // GetParcelOrgStation — one station, scoped by org so a detail fetch
 // can't read a competitor's location by guessing an id.
 func GetParcelOrgStation(ctx context.Context, pool *pgxpool.Pool, orgID, stationID string) (*ParcelOrgStation, error) {

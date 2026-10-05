@@ -76,6 +76,27 @@ func (s *Server) handleListWalkInStations(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"stations": stations})
 }
 
+// handleListPublicOrgStations — GET /v1/parcels/org-stations?orgId=.
+// One named courier company's own branches, for the guest destination
+// search on the booking form: a sender who has already picked which
+// office they're standing in next picks which of that SAME company's
+// branches the parcel is going to. orgId is required and unauthenticated
+// by design (same boundary as the station/agent pickers above) — it
+// names a company, not a customer, so there is nothing to protect.
+func (s *Server) handleListPublicOrgStations(c *gin.Context) {
+	orgID := strings.TrimSpace(c.Query("orgId"))
+	if orgID == "" {
+		writeError(c, http.StatusBadRequest, "BAD_INPUT", "orgId is required")
+		return
+	}
+	stations, err := dbx.ListPublicOrgStations(c.Request.Context(), s.Pool, orgID)
+	if err != nil {
+		writeError(c, http.StatusInternalServerError, "LIST_FAILED", "Could not load that company's branches")
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"stations": stations})
+}
+
 // parcelStaffCapabilities resolves a staffer's capability bundle by role,
 // case-insensitively, so a custom role typed as "Manager" still gets
 // MANAGER. Anything that doesn't match a known preset falls back to the
