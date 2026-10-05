@@ -64,10 +64,8 @@ header { position:sticky; top:0; z-index:90; background:rgba(255,255,255,.95);
    label to it so it never overflows a phone. */
 .track-label { margin:14px 0 0 }
 
-/* Send-a-parcel form's progress rail — the existing section headings
-   turned into a visible, sticky "how far am I" signal, no navigation
-   gating (the form stays one long scroll — see SendParcelForm's own
-   comment on why a gated step wasn't the fix last time this shipped). */
+/* Send-a-parcel form's progress rail — a sticky "how far am I" signal
+   for AtOfficeSendForm's gated, one-question-per-screen check-in. */
 .pf-rail { position:sticky; top:64px; z-index:70; display:flex; gap:6px;
   background:#fff; padding:10px 0; margin-bottom:14px; border-bottom:1px solid var(--line) }
 .pf-rail-step { flex:1; display:flex; flex-direction:column; gap:6px; align-items:center;

@@ -47,7 +47,7 @@ async function goFetch<T>(path: string, init?: RequestInit): Promise<T> {
 /** The standard rate card's weight brackets — used only to match a
  *  typed weight to a parcel type and to show its weightLabel (e.g.
  *  "0.5kg to 2.2kg") next to each type. No price from this is ever
- *  quoted or rendered: see SendParcelForm's own comment on why every
+ *  quoted or rendered: see AtOfficeSendForm's own comment on why every
  *  booking here is PAY_AT_COUNTER, settled in person. */
 export interface ParcelPricingView {
   parcelType: string; weightLabel: string; minWeightKg: number; maxWeightKg: number;
@@ -147,9 +147,9 @@ export interface BookParcelInput {
   parcelOrgId?: string;
   // payAtCounter — no price is quoted or charged online for this
   // booking; it lands straight in BOOKED and the fee is settled in
-  // person, with the agent or the courier. SendParcelForm always sends
-  // true — see dbx.BookParcelInput.PayAtCounter's own comment for why
-  // this is no longer restricted to a walk-in drop-off.
+  // person, with the agent or the courier. AtOfficeSendForm always
+  // sends true — see dbx.BookParcelInput.PayAtCounter's own comment for
+  // why this is no longer restricted to a walk-in drop-off.
   payAtCounter?: boolean;
 
   // The sender's own declaration of what's in the box. Distinct from

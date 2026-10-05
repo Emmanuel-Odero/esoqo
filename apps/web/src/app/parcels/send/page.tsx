@@ -1,47 +1,36 @@
 import type { Metadata } from 'next';
 import Link from 'next/link';
-import {
-  actionListParcelAgents, actionListParcelPricing, actionListParcelZones,
-  actionListWalkInStations,
-} from '../actions';
+import { actionListParcelPricing, actionListWalkInStations } from '../actions';
 import { actionGetCounterTicket } from '../counter-ticket-actions';
-import { SendParcelForm } from '../SendParcelForm';
+import { AtOfficeSendForm } from './AtOfficeSendForm';
 
 export const metadata: Metadata = {
   title: 'Send a parcel',
-  description: 'Enter your shipping details online — the fee is settled in person, with the agent or courier, not here.',
+  description: 'Standing at a courier’s counter? Check in step by step and get a case number for the clerk to call you by.',
 };
 export const dynamic = 'force-dynamic';
 
 /**
- * Guest parcel booking — same public boundary as /tickets checkout and
- * apps/store's storefront (ADR-0003). No sign-in anywhere on this page:
- * the sender types their own name/phone right on the form, same as the
- * receiver's. core-go's booking/pricing/pay/status endpoints are all
- * already unauthenticated for exactly this reason.
- *
- * No price or online payment anywhere on this page — every booking
- * lands as PAY_AT_COUNTER (see dbx.BookParcelInput's own comment) and
- * is settled in person, with the agent at a station or the courier on
- * pickup. `pricing` is fetched only for its weight brackets (matching a
- * typed weight to a parcel type) and label text — no KES figure from it
- * is ever rendered.
- *
- * Tracking lives on its own page (/parcels/track); this page is only
- * the booking form, so it stays short and focused.
+ * /parcels/send — one question per screen, gated: you cannot reach
+ * "what's inside" without first naming the office, the sender and the
+ * receiver. A sender is standing at the counter filling this in, often
+ * handing the phone back and forth with the clerk, which is served
+ * better by one question at a time than a long page to scroll and
+ * re-find a place in — the reason there is no second, scrolling form
+ * on this site any more.
  */
 export default async function SendParcelPage({
   searchParams,
 }: { searchParams: Promise<{ ticket?: string }> }) {
   const { ticket: ticketId } = await searchParams;
-  const [pricing, zones, agents, stations, ticket] = await Promise.all([
-    actionListParcelPricing(),
-    actionListParcelZones(),
-    actionListParcelAgents(),
+  const [stations, pricing, ticket] = await Promise.all([
     actionListWalkInStations(),
+    actionListParcelPricing(),
     // Opened from a counter ticket's "fill in details while you wait"
     // link (see CounterTicketStatus) — a WAITING ticket's own
-    // draftDetails, if any, resumes the form exactly where it was left.
+    // draftDetails, if any, resumes the form exactly where it was left,
+    // and the office step is skipped: the ticket's own org IS the
+    // office the sender already checked in at.
     ticketId ? actionGetCounterTicket(ticketId) : Promise.resolve(null),
   ]);
 
@@ -50,20 +39,22 @@ export default async function SendParcelPage({
       <section className="phead">
         <div className="wrap">
           <p className="kicker">Parcels</p>
-          <h1>Send a parcel</h1>
+          <h1>Check in at the counter</h1>
           <p className="lead">
-            Tell us what you&apos;re sending and where it&apos;s going — the fee is settled in person,
-            with the agent or courier. No account needed; just your details and the receiver&apos;s.
+            One question at a time — tell us the office you&apos;re at, who it&apos;s for and
+            what you&apos;re sending. At the end you&apos;ll get a case number to show the clerk.
           </p>
         </div>
       </section>
 
       <section className="sec">
-        <div className="wrap" style={{ maxWidth: 620 }}>
-          <SendParcelForm
-            pricing={pricing} zones={zones} agents={agents} stations={stations}
+        <div className="wrap" style={{ maxWidth: 560 }}>
+          <AtOfficeSendForm
+            stations={stations}
+            pricing={pricing}
             ticketId={ticket ? ticketId : undefined}
             initialDraft={ticket?.draftDetails as Record<string, unknown> | null | undefined}
+            lockedStationId={ticket?.orgId}
           />
 
           <p className="sub" style={{ textAlign: 'center', marginTop: 18, fontSize: '.88rem' }}>

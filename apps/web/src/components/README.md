@@ -296,7 +296,6 @@ See **INTEGRATION_GUIDE.md > Troubleshooting** for more.
 ## 🔗 Related Files
 
 - **JoinWizard.tsx** - Old multi-step wizard (can be replaced)
-- **SendParcelForm.tsx** - Reference form (can be migrated)
 - **DetailsForm.tsx** - Current registration step (can be refactored)
 
 ## 📝 API Reference Quick Links
