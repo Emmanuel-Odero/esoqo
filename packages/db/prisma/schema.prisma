@@ -702,6 +702,13 @@ enum AccountKind {
   /// paid nothing here ever cost the platform money on a per-event
   /// basis.
   PARCEL_COURIER_COST
+  /// One per ParcelOrg's enterprise party — a courier company's share
+  /// of a parcel's price (Parcel.orgEarningsKes), reclassified here out
+  /// of PARCEL_REVENUE the moment a payment is confirmed and debited
+  /// again once ParcelOrgPayout actually pays it out. The company-level
+  /// counterpart to PARCEL_COURIER_PAYABLE above, which is scoped to an
+  /// individual gig courier instead. See dbx.createParcelOrgPayoutTx.
+  PARCEL_ORG_EARNINGS_PAYABLE
   /// One per ticket org's enterprise party — what a booking is worth to
   /// that operator, and therefore what Esoqo owes them. Replaces the
   /// SUSPENSE placeholder ticketing.go used to post against, which its
@@ -773,6 +780,7 @@ model JournalEntry {
   walletWithdrawal    WalletWithdrawal?
   esoqoTransfer       EsoqoTransfer?
   thirdPartyPayout    ThirdPartyPayout?
+  parcelOrgPayout     ParcelOrgPayout?
   signatoryFeePayment SignatoryFeePayment?
   projectContribution GroupProjectContribution?
   projectWithdrawal   GroupProjectWithdrawal?
@@ -4689,6 +4697,11 @@ model Parcel {
   platformFeeKes Decimal? @db.Decimal(10, 2)
   orgEarningsKes Decimal? @db.Decimal(10, 2)
 
+  /// The automatic disbursement of orgEarningsKes to the carrying
+  /// company, created the same moment the split above is frozen. See
+  /// ParcelOrgPayout's own comment.
+  orgPayout ParcelOrgPayout?
+
   /// The passenger trip this parcel is riding on — an actual matatu or
   /// intercity bus, on a scheduled run, with a conductor.
   ///
@@ -5122,6 +5135,31 @@ model ParcelOrg {
   /// payouts run through the ledger, not off this column.
   settlementPhone String?
 
+  /// Where this company's share of a parcel (Parcel.orgEarningsKes)
+  /// actually gets paid, automatically, the moment a parcel is settled.
+  /// Null until onboarding sets it, in which case ParcelOrgPayout rows
+  /// are created MANUAL instead of being disbursed — see
+  /// dbx.createParcelOrgPayoutTx. Unlike settlementPhone above, these
+  /// fields ARE read live by the payout trigger; they are snapshotted
+  /// onto each ParcelOrgPayout at creation time precisely so a later
+  /// edit here never rewrites a payout already in flight or paid.
+  payoutMethod ParcelOrgPayoutMethod?
+  /// PHONE payout destination (M-Pesa B2C).
+  payoutMsisdn String?
+  /// TILL payout destination (M-Pesa B2B BusinessBuyGoods).
+  payoutTillNumber String?
+  /// PAYBILL payout destination (M-Pesa B2B BusinessPayBill).
+  payoutPaybillNumber String?
+  payoutPaybillAccount String?
+  /// BANK payout destination. No automatic disbursement integration
+  /// exists for this yet — see ParcelOrgPayoutStatus.MANUAL — but the
+  /// destination is still captured at onboarding so finance has
+  /// somewhere real to send a manual payout, and so the automatic path
+  /// can pick it up the day a bank-disbursement integration exists.
+  payoutBankCode          String?
+  payoutBankAccountNumber String?
+  payoutBankAccountName   String?
+
   /// Esoqo's cut of every parcel this company carries, as a percent of
   /// the paid price. Copied onto each parcel at payment time (see
   /// Parcel.platformFeeKes) and never read live afterwards, so
@@ -5176,6 +5214,7 @@ model ParcelOrg {
   runs           ParcelShipment[]
   routes         ParcelRoute[]
   counterTickets ParcelCounterTicket[]
+  payouts        ParcelOrgPayout[]
 
   @@index([enterpriseId])
   @@index([status])
@@ -5300,6 +5339,83 @@ model ParcelCounterTicket {
   /// first" — this index is that query.
   @@index([orgId, status, createdAt])
   @@map("parcel_counter_ticket")
+}
+
+/// How a courier company is actually paid — mirrors the shape of
+/// ParcelOrg's own payout* fields one-for-one, so a ParcelOrgPayout row
+/// can snapshot whichever of them was configured at the moment it was
+/// created.
+enum ParcelOrgPayoutMethod {
+  PHONE
+  TILL
+  PAYBILL
+  BANK
+}
+
+/// PENDING: created, not yet attempted. PROCESSING: a B2C/B2B request is
+/// in flight (mpesaConversationId set). CONFIRMED: Daraja's result
+/// callback matched this conversation and the money moved. FAILED: a
+/// request was attempted and Daraja said no (see failureReason) — still
+/// eligible for the retry worker. MANUAL: method was BANK, or the org
+/// had no payout method configured at all, so no automatic attempt is
+/// made; it sits here for finance to clear from the admin payouts list.
+enum ParcelOrgPayoutStatus {
+  PENDING
+  PROCESSING
+  CONFIRMED
+  FAILED
+  MANUAL
+}
+
+/// The automatic disbursement of a courier company's cut of one parcel
+/// (Parcel.orgEarningsKes) to whatever payout destination it was
+/// onboarded with — created in the same transaction that freezes the
+/// revenue split, one row per settled parcel, matching "pay the company
+/// the moment the sender's money clears" rather than batching.
+///
+/// Destination fields are a snapshot of ParcelOrg.payout* at creation
+/// time, not a live join: renegotiating or correcting a company's
+/// payout details next month must never rewrite where money already in
+/// flight was actually sent, the same reasoning ParcelOrg.commissionPct's
+/// own comment gives for freezing onto Parcel.platformFeeKes.
+model ParcelOrgPayout {
+  id String @id @default(uuid()) @db.Uuid
+
+  parcelOrgId String    @db.Uuid
+  parcelOrg   ParcelOrg @relation(fields: [parcelOrgId], references: [id])
+
+  /// One payout per settled parcel — see this model's own comment on why
+  /// this is per-transaction rather than a batch across many parcels.
+  parcelId String @unique @db.Uuid
+  parcel   Parcel @relation(fields: [parcelId], references: [id])
+
+  amountKes Decimal @db.Decimal(10, 2)
+
+  method                  ParcelOrgPayoutMethod?
+  payoutMsisdn            String?
+  payoutTillNumber        String?
+  payoutPaybillNumber     String?
+  payoutPaybillAccount    String?
+  payoutBankCode          String?
+  payoutBankAccountNumber String?
+  payoutBankAccountName   String?
+
+  status        ParcelOrgPayoutStatus @default(PENDING)
+  failureReason String?
+
+  /// The B2C/B2B idempotency key — set once a request is actually sent
+  /// to Daraja, matched against on its result callback.
+  mpesaConversationId String?       @unique
+  mpesaTransactionId  String?
+  journalEntryId      String?       @unique @db.Uuid
+  journalEntry        JournalEntry? @relation(fields: [journalEntryId], references: [id])
+
+  createdAt   DateTime  @default(now())
+  confirmedAt DateTime?
+
+  @@index([parcelOrgId, status])
+  @@index([status, createdAt])
+  @@map("parcel_org_payout")
 }
 
 /// Admin-owned pricing config, one row per ParcelType — same
