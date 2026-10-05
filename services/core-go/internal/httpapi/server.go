@@ -509,6 +509,8 @@ func (s *Server) Router() *gin.Engine {
 		v1.POST("/parcels/:code/price",
 			s.rateLimit("book:parcelprice", 30, time.Hour), s.handleSetParcelPrice)
 		v1.POST("/parcels/:code/settle-counter", s.authRequired(), s.handleSettleCounterParcel)
+		v1.POST("/parcels/:code/settle-counter/stk", s.authRequired(), s.handleSettleCounterParcelStk)
+		v1.GET("/parcel-orgs/me/parcels/:code/settlement-status", s.authRequired(), s.handleGetCounterSettlementStatus)
 		v1.POST("/parcels/:code/pay", s.rateLimit("pay:parcel", 30, time.Hour), s.handlePayParcel)
 		v1.PATCH("/parcels/:code", s.authRequired(), s.handleUpdateOwnParcelDetails)
 		v1.GET("/parcels/:code/status",
@@ -684,6 +686,12 @@ func (s *Server) Router() *gin.Engine {
 		v1.POST("/admin/parcels/:id/org", s.authRequired(), s.handleAdminAssignParcelOrg)
 		v1.PATCH("/admin/parcels/orgs/:id", s.authRequired(), s.handleAdminUpdateParcelOrg)
 		v1.GET("/admin/parcels/orgs/:id/staff", s.authRequired(), s.handleAdminListParcelOrgStaff)
+		// Payouts no automatic rail could clear — bank destinations (no
+		// disbursement integration yet) and anything stuck FAILED long
+		// enough that finance should look rather than let the retry
+		// worker keep trying.
+		v1.GET("/admin/parcels/payouts/manual", s.authRequired(), s.handleAdminListManualParcelOrgPayouts)
+		v1.POST("/admin/parcels/payouts/:id/mark-paid", s.authRequired(), s.handleAdminMarkParcelOrgPayoutPaid)
 		v1.POST("/admin/parcels/orgs/:id/staff", s.authRequired(), s.handleAdminUpsertParcelOrgStaff)
 		v1.POST("/admin/parcels/orgs/:id/staff/:staffId/issue-id", s.authRequired(), s.handleAdminIssueParcelOrgStaffID)
 		// Pickup points and the coverage rate card — siblings of zones
@@ -739,6 +747,13 @@ func (s *Server) Router() *gin.Engine {
 	// than silently 404ing — and so console/dev setups keep working.
 	r.POST("/webhooks/mpesa/stk-callback", s.handleMpesaStkCallback)
 	r.POST("/webhooks/mpesa/stk-callback/:token", s.handleMpesaStkCallback)
+
+	// Result callbacks for courier-partner payouts (dispatchParcelOrgPayout) —
+	// same bare-path-stays-registered reasoning as the STK callback above.
+	r.POST("/webhooks/mpesa/b2c-result", s.handleMpesaB2CResultCallback)
+	r.POST("/webhooks/mpesa/b2c-result/:token", s.handleMpesaB2CResultCallback)
+	r.POST("/webhooks/mpesa/b2b-result", s.handleMpesaB2BResultCallback)
+	r.POST("/webhooks/mpesa/b2b-result/:token", s.handleMpesaB2BResultCallback)
 
 	return r
 }

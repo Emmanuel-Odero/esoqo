@@ -768,11 +768,11 @@ func (s *Server) handleCounterBookParcel(c *gin.Context) {
 		ReceiverName: req.ReceiverName, ReceiverMsisdn: req.ReceiverMsisdn,
 		OriginLabel: req.OriginLabel, DestinationLabel: req.DestinationLabel, Notes: req.Notes,
 		ParcelType: req.ParcelType, WeightKg: req.WeightKg, Fragile: req.Fragile,
-		ExistingCode:       req.ExistingCode,
-		DeclaredValueKes:   req.DeclaredValueKes, CoverageTierID: req.CoverageTierID,
+		ExistingCode:     req.ExistingCode,
+		DeclaredValueKes: req.DeclaredValueKes, CoverageTierID: req.CoverageTierID,
 		ParcelOrgID: &orgID, OriginMethod: "SCHEDULED_PICKUP", PayAtCounter: true,
 		BinderOrgID: &orgID,
-		LengthCm: req.LengthCm, WidthCm: req.WidthCm, HeightCm: req.HeightCm,
+		LengthCm:    req.LengthCm, WidthCm: req.WidthCm, HeightCm: req.HeightCm,
 		ContentsDeclaredByStaffID: contentsDeclaredByStaffID,
 	})
 	if err != nil {
@@ -1307,6 +1307,17 @@ type parcelOrgRequest struct {
 	LogoStorageKey *string `json:"logoStorageKey"`
 	LogoUrl        *string `json:"logoUrl"`
 	BrandAccent    *string `json:"brandAccent"`
+
+	// Where this company's cut of a parcel is paid out, automatically,
+	// at settlement — see dbx.ParcelOrgInput's own comment.
+	PayoutMethod            *string `json:"payoutMethod"`
+	PayoutMsisdn            *string `json:"payoutMsisdn"`
+	PayoutTillNumber        *string `json:"payoutTillNumber"`
+	PayoutPaybillNumber     *string `json:"payoutPaybillNumber"`
+	PayoutPaybillAccount    *string `json:"payoutPaybillAccount"`
+	PayoutBankCode          *string `json:"payoutBankCode"`
+	PayoutBankAccountNumber *string `json:"payoutBankAccountNumber"`
+	PayoutBankAccountName   *string `json:"payoutBankAccountName"`
 }
 
 func (r parcelOrgRequest) toInput() dbx.ParcelOrgInput {
@@ -1319,6 +1330,10 @@ func (r parcelOrgRequest) toInput() dbx.ParcelOrgInput {
 		AcceptsWalkIn: r.AcceptsWalkIn, Lat: r.Lat, Lng: r.Lng,
 		LocationHint: r.LocationHint, OpeningHours: r.OpeningHours,
 		LogoStorageKey: r.LogoStorageKey, LogoUrl: r.LogoUrl, BrandAccent: r.BrandAccent,
+		PayoutMethod: r.PayoutMethod, PayoutMsisdn: r.PayoutMsisdn, PayoutTillNumber: r.PayoutTillNumber,
+		PayoutPaybillNumber: r.PayoutPaybillNumber, PayoutPaybillAccount: r.PayoutPaybillAccount,
+		PayoutBankCode: r.PayoutBankCode, PayoutBankAccountNumber: r.PayoutBankAccountNumber,
+		PayoutBankAccountName: r.PayoutBankAccountName,
 	}
 }
 
@@ -1379,6 +1394,47 @@ func (s *Server) handleAdminGetParcelOrg(c *gin.Context) {
 	})
 }
 
+// handleAdminListManualParcelOrgPayouts — GET /v1/admin/parcels/payouts/manual.
+// The finance-facing worklist dbx.createParcelOrgPayout's own comment
+// promises: a company with BANK configured (no disbursement
+// integration exists yet) or no payout method at all lands here
+// instead of silently going unpaid, same for anything Daraja has kept
+// refusing.
+func (s *Server) handleAdminListManualParcelOrgPayouts(c *gin.Context) {
+	if err := authsvc.RequireCapability(ctxFromGin(c), "parcels.read", nil); err != nil {
+		writeError(c, http.StatusForbidden, "DENIED", "You don't have access to parcels")
+		return
+	}
+	rows, err := dbx.ListAdminManualParcelOrgPayouts(c.Request.Context(), s.Pool)
+	if err != nil {
+		writeError(c, http.StatusInternalServerError, "LIST_FAILED", "Could not load manual payouts")
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"payouts": rows})
+}
+
+type markParcelOrgPayoutPaidRequest struct {
+	Note string `json:"note"`
+}
+
+// handleAdminMarkParcelOrgPayoutPaid — POST
+// /v1/admin/parcels/payouts/:id/mark-paid. Finance confirming they sent
+// a bank transfer (or any other out-of-band payment) themselves — see
+// dbx.MarkParcelOrgPayoutPaidManually for the ledger entry this posts.
+func (s *Server) handleAdminMarkParcelOrgPayoutPaid(c *gin.Context) {
+	if err := authsvc.RequireCapability(ctxFromGin(c), "parcels.edit", nil); err != nil {
+		writeError(c, http.StatusForbidden, "DENIED", "You can't edit parcel settings")
+		return
+	}
+	var req markParcelOrgPayoutPaidRequest
+	_ = c.ShouldBindJSON(&req) // note is optional
+	if err := dbx.MarkParcelOrgPayoutPaidManually(c.Request.Context(), s.Pool, c.Param("id"), strings.TrimSpace(req.Note)); err != nil {
+		writeParcelError(c, err)
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"paid": true})
+}
+
 // recordParcelOrgAudit writes one best-effort audit row against a
 // company — the feed handleAdminGetParcelOrg later reads back as
 // activity. Best-effort for the same reason every other RecordAudit
@@ -1421,6 +1477,9 @@ func (s *Server) handleAdminCreateParcelOrg(c *gin.Context) {
 	if !optionalMsisdn(c, &req.SettlementPhone, "The settlement M-Pesa number") {
 		return
 	}
+	if !optionalMsisdn(c, &req.PayoutMsisdn, "The payout M-Pesa number") {
+		return
+	}
 	var staffID *string
 	if ctx.ActorID != "" {
 		staffID = &ctx.ActorID
@@ -1444,6 +1503,9 @@ func (s *Server) handleAdminUpdateParcelOrg(c *gin.Context) {
 	var req parcelOrgRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
 		writeError(c, http.StatusBadRequest, "INVALID_REQUEST", err.Error())
+		return
+	}
+	if !optionalMsisdn(c, &req.PayoutMsisdn, "The payout M-Pesa number") {
 		return
 	}
 	if err := dbx.UpdateParcelOrg(c.Request.Context(), s.Pool, c.Param("id"), req.toInput()); err != nil {

@@ -126,10 +126,24 @@ func (s *Server) handleMpesaStkCallback(c *gin.Context) {
 	// still isn't a courier's hand on the parcel; see
 	// handleScanParcelHandoff's own comment on why that's the only
 	// event that ever texts a sender or receiver.
-	if _, _, err := dbx.ConfirmParcelPaymentByCheckoutID(ctx, s.Pool, cb.CheckoutRequestID, cb.MpesaReceiptCode, s.Cfg.LoyaltyEarnEnabled); err == nil {
+	if _, parcelID, _, err := dbx.ConfirmParcelPaymentByCheckoutID(ctx, s.Pool, cb.CheckoutRequestID, cb.MpesaReceiptCode, s.Cfg.LoyaltyEarnEnabled); err == nil {
+		s.dispatchParcelOrgPayoutForParcel(parcelID)
 		c.JSON(http.StatusOK, gin.H{"ok": true})
 		return
 	} else if err != dbx.ErrParcelPaymentNotFound {
+		writeError(c, http.StatusInternalServerError, "CONFIRM_FAILED", "Could not confirm payment")
+		return
+	}
+
+	// Counter settlement paid by M-Pesa (handleSettleCounterParcelStk) —
+	// a different flow from the booking-STK confirm above, disambiguated
+	// by paymentMethod so the two can share paymentCheckoutRequestId
+	// without either one swallowing the other's callback.
+	if parcelID, _, err := dbx.ConfirmCounterSettlementByCheckoutID(ctx, s.Pool, cb.CheckoutRequestID, cb.MpesaReceiptCode); err == nil {
+		s.dispatchParcelOrgPayoutForParcel(parcelID)
+		c.JSON(http.StatusOK, gin.H{"ok": true})
+		return
+	} else if err != dbx.ErrCounterSettlementNotFound {
 		writeError(c, http.StatusInternalServerError, "CONFIRM_FAILED", "Could not confirm payment")
 		return
 	}
@@ -179,6 +193,61 @@ func (s *Server) handleMpesaStkCallback(c *gin.Context) {
 	// configured, else ack. Never an error here either way.
 	if s.Cfg.TsCoreWebhookURL != "" && len(raw) > 0 {
 		forwardToTsWebhook(s.Cfg.TsCoreWebhookURL, raw)
+	}
+	c.JSON(http.StatusOK, gin.H{"ok": true})
+}
+
+// handleMpesaB2CResultCallback / handleMpesaB2BResultCallback are the
+// result side of dispatchParcelOrgPayout's B2C/B2B requests — Daraja's
+// own ResultURL for each. Same token-auth and always-200 discipline as
+// handleMpesaStkCallback: a forged POST gets a 404 (no Safaricom retry
+// to suppress), a genuine one is acknowledged either way so Safaricom
+// never retries an already-handled result.
+func (s *Server) handleMpesaB2CResultCallback(c *gin.Context) {
+	s.handleMpesaPayoutResultCallback(c)
+}
+
+func (s *Server) handleMpesaB2BResultCallback(c *gin.Context) {
+	s.handleMpesaPayoutResultCallback(c)
+}
+
+// handleMpesaPayoutResultCallback is shared by both routes above —
+// Daraja's B2C and B2B result payloads are structurally identical (see
+// payments.ParseB2CResultCallback's own comment), so there is nothing
+// method-specific left to branch on once the body is parsed.
+func (s *Server) handleMpesaPayoutResultCallback(c *gin.Context) {
+	if !s.callbackTokenOK(c.Param("token")) {
+		log.Printf("core-go: rejected mpesa payout result callback with bad/missing token from %s", c.ClientIP())
+		c.JSON(http.StatusNotFound, gin.H{"error": "not found"})
+		return
+	}
+
+	raw, err := c.GetRawData()
+	if err != nil {
+		c.JSON(http.StatusOK, gin.H{"ok": true})
+		return
+	}
+	var body map[string]interface{}
+	if err := json.Unmarshal(raw, &body); err != nil {
+		c.JSON(http.StatusOK, gin.H{"ok": true})
+		return
+	}
+
+	cb := payments.ParseB2CResultCallback(body)
+	if cb == nil {
+		c.JSON(http.StatusOK, gin.H{"ok": true})
+		return
+	}
+
+	ctx := c.Request.Context()
+	if cb.Succeeded {
+		if err := dbx.ConfirmParcelOrgPayoutByConversationID(ctx, s.Pool, cb.ConversationID, cb.MpesaTransactionID); err != nil && err != dbx.ErrParcelOrgPayoutNotFound {
+			log.Printf("core-go: could not confirm parcel org payout %s: %v", cb.ConversationID, err)
+		}
+	} else {
+		if err := dbx.FailParcelOrgPayoutByConversationID(ctx, s.Pool, cb.ConversationID, cb.ResultDescription); err != nil && err != dbx.ErrParcelOrgPayoutNotFound {
+			log.Printf("core-go: could not fail parcel org payout %s: %v", cb.ConversationID, err)
+		}
 	}
 	c.JSON(http.StatusOK, gin.H{"ok": true})
 }

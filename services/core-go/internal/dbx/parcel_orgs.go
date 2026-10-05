@@ -64,13 +64,29 @@ type ParcelOrg struct {
 	LogoStorageKey *string `json:"logoStorageKey"`
 	LogoUrl        *string `json:"logoUrl"`
 	BrandAccent    *string `json:"brandAccent"`
+
+	// Where this company's share of a parcel is actually paid,
+	// automatically, at settlement — see schema.prisma's own comment on
+	// ParcelOrg.payoutMethod for why this is read live (unlike
+	// SettlementPhone above) and snapshotted onto each ParcelOrgPayout.
+	PayoutMethod            *string `json:"payoutMethod"`
+	PayoutMsisdn            *string `json:"payoutMsisdn"`
+	PayoutTillNumber        *string `json:"payoutTillNumber"`
+	PayoutPaybillNumber     *string `json:"payoutPaybillNumber"`
+	PayoutPaybillAccount    *string `json:"payoutPaybillAccount"`
+	PayoutBankCode          *string `json:"payoutBankCode"`
+	PayoutBankAccountNumber *string `json:"payoutBankAccountNumber"`
+	PayoutBankAccountName   *string `json:"payoutBankAccountName"`
 }
 
 const parcelOrgColumns = `
 	id, "enterpriseId", name, slug, status, "contactPerson", "contactPhone",
 	"contactEmail", "settlementPhone", "commissionPct"::text,
 	"acceptsWalkIn", lat::text, lng::text, "locationHint", "openingHours",
-	"logoStorageKey", "logoUrl", "brandAccent"`
+	"logoStorageKey", "logoUrl", "brandAccent",
+	"payoutMethod"::text, "payoutMsisdn", "payoutTillNumber",
+	"payoutPaybillNumber", "payoutPaybillAccount",
+	"payoutBankCode", "payoutBankAccountNumber", "payoutBankAccountName"`
 
 func scanParcelOrg(row pgx.Row) (*ParcelOrg, error) {
 	var o ParcelOrg
@@ -79,7 +95,10 @@ func scanParcelOrg(row pgx.Row) (*ParcelOrg, error) {
 	if err := row.Scan(&o.ID, &o.EnterpriseID, &o.Name, &o.Slug, &o.Status,
 		&o.ContactPerson, &o.ContactPhone, &o.ContactEmail, &o.SettlementPhone,
 		&commissionText, &o.AcceptsWalkIn, &latText, &lngText, &o.LocationHint, &o.OpeningHours,
-		&o.LogoStorageKey, &o.LogoUrl, &o.BrandAccent); err != nil {
+		&o.LogoStorageKey, &o.LogoUrl, &o.BrandAccent,
+		&o.PayoutMethod, &o.PayoutMsisdn, &o.PayoutTillNumber,
+		&o.PayoutPaybillNumber, &o.PayoutPaybillAccount,
+		&o.PayoutBankCode, &o.PayoutBankAccountNumber, &o.PayoutBankAccountName); err != nil {
 		return nil, err
 	}
 	var err error
@@ -127,6 +146,15 @@ type ParcelOrgInput struct {
 	LogoStorageKey  *string
 	LogoUrl         *string
 	BrandAccent     *string
+
+	PayoutMethod            *string
+	PayoutMsisdn            *string
+	PayoutTillNumber        *string
+	PayoutPaybillNumber     *string
+	PayoutPaybillAccount    *string
+	PayoutBankCode          *string
+	PayoutBankAccountNumber *string
+	PayoutBankAccountName   *string
 }
 
 func (in ParcelOrgInput) validate() error {
@@ -154,6 +182,33 @@ func (in ParcelOrgInput) validate() error {
 		matched, _ := regexp.MatchString(`^#(?:[0-9a-fA-F]{3}|[0-9a-fA-F]{6})$`, trimmed)
 		if !matched {
 			return &ParcelError{"BAD_INPUT", "Brand accent must be a hex colour like #1a73e8"}
+		}
+	}
+	// A payout method with no destination filled in is a configuration
+	// that would create ParcelOrgPayout rows nobody can ever send money
+	// to — same "don't half-fill a real destination" rule AcceptsWalkIn's
+	// locationHint check above already follows, just for a field real
+	// money moves against instead of a label.
+	if in.PayoutMethod != nil {
+		switch *in.PayoutMethod {
+		case "PHONE":
+			if in.PayoutMsisdn == nil || strings.TrimSpace(*in.PayoutMsisdn) == "" {
+				return &ParcelError{"BAD_INPUT", "Give the M-Pesa number payouts should go to"}
+			}
+		case "TILL":
+			if in.PayoutTillNumber == nil || strings.TrimSpace(*in.PayoutTillNumber) == "" {
+				return &ParcelError{"BAD_INPUT", "Give the till number payouts should go to"}
+			}
+		case "PAYBILL":
+			if in.PayoutPaybillNumber == nil || strings.TrimSpace(*in.PayoutPaybillNumber) == "" {
+				return &ParcelError{"BAD_INPUT", "Give the paybill number payouts should go to"}
+			}
+		case "BANK":
+			if in.PayoutBankAccountNumber == nil || strings.TrimSpace(*in.PayoutBankAccountNumber) == "" {
+				return &ParcelError{"BAD_INPUT", "Give the bank account number payouts should go to"}
+			}
+		default:
+			return &ParcelError{"BAD_INPUT", "That isn't a payout method Esoqo supports"}
 		}
 	}
 	return nil
@@ -208,6 +263,9 @@ const adminParcelOrgColumns = `
 	o."contactEmail", o."settlementPhone", o."commissionPct"::text,
 	o."acceptsWalkIn", o.lat::text, o.lng::text, o."locationHint", o."openingHours",
 	o."logoStorageKey", o."logoUrl", o."brandAccent",
+	o."payoutMethod"::text, o."payoutMsisdn", o."payoutTillNumber",
+	o."payoutPaybillNumber", o."payoutPaybillAccount",
+	o."payoutBankCode", o."payoutBankAccountNumber", o."payoutBankAccountName",
 	COALESCE(org."knownAs", org."officialName", pr."knownAs", pr."officialName", e."workRaw", o.name),
 	e."partyId"::text,
 	(SELECT count(*) FROM parcel_org_staff st WHERE st."orgId" = o.id),
@@ -239,6 +297,9 @@ func scanAdminParcelOrg(row pgx.Row) (*AdminParcelOrg, error) {
 		&o.ContactPerson, &o.ContactPhone, &o.ContactEmail, &o.SettlementPhone,
 		&commissionText, &o.AcceptsWalkIn, &latText, &lngText, &o.LocationHint, &o.OpeningHours,
 		&o.LogoStorageKey, &o.LogoUrl, &o.BrandAccent,
+		&o.PayoutMethod, &o.PayoutMsisdn, &o.PayoutTillNumber,
+		&o.PayoutPaybillNumber, &o.PayoutPaybillAccount,
+		&o.PayoutBankCode, &o.PayoutBankAccountNumber, &o.PayoutBankAccountName,
 		&o.EnterpriseName, &o.OwnerPartyID,
 		&o.StaffCount, &o.ActiveStaff, &o.ParcelCount, &o.DeliveredCount, &o.EarningsKes,
 		&o.PrimaryContactName, &o.PrimaryContactPhone); err != nil {
@@ -388,13 +449,20 @@ func CreateParcelOrg(ctx context.Context, pool *pgxpool.Pool, in ParcelOrgInput,
 			"contactEmail", "settlementPhone", "commissionPct",
 			"acceptsWalkIn", lat, lng, "locationHint", "openingHours",
 			"logoStorageKey", "logoUrl", "brandAccent",
+			"payoutMethod", "payoutMsisdn", "payoutTillNumber",
+			"payoutPaybillNumber", "payoutPaybillAccount",
+			"payoutBankCode", "payoutBankAccountNumber", "payoutBankAccountName",
 			"createdAt", "updatedAt", "createdByStaffId"
-		) VALUES (gen_random_uuid(), $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, now(), now(), $18)
+		) VALUES (gen_random_uuid(), $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17,
+		          $18::"ParcelOrgPayoutMethod", $19, $20, $21, $22, $23, $24, $25, now(), now(), $26)
 		RETURNING id`,
 		in.EnterpriseID, in.Name, in.Slug, in.Status, in.ContactPerson, in.ContactPhone,
 		in.ContactEmail, in.SettlementPhone, in.CommissionPct,
 		in.AcceptsWalkIn, in.Lat, in.Lng, in.LocationHint, in.OpeningHours,
-		in.LogoStorageKey, in.LogoUrl, in.BrandAccent, staffID).Scan(&id)
+		in.LogoStorageKey, in.LogoUrl, in.BrandAccent,
+		in.PayoutMethod, in.PayoutMsisdn, in.PayoutTillNumber,
+		in.PayoutPaybillNumber, in.PayoutPaybillAccount,
+		in.PayoutBankCode, in.PayoutBankAccountNumber, in.PayoutBankAccountName, staffID).Scan(&id)
 	if isUniqueViolation(err) {
 		return "", &ParcelError{"BAD_INPUT", "That slug is already taken"}
 	}
@@ -411,12 +479,18 @@ func UpdateParcelOrg(ctx context.Context, pool *pgxpool.Pool, id string, in Parc
 			"contactEmail" = $6, "settlementPhone" = $7, "commissionPct" = $8,
 			"acceptsWalkIn" = $9, lat = $10, lng = $11, "locationHint" = $12, "openingHours" = $13,
 			"logoStorageKey" = $14, "logoUrl" = $15, "brandAccent" = $16,
+			"payoutMethod" = $17::"ParcelOrgPayoutMethod", "payoutMsisdn" = $18, "payoutTillNumber" = $19,
+			"payoutPaybillNumber" = $20, "payoutPaybillAccount" = $21,
+			"payoutBankCode" = $22, "payoutBankAccountNumber" = $23, "payoutBankAccountName" = $24,
 			"updatedAt" = now()
-		WHERE id = $17`,
+		WHERE id = $25`,
 		in.Name, in.Slug, in.Status, in.ContactPerson, in.ContactPhone,
 		in.ContactEmail, in.SettlementPhone, in.CommissionPct,
 		in.AcceptsWalkIn, in.Lat, in.Lng, in.LocationHint, in.OpeningHours,
-		in.LogoStorageKey, in.LogoUrl, in.BrandAccent, id)
+		in.LogoStorageKey, in.LogoUrl, in.BrandAccent,
+		in.PayoutMethod, in.PayoutMsisdn, in.PayoutTillNumber,
+		in.PayoutPaybillNumber, in.PayoutPaybillAccount,
+		in.PayoutBankCode, in.PayoutBankAccountNumber, in.PayoutBankAccountName, id)
 	if isUniqueViolation(err) {
 		return &ParcelError{"BAD_INPUT", "That slug is already taken"}
 	}
