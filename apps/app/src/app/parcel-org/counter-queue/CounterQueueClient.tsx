@@ -1,8 +1,8 @@
 'use client';
 
 import { useEffect, useRef, useState } from 'react';
-import { Icon } from '@esoqo/ui';
 import { claimCounterTicket, listCounterTicketQueue, type CounterTicketRow } from './actions';
+import { ServeTicketPanel } from './ServeTicketPanel';
 
 /** Green under 2 minutes, amber under 5, red past that — a queue with
  *  one ticket waiting 8 minutes should look different at a glance from
@@ -93,25 +93,8 @@ export function CounterQueueClient({ initial }: { initial: CounterTicketRow[] })
       </div>
 
       {claimed && (
-        <div className="chain ok" style={{ marginBottom: 12 }}>
-          <Icon name="check-circle" size={16} />
-          <span>
-            Now serving <strong className="mono">{claimed.serviceTicketNumber}</strong> — {claimed.msisdn}.
-            {claimed.draftDetails ? ' They left some details below to start from.' : ' Start the booking below.'}
-          </span>
-          <button className="btn btn-o btn-sm" style={{ marginLeft: 'auto' }} onClick={() => setClaimed(null)}>
-            <Icon name="close" size={14} />
-          </button>
-        </div>
+        <ServeTicketPanel ticket={claimed} onDone={() => setClaimed(null)} />
       )}
-      {claimed?.draftDetails ? (
-        <pre className="sub" style={{
-          margin: '0 0 14px', padding: 10, background: 'var(--paper, #f7f7f5)',
-          borderRadius: 8, fontSize: '.78rem', overflowX: 'auto',
-        }}>
-          {JSON.stringify(claimed.draftDetails, null, 2)}
-        </pre>
-      ) : null}
 
       {error && (
         <p className="sub" style={{ color: 'var(--red, #b42318)', margin: '0 0 10px', fontSize: '.85rem' }}>{error}</p>
