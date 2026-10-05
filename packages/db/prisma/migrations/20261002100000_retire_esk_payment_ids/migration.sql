@@ -50,7 +50,7 @@
 -- trip on.
 
 -- 1. Report what is about to change.
-SELECT p.id AS "partyId",
+SELECT pa.id AS "partyId",
        pi.code AS "oldCode",
        pa.kind,
        COALESCE(pe."officialName", org."officialName") AS "partyName"
