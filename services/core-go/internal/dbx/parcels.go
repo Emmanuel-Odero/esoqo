@@ -2756,6 +2756,55 @@ func GetParcelStatus(ctx context.Context, pool *pgxpool.Pool, code string) (*Par
 	return &stock, nil
 }
 
+// ParcelReceipt is what the sender's "Receipt for this parcel" SMS link
+// resolves to — unlike ParcelStatusView it carries payment facts
+// (price, how it was paid, the M-Pesa code if any), which is why it is
+// never returned for a parcel that hasn't actually been paid for yet:
+// GetParcelReceipt matches that, not a separate PII reduction step.
+type ParcelReceipt struct {
+	Code             string     `json:"code"`
+	Status           string     `json:"status"`
+	OrgName          *string    `json:"orgName"`
+	OrgLogoUrl       *string    `json:"orgLogoUrl"`
+	OriginLabel      string     `json:"originLabel"`
+	DestinationLabel string     `json:"destinationLabel"`
+	SenderName       string     `json:"senderName"`
+	ReceiverName     string     `json:"receiverName"`
+	ParcelType       string     `json:"parcelType"`
+	PriceKes         *string    `json:"priceKes"`
+	PaymentMethod    *string    `json:"paymentMethod"`
+	MpesaReceiptCode *string    `json:"mpesaReceiptCode"`
+	PaidAt           *time.Time `json:"paidAt"`
+	CreatedAt        time.Time  `json:"createdAt"`
+}
+
+// GetParcelReceipt is GetParcelStatus's payment-facing sibling — same
+// bearer-credential convention (code or serviceTicketNumber), but
+// answers nil (NOT_FOUND to the caller) for anything that hasn't been
+// paid for, rather than reducing a PII-bearing view after the fact: a
+// parcel with no paidAt has no receipt to show, full stop.
+func GetParcelReceipt(ctx context.Context, pool *pgxpool.Pool, code string) (*ParcelReceipt, error) {
+	var r ParcelReceipt
+	err := pool.QueryRow(ctx, `
+		SELECT p.code, p.status::text, p."originLabel", p."destinationLabel", p."parcelType"::text,
+		       p."senderName", p."receiverName", p."priceKes"::text, p."paymentMethod",
+		       p."mpesaReceiptCode", p."paidAt", p."createdAt",
+		       o.name, o."logoUrl"
+		FROM parcel p
+		LEFT JOIN parcel_org o ON o.id = p."parcelOrgId"
+		WHERE (p.code = $1 OR p."serviceTicketNumber" = $1) AND p."paidAt" IS NOT NULL`, code).
+		Scan(&r.Code, &r.Status, &r.OriginLabel, &r.DestinationLabel, &r.ParcelType,
+			&r.SenderName, &r.ReceiverName, &r.PriceKes, &r.PaymentMethod,
+			&r.MpesaReceiptCode, &r.PaidAt, &r.CreatedAt, &r.OrgName, &r.OrgLogoUrl)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, err
+	}
+	return &r, nil
+}
+
 // ReduceParcelStatusForUnintaken strips everything a tracking response
 // must not carry while the parcel has not been physically received.
 //

@@ -524,6 +524,13 @@ func (s *Server) Router() *gin.Engine {
 			// serviceTicketNumber as well as the tracking code, is
 			// unauthenticated, and answered one code per request.
 			s.rateLimit("track:parcel", 60, time.Hour), s.handleGetParcelStatus)
+		// Public and code-gated like /status above — but see
+		// dbx.GetParcelReceipt's own comment on why it's rate-limited
+		// separately rather than sharing track:parcel's budget: a receipt
+		// carries payment facts /status never did, which makes grinding
+		// it a different, more valuable attack than grinding tracking.
+		v1.GET("/parcels/:code/receipt",
+			s.rateLimit("track:parcelreceipt", 60, time.Hour), s.handleGetParcelReceipt)
 		// Public and code-gated like /status above — the live position
 		// is deliberately anonymous (see dbx.CourierPosition).
 		v1.GET("/parcels/:code/position",

@@ -424,6 +424,52 @@ export async function actionCheckParcelStatus(
   return { kind: 'found', parcel: json };
 }
 
+export interface ParcelReceiptView {
+  code: string;
+  status: string;
+  orgName: string | null;
+  orgLogoUrl: string | null;
+  originLabel: string;
+  destinationLabel: string;
+  senderName: string;
+  receiverName: string;
+  parcelType: string;
+  priceKes: string | null;
+  paymentMethod: string | null;
+  mpesaReceiptCode: string | null;
+  paidAt: string | null;
+  createdAt: string;
+}
+
+export type ParcelReceiptResult =
+  | { kind: 'found'; receipt: ParcelReceiptView }
+  | { kind: 'not-found' }
+  | { kind: 'error'; error: string };
+
+/** Guest-safe on the same bearer-credential convention
+ *  actionCheckParcelStatus follows — see dbx.GetParcelReceipt's own
+ *  comment on why an unpaid parcel comes back not-found rather than a
+ *  reduced view. */
+export async function actionGetParcelReceipt(code: string): Promise<ParcelReceiptResult> {
+  let res: Response;
+  try {
+    res = await fetch(`${CORE_GO_URL}/v1/parcels/${encodeURIComponent(code)}/receipt`, {
+      headers: { 'Content-Type': 'application/json' },
+      cache: 'no-store',
+      signal: AbortSignal.timeout(15000),
+    });
+  } catch {
+    return { kind: 'error', error: UNAVAILABLE };
+  }
+  const json = (await res.json().catch(() => null)) as ParcelReceiptView | null;
+  if (!res.ok) {
+    if (res.status === 404) return { kind: 'not-found' };
+    return { kind: 'error', error: goMessage(json as GoErrorBody | null, UNAVAILABLE) };
+  }
+  if (!json) return { kind: 'error', error: UNAVAILABLE };
+  return { kind: 'found', receipt: json };
+}
+
 // ── Claiming a parcel ──
 //
 // The tracking view above is deliberately PII-free: the code is printed

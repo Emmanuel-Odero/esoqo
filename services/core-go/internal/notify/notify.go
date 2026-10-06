@@ -94,6 +94,18 @@ func TrackingURL(code string) string {
 	return trackingBaseURL + "/t/" + code
 }
 
+// ReceiptURL — TrackingURL's payment-facing sibling, same base URL and
+// same "" when unconfigured. A separate path (/r/, not /t/) because the
+// two pages answer to different handlers and different data (see
+// dbx.GetParcelReceipt): a receipt only exists once the parcel's been
+// paid for, tracking doesn't require that at all.
+func ReceiptURL(code string) string {
+	if trackingBaseURL == "" {
+		return ""
+	}
+	return trackingBaseURL + "/r/" + code
+}
+
 // withTrack appends a tracking link to [msg] — but only if the result
 // still fits in one SMS segment.
 //

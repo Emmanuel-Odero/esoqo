@@ -729,6 +729,23 @@ func (s *Server) handleGetParcelStatus(c *gin.Context) {
 	c.JSON(http.StatusOK, dbx.ReduceParcelStatusForUnintaken(status))
 }
 
+// handleGetParcelReceipt — GET /v1/parcels/:code/receipt. Guest-safe on
+// the same bearer-credential convention handleGetParcelStatus follows —
+// but see dbx.GetParcelReceipt's own comment for why an unpaid parcel
+// answers 404 here rather than a reduced view.
+func (s *Server) handleGetParcelReceipt(c *gin.Context) {
+	receipt, err := dbx.GetParcelReceipt(c.Request.Context(), s.Pool, c.Param("code"))
+	if err != nil {
+		writeError(c, http.StatusInternalServerError, "GET_FAILED", "Could not load that receipt")
+		return
+	}
+	if receipt == nil {
+		writeError(c, http.StatusNotFound, "NOT_FOUND", "That parcel has no receipt yet")
+		return
+	}
+	c.JSON(http.StatusOK, receipt)
+}
+
 // handleGetPartyParcelActivity — GET /v1/me/parcel-activity. One
 // endpoint behind the generic "any signed-in party" gate, not two
 // session-specific ones — a customer, an admin staffer and a parcel-org
