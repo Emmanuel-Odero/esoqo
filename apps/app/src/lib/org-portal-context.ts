@@ -97,77 +97,6 @@ export function getAllOrgPortalHandlers(): OrgPortalHandler[] {
 }
 
 /**
- * Portal handler for courier organizations.
- * Maps the legacy /parcel-org routes to the new /org/courier/[id] structure.
- */
-export const courierPortalHandler: OrgPortalHandler = {
-  orgType: "courier",
-  getSubtitle: () => "Courier company",
-  getHomeLink: (orgId: string) => `/org/courier/${orgId}`,
-  getSignOutAction: () => "/orgs/signout",
-  stylePrefix: "porg",
-  getNavItems: (args: {
-    orgId: string;
-    capabilities: string[];
-    metadata?: Record<string, any>;
-  }) => {
-    const { orgId, capabilities, metadata } = args;
-
-    const canManagePricing = capabilities.includes("parcelorg.write");
-    const canDispatch = capabilities.includes("parcelorg.dispatch");
-    const canSeeMoney = capabilities.includes("parcelorg.earnings");
-    const canDesk = canDispatch || capabilities.includes("parcelorg.carry");
-    const canScan =
-      canDesk ||
-      capabilities.includes("parcelorg.intake") ||
-      capabilities.includes("parcelorg.arrival");
-    const canSell = canDispatch || canManagePricing;
-
-    const items: OrgPortalNavItem[] = [
-      {
-        href: `/org/courier/${orgId}`,
-        label: "Parcels",
-        icon: "box",
-        show: true,
-      },
-      {
-        href: `/org/courier/${orgId}/scan`,
-        label: "Scan",
-        icon: "qr",
-        badge: metadata?.awaitingDropoff || undefined,
-        show: canScan,
-      },
-      {
-        href: `/org/courier/${orgId}/dispatch`,
-        label: "Dispatch",
-        icon: "send",
-        show: canDispatch,
-      },
-      {
-        href: `/org/courier/${orgId}/counter`,
-        label: "Counter",
-        icon: "plus",
-        show: canSell,
-      },
-      {
-        href: `/org/courier/${orgId}/money`,
-        label: "Money",
-        icon: "coins",
-        show: canSeeMoney,
-      },
-      {
-        href: `/org/courier/${orgId}/settings`,
-        label: "Settings",
-        icon: "grid",
-        show: true,
-      },
-    ];
-
-    return items;
-  },
-};
-
-/**
  * Portal handler for ticket/transport organizations.
  * Maps the legacy /org/[orgId] routes to the new /org/ticket/[id] structure.
  */
@@ -441,7 +370,6 @@ export const toutPortalHandler: OrgPortalHandler = {
  * Initialize the portal handler registry with all built-in handlers.
  */
 export function initializePortalHandlers(): void {
-  registerOrgPortalHandler(courierPortalHandler);
   registerOrgPortalHandler(ticketPortalHandler);
   registerOrgPortalHandler(hotelPortalHandler);
   registerOrgPortalHandler(eateryPortalHandler);

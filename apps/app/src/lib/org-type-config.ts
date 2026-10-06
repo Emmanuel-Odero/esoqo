@@ -105,7 +105,12 @@ export const ORG_TYPE_CONFIG: Record<OrgTypeId, OrgTypeConfig> = {
     order: 1,
     entryType: 'session',
     sessionProfile: 'shift',
-    portalRoute: '/org/courier',
+    // The real courier portal (dispatch board, live tracking, counter,
+    // scan, settings tabs) lives at /parcel-org. An /org/courier/[id]
+    // scaffold briefly existed as a generic-portal migration attempt,
+    // but never got the actual features ported over and has been
+    // removed — this is the one courier destination, not a stopgap.
+    portalRoute: '/parcel-org',
     requiresApproval: true,
     supportsTeam: true,
     supportsWalkIn: true,
