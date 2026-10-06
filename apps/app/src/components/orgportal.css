@@ -1,0 +1,86 @@
+/* ══════════════════════════════════════════════════════════════
+   Generic org portal shell — OrgPortalShell / OrgPortalHeader /
+   OrgPortalNav, shared by every org type's portal (/org/courier,
+   /org/hotel, /org/[type]).
+
+   These components were built referencing a vocabulary
+   (.orgportal-header, .orgportal-nav, .orgportal-nav-mobile, …) that
+   nothing ever defined, so every portal rendered as bare, unstyled
+   HTML with both the desktop and mobile nav (and both "Sign out"
+   renders) stacked and visible at once — there was no stylesheet to
+   hide either one. Same shape as /parcel-org/parcel-org.css's header
+   (sticky bar: brand, switcher, nav, sign out), reusing this app's
+   token set rather than inventing a new one.
+   ══════════════════════════════════════════════════════════════ */
+
+.orgportal { min-height: 100dvh; background: linear-gradient(180deg, #F8FBFC 0, var(--paper) 300px) }
+
+.orgportal-header {
+  position: sticky; top: 0; z-index: 60;
+  background: #fff; border-bottom: 1px solid var(--line);
+}
+.orgportal-header-in {
+  max-width: 1180px; margin: 0 auto; min-height: 64px;
+  padding: calc(6px + var(--safe-t)) max(20px, var(--safe-r)) 6px max(20px, var(--safe-l));
+  display: flex; align-items: center; gap: 8px; flex-wrap: wrap;
+}
+.orgportal-brand { display: inline-flex; align-items: center; min-height: 44px; flex: none }
+.orgportal-header-in .wsw { max-width: 250px }
+
+/* Desktop nav: a single row, inline with the switcher and sign-out. */
+.orgportal-nav {
+  display: flex; align-items: center; gap: 2px;
+  flex: 1 1 auto; min-width: 0; flex-wrap: nowrap;
+  overflow-x: auto; scrollbar-width: none;
+}
+.orgportal-nav::-webkit-scrollbar { display: none }
+.orgportal-nav-item {
+  display: inline-flex; align-items: center; gap: 6px; white-space: nowrap;
+  padding: 0 12px; min-height: 40px; border-radius: var(--r-md, 10px);
+  color: var(--tx-2); font-size: .88rem; font-weight: 600;
+}
+.orgportal-nav-item:hover { background: var(--paper); color: var(--navy) }
+.orgportal-nav-item[aria-current="page"] { color: var(--navy); background: var(--green-t); font-weight: 700 }
+.orgportal-nav-item:focus-visible { outline: 2px solid var(--green); outline-offset: -2px }
+.orgportal-nav-badge {
+  display: inline-flex; align-items: center; justify-content: center;
+  min-width: 18px; height: 18px; padding: 0 5px; border-radius: 999px;
+  background: var(--green); color: #fff; font-size: .72rem; font-weight: 700;
+}
+
+/* Sign out — outside the nav flow, trailing, same as the rest of the
+   app's operator consoles (.btn.btn-o.btn-sm). */
+.orgportal-signout { margin-left: auto }
+
+.orgportal-wrap {
+  max-width: 1180px; margin: 0 auto;
+  padding: 24px max(20px, var(--safe-r)) 60px max(20px, var(--safe-l));
+}
+
+/* Mobile nav: hidden on desktop. Shown, and the desktop row hidden
+   instead, under the same breakpoint the rest of the app's shells
+   switch at (see /me/me.css's .appbar-div toggle, /parcel-org's
+   .porgnav narrowing). */
+.orgportal-nav-mobile { display: none }
+
+@media (max-width: 720px) {
+  .orgportal-nav { display: none }
+  .orgportal-nav-mobile {
+    display: flex; align-items: center; gap: 2px; width: 100%;
+    overflow-x: auto; scrollbar-width: none; order: 10;
+    padding: 0 max(20px, var(--safe-r)) 8px max(20px, var(--safe-l));
+  }
+  .orgportal-nav-mobile::-webkit-scrollbar { display: none }
+  .orgportal-nav-item-mobile {
+    display: inline-flex; align-items: center; gap: 6px; white-space: nowrap;
+    padding: 0 12px; min-height: 36px; border-radius: var(--r-md, 10px);
+    color: var(--tx-2); font-size: .82rem; font-weight: 600;
+  }
+  .orgportal-nav-item-mobile[aria-current="page"] { color: var(--navy); background: var(--green-t); font-weight: 700 }
+  .orgportal-nav-badge-mobile {
+    display: inline-flex; align-items: center; justify-content: center;
+    min-width: 16px; height: 16px; padding: 0 4px; border-radius: 999px;
+    background: var(--green); color: #fff; font-size: .68rem; font-weight: 700;
+  }
+  .orgportal-wrap { padding: 16px 12px 48px }
+}

@@ -48,7 +48,8 @@ export interface OrgPortalHandler {
   }) => OrgPortalNavItem[];
 
   /**
-   * CSS class prefix for styling (e.g., 'porg' for courier, 'hotel-portal' for hotel)
+   * CSS class prefix for styling — all handlers share "orgportal",
+   * which is what apps/app/src/components/orgportal.css defines.
    */
   stylePrefix: string;
 
@@ -175,7 +176,7 @@ export const ticketPortalHandler: OrgPortalHandler = {
   getSubtitle: () => "Event/Transport organiser",
   getHomeLink: (orgId: string) => `/org/ticket/${orgId}`,
   getSignOutAction: () => "/orgs/signout",
-  stylePrefix: "org-portal",
+  stylePrefix: "orgportal",
   getNavItems: (args: {
     orgId: string;
     capabilities: string[];
@@ -248,7 +249,7 @@ export const hotelPortalHandler: OrgPortalHandler = {
   getSubtitle: () => "Hotel",
   getHomeLink: (orgId: string) => `/org/hotel/${orgId}`,
   getSignOutAction: () => "/orgs/signout",
-  stylePrefix: "hotel-portal",
+  stylePrefix: "orgportal",
   getNavItems: (args: { orgId: string; capabilities: string[] }) => {
     const { orgId, capabilities } = args;
 
@@ -297,7 +298,7 @@ export const eateryPortalHandler: OrgPortalHandler = {
   getSubtitle: () => "Restaurant/Eatery",
   getHomeLink: (orgId: string) => `/org/eatery/${orgId}`,
   getSignOutAction: () => "/orgs/signout",
-  stylePrefix: "eatery-portal",
+  stylePrefix: "orgportal",
   getNavItems: (args: { orgId: string; capabilities: string[] }) => {
     const { orgId, capabilities } = args;
 
@@ -346,7 +347,7 @@ export const chamaPortalHandler: OrgPortalHandler = {
   getSubtitle: () => "Chama/Savings Group",
   getHomeLink: (orgId: string) => `/org/chama/${orgId}`,
   getSignOutAction: () => "/orgs/signout",
-  stylePrefix: "chama-portal",
+  stylePrefix: "orgportal",
   getNavItems: (args: { orgId: string; capabilities: string[] }) => {
     const { orgId, capabilities } = args;
 
@@ -395,7 +396,7 @@ export const toutPortalHandler: OrgPortalHandler = {
   getSubtitle: () => "Tout/Broker",
   getHomeLink: (orgId: string) => `/org/tout/${orgId}`,
   getSignOutAction: () => "/orgs/signout",
-  stylePrefix: "tout-portal",
+  stylePrefix: "orgportal",
   getNavItems: (args: { orgId: string; capabilities: string[] }) => {
     const { orgId, capabilities } = args;
 
