@@ -1,12 +1,8 @@
 import type { Metadata } from 'next';
 import { redirect } from 'next/navigation';
-import {
-  ParcelOrgUnauthorised, getParcelOrgMe, parcelOrgFetch,
-  type OrgParcelRow,
-} from '@/lib/parcel-org-session';
+import { ParcelOrgUnauthorised, getParcelOrgMe } from '@/lib/parcel-org-session';
 import { listOpenRuns } from './actions';
 import { ScannerConsole } from './ScannerConsole';
-import { FrontDeskClient } from '../counter/FrontDeskClient';
 import './scanner.css';
 
 export const dynamic = 'force-dynamic';
@@ -51,20 +47,10 @@ export default async function ParcelOrgScanPage() {
   const canArrival = me.capabilities.includes('parcelorg.arrival');
   if (!canCarry && !canDispatch && !canIntake && !canArrival) redirect('/parcel-org');
 
-  // Both fetched here so the page is useful on first paint — a clerk
-  // who has to wait for a dropdown to fill after scanning has been
-  // given a loading spinner in place of a decision.
-  const [runs, waiting] = await Promise.all([
-    canCarry || canDispatch ? listOpenRuns() : Promise.resolve([]),
-    // The senders who said they'd walk in. This worklist used to be a
-    // tab on Counter, which put "a box is coming to me" on the page
-    // about selling carriage rather than the page about handling boxes.
-    canCarry
-      ? parcelOrgFetch<{ parcels: OrgParcelRow[] | null }>(
-          '/v1/parcel-orgs/me/parcels?status=BOOKED&originMethod=SELF_DROPOFF',
-        ).then((r) => r.parcels ?? []).catch(() => [] as OrgParcelRow[])
-      : Promise.resolve([] as OrgParcelRow[]),
-  ]);
+  // Fetched here so the page is useful on first paint — a clerk who has
+  // to wait for a dropdown to fill after scanning has been given a
+  // loading spinner in place of a decision.
+  const runs = canCarry || canDispatch ? await listOpenRuns() : [];
 
   return (
     <>
@@ -94,26 +80,6 @@ export default async function ParcelOrgScanPage() {
         // capable, which is the behaviour that existed before it.
         custodyCapable={me.custodyCapable !== false}
       />
-      {/* Below the scanner, never above it: the scan box is what this
-          page is for, and a worklist pushing it down the screen would
-          make the common case (a box is already here) wait on the rarer
-          one (a box is still coming). Only drawn when somebody is
-          actually expected. */}
-      {canCarry && waiting.length > 0 && (
-        <section className="scan-waiting">
-          <h2>Expected at the desk</h2>
-          <p className="sub">
-            {waiting.length} sender{waiting.length === 1 ? '' : 's'} said they
-            would drop off. Scanning the code receives it — this list is for
-            finding one that hasn&rsquo;t arrived.
-          </p>
-          <FrontDeskClient
-            waiting={waiting}
-            orgName={me.org.name}
-            orgLogoUrl={me.org.logoUrl ?? undefined}
-          />
-        </section>
-      )}
     </>
   );
 }

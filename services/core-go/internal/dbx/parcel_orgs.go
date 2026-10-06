@@ -1592,6 +1592,13 @@ type ParcelOrgStats struct {
 	// money, but this slice is Esoqo's, and it isn't really "earned"
 	// until the cash itself has actually moved.
 	CounterCashPlatformFeeOwedKes money.Amount `json:"counterCashPlatformFeeOwedKes"`
+	// WaitingTickets — counter tickets still in the queue, nobody claimed
+	// yet. This is what the nav badge shows now: a sender who got a
+	// ticket is not a parcel yet (a clerk hasn't looked at them), so
+	// AwaitingDropoff — a count of BOOKED parcels — can't stand in for
+	// "who's waiting at the desk right now" the way it used to when
+	// self-drop-off senders minted themselves a BOOKED parcel directly.
+	WaitingTickets int `json:"waitingTickets"`
 }
 
 func GetParcelOrgStats(ctx context.Context, pool *pgxpool.Pool, orgID string) (*ParcelOrgStats, error) {
@@ -1613,12 +1620,15 @@ func GetParcelOrgStats(ctx context.Context, pool *pgxpool.Pool, orgID string) (*
 				  AND "mpesaReceiptCode" IS NULL AND "counterCashRemittanceId" IS NULL),
 			(SELECT COALESCE(SUM("platformFeeKes"), 0)::float8 FROM parcel
 				WHERE "parcelOrgId" = $1 AND "paymentMethod" = 'PAY_AT_COUNTER' AND "paidAt" IS NOT NULL
-				  AND "mpesaReceiptCode" IS NULL AND "counterCashRemittanceId" IS NULL)
+				  AND "mpesaReceiptCode" IS NULL AND "counterCashRemittanceId" IS NULL),
+			(SELECT count(*) FROM parcel_counter_ticket
+				WHERE "orgId" = $1 AND status = 'WAITING')
 		FROM parcel
 		WHERE "parcelOrgId" = $1 AND status != 'CANCELLED'`, orgID).
 		Scan(&s.AwaitingPickup, &s.InTransit, &s.FailedDeliveries, &s.AtAgent,
 			&s.DeliveredToday, &s.EarningsTodayKes, &s.EarningsKes, &s.AwaitingDropoff,
-			&s.Overdue, &s.CounterCashOutstandingKes, &s.CounterCashPlatformFeeOwedKes)
+			&s.Overdue, &s.CounterCashOutstandingKes, &s.CounterCashPlatformFeeOwedKes,
+			&s.WaitingTickets)
 	if err != nil {
 		return nil, err
 	}

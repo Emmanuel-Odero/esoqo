@@ -860,16 +860,6 @@ export async function lookupOrgParcelByCode(
   return res.parcels?.find((p) => p.code.toUpperCase() === needle) ?? null;
 }
 
-/** The counter worklist, refetched on the desk's own polling interval:
- *  self-drop-off bookings that walked in online since the page last
- *  rendered. Same query the server page runs for its first paint. */
-export async function listOrgWaitingParcels(): Promise<OrgParcelRow[]> {
-  const res = await parcelOrgFetch<{ parcels: OrgParcelRow[] | null }>(
-    "/v1/parcel-orgs/me/parcels?status=BOOKED&originMethod=SELF_DROPOFF",
-  );
-  return res.parcels ?? [];
-}
-
 export interface OrgCounterPricingOption {
   parcelType: string;
   weightLabel: string;
