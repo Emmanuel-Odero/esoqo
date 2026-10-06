@@ -230,7 +230,7 @@ export function BusinessRegistrationOnboarding() {
           type: "file",
           required: true,
           accept: "application/pdf,image/png,image/jpeg",
-          helpText: "PDF or image of your registration certificate (max 5MB)",
+          helpText: "PDF or image of your registration certificate (max 1MB)",
         },
       ],
     },

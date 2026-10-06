@@ -14,7 +14,7 @@ metadata:
   name: esoqo
   annotations:
     cert-manager.io/issuer: letsencrypt-prod
-    nginx.ingress.kubernetes.io/proxy-body-size: "12m"
+    nginx.ingress.kubernetes.io/proxy-body-size: "2m"
     nginx.ingress.kubernetes.io/proxy-read-timeout: "60"
     # www → apex is the intent (canonical origin for cookies, CORS and
     # SEO), but nginx.ingress.kubernetes.io/from-to-www-redirect is an

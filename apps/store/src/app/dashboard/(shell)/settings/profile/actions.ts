@@ -49,7 +49,7 @@ async function handleUpload(storeId: string, target: 'logo' | 'favicon' | 'photo
   try {
     const file = form.get('file');
     if (!(file instanceof File)) return { ok: false, error: 'No file was attached' };
-    if (file.size > MAX_BYTES) return { ok: false, error: 'That file is larger than 10 MB' };
+    if (file.size > MAX_BYTES) return { ok: false, error: 'That file is larger than 1 MB' };
 
     const buf = Buffer.from(await file.arrayBuffer());
     const check = sniff(buf, file.type, file.name);
