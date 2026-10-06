@@ -7,10 +7,29 @@ import {
   getCounterSettlementStatus,
   receiveWalkInParcel,
   resolveOrgLabel,
+  searchOrgLabels,
   settleCounterParcel,
   settleCounterParcelStk,
 } from "../actions";
-import type { CounterTicketRow } from "./actions";
+import type { OrgLabelSearchRow } from "@/lib/parcel-org-session";
+import { LabelPicker } from "../LabelPicker";
+import { bookCounterTicket, cancelCounterTicket, type CounterTicketRow } from "./actions";
+
+/** What a sender filled in while waiting — see AtOfficeSendForm's
+ *  OfficeDraft, the shape autosaved into ticket.draftDetails. Read back
+ *  here as an editable confirmation step rather than the read-only JSON
+ *  dump this panel used to show. */
+interface DraftDetails {
+  senderFirstName?: string; senderLastName?: string; senderPhone?: string;
+  receiverFirstName?: string; receiverLastName?: string; receiverPhone?: string;
+  parcelType?: string; weightKg?: string;
+  destinationLabel?: string;
+  declaredContents?: string;
+}
+
+function fullName(first?: string, last?: string): string {
+  return [first, last].filter(Boolean).join(" ").trim();
+}
 
 /** Same interval/give-up shape apps/web/src/app/pay/PayClient.tsx
  *  already proved for STK push waits: long enough for someone to fumble
@@ -19,7 +38,7 @@ import type { CounterTicketRow } from "./actions";
 const POLL_INTERVAL_MS = 2500;
 const POLL_GIVE_UP_MS = 5 * 60 * 1000;
 
-type Step = "label" | "receive" | "settle" | "done";
+type Step = "confirm" | "label" | "receive" | "settle" | "done";
 
 /**
  * The counter's "serve this one" flow, opened the moment a clerk claims
@@ -41,18 +60,69 @@ export function ServeTicketPanel({
   onDone: () => void;
 }) {
   const announce = useAnnounce();
-  const [step, setStep] = useState<Step>("label");
-  const labelInputId = useId();
+  const [step, setStep] = useState<Step>("confirm");
   const referenceInputId = useId();
 
-  // ── Label ──
-  const [labelCode, setLabelCode] = useState("");
+  // ── Confirm (editable, prefilled from what the sender entered) ──
+  const draft = (ticket.draftDetails ?? null) as DraftDetails | null;
+  const [senderName, setSenderName] = useState(fullName(draft?.senderFirstName, draft?.senderLastName));
+  const [senderMsisdn, setSenderMsisdn] = useState(draft?.senderPhone ?? ticket.msisdn);
+  const [receiverName, setReceiverName] = useState(fullName(draft?.receiverFirstName, draft?.receiverLastName));
+  const [receiverMsisdn, setReceiverMsisdn] = useState(draft?.receiverPhone ?? "");
+  const [itemType, setItemType] = useState(draft?.parcelType ?? "");
+  const [weightKg, setWeightKg] = useState(draft?.weightKg ?? "");
+  const [destination, setDestination] = useState(draft?.destinationLabel ?? "");
+  const [itemDescription, setItemDescription] = useState(draft?.declaredContents ?? "");
+
+  // ── Label (live tail-search over the company's own unused stock —
+  //    same searchOrgLabels CustomParcelPanel's picker uses) ──
+  const [labelTail, setLabelTail] = useState("");
+  const [labelResults, setLabelResults] = useState<OrgLabelSearchRow[] | null>(null);
+  const [labelSearching, setLabelSearching] = useState(false);
+  const [labelPickerOpen, setLabelPickerOpen] = useState(false);
+  const labelSeq = useRef(0);
   const [labelConfirmed, setLabelConfirmed] = useState<string | null>(null);
   const [labelError, setLabelError] = useState<string | null>(null);
   const [labelPending, startLabelTransition] = useTransition();
+  const [bookPending, startBookTransition] = useTransition();
+  const [bookError, setBookError] = useState<string | null>(null);
 
-  // ── Receive ──
-  const [reference, setReference] = useState(ticket.serviceTicketNumber);
+  // ── Discard — the sender walked away before a parcel ever existed.
+  //    Only reachable from "confirm"/"label": once bookAndContinue has
+  //    run, there's a real Parcel and this ticket isn't the thing to
+  //    cancel any more (see dbx.CancelCounterTicket). ──
+  const [discardOpen, setDiscardOpen] = useState(false);
+  const [discardReason, setDiscardReason] = useState("");
+  const [discardError, setDiscardError] = useState<string | null>(null);
+  const [discardPending, startDiscardTransition] = useTransition();
+
+  useEffect(() => {
+    const tail = labelTail.trim();
+    if (!labelPickerOpen || tail.length === 0) {
+      setLabelResults(labelPickerOpen ? [] : null);
+      setLabelSearching(false);
+      return;
+    }
+    setLabelSearching(true);
+    const seq = ++labelSeq.current;
+    const id = window.setTimeout(() => {
+      void searchOrgLabels(tail).then((rows) => {
+        if (labelSeq.current !== seq) return;
+        setLabelResults(rows);
+        setLabelSearching(false);
+      }).catch(() => {
+        if (labelSeq.current !== seq) return;
+        setLabelResults([]);
+        setLabelSearching(false);
+      });
+    }, 250);
+    return () => window.clearTimeout(id);
+  }, [labelTail, labelPickerOpen]);
+
+  // ── Receive ── reference starts empty; set to the real tracking code
+  // once bookAndContinue mints one — a ticket's own TCK-… number was
+  // never a parcel ScanHandoff could find (see bookAndContinue).
+  const [reference, setReference] = useState("");
   const [parcelCode, setParcelCode] = useState<string | null>(null);
   const [receiveError, setReceiveError] = useState<string | null>(null);
   const [receivePending, startReceiveTransition] = useTransition();
@@ -67,12 +137,7 @@ export function ServeTicketPanel({
   const [mpesaReceipt, setMpesaReceipt] = useState<string | null>(null);
   const waitingSince = useRef<number | null>(null);
 
-  function checkLabel() {
-    const code = labelCode.trim();
-    if (!code) {
-      setLabelError("Scan or type the label's code");
-      return;
-    }
+  function pickLabel(code: string) {
     setLabelError(null);
     startLabelTransition(async () => {
       const res = await resolveOrgLabel(code);
@@ -80,13 +145,62 @@ export function ServeTicketPanel({
         setLabelError(res.error);
         return;
       }
+      if (res.label.state === "spent") {
+        setLabelError(`${code} has already been used on another parcel.`);
+        return;
+      }
+      if (res.label.state === "voided") {
+        setLabelError(`${code} has been withdrawn and can't be used.`);
+        return;
+      }
       setLabelConfirmed(res.label.code ?? code);
+      setLabelTail(""); setLabelResults(null); setLabelPickerOpen(false);
       announce(`Label ${code} confirmed`, "polite");
     });
   }
 
+  /** The step a claimed ticket was always missing: nothing before this
+   *  ever created an actual parcel, so the ticket's own TCK-… number
+   *  never resolved to anything "receive" could find (see
+   *  dbx.BookParcelFromCounterTicket). Books one now, from this step's
+   *  (possibly edited) confirm-step values plus whichever label was
+   *  just picked — spent directly as the parcel's own tracking code,
+   *  rather than written onto the label separately — and hands the
+   *  real code to "receive". */
+  function bookAndContinue() {
+    setBookError(null);
+    startBookTransition(async () => {
+      const res = await bookCounterTicket(ticket.id, {
+        senderName, senderMsisdn, receiverName, receiverMsisdn,
+        parcelType: itemType, weightKg: weightKg ? Number(weightKg) : undefined,
+        destinationLabel: destination,
+        senderDeclaredContents: itemDescription,
+        labelCode: labelConfirmed ?? undefined,
+      });
+      if (!res.ok) {
+        setBookError(res.error);
+        return;
+      }
+      setReference(res.code);
+      setStep("receive");
+    });
+  }
+
+  function discardTicket() {
+    setDiscardError(null);
+    startDiscardTransition(async () => {
+      const res = await cancelCounterTicket(ticket.id, discardReason);
+      if (!res.ok) {
+        setDiscardError(res.error);
+        return;
+      }
+      announce(`Ticket ${ticket.serviceTicketNumber} discarded`, "polite");
+      onDone();
+    });
+  }
+
   function receive() {
-    const ref = reference.trim() || ticket.serviceTicketNumber;
+    const ref = reference.trim();
     setReceiveError(null);
     startReceiveTransition(async () => {
       const res = await receiveWalkInParcel(ref);
@@ -182,70 +296,120 @@ export function ServeTicketPanel({
           <Icon name="check-circle" size={16} /> Now serving{" "}
           <strong className="mono">{ticket.serviceTicketNumber}</strong> — {ticket.msisdn}
         </span>
-        {step !== "done" && (
-          <button className="btn btn-o btn-sm" onClick={onDone}>
-            <Icon name="close" size={14} />
-          </button>
-        )}
+        <div className="row" style={{ gap: 6 }}>
+          {(step === "confirm" || step === "label") && (
+            <button className="btn btn-o btn-sm" onClick={() => setDiscardOpen((v) => !v)}>
+              Discard ticket
+            </button>
+          )}
+          {step !== "done" && (
+            <button className="btn btn-o btn-sm" onClick={onDone}>
+              <Icon name="close" size={14} />
+            </button>
+          )}
+        </div>
       </div>
 
-      {ticket.draftDetails ? (
-        <details>
-          <summary className="sub" style={{ fontSize: ".8rem", cursor: "pointer" }}>
-            Details the client left while waiting
-          </summary>
-          <pre className="sub" style={{
-            margin: "6px 0 0", padding: 10, background: "var(--paper, #f7f7f5)",
-            borderRadius: 8, fontSize: ".78rem", overflowX: "auto",
-          }}>
-            {JSON.stringify(ticket.draftDetails, null, 2)}
-          </pre>
-        </details>
-      ) : null}
+      {discardOpen && (step === "confirm" || step === "label") && (
+        <div className="chain" style={{ flexDirection: "column", alignItems: "stretch", gap: 8, padding: 10, border: "1.5px solid var(--red, #b42318)", borderRadius: 8 }}>
+          <span className="sub" style={{ fontSize: ".82rem", fontWeight: 600 }}>
+            Discard this ticket — the sender walked away before anything was booked.
+          </span>
+          <input
+            className="mono"
+            style={{ padding: "6px 8px", border: "1.5px solid var(--line)", borderRadius: 6 }}
+            value={discardReason}
+            onChange={(e) => setDiscardReason(e.target.value)}
+            placeholder="Why? (optional)"
+          />
+          {discardError && (
+            <p className="sub" style={{ color: "var(--red, #b42318)", margin: 0, fontSize: ".82rem" }}>{discardError}</p>
+          )}
+          <div className="row" style={{ gap: 8, justifyContent: "flex-end" }}>
+            <button className="btn btn-o btn-sm" onClick={() => setDiscardOpen(false)} disabled={discardPending}>
+              Never mind
+            </button>
+            <button className="btn btn-p btn-sm" onClick={discardTicket} disabled={discardPending}>
+              {discardPending ? "Discarding…" : "Yes, discard it"}
+            </button>
+          </div>
+        </div>
+      )}
+
+      {step === "confirm" && (
+        <div style={{ display: "grid", gap: 8 }}>
+          <span className="sub" style={{ fontSize: ".8rem", fontWeight: 600 }}>
+            1. Confirm what the sender entered — fix anything that's wrong
+          </span>
+          <div className="pgrid">
+            <label className="pfield"><span>Sender name</span>
+              <input value={senderName} onChange={(e) => setSenderName(e.target.value)} />
+            </label>
+            <label className="pfield"><span>Sender phone</span>
+              <input value={senderMsisdn} onChange={(e) => setSenderMsisdn(e.target.value)} />
+            </label>
+            <label className="pfield"><span>Receiver name</span>
+              <input value={receiverName} onChange={(e) => setReceiverName(e.target.value)} />
+            </label>
+            <label className="pfield"><span>Receiver phone</span>
+              <input value={receiverMsisdn} onChange={(e) => setReceiverMsisdn(e.target.value)} />
+            </label>
+            <label className="pfield"><span>Item type</span>
+              <input value={itemType} onChange={(e) => setItemType(e.target.value)} />
+            </label>
+            <label className="pfield"><span>Weight (kg)</span>
+              <input value={weightKg} onChange={(e) => setWeightKg(e.target.value)} />
+            </label>
+            <label className="pfield"><span>Going to</span>
+              <input value={destination} onChange={(e) => setDestination(e.target.value)} />
+            </label>
+            <label className="pfield"><span>What's inside</span>
+              <input value={itemDescription} onChange={(e) => setItemDescription(e.target.value)} />
+            </label>
+          </div>
+          <div className="row" style={{ gap: 8, justifyContent: "flex-end" }}>
+            <button className="btn btn-p btn-sm" onClick={() => setStep("label")}>
+              Next: attach label
+            </button>
+          </div>
+        </div>
+      )}
 
       {step === "label" && (
         <div style={{ display: "grid", gap: 8 }}>
-          <label
-            className="sub"
-            htmlFor={labelInputId}
-            style={{ fontSize: ".8rem", fontWeight: 600 }}
-          >
-            1. Attach a label — scan or type one of your own pre-printed codes
-          </label>
-          <div className="row" style={{ gap: 8 }}>
-            <input
-              id={labelInputId}
-              className="mono"
-              style={{ flex: 1, padding: "6px 8px", border: "1.5px solid var(--line)", borderRadius: 6 }}
-              value={labelCode}
-              onChange={(e) => {
-                setLabelCode(e.target.value);
-                setLabelConfirmed(null);
-              }}
-              placeholder="Label code"
-            />
-            <button className="btn btn-o btn-sm" disabled={labelPending} onClick={checkLabel}>
-              {labelPending ? "Checking…" : "Check"}
-            </button>
-          </div>
-          {labelError && (
-            <p className="sub" style={{ color: "var(--red, #b42318)", margin: 0, fontSize: ".82rem" }}>{labelError}</p>
-          )}
-          {labelConfirmed && (
-            <p className="sub" style={{ color: "var(--green, #1a7f37)", margin: 0, fontSize: ".82rem" }}>
-              <Icon name="check" size={13} /> Label {labelConfirmed} confirmed — it'll print on this parcel.
-            </p>
+          <span className="sub" style={{ fontSize: ".8rem", fontWeight: 600 }}>
+            2. Attach a label
+          </span>
+          <LabelPicker
+            title="Parcel label"
+            hint="Type any characters from one of your own pre-printed codes, or scan it."
+            tail={labelTail}
+            onTail={(v) => { setLabelTail(v.toUpperCase()); setLabelPickerOpen(true); setLabelError(null); }}
+            onFocus={() => setLabelPickerOpen(true)}
+            results={labelResults}
+            searching={labelSearching}
+            pickerOpen={labelPickerOpen}
+            selected={labelConfirmed ?? ""}
+            onSelect={pickLabel}
+            onScan={pickLabel}
+            checking={labelPending}
+            checkError={labelError}
+            onClear={() => { setLabelConfirmed(null); setLabelTail(""); setLabelResults(null); setLabelError(null); }}
+            onClose={() => setLabelPickerOpen(false)}
+          />
+          {bookError && (
+            <p className="sub" style={{ color: "var(--red, #b42318)", margin: 0, fontSize: ".82rem" }}>{bookError}</p>
           )}
           <div className="row" style={{ gap: 8, justifyContent: "flex-end" }}>
-            <button className="btn btn-o btn-sm" onClick={() => setStep("receive")}>
-              Skip (no label yet)
+            <button className="btn btn-o btn-sm" disabled={bookPending} onClick={bookAndContinue}>
+              {bookPending && !labelConfirmed ? "Booking…" : "Skip (no label yet)"}
             </button>
             <button
               className="btn btn-p btn-sm"
-              disabled={!labelConfirmed}
-              onClick={() => setStep("receive")}
+              disabled={!labelConfirmed || bookPending}
+              onClick={bookAndContinue}
             >
-              Next: receive
+              {bookPending && labelConfirmed ? "Booking…" : "Next: receive"}
             </button>
           </div>
         </div>
@@ -258,7 +422,7 @@ export function ServeTicketPanel({
             htmlFor={referenceInputId}
             style={{ fontSize: ".8rem", fontWeight: 600 }}
           >
-            2. Take the parcel into custody
+            3. Take the parcel into custody
           </label>
           <input
             id={referenceInputId}
@@ -285,7 +449,7 @@ export function ServeTicketPanel({
       {step === "settle" && parcelCode && (
         <div style={{ display: "grid", gap: 8 }}>
           <span className="sub" style={{ fontSize: ".8rem", fontWeight: 600 }}>
-            3. Collect payment for <span className="mono">{parcelCode}</span>
+            4. Collect payment for <span className="mono">{parcelCode}</span>
           </span>
           <div className="row" style={{ gap: 12 }}>
             <label className="sub" style={{ display: "flex", alignItems: "center", gap: 6, fontSize: ".85rem" }}>

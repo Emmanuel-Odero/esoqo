@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useRef, useState } from 'react';
-import { claimCounterTicket, listCounterTicketQueue, type CounterTicketRow } from './actions';
+import { cancelCounterTicket, claimCounterTicket, listCounterTicketQueue, type CounterTicketRow } from './actions';
 import { ServeTicketPanel } from './ServeTicketPanel';
 
 /** Green under 2 minutes, amber under 5, red past that — a queue with
@@ -45,6 +45,7 @@ export function CounterQueueClient({ initial }: { initial: CounterTicketRow[] })
   const [tickets, setTickets] = useState(initial);
   const [now, setNow] = useState(() => Date.now());
   const [claimingId, setClaimingId] = useState<string | null>(null);
+  const [discardingId, setDiscardingId] = useState<string | null>(null);
   const [claimed, setClaimed] = useState<CounterTicketRow | null>(null);
   const [error, setError] = useState<string | null>(null);
   const refreshing = useRef(false);
@@ -81,6 +82,21 @@ export function CounterQueueClient({ initial }: { initial: CounterTicketRow[] })
     }
     setTickets((prev) => prev.filter((t) => t.id !== id));
     setClaimed(res.ticket);
+  }
+
+  /** A sender who never showed — discarded straight from the queue,
+   *  no reason prompt: this is the fast, common case, not the "walked
+   *  away mid-service" one ServeTicketPanel's own discard handles. */
+  async function discard(id: string) {
+    setDiscardingId(id);
+    setError(null);
+    const res = await cancelCounterTicket(id);
+    setDiscardingId(null);
+    if (!res.ok) {
+      setError(res.error);
+      return;
+    }
+    setTickets((prev) => prev.filter((t) => t.id !== id));
   }
 
   return (
@@ -120,13 +136,23 @@ export function CounterQueueClient({ initial }: { initial: CounterTicketRow[] })
                 }}>
                   {formatElapsed(t.createdAt, now)}
                 </span>
-                <button
-                  className="btn btn-p btn-sm"
-                  disabled={claimingId === t.id}
-                  onClick={() => void serve(t.id)}
-                >
-                  {claimingId === t.id ? 'Serving…' : 'Serve'}
-                </button>
+                <div className="row" style={{ gap: 6 }}>
+                  <button
+                    className="btn btn-o btn-sm"
+                    disabled={claimingId === t.id || discardingId === t.id}
+                    onClick={() => void discard(t.id)}
+                    title="Discard this ticket — the sender never showed"
+                  >
+                    {discardingId === t.id ? 'Discarding…' : 'Discard'}
+                  </button>
+                  <button
+                    className="btn btn-p btn-sm"
+                    disabled={claimingId === t.id || discardingId === t.id}
+                    onClick={() => void serve(t.id)}
+                  >
+                    {claimingId === t.id ? 'Serving…' : 'Serve'}
+                  </button>
+                </div>
               </li>
             );
           })}

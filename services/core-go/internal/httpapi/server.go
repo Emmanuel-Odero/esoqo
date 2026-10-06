@@ -428,6 +428,8 @@ func (s *Server) Router() *gin.Engine {
 		v1.GET("/parcel-orgs/me/counter-tickets/queue", s.authRequired(), s.handleListCounterTicketQueue)
 		v1.GET("/parcel-orgs/me/counter-tickets/stream", s.authRequired(), s.handleStreamCounterTicketQueue)
 		v1.POST("/parcel-orgs/me/counter-tickets/:id/claim", s.authRequired(), s.handleClaimCounterTicket)
+		v1.POST("/parcel-orgs/me/counter-tickets/:id/book", s.authRequired(), s.handleBookCounterTicket)
+		v1.POST("/parcel-orgs/me/counter-tickets/:id/cancel", s.authRequired(), s.handleCancelCounterTicket)
 		// Scan/lookup a code against the company's own stock, and attach
 		// field notes to a printed label. The static "info" segment is
 		// load-bearing: see handleAttachOrgLabelInfo's own comment.

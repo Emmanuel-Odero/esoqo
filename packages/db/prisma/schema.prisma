@@ -5314,7 +5314,8 @@ model ParcelOrgStaff {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  claimedCounterTickets ParcelCounterTicket[]
+  claimedCounterTickets    ParcelCounterTicket[]
+  cancelledCounterTickets  ParcelCounterTicket[] @relation("CounterTicketCancelledBy")
 
   @@index([orgId])
   @@map("parcel_org_staff")
@@ -5362,9 +5363,12 @@ model ParcelCounterTicket {
   orgId String    @db.Uuid
   org   ParcelOrg @relation(fields: [orgId], references: [id], onDelete: Cascade)
 
-  /// "TCK-…" — same fleetqr.PrefixServiceTicket pool Parcel.serviceTicketNumber
-  /// mints from, so a ticket and a pre-intake parcel are never
-  /// confusable at a glance by their prefix alone.
+  /// Name-shaped — "JOHN-482", or "GUEST-###" for a phone with no
+  /// Esoqo account to read a name off of — same
+  /// fleetqr.ServiceTicketForName convention Parcel.serviceTicketNumber
+  /// already mints from (see dbx.CreateCounterTicket). Never the bare
+  /// TCK-XXXXXX fallback shape: a sender reads this aloud at the
+  /// counter, and a name is what lets a clerk call them forward by it.
   serviceTicketNumber String                     @unique
   msisdn              String
   channel             ParcelCounterTicketChannel
@@ -5375,6 +5379,29 @@ model ParcelCounterTicket {
   claimedByStaffId String?         @db.Uuid
   claimedByStaff   ParcelOrgStaff? @relation(fields: [claimedByStaffId], references: [id], onDelete: SetNull)
   claimedAt        DateTime?
+
+  /// The real booking this ticket turned into (dbx.BookParcelFromCounterTicket)
+  /// — null until the clerk confirms the sender's details and attaches a
+  /// label. Not a Prisma relation to Parcel (that model's relation list
+  /// is large enough already): a plain FK column is all this needs,
+  /// since nothing ever navigates ticket -> parcel through Prisma.
+  parcelId String? @db.Uuid
+  /// Claimed atomically before BookParcel runs, same reservation-token
+  /// shape SettleCounterParcelStk's paymentReservationAt follows — so
+  /// two requests racing to book the same ticket can't both mint a
+  /// parcel. Cleared if the booking attempt fails, so a retry is never
+  /// blocked by its own dead reservation.
+  bookingStartedAt DateTime?
+
+  /// Set only on a clerk-discarded ticket (dbx.CancelCounterTicket) —
+  /// a sender who never showed, or walked away mid-service. Only ever
+  /// reachable from WAITING or CLAIMED with parcelId still null: once
+  /// a real parcel exists, abandoning it is that parcel's own cancel
+  /// flow, not this ticket's.
+  cancelledByStaffId String?         @db.Uuid
+  cancelledByStaff   ParcelOrgStaff? @relation("CounterTicketCancelledBy", fields: [cancelledByStaffId], references: [id], onDelete: SetNull)
+  cancelledAt        DateTime?
+  cancelReason       String?
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt

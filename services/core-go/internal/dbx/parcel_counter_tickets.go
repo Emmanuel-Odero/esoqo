@@ -91,14 +91,8 @@ func CreateCounterTicket(
 		return nil, &ParcelError{"BAD_INPUT", "Unknown channel"}
 	}
 
-	tx, err := pool.Begin(ctx)
-	if err != nil {
-		return nil, err
-	}
-	defer tx.Rollback(ctx)
-
 	var acceptsWalkIn bool
-	err = tx.QueryRow(ctx, `SELECT "acceptsWalkIn" FROM parcel_org WHERE id = $1 AND status != 'SUSPENDED'`, orgID).
+	err := pool.QueryRow(ctx, `SELECT "acceptsWalkIn" FROM parcel_org WHERE id = $1 AND status != 'SUSPENDED'`, orgID).
 		Scan(&acceptsWalkIn)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return nil, &ParcelError{"NOT_FOUND", "That company isn't available"}
@@ -110,33 +104,73 @@ func CreateCounterTicket(
 		return nil, &ParcelError{"BAD_INPUT", "That company doesn't take walk-ins"}
 	}
 
+	// Name-shaped from the start, same convention Parcel.serviceTicketNumber
+	// already follows (fleetqr.ServiceTicketForName) — a sender is only
+	// ever asked for a phone number at this point, so this looks that
+	// phone up against an existing Esoqo account for a name to read.
+	// "GUEST" when it's a genuinely fresh number: still "a word plus
+	// three digits", never the bare TCK-XXXXXX shape — that shape must
+	// not reach a sender again (see ServiceTicketForName's own fallback,
+	// which this deliberately avoids triggering).
+	var personName string
+	_ = pool.QueryRow(ctx, `
+		SELECT COALESCE(NULLIF(p."firstName", ''), p."officialName")
+		FROM person p WHERE p.msisdn = $1 LIMIT 1`, msisdn).Scan(&personName)
+	if personName == "" {
+		personName = "GUEST"
+	}
+
 	t := &ParcelCounterTicket{
-		OrgID:               orgID,
-		ServiceTicketNumber: fleetqr.ShortCodeChecked(fleetqr.PrefixServiceTicket, 6),
-		Msisdn:              msisdn,
-		Channel:             channel,
-		Status:              "WAITING",
-		DraftDetails:        draftDetails,
+		OrgID:        orgID,
+		Msisdn:       msisdn,
+		Channel:      channel,
+		Status:       "WAITING",
+		DraftDetails: draftDetails,
 	}
 	if len(draftDetails) == 0 {
 		t.DraftDetails = nil
 	}
-	err = tx.QueryRow(ctx, `
-		INSERT INTO parcel_counter_ticket (id, "orgId", "serviceTicketNumber", msisdn, channel, status, "draftDetails")
-		VALUES (gen_random_uuid(), $1, $2, $3, $4::"ParcelCounterTicketChannel", 'WAITING', $5)
-		RETURNING id, "createdAt"`,
-		orgID, t.ServiceTicketNumber, msisdn, channel, nullableJSON(t.DraftDetails)).
-		Scan(&t.ID, &t.CreatedAt)
+	// Run against the pool, one INSERT per attempt, not inside a
+	// transaction: a unique violation would otherwise poison a shared
+	// tx and make every retried statement fail with "transaction is
+	// aborted" instead of the 23505 retryUnique actually checks for.
+	// Only a 3-digit suffix (1000 draws), reused across every ticket
+	// that falls back to the same name — unlike ShortCodeChecked's
+	// checksummed 6-char code, a collision here is a real, regular
+	// possibility, not a theoretical one.
+	err = retryUnique(func() error {
+		t.ServiceTicketNumber = fleetqr.ServiceTicketForName(personName)
+		return pool.QueryRow(ctx, `
+			INSERT INTO parcel_counter_ticket (id, "orgId", "serviceTicketNumber", msisdn, channel, status, "draftDetails")
+			VALUES (gen_random_uuid(), $1, $2, $3, $4::"ParcelCounterTicketChannel", 'WAITING', $5)
+			RETURNING id, "createdAt"`,
+			orgID, t.ServiceTicketNumber, msisdn, channel, nullableJSON(t.DraftDetails)).
+			Scan(&t.ID, &t.CreatedAt)
+	})
 	if err != nil {
 		return nil, err
 	}
-	if err := notifyCounterTicketEvent(ctx, tx, CounterTicketEvent{OrgID: orgID, TicketID: t.ID, Event: "created"}); err != nil {
-		return nil, err
-	}
-	if err := tx.Commit(ctx); err != nil {
+	// The insert already committed (no transaction wraps it — see
+	// above), so the NOTIFY firing standalone here is exactly as safe
+	// as the tx-scoped version every other caller uses: a ticket that
+	// wasn't actually created never reaches this line.
+	if _, err := pool.Exec(ctx, `SELECT pg_notify($1, $2)`, CounterTicketChannel,
+		mustMarshalCounterTicketEvent(CounterTicketEvent{OrgID: orgID, TicketID: t.ID, Event: "created"})); err != nil {
 		return nil, err
 	}
 	return t, nil
+}
+
+// mustMarshalCounterTicketEvent — CounterTicketEvent is our own small
+// struct with no exotic fields, so a marshal failure here would be a
+// programming error, not a runtime one worth plumbing an error return
+// through pool.Exec's single-statement call site for.
+func mustMarshalCounterTicketEvent(ev CounterTicketEvent) string {
+	b, err := json.Marshal(ev)
+	if err != nil {
+		panic(err)
+	}
+	return string(b)
 }
 
 // nullableJSON — pgx sends a nil json.RawMessage as SQL NULL only when
@@ -190,6 +224,51 @@ func ClaimCounterTicket(ctx context.Context, pool *pgxpool.Pool, ticketID, staff
 	}
 	t.DraftDetails = draft
 	if err := notifyCounterTicketEvent(ctx, tx, CounterTicketEvent{OrgID: t.OrgID, TicketID: t.ID, Event: "claimed"}); err != nil {
+		return nil, err
+	}
+	if err := tx.Commit(ctx); err != nil {
+		return nil, err
+	}
+	return t, nil
+}
+
+// CancelCounterTicket is a clerk discarding a ticket — a sender who
+// never showed, or walked away mid-service. Same atomic-guard shape
+// ClaimCounterTicket uses, just a wider WHERE: either WAITING (never
+// claimed) or CLAIMED (claimed, abandoned before a parcel existed) can
+// be discarded, but "parcelId" IS NULL is non-negotiable — once
+// BookParcelFromCounterTicket has minted a real Parcel, abandoning it
+// is that parcel's own cancellation flow to run, not this ticket's;
+// letting this reach past that point would orphan a booked parcel with
+// no ticket left pointing at it.
+func CancelCounterTicket(ctx context.Context, pool *pgxpool.Pool, ticketID, staffID, orgID string, reason *string) (*ParcelCounterTicket, error) {
+	tx, err := pool.Begin(ctx)
+	if err != nil {
+		return nil, err
+	}
+	defer tx.Rollback(ctx)
+
+	t := &ParcelCounterTicket{ID: ticketID}
+	var draft []byte
+	err = tx.QueryRow(ctx, `
+		UPDATE parcel_counter_ticket
+		SET status = 'CANCELLED', "cancelledByStaffId" = $2, "cancelledAt" = now(),
+		    "cancelReason" = $3, "updatedAt" = now()
+		WHERE id = $1 AND "orgId" = $4 AND status IN ('WAITING', 'CLAIMED') AND "parcelId" IS NULL
+		RETURNING "orgId", "serviceTicketNumber", msisdn, channel::text, status::text, "draftDetails", "claimedByStaffId", "claimedAt", "createdAt"`,
+		ticketID, staffID, reason, orgID).
+		Scan(&t.OrgID, &t.ServiceTicketNumber, &t.Msisdn, &t.Channel, &t.Status, &draft, &t.ClaimedByStaffID, &t.ClaimedAt, &t.CreatedAt)
+	if errors.Is(err, pgx.ErrNoRows) {
+		// Gone, already settled by someone else, or already past
+		// booking — collapsed to one message for the same reason
+		// ClaimCounterTicket's own ALREADY_CLAIMED does.
+		return nil, &ParcelError{"NOT_FOUND", "That ticket can no longer be discarded"}
+	}
+	if err != nil {
+		return nil, err
+	}
+	t.DraftDetails = draft
+	if err := notifyCounterTicketEvent(ctx, tx, CounterTicketEvent{OrgID: t.OrgID, TicketID: t.ID, Event: "cancelled"}); err != nil {
 		return nil, err
 	}
 	if err := tx.Commit(ctx); err != nil {
@@ -274,4 +353,115 @@ func UpdateCounterTicketDraft(ctx context.Context, pool *pgxpool.Pool, id string
 		return err
 	}
 	return tx.Commit(ctx)
+}
+
+// CounterTicketBookingInput is what the clerk confirmed at the "1.
+// Confirm what the sender entered" step — the source of truth for the
+// booking, not the ticket's own draftDetails (a prefill convenience
+// only; see ServeTicketPanel). LabelCode, if set, is spent as the
+// parcel's own tracking code via BookParcelInput.ExistingCode — the
+// label the clerk just picked in the live search.
+type CounterTicketBookingInput struct {
+	SenderName             string
+	SenderMsisdn           string
+	ReceiverName           string
+	ReceiverMsisdn         string
+	ParcelType             string
+	WeightKg               *float64
+	DestinationLabel       string
+	SenderDeclaredContents *string
+	DeclaredValueKes       *float64
+	LabelCode              *string
+}
+
+// BookParcelFromCounterTicket is the missing link between the walk-in
+// queue and the parcel it was always meant to become: CreateCounterTicket
+// and ClaimCounterTicket only ever touch parcel_counter_ticket, so a
+// ticket's own TCK-… number has never resolved to anything
+// ScanHandoff/receiveWalkInParcel could find — "receive" 404'd on every
+// ticket that ever went through this queue. This runs once, right after
+// the clerk confirms details and attaches a label, and reuses BookParcel
+// itself (SELF_DROPOFF, PAY_AT_COUNTER) rather than re-deriving a second
+// insert, so a counter-ticket booking is indistinguishable from any
+// other PAY_AT_COUNTER walk-in once it exists.
+//
+// bookingStartedAt is claimed atomically before BookParcel runs — same
+// reservation shape SettleCounterParcelStk's paymentReservationAt
+// follows — so two requests racing a double-click can't both mint a
+// parcel from the same ticket. Released on any failure so a retry
+// isn't blocked by its own dead reservation.
+func BookParcelFromCounterTicket(ctx context.Context, pool *pgxpool.Pool, ticketID, orgID, staffID string, in CounterTicketBookingInput) (parcelID, code, serviceTicketNumber string, err error) {
+	if in.SenderName == "" || in.SenderMsisdn == "" {
+		return "", "", "", &ParcelError{"BAD_INPUT", "Sender name and phone are required"}
+	}
+	if in.ReceiverName == "" || in.ReceiverMsisdn == "" {
+		return "", "", "", &ParcelError{"BAD_INPUT", "Receiver name and phone are required"}
+	}
+	if in.DestinationLabel == "" {
+		return "", "", "", &ParcelError{"BAD_INPUT", "Say where this is going"}
+	}
+
+	var ticketParcelID *string
+	tag, terr := pool.Exec(ctx, `
+		UPDATE parcel_counter_ticket
+		SET "bookingStartedAt" = now()
+		WHERE id = $1 AND "orgId" = $2 AND status = 'CLAIMED'
+		  AND "claimedByStaffId" = $3 AND "parcelId" IS NULL AND "bookingStartedAt" IS NULL`,
+		ticketID, orgID, staffID)
+	if terr != nil {
+		return "", "", "", terr
+	}
+	if tag.RowsAffected() == 0 {
+		// Covers every reason this could be unavailable — already
+		// booked, claimed by someone else, or a concurrent attempt
+		// already holds the reservation — with one message, same
+		// "gone vs. already claimed collapse no further" reasoning
+		// ClaimCounterTicket's own comment gives.
+		err = pool.QueryRow(ctx, `SELECT "parcelId" FROM parcel_counter_ticket WHERE id = $1`, ticketID).Scan(&ticketParcelID)
+		if err == nil && ticketParcelID != nil {
+			return "", "", "", &ParcelError{"ALREADY_BOOKED", "This ticket already has a parcel booked against it"}
+		}
+		return "", "", "", &ParcelError{"CONFLICT", "This ticket isn't ready to book — it may already be in progress"}
+	}
+
+	org, oerr := GetParcelOrg(ctx, pool, orgID)
+	if oerr != nil {
+		_, _ = pool.Exec(ctx, `UPDATE parcel_counter_ticket SET "bookingStartedAt" = NULL WHERE id = $1`, ticketID)
+		return "", "", "", oerr
+	}
+	if org == nil {
+		_, _ = pool.Exec(ctx, `UPDATE parcel_counter_ticket SET "bookingStartedAt" = NULL WHERE id = $1`, ticketID)
+		return "", "", "", &ParcelError{"NOT_FOUND", "That company was not found"}
+	}
+
+	parcelType := in.ParcelType
+	if parcelType == "" {
+		parcelType = "SMALL"
+	}
+	parcelID, code, _, serviceTicketNumber, err = BookParcel(ctx, pool, BookParcelInput{
+		SenderName: in.SenderName, SenderMsisdn: in.SenderMsisdn,
+		ReceiverName: in.ReceiverName, ReceiverMsisdn: in.ReceiverMsisdn,
+		OriginLabel: org.Name, DestinationLabel: in.DestinationLabel,
+		ParcelType: parcelType, WeightKg: in.WeightKg,
+		ParcelOrgID:               &orgID,
+		OriginMethod:              "SELF_DROPOFF",
+		PayAtCounter:              true,
+		ExistingCode:              in.LabelCode,
+		BinderOrgID:               &orgID,
+		ContentsDeclaredByStaffID: &staffID,
+		SenderDeclaredContents:    in.SenderDeclaredContents,
+		DeclaredValueKes:          in.DeclaredValueKes,
+		LawfulContentsAttested:    true,
+	})
+	if err != nil {
+		_, _ = pool.Exec(ctx, `UPDATE parcel_counter_ticket SET "bookingStartedAt" = NULL WHERE id = $1`, ticketID)
+		return "", "", "", err
+	}
+
+	if _, err := pool.Exec(ctx, `
+		UPDATE parcel_counter_ticket SET "parcelId" = $1, "bookingStartedAt" = NULL WHERE id = $2`,
+		parcelID, ticketID); err != nil {
+		return parcelID, code, serviceTicketNumber, err
+	}
+	return parcelID, code, serviceTicketNumber, nil
 }

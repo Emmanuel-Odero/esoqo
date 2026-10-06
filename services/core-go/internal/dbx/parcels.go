@@ -179,6 +179,92 @@ func isForeignLabelCode(code string) bool {
 	return !strings.HasPrefix(upper, "PKG-")
 }
 
+// rowQuerier is the common slice of *pgxpool.Pool and pgx.Tx that
+// insertParcelRow needs — letting it run either as its own statement
+// (the fresh-code path, against the pool) or as one statement inside an
+// already-open transaction (the pre-printed-label path, which also has
+// to lock and spend the label stock row atomically).
+type rowQuerier interface {
+	QueryRow(ctx context.Context, sql string, args ...any) pgx.Row
+}
+
+// insertParcelRow is the one INSERT both of BookParcel's paths run —
+// extracted because they used to be two separately maintained copies,
+// and the pre-printed-label one had silently fallen behind: it never
+// picked up originMethod, paymentMethod, the SLA clock, or the sender's
+// contents declaration when those were added to the fresh-code path,
+// so a label-bound PayAtCounter booking landed in DRAFT_PENDING_PAYMENT
+// with no SLA regardless of what the caller asked for. One function,
+// one row shape, so that can't happen again.
+func insertParcelRow(ctx context.Context, q rowQuerier, code, deliveryCode, serviceTicketNumber, originMethod string, in BookParcelInput, pricing *ParcelPricing, coverageFeeKes *float64, parcelID *string) error {
+	// PayAtCounter skips the whole DRAFT_PENDING_PAYMENT -> price ->
+	// pay sequence and lands directly in BOOKED, same slaDeadlineAt
+	// formula PayParcelWithPoints uses at its own payment-confirmation
+	// moment — a parcel settled in person still deserves an SLA clock,
+	// it just starts at booking instead of at payment because there
+	// is no separate payment step to start it from.
+	status := "DRAFT_PENDING_PAYMENT"
+	var paymentMethod *string
+	if in.PayAtCounter {
+		status = "BOOKED"
+		m := "PAY_AT_COUNTER"
+		paymentMethod = &m
+	}
+	return q.QueryRow(ctx, `
+		INSERT INTO parcel (
+			id, code, "deliveryCode", "senderPartyId", "senderName", "senderMsisdn",
+			"receiverName", "receiverMsisdn", "originLabel", "destinationLabel", notes,
+			"parcelType", "weightKg", fragile, "transportMode", "originZoneId", "destinationZoneId",
+			"destinationAgentId", "declaredValueKes", "coverageTierId", "coverageFeeKes",
+			"parcelOrgId", "originLat", "originLng", "destinationLat", "destinationLng",
+			"lengthCm", "widthCm", "heightCm",
+			"contentsDeclaredAt", "contentsDeclaredByStaffId",
+			"originMethod", "paymentMethod", "slaDeadlineAt",
+			status, "createdAt", "serviceTicketNumber",
+			"senderDeclaredContents", "lawfulContentsAttestedAt",
+			"termsAcceptedAt", "termsVersion", "carrierTermsVersion"
+		) VALUES (
+			gen_random_uuid(), $1, $2, $3, $4, $5, $6, $7, $8, $9, $10,
+			$11::"ParcelType", $12, $13, $14::"ParcelTransportMode", $15, $16,
+			$17, $18, $19, $20, $21, $22, $23, $24, $25,
+			$26, $27, $28,
+			-- Stamped together: the timestamp is only meaningful
+			-- alongside the person who asked.
+			CASE WHEN $29::uuid IS NULL THEN NULL ELSE now() END, $29::uuid,
+			$30::"ParcelOriginMethod", $31,
+			CASE WHEN $32::text != 'BOOKED' THEN NULL ELSE now() + (
+				SELECT r."slaHours" FROM parcel_pricing_rule r
+				WHERE r."parcelType" = $11::"ParcelType"
+				  AND (r."parcelOrgId" IS NULL OR r."parcelOrgId" = $21::uuid)
+				ORDER BY r."parcelOrgId" NULLS LAST
+				LIMIT 1
+			) * interval '1 hour' END,
+			$32::"ParcelStatus", now(), $33,
+			-- The booleans become timestamps here rather than in Go,
+			-- so the recorded moment is the same now() the row itself
+			-- is stamped with. A version is only kept alongside an
+			-- acceptance: "v3" with no termsAcceptedAt would claim an
+			-- agreement nobody made.
+			$34,
+			CASE WHEN $35::boolean THEN now() ELSE NULL END,
+			CASE WHEN $36::boolean THEN now() ELSE NULL END,
+			CASE WHEN $36::boolean THEN $37 ELSE NULL END,
+			CASE WHEN $36::boolean THEN $38 ELSE NULL END
+		) RETURNING id`,
+		code, deliveryCode, in.SenderPartyID, in.SenderName, in.SenderMsisdn,
+		in.ReceiverName, in.ReceiverMsisdn, in.OriginLabel, in.DestinationLabel, in.Notes,
+		in.ParcelType, in.WeightKg, in.Fragile, pricing.SuggestedTransportMode,
+		in.OriginZoneID, in.DestinationZoneID,
+		in.DestinationAgentID, in.DeclaredValueKes, in.CoverageTierID, coverageFeeKes,
+		in.ParcelOrgID,
+		in.OriginLat, in.OriginLng, in.DestinationLat, in.DestinationLng,
+		in.LengthCm, in.WidthCm, in.HeightCm, in.ContentsDeclaredByStaffID,
+		originMethod, paymentMethod, status, serviceTicketNumber,
+		in.SenderDeclaredContents, in.LawfulContentsAttested,
+		in.TermsAccepted, in.TermsVersion, in.CarrierTermsVersion).
+		Scan(parcelID)
+}
+
 // BookParcel mints the parcel's own tracking code (PKG-…, via
 // fleetqr's minting contract — see the security posture's rule on
 // never hand-rolling a short code) plus a second, separate
@@ -280,73 +366,8 @@ func BookParcel(ctx context.Context, pool *pgxpool.Pool, in BookParcelInput) (pa
 	// at the counter reads this aloud, never types it back in.
 	serviceTicketNumber = fleetqr.ServiceTicketForName(in.SenderName)
 
-	insertParcel := func(useCode string) error {
-		// PayAtCounter skips the whole DRAFT_PENDING_PAYMENT -> price ->
-		// pay sequence and lands directly in BOOKED, same slaDeadlineAt
-		// formula PayParcelWithPoints uses at its own payment-confirmation
-		// moment — a parcel settled in person still deserves an SLA clock,
-		// it just starts at booking instead of at payment because there
-		// is no separate payment step to start it from.
-		status := "DRAFT_PENDING_PAYMENT"
-		var paymentMethod *string
-		if in.PayAtCounter {
-			status = "BOOKED"
-			m := "PAY_AT_COUNTER"
-			paymentMethod = &m
-		}
-		return pool.QueryRow(ctx, `
-			INSERT INTO parcel (
-				id, code, "deliveryCode", "senderPartyId", "senderName", "senderMsisdn",
-				"receiverName", "receiverMsisdn", "originLabel", "destinationLabel", notes,
-				"parcelType", "weightKg", fragile, "transportMode", "originZoneId", "destinationZoneId",
-				"destinationAgentId", "declaredValueKes", "coverageTierId", "coverageFeeKes",
-				"parcelOrgId", "originLat", "originLng", "destinationLat", "destinationLng",
-				"lengthCm", "widthCm", "heightCm",
-				"contentsDeclaredAt", "contentsDeclaredByStaffId",
-				"originMethod", "paymentMethod", "slaDeadlineAt",
-				status, "createdAt", "serviceTicketNumber",
-				"senderDeclaredContents", "lawfulContentsAttestedAt",
-				"termsAcceptedAt", "termsVersion", "carrierTermsVersion"
-			) VALUES (
-				gen_random_uuid(), $1, $2, $3, $4, $5, $6, $7, $8, $9, $10,
-				$11::"ParcelType", $12, $13, $14::"ParcelTransportMode", $15, $16,
-				$17, $18, $19, $20, $21, $22, $23, $24, $25,
-				$26, $27, $28,
-				-- Stamped together: the timestamp is only meaningful
-				-- alongside the person who asked.
-				CASE WHEN $29::uuid IS NULL THEN NULL ELSE now() END, $29::uuid,
-				$30::"ParcelOriginMethod", $31,
-				CASE WHEN $32::text != 'BOOKED' THEN NULL ELSE now() + (
-					SELECT r."slaHours" FROM parcel_pricing_rule r
-					WHERE r."parcelType" = $11::"ParcelType"
-					  AND (r."parcelOrgId" IS NULL OR r."parcelOrgId" = $21::uuid)
-					ORDER BY r."parcelOrgId" NULLS LAST
-					LIMIT 1
-				) * interval '1 hour' END,
-				$32::"ParcelStatus", now(), $33,
-				-- The booleans become timestamps here rather than in Go,
-				-- so the recorded moment is the same now() the row itself
-				-- is stamped with. A version is only kept alongside an
-				-- acceptance: "v3" with no termsAcceptedAt would claim an
-				-- agreement nobody made.
-				$34,
-				CASE WHEN $35::boolean THEN now() ELSE NULL END,
-				CASE WHEN $36::boolean THEN now() ELSE NULL END,
-				CASE WHEN $36::boolean THEN $37 ELSE NULL END,
-				CASE WHEN $36::boolean THEN $38 ELSE NULL END
-			) RETURNING id`,
-			useCode, deliveryCode, in.SenderPartyID, in.SenderName, in.SenderMsisdn,
-			in.ReceiverName, in.ReceiverMsisdn, in.OriginLabel, in.DestinationLabel, in.Notes,
-			in.ParcelType, in.WeightKg, in.Fragile, pricing.SuggestedTransportMode,
-			in.OriginZoneID, in.DestinationZoneID,
-			in.DestinationAgentID, in.DeclaredValueKes, in.CoverageTierID, coverageFeeKes,
-			in.ParcelOrgID,
-			in.OriginLat, in.OriginLng, in.DestinationLat, in.DestinationLng,
-			in.LengthCm, in.WidthCm, in.HeightCm, in.ContentsDeclaredByStaffID,
-			originMethod, paymentMethod, status, serviceTicketNumber,
-			in.SenderDeclaredContents, in.LawfulContentsAttested,
-			in.TermsAccepted, in.TermsVersion, in.CarrierTermsVersion).
-			Scan(&parcelID)
+	insertParcel := func(q rowQuerier, useCode string) error {
+		return insertParcelRow(ctx, q, useCode, deliveryCode, serviceTicketNumber, originMethod, in, pricing, coverageFeeKes, &parcelID)
 	}
 
 	if in.ExistingCode != nil && *in.ExistingCode != "" {
@@ -418,36 +439,15 @@ func BookParcel(ctx context.Context, pool *pgxpool.Pool, in BookParcelInput) (pa
 				return "", "", "", "", &ParcelError{"FORBIDDEN", "That label was issued to another company — use one of your own"}
 			}
 		}
-		if err := tx.QueryRow(ctx, `
-			INSERT INTO parcel (
-				id, code, "deliveryCode", "senderPartyId", "senderName", "senderMsisdn",
-				"receiverName", "receiverMsisdn", "originLabel", "destinationLabel", notes,
-				"parcelType", "weightKg", fragile, "transportMode", "originZoneId", "destinationZoneId",
-				"destinationAgentId", "declaredValueKes", "coverageTierId", "coverageFeeKes",
-				"parcelOrgId", "originLat", "originLng", "destinationLat", "destinationLng",
-				"lengthCm", "widthCm", "heightCm",
-				"contentsDeclaredAt", "contentsDeclaredByStaffId",
-				status, "createdAt", "serviceTicketNumber"
-			) VALUES (
-				gen_random_uuid(), $1, $2, $3, $4, $5, $6, $7, $8, $9, $10,
-				$11::"ParcelType", $12, $13, $14::"ParcelTransportMode", $15, $16,
-				$17, $18, $19, $20, $21, $22, $23, $24, $25,
-				$26, $27, $28,
-				-- Stamped together: the timestamp is only meaningful
-				-- alongside the person who asked.
-				CASE WHEN $29::uuid IS NULL THEN NULL ELSE now() END, $29::uuid,
-				'DRAFT_PENDING_PAYMENT', now(), $30
-			) RETURNING id`,
-			code, deliveryCode, in.SenderPartyID, in.SenderName, in.SenderMsisdn,
-			in.ReceiverName, in.ReceiverMsisdn, in.OriginLabel, in.DestinationLabel, in.Notes,
-			in.ParcelType, in.WeightKg, in.Fragile, pricing.SuggestedTransportMode,
-			in.OriginZoneID, in.DestinationZoneID,
-			in.DestinationAgentID, in.DeclaredValueKes, in.CoverageTierID, coverageFeeKes,
-			in.ParcelOrgID,
-			in.OriginLat, in.OriginLng, in.DestinationLat, in.DestinationLng,
-			in.LengthCm, in.WidthCm, in.HeightCm, in.ContentsDeclaredByStaffID,
-			serviceTicketNumber).
-			Scan(&parcelID); err != nil {
+		// Same row shape the fresh-code path inserts (originMethod,
+		// paymentMethod, the SLA clock, the sender's contents
+		// declaration) — this used to be its own, older INSERT that
+		// predated PayAtCounter/SLA/declared-contents and never picked
+		// them up, which meant every pre-printed-label booking landed in
+		// DRAFT_PENDING_PAYMENT with no SLA regardless of what the
+		// caller actually asked for. One insert, shared, so the two
+		// paths can't drift apart like that again.
+		if err := insertParcelRow(ctx, tx, code, deliveryCode, serviceTicketNumber, originMethod, in, pricing, coverageFeeKes, &parcelID); err != nil {
 			return "", "", "", "", err
 		}
 		if _, err := tx.Exec(ctx, `
@@ -467,7 +467,7 @@ func BookParcel(ctx context.Context, pool *pgxpool.Pool, in BookParcelInput) (pa
 		// either @unique column fails the same INSERT, and holding onto
 		// a stale ticket number across retries would just collide again.
 		serviceTicketNumber = fleetqr.ServiceTicketForName(in.SenderName)
-		return insertParcel(code)
+		return insertParcel(pool, code)
 	})
 	return parcelID, code, deliveryCode, serviceTicketNumber, err
 }
