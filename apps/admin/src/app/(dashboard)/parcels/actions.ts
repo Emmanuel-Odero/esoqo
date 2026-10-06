@@ -1101,6 +1101,11 @@ export interface ParcelOrgStats {
   earningsTodayKes: string;
   earningsKes: string;
   awaitingDropoff: number;
+  /** Counter cash a clerk has taken and a manager hasn't counted in yet
+   *  — sitting with the company, not Esoqo, until that happens. */
+  counterCashOutstandingKes: string;
+  /** Esoqo's own cut of counterCashOutstandingKes. */
+  counterCashPlatformFeeOwedKes: string;
 }
 
 export interface ParcelOrgDetail {

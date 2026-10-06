@@ -182,6 +182,13 @@ export interface ParcelOrgStats {
   /** Active parcels past their SLA deadline — powers the register's
    *  "Overdue only" toggle and the attention band. */
   overdue: number;
+  /** Counter cash a clerk has taken and a manager hasn't counted in yet
+   *  (see RemitCounterCash) — sitting with the company, not Esoqo,
+   *  until that happens. */
+  counterCashOutstandingKes: string;
+  /** Esoqo's own cut of counterCashOutstandingKes — the company's own
+   *  share of that cash is theirs; this slice is Esoqo's, pending. */
+  counterCashPlatformFeeOwedKes: string;
 }
 
 export interface OrgParcelRow {

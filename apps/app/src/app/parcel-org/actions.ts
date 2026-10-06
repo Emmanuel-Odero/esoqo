@@ -281,6 +281,38 @@ export async function remitRiderCod(
   }
 }
 
+/** remitRiderCod's counterpart for counter-intake cash: a manager
+ *  counting a clerk's cash in instead of a rider's round. See
+ *  dbx.RemitCounterCash. */
+export async function remitCounterCash(
+  staffId: string,
+  amountKes: string,
+  note?: string,
+): Promise<
+  | { ok: true; expectedKes: string; shortfallKes: string }
+  | { ok: false; error: string }
+> {
+  try {
+    const res = await parcelOrgFetch<{
+      expectedKes: string;
+      shortfallKes: string;
+    }>("/v1/parcel-orgs/me/counter-cash/remit", {
+      method: "POST",
+      body: JSON.stringify({ staffId, amountKes, note: note || null }),
+    });
+    revalidatePath("/parcel-org");
+    revalidatePath("/parcel-org/money");
+    return {
+      ok: true,
+      expectedKes: res.expectedKes,
+      shortfallKes: res.shortfallKes,
+    };
+  } catch (e) {
+    const r = toResult(e);
+    return { ok: false, error: r.ok ? "That did not work" : r.error };
+  }
+}
+
 // OrgPricingRow — mirrors dbx.ParcelPricing's JSON shape. Whatever this
 // endpoint returns for a type is exactly what a sender's own quote will
 // resolve to (see handleListMyOrgPricing's own comment) — this screen

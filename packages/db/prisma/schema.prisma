@@ -682,6 +682,12 @@ enum AccountKind {
   /// now". Debited when a collection is recorded, credited when the
   /// rider remits. See dbx.RecordCodCollection / RemitCod.
   PARCEL_COD_HELD
+  /// One per courier-company staff member — counter-intake cash
+  /// physically in that clerk's pocket between settling a sender at the
+  /// desk and a manager counting it in. Same role PARCEL_COD_HELD plays
+  /// for a rider's delivery round, keyed by staff instead of party. See
+  /// dbx.SettleCounterParcel / RemitCounterCash.
+  PARCEL_COUNTER_CASH_HELD
   /// One per seller (the parcel's sender) — goods money collected on
   /// their behalf and not yet paid out. Credited at collection, debited
   /// at settlement. Deliberately separate from WALLET: this is money
@@ -4435,11 +4441,21 @@ model Parcel {
   /// own mpesaReceiptCode columns already play. Null for ESOKO_POINTS.
   mpesaReceiptCode         String?
   paidAt                   DateTime?
-  /// Set only for a CASH payment — who at the counter confirmed the
-  /// cash was actually handed over, same audit shape as
-  /// refundedByStaffId/cancelledByStaffId below. Null for MPESA_STK
-  /// and ESOKO_POINTS, which confirm themselves.
+  /// Who at the counter confirmed this payment themselves, rather than
+  /// Safaricom's own webhook confirming it: a CASH settlement (always),
+  /// or a clerk typing in an M-Pesa code because the STK callback never
+  /// arrived (dbx.ConfirmCounterSettlementByManualCode). Null for
+  /// MPESA_STK, ESOKO_POINTS, and a webhook-confirmed counter
+  /// settlement, which all confirm themselves — same audit shape as
+  /// refundedByStaffId/cancelledByStaffId below.
   paidByStaffId            String?   @db.Uuid
+  /// Which counter-cash hand-over batch cleared this parcel's cash out
+  /// of the clerk's pocket (see ParcelCounterCashRemittance). Null
+  /// until remitted, and only ever set for a CASH settlement —
+  /// mpesaReceiptCode being non-null on a PAY_AT_COUNTER row means the
+  /// money already landed electronically, never in anyone's hand.
+  counterCashRemittanceId String?                       @db.Uuid
+  counterCashRemittance   ParcelCounterCashRemittance?  @relation(fields: [counterCashRemittanceId], references: [id])
 
   /// Who's coming to collect it and when, set by an admin scheduling a
   /// pickup — distinct from currentHolderPartyId, which only changes
@@ -4978,6 +4994,34 @@ model ParcelCodRemittance {
 
   @@index([riderPartyId, createdAt])
   @@map("parcel_cod_remittance")
+}
+
+/// One hand-over of a clerk's counter-intake cash, clearing their
+/// pocket — ParcelCodRemittance's counterpart for cash collected at a
+/// walk-in counter instead of on a rider's delivery round. Same
+/// batch-not-per-parcel shape, same allowed-to-disagree amountKes vs
+/// expectedKes pair, for the same reasons that model's own comment
+/// gives.
+model ParcelCounterCashRemittance {
+  id String @id @default(uuid()) @db.Uuid
+
+  orgId String @db.Uuid
+
+  /// The clerk whose pocket this emptied.
+  collectedByStaffId String @db.Uuid
+  /// The manager who counted it in.
+  receivedByStaffId  String @db.Uuid
+
+  amountKes   Decimal @db.Decimal(12, 2)
+  expectedKes Decimal @db.Decimal(12, 2)
+  note        String?
+
+  createdAt DateTime @default(now())
+
+  parcels Parcel[]
+
+  @@index([collectedByStaffId, createdAt])
+  @@map("parcel_counter_cash_remittance")
 }
 
 /// One batch of COD money paid out from the platform SETTLEMENT account

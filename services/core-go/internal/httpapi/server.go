@@ -411,6 +411,7 @@ func (s *Server) Router() *gin.Engine {
 		v1.POST("/parcel-orgs/me/parcels/:code/courier-earnings/release",
 			s.authRequired(), s.handleOrgReleaseHeldEarnings)
 		v1.POST("/parcel-orgs/me/cod/remit", s.authRequired(), s.handleOrgRemitCod)
+		v1.POST("/parcel-orgs/me/counter-cash/remit", s.authRequired(), s.handleOrgRemitCounterCash)
 		// A company's own label stock — minting, the register, and
 		// withdrawing a stolen pad, all scoped to the session's org.
 		// "batches" is static and sits above :id, same shape as the

@@ -1580,6 +1580,18 @@ type ParcelOrgStats struct {
 	// Overdue — active parcels past their SLA deadline. Powers the
 	// register's "Overdue only" toggle and the attention band.
 	Overdue int `json:"overdue"`
+	// CounterCashOutstandingKes — cash a clerk took at the counter and
+	// hasn't yet been counted in by a manager (see RemitCounterCash).
+	// Physically sitting with the company, not Esoqo, until that
+	// happens — shown here (both the org's own dashboard and Esoqo
+	// admin read this same struct) so neither side has to go looking
+	// for it.
+	CounterCashOutstandingKes money.Amount `json:"counterCashOutstandingKes"`
+	// CounterCashPlatformFeeOwedKes — Esoqo's own cut of the figure
+	// above: the company's share of that counter cash is its own
+	// money, but this slice is Esoqo's, and it isn't really "earned"
+	// until the cash itself has actually moved.
+	CounterCashPlatformFeeOwedKes money.Amount `json:"counterCashPlatformFeeOwedKes"`
 }
 
 func GetParcelOrgStats(ctx context.Context, pool *pgxpool.Pool, orgID string) (*ParcelOrgStats, error) {
@@ -1595,12 +1607,18 @@ func GetParcelOrgStats(ctx context.Context, pool *pgxpool.Pool, orgID string) (*
 			COALESCE(SUM("orgEarningsKes"), 0)::float8,
 			count(*) FILTER (WHERE status = 'BOOKED' AND "originMethod" = 'SELF_DROPOFF'),
 			count(*) FILTER (WHERE "slaDeadlineAt" IS NOT NULL AND "slaDeadlineAt" < now()
-				AND status IN ('RECEIVED_AT_COUNTER', 'PICKED_UP', 'IN_TRANSIT'))
+				AND status IN ('RECEIVED_AT_COUNTER', 'PICKED_UP', 'IN_TRANSIT')),
+			(SELECT COALESCE(SUM("priceKes"), 0)::float8 FROM parcel
+				WHERE "parcelOrgId" = $1 AND "paymentMethod" = 'PAY_AT_COUNTER' AND "paidAt" IS NOT NULL
+				  AND "mpesaReceiptCode" IS NULL AND "counterCashRemittanceId" IS NULL),
+			(SELECT COALESCE(SUM("platformFeeKes"), 0)::float8 FROM parcel
+				WHERE "parcelOrgId" = $1 AND "paymentMethod" = 'PAY_AT_COUNTER' AND "paidAt" IS NOT NULL
+				  AND "mpesaReceiptCode" IS NULL AND "counterCashRemittanceId" IS NULL)
 		FROM parcel
 		WHERE "parcelOrgId" = $1 AND status != 'CANCELLED'`, orgID).
 		Scan(&s.AwaitingPickup, &s.InTransit, &s.FailedDeliveries, &s.AtAgent,
 			&s.DeliveredToday, &s.EarningsTodayKes, &s.EarningsKes, &s.AwaitingDropoff,
-			&s.Overdue)
+			&s.Overdue, &s.CounterCashOutstandingKes, &s.CounterCashPlatformFeeOwedKes)
 	if err != nil {
 		return nil, err
 	}

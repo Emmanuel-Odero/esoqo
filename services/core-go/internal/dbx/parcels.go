@@ -1314,15 +1314,19 @@ func validateCounterSettlement(ctx context.Context, pool *pgxpool.Pool, code str
 	return parcelID, nil
 }
 
-func SettleCounterParcel(ctx context.Context, pool *pgxpool.Pool, code string, priceKes float64, orgScope *string) (parcelID string, err error) {
+// staffID is who physically took the cash — stamped onto paidByStaffId
+// so RemitCounterCash can later total up what each clerk is holding.
+// Required (unlike the STK path, which confirms itself): cash has no
+// other record of whose hands it passed through.
+func SettleCounterParcel(ctx context.Context, pool *pgxpool.Pool, code string, priceKes float64, staffID string, orgScope *string) (parcelID string, err error) {
 	parcelID, err = validateCounterSettlement(ctx, pool, code, priceKes, orgScope)
 	if err != nil {
 		return "", err
 	}
 
 	tag, err := pool.Exec(ctx, `
-		UPDATE parcel SET "priceKes" = $1, "paidAt" = now()
-		WHERE id = $2 AND "paidAt" IS NULL`, priceKes, parcelID)
+		UPDATE parcel SET "priceKes" = $1, "paidAt" = now(), "paidByStaffId" = $3
+		WHERE id = $2 AND "paidAt" IS NULL`, priceKes, parcelID, staffID)
 	if err != nil {
 		return "", err
 	}

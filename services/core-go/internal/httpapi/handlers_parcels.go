@@ -261,7 +261,7 @@ func (s *Server) handleSettleCounterParcel(c *gin.Context) {
 		return
 	}
 
-	parcelID, err := dbx.SettleCounterParcel(c.Request.Context(), s.Pool, c.Param("code"), req.PriceKes, orgScope)
+	parcelID, err := dbx.SettleCounterParcel(c.Request.Context(), s.Pool, c.Param("code"), req.PriceKes, ctx.ActorID, orgScope)
 	if err != nil {
 		writeParcelError(c, err)
 		return
