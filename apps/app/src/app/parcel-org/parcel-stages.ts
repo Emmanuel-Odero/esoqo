@@ -126,6 +126,49 @@ export function isInFlight(status: string): boolean {
   return stage === 'at-counter' || stage === 'moving';
 }
 
+/**
+ * The human label for a status — the one thing stageFor's ScanStage
+ * vocabulary genuinely can't carry on its own: BOOKED means two
+ * different things to say out loud depending on how the parcel is
+ * getting to the company. A scheduled pickup is a rider the company is
+ * waiting ON; a self-dropoff is a sender the company is waiting FOR, at
+ * its own counter — showing "Waiting for a rider" on the second one
+ * told a clerk a rider was coming when nobody had been assigned, because
+ * nobody needs to be: the sender is walking in.
+ *
+ * Was three separately hand-maintained copies (OrgParcelsTable,
+ * ParcelDrawer, ScannerConsole's own STATUS_LABEL maps), none of them
+ * originMethod-aware, all three wrong for the same case in the same way
+ * — exactly the drift this file's own module comment warns a second
+ * encoding invites.
+ */
+export function statusLabel(status: string, originMethod?: string): string {
+  switch (status) {
+    case "DRAFT_PENDING_PAYMENT":
+      return "Awaiting payment";
+    case "BOOKED":
+      return originMethod === "SELF_DROPOFF" ? "Awaiting drop-off" : "Waiting for a rider";
+    case "RECEIVED_AT_COUNTER":
+      return "At the station";
+    case "PICKED_UP":
+      return "Picked up";
+    case "IN_TRANSIT":
+      return "On the way";
+    case "FAILED_DELIVERY":
+      return "Delivery attempted";
+    case "HELD_AT_AGENT":
+      return "At a pickup point";
+    case "DELIVERED":
+      return "Delivered";
+    case "RETURNED_TO_SENDER":
+      return "Returned to sender";
+    case "CANCELLED":
+      return "Cancelled";
+    default:
+      return status;
+  }
+}
+
 /** What the scan turned out to be. The client renders one panel per
  *  `kind`, and for a parcel one panel per `stage` — so a new status can
  *  never silently fall through to a screen with no actions on it. */

@@ -4,7 +4,7 @@ import { useEffect, useRef } from 'react';
 import { dropPointFor, Icon, PrintStyles, ScaledLabel } from '@esoqo/ui';
 import type { OrgParcelRow } from '@/lib/parcel-org-session';
 import { DemoPhoneSpan } from '@/components/DemoContact';
-import { affordancesFor, stageFor } from './parcel-stages';
+import { affordancesFor, stageFor, statusLabel } from './parcel-stages';
 
 /**
  * The whole parcel, before anything is done to it.
@@ -90,7 +90,7 @@ export function ParcelDrawer({
           <div style={{ flex: 1, minWidth: 0 }}>
             <span className="pdrawer-code mono">{parcel.code}</span>
             <div className="pdrawer-pills">
-              <span className={`pill ${pillFor(stage)}`}>{STATUS_LABEL[parcel.status] ?? parcel.status}</span>
+              <span className={`pill ${pillFor(stage)}`}>{statusLabel(parcel.status, parcel.originMethod)}</span>
               {overdue && <span className="pill p-bad">Past SLA</span>}
               {parcel.deliveryAttempts > 0 && (
                 <span className="pill p-warn">
@@ -274,19 +274,6 @@ export function ParcelDrawer({
     </div>
   );
 }
-
-const STATUS_LABEL: Record<string, string> = {
-  DRAFT_PENDING_PAYMENT: 'Awaiting payment',
-  BOOKED: 'Waiting for a rider',
-  RECEIVED_AT_COUNTER: 'At the station',
-  PICKED_UP: 'Picked up',
-  IN_TRANSIT: 'On the way',
-  FAILED_DELIVERY: 'Delivery attempted',
-  HELD_AT_AGENT: 'At a pickup point',
-  DELIVERED: 'Delivered',
-  RETURNED_TO_SENDER: 'Returned to sender',
-  CANCELLED: 'Cancelled',
-};
 
 // The only two values ParcelOriginMethod has. The drawer showed raw
 // enum text for anything it didn't know, so a clerk read
