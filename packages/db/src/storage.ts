@@ -77,7 +77,7 @@ function r2Client(): S3Client {
   return r2;
 }
 
-export const MAX_BYTES = 10 * 1024 * 1024;
+export const MAX_BYTES = 1 * 1024 * 1024;
 
 /** Magic-byte signatures. A .png that starts with MZ is an executable. */
 const SIGNATURES: { mime: string; ext: string; test: (b: Buffer) => boolean }[] = [
@@ -107,7 +107,7 @@ export interface SniffResult {
  */
 export function sniff(buf: Buffer, declaredMime: string, filename: string): SniffResult {
   if (buf.length === 0) return { ok: false, reason: 'That file is empty' };
-  if (buf.length > MAX_BYTES) return { ok: false, reason: 'That file is larger than 10 MB' };
+  if (buf.length > MAX_BYTES) return { ok: false, reason: 'That file is larger than 1 MB' };
 
   const hit = SIGNATURES.find((s) => s.test(buf));
   if (!hit) return { ok: false, reason: 'We could not recognise that file type' };

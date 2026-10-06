@@ -148,7 +148,21 @@ export function ShellNav({
           </button>
 
           {open && (
-            <div className="sheet-scrim" onClick={toggle} role="presentation">
+            <div
+              className="sheet-scrim"
+              // Close only for a click ON the scrim itself. Without this
+              // check, any click inside the sheet bubbles up here too —
+              // harmless for the Link rows (Next's router navigates
+              // regardless of whether the DOM node survives), but fatal
+              // for the Sign out button: this handler's setOpen(false)
+              // unmounts the form synchronously, in the same event, before
+              // the browser gets to run the submit button's native default
+              // action — so the sheet closes and the POST never fires.
+              onClick={(e) => {
+                if (e.target === e.currentTarget) toggle();
+              }}
+              role="presentation"
+            >
               <div
                 className="sheet"
                 id="more-sheet"

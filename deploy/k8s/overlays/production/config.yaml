@@ -65,4 +65,9 @@ data:
   OTP_RATE_LIMIT_PER_HOUR: "5"
   OTP_DAILY_SPEND_CAP_KES: "5000"
 
-  LOCAL_STORAGE_DIR: /tmp/esoqo-uploads
+  # On the cluster, not R2 — see media-storage.yaml. local forces the
+  # same code path preview already uses; the difference here is this
+  # directory is now backed by a real PVC instead of the ephemeral
+  # container filesystem.
+  STORAGE_PROVIDER: local
+  LOCAL_STORAGE_DIR: /data/uploads

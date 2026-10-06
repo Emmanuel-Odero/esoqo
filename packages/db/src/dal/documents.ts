@@ -64,7 +64,7 @@ export async function createDocument(ctx: Ctx, input: CreateDocumentInput) {
     throw new Error(`We cannot accept ${input.mimeType} files`);
   }
   if (input.sizeBytes > MAX_BYTES) {
-    throw new Error('That file is larger than 10 MB');
+    throw new Error('That file is larger than 1 MB');
   }
 
   // Identical bytes already uploaded for this subject → reuse, do not duplicate.

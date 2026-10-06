@@ -48,7 +48,8 @@ export interface OrgPortalHandler {
   }) => OrgPortalNavItem[];
 
   /**
-   * CSS class prefix for styling (e.g., 'porg' for courier, 'hotel-portal' for hotel)
+   * CSS class prefix for styling — all handlers share "orgportal",
+   * which is what apps/app/src/components/orgportal.css defines.
    */
   stylePrefix: string;
 
@@ -96,77 +97,6 @@ export function getAllOrgPortalHandlers(): OrgPortalHandler[] {
 }
 
 /**
- * Portal handler for courier organizations.
- * Maps the legacy /parcel-org routes to the new /org/courier/[id] structure.
- */
-export const courierPortalHandler: OrgPortalHandler = {
-  orgType: "courier",
-  getSubtitle: () => "Courier company",
-  getHomeLink: (orgId: string) => `/org/courier/${orgId}`,
-  getSignOutAction: () => "/orgs/signout",
-  stylePrefix: "porg",
-  getNavItems: (args: {
-    orgId: string;
-    capabilities: string[];
-    metadata?: Record<string, any>;
-  }) => {
-    const { orgId, capabilities, metadata } = args;
-
-    const canManagePricing = capabilities.includes("parcelorg.write");
-    const canDispatch = capabilities.includes("parcelorg.dispatch");
-    const canSeeMoney = capabilities.includes("parcelorg.earnings");
-    const canDesk = canDispatch || capabilities.includes("parcelorg.carry");
-    const canScan =
-      canDesk ||
-      capabilities.includes("parcelorg.intake") ||
-      capabilities.includes("parcelorg.arrival");
-    const canSell = canDispatch || canManagePricing;
-
-    const items: OrgPortalNavItem[] = [
-      {
-        href: `/org/courier/${orgId}`,
-        label: "Parcels",
-        icon: "box",
-        show: true,
-      },
-      {
-        href: `/org/courier/${orgId}/scan`,
-        label: "Scan",
-        icon: "qr",
-        badge: metadata?.awaitingDropoff || undefined,
-        show: canScan,
-      },
-      {
-        href: `/org/courier/${orgId}/dispatch`,
-        label: "Dispatch",
-        icon: "send",
-        show: canDispatch,
-      },
-      {
-        href: `/org/courier/${orgId}/counter`,
-        label: "Counter",
-        icon: "plus",
-        show: canSell,
-      },
-      {
-        href: `/org/courier/${orgId}/money`,
-        label: "Money",
-        icon: "coins",
-        show: canSeeMoney,
-      },
-      {
-        href: `/org/courier/${orgId}/settings`,
-        label: "Settings",
-        icon: "grid",
-        show: true,
-      },
-    ];
-
-    return items;
-  },
-};
-
-/**
  * Portal handler for ticket/transport organizations.
  * Maps the legacy /org/[orgId] routes to the new /org/ticket/[id] structure.
  */
@@ -175,7 +105,7 @@ export const ticketPortalHandler: OrgPortalHandler = {
   getSubtitle: () => "Event/Transport organiser",
   getHomeLink: (orgId: string) => `/org/ticket/${orgId}`,
   getSignOutAction: () => "/orgs/signout",
-  stylePrefix: "org-portal",
+  stylePrefix: "orgportal",
   getNavItems: (args: {
     orgId: string;
     capabilities: string[];
@@ -248,7 +178,7 @@ export const hotelPortalHandler: OrgPortalHandler = {
   getSubtitle: () => "Hotel",
   getHomeLink: (orgId: string) => `/org/hotel/${orgId}`,
   getSignOutAction: () => "/orgs/signout",
-  stylePrefix: "hotel-portal",
+  stylePrefix: "orgportal",
   getNavItems: (args: { orgId: string; capabilities: string[] }) => {
     const { orgId, capabilities } = args;
 
@@ -297,7 +227,7 @@ export const eateryPortalHandler: OrgPortalHandler = {
   getSubtitle: () => "Restaurant/Eatery",
   getHomeLink: (orgId: string) => `/org/eatery/${orgId}`,
   getSignOutAction: () => "/orgs/signout",
-  stylePrefix: "eatery-portal",
+  stylePrefix: "orgportal",
   getNavItems: (args: { orgId: string; capabilities: string[] }) => {
     const { orgId, capabilities } = args;
 
@@ -346,7 +276,7 @@ export const chamaPortalHandler: OrgPortalHandler = {
   getSubtitle: () => "Chama/Savings Group",
   getHomeLink: (orgId: string) => `/org/chama/${orgId}`,
   getSignOutAction: () => "/orgs/signout",
-  stylePrefix: "chama-portal",
+  stylePrefix: "orgportal",
   getNavItems: (args: { orgId: string; capabilities: string[] }) => {
     const { orgId, capabilities } = args;
 
@@ -395,7 +325,7 @@ export const toutPortalHandler: OrgPortalHandler = {
   getSubtitle: () => "Tout/Broker",
   getHomeLink: (orgId: string) => `/org/tout/${orgId}`,
   getSignOutAction: () => "/orgs/signout",
-  stylePrefix: "tout-portal",
+  stylePrefix: "orgportal",
   getNavItems: (args: { orgId: string; capabilities: string[] }) => {
     const { orgId, capabilities } = args;
 
@@ -440,7 +370,6 @@ export const toutPortalHandler: OrgPortalHandler = {
  * Initialize the portal handler registry with all built-in handlers.
  */
 export function initializePortalHandlers(): void {
-  registerOrgPortalHandler(courierPortalHandler);
   registerOrgPortalHandler(ticketPortalHandler);
   registerOrgPortalHandler(hotelPortalHandler);
   registerOrgPortalHandler(eateryPortalHandler);

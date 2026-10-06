@@ -935,7 +935,7 @@ function UploadRegistrationDocument({
           </select>
 
           <label className="sub" htmlFor="urd-file" style={{ display: 'block', marginBottom: 6 }}>
-            File (PDF, Word, Excel or image — up to 10 MB)
+            File (PDF, Word, Excel or image — up to 1 MB)
           </label>
           <input id="urd-file" className="inp" type="file" style={{ width: '100%' }}
             accept=".pdf,.doc,.docx,.xls,.xlsx,.png,.jpg,.jpeg"

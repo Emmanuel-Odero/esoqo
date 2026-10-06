@@ -21,6 +21,7 @@ resources:
 - ingress.yaml
 - config.yaml
 - issuer.yaml
+- media-storage.yaml
 
 labels:
 - pairs:
@@ -110,6 +111,38 @@ patches:
       path: /spec/template/spec/nodeSelector
       value:
         kubernetes.io/hostname: kcw-55
+  target:
+    kind: Deployment
+    name: core-go
+
+# Mount the media-storage PVC (media-storage.yaml) into both services
+# that write uploads — see that file's header for why this exists and
+# why it's RWX. /data/uploads, not /tmp: the previous LOCAL_STORAGE_DIR
+# pointed at a bare container path with nothing backing it, so every
+# upload was lost on the next restart even when STORAGE_PROVIDER=local.
+- patch: |
+    - op: add
+      path: /spec/template/spec/volumes
+      value:
+        - name: media-storage
+          persistentVolumeClaim: { claimName: media-storage }
+    - op: add
+      path: /spec/template/spec/containers/0/volumeMounts
+      value:
+        - { name: media-storage, mountPath: /data/uploads }
+  target:
+    kind: Deployment
+    name: core-service
+- patch: |
+    - op: add
+      path: /spec/template/spec/volumes
+      value:
+        - name: media-storage
+          persistentVolumeClaim: { claimName: media-storage }
+    - op: add
+      path: /spec/template/spec/containers/0/volumeMounts
+      value:
+        - { name: media-storage, mountPath: /data/uploads }
   target:
     kind: Deployment
     name: core-go

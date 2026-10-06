@@ -179,6 +179,92 @@ func isForeignLabelCode(code string) bool {
 	return !strings.HasPrefix(upper, "PKG-")
 }
 
+// rowQuerier is the common slice of *pgxpool.Pool and pgx.Tx that
+// insertParcelRow needs — letting it run either as its own statement
+// (the fresh-code path, against the pool) or as one statement inside an
+// already-open transaction (the pre-printed-label path, which also has
+// to lock and spend the label stock row atomically).
+type rowQuerier interface {
+	QueryRow(ctx context.Context, sql string, args ...any) pgx.Row
+}
+
+// insertParcelRow is the one INSERT both of BookParcel's paths run —
+// extracted because they used to be two separately maintained copies,
+// and the pre-printed-label one had silently fallen behind: it never
+// picked up originMethod, paymentMethod, the SLA clock, or the sender's
+// contents declaration when those were added to the fresh-code path,
+// so a label-bound PayAtCounter booking landed in DRAFT_PENDING_PAYMENT
+// with no SLA regardless of what the caller asked for. One function,
+// one row shape, so that can't happen again.
+func insertParcelRow(ctx context.Context, q rowQuerier, code, deliveryCode, serviceTicketNumber, originMethod string, in BookParcelInput, pricing *ParcelPricing, coverageFeeKes *float64, parcelID *string) error {
+	// PayAtCounter skips the whole DRAFT_PENDING_PAYMENT -> price ->
+	// pay sequence and lands directly in BOOKED, same slaDeadlineAt
+	// formula PayParcelWithPoints uses at its own payment-confirmation
+	// moment — a parcel settled in person still deserves an SLA clock,
+	// it just starts at booking instead of at payment because there
+	// is no separate payment step to start it from.
+	status := "DRAFT_PENDING_PAYMENT"
+	var paymentMethod *string
+	if in.PayAtCounter {
+		status = "BOOKED"
+		m := "PAY_AT_COUNTER"
+		paymentMethod = &m
+	}
+	return q.QueryRow(ctx, `
+		INSERT INTO parcel (
+			id, code, "deliveryCode", "senderPartyId", "senderName", "senderMsisdn",
+			"receiverName", "receiverMsisdn", "originLabel", "destinationLabel", notes,
+			"parcelType", "weightKg", fragile, "transportMode", "originZoneId", "destinationZoneId",
+			"destinationAgentId", "declaredValueKes", "coverageTierId", "coverageFeeKes",
+			"parcelOrgId", "originLat", "originLng", "destinationLat", "destinationLng",
+			"lengthCm", "widthCm", "heightCm",
+			"contentsDeclaredAt", "contentsDeclaredByStaffId",
+			"originMethod", "paymentMethod", "slaDeadlineAt",
+			status, "createdAt", "serviceTicketNumber",
+			"senderDeclaredContents", "lawfulContentsAttestedAt",
+			"termsAcceptedAt", "termsVersion", "carrierTermsVersion"
+		) VALUES (
+			gen_random_uuid(), $1, $2, $3, $4, $5, $6, $7, $8, $9, $10,
+			$11::"ParcelType", $12, $13, $14::"ParcelTransportMode", $15, $16,
+			$17, $18, $19, $20, $21, $22, $23, $24, $25,
+			$26, $27, $28,
+			-- Stamped together: the timestamp is only meaningful
+			-- alongside the person who asked.
+			CASE WHEN $29::uuid IS NULL THEN NULL ELSE now() END, $29::uuid,
+			$30::"ParcelOriginMethod", $31,
+			CASE WHEN $32::text != 'BOOKED' THEN NULL ELSE now() + (
+				SELECT r."slaHours" FROM parcel_pricing_rule r
+				WHERE r."parcelType" = $11::"ParcelType"
+				  AND (r."parcelOrgId" IS NULL OR r."parcelOrgId" = $21::uuid)
+				ORDER BY r."parcelOrgId" NULLS LAST
+				LIMIT 1
+			) * interval '1 hour' END,
+			$32::"ParcelStatus", now(), $33,
+			-- The booleans become timestamps here rather than in Go,
+			-- so the recorded moment is the same now() the row itself
+			-- is stamped with. A version is only kept alongside an
+			-- acceptance: "v3" with no termsAcceptedAt would claim an
+			-- agreement nobody made.
+			$34,
+			CASE WHEN $35::boolean THEN now() ELSE NULL END,
+			CASE WHEN $36::boolean THEN now() ELSE NULL END,
+			CASE WHEN $36::boolean THEN $37 ELSE NULL END,
+			CASE WHEN $36::boolean THEN $38 ELSE NULL END
+		) RETURNING id`,
+		code, deliveryCode, in.SenderPartyID, in.SenderName, in.SenderMsisdn,
+		in.ReceiverName, in.ReceiverMsisdn, in.OriginLabel, in.DestinationLabel, in.Notes,
+		in.ParcelType, in.WeightKg, in.Fragile, pricing.SuggestedTransportMode,
+		in.OriginZoneID, in.DestinationZoneID,
+		in.DestinationAgentID, in.DeclaredValueKes, in.CoverageTierID, coverageFeeKes,
+		in.ParcelOrgID,
+		in.OriginLat, in.OriginLng, in.DestinationLat, in.DestinationLng,
+		in.LengthCm, in.WidthCm, in.HeightCm, in.ContentsDeclaredByStaffID,
+		originMethod, paymentMethod, status, serviceTicketNumber,
+		in.SenderDeclaredContents, in.LawfulContentsAttested,
+		in.TermsAccepted, in.TermsVersion, in.CarrierTermsVersion).
+		Scan(parcelID)
+}
+
 // BookParcel mints the parcel's own tracking code (PKG-…, via
 // fleetqr's minting contract — see the security posture's rule on
 // never hand-rolling a short code) plus a second, separate
@@ -275,78 +361,14 @@ func BookParcel(ctx context.Context, pool *pgxpool.Pool, in BookParcelInput) (pa
 	// serviceTicketNumber — minted unconditionally, on every booking
 	// path (fresh code or a pre-printed label). See its own schema
 	// comment: this, not the real tracking code, is what a self-service
-	// booking's response actually carries. Firstname + an assigned
-	// number, not a checksummed code — a clerk calling someone forward
-	// at the counter reads this aloud, never types it back in.
+	// booking's response actually carries. A name (the sender's first
+	// or second, drawn at random) plus an assigned number, not a
+	// checksummed code — a clerk calling someone forward at the
+	// counter reads this aloud, never types it back in.
 	serviceTicketNumber = fleetqr.ServiceTicketForName(in.SenderName)
 
-	insertParcel := func(useCode string) error {
-		// PayAtCounter skips the whole DRAFT_PENDING_PAYMENT -> price ->
-		// pay sequence and lands directly in BOOKED, same slaDeadlineAt
-		// formula PayParcelWithPoints uses at its own payment-confirmation
-		// moment — a parcel settled in person still deserves an SLA clock,
-		// it just starts at booking instead of at payment because there
-		// is no separate payment step to start it from.
-		status := "DRAFT_PENDING_PAYMENT"
-		var paymentMethod *string
-		if in.PayAtCounter {
-			status = "BOOKED"
-			m := "PAY_AT_COUNTER"
-			paymentMethod = &m
-		}
-		return pool.QueryRow(ctx, `
-			INSERT INTO parcel (
-				id, code, "deliveryCode", "senderPartyId", "senderName", "senderMsisdn",
-				"receiverName", "receiverMsisdn", "originLabel", "destinationLabel", notes,
-				"parcelType", "weightKg", fragile, "transportMode", "originZoneId", "destinationZoneId",
-				"destinationAgentId", "declaredValueKes", "coverageTierId", "coverageFeeKes",
-				"parcelOrgId", "originLat", "originLng", "destinationLat", "destinationLng",
-				"lengthCm", "widthCm", "heightCm",
-				"contentsDeclaredAt", "contentsDeclaredByStaffId",
-				"originMethod", "paymentMethod", "slaDeadlineAt",
-				status, "createdAt", "serviceTicketNumber",
-				"senderDeclaredContents", "lawfulContentsAttestedAt",
-				"termsAcceptedAt", "termsVersion", "carrierTermsVersion"
-			) VALUES (
-				gen_random_uuid(), $1, $2, $3, $4, $5, $6, $7, $8, $9, $10,
-				$11::"ParcelType", $12, $13, $14::"ParcelTransportMode", $15, $16,
-				$17, $18, $19, $20, $21, $22, $23, $24, $25,
-				$26, $27, $28,
-				-- Stamped together: the timestamp is only meaningful
-				-- alongside the person who asked.
-				CASE WHEN $29::uuid IS NULL THEN NULL ELSE now() END, $29::uuid,
-				$30::"ParcelOriginMethod", $31,
-				CASE WHEN $32::text != 'BOOKED' THEN NULL ELSE now() + (
-					SELECT r."slaHours" FROM parcel_pricing_rule r
-					WHERE r."parcelType" = $11::"ParcelType"
-					  AND (r."parcelOrgId" IS NULL OR r."parcelOrgId" = $21::uuid)
-					ORDER BY r."parcelOrgId" NULLS LAST
-					LIMIT 1
-				) * interval '1 hour' END,
-				$32::"ParcelStatus", now(), $33,
-				-- The booleans become timestamps here rather than in Go,
-				-- so the recorded moment is the same now() the row itself
-				-- is stamped with. A version is only kept alongside an
-				-- acceptance: "v3" with no termsAcceptedAt would claim an
-				-- agreement nobody made.
-				$34,
-				CASE WHEN $35::boolean THEN now() ELSE NULL END,
-				CASE WHEN $36::boolean THEN now() ELSE NULL END,
-				CASE WHEN $36::boolean THEN $37 ELSE NULL END,
-				CASE WHEN $36::boolean THEN $38 ELSE NULL END
-			) RETURNING id`,
-			useCode, deliveryCode, in.SenderPartyID, in.SenderName, in.SenderMsisdn,
-			in.ReceiverName, in.ReceiverMsisdn, in.OriginLabel, in.DestinationLabel, in.Notes,
-			in.ParcelType, in.WeightKg, in.Fragile, pricing.SuggestedTransportMode,
-			in.OriginZoneID, in.DestinationZoneID,
-			in.DestinationAgentID, in.DeclaredValueKes, in.CoverageTierID, coverageFeeKes,
-			in.ParcelOrgID,
-			in.OriginLat, in.OriginLng, in.DestinationLat, in.DestinationLng,
-			in.LengthCm, in.WidthCm, in.HeightCm, in.ContentsDeclaredByStaffID,
-			originMethod, paymentMethod, status, serviceTicketNumber,
-			in.SenderDeclaredContents, in.LawfulContentsAttested,
-			in.TermsAccepted, in.TermsVersion, in.CarrierTermsVersion).
-			Scan(&parcelID)
+	insertParcel := func(q rowQuerier, useCode string) error {
+		return insertParcelRow(ctx, q, useCode, deliveryCode, serviceTicketNumber, originMethod, in, pricing, coverageFeeKes, &parcelID)
 	}
 
 	if in.ExistingCode != nil && *in.ExistingCode != "" {
@@ -418,36 +440,15 @@ func BookParcel(ctx context.Context, pool *pgxpool.Pool, in BookParcelInput) (pa
 				return "", "", "", "", &ParcelError{"FORBIDDEN", "That label was issued to another company — use one of your own"}
 			}
 		}
-		if err := tx.QueryRow(ctx, `
-			INSERT INTO parcel (
-				id, code, "deliveryCode", "senderPartyId", "senderName", "senderMsisdn",
-				"receiverName", "receiverMsisdn", "originLabel", "destinationLabel", notes,
-				"parcelType", "weightKg", fragile, "transportMode", "originZoneId", "destinationZoneId",
-				"destinationAgentId", "declaredValueKes", "coverageTierId", "coverageFeeKes",
-				"parcelOrgId", "originLat", "originLng", "destinationLat", "destinationLng",
-				"lengthCm", "widthCm", "heightCm",
-				"contentsDeclaredAt", "contentsDeclaredByStaffId",
-				status, "createdAt", "serviceTicketNumber"
-			) VALUES (
-				gen_random_uuid(), $1, $2, $3, $4, $5, $6, $7, $8, $9, $10,
-				$11::"ParcelType", $12, $13, $14::"ParcelTransportMode", $15, $16,
-				$17, $18, $19, $20, $21, $22, $23, $24, $25,
-				$26, $27, $28,
-				-- Stamped together: the timestamp is only meaningful
-				-- alongside the person who asked.
-				CASE WHEN $29::uuid IS NULL THEN NULL ELSE now() END, $29::uuid,
-				'DRAFT_PENDING_PAYMENT', now(), $30
-			) RETURNING id`,
-			code, deliveryCode, in.SenderPartyID, in.SenderName, in.SenderMsisdn,
-			in.ReceiverName, in.ReceiverMsisdn, in.OriginLabel, in.DestinationLabel, in.Notes,
-			in.ParcelType, in.WeightKg, in.Fragile, pricing.SuggestedTransportMode,
-			in.OriginZoneID, in.DestinationZoneID,
-			in.DestinationAgentID, in.DeclaredValueKes, in.CoverageTierID, coverageFeeKes,
-			in.ParcelOrgID,
-			in.OriginLat, in.OriginLng, in.DestinationLat, in.DestinationLng,
-			in.LengthCm, in.WidthCm, in.HeightCm, in.ContentsDeclaredByStaffID,
-			serviceTicketNumber).
-			Scan(&parcelID); err != nil {
+		// Same row shape the fresh-code path inserts (originMethod,
+		// paymentMethod, the SLA clock, the sender's contents
+		// declaration) — this used to be its own, older INSERT that
+		// predated PayAtCounter/SLA/declared-contents and never picked
+		// them up, which meant every pre-printed-label booking landed in
+		// DRAFT_PENDING_PAYMENT with no SLA regardless of what the
+		// caller actually asked for. One insert, shared, so the two
+		// paths can't drift apart like that again.
+		if err := insertParcelRow(ctx, tx, code, deliveryCode, serviceTicketNumber, originMethod, in, pricing, coverageFeeKes, &parcelID); err != nil {
 			return "", "", "", "", err
 		}
 		if _, err := tx.Exec(ctx, `
@@ -467,7 +468,7 @@ func BookParcel(ctx context.Context, pool *pgxpool.Pool, in BookParcelInput) (pa
 		// either @unique column fails the same INSERT, and holding onto
 		// a stale ticket number across retries would just collide again.
 		serviceTicketNumber = fleetqr.ServiceTicketForName(in.SenderName)
-		return insertParcel(code)
+		return insertParcel(pool, code)
 	})
 	return parcelID, code, deliveryCode, serviceTicketNumber, err
 }
@@ -987,7 +988,7 @@ var ErrParcelPaymentNotFound = errors.New("no parcel for that checkout request")
 // replayed callback finding it already BOOKED) — callers use that to
 // send the payment-confirmation SMS exactly once (see
 // handlers_parcels.go / handlers_payments_webhook.go).
-func ConfirmParcelPaymentByCheckoutID(ctx context.Context, pool *pgxpool.Pool, checkoutRequestID, mpesaReceiptCode string, loyaltyEnabled bool) (code string, justConfirmed bool, err error) {
+func ConfirmParcelPaymentByCheckoutID(ctx context.Context, pool *pgxpool.Pool, checkoutRequestID, mpesaReceiptCode string, loyaltyEnabled bool) (code, parcelID string, justConfirmed bool, err error) {
 	// The read, the ledger entry and the status flip are one
 	// transaction. The idempotency here rests entirely on the parcel
 	// row — the webhook is a third party that retries, so two callbacks
@@ -1000,42 +1001,52 @@ func ConfirmParcelPaymentByCheckoutID(ctx context.Context, pool *pgxpool.Pool, c
 	// lock, not the key.
 	tx, err := pool.Begin(ctx)
 	if err != nil {
-		return "", false, err
+		return "", "", false, err
 	}
 	defer func() { _ = tx.Rollback(ctx) }()
 
-	var parcelID, status, priceKesText string
+	var status, priceKesText string
 	var senderPartyID *string
+	// paymentMethod = 'MPESA_STK' narrows this to the fresh-booking STK
+	// flow specifically — AttachParcelPaymentCheckoutID is the only
+	// writer that ever sets it, so this can never match a counter
+	// settlement's checkout id (AttachCounterParcelPaymentCheckoutID
+	// deliberately leaves paymentMethod at PAY_AT_COUNTER; see its own
+	// comment). Without this, a counter-settlement checkout id would
+	// hit the "already confirmed — replayed callback" branch below
+	// (its status is never DRAFT_PENDING_PAYMENT) and the callback
+	// would be silently swallowed without ConfirmCounterSettlementByCheckoutID
+	// ever running.
 	err = tx.QueryRow(ctx, `
 		SELECT id, code, status::text, "priceKes"::text, "senderPartyId" FROM parcel
-		WHERE "paymentCheckoutRequestId" = $1 FOR UPDATE`, checkoutRequestID).
+		WHERE "paymentCheckoutRequestId" = $1 AND "paymentMethod" = 'MPESA_STK' FOR UPDATE`, checkoutRequestID).
 		Scan(&parcelID, &code, &status, &priceKesText, &senderPartyID)
 	if errors.Is(err, pgx.ErrNoRows) {
-		return "", false, ErrParcelPaymentNotFound
+		return "", "", false, ErrParcelPaymentNotFound
 	}
 	if err != nil {
-		return "", false, err
+		return "", "", false, err
 	}
 	if status != "DRAFT_PENDING_PAYMENT" {
-		return code, false, nil // already confirmed — replayed callback
+		return code, parcelID, false, nil // already confirmed — replayed callback
 	}
 	priceKes, err := strconv.ParseFloat(priceKesText, 64)
 	if err != nil {
-		return "", false, err
+		return "", "", false, err
 	}
 
 	settlementAcct, err := ledger.EnsureAccount(ctx, pool, nil, "SETTLEMENT", "KES")
 	if err != nil {
-		return "", false, err
+		return "", "", false, err
 	}
 	revenueAcct, err := ledger.EnsureAccount(ctx, pool, nil, "PARCEL_REVENUE", "KES")
 	if err != nil {
-		return "", false, err
+		return "", "", false, err
 	}
 	if _, err := ledger.PostEntryTx(ctx, tx,
 		"parcel:"+parcelID, "Parcel delivery payment", "core-go:parcel:"+parcelID,
 		[]ledger.Posting{{AccountID: settlementAcct, AmountCents: ledger.CentsFromKES(priceKes)}, {AccountID: revenueAcct, AmountCents: ledger.CentsFromKES(-priceKes)}}); err != nil {
-		return "", false, err
+		return "", "", false, err
 	}
 
 	if senderPartyID != nil {
@@ -1056,16 +1067,16 @@ func ConfirmParcelPaymentByCheckoutID(ctx context.Context, pool *pgxpool.Pool, c
 		           LIMIT 1
 		       ) * interval '1 hour'
 		WHERE id = $2 AND status = 'DRAFT_PENDING_PAYMENT'`, receiptCol, parcelID); err != nil {
-		return "", false, err
+		return "", "", false, err
 	}
 	// Frozen here, on the one transition that makes a parcel real money.
-	if err := writeParcelRevenueSplitTx(ctx, tx, parcelID, priceKes); err != nil {
-		return "", false, err
+	if err := writeParcelRevenueSplitTx(ctx, tx, pool, parcelID, priceKes); err != nil {
+		return "", "", false, err
 	}
 	if err := tx.Commit(ctx); err != nil {
-		return "", false, err
+		return "", "", false, err
 	}
-	return code, true, nil
+	return code, parcelID, true, nil
 }
 
 // ConfirmParcelCashPayment — the counter-cash payment path: a staff
@@ -1201,7 +1212,7 @@ func PayParcelWithPoints(ctx context.Context, pool *pgxpool.Pool, code, partyID 
 		WHERE code = $1 AND status = 'DRAFT_PENDING_PAYMENT'`, code); err != nil {
 		return err
 	}
-	if err := writeParcelRevenueSplitTx(ctx, tx, parcelID, priceKes); err != nil {
+	if err := writeParcelRevenueSplitTx(ctx, tx, pool, parcelID, priceKes); err != nil {
 		return err
 	}
 	return tx.Commit(ctx)
@@ -1234,19 +1245,25 @@ func PayParcelWithPoints(ctx context.Context, pool *pgxpool.Pool, code, partyID 
 // requires paidAt IS NULL, so two clerks settling the same box at once
 // produce one settlement and one "already settled", never two revenue
 // splits.
-func SettleCounterParcel(ctx context.Context, pool *pgxpool.Pool, code string, priceKes float64, orgScope *string) error {
+// validateCounterSettlement is the common gate both SettleCounterParcel
+// (cash) and SettleCounterParcelStk (M-Pesa) open before touching
+// money: same parcel, same tenancy, same PAY_AT_COUNTER/not-already-paid/
+// not-closed/price-band checks either way — only what happens once
+// through the gate differs (write paidAt immediately vs. push an STK
+// request and wait for its callback).
+func validateCounterSettlement(ctx context.Context, pool *pgxpool.Pool, code string, priceKes float64, orgScope *string) (parcelID string, err error) {
 	if priceKes <= 0 {
-		return &ParcelError{"BAD_INPUT", "Enter what the sender actually paid"}
+		return "", &ParcelError{"BAD_INPUT", "Enter what the sender actually paid"}
 	}
 
-	var parcelID, status, parcelType string
+	var status, parcelType string
 	var paymentMethod, paidAt, originZoneID, destinationZoneID, destinationAgentID, coverageFeeText, parcelOrgID *string
 	// Code or serviceTicketNumber, same reasoning ScanHandoff's own
 	// lookup gives: the clerk settling the fare is holding whichever
 	// reference the sender walked in with, and for a walk-in that is the
 	// ticket number. Settling is gated by capability and tenancy below,
 	// never by which reference was quoted.
-	err := pool.QueryRow(ctx, `
+	err = pool.QueryRow(ctx, `
 		SELECT id, status::text, "parcelType"::text, "paymentMethod"::text, "paidAt"::text,
 		       "originZoneId"::text, "destinationZoneId"::text, "destinationAgentId"::text,
 		       "coverageFeeKes"::text, "parcelOrgId"::text
@@ -1254,31 +1271,31 @@ func SettleCounterParcel(ctx context.Context, pool *pgxpool.Pool, code string, p
 		Scan(&parcelID, &status, &parcelType, &paymentMethod, &paidAt,
 			&originZoneID, &destinationZoneID, &destinationAgentID, &coverageFeeText, &parcelOrgID)
 	if errors.Is(err, pgx.ErrNoRows) {
-		return &ParcelError{"NOT_FOUND", "That parcel was not found"}
+		return "", &ParcelError{"NOT_FOUND", "That parcel was not found"}
 	}
 	if err != nil {
-		return err
+		return "", err
 	}
 	// Tenancy, same reasoning handleUpsertMyOrgStaff's own comment
 	// gives: a clerk settles their own company's parcels, and the scope
 	// comes from the session, never from the body. Nil means Esoqo staff
 	// acting with an explicit capability — no narrowing to apply.
 	if orgScope != nil && (parcelOrgID == nil || *parcelOrgID != *orgScope) {
-		return &ParcelError{"NOT_FOUND", "That parcel was not found"}
+		return "", &ParcelError{"NOT_FOUND", "That parcel was not found"}
 	}
 	if paymentMethod == nil || *paymentMethod != "PAY_AT_COUNTER" {
-		return &ParcelError{"BAD_INPUT", "This parcel wasn't booked to be paid at the counter"}
+		return "", &ParcelError{"BAD_INPUT", "This parcel wasn't booked to be paid at the counter"}
 	}
 	if paidAt != nil {
-		return &ParcelError{"ALREADY_SETTLED", "This parcel has already been settled"}
+		return "", &ParcelError{"ALREADY_SETTLED", "This parcel has already been settled"}
 	}
 	if status == "CANCELLED" || status == "RETURNED_TO_SENDER" {
-		return &ParcelError{"BAD_INPUT", "This parcel's journey is already closed"}
+		return "", &ParcelError{"BAD_INPUT", "This parcel's journey is already closed"}
 	}
 
 	coverageFeeKes, err := parseAgentFee(coverageFeeText)
 	if err != nil {
-		return err
+		return "", err
 	}
 	pricing, _, err := ParcelPriceBand(ctx, pool, PriceBandInput{
 		ParcelType:          parcelType,
@@ -1289,23 +1306,344 @@ func SettleCounterParcel(ctx context.Context, pool *pgxpool.Pool, code string, p
 		ParcelOrgID:         parcelOrgID,
 	})
 	if err != nil {
-		return err
+		return "", err
 	}
 	price := money.FromKES(priceKes)
 	if price < pricing.MinKes.Cents()-priceToleranceCents || price > pricing.MaxKes.Cents()+priceToleranceCents {
-		return &ParcelError{"BAD_INPUT", "That amount is outside the standard range for this parcel"}
+		return "", &ParcelError{"BAD_INPUT", "That amount is outside the standard range for this parcel"}
+	}
+	return parcelID, nil
+}
+
+// staffID is who physically took the cash — stamped onto paidByStaffId
+// so RemitCounterCash can later total up what each clerk is holding.
+// Required (unlike the STK path, which confirms itself): cash has no
+// other record of whose hands it passed through.
+func SettleCounterParcel(ctx context.Context, pool *pgxpool.Pool, code string, priceKes float64, staffID string, orgScope *string) (parcelID string, err error) {
+	parcelID, err = validateCounterSettlement(ctx, pool, code, priceKes, orgScope)
+	if err != nil {
+		return "", err
 	}
 
 	tag, err := pool.Exec(ctx, `
-		UPDATE parcel SET "priceKes" = $1, "paidAt" = now()
-		WHERE id = $2 AND "paidAt" IS NULL`, priceKes, parcelID)
+		UPDATE parcel SET "priceKes" = $1, "paidAt" = now(), "paidByStaffId" = $3
+		WHERE id = $2 AND "paidAt" IS NULL`, priceKes, parcelID, staffID)
+	if err != nil {
+		return "", err
+	}
+	if tag.RowsAffected() == 0 {
+		return "", &ParcelError{"ALREADY_SETTLED", "This parcel has already been settled"}
+	}
+	// The base revenue entry every other payment-confirm path posts
+	// (ConfirmParcelPaymentByCheckoutID, ConfirmParcelCashPayment,
+	// PayParcelWithPoints) — missing here until now, which this
+	// function's own doc comment didn't catch: it fixed priceKes/paidAt
+	// and the frozen split columns, but never the ledger itself, so a
+	// counter-settled parcel's cash was recorded everywhere except the
+	// one place "how much Esoqo actually banked" is supposed to add up
+	// from. Needed now in particular because reclassifyParcelOrgEarnings
+	// below debits PARCEL_REVENUE for the company's share — which only
+	// balances if this credited it first.
+	settlementAcct, err := ledger.EnsureAccount(ctx, pool, nil, "SETTLEMENT", "KES")
+	if err != nil {
+		return "", err
+	}
+	revenueAcct, err := ledger.EnsureAccount(ctx, pool, nil, "PARCEL_REVENUE", "KES")
+	if err != nil {
+		return "", err
+	}
+	if _, err := ledger.PostEntry(ctx, pool,
+		"parcel:"+parcelID, "Parcel delivery payment (counter)", "core-go:parcel:"+parcelID,
+		[]ledger.Posting{{AccountID: settlementAcct, AmountCents: ledger.CentsFromKES(priceKes)}, {AccountID: revenueAcct, AmountCents: ledger.CentsFromKES(-priceKes)}}); err != nil {
+		return "", err
+	}
+	return parcelID, writeParcelRevenueSplit(ctx, pool, parcelID, priceKes)
+}
+
+// SettleCounterParcelStk runs the same gate validateCounterSettlement
+// opens for cash, then claims the right to push an STK request instead
+// of writing paidAt immediately — same reservation-token trick
+// ReserveParcelPayment uses for a fresh booking (see its own comment),
+// matched on "paidAt IS NULL" rather than "status = DRAFT_PENDING_PAYMENT"
+// because a counter parcel is already BOOKED/received by the time it
+// is settled, never DRAFT_PENDING_PAYMENT.
+//
+// priceKes is written here, before the push, same as a fresh booking's
+// SetParcelPrice — so the amount a clerk quoted the client is what the
+// STK webhook cross-checks against (dbx.ExpectedAmountForCheckout),
+// never whatever the push itself happened to carry.
+//
+// dbx never calls Daraja itself (see this package's own comment) — the
+// httpapi caller does InitiateStkPush with the returned reservation as
+// AccountReference-independent context, then calls
+// AttachCounterParcelPaymentCheckoutID on success or
+// ReleaseCounterParcelPaymentReservation on failure.
+func SettleCounterParcelStk(ctx context.Context, pool *pgxpool.Pool, code string, priceKes float64, orgScope *string) (parcelID, reservation string, err error) {
+	parcelID, err = validateCounterSettlement(ctx, pool, code, priceKes, orgScope)
+	if err != nil {
+		return "", "", err
+	}
+
+	tag, err := pool.Exec(ctx, `
+		UPDATE parcel SET "priceKes" = $1, "paymentCheckoutRequestId" = gen_random_uuid()::text,
+		       "paymentReservationAt" = now()
+		WHERE id = $2 AND "paidAt" IS NULL AND "paymentCheckoutRequestId" IS NULL`, priceKes, parcelID)
+	if err != nil {
+		return "", "", err
+	}
+	if tag.RowsAffected() == 0 {
+		return "", "", &ParcelError{"CONFLICT", "A payment is already in progress for this parcel"}
+	}
+	err = pool.QueryRow(ctx, `
+		SELECT "paymentCheckoutRequestId" FROM parcel
+		WHERE id = $1 AND "paymentReservationAt" IS NOT NULL`, parcelID).Scan(&reservation)
+	if err != nil {
+		return "", "", err
+	}
+	return parcelID, reservation, nil
+}
+
+// ReleaseCounterParcelPaymentReservation is
+// ReleaseParcelPaymentReservation's counter-settlement counterpart —
+// matched on parcel id rather than code, since the caller already has
+// it from SettleCounterParcelStk's return.
+func ReleaseCounterParcelPaymentReservation(ctx context.Context, pool *pgxpool.Pool, parcelID, reservation string) error {
+	_, err := pool.Exec(ctx, `
+		UPDATE parcel SET "paymentCheckoutRequestId" = NULL, "paymentReservationAt" = NULL
+		WHERE id = $1 AND "paymentCheckoutRequestId" = $2`, parcelID, reservation)
+	return err
+}
+
+// AttachCounterParcelPaymentCheckoutID is AttachParcelPaymentCheckoutID's
+// counter-settlement counterpart. Deliberately does NOT overwrite
+// paymentMethod to MPESA_STK the way the booking-time attach does — a
+// counter parcel's paymentMethod stays PAY_AT_COUNTER regardless of
+// which instrument actually cleared it; "how this parcel was meant to
+// be paid" and "which rail the clerk happened to use" are different
+// facts, and only the second one changes here.
+func AttachCounterParcelPaymentCheckoutID(ctx context.Context, pool *pgxpool.Pool, parcelID, reservation, checkoutRequestID string) error {
+	tag, err := pool.Exec(ctx, `
+		UPDATE parcel SET "paymentCheckoutRequestId" = $1, "paymentReservationAt" = NULL
+		WHERE id = $2 AND "paidAt" IS NULL AND "paymentCheckoutRequestId" = $3`,
+		checkoutRequestID, parcelID, reservation)
 	if err != nil {
 		return err
 	}
 	if tag.RowsAffected() == 0 {
-		return &ParcelError{"ALREADY_SETTLED", "This parcel has already been settled"}
+		return &ParcelError{"CONFLICT", "That payment attempt was superseded — start again"}
 	}
-	return writeParcelRevenueSplit(ctx, pool, parcelID, priceKes)
+	return nil
+}
+
+// ErrCounterSettlementNotFound lets the STK callback dispatcher fall
+// through to the next Go-owned domain — same "only continue on
+// NOT_FOUND" shape ErrParcelPaymentNotFound follows, kept as its own
+// sentinel (rather than reusing that one) so a counter settlement and a
+// fresh booking's payment are never confused by a caller matching on
+// the error alone.
+var ErrCounterSettlementNotFound = errors.New("no counter settlement for that checkout request")
+
+// ConfirmCounterSettlementByCheckoutID is the STK callback's success
+// path for SettleCounterParcelStk — same idempotent-by-row-lock shape
+// ConfirmParcelPaymentByCheckoutID uses, but writing paidAt/mpesaReceiptCode
+// without touching status: a counter parcel is already BOOKED/received,
+// and settlement here is a payment fact, not a custody transition.
+func ConfirmCounterSettlementByCheckoutID(ctx context.Context, pool *pgxpool.Pool, checkoutRequestID, mpesaReceiptCode string) (parcelID string, justConfirmed bool, err error) {
+	tx, err := pool.Begin(ctx)
+	if err != nil {
+		return "", false, err
+	}
+	defer func() { _ = tx.Rollback(ctx) }()
+
+	var paidAt *string
+	var priceKesText string
+	// paymentMethod = 'PAY_AT_COUNTER' is the mirror of
+	// ConfirmParcelPaymentByCheckoutID's own 'MPESA_STK' narrowing —
+	// see that function's comment for why both functions need this to
+	// stay mutually exclusive on the one column they share.
+	err = tx.QueryRow(ctx, `
+		SELECT id, "paidAt"::text, "priceKes"::text FROM parcel
+		WHERE "paymentCheckoutRequestId" = $1 AND "paymentMethod" = 'PAY_AT_COUNTER' FOR UPDATE`, checkoutRequestID).
+		Scan(&parcelID, &paidAt, &priceKesText)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return "", false, ErrCounterSettlementNotFound
+	}
+	if err != nil {
+		return "", false, err
+	}
+	if paidAt != nil {
+		return parcelID, false, nil // already confirmed — replayed callback
+	}
+	priceKes, err := strconv.ParseFloat(priceKesText, 64)
+	if err != nil {
+		return "", false, err
+	}
+
+	settlementAcct, err := ledger.EnsureAccount(ctx, pool, nil, "SETTLEMENT", "KES")
+	if err != nil {
+		return "", false, err
+	}
+	revenueAcct, err := ledger.EnsureAccount(ctx, pool, nil, "PARCEL_REVENUE", "KES")
+	if err != nil {
+		return "", false, err
+	}
+	if _, err := ledger.PostEntryTx(ctx, tx,
+		"parcel:"+parcelID, "Parcel delivery payment (counter, M-Pesa)", "core-go:parcel:"+parcelID,
+		[]ledger.Posting{{AccountID: settlementAcct, AmountCents: ledger.CentsFromKES(priceKes)}, {AccountID: revenueAcct, AmountCents: ledger.CentsFromKES(-priceKes)}}); err != nil {
+		return "", false, err
+	}
+
+	var receiptCol *string
+	if mpesaReceiptCode != "" {
+		receiptCol = &mpesaReceiptCode
+	}
+	if _, err := tx.Exec(ctx, `
+		UPDATE parcel SET "paidAt" = now(), "mpesaReceiptCode" = $1
+		WHERE id = $2 AND "paidAt" IS NULL`, receiptCol, parcelID); err != nil {
+		return "", false, err
+	}
+	if err := writeParcelRevenueSplitTx(ctx, tx, pool, parcelID, priceKes); err != nil {
+		return "", false, err
+	}
+	if err := tx.Commit(ctx); err != nil {
+		return "", false, err
+	}
+	return parcelID, true, nil
+}
+
+// ConfirmCounterSettlementByManualCode is the clerk-asserted fallback
+// for when an STK push genuinely landed but the Daraja callback that
+// would have driven ConfirmCounterSettlementByCheckoutID never arrived
+// (or arrived and was lost) — there is no synchronous Safaricom query
+// that can validate a receipt code on the spot today (see
+// payments.QueryTransactionStatus's own doc comment), so this trusts
+// the clerk's typed code the same way SettleCounterParcel trusts a
+// clerk's typed cash amount, and leans on paidByStaffId to keep that
+// distinguishable from a webhook-confirmed payment during any later
+// reconciliation: null means Safaricom confirmed itself, set means a
+// person asserted it.
+//
+// Requires paymentCheckoutRequestId to already be a real checkout id
+// (i.e. SettleCounterParcelStk's push actually went out) rather than
+// letting a clerk manufacture a settlement with no STK attempt behind
+// it at all.
+func ConfirmCounterSettlementByManualCode(ctx context.Context, pool *pgxpool.Pool, code, mpesaReceiptCode, staffID string, orgScope *string) (parcelID string, err error) {
+	if strings.TrimSpace(mpesaReceiptCode) == "" {
+		return "", &ParcelError{"BAD_INPUT", "Enter the M-Pesa code from the client's confirmation message"}
+	}
+
+	tx, err := pool.Begin(ctx)
+	if err != nil {
+		return "", err
+	}
+	defer func() { _ = tx.Rollback(ctx) }()
+
+	var parcelOrgID *string
+	var paidAt *string
+	var priceKesText *string
+	var checkoutRequestID *string
+	err = tx.QueryRow(ctx, `
+		SELECT id, "parcelOrgId"::text, "paidAt"::text, "priceKes"::text, "paymentCheckoutRequestId"
+		FROM parcel WHERE (code = $1 OR "serviceTicketNumber" = $1) AND "paymentMethod" = 'PAY_AT_COUNTER'
+		FOR UPDATE`, code).
+		Scan(&parcelID, &parcelOrgID, &paidAt, &priceKesText, &checkoutRequestID)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return "", &ParcelError{"NOT_FOUND", "That parcel was not found"}
+	}
+	if err != nil {
+		return "", err
+	}
+	if orgScope != nil && (parcelOrgID == nil || *parcelOrgID != *orgScope) {
+		return "", &ParcelError{"NOT_FOUND", "That parcel was not found"}
+	}
+	if paidAt != nil {
+		return "", &ParcelError{"ALREADY_SETTLED", "This parcel has already been settled"}
+	}
+	if checkoutRequestID == nil || *checkoutRequestID == "" {
+		return "", &ParcelError{"BAD_INPUT", "Send the M-Pesa prompt first — there's no payment attempt to match this code against"}
+	}
+	priceKes, err := parseFloatOrZero2(priceKesText)
+	if err != nil {
+		return "", err
+	}
+
+	settlementAcct, err := ledger.EnsureAccount(ctx, pool, nil, "SETTLEMENT", "KES")
+	if err != nil {
+		return "", err
+	}
+	revenueAcct, err := ledger.EnsureAccount(ctx, pool, nil, "PARCEL_REVENUE", "KES")
+	if err != nil {
+		return "", err
+	}
+	if _, err := ledger.PostEntryTx(ctx, tx,
+		"parcel:"+parcelID, "Parcel delivery payment (counter, M-Pesa code entered by clerk)", "core-go:parcel:"+parcelID,
+		[]ledger.Posting{{AccountID: settlementAcct, AmountCents: ledger.CentsFromKES(priceKes)}, {AccountID: revenueAcct, AmountCents: ledger.CentsFromKES(-priceKes)}}); err != nil {
+		return "", err
+	}
+
+	if _, err := tx.Exec(ctx, `
+		UPDATE parcel SET "paidAt" = now(), "mpesaReceiptCode" = $1, "paidByStaffId" = $2
+		WHERE id = $3 AND "paidAt" IS NULL`, mpesaReceiptCode, staffID, parcelID); err != nil {
+		return "", err
+	}
+	if err := writeParcelRevenueSplitTx(ctx, tx, pool, parcelID, priceKes); err != nil {
+		return "", err
+	}
+	if err := tx.Commit(ctx); err != nil {
+		return "", err
+	}
+	return parcelID, nil
+}
+
+// CounterSettlementStatus is what a clerk's client polls while an STK
+// counter settlement is in flight.
+type CounterSettlementStatus struct {
+	Status           string  `json:"status"` // AWAITING_MPESA | SETTLED
+	PriceKes         float64 `json:"priceKes"`
+	MpesaReceiptCode *string `json:"mpesaReceiptCode"`
+}
+
+// GetCounterSettlementStatus answers handleGetCounterSettlementStatus's
+// poll. orgScope nil means Esoqo staff (no narrowing) — same tenancy
+// rule every other counter-settlement function in this file follows.
+func GetCounterSettlementStatus(ctx context.Context, pool *pgxpool.Pool, code string, orgScope *string) (*CounterSettlementStatus, error) {
+	var parcelOrgID *string
+	var paidAt *string
+	var priceKesText *string
+	var receiptCode *string
+	err := pool.QueryRow(ctx, `
+		SELECT "parcelOrgId"::text, "paidAt"::text, "priceKes"::text, "mpesaReceiptCode"
+		FROM parcel WHERE code = $1 OR "serviceTicketNumber" = $1`, code).
+		Scan(&parcelOrgID, &paidAt, &priceKesText, &receiptCode)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return nil, &ParcelError{"NOT_FOUND", "That parcel was not found"}
+	}
+	if err != nil {
+		return nil, err
+	}
+	if orgScope != nil && (parcelOrgID == nil || *parcelOrgID != *orgScope) {
+		return nil, &ParcelError{"NOT_FOUND", "That parcel was not found"}
+	}
+	priceKes, err := parseFloatOrZero2(priceKesText)
+	if err != nil {
+		return nil, err
+	}
+	status := "AWAITING_MPESA"
+	if paidAt != nil {
+		status = "SETTLED"
+	}
+	return &CounterSettlementStatus{Status: status, PriceKes: priceKes, MpesaReceiptCode: receiptCode}, nil
+}
+
+// parseFloatOrZero2 is parseFloatOrZero for a *string — nil (a parcel
+// with no priceKes set yet) reads as zero rather than an error, since
+// "not priced yet" is a normal state for GetCounterSettlementStatus to
+// observe mid-flow.
+func parseFloatOrZero2(s *string) (float64, error) {
+	if s == nil {
+		return 0, nil
+	}
+	return parseFloatOrZero(*s)
 }
 
 // generateDeliveryCode mirrors generatePickupCode's alphabet trick
@@ -1395,7 +1733,10 @@ func writeParcelRevenueSplit(ctx context.Context, pool *pgxpool.Pool, parcelID s
 	_, err = pool.Exec(ctx, `
 		UPDATE parcel SET "platformFeeKes" = $1, "orgEarningsKes" = $2 WHERE id = $3`,
 		platformFee, orgEarnings, parcelID)
-	return err
+	if err != nil {
+		return err
+	}
+	return reclassifyParcelOrgEarnings(ctx, pool, parcelID, *orgID, orgEarnings)
 }
 
 // writeParcelRevenueSplitTx is writeParcelRevenueSplit inside the
@@ -1404,7 +1745,7 @@ func writeParcelRevenueSplit(ctx context.Context, pool *pgxpool.Pool, parcelID s
 // payment — a crash between them left a paid parcel with no revenue
 // split, and nothing replays it: the money is taken and the courier
 // company's share is simply never recorded.
-func writeParcelRevenueSplitTx(ctx context.Context, tx pgx.Tx, parcelID string, priceKes float64) error {
+func writeParcelRevenueSplitTx(ctx context.Context, tx pgx.Tx, pool *pgxpool.Pool, parcelID string, priceKes float64) error {
 	orgID, commissionPct, err := parcelOrgCommissionTx(ctx, tx, parcelID)
 	if err != nil || orgID == nil {
 		return err
@@ -1413,7 +1754,532 @@ func writeParcelRevenueSplitTx(ctx context.Context, tx pgx.Tx, parcelID string, 
 	_, err = tx.Exec(ctx, `
 		UPDATE parcel SET "platformFeeKes" = $1, "orgEarningsKes" = $2 WHERE id = $3`,
 		platformFee, orgEarnings, parcelID)
+	if err != nil {
+		return err
+	}
+	return reclassifyParcelOrgEarningsTx(ctx, tx, pool, parcelID, *orgID, orgEarnings)
+}
+
+// reclassifyParcelOrgEarnings moves a courier company's share out of
+// PARCEL_REVENUE (where the whole price landed when the sender paid)
+// into PARCEL_ORG_EARNINGS_PAYABLE — a real liability the platform owes
+// that company, aged and stated like PARCEL_COD_PAYABLE already is —
+// and creates the ParcelOrgPayout row that actually clears it. Both
+// steps happen together: a reclassification with nothing to pay it out
+// is as much a bug as a payout with nothing backing it in the ledger.
+//
+// A no-op below one cent — SplitParcelRevenue can legitimately hand back
+// zero (a 100% commissionPct), and there is nothing to disburse or
+// reclassify for that company on this parcel.
+func reclassifyParcelOrgEarnings(ctx context.Context, pool *pgxpool.Pool, parcelID, orgID string, orgEarningsKes float64) error {
+	if orgEarningsKes <= 0 {
+		return nil
+	}
+	revenueAcct, err := ledger.EnsureAccount(ctx, pool, nil, "PARCEL_REVENUE", "KES")
+	if err != nil {
+		return err
+	}
+	payableAcct, payablePartyID, err := parcelOrgPayableAccount(ctx, pool, orgID)
+	if err != nil {
+		return err
+	}
+	if _, err := ledger.PostEntry(ctx, pool,
+		"parcel-org-payable:"+parcelID, "Courier company's share, held pending payout",
+		"core-go:parcel-org-payable:"+parcelID,
+		[]ledger.Posting{
+			{AccountID: revenueAcct, AmountCents: ledger.CentsFromKES(orgEarningsKes)},
+			{AccountID: payableAcct, AmountCents: ledger.CentsFromKES(-orgEarningsKes)},
+		}); err != nil {
+		return err
+	}
+	_ = payablePartyID // kept only for the pool.QueryRow destructuring below
+	return createParcelOrgPayout(ctx, pool, parcelID, orgID, orgEarningsKes)
+}
+
+// reclassifyParcelOrgEarningsTx is reclassifyParcelOrgEarnings inside
+// the caller's transaction — see writeParcelRevenueSplitTx's own
+// comment on why this has to be in the same commit as the payment.
+//
+// ledger.EnsureAccount only ever takes a *pgxpool.Pool, never a
+// pgx.Tx — same as every other caller in this file (see
+// ConfirmParcelPaymentByCheckoutID) — because an Account row is an
+// idempotent upsert, not data that needs to share the posting's lock.
+func reclassifyParcelOrgEarningsTx(ctx context.Context, tx pgx.Tx, pool *pgxpool.Pool, parcelID, orgID string, orgEarningsKes float64) error {
+	if orgEarningsKes <= 0 {
+		return nil
+	}
+	revenueAcct, err := ledger.EnsureAccount(ctx, pool, nil, "PARCEL_REVENUE", "KES")
+	if err != nil {
+		return err
+	}
+	payableAcct, _, err := parcelOrgPayableAccountTx(ctx, tx, pool, orgID)
+	if err != nil {
+		return err
+	}
+	if _, err := ledger.PostEntryTx(ctx, tx,
+		"parcel-org-payable:"+parcelID, "Courier company's share, held pending payout",
+		"core-go:parcel-org-payable:"+parcelID,
+		[]ledger.Posting{
+			{AccountID: revenueAcct, AmountCents: ledger.CentsFromKES(orgEarningsKes)},
+			{AccountID: payableAcct, AmountCents: ledger.CentsFromKES(-orgEarningsKes)},
+		}); err != nil {
+		return err
+	}
+	return createParcelOrgPayoutTx(ctx, tx, parcelID, orgID, orgEarningsKes)
+}
+
+// parcelOrgPayableAccount resolves the PARCEL_ORG_EARNINGS_PAYABLE
+// account for orgID's own enterprise party — same "one per operator"
+// shape TICKET_REVENUE/FARE_REVENUE/BUSINESS_REVENUE already use,
+// keyed on the enterprise's party rather than on parcel_org.id directly
+// since Account.partyId is what the rest of the ledger already joins on.
+func parcelOrgPayableAccount(ctx context.Context, pool *pgxpool.Pool, orgID string) (accountID, partyID string, err error) {
+	err = pool.QueryRow(ctx, `
+		SELECT e."partyId" FROM parcel_org o JOIN enterprise e ON e.id = o."enterpriseId"
+		WHERE o.id = $1`, orgID).Scan(&partyID)
+	if err != nil {
+		return "", "", err
+	}
+	accountID, err = ledger.EnsureAccount(ctx, pool, &partyID, "PARCEL_ORG_EARNINGS_PAYABLE", "KES")
+	return accountID, partyID, err
+}
+
+func parcelOrgPayableAccountTx(ctx context.Context, tx pgx.Tx, pool *pgxpool.Pool, orgID string) (accountID, partyID string, err error) {
+	err = tx.QueryRow(ctx, `
+		SELECT e."partyId" FROM parcel_org o JOIN enterprise e ON e.id = o."enterpriseId"
+		WHERE o.id = $1`, orgID).Scan(&partyID)
+	if err != nil {
+		return "", "", err
+	}
+	accountID, err = ledger.EnsureAccount(ctx, pool, &partyID, "PARCEL_ORG_EARNINGS_PAYABLE", "KES")
+	return accountID, partyID, err
+}
+
+// ParcelOrgPayoutStatus mirrors the Prisma enum of the same name.
+type ParcelOrgPayoutStatus string
+
+const (
+	ParcelOrgPayoutPending    ParcelOrgPayoutStatus = "PENDING"
+	ParcelOrgPayoutProcessing ParcelOrgPayoutStatus = "PROCESSING"
+	ParcelOrgPayoutConfirmed  ParcelOrgPayoutStatus = "CONFIRMED"
+	ParcelOrgPayoutFailed     ParcelOrgPayoutStatus = "FAILED"
+	ParcelOrgPayoutManual     ParcelOrgPayoutStatus = "MANUAL"
+)
+
+// ParcelOrgPayoutRow is what the dispatch step and the admin manual-
+// payouts list both need: enough to actually place the B2C/B2B call, or
+// to show a human what to pay by hand.
+type ParcelOrgPayoutRow struct {
+	ID                      string
+	ParcelOrgID             string
+	ParcelID                string
+	AmountKes               float64
+	Method                  *string
+	PayoutMsisdn            *string
+	PayoutTillNumber        *string
+	PayoutPaybillNumber     *string
+	PayoutPaybillAccount    *string
+	PayoutBankCode          *string
+	PayoutBankAccountNumber *string
+	PayoutBankAccountName   *string
+	Status                  string
+	FailureReason           *string
+}
+
+// createParcelOrgPayout inserts the ParcelOrgPayout row that will
+// actually move orgEarningsKes to the carrying company — one row per
+// settled parcel (ON CONFLICT DO NOTHING on the unique parcelId, so a
+// replayed confirmation never creates a second one).
+//
+// Destination fields are copied from parcel_org as it stands right now,
+// not joined live later — see ParcelOrgPayout's own schema comment.
+// MANUAL when no automatic method is configured (or BANK, which has no
+// disbursement integration yet): still a real row, just one a human
+// clears instead of Daraja.
+func createParcelOrgPayout(ctx context.Context, pool *pgxpool.Pool, parcelID, orgID string, amountKes float64) error {
+	method, dest, err := parcelOrgPayoutDestination(ctx, pool, orgID)
+	if err != nil {
+		return err
+	}
+	status := parcelOrgPayoutInitialStatus(method)
+	_, err = pool.Exec(ctx, `
+		INSERT INTO parcel_org_payout
+			(id, "parcelOrgId", "parcelId", "amountKes", method,
+			 "payoutMsisdn", "payoutTillNumber", "payoutPaybillNumber", "payoutPaybillAccount",
+			 "payoutBankCode", "payoutBankAccountNumber", "payoutBankAccountName", status)
+		VALUES (gen_random_uuid(), $1, $2, $3, $4::"ParcelOrgPayoutMethod",
+		        $5, $6, $7, $8, $9, $10, $11, $12::"ParcelOrgPayoutStatus")
+		ON CONFLICT ("parcelId") DO NOTHING`,
+		orgID, parcelID, amountKes, method,
+		dest.msisdn, dest.till, dest.paybillNumber, dest.paybillAccount,
+		dest.bankCode, dest.bankAccountNumber, dest.bankAccountName, status)
 	return err
+}
+
+func createParcelOrgPayoutTx(ctx context.Context, tx pgx.Tx, parcelID, orgID string, amountKes float64) error {
+	method, dest, err := parcelOrgPayoutDestinationTx(ctx, tx, orgID)
+	if err != nil {
+		return err
+	}
+	status := parcelOrgPayoutInitialStatus(method)
+	_, err = tx.Exec(ctx, `
+		INSERT INTO parcel_org_payout
+			(id, "parcelOrgId", "parcelId", "amountKes", method,
+			 "payoutMsisdn", "payoutTillNumber", "payoutPaybillNumber", "payoutPaybillAccount",
+			 "payoutBankCode", "payoutBankAccountNumber", "payoutBankAccountName", status)
+		VALUES (gen_random_uuid(), $1, $2, $3, $4::"ParcelOrgPayoutMethod",
+		        $5, $6, $7, $8, $9, $10, $11, $12::"ParcelOrgPayoutStatus")
+		ON CONFLICT ("parcelId") DO NOTHING`,
+		orgID, parcelID, amountKes, method,
+		dest.msisdn, dest.till, dest.paybillNumber, dest.paybillAccount,
+		dest.bankCode, dest.bankAccountNumber, dest.bankAccountName, status)
+	return err
+}
+
+func parcelOrgPayoutInitialStatus(method *string) ParcelOrgPayoutStatus {
+	if method == nil {
+		return ParcelOrgPayoutManual
+	}
+	switch *method {
+	case "PHONE", "TILL", "PAYBILL":
+		return ParcelOrgPayoutPending
+	default: // "BANK", or anything unrecognised
+		return ParcelOrgPayoutManual
+	}
+}
+
+type parcelOrgPayoutDest struct {
+	msisdn            *string
+	till              *string
+	paybillNumber     *string
+	paybillAccount    *string
+	bankCode          *string
+	bankAccountNumber *string
+	bankAccountName   *string
+}
+
+func parcelOrgPayoutDestination(ctx context.Context, pool *pgxpool.Pool, orgID string) (method *string, dest parcelOrgPayoutDest, err error) {
+	err = pool.QueryRow(ctx, `
+		SELECT "payoutMethod"::text, "payoutMsisdn", "payoutTillNumber",
+		       "payoutPaybillNumber", "payoutPaybillAccount",
+		       "payoutBankCode", "payoutBankAccountNumber", "payoutBankAccountName"
+		FROM parcel_org WHERE id = $1`, orgID).
+		Scan(&method, &dest.msisdn, &dest.till, &dest.paybillNumber, &dest.paybillAccount,
+			&dest.bankCode, &dest.bankAccountNumber, &dest.bankAccountName)
+	return method, dest, err
+}
+
+func parcelOrgPayoutDestinationTx(ctx context.Context, tx pgx.Tx, orgID string) (method *string, dest parcelOrgPayoutDest, err error) {
+	err = tx.QueryRow(ctx, `
+		SELECT "payoutMethod"::text, "payoutMsisdn", "payoutTillNumber",
+		       "payoutPaybillNumber", "payoutPaybillAccount",
+		       "payoutBankCode", "payoutBankAccountNumber", "payoutBankAccountName"
+		FROM parcel_org WHERE id = $1`, orgID).
+		Scan(&method, &dest.msisdn, &dest.till, &dest.paybillNumber, &dest.paybillAccount,
+			&dest.bankCode, &dest.bankAccountNumber, &dest.bankAccountName)
+	return method, dest, err
+}
+
+// GetPendingParcelOrgPayout fetches the PENDING row created for a just-
+// settled parcel, for the httpapi layer to actually dispatch — dbx
+// itself never calls out to Daraja (see this package's own doc comment:
+// no payment or notification side effects from in here). Returns
+// (nil, nil) when there is nothing to dispatch (no org, zero earnings,
+// or already MANUAL).
+func GetPendingParcelOrgPayout(ctx context.Context, pool *pgxpool.Pool, parcelID string) (*ParcelOrgPayoutRow, error) {
+	var r ParcelOrgPayoutRow
+	var amountText string
+	err := pool.QueryRow(ctx, `
+		SELECT id, "parcelOrgId", "parcelId", "amountKes"::text, method::text,
+		       "payoutMsisdn", "payoutTillNumber", "payoutPaybillNumber", "payoutPaybillAccount",
+		       "payoutBankCode", "payoutBankAccountNumber", "payoutBankAccountName", status::text
+		FROM parcel_org_payout WHERE "parcelId" = $1 AND status = 'PENDING'`, parcelID).
+		Scan(&r.ID, &r.ParcelOrgID, &r.ParcelID, &amountText, &r.Method,
+			&r.PayoutMsisdn, &r.PayoutTillNumber, &r.PayoutPaybillNumber, &r.PayoutPaybillAccount,
+			&r.PayoutBankCode, &r.PayoutBankAccountNumber, &r.PayoutBankAccountName, &r.Status)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, err
+	}
+	r.AmountKes, err = parseFloatOrZero(amountText)
+	return &r, err
+}
+
+// MarkParcelOrgPayoutProcessing records that a B2C/B2B request was
+// actually sent to Daraja and is awaiting its result callback.
+func MarkParcelOrgPayoutProcessing(ctx context.Context, pool *pgxpool.Pool, payoutID, conversationID string) error {
+	_, err := pool.Exec(ctx, `
+		UPDATE parcel_org_payout SET status = 'PROCESSING', "mpesaConversationId" = $1
+		WHERE id = $2`, conversationID, payoutID)
+	return err
+}
+
+// ResetParcelOrgPayoutToPending moves a FAILED row back to PENDING so
+// the retry worker's dispatch attempt looks identical to a first
+// attempt. Only FAILED rows move — a PENDING row is left exactly as
+// is, and a PROCESSING/CONFIRMED one is never touched, so a retry can
+// never race a result callback that is already on its way.
+func ResetParcelOrgPayoutToPending(ctx context.Context, pool *pgxpool.Pool, payoutID string) error {
+	_, err := pool.Exec(ctx, `
+		UPDATE parcel_org_payout SET status = 'PENDING', "failureReason" = NULL
+		WHERE id = $1 AND status = 'FAILED'`, payoutID)
+	return err
+}
+
+// MarkParcelOrgPayoutFailed records that Daraja refused the request
+// outright (not a result callback — that path is
+// ConfirmParcelOrgPayoutByConversationID/FailParcelOrgPayoutByConversationID
+// below). Still eligible for the retry worker.
+func MarkParcelOrgPayoutFailed(ctx context.Context, pool *pgxpool.Pool, payoutID, reason string) error {
+	_, err := pool.Exec(ctx, `
+		UPDATE parcel_org_payout SET status = 'FAILED', "failureReason" = $1 WHERE id = $2`,
+		reason, payoutID)
+	return err
+}
+
+// ErrParcelOrgPayoutNotFound lets the B2C/B2B result webhook fall
+// through to whatever else matches a conversation id, same
+// "only continue on NOT_FOUND" shape ErrParcelPaymentNotFound follows.
+var ErrParcelOrgPayoutNotFound = errors.New("no payout for that conversation id")
+
+// ConfirmParcelOrgPayoutByConversationID is the B2C/B2B result
+// callback's success path: the money actually reached the courier
+// company. Posts the final ledger leg — PARCEL_ORG_EARNINGS_PAYABLE
+// clears, SETTLEMENT pays out — same idempotency-by-row-lock shape
+// ConfirmParcelPaymentByCheckoutID already uses, keyed on
+// mpesaConversationId instead of a checkout request id.
+func ConfirmParcelOrgPayoutByConversationID(ctx context.Context, pool *pgxpool.Pool, conversationID, mpesaTransactionID string) error {
+	tx, err := pool.Begin(ctx)
+	if err != nil {
+		return err
+	}
+	defer func() { _ = tx.Rollback(ctx) }()
+
+	var payoutID, orgID, status, amountText string
+	err = tx.QueryRow(ctx, `
+		SELECT id, "parcelOrgId", status::text, "amountKes"::text
+		FROM parcel_org_payout WHERE "mpesaConversationId" = $1 FOR UPDATE`, conversationID).
+		Scan(&payoutID, &orgID, &status, &amountText)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return ErrParcelOrgPayoutNotFound
+	}
+	if err != nil {
+		return err
+	}
+	if status != "PROCESSING" {
+		return nil // already settled — replayed callback
+	}
+	amountKes, err := parseFloatOrZero(amountText)
+	if err != nil {
+		return err
+	}
+
+	settlementAcct, err := ledger.EnsureAccount(ctx, pool, nil, "SETTLEMENT", "KES")
+	if err != nil {
+		return err
+	}
+	payableAcct, _, err := parcelOrgPayableAccountTx(ctx, tx, pool, orgID)
+	if err != nil {
+		return err
+	}
+	if _, err := ledger.PostEntryTx(ctx, tx,
+		"parcel-org-payout:"+payoutID, "Courier company payout",
+		"core-go:parcel-org-payout:"+payoutID,
+		[]ledger.Posting{
+			{AccountID: payableAcct, AmountCents: ledger.CentsFromKES(amountKes)},
+			{AccountID: settlementAcct, AmountCents: ledger.CentsFromKES(-amountKes)},
+		}); err != nil {
+		return err
+	}
+
+	var txIDCol *string
+	if mpesaTransactionID != "" {
+		txIDCol = &mpesaTransactionID
+	}
+	if _, err := tx.Exec(ctx, `
+		UPDATE parcel_org_payout SET status = 'CONFIRMED', "mpesaTransactionId" = $1, "confirmedAt" = now()
+		WHERE id = $2`, txIDCol, payoutID); err != nil {
+		return err
+	}
+	return tx.Commit(ctx)
+}
+
+// FailParcelOrgPayoutByConversationID is the result callback's failure
+// path — Daraja accepted the request but the payout itself didn't go
+// through (bad till, suspended paybill, insufficient float on our
+// side). Left FAILED rather than reverted to PENDING so the retry
+// worker backs off instead of hammering the same bad destination every
+// tick; an admin correcting the destination clears it by hand.
+func FailParcelOrgPayoutByConversationID(ctx context.Context, pool *pgxpool.Pool, conversationID, reason string) error {
+	tag, err := pool.Exec(ctx, `
+		UPDATE parcel_org_payout SET status = 'FAILED', "failureReason" = $1
+		WHERE "mpesaConversationId" = $2 AND status = 'PROCESSING'`, reason, conversationID)
+	if err != nil {
+		return err
+	}
+	if tag.RowsAffected() == 0 {
+		return ErrParcelOrgPayoutNotFound
+	}
+	return nil
+}
+
+// ListRetryableParcelOrgPayouts is the retry worker's query — anything
+// stuck PENDING (a dispatch attempt was never made, e.g. a process
+// restart between the row's commit and the goroutine firing) or FAILED
+// (Daraja refused it outright, or a result callback said so), older
+// than the grace period so a payout mid-flight right now is never
+// double-sent.
+func ListRetryableParcelOrgPayouts(ctx context.Context, pool *pgxpool.Pool, olderThan time.Duration, limit int) ([]ParcelOrgPayoutRow, error) {
+	rows, err := pool.Query(ctx, `
+		SELECT id, "parcelOrgId", "parcelId", "amountKes"::text, method::text,
+		       "payoutMsisdn", "payoutTillNumber", "payoutPaybillNumber", "payoutPaybillAccount",
+		       "payoutBankCode", "payoutBankAccountNumber", "payoutBankAccountName", status::text
+		FROM parcel_org_payout
+		WHERE status IN ('PENDING', 'FAILED') AND "createdAt" < now() - ($1 * interval '1 second')
+		ORDER BY "createdAt" ASC
+		LIMIT $2`, olderThan.Seconds(), limit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var out []ParcelOrgPayoutRow
+	for rows.Next() {
+		var r ParcelOrgPayoutRow
+		var amountText string
+		if err := rows.Scan(&r.ID, &r.ParcelOrgID, &r.ParcelID, &amountText, &r.Method,
+			&r.PayoutMsisdn, &r.PayoutTillNumber, &r.PayoutPaybillNumber, &r.PayoutPaybillAccount,
+			&r.PayoutBankCode, &r.PayoutBankAccountNumber, &r.PayoutBankAccountName, &r.Status); err != nil {
+			return nil, err
+		}
+		r.AmountKes, err = parseFloatOrZero(amountText)
+		if err != nil {
+			return nil, err
+		}
+		out = append(out, r)
+	}
+	return out, rows.Err()
+}
+
+// AdminManualParcelOrgPayoutRow is one row of the finance-facing manual
+// payouts list — MANUAL (no automatic method configured, or BANK, which
+// has no disbursement integration yet) and stuck FAILED rows a human
+// has to clear, enriched with enough context to actually act on it
+// without a second lookup.
+type AdminManualParcelOrgPayoutRow struct {
+	ID            string  `json:"id"`
+	ParcelOrgName string  `json:"parcelOrgName"`
+	ParcelCode    string  `json:"parcelCode"`
+	AmountKes     float64 `json:"amountKes"`
+	Method        *string `json:"method"`
+	Status        string  `json:"status"`
+	FailureReason *string `json:"failureReason"`
+	CreatedAt     string  `json:"createdAt"`
+
+	PayoutMsisdn            *string `json:"payoutMsisdn"`
+	PayoutTillNumber        *string `json:"payoutTillNumber"`
+	PayoutPaybillNumber     *string `json:"payoutPaybillNumber"`
+	PayoutPaybillAccount    *string `json:"payoutPaybillAccount"`
+	PayoutBankCode          *string `json:"payoutBankCode"`
+	PayoutBankAccountNumber *string `json:"payoutBankAccountNumber"`
+	PayoutBankAccountName   *string `json:"payoutBankAccountName"`
+}
+
+// ListAdminManualParcelOrgPayouts is the manual-payouts list's query —
+// MANUAL rows (bank, or no method configured) plus any FAILED row that
+// has already outlived a few retry attempts, oldest first so the
+// longest-unpaid company surfaces at the top.
+func ListAdminManualParcelOrgPayouts(ctx context.Context, pool *pgxpool.Pool) ([]AdminManualParcelOrgPayoutRow, error) {
+	rows, err := pool.Query(ctx, `
+		SELECT po.id, o.name, p.code, po."amountKes"::text, po.method::text, po.status::text,
+		       po."failureReason", po."createdAt"::text,
+		       po."payoutMsisdn", po."payoutTillNumber", po."payoutPaybillNumber", po."payoutPaybillAccount",
+		       po."payoutBankCode", po."payoutBankAccountNumber", po."payoutBankAccountName"
+		FROM parcel_org_payout po
+		JOIN parcel_org o ON o.id = po."parcelOrgId"
+		JOIN parcel p ON p.id = po."parcelId"
+		WHERE po.status IN ('MANUAL', 'FAILED')
+		ORDER BY po."createdAt" ASC`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var out []AdminManualParcelOrgPayoutRow
+	for rows.Next() {
+		var r AdminManualParcelOrgPayoutRow
+		var amountText string
+		if err := rows.Scan(&r.ID, &r.ParcelOrgName, &r.ParcelCode, &amountText, &r.Method, &r.Status,
+			&r.FailureReason, &r.CreatedAt,
+			&r.PayoutMsisdn, &r.PayoutTillNumber, &r.PayoutPaybillNumber, &r.PayoutPaybillAccount,
+			&r.PayoutBankCode, &r.PayoutBankAccountNumber, &r.PayoutBankAccountName); err != nil {
+			return nil, err
+		}
+		r.AmountKes, err = parseFloatOrZero(amountText)
+		if err != nil {
+			return nil, err
+		}
+		out = append(out, r)
+	}
+	return out, rows.Err()
+}
+
+// MarkParcelOrgPayoutPaidManually is finance saying "I just sent this
+// myself" — a bank transfer or a one-off till top-up Daraja never saw.
+// No ledger reclassification runs twice: this reuses the exact same
+// PARCEL_ORG_EARNINGS_PAYABLE → SETTLEMENT posting
+// ConfirmParcelOrgPayoutByConversationID uses for an automatic payout,
+// just triggered by a human instead of a result callback.
+func MarkParcelOrgPayoutPaidManually(ctx context.Context, pool *pgxpool.Pool, payoutID, staffNote string) error {
+	tx, err := pool.Begin(ctx)
+	if err != nil {
+		return err
+	}
+	defer func() { _ = tx.Rollback(ctx) }()
+
+	var orgID, status, amountText string
+	err = tx.QueryRow(ctx, `
+		SELECT "parcelOrgId", status::text, "amountKes"::text
+		FROM parcel_org_payout WHERE id = $1 FOR UPDATE`, payoutID).
+		Scan(&orgID, &status, &amountText)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return &ParcelError{"NOT_FOUND", "That payout was not found"}
+	}
+	if err != nil {
+		return err
+	}
+	if status != "MANUAL" && status != "FAILED" {
+		return &ParcelError{"BAD_INPUT", "That payout isn't waiting to be cleared by hand"}
+	}
+	amountKes, err := parseFloatOrZero(amountText)
+	if err != nil {
+		return err
+	}
+
+	settlementAcct, err := ledger.EnsureAccount(ctx, pool, nil, "SETTLEMENT", "KES")
+	if err != nil {
+		return err
+	}
+	payableAcct, _, err := parcelOrgPayableAccountTx(ctx, tx, pool, orgID)
+	if err != nil {
+		return err
+	}
+	if _, err := ledger.PostEntryTx(ctx, tx,
+		"parcel-org-payout:"+payoutID, "Courier company payout (manual): "+staffNote,
+		"core-go:parcel-org-payout:"+payoutID,
+		[]ledger.Posting{
+			{AccountID: payableAcct, AmountCents: ledger.CentsFromKES(amountKes)},
+			{AccountID: settlementAcct, AmountCents: ledger.CentsFromKES(-amountKes)},
+		}); err != nil {
+		return err
+	}
+	if _, err := tx.Exec(ctx, `
+		UPDATE parcel_org_payout SET status = 'CONFIRMED', "confirmedAt" = now() WHERE id = $1`, payoutID); err != nil {
+		return err
+	}
+	return tx.Commit(ctx)
 }
 
 // DeliveryCodeDigits is the length of a newly issued delivery code.
@@ -1973,6 +2839,55 @@ func GetParcelStatus(ctx context.Context, pool *pgxpool.Pool, code string) (*Par
 		stock.PreLabelInfo = &info
 	}
 	return &stock, nil
+}
+
+// ParcelReceipt is what the sender's "Receipt for this parcel" SMS link
+// resolves to — unlike ParcelStatusView it carries payment facts
+// (price, how it was paid, the M-Pesa code if any), which is why it is
+// never returned for a parcel that hasn't actually been paid for yet:
+// GetParcelReceipt matches that, not a separate PII reduction step.
+type ParcelReceipt struct {
+	Code             string     `json:"code"`
+	Status           string     `json:"status"`
+	OrgName          *string    `json:"orgName"`
+	OrgLogoUrl       *string    `json:"orgLogoUrl"`
+	OriginLabel      string     `json:"originLabel"`
+	DestinationLabel string     `json:"destinationLabel"`
+	SenderName       string     `json:"senderName"`
+	ReceiverName     string     `json:"receiverName"`
+	ParcelType       string     `json:"parcelType"`
+	PriceKes         *string    `json:"priceKes"`
+	PaymentMethod    *string    `json:"paymentMethod"`
+	MpesaReceiptCode *string    `json:"mpesaReceiptCode"`
+	PaidAt           *time.Time `json:"paidAt"`
+	CreatedAt        time.Time  `json:"createdAt"`
+}
+
+// GetParcelReceipt is GetParcelStatus's payment-facing sibling — same
+// bearer-credential convention (code or serviceTicketNumber), but
+// answers nil (NOT_FOUND to the caller) for anything that hasn't been
+// paid for, rather than reducing a PII-bearing view after the fact: a
+// parcel with no paidAt has no receipt to show, full stop.
+func GetParcelReceipt(ctx context.Context, pool *pgxpool.Pool, code string) (*ParcelReceipt, error) {
+	var r ParcelReceipt
+	err := pool.QueryRow(ctx, `
+		SELECT p.code, p.status::text, p."originLabel", p."destinationLabel", p."parcelType"::text,
+		       p."senderName", p."receiverName", p."priceKes"::text, p."paymentMethod",
+		       p."mpesaReceiptCode", p."paidAt", p."createdAt",
+		       o.name, o."logoUrl"
+		FROM parcel p
+		LEFT JOIN parcel_org o ON o.id = p."parcelOrgId"
+		WHERE (p.code = $1 OR p."serviceTicketNumber" = $1) AND p."paidAt" IS NOT NULL`, code).
+		Scan(&r.Code, &r.Status, &r.OriginLabel, &r.DestinationLabel, &r.ParcelType,
+			&r.SenderName, &r.ReceiverName, &r.PriceKes, &r.PaymentMethod,
+			&r.MpesaReceiptCode, &r.PaidAt, &r.CreatedAt, &r.OrgName, &r.OrgLogoUrl)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, err
+	}
+	return &r, nil
 }
 
 // ReduceParcelStatusForUnintaken strips everything a tracking response
@@ -2903,6 +3818,19 @@ type ParcelNotifyInfo struct {
 	// notify.ParcelOrgDispatchSummary): only a courier company has a
 	// "team" to summarize a departure to.
 	ParcelOrgID *string
+}
+
+// GetParcelCode resolves a parcel's id back to its public code — what
+// the STK webhook needs after ConfirmCounterSettlementByCheckoutID,
+// which only has the id, to then fetch GetParcelNotifyInfo (keyed on
+// code, not id) for the payment-confirmed SMS.
+func GetParcelCode(ctx context.Context, pool *pgxpool.Pool, parcelID string) (string, error) {
+	var code string
+	err := pool.QueryRow(ctx, `SELECT code FROM parcel WHERE id = $1`, parcelID).Scan(&code)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return "", nil
+	}
+	return code, err
 }
 
 func GetParcelNotifyInfo(ctx context.Context, pool *pgxpool.Pool, code string) (*ParcelNotifyInfo, error) {

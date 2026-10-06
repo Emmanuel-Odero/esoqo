@@ -754,6 +754,19 @@ export interface ParcelOrg {
   logoStorageKey?: string | null;
   logoUrl?: string | null;
   brandAccent?: string | null;
+  /** Where this company's cut of a parcel is paid out, automatically,
+   *  at settlement. Null = no automatic payout — new payouts land MANUAL
+   *  for finance to clear by hand on the manual-payouts page. Unlike
+   *  settlementPhone above, these ARE read live and actually drive money
+   *  movement — see services/core-go's ParcelOrg.payoutMethod comment. */
+  payoutMethod?: ParcelOrgPayoutMethod | null;
+  payoutMsisdn?: string | null;
+  payoutTillNumber?: string | null;
+  payoutPaybillNumber?: string | null;
+  payoutPaybillAccount?: string | null;
+  payoutBankCode?: string | null;
+  payoutBankAccountNumber?: string | null;
+  payoutBankAccountName?: string | null;
   // ── Register enrichment (admin list/detail only) ───────────────────
   /** The registered business that owns the company. Distinct from the
    *  contact person: the business outlives whoever is on the roster. */
@@ -789,7 +802,17 @@ export interface ParcelOrgInput {
   logoStorageKey?: string | null;
   logoUrl?: string | null;
   brandAccent?: string | null;
+  payoutMethod?: ParcelOrgPayoutMethod | null;
+  payoutMsisdn?: string | null;
+  payoutTillNumber?: string | null;
+  payoutPaybillNumber?: string | null;
+  payoutPaybillAccount?: string | null;
+  payoutBankCode?: string | null;
+  payoutBankAccountNumber?: string | null;
+  payoutBankAccountName?: string | null;
 }
+
+export type ParcelOrgPayoutMethod = "PHONE" | "TILL" | "PAYBILL" | "BANK";
 
 export interface EnterpriseLite {
   id: string;
@@ -918,6 +941,58 @@ export async function actionCreateParcelOrg(
   }
 }
 
+/** One payout no automatic rail could clear — a bank destination (no
+ *  disbursement integration exists yet) or a company with no payout
+ *  method set, plus anything Daraja kept refusing. See core-go's
+ *  AdminManualParcelOrgPayoutRow. */
+export interface ManualParcelOrgPayout {
+  id: string;
+  parcelOrgName: string;
+  parcelCode: string;
+  amountKes: number;
+  method: ParcelOrgPayoutMethod | null;
+  status: "MANUAL" | "FAILED";
+  failureReason: string | null;
+  createdAt: string;
+  payoutMsisdn: string | null;
+  payoutTillNumber: string | null;
+  payoutPaybillNumber: string | null;
+  payoutPaybillAccount: string | null;
+  payoutBankCode: string | null;
+  payoutBankAccountNumber: string | null;
+  payoutBankAccountName: string | null;
+}
+
+export async function actionListManualParcelOrgPayouts(): Promise<
+  ManualParcelOrgPayout[]
+> {
+  await requireStaff();
+  const { payouts } = await adminGo<{ payouts: ManualParcelOrgPayout[] | null }>(
+    "/v1/admin/parcels/payouts/manual",
+  );
+  return payouts ?? [];
+}
+
+export async function actionMarkParcelOrgPayoutPaid(
+  id: string,
+  note: string,
+): Promise<Result> {
+  try {
+    await requireStaff();
+    await adminGo(`/v1/admin/parcels/payouts/${id}/mark-paid`, {
+      method: "POST",
+      body: JSON.stringify({ note }),
+    });
+    revalidatePath("/parcels/companies/payouts");
+    return { ok: true };
+  } catch (e) {
+    return {
+      ok: false,
+      error: e instanceof Error ? e.message : "Could not mark that payout as paid",
+    };
+  }
+}
+
 export async function actionUpdateParcelOrg(
   id: string,
   input: ParcelOrgInput,
@@ -1026,6 +1101,11 @@ export interface ParcelOrgStats {
   earningsTodayKes: string;
   earningsKes: string;
   awaitingDropoff: number;
+  /** Counter cash a clerk has taken and a manager hasn't counted in yet
+   *  — sitting with the company, not Esoqo, until that happens. */
+  counterCashOutstandingKes: string;
+  /** Esoqo's own cut of counterCashOutstandingKes. */
+  counterCashPlatformFeeOwedKes: string;
 }
 
 export interface ParcelOrgDetail {

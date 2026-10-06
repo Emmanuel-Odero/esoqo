@@ -3,13 +3,12 @@ import { useEffect, useMemo, useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { Icon } from "@esoqo/ui";
 import {
-  actionBookParcel,
   actionListOrgStations,
   type ParcelPricingView,
   type PublicOrgStationView,
   type WalkInStationView,
 } from "../actions";
-import { actionSaveCounterTicketDraft } from "../counter-ticket-actions";
+import { actionCreateCounterTicket, actionSaveCounterTicketDraft } from "../counter-ticket-actions";
 
 /**
  * The one and only "send a parcel" form on the site — one question per
@@ -19,9 +18,17 @@ import { actionSaveCounterTicketDraft } from "../counter-ticket-actions";
  * the clerk, which is served far better by one question at a time than
  * a long page to scroll and re-find a place in.
  *
- * Every booking from here is SELF_DROPOFF, PAY_AT_COUNTER — the sender
- * is standing at the courier's own counter as they fill this in, so
- * there is no pickup to schedule and nothing to pay online.
+ * Every walk-in from here ends up a counter ticket, never a booked
+ * parcel directly — a clerk is the only thing that mints a real
+ * tracking code (see ServeTicketPanel's bookAndContinue). This used to
+ * have a second mode that called actionBookParcel straight from this
+ * unauthenticated form the moment "Check in" was pressed — a sender
+ * could mint themselves a real, BOOKED, PAY_AT_COUNTER parcel with no
+ * clerk ever having seen the box, which is exactly the kind of
+ * unverified intake the counter-ticket queue exists to prevent. Now
+ * both entry points (a QR-scanned ticket, or picking "which office"
+ * here) converge on the same ticket the instant a phone number exists
+ * — see createTicketIfNeeded.
  */
 
 const PARCEL_TYPES = [
@@ -31,8 +38,6 @@ const PARCEL_TYPES = [
   ["LARGE", "Large parcel"],
   ["HEAVY_OVERSIZE", "Heavy / Oversize"],
 ] as const;
-
-const TERMS_VERSION = "2026-09-01";
 
 const fieldStyle: React.CSSProperties = {
   width: "100%",
@@ -110,6 +115,16 @@ export function AtOfficeSendForm({
 }) {
   const router = useRouter();
   const draft = initialDraft as Partial<OfficeDraft> | null | undefined;
+
+  // The ticket this session is building toward — present from the start
+  // when opened via a QR-scanned ticket's own link (the `ticketId`
+  // prop), or minted on the fly, right here, the moment a phone number
+  // exists (see createTicketIfNeeded). Everything past that point —
+  // autosave, the final "Save & return to my ticket" — treats the two
+  // origins identically; only the "which office" step cares which one
+  // this is.
+  const [ticket, setTicket] = useState(ticketId ?? null);
+  const [ticketError, setTicketError] = useState<string | null>(null);
 
   const steps = useMemo(
     () => (ticketId ? ALL_STEPS.filter((s) => s.key !== "office") : ALL_STEPS),
@@ -191,13 +206,6 @@ export function AtOfficeSendForm({
 
   const [error, setError] = useState<string | null>(null);
   const [pending, start] = useTransition();
-  // Only the case number is ever shown here — see dbx.
-  // ReduceParcelStatusForUnintaken's own comment: the real tracking code
-  // and the receiver's delivery code both stay withheld, by SMS, until
-  // the clerk has the physical box in hand and scans it in. Showing
-  // either one on this screen would hand out a credential for a parcel
-  // nobody has actually taken custody of yet.
-  const [caseNumber, setCaseNumber] = useState<string | null>(null);
 
   function buildDraft(): OfficeDraft {
     return {
@@ -219,19 +227,36 @@ export function AtOfficeSendForm({
   // changes.
   const savingRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   useEffect(() => {
-    if (!ticketId) return;
+    if (!ticket) return;
     if (savingRef.current) clearTimeout(savingRef.current);
     savingRef.current = setTimeout(() => {
-      void actionSaveCounterTicketDraft(ticketId, buildDraft());
+      void actionSaveCounterTicketDraft(ticket, buildDraft());
     }, 900);
     return () => {
       if (savingRef.current) clearTimeout(savingRef.current);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [
-    ticketId, sender, receiver, parcelType, weightKg, fragile,
+    ticket, sender, receiver, parcelType, weightKg, fragile,
     destinationId, destination, declaredContents, declaredValue,
   ]);
+
+  /** Mints the ticket the instant it becomes possible to — right after
+   *  the sender step validates, since a ticket needs a phone number and
+   *  that's the first point one exists. A no-op once `ticket` is
+   *  already set, whether that's from the `ticketId` prop (opened from
+   *  a QR scan) or from an earlier call here. */
+  async function createTicketIfNeeded(): Promise<string | null> {
+    if (ticket) return ticket;
+    try {
+      const created = await actionCreateCounterTicket(chosenStationId, sender.phone.trim(), "WEB_QR");
+      setTicket(created.id);
+      return created.id;
+    } catch (e) {
+      setTicketError(e instanceof Error ? e.message : "Could not check you in — try again");
+      return null;
+    }
+  }
 
   function validStep(key: StepKey): string | null {
     switch (key) {
@@ -267,8 +292,19 @@ export function AtOfficeSendForm({
       return;
     }
     setError(null);
+    setTicketError(null);
     if (stepIndex === steps.length - 1) {
       submit();
+      return;
+    }
+    // The one step whose exit needs a round trip: right after "sender"
+    // validates, a phone number exists and the ticket can be minted.
+    // Every other step just advances locally.
+    if (step === "sender" && !ticket) {
+      start(async () => {
+        const id = await createTicketIfNeeded();
+        if (id) setStepIndex((i) => i + 1);
+      });
       return;
     }
     setStepIndex((i) => i + 1);
@@ -280,93 +316,18 @@ export function AtOfficeSendForm({
   }
 
   function submit() {
-    // Reached from a counter ticket: nothing here books anything — a
-    // clerk does that at the counter once they claim the ticket, using
-    // exactly what was just validated (already autosaved as it was
-    // typed; this is a final flush before leaving the page). Booking
-    // it again here would create a second, competing parcel for the
-    // same walk-in.
-    if (ticketId) {
-      start(async () => {
-        await actionSaveCounterTicketDraft(ticketId, buildDraft());
-        router.push(`/parcels/counter-ticket/${ticketId}`);
-      });
-      return;
-    }
-
+    // By now a ticket always exists — created the moment the sender
+    // step validated (see createTicketIfNeeded) — so this never books
+    // anything itself; a clerk does that at the counter once they claim
+    // the ticket, using exactly what was just validated (already
+    // autosaved as it was typed; this is a final flush before leaving
+    // the page).
     start(async () => {
-      const notesLines: string[] = [];
-      if (sender.phone2.trim()) notesLines.push(`Sender alt phone: ${sender.phone2.trim()}`);
-      if (sender.email.trim()) notesLines.push(`Sender email: ${sender.email.trim()}`);
-      if (receiver.phone2.trim()) notesLines.push(`Receiver alt phone: ${receiver.phone2.trim()}`);
-      if (receiver.email.trim()) notesLines.push(`Receiver email: ${receiver.email.trim()}`);
-
-      const booked = await actionBookParcel({
-        senderName: `${sender.firstName.trim()} ${sender.lastName.trim()}`.trim(),
-        senderMsisdn: sender.phone.trim(),
-        receiverName: `${receiver.firstName.trim()} ${receiver.lastName.trim()}`.trim(),
-        receiverMsisdn: receiver.phone.trim(),
-        originLabel: chosenStation ? `${chosenStation.name} — ${chosenStation.locationHint}` : "",
-        destinationLabel: destination ? `${destination.name} — ${destination.locationHint}` : "",
-        parcelType,
-        weightKg: weightKg ? Number(weightKg) : undefined,
-        fragile,
-        notes: notesLines.join("\n") || undefined,
-        destinationAgentId: destinationId || undefined,
-        originMethod: "SELF_DROPOFF",
-        parcelOrgId: chosenStationId,
-        senderDeclaredContents: declaredContents.trim(),
-        declaredValueKes: Number(declaredValue),
-        lawfulContentsAttested: lawfulAttested,
-        termsAccepted,
-        termsVersion: TERMS_VERSION,
-        payAtCounter: true,
-      });
-      if (!booked.ok) {
-        setError(booked.error);
-        return;
-      }
-      setCaseNumber(booked.serviceTicketNumber);
+      const id = await createTicketIfNeeded();
+      if (!id) return;
+      await actionSaveCounterTicketDraft(id, buildDraft());
+      router.push(`/parcels/counter-ticket/${id}`);
     });
-  }
-
-  // ── Terminal stage ──────────────────────────────────────────────────
-  if (caseNumber) {
-    return (
-      <div className="card" style={{ textAlign: "center" }}>
-        <span className="icbox icbox-g" style={{ margin: "0 auto 14px" }}>
-          <Icon name="check-circle" size={22} />
-        </span>
-        <h3 style={{ marginBottom: 6 }}>You&apos;re checked in</h3>
-        <p className="sub" style={{ margin: "0 0 14px" }}>
-          {`We've told ${chosenStation?.name ?? "the office"} to expect you.`}
-        </p>
-        <div
-          style={{
-            textAlign: "left",
-            border: "1px solid var(--line)",
-            borderRadius: 10,
-            padding: 14,
-            marginBottom: 14,
-          }}
-        >
-          <p className="sub" style={{ margin: "0 0 4px", fontSize: ".8rem" }}>
-            Your case number
-          </p>
-          <p className="mono" style={{ margin: 0, fontSize: "1.6rem", fontWeight: 800, letterSpacing: ".04em" }}>
-            {caseNumber}
-          </p>
-          <p className="sub" style={{ margin: "8px 0 0", fontSize: ".82rem" }}>
-            Show this to the clerk at the counter — they&apos;ll call it out when it&apos;s your turn.
-          </p>
-        </div>
-        <div style={{ textAlign: "left", border: "1px solid var(--line)", borderRadius: 10, padding: 14 }}>
-          <p className="sub" style={{ margin: 0, fontSize: ".85rem" }}>
-            {`Nothing to pay online — settle the fee with the clerk when they call you forward. We'll text you your real tracking link, and ${receiver.firstName || "your receiver"} their delivery code, the moment the clerk confirms they have your parcel in hand.`}
-          </p>
-        </div>
-      </div>
-    );
   }
 
   // ── The wizard ────────────────────────────────────────────────────────
@@ -383,7 +344,7 @@ export function AtOfficeSendForm({
 
       <p className="sub" style={{ margin: "0 0 4px", fontSize: ".72rem", letterSpacing: ".12em", textTransform: "uppercase", fontFamily: "var(--font-mono)" }}>
         Step {stepIndex + 1} of {steps.length}
-        {ticketId && chosenStation ? ` · Checking in at ${chosenStation.name}` : ""}
+        {chosenStation ? ` · Checking in at ${chosenStation.name}` : ""}
       </p>
 
       {step === "office" && (
@@ -563,6 +524,7 @@ export function AtOfficeSendForm({
         </>
       )}
 
+      {ticketError && <ErrorLine message={ticketError} />}
       {error && <ErrorLine message={error} />}
 
       <div style={{ display: "flex", gap: 10, marginTop: 20 }}>
@@ -573,15 +535,15 @@ export function AtOfficeSendForm({
         )}
         <button type="button" className="btn btn-p" style={{ flex: 1 }} onClick={goNext} disabled={pending}>
           {pending
-            ? (ticketId ? "Saving…" : "Checking in…")
+            ? (ticket ? "Saving…" : "Checking in…")
             : stepIndex === steps.length - 1
-              ? (ticketId ? "Save & return to my ticket" : "Check in")
+              ? "Save & return to my ticket"
               : "Next"}
           {!pending && stepIndex < steps.length - 1 && <Icon name="arrow-right" size={15} />}
         </button>
       </div>
       <p className="sub" style={{ margin: "10px 0 0", fontSize: ".78rem", textAlign: "center" }}>
-        {ticketId
+        {ticket
           ? "This is saved automatically as you type — your clerk picks up from here once they call your ticket."
           : "Nothing to pay online — settle the fee with the clerk when they call you forward."}
       </p>

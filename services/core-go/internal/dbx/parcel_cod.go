@@ -424,7 +424,7 @@ func RecordCodCollection(ctx context.Context, pool *pgxpool.Pool, code string, c
 	// Esoqo's revenue, so that — not the whole collection — is what the
 	// company's commission splits against.
 	if feeKes > 0 {
-		if err := writeParcelRevenueSplitTx(ctx, tx, parcelID, feeKes); err != nil {
+		if err := writeParcelRevenueSplitTx(ctx, tx, pool, parcelID, feeKes); err != nil {
 			return nil, err
 		}
 	}
