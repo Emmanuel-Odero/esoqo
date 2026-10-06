@@ -59,7 +59,6 @@ export default async function ParcelReceiptPage({ params }: { params: Promise<{ 
         {res.kind === 'found' ? (
           <div className="card">
             {res.receipt.orgLogoUrl ? (
-              // eslint-disable-next-line @next/next/no-img-element
               <img
                 src={res.receipt.orgLogoUrl}
                 alt={res.receipt.orgName ?? 'Courier'}
