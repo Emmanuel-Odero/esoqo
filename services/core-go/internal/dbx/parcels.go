@@ -1510,6 +1510,90 @@ func ConfirmCounterSettlementByCheckoutID(ctx context.Context, pool *pgxpool.Poo
 	return parcelID, true, nil
 }
 
+// ConfirmCounterSettlementByManualCode is the clerk-asserted fallback
+// for when an STK push genuinely landed but the Daraja callback that
+// would have driven ConfirmCounterSettlementByCheckoutID never arrived
+// (or arrived and was lost) — there is no synchronous Safaricom query
+// that can validate a receipt code on the spot today (see
+// payments.QueryTransactionStatus's own doc comment), so this trusts
+// the clerk's typed code the same way SettleCounterParcel trusts a
+// clerk's typed cash amount, and leans on paidByStaffId to keep that
+// distinguishable from a webhook-confirmed payment during any later
+// reconciliation: null means Safaricom confirmed itself, set means a
+// person asserted it.
+//
+// Requires paymentCheckoutRequestId to already be a real checkout id
+// (i.e. SettleCounterParcelStk's push actually went out) rather than
+// letting a clerk manufacture a settlement with no STK attempt behind
+// it at all.
+func ConfirmCounterSettlementByManualCode(ctx context.Context, pool *pgxpool.Pool, code, mpesaReceiptCode, staffID string, orgScope *string) (parcelID string, err error) {
+	if strings.TrimSpace(mpesaReceiptCode) == "" {
+		return "", &ParcelError{"BAD_INPUT", "Enter the M-Pesa code from the client's confirmation message"}
+	}
+
+	tx, err := pool.Begin(ctx)
+	if err != nil {
+		return "", err
+	}
+	defer func() { _ = tx.Rollback(ctx) }()
+
+	var parcelOrgID *string
+	var paidAt *string
+	var priceKesText *string
+	var checkoutRequestID *string
+	err = tx.QueryRow(ctx, `
+		SELECT id, "parcelOrgId"::text, "paidAt"::text, "priceKes"::text, "paymentCheckoutRequestId"
+		FROM parcel WHERE (code = $1 OR "serviceTicketNumber" = $1) AND "paymentMethod" = 'PAY_AT_COUNTER'
+		FOR UPDATE`, code).
+		Scan(&parcelID, &parcelOrgID, &paidAt, &priceKesText, &checkoutRequestID)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return "", &ParcelError{"NOT_FOUND", "That parcel was not found"}
+	}
+	if err != nil {
+		return "", err
+	}
+	if orgScope != nil && (parcelOrgID == nil || *parcelOrgID != *orgScope) {
+		return "", &ParcelError{"NOT_FOUND", "That parcel was not found"}
+	}
+	if paidAt != nil {
+		return "", &ParcelError{"ALREADY_SETTLED", "This parcel has already been settled"}
+	}
+	if checkoutRequestID == nil || *checkoutRequestID == "" {
+		return "", &ParcelError{"BAD_INPUT", "Send the M-Pesa prompt first — there's no payment attempt to match this code against"}
+	}
+	priceKes, err := parseFloatOrZero2(priceKesText)
+	if err != nil {
+		return "", err
+	}
+
+	settlementAcct, err := ledger.EnsureAccount(ctx, pool, nil, "SETTLEMENT", "KES")
+	if err != nil {
+		return "", err
+	}
+	revenueAcct, err := ledger.EnsureAccount(ctx, pool, nil, "PARCEL_REVENUE", "KES")
+	if err != nil {
+		return "", err
+	}
+	if _, err := ledger.PostEntryTx(ctx, tx,
+		"parcel:"+parcelID, "Parcel delivery payment (counter, M-Pesa code entered by clerk)", "core-go:parcel:"+parcelID,
+		[]ledger.Posting{{AccountID: settlementAcct, AmountCents: ledger.CentsFromKES(priceKes)}, {AccountID: revenueAcct, AmountCents: ledger.CentsFromKES(-priceKes)}}); err != nil {
+		return "", err
+	}
+
+	if _, err := tx.Exec(ctx, `
+		UPDATE parcel SET "paidAt" = now(), "mpesaReceiptCode" = $1, "paidByStaffId" = $2
+		WHERE id = $3 AND "paidAt" IS NULL`, mpesaReceiptCode, staffID, parcelID); err != nil {
+		return "", err
+	}
+	if err := writeParcelRevenueSplitTx(ctx, tx, pool, parcelID, priceKes); err != nil {
+		return "", err
+	}
+	if err := tx.Commit(ctx); err != nil {
+		return "", err
+	}
+	return parcelID, nil
+}
+
 // CounterSettlementStatus is what a clerk's client polls while an STK
 // counter settlement is in flight.
 type CounterSettlementStatus struct {
@@ -3733,6 +3817,19 @@ type ParcelNotifyInfo struct {
 	// notify.ParcelOrgDispatchSummary): only a courier company has a
 	// "team" to summarize a departure to.
 	ParcelOrgID *string
+}
+
+// GetParcelCode resolves a parcel's id back to its public code — what
+// the STK webhook needs after ConfirmCounterSettlementByCheckoutID,
+// which only has the id, to then fetch GetParcelNotifyInfo (keyed on
+// code, not id) for the payment-confirmed SMS.
+func GetParcelCode(ctx context.Context, pool *pgxpool.Pool, parcelID string) (string, error) {
+	var code string
+	err := pool.QueryRow(ctx, `SELECT code FROM parcel WHERE id = $1`, parcelID).Scan(&code)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return "", nil
+	}
+	return code, err
 }
 
 func GetParcelNotifyInfo(ctx context.Context, pool *pgxpool.Pool, code string) (*ParcelNotifyInfo, error) {

@@ -515,6 +515,7 @@ func (s *Server) Router() *gin.Engine {
 			s.rateLimit("book:parcelprice", 30, time.Hour), s.handleSetParcelPrice)
 		v1.POST("/parcels/:code/settle-counter", s.authRequired(), s.handleSettleCounterParcel)
 		v1.POST("/parcels/:code/settle-counter/stk", s.authRequired(), s.handleSettleCounterParcelStk)
+		v1.POST("/parcels/:code/settle-counter/mpesa-code", s.authRequired(), s.handleConfirmCounterSettlementManualCode)
 		v1.GET("/parcel-orgs/me/parcels/:code/settlement-status", s.authRequired(), s.handleGetCounterSettlementStatus)
 		v1.POST("/parcels/:code/pay", s.rateLimit("pay:parcel", 30, time.Hour), s.handlePayParcel)
 		v1.PATCH("/parcels/:code", s.authRequired(), s.handleUpdateOwnParcelDetails)

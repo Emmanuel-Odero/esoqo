@@ -149,6 +149,34 @@ export async function settleCounterParcelStk(
   }
 }
 
+/**
+ * The manual fallback for settleCounterParcelStk: an STK prompt went
+ * out but Safaricom's own callback never confirmed it (or the clerk
+ * gave up waiting), so the clerk reads the M-Pesa code off the
+ * client's confirmation SMS and types it in instead. See
+ * dbx.ConfirmCounterSettlementByManualCode for why this is trusted
+ * rather than independently re-verified against Safaricom.
+ */
+export async function confirmCounterSettlementManualCode(
+  code: string,
+  mpesaReceiptCode: string,
+): Promise<Result> {
+  try {
+    await parcelOrgFetch(
+      `/v1/parcels/${encodeURIComponent(code)}/settle-counter/mpesa-code`,
+      {
+        method: "POST",
+        body: JSON.stringify({ mpesaReceiptCode: mpesaReceiptCode.trim() }),
+      },
+    );
+    revalidatePath("/parcel-org");
+    revalidatePath("/parcel-org/counter");
+    return { ok: true };
+  } catch (e) {
+    return toResult(e);
+  }
+}
+
 export type CounterSettlementStatus = {
   status: "AWAITING_MPESA" | "SETTLED";
   priceKes: number;

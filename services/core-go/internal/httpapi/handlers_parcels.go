@@ -267,6 +267,7 @@ func (s *Server) handleSettleCounterParcel(c *gin.Context) {
 		return
 	}
 	s.dispatchParcelOrgPayoutForParcel(parcelID)
+	s.sendCounterPaymentConfirmedSms(c, c.Param("code"))
 	c.JSON(http.StatusOK, gin.H{"settled": true})
 }
 
@@ -346,6 +347,7 @@ func (s *Server) handleSettleCounterParcelStk(c *gin.Context) {
 		if _, _, err := dbx.ConfirmCounterSettlementByCheckoutID(c.Request.Context(), s.Pool, stk.CheckoutRequestID, stk.MpesaReceiptCode); err == nil {
 			resp["status"] = "SETTLED"
 			s.dispatchParcelOrgPayoutForParcel(parcelID)
+			s.sendCounterPaymentConfirmedSms(c, code)
 		}
 	}
 	c.JSON(http.StatusOK, resp)
@@ -374,6 +376,54 @@ func (s *Server) handleGetCounterSettlementStatus(c *gin.Context) {
 		return
 	}
 	c.JSON(http.StatusOK, status)
+}
+
+type confirmCounterSettlementManualCodeRequest struct {
+	MpesaReceiptCode string `json:"mpesaReceiptCode" binding:"required"`
+}
+
+// handleConfirmCounterSettlementManualCode — POST
+// /v1/parcels/:code/settle-counter/mpesa-code. The
+// fallback for when an STK prompt genuinely went through but the
+// Safaricom callback that would have driven handleMpesaStkCallback
+// never showed up (or got lost) — a clerk reads the code off the
+// client's own M-Pesa confirmation SMS and types it in. Same
+// tenancy/capability gate as handleSettleCounterParcelStk; see
+// dbx.ConfirmCounterSettlementByManualCode for why this is trusted
+// rather than independently verified against Safaricom.
+func (s *Server) handleConfirmCounterSettlementManualCode(c *gin.Context) {
+	var req confirmCounterSettlementManualCodeRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		writeError(c, http.StatusBadRequest, "INVALID_REQUEST", err.Error())
+		return
+	}
+	ctx := ctxFromGin(c)
+	code := c.Param("code")
+
+	var orgScope *string
+	switch {
+	case ctx.ParcelOrgID != "":
+		if err := authsvc.RequireCapability(ctx, authsvc.CapParcelOrgCarry, nil); err != nil {
+			writeError(c, http.StatusForbidden, "DENIED", "Your role doesn't allow taking payment")
+			return
+		}
+		orgID := ctx.ParcelOrgID
+		orgScope = &orgID
+	case authsvc.Can(ctx, "parcels.edit", nil):
+		// Esoqo ops — no tenancy narrowing to apply.
+	default:
+		writeError(c, http.StatusForbidden, "DENIED", "Not permitted to settle a parcel")
+		return
+	}
+
+	parcelID, err := dbx.ConfirmCounterSettlementByManualCode(c.Request.Context(), s.Pool, code, req.MpesaReceiptCode, ctx.ActorID, orgScope)
+	if err != nil {
+		writeParcelError(c, err)
+		return
+	}
+	s.dispatchParcelOrgPayoutForParcel(parcelID)
+	s.sendCounterPaymentConfirmedSms(c, code)
+	c.JSON(http.StatusOK, gin.H{"settled": true})
 }
 
 // handleGetParcelPricing — GET /v1/parcels/pricing?parcelType=. Public
@@ -911,6 +961,33 @@ const dispatchSummaryEvery = 10
 // entirely. Best-effort and silent on any error — a summary text is a
 // courtesy to the desk, never a reason to fail a scan that already
 // succeeded.
+// sendCounterPaymentConfirmedSms fires once a counter settlement
+// actually clears — cash in hand, the STK webhook, or a clerk's
+// manually entered M-Pesa code (see dbx.SettleCounterParcel /
+// ConfirmCounterSettlementByCheckoutID / ConfirmCounterSettlementByManualCode,
+// all three of which call this) — separately from
+// notify.ParcelIntakeConfirmed, which already fired when the clerk took
+// the box into custody at handleScanParcelHandoff. This is the "and
+// here's what you paid, and where it's headed" message the counter
+// flow's own spec calls for, tied to the money actually clearing rather
+// than to custody.
+func (s *Server) sendCounterPaymentConfirmedSms(c *gin.Context, code string) {
+	info, err := dbx.GetParcelNotifyInfo(c.Request.Context(), s.Pool, code)
+	if err != nil || info == nil {
+		return
+	}
+	if info.SenderMsisdn != "" {
+		_ = authsvc.SendSms(info.SenderMsisdn,
+			notify.ParcelCounterPaymentConfirmed(code, info.CarrierOrgName, info.OriginLabel, info.DestinationLabel),
+			"PARCEL_COUNTER_PAYMENT_CONFIRMED")
+	}
+	if info.ReceiverMsisdn != "" {
+		_ = authsvc.SendSms(info.ReceiverMsisdn,
+			notify.ParcelCounterPaymentConfirmedToReceiver(code, info.SenderName, info.CarrierOrgName, info.DestinationLabel),
+			"PARCEL_COUNTER_PAYMENT_CONFIRMED_RECEIVER")
+	}
+}
+
 func (s *Server) sendOrgDispatchSummary(c *gin.Context, orgID, code string) {
 	count, err := dbx.CountOrgParcelsDispatchedToday(c.Request.Context(), s.Pool, orgID)
 	if err != nil {

@@ -139,8 +139,13 @@ func (s *Server) handleMpesaStkCallback(c *gin.Context) {
 	// a different flow from the booking-STK confirm above, disambiguated
 	// by paymentMethod so the two can share paymentCheckoutRequestId
 	// without either one swallowing the other's callback.
-	if parcelID, _, err := dbx.ConfirmCounterSettlementByCheckoutID(ctx, s.Pool, cb.CheckoutRequestID, cb.MpesaReceiptCode); err == nil {
+	if parcelID, justConfirmed, err := dbx.ConfirmCounterSettlementByCheckoutID(ctx, s.Pool, cb.CheckoutRequestID, cb.MpesaReceiptCode); err == nil {
 		s.dispatchParcelOrgPayoutForParcel(parcelID)
+		if justConfirmed {
+			if code, cerr := dbx.GetParcelCode(ctx, s.Pool, parcelID); cerr == nil && code != "" {
+				s.sendCounterPaymentConfirmedSms(c, code)
+			}
+		}
 		c.JSON(http.StatusOK, gin.H{"ok": true})
 		return
 	} else if err != dbx.ErrCounterSettlementNotFound {

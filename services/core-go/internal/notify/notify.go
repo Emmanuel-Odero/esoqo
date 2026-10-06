@@ -432,6 +432,60 @@ func ParcelIntakeConfirmedToReceiver(code, senderName string, carrierOrgName *st
 		code, trunc(senderName), courierCompanyLabel(carrierOrgName), deliveryCode), code)
 }
 
+// withTrackAndReceipt tries to append both the tracking and receipt
+// links, falls back to withTrack's own single-link behaviour when both
+// don't fit in one SMS segment, and degrades to the bare message when
+// even that doesn't — the receipt link is the one worth dropping first,
+// since the tracking page carries everything the receipt does except
+// the payment facts.
+func withTrackAndReceipt(msg, code string) string {
+	trackURL := TrackingURL(code)
+	receiptURL := ReceiptURL(code)
+	if trackURL != "" && receiptURL != "" {
+		withBoth := msg + " Track: " + trackURL + " Receipt: " + receiptURL
+		if len(withBoth) <= smsSegmentBudget {
+			return withBoth
+		}
+	}
+	return withTrack(msg, code)
+}
+
+// ParcelCounterPaymentConfirmed — the sender's "paid" text once a
+// counter settlement actually clears (cash in hand, the M-Pesa webhook,
+// or a clerk's manually entered M-Pesa code — see
+// dbx.SettleCounterParcel / ConfirmCounterSettlementByCheckoutID /
+// ConfirmCounterSettlementByManualCode, all three of which trigger
+// this), not at intake: a sender already heard "accepted" via
+// ParcelIntakeConfirmed when the clerk took the box into custody at the
+// desk. This is the separate "and here's what you paid, and where it's
+// headed" message the counter flow calls for, tied to money clearing.
+func ParcelCounterPaymentConfirmed(code string, carrierOrgName *string, officeLabel, destinationLabel string) string {
+	company := courierCompanyLabel(carrierOrgName)
+	// A counter ticket's own originLabel is the company's name itself —
+	// there's no separate station entity at that layer yet (see
+	// dbx.BookParcelFromCounterTicket) — so naming it again here would
+	// read as "accepted at Acme Acme". Said once is enough; a company
+	// with real sub-stations wired up still gets both names distinctly.
+	at := company
+	if !strings.EqualFold(strings.TrimSpace(officeLabel), strings.TrimSpace(company)) {
+		at = company + " " + trunc(officeLabel)
+	}
+	base := fmt.Sprintf(
+		"Parcel Esoqo: Your parcel has been accepted at %s and is scheduled for dispatch to %s. Your parcel code and tracking number is %s.",
+		at, trunc(destinationLabel), code)
+	return withTrackAndReceipt(base, code)
+}
+
+// ParcelCounterPaymentConfirmedToReceiver — the receiver's side of the
+// same payment confirmation, naming who sent it and where it's headed
+// so the one SMS stands on its own.
+func ParcelCounterPaymentConfirmedToReceiver(code, senderName string, carrierOrgName *string, destinationLabel string) string {
+	base := fmt.Sprintf(
+		"Parcel Esoqo: %s has sent you a parcel %s via %s, scheduled to arrive %s.",
+		trunc(senderName), code, courierCompanyLabel(carrierOrgName), trunc(destinationLabel))
+	return withTrackAndReceipt(base, code)
+}
+
 // ParcelOrgDispatchSummary — sent to a courier company's dispatch desk
 // (see dbx.ListOrgDispatchDeskMsisdns) when one of their parcels leaves
 // the station: the first genuine handoff scan out of BOOKED (see

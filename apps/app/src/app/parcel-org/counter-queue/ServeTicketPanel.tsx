@@ -4,6 +4,7 @@ import { useEffect, useId, useRef, useState, useTransition } from "react";
 import { Icon } from "@esoqo/ui";
 import { useAnnounce } from "@esoqo/a11y";
 import {
+  confirmCounterSettlementManualCode,
   getCounterSettlementStatus,
   receiveWalkInParcel,
   resolveOrgLabel,
@@ -136,6 +137,9 @@ export function ServeTicketPanel({
   const [mpesaPhase, setMpesaPhase] = useState<"idle" | "waiting" | "unresolved">("idle");
   const [mpesaReceipt, setMpesaReceipt] = useState<string | null>(null);
   const waitingSince = useRef<number | null>(null);
+  const [manualCode, setManualCode] = useState("");
+  const [manualCodeError, setManualCodeError] = useState<string | null>(null);
+  const [manualCodePending, startManualCodeTransition] = useTransition();
 
   function pickLabel(code: string) {
     setLabelError(null);
@@ -254,6 +258,30 @@ export function ServeTicketPanel({
       }
       waitingSince.current = Date.now();
       setMpesaPhase("waiting");
+    });
+  }
+
+  /** The code-entry fallback once a push has gone unresolved too long —
+   *  see dbx.ConfirmCounterSettlementByManualCode's own comment on why
+   *  this is trusted rather than re-verified against Safaricom. */
+  function submitManualCode() {
+    if (!parcelCode) return;
+    const value = manualCode.trim();
+    if (!value) {
+      setManualCodeError("Enter the M-Pesa code from the client's confirmation message");
+      return;
+    }
+    setManualCodeError(null);
+    startManualCodeTransition(async () => {
+      const res = await confirmCounterSettlementManualCode(parcelCode, value);
+      if (!res.ok) {
+        setManualCodeError(res.error);
+        return;
+      }
+      setMpesaReceipt(value);
+      setMpesaPhase("idle");
+      announce(`M-Pesa payment confirmed for ${parcelCode}`, "assertive");
+      setStep("done");
     });
   }
 
@@ -500,10 +528,27 @@ export function ServeTicketPanel({
             </p>
           )}
           {mpesaPhase === "unresolved" && (
-            <p className="sub" style={{ color: "var(--amber, #9a6700)", margin: 0, fontSize: ".85rem" }}>
-              Still no word from Safaricom. Check the client's M-Pesa messages before trying again —
-              don't push a second prompt if the first one might still land.
-            </p>
+            <div style={{ display: "grid", gap: 6 }}>
+              <p className="sub" style={{ color: "var(--amber, #9a6700)", margin: 0, fontSize: ".85rem" }}>
+                Still no word from Safaricom. If the client already got the "money sent" message on
+                their phone, enter the M-Pesa code from it below instead of pushing a second prompt.
+              </p>
+              <div className="row" style={{ gap: 8 }}>
+                <input
+                  className="mono"
+                  style={{ flex: 1, padding: "6px 8px", border: "1.5px solid var(--line)", borderRadius: 6 }}
+                  value={manualCode}
+                  onChange={(e) => setManualCode(e.target.value.toUpperCase())}
+                  placeholder="M-Pesa code, e.g. QFL7XYZ123"
+                />
+                <button className="btn btn-o btn-sm" disabled={manualCodePending} onClick={submitManualCode}>
+                  {manualCodePending ? "Checking…" : "Use this code"}
+                </button>
+              </div>
+              {manualCodeError && (
+                <p className="sub" style={{ color: "var(--red, #b42318)", margin: 0, fontSize: ".82rem" }}>{manualCodeError}</p>
+              )}
+            </div>
           )}
           <div className="row" style={{ gap: 8, justifyContent: "flex-end" }}>
             <button
