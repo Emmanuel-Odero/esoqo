@@ -361,9 +361,10 @@ func BookParcel(ctx context.Context, pool *pgxpool.Pool, in BookParcelInput) (pa
 	// serviceTicketNumber — minted unconditionally, on every booking
 	// path (fresh code or a pre-printed label). See its own schema
 	// comment: this, not the real tracking code, is what a self-service
-	// booking's response actually carries. Firstname + an assigned
-	// number, not a checksummed code — a clerk calling someone forward
-	// at the counter reads this aloud, never types it back in.
+	// booking's response actually carries. A name (the sender's first
+	// or second, drawn at random) plus an assigned number, not a
+	// checksummed code — a clerk calling someone forward at the
+	// counter reads this aloud, never types it back in.
 	serviceTicketNumber = fleetqr.ServiceTicketForName(in.SenderName)
 
 	insertParcel := func(q rowQuerier, useCode string) error {

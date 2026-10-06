@@ -5363,12 +5363,14 @@ model ParcelCounterTicket {
   orgId String    @db.Uuid
   org   ParcelOrg @relation(fields: [orgId], references: [id], onDelete: Cascade)
 
-  /// Name-shaped — "JOHN-482", or "GUEST-###" for a phone with no
-  /// Esoqo account to read a name off of — same
-  /// fleetqr.ServiceTicketForName convention Parcel.serviceTicketNumber
-  /// already mints from (see dbx.CreateCounterTicket). Never the bare
-  /// TCK-XXXXXX fallback shape: a sender reads this aloud at the
-  /// counter, and a name is what lets a clerk call them forward by it.
+  /// Name-shaped — "JOHN-482" or "DOE-482" (the name half drawn at
+  /// random from the sender's first name or their second/family name),
+  /// or "GUEST-###" for a phone with no Esoqo account to read a name
+  /// off of — same fleetqr.ServiceTicketForName convention
+  /// Parcel.serviceTicketNumber already mints from (see
+  /// dbx.CreateCounterTicket). Never the bare TCK-XXXXXX fallback
+  /// shape: a sender reads this aloud at the counter, and a name is
+  /// what lets a clerk call them forward by it.
   serviceTicketNumber String                     @unique
   msisdn              String
   channel             ParcelCounterTicketChannel

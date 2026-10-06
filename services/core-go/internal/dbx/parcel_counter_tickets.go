@@ -108,13 +108,20 @@ func CreateCounterTicket(
 	// already follows (fleetqr.ServiceTicketForName) — a sender is only
 	// ever asked for a phone number at this point, so this looks that
 	// phone up against an existing Esoqo account for a name to read.
+	// First name and surname are fetched together, not just the first
+	// name: the ticket number draws at random from either of them (see
+	// ServiceTicketForName), so giving it only half the identity would
+	// mean every account-holder's ticket opens with their first name.
 	// "GUEST" when it's a genuinely fresh number: still "a word plus
 	// three digits", never the bare TCK-XXXXXX shape — that shape must
 	// not reach a sender again (see ServiceTicketForName's own fallback,
 	// which this deliberately avoids triggering).
 	var personName string
 	_ = pool.QueryRow(ctx, `
-		SELECT COALESCE(NULLIF(p."firstName", ''), p."officialName")
+		SELECT COALESCE(
+			NULLIF(CONCAT_WS(' ', NULLIF(p."firstName", ''), NULLIF(p."surname", '')), ''),
+			NULLIF(p."firstName", ''),
+			p."officialName")
 		FROM person p WHERE p.msisdn = $1 LIMIT 1`, msisdn).Scan(&personName)
 	if personName == "" {
 		personName = "GUEST"
