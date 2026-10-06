@@ -14,7 +14,12 @@ import {
 } from "../actions";
 import type { OrgLabelSearchRow } from "@/lib/parcel-org-session";
 import { LabelPicker } from "../LabelPicker";
-import { bookCounterTicket, cancelCounterTicket, type CounterTicketRow } from "./actions";
+import {
+  bookCounterTicket,
+  cancelCounterTicket,
+  releaseCounterTicket,
+  type CounterTicketRow,
+} from "./actions";
 
 /** What a sender filled in while waiting — see AtOfficeSendForm's
  *  OfficeDraft, the shape autosaved into ticket.draftDetails. Read back
@@ -41,6 +46,25 @@ const POLL_GIVE_UP_MS = 5 * 60 * 1000;
 
 type Step = "confirm" | "label" | "receive" | "settle" | "done";
 
+/** Where a resumed case picks up — derived from what the server knows
+ *  about the ticket, never from where this component's state happened
+ *  to be before the refresh:
+ *
+ *  - no parcel yet → back at "1. Confirm", draft prefilled, exactly as
+ *    a fresh claim would open;
+ *  - parcel booked but not received → "3. Receive", with the real
+ *    tracking code already in the reference field;
+ *  - parcel received (or further along) → "4. Settle"; if an M-Pesa
+ *    push for it is still in flight the panel resumes watching it.
+ *
+ *  "done" is deliberately unreachable here: a settled ticket leaves
+ *  the board's in-service list entirely and belongs to the register. */
+function startStepFor(ticket: CounterTicketRow): Step {
+  if (!ticket.parcelCode) return "confirm";
+  if (ticket.parcelStatus === "BOOKED") return "receive";
+  return "settle";
+}
+
 /**
  * The counter's "serve this one" flow, opened the moment a clerk claims
  * a waiting ticket: confirm the pre-printed label they're sticking on
@@ -52,16 +76,31 @@ type Step = "confirm" | "label" | "receive" | "settle" | "done";
  * claiming a ticket (this page) dead-ended in a JSON dump; label
  * resolve/attach only existed inside the booking form; and cash
  * settlement only existed on a different page (/parcel-org/scan).
+ *
+ * Resumable: every step's entry state is derived from the ticket row
+ * itself (see startStepFor), so a page refresh mid-service — the event
+ * that used to close this panel and lose the case from every screen —
+ * reopens it at the same step with the same codes, including an
+ * in-flight M-Pesa prompt it keeps polling.
  */
 export function ServeTicketPanel({
   ticket,
+  onDismiss,
   onDone,
+  onReleased,
 }: {
   ticket: CounterTicketRow;
+  /** The panel's ✕ — dismiss without finishing; the case stays in
+   *  service and the board won't auto-reopen it on the next refresh. */
+  onDismiss: () => void;
+  /** Terminal close — discarded or settled; the case is no longer
+   *  in service. */
   onDone: () => void;
+  /** Hand-back succeeded — the case is WAITING again. */
+  onReleased: (ticket: CounterTicketRow) => void;
 }) {
   const announce = useAnnounce();
-  const [step, setStep] = useState<Step>("confirm");
+  const [step, setStep] = useState<Step>(() => startStepFor(ticket));
   const referenceInputId = useId();
 
   // ── Confirm (editable, prefilled from what the sender entered) ──
@@ -120,26 +159,47 @@ export function ServeTicketPanel({
     return () => window.clearTimeout(id);
   }, [labelTail, labelPickerOpen]);
 
-  // ── Receive ── reference starts empty; set to the real tracking code
-  // once bookAndContinue mints one — a ticket's own TCK-… number was
-  // never a parcel ScanHandoff could find (see bookAndContinue).
-  const [reference, setReference] = useState("");
-  const [parcelCode, setParcelCode] = useState<string | null>(null);
+  // ── Receive ── reference starts as the real tracking code when this
+  // panel resumed a case whose booking already happened (a ticket's own
+  // TCK-… number was never a parcel ScanHandoff could find — see
+  // bookAndContinue), empty when the booking is still ahead of us.
+  const [reference, setReference] = useState(ticket.parcelCode ?? "");
+  const [parcelCode, setParcelCode] = useState<string | null>(ticket.parcelCode ?? null);
+  // Set the moment this panel's own booking succeeds. Guards that must
+  // hold past a real parcel (don't re-book, don't offer discard or
+  // hand-back) read this rather than ticket.parcelCode: the row the
+  // parent handed in was fetched before the booking and doesn't learn
+  // about it, so the prop would still claim there's no parcel.
+  const [booked, setBooked] = useState<string | null>(ticket.parcelCode ?? null);
   const [receiveError, setReceiveError] = useState<string | null>(null);
   const [receivePending, startReceiveTransition] = useTransition();
 
-  // ── Settle ──
-  const [method, setMethod] = useState<"CASH" | "MPESA">("CASH");
-  const [amount, setAmount] = useState("");
+  // ── Settle ── prefilled from the parcel's own price when a resumed
+  // case already carries one (SettleCounterParcelStk writes priceKes
+  // before the prompt goes out, so a refresh mid-M-Pesa comes back
+  // showing the amount actually being chased).
+  const [method, setMethod] = useState<"CASH" | "MPESA">(ticket.paymentPending ? "MPESA" : "CASH");
+  const [amount, setAmount] = useState(ticket.parcelPriceKes ? String(ticket.parcelPriceKes) : "");
   const [msisdn, setMsisdn] = useState(ticket.msisdn);
   const [settleError, setSettleError] = useState<string | null>(null);
   const [settlePending, startSettleTransition] = useTransition();
-  const [mpesaPhase, setMpesaPhase] = useState<"idle" | "waiting" | "unresolved">("idle");
+  // A payment already in flight when the panel (re)opened: start
+  // watching it rather than inviting a second prompt. waitingSince
+  // starts now so the give-up window is measured from this mount.
+  const [mpesaPhase, setMpesaPhase] = useState<"idle" | "waiting" | "unresolved">(
+    ticket.paymentPending ? "waiting" : "idle",
+  );
   const [mpesaReceipt, setMpesaReceipt] = useState<string | null>(null);
-  const waitingSince = useRef<number | null>(null);
+  const waitingSince = useRef<number | null>(ticket.paymentPending ? Date.now() : null);
   const [manualCode, setManualCode] = useState("");
   const [manualCodeError, setManualCodeError] = useState<string | null>(null);
   const [manualCodePending, startManualCodeTransition] = useTransition();
+
+  // ── Hand back to the queue ── the case was claimed by mistake, or
+  //    the sender needs somebody else. Pre-booking only; the server
+  //    refuses anything past a real parcel (see dbx.ReleaseCounterTicket).
+  const [releaseError, setReleaseError] = useState<string | null>(null);
+  const [releasePending, startReleaseTransition] = useTransition();
 
   function pickLabel(code: string) {
     setLabelError(null);
@@ -174,6 +234,13 @@ export function ServeTicketPanel({
   function bookAndContinue() {
     setBookError(null);
     startBookTransition(async () => {
+      // A resumed case may travel back to this step from "receive" —
+      // its parcel already exists, so re-booking would only earn an
+      // ALREADY_BOOKED error. Advance instead.
+      if (booked) {
+        setStep("receive");
+        return;
+      }
       const res = await bookCounterTicket(ticket.id, {
         senderName, senderMsisdn, receiverName, receiverMsisdn,
         parcelType: itemType, weightKg: weightKg ? Number(weightKg) : undefined,
@@ -185,6 +252,7 @@ export function ServeTicketPanel({
         setBookError(res.error);
         return;
       }
+      setBooked(res.code);
       setReference(res.code);
       setStep("receive");
     });
@@ -200,6 +268,22 @@ export function ServeTicketPanel({
       }
       announce(`Ticket ${ticket.serviceTicketNumber} discarded`, "polite");
       onDone();
+    });
+  }
+
+  /** Hand the case back to the queue instead of keeping it CLAIMED —
+   *  the server clears the claim and the board puts the row straight
+   *  back into "Waiting". */
+  function handBackToQueue() {
+    setReleaseError(null);
+    startReleaseTransition(async () => {
+      const res = await releaseCounterTicket(ticket.id);
+      if (!res.ok) {
+        setReleaseError(res.error);
+        return;
+      }
+      announce(`Ticket ${ticket.serviceTicketNumber} handed back to the queue`, "polite");
+      onReleased(res.ticket);
     });
   }
 
@@ -325,20 +409,38 @@ export function ServeTicketPanel({
           <strong className="mono">{ticket.serviceTicketNumber}</strong> — {ticket.msisdn}
         </span>
         <div className="row" style={{ gap: 6 }}>
-          {(step === "confirm" || step === "label") && (
+          {(step === "confirm" || step === "label") && !booked && ticket.mine && (
+            <button
+              className="btn btn-o btn-sm"
+              disabled={releasePending}
+              onClick={handBackToQueue}
+              title="Put this case back in the queue for anyone to pick up"
+            >
+              {releasePending ? "Handing back…" : "Hand back to queue"}
+            </button>
+          )}
+          {(step === "confirm" || step === "label") && !booked && (
             <button className="btn btn-o btn-sm" onClick={() => setDiscardOpen((v) => !v)}>
               Discard ticket
             </button>
           )}
           {step !== "done" && (
-            <button className="btn btn-o btn-sm" onClick={onDone}>
+            <button
+              className="btn btn-o btn-sm"
+              onClick={onDismiss}
+              title="Close — the case stays in service and comes back on refresh"
+            >
               <Icon name="close" size={14} />
             </button>
           )}
         </div>
       </div>
 
-      {discardOpen && (step === "confirm" || step === "label") && (
+      {releaseError && (
+        <p className="sub" style={{ color: "var(--red, #b42318)", margin: 0, fontSize: ".82rem" }}>{releaseError}</p>
+      )}
+
+      {discardOpen && !booked && (step === "confirm" || step === "label") && (
         <div className="chain" style={{ flexDirection: "column", alignItems: "stretch", gap: 8, padding: 10, border: "1.5px solid var(--red, #b42318)", borderRadius: 8 }}>
           <span className="sub" style={{ fontSize: ".82rem", fontWeight: 600 }}>
             Discard this ticket — the sender walked away before anything was booked.
