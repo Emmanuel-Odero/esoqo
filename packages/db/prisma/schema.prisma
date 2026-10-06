@@ -5332,12 +5332,17 @@ enum ParcelCounterTicketChannel {
   APP
 }
 
-/// WAITING is the only state that shows up in a clerk's live queue.
-/// CLAIMED means a clerk is actively serving it — not that a Parcel
-/// exists yet, since a claimed ticket still has to go through the
-/// ordinary booking/label-binding flow same as any counter intake.
-/// EXPIRED is a customer who walked off or a stale kiosk session,
-/// aged out rather than left WAITING forever.
+/// WAITING is the unclaimed live queue. CLAIMED means a clerk is
+/// actively serving it — not that a Parcel exists yet, since a
+/// claimed ticket still has to go through the ordinary
+/// booking/label-binding flow same as any counter intake. Claimed
+/// cases stay on the counter board too (dbx.ListCounterTicketQueue's
+/// "active" list) rather than dropping out of every screen — a refresh
+/// mid-service must resume, not lose the case. EXPIRED is a customer
+/// who walked off or a stale kiosk session, aged out rather than left
+/// WAITING forever; CANCELLED is a clerk's discard (see
+/// dbx.CancelCounterTicket). Both closed states live on in the
+/// counter's register (dbx.ListCounterTicketHistory).
 enum ParcelCounterTicketStatus {
   WAITING
   CLAIMED

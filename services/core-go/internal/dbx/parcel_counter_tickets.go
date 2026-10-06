@@ -20,6 +20,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"strconv"
 	"strings"
 	"time"
 
@@ -45,6 +46,23 @@ type ParcelCounterTicket struct {
 	ClaimedByStaffID    *string         `json:"claimedByStaffId,omitempty"`
 	ClaimedAt           *time.Time      `json:"claimedAt,omitempty"`
 	CreatedAt           time.Time       `json:"createdAt"`
+
+	// Present on the clerk-facing board/history reads, never on the
+	// public ticket endpoints: who is serving this (by name, not id),
+	// whether that person is the caller (so the client knows which
+	// active case it may resume rather than merely admire), and what
+	// the claim turned into so far — the booked parcel's code/status,
+	// and whether an M-Pesa push for it is still in flight.
+	ClaimedByName        *string    `json:"claimedByName,omitempty"`
+	Mine                 bool       `json:"mine"`
+	ParcelCode           *string    `json:"parcelCode,omitempty"`
+	ParcelStatus         *string    `json:"parcelStatus,omitempty"`
+	ParcelPaidAt         *time.Time `json:"parcelPaidAt,omitempty"`
+	ParcelPriceKes       *float64   `json:"parcelPriceKes,omitempty"`
+	PaymentPending       bool       `json:"paymentPending"`
+	CancelledAt          *time.Time `json:"cancelledAt,omitempty"`
+	CancelReason         *string    `json:"cancelReason,omitempty"`
+	CancelledByStaffName *string    `json:"cancelledByStaffName,omitempty"`
 }
 
 // CounterTicketEvent is the NOTIFY payload — small on purpose (the
@@ -284,10 +302,47 @@ func CancelCounterTicket(ctx context.Context, pool *pgxpool.Pool, ticketID, staf
 	return t, nil
 }
 
-// ListWaitingCounterTickets — the clerk queue's initial paint before
-// its SSE stream takes over: every WAITING ticket for the caller's own
-// org, oldest first (see the model's own org/status/createdAt index).
-func ListWaitingCounterTickets(ctx context.Context, pool *pgxpool.Pool, orgID string) ([]ParcelCounterTicket, error) {
+// CounterTicketBoard is everything the counter page paints in one
+// round-trip: the live queue, and the cases already claimed by this
+// company's clerks. The split matters — a refresh mid-service used to
+// drop a CLAIMED ticket out of every screen in the product (the queue
+// only ever asked for WAITING, and nothing anywhere asked for
+// CLAIMED), so the board carries both lists and the client can put
+// the serving panel back exactly where it was.
+type CounterTicketBoard struct {
+	Waiting []ParcelCounterTicket `json:"waiting"`
+	Active  []ParcelCounterTicket `json:"active"`
+}
+
+// ListCounterTicketQueue — the clerk board's initial paint before its
+// SSE stream takes over.
+//
+// Waiting: every WAITING ticket for the caller's own org, oldest first
+// (see the model's own org/status/createdAt index).
+//
+// Active: every CLAIMED ticket the company has in flight — whoever
+// claimed it — so one clerk refreshing (or closing the panel) never
+// makes a case vanish for the whole desk. Includes the claimer's name,
+// the caller's own `mine` flag, draftDetails (the panel's prefill on
+// resume) and, where a booking already happened, the parcel's
+// code/status/payment state so the client can reopen the panel at the
+// step it was left on. Fully settled tickets are excluded: their
+// parcel is paid, the case is closed, and ListCounterTicketHistory is
+// where a closed case belongs.
+func ListCounterTicketQueue(ctx context.Context, pool *pgxpool.Pool, orgID, staffID string) (*CounterTicketBoard, error) {
+	waiting, err := listWaitingCounterTickets(ctx, pool, orgID)
+	if err != nil {
+		return nil, err
+	}
+	active, err := listActiveCounterTickets(ctx, pool, orgID, staffID)
+	if err != nil {
+		return nil, err
+	}
+	return &CounterTicketBoard{Waiting: waiting, Active: active}, nil
+}
+
+// listWaitingCounterTickets — see ListCounterTicketQueue.
+func listWaitingCounterTickets(ctx context.Context, pool *pgxpool.Pool, orgID string) ([]ParcelCounterTicket, error) {
 	rows, err := pool.Query(ctx, `
 		SELECT id, "orgId", "serviceTicketNumber", msisdn, channel::text, status::text, "createdAt"
 		FROM parcel_counter_ticket
@@ -306,6 +361,136 @@ func ListWaitingCounterTickets(ctx context.Context, pool *pgxpool.Pool, orgID st
 		out = append(out, t)
 	}
 	return out, rows.Err()
+}
+
+// listActiveCounterTickets — see ListCounterTicketQueue. The two
+// LEFT JOINs (staff, parcel) are outer because a claim always has a
+// claimer but a booking may not have happened yet; mine/paymentPending
+// are computed in SQL so the client never re-derives identity or
+// payment state from a JSON payload it could misread.
+func listActiveCounterTickets(ctx context.Context, pool *pgxpool.Pool, orgID, staffID string) ([]ParcelCounterTicket, error) {
+	rows, err := pool.Query(ctx, `
+		SELECT t.id, t."orgId", t."serviceTicketNumber", t.msisdn, t.channel::text, t.status::text,
+		       t."draftDetails", t."claimedByStaffId", t."claimedAt", t."createdAt",
+		       s.name, p.code, p.status::text, p."paidAt", p."priceKes"::text,
+		       COALESCE(t."claimedByStaffId" = $2, false),
+		       (p."paymentCheckoutRequestId" IS NOT NULL AND p."paidAt" IS NULL)
+		FROM parcel_counter_ticket t
+		LEFT JOIN parcel_org_staff s ON s.id = t."claimedByStaffId"
+		LEFT JOIN parcel p ON p.id = t."parcelId"
+		WHERE t."orgId" = $1 AND t.status = 'CLAIMED'
+		  AND (t."parcelId" IS NULL OR p."paidAt" IS NULL)
+		ORDER BY t."claimedAt" ASC NULLS FIRST`, orgID, staffID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	out := []ParcelCounterTicket{}
+	for rows.Next() {
+		var t ParcelCounterTicket
+		var draft []byte
+		var priceText *string
+		if err := rows.Scan(&t.ID, &t.OrgID, &t.ServiceTicketNumber, &t.Msisdn, &t.Channel, &t.Status,
+			&draft, &t.ClaimedByStaffID, &t.ClaimedAt, &t.CreatedAt,
+			&t.ClaimedByName, &t.ParcelCode, &t.ParcelStatus, &t.ParcelPaidAt, &priceText,
+			&t.Mine, &t.PaymentPending); err != nil {
+			return nil, err
+		}
+		t.DraftDetails = draft
+		// priceKes comes back as text (the convention every other
+		// price read in this package follows — numeric straight into a
+		// float is a pgx-version trap), for the settle step's prefill.
+		if priceText != nil {
+			if v, perr := strconv.ParseFloat(*priceText, 64); perr == nil {
+				t.ParcelPriceKes = &v
+			}
+		}
+		out = append(out, t)
+	}
+	return out, rows.Err()
+}
+
+// ListCounterTicketHistory — the counter's register of closed cases,
+// newest first: discarded tickets (with the reason and the clerk who
+// discarded them), aged-out ones, and tickets whose booking was
+// actually paid — the completed end of a case. This is the record a
+// discarded or finished ticket used to vanish from: CancelCounterTicket
+// and the settle path only ever changed status, but no screen read a
+// status other than WAITING, so the row survived in the database while
+// disappearing from the product.
+func ListCounterTicketHistory(ctx context.Context, pool *pgxpool.Pool, orgID string, limit int) ([]ParcelCounterTicket, error) {
+	if limit <= 0 || limit > 200 {
+		limit = 50
+	}
+	rows, err := pool.Query(ctx, `
+		SELECT t.id, t."orgId", t."serviceTicketNumber", t.msisdn, t.channel::text, t.status::text,
+		       t."createdAt", t."claimedAt", t."cancelledAt", t."cancelReason",
+		       s.name, cs.name, p.code, p.status::text, p."paidAt"
+		FROM parcel_counter_ticket t
+		LEFT JOIN parcel_org_staff s ON s.id = t."claimedByStaffId"
+		LEFT JOIN parcel_org_staff cs ON cs.id = t."cancelledByStaffId"
+		LEFT JOIN parcel p ON p.id = t."parcelId"
+		WHERE t."orgId" = $1
+		  AND (t.status IN ('CANCELLED', 'EXPIRED')
+		       OR (t."parcelId" IS NOT NULL AND p."paidAt" IS NOT NULL))
+		ORDER BY t."createdAt" DESC
+		LIMIT $2`, orgID, limit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	out := []ParcelCounterTicket{}
+	for rows.Next() {
+		var t ParcelCounterTicket
+		if err := rows.Scan(&t.ID, &t.OrgID, &t.ServiceTicketNumber, &t.Msisdn, &t.Channel, &t.Status,
+			&t.CreatedAt, &t.ClaimedAt, &t.CancelledAt, &t.CancelReason,
+			&t.ClaimedByName, &t.CancelledByStaffName, &t.ParcelCode, &t.ParcelStatus, &t.ParcelPaidAt); err != nil {
+			return nil, err
+		}
+		out = append(out, t)
+	}
+	return out, rows.Err()
+}
+
+// ReleaseCounterTicket — a clerk handing an in-progress case back to
+// the queue: WAITING again, claim cleared, draftDetails untouched so
+// the next clerk still gets the same prefill. Deliberately narrower
+// than CancelCounterTicket in both directions: only the clerk who
+// holds the claim may release it (nobody else's case disappears from
+// under them), and only while no parcel exists (past booking, the
+// case has already become a parcel and "back in line" no longer means
+// anything).
+func ReleaseCounterTicket(ctx context.Context, pool *pgxpool.Pool, ticketID, staffID, orgID string) (*ParcelCounterTicket, error) {
+	tx, err := pool.Begin(ctx)
+	if err != nil {
+		return nil, err
+	}
+	defer tx.Rollback(ctx)
+
+	t := &ParcelCounterTicket{ID: ticketID}
+	var draft []byte
+	err = tx.QueryRow(ctx, `
+		UPDATE parcel_counter_ticket
+		SET status = 'WAITING', "claimedByStaffId" = NULL, "claimedAt" = NULL, "updatedAt" = now()
+		WHERE id = $1 AND "orgId" = $3 AND status = 'CLAIMED'
+		  AND "claimedByStaffId" = $2 AND "parcelId" IS NULL
+		RETURNING "orgId", "serviceTicketNumber", msisdn, channel::text, status::text, "draftDetails", "createdAt"`,
+		ticketID, staffID, orgID).
+		Scan(&t.OrgID, &t.ServiceTicketNumber, &t.Msisdn, &t.Channel, &t.Status, &draft, &t.CreatedAt)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return nil, &ParcelError{"NOT_FOUND", "That ticket can't be handed back to the queue"}
+	}
+	if err != nil {
+		return nil, err
+	}
+	t.DraftDetails = draft
+	if err := notifyCounterTicketEvent(ctx, tx, CounterTicketEvent{OrgID: t.OrgID, TicketID: t.ID, Event: "released"}); err != nil {
+		return nil, err
+	}
+	if err := tx.Commit(ctx); err != nil {
+		return nil, err
+	}
+	return t, nil
 }
 
 // GetCounterTicket — the id itself is the bearer credential, same

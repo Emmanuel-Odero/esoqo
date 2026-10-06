@@ -422,14 +422,21 @@ func (s *Server) Router() *gin.Engine {
 		v1.GET("/parcel-orgs/me/labels/search", s.authRequired(), s.handleSearchOrgLabels)
 		v1.GET("/parcel-orgs/me/labels", s.authRequired(), s.handleOrgListLabelRegister)
 		// The walk-in counter queue: every WAITING ticket for the
-		// session's own org, oldest first, plus its live SSE stream and
-		// the "Serve" action that claims one. See
-		// handlers_parcel_counter_tickets.go.
+		// session's own org, oldest first, plus every case the company
+		// currently has CLAIMED (so a refresh mid-service can't make one
+		// vanish), its register of closed cases, its live SSE stream and
+		// the "Serve"/"Hand back"/discard actions. The two static
+		// segments ("queue", "history") are registered before ":id"'s
+		// subtree the same way "search" is above — see
+		// handleAttachOrgLabelInfo's own comment.
+		// See handlers_parcel_counter_tickets.go.
 		v1.GET("/parcel-orgs/me/counter-tickets/queue", s.authRequired(), s.handleListCounterTicketQueue)
+		v1.GET("/parcel-orgs/me/counter-tickets/history", s.authRequired(), s.handleListCounterTicketHistory)
 		v1.GET("/parcel-orgs/me/counter-tickets/stream", s.authRequired(), s.handleStreamCounterTicketQueue)
 		v1.POST("/parcel-orgs/me/counter-tickets/:id/claim", s.authRequired(), s.handleClaimCounterTicket)
 		v1.POST("/parcel-orgs/me/counter-tickets/:id/book", s.authRequired(), s.handleBookCounterTicket)
 		v1.POST("/parcel-orgs/me/counter-tickets/:id/cancel", s.authRequired(), s.handleCancelCounterTicket)
+		v1.POST("/parcel-orgs/me/counter-tickets/:id/release", s.authRequired(), s.handleReleaseCounterTicket)
 		// Scan/lookup a code against the company's own stock, and attach
 		// field notes to a printed label. The static "info" segment is
 		// load-bearing: see handleAttachOrgLabelInfo's own comment.
