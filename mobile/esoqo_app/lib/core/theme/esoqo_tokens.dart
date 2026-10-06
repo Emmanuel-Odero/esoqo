@@ -227,7 +227,7 @@ abstract final class EsoqoTypography {
   ).copyWith(letterSpacing: fontSize * 0.07);
 
   /// Money/ID/code text — EsoqoFonts.mono at a given size+weight, tabular
-  /// figures on so digit columns align (KES amounts, ESK-Ids, ticket
+  /// figures on so digit columns align (KES amounts, esoqo handles, ticket
   /// codes). Use this instead of the ambient body/display font any time
   /// the text is a number a user will double-check against cash in hand.
   static TextStyle mono({

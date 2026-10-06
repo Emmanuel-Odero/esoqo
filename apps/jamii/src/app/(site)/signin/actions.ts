@@ -141,6 +141,10 @@ export async function actionSetPin(raw: unknown): Promise<ActionResult<{ next: s
     return { ok: false, error: 'Choose a less predictable PIN — not 1234, 0000 or a run of digits.', field: 'pin' };
   }
 
+  if (!code) {
+    return { ok: false, error: 'Enter the code we sent you.', field: 'code' };
+  }
+
   try {
     await verifyOtp(msisdn, 'PIN_RESET', code);
   } catch (e) {

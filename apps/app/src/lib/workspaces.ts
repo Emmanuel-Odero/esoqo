@@ -66,7 +66,7 @@ export const PERSONAL_WORKSPACE: Workspace = {
   kind: "personal",
   id: "",
   name: "Esoqo",
-  subtitle: "Your own record",
+  subtitle: "Your own profile",
   href: "/me",
   enterable: true,
 };

@@ -39,12 +39,11 @@ export function CreateGroupForm({ kindOptions }: { kindOptions: readonly (readon
   }
 
   return (
-    <div className="mcard">
+    <div className="mcard mcard--premium" style={{ borderStyle: 'dashed', background: 'var(--surface-2)' }}>
       <h2><Icon name="users" size={18} />Start a group</h2>
-      <p style={{ color: 'var(--tx-2)', fontSize: '.9rem', margin: '0 0 14px' }}>
+      <p style={{ color: 'var(--tx-2)', fontSize: '.9rem', margin: '0 0 16px', lineHeight: 1.5 }}>
         For a chama, table-banking circle, SACCO or similar. You become its chairperson and first
-        signer — its contribution account and multisig withdrawals are ready immediately, no
-        separate setup.
+        signer — its treasury and multisig withdrawals are ready immediately, no separate setup.
       </p>
       <SelectWithOther
         id="grp-kind" label="What kind of group?" options={kindOptions}

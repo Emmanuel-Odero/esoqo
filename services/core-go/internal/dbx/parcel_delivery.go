@@ -111,8 +111,31 @@ func RecordDeliveryAttempt(ctx context.Context, pool *pgxpool.Pool, code, byPart
 
 	var parcelID, status string
 	var currentHolder *string
-	err = pool.QueryRow(ctx, `
-		SELECT id, status::text, "currentHolderPartyId" FROM parcel WHERE code = $1`, code).
+	// The state read and the write happen in one transaction, with the row
+	// locked, and the statuses this accepts are repeated in the UPDATE's
+	// predicate.
+	//
+	// Read-then-write across a transaction boundary is what this used to
+	// do, and the window between them is the whole bug: a courier
+	// recording a failed attempt while the parcel was actually delivered
+	// elsewhere. DeliverParcel holds the same row and sets DELIVERED;
+	// this UPDATE carried no predicate at all, so whichever committed last
+	// won — and a parcel that had changed hands could be dragged back to
+	// FAILED_DELIVERY by an attempt that had already been superseded. The
+	// attempt row would have been inserted too, so the parcel would carry
+	// both a delivery and a later "couldn't deliver" against it.
+	//
+	// Locking first means the second writer sees the first's committed
+	// state and is rejected, and the predicate makes that rejection hold
+	// even if the lock were unavailable.
+	tx, err := pool.Begin(ctx)
+	if err != nil {
+		return 0, err
+	}
+	defer func() { _ = tx.Rollback(ctx) }()
+
+	err = tx.QueryRow(ctx, `
+		SELECT id, status::text, "currentHolderPartyId" FROM parcel WHERE code = $1 FOR UPDATE`, code).
 		Scan(&parcelID, &status, &currentHolder)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return 0, &ParcelError{"NOT_FOUND", "That parcel was not found"}
@@ -130,32 +153,49 @@ func RecordDeliveryAttempt(ctx context.Context, pool *pgxpool.Pool, code, byPart
 		return 0, &ParcelError{"FORBIDDEN", "You aren't holding this parcel"}
 	}
 
-	tx, err := pool.Begin(ctx)
-	if err != nil {
-		return 0, err
-	}
-	defer func() { _ = tx.Rollback(ctx) }()
-
 	if _, err := tx.Exec(ctx, `
 		INSERT INTO parcel_delivery_attempt (id, "parcelId", "byPartyId", reason, note, lat, lng, "createdAt")
 		VALUES (gen_random_uuid(), $1, $2, $3, $4, $5, $6, now())`,
 		parcelID, byPartyID, reason, note, lat, lng); err != nil {
 		return 0, err
 	}
-	if err := tx.QueryRow(ctx, `
+	tag, err := tx.Exec(ctx, `
 		UPDATE parcel SET
 			status = 'FAILED_DELIVERY',
 			"deliveryAttempts" = "deliveryAttempts" + 1,
 			"lastAttemptAt" = now(),
 			"lastAttemptReason" = $1
-		WHERE id = $2
-		RETURNING "deliveryAttempts"`, reason, parcelID).Scan(&attempts); err != nil {
+		WHERE id = $2 AND status::text = ANY($3)`,
+		reason, parcelID, []string{"PICKED_UP", "IN_TRANSIT", "FAILED_DELIVERY"})
+	if err != nil {
+		return 0, err
+	}
+	// Belt-and-braces past the row lock. If this is ever zero the attempt
+	// row above rolls back with it, so a failed attempt can never be
+	// recorded against a parcel that isn't in a state to have one.
+	if tag.RowsAffected() == 0 {
+		return 0, &ParcelError{"CONFLICT", "This parcel was delivered while you were recording that — check its status"}
+	}
+	attempts, err = currentDeliveryAttempts(ctx, tx, parcelID)
+	if err != nil {
 		return 0, err
 	}
 	if err := tx.Commit(ctx); err != nil {
 		return 0, err
 	}
 	return attempts, nil
+}
+
+// currentDeliveryAttempts reads the counter back inside the caller's
+// transaction rather than taking it from RETURNING. The UPDATE's RETURNING
+// clause would do the same thing in one round trip, but Postgres forbids
+// RETURNING on an UPDATE with no rows — which is exactly the case this
+// function now has to distinguish — so the value is fetched separately and
+// the zero-row case is decided by RowsAffected above.
+func currentDeliveryAttempts(ctx context.Context, tx pgx.Tx, parcelID string) (int, error) {
+	var n int
+	err := tx.QueryRow(ctx, `SELECT "deliveryAttempts" FROM parcel WHERE id = $1`, parcelID).Scan(&n)
+	return n, err
 }
 
 // ListDeliveryAttempts — the attempt log for one parcel, oldest first,
@@ -289,8 +329,22 @@ func HoldParcelAtAgent(ctx context.Context, pool *pgxpool.Pool, code, agentID, b
 	}
 	var parcelID, status string
 	var currentHolder *string
-	err := pool.QueryRow(ctx, `
-		SELECT id, status::text, "currentHolderPartyId" FROM parcel WHERE code = $1`, code).
+	tx, err := pool.Begin(ctx)
+	if err != nil {
+		return nil, err
+	}
+	defer func() { _ = tx.Rollback(ctx) }()
+
+	// Read under the row lock, inside the transaction that writes — the
+	// same shape RecordDeliveryAttempt above was corrected to, and for the
+	// same reason. Checked out here and written in there, a courier
+	// dropping off at a pickup point could overwrite a delivery that
+	// landed in between, putting a parcel that had reached its receiver
+	// back on a shop's shelf with a new holder and a fresh held-since
+	// clock — and the handoff row would record the shop as having taken
+	// custody of something already delivered.
+	err = tx.QueryRow(ctx, `
+		SELECT id, status::text, "currentHolderPartyId" FROM parcel WHERE code = $1 FOR UPDATE`, code).
 		Scan(&parcelID, &status, &currentHolder)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return nil, &ParcelError{"NOT_FOUND", "That parcel was not found"}
@@ -307,12 +361,6 @@ func HoldParcelAtAgent(ctx context.Context, pool *pgxpool.Pool, code, agentID, b
 	if currentHolder == nil || *currentHolder != byPartyID {
 		return nil, &ParcelError{"FORBIDDEN", "You aren't holding this parcel"}
 	}
-
-	tx, err := pool.Begin(ctx)
-	if err != nil {
-		return nil, err
-	}
-	defer func() { _ = tx.Rollback(ctx) }()
 
 	var res AgentDropResult
 	var agentPartyID *string
@@ -349,11 +397,16 @@ func HoldParcelAtAgent(ctx context.Context, pool *pgxpool.Pool, code, agentID, b
 	if agentPartyID != nil && *agentPartyID != "" {
 		newHolder = *agentPartyID
 	}
-	if _, err := tx.Exec(ctx, `
+	tag, err := tx.Exec(ctx, `
 		UPDATE parcel SET status = 'HELD_AT_AGENT', "destinationAgentId" = $1,
 		                  "currentHolderPartyId" = $2, "agentHeldSince" = now()
-		WHERE id = $3`, agentID, newHolder, parcelID); err != nil {
+		WHERE id = $3 AND status::text = ANY($4)`,
+		agentID, newHolder, parcelID, []string{"PICKED_UP", "IN_TRANSIT", "FAILED_DELIVERY"})
+	if err != nil {
 		return nil, err
+	}
+	if tag.RowsAffected() == 0 {
+		return nil, &ParcelError{"CONFLICT", "This parcel was delivered while you were dropping it off — check its status"}
 	}
 	if newHolder != byPartyID {
 		if _, err := tx.Exec(ctx, `
@@ -382,10 +435,23 @@ func ReturnParcelToSender(ctx context.Context, pool *pgxpool.Pool, code, byParty
 	if strings.TrimSpace(reason) == "" {
 		return &ParcelError{"BAD_INPUT", "Say why this parcel is going back"}
 	}
+	// Locked read in the same transaction as the write, with the accepted
+	// states repeated in the UPDATE predicate — third instance of this
+	// shape in this file, and the worst of the three if left: returning a
+	// parcel to its sender is terminal and NOT the same as cancelling, so
+	// a RETURNED_TO_SENDER landing on a parcel that was actually delivered
+	// would tell both parties the journey ended at the origin while the
+	// receiver is standing there holding the box.
+	tx, err := pool.Begin(ctx)
+	if err != nil {
+		return err
+	}
+	defer func() { _ = tx.Rollback(ctx) }()
+
 	var parcelID, status string
 	var currentHolder *string
-	err := pool.QueryRow(ctx, `
-		SELECT id, status::text, "currentHolderPartyId" FROM parcel WHERE code = $1`, code).
+	err = tx.QueryRow(ctx, `
+		SELECT id, status::text, "currentHolderPartyId" FROM parcel WHERE code = $1 FOR UPDATE`, code).
 		Scan(&parcelID, &status, &currentHolder)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return &ParcelError{"NOT_FOUND", "That parcel was not found"}
@@ -402,8 +468,16 @@ func ReturnParcelToSender(ctx context.Context, pool *pgxpool.Pool, code, byParty
 	if !isStaff && (currentHolder == nil || *currentHolder != byPartyID) {
 		return &ParcelError{"FORBIDDEN", "You aren't holding this parcel"}
 	}
-	_, err = pool.Exec(ctx, `
+	tag, err := tx.Exec(ctx, `
 		UPDATE parcel SET status = 'RETURNED_TO_SENDER', "lastAttemptReason" = $1, "lastAttemptAt" = now()
-		WHERE id = $2`, reason, parcelID)
-	return err
+		WHERE id = $2 AND status::text = ANY($3)`,
+		reason, parcelID,
+		[]string{"FAILED_DELIVERY", "HELD_AT_AGENT", "IN_TRANSIT", "RECEIVED_AT_COUNTER"})
+	if err != nil {
+		return err
+	}
+	if tag.RowsAffected() == 0 {
+		return &ParcelError{"CONFLICT", "This parcel was delivered while you were returning it — check its status"}
+	}
+	return tx.Commit(ctx)
 }

@@ -275,10 +275,25 @@ func seedShowcaseForOrg(ctx context.Context, pool *pgxpool.Pool, cfg showcaseOrg
 		return &id
 	}
 
-	remap := func(p showcaseParcel) showcaseParcel {
+	// Codes handed out during this run. The database is the authority on
+	// what is taken, but the rows this same run has already written are
+	// only visible to it one statement at a time, so a seed that inserts
+	// two parcels with the same code in one pass can read as "free" for
+	// both unless it also remembers what it just handed out.
+	handedCodes := map[string]bool{}
+
+	remap := func(p showcaseParcel) (showcaseParcel, error) {
 		out := p
 		out.code = strings.Replace(p.code, "PKG-DEMO-", cfg.codePrefix, 1)
 		out.ticket = strings.Replace(p.ticket, "TCK-DEMO-", cfg.ticketPrefix, 1)
+		// The code is reserved before the parcel row is written, so a
+		// collision walks forward from the derived digits rather than
+		// aborting the seed on the unique index.
+		deliveryCode, err := reserveShowcaseDeliveryCode(ctx, pool, out.code, handedCodes)
+		if err != nil {
+			return out, err
+		}
+		out.deliveryCode = deliveryCode
 		if cfg.holderOverride != "" && out.holderMsisdn != "" {
 			out.holderMsisdn = cfg.holderOverride
 		}
@@ -305,11 +320,14 @@ func seedShowcaseForOrg(ctx context.Context, pool *pgxpool.Pool, cfg showcaseOrg
 			)
 			out.origin, out.dest = area.Replace(out.origin), area.Replace(out.dest)
 		}
-		return out
+		return out, nil
 	}
 
 	for _, tpl := range showcaseParcels {
-		p := remap(tpl)
+		p, err := remap(tpl)
+		if err != nil {
+			return err
+		}
 		platformFee := p.priceKES * commissionPct / 100
 		orgEarnings := p.priceKES - platformFee
 		paidAgo := p.createdDaysAgo - 0.05
@@ -326,7 +344,7 @@ func seedShowcaseForOrg(ctx context.Context, pool *pgxpool.Pool, cfg showcaseOrg
 			codStatus = "PENDING"
 		}
 		var existing string
-		err := pool.QueryRow(ctx, `SELECT id FROM parcel WHERE code = $1`, p.code).Scan(&existing)
+		err = pool.QueryRow(ctx, `SELECT id FROM parcel WHERE code = $1`, p.code).Scan(&existing)
 		if err == nil {
 			// Refresh the tour-facing fields; never stomp money already
 			// settled by a real flow, only backfill nulls.

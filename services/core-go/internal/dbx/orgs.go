@@ -40,16 +40,16 @@ type Org struct {
 
 // OrgStaff represents a staff member at an organization
 type OrgStaff struct {
-	ID                   string
-	OrgID                string
-	PartyID              *string
-	Name                 string
-	Role                 string
-	CustomCapabilities   []string
-	Active               bool
-	IsContact            bool
-	CreatedAt            string
-	UpdatedAt            string
+	ID                 string
+	OrgID              string
+	PartyID            *string
+	Name               string
+	Role               string
+	CustomCapabilities []string
+	Active             bool
+	IsContact          bool
+	CreatedAt          string
+	UpdatedAt          string
 }
 
 // OrgConfig represents a configuration entry for an organization
@@ -77,7 +77,7 @@ type MyOrg struct {
 func GetOrg(ctx context.Context, pool *pgxpool.Pool, orgID string) (*Org, error) {
 	var org Org
 	err := pool.QueryRow(ctx, `
-		SELECT id, type, "enterpriseId", name, slug, status, metadata, "createdAt", "updatedAt"
+		SELECT id, type, "enterpriseId", name, slug, status, metadata, "createdAt"::text, "updatedAt"::text
 		FROM "org"
 		WHERE id = $1
 	`, orgID).Scan(
@@ -97,7 +97,7 @@ func GetOrg(ctx context.Context, pool *pgxpool.Pool, orgID string) (*Org, error)
 func GetOrgBySlug(ctx context.Context, pool *pgxpool.Pool, slug string, orgType string) (*Org, error) {
 	var org Org
 	err := pool.QueryRow(ctx, `
-		SELECT id, type, "enterpriseId", name, slug, status, metadata, "createdAt", "updatedAt"
+		SELECT id, type, "enterpriseId", name, slug, status, metadata, "createdAt"::text, "updatedAt"::text
 		FROM "org"
 		WHERE slug = $1 AND type = $2 AND status != $3
 	`, slug, orgType, OrgStatusDraft).Scan(
@@ -141,7 +141,7 @@ func ListMyOrgs(ctx context.Context, pool *pgxpool.Pool, partyID string) ([]MyOr
 // ListOrgsByType lists all organizations of a specific type
 func ListOrgsByType(ctx context.Context, pool *pgxpool.Pool, orgType string) ([]Org, error) {
 	rows, err := pool.Query(ctx, `
-		SELECT id, type, "enterpriseId", name, slug, status, metadata, "createdAt", "updatedAt"
+		SELECT id, type, "enterpriseId", name, slug, status, metadata, "createdAt"::text, "updatedAt"::text
 		FROM "org"
 		WHERE type = $1
 		ORDER BY name ASC
@@ -169,7 +169,7 @@ func ListOrgsByType(ctx context.Context, pool *pgxpool.Pool, orgType string) ([]
 func FindOrgStaff(ctx context.Context, pool *pgxpool.Pool, orgID string, staffID string) (*OrgStaff, error) {
 	var staff OrgStaff
 	err := pool.QueryRow(ctx, `
-		SELECT id, "orgId", "partyId", name, role, "customCapabilities", active, "isContact", "createdAt", "updatedAt"
+		SELECT id, "orgId", "partyId", name, role, "customCapabilities", active, "isContact", "createdAt"::text, "updatedAt"::text
 		FROM "org_staff"
 		WHERE "orgId" = $1 AND id = $2
 	`, orgID, staffID).Scan(
@@ -189,7 +189,7 @@ func FindOrgStaff(ctx context.Context, pool *pgxpool.Pool, orgID string, staffID
 func FindOrgStaffByParty(ctx context.Context, pool *pgxpool.Pool, orgID string, partyID string) (*OrgStaff, error) {
 	var staff OrgStaff
 	err := pool.QueryRow(ctx, `
-		SELECT id, "orgId", "partyId", name, role, "customCapabilities", active, "isContact", "createdAt", "updatedAt"
+		SELECT id, "orgId", "partyId", name, role, "customCapabilities", active, "isContact", "createdAt"::text, "updatedAt"::text
 		FROM "org_staff"
 		WHERE "orgId" = $1 AND "partyId" = $2 AND active
 	`, orgID, partyID).Scan(
@@ -208,7 +208,7 @@ func FindOrgStaffByParty(ctx context.Context, pool *pgxpool.Pool, orgID string, 
 // ListOrgStaff lists all active staff in an organization
 func ListOrgStaff(ctx context.Context, pool *pgxpool.Pool, orgID string) ([]OrgStaff, error) {
 	rows, err := pool.Query(ctx, `
-		SELECT id, "orgId", "partyId", name, role, "customCapabilities", active, "isContact", "createdAt", "updatedAt"
+		SELECT id, "orgId", "partyId", name, role, "customCapabilities", active, "isContact", "createdAt"::text, "updatedAt"::text
 		FROM "org_staff"
 		WHERE "orgId" = $1 AND active
 		ORDER BY name ASC
@@ -236,7 +236,7 @@ func ListOrgStaff(ctx context.Context, pool *pgxpool.Pool, orgID string) ([]OrgS
 func GetOrgConfig(ctx context.Context, pool *pgxpool.Pool, orgID string, configKey string) (*OrgConfig, error) {
 	var config OrgConfig
 	err := pool.QueryRow(ctx, `
-		SELECT id, "orgId", "configKey", "configData", priority, "createdAt", "updatedAt"
+		SELECT id, "orgId", "configKey", "configData", priority, "createdAt"::text, "updatedAt"::text
 		FROM "org_config"
 		WHERE "orgId" = $1 AND "configKey" = $2
 	`, orgID, configKey).Scan(
@@ -260,7 +260,7 @@ func ListOrgConfigs(ctx context.Context, pool *pgxpool.Pool, orgID string, prefi
 
 	if prefix != "" {
 		query = `
-			SELECT id, "orgId", "configKey", "configData", priority, "createdAt", "updatedAt"
+			SELECT id, "orgId", "configKey", "configData", priority, "createdAt"::text, "updatedAt"::text
 			FROM "org_config"
 			WHERE "orgId" = $1 AND "configKey" LIKE $2
 			ORDER BY priority ASC, "configKey" ASC
@@ -268,7 +268,7 @@ func ListOrgConfigs(ctx context.Context, pool *pgxpool.Pool, orgID string, prefi
 		args = []interface{}{orgID, prefix + "%"}
 	} else {
 		query = `
-			SELECT id, "orgId", "configKey", "configData", priority, "createdAt", "updatedAt"
+			SELECT id, "orgId", "configKey", "configData", priority, "createdAt"::text, "updatedAt"::text
 			FROM "org_config"
 			WHERE "orgId" = $1
 			ORDER BY priority ASC, "configKey" ASC
@@ -313,7 +313,7 @@ func CreateOrgStaff(ctx context.Context, pool *pgxpool.Pool, orgID string, party
 	err := pool.QueryRow(ctx, `
 		INSERT INTO "org_staff" ("id", "orgId", "partyId", "name", "role", "active", "createdAt", "updatedAt")
 		VALUES (gen_random_uuid(), $1, $2, $3, $4, true, NOW(), NOW())
-		RETURNING id, "orgId", "partyId", name, role, "customCapabilities", active, "isContact", "createdAt", "updatedAt"
+		RETURNING id, "orgId", "partyId", name, role, "customCapabilities", active, "isContact", "createdAt"::text, "updatedAt"::text
 	`, orgID, partyID, name, role).Scan(
 		&staff.ID, &staff.OrgID, &staff.PartyID, &staff.Name, &staff.Role,
 		&staff.CustomCapabilities, &staff.Active, &staff.IsContact, &staff.CreatedAt, &staff.UpdatedAt,
@@ -337,7 +337,7 @@ func CreateOrg(ctx context.Context, pool *pgxpool.Pool, orgType string, enterpri
 	err := pool.QueryRow(ctx, `
 		INSERT INTO "org" ("id", "type", "enterpriseId", "name", "slug", "status", "metadata", "createdAt", "updatedAt")
 		VALUES (gen_random_uuid(), $1, $2, $3, $4, $5, $6, NOW(), NOW())
-		RETURNING id, type, "enterpriseId", name, slug, status, metadata, "createdAt", "updatedAt"
+		RETURNING id, type, "enterpriseId", name, slug, status, metadata, "createdAt"::text, "updatedAt"::text
 	`, orgType, enterpriseID, name, slug, OrgStatusDraft, metadata).Scan(
 		&org.ID, &org.Type, &org.EnterpriseID, &org.Name, &org.Slug,
 		&org.Status, &org.Metadata, &org.CreatedAt, &org.UpdatedAt,
@@ -475,7 +475,7 @@ func SearchOrgsByName(ctx context.Context, pool *pgxpool.Pool, query string, lim
 	}
 
 	rows, err := pool.Query(ctx, `
-		SELECT id, type, "enterpriseId", name, slug, status, metadata, "createdAt", "updatedAt"
+		SELECT id, type, "enterpriseId", name, slug, status, metadata, "createdAt"::text, "updatedAt"::text
 		FROM "org"
 		WHERE name ILIKE $1
 		ORDER BY name ASC
@@ -516,7 +516,7 @@ func FindOrgStaffByName(ctx context.Context, pool *pgxpool.Pool, orgID string, n
 			os.id, os."orgId", os."partyId", os.name, os.role,
 			COALESCE(os."customCapabilities", ARRAY[]::TEXT[]),
 			os.active, COALESCE(os."isContact", false),
-			os."createdAt", os."updatedAt",
+			os."createdAt"::text, os."updatedAt"::text,
 			COALESCE(osp."pinHash", '') AS "pinHash"
 		FROM "org_staff" os
 		LEFT JOIN "org_staff_pin" osp ON osp."staffId" = os.id

@@ -1,0 +1,14 @@
+-- The hand-over itself was missing from the parcel's history.
+--
+-- Every other value in ParcelEventKind describes the authentication
+-- *around* a delivery — somebody proving who they were. Nothing recorded
+-- the delivery. So a parcel delivered against a photo, a GPS fix and a
+-- named receiver had a POD block and no event saying it happened, and the
+-- one branch that did write an event (a receiver self-confirming at a
+-- pickup point) was the branch with no staff witness at all. The staff-
+-- witnessed hand-over — the ordinary, well-evidenced delivery — was the
+-- one that left no row.
+--
+-- ADD VALUE IF NOT EXISTS because re-running a migration that already
+-- landed must not fail on a value that is already there.
+ALTER TYPE "ParcelEventKind" ADD VALUE IF NOT EXISTS 'DELIVERED_STAFF_WITNESSED';

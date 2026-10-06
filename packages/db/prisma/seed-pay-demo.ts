@@ -16,7 +16,7 @@
  */
 import { prisma } from '../src/client';
 import { anonCtx } from '../src/capabilities';
-import { allocateEsoqoCode } from '../src/dal/payment-id';
+import { allocateEsoqoOrgHandle } from '../src/dal/payment-id';
 import { findPayableGroups, lookupPayee, lookupPayeeByPlate } from '../src/dal/business-payment';
 import { findParkingLot } from '../src/dal/parking';
 
@@ -114,7 +114,7 @@ async function main() {
       throw new Error(`${o.knownAs} holds a suspended Payment ID and cannot be paid — resolve that first`);
     }
     if (!party.esoqoPaymentId) {
-      const code = await allocateEsoqoCode(party.id);
+      const code = await allocateEsoqoOrgHandle(party.id, o.officialName, o.knownAs);
       console.log(`  issued ${code}  ${o.knownAs}`);
       continue;
     }

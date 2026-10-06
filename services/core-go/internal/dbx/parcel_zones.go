@@ -99,7 +99,32 @@ func GetParcelZone(ctx context.Context, pool *pgxpool.Pool, id string) (*ParcelZ
 	return z, err
 }
 
+// validateZoneCoords keeps a zone's point on the globe.
+//
+// A zone's lat/lng is not decoration: it is the coordinate every price
+// and every "is this the same neighbourhood" comparison is measured
+// from, so a zone stored at lat=900 or lng=4000 does not break loudly —
+// it silently quotes distances to everywhere, quietly sorts to whichever
+// end of the list it happens to fall at, and is invisible to anyone
+// reading the admin screen, which shows a map of the world rather than
+// the number.
+//
+// Decimal(9,6) will happily hold 900.000000, so the column type is not
+// the check that matters; the range is.
+func validateZoneCoords(lat, lng float64) *ParcelError {
+	if lat < -90 || lat > 90 {
+		return &ParcelError{"BAD_INPUT", "That latitude is off the globe — it must be between -90 and 90"}
+	}
+	if lng < -180 || lng > 180 {
+		return &ParcelError{"BAD_INPUT", "That longitude is off the globe — it must be between -180 and 180"}
+	}
+	return nil
+}
+
 func CreateParcelZone(ctx context.Context, pool *pgxpool.Pool, name string, lat, lng float64) (string, error) {
+	if e := validateZoneCoords(lat, lng); e != nil {
+		return "", e
+	}
 	var id string
 	err := pool.QueryRow(ctx, `
 		INSERT INTO parcel_zone (id, name, lat, lng, active, "createdAt")
@@ -108,6 +133,9 @@ func CreateParcelZone(ctx context.Context, pool *pgxpool.Pool, name string, lat,
 }
 
 func UpdateParcelZone(ctx context.Context, pool *pgxpool.Pool, id, name string, lat, lng float64, active bool) error {
+	if e := validateZoneCoords(lat, lng); e != nil {
+		return e
+	}
 	tag, err := pool.Exec(ctx, `
 		UPDATE parcel_zone SET name = $1, lat = $2, lng = $3, active = $4 WHERE id = $5`,
 		name, lat, lng, active, id)
@@ -153,12 +181,28 @@ func GetParcelDistanceRate(ctx context.Context, pool *pgxpool.Pool) (*ParcelDist
 // SetParcelDistanceRate — admin editing the single global rate. Only
 // one row is ever meant to exist; this upserts it rather than growing a
 // history table nothing reads.
+//
+// The DELETE and INSERT are two Execs inside one transaction. A
+// multi-statement string would fail outright — pgx sends strings with
+// arguments through the extended protocol, and Postgres rejects more
+// than one command per prepared statement — and even if it ran, a crash
+// between the DELETE and the INSERT would leave the platform briefly
+// unpriced. The tx makes the swap atomic.
 func SetParcelDistanceRate(ctx context.Context, pool *pgxpool.Pool, perKmKes, minChargeableKm float64, staffID string) error {
-	_, err := pool.Exec(ctx, `
-		DELETE FROM parcel_distance_rate;
+	tx, err := pool.Begin(ctx)
+	if err != nil {
+		return err
+	}
+	defer func() { _ = tx.Rollback(ctx) }()
+	if _, err := tx.Exec(ctx, `DELETE FROM parcel_distance_rate`); err != nil {
+		return err
+	}
+	if _, err := tx.Exec(ctx, `
 		INSERT INTO parcel_distance_rate (id, "perKmKes", "minChargeableKm", "updatedAt", "updatedById")
-		VALUES (gen_random_uuid(), $1, $2, now(), $3)`, perKmKes, minChargeableKm, staffID)
-	return err
+		VALUES (gen_random_uuid(), $1, $2, now(), $3)`, perKmKes, minChargeableKm, staffID); err != nil {
+		return err
+	}
+	return tx.Commit(ctx)
 }
 
 // DistanceSurchargeKes — the additive amount HaversineKm(zones) *

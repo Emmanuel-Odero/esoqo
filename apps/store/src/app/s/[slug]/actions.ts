@@ -3,8 +3,9 @@
 import {
   createStoreOrder, attachCheckoutRequestId, confirmStoreOrderPayment, getOrder, getMyRecord,
 } from '@esoqo/db';
-import { checkoutSchema } from '@esoqo/domain';
+import { checkoutSchema, purchaseReceiptSms } from '@esoqo/domain';
 import { initiateStkPush, MpesaError } from '@esoqo/payments';
+import { sendSms } from '@esoqo/auth';
 import { getCtx } from '@/lib/session';
 
 export type ActionResult<T> = { ok: true; data: T } | { ok: false; error: string };
@@ -73,7 +74,17 @@ export async function checkout(raw: unknown): Promise<ActionResult<{ orderId: st
     });
     await attachCheckoutRequestId(order.id, push.checkoutRequestId);
     if (push.autoConfirmed) {
-      await confirmStoreOrderPayment(push.checkoutRequestId, push.mpesaReceiptCode ?? '');
+      const confirmed = await confirmStoreOrderPayment(push.checkoutRequestId, push.mpesaReceiptCode ?? '');
+      // Best-effort — console mode has already confirmed and posted the
+      // order by this point, so an SMS provider hiccup must not fail
+      // the checkout response.
+      if (confirmed.receipt?.sentTo && confirmed.receipt.receiptCode) {
+        await sendSms(
+          confirmed.receipt.sentTo,
+          purchaseReceiptSms({ storeName: confirmed.receipt.storeName ?? 'Esoqo', amountKes: Number(confirmed.receipt.totalKes), receiptCode: confirmed.receipt.receiptCode }),
+          'purchase-receipt',
+        ).catch((err) => console.error(`[checkout ${order.id}] failed to send the receipt SMS:`, err));
+      }
     }
   } catch (e) {
     return { ok: false, error: e instanceof MpesaError ? e.message : 'Could not start the M-Pesa payment' };

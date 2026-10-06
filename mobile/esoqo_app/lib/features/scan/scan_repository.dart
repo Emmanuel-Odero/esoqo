@@ -92,7 +92,7 @@ class ScanOrderInfo {
   final String? readyAt;
 }
 
-/// Public payment card resolved from an ESK-…-KE code — who a peer or a
+/// Public payment card resolved from an Esoqo handle — who a peer or a
 /// register is pointing their camera at, before any money moves.
 class ScanPartyInfo {
   ScanPartyInfo({

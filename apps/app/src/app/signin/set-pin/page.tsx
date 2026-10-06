@@ -1,8 +1,12 @@
-import type { Metadata } from 'next';
-import { Logo } from '@esoqo/ui';
-import { SetPinForm } from './SetPinForm';
+import type { Metadata } from "next";
+import { Suspense } from "react";
+import { Logo } from "@esoqo/ui";
+import { SetPinForm } from "./SetPinForm";
 
-export const metadata: Metadata = { title: 'Set your PIN' };
+export const metadata: Metadata = { title: "Set your PIN" };
+
+// Make this page dynamic since it uses searchParams
+export const dynamic = "force-dynamic";
 
 export default function SetPinPage() {
   return (
@@ -14,10 +18,12 @@ export default function SetPinPage() {
         <p className="kicker">Your Esoqo record</p>
         <h1>Set your PIN</h1>
         <p className="lead" style={{ marginTop: 6 }}>
-          We&apos;ll text a code to your phone to confirm it&apos;s you, then you can choose a PIN.
+          Choose a PIN to secure your account and sign in.
         </p>
         <div style={{ marginTop: 22 }}>
-          <SetPinForm />
+          <Suspense fallback={<div>Loading...</div>}>
+            <SetPinForm />
+          </Suspense>
         </div>
       </div>
     </div>

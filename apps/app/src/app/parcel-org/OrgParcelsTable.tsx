@@ -12,7 +12,7 @@ import {
   grantReceiverAuthRetry, reissueDeliveryCode, releaseHeldCourierEarnings,
 } from './actions';
 import { ParcelDrawer } from './ParcelDrawer';
-import { can, isInFlight, stageFor } from './parcel-stages';
+import { can, isInFlight, stageFor, statusLabel } from './parcel-stages';
 
 /**
  * The register as an operations explorer, not a static list.
@@ -23,19 +23,6 @@ import { can, isInFlight, stageFor } from './parcel-stages';
  * keeps every active filter. Sorting never reorders client-side: it
  * navigates, so page 2 of a sorted view is still the server's page 2.
  */
-
-const STATUS_LABEL: Record<string, string> = {
-  DRAFT_PENDING_PAYMENT: 'Awaiting payment',
-  BOOKED: 'Waiting for a rider',
-  RECEIVED_AT_COUNTER: 'At the station',
-  PICKED_UP: 'Picked up',
-  IN_TRANSIT: 'On the way',
-  FAILED_DELIVERY: 'Delivery attempted',
-  HELD_AT_AGENT: 'At a pickup point',
-  DELIVERED: 'Delivered',
-  RETURNED_TO_SENDER: 'Returned to sender',
-  CANCELLED: 'Cancelled',
-};
 
 function pillClass(status: string): string {
   switch (status) {
@@ -357,7 +344,7 @@ function Row({
       <td data-label="Route" className="sub">{parcel.originLabel} → {parcel.destinationLabel}</td>
       <td data-label="Status">
         <span className={`pill ${pillClass(parcel.status)}`}>
-          {STATUS_LABEL[parcel.status] ?? parcel.status}
+          {statusLabel(parcel.status, parcel.originMethod)}
         </span>
         {parcel.deliveryAttempts > 0 && (
           <span className="sub" style={{ display: 'block' }}>

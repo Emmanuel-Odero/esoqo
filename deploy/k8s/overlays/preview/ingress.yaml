@@ -21,11 +21,11 @@ kind: Ingress
 metadata:
   name: esoqo
   annotations:
-    cert-manager.io/cluster-issuer: letsencrypt-prod
-    # Server Actions in apps/app accept 11MB uploads; nginx's 1MB
-    # default would reject them at the proxy with a 413 before the app
-    # ever sees the request.
-    nginx.ingress.kubernetes.io/proxy-body-size: "12m"
+    cert-manager.io/issuer: letsencrypt-prod
+    # Server Actions accept up to 1MB file uploads, plus base64/multipart
+    # overhead; nginx's 1MB default would reject them at the proxy with
+    # a 413 before the app ever sees the request.
+    nginx.ingress.kubernetes.io/proxy-body-size: "2m"
     nginx.ingress.kubernetes.io/proxy-read-timeout: "60"
     # preview is a preview environment and must never be indexed.
     nginx.ingress.kubernetes.io/configuration-snippet: |
@@ -71,7 +71,7 @@ kind: Ingress
 metadata:
   name: esoqo-api
   annotations:
-    cert-manager.io/cluster-issuer: letsencrypt-prod
+    cert-manager.io/issuer: letsencrypt-prod
     nginx.ingress.kubernetes.io/proxy-body-size: "2m"
 spec:
   ingressClassName: traefik

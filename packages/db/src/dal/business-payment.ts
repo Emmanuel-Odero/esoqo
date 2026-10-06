@@ -1,9 +1,10 @@
-import { randomBytes } from 'node:crypto';
-import { extractEsoqoId, isGroupKind, normaliseMsisdn } from '@esoqo/domain';
+import { extractEsoqoId, isGroupKind, normaliseMsisdn, generateTransactionCode, TRANSACTION_CODE_KINDS } from '@esoqo/domain';
 import { MpesaError, queryStkPush, type StkQueryResult } from '@esoqo/payments';
 import { prisma } from '../client';
 import { systemCtx, type Ctx } from '../capabilities';
 import { recordAudit } from '../audit';
+import { isUniqueViolation } from './payment-id';
+import { issueReceiptFor } from './receipt';
 import type { Prisma } from '@prisma/client';
 
 /** How long after the push before it is worth asking Safaricom anything.
@@ -76,7 +77,7 @@ const NOTE_MAX = 140;
 /** What a payer is allowed to see about the business they're paying. */
 export interface PayableBusiness {
   partyId: string;
-  /** The issued Esoqo Payment ID — ESK-4471-KE. The thing they type or
+  /** The issued Esoqo Payment ID — a handle like "johnmutu482". The thing they type or
    *  the thing in the QR. */
   esoqoId: string;
   name: string;
@@ -460,10 +461,6 @@ export async function attachBusinessPaymentCheckoutRequestId(paymentId: string, 
   });
 }
 
-function receiptCode(): string {
-  return `BP-${randomBytes(5).toString('hex').toUpperCase()}`;
-}
-
 async function businessRevenueAccountId(tx: Prisma.TransactionClient, payeePartyId: string): Promise<string> {
   const existing = await tx.account.findFirst({
     where: { partyId: payeePartyId, kind: 'BUSINESS_REVENUE', currency: 'KES' },
@@ -510,6 +507,11 @@ export interface BusinessPaymentNotifyInfo {
    *  that receipt needs: the ticket is deliberately absent, because the
    *  driver spent it at the barrier and repeating it helps nobody. */
   parking?: { lotName: string };
+  /** The Receipt this payment minted (see issueReceiptFor in
+   *  dal/receipt.ts) — null for a parking payment, which never mints
+   *  one, or on the rare case the mint itself failed. Feeds
+   *  payerPaymentReceiptSms's receiptVerifyCode. */
+  receiptVerifyCode: string | null;
 }
 
 export interface ConfirmBusinessPaymentResult {
@@ -591,16 +593,23 @@ export async function confirmBusinessPayment(
   }
 
   const amount = Number(payment.amountKes);
-  const code = receiptCode();
 
   // Thrown to abandon the transaction when another confirmer got there
   // first. Rolling back is the point: the loser must leave no journal
   // entry behind, or one payment would post twice.
   const LOST_RACE = Symbol('business payment already confirmed');
 
-  let updated: ConfirmBusinessPaymentResult['payment'];
-  try {
-    updated = await prisma.$transaction(async (tx) => {
+  // Re-rolled on each attempt: a receiptCode collision (astronomically
+  // unlikely at 31^5 entropy, but the unique constraint is the real
+  // guarantee, not the odds) must retry with a *new* code, not the same
+  // one — same "let the database arbitrate" rule allocateEsoqoCode
+  // follows for Esoqo Payment IDs.
+  let code = '';
+  let updated: ConfirmBusinessPaymentResult['payment'] | undefined;
+  for (let attempt = 0; attempt < 5 && !updated; attempt++) {
+    code = generateTransactionCode(TRANSACTION_CODE_KINDS.BUSINESS_PAYMENT);
+    try {
+      updated = await prisma.$transaction(async (tx) => {
       // Claim the row before anything else, atomically. Two paths can now
       // confirm the same payment at the same moment — Safaricom's callback
       // and the waiting screen's own status query — and a read-then-write
@@ -658,15 +667,20 @@ export async function confirmBusinessPayment(
       }
       return updated;
       });
-    });
-  } catch (e) {
-    if (e !== LOST_RACE) throw e;
-    // Someone else confirmed this payment first — almost always the
-    // callback arriving while our own status query was in flight. Report
-    // the replay honestly so no second receipt goes out.
-    const settled = await prisma.businessPayment.findUnique({ where: { id: payment.id } });
-    return { payment: settled!, justConfirmed: false };
+      });
+    } catch (e) {
+      if (e === LOST_RACE) {
+        // Someone else confirmed this payment first — almost always the
+        // callback arriving while our own status query was in flight.
+        // Report the replay honestly so no second receipt goes out.
+        const settled = await prisma.businessPayment.findUnique({ where: { id: payment.id } });
+        return { payment: settled!, justConfirmed: false };
+      }
+      if (isUniqueViolation(e) && attempt < 4) continue; // receiptCode collision — re-roll and retry
+      throw e;
+    }
   }
+  if (!updated) throw new Error('Could not confirm this payment — try again');
 
   await recordAudit(systemCtx('mpesa-callback'), {
     action: 'business_payment.confirmed',
@@ -682,6 +696,37 @@ export async function confirmBusinessPayment(
     .filter((n, i, all) => all.indexOf(n) === i)
     .slice(0, 5);
 
+  // Parking never mints a Receipt — it settles through parkingPaidSms
+  // instead (see the doc comment on receiptVerifyCode). Everything else
+  // does, and gets storeId attributed when the payee maps to exactly
+  // one ACTIVE store — the case that also makes it itemizable from that
+  // store's dashboard (see listReceiptsNeedingItems in dal/receipt.ts).
+  let receiptVerifyCode: string | null = null;
+  if (!payment.parkingSessionId) {
+    const stores = await prisma.store.findMany({
+      where: { status: 'ACTIVE', enterprise: { partyId: payment.payeePartyId } },
+      select: { id: true },
+    });
+    try {
+      const receipt = await issueReceiptFor({
+        storeId: stores.length === 1 ? stores[0]!.id : null,
+        businessPaymentId: payment.id,
+        totalKes: amount,
+        buyerMsisdn: payment.payerMsisdn,
+      });
+      receiptVerifyCode = receipt.receiptCode ?? null;
+    } catch (e) {
+      // Best-effort, deliberately: the payment and its BP-kind
+      // receiptCode above are already durably confirmed. A Receipt is
+      // an added courtesy (the verify link, the itemization list) — its
+      // failure must never roll back or re-throw into a webhook retry.
+      recordAudit(systemCtx('mpesa-callback'), {
+        action: 'business_payment.receipt_failed', targetType: 'business_payment', targetId: payment.id,
+        payload: { error: e instanceof Error ? e.message : String(e) },
+      }).catch(() => {});
+    }
+  }
+
   return {
     payment: updated,
     justConfirmed: true,
@@ -694,6 +739,7 @@ export async function confirmBusinessPayment(
       receiptCode: code,
       mpesaReceiptCode: mpesaReceiptCode || null,
       businessMsisdns,
+      receiptVerifyCode,
       ...(payment.parkingSession
         ? { parking: { lotName: payment.parkingSession.lot.name } }
         : {}),

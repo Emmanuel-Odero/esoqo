@@ -2,7 +2,7 @@
 
 import { headers } from "next/headers";
 import { redirect } from "next/navigation";
-import { clientIpFrom } from "@esoqo/domain";
+import { clientIpFrom, isSystemHandleShape } from "@esoqo/domain";
 import { checkRateLimit, RateLimitError } from "@esoqo/auth";
 import { goUrl } from "@/lib/ticketing";
 import { setParcelOrgSession } from "@/lib/parcel-org-session";
@@ -34,7 +34,11 @@ export async function parcelStaffSignIn(
   const name = typeof form?.name === "string" ? form.name.trim() : "";
   const suppliedEsoqoId =
     typeof form?.esokoId === "string" ? form.esokoId.trim() : "";
-  const esokoId = suppliedEsoqoId || (/^ESK-/i.test(name) ? name : "");
+  // A single field accepts either a name or an Esoqo ID, so decide by
+  // shape rather than by a retired prefix. Anything handle-shaped is
+  // taken as the ID; anything else is treated as a name to search on.
+  const esokoId =
+    suppliedEsoqoId || (isSystemHandleShape(name) ? name : "");
   const pin = typeof form?.pin === "string" ? form.pin.trim() : "";
   if (!name && !esokoId)
     return { ok: false, error: "Enter your name or Esoqo ID" };

@@ -1,6 +1,7 @@
 package httpapi
 
 import (
+	"errors"
 	"net/http"
 	"strconv"
 	"strings"
@@ -75,6 +76,27 @@ func (s *Server) handleListWalkInStations(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"stations": stations})
 }
 
+// handleListPublicOrgStations — GET /v1/parcels/org-stations?orgId=.
+// One named courier company's own branches, for the guest destination
+// search on the booking form: a sender who has already picked which
+// office they're standing in next picks which of that SAME company's
+// branches the parcel is going to. orgId is required and unauthenticated
+// by design (same boundary as the station/agent pickers above) — it
+// names a company, not a customer, so there is nothing to protect.
+func (s *Server) handleListPublicOrgStations(c *gin.Context) {
+	orgID := strings.TrimSpace(c.Query("orgId"))
+	if orgID == "" {
+		writeError(c, http.StatusBadRequest, "BAD_INPUT", "orgId is required")
+		return
+	}
+	stations, err := dbx.ListPublicOrgStations(c.Request.Context(), s.Pool, orgID)
+	if err != nil {
+		writeError(c, http.StatusInternalServerError, "LIST_FAILED", "Could not load that company's branches")
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"stations": stations})
+}
+
 // parcelStaffCapabilities resolves a staffer's capability bundle by role,
 // case-insensitively, so a custom role typed as "Manager" still gets
 // MANAGER. Anything that doesn't match a known preset falls back to the
@@ -106,8 +128,38 @@ func (s *Server) handleParcelStaffSignIn(c *gin.Context) {
 		writeError(c, http.StatusBadRequest, "INVALID_REQUEST", err.Error())
 		return
 	}
-	identifier := strings.TrimSpace(req.Name)
-	subject := "parcelorg:" + strings.ToLower(req.OrgSlug+":"+identifier+":"+req.EsoqoID)
+	// Resolve the staff row BEFORE any lockout is consulted. The lockout
+	// subject must name the account, not whatever the caller typed — an
+	// attacker who varies EsoqoID is otherwise handed a fresh bucket per
+	// guess and the 10/hour wall never accumulates (see the "free-form
+	// EsoqoID defeats the lockout" scenario). With the row resolved the
+	// subject is the stable org+staff identity; a name that resolves to
+	// nobody still gets its own bucket so lookups themselves are throttled.
+	staff, err := dbx.FindParcelStaffForSignIn(c.Request.Context(), s.Pool, req.OrgSlug, strings.TrimSpace(req.Name))
+	if err != nil {
+		writeError(c, http.StatusInternalServerError, "SIGN_IN_FAILED", "Could not sign in")
+		return
+	}
+	if strings.TrimSpace(req.EsoqoID) != "" {
+		partyID, perr := dbx.PartyIDByEsoqoID(c.Request.Context(), s.Pool, req.EsoqoID)
+		if perr == nil {
+			fmtStaff, ferr := dbx.FindParcelStaffForSignInByPartyID(c.Request.Context(), s.Pool, req.OrgSlug, partyID)
+			if ferr != nil {
+				writeError(c, http.StatusInternalServerError, "SIGN_IN_FAILED", "Could not sign in")
+				return
+			}
+			// A present, resolvable EsoqoID carries the sign-in intent
+			// and takes precedence over the free-typed name, same as
+			// before the lockout change.
+			if fmtStaff != nil {
+				staff = fmtStaff
+			}
+		}
+	}
+	subject := "parcelorg-name:" + strings.ToLower(strings.TrimSpace(req.OrgSlug)+":"+strings.TrimSpace(req.Name))
+	if staff != nil {
+		subject = "parcelorg-staff:" + staff.OrgID + ":" + staff.ID
+	}
 	if s.StaffLockout.Locked(c.Request.Context(), subject) {
 		// Same message as a wrong PIN: saying "locked" would confirm the
 		// company/name pair exists.
@@ -115,17 +167,6 @@ func (s *Server) handleParcelStaffSignIn(c *gin.Context) {
 		return
 	}
 
-	staff, err := dbx.FindParcelStaffForSignIn(c.Request.Context(), s.Pool, req.OrgSlug, identifier)
-	if strings.TrimSpace(req.EsoqoID) != "" {
-		partyID, perr := dbx.PartyIDByEsoqoID(c.Request.Context(), s.Pool, req.EsoqoID)
-		if perr == nil {
-			staff, err = dbx.FindParcelStaffForSignInByPartyID(c.Request.Context(), s.Pool, req.OrgSlug, partyID)
-		}
-	}
-	if err != nil {
-		writeError(c, http.StatusInternalServerError, "SIGN_IN_FAILED", "Could not sign in")
-		return
-	}
 	storedHash := authsvc.DummyPinHash
 	if staff != nil {
 		storedHash = staff.PinHash
@@ -727,11 +768,11 @@ func (s *Server) handleCounterBookParcel(c *gin.Context) {
 		ReceiverName: req.ReceiverName, ReceiverMsisdn: req.ReceiverMsisdn,
 		OriginLabel: req.OriginLabel, DestinationLabel: req.DestinationLabel, Notes: req.Notes,
 		ParcelType: req.ParcelType, WeightKg: req.WeightKg, Fragile: req.Fragile,
-		ExistingCode:       req.ExistingCode,
-		DeclaredValueKes:   req.DeclaredValueKes, CoverageTierID: req.CoverageTierID,
+		ExistingCode:     req.ExistingCode,
+		DeclaredValueKes: req.DeclaredValueKes, CoverageTierID: req.CoverageTierID,
 		ParcelOrgID: &orgID, OriginMethod: "SCHEDULED_PICKUP", PayAtCounter: true,
 		BinderOrgID: &orgID,
-		LengthCm: req.LengthCm, WidthCm: req.WidthCm, HeightCm: req.HeightCm,
+		LengthCm:    req.LengthCm, WidthCm: req.WidthCm, HeightCm: req.HeightCm,
 		ContentsDeclaredByStaffID: contentsDeclaredByStaffID,
 	})
 	if err != nil {
@@ -1057,16 +1098,41 @@ func (s *Server) handleUpsertMyOrgStaff(c *gin.Context) {
 	// manager adding a rider can give them a /signin login too. Without
 	// one, the row stays a company-portal (name + PIN) login and any
 	// partyId is only for custody attribution.
+	//
+	// Unlike the admin path there is no platform authority behind this:
+	// a manager vouches for a number within their OWN company only. The
+	// org-scoped resolver refuses to take over an account that already
+	// exists outside this org's roster — that number has to come in via
+	// the OTP-invite path instead (see dbx.ErrParcelOrgForeignAccount).
 	partyID := req.PartyID
 	if req.Msisdn != nil && strings.TrimSpace(*req.Msisdn) != "" {
 		msisdn := strings.TrimSpace(*req.Msisdn)
-		resolved, err := dbx.EnsureEsoqoAccountForStaff(c.Request.Context(), s.Pool, strings.TrimSpace(req.Name), msisdn, pinHash)
+		resolved, err := dbx.EnsureParcelOrgStaffAccount(c.Request.Context(), s.Pool, orgID, strings.TrimSpace(req.Name), msisdn, pinHash)
 		if err != nil {
+			if errors.Is(err, dbx.ErrParcelOrgForeignAccount) {
+				writeError(c, http.StatusForbidden, "FORBIDDEN", "That phone already belongs to an Esoqo account outside your team — invite them by OTP instead of taking over their login")
+				return
+			}
 			writeError(c, http.StatusInternalServerError, "SAVE_FAILED", "Could not add that person")
 			return
 		}
 		partyID = &resolved
 		_, _ = dbx.EnsureEsoqoPaymentId(c.Request.Context(), s.Pool, resolved, msisdn)
+	} else if partyID != nil && strings.TrimSpace(*partyID) != "" {
+		// A partyId straight from the body is the second door into the
+		// same takeover: linking a roster row to a stranger's account
+		// gives the manager a row whose PIN changes move that outsider's
+		// /signin credential. Only an account already on this org's
+		// roster may be pointed at.
+		onRoster, err := dbx.PartyIsParcelOrgStaff(c.Request.Context(), s.Pool, orgID, strings.TrimSpace(*partyID))
+		if err != nil {
+			writeError(c, http.StatusInternalServerError, "SAVE_FAILED", "Could not add that person")
+			return
+		}
+		if !onRoster {
+			writeError(c, http.StatusForbidden, "FORBIDDEN", "That account isn't on your team — invite them by OTP so they can link themselves")
+			return
+		}
 	}
 	caps, setCaps := requestedCapabilities(req.Capabilities)
 	if err := dbx.UpsertParcelOrgStaff(c.Request.Context(), s.Pool, req.ID, orgID,
@@ -1241,6 +1307,17 @@ type parcelOrgRequest struct {
 	LogoStorageKey *string `json:"logoStorageKey"`
 	LogoUrl        *string `json:"logoUrl"`
 	BrandAccent    *string `json:"brandAccent"`
+
+	// Where this company's cut of a parcel is paid out, automatically,
+	// at settlement — see dbx.ParcelOrgInput's own comment.
+	PayoutMethod            *string `json:"payoutMethod"`
+	PayoutMsisdn            *string `json:"payoutMsisdn"`
+	PayoutTillNumber        *string `json:"payoutTillNumber"`
+	PayoutPaybillNumber     *string `json:"payoutPaybillNumber"`
+	PayoutPaybillAccount    *string `json:"payoutPaybillAccount"`
+	PayoutBankCode          *string `json:"payoutBankCode"`
+	PayoutBankAccountNumber *string `json:"payoutBankAccountNumber"`
+	PayoutBankAccountName   *string `json:"payoutBankAccountName"`
 }
 
 func (r parcelOrgRequest) toInput() dbx.ParcelOrgInput {
@@ -1253,6 +1330,10 @@ func (r parcelOrgRequest) toInput() dbx.ParcelOrgInput {
 		AcceptsWalkIn: r.AcceptsWalkIn, Lat: r.Lat, Lng: r.Lng,
 		LocationHint: r.LocationHint, OpeningHours: r.OpeningHours,
 		LogoStorageKey: r.LogoStorageKey, LogoUrl: r.LogoUrl, BrandAccent: r.BrandAccent,
+		PayoutMethod: r.PayoutMethod, PayoutMsisdn: r.PayoutMsisdn, PayoutTillNumber: r.PayoutTillNumber,
+		PayoutPaybillNumber: r.PayoutPaybillNumber, PayoutPaybillAccount: r.PayoutPaybillAccount,
+		PayoutBankCode: r.PayoutBankCode, PayoutBankAccountNumber: r.PayoutBankAccountNumber,
+		PayoutBankAccountName: r.PayoutBankAccountName,
 	}
 }
 
@@ -1313,6 +1394,47 @@ func (s *Server) handleAdminGetParcelOrg(c *gin.Context) {
 	})
 }
 
+// handleAdminListManualParcelOrgPayouts — GET /v1/admin/parcels/payouts/manual.
+// The finance-facing worklist dbx.createParcelOrgPayout's own comment
+// promises: a company with BANK configured (no disbursement
+// integration exists yet) or no payout method at all lands here
+// instead of silently going unpaid, same for anything Daraja has kept
+// refusing.
+func (s *Server) handleAdminListManualParcelOrgPayouts(c *gin.Context) {
+	if err := authsvc.RequireCapability(ctxFromGin(c), "parcels.read", nil); err != nil {
+		writeError(c, http.StatusForbidden, "DENIED", "You don't have access to parcels")
+		return
+	}
+	rows, err := dbx.ListAdminManualParcelOrgPayouts(c.Request.Context(), s.Pool)
+	if err != nil {
+		writeError(c, http.StatusInternalServerError, "LIST_FAILED", "Could not load manual payouts")
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"payouts": rows})
+}
+
+type markParcelOrgPayoutPaidRequest struct {
+	Note string `json:"note"`
+}
+
+// handleAdminMarkParcelOrgPayoutPaid — POST
+// /v1/admin/parcels/payouts/:id/mark-paid. Finance confirming they sent
+// a bank transfer (or any other out-of-band payment) themselves — see
+// dbx.MarkParcelOrgPayoutPaidManually for the ledger entry this posts.
+func (s *Server) handleAdminMarkParcelOrgPayoutPaid(c *gin.Context) {
+	if err := authsvc.RequireCapability(ctxFromGin(c), "parcels.edit", nil); err != nil {
+		writeError(c, http.StatusForbidden, "DENIED", "You can't edit parcel settings")
+		return
+	}
+	var req markParcelOrgPayoutPaidRequest
+	_ = c.ShouldBindJSON(&req) // note is optional
+	if err := dbx.MarkParcelOrgPayoutPaidManually(c.Request.Context(), s.Pool, c.Param("id"), strings.TrimSpace(req.Note)); err != nil {
+		writeParcelError(c, err)
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"paid": true})
+}
+
 // recordParcelOrgAudit writes one best-effort audit row against a
 // company — the feed handleAdminGetParcelOrg later reads back as
 // activity. Best-effort for the same reason every other RecordAudit
@@ -1355,6 +1477,9 @@ func (s *Server) handleAdminCreateParcelOrg(c *gin.Context) {
 	if !optionalMsisdn(c, &req.SettlementPhone, "The settlement M-Pesa number") {
 		return
 	}
+	if !optionalMsisdn(c, &req.PayoutMsisdn, "The payout M-Pesa number") {
+		return
+	}
 	var staffID *string
 	if ctx.ActorID != "" {
 		staffID = &ctx.ActorID
@@ -1378,6 +1503,9 @@ func (s *Server) handleAdminUpdateParcelOrg(c *gin.Context) {
 	var req parcelOrgRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
 		writeError(c, http.StatusBadRequest, "INVALID_REQUEST", err.Error())
+		return
+	}
+	if !optionalMsisdn(c, &req.PayoutMsisdn, "The payout M-Pesa number") {
 		return
 	}
 	if err := dbx.UpdateParcelOrg(c.Request.Context(), s.Pool, c.Param("id"), req.toInput()); err != nil {
@@ -1495,7 +1623,7 @@ func (s *Server) handleAdminUpsertParcelOrgStaff(c *gin.Context) {
 		}
 		partyID = &resolvedPartyID
 		// Mint their Esoqo ID now that staff are vouching for the number.
-		// Without this an invited manager had a Party but no ESK-… handle,
+		// Without this an invited manager had a Party but no esoqo handle,
 		// so the roster showed no code and they alone couldn't use the
 		// "sign in with an Esoqo ID" path. Best-effort: a failed mint must
 		// not stop the invite that's already on its way.
@@ -1529,7 +1657,7 @@ func (s *Server) handleAdminUpsertParcelOrgStaff(c *gin.Context) {
 
 // handleAdminIssueParcelOrgStaffID — POST
 // /v1/admin/parcels/orgs/:id/staff/:staffId/issue-id. Mints (or returns)
-// the ESK-… handle a roster member signs in with, so an admin can read
+// the esoqo handle a roster member signs in with, so an admin can read
 // it back to them. Needed because staff created before the invite flow
 // minted IDs have a Party and a phone but no code at all, which is
 // exactly the "I can't see their Esoqo ID" gap. Idempotent — a member

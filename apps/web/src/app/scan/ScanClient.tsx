@@ -29,11 +29,14 @@ import { actionResolveScan, type ScanResolution } from './actions';
 
 const STORE_URL = process.env.NEXT_PUBLIC_STORE_URL ?? 'http://localhost:3003';
 
-const PREFIX_EXAMPLES: ReadonlyArray<{ prefix: string; label: string; example: string }> = [
-  { prefix: 'PKG-', label: 'Parcel', example: 'PKG-T7HZ967' },
-  { prefix: 'TKT-', label: 'Ticket', example: 'TKT-8K2PQ4' },
-  { prefix: 'PKP-', label: 'Pickup', example: 'PKP-4D9W2A' },
-  { prefix: 'ESK-', label: 'Payment', example: 'ESK-9Q3M7X' },
+// `prefix` is null for the Esoqo handle: it carries no prefix at all, so
+// the chip shows the handle itself rather than implying a leading token
+// that the resolver does not look for.
+const PREFIX_EXAMPLES: ReadonlyArray<{ key: string; prefix: string | null; label: string; example: string }> = [
+  { key: 'parcel', prefix: 'PKG-', label: 'Parcel', example: 'PKG-T7HZ967' },
+  { key: 'ticket', prefix: 'TKT-', label: 'Ticket', example: 'TKT-8K2PQ4' },
+  { key: 'pickup', prefix: 'PKP-', label: 'Pickup', example: 'PKP-4D9W2A' },
+  { key: 'payment', prefix: null, label: 'Payment', example: 'johnmutu482' },
 ];
 
 const HISTORY_KEY = 'esoqo-scan-history';
@@ -177,20 +180,23 @@ export function ScanClient() {
               </button>
             </div>
             <p id="scan-hint" className="sub" style={{ margin: '8px 0 0', fontSize: '.85rem' }}>
-              Parcel labels, tickets, pickup codes and payment IDs —{' '}
-              <span className="mono">PKG- · TKT- · PKP- · ESK- · BUS-</span>
+              Parcel labels, tickets, pickup codes and esoqo handles —{' '}
+              <span className="mono">PKG- · TKT- · PKP- · BUS- · johnmutu482</span>
             </p>
 
             <div style={{ display: 'flex', flexWrap: 'wrap', gap: 7, marginTop: 12 }}>
               {PREFIX_EXAMPLES.map((p) => (
                 <button
-                  key={p.prefix}
+                  key={p.key}
                   type="button"
                   className="chip"
                   title={`Try ${p.example}`}
                   onClick={() => { setTyped(p.example); resolve(p.example); }}
                 >
-                  <span className="mono" style={{ fontWeight: 700 }}>{p.prefix}</span>{p.label}
+                  <span className="mono" style={{ fontWeight: 700 }}>
+                    {p.prefix ?? p.example}
+                  </span>
+                  {p.prefix ? p.label : ''}
                 </button>
               ))}
             </div>

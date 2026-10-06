@@ -111,28 +111,28 @@ type RunPing struct {
 }
 
 type Dispatch struct {
-	ID                 string            `json:"id"`
-	VehiclePlate       string            `json:"vehiclePlate"`
-	VehicleType        string            `json:"vehicleType"`
-	Origin             *RunStation  `json:"origin"`
-	Destination        *RunStation  `json:"destination"`
-	Status             string            `json:"status"`
-	Notes              *string           `json:"notes"`
-	CurrentLat         *float64          `json:"currentLat"`
-	CurrentLng         *float64          `json:"currentLng"`
-	CurrentAt          *string           `json:"currentAt"`
-	ArrivedAt          *string           `json:"arrivedAt"`
-	ReceivedBy         *string           `json:"receivedBy"`
-	CreatedAt          string            `json:"createdAt"`
+	ID           string      `json:"id"`
+	VehiclePlate string      `json:"vehiclePlate"`
+	VehicleType  string      `json:"vehicleType"`
+	Origin       *RunStation `json:"origin"`
+	Destination  *RunStation `json:"destination"`
+	Status       string      `json:"status"`
+	Notes        *string     `json:"notes"`
+	CurrentLat   *float64    `json:"currentLat"`
+	CurrentLng   *float64    `json:"currentLng"`
+	CurrentAt    *string     `json:"currentAt"`
+	ArrivedAt    *string     `json:"arrivedAt"`
+	ReceivedBy   *string     `json:"receivedBy"`
+	CreatedAt    string      `json:"createdAt"`
 	// The route followed, when one was chosen. Nil for an ad-hoc run.
-	RouteID            *string           `json:"routeId"`
-	RouteName          *string           `json:"routeName"`
+	RouteID   *string `json:"routeId"`
+	RouteName *string `json:"routeName"`
 	// How many parcels are aboard — the number the merge exists to make
 	// answerable from the board. A dispatch could never report it.
-	Loaded             int               `json:"loaded"`
-	Crew               []RunCrew    `json:"crew"`
-	Receivers          []RunReceiver `json:"receivers"`
-	Trail              []RunPing    `json:"trail"`
+	Loaded    int           `json:"loaded"`
+	Crew      []RunCrew     `json:"crew"`
+	Receivers []RunReceiver `json:"receivers"`
+	Trail     []RunPing     `json:"trail"`
 }
 
 type RunCrewInput struct {
@@ -157,11 +157,11 @@ type CreateRunInput struct {
 	// an ad-hoc run — a vehicle at the door that nobody scheduled — and
 	// must stay possible, or the counter stops during exactly the rush
 	// the ad-hoc run exists to absorb (ADR-0006).
-	RouteID *string
-	Notes                *string
-	Crew                 []RunCrewInput
-	Receivers            []RunReceiverInput
-	CreatedByStaffID     *string
+	RouteID          *string
+	Notes            *string
+	Crew             []RunCrewInput
+	Receivers        []RunReceiverInput
+	CreatedByStaffID *string
 }
 
 // runVehicleTypes — the console's vehicle picker. Free text would let
@@ -180,6 +180,19 @@ func stationBelongsToOrg(ctx context.Context, pool *pgxpool.Pool, orgID, station
 func staffBelongsToOrg(ctx context.Context, pool *pgxpool.Pool, orgID, staffID string) (bool, error) {
 	var n int
 	err := pool.QueryRow(ctx, `SELECT count(*) FROM parcel_org_staff WHERE id = $1 AND "orgId" = $2 AND active`, staffID, orgID).Scan(&n)
+	return n > 0, err
+}
+
+// routeBelongsToOrg — same tenancy check as the station and crew ones
+// above, for the one foreign id CreateRun was still taking on trust.
+// A routeId is a client-supplied string like every other id here, so
+// without this a manager could attach ANY courier company's route to
+// their own run — and, because the route name comes back in ListRuns
+// through the same join, read that competitor's route names and station
+// endpoints off their own dispatch board.
+func routeBelongsToOrg(ctx context.Context, pool *pgxpool.Pool, orgID, routeID string) (bool, error) {
+	var n int
+	err := pool.QueryRow(ctx, `SELECT count(*) FROM parcel_route WHERE id = $1 AND "parcelOrgId" = $2`, routeID, orgID).Scan(&n)
 	return n > 0, err
 }
 
@@ -217,6 +230,20 @@ func CreateRun(ctx context.Context, pool *pgxpool.Pool, orgID string, in CreateR
 		}
 	} else {
 		in.DestinationStationID = nil
+	}
+	// The route is a foreign id like the stations, and gets the same
+	// treatment — see routeBelongsToOrg on why leaving it unchecked let a
+	// manager read another company's route names off their own board.
+	if in.RouteID != nil && *in.RouteID != "" {
+		ok, err := routeBelongsToOrg(ctx, pool, orgID, *in.RouteID)
+		if err != nil {
+			return "", err
+		}
+		if !ok {
+			return "", &ParcelError{"NOT_FOUND", "That route isn't one of yours"}
+		}
+	} else {
+		in.RouteID = nil
 	}
 	if len(in.Crew) == 0 {
 		return "", &ParcelError{"BAD_INPUT", "Add at least one crew member — a run with nobody aboard isn't a run"}
@@ -295,10 +322,10 @@ func CreateRun(ctx context.Context, pool *pgxpool.Pool, orgID string, in CreateR
 	// manifest printed today said. They are also NOT NULL on this table,
 	// so there is no option to leave them out.
 	err = tx.QueryRow(ctx, `
-		INSERT INTO parcel_shipment ("parcelOrgId", "vehiclePlate", "vehicleType",
+		INSERT INTO parcel_shipment (id, "parcelOrgId", "vehiclePlate", "vehicleType",
 			"originStationId", "destinationStationId", "routeId", notes, "createdByStaffId",
 			"originLabel", "destinationLabel", status)
-		VALUES ($1, $2, $3, $4, $5, $6, $7, $8,
+		VALUES (gen_random_uuid(), $1, $2, $3, $4, $5, $6, $7, $8,
 			COALESCE((SELECT name FROM parcel_agent WHERE id = $4), 'Origin'),
 			COALESCE((SELECT name FROM parcel_agent WHERE id = $5), 'Destination'),
 			'LOADING')
@@ -385,7 +412,13 @@ func ListRuns(ctx context.Context, pool *pgxpool.Pool, orgID string, includeClos
 		FROM parcel_shipment d
 		LEFT JOIN parcel_agent o ON o.id = d."originStationId"
 		LEFT JOIN parcel_agent t ON t.id = d."destinationStationId"
-		LEFT JOIN parcel_route r ON r.id = d."routeId"
+		-- Scoped to the caller's own org, not just on d."routeId". A row
+		-- created before route ownership was checked can point at another
+		-- company's route, and an unqualified join would hand its name
+		-- back on this org's own board. The predicate makes that a NULL
+		-- route rather than a competitor's name; routeBelongsToOrg stops
+		-- any new one being created.
+		LEFT JOIN parcel_route r ON r.id = d."routeId" AND r."parcelOrgId" = d."parcelOrgId"
 		WHERE d."parcelOrgId" = $1 `+statusFilter+`
 		ORDER BY (d.status IN ('LOADING', 'DEPARTED')) DESC, d."createdAt" DESC LIMIT 50`, orgID)
 	if err != nil {
@@ -628,8 +661,24 @@ func ArriveRun(ctx context.Context, pool *pgxpool.Pool, orgID, runID, receivedBy
 
 // CancelRun calls a run off before it arrives. History stays
 // readable; only the board stops showing it as live.
+//
+// Cancelling the run also puts its cargo back, in the same transaction.
+// The boxes on a called-off run were left loaded: their manifest items
+// still carried loadedAt with no offloadedAt, and their parcels were
+// flipped to IN_TRANSIT at load time. Nothing else moves them — the only
+// other writer of offloadedAt is the offload scan, and a run that is
+// CANCELLED has no arrival to scan against. So every parcel on it sat
+// IN_TRANSIT, on a run that does not exist, until a platform admin with
+// parcels.assign intervened. A load that never became a journey should
+// not leave the parcel claiming it is one.
 func CancelRun(ctx context.Context, pool *pgxpool.Pool, orgID, runID string) error {
-	res, err := pool.Exec(ctx, `
+	tx, err := pool.Begin(ctx)
+	if err != nil {
+		return err
+	}
+	defer func() { _ = tx.Rollback(ctx) }()
+
+	res, err := tx.Exec(ctx, `
 		UPDATE parcel_shipment SET status = 'CANCELLED'
 		WHERE id = $1 AND "parcelOrgId" = $2 AND status IN ('LOADING', 'DEPARTED')`, runID, orgID)
 	if err != nil {
@@ -637,6 +686,87 @@ func CancelRun(ctx context.Context, pool *pgxpool.Pool, orgID, runID string) err
 	}
 	if res.RowsAffected() == 0 {
 		return &ParcelError{"NOT_FOUND", "That run isn't active — or isn't one of yours"}
+	}
+
+	// Cargo is released in one of two ways, and which one is correct
+	// depends on whether the run had actually left. Both used to be the
+	// second one, unconditionally.
+	//
+	// A LOADING run never departed: its boxes are sitting at the origin
+	// station and "received at counter" is the truth. They go back to
+	// RECEIVED_AT_COUNTER, which is also the state the ops queue's
+	// ready_to_load is built to pick up again.
+	//
+	// A DEPARTED run was on the road. Its boxes are somewhere between the
+	// two stations — not at the origin, and not necessarily at the
+	// destination either. Rewinding them to RECEIVED_AT_COUNTER asserted a
+	// location nobody had observed, and did it silently: the parcel's
+	// public tracker would go from "in transit, courier en route" back to
+	// "received at Kilimani Hub", so a sender would be told their box was
+	// waiting at the depot when the vehicle was halfway to Westlands. The
+	// parcel is also no longer claimable by this run, so nobody would
+	// touch it again without a platform admin intervening.
+	//
+	// So departed cargo is left where it is and made someone's problem
+	// explicitly: the parcel keeps its status (it really is still moving,
+	// or still sitting in a vehicle nobody has accounted for), and the
+	// manifest item is stamped as an exception rather than quietly
+	// offloaded. That routes it to the ops queue's arrival_exception,
+	// which is built to find exactly "an item with an exception and no
+	// offload" — so the boxes surface to a human instead of to nobody.
+	//
+	// This is the one place in the vertical where a status change is a
+	// product decision rather than a mechanical consequence, and it is
+	// deliberately the conservative one: claiming less about where a box
+	// is beats asserting a location the system does not know.
+	if _, err := tx.Exec(ctx, `
+		UPDATE parcel p SET status = 'RECEIVED_AT_COUNTER'
+		FROM parcel_shipment_item i
+		WHERE i."shipmentId" = $1 AND i."parcelId" = p.id
+		  AND i."loadedAt" IS NOT NULL AND i."offloadedAt" IS NULL
+		  AND p.status = 'IN_TRANSIT'
+		  AND EXISTS (
+			SELECT 1 FROM parcel_shipment s
+			WHERE s.id = $1 AND s."startedAt" IS NULL
+		  )`, runID); err != nil {
+		return err
+	}
+
+	// The manifest items are closed out rather than left open: an item
+	// with loadedAt and no offloadedAt is exactly what the per-run
+	// outstanding counts are built to find, so a called-off run would
+	// otherwise report forever as a run with boxes still on board.
+	// Marked offloaded (not deleted) so the load it records survives for
+	// the audit trail.
+	//
+	// Departed cargo is the exception to the exception: it is stamped
+	// exceptionCode = 'RUN_CANCELLED' and deliberately left un-offloaded,
+	// which is what puts it in the arrival_exception queue. Offloading it
+	// here would hide the very thing an operator needs to see.
+	if _, err := tx.Exec(ctx, `
+		UPDATE parcel_shipment_item SET
+			"offloadedAt"  = CASE WHEN EXISTS (
+			                    SELECT 1 FROM parcel_shipment s
+			                    WHERE s.id = $1 AND s."startedAt" IS NULL)
+			                  THEN COALESCE("offloadedAt", now())
+			                  ELSE "offloadedAt" END,
+			"exceptionCode" = CASE WHEN EXISTS (
+			                    SELECT 1 FROM parcel_shipment s
+			                    WHERE s.id = $1 AND s."startedAt" IS NOT NULL)
+			                  THEN COALESCE("exceptionCode", 'RUN_CANCELLED')
+			                  ELSE "exceptionCode" END,
+			"exceptionNote" = CASE WHEN EXISTS (
+			                    SELECT 1 FROM parcel_shipment s
+			                    WHERE s.id = $1 AND s."startedAt" IS NOT NULL)
+			                  THEN COALESCE("exceptionNote",
+			                       'Run cancelled after departure — cargo location unconfirmed, needs recount')
+			                  ELSE "exceptionNote" END
+		WHERE "shipmentId" = $1 AND "loadedAt" IS NOT NULL AND "offloadedAt" IS NULL`, runID); err != nil {
+		return err
+	}
+
+	if err := tx.Commit(ctx); err != nil {
+		return err
 	}
 	return nil
 }

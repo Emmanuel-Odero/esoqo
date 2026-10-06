@@ -1,0 +1,27 @@
+# ════════════════════════════════════════════════════════════════════
+#  Production media storage — on the cluster, not R2.
+#
+#  R2_* secrets have never actually been filled in for this namespace
+#  (confirmed empty), so STORAGE_PROVIDER defaulting to "r2" here meant
+#  every upload was silently failing with "R2 is not configured". This
+#  PVC backs LOCAL_STORAGE_DIR (see config.yaml) with real Longhorn
+#  storage instead, so uploads persist across restarts/rollouts.
+#
+#  ReadWriteMany, not ReadWriteOnce: core-service's two replicas are
+#  spread across nodes by the topologySpreadConstraints patch (no
+#  nodeSelector pinning it the way core-go is pinned to kcw-55), so
+#  both pods need to read/write the same files from whichever node
+#  they land on. Longhorn backs RWX with its own NFS-ish share-manager
+#  pod — same CSI driver as postgres/redis's RWO volumes, just a
+#  different access mode.
+# ════════════════════════════════════════════════════════════════════
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: media-storage
+spec:
+  accessModes: [ReadWriteMany]
+  storageClassName: longhorn
+  resources:
+    requests:
+      storage: 20Gi

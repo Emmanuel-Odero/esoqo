@@ -182,6 +182,19 @@ export interface ParcelOrgStats {
   /** Active parcels past their SLA deadline — powers the register's
    *  "Overdue only" toggle and the attention band. */
   overdue: number;
+  /** Counter cash a clerk has taken and a manager hasn't counted in yet
+   *  (see RemitCounterCash) — sitting with the company, not Esoqo,
+   *  until that happens. */
+  counterCashOutstandingKes: string;
+  /** Esoqo's own cut of counterCashOutstandingKes — the company's own
+   *  share of that cash is theirs; this slice is Esoqo's, pending. */
+  counterCashPlatformFeeOwedKes: string;
+  /** Counter tickets still in the queue, unclaimed — a sender who's
+   *  checked in but no clerk has picked up their case yet. This is the
+   *  live "someone's waiting" count; awaitingDropoff no longer is, now
+   *  that a self-drop-off sender can't mint a BOOKED parcel without a
+   *  clerk going through the counter queue first. */
+  waitingTickets: number;
 }
 
 export interface OrgParcelRow {
@@ -325,7 +338,7 @@ export interface ParcelOrgStaffRow {
   isContact: boolean;
   partyId: string | null;
   stationId: string | null;
-  /** The phone and the ESK-… handle this member signs in with — read
+  /** The phone and the esoqo handle this member signs in with — read
    *  back to someone who forgot, and shown so a manager can see a
    *  credential exists. Both null for an office-only login with no
    *  linked person. */

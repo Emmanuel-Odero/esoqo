@@ -11,12 +11,12 @@
  *
  * ## Why the QR carries a link, not a bare code
  *
- * A bare `ESK-4471-KE` is what core-go's scanner resolver understands
- * (see services/core-go/internal/dbx/scan.go, where the ESK- prefix maps
- * to the public `party` projection). It is the right payload for the
- * Esoqo scanner. It is the *wrong* payload for an ordinary phone camera,
- * which has no idea what to do with a payment handle and will just
- * offer to search the web for it.
+ * A bare handle such as `johnmutu482` is what core-go's scanner resolver
+ * understands (see services/core-go/internal/dbx/scan.go, where a
+ * handle-shaped token routes to the public `party` projection). It is the
+ * right payload for the Esoqo scanner. It is the *wrong* payload for an
+ * ordinary phone camera, which has no idea what to do with a payment
+ * handle and will just offer to search the web for it.
  *
  * So the printed QR encodes a pay link, and a phone camera's
  * "open this URL" is what gets the payer to a page where they can enter
@@ -27,73 +27,38 @@
  */
 
 /**
- * The issued-code shapes, and why there are two.
+ * An Esoqo ID is a human-friendly handle (e.g. "mutukuka482") built from
+ * the party's names — see handle-code.ts, which owns the shape and the
+ * generator.
  *
- * Codes are minted as `ESK-` + six characters from the unambiguous
- * alphabet (no I/L/O, no 0/1) + `-KE` — see
- * services/core-go/internal/dbx/payment_id.go's generatePaymentIdCode
- * and fleetqr.Alphabet. The older `ESK-` + four digits + `-KE` shape is
- * no longer minted anywhere; per that same Go comment it is "just no
- * longer minted", and deliberately still *resolvable*, because codes
- * already in the field — printed on a stand, sent over SMS when one was
- * issued — must not stop working. Both are accepted for that reason, and
- * neither party can be asked to re-print.
- *
- * Shape only. This answers "could this be one", never "is this one" —
- * only the database knows that, and only the lookup does.
+ * The old `ESK-XXXXXX-KE` code shape is gone, mint and parse alike. There
+ * is no compatibility branch for it: nothing was ever in the field that
+ * needs one, and keeping a second accepted shape would mean two sets of
+ * rules to keep in step across the TypeScript and Go resolvers forever.
  */
-import { randomAlphabetString, UNAMBIGUOUS_ALPHABET } from './random-code';
+import { isSystemHandleShape } from './handle-code';
 
-const ESK_CURRENT = `[ABCDEFGHJKMNPQRSTUVWXYZ23456789]{6}`;
-const ESK_LEGACY = `[0-9]{4}`;
-const ESK_SHAPE = new RegExp(`^ESK-(?:${ESK_CURRENT}|${ESK_LEGACY})-KE$`);
-
-/**
- * The characters a new code is drawn from — the same 31-character set
- * fleetqr.Alphabet defines on the Go side
- * (services/core-go/internal/fleetqr/qr.go). It is exported rather than
- * inlined into the pattern above so the TypeScript minter and the shape
- * check cannot drift apart, and it is the one place to change if the
- * alphabet is ever revisited.
- *
- * Excludes I, L and O, and 0 and 1: the characters a person is most
- * likely to mistype when reading a code off a printed stand and typing
- * it into a phone, which is what turns a six-character code into a
- * support call when a near-miss is silently "not found". O and 0, I and
- * 1, and L and 1 are the confusable pairs.
- */
-export const ESK_CODE_ALPHABET = UNAMBIGUOUS_ALPHABET;
-
-/** How many characters sit between `ESK-` and `-KE`. */
-export const ESK_CODE_LENGTH = 6;
-
-/**
- * Mints a new Esoqo Payment ID in the current shape, drawn from the
- * platform CSPRNG via randomAlphabetString (see random-code.ts) — a code
- * is a credential, not a value `Math.random` should ever produce.
- *
- * This returns a *candidate*. It has not been checked against the
- * database, and the caller owns the unique constraint and the retry —
- * minting and allocating are different jobs, and only the second one
- * can fail.
- */
-export function mintEsoqoCode(): string {
-  return `ESK-${randomAlphabetString(ESK_CODE_ALPHABET, ESK_CODE_LENGTH)}-KE`;
-}
-
-/** Whether a string is shaped like an Esoqo Payment ID. Not a lookup —
- *  it answers "could this be one", so callers can decide whether to go
- *  looking or fall through to a name search. */
+/** Whether a string is shaped like an Esoqo ID. Not a lookup — it answers
+ *  "could this be one", so callers can decide whether to go looking or fall
+ *  through to a name search. */
 export function isEsoqoIdShape(raw: string): boolean {
-  return ESK_SHAPE.test(raw.trim().toUpperCase());
+  return isSystemHandleShape(raw);
+}
+
+/** The canonical case for a shape-matched id. Handles are minted
+ *  lower-case, so this lower-cases and trims. Returns '' if the input is
+ *  not handle-shaped. */
+function canonicalEsoqoId(raw: string): string {
+  const trimmed = raw.trim();
+  return isSystemHandleShape(trimmed) ? trimmed.toLowerCase() : '';
 }
 
 /**
- * Normalises scanned, typed or pasted input to a bare upper-case Esoqo
- * Payment ID, or '' when the input isn't one.
+ * Normalises scanned, typed or pasted input to a bare, canonically-cased
+ * Esoqo ID, or '' when the input isn't one.
  *
  * Three shapes arrive and all three are legitimate:
- *  - a bare code, from a scanner gun or someone reading the stand;
+ *  - a bare handle, from a scanner gun or someone reading the stand;
  *  - a pay link, because the printed QR encodes one so an ordinary
  *    phone camera resolves to a page rather than showing plain text —
  *    which also means links forwarded over chat and pasted into the
@@ -102,12 +67,12 @@ export function isEsoqoIdShape(raw: string): boolean {
  *    often appends a carriage return as its "Enter").
  *
  * A pay link is read from its `to` query parameter first, falling back
- * to the last path segment, so `/pay?to=ESK-4471-KE` and a future
- * `/pay/ESK-4471-KE` both work without changing this function.
+ * to the last path segment, so `/pay?to=mutukuka482` and
+ * `/pay/mutukuka482` both work without changing this function.
  *
  * A string that merely looks URL-ish but won't parse falls through and
  * is tested as a code, on the grounds that returning nothing helps
- * nobody — let the caller be the thing that decides a code isn't real.
+ * nobody — let the caller be the thing that decides a handle isn't real.
  */
 export function extractEsoqoId(raw: string): string {
   const trimmed = raw.trim();
@@ -117,22 +82,23 @@ export function extractEsoqoId(raw: string): string {
     try {
       const url = new URL(trimmed);
       const fromQuery = (url.searchParams.get('to') ?? url.searchParams.get('party') ?? '').trim();
-      if (isEsoqoIdShape(fromQuery)) return fromQuery.toUpperCase();
+      const fromQueryCanonical = canonicalEsoqoId(fromQuery);
+      if (fromQueryCanonical) return fromQueryCanonical;
 
       const segments = url.pathname.split('/').filter(Boolean);
       const last = segments[segments.length - 1];
       if (last) {
-        const decoded = decodeURIComponent(last).trim().toUpperCase();
-        if (isEsoqoIdShape(decoded)) return decoded;
+        const decoded = decodeURIComponent(last).trim();
+        const decodedCanonical = canonicalEsoqoId(decoded);
+        if (decodedCanonical) return decodedCanonical;
       }
       return '';
     } catch {
-      // Not parseable after all — fall through to the bare-code path.
+      // Not parseable after all — fall through to the bare-handle path.
     }
   }
 
-  const upper = trimmed.toUpperCase();
-  return isEsoqoIdShape(upper) ? upper : '';
+  return canonicalEsoqoId(trimmed);
 }
 
 /**
@@ -157,7 +123,7 @@ export function buildPayLink(baseUrl: string, esoqoId: string, amountKes?: numbe
 /**
  * The same destination, in a shape that survives an SMS.
  *
- * `/pay?to=ESK-ABC234-KE` is 45 characters on a typical host, which is
+ * `/pay?to=johnmutu482` is 41 characters on a typical host, which is
  * already more than an SMS link can carry alongside a receipt message
  * — and the obvious workaround, clipping the string to fit, produces a
  * URL with its Esoqo ID cut in half. A payer following that link lands

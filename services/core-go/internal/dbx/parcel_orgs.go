@@ -64,13 +64,29 @@ type ParcelOrg struct {
 	LogoStorageKey *string `json:"logoStorageKey"`
 	LogoUrl        *string `json:"logoUrl"`
 	BrandAccent    *string `json:"brandAccent"`
+
+	// Where this company's share of a parcel is actually paid,
+	// automatically, at settlement — see schema.prisma's own comment on
+	// ParcelOrg.payoutMethod for why this is read live (unlike
+	// SettlementPhone above) and snapshotted onto each ParcelOrgPayout.
+	PayoutMethod            *string `json:"payoutMethod"`
+	PayoutMsisdn            *string `json:"payoutMsisdn"`
+	PayoutTillNumber        *string `json:"payoutTillNumber"`
+	PayoutPaybillNumber     *string `json:"payoutPaybillNumber"`
+	PayoutPaybillAccount    *string `json:"payoutPaybillAccount"`
+	PayoutBankCode          *string `json:"payoutBankCode"`
+	PayoutBankAccountNumber *string `json:"payoutBankAccountNumber"`
+	PayoutBankAccountName   *string `json:"payoutBankAccountName"`
 }
 
 const parcelOrgColumns = `
 	id, "enterpriseId", name, slug, status, "contactPerson", "contactPhone",
 	"contactEmail", "settlementPhone", "commissionPct"::text,
 	"acceptsWalkIn", lat::text, lng::text, "locationHint", "openingHours",
-	"logoStorageKey", "logoUrl", "brandAccent"`
+	"logoStorageKey", "logoUrl", "brandAccent",
+	"payoutMethod"::text, "payoutMsisdn", "payoutTillNumber",
+	"payoutPaybillNumber", "payoutPaybillAccount",
+	"payoutBankCode", "payoutBankAccountNumber", "payoutBankAccountName"`
 
 func scanParcelOrg(row pgx.Row) (*ParcelOrg, error) {
 	var o ParcelOrg
@@ -79,7 +95,10 @@ func scanParcelOrg(row pgx.Row) (*ParcelOrg, error) {
 	if err := row.Scan(&o.ID, &o.EnterpriseID, &o.Name, &o.Slug, &o.Status,
 		&o.ContactPerson, &o.ContactPhone, &o.ContactEmail, &o.SettlementPhone,
 		&commissionText, &o.AcceptsWalkIn, &latText, &lngText, &o.LocationHint, &o.OpeningHours,
-		&o.LogoStorageKey, &o.LogoUrl, &o.BrandAccent); err != nil {
+		&o.LogoStorageKey, &o.LogoUrl, &o.BrandAccent,
+		&o.PayoutMethod, &o.PayoutMsisdn, &o.PayoutTillNumber,
+		&o.PayoutPaybillNumber, &o.PayoutPaybillAccount,
+		&o.PayoutBankCode, &o.PayoutBankAccountNumber, &o.PayoutBankAccountName); err != nil {
 		return nil, err
 	}
 	var err error
@@ -127,6 +146,15 @@ type ParcelOrgInput struct {
 	LogoStorageKey  *string
 	LogoUrl         *string
 	BrandAccent     *string
+
+	PayoutMethod            *string
+	PayoutMsisdn            *string
+	PayoutTillNumber        *string
+	PayoutPaybillNumber     *string
+	PayoutPaybillAccount    *string
+	PayoutBankCode          *string
+	PayoutBankAccountNumber *string
+	PayoutBankAccountName   *string
 }
 
 func (in ParcelOrgInput) validate() error {
@@ -154,6 +182,33 @@ func (in ParcelOrgInput) validate() error {
 		matched, _ := regexp.MatchString(`^#(?:[0-9a-fA-F]{3}|[0-9a-fA-F]{6})$`, trimmed)
 		if !matched {
 			return &ParcelError{"BAD_INPUT", "Brand accent must be a hex colour like #1a73e8"}
+		}
+	}
+	// A payout method with no destination filled in is a configuration
+	// that would create ParcelOrgPayout rows nobody can ever send money
+	// to — same "don't half-fill a real destination" rule AcceptsWalkIn's
+	// locationHint check above already follows, just for a field real
+	// money moves against instead of a label.
+	if in.PayoutMethod != nil {
+		switch *in.PayoutMethod {
+		case "PHONE":
+			if in.PayoutMsisdn == nil || strings.TrimSpace(*in.PayoutMsisdn) == "" {
+				return &ParcelError{"BAD_INPUT", "Give the M-Pesa number payouts should go to"}
+			}
+		case "TILL":
+			if in.PayoutTillNumber == nil || strings.TrimSpace(*in.PayoutTillNumber) == "" {
+				return &ParcelError{"BAD_INPUT", "Give the till number payouts should go to"}
+			}
+		case "PAYBILL":
+			if in.PayoutPaybillNumber == nil || strings.TrimSpace(*in.PayoutPaybillNumber) == "" {
+				return &ParcelError{"BAD_INPUT", "Give the paybill number payouts should go to"}
+			}
+		case "BANK":
+			if in.PayoutBankAccountNumber == nil || strings.TrimSpace(*in.PayoutBankAccountNumber) == "" {
+				return &ParcelError{"BAD_INPUT", "Give the bank account number payouts should go to"}
+			}
+		default:
+			return &ParcelError{"BAD_INPUT", "That isn't a payout method Esoqo supports"}
 		}
 	}
 	return nil
@@ -208,6 +263,9 @@ const adminParcelOrgColumns = `
 	o."contactEmail", o."settlementPhone", o."commissionPct"::text,
 	o."acceptsWalkIn", o.lat::text, o.lng::text, o."locationHint", o."openingHours",
 	o."logoStorageKey", o."logoUrl", o."brandAccent",
+	o."payoutMethod"::text, o."payoutMsisdn", o."payoutTillNumber",
+	o."payoutPaybillNumber", o."payoutPaybillAccount",
+	o."payoutBankCode", o."payoutBankAccountNumber", o."payoutBankAccountName",
 	COALESCE(org."knownAs", org."officialName", pr."knownAs", pr."officialName", e."workRaw", o.name),
 	e."partyId"::text,
 	(SELECT count(*) FROM parcel_org_staff st WHERE st."orgId" = o.id),
@@ -239,6 +297,9 @@ func scanAdminParcelOrg(row pgx.Row) (*AdminParcelOrg, error) {
 		&o.ContactPerson, &o.ContactPhone, &o.ContactEmail, &o.SettlementPhone,
 		&commissionText, &o.AcceptsWalkIn, &latText, &lngText, &o.LocationHint, &o.OpeningHours,
 		&o.LogoStorageKey, &o.LogoUrl, &o.BrandAccent,
+		&o.PayoutMethod, &o.PayoutMsisdn, &o.PayoutTillNumber,
+		&o.PayoutPaybillNumber, &o.PayoutPaybillAccount,
+		&o.PayoutBankCode, &o.PayoutBankAccountNumber, &o.PayoutBankAccountName,
 		&o.EnterpriseName, &o.OwnerPartyID,
 		&o.StaffCount, &o.ActiveStaff, &o.ParcelCount, &o.DeliveredCount, &o.EarningsKes,
 		&o.PrimaryContactName, &o.PrimaryContactPhone); err != nil {
@@ -388,13 +449,20 @@ func CreateParcelOrg(ctx context.Context, pool *pgxpool.Pool, in ParcelOrgInput,
 			"contactEmail", "settlementPhone", "commissionPct",
 			"acceptsWalkIn", lat, lng, "locationHint", "openingHours",
 			"logoStorageKey", "logoUrl", "brandAccent",
+			"payoutMethod", "payoutMsisdn", "payoutTillNumber",
+			"payoutPaybillNumber", "payoutPaybillAccount",
+			"payoutBankCode", "payoutBankAccountNumber", "payoutBankAccountName",
 			"createdAt", "updatedAt", "createdByStaffId"
-		) VALUES (gen_random_uuid(), $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, now(), now(), $18)
+		) VALUES (gen_random_uuid(), $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17,
+		          $18::"ParcelOrgPayoutMethod", $19, $20, $21, $22, $23, $24, $25, now(), now(), $26)
 		RETURNING id`,
 		in.EnterpriseID, in.Name, in.Slug, in.Status, in.ContactPerson, in.ContactPhone,
 		in.ContactEmail, in.SettlementPhone, in.CommissionPct,
 		in.AcceptsWalkIn, in.Lat, in.Lng, in.LocationHint, in.OpeningHours,
-		in.LogoStorageKey, in.LogoUrl, in.BrandAccent, staffID).Scan(&id)
+		in.LogoStorageKey, in.LogoUrl, in.BrandAccent,
+		in.PayoutMethod, in.PayoutMsisdn, in.PayoutTillNumber,
+		in.PayoutPaybillNumber, in.PayoutPaybillAccount,
+		in.PayoutBankCode, in.PayoutBankAccountNumber, in.PayoutBankAccountName, staffID).Scan(&id)
 	if isUniqueViolation(err) {
 		return "", &ParcelError{"BAD_INPUT", "That slug is already taken"}
 	}
@@ -411,12 +479,18 @@ func UpdateParcelOrg(ctx context.Context, pool *pgxpool.Pool, id string, in Parc
 			"contactEmail" = $6, "settlementPhone" = $7, "commissionPct" = $8,
 			"acceptsWalkIn" = $9, lat = $10, lng = $11, "locationHint" = $12, "openingHours" = $13,
 			"logoStorageKey" = $14, "logoUrl" = $15, "brandAccent" = $16,
+			"payoutMethod" = $17::"ParcelOrgPayoutMethod", "payoutMsisdn" = $18, "payoutTillNumber" = $19,
+			"payoutPaybillNumber" = $20, "payoutPaybillAccount" = $21,
+			"payoutBankCode" = $22, "payoutBankAccountNumber" = $23, "payoutBankAccountName" = $24,
 			"updatedAt" = now()
-		WHERE id = $17`,
+		WHERE id = $25`,
 		in.Name, in.Slug, in.Status, in.ContactPerson, in.ContactPhone,
 		in.ContactEmail, in.SettlementPhone, in.CommissionPct,
 		in.AcceptsWalkIn, in.Lat, in.Lng, in.LocationHint, in.OpeningHours,
-		in.LogoStorageKey, in.LogoUrl, in.BrandAccent, id)
+		in.LogoStorageKey, in.LogoUrl, in.BrandAccent,
+		in.PayoutMethod, in.PayoutMsisdn, in.PayoutTillNumber,
+		in.PayoutPaybillNumber, in.PayoutPaybillAccount,
+		in.PayoutBankCode, in.PayoutBankAccountNumber, in.PayoutBankAccountName, id)
 	if isUniqueViolation(err) {
 		return &ParcelError{"BAD_INPUT", "That slug is already taken"}
 	}
@@ -602,7 +676,7 @@ type ParcelOrgStaff struct {
 	IsContact bool    `json:"isContact"`
 	PartyID   *string `json:"partyId"`
 	StationID *string `json:"stationId"`
-	// Msisdn / EsoqoID — the phone and the ESK-… handle this person can
+	// Msisdn / EsoqoID — the phone and the esoqo handle this person can
 	// sign in with, joined out from their Party. Surfaced so an admin can
 	// read a login back to someone who forgot it, and so the roster shows
 	// a credential actually exists rather than a bare uuid. Both nil for
@@ -819,8 +893,8 @@ type OrgLiveParcel struct {
 // OrgLiveView — everything the company's live dispatch map needs in one
 // round trip, plus the stations that anchor it.
 type OrgLiveView struct {
-	Riders   []OrgLiveRider    `json:"riders"`
-	Parcels  []OrgLiveParcel   `json:"parcels"`
+	Riders   []OrgLiveRider     `json:"riders"`
+	Parcels  []OrgLiveParcel    `json:"parcels"`
 	Stations []ParcelOrgStation `json:"stations"`
 }
 
@@ -926,12 +1000,12 @@ type OrgParcelLabel struct {
 	LengthCm      *float64 `json:"lengthCm"`
 	WidthCm       *float64 `json:"widthCm"`
 	HeightCm      *float64 `json:"heightCm"`
-	UsedAt          *string `json:"usedAt"`
-	VoidedAt        *string `json:"voidedAt"`
-	VoidedReason    *string `json:"voidedReason"`
-	ParcelID        *string `json:"parcelId"`
-	ParcelCode      *string `json:"parcelCode"`
-	ParcelStatus    *string `json:"parcelStatus"`
+	UsedAt        *string  `json:"usedAt"`
+	VoidedAt      *string  `json:"voidedAt"`
+	VoidedReason  *string  `json:"voidedReason"`
+	ParcelID      *string  `json:"parcelId"`
+	ParcelCode    *string  `json:"parcelCode"`
+	ParcelStatus  *string  `json:"parcelStatus"`
 	// Batch run + QR signature, so a resolved label reprints genuine
 	// without a second fetch. Signed by the handler (secret owner).
 	BatchID *string `json:"batchId"`
@@ -1185,6 +1259,45 @@ func ListParcelOrgStations(ctx context.Context, pool *pgxpool.Pool, orgID string
 		out = append(out, s)
 	}
 	return out, rows.Err()
+}
+
+// PublicOrgStation is the guest-facing projection of a ParcelOrgStation
+// — one of a courier company's own branch offices, offered as a
+// destination pick once a sender has already chosen that company at
+// the "which office are you at" step. No msisdn, capacity or manager —
+// a sender searching for where their parcel is going has no more
+// business seeing those than a WalkInStation's own guest picker does.
+type PublicOrgStation struct {
+	ID           string   `json:"id"`
+	Name         string   `json:"name"`
+	LocationHint string   `json:"locationHint"`
+	OpeningHours *string  `json:"openingHours"`
+	Lat          *float64 `json:"lat"`
+	Lng          *float64 `json:"lng"`
+}
+
+// ListPublicOrgStations — active branches of one named courier company,
+// for the guest destination search. Reuses ListParcelOrgStations' own
+// query (the staff "me/stations" register and this guest picker are the
+// same underlying rows, just projected differently) rather than a
+// second SQL statement to keep in sync.
+func ListPublicOrgStations(ctx context.Context, pool *pgxpool.Pool, orgID string) ([]PublicOrgStation, error) {
+	stations, err := ListParcelOrgStations(ctx, pool, orgID)
+	if err != nil {
+		return nil, err
+	}
+	out := make([]PublicOrgStation, 0, len(stations))
+	for _, s := range stations {
+		if !s.Active {
+			continue
+		}
+		lat, lng := s.Lat, s.Lng
+		out = append(out, PublicOrgStation{
+			ID: s.ID, Name: s.Name, LocationHint: s.LocationHint,
+			OpeningHours: s.OpeningHours, Lat: &lat, Lng: &lng,
+		})
+	}
+	return out, nil
 }
 
 // GetParcelOrgStation — one station, scoped by org so a detail fetch
@@ -1467,6 +1580,25 @@ type ParcelOrgStats struct {
 	// Overdue — active parcels past their SLA deadline. Powers the
 	// register's "Overdue only" toggle and the attention band.
 	Overdue int `json:"overdue"`
+	// CounterCashOutstandingKes — cash a clerk took at the counter and
+	// hasn't yet been counted in by a manager (see RemitCounterCash).
+	// Physically sitting with the company, not Esoqo, until that
+	// happens — shown here (both the org's own dashboard and Esoqo
+	// admin read this same struct) so neither side has to go looking
+	// for it.
+	CounterCashOutstandingKes money.Amount `json:"counterCashOutstandingKes"`
+	// CounterCashPlatformFeeOwedKes — Esoqo's own cut of the figure
+	// above: the company's share of that counter cash is its own
+	// money, but this slice is Esoqo's, and it isn't really "earned"
+	// until the cash itself has actually moved.
+	CounterCashPlatformFeeOwedKes money.Amount `json:"counterCashPlatformFeeOwedKes"`
+	// WaitingTickets — counter tickets still in the queue, nobody claimed
+	// yet. This is what the nav badge shows now: a sender who got a
+	// ticket is not a parcel yet (a clerk hasn't looked at them), so
+	// AwaitingDropoff — a count of BOOKED parcels — can't stand in for
+	// "who's waiting at the desk right now" the way it used to when
+	// self-drop-off senders minted themselves a BOOKED parcel directly.
+	WaitingTickets int `json:"waitingTickets"`
 }
 
 func GetParcelOrgStats(ctx context.Context, pool *pgxpool.Pool, orgID string) (*ParcelOrgStats, error) {
@@ -1482,12 +1614,21 @@ func GetParcelOrgStats(ctx context.Context, pool *pgxpool.Pool, orgID string) (*
 			COALESCE(SUM("orgEarningsKes"), 0)::float8,
 			count(*) FILTER (WHERE status = 'BOOKED' AND "originMethod" = 'SELF_DROPOFF'),
 			count(*) FILTER (WHERE "slaDeadlineAt" IS NOT NULL AND "slaDeadlineAt" < now()
-				AND status IN ('RECEIVED_AT_COUNTER', 'PICKED_UP', 'IN_TRANSIT'))
+				AND status IN ('RECEIVED_AT_COUNTER', 'PICKED_UP', 'IN_TRANSIT')),
+			(SELECT COALESCE(SUM("priceKes"), 0)::float8 FROM parcel
+				WHERE "parcelOrgId" = $1 AND "paymentMethod" = 'PAY_AT_COUNTER' AND "paidAt" IS NOT NULL
+				  AND "mpesaReceiptCode" IS NULL AND "counterCashRemittanceId" IS NULL),
+			(SELECT COALESCE(SUM("platformFeeKes"), 0)::float8 FROM parcel
+				WHERE "parcelOrgId" = $1 AND "paymentMethod" = 'PAY_AT_COUNTER' AND "paidAt" IS NOT NULL
+				  AND "mpesaReceiptCode" IS NULL AND "counterCashRemittanceId" IS NULL),
+			(SELECT count(*) FROM parcel_counter_ticket
+				WHERE "orgId" = $1 AND status = 'WAITING')
 		FROM parcel
 		WHERE "parcelOrgId" = $1 AND status != 'CANCELLED'`, orgID).
 		Scan(&s.AwaitingPickup, &s.InTransit, &s.FailedDeliveries, &s.AtAgent,
 			&s.DeliveredToday, &s.EarningsTodayKes, &s.EarningsKes, &s.AwaitingDropoff,
-			&s.Overdue)
+			&s.Overdue, &s.CounterCashOutstandingKes, &s.CounterCashPlatformFeeOwedKes,
+			&s.WaitingTickets)
 	if err != nil {
 		return nil, err
 	}
@@ -1795,7 +1936,7 @@ func ImportOrgParcel(ctx context.Context, pool *pgxpool.Pool, orgID string, in I
 		return "", "", &ParcelError{"BAD_INPUT", "Choose a valid parcel type"}
 	}
 
-	deliveryCode, err := generateDeliveryCode()
+	deliveryCode, err := generateUniqueDeliveryCode(ctx, pool)
 	if err != nil {
 		return "", "", err
 	}
@@ -1979,8 +2120,25 @@ func AssignParcelToOrg(ctx context.Context, pool *pgxpool.Pool, parcelID string,
 	if status != "DRAFT_PENDING_PAYMENT" && status != "BOOKED" {
 		return &ParcelError{"BAD_INPUT", "This parcel is already on its way"}
 	}
-	_, err = pool.Exec(ctx, `UPDATE parcel SET "parcelOrgId" = $1 WHERE id = $2`, orgID, parcelID)
-	return err
+	// The statuses this checked are carried into the UPDATE rather than
+	// checked and then forgotten. Two dispatchers tapping "assign" at the
+	// same moment both read a DRAFT, both write, and the parcel ends up on
+	// whichever courier's write landed last — with the losing dispatch
+	// having been told it worked, and a rider dispatched to a counter that
+	// has already been told the box belongs to somebody else. The
+	// predicate turns the loser into a refusal instead of a silent
+	// overwrite.
+	tag, err := pool.Exec(ctx, `
+		UPDATE parcel SET "parcelOrgId" = $1
+		WHERE id = $2 AND ("paidAt" IS NULL) AND status::text = ANY($3)`,
+		orgID, parcelID, []string{"DRAFT_PENDING_PAYMENT", "BOOKED"})
+	if err != nil {
+		return err
+	}
+	if tag.RowsAffected() == 0 {
+		return &ParcelError{"CONFLICT", "That parcel moved on before it could be assigned — reload and try again"}
+	}
+	return nil
 }
 
 // AssignOrgParcel — a dispatcher handing one of their own parcels to

@@ -34,6 +34,7 @@
  */
 
 import { appEnv } from '@esoqo/domain';
+import { buildSecurityCredential } from './b2c-credential';
 
 const SANDBOX_BASE = 'https://sandbox.safaricom.co.ke';
 const PRODUCTION_BASE = 'https://api.safaricom.co.ke';
@@ -289,6 +290,162 @@ async function initiateDarajaStkPush(req: StkPushRequest, base: string): Promise
     merchantRequestId: data.MerchantRequestID ?? data.CheckoutRequestID,
     responseDescription: data.ResponseDescription ?? 'Accepted',
     autoConfirmed: false,
+  };
+}
+
+/* ── B2C: Esoqo paying a customer, not the other way round ──────────────
+ *
+ * A wallet withdrawal or a third-party payout is Esoqo-initiated: nobody's
+ * phone approves anything, so there is no "prompt" and no waiting screen —
+ * Daraja either accepts the request (ResponseCode 0, a ConversationID to
+ * track) or refuses it outright, and the actual outcome (paid or failed)
+ * arrives later on the Result/Timeout URLs, exactly as asynchronous as the
+ * STK callback but on a different pair of URLs and a different payload
+ * shape (see parseB2CResultCallback below). */
+
+export interface B2CPaymentRequest {
+  msisdn: string; // E.164, e.g. +254712345678
+  amountKes: number;
+  /** "BusinessPayment" | "SalaryPayment" | "PromotionPayment" — Daraja's
+   *  own CommandID enum. BusinessPayment is the correct one for a wallet
+   *  withdrawal or a payout to someone else; the other two exist for
+   *  payroll/promo use cases this codebase does not have. */
+  commandId?: 'BusinessPayment' | 'SalaryPayment' | 'PromotionPayment';
+  remarks: string;
+  occasion?: string;
+}
+
+export interface B2CPaymentResult {
+  conversationId: string;
+  originatorConversationId: string;
+  responseDescription: string;
+  /** True when this call already settled the payout (console mode only). */
+  autoConfirmed: boolean;
+  mpesaTransactionId?: string;
+}
+
+export async function initiateB2CPayment(req: B2CPaymentRequest): Promise<B2CPaymentResult> {
+  assertValidMsisdn(req.msisdn);
+
+  const provider = mpesaProvider();
+
+  if (provider === 'console') {
+    await new Promise((r) => setTimeout(r, 800));
+    const conversationId = `console-b2c-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+    const transactionId = `CNSB2C${Math.random().toString(36).slice(2, 9).toUpperCase()}`;
+    console.log(
+      `\n  ┌─ M-PESA B2C PAYOUT (console) ───────\n` +
+      `  │  ${req.msisdn}\n` +
+      `  │  KES ${req.amountKes.toLocaleString('en-KE')} — ${req.remarks}\n` +
+      `  │  conversationId: ${conversationId}\n` +
+      `  │  auto-confirmed with transaction id ${transactionId}\n` +
+      `  └─────────────────────────────────────\n`,
+    );
+    return {
+      conversationId,
+      originatorConversationId: conversationId,
+      responseDescription: 'Accepted (console — never enabled in a deployed environment)',
+      autoConfirmed: true,
+      mpesaTransactionId: transactionId,
+    };
+  }
+
+  const base = provider === 'sandbox' ? SANDBOX_BASE : PRODUCTION_BASE;
+  return initiateDarajaB2CPayment(req, base);
+}
+
+async function initiateDarajaB2CPayment(req: B2CPaymentRequest, base: string): Promise<B2CPaymentResult> {
+  const shortcode = process.env.MPESA_B2C_SHORTCODE;
+  const initiatorName = process.env.MPESA_INITIATOR_NAME;
+  const initiatorPassword = process.env.MPESA_INITIATOR_PASSWORD;
+  const certPem = process.env.MPESA_B2C_CERT;
+  const resultUrl = process.env.MPESA_B2C_RESULT_URL;
+  const timeoutUrl = process.env.MPESA_B2C_TIMEOUT_URL;
+  if (!shortcode || !initiatorName || !initiatorPassword || !certPem || !resultUrl || !timeoutUrl) {
+    throw new MpesaError(
+      'MPESA_B2C_SHORTCODE/MPESA_INITIATOR_NAME/MPESA_INITIATOR_PASSWORD/MPESA_B2C_CERT/'
+        + 'MPESA_B2C_RESULT_URL/MPESA_B2C_TIMEOUT_URL are not set',
+      'NOT_CONFIGURED',
+    );
+  }
+
+  const token = await getDarajaAccessToken(base);
+  const securityCredential = buildSecurityCredential(initiatorPassword, certPem);
+  const msisdnLocal = req.msisdn.replace('+', '');
+
+  const res = await fetch(`${base}/mpesa/b2c/v1/paymentrequest`, {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      InitiatorName: initiatorName,
+      SecurityCredential: securityCredential,
+      CommandID: req.commandId ?? 'BusinessPayment',
+      Amount: Math.round(req.amountKes),
+      PartyA: shortcode,
+      PartyB: msisdnLocal,
+      Remarks: req.remarks.slice(0, 100),
+      QueueTimeOutURL: timeoutUrl,
+      ResultURL: resultUrl,
+      Occasion: (req.occasion ?? '').slice(0, 100),
+    }),
+  });
+
+  const data = (await readDarajaJson(res, 'the B2C payout')) as {
+    ConversationID?: string;
+    OriginatorConversationID?: string;
+    ResponseDescription?: string;
+    ResponseCode?: string;
+  };
+  if (!data.ConversationID) {
+    const said = data.ResponseDescription ? ` Safaricom said: ${data.ResponseDescription}.` : '';
+    throw new MpesaError(
+      `Safaricom accepted the request but sent no conversation id, so the payout was never queued.${said}`,
+      'DARAJA_ERROR',
+    );
+  }
+
+  return {
+    conversationId: data.ConversationID,
+    originatorConversationId: data.OriginatorConversationID ?? data.ConversationID,
+    responseDescription: data.ResponseDescription ?? 'Accepted',
+    autoConfirmed: false,
+  };
+}
+
+/**
+ * Daraja's B2C result callback — shaped nothing like the STK callback.
+ * Success and failure both land on the same ResultURL (a distinct
+ * QueueTimeOutURL exists for the case where the request itself timed out
+ * in Safaricom's queue, before any result was ever produced); the
+ * parameters that matter come out of `Result.ResultParameters.ResultParameter`,
+ * a name/value array rather than STK's `CallbackMetadata.Item`.
+ */
+export interface B2CResultCallback {
+  conversationId: string;
+  succeeded: boolean;
+  resultDescription: string;
+  mpesaTransactionId?: string;
+  amountKes?: number;
+}
+
+export function parseB2CResultCallback(body: unknown): B2CResultCallback | null {
+  const result = (body as { Result?: Record<string, unknown> })?.Result;
+  if (!result || typeof result.ConversationID !== 'string') return null;
+
+  const params = (result.ResultParameters as { ResultParameter?: { Key: string; Value: unknown }[] } | undefined)
+    ?.ResultParameter ?? [];
+  const param = (key: string): string | undefined => {
+    const found = params.find((p) => p.Key === key)?.Value;
+    return found === undefined || found === null ? undefined : String(found);
+  };
+
+  const amount = Number(param('TransactionAmount'));
+  return {
+    conversationId: result.ConversationID,
+    succeeded: result.ResultCode === 0,
+    resultDescription: String(result.ResultDesc ?? ''),
+    mpesaTransactionId: param('TransactionReceipt'),
+    amountKes: Number.isFinite(amount) ? amount : undefined,
   };
 }
 

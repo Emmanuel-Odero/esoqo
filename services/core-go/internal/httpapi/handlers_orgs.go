@@ -7,6 +7,7 @@ package httpapi
 
 import (
 	"encoding/json"
+	"log"
 	"net/http"
 	"strings"
 	"time"
@@ -115,6 +116,7 @@ func (s *Server) handleActivateOrgSession(c *gin.Context) {
 	// Verify person is staff at this org
 	staff, err := dbx.FindOrgStaffByParty(c.Request.Context(), s.Pool, orgID, ctx.PartyID)
 	if err != nil {
+		log.Printf("handleActivateOrgSession: FindOrgStaffByParty(%s,%s) failed: %v", orgID, ctx.PartyID, err)
 		writeError(c, http.StatusInternalServerError, "ACTIVATE_FAILED", "Could not open that organization")
 		return
 	}
@@ -126,6 +128,7 @@ func (s *Server) handleActivateOrgSession(c *gin.Context) {
 	// Resolve capabilities
 	capabilities, err := authsvc.ResolveOrgCapabilities(req.OrgType, staff.Role, staff.CustomCapabilities)
 	if err != nil {
+		log.Printf("handleActivateOrgSession: ResolveOrgCapabilities(%s,%s) failed: %v", req.OrgType, staff.Role, err)
 		writeError(c, http.StatusInternalServerError, "CAPABILITY_FAILED", "Could not resolve your permissions")
 		return
 	}
@@ -142,6 +145,7 @@ func (s *Server) handleActivateOrgSession(c *gin.Context) {
 		capabilities,
 	)
 	if err != nil {
+		log.Printf("handleActivateOrgSession: CreateOrgSession(%s,%s) failed: %v", orgID, req.OrgType, err)
 		writeError(c, http.StatusInternalServerError, "SESSION_CREATE_FAILED", "Could not create a session")
 		return
 	}
@@ -339,6 +343,13 @@ func (s *Server) handleListGenericOrgStaff(c *gin.Context) {
 
 // handleSignOutOrg — POST /v1/orgs/me/signout
 // Signs out from the current organization session.
+//
+// This is called server-to-server from Next.js with the bearer token,
+// never directly by the browser, so there is no cookie on this request
+// to clear — the only thing that makes sign-out real is revoking the
+// token itself in the session store. Without that, a token copied out
+// of a browser's history, a proxy log, or a shared depot phone stays
+// live for its full TTL (up to 12h) after the person "signed out".
 func (s *Server) handleSignOutOrg(c *gin.Context) {
 	ctx := ctxFromGin(c)
 	if ctx.OrgID == "" {
@@ -346,11 +357,11 @@ func (s *Server) handleSignOutOrg(c *gin.Context) {
 		return
 	}
 
-	// Clear org session cookie based on org type
-	if ctx.OrgType != "" {
-		authsvc.ClearOrgSessionCookie(c.Writer, ctx.OrgType)
-	} else {
-		authsvc.ClearOrgSessionCookie(c.Writer, "courier") // fallback for backward compat
+	if token := bearerToken(c); token != "" {
+		if err := s.Session.DestroySession(c.Request.Context(), token); err != nil {
+			writeError(c, http.StatusInternalServerError, "SIGNOUT_FAILED", "Could not end your session")
+			return
+		}
 	}
 
 	c.JSON(http.StatusOK, gin.H{"ok": true})

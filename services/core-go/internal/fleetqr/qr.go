@@ -18,26 +18,25 @@ import (
 // Alphabet is the unambiguous code alphabet: no 0/O, 1/I or L — the
 // characters most often mistyped on a keypad or USSD handset. Every
 // human-typable short code in the product (trip, voucher, ticket,
-// pickup, payment id) draws from this same set so one resolver grammar
+// pickup, parcel) draws from this same set so one resolver grammar
 // covers them all.
 const Alphabet = "ABCDEFGHJKMNPQRSTUVWXYZ23456789"
 
 // Prefix is one registered code kind. A short-code prefix is the first
 // thing a scanner sees — BUS-/TRIP- (boarding), VCH- (vouchers),
-// TKT- (event tickets), PKP- (store pickup), ESK- (payment id) — so
+// TKT- (event tickets), PKP- (store pickup), PKG- (parcels) — so
 // every mint MUST go through a registered prefix to keep the smuggler
 // exact. Prefixes are uppercase by convention.
 type Prefix string
 
 // Registered prefixes — the single namespace table for short codes.
 const (
-	PrefixTrip      Prefix = "TRIP" // trip token, rotated per trip
-	PrefixBus       Prefix = "BUS"  // passenger-facing boarding code
-	PrefixVoucher   Prefix = "VCH"
-	PrefixTicket    Prefix = "TKT"
-	PrefixPickup    Prefix = "PKP"
-	PrefixPaymentID Prefix = "ESK"
-	PrefixParcel    Prefix = "PKG"
+	PrefixTrip    Prefix = "TRIP" // trip token, rotated per trip
+	PrefixBus     Prefix = "BUS"  // passenger-facing boarding code
+	PrefixVoucher Prefix = "VCH"
+	PrefixTicket  Prefix = "TKT"
+	PrefixPickup  Prefix = "PKP"
+	PrefixParcel  Prefix = "PKG"
 	// PrefixServiceTicket — Parcel.serviceTicketNumber's own prefix,
 	// deliberately distinct from PKG so the two can never be confused
 	// side by side on a printed slip or a counter screen.
@@ -61,7 +60,7 @@ const LuggageCodeLen = 6
 // ValidPrefix reports whether p is a registered code prefix.
 func ValidPrefix(p Prefix) bool {
 	switch p {
-	case PrefixTrip, PrefixBus, PrefixVoucher, PrefixTicket, PrefixPickup, PrefixPaymentID, PrefixParcel, PrefixServiceTicket, PrefixLuggage:
+	case PrefixTrip, PrefixBus, PrefixVoucher, PrefixTicket, PrefixPickup, PrefixParcel, PrefixServiceTicket, PrefixLuggage:
 		return true
 	}
 	return false
@@ -119,6 +118,74 @@ func WithCheck(segment string) string {
 		total = (total + idx*(i+1)) % len(Alphabet)
 	}
 	return segment + string(Alphabet[total])
+}
+
+// ServiceTicketForName mints a name-shaped service ticket — JOHN-482
+// or DOE-482 — so the clerk calling a walk-in sender forward at the
+// counter can read a name straight off the screen instead of an opaque
+// code. The name half is drawn at random from the sender's first name
+// or their second (family) name, so a ticket reads either way the
+// sender introduces themselves; any interior names are never used.
+// Falls back to the plain PrefixServiceTicket form when no usable
+// name is given (e.g. a staff-side import with no sender on the form;
+// CreateCounterTicket substitutes GUEST rather than reach that
+// fallback). No checksum: unlike a code someone types back in, this is
+// read aloud, never typed, so there is nothing for a checksum to
+// protect against.
+func ServiceTicketForName(fullName string) string {
+	words := strings.Fields(fullName)
+	if len(words) == 0 {
+		return ShortCodeChecked(PrefixServiceTicket, 6)
+	}
+	first := nameLetters(words[0])
+	last := nameLetters(words[len(words)-1])
+	switch {
+	case first == "" && last == "":
+		return ShortCodeChecked(PrefixServiceTicket, 6)
+	case last == "":
+		return first + "-" + randomDigits3()
+	case first == "":
+		return last + "-" + randomDigits3()
+	}
+	// Both names usable — flip a coin for which one the ticket carries.
+	// crypto/rand, same source randomDigits3 draws its digits from: a
+	// coin that always landed on the first name would make this half of
+	// the rule dead code at scale.
+	second, err := rand.Int(rand.Reader, big.NewInt(2))
+	if err == nil && second.Int64() == 1 {
+		return last + "-" + randomDigits3()
+	}
+	return first + "-" + randomDigits3()
+}
+
+// nameLetters — a name usable on a ticket: uppercased A–Z runs only,
+// capped at 10 characters so a hyphenated or decorated name can't
+// stretch the row, empty when the word carries no letters at all.
+func nameLetters(word string) string {
+	var letters strings.Builder
+	for _, r := range strings.ToUpper(strings.TrimSpace(word)) {
+		if r >= 'A' && r <= 'Z' {
+			letters.WriteRune(r)
+		}
+		if letters.Len() >= 10 {
+			break
+		}
+	}
+	return letters.String()
+}
+
+// randomDigits3 returns 3 cryptographically random base-10 digits,
+// zero-padded — the "assigned number" half of ServiceTicketForName.
+func randomDigits3() string {
+	v, err := rand.Int(rand.Reader, big.NewInt(1000))
+	if err != nil {
+		return "000"
+	}
+	s := v.String()
+	if len(s) < 3 {
+		s = strings.Repeat("0", 3-len(s)) + s
+	}
+	return s
 }
 
 // ShortCodeChecked is [ShortCode] plus a trailing checksum character —

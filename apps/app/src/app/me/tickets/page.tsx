@@ -30,21 +30,22 @@ export default async function MyTickets() {
 
   return (
     <>
-      <div className="mehead">
+      <header className="hero" style={{ padding: '4px 0 14px' }}>
+        <p className="kicker">Tickets</p>
         <h1>Your tickets</h1>
-        <p>Events and transport bookings on this account — search, filter, newest first.</p>
-      </div>
+        <p className="lead">Events and transport bookings on this account — search, filter, newest first.</p>
+      </header>
 
-      <div className="mcard" style={{ marginBottom: 16 }}>
+      <div className="mcard mcard--premium" style={{ marginBottom: 16 }}>
         <a href={`${process.env.NEXT_PUBLIC_WEB_URL ?? 'http://localhost:3000'}/tickets`} className="btn btn-o btn-block">
           <Icon name="search" size={16} />Browse events &amp; transport
         </a>
-        {/* Vouchers & loyalty used to be reachable only by typing the URL —
-            no nav entry, no link from here. Tickets and vouchers are
-            related (both are "what I can spend") but separate jobs, so
-            they stay separate pages with a door between them. */}
-        <a href="/me/vouchers" className="btn btn-o btn-block" style={{ marginTop: 8 }}>
-          <Icon name="tag" size={16} />Vouchers &amp; loyalty
+        {/* Vouchers/loyalty now live inside Wallet, not their own page —
+            Tickets and Wallet are related (both are "what I can spend")
+            but separate jobs, so they stay separate pages with a door
+            between them. */}
+        <a href="/me/wallet" className="btn btn-o btn-block" style={{ marginTop: 8 }}>
+          <Icon name="tag" size={16} />Wallet, vouchers &amp; loyalty
         </a>
       </div>
 

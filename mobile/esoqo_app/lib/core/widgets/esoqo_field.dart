@@ -252,9 +252,15 @@ class EsoqoField extends StatelessWidget {
   );
 
   /// A scannable or dictated reference — PKG-…, a delivery code, an
-  /// ESK-… payment id. Upper-cased because these are always upper case
-  /// on a label, and a lower-case keyboard makes somebody reach for
-  /// shift on every character.
+  /// Esoqo handle like "johnmutu482". Upper-cased because the prefixed
+  /// families are always upper case on a label, and a lower-case keyboard
+  /// makes somebody reach for shift on every character.
+  ///
+  /// Handles are minted lower-case, so this makes one typeable rather
+  /// than exact. It resolves because every resolver canonicalises case
+  /// before comparing (handlecode.Canonicalize on the Go side,
+  /// canonicalEsoqoId in pay-code.ts) — the stored shape, not the typed
+  /// case, is what the lookup uses.
   factory EsoqoField.code({
     Key? key,
     TextEditingController? controller,

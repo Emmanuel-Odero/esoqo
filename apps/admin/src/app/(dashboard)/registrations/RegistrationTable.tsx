@@ -13,6 +13,7 @@ import {
   actionUploadWalkInDocument, actionRemoveWalkInDocument,
 } from './actions';
 import WalkInFlow from './WalkInFlow';
+import NationalIdPanel from './NationalIdPanel';
 
 interface Row {
   id: string; officialName: string | null; knownAs: string | null; orgName: string | null;
@@ -307,7 +308,7 @@ function DetailDrawer({
   canUploadDocs: boolean; documentKinds: [string, string][]; onClose: () => void;
 }) {
   const [d, setD] = useState<Detail>(null);
-  const [tab, setTab] = useState<'record' | 'payment' | 'documents' | 'account'>('record');
+  const [tab, setTab] = useState<'record' | 'payment' | 'documents' | 'account' | 'nationalId'>('record');
   const [editing, setEditing] = useState(false);
   const [voiding, setVoiding] = useState(false);
   const [reason, setReason] = useState('');
@@ -473,7 +474,8 @@ function DetailDrawer({
         <div style={{ display: 'flex', gap: 2, padding: '0 24px', borderBottom: '1px solid var(--line)' }}
           role="tablist" aria-label="Sections">
           {([['record', 'Record'], ['payment', 'Payment'], ['documents', `Documents (${d.documents.length})`],
-             ['account', 'Account']] as const)
+             ['account', 'Account'],
+             ...(canSeePii && d.party?.person ? [['nationalId', 'National ID'] as const] : [])] as const)
             .map(([k, label]) => (
             <button key={k} role="tab" aria-selected={tab === k} onClick={() => setTab(k)}
               style={{
@@ -761,6 +763,10 @@ function DetailDrawer({
             )
           )}
 
+          {tab === 'nationalId' && d.party?.person && (
+            <NationalIdPanel partyId={d.party.person.partyId} />
+          )}
+
           {voiding && (
             <div style={{ marginTop: 18 }}>
               <label className="sub" htmlFor="void-reason" style={{ display: 'block', marginBottom: 6 }}>
@@ -929,7 +935,7 @@ function UploadRegistrationDocument({
           </select>
 
           <label className="sub" htmlFor="urd-file" style={{ display: 'block', marginBottom: 6 }}>
-            File (PDF, Word, Excel or image — up to 10 MB)
+            File (PDF, Word, Excel or image — up to 1 MB)
           </label>
           <input id="urd-file" className="inp" type="file" style={{ width: '100%' }}
             accept=".pdf,.doc,.docx,.xls,.xlsx,.png,.jpg,.jpeg"

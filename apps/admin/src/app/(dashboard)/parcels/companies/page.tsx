@@ -1,3 +1,4 @@
+import Link from 'next/link';
 import { Icon } from '@esoqo/ui';
 import { requireStaff } from '@/lib/session';
 import { actionListParcelOrgs } from '../actions';
@@ -37,6 +38,9 @@ export default async function ParcelCompaniesPage() {
             own riders and a commission split — parcels with no company stay on Esoqo-run dispatch.
           </p>
         </div>
+        <Link href="/parcels/companies/payouts" className="btn btn-o btn-sm">
+          Manual payouts
+        </Link>
       </div>
 
       {!canEdit && (

@@ -1,44 +1,35 @@
 import { describe, it, expect } from 'vitest';
 import {
-  extractEsoqoId, isEsoqoIdShape, buildPayLink, buildShortPayLink, mintEsoqoCode,
-  ESK_CODE_ALPHABET, ESK_CODE_LENGTH,
+  extractEsoqoId, isEsoqoIdShape, buildPayLink, buildShortPayLink,
 } from './pay-code';
 
-// The current minted shape (six characters from the unambiguous
-// alphabet) and the legacy four-digit one, which is deliberately still
-// resolvable — see pay-code.ts and core-go's dbx/payment_id.go.
-const CURRENT = 'ESK-BCUP2K-KE';
-const LEGACY = 'ESK-4471-KE';
+const CURRENT = 'mutukuka482';
 
 describe('isEsoqoIdShape', () => {
-  it('accepts the current six-character shape', () => {
+  it('accepts a handle, in any case', () => {
     expect(isEsoqoIdShape(CURRENT)).toBe(true);
-    expect(isEsoqoIdShape('esk-bcup2k-ke')).toBe(true);
-  });
-
-  it('still accepts the legacy four-digit shape', () => {
-    expect(isEsoqoIdShape(LEGACY)).toBe(true);
+    expect(isEsoqoIdShape('MUTUKUKA482')).toBe(true);
   });
 
   it('tolerates surrounding whitespace', () => {
     expect(isEsoqoIdShape(`  ${CURRENT} `)).toBe(true);
   });
 
-  it('rejects a wrong-length segment', () => {
-    expect(isEsoqoIdShape('ESK-4471')).toBe(false);
-    expect(isEsoqoIdShape('ESK-1234567-KE')).toBe(false);
+  it('rejects a wrong-length digit tail', () => {
+    expect(isEsoqoIdShape('mutukuka')).toBe(false);
+    expect(isEsoqoIdShape('mutukuka4821')).toBe(false);
   });
 
-  // The alphabet exists so a code read aloud off a printed stand cannot
-  // be mistyped into a different valid-looking string. Accepting the
-  // excluded characters would undo the point of it.
-  it('rejects characters outside the unambiguous alphabet', () => {
-    expect(isEsoqoIdShape('ESK-IL0UVW-KE')).toBe(false);
-    expect(isEsoqoIdShape('ESK-ABC001-KE')).toBe(false);
+  it('rejects anything with a hyphen in it', () => {
+    expect(isEsoqoIdShape('mutukuka-482')).toBe(false);
   });
 
-  it('rejects a wrong suffix', () => {
-    expect(isEsoqoIdShape('ESK-BCUP2K-XX')).toBe(false);
+  // The retired ESK- shape must not be recognised as an ID. Accepting it
+  // would route a stale printed stand into a lookup that can only miss.
+  it('rejects the retired ESK- code shape outright', () => {
+    expect(isEsoqoIdShape('ESK-BCUP2K-KE')).toBe(false);
+    expect(isEsoqoIdShape('ESK-4471-KE')).toBe(false);
+    expect(isEsoqoIdShape('esk-bcup2k-ke')).toBe(false);
   });
 
   it('rejects things that are not IDs at all', () => {
@@ -51,11 +42,17 @@ describe('isEsoqoIdShape', () => {
 });
 
 describe('extractEsoqoId', () => {
-  it('passes a bare code through, upper-cased', () => {
+  // Handles are minted lower-case, so this folds case down rather than
+  // up. The Go scanner had this backwards, which is why a handle resolved
+  // in TypeScript but silently missed in core-go.
+  it('passes a bare handle through, lower-cased', () => {
     expect(extractEsoqoId(CURRENT)).toBe(CURRENT);
-    expect(extractEsoqoId('esk-bcup2k-ke')).toBe(CURRENT);
-    expect(extractEsoqoId(LEGACY)).toBe(LEGACY);
-    expect(extractEsoqoId('esk-4471-ke')).toBe(LEGACY);
+    expect(extractEsoqoId('MUTUKUKA482')).toBe(CURRENT);
+  });
+
+  it('returns empty for the retired ESK- shape', () => {
+    expect(extractEsoqoId('ESK-BCUP2K-KE')).toBe('');
+    expect(extractEsoqoId('esk-4471-ke')).toBe('');
   });
 
   // A handheld scanner gun often appends a carriage return as its
@@ -66,7 +63,7 @@ describe('extractEsoqoId', () => {
 
   it('pulls the ID out of a pay link', () => {
     expect(extractEsoqoId(`https://esoqo.co.ke/pay?to=${CURRENT}`)).toBe(CURRENT);
-    expect(extractEsoqoId('http://localhost:3000/pay?to=esk-bcup2k-ke')).toBe(CURRENT);
+    expect(extractEsoqoId('http://localhost:3000/pay?to=MUTUKUKA482')).toBe(CURRENT);
   });
 
   it('keeps the pay link amount and utm params out of the result', () => {
@@ -121,7 +118,7 @@ describe('buildPayLink', () => {
   });
 
   it('normalises the ID it is given', () => {
-    expect(buildPayLink('https://esoqo.co.ke', ' esk-bcup2k-ke '))
+    expect(buildPayLink('https://esoqo.co.ke', ' MUTUKUKA482 '))
       .toBe(`https://esoqo.co.ke/pay?to=${CURRENT}`);
   });
 
@@ -157,7 +154,7 @@ describe('buildShortPayLink', () => {
   });
 
   it('normalises the ID it is given', () => {
-    expect(buildShortPayLink('https://esoqo.co.ke', ' esk-bcup2k-ke '))
+    expect(buildShortPayLink('https://esoqo.co.ke', ' MUTUKUKA482 '))
       .toBe(`https://esoqo.co.ke/pay/${CURRENT}`);
   });
 
@@ -168,61 +165,5 @@ describe('buildShortPayLink', () => {
   it('resolves against a subpath base URL without carrying it', () => {
     expect(buildShortPayLink('https://esoqo.co.ke/ke', CURRENT))
       .toBe(`https://esoqo.co.ke/pay/${CURRENT}`);
-  });
-});
-
-describe('mintEsoqoCode', () => {
-  // The alphabet must stay byte-for-byte identical to fleetqr.Alphabet in
-  // services/core-go/internal/fleetqr/qr.go. If the two ever disagree,
-  // codes minted on one side stop validating on the other, and only in
-  // production.
-  it('uses exactly the Go fleetqr alphabet', () => {
-    expect(ESK_CODE_ALPHABET).toBe('ABCDEFGHJKMNPQRSTUVWXYZ23456789');
-    expect(ESK_CODE_ALPHABET).toHaveLength(31);
-  });
-
-  it('excludes the characters that get mistyped', () => {
-    // I, L and O; and 0 and 1 — the O/0, I/1 and L/1 confusions.
-    for (const ch of 'ILO01') expect(ESK_CODE_ALPHABET).not.toContain(ch);
-  });
-
-  it('mints codes the shape check accepts', () => {
-    for (let i = 0; i < 500; i++) {
-      const code = mintEsoqoCode();
-      expect(code).toMatch(/^ESK-[ABCDEFGHJKMNPQRSTUVWXYZ23456789]{6}-KE$/);
-      expect(isEsoqoIdShape(code)).toBe(true);
-      expect(extractEsoqoId(code)).toBe(code);
-    }
-  });
-
-  it('never mints the legacy four-digit shape', () => {
-    for (let i = 0; i < 200; i++) {
-      expect(mintEsoqoCode()).not.toMatch(/^ESK-\d{4}-KE$/);
-    }
-  });
-
-  // 31 does not divide 256, so a naive `%` would favour the first 17
-  // characters. A large sample is a blunt but honest way to catch that.
-  it('does not visibly favour the low end of the alphabet', () => {
-    const counts = new Map<string, number>();
-    const draws = 31 * 400;
-    for (let i = 0; i < draws; i++) {
-      for (const ch of mintEsoqoCode().slice(4, -3)) {
-        counts.set(ch, (counts.get(ch) ?? 0) + 1);
-      }
-    }
-    const expected = (draws * ESK_CODE_LENGTH) / ESK_CODE_ALPHABET.length;
-    for (const ch of ESK_CODE_ALPHABET) {
-      const got = counts.get(ch) ?? 0;
-      expect(got).toBeGreaterThan(expected * 0.85);
-      expect(got).toBeLessThan(expected * 1.15);
-    }
-  });
-
-  it('does not repeat itself', () => {
-    const seen = new Set<string>();
-    for (let i = 0; i < 1000; i++) seen.add(mintEsoqoCode());
-    // ~8.9e8 possible codes; 1000 draws colliding is not a real event.
-    expect(seen.size).toBe(1000);
   });
 });

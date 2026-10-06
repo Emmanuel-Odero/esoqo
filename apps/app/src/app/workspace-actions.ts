@@ -6,6 +6,7 @@ import { redirect } from "next/navigation";
 import { SESSION_COOKIE } from "@esoqo/auth";
 import { goUrl } from "@/lib/ticketing";
 import { setParcelOrgSession } from "@/lib/parcel-org-session";
+import { setOrgSession } from "@/lib/org-session";
 import { getOrgTypeConfig } from "@/lib/org-type-config";
 
 /**
@@ -28,15 +29,28 @@ export async function enterOrg(orgId: string, orgType: string): Promise<void> {
   const token = (await cookies()).get(SESSION_COOKIE)?.value;
   if (!token) redirect("/signin");
 
+  // Courier activates through its own legacy endpoint, not the generic
+  // one. The generic path resolves capabilities against the new
+  // orgtypes registry, but every /parcel-org page checks capabilities
+  // computed by the legacy parcelStaffCapabilities() against the legacy
+  // parcel_staff table — the two don't agree on what a role like "ceo"
+  // can do, so a session minted the generic way looks signed-in (the
+  // dashboard needs little) but gets DENIED on anything gated by a real
+  // capability (staff list, dispatch, settings writes).
+  const endpoint = orgType === "courier"
+    ? "/v1/me/parcel-orgs/activate"
+    : `/v1/orgs/${orgId}/session`;
+  const body = orgType === "courier" ? { orgId } : { orgType };
+
   let sessionToken: string | undefined;
   try {
-    const res = await fetch(goUrl("/v1/orgs/{orgId}/session"), {
+    const res = await fetch(goUrl(endpoint), {
       method: "POST",
       headers: {
         Authorization: `Bearer ${token}`,
         "Content-Type": "application/json",
       },
-      body: JSON.stringify({ orgType }),
+      body: JSON.stringify(body),
       cache: "no-store",
       signal: AbortSignal.timeout(15000),
     });
@@ -50,20 +64,25 @@ export async function enterOrg(orgId: string, orgType: string): Promise<void> {
 
   if (!sessionToken) redirect("/me?orgError=1");
 
-  // Use the generic session cookie handling
-  // For backward compat during courier migration, courier still uses old cookie name
+  // Courier keeps its legacy cookie name for backward compat; every
+  // other org type goes through the generic org session cookie, which
+  // is what OrgPortalShell's fetchOrgMe actually reads.
   if (orgType === "courier") {
     await setParcelOrgSession(sessionToken);
   } else {
-    // For other org types, store in generic org session cookie
-    // This will be handled by a generic setOrgSession function
-    // For now, use the parcel org session as fallback
-    await setParcelOrgSession(sessionToken);
+    await setOrgSession(orgType, sessionToken);
   }
 
   // Get org type config to determine portal route
   const config = getOrgTypeConfig(orgType);
   const portalRoute = config?.portalRoute || "/org/default";
+
+  // /parcel-org (courier's real portal) takes no id in its URL at all —
+  // it's entirely session-scoped, same as every page under it. Every
+  // other org type's portal route is still a dynamic [id] segment.
+  if (orgType === "courier") {
+    redirect(portalRoute as Route);
+  }
 
   redirect((portalRoute + "/" + orgId) as Route);
 }

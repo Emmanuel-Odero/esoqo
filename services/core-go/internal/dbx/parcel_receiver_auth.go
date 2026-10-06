@@ -30,23 +30,23 @@ import (
 //
 // ── Why the counter is in Postgres ───────────────────────────────────
 //
-// handleDeliverParcel already throttles delivery-code guesses, in Redis,
-// via authsvc.FailedAttempts. That is the right call there: it guards a
-// staff endpoint, and authsvc's limiters deliberately fail open, so a
-// Redis hiccup means a clerk at a counter gets a few extra tries rather
-// than a receiver being turned away.
+// handleDeliverParcel throttles delivery-code guesses against the same
+// row now (parcel.deliveryCodeFailures) — it used to be a Redis key via
+// authsvc.FailedAttempts, and that was wrong for the reason set out in
+// DeliveryCodeTriesLeft's own comment: a counter that reports zero
+// whenever the cache is missing is not a counter, and the party guessing
+// a six-digit code is the courier holding the box.
 //
-// It is the wrong call here. This counter is not a throttle, it is
+// So this one was never really the "Redis one vs the Postgres one"
+// choice it was written up as. Both belong on the row, and the reason is
+// the same in each case: the state has to be visible to somebody else.
+// Here that is sharper still. This counter is not a throttle, it is
 // escalation state: staff have to SEE it (a locked parcel is a work
 // item), act on it (grant more tries), and have that grant survive a
 // restart. A guard that forgets is fine; a queue that forgets is a
-// parcel nobody ever comes back to. So the attempts live on the row,
-// and the Redis limiter stays where it is, guarding the transport.
-//
-// The two are not redundant. The row counter is per-parcel and is the
-// real gate. The IP rate limit on the route stops one host sweeping
-// many parcels — something a per-parcel counter cannot see by
-// construction.
+// parcel nobody ever comes back to. The IP rate limit on the route is
+// what handles transport-level sweeping — something a per-parcel counter
+// cannot see by construction.
 
 const (
 	// ReceiverAuthMaxAttempts — tries before the parcel locks and the
@@ -371,7 +371,7 @@ func ReissueDeliveryCode(
 		return "", &ParcelError{"BAD_INPUT", "This parcel's journey is already closed"}
 	}
 
-	newCode, err = generateDeliveryCode()
+	newCode, err = generateUniqueDeliveryCode(ctx, tx)
 	if err != nil {
 		return "", err
 	}
