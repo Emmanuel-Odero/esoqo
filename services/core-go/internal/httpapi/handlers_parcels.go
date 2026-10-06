@@ -170,6 +170,21 @@ func (s *Server) handleBookParcel(c *gin.Context) {
 			}
 		}
 	}
+	// SELF_DROPOFF on this public endpoint used to mean a sender could
+	// mint themselves a real, BOOKED, PAY_AT_COUNTER parcel — tracking
+	// code and all — with no clerk ever having laid eyes on the box.
+	// That's not a booking, it's a sender attesting to their own
+	// intake. A walk-in now has to go through the counter queue instead
+	// (POST /v1/parcels/counter-tickets, public and unauthenticated
+	// same as this one), where a clerk is the only thing that turns it
+	// into a parcel — see dbx.BookParcelFromCounterTicket, the one
+	// legitimate source of a SELF_DROPOFF parcel. binderIsPlatformStaff
+	// (an Esoqo operator with parcels.assign) is the one exception: a
+	// manual recovery/re-entry, not a guest booking themselves in.
+	if req.OriginMethod == "SELF_DROPOFF" && !binderIsPlatformStaff {
+		writeError(c, http.StatusForbidden, "CLERK_REQUIRED", "A walk-in drop-off has to be checked in at the counter — request a ticket instead of booking directly")
+		return
+	}
 	parcelID, code, deliveryCode, serviceTicketNumber, err := dbx.BookParcel(c.Request.Context(), s.Pool, dbx.BookParcelInput{
 		SenderPartyID: senderPartyID, SenderName: req.SenderName, SenderMsisdn: req.SenderMsisdn,
 		ReceiverName: req.ReceiverName, ReceiverMsisdn: req.ReceiverMsisdn,

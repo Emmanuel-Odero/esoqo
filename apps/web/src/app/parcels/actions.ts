@@ -1,7 +1,5 @@
 'use server';
 
-import { normalizePublicBookingResponse } from './booking-response';
-
 // Same convention as apps/web/tickets/[slug]/actions.ts: server-side Go
 // calls use the docker/compose service URL, falling back to localhost
 // for bare-metal dev. No auth header anywhere in this file — sending a
@@ -129,101 +127,6 @@ export async function actionListParcelZones(): Promise<ParcelZoneView[]> {
     return zones ?? [];
   } catch {
     return [];
-  }
-}
-
-export interface BookParcelInput {
-  senderName: string; senderMsisdn: string;
-  receiverName: string; receiverMsisdn: string;
-  originLabel: string; destinationLabel: string;
-  parcelType: string; weightKg?: number; fragile: boolean; notes?: string;
-  originZoneId?: string; destinationZoneId?: string;
-  destinationAgentId?: string;
-  // originMethod/parcelOrgId — set together when the sender picks "I'm
-  // dropping this off myself" over a scheduled pickup (see
-  // WalkInStationView). Omitted keeps the historical SCHEDULED_PICKUP
-  // default.
-  originMethod?: 'SCHEDULED_PICKUP' | 'SELF_DROPOFF';
-  parcelOrgId?: string;
-  // payAtCounter — no price is quoted or charged online for this
-  // booking; it lands straight in BOOKED and the fee is settled in
-  // person, with the agent or the courier. AtOfficeSendForm always
-  // sends true — see dbx.BookParcelInput.PayAtCounter's own comment for
-  // why this is no longer restricted to a walk-in drop-off.
-  payAtCounter?: boolean;
-
-  // The sender's own declaration of what's in the box. Distinct from
-  // the staff-only `contentsDeclared` flag core-go refuses from a guest
-  // booking — that one asserts a named clerk asked in person, which a
-  // web form cannot claim. These are recorded in their own columns as
-  // the sender's statement (see Parcel.senderDeclaredContents).
-  //
-  // declaredValueKes has always been accepted by the API and was simply
-  // never sent from this form; it doubles as the figure any cover would
-  // be priced against.
-  senderDeclaredContents?: string;
-  declaredValueKes?: number;
-  lawfulContentsAttested?: boolean;
-  termsAccepted?: boolean;
-  /** Which wording of the terms the form actually showed. Sent because
-   *  the server cannot know it, and "they accepted the terms" without a
-   *  version is worth very little in a dispute. */
-  termsVersion?: string;
-}
-
-/** Creates the booking — always PAY_AT_COUNTER from this form (see
- *  BookParcelInput.payAtCounter), so it lands straight in BOOKED rather
- *  than DRAFT_PENDING_PAYMENT; there is no price/pay step after this
- *  call.
- *
- *  The real tracking code is deliberately not part of this response —
- *  see core-go's Parcel.serviceTicketNumber schema comment. Nobody has
- *  proven they have the box in hand yet, guest or staff, so this
- *  returns a service ticket number instead: what the sender shows at
- *  the counter, and the only identifier that exists to them until a
- *  handler's first custody scan reveals the real code by SMS.
- *  deliveryCode is still returned here too, once — a guest sender has
- *  no session to revisit later, so this is their only chance to see it
- *  themselves and relay it proactively if they'd rather. */
-export async function actionBookParcel(
-  input: BookParcelInput,
-): Promise<{ ok: true; code: string; serviceTicketNumber: string; deliveryCode: string } | { ok: false; error: string }> {
-  if (!input.senderName.trim() || !input.senderMsisdn.trim()) return { ok: false, error: 'Enter your name and phone number' };
-  if (!input.receiverName.trim() || !input.receiverMsisdn.trim()) return { ok: false, error: "Enter the receiver's name and phone number" };
-  if (!input.originLabel.trim() || !input.destinationLabel.trim()) return { ok: false, error: 'Enter where it’s coming from and going to' };
-  try {
-    const json = await goFetch<{ code?: string; serviceTicketNumber?: string; deliveryCode?: string }>('/v1/parcels', {
-      method: 'POST',
-      body: JSON.stringify({
-        senderName: input.senderName.trim(), senderMsisdn: input.senderMsisdn.trim(),
-        receiverName: input.receiverName.trim(), receiverMsisdn: input.receiverMsisdn.trim(),
-        originLabel: input.originLabel.trim(), destinationLabel: input.destinationLabel.trim(),
-        parcelType: input.parcelType, weightKg: input.weightKg ?? null, fragile: input.fragile,
-        notes: input.notes?.trim() || null,
-        originZoneId: input.originZoneId ?? null, destinationZoneId: input.destinationZoneId ?? null,
-        destinationAgentId: input.destinationAgentId ?? null,
-        originMethod: input.originMethod ?? null,
-        parcelOrgId: input.parcelOrgId ?? null,
-        payAtCounter: input.payAtCounter ?? false,
-        senderDeclaredContents: input.senderDeclaredContents?.trim() || null,
-        // Sent as a number core-go parses into money.Amount. Null
-        // rather than 0 when unset: zero is a claim about worth, absent
-        // is the absence of one, and cover pricing reads this column.
-        declaredValueKes: Number.isFinite(input.declaredValueKes) ? input.declaredValueKes : null,
-        lawfulContentsAttested: input.lawfulContentsAttested ?? false,
-        termsAccepted: input.termsAccepted ?? false,
-        termsVersion: input.termsVersion ?? null,
-      }),
-    });
-    const normalized = normalizePublicBookingResponse(json);
-    return {
-      ok: true,
-      code: normalized.code,
-      serviceTicketNumber: normalized.serviceTicketNumber,
-      deliveryCode: normalized.deliveryCode,
-    };
-  } catch (e) {
-    return { ok: false, error: e instanceof Error ? e.message : UNAVAILABLE };
   }
 }
 
