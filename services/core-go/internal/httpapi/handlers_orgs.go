@@ -7,6 +7,7 @@ package httpapi
 
 import (
 	"encoding/json"
+	"log"
 	"net/http"
 	"strings"
 	"time"
@@ -115,6 +116,7 @@ func (s *Server) handleActivateOrgSession(c *gin.Context) {
 	// Verify person is staff at this org
 	staff, err := dbx.FindOrgStaffByParty(c.Request.Context(), s.Pool, orgID, ctx.PartyID)
 	if err != nil {
+		log.Printf("handleActivateOrgSession: FindOrgStaffByParty(%s,%s) failed: %v", orgID, ctx.PartyID, err)
 		writeError(c, http.StatusInternalServerError, "ACTIVATE_FAILED", "Could not open that organization")
 		return
 	}
@@ -126,6 +128,7 @@ func (s *Server) handleActivateOrgSession(c *gin.Context) {
 	// Resolve capabilities
 	capabilities, err := authsvc.ResolveOrgCapabilities(req.OrgType, staff.Role, staff.CustomCapabilities)
 	if err != nil {
+		log.Printf("handleActivateOrgSession: ResolveOrgCapabilities(%s,%s) failed: %v", req.OrgType, staff.Role, err)
 		writeError(c, http.StatusInternalServerError, "CAPABILITY_FAILED", "Could not resolve your permissions")
 		return
 	}
@@ -142,6 +145,7 @@ func (s *Server) handleActivateOrgSession(c *gin.Context) {
 		capabilities,
 	)
 	if err != nil {
+		log.Printf("handleActivateOrgSession: CreateOrgSession(%s,%s) failed: %v", orgID, req.OrgType, err)
 		writeError(c, http.StatusInternalServerError, "SESSION_CREATE_FAILED", "Could not create a session")
 		return
 	}

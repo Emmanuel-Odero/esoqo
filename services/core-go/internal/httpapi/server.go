@@ -157,6 +157,8 @@ func (s *Server) Router() *gin.Engine {
 		v1.GET("/orgs/:orgId/portal", s.authRequired(), s.handleGetOrgPortalData)
 		v1.GET("/orgs/:orgId/metadata", s.authRequired(), s.handleListOrgMetadata)
 		v1.PATCH("/orgs/:orgId/metadata", s.authRequired(), s.handleUpdateOrgMetadata)
+		// One-click entry into an org's session-based portal (hotel, eatery, chama, tout, courier).
+		v1.POST("/orgs/:orgId/session", s.authRequired(), s.handleActivateOrgSession)
 
 		// Generic staff sign-in and sign-out (all org types)
 		v1.POST("/orgs/staff/signin", s.rateLimit("auth:orgstaff", 20, time.Hour), s.handleOrgStaffSignIn)
