@@ -1,0 +1,27 @@
+# Public endpoint for GitHub's push webhook. Separate Ingress object
+# from the app hosts in ingress.yaml, on its own hostname — a listener
+# that only ever handles one POST path shouldn't share a host with
+# five apps that route on path prefix alone.
+#
+# cert-manager.io/issuer (namespaced), not cluster-issuer: this account
+# cannot create ClusterIssuers (see esoko-production-bootstrap memory /
+# docs/deployment/README.md's TLS section) — every other Ingress in
+# this cluster was already moved to the namespaced Issuer for the same
+# reason.
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: ci-webhook
+  annotations:
+    cert-manager.io/issuer: letsencrypt-prod
+spec:
+  ingressClassName: traefik
+  tls:
+    - secretName: ci-webhook-preview-tls
+      hosts:
+        - ci-preview.esoqo.com
+  rules:
+    - host: ci-preview.esoqo.com
+      http:
+        paths:
+          - { path: /, pathType: Prefix, backend: { service: { name: ci-webhook, port: { number: 80 } } } }

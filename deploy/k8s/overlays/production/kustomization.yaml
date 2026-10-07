@@ -22,6 +22,8 @@ resources:
 - config.yaml
 - issuer.yaml
 - media-storage.yaml
+- ci-webhook-config.yaml
+- ci-webhook-ingress.yaml
 
 labels:
 - pairs:
