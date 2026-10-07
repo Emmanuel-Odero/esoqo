@@ -206,7 +206,7 @@ export async function actionUploadWalkInDocument(form: FormData): Promise<Upload
     if (!registrationId) return { ok: false, error: 'Registration not found' };
     if (!title) return { ok: false, error: 'Give the document a title' };
     if (!(file instanceof File)) return { ok: false, error: 'No file was attached' };
-    if (file.size > MAX_BYTES) return { ok: false, error: 'That file is larger than 10 MB' };
+    if (file.size > MAX_BYTES) return { ok: false, error: 'That file is larger than 1 MB' };
 
     const buf = Buffer.from(await file.arrayBuffer());
     const check = sniff(buf, file.type, file.name);
@@ -308,7 +308,7 @@ export async function actionUploadNationalIdImage(form: FormData): Promise<Uploa
     if (!partyId) return { ok: false, error: 'Person not found' };
     if (side !== 'front' && side !== 'back') return { ok: false, error: 'Unknown side' };
     if (!(file instanceof File)) return { ok: false, error: 'No file was attached' };
-    if (file.size > MAX_BYTES) return { ok: false, error: 'That file is larger than 10 MB' };
+    if (file.size > MAX_BYTES) return { ok: false, error: 'That file is larger than 1 MB' };
 
     const buf = Buffer.from(await file.arrayBuffer());
     const check = sniff(buf, file.type, file.name);

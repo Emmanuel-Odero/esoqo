@@ -60,7 +60,7 @@ func (s *Server) handleUploadPodPhoto(c *gin.Context) {
 	// then again below from what was actually read — a multipart header
 	// is a claim, not a measurement.
 	if file.Size > storage.MaxImageBytes {
-		writeError(c, http.StatusBadRequest, "TOO_LARGE", "That photo is too large - keep it under 5MB")
+		writeError(c, http.StatusBadRequest, "TOO_LARGE", "That photo is too large - keep it under 1MB")
 		return
 	}
 	opened, err := file.Open()
@@ -76,7 +76,7 @@ func (s *Server) handleUploadPodPhoto(c *gin.Context) {
 		return
 	}
 	if len(body) > storage.MaxImageBytes {
-		writeError(c, http.StatusBadRequest, "TOO_LARGE", "That photo is too large - keep it under 5MB")
+		writeError(c, http.StatusBadRequest, "TOO_LARGE", "That photo is too large - keep it under 1MB")
 		return
 	}
 

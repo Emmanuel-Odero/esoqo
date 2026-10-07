@@ -1,0 +1,28 @@
+# The orchestrator image for the esoqo-deployer Job (one per push to
+# preview/production — see deploy/scripts/orchestrate.sh, which this
+# just packages with the three CLIs it shells out to). Nothing in here
+# builds anything itself; Kaniko Jobs do that, created by orchestrate.sh
+# against the cluster this pod is already running in.
+FROM alpine:3.20
+
+RUN apk add --no-cache bash git curl ca-certificates gawk
+
+# kubectl — pinned to a recent stable, matching the cluster's own
+# server version closely enough that `kubectl wait`/`apply` behave
+# predictably.
+ARG KUBECTL_VERSION=v1.31.1
+RUN curl -fsSL -o /usr/local/bin/kubectl \
+      "https://dl.k8s.io/release/${KUBECTL_VERSION}/bin/linux/amd64/kubectl" \
+ && chmod +x /usr/local/bin/kubectl
+
+# kustomize — the standalone CLI, not kubectl's built-in subset, same
+# requirement build-and-push.sh already documents ("cannot 'edit set
+# image'" with kubectl's own kustomize).
+ARG KUSTOMIZE_VERSION=v5.4.3
+RUN curl -fsSL "https://github.com/kubernetes-sigs/kustomize/releases/download/kustomize%2F${KUSTOMIZE_VERSION}/kustomize_${KUSTOMIZE_VERSION}_linux_amd64.tar.gz" \
+    | tar xz -C /usr/local/bin
+
+COPY deploy/scripts/orchestrate.sh /orchestrate.sh
+RUN chmod +x /orchestrate.sh
+
+ENTRYPOINT ["/orchestrate.sh"]

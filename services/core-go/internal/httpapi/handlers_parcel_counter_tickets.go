@@ -117,16 +117,41 @@ func (s *Server) handleStreamCounterTicket(c *gin.Context) {
 	})
 }
 
-// handleListCounterTicketQueue — GET /v1/admin/parcels/counter-tickets/queue.
-// The clerk dashboard's initial paint, oldest ticket first.
+// handleListCounterTicketQueue — GET /v1/parcel-orgs/me/counter-tickets/queue.
+// The clerk board's initial paint: the waiting queue, oldest ticket
+// first, plus every case the company currently has claimed — see
+// dbx.ListCounterTicketQueue for why the second list has to ride along
+// (a CLAIMED ticket was the one status no screen ever read, which is
+// how a refresh mid-service used to make a case disappear entirely).
 func (s *Server) handleListCounterTicketQueue(c *gin.Context) {
 	orgID := s.orgCtx(c, authsvc.CapParcelOrgIntake)
 	if orgID == "" {
 		return
 	}
-	rows, err := dbx.ListWaitingCounterTickets(c.Request.Context(), s.Pool, orgID)
+	ctx := ctxFromGin(c)
+	board, err := dbx.ListCounterTicketQueue(c.Request.Context(), s.Pool, orgID, ctx.ActorID)
 	if err != nil {
 		writeError(c, http.StatusInternalServerError, "LIST_FAILED", "Could not load the queue")
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"tickets": board.Waiting, "active": board.Active})
+}
+
+// handleListCounterTicketHistory — GET /v1/parcel-orgs/me/counter-tickets/history.
+// The counter's register of closed cases: discarded, aged out, or
+// completed (booked and paid). Kept separate from the queue endpoint
+// because it answers a different question — not "who is waiting right
+// now" but "what happened to every case that is no longer live" — and
+// because a busy desk's queue should not carry fifty rows of history
+// through it on every SSE-triggered refresh.
+func (s *Server) handleListCounterTicketHistory(c *gin.Context) {
+	orgID := s.orgCtx(c, authsvc.CapParcelOrgIntake)
+	if orgID == "" {
+		return
+	}
+	rows, err := dbx.ListCounterTicketHistory(c.Request.Context(), s.Pool, orgID, 50)
+	if err != nil {
+		writeError(c, http.StatusInternalServerError, "LIST_FAILED", "Could not load the register")
 		return
 	}
 	c.JSON(http.StatusOK, gin.H{"tickets": rows})
@@ -169,6 +194,100 @@ func (s *Server) handleClaimCounterTicket(c *gin.Context) {
 		return
 	}
 	c.JSON(http.StatusOK, gin.H{"ticket": t})
+}
+
+type cancelCounterTicketRequest struct {
+	Reason *string `json:"reason"`
+}
+
+// handleCancelCounterTicket — POST
+// /v1/parcel-orgs/me/counter-tickets/:id/cancel. A clerk discarding a
+// ticket — a sender who never showed at the counter, or one who walked
+// away mid-service, before BookParcelFromCounterTicket ever ran (see
+// dbx.CancelCounterTicket for why that's the hard line).
+func (s *Server) handleCancelCounterTicket(c *gin.Context) {
+	orgID := s.orgCtx(c, authsvc.CapParcelOrgIntake)
+	if orgID == "" {
+		return
+	}
+	var req cancelCounterTicketRequest
+	_ = c.ShouldBindJSON(&req) // optional body — reason is never required
+	ctx := ctxFromGin(c)
+	t, err := dbx.CancelCounterTicket(c.Request.Context(), s.Pool, c.Param("id"), ctx.ActorID, orgID, req.Reason)
+	if err != nil {
+		writeParcelError(c, err)
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"ticket": t})
+}
+
+// handleReleaseCounterTicket — POST
+// /v1/parcel-orgs/me/counter-tickets/:id/release. A clerk putting an
+// in-progress case back in the queue — wrong claim, or the sender
+// needs someone else — instead of leaving it CLAIMED where no queue
+// ever looked. Only the claimer can do this, and only before a parcel
+// exists (see dbx.ReleaseCounterTicket).
+func (s *Server) handleReleaseCounterTicket(c *gin.Context) {
+	orgID := s.orgCtx(c, authsvc.CapParcelOrgIntake)
+	if orgID == "" {
+		return
+	}
+	ctx := ctxFromGin(c)
+	t, err := dbx.ReleaseCounterTicket(c.Request.Context(), s.Pool, c.Param("id"), ctx.ActorID, orgID)
+	if err != nil {
+		writeParcelError(c, err)
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"ticket": t})
+}
+
+type bookCounterTicketRequest struct {
+	SenderName             string   `json:"senderName" binding:"required"`
+	SenderMsisdn           string   `json:"senderMsisdn" binding:"required"`
+	ReceiverName           string   `json:"receiverName" binding:"required"`
+	ReceiverMsisdn         string   `json:"receiverMsisdn" binding:"required"`
+	ParcelType             string   `json:"parcelType"`
+	WeightKg               *float64 `json:"weightKg"`
+	DestinationLabel       string   `json:"destinationLabel" binding:"required"`
+	SenderDeclaredContents *string  `json:"senderDeclaredContents"`
+	DeclaredValueKes       *float64 `json:"declaredValueKes"`
+	LabelCode              *string  `json:"labelCode"`
+}
+
+// handleBookCounterTicket — POST
+// /v1/parcel-orgs/me/counter-tickets/:id/book. Fired from the "1.
+// Confirm" step once the clerk has fixed up whatever the sender typed,
+// right before attaching a label — see dbx.BookParcelFromCounterTicket
+// for why this has to exist at all.
+func (s *Server) handleBookCounterTicket(c *gin.Context) {
+	orgID := s.orgCtx(c, authsvc.CapParcelOrgIntake)
+	if orgID == "" {
+		return
+	}
+	var req bookCounterTicketRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		writeError(c, http.StatusBadRequest, "INVALID_REQUEST", err.Error())
+		return
+	}
+	ctx := ctxFromGin(c)
+	parcelID, code, serviceTicketNumber, err := dbx.BookParcelFromCounterTicket(
+		c.Request.Context(), s.Pool, c.Param("id"), orgID, ctx.ActorID,
+		dbx.CounterTicketBookingInput{
+			SenderName: req.SenderName, SenderMsisdn: req.SenderMsisdn,
+			ReceiverName: req.ReceiverName, ReceiverMsisdn: req.ReceiverMsisdn,
+			ParcelType: req.ParcelType, WeightKg: req.WeightKg,
+			DestinationLabel:       req.DestinationLabel,
+			SenderDeclaredContents: req.SenderDeclaredContents,
+			DeclaredValueKes:       req.DeclaredValueKes,
+			LabelCode:              req.LabelCode,
+		})
+	if err != nil {
+		writeParcelError(c, err)
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{
+		"parcelId": parcelID, "code": code, "serviceTicketNumber": serviceTicketNumber,
+	})
 }
 
 // ── SSE plumbing ────────────────────────────────────────────────────

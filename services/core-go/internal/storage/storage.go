@@ -40,12 +40,10 @@ import (
 	"github.com/esoqo/core-go/internal/config"
 )
 
-// MaxImageBytes — 5MB. Half what storage.ts allows for documents,
-// because the only writer here is a phone camera and a 5MB JPEG is
-// already a generous full-resolution photo. A tighter cap on a field
-// upload path is a smaller denial-of-service surface over a courier's
-// mobile data, not just a smaller bill.
-const MaxImageBytes = 5 * 1024 * 1024
+// MaxImageBytes — 1MB, matching storage.ts's cap for documents. A
+// tighter cap on a field upload path is a smaller denial-of-service
+// surface over a courier's mobile data, not just a smaller bill.
+const MaxImageBytes = 1 * 1024 * 1024
 
 // Sniff returns the real MIME type of buf, ignoring whatever the client
 // claimed. Empty string means "not an image we accept".

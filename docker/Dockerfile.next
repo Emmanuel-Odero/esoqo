@@ -57,17 +57,48 @@ ENV NEXT_PUBLIC_WEB_URL=$NEXT_PUBLIC_WEB_URL \
 # @types/node"). `next build` sets NODE_ENV=production for the compile
 # itself regardless, so nothing is lost by leaving it unset here.
 
-COPY . .
-
-# The pnpm store is a cache mount rather than a layer: the whole repo is
-# copied above, so any source change invalidates the install layer, but
-# the mount survives that and keeps a warm rebuild near-instant.
+# Manifests only, first: every package.json in the workspace plus the
+# root lockfile/workspace file, nothing else. This layer — and the
+# install below — is then invalidated only when a dependency actually
+# changes, not on every source edit, which is the overwhelming majority
+# of commits. (A `--mount=type=cache` pnpm-store mount used to sit here
+# instead; it's gone because Kaniko — the in-cluster builder this image
+# now also has to run under — silently drops the mount's target
+# directory instead of creating it, so the RUN failed outright. A
+# mount-cache tied to one builder host was always going to be dead
+# weight for Kaniko's one-pod-per-build model anyway.)
 #
+# Explicit paths, not a glob: Kaniko's Dockerfile frontend is its own
+# implementation, not BuildKit, so wildcard COPY destinations that rely
+# on BuildKit preserving source subdirectories (or `--parents`) are not
+# something to depend on here. This list is pnpm-workspace.yaml's own
+# package list, spelled out.
+COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
+COPY apps/admin/package.json ./apps/admin/
+COPY apps/app/package.json ./apps/app/
+COPY apps/jamii/package.json ./apps/jamii/
+COPY apps/store/package.json ./apps/store/
+COPY apps/web/package.json ./apps/web/
+COPY packages/a11y/package.json ./packages/a11y/
+COPY packages/auth/package.json ./packages/auth/
+COPY packages/config/package.json ./packages/config/
+COPY packages/db/package.json ./packages/db/
+COPY packages/domain/package.json ./packages/domain/
+COPY packages/payments/package.json ./packages/payments/
+COPY packages/ui/package.json ./packages/ui/
+COPY services/core/package.json ./services/core/
+COPY services/cecf-wordpress/web/app/themes/cecf-sage/package.json ./services/cecf-wordpress/web/app/themes/cecf-sage/
+# packages/db's own postinstall runs `prisma generate` eagerly during
+# `pnpm install` itself (not a separate later step), so the schema has
+# to already be on disk before install runs, not just its package.json.
+COPY packages/db/prisma ./packages/db/prisma
+
 # --prod=false belt-and-braces: it pins the devDependency behaviour to
 # this flag rather than to whatever NODE_ENV happens to be, so setting
 # NODE_ENV here later cannot silently break the build again.
-RUN --mount=type=cache,id=pnpm-store,target=/pnpm/store \
-    pnpm install --frozen-lockfile --prod=false
+RUN pnpm install --frozen-lockfile --prod=false
+
+COPY . .
 
 # `next build` typechecks against the generated client; @esoqo/db's
 # postinstall already ran generate, but a cached store can skip

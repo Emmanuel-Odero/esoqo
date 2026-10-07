@@ -16,6 +16,7 @@ import {
   actionSearchParcelPeople,
   type ParcelOrg,
   type ParcelOrgInput,
+  type ParcelOrgPayoutMethod,
   type EnterpriseLite,
   type ParcelOrgStaffRow,
   type OrgMemberInput,
@@ -89,6 +90,14 @@ export function orgToInput(
     logoStorageKey: org.logoStorageKey ?? null,
     logoUrl: org.logoUrl ?? null,
     brandAccent: org.brandAccent ?? null,
+    payoutMethod: org.payoutMethod ?? null,
+    payoutMsisdn: org.payoutMsisdn ?? null,
+    payoutTillNumber: org.payoutTillNumber ?? null,
+    payoutPaybillNumber: org.payoutPaybillNumber ?? null,
+    payoutPaybillAccount: org.payoutPaybillAccount ?? null,
+    payoutBankCode: org.payoutBankCode ?? null,
+    payoutBankAccountNumber: org.payoutBankAccountNumber ?? null,
+    payoutBankAccountName: org.payoutBankAccountName ?? null,
     ...overrides,
   };
 }
@@ -915,6 +924,34 @@ export function OrgForm({
   const [settlementPhone, setSettlementPhone] = useState(
     initial?.settlementPhone ?? "",
   );
+  // Where this company's cut of a parcel is actually paid, automatically,
+  // the moment it's settled — unlike settlementPhone above, which is
+  // informational only. "" (no method) leaves new payouts MANUAL, for
+  // finance to clear by hand on the manual-payouts page.
+  const [payoutMethod, setPayoutMethod] = useState(
+    initial?.payoutMethod ?? "",
+  );
+  const [payoutMsisdn, setPayoutMsisdn] = useState(
+    initial?.payoutMsisdn ?? "",
+  );
+  const [payoutTillNumber, setPayoutTillNumber] = useState(
+    initial?.payoutTillNumber ?? "",
+  );
+  const [payoutPaybillNumber, setPayoutPaybillNumber] = useState(
+    initial?.payoutPaybillNumber ?? "",
+  );
+  const [payoutPaybillAccount, setPayoutPaybillAccount] = useState(
+    initial?.payoutPaybillAccount ?? "",
+  );
+  const [payoutBankCode, setPayoutBankCode] = useState(
+    initial?.payoutBankCode ?? "",
+  );
+  const [payoutBankAccountNumber, setPayoutBankAccountNumber] = useState(
+    initial?.payoutBankAccountNumber ?? "",
+  );
+  const [payoutBankAccountName, setPayoutBankAccountName] = useState(
+    initial?.payoutBankAccountName ?? "",
+  );
   const [enterpriseId, setEnterpriseId] = useState(initial?.enterpriseId ?? "");
   const [entQuery, setEntQuery] = useState("");
   const [entResults, setEntResults] = useState<EnterpriseLite[]>([]);
@@ -964,6 +1001,14 @@ export function OrgForm({
     location: useId(),
     hours: useId(),
     brand: useId(),
+    payoutMethod: useId(),
+    payoutMsisdn: useId(),
+    payoutTill: useId(),
+    payoutPaybillNumber: useId(),
+    payoutPaybillAccount: useId(),
+    payoutBankCode: useId(),
+    payoutBankAccountNumber: useId(),
+    payoutBankAccountName: useId(),
   };
 
   function addMember() {
@@ -1034,6 +1079,22 @@ export function OrgForm({
       );
       return;
     }
+    if (payoutMethod === "PHONE" && !payoutMsisdn.trim()) {
+      setError("Give the M-Pesa number payouts should go to.");
+      return;
+    }
+    if (payoutMethod === "TILL" && !payoutTillNumber.trim()) {
+      setError("Give the till number payouts should go to.");
+      return;
+    }
+    if (payoutMethod === "PAYBILL" && !payoutPaybillNumber.trim()) {
+      setError("Give the paybill number payouts should go to.");
+      return;
+    }
+    if (payoutMethod === "BANK" && !payoutBankAccountNumber.trim()) {
+      setError("Give the bank account number payouts should go to.");
+      return;
+    }
     const input: ParcelOrgInput = {
       // Only sent on create — an update never moves a company to a
       // different owning business, which would silently transfer every
@@ -1056,6 +1117,20 @@ export function OrgForm({
       logoStorageKey: logoStorageKey.trim() || null,
       logoUrl: logoUrl.trim() || null,
       brandAccent: accent || null,
+      payoutMethod: (payoutMethod as ParcelOrgPayoutMethod) || null,
+      payoutMsisdn: payoutMethod === "PHONE" ? payoutMsisdn.trim() || null : null,
+      payoutTillNumber:
+        payoutMethod === "TILL" ? payoutTillNumber.trim() || null : null,
+      payoutPaybillNumber:
+        payoutMethod === "PAYBILL" ? payoutPaybillNumber.trim() || null : null,
+      payoutPaybillAccount:
+        payoutMethod === "PAYBILL" ? payoutPaybillAccount.trim() || null : null,
+      payoutBankCode:
+        payoutMethod === "BANK" ? payoutBankCode.trim() || null : null,
+      payoutBankAccountNumber:
+        payoutMethod === "BANK" ? payoutBankAccountNumber.trim() || null : null,
+      payoutBankAccountName:
+        payoutMethod === "BANK" ? payoutBankAccountName.trim() || null : null,
     };
     startTransition(async () => {
       const result = initial
@@ -1451,6 +1526,177 @@ export function OrgForm({
           </div>
         </div>
       )}
+
+      <div
+        style={{
+          borderTop: "1px solid var(--line)",
+          paddingTop: 12,
+          display: "grid",
+          gap: 10,
+        }}
+      >
+        <div>
+          <span className="sub" style={{ display: "block", fontWeight: 600 }}>
+            Payout destination
+          </span>
+          <span className="sub" style={{ fontSize: ".78rem" }}>
+            Where this company&apos;s cut of a parcel is sent, automatically,
+            the moment it&apos;s settled. Leave as &quot;Not set&quot; (or pick
+            Bank) and payouts land on the manual payouts page for finance to
+            clear by hand instead.
+          </span>
+        </div>
+        <div
+          style={{
+            display: "grid",
+            gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))",
+            gap: 12,
+          }}
+        >
+          <div>
+            <label
+              className="sub"
+              htmlFor={ids.payoutMethod}
+              style={{ display: "block", marginBottom: 4 }}
+            >
+              Payout method
+            </label>
+            <select
+              id={ids.payoutMethod}
+              style={inputStyle}
+              value={payoutMethod}
+              onChange={(e) => setPayoutMethod(e.target.value)}
+            >
+              <option value="">Not set (manual)</option>
+              <option value="PHONE">M-Pesa phone number</option>
+              <option value="TILL">M-Pesa till number</option>
+              <option value="PAYBILL">M-Pesa paybill</option>
+              <option value="BANK">Bank account (manual for now)</option>
+            </select>
+          </div>
+          {payoutMethod === "PHONE" && (
+            <div>
+              <label
+                className="sub"
+                htmlFor={ids.payoutMsisdn}
+                style={{ display: "block", marginBottom: 4 }}
+              >
+                Payout M-Pesa number
+              </label>
+              <input
+                id={ids.payoutMsisdn}
+                style={inputStyle}
+                value={payoutMsisdn}
+                onChange={(e) => setPayoutMsisdn(e.target.value)}
+              />
+            </div>
+          )}
+          {payoutMethod === "TILL" && (
+            <div>
+              <label
+                className="sub"
+                htmlFor={ids.payoutTill}
+                style={{ display: "block", marginBottom: 4 }}
+              >
+                Till number
+              </label>
+              <input
+                id={ids.payoutTill}
+                className="mono"
+                style={inputStyle}
+                value={payoutTillNumber}
+                onChange={(e) => setPayoutTillNumber(e.target.value)}
+              />
+            </div>
+          )}
+          {payoutMethod === "PAYBILL" && (
+            <>
+              <div>
+                <label
+                  className="sub"
+                  htmlFor={ids.payoutPaybillNumber}
+                  style={{ display: "block", marginBottom: 4 }}
+                >
+                  Paybill number
+                </label>
+                <input
+                  id={ids.payoutPaybillNumber}
+                  className="mono"
+                  style={inputStyle}
+                  value={payoutPaybillNumber}
+                  onChange={(e) => setPayoutPaybillNumber(e.target.value)}
+                />
+              </div>
+              <div>
+                <label
+                  className="sub"
+                  htmlFor={ids.payoutPaybillAccount}
+                  style={{ display: "block", marginBottom: 4 }}
+                >
+                  Account reference
+                </label>
+                <input
+                  id={ids.payoutPaybillAccount}
+                  style={inputStyle}
+                  value={payoutPaybillAccount}
+                  onChange={(e) => setPayoutPaybillAccount(e.target.value)}
+                />
+              </div>
+            </>
+          )}
+          {payoutMethod === "BANK" && (
+            <>
+              <div>
+                <label
+                  className="sub"
+                  htmlFor={ids.payoutBankCode}
+                  style={{ display: "block", marginBottom: 4 }}
+                >
+                  Bank
+                </label>
+                <input
+                  id={ids.payoutBankCode}
+                  style={inputStyle}
+                  value={payoutBankCode}
+                  placeholder="e.g. KCB, Equity"
+                  onChange={(e) => setPayoutBankCode(e.target.value)}
+                />
+              </div>
+              <div>
+                <label
+                  className="sub"
+                  htmlFor={ids.payoutBankAccountNumber}
+                  style={{ display: "block", marginBottom: 4 }}
+                >
+                  Account number
+                </label>
+                <input
+                  id={ids.payoutBankAccountNumber}
+                  className="mono"
+                  style={inputStyle}
+                  value={payoutBankAccountNumber}
+                  onChange={(e) => setPayoutBankAccountNumber(e.target.value)}
+                />
+              </div>
+              <div>
+                <label
+                  className="sub"
+                  htmlFor={ids.payoutBankAccountName}
+                  style={{ display: "block", marginBottom: 4 }}
+                >
+                  Account name
+                </label>
+                <input
+                  id={ids.payoutBankAccountName}
+                  style={inputStyle}
+                  value={payoutBankAccountName}
+                  onChange={(e) => setPayoutBankAccountName(e.target.value)}
+                />
+              </div>
+            </>
+          )}
+        </div>
+      </div>
 
       <div
         style={{

@@ -85,11 +85,13 @@ export default async function ParcelOrgLayout({ children }: { children: React.Re
     // entry point for every job that starts with a box in someone's
     // hands — which is most of them. It is the one page that needs no
     // decision before it is useful: open it and scan.
-    // The badge counts senders expected at the desk. It sat on Counter
-    // while the worklist did; it follows the worklist here.
-    ...(canScan ? [{ href: '/parcel-org/scan', label: 'Scan', icon: 'qr' as const, badge: me.stats.awaitingDropoff || undefined }] : []),
+    ...(canScan ? [{ href: '/parcel-org/scan', label: 'Scan', icon: 'qr' as const }] : []),
     ...(canDispatch ? [{ href: '/parcel-org/dispatch', label: 'Dispatch', icon: 'send' as const }] : []),
-    ...(canSell ? [{ href: '/parcel-org/counter', label: 'Counter', icon: 'plus' as const }] : []),
+    // The badge counts senders checked in and still waiting for a clerk
+    // to pick up their ticket — Counter is where that queue lives now,
+    // not Scan, and the count comes from the live ticket queue itself
+    // rather than a BOOKED-parcel proxy (see ParcelOrgStats.waitingTickets).
+    ...(canSell ? [{ href: '/parcel-org/counter', label: 'Counter', icon: 'plus' as const, badge: me.stats.waitingTickets || undefined }] : []),
     // Counting cash in is its own job with its own page now — the
     // rider-float panel used to sit at the bottom of the register.
     ...(canSeeMoney ? [{ href: '/parcel-org/money', label: 'Money', icon: 'coins' as const }] : []),

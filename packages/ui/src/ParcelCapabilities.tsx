@@ -26,6 +26,7 @@ export const PARCEL_CAPABILITIES: ParcelCapabilityOption[] = [
   { value: 'parcelorgstaff.write', label: 'Manage the team', hint: 'Add, edit and suspend staff, and set their roles.' },
   { value: 'parcelorg.write', label: 'Company profile & pricing', hint: 'Edit the company details and its rate card.' },
   { value: 'parcelorg.earnings', label: 'See earnings', hint: 'View what the company earned and the cash owed.' },
+  { value: 'parcelorg.counter-cash', label: 'Count counter cash in', hint: 'Close out the cash a clerk collected at the counter.' },
 ];
 
 /** The RIDER floor core-go applies to a role with no preset and no

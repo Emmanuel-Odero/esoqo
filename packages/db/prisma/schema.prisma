@@ -682,6 +682,12 @@ enum AccountKind {
   /// now". Debited when a collection is recorded, credited when the
   /// rider remits. See dbx.RecordCodCollection / RemitCod.
   PARCEL_COD_HELD
+  /// One per courier-company staff member — counter-intake cash
+  /// physically in that clerk's pocket between settling a sender at the
+  /// desk and a manager counting it in. Same role PARCEL_COD_HELD plays
+  /// for a rider's delivery round, keyed by staff instead of party. See
+  /// dbx.SettleCounterParcel / RemitCounterCash.
+  PARCEL_COUNTER_CASH_HELD
   /// One per seller (the parcel's sender) — goods money collected on
   /// their behalf and not yet paid out. Credited at collection, debited
   /// at settlement. Deliberately separate from WALLET: this is money
@@ -702,6 +708,13 @@ enum AccountKind {
   /// paid nothing here ever cost the platform money on a per-event
   /// basis.
   PARCEL_COURIER_COST
+  /// One per ParcelOrg's enterprise party — a courier company's share
+  /// of a parcel's price (Parcel.orgEarningsKes), reclassified here out
+  /// of PARCEL_REVENUE the moment a payment is confirmed and debited
+  /// again once ParcelOrgPayout actually pays it out. The company-level
+  /// counterpart to PARCEL_COURIER_PAYABLE above, which is scoped to an
+  /// individual gig courier instead. See dbx.createParcelOrgPayoutTx.
+  PARCEL_ORG_EARNINGS_PAYABLE
   /// One per ticket org's enterprise party — what a booking is worth to
   /// that operator, and therefore what Esoqo owes them. Replaces the
   /// SUSPENSE placeholder ticketing.go used to post against, which its
@@ -773,6 +786,7 @@ model JournalEntry {
   walletWithdrawal    WalletWithdrawal?
   esoqoTransfer       EsoqoTransfer?
   thirdPartyPayout    ThirdPartyPayout?
+  parcelOrgPayout     ParcelOrgPayout?
   signatoryFeePayment SignatoryFeePayment?
   projectContribution GroupProjectContribution?
   projectWithdrawal   GroupProjectWithdrawal?
@@ -4427,11 +4441,21 @@ model Parcel {
   /// own mpesaReceiptCode columns already play. Null for ESOKO_POINTS.
   mpesaReceiptCode         String?
   paidAt                   DateTime?
-  /// Set only for a CASH payment — who at the counter confirmed the
-  /// cash was actually handed over, same audit shape as
-  /// refundedByStaffId/cancelledByStaffId below. Null for MPESA_STK
-  /// and ESOKO_POINTS, which confirm themselves.
+  /// Who at the counter confirmed this payment themselves, rather than
+  /// Safaricom's own webhook confirming it: a CASH settlement (always),
+  /// or a clerk typing in an M-Pesa code because the STK callback never
+  /// arrived (dbx.ConfirmCounterSettlementByManualCode). Null for
+  /// MPESA_STK, ESOKO_POINTS, and a webhook-confirmed counter
+  /// settlement, which all confirm themselves — same audit shape as
+  /// refundedByStaffId/cancelledByStaffId below.
   paidByStaffId            String?   @db.Uuid
+  /// Which counter-cash hand-over batch cleared this parcel's cash out
+  /// of the clerk's pocket (see ParcelCounterCashRemittance). Null
+  /// until remitted, and only ever set for a CASH settlement —
+  /// mpesaReceiptCode being non-null on a PAY_AT_COUNTER row means the
+  /// money already landed electronically, never in anyone's hand.
+  counterCashRemittanceId String?                       @db.Uuid
+  counterCashRemittance   ParcelCounterCashRemittance?  @relation(fields: [counterCashRemittanceId], references: [id])
 
   /// Who's coming to collect it and when, set by an admin scheduling a
   /// pickup — distinct from currentHolderPartyId, which only changes
@@ -4688,6 +4712,11 @@ model Parcel {
   /// already Esoqo's and a split would be a fiction.
   platformFeeKes Decimal? @db.Decimal(10, 2)
   orgEarningsKes Decimal? @db.Decimal(10, 2)
+
+  /// The automatic disbursement of orgEarningsKes to the carrying
+  /// company, created the same moment the split above is frozen. See
+  /// ParcelOrgPayout's own comment.
+  orgPayout ParcelOrgPayout?
 
   /// The passenger trip this parcel is riding on — an actual matatu or
   /// intercity bus, on a scheduled run, with a conductor.
@@ -4967,6 +4996,34 @@ model ParcelCodRemittance {
   @@map("parcel_cod_remittance")
 }
 
+/// One hand-over of a clerk's counter-intake cash, clearing their
+/// pocket — ParcelCodRemittance's counterpart for cash collected at a
+/// walk-in counter instead of on a rider's delivery round. Same
+/// batch-not-per-parcel shape, same allowed-to-disagree amountKes vs
+/// expectedKes pair, for the same reasons that model's own comment
+/// gives.
+model ParcelCounterCashRemittance {
+  id String @id @default(uuid()) @db.Uuid
+
+  orgId String @db.Uuid
+
+  /// The clerk whose pocket this emptied.
+  collectedByStaffId String @db.Uuid
+  /// The manager who counted it in.
+  receivedByStaffId  String @db.Uuid
+
+  amountKes   Decimal @db.Decimal(12, 2)
+  expectedKes Decimal @db.Decimal(12, 2)
+  note        String?
+
+  createdAt DateTime @default(now())
+
+  parcels Parcel[]
+
+  @@index([collectedByStaffId, createdAt])
+  @@map("parcel_counter_cash_remittance")
+}
+
 /// One batch of COD money paid out from the platform SETTLEMENT account
 /// to a seller. The money-out side of ParcelCodRemittance: where a
 /// remittance records a rider handing cash in, this records an operator
@@ -5134,6 +5191,31 @@ model ParcelOrg {
   /// payouts run through the ledger, not off this column.
   settlementPhone String?
 
+  /// Where this company's share of a parcel (Parcel.orgEarningsKes)
+  /// actually gets paid, automatically, the moment a parcel is settled.
+  /// Null until onboarding sets it, in which case ParcelOrgPayout rows
+  /// are created MANUAL instead of being disbursed — see
+  /// dbx.createParcelOrgPayoutTx. Unlike settlementPhone above, these
+  /// fields ARE read live by the payout trigger; they are snapshotted
+  /// onto each ParcelOrgPayout at creation time precisely so a later
+  /// edit here never rewrites a payout already in flight or paid.
+  payoutMethod ParcelOrgPayoutMethod?
+  /// PHONE payout destination (M-Pesa B2C).
+  payoutMsisdn String?
+  /// TILL payout destination (M-Pesa B2B BusinessBuyGoods).
+  payoutTillNumber String?
+  /// PAYBILL payout destination (M-Pesa B2B BusinessPayBill).
+  payoutPaybillNumber String?
+  payoutPaybillAccount String?
+  /// BANK payout destination. No automatic disbursement integration
+  /// exists for this yet — see ParcelOrgPayoutStatus.MANUAL — but the
+  /// destination is still captured at onboarding so finance has
+  /// somewhere real to send a manual payout, and so the automatic path
+  /// can pick it up the day a bank-disbursement integration exists.
+  payoutBankCode          String?
+  payoutBankAccountNumber String?
+  payoutBankAccountName   String?
+
   /// Esoqo's cut of every parcel this company carries, as a percent of
   /// the paid price. Copied onto each parcel at payment time (see
   /// Parcel.platformFeeKes) and never read live afterwards, so
@@ -5188,6 +5270,7 @@ model ParcelOrg {
   runs           ParcelShipment[]
   routes         ParcelRoute[]
   counterTickets ParcelCounterTicket[]
+  payouts        ParcelOrgPayout[]
 
   @@index([enterpriseId])
   @@index([status])
@@ -5243,7 +5326,8 @@ model ParcelOrgStaff {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  claimedCounterTickets ParcelCounterTicket[]
+  claimedCounterTickets    ParcelCounterTicket[]
+  cancelledCounterTickets  ParcelCounterTicket[] @relation("CounterTicketCancelledBy")
 
   @@index([orgId])
   @@map("parcel_org_staff")
@@ -5260,12 +5344,17 @@ enum ParcelCounterTicketChannel {
   APP
 }
 
-/// WAITING is the only state that shows up in a clerk's live queue.
-/// CLAIMED means a clerk is actively serving it — not that a Parcel
-/// exists yet, since a claimed ticket still has to go through the
-/// ordinary booking/label-binding flow same as any counter intake.
-/// EXPIRED is a customer who walked off or a stale kiosk session,
-/// aged out rather than left WAITING forever.
+/// WAITING is the unclaimed live queue. CLAIMED means a clerk is
+/// actively serving it — not that a Parcel exists yet, since a
+/// claimed ticket still has to go through the ordinary
+/// booking/label-binding flow same as any counter intake. Claimed
+/// cases stay on the counter board too (dbx.ListCounterTicketQueue's
+/// "active" list) rather than dropping out of every screen — a refresh
+/// mid-service must resume, not lose the case. EXPIRED is a customer
+/// who walked off or a stale kiosk session, aged out rather than left
+/// WAITING forever; CANCELLED is a clerk's discard (see
+/// dbx.CancelCounterTicket). Both closed states live on in the
+/// counter's register (dbx.ListCounterTicketHistory).
 enum ParcelCounterTicketStatus {
   WAITING
   CLAIMED
@@ -5291,9 +5380,14 @@ model ParcelCounterTicket {
   orgId String    @db.Uuid
   org   ParcelOrg @relation(fields: [orgId], references: [id], onDelete: Cascade)
 
-  /// "TCK-…" — same fleetqr.PrefixServiceTicket pool Parcel.serviceTicketNumber
-  /// mints from, so a ticket and a pre-intake parcel are never
-  /// confusable at a glance by their prefix alone.
+  /// Name-shaped — "JOHN-482" or "DOE-482" (the name half drawn at
+  /// random from the sender's first name or their second/family name),
+  /// or "GUEST-###" for a phone with no Esoqo account to read a name
+  /// off of — same fleetqr.ServiceTicketForName convention
+  /// Parcel.serviceTicketNumber already mints from (see
+  /// dbx.CreateCounterTicket). Never the bare TCK-XXXXXX fallback
+  /// shape: a sender reads this aloud at the counter, and a name is
+  /// what lets a clerk call them forward by it.
   serviceTicketNumber String                     @unique
   msisdn              String
   channel             ParcelCounterTicketChannel
@@ -5305,6 +5399,29 @@ model ParcelCounterTicket {
   claimedByStaff   ParcelOrgStaff? @relation(fields: [claimedByStaffId], references: [id], onDelete: SetNull)
   claimedAt        DateTime?
 
+  /// The real booking this ticket turned into (dbx.BookParcelFromCounterTicket)
+  /// — null until the clerk confirms the sender's details and attaches a
+  /// label. Not a Prisma relation to Parcel (that model's relation list
+  /// is large enough already): a plain FK column is all this needs,
+  /// since nothing ever navigates ticket -> parcel through Prisma.
+  parcelId String? @db.Uuid
+  /// Claimed atomically before BookParcel runs, same reservation-token
+  /// shape SettleCounterParcelStk's paymentReservationAt follows — so
+  /// two requests racing to book the same ticket can't both mint a
+  /// parcel. Cleared if the booking attempt fails, so a retry is never
+  /// blocked by its own dead reservation.
+  bookingStartedAt DateTime?
+
+  /// Set only on a clerk-discarded ticket (dbx.CancelCounterTicket) —
+  /// a sender who never showed, or walked away mid-service. Only ever
+  /// reachable from WAITING or CLAIMED with parcelId still null: once
+  /// a real parcel exists, abandoning it is that parcel's own cancel
+  /// flow, not this ticket's.
+  cancelledByStaffId String?         @db.Uuid
+  cancelledByStaff   ParcelOrgStaff? @relation("CounterTicketCancelledBy", fields: [cancelledByStaffId], references: [id], onDelete: SetNull)
+  cancelledAt        DateTime?
+  cancelReason       String?
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
@@ -5312,6 +5429,83 @@ model ParcelCounterTicket {
   /// first" — this index is that query.
   @@index([orgId, status, createdAt])
   @@map("parcel_counter_ticket")
+}
+
+/// How a courier company is actually paid — mirrors the shape of
+/// ParcelOrg's own payout* fields one-for-one, so a ParcelOrgPayout row
+/// can snapshot whichever of them was configured at the moment it was
+/// created.
+enum ParcelOrgPayoutMethod {
+  PHONE
+  TILL
+  PAYBILL
+  BANK
+}
+
+/// PENDING: created, not yet attempted. PROCESSING: a B2C/B2B request is
+/// in flight (mpesaConversationId set). CONFIRMED: Daraja's result
+/// callback matched this conversation and the money moved. FAILED: a
+/// request was attempted and Daraja said no (see failureReason) — still
+/// eligible for the retry worker. MANUAL: method was BANK, or the org
+/// had no payout method configured at all, so no automatic attempt is
+/// made; it sits here for finance to clear from the admin payouts list.
+enum ParcelOrgPayoutStatus {
+  PENDING
+  PROCESSING
+  CONFIRMED
+  FAILED
+  MANUAL
+}
+
+/// The automatic disbursement of a courier company's cut of one parcel
+/// (Parcel.orgEarningsKes) to whatever payout destination it was
+/// onboarded with — created in the same transaction that freezes the
+/// revenue split, one row per settled parcel, matching "pay the company
+/// the moment the sender's money clears" rather than batching.
+///
+/// Destination fields are a snapshot of ParcelOrg.payout* at creation
+/// time, not a live join: renegotiating or correcting a company's
+/// payout details next month must never rewrite where money already in
+/// flight was actually sent, the same reasoning ParcelOrg.commissionPct's
+/// own comment gives for freezing onto Parcel.platformFeeKes.
+model ParcelOrgPayout {
+  id String @id @default(uuid()) @db.Uuid
+
+  parcelOrgId String    @db.Uuid
+  parcelOrg   ParcelOrg @relation(fields: [parcelOrgId], references: [id])
+
+  /// One payout per settled parcel — see this model's own comment on why
+  /// this is per-transaction rather than a batch across many parcels.
+  parcelId String @unique @db.Uuid
+  parcel   Parcel @relation(fields: [parcelId], references: [id])
+
+  amountKes Decimal @db.Decimal(10, 2)
+
+  method                  ParcelOrgPayoutMethod?
+  payoutMsisdn            String?
+  payoutTillNumber        String?
+  payoutPaybillNumber     String?
+  payoutPaybillAccount    String?
+  payoutBankCode          String?
+  payoutBankAccountNumber String?
+  payoutBankAccountName   String?
+
+  status        ParcelOrgPayoutStatus @default(PENDING)
+  failureReason String?
+
+  /// The B2C/B2B idempotency key — set once a request is actually sent
+  /// to Daraja, matched against on its result callback.
+  mpesaConversationId String?       @unique
+  mpesaTransactionId  String?
+  journalEntryId      String?       @unique @db.Uuid
+  journalEntry        JournalEntry? @relation(fields: [journalEntryId], references: [id])
+
+  createdAt   DateTime  @default(now())
+  confirmedAt DateTime?
+
+  @@index([parcelOrgId, status])
+  @@index([status, createdAt])
+  @@map("parcel_org_payout")
 }
 
 /// Admin-owned pricing config, one row per ParcelType — same

@@ -120,6 +120,84 @@ export async function settleCounterParcel(
   }
 }
 
+/**
+ * The M-Pesa sibling of settleCounterParcel — pushes an STK prompt to
+ * the client's own phone instead of recording cash in hand. Returns
+ * immediately once the push is away; the clerk's UI then polls
+ * getCounterSettlementStatus (same interval/give-up pattern
+ * apps/web/pay/PayClient.tsx already uses) rather than this call
+ * blocking on Safaricom's callback.
+ */
+export async function settleCounterParcelStk(
+  code: string,
+  priceKes: number,
+  msisdn: string,
+): Promise<{ ok: true; status: "AWAITING_MPESA" | "SETTLED" } | { ok: false; error: string }> {
+  try {
+    const res = await parcelOrgFetch<{ status: "AWAITING_MPESA" | "SETTLED" }>(
+      `/v1/parcels/${encodeURIComponent(code)}/settle-counter/stk`,
+      {
+        method: "POST",
+        body: JSON.stringify({ priceKes, msisdn }),
+      },
+    );
+    revalidatePath("/parcel-org");
+    revalidatePath("/parcel-org/counter");
+    return { ok: true, status: res.status };
+  } catch (e) {
+    return toResult(e);
+  }
+}
+
+/**
+ * The manual fallback for settleCounterParcelStk: an STK prompt went
+ * out but Safaricom's own callback never confirmed it (or the clerk
+ * gave up waiting), so the clerk reads the M-Pesa code off the
+ * client's confirmation SMS and types it in instead. See
+ * dbx.ConfirmCounterSettlementByManualCode for why this is trusted
+ * rather than independently re-verified against Safaricom.
+ */
+export async function confirmCounterSettlementManualCode(
+  code: string,
+  mpesaReceiptCode: string,
+): Promise<Result> {
+  try {
+    await parcelOrgFetch(
+      `/v1/parcels/${encodeURIComponent(code)}/settle-counter/mpesa-code`,
+      {
+        method: "POST",
+        body: JSON.stringify({ mpesaReceiptCode: mpesaReceiptCode.trim() }),
+      },
+    );
+    revalidatePath("/parcel-org");
+    revalidatePath("/parcel-org/counter");
+    return { ok: true };
+  } catch (e) {
+    return toResult(e);
+  }
+}
+
+export type CounterSettlementStatus = {
+  status: "AWAITING_MPESA" | "SETTLED";
+  priceKes: number;
+  mpesaReceiptCode: string | null;
+};
+
+/** What the clerk's client polls while an M-Pesa counter settlement is
+ *  in flight. */
+export async function getCounterSettlementStatus(
+  code: string,
+): Promise<{ ok: true; status: CounterSettlementStatus } | { ok: false; error: string }> {
+  try {
+    const status = await parcelOrgFetch<CounterSettlementStatus>(
+      `/v1/parcel-orgs/me/parcels/${encodeURIComponent(code)}/settlement-status`,
+    );
+    return { ok: true, status };
+  } catch (e) {
+    return toResult(e);
+  }
+}
+
 export async function assignOrgParcel(
   code: string,
   riderPartyId: string,
@@ -220,6 +298,38 @@ export async function remitRiderCod(
       body: JSON.stringify({ riderPartyId, amountKes, note: note || null }),
     });
     revalidatePath("/parcel-org");
+    return {
+      ok: true,
+      expectedKes: res.expectedKes,
+      shortfallKes: res.shortfallKes,
+    };
+  } catch (e) {
+    const r = toResult(e);
+    return { ok: false, error: r.ok ? "That did not work" : r.error };
+  }
+}
+
+/** remitRiderCod's counterpart for counter-intake cash: a manager
+ *  counting a clerk's cash in instead of a rider's round. See
+ *  dbx.RemitCounterCash. */
+export async function remitCounterCash(
+  staffId: string,
+  amountKes: string,
+  note?: string,
+): Promise<
+  | { ok: true; expectedKes: string; shortfallKes: string }
+  | { ok: false; error: string }
+> {
+  try {
+    const res = await parcelOrgFetch<{
+      expectedKes: string;
+      shortfallKes: string;
+    }>("/v1/parcel-orgs/me/counter-cash/remit", {
+      method: "POST",
+      body: JSON.stringify({ staffId, amountKes, note: note || null }),
+    });
+    revalidatePath("/parcel-org");
+    revalidatePath("/parcel-org/money");
     return {
       ok: true,
       expectedKes: res.expectedKes,
@@ -748,16 +858,6 @@ export async function lookupOrgParcelByCode(
     `/v1/parcel-orgs/me/parcels?q=${encodeURIComponent(needle)}`,
   );
   return res.parcels?.find((p) => p.code.toUpperCase() === needle) ?? null;
-}
-
-/** The counter worklist, refetched on the desk's own polling interval:
- *  self-drop-off bookings that walked in online since the page last
- *  rendered. Same query the server page runs for its first paint. */
-export async function listOrgWaitingParcels(): Promise<OrgParcelRow[]> {
-  const res = await parcelOrgFetch<{ parcels: OrgParcelRow[] | null }>(
-    "/v1/parcel-orgs/me/parcels?status=BOOKED&originMethod=SELF_DROPOFF",
-  );
-  return res.parcels ?? [];
 }
 
 export interface OrgCounterPricingOption {

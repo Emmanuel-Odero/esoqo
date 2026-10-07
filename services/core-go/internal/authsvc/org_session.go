@@ -65,6 +65,15 @@ func CreateOrgSession(
 		Capabilities:   capabilities,
 	}
 
+	// Courier's legacy /v1/parcel-orgs/* handlers (the entire courier
+	// portal — parcels, counter, dispatch, money, scan) all gate on
+	// ctx.ParcelOrgID via orgCtx(), not the generic OrgID/OrgType this
+	// function otherwise sets. Without this, a courier session minted
+	// through the generic switcher is invisible to every one of them.
+	if orgType == "courier" {
+		sessionData.ParcelOrgID = orgID
+	}
+
 	// Create and return the session token
 	return s.CreateSession(ctx, sessionData, ttl)
 }

@@ -63,7 +63,7 @@ export function PostForm({
     <div className="card" style={{ padding: 22, maxWidth: 640 }}>
       <div className="field"><label htmlFor="title">Title</label><input id="title" value={title} onChange={(e) => setTitle(e.target.value)} /></div>
       <div className="field"><label htmlFor="excerpt">Short excerpt (optional)</label><input id="excerpt" value={excerpt} onChange={(e) => setExcerpt(e.target.value)} /></div>
-      <AssetUpload label="Photo (optional)" hint="PNG or JPEG, up to 10 MB" aspect="1.6" url={imageUrl} pending={uploading} onUpload={upload} />
+      <AssetUpload label="Photo (optional)" hint="PNG or JPEG, up to 1 MB" aspect="1.6" url={imageUrl} pending={uploading} onUpload={upload} />
       <div className="field">
         <label htmlFor="body">What happened?</label>
         <RichTextEditor value={body} onChange={setBody} />

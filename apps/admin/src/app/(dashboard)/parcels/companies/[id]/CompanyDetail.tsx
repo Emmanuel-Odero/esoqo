@@ -190,6 +190,14 @@ export function CompanyDetail({
             value={String(stats.deliveredToday)}
           />
           <MiniKpi label="Esoqo earnings" value={kes(org.earningsKes)} />
+          <MiniKpi
+            label="Counter cash outstanding"
+            value={kes(stats.counterCashOutstandingKes)}
+          />
+          <MiniKpi
+            label="Esoqo's share of that"
+            value={kes(stats.counterCashPlatformFeeOwedKes)}
+          />
         </div>
 
         <div
