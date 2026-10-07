@@ -1,6 +1,6 @@
 module github.com/esoqo/ci-webhook
 
-go 1.26.1
+go 1.25
 
 require (
 	k8s.io/api v0.31.3
