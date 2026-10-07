@@ -23,6 +23,8 @@ resources:
 - ingress.yaml
 - config.yaml
 - issuer.yaml
+- ci-webhook-config.yaml
+- ci-webhook-ingress.yaml
 
 # No includeSelectors key — it defaults to false, which is what we want.
 # `commonLabels` would instead inject into spec.selector.matchLabels,

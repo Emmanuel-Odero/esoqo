@@ -99,3 +99,4 @@ next-env.d.ts
 # mobile/esoko_app is a stray, misspelled Flutter workspace that only ever
 # held generated scaffolding — never commit its build output.
 mobile/esoko_app/
+services/ci-webhook/ci-webhook
