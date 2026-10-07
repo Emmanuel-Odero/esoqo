@@ -53,7 +53,7 @@ export async function applyForBusinessHandle(
   const created = [];
   for (const doc of documents) {
     if (!(doc.mimeType in ALLOWED_TYPES)) throw new Error(`We cannot accept ${doc.mimeType} files`);
-    if (doc.sizeBytes > MAX_BYTES) throw new Error('That file is larger than 10 MB');
+    if (doc.sizeBytes > MAX_BYTES) throw new Error('That file is larger than 1 MB');
 
     const dupe = await prisma.document.findFirst({
       where: { sha256: doc.sha256, deletedAt: null, partyId: orgPartyId },

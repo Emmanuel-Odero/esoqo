@@ -75,7 +75,7 @@ export function CampaignForm({
           </select>
         </div>
       )}
-      <AssetUpload label="Cover photo (optional)" hint="PNG or JPEG, up to 10 MB" aspect="2" url={coverUrl} pending={uploading} onUpload={upload} />
+      <AssetUpload label="Cover photo (optional)" hint="PNG or JPEG, up to 1 MB" aspect="2" url={coverUrl} pending={uploading} onUpload={upload} />
       <div className="field">
         <label htmlFor="cbody">Full story (optional)</label>
         <RichTextEditor value={body ?? ''} onChange={setBody} />

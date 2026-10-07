@@ -157,6 +157,8 @@ func (s *Server) Router() *gin.Engine {
 		v1.GET("/orgs/:orgId/portal", s.authRequired(), s.handleGetOrgPortalData)
 		v1.GET("/orgs/:orgId/metadata", s.authRequired(), s.handleListOrgMetadata)
 		v1.PATCH("/orgs/:orgId/metadata", s.authRequired(), s.handleUpdateOrgMetadata)
+		// One-click entry into an org's session-based portal (hotel, eatery, chama, tout, courier).
+		v1.POST("/orgs/:orgId/session", s.authRequired(), s.handleActivateOrgSession)
 
 		// Generic staff sign-in and sign-out (all org types)
 		v1.POST("/orgs/staff/signin", s.rateLimit("auth:orgstaff", 20, time.Hour), s.handleOrgStaffSignIn)
@@ -409,6 +411,7 @@ func (s *Server) Router() *gin.Engine {
 		v1.POST("/parcel-orgs/me/parcels/:code/courier-earnings/release",
 			s.authRequired(), s.handleOrgReleaseHeldEarnings)
 		v1.POST("/parcel-orgs/me/cod/remit", s.authRequired(), s.handleOrgRemitCod)
+		v1.POST("/parcel-orgs/me/counter-cash/remit", s.authRequired(), s.handleOrgRemitCounterCash)
 		// A company's own label stock — minting, the register, and
 		// withdrawing a stolen pad, all scoped to the session's org.
 		// "batches" is static and sits above :id, same shape as the
@@ -419,12 +422,21 @@ func (s *Server) Router() *gin.Engine {
 		v1.GET("/parcel-orgs/me/labels/search", s.authRequired(), s.handleSearchOrgLabels)
 		v1.GET("/parcel-orgs/me/labels", s.authRequired(), s.handleOrgListLabelRegister)
 		// The walk-in counter queue: every WAITING ticket for the
-		// session's own org, oldest first, plus its live SSE stream and
-		// the "Serve" action that claims one. See
-		// handlers_parcel_counter_tickets.go.
+		// session's own org, oldest first, plus every case the company
+		// currently has CLAIMED (so a refresh mid-service can't make one
+		// vanish), its register of closed cases, its live SSE stream and
+		// the "Serve"/"Hand back"/discard actions. The two static
+		// segments ("queue", "history") are registered before ":id"'s
+		// subtree the same way "search" is above — see
+		// handleAttachOrgLabelInfo's own comment.
+		// See handlers_parcel_counter_tickets.go.
 		v1.GET("/parcel-orgs/me/counter-tickets/queue", s.authRequired(), s.handleListCounterTicketQueue)
+		v1.GET("/parcel-orgs/me/counter-tickets/history", s.authRequired(), s.handleListCounterTicketHistory)
 		v1.GET("/parcel-orgs/me/counter-tickets/stream", s.authRequired(), s.handleStreamCounterTicketQueue)
 		v1.POST("/parcel-orgs/me/counter-tickets/:id/claim", s.authRequired(), s.handleClaimCounterTicket)
+		v1.POST("/parcel-orgs/me/counter-tickets/:id/book", s.authRequired(), s.handleBookCounterTicket)
+		v1.POST("/parcel-orgs/me/counter-tickets/:id/cancel", s.authRequired(), s.handleCancelCounterTicket)
+		v1.POST("/parcel-orgs/me/counter-tickets/:id/release", s.authRequired(), s.handleReleaseCounterTicket)
 		// Scan/lookup a code against the company's own stock, and attach
 		// field notes to a printed label. The static "info" segment is
 		// load-bearing: see handleAttachOrgLabelInfo's own comment.
@@ -509,6 +521,9 @@ func (s *Server) Router() *gin.Engine {
 		v1.POST("/parcels/:code/price",
 			s.rateLimit("book:parcelprice", 30, time.Hour), s.handleSetParcelPrice)
 		v1.POST("/parcels/:code/settle-counter", s.authRequired(), s.handleSettleCounterParcel)
+		v1.POST("/parcels/:code/settle-counter/stk", s.authRequired(), s.handleSettleCounterParcelStk)
+		v1.POST("/parcels/:code/settle-counter/mpesa-code", s.authRequired(), s.handleConfirmCounterSettlementManualCode)
+		v1.GET("/parcel-orgs/me/parcels/:code/settlement-status", s.authRequired(), s.handleGetCounterSettlementStatus)
 		v1.POST("/parcels/:code/pay", s.rateLimit("pay:parcel", 30, time.Hour), s.handlePayParcel)
 		v1.PATCH("/parcels/:code", s.authRequired(), s.handleUpdateOwnParcelDetails)
 		v1.GET("/parcels/:code/status",
@@ -517,6 +532,13 @@ func (s *Server) Router() *gin.Engine {
 			// serviceTicketNumber as well as the tracking code, is
 			// unauthenticated, and answered one code per request.
 			s.rateLimit("track:parcel", 60, time.Hour), s.handleGetParcelStatus)
+		// Public and code-gated like /status above — but see
+		// dbx.GetParcelReceipt's own comment on why it's rate-limited
+		// separately rather than sharing track:parcel's budget: a receipt
+		// carries payment facts /status never did, which makes grinding
+		// it a different, more valuable attack than grinding tracking.
+		v1.GET("/parcels/:code/receipt",
+			s.rateLimit("track:parcelreceipt", 60, time.Hour), s.handleGetParcelReceipt)
 		// Public and code-gated like /status above — the live position
 		// is deliberately anonymous (see dbx.CourierPosition).
 		v1.GET("/parcels/:code/position",
@@ -684,6 +706,12 @@ func (s *Server) Router() *gin.Engine {
 		v1.POST("/admin/parcels/:id/org", s.authRequired(), s.handleAdminAssignParcelOrg)
 		v1.PATCH("/admin/parcels/orgs/:id", s.authRequired(), s.handleAdminUpdateParcelOrg)
 		v1.GET("/admin/parcels/orgs/:id/staff", s.authRequired(), s.handleAdminListParcelOrgStaff)
+		// Payouts no automatic rail could clear — bank destinations (no
+		// disbursement integration yet) and anything stuck FAILED long
+		// enough that finance should look rather than let the retry
+		// worker keep trying.
+		v1.GET("/admin/parcels/payouts/manual", s.authRequired(), s.handleAdminListManualParcelOrgPayouts)
+		v1.POST("/admin/parcels/payouts/:id/mark-paid", s.authRequired(), s.handleAdminMarkParcelOrgPayoutPaid)
 		v1.POST("/admin/parcels/orgs/:id/staff", s.authRequired(), s.handleAdminUpsertParcelOrgStaff)
 		v1.POST("/admin/parcels/orgs/:id/staff/:staffId/issue-id", s.authRequired(), s.handleAdminIssueParcelOrgStaffID)
 		// Pickup points and the coverage rate card — siblings of zones
@@ -739,6 +767,13 @@ func (s *Server) Router() *gin.Engine {
 	// than silently 404ing — and so console/dev setups keep working.
 	r.POST("/webhooks/mpesa/stk-callback", s.handleMpesaStkCallback)
 	r.POST("/webhooks/mpesa/stk-callback/:token", s.handleMpesaStkCallback)
+
+	// Result callbacks for courier-partner payouts (dispatchParcelOrgPayout) —
+	// same bare-path-stays-registered reasoning as the STK callback above.
+	r.POST("/webhooks/mpesa/b2c-result", s.handleMpesaB2CResultCallback)
+	r.POST("/webhooks/mpesa/b2c-result/:token", s.handleMpesaB2CResultCallback)
+	r.POST("/webhooks/mpesa/b2b-result", s.handleMpesaB2BResultCallback)
+	r.POST("/webhooks/mpesa/b2b-result/:token", s.handleMpesaB2BResultCallback)
 
 	return r
 }

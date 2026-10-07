@@ -120,20 +120,50 @@ func WithCheck(segment string) string {
 	return segment + string(Alphabet[total])
 }
 
-// ServiceTicketForName mints a "firstname + number" service ticket —
-// JOHN-482 — so the clerk calling a walk-in sender forward at the
+// ServiceTicketForName mints a name-shaped service ticket — JOHN-482
+// or DOE-482 — so the clerk calling a walk-in sender forward at the
 // counter can read a name straight off the screen instead of an opaque
-// code. Falls back to the plain PrefixServiceTicket form when no usable
-// name is given (e.g. a staff-side import with no sender on the form).
-// No checksum: unlike a code someone types back in, this is read aloud,
-// never typed, so there is nothing for a checksum to protect against.
+// code. The name half is drawn at random from the sender's first name
+// or their second (family) name, so a ticket reads either way the
+// sender introduces themselves; any interior names are never used.
+// Falls back to the plain PrefixServiceTicket form when no usable
+// name is given (e.g. a staff-side import with no sender on the form;
+// CreateCounterTicket substitutes GUEST rather than reach that
+// fallback). No checksum: unlike a code someone types back in, this is
+// read aloud, never typed, so there is nothing for a checksum to
+// protect against.
 func ServiceTicketForName(fullName string) string {
-	first := fullName
-	if i := strings.IndexAny(fullName, " \t"); i > 0 {
-		first = fullName[:i]
+	words := strings.Fields(fullName)
+	if len(words) == 0 {
+		return ShortCodeChecked(PrefixServiceTicket, 6)
 	}
+	first := nameLetters(words[0])
+	last := nameLetters(words[len(words)-1])
+	switch {
+	case first == "" && last == "":
+		return ShortCodeChecked(PrefixServiceTicket, 6)
+	case last == "":
+		return first + "-" + randomDigits3()
+	case first == "":
+		return last + "-" + randomDigits3()
+	}
+	// Both names usable — flip a coin for which one the ticket carries.
+	// crypto/rand, same source randomDigits3 draws its digits from: a
+	// coin that always landed on the first name would make this half of
+	// the rule dead code at scale.
+	second, err := rand.Int(rand.Reader, big.NewInt(2))
+	if err == nil && second.Int64() == 1 {
+		return last + "-" + randomDigits3()
+	}
+	return first + "-" + randomDigits3()
+}
+
+// nameLetters — a name usable on a ticket: uppercased A–Z runs only,
+// capped at 10 characters so a hyphenated or decorated name can't
+// stretch the row, empty when the word carries no letters at all.
+func nameLetters(word string) string {
 	var letters strings.Builder
-	for _, r := range strings.ToUpper(strings.TrimSpace(first)) {
+	for _, r := range strings.ToUpper(strings.TrimSpace(word)) {
 		if r >= 'A' && r <= 'Z' {
 			letters.WriteRune(r)
 		}
@@ -141,10 +171,7 @@ func ServiceTicketForName(fullName string) string {
 			break
 		}
 	}
-	if letters.Len() == 0 {
-		return ShortCodeChecked(PrefixServiceTicket, 6)
-	}
-	return letters.String() + "-" + randomDigits3()
+	return letters.String()
 }
 
 // randomDigits3 returns 3 cryptographically random base-10 digits,

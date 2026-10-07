@@ -10,7 +10,7 @@ import { ScanButton } from '../ScanButton';
 import { HandOverPanel } from './HandOverPanel';
 import { RunPicker } from './RunPicker';
 import { listOpenRuns, receiveParcel, resolveScan, settleAtCounter } from './actions';
-import type { ScanTarget } from '../parcel-stages';
+import { statusLabel, type ScanTarget } from '../parcel-stages';
 
 /**
  * The scanner's whole behaviour, in one place.
@@ -31,19 +31,6 @@ import type { ScanTarget } from '../parcel-stages';
  * THIS box, which is what makes the thing operable by someone who was
  * shown it once.
  */
-
-const STATUS_LABEL: Record<string, string> = {
-  DRAFT_PENDING_PAYMENT: 'Not paid yet',
-  BOOKED: 'Waiting for a rider',
-  RECEIVED_AT_COUNTER: 'At our counter',
-  PICKED_UP: 'Picked up',
-  IN_TRANSIT: 'On the way',
-  FAILED_DELIVERY: 'Delivery attempted',
-  HELD_AT_AGENT: 'At a pickup point',
-  DELIVERED: 'Delivered',
-  RETURNED_TO_SENDER: 'Returned to sender',
-  CANCELLED: 'Cancelled',
-};
 
 type Phase =
   | { k: 'idle' }
@@ -301,7 +288,7 @@ function describe(t: ScanTarget): string {
     case 'filled-label': return 'Label already written on. Check the details.';
     case 'ticket': return 'Drop-off ticket. Ready to receive.';
     case 'unknown': return t.reason;
-    case 'parcel': return `${t.code}: ${STATUS_LABEL[t.parcel.status] ?? t.parcel.status}`;
+    case 'parcel': return `${t.code}: ${statusLabel(t.parcel.status, t.parcel.originMethod)}`;
   }
 }
 
@@ -572,7 +559,7 @@ function TargetPanel({
 
     case 'closed':
       return (
-        <Panel tone="ok" icon="check-circle" title={STATUS_LABEL[parcel.status] ?? parcel.status} code={parcel.code}>
+        <Panel tone="ok" icon="check-circle" title={statusLabel(parcel.status, parcel.originMethod)} code={parcel.code}>
           {head}
           <p>
             This box&rsquo;s journey is finished. Nothing more to do here — scanning it again

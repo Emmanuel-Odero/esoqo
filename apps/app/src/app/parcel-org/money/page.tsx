@@ -6,6 +6,7 @@ import { Icon } from '@esoqo/ui';
 import { ParcelOrgUnauthorised, getParcelOrgMe } from '@/lib/parcel-org-session';
 import { listOrgStaff } from '../actions';
 import { RiderCashPanel } from '../RiderCashPanel';
+import { CounterCashPanel } from '../CounterCashPanel';
 
 export const dynamic = 'force-dynamic';
 export const metadata: Metadata = {
@@ -47,8 +48,9 @@ export default async function ParcelOrgMoneyPage() {
 
   // Only people with a linked party can be counted in: the remittance
   // is recorded against the person, not against the roster row.
-  const riders = (await listOrgStaff().catch(() => []))
-    .filter((s) => s.active && s.partyId);
+  const staff = await listOrgStaff().catch(() => []);
+  const riders = staff.filter((s) => s.active && s.partyId);
+  const canCountCounterCash = me.capabilities.includes('parcelorg.counter-cash');
 
   const { stats } = me;
   const money = (raw: string) => {
@@ -95,9 +97,20 @@ export default async function ParcelOrgMoneyPage() {
           <span className="pstat-v mono">{stats.failedDeliveries + stats.atAgent}</span>
           <span className="pstat-h">Failed or waiting at a pickup point</span>
         </div>
+        {canCountCounterCash && Number(stats.counterCashOutstandingKes) > 0 && (
+          <div className="pstat">
+            <span className="pstat-k">Counter cash outstanding</span>
+            <span className="pstat-v mono">{money(stats.counterCashOutstandingKes)}</span>
+            <span className="pstat-h">
+              Still with your clerks — {money(stats.counterCashPlatformFeeOwedKes)} of it is Esoqo&rsquo;s share
+            </span>
+          </div>
+        )}
       </section>
 
       <RiderCashPanel riders={riders} />
+
+      {canCountCounterCash && <CounterCashPanel clerks={riders} />}
 
       {/* An honest pointer rather than an invented report. There is no
           per-parcel earnings breakdown endpoint yet; the register can

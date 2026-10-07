@@ -35,7 +35,7 @@ export function PageAssets({
         url={logoUrl} pending={pendingTarget === 'logo'} onUpload={(f) => upload('logo', f)}
       />
       <AssetUpload
-        label="Cover photo" hint="Wide image, shown at the top of your public page · up to 10 MB"
+        label="Cover photo" hint="Wide image, shown at the top of your public page · up to 1 MB"
         aspect="2.6" url={coverUrl} pending={pendingTarget === 'cover'} onUpload={(f) => upload('cover', f)}
       />
       {error && <p style={{ color: 'var(--stamp)', fontSize: '.85rem', margin: 0 }}>{error}</p>}

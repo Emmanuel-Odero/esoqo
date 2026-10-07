@@ -251,6 +251,13 @@ const (
 	CapParcelOrgIntake     = "parcelorg.intake"
 	CapParcelOrgArrival    = "parcelorg.arrival"
 	CapParcelOrgCollection = "parcelorg.collection"
+	// CapParcelOrgCounterCash — count a clerk's counter cash in,
+	// closing out what they settled in cash since their last count.
+	// Deliberately not granted alongside CapParcelOrgCarry: a clerk can
+	// generate the debt by taking cash at the counter, but only a
+	// manager clears it, same separation CapParcelOrgEarnings/RiderCash
+	// already draws between collecting money and counting it in.
+	CapParcelOrgCounterCash = "parcelorg.counter-cash"
 )
 
 // ParcelStaffCapabilities — one bundle per role a parcel company issues
@@ -274,6 +281,7 @@ var ParcelStaffCapabilities = map[string][]string{
 	"MANAGER": {
 		CapParcelOrgRead, CapParcelOrgCarry, CapParcelOrgDispatch,
 		CapParcelOrgWrite, CapParcelOrgStaff, CapParcelOrgStations, CapParcelOrgEarnings,
+		CapParcelOrgCounterCash,
 	},
 }
 
@@ -325,6 +333,7 @@ var AllParcelOrgCapabilities = []string{
 	CapParcelOrgRead, CapParcelOrgCarry, CapParcelOrgDispatch,
 	CapParcelOrgIntake, CapParcelOrgArrival, CapParcelOrgCollection,
 	CapParcelOrgStations, CapParcelOrgStaff, CapParcelOrgWrite, CapParcelOrgEarnings,
+	CapParcelOrgCounterCash,
 }
 
 // knownParcelOrgCapability — set form of the list above, for the filter.

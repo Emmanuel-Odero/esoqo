@@ -7,7 +7,7 @@ import {
 import { listOrgCounterPricing } from "../actions";
 import { CustomParcelPanel } from "../CustomParcelPanel";
 import { OrgCounterClient } from "./OrgCounterClient";
-import { listCounterTicketQueue } from "../counter-queue/actions";
+import { listCounterTicketHistory, listCounterTicketQueue } from "../counter-queue/actions";
 import { CounterQueueClient } from "../counter-queue/CounterQueueClient";
 
 export const dynamic = "force-dynamic";
@@ -63,7 +63,12 @@ export default async function ParcelOrgCounterPage({
   if (!canDispatch && !canIntake) redirect("/parcel-org");
 
   const pricing = await listOrgCounterPricing(me.org.id);
+  // The whole board — waiting queue, the company's in-flight cases and
+  // the register of closed ones — comes from the same session-scoped
+  // calls the client re-runs on every SSE signal, so what this page
+  // paints is never a shape the live view couldn't reproduce.
   const queue = canIntake ? await listCounterTicketQueue() : null;
+  const history = canIntake ? await listCounterTicketHistory() : null;
   const divisor = Number(process.env.PARCEL_VOLUMETRIC_DIVISOR) || 5000;
 
   return (
@@ -88,9 +93,24 @@ export default async function ParcelOrgCounterPage({
           </div>
         )}
       </div>
+      {/* A failed board fetch used to render as nothing at all — the
+          whole queue silently absent, indistinguishable from "no one
+          is waiting". Say so instead: a desk that can't see its own
+          line needs to know it, not infer it. */}
+      {canIntake && queue && !queue.ok && (
+        <div className="card" style={{ padding: 18, marginBottom: 20 }}>
+          <p className="sub" style={{ margin: 0, color: "var(--red, #b42318)", fontSize: ".9rem" }}>
+            {queue.error} — the counter queue could not be loaded. Refresh to try again.
+          </p>
+        </div>
+      )}
       {queue?.ok && (
         <div style={{ marginBottom: 20 }}>
-          <CounterQueueClient initial={queue.tickets} />
+          <CounterQueueClient
+            initial={queue.tickets}
+            initialActive={queue.active}
+            initialHistory={history?.ok ? history.tickets : []}
+          />
         </div>
       )}
       <OrgCounterClient

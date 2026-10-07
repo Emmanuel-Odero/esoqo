@@ -179,3 +179,55 @@ func TestPayloadRoundTrip(t *testing.T) {
 		t.Fatalf("legacy voucher payload must still parse: %q %q", lvid, lvsig)
 	}
 }
+
+// The counter ticket's number is a name plus three digits, and the
+// name half is drawn at random from the sender's first name or their
+// second (family) name — a clerk reads it aloud to call the sender
+// forward, so both spellings of "who this ticket belongs to" have to
+// be reachable, and neither may ever be a bare TCK- code while a
+// usable name exists.
+func TestServiceTicketForNameDrawsFirstOrSecondName(t *testing.T) {
+	seenFirst, seenLast := false, false
+	for i := 0; i < 200; i++ {
+		got := ServiceTicketForName("John Doe")
+		switch {
+		case strings.HasPrefix(got, "JOHN-"):
+			seenFirst = true
+		case strings.HasPrefix(got, "DOE-"):
+			seenLast = true
+		default:
+			t.Fatalf("ticket %q is neither the first nor the second name of the sender", got)
+		}
+		digits := got[len(got)-4:]
+		if digits[0] != '-' || digits[1] < '0' || digits[1] > '9' ||
+			digits[2] < '0' || digits[2] > '9' || digits[3] < '0' || digits[3] > '9' {
+			t.Fatalf("ticket %q must end in exactly three digits", got)
+		}
+	}
+	if !seenFirst || !seenLast {
+		t.Fatalf("200 draws must reach both names over time (first=%v last=%v)", seenFirst, seenLast)
+	}
+}
+
+func TestServiceTicketForNameEdgeCases(t *testing.T) {
+	if got := ServiceTicketForName("Amani"); !strings.HasPrefix(got, "AMANI-") || len(got) != len("AMANI-000") {
+		t.Fatalf("single name must keep its shape, got %q", got)
+	}
+	// No letters anywhere — the only acceptable outcome is the
+	// checksummed TCK- fallback, never "-123".
+	if got := ServiceTicketForName("123 456"); !CheckedShape(PrefixServiceTicket, got, 6) {
+		t.Fatalf("a name with no letters must fall back to a checked TCK- code, got %q", got)
+	}
+	if got := ServiceTicketForName(""); !CheckedShape(PrefixServiceTicket, got, 6) {
+		t.Fatalf("an empty name must fall back to a checked TCK- code, got %q", got)
+	}
+	// Long names are capped at 10 letters so a decorated name can't
+	// stretch the column or be unreadable aloud.
+	if got := ServiceTicketForName("Bartholomew Fitzgerald"); len(got) > len("BARTHOLOME-000") {
+		t.Fatalf("name half must cap at 10 letters, got %q", got)
+	}
+	if got := ServiceTicketForName("Bartholomew Fitzgerald"); !strings.HasPrefix(got, "BARTHOLOME-") &&
+		!strings.HasPrefix(got, "FITZGERALD-") {
+		t.Fatalf("expected a first- or second-name prefix, got %q", got)
+	}
+}

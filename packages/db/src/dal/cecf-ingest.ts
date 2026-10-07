@@ -171,7 +171,7 @@ export async function uploadCecfDocument(registrationId: string, doc: CecfDocume
   if (!reg) throw new Error('Registration not found');
 
   const buf = Buffer.from(doc.base64, 'base64');
-  if (buf.length > MAX_BYTES) throw new Error('That file is larger than 10 MB');
+  if (buf.length > MAX_BYTES) throw new Error('That file is larger than 1 MB');
 
   const check = sniff(buf, doc.mimeType, doc.originalName);
   if (!check.ok || !check.mime) throw new Error(check.reason ?? 'We cannot accept that file');

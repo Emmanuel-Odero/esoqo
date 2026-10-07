@@ -6,7 +6,7 @@ import {
 } from '@/lib/org-portal-context';
 import { listWorkspaces } from '@/lib/workspaces';
 import { OrgPortalHeader } from '@/components/OrgPortalHeader';
-import '@/app/me/me.css';
+import './orgportal.css';
 
 /**
  * Shared portal shell for all org types.

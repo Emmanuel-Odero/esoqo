@@ -14,6 +14,7 @@
  */
 import { cookies } from 'next/headers';
 import { NextResponse, type NextRequest } from 'next/server';
+import { goUrl } from '@/lib/ticketing';
 
 const ORG_SESSION_COOKIES = [
   'esoqo_parcel_org_session', // courier (legacy name)
@@ -38,6 +39,14 @@ export async function POST(request: NextRequest) {
     // Ignore parse errors — clear all
   }
 
+  // Read the token BEFORE clearing cookies — jar.delete() removes the
+  // entry from this same request-scoped jar, so a get() afterward would
+  // always come back empty and the backend invalidation below would
+  // silently never fire.
+  const token =
+    jar.get('esoqo_parcel_org_session')?.value
+    ?? jar.get('esoqo_org_session')?.value;
+
   if (orgType === 'courier') {
     jar.delete('esoqo_parcel_org_session');
   } else if (orgType) {
@@ -51,13 +60,8 @@ export async function POST(request: NextRequest) {
 
   // Also call the backend to invalidate the server-side session token
   // (best-effort — if it fails the cookie is still cleared)
-  const token =
-    jar.get('esoqo_parcel_org_session')?.value
-    ?? jar.get('esoqo_org_session')?.value;
-
   if (token) {
-    const goBase = process.env.CORE_GO_URL ?? 'http://localhost:8080';
-    await fetch(`${goBase}/v1/orgs/me/signout`, {
+    await fetch(goUrl('/v1/orgs/me/signout'), {
       method: 'POST',
       headers: { Authorization: `Bearer ${token}` },
       signal: AbortSignal.timeout(3000),

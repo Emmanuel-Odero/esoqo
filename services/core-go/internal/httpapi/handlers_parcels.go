@@ -170,6 +170,21 @@ func (s *Server) handleBookParcel(c *gin.Context) {
 			}
 		}
 	}
+	// SELF_DROPOFF on this public endpoint used to mean a sender could
+	// mint themselves a real, BOOKED, PAY_AT_COUNTER parcel — tracking
+	// code and all — with no clerk ever having laid eyes on the box.
+	// That's not a booking, it's a sender attesting to their own
+	// intake. A walk-in now has to go through the counter queue instead
+	// (POST /v1/parcels/counter-tickets, public and unauthenticated
+	// same as this one), where a clerk is the only thing that turns it
+	// into a parcel — see dbx.BookParcelFromCounterTicket, the one
+	// legitimate source of a SELF_DROPOFF parcel. binderIsPlatformStaff
+	// (an Esoqo operator with parcels.assign) is the one exception: a
+	// manual recovery/re-entry, not a guest booking themselves in.
+	if req.OriginMethod == "SELF_DROPOFF" && !binderIsPlatformStaff {
+		writeError(c, http.StatusForbidden, "CLERK_REQUIRED", "A walk-in drop-off has to be checked in at the counter — request a ticket instead of booking directly")
+		return
+	}
 	parcelID, code, deliveryCode, serviceTicketNumber, err := dbx.BookParcel(c.Request.Context(), s.Pool, dbx.BookParcelInput{
 		SenderPartyID: senderPartyID, SenderName: req.SenderName, SenderMsisdn: req.SenderMsisdn,
 		ReceiverName: req.ReceiverName, ReceiverMsisdn: req.ReceiverMsisdn,
@@ -261,10 +276,168 @@ func (s *Server) handleSettleCounterParcel(c *gin.Context) {
 		return
 	}
 
-	if err := dbx.SettleCounterParcel(c.Request.Context(), s.Pool, c.Param("code"), req.PriceKes, orgScope); err != nil {
+	parcelID, err := dbx.SettleCounterParcel(c.Request.Context(), s.Pool, c.Param("code"), req.PriceKes, ctx.ActorID, orgScope)
+	if err != nil {
 		writeParcelError(c, err)
 		return
 	}
+	s.dispatchParcelOrgPayoutForParcel(parcelID)
+	s.sendCounterPaymentConfirmedSms(c, c.Param("code"))
+	c.JSON(http.StatusOK, gin.H{"settled": true})
+}
+
+type settleCounterParcelStkRequest struct {
+	PriceKes float64 `json:"priceKes" binding:"required"`
+	Msisdn   string  `json:"msisdn" binding:"required"`
+}
+
+// handleSettleCounterParcelStk — POST /v1/parcels/:code/settle-counter/stk.
+// The M-Pesa sibling of handleSettleCounterParcel: same gate
+// (dbx.validateCounterSettlement, via SettleCounterParcelStk), but
+// instead of writing paidAt immediately it reserves the right to push
+// an STK request, pushes it, and leaves paidAt for
+// handleMpesaStkCallback → dbx.ConfirmCounterSettlementByCheckoutID to
+// set once Safaricom actually confirms. Same tenancy/capability gate as
+// handleSettleCounterParcel — duplicated rather than shared because gin
+// handler setup (binding, writeError) doesn't factor cleanly, same as
+// the two STK branches already do in handlePayParcel vs. nowhere else.
+func (s *Server) handleSettleCounterParcelStk(c *gin.Context) {
+	var req settleCounterParcelStkRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		writeError(c, http.StatusBadRequest, "INVALID_REQUEST", err.Error())
+		return
+	}
+	ctx := ctxFromGin(c)
+	code := c.Param("code")
+
+	var orgScope *string
+	switch {
+	case ctx.ParcelOrgID != "":
+		if err := authsvc.RequireCapability(ctx, authsvc.CapParcelOrgCarry, nil); err != nil {
+			writeError(c, http.StatusForbidden, "DENIED", "Your role doesn't allow taking payment")
+			return
+		}
+		orgID := ctx.ParcelOrgID
+		orgScope = &orgID
+	case authsvc.Can(ctx, "parcels.edit", nil):
+		// Esoqo ops — no tenancy narrowing to apply.
+	default:
+		writeError(c, http.StatusForbidden, "DENIED", "Not permitted to settle a parcel")
+		return
+	}
+
+	parcelID, reservation, err := dbx.SettleCounterParcelStk(c.Request.Context(), s.Pool, code, req.PriceKes, orgScope)
+	if err != nil {
+		writeParcelError(c, err)
+		return
+	}
+
+	stk, err := payments.InitiateStkPush(s.Cfg, payments.StkPushRequest{
+		Msisdn: req.Msisdn, AmountKES: req.PriceKes,
+		AccountReference: code, Description: "Esoqo parcel settlement",
+	})
+	if err != nil {
+		message := "Could not start the M-Pesa payment. Please try again in a moment."
+		if mpesaErr, ok := err.(*payments.MpesaError); ok && mpesaErr.Code == payments.MpesaInvalidMsisdn {
+			message = mpesaErr.Message
+		} else {
+			log.Printf("counter settlement STK push failed for %s: %v", code, err)
+		}
+		if rerr := dbx.ReleaseCounterParcelPaymentReservation(c.Request.Context(), s.Pool, parcelID, reservation); rerr != nil {
+			log.Printf("counter settlement %s STK push failed and releasing the reservation failed too: %v", code, rerr)
+		}
+		writeError(c, http.StatusBadRequest, "STK_FAILED", message)
+		return
+	}
+	if err := dbx.AttachCounterParcelPaymentCheckoutID(c.Request.Context(), s.Pool, parcelID, reservation, stk.CheckoutRequestID); err != nil {
+		if _, ok := err.(*dbx.ParcelError); ok {
+			writeParcelError(c, err)
+			return
+		}
+		writeError(c, http.StatusInternalServerError, "PAY_FAILED", "Could not start payment")
+		return
+	}
+	resp := gin.H{"status": "AWAITING_MPESA"}
+	if stk.AutoConfirmed {
+		if _, _, err := dbx.ConfirmCounterSettlementByCheckoutID(c.Request.Context(), s.Pool, stk.CheckoutRequestID, stk.MpesaReceiptCode); err == nil {
+			resp["status"] = "SETTLED"
+			s.dispatchParcelOrgPayoutForParcel(parcelID)
+			s.sendCounterPaymentConfirmedSms(c, code)
+		}
+	}
+	c.JSON(http.StatusOK, resp)
+}
+
+// handleGetCounterSettlementStatus — GET
+// /v1/parcel-orgs/me/parcels/:code/settlement-status. What the clerk's
+// client polls while an M-Pesa counter settlement is in flight — same
+// interval/give-up/"unresolved" pattern apps/web's PayClient.tsx
+// already uses for the public checkout STK flow, pointed at this
+// instead of a BusinessPayment id.
+func (s *Server) handleGetCounterSettlementStatus(c *gin.Context) {
+	ctx := ctxFromGin(c)
+	var orgScope *string
+	if ctx.ParcelOrgID != "" {
+		orgID := ctx.ParcelOrgID
+		orgScope = &orgID
+	} else if !authsvc.Can(ctx, "parcels.edit", nil) {
+		writeError(c, http.StatusForbidden, "DENIED", "Not permitted to view this parcel")
+		return
+	}
+
+	status, err := dbx.GetCounterSettlementStatus(c.Request.Context(), s.Pool, c.Param("code"), orgScope)
+	if err != nil {
+		writeParcelError(c, err)
+		return
+	}
+	c.JSON(http.StatusOK, status)
+}
+
+type confirmCounterSettlementManualCodeRequest struct {
+	MpesaReceiptCode string `json:"mpesaReceiptCode" binding:"required"`
+}
+
+// handleConfirmCounterSettlementManualCode — POST
+// /v1/parcels/:code/settle-counter/mpesa-code. The
+// fallback for when an STK prompt genuinely went through but the
+// Safaricom callback that would have driven handleMpesaStkCallback
+// never showed up (or got lost) — a clerk reads the code off the
+// client's own M-Pesa confirmation SMS and types it in. Same
+// tenancy/capability gate as handleSettleCounterParcelStk; see
+// dbx.ConfirmCounterSettlementByManualCode for why this is trusted
+// rather than independently verified against Safaricom.
+func (s *Server) handleConfirmCounterSettlementManualCode(c *gin.Context) {
+	var req confirmCounterSettlementManualCodeRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		writeError(c, http.StatusBadRequest, "INVALID_REQUEST", err.Error())
+		return
+	}
+	ctx := ctxFromGin(c)
+	code := c.Param("code")
+
+	var orgScope *string
+	switch {
+	case ctx.ParcelOrgID != "":
+		if err := authsvc.RequireCapability(ctx, authsvc.CapParcelOrgCarry, nil); err != nil {
+			writeError(c, http.StatusForbidden, "DENIED", "Your role doesn't allow taking payment")
+			return
+		}
+		orgID := ctx.ParcelOrgID
+		orgScope = &orgID
+	case authsvc.Can(ctx, "parcels.edit", nil):
+		// Esoqo ops — no tenancy narrowing to apply.
+	default:
+		writeError(c, http.StatusForbidden, "DENIED", "Not permitted to settle a parcel")
+		return
+	}
+
+	parcelID, err := dbx.ConfirmCounterSettlementByManualCode(c.Request.Context(), s.Pool, code, req.MpesaReceiptCode, ctx.ActorID, orgScope)
+	if err != nil {
+		writeParcelError(c, err)
+		return
+	}
+	s.dispatchParcelOrgPayoutForParcel(parcelID)
+	s.sendCounterPaymentConfirmedSms(c, code)
 	c.JSON(http.StatusOK, gin.H{"settled": true})
 }
 
@@ -549,8 +722,9 @@ func (s *Server) handlePayParcel(c *gin.Context) {
 		// justConfirmed no longer triggers an SMS here — a cleared
 		// payment still only describes a parcel, not a courier's hand on
 		// it. See handleScanParcelHandoff's own comment.
-		if _, _, err := dbx.ConfirmParcelPaymentByCheckoutID(c.Request.Context(), s.Pool, stk.CheckoutRequestID, stk.MpesaReceiptCode, s.Cfg.LoyaltyEarnEnabled); err == nil {
+		if _, parcelID, _, err := dbx.ConfirmParcelPaymentByCheckoutID(c.Request.Context(), s.Pool, stk.CheckoutRequestID, stk.MpesaReceiptCode, s.Cfg.LoyaltyEarnEnabled); err == nil {
 			resp["status"] = "BOOKED"
+			s.dispatchParcelOrgPayoutForParcel(parcelID)
 		}
 	}
 	c.JSON(http.StatusOK, resp)
@@ -618,6 +792,23 @@ func (s *Server) handleGetParcelStatus(c *gin.Context) {
 	// code-shape requirement at all; a gate on one of the two doors is not
 	// a gate. The reduction itself lives in dbx so the two cannot drift.
 	c.JSON(http.StatusOK, dbx.ReduceParcelStatusForUnintaken(status))
+}
+
+// handleGetParcelReceipt — GET /v1/parcels/:code/receipt. Guest-safe on
+// the same bearer-credential convention handleGetParcelStatus follows —
+// but see dbx.GetParcelReceipt's own comment for why an unpaid parcel
+// answers 404 here rather than a reduced view.
+func (s *Server) handleGetParcelReceipt(c *gin.Context) {
+	receipt, err := dbx.GetParcelReceipt(c.Request.Context(), s.Pool, c.Param("code"))
+	if err != nil {
+		writeError(c, http.StatusInternalServerError, "GET_FAILED", "Could not load that receipt")
+		return
+	}
+	if receipt == nil {
+		writeError(c, http.StatusNotFound, "NOT_FOUND", "That parcel has no receipt yet")
+		return
+	}
+	c.JSON(http.StatusOK, receipt)
 }
 
 // handleGetPartyParcelActivity — GET /v1/me/parcel-activity. One
@@ -785,6 +976,33 @@ const dispatchSummaryEvery = 10
 // entirely. Best-effort and silent on any error — a summary text is a
 // courtesy to the desk, never a reason to fail a scan that already
 // succeeded.
+// sendCounterPaymentConfirmedSms fires once a counter settlement
+// actually clears — cash in hand, the STK webhook, or a clerk's
+// manually entered M-Pesa code (see dbx.SettleCounterParcel /
+// ConfirmCounterSettlementByCheckoutID / ConfirmCounterSettlementByManualCode,
+// all three of which call this) — separately from
+// notify.ParcelIntakeConfirmed, which already fired when the clerk took
+// the box into custody at handleScanParcelHandoff. This is the "and
+// here's what you paid, and where it's headed" message the counter
+// flow's own spec calls for, tied to the money actually clearing rather
+// than to custody.
+func (s *Server) sendCounterPaymentConfirmedSms(c *gin.Context, code string) {
+	info, err := dbx.GetParcelNotifyInfo(c.Request.Context(), s.Pool, code)
+	if err != nil || info == nil {
+		return
+	}
+	if info.SenderMsisdn != "" {
+		_ = authsvc.SendSms(info.SenderMsisdn,
+			notify.ParcelCounterPaymentConfirmed(code, info.CarrierOrgName, info.OriginLabel, info.DestinationLabel),
+			"PARCEL_COUNTER_PAYMENT_CONFIRMED")
+	}
+	if info.ReceiverMsisdn != "" {
+		_ = authsvc.SendSms(info.ReceiverMsisdn,
+			notify.ParcelCounterPaymentConfirmedToReceiver(code, info.SenderName, info.CarrierOrgName, info.DestinationLabel),
+			"PARCEL_COUNTER_PAYMENT_CONFIRMED_RECEIVER")
+	}
+}
+
 func (s *Server) sendOrgDispatchSummary(c *gin.Context, orgID, code string) {
 	count, err := dbx.CountOrgParcelsDispatchedToday(c.Request.Context(), s.Pool, orgID)
 	if err != nil {

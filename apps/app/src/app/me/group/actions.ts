@@ -228,7 +228,7 @@ export async function actionApplyForOrgHandle(form: FormData) {
 
     const documents = [];
     for (const file of files) {
-      if (file.size > MAX_BYTES) return { ok: false as const, error: `${file.name} is larger than 10 MB` };
+      if (file.size > MAX_BYTES) return { ok: false as const, error: `${file.name} is larger than 1 MB` };
       const buf = Buffer.from(await file.arrayBuffer());
       const check = sniff(buf, file.type, file.name);
       if (!check.ok || !check.mime) return { ok: false as const, error: check.reason ?? `We can't accept ${file.name}` };

@@ -87,6 +87,11 @@ func main() {
 	// time-critical like a due withdrawal, so a longer interval.
 	go runParcelDraftSweep(ctx, pool)
 
+	// Re-attempts a courier-partner payout that never got dispatched or
+	// that Daraja refused — see Server.retryParcelOrgPayouts's own
+	// comment on why this lives here rather than in services/workers.
+	go server.RetryParcelOrgPayouts(ctx)
+
 	<-ctx.Done()
 	log.Println("core-go: shutting down")
 

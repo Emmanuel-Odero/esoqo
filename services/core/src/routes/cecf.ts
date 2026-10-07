@@ -175,10 +175,10 @@ export async function cecfRoutes(app: FastifyInstance) {
   app.post<{ Params: { id: string } }>(
     '/api/cecf/registration/:id/documents',
     // Base64-encoded file bytes blow past the service's default 256KB
-    // body limit fast — MAX_BYTES (10MB) per file, up to 6 files, plus
+    // body limit fast — MAX_BYTES (1MB) per file, up to 6 files, plus
     // ~33% base64 overhead. This route alone gets a much larger ceiling;
     // every other route keeps the tight default.
-    { bodyLimit: 15 * 1024 * 1024 },
+    { bodyLimit: 10 * 1024 * 1024 },
     async (req, reply) => {
       try {
         const body = z.object({ documents: z.array(cecfDocumentUploadSchema).min(1).max(6) }).parse(req.body);
