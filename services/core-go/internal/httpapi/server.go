@@ -739,6 +739,7 @@ func (s *Server) Router() *gin.Engine {
 	// than silently 404ing — and so console/dev setups keep working.
 	r.POST("/webhooks/mpesa/stk-callback", s.handleMpesaStkCallback)
 	r.POST("/webhooks/mpesa/stk-callback/:token", s.handleMpesaStkCallback)
+	r.POST("/webhooks/coop/callback/:token", s.handleCoopCallback)
 
 	return r
 }

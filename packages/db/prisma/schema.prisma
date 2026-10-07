@@ -5076,9 +5076,21 @@ model ParcelCourierPayout {
   paidByStaffId String?  @db.Uuid
   createdAt     DateTime @default(now())
 
+  /// PAID for every manual payout (the admin already sent the money).
+  /// Automatic Co-op B2C payouts start PENDING and move to PAID or FAILED
+  /// when the bank reports the outcome; FAILED unlinks the parcels so the
+  /// earnings are owed again.
+  status        String    @default("PAID")
+  coopReference String?   @unique
+  /// The wallet this payout was actually sent to, copied at send time.
+  destinationMsisdn String?
+  failureReason String?
+  settledAt     DateTime?
+
   parcels Parcel[]
 
   @@index([courierPartyId, createdAt])
+  @@index([status])
   @@map("parcel_courier_payout")
 }
 
@@ -5275,7 +5287,7 @@ enum ParcelCounterTicketStatus {
 /// free-form JSON blob the clerk's intake screen prefills from at claim
 /// time, never validated or read by anything else here.
 model ParcelCounterTicket {
-  id    String    @id @default(uuid()) @db.Uuid
+  id    String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
   orgId String    @db.Uuid
   org   ParcelOrg @relation(fields: [orgId], references: [id], onDelete: Cascade)
 
@@ -5459,7 +5471,7 @@ enum ParcelEventSeverity {
 /// stranger's tracking page. staffDetail carries what the public label
 /// must not: attempt counts, actor identity, the reason.
 model ParcelEvent {
-  id       String @id @default(uuid()) @db.Uuid
+  id       String @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
   parcelId String @db.Uuid
   parcel   Parcel @relation(fields: [parcelId], references: [id], onDelete: Cascade)
 
@@ -5703,7 +5715,7 @@ model ParcelAgent {
 /// convention ParcelOrgStaff.role follows; staffId links the roster row
 /// when the crew member was picked from the team.
 model ParcelRunCrew {
-  id    String         @id @default(uuid()) @db.Uuid
+  id    String         @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
   runId String         @db.Uuid
   run   ParcelShipment @relation(fields: [runId], references: [id], onDelete: Cascade)
 
@@ -5721,7 +5733,7 @@ model ParcelRunCrew {
 /// in on arrival. staffId links the roster where possible; name is a
 /// snapshot so the run still reads sensibly if the roster changes later.
 model ParcelRunReceiver {
-  id    String         @id @default(uuid()) @db.Uuid
+  id    String         @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
   runId String         @db.Uuid
   run   ParcelShipment @relation(fields: [runId], references: [id], onDelete: Cascade)
 
@@ -5736,7 +5748,7 @@ model ParcelRunReceiver {
 /// growth is capped on write (see dbx.ReportRunPosition): only recent
 /// points are ever read back.
 model ParcelRunPing {
-  id    String         @id @default(uuid()) @db.Uuid
+  id    String         @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
   runId String         @db.Uuid
   run   ParcelShipment @relation(fields: [runId], references: [id], onDelete: Cascade)
 
@@ -5753,7 +5765,7 @@ model ParcelRunPing {
 /// route or stand alone: an ad-hoc vehicle at the door has to be
 /// openable without a manager defining a route first.
 model ParcelRoute {
-  id          String    @id @default(uuid()) @db.Uuid
+  id          String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
   parcelOrgId String    @db.Uuid
   org         ParcelOrg @relation(fields: [parcelOrgId], references: [id], onDelete: Cascade)
 
@@ -5778,7 +5790,7 @@ model ParcelRoute {
 /// leg table — a parcel riding two vehicles is already expressible as
 /// two ParcelShipmentItem rows with load/offload times.
 model ParcelRouteStop {
-  id      String      @id @default(uuid()) @db.Uuid
+  id      String      @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
   routeId String      @db.Uuid
   route   ParcelRoute @relation(fields: [routeId], references: [id], onDelete: Cascade)
 
@@ -6059,7 +6071,7 @@ model TicketOrgStaff {
 /// activate-context attempt still requires OTP, same as any other
 /// lapsed activation.
 model OrgStaffGrant {
-  id    String    @id @default(uuid()) @db.Uuid
+  id    String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
   orgId String    @db.Uuid
   org   TicketOrg @relation(fields: [orgId], references: [id], onDelete: Cascade)
 
@@ -6799,7 +6811,7 @@ enum LuggageClaimMethod {
 /// parcel query and an exception to every parcel invariant, forever, to
 /// save one migration now.
 model LuggageTag {
-  id String @id @default(uuid()) @db.Uuid
+  id String @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
 
   /// LUG-… — checksummed, because this code is read aloud off a paper
   /// stub and typed by hand far more often than a parcel code is: the

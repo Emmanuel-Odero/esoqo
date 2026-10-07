@@ -1,5 +1,5 @@
 {
-  "$schema": "https://turbo.build/schema.json",
+  "$schema": "./node_modules/turbo/schema.json",
   "globalDependencies": [".env"],
   "globalEnv": [
     "NODE_ENV", "DATABASE_URL", "DIRECT_DATABASE_URL", "REDIS_URL",
@@ -8,8 +8,10 @@
     "MPESA_PROVIDER", "MPESA_CONSUMER_KEY", "MPESA_CONSUMER_SECRET",
     "MPESA_SHORTCODE", "MPESA_PASSKEY", "MPESA_CALLBACK_URL",
     "NEXT_PUBLIC_APP_URL", "NEXT_PUBLIC_WEB_URL", "NEXT_PUBLIC_STORE_URL", "CORE_API_URL",
+    "CORE_GO_API_URL", "APP_ENV", "SMS_MOCK_URL", "SMTP_HOST", "SMTP_PORT",
     "SEED_ADMIN_PIN", "SEED_ADMIN_HASH", "JAMII_PRIMARY_HOSTS"
   ],
+  "globalPassThroughEnv": ["CHOKIDAR_USEPOLLING", "WATCHPACK_POLLING"],
   "tasks": {
     "build": { "dependsOn": ["^build"], "outputs": [".next/**", "!.next/cache/**", "dist/**", "public/build/**"] },
     "dev": { "cache": false, "persistent": true },

@@ -504,7 +504,11 @@ func (s *Server) handlePayParcel(c *gin.Context) {
 		return
 	}
 
-	stk, err := payments.InitiateStkPush(s.Cfg, payments.StkPushRequest{
+	push := payments.InitiateStkPush
+	if payments.CoopEnabled(s.Cfg) {
+		push = payments.CoopStkPush
+	}
+	stk, err := push(s.Cfg, payments.StkPushRequest{
 		Msisdn: req.Msisdn, AmountKES: priceKes,
 		AccountReference: code, Description: "Esoqo parcel delivery",
 	})
@@ -560,6 +564,9 @@ func (s *Server) handlePayParcel(c *gin.Context) {
 // same code the sender printed/shared is the bearer credential for
 // "check this parcel", same convention a pickup code follows.
 func (s *Server) handleGetParcelStatus(c *gin.Context) {
+	// A Co-op push has no inbound confirm we can trust, so a poll doubles
+	// as the settlement check (throttled per payment in settleCoopForParcelCode).
+	s.settleCoopForParcelCode(c, c.Param("code"))
 	status, err := dbx.GetParcelStatus(c.Request.Context(), s.Pool, c.Param("code"))
 	if err != nil {
 		writeError(c, http.StatusInternalServerError, "GET_FAILED", "Could not load that parcel")

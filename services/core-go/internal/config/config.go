@@ -97,6 +97,25 @@ type Config struct {
 	// Config.Validate.
 	MpesaCallbackSecret string
 
+	// Co-operative Bank Open API. CoopProvider "" leaves the Daraja STK path
+	// in charge; "sandbox"/"production" route parcel STK through Co-op.
+	// CoopBaseURL defaults to https://openapi.co-opbank.co.ke.
+	CoopProvider       string
+	CoopBaseURL        string
+	CoopBasicAuth      string // base64(key:secret), as issued; with or without "Basic "
+	// CoopSourceAccount is the Co-op account B2C payouts are debited from.
+	// CoopCourierAutopay turns on the sweep that pays accrued courier
+	// earnings out automatically; off by default because it moves real money.
+	CoopSourceAccount  string
+	CoopCourierAutopay bool
+	CoopUserID         string
+	CoopOperatorCode   string
+	CoopCallbackURL    string
+	// CoopCallbackSecret is the unguessable path segment of the callback
+	// URL. The callback body is never trusted (the outcome is re-queried),
+	// but it still keeps strangers from making us call Co-op on demand.
+	CoopCallbackSecret string
+
 	// Pesapal
 	PesapalProvider       string
 	PesapalConsumerKey    string
@@ -170,6 +189,15 @@ func (c Config) Validate() error {
 	if c.MpesaProvider != "" && c.MpesaProvider != "console" && c.MpesaCallbackSecret == "" {
 		missing = append(missing, fmt.Sprintf(
 			"MPESA_CALLBACK_SECRET (required with MPESA_PROVIDER=%s)", c.MpesaProvider))
+	}
+
+	if c.CoopProvider != "" && c.CoopCallbackSecret == "" {
+		missing = append(missing, fmt.Sprintf(
+			"COOP_CALLBACK_SECRET (required with COOP_PROVIDER=%s)", c.CoopProvider))
+	}
+
+	if c.CoopCourierAutopay && (c.CoopProvider == "" || c.CoopSourceAccount == "") {
+		missing = append(missing, "COOP_PROVIDER and COOP_SOURCE_ACCOUNT (required with COOP_COURIER_AUTOPAY=true)")
 	}
 
 	if len(missing) == 0 {
@@ -274,6 +302,16 @@ func Load() Config {
 		MpesaPasskey:        getenv("MPESA_PASSKEY", ""),
 		MpesaCallbackURL:    getenv("MPESA_CALLBACK_URL", ""),
 		MpesaCallbackSecret: getenv("MPESA_CALLBACK_SECRET", ""),
+
+		CoopProvider:       getenv("COOP_PROVIDER", ""),
+		CoopBaseURL:        getenv("COOP_BASE_URL", ""),
+		CoopBasicAuth:      getenv("COOP_BASIC_AUTH", ""),
+		CoopSourceAccount:  getenv("COOP_SOURCE_ACCOUNT", ""),
+		CoopCourierAutopay: getenv("COOP_COURIER_AUTOPAY", "false") == "true",
+		CoopUserID:         getenv("COOP_USER_ID", ""),
+		CoopOperatorCode:   getenv("COOP_OPERATOR_CODE", ""),
+		CoopCallbackURL:    getenv("COOP_CALLBACK_URL", ""),
+		CoopCallbackSecret: getenv("COOP_CALLBACK_SECRET", ""),
 
 		PesapalProvider:       getenv("PESAPAL_PROVIDER", ""),
 		PesapalConsumerKey:    getenv("PESAPAL_CONSUMER_KEY", ""),

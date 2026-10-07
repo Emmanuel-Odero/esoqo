@@ -1,6 +1,6 @@
-import { redirect } from 'next/navigation';
+import { notFound, redirect } from 'next/navigation';
 import {
-  ParcelOrgUnauthorised, getParcelOrgMe, parcelOrgFetch,
+  ParcelOrgRequestError, ParcelOrgUnauthorised, getParcelOrgMe, parcelOrgFetch,
   type ParcelOrgStaffRow, type ParcelOrgStationRow,
 } from '@/lib/parcel-org-session';
 import { listOrgStaff } from '../../../actions';
@@ -36,6 +36,7 @@ export default async function StationPage({ params }: { params: Promise<{ id: st
     return <StationDetail station={station} members={members ?? []} roster={roster} canManage={canManage} />;
   } catch (e) {
     if (e instanceof ParcelOrgUnauthorised) redirect('/parcel-org/signed-out');
+    if (e instanceof ParcelOrgRequestError && e.code === 'NOT_FOUND') notFound();
     throw e;
   }
 }

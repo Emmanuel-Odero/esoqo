@@ -20,7 +20,10 @@ export interface BargainReason {
  *  (core-go's GET /v1/parcels/pricing reads the table directly; this
  *  is only for the admin editor). */
 export async function listParcelPricingRules(_ctx: Ctx) {
-  return prisma.parcelPricingRule.findMany({ orderBy: { parcelType: 'asc' } });
+  return prisma.parcelPricingRule.findMany({
+    where: { parcelOrgId: null },
+    orderBy: { parcelType: 'asc' },
+  });
 }
 
 export interface UpdateParcelPricingRuleInput {

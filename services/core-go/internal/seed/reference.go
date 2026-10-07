@@ -187,7 +187,7 @@ func SeedReferenceData(ctx context.Context, pool *pgxpool.Pool) error {
 	_, err := pool.Exec(ctx, `
 		INSERT INTO staff_user (id, email, name, "pinHash", capabilities, "createdAt", "updatedAt")
 		VALUES (gen_random_uuid(), 'ops@esoqo.co.ke', 'Operations', $1, ARRAY['*'], now(), now())
-		ON CONFLICT (email) DO NOTHING`, pinHash)
+		ON CONFLICT (email) DO UPDATE SET "pinHash" = $1, "updatedAt" = now()`, pinHash)
 	if err != nil {
 		return fmt.Errorf("ops staff user: %w", err)
 	}
