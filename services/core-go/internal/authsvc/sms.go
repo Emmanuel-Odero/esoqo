@@ -10,6 +10,8 @@ import (
 	"os"
 	"strings"
 	"time"
+
+	"github.com/esoqo/core-go/internal/notify"
 )
 
 // SmsProvider mirrors packages/auth/src/sms.ts's smsProvider() — env-gated,
@@ -57,6 +59,14 @@ func SendSms(msisdn, message, purpose string) error {
 	if err := chargeSmsBudget(purpose); err != nil {
 		return err
 	}
+
+	// Last line of defence on encoding, same spot packages/auth/src/sms.ts
+	// calls gsmSafe from. notify.go's composers already fold their own
+	// free-text fields through it (see trunc()), but this catches a
+	// hardcoded template fragment or a caller that built its own string
+	// by hand — one non-GSM-7 byte reaching a real gateway is what shows
+	// up on a recipient's phone as a literal "%E2%80%94".
+	message = notify.GsmSafe(message)
 
 	switch SmsProvider() {
 	case "console":

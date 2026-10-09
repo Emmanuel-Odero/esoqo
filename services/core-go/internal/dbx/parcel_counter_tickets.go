@@ -73,7 +73,7 @@ type ParcelCounterTicket struct {
 type CounterTicketEvent struct {
 	OrgID    string `json:"orgId"`
 	TicketID string `json:"ticketId"`
-	Event    string `json:"event"` // created | claimed | expired | cancelled | draft_updated
+	Event    string `json:"event"` // created | claimed | expired | cancelled | draft_updated | booked
 }
 
 func notifyCounterTicketEvent(ctx context.Context, tx pgx.Tx, ev CounterTicketEvent) error {
@@ -521,30 +521,64 @@ func GetCounterTicket(ctx context.Context, pool *pgxpool.Pool, id string) (*Parc
 // ticket the intake screen owns the details from its own prefill, and
 // a late autosave landing after that would silently overwrite what the
 // clerk is now looking at.
+//
+// The ticket was minted off just a phone number (CreateCounterTicket),
+// so it reads "GUEST-###" until a real name exists. The moment the
+// sender's own name lands in the draft (OfficeDraft.senderFirstName/
+// senderLastName on the web side), re-mint the ticket number from it
+// through the same fleetqr.ServiceTicketForName every other ticket
+// uses — so "GUEST" never outlives the sender actually telling us who
+// they are.
 func UpdateCounterTicketDraft(ctx context.Context, pool *pgxpool.Pool, id string, draftDetails json.RawMessage) error {
-	tx, err := pool.Begin(ctx)
-	if err != nil {
-		return err
+	var senderName struct {
+		SenderFirstName string `json:"senderFirstName"`
+		SenderLastName  string `json:"senderLastName"`
 	}
-	defer tx.Rollback(ctx)
+	_ = json.Unmarshal(draftDetails, &senderName)
+	fullName := strings.TrimSpace(senderName.SenderFirstName + " " + senderName.SenderLastName)
 
+	// Re-minted under retryUnique for the same reason CreateCounterTicket
+	// mints under it: serviceTicketNumber is @unique, and the name-derived
+	// number carries only a 3-digit suffix, so a collision with another
+	// waiting ticket of the same name is a real, regular possibility —
+	// without the retry a collision would turn the sender's ordinary
+	// autosave into a 500. Each attempt re-draws the number; the UPDATE's
+	// own `LIKE 'GUEST-%'` guard means only the first success actually
+	// changes the row. Run against the pool, not a transaction: a 23505
+	// would otherwise poison a shared tx and make every retry fail with
+	// "transaction is aborted" (see CreateCounterTicket's own note).
 	var orgID string
-	err = tx.QueryRow(ctx, `
-		UPDATE parcel_counter_ticket
-		SET "draftDetails" = $2, "updatedAt" = now()
-		WHERE id = $1 AND status = 'WAITING'
-		RETURNING "orgId"`, id, nullableJSON(draftDetails)).
-		Scan(&orgID)
+	err := retryUnique(func() error {
+		var newTicketNumber *string
+		if fullName != "" {
+			n := fleetqr.ServiceTicketForName(fullName)
+			newTicketNumber = &n
+		}
+		return pool.QueryRow(ctx, `
+			UPDATE parcel_counter_ticket
+			SET "draftDetails" = $2, "updatedAt" = now(),
+				"serviceTicketNumber" = CASE
+					WHEN $3::text IS NOT NULL AND "serviceTicketNumber" LIKE 'GUEST-%'
+					THEN $3 ELSE "serviceTicketNumber" END
+			WHERE id = $1 AND status = 'WAITING'
+			RETURNING "orgId"`, id, nullableJSON(draftDetails), newTicketNumber).
+			Scan(&orgID)
+	})
 	if errors.Is(err, pgx.ErrNoRows) {
 		return &ParcelError{"NOT_FOUND", "That ticket can no longer be updated"}
 	}
 	if err != nil {
 		return err
 	}
-	if err := notifyCounterTicketEvent(ctx, tx, CounterTicketEvent{OrgID: orgID, TicketID: id, Event: "draft_updated"}); err != nil {
+	// The UPDATE already committed (no transaction wraps it — see the
+	// retry note above), so a standalone NOTIFY is exactly as safe as the
+	// tx-scoped version every other caller uses: a draft that wasn't
+	// actually saved never reaches this line.
+	if _, err := pool.Exec(ctx, `SELECT pg_notify($1, $2)`, CounterTicketChannel,
+		mustMarshalCounterTicketEvent(CounterTicketEvent{OrgID: orgID, TicketID: id, Event: "draft_updated"})); err != nil {
 		return err
 	}
-	return tx.Commit(ctx)
+	return nil
 }
 
 // CounterTicketBookingInput is what the clerk confirmed at the "1.
@@ -650,9 +684,36 @@ func BookParcelFromCounterTicket(ctx context.Context, pool *pgxpool.Pool, ticket
 		return "", "", "", err
 	}
 
-	if _, err := pool.Exec(ctx, `
-		UPDATE parcel_counter_ticket SET "parcelId" = $1, "bookingStartedAt" = NULL WHERE id = $2`,
-		parcelID, ticketID); err != nil {
+	tx, txErr := pool.Begin(ctx)
+	if txErr != nil {
+		return parcelID, code, serviceTicketNumber, txErr
+	}
+	defer tx.Rollback(ctx)
+
+	// The ticket's own number is swapped for the parcel's once a booking
+	// exists, so the number the clerk reads off the board is the same one
+	// ScanHandoff/settle look the parcel up by (they match code OR
+	// serviceTicketNumber). Guarded rather than blind: both columns are
+	// @unique but independent, so the parcel's freshly-minted NAME-###
+	// could in principle equal another counter ticket's — the NOT EXISTS
+	// then keeps this ticket's existing number instead of raising a 23505
+	// that would strand a parcel that already committed.
+	if _, err := tx.Exec(ctx, `
+		UPDATE parcel_counter_ticket
+		SET "parcelId" = $1, "bookingStartedAt" = NULL,
+			"serviceTicketNumber" = CASE
+				WHEN NOT EXISTS (
+					SELECT 1 FROM parcel_counter_ticket
+					WHERE "serviceTicketNumber" = $2 AND id <> $3
+				) THEN $2 ELSE "serviceTicketNumber" END
+		WHERE id = $3`,
+		parcelID, serviceTicketNumber, ticketID); err != nil {
+		return parcelID, code, serviceTicketNumber, err
+	}
+	if err := notifyCounterTicketEvent(ctx, tx, CounterTicketEvent{OrgID: orgID, TicketID: ticketID, Event: "booked"}); err != nil {
+		return parcelID, code, serviceTicketNumber, err
+	}
+	if err := tx.Commit(ctx); err != nil {
 		return parcelID, code, serviceTicketNumber, err
 	}
 	return parcelID, code, serviceTicketNumber, nil
