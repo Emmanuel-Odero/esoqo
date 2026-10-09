@@ -32,25 +32,25 @@ labels:
 images:
 - name: ghcr.io/emmanuel-odero/esoqo-admin
   newName: ghcr.io/emmanuel-odero/esoqo-admin
-  newTag: ec93f264f3e4
+  newTag: 7d57b5910224
 - name: ghcr.io/emmanuel-odero/esoqo-app
   newName: ghcr.io/emmanuel-odero/esoqo-app
-  newTag: ec93f264f3e4
+  newTag: 7d57b5910224
 - name: ghcr.io/emmanuel-odero/esoqo-core-go
   newName: ghcr.io/emmanuel-odero/esoqo-core-go
-  newTag: ec93f264f3e4
+  newTag: 7d57b5910224
 - name: ghcr.io/emmanuel-odero/esoqo-core-service
   newName: ghcr.io/emmanuel-odero/esoqo-core-service
-  newTag: ec93f264f3e4
+  newTag: 7d57b5910224
 - name: ghcr.io/emmanuel-odero/esoqo-jamii
   newName: ghcr.io/emmanuel-odero/esoqo-jamii
-  newTag: ec93f264f3e4
+  newTag: 7d57b5910224
 - name: ghcr.io/emmanuel-odero/esoqo-store
   newName: ghcr.io/emmanuel-odero/esoqo-store
-  newTag: ec93f264f3e4
+  newTag: 7d57b5910224
 - name: ghcr.io/emmanuel-odero/esoqo-web
   newName: ghcr.io/emmanuel-odero/esoqo-web
-  newTag: f49805be3eaa
+  newTag: 7d57b5910224
 
   # Give Postgres real headroom. The base's 20Gi/2Gi is sized for a
   # preview environment; a volumeClaimTemplate cannot be shrunk later,
@@ -59,6 +59,31 @@ images:
 
   # A PodDisruptionBudget is not enough on its own — spread the replicas
   # so a single node drain cannot take a whole app down.
+
+# core-go is the one service that calls out to bank APIs requiring a
+# whitelisted source IP (M-Pesa B2C/B2B courier-partner payouts today;
+# any future direct-bank disbursement integration tomorrow). Banks
+# whitelist by IP, not by hostname, and this cluster has no NAT
+# gateway or egress load balancer — a pod's outbound traffic leaves
+# through whatever node it happens to be scheduled on. Pinning both
+# replicas to kcw-55 (138.199.241.76, already whitelisted with the
+# bank) is what makes that IP actually reliable instead of "true until
+# the next reschedule."
+#
+# Trade-off, stated once so it isn't rediscovered the hard way: this
+# overrides the topologySpreadConstraints patch above for core-go
+# specifically (a hard nodeSelector beats a soft ScheduleAnyway spread)
+# — both replicas now share a single point of failure. If kcw-55 is
+# drained or goes down, core-go has zero running replicas until it
+# comes back, rather than degrading to one replica elsewhere. Accepted
+# deliberately in exchange for a stable bank-facing egress IP; revisit
+# if/when a proper egress gateway replaces this.
+
+# Mount the media-storage PVC (media-storage.yaml) into both services
+# that write uploads — see that file's header for why this exists and
+# why it's RWX. /data/uploads, not /tmp: the previous LOCAL_STORAGE_DIR
+# pointed at a bare container path with nothing backing it, so every
+# upload was lost on the next restart even when STORAGE_PROVIDER=local.
 patches:
 - patch: |
     - op: replace
@@ -89,25 +114,6 @@ patches:
   target:
     kind: Deployment
     labelSelector: app.kubernetes.io/part-of=esoqo
-
-# core-go is the one service that calls out to bank APIs requiring a
-# whitelisted source IP (M-Pesa B2C/B2B courier-partner payouts today;
-# any future direct-bank disbursement integration tomorrow). Banks
-# whitelist by IP, not by hostname, and this cluster has no NAT
-# gateway or egress load balancer — a pod's outbound traffic leaves
-# through whatever node it happens to be scheduled on. Pinning both
-# replicas to kcw-55 (138.199.241.76, already whitelisted with the
-# bank) is what makes that IP actually reliable instead of "true until
-# the next reschedule."
-#
-# Trade-off, stated once so it isn't rediscovered the hard way: this
-# overrides the topologySpreadConstraints patch above for core-go
-# specifically (a hard nodeSelector beats a soft ScheduleAnyway spread)
-# — both replicas now share a single point of failure. If kcw-55 is
-# drained or goes down, core-go has zero running replicas until it
-# comes back, rather than degrading to one replica elsewhere. Accepted
-# deliberately in exchange for a stable bank-facing egress IP; revisit
-# if/when a proper egress gateway replaces this.
 - patch: |
     - op: add
       path: /spec/template/spec/nodeSelector
@@ -116,12 +122,6 @@ patches:
   target:
     kind: Deployment
     name: core-go
-
-# Mount the media-storage PVC (media-storage.yaml) into both services
-# that write uploads — see that file's header for why this exists and
-# why it's RWX. /data/uploads, not /tmp: the previous LOCAL_STORAGE_DIR
-# pointed at a bare container path with nothing backing it, so every
-# upload was lost on the next restart even when STORAGE_PROVIDER=local.
 - patch: |
     - op: add
       path: /spec/template/spec/volumes
