@@ -124,6 +124,6 @@ func (s *Server) settleCoopPayoutByRef(c *gin.Context, ref string) {
 		}
 	}
 	if row, err := dbx.GetProcessingParcelOrgPayoutByConversationID(ctx, s.Pool, ref); err == nil && row != nil {
-		s.reconcileBankParcelOrgPayout(ctx, row)
+		s.reconcileCoopParcelOrgPayout(ctx, row)
 	}
 }
