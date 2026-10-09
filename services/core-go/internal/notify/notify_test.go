@@ -330,6 +330,64 @@ func TestCourierTripDeparted(t *testing.T) {
 
 func ptrF(v float64) *float64 { return &v }
 
+// TestGsmSafeFoldsToASCII — every real-world character that would
+// otherwise force UCS-2 (or reach a gateway as a mangled escape) folds
+// to its ASCII twin, or is dropped when nothing sensible maps. This is
+// the guarantee authsvc.SendSms's last-line-of-defence call relies on.
+func TestGsmSafeFoldsToASCII(t *testing.T) {
+	cases := []struct{ name, in, want string }{
+		{"emDash", "a\u2014b", "a-b"},
+		{"enDash", "a\u2013b", "a-b"},
+		{"curlyApostrophe", "it\u2019s", "it's"},
+		{"curlyDoubleQuote", "\u201chi\u201d", "\"hi\""},
+		{"ellipsis", "wait\u2026", "wait..."},
+		{"nbsp", "a\u00a0b", "a b"},
+		{"zeroWidth", "a\u200bb", "ab"},
+		{"trademark", "Esoqo\u2122", "Esoqo(TM)"},
+		{"bullet", "a\u2022b", "a-b"},
+		{"accentedLatin", "Caf\u00e9", "Cafe"},
+		{"umlaut", "M\u00fcller", "Muller"},
+		{"backtick", "a`b", "ab"},
+		{"emoji", "hi\U0001F600", "hi"},
+		{"euro", "\u20ac5", "5"},
+		{"tab", "a\tb", "ab"},
+		{"doubleSpace", "a  b", "a b"},
+	}
+	for _, tc := range cases {
+		got := GsmSafe(tc.in)
+		if got != tc.want {
+			t.Errorf("%s: GsmSafe(%q) = %q, want %q", tc.name, tc.in, got, tc.want)
+		}
+		for _, r := range got {
+			if r > 127 {
+				t.Errorf("%s: GsmSafe leaked non-ASCII rune %q from %q: %q", tc.name, r, tc.in, got)
+				break
+			}
+		}
+	}
+}
+
+// TestTruncFoldsBeforeBudgeting — trunc's free-text budget is only
+// worth anything if the string it measures is already GSM-7, or one
+// pasted accent in an otherwise-short name silently doubles the
+// message. Folding must keep the base letter, not drop it.
+func TestTruncFoldsBeforeBudgeting(t *testing.T) {
+	if got := trunc("Jos\u00e9"); got != "Jose" {
+		t.Errorf("trunc should keep the base letter of an accented name: %q", got)
+	}
+	long := "Jos\u00e9 " + strings.Repeat("x", 40)
+	got := trunc(long)
+	if len(got) > smsFieldMaxLen {
+		t.Errorf("trunc(%q) = %q is %d chars, over the %d budget", long, got, len(got), smsFieldMaxLen)
+	}
+	for _, r := range got {
+		if r > 127 {
+			t.Errorf("trunc leaked non-ASCII rune %q: %q", r, got)
+			break
+		}
+	}
+}
+
 // TestKESFormatting — the money format every composer here quotes, and
 // the thing that has to match smsKes in packages/domain/src/sms.ts
 // character for character: the same event notified from the web and
