@@ -758,6 +758,12 @@ func (s *Server) Router() *gin.Engine {
 		// finance should look rather than let the retry worker keep trying.
 		v1.GET("/admin/parcels/payouts/manual", s.authRequired(), s.handleAdminListManualParcelOrgPayouts)
 		v1.POST("/admin/parcels/payouts/:id/mark-paid", s.authRequired(), s.handleAdminMarkParcelOrgPayoutPaid)
+		// Bank overview: the platform's own Co-op settlement account
+		// (balance + statement), and the per-company payout rollup —
+		// what's paid, in flight, or stuck — that sits alongside it.
+		v1.GET("/admin/bank/balance", s.authRequired(), s.handleAdminGetBankBalance)
+		v1.GET("/admin/bank/statement", s.authRequired(), s.handleAdminGetBankStatement)
+		v1.GET("/admin/parcels/orgs/payout-overview", s.authRequired(), s.handleAdminListParcelOrgPayoutOverview)
 		v1.POST("/admin/parcels/orgs/:id/staff", s.authRequired(), s.handleAdminUpsertParcelOrgStaff)
 		v1.POST("/admin/parcels/orgs/:id/staff/:staffId/issue-id", s.authRequired(), s.handleAdminIssueParcelOrgStaffID)
 		// Pickup points and the coverage rate card — siblings of zones
