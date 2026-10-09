@@ -73,7 +73,7 @@ type ParcelCounterTicket struct {
 type CounterTicketEvent struct {
 	OrgID    string `json:"orgId"`
 	TicketID string `json:"ticketId"`
-	Event    string `json:"event"` // created | claimed | expired | cancelled | draft_updated
+	Event    string `json:"event"` // created | claimed | expired | cancelled | draft_updated | booked
 }
 
 func notifyCounterTicketEvent(ctx context.Context, tx pgx.Tx, ev CounterTicketEvent) error {
@@ -684,9 +684,36 @@ func BookParcelFromCounterTicket(ctx context.Context, pool *pgxpool.Pool, ticket
 		return "", "", "", err
 	}
 
-	if _, err := pool.Exec(ctx, `
-		UPDATE parcel_counter_ticket SET "parcelId" = $1, "bookingStartedAt" = NULL WHERE id = $2`,
-		parcelID, ticketID); err != nil {
+	tx, txErr := pool.Begin(ctx)
+	if txErr != nil {
+		return parcelID, code, serviceTicketNumber, txErr
+	}
+	defer tx.Rollback(ctx)
+
+	// The ticket's own number is swapped for the parcel's once a booking
+	// exists, so the number the clerk reads off the board is the same one
+	// ScanHandoff/settle look the parcel up by (they match code OR
+	// serviceTicketNumber). Guarded rather than blind: both columns are
+	// @unique but independent, so the parcel's freshly-minted NAME-###
+	// could in principle equal another counter ticket's — the NOT EXISTS
+	// then keeps this ticket's existing number instead of raising a 23505
+	// that would strand a parcel that already committed.
+	if _, err := tx.Exec(ctx, `
+		UPDATE parcel_counter_ticket
+		SET "parcelId" = $1, "bookingStartedAt" = NULL,
+			"serviceTicketNumber" = CASE
+				WHEN NOT EXISTS (
+					SELECT 1 FROM parcel_counter_ticket
+					WHERE "serviceTicketNumber" = $2 AND id <> $3
+				) THEN $2 ELSE "serviceTicketNumber" END
+		WHERE id = $3`,
+		parcelID, serviceTicketNumber, ticketID); err != nil {
+		return parcelID, code, serviceTicketNumber, err
+	}
+	if err := notifyCounterTicketEvent(ctx, tx, CounterTicketEvent{OrgID: orgID, TicketID: ticketID, Event: "booked"}); err != nil {
+		return parcelID, code, serviceTicketNumber, err
+	}
+	if err := tx.Commit(ctx); err != nil {
 		return parcelID, code, serviceTicketNumber, err
 	}
 	return parcelID, code, serviceTicketNumber, nil
