@@ -313,14 +313,22 @@ export function CounterQueueClient({
                           Resume
                         </button>
                       )}
-                      <button
-                        className="btn btn-o btn-sm"
-                        disabled={discardingId === t.id}
-                        onClick={() => void discard(t.id)}
-                        title="Discard this case — it never became a parcel"
-                      >
-                        {discardingId === t.id ? 'Discarding…' : 'Discard'}
-                      </button>
+                      {/* Once a parcel exists, the ticket's own job is done —
+                       *  it's a label/payment case now, not a counter queue
+                       *  item, and the backend itself refuses to discard a
+                       *  ticket with a parcelId (see dbx.CancelCounterTicket).
+                       *  Only a case still "Confirming details" (no parcel
+                       *  booked yet) can still be walked away from. */}
+                      {!t.parcelCode && (
+                        <button
+                          className="btn btn-o btn-sm"
+                          disabled={discardingId === t.id}
+                          onClick={() => void discard(t.id)}
+                          title="Discard this case — it never became a parcel"
+                        >
+                          {discardingId === t.id ? 'Discarding…' : 'Discard'}
+                        </button>
+                      )}
                     </div>
                   </li>
                 );
