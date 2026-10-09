@@ -111,13 +111,19 @@ func truncatePayoutReason(s string) string {
 // settleCoopPayoutByRef is the callback's path to the same reconcile the
 // ticker runs, so a result lands in seconds instead of waiting a tick. Like
 // the STK path it believes nothing in the callback body.
+//
+// Courier earnings (rider payouts) and parcel org (courier company)
+// payouts now share the same "CPO" Co-op reference prefix, so a ref is
+// tried against both tables — a given ref only ever matches one of them.
 func (s *Server) settleCoopPayoutByRef(c *gin.Context, ref string) {
-	if !s.Cfg.CoopCourierAutopay {
-		return
+	ctx := c.Request.Context()
+	if s.Cfg.CoopCourierAutopay {
+		if p, err := dbx.GetPendingAutoPayoutByRef(ctx, s.Pool, ref); err == nil && p != nil {
+			s.reconcileCourierPayout(ctx, *p)
+			return
+		}
 	}
-	p, err := dbx.GetPendingAutoPayoutByRef(c.Request.Context(), s.Pool, ref)
-	if err != nil || p == nil {
-		return
+	if row, err := dbx.GetProcessingParcelOrgPayoutByConversationID(ctx, s.Pool, ref); err == nil && row != nil {
+		s.reconcileBankParcelOrgPayout(ctx, row)
 	}
-	s.reconcileCourierPayout(c.Request.Context(), *p)
 }

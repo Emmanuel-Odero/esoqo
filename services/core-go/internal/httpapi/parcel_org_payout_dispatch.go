@@ -33,6 +33,27 @@ func (s *Server) dispatchParcelOrgPayoutForParcel(parcelID string) {
 	}()
 }
 
+// dispatchParcelOrgPayoutForBusBooking is dispatchParcelOrgPayoutForParcel
+// for a just-paid bus booking instead of a just-settled parcel — same
+// detached-goroutine shape, same shared dispatch step below, since a
+// bus booking's payout row lives in the exact same table and clears
+// through the exact same rails.
+func (s *Server) dispatchParcelOrgPayoutForBusBooking(bookingID string) {
+	go func() {
+		ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
+		defer cancel()
+		row, err := dbx.GetPendingParcelOrgPayoutByBusBooking(ctx, s.Pool, bookingID)
+		if err != nil {
+			log.Printf("core-go: dispatchParcelOrgPayoutForBusBooking lookup failed for booking %s: %v", bookingID, err)
+			return
+		}
+		if row == nil {
+			return // nothing PENDING — MANUAL, no org, or already handled
+		}
+		s.dispatchParcelOrgPayout(ctx, row)
+	}()
+}
+
 // dispatchParcelOrgPayout is the one place that actually sends a courier
 // company's cut of a parcel out the door. dbx itself never calls Daraja
 // (see dbx/parcels.go's own package comment on keeping side effects out
@@ -104,8 +125,37 @@ func (s *Server) dispatchParcelOrgPayout(ctx context.Context, row *dbx.ParcelOrg
 			break
 		}
 		conversationID, transactionID, autoConfirmed = res.ConversationID, res.MpesaTransactionID, res.AutoConfirmed
+	case "BANK":
+		if row.PayoutBankCode == nil || *row.PayoutBankCode == "" ||
+			row.PayoutBankAccountNumber == nil || *row.PayoutBankAccountNumber == "" {
+			initErr = errMissingPayoutDestination
+			break
+		}
+		if s.Cfg.CoopSourceAccount == "" {
+			initErr = errBankPayoutsNotConfigured
+			break
+		}
+		ref := payments.NewCoopPayoutRef()
+		// Co-op itself (bank identifier "0011") moves as an internal
+		// transfer; every other bank goes out over PesaLink — see
+		// payments.CoopBankTransferSend's own comment.
+		outcome, desc := payments.CoopBankTransferSend(s.Cfg, ref, *row.PayoutBankCode, *row.PayoutBankAccountNumber,
+			int64(row.AmountKes), "Esoqo parcel settlement")
+		switch outcome {
+		case payments.CoopSendRejected:
+			initErr = &payoutDestinationError{desc}
+		case payments.CoopSendUnknown:
+			// A transport/auth failure, not a bank verdict — left exactly
+			// as PENDING so the retry worker's next tick (or a genuine
+			// Co-op callback, if one still lands) asks again instead of
+			// risking a second transfer.
+			log.Printf("core-go: parcel org payout %s: no answer from Co-op PesaLink, left pending", row.ID)
+			return
+		default:
+			conversationID = ref
+		}
 	default:
-		return // BANK or unrecognised — already created MANUAL, nothing to dispatch
+		return // unrecognised — already created MANUAL, nothing to dispatch
 	}
 
 	if initErr != nil {
@@ -126,7 +176,32 @@ func (s *Server) dispatchParcelOrgPayout(ctx context.Context, row *dbx.ParcelOrg
 	}
 }
 
+// reconcileBankParcelOrgPayout asks Co-op what became of a PesaLink
+// transfer and acts on the answer — the BANK-rail equivalent of
+// reconcileCourierPayout (courier_autopayout.go), confirming or failing
+// through the same row-locked ledger paths the Daraja result webhooks use
+// for every other payout method.
+func (s *Server) reconcileBankParcelOrgPayout(ctx context.Context, row *dbx.ParcelOrgPayoutRow) {
+	st := payments.CoopQueryTransferStatus(s.Cfg, row.MpesaConversationID)
+	switch st.State {
+	case payments.CoopTransferSuccess:
+		if err := dbx.ConfirmParcelOrgPayoutByConversationID(ctx, s.Pool, row.MpesaConversationID, st.Receipt); err != nil && err != dbx.ErrParcelOrgPayoutNotFound {
+			log.Printf("core-go: confirming bank parcel org payout %s: %v", row.ID, err)
+		}
+	case payments.CoopTransferFailed:
+		if err := dbx.FailParcelOrgPayoutByConversationID(ctx, s.Pool, row.MpesaConversationID, truncatePayoutReason(st.Description)); err != nil && err != dbx.ErrParcelOrgPayoutNotFound {
+			log.Printf("core-go: failing bank parcel org payout %s: %v", row.ID, err)
+		}
+	}
+}
+
 var errMissingPayoutDestination = &payoutDestinationError{"That company's payout destination is missing a required field"}
+
+// errBankPayoutsNotConfigured fires when a company is set up for BANK but
+// this environment has no Co-op source account to send PesaLink transfers
+// from — same shape as errMissingPayoutDestination, just a platform-level
+// gap rather than the company's own configuration.
+var errBankPayoutsNotConfigured = &payoutDestinationError{"Bank payouts aren't configured on this environment (COOP_SOURCE_ACCOUNT)"}
 
 type payoutDestinationError struct{ msg string }
 
@@ -147,6 +222,17 @@ func (s *Server) RetryParcelOrgPayouts(ctx context.Context) {
 		case <-ctx.Done():
 			return
 		case <-ticker.C:
+			// Resolve PesaLink transfers already in flight before sending
+			// anything new — same order RunCourierPayoutSweep follows for
+			// the M-Pesa rail.
+			processing, err := dbx.ListProcessingBankParcelOrgPayouts(ctx, s.Pool, 50)
+			if err != nil {
+				log.Printf("core-go: retryParcelOrgPayouts bank reconcile list failed: %v", err)
+			}
+			for i := range processing {
+				s.reconcileBankParcelOrgPayout(ctx, &processing[i])
+			}
+
 			rows, err := dbx.ListRetryableParcelOrgPayouts(ctx, s.Pool, 10*time.Minute, 50)
 			if err != nil {
 				log.Printf("core-go: retryParcelOrgPayouts list failed: %v", err)

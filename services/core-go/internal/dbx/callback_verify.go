@@ -55,6 +55,16 @@ func ExpectedAmountForCheckout(ctx context.Context, pool *pgxpool.Pool, checkout
 				FROM voucher_batch      WHERE "mpesaCheckoutRequestId"  = $1
 			UNION ALL
 			SELECT "amountKes"::text            FROM bill_contribution  WHERE "mpesaCheckoutRequestId"  = $1
+			UNION ALL
+			-- One checkout can cover several seats (see CreateBusBooking),
+			-- all sharing this checkout id, so the expected amount is
+			-- their combined fare, not any single seat's — summed rather
+			-- than selected bare like every other arm above. HAVING
+			-- excludes the one all-NULL row sum() still returns with no
+			-- matching rows, keeping this arm's "0 rows if no match"
+			-- behaviour consistent with the rest of the union.
+			SELECT sum("priceKes")::text        FROM bus_booking        WHERE "mpesaCheckoutRequestId"  = $1
+				HAVING count(*) > 0
 		) AS claims
 		LIMIT 1`
 

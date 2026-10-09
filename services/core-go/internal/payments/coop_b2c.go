@@ -65,6 +65,10 @@ func CoopB2CSend(cfg config.Config, ref, msisdn string, amountKES int64, narrati
 		"MessageReference": ref,
 		"ISO2CountryCode":  "KE",
 		"CallBackUrl":      cfg.CoopCallbackURL,
+		// Required by Co-op's own M-Pesa B2C (Account-to-Mobile) product
+		// for this endpoint — not a Safaricom Daraja CommandID, which is
+		// why it doesn't match InitiateB2CPayment's BusinessPayment/etc.
+		"CommandId": "SUSUFO",
 		"Source": map[string]interface{}{
 			"AccountNumber":       cfg.CoopSourceAccount,
 			"Amount":              fmt.Sprint(amountKES),

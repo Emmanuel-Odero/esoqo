@@ -6,6 +6,11 @@ import {
   ParcelOrgUnauthorised,
   parcelOrgFetch,
   type DispatchRun,
+  type OrgBus,
+  type OrgBusBooking,
+  type OrgBusRoute,
+  type OrgBusSchedule,
+  type OrgBusTrip,
   type OrgLabelSearchRow,
   type OrgParcelLabel,
   type OrgParcelRow,
@@ -14,6 +19,7 @@ import {
   type ParcelOrgStaffRow,
   type ParcelOrgStationRow,
 } from "@/lib/parcel-org-session";
+import { goUrl } from "@/lib/ticketing";
 
 export type Result = { ok: true } | { ok: false; error: string };
 
@@ -1192,13 +1198,22 @@ export async function listOrgRoutes(): Promise<OrgRoute[]> {
   }));
 }
 
-/** Create (no id) or replace (with one). The station order IS the
+/** One stop as saved: either an existing station, or a free-text
+ *  place with no station there yet (a bus route passing through a
+ *  town with no shop). Exactly one of the two is set. */
+export interface OrgRouteStopInput {
+  stationId?: string | null;
+  placeName?: string | null;
+}
+
+/** Create (no id) or replace (with one). The stop order IS the
  *  route, so reordering on the client is just another save. */
 export async function saveOrgRoute(input: {
   id?: string;
   name: string;
   code?: string | null;
-  stationIds: string[];
+  stops: OrgRouteStopInput[];
+  distanceKm?: number | null;
   active: boolean;
 }): Promise<Result> {
   try {
@@ -1211,12 +1226,14 @@ export async function saveOrgRoute(input: {
         body: JSON.stringify({
           name: input.name,
           code: input.code || null,
-          stationIds: input.stationIds,
+          stops: input.stops,
+          distanceKm: input.distanceKm ?? null,
           active: input.active,
         }),
       },
     );
     revalidatePath("/parcel-org/settings/routes");
+    revalidatePath("/parcel-org/settings/transport");
     revalidatePath("/parcel-org/dispatch");
     return { ok: true };
   } catch (e) {
@@ -1233,5 +1250,209 @@ export async function deleteOrgRoute(id: string): Promise<Result> {
     return { ok: true };
   } catch (e) {
     return toResult(e);
+  }
+}
+
+// ── Transport (ParcelOrg.offersTransport) ──
+//
+// A courier company that also runs passenger buses: fleet, routes,
+// schedules (prices/capacities) and trips, configured here; seats sold
+// at the counter from /parcel-org/counter/bus.
+
+const TRANSPORT_SETTINGS_PATH = "/parcel-org/settings/transport";
+
+export async function listOrgBuses(): Promise<OrgBus[]> {
+  const res = await parcelOrgFetch<{ buses: OrgBus[] | null }>(
+    "/v1/parcel-orgs/me/transport/buses",
+  );
+  return res.buses ?? [];
+}
+
+export async function saveOrgBus(input: {
+  id?: string;
+  name: string;
+  plateNumber: string;
+  totalSeats: number;
+  seatLayout?: string | null;
+  amenities?: string[];
+  status?: "ACTIVE" | "INACTIVE";
+}): Promise<Result> {
+  try {
+    await parcelOrgFetch(
+      input.id
+        ? `/v1/parcel-orgs/me/transport/buses/${encodeURIComponent(input.id)}`
+        : "/v1/parcel-orgs/me/transport/buses",
+      { method: "POST", body: JSON.stringify(input) },
+    );
+    revalidatePath(TRANSPORT_SETTINGS_PATH);
+    return { ok: true };
+  } catch (e) {
+    return toResult(e);
+  }
+}
+
+export async function deleteOrgBus(id: string): Promise<Result> {
+  try {
+    await parcelOrgFetch(`/v1/parcel-orgs/me/transport/buses/${encodeURIComponent(id)}`, {
+      method: "DELETE",
+    });
+    revalidatePath(TRANSPORT_SETTINGS_PATH);
+    return { ok: true };
+  } catch (e) {
+    return toResult(e);
+  }
+}
+
+/** A transport company's routes ride the SAME ParcelRoute list its
+ *  parcel runs use — managed at Settings → Routes (saveOrgRoute/
+ *  deleteOrgRoute above), not here. This is a read-only,
+ *  origin/destination-shaped projection of that list for the
+ *  schedule/trip pickers below. */
+export async function listOrgBusRoutes(): Promise<OrgBusRoute[]> {
+  const res = await parcelOrgFetch<{ routes: OrgBusRoute[] | null }>(
+    "/v1/parcel-orgs/me/transport/routes",
+  );
+  return res.routes ?? [];
+}
+
+export async function listOrgBusSchedules(): Promise<OrgBusSchedule[]> {
+  const res = await parcelOrgFetch<{ schedules: OrgBusSchedule[] | null }>(
+    "/v1/parcel-orgs/me/transport/schedules",
+  );
+  return res.schedules ?? [];
+}
+
+export async function saveOrgBusSchedule(input: {
+  id?: string;
+  busId: string;
+  routeId: string;
+  departTime: string;
+  daysOfWeek: number[];
+  priceKes: number;
+  active: boolean;
+}): Promise<Result> {
+  try {
+    await parcelOrgFetch(
+      input.id
+        ? `/v1/parcel-orgs/me/transport/schedules/${encodeURIComponent(input.id)}`
+        : "/v1/parcel-orgs/me/transport/schedules",
+      { method: "POST", body: JSON.stringify(input) },
+    );
+    revalidatePath(TRANSPORT_SETTINGS_PATH);
+    return { ok: true };
+  } catch (e) {
+    return toResult(e);
+  }
+}
+
+export async function deleteOrgBusSchedule(id: string): Promise<Result> {
+  try {
+    await parcelOrgFetch(`/v1/parcel-orgs/me/transport/schedules/${encodeURIComponent(id)}`, {
+      method: "DELETE",
+    });
+    revalidatePath(TRANSPORT_SETTINGS_PATH);
+    return { ok: true };
+  } catch (e) {
+    return toResult(e);
+  }
+}
+
+export async function listOrgBusTrips(routeId?: string): Promise<OrgBusTrip[]> {
+  const qs = routeId ? `?routeId=${encodeURIComponent(routeId)}` : "";
+  const res = await parcelOrgFetch<{ trips: OrgBusTrip[] | null }>(
+    `/v1/parcel-orgs/me/transport/trips${qs}`,
+  );
+  return res.trips ?? [];
+}
+
+export async function createOrgBusTrip(input: {
+  busId: string;
+  routeId: string;
+  departAt: string; // RFC3339
+  priceKes: number;
+}): Promise<Result> {
+  try {
+    await parcelOrgFetch("/v1/parcel-orgs/me/transport/trips", {
+      method: "POST",
+      body: JSON.stringify(input),
+    });
+    revalidatePath(TRANSPORT_SETTINGS_PATH);
+    return { ok: true };
+  } catch (e) {
+    return toResult(e);
+  }
+}
+
+export async function cancelOrgBusTrip(id: string): Promise<Result> {
+  try {
+    await parcelOrgFetch(`/v1/parcel-orgs/me/transport/trips/${encodeURIComponent(id)}/cancel`, {
+      method: "POST",
+    });
+    revalidatePath(TRANSPORT_SETTINGS_PATH);
+    return { ok: true };
+  } catch (e) {
+    return toResult(e);
+  }
+}
+
+export async function listOrgBusTripBookings(tripId: string): Promise<OrgBusBooking[]> {
+  const res = await parcelOrgFetch<{ bookings: OrgBusBooking[] | null }>(
+    `/v1/parcel-orgs/me/transport/trips/${encodeURIComponent(tripId)}/bookings`,
+  );
+  return res.bookings ?? [];
+}
+
+/** The counter's "sell a seat" action — always cash, settled on the
+ *  spot, same shape bookOrgCounterParcel follows for a parcel sale. */
+export async function bookCounterBusSeat(input: {
+  tripId: string;
+  seatNumber: number;
+  passengerName: string;
+  passengerMsisdn: string;
+  passengerIdNumber?: string | null;
+}): Promise<
+  | { ok: true; bookingId: string; code: string; totalKes: string }
+  | { ok: false; error: string }
+> {
+  try {
+    const res = await parcelOrgFetch<{ bookingId: string; code: string; totalKes: string }>(
+      "/v1/parcel-orgs/me/transport/counter/book",
+      { method: "POST", body: JSON.stringify(input) },
+    );
+    revalidatePath("/parcel-org/counter/bus");
+    return { ok: true, ...res };
+  } catch (e) {
+    return toResult(e);
+  }
+}
+
+export async function cancelCounterBusBooking(id: string): Promise<Result> {
+  try {
+    await parcelOrgFetch(`/v1/parcel-orgs/me/transport/bookings/${encodeURIComponent(id)}/cancel`, {
+      method: "POST",
+    });
+    revalidatePath("/parcel-org/counter/bus");
+    return { ok: true };
+  } catch (e) {
+    return toResult(e);
+  }
+}
+
+/** Seat availability is the same public read the web booking flow uses
+ *  (nothing sensitive in "which seat numbers are taken") — no org
+ *  session needed, so the counter calls it directly rather than
+ *  through parcelOrgFetch. */
+export async function getBusTripSeats(
+  tripId: string,
+): Promise<{ seatsTotal: number; takenSeats: number[] }> {
+  try {
+    const res = await fetch(goUrl(`/v1/transport/trips/${encodeURIComponent(tripId)}/seats`), {
+      cache: "no-store",
+    });
+    if (!res.ok) return { seatsTotal: 0, takenSeats: [] };
+    const json = (await res.json()) as { seatsTotal?: number; takenSeats?: number[] };
+    return { seatsTotal: json.seatsTotal ?? 0, takenSeats: json.takenSeats ?? [] };
+  } catch {
+    return { seatsTotal: 0, takenSeats: [] };
   }
 }

@@ -1553,6 +1553,11 @@ func parcelErrorStatus(code string) int {
 		// "someone already took this money" apart from "you typed a
 		// bad amount" without parsing prose.
 		return http.StatusConflict
+	case "SEAT_TAKEN":
+		// Conflict, not a bad request: the caller picked a seat that was
+		// free a moment ago — same "you did nothing wrong, the world
+		// moved" reasoning ALREADY_SETTLED/ALREADY_DELIVERED follow.
+		return http.StatusConflict
 	case "LABEL_ALREADY_SPENT":
 		// Also a conflict, and for the sharpest version of the same
 		// reason: for the offline counter queue this response is how a

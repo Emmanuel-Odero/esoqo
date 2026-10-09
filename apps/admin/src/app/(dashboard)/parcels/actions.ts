@@ -745,6 +745,10 @@ export interface ParcelOrg {
   /** The one physical front desk a sender can walk into — see the
    *  schema's own comment on ParcelOrg.acceptsWalkIn. */
   acceptsWalkIn: boolean;
+  /** This courier company also runs passenger buses — see the schema's
+   *  own comment on ParcelOrg.offersTransport. Flips on the Bus/
+   *  BusRoute/BusSchedule console and counter for this company. */
+  offersTransport: boolean;
   lat: number | null;
   lng: number | null;
   locationHint: string | null;
@@ -795,6 +799,7 @@ export interface ParcelOrgInput {
   settlementPhone?: string | null;
   commissionPct: number;
   acceptsWalkIn: boolean;
+  offersTransport: boolean;
   lat?: number | null;
   lng?: number | null;
   locationHint?: string | null;
@@ -813,6 +818,14 @@ export interface ParcelOrgInput {
 }
 
 export type ParcelOrgPayoutMethod = "PHONE" | "TILL" | "PAYBILL" | "BANK";
+
+/** One PesaLink participant — the bank picker on a company's settlement
+ *  account form is built from this list, fetched from core-go rather than
+ *  duplicated here so the identifier codes only live in one place. */
+export interface Bank {
+  code: string;
+  name: string;
+}
 
 export interface EnterpriseLite {
   id: string;
@@ -871,6 +884,50 @@ export async function actionCreateEnterprise(
     return {
       ok: false,
       error: e instanceof Error ? e.message : "Could not create that business",
+    };
+  }
+}
+
+/** The PesaLink participant list a bank settlement account is picked
+ *  from — see core-go's payments.KenyanBanks. */
+export async function actionListBanks(): Promise<Bank[]> {
+  await requireStaff();
+  const { banks } = await adminGo<{ banks: Bank[] | null }>(
+    "/v1/admin/parcels/banks",
+  );
+  return banks ?? [];
+}
+
+/**
+ * Runs a bank settlement account through Co-op's PesaLink validation
+ * before it can be saved — the same check a real transfer to it would
+ * have to pass, just without moving any money. A name coming back is
+ * what proves the account number/bank pair is real; nothing here is
+ * trusted enough to save on a "could not verify" answer.
+ */
+export async function actionValidateBankAccount(
+  bankCode: string,
+  accountNumber: string,
+): Promise<
+  { ok: true; accountName: string } | { ok: false; error: string }
+> {
+  try {
+    await requireStaff();
+    const res = await adminGo<{ valid: boolean; accountName: string }>(
+      "/v1/admin/parcels/payout-accounts/validate-bank",
+      {
+        method: "POST",
+        body: JSON.stringify({ bankCode, accountNumber }),
+      },
+    );
+    return { ok: true, accountName: res.accountName };
+  } catch (e) {
+    return {
+      ok: false,
+      error:
+        e instanceof Error
+          ? e.message
+          : "Could not validate that bank account",
     };
   }
 }
@@ -943,12 +1000,15 @@ export async function actionCreateParcelOrg(
 
 /** One payout no automatic rail could clear — a bank destination (no
  *  disbursement integration exists yet) or a company with no payout
- *  method set, plus anything Daraja kept refusing. See core-go's
+ *  method set, plus anything Daraja kept refusing. Covers both a
+ *  settled parcel and a paid bus booking — the same company's two
+ *  product lines clear through the same payout table. See core-go's
  *  AdminManualParcelOrgPayoutRow. */
 export interface ManualParcelOrgPayout {
   id: string;
   parcelOrgName: string;
-  parcelCode: string;
+  kind: "PARCEL" | "BUS";
+  reference: string;
   amountKes: number;
   method: ParcelOrgPayoutMethod | null;
   status: "MANUAL" | "FAILED";

@@ -1888,9 +1888,12 @@ const (
 // payouts list both need: enough to actually place the B2C/B2B call, or
 // to show a human what to pay by hand.
 type ParcelOrgPayoutRow struct {
-	ID                      string
-	ParcelOrgID             string
-	ParcelID                string
+	ID          string
+	ParcelOrgID string
+	// Exactly one of ParcelID/BusBookingID is set — see
+	// ParcelOrgPayout.busBookingId's own schema comment.
+	ParcelID                *string
+	BusBookingID            *string
 	AmountKes               float64
 	Method                  *string
 	PayoutMsisdn            *string
@@ -1902,6 +1905,11 @@ type ParcelOrgPayoutRow struct {
 	PayoutBankAccountName   *string
 	Status                  string
 	FailureReason           *string
+	// MpesaConversationID is actually any provider's own reference for a
+	// PROCESSING row — a Daraja ConversationID for PHONE/TILL/PAYBILL, or
+	// a Co-op PesaLink MessageReference for BANK. Only populated by the
+	// lookups the reconcile sweep and Co-op callback need it for.
+	MpesaConversationID string
 }
 
 // createParcelOrgPayout inserts the ParcelOrgPayout row that will
@@ -1911,9 +1919,8 @@ type ParcelOrgPayoutRow struct {
 //
 // Destination fields are copied from parcel_org as it stands right now,
 // not joined live later — see ParcelOrgPayout's own schema comment.
-// MANUAL when no automatic method is configured (or BANK, which has no
-// disbursement integration yet): still a real row, just one a human
-// clears instead of Daraja.
+// MANUAL when no automatic method is configured at all: still a real
+// row, just one a human clears by hand instead of Daraja/Co-op.
 func createParcelOrgPayout(ctx context.Context, pool *pgxpool.Pool, parcelID, orgID string, amountKes float64) error {
 	method, dest, err := parcelOrgPayoutDestination(ctx, pool, orgID)
 	if err != nil {
@@ -1929,6 +1936,30 @@ func createParcelOrgPayout(ctx context.Context, pool *pgxpool.Pool, parcelID, or
 		        $5, $6, $7, $8, $9, $10, $11, $12::"ParcelOrgPayoutStatus")
 		ON CONFLICT ("parcelId") DO NOTHING`,
 		orgID, parcelID, amountKes, method,
+		dest.msisdn, dest.till, dest.paybillNumber, dest.paybillAccount,
+		dest.bankCode, dest.bankAccountNumber, dest.bankAccountName, status)
+	return err
+}
+
+// createBusBookingOrgPayoutTx is createParcelOrgPayoutTx for a settled
+// bus booking instead of a settled parcel — same table, same dispatch
+// pipeline, keyed on "busBookingId" instead of "parcelId" (the two are
+// mutually exclusive, enforced by the table's own check constraint).
+func createBusBookingOrgPayoutTx(ctx context.Context, tx pgx.Tx, bookingID, orgID string, amountKes float64) error {
+	method, dest, err := parcelOrgPayoutDestinationTx(ctx, tx, orgID)
+	if err != nil {
+		return err
+	}
+	status := parcelOrgPayoutInitialStatus(method)
+	_, err = tx.Exec(ctx, `
+		INSERT INTO parcel_org_payout
+			(id, "parcelOrgId", "busBookingId", "amountKes", method,
+			 "payoutMsisdn", "payoutTillNumber", "payoutPaybillNumber", "payoutPaybillAccount",
+			 "payoutBankCode", "payoutBankAccountNumber", "payoutBankAccountName", status)
+		VALUES (gen_random_uuid(), $1, $2, $3, $4::"ParcelOrgPayoutMethod",
+		        $5, $6, $7, $8, $9, $10, $11, $12::"ParcelOrgPayoutStatus")
+		ON CONFLICT ("busBookingId") DO NOTHING`,
+		orgID, bookingID, amountKes, method,
 		dest.msisdn, dest.till, dest.paybillNumber, dest.paybillAccount,
 		dest.bankCode, dest.bankAccountNumber, dest.bankAccountName, status)
 	return err
@@ -1959,9 +1990,14 @@ func parcelOrgPayoutInitialStatus(method *string) ParcelOrgPayoutStatus {
 		return ParcelOrgPayoutManual
 	}
 	switch *method {
-	case "PHONE", "TILL", "PAYBILL":
+	case "PHONE", "TILL", "PAYBILL", "BANK":
+		// BANK now clears over Co-op PesaLink the same automatic way the
+		// M-Pesa rails do — see httpapi.dispatchParcelOrgPayout's "BANK"
+		// case. If Co-op itself isn't configured in this environment,
+		// dispatch fails the row instead of leaving it silently PENDING,
+		// so it still surfaces on the manual-payouts page.
 		return ParcelOrgPayoutPending
-	default: // "BANK", or anything unrecognised
+	default: // anything unrecognised
 		return ParcelOrgPayoutManual
 	}
 }
@@ -2013,6 +2049,29 @@ func GetPendingParcelOrgPayout(ctx context.Context, pool *pgxpool.Pool, parcelID
 		       "payoutBankCode", "payoutBankAccountNumber", "payoutBankAccountName", status::text
 		FROM parcel_org_payout WHERE "parcelId" = $1 AND status = 'PENDING'`, parcelID).
 		Scan(&r.ID, &r.ParcelOrgID, &r.ParcelID, &amountText, &r.Method,
+			&r.PayoutMsisdn, &r.PayoutTillNumber, &r.PayoutPaybillNumber, &r.PayoutPaybillAccount,
+			&r.PayoutBankCode, &r.PayoutBankAccountNumber, &r.PayoutBankAccountName, &r.Status)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, err
+	}
+	r.AmountKes, err = parseFloatOrZero(amountText)
+	return &r, err
+}
+
+// GetPendingParcelOrgPayoutByBusBooking is GetPendingParcelOrgPayout for
+// a just-paid bus booking instead of a just-settled parcel.
+func GetPendingParcelOrgPayoutByBusBooking(ctx context.Context, pool *pgxpool.Pool, bookingID string) (*ParcelOrgPayoutRow, error) {
+	var r ParcelOrgPayoutRow
+	var amountText string
+	err := pool.QueryRow(ctx, `
+		SELECT id, "parcelOrgId", "busBookingId", "amountKes"::text, method::text,
+		       "payoutMsisdn", "payoutTillNumber", "payoutPaybillNumber", "payoutPaybillAccount",
+		       "payoutBankCode", "payoutBankAccountNumber", "payoutBankAccountName", status::text
+		FROM parcel_org_payout WHERE "busBookingId" = $1 AND status = 'PENDING'`, bookingID).
+		Scan(&r.ID, &r.ParcelOrgID, &r.BusBookingID, &amountText, &r.Method,
 			&r.PayoutMsisdn, &r.PayoutTillNumber, &r.PayoutPaybillNumber, &r.PayoutPaybillAccount,
 			&r.PayoutBankCode, &r.PayoutBankAccountNumber, &r.PayoutBankAccountName, &r.Status)
 	if errors.Is(err, pgx.ErrNoRows) {
@@ -2181,15 +2240,89 @@ func ListRetryableParcelOrgPayouts(ctx context.Context, pool *pgxpool.Pool, olde
 	return out, rows.Err()
 }
 
+// ListProcessingBankParcelOrgPayouts is the PesaLink reconcile sweep's
+// query: BANK payouts a PesaLink transfer was actually sent for and that
+// are still awaiting their outcome. Unlike the Daraja rails, nothing here
+// is confirmed from a trusted result webhook alone — see
+// handlers_coop.go's own discipline on Co-op callbacks — so this is polled
+// the same way RunCoopReconcileSweep polls parcel payments.
+func ListProcessingBankParcelOrgPayouts(ctx context.Context, pool *pgxpool.Pool, limit int) ([]ParcelOrgPayoutRow, error) {
+	rows, err := pool.Query(ctx, `
+		SELECT id, "parcelOrgId", "parcelId", "amountKes"::text, method::text,
+		       "payoutMsisdn", "payoutTillNumber", "payoutPaybillNumber", "payoutPaybillAccount",
+		       "payoutBankCode", "payoutBankAccountNumber", "payoutBankAccountName",
+		       status::text, "mpesaConversationId"
+		FROM parcel_org_payout
+		WHERE status = 'PROCESSING' AND method = 'BANK' AND "mpesaConversationId" IS NOT NULL
+		ORDER BY "createdAt" ASC
+		LIMIT $1`, limit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var out []ParcelOrgPayoutRow
+	for rows.Next() {
+		var r ParcelOrgPayoutRow
+		var amountText string
+		var conversationID *string
+		if err := rows.Scan(&r.ID, &r.ParcelOrgID, &r.ParcelID, &amountText, &r.Method,
+			&r.PayoutMsisdn, &r.PayoutTillNumber, &r.PayoutPaybillNumber, &r.PayoutPaybillAccount,
+			&r.PayoutBankCode, &r.PayoutBankAccountNumber, &r.PayoutBankAccountName,
+			&r.Status, &conversationID); err != nil {
+			return nil, err
+		}
+		r.AmountKes, err = parseFloatOrZero(amountText)
+		if err != nil {
+			return nil, err
+		}
+		if conversationID != nil {
+			r.MpesaConversationID = *conversationID
+		}
+		out = append(out, r)
+	}
+	return out, rows.Err()
+}
+
+// GetProcessingParcelOrgPayoutByConversationID resolves a Co-op
+// MessageReference to the PROCESSING bank payout it belongs to, nil when
+// there is none — an unknown reference, or one already settled. Lets the
+// Co-op callback (handlers_coop.go's handleCoopCallback) nudge a parcel org
+// payout the same way it already nudges a courier one, since both now share
+// the "CPO" reference prefix.
+func GetProcessingParcelOrgPayoutByConversationID(ctx context.Context, pool *pgxpool.Pool, conversationID string) (*ParcelOrgPayoutRow, error) {
+	var r ParcelOrgPayoutRow
+	var amountText string
+	err := pool.QueryRow(ctx, `
+		SELECT id, "parcelOrgId", "parcelId", "amountKes"::text, method::text,
+		       "payoutMsisdn", "payoutTillNumber", "payoutPaybillNumber", "payoutPaybillAccount",
+		       "payoutBankCode", "payoutBankAccountNumber", "payoutBankAccountName", status::text
+		FROM parcel_org_payout WHERE "mpesaConversationId" = $1 AND status = 'PROCESSING'`, conversationID).
+		Scan(&r.ID, &r.ParcelOrgID, &r.ParcelID, &amountText, &r.Method,
+			&r.PayoutMsisdn, &r.PayoutTillNumber, &r.PayoutPaybillNumber, &r.PayoutPaybillAccount,
+			&r.PayoutBankCode, &r.PayoutBankAccountNumber, &r.PayoutBankAccountName, &r.Status)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, err
+	}
+	r.MpesaConversationID = conversationID
+	r.AmountKes, err = parseFloatOrZero(amountText)
+	return &r, err
+}
+
 // AdminManualParcelOrgPayoutRow is one row of the finance-facing manual
-// payouts list — MANUAL (no automatic method configured, or BANK, which
-// has no disbursement integration yet) and stuck FAILED rows a human
-// has to clear, enriched with enough context to actually act on it
-// without a second lookup.
+// payouts list — MANUAL (no payout method configured at all) and stuck
+// FAILED rows a human has to clear, enriched with enough context to
+// actually act on it without a second lookup.
 type AdminManualParcelOrgPayoutRow struct {
-	ID            string  `json:"id"`
-	ParcelOrgName string  `json:"parcelOrgName"`
-	ParcelCode    string  `json:"parcelCode"`
+	ID            string `json:"id"`
+	ParcelOrgName string `json:"parcelOrgName"`
+	// Kind — "PARCEL" or "BUS", so the console can label Reference
+	// correctly ("Parcel ESQ-..." vs "Bus ticket BUS-...").
+	Kind          string  `json:"kind"`
+	Reference     string  `json:"reference"`
 	AmountKes     float64 `json:"amountKes"`
 	Method        *string `json:"method"`
 	Status        string  `json:"status"`
@@ -2208,16 +2341,23 @@ type AdminManualParcelOrgPayoutRow struct {
 // ListAdminManualParcelOrgPayouts is the manual-payouts list's query —
 // MANUAL rows (bank, or no method configured) plus any FAILED row that
 // has already outlived a few retry attempts, oldest first so the
-// longest-unpaid company surfaces at the top.
+// longest-unpaid company surfaces at the top. LEFT JOINs both possible
+// sources (a row is ever for exactly one, per the table's own check
+// constraint) so a transport-enabled company's stuck bus payouts show
+// up here exactly as a stuck parcel payout always has.
 func ListAdminManualParcelOrgPayouts(ctx context.Context, pool *pgxpool.Pool) ([]AdminManualParcelOrgPayoutRow, error) {
 	rows, err := pool.Query(ctx, `
-		SELECT po.id, o.name, p.code, po."amountKes"::text, po.method::text, po.status::text,
+		SELECT po.id, o.name,
+		       CASE WHEN po."parcelId" IS NOT NULL THEN 'PARCEL' ELSE 'BUS' END,
+		       COALESCE(p.code, bb.code, ''),
+		       po."amountKes"::text, po.method::text, po.status::text,
 		       po."failureReason", po."createdAt"::text,
 		       po."payoutMsisdn", po."payoutTillNumber", po."payoutPaybillNumber", po."payoutPaybillAccount",
 		       po."payoutBankCode", po."payoutBankAccountNumber", po."payoutBankAccountName"
 		FROM parcel_org_payout po
 		JOIN parcel_org o ON o.id = po."parcelOrgId"
-		JOIN parcel p ON p.id = po."parcelId"
+		LEFT JOIN parcel p ON p.id = po."parcelId"
+		LEFT JOIN bus_booking bb ON bb.id = po."busBookingId"
 		WHERE po.status IN ('MANUAL', 'FAILED')
 		ORDER BY po."createdAt" ASC`)
 	if err != nil {
@@ -2229,7 +2369,7 @@ func ListAdminManualParcelOrgPayouts(ctx context.Context, pool *pgxpool.Pool) ([
 	for rows.Next() {
 		var r AdminManualParcelOrgPayoutRow
 		var amountText string
-		if err := rows.Scan(&r.ID, &r.ParcelOrgName, &r.ParcelCode, &amountText, &r.Method, &r.Status,
+		if err := rows.Scan(&r.ID, &r.ParcelOrgName, &r.Kind, &r.Reference, &amountText, &r.Method, &r.Status,
 			&r.FailureReason, &r.CreatedAt,
 			&r.PayoutMsisdn, &r.PayoutTillNumber, &r.PayoutPaybillNumber, &r.PayoutPaybillAccount,
 			&r.PayoutBankCode, &r.PayoutBankAccountNumber, &r.PayoutBankAccountName); err != nil {

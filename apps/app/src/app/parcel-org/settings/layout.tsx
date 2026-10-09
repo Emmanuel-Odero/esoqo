@@ -38,7 +38,7 @@ export default async function ParcelOrgSettingsLayout(
           <p>How this company is set up — its prices, its places, and its people.</p>
         </div>
       </div>
-      <SettingsNav items={sectionsFor(me.capabilities)} />
+      <SettingsNav items={sectionsFor(me.capabilities, me.org.offersTransport ?? false)} />
       <div className="porgset-body">{children}</div>
     </div>
   );

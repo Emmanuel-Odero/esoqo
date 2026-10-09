@@ -193,6 +193,35 @@ header { position:sticky; top:0; z-index:90; background:rgba(255,255,255,.95);
 .sec-navy .lead { color:#BFD6E6 }
 .sec-navy .kicker { color:#7FD3A8 }
 
+/* search forms (e.g. bus "board at / alight at") — one field shape
+   and a row layout so a select reads as a real control, not the bare
+   unstyled browser default, and sits beside its neighbours instead of
+   stacking full-width down the card. */
+.pfield { display:grid; gap:6px; min-width:0 }
+.pfield > span { font-size:.82rem; font-weight:600; color:var(--tx-2) }
+.pfield select, .pfield input {
+  width:100%; box-sizing:border-box; padding:12px 14px;
+  border:1px solid var(--line); border-radius:8px;
+  background:#fff; color:var(--tx); font:inherit; font-size:.95rem;
+  transition:border-color var(--dur-fast), box-shadow var(--dur-fast);
+}
+.pfield select {
+  appearance:none; padding-right:36px;
+  background-image:linear-gradient(45deg,transparent 50%,var(--tx-2) 50%),
+                    linear-gradient(135deg,var(--tx-2) 50%,transparent 50%);
+  background-position:calc(100% - 18px) 55%, calc(100% - 13px) 55%;
+  background-size:5px 5px, 5px 5px; background-repeat:no-repeat;
+}
+.pfield select:hover, .pfield input:hover { border-color:var(--blue-2) }
+.pfield select:focus, .pfield input:focus {
+  outline:0; border-color:var(--green-2); box-shadow:0 0 0 3px rgba(31,161,99,.18);
+}
+.pfield select:disabled { background:var(--paper); color:var(--tx-3); cursor:not-allowed }
+.sbar { display:flex; flex-wrap:wrap; gap:16px; align-items:flex-end }
+.sbar .pfield { flex:1 1 220px }
+.sbar .btn { flex:0 0 auto }
+@media(max-width:640px){ .sbar{ flex-direction:column; align-items:stretch } .sbar .btn{ width:100% } }
+
 /* page head */
 .phead { background:var(--navy); color:#fff; padding:44px 0 40px; position:relative; overflow:hidden }
 .phead h1 { color:#fff; max-width:20ch }

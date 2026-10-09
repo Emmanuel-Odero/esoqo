@@ -92,6 +92,13 @@ export default async function ParcelOrgLayout({ children }: { children: React.Re
     // not Scan, and the count comes from the live ticket queue itself
     // rather than a BOOKED-parcel proxy (see ParcelOrgStats.waitingTickets).
     ...(canSell ? [{ href: '/parcel-org/counter', label: 'Counter', icon: 'plus' as const, badge: me.stats.waitingTickets || undefined }] : []),
+    // Selling a bus seat is its own counter job, gated on both the
+    // company having turned transport on and this login being able to
+    // sell — same "plenty of companies never see this" shape Dispatch
+    // and Money already follow.
+    ...(me.org.offersTransport && me.capabilities.includes('parcelorg.transport-sell')
+      ? [{ href: '/parcel-org/counter/bus', label: 'Bus tickets', icon: 'truck' as const }]
+      : []),
     // Counting cash in is its own job with its own page now — the
     // rider-float panel used to sit at the bottom of the register.
     ...(canSeeMoney ? [{ href: '/parcel-org/money', label: 'Money', icon: 'coins' as const }] : []),

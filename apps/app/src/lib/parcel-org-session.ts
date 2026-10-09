@@ -164,6 +164,10 @@ export interface ParcelOrgSummary {
   /** Co-branded label logo. Null = Esoqo branding alone. */
   logoUrl?: string | null;
   brandAccent?: string | null;
+  /** This courier company also runs passenger buses — see the schema's
+   *  own comment on ParcelOrg.offersTransport. Gates the Transport
+   *  settings tab and the bus-counter nav entry. */
+  offersTransport?: boolean;
 }
 
 export interface ParcelOrgStats {
@@ -442,26 +446,107 @@ export interface DispatchRun {
   loaded: number;
 }
 
-/** One stop on a route: a station, and where it falls in the order. */
+/** One stop on a route. Exactly one of (stationId/stationName/...) or
+ *  placeName is set: a stop at one of the company's own stations
+ *  carries the richer station fields, a stop with no physical station
+ *  there yet (a town a bus passes through with no shop) carries only
+ *  a name. */
 export interface OrgRouteStop {
   id: string;
   sequence: number;
-  stationId: string;
-  stationName: string;
-  locationHint: string;
-  lat: number;
-  lng: number;
+  stationId: string | null;
+  stationName: string | null;
+  locationHint: string | null;
+  lat: number | null;
+  lng: number | null;
+  placeName: string | null;
 }
 
-/** A company's own route — the ordered list of stations it serves. A
+/** A company's own route — the ordered list of stops it serves. A
  *  LEG is a consecutive pair of stops; there is no leg record, because
- *  a parcel riding two vehicles is already two run items. */
+ *  a parcel riding two vehicles is already two run items. The SAME
+ *  list a transport-enabled company's buses ride (see OrgBusRoute). */
 export interface OrgRoute {
   id: string;
   name: string;
   code: string | null;
   active: boolean;
+  /** Optional, informational (bus fare context mostly). */
+  distanceKm: number | null;
   stops: OrgRouteStop[];
   /** Runs still out against it — what makes deleting one a decision. */
   openRuns: number;
+}
+
+// ── Transport (ParcelOrg.offersTransport) — buses, schedules, trips
+// and bookings. Mirrors dbx.Bus/BusSchedule/BusTrip/BusBooking in
+// services/core-go/internal/dbx/bus_transport.go. Routes are not a
+// transport type of their own — a bus rides the company's own
+// OrgRoute/OrgRouteStop list (Settings → Routes); OrgBusRoute below is
+// just that same list projected down to an origin/destination card
+// for the schedule/trip pickers.
+
+export interface OrgBus {
+  id: string;
+  name: string;
+  plateNumber: string;
+  totalSeats: number;
+  seatLayout: string | null;
+  amenities: string[];
+  status: "ACTIVE" | "INACTIVE";
+}
+
+export interface OrgBusRoute {
+  id: string;
+  originName: string;
+  destinationName: string;
+  distanceKm: number | null;
+  active: boolean;
+}
+
+export interface OrgBusSchedule {
+  id: string;
+  busId: string;
+  busName: string;
+  routeId: string;
+  originName: string;
+  destinationName: string;
+  departTime: string; // "HH:MM"
+  daysOfWeek: number[]; // 0=Sunday..6=Saturday
+  priceKes: number;
+  active: boolean;
+}
+
+/** One concrete, bookable departure. Mirrors dbx.BusTrip. */
+export interface OrgBusTrip {
+  id: string;
+  busId: string;
+  busName: string;
+  plateNumber: string;
+  routeId: string;
+  originName: string;
+  destinationName: string;
+  departAt: string; // RFC3339
+  priceKes: number;
+  seatsTotal: number;
+  seatsAvailable: number;
+  status: "SCHEDULED" | "DEPARTED" | "CANCELLED" | "COMPLETED";
+}
+
+/** One booked seat. Mirrors dbx.BusBooking. */
+export interface OrgBusBooking {
+  id: string;
+  tripId: string;
+  seatNumber: number;
+  passengerName: string;
+  passengerMsisdn: string;
+  code: string;
+  status: "PENDING_PAYMENT" | "PAID" | "CANCELLED" | "REFUNDED";
+  paymentMethod: "MPESA_STK" | "CASH";
+  channel: "WEB" | "COUNTER";
+  priceKes: number;
+  originName: string;
+  destinationName: string;
+  departAt: string;
+  busName: string;
 }

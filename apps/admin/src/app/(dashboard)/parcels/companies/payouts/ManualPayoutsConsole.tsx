@@ -41,7 +41,7 @@ export function ManualPayoutsConsole({
         <table className="tbl">
           <thead>
             <tr>
-              <th>Company</th><th>Parcel</th><th>Destination</th><th>Status</th>
+              <th>Company</th><th>Reference</th><th>Destination</th><th>Status</th>
               <th className="num">Owed</th>
               {canPay && <th />}
             </tr>
@@ -76,7 +76,7 @@ function PayoutRow({ payout, canPay }: { payout: ManualParcelOrgPayout; canPay: 
     return (
       <tr>
         <td colSpan={canPay ? 6 : 5} className="sub">
-          Marked paid — {payout.parcelOrgName} / {payout.parcelCode}
+          Marked paid — {payout.parcelOrgName} / {payout.reference}
         </td>
       </tr>
     );
@@ -97,7 +97,12 @@ function PayoutRow({ payout, canPay }: { payout: ManualParcelOrgPayout; canPay: 
   return (
     <tr>
       <td>{payout.parcelOrgName}</td>
-      <td className="mono">{payout.parcelCode}</td>
+      <td className="mono">
+        <span className="sub" style={{ fontSize: '.72rem', display: 'block' }}>
+          {payout.kind === 'BUS' ? 'Bus ticket' : 'Parcel'}
+        </span>
+        {payout.reference}
+      </td>
       <td>
         {destinationLabel(payout)}
         {payout.failureReason && (

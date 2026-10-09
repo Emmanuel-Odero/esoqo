@@ -868,8 +868,12 @@ function CreateDispatchForm({
                   const r = routes.find((x) => x.id === id);
                   const stops = Array.isArray(r?.stops) ? r.stops : [];
                   if (stops.length >= 2) {
-                    setOriginId(stops[0]!.stationId);
-                    setDestinationId(stops[stops.length - 1]!.stationId);
+                    // A run's origin/destination are always real stations
+                    // (a dispatcher picks from this org's own register
+                    // below); a route stop with no station yet (a bus-only
+                    // placeName stop) just leaves the field for them to fill.
+                    setOriginId(stops[0]!.stationId ?? '');
+                    setDestinationId(stops[stops.length - 1]!.stationId ?? '');
                   }
                 }}
               >

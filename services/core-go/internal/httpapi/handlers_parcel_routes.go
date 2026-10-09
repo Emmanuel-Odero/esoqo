@@ -19,13 +19,22 @@ import (
 // Reading is open to any session that can read the company, because a
 // clerk opening a run has to pick from the list.
 
+// routeStopRequest is one stop as the client sends it: either an
+// existing station id, or a free-text place with no station there yet
+// (a bus route passing through a town with no shop).
+type routeStopRequest struct {
+	StationID *string `json:"stationId"`
+	PlaceName *string `json:"placeName"`
+}
+
 type routeRequest struct {
 	Name string  `json:"name" binding:"required"`
 	Code *string `json:"code"`
-	// Station ids in travel order — the array order IS the route, so a
+	// Stops in travel order — the array order IS the route, so a
 	// reorder on the client is a resend, not a separate endpoint.
-	StationIDs []string `json:"stationIds" binding:"required"`
-	Active     *bool    `json:"active"`
+	Stops      []routeStopRequest `json:"stops" binding:"required"`
+	DistanceKm *int               `json:"distanceKm"`
+	Active     *bool              `json:"active"`
 }
 
 // handleListMyOrgRoutes — GET /v1/parcel-orgs/me/routes.
@@ -59,11 +68,9 @@ func (s *Server) handleSaveMyOrgRoute(c *gin.Context) {
 		writeError(c, http.StatusBadRequest, "BAD_INPUT", "Give the route a name and its stops")
 		return
 	}
-	stops := make([]string, 0, len(req.StationIDs))
-	for _, id := range req.StationIDs {
-		if t := strings.TrimSpace(id); t != "" {
-			stops = append(stops, t)
-		}
+	stops := make([]dbx.RouteStopInput, 0, len(req.Stops))
+	for _, st := range req.Stops {
+		stops = append(stops, dbx.RouteStopInput{StationID: st.StationID, PlaceName: st.PlaceName})
 	}
 	// Absent means active: a manager adding a route is adding one they
 	// intend to run.
@@ -72,7 +79,7 @@ func (s *Server) handleSaveMyOrgRoute(c *gin.Context) {
 		active = *req.Active
 	}
 	id, err := dbx.SaveRoute(c.Request.Context(), s.Pool, orgID, strings.TrimSpace(c.Param("id")), dbx.RouteInput{
-		Name: req.Name, Code: req.Code, StationIDs: stops, Active: active,
+		Name: req.Name, Code: req.Code, DistanceKm: req.DistanceKm, Stops: stops, Active: active,
 	})
 	if err != nil {
 		writeParcelError(c, err)

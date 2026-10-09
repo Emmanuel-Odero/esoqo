@@ -1,6 +1,7 @@
 import { createHash, randomBytes } from 'node:crypto';
 import { mkdir, readFile, unlink, writeFile } from 'node:fs/promises';
 import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { appEnv } from '@esoqo/domain';
 import {
   S3Client,
@@ -49,10 +50,19 @@ if (PROVIDER !== 'r2' && PROVIDER !== 'local') {
 // lives under it, and a rebrand doesn't move objects between buckets.
 const BUCKET = process.env.R2_BUCKET ?? 'esoko';
 
-// Local dev store lives on disk under <cwd>/.data/storage (gitignored).
+// Local dev store lives on disk under <repo>/.data/storage (gitignored).
 // The docker-compose bind mount keeps it on the host, so files survive
-// container restarts.
-const LOCAL_STORAGE_DIR = process.env.LOCAL_STORAGE_DIR ?? path.join(process.cwd(), '.data', 'storage');
+// container restarts. Anchored to this module's own location rather
+// than process.cwd(): every Next.js app in the monorepo runs its dev
+// server from its own package directory (apps/web, apps/admin, ...),
+// so a cwd-relative path would give each app a different, private
+// storage tree — a file uploaded via admin would silently 404 when
+// read back by web/app/store/jamii. An empty LOCAL_STORAGE_DIR (as
+// set by .env.example's commented-out placeholder) is treated as
+// unset, same as every other optional env var here.
+const LOCAL_STORAGE_DIR =
+  process.env.LOCAL_STORAGE_DIR ||
+  path.join(path.dirname(fileURLToPath(import.meta.url)), '..', '..', '..', '.data', 'storage');
 
 let r2: S3Client | undefined;
 function r2Client(): S3Client {

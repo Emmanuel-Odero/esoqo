@@ -14,6 +14,9 @@ export interface SettingsSection {
   label: string;
   icon: IconName;
   capability: string | null;
+  /** Only shown for a transport-enabled company — see
+   *  ParcelOrg.offersTransport's own schema comment. */
+  requiresTransport?: boolean;
 }
 
 const SECTIONS: readonly SettingsSection[] = [
@@ -26,12 +29,21 @@ const SECTIONS: readonly SettingsSection[] = [
   // route is the order it serves them in.
   { href: '/parcel-org/settings/stations', label: 'Stations', icon: 'pin', capability: 'parcelorgstation.write' },
   { href: '/parcel-org/settings/routes', label: 'Routes', icon: 'map', capability: 'parcelorg.write' },
+  // Buses/bus routes/schedules — a second product line on the same
+  // company, visible only once an admin has turned it on.
+  { href: '/parcel-org/settings/transport', label: 'Transport', icon: 'truck', capability: 'parcelorg.transport', requiresTransport: true },
   { href: '/parcel-org/settings/team', label: 'Team', icon: 'users', capability: 'parcelorgstaff.write' },
   // Never gated: a rider holding a temporary invite PIN needs this more
   // than anyone, and a manager gate would lock out exactly them.
   { href: '/parcel-org/settings/security', label: 'Your sign-in', icon: 'key', capability: null },
 ];
 
-export function sectionsFor(capabilities: readonly string[]): SettingsSection[] {
-  return SECTIONS.filter((s) => s.capability === null || capabilities.includes(s.capability));
+export function sectionsFor(
+  capabilities: readonly string[],
+  offersTransport = false,
+): SettingsSection[] {
+  return SECTIONS.filter((s) => {
+    if (s.requiresTransport && !offersTransport) return false;
+    return s.capability === null || capabilities.includes(s.capability);
+  });
 }

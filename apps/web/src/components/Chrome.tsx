@@ -15,6 +15,7 @@ export const NAV: readonly (readonly [Route, string])[] = [
   ["/discover", "Shops"],
   ["/tickets", "Tickets"],
   ["/parcels", "Parcels"],
+  ["/buses", "Buses"],
   ["/prices", "Prices"],
   ["/pay", "Pay"],
   ["/counties", "Counties"],

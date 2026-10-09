@@ -14,6 +14,8 @@ import {
   actionCreateParcelOrgManager,
   actionIssueParcelOrgStaffId,
   actionSearchParcelPeople,
+  actionListBanks,
+  actionValidateBankAccount,
   type ParcelOrg,
   type ParcelOrgInput,
   type ParcelOrgPayoutMethod,
@@ -21,6 +23,7 @@ import {
   type ParcelOrgStaffRow,
   type OrgMemberInput,
   type CollectorLite,
+  type Bank,
 } from "../actions";
 import { RoleField } from "../teams/RoleField";
 
@@ -69,6 +72,35 @@ export function statusLabel(status: string): string {
   return STATUSES.find(([v]) => v === status)?.[1] ?? status;
 }
 
+/** A one-line summary of where a company's cut of a parcel is actually
+ *  paid, automatically, at settlement — the single source of truth for
+ *  "what M-Pesa/bank number is this company on", replacing the old
+ *  separate (and never-synced) "Settlement M-Pesa" field. */
+export function payoutSummary(org: ParcelOrg): string {
+  switch (org.payoutMethod) {
+    case "PHONE":
+      return org.payoutMsisdn ? `M-Pesa — ${org.payoutMsisdn}` : "Not set";
+    case "TILL":
+      return org.payoutTillNumber
+        ? `M-Pesa till — ${org.payoutTillNumber}`
+        : "Not set";
+    case "PAYBILL":
+      return org.payoutPaybillNumber
+        ? `M-Pesa paybill — ${org.payoutPaybillNumber}${
+            org.payoutPaybillAccount ? ` / ${org.payoutPaybillAccount}` : ""
+          }`
+        : "Not set";
+    case "BANK":
+      return org.payoutBankAccountNumber
+        ? `Bank — ${org.payoutBankAccountNumber}${
+            org.payoutBankAccountName ? ` (${org.payoutBankAccountName})` : ""
+          }`
+        : "Not set";
+    default:
+      return "Not set (manual)";
+  }
+}
+
 export function orgToInput(
   org: ParcelOrg,
   overrides: Partial<ParcelOrgInput> = {},
@@ -83,6 +115,7 @@ export function orgToInput(
     settlementPhone: org.settlementPhone,
     commissionPct: org.commissionPct,
     acceptsWalkIn: org.acceptsWalkIn,
+    offersTransport: org.offersTransport,
     lat: org.lat,
     lng: org.lng,
     locationHint: org.locationHint,
@@ -921,13 +954,12 @@ export function OrgForm({
     String(initial?.commissionPct ?? 15),
   );
   const [contactPhone, setContactPhone] = useState(initial?.contactPhone ?? "");
-  const [settlementPhone, setSettlementPhone] = useState(
-    initial?.settlementPhone ?? "",
-  );
   // Where this company's cut of a parcel is actually paid, automatically,
-  // the moment it's settled — unlike settlementPhone above, which is
-  // informational only. "" (no method) leaves new payouts MANUAL, for
-  // finance to clear by hand on the manual-payouts page.
+  // the moment it's settled. "" (no method) leaves new payouts MANUAL, for
+  // finance to clear by hand on the manual-payouts page. settlementPhone
+  // (the legacy, display-only "Settlement M-Pesa" column) is no longer
+  // separately editable — it's kept in sync with payoutMsisdn below so a
+  // company's M-Pesa number only has to be entered once.
   const [payoutMethod, setPayoutMethod] = useState(
     initial?.payoutMethod ?? "",
   );
@@ -952,6 +984,48 @@ export function OrgForm({
   const [payoutBankAccountName, setPayoutBankAccountName] = useState(
     initial?.payoutBankAccountName ?? "",
   );
+  // The PesaLink participant list the bank dropdown below is built from,
+  // and the state of validating the bank/account-number pair currently
+  // entered — see validateBankAccount. A bank account can only be saved
+  // once it's been validated for the exact code+number pair on screen;
+  // changing either after a successful validation un-validates it, same
+  // "don't trust a stale check" rule save()'s own guard follows.
+  const [banks, setBanks] = useState<Bank[]>([]);
+  const [bankValidating, setBankValidating] = useState(false);
+  const [bankValidationError, setBankValidationError] = useState<
+    string | null
+  >(null);
+  const [validatedBankKey, setValidatedBankKey] = useState(
+    initial?.payoutMethod === "BANK" && initial?.payoutBankAccountName
+      ? `${initial.payoutBankCode ?? ""}:${initial.payoutBankAccountNumber ?? ""}`
+      : "",
+  );
+  const isBankAccountValidated =
+    !!payoutBankCode &&
+    !!payoutBankAccountNumber.trim() &&
+    validatedBankKey === `${payoutBankCode}:${payoutBankAccountNumber.trim()}`;
+  useEffect(() => {
+    void actionListBanks().then(setBanks);
+  }, []);
+  function validateBankAccount() {
+    setBankValidationError(null);
+    if (!payoutBankCode || !payoutBankAccountNumber.trim()) {
+      setBankValidationError("Pick a bank and enter the account number first.");
+      return;
+    }
+    setBankValidating(true);
+    void actionValidateBankAccount(payoutBankCode, payoutBankAccountNumber.trim())
+      .then((result) => {
+        if (result.ok) {
+          setPayoutBankAccountName(result.accountName);
+          setValidatedBankKey(`${payoutBankCode}:${payoutBankAccountNumber.trim()}`);
+        } else {
+          setPayoutBankAccountName("");
+          setBankValidationError(result.error);
+        }
+      })
+      .finally(() => setBankValidating(false));
+  }
   const [enterpriseId, setEnterpriseId] = useState(initial?.enterpriseId ?? "");
   const [entQuery, setEntQuery] = useState("");
   const [entResults, setEntResults] = useState<EnterpriseLite[]>([]);
@@ -963,6 +1037,9 @@ export function OrgForm({
   const [entPending, startEntTransition] = useTransition();
   const [acceptsWalkIn, setAcceptsWalkIn] = useState(
     initial?.acceptsWalkIn ?? false,
+  );
+  const [offersTransport, setOffersTransport] = useState(
+    initial?.offersTransport ?? false,
   );
   const [locationHint, setLocationHint] = useState(initial?.locationHint ?? "");
   const [openingHours, setOpeningHours] = useState(initial?.openingHours ?? "");
@@ -994,10 +1071,10 @@ export function OrgForm({
     status: useId(),
     commission: useId(),
     phone: useId(),
-    settlement: useId(),
     ent: useId(),
     newEnt: useId(),
     walkIn: useId(),
+    transport: useId(),
     location: useId(),
     hours: useId(),
     brand: useId(),
@@ -1091,8 +1168,18 @@ export function OrgForm({
       setError("Give the paybill number payouts should go to.");
       return;
     }
+    if (payoutMethod === "BANK" && !payoutBankCode.trim()) {
+      setError("Pick the bank payouts should go to.");
+      return;
+    }
     if (payoutMethod === "BANK" && !payoutBankAccountNumber.trim()) {
       setError("Give the bank account number payouts should go to.");
+      return;
+    }
+    if (payoutMethod === "BANK" && !isBankAccountValidated) {
+      setError(
+        "Validate the bank account (it passes Co-op's PesaLink check) before saving.",
+      );
       return;
     }
     const input: ParcelOrgInput = {
@@ -1108,8 +1195,13 @@ export function OrgForm({
       // leave and the company must carry on unchanged. What's left is the
       // company's own phone line.
       contactPhone: contactPhone.trim() || null,
-      settlementPhone: settlementPhone.trim() || null,
+      // Kept in sync with the payout M-Pesa number rather than entered
+      // separately, so the (legacy, display-only) "Settlement M-Pesa"
+      // field on the company's profile never drifts from where payouts
+      // actually go.
+      settlementPhone: payoutMethod === "PHONE" ? payoutMsisdn.trim() || null : null,
       acceptsWalkIn,
+      offersTransport,
       locationHint: acceptsWalkIn ? locationHint.trim() || null : null,
       openingHours: acceptsWalkIn ? openingHours.trim() || null : null,
       lat: acceptsWalkIn && lat.trim() ? Number(lat) : null,
@@ -1407,21 +1499,6 @@ export function OrgForm({
         <div>
           <label
             className="sub"
-            htmlFor={ids.settlement}
-            style={{ display: "block", marginBottom: 4 }}
-          >
-            Settlement M-Pesa
-          </label>
-          <input
-            id={ids.settlement}
-            style={inputStyle}
-            value={settlementPhone}
-            onChange={(e) => setSettlementPhone(e.target.value)}
-          />
-        </div>
-        <div>
-          <label
-            className="sub"
             htmlFor={ids.status}
             style={{ display: "block", marginBottom: 4 }}
           >
@@ -1527,6 +1604,27 @@ export function OrgForm({
         </div>
       )}
 
+      <div>
+        <label
+          className="sub"
+          htmlFor={ids.transport}
+          style={{ display: "flex", alignItems: "center", gap: 8 }}
+        >
+          <input
+            id={ids.transport}
+            type="checkbox"
+            checked={offersTransport}
+            onChange={(e) => setOffersTransport(e.target.checked)}
+          />
+          Also runs passenger buses
+        </label>
+        <span className="sub" style={{ fontSize: ".78rem" }}>
+          Turns on the Transport section (buses, routes, schedules and bus
+          bookings) in this company&apos;s own console and counter, and lists
+          it on the public bus-ticket booking page.
+        </span>
+      </div>
+
       <div
         style={{
           borderTop: "1px solid var(--line)",
@@ -1541,9 +1639,10 @@ export function OrgForm({
           </span>
           <span className="sub" style={{ fontSize: ".78rem" }}>
             Where this company&apos;s cut of a parcel is sent, automatically,
-            the moment it&apos;s settled. Leave as &quot;Not set&quot; (or pick
-            Bank) and payouts land on the manual payouts page for finance to
-            clear by hand instead.
+            the moment it&apos;s settled — M-Pesa (phone, till or paybill) or
+            a bank account over PesaLink. Leave as &quot;Not set&quot; and
+            payouts land on the manual payouts page for finance to clear by
+            hand instead.
           </span>
         </div>
         <div
@@ -1568,10 +1667,10 @@ export function OrgForm({
               onChange={(e) => setPayoutMethod(e.target.value)}
             >
               <option value="">Not set (manual)</option>
-              <option value="PHONE">M-Pesa phone number</option>
+              <option value="PHONE">M-Pesa (phone number)</option>
               <option value="TILL">M-Pesa till number</option>
               <option value="PAYBILL">M-Pesa paybill</option>
-              <option value="BANK">Bank account (manual for now)</option>
+              <option value="BANK">Bank account (PesaLink)</option>
             </select>
           </div>
           {payoutMethod === "PHONE" && (
@@ -1586,6 +1685,7 @@ export function OrgForm({
               <input
                 id={ids.payoutMsisdn}
                 style={inputStyle}
+                placeholder="07XXXXXXXX or +2547XXXXXXXX"
                 value={payoutMsisdn}
                 onChange={(e) => setPayoutMsisdn(e.target.value)}
               />
@@ -1654,13 +1754,25 @@ export function OrgForm({
                 >
                   Bank
                 </label>
-                <input
+                <select
                   id={ids.payoutBankCode}
                   style={inputStyle}
                   value={payoutBankCode}
-                  placeholder="e.g. KCB, Equity"
-                  onChange={(e) => setPayoutBankCode(e.target.value)}
-                />
+                  onChange={(e) => {
+                    setPayoutBankCode(e.target.value);
+                    setPayoutBankAccountName("");
+                    setBankValidationError(null);
+                  }}
+                >
+                  <option value="">
+                    {banks.length ? "Select a bank" : "Loading banks…"}
+                  </option>
+                  {banks.map((b) => (
+                    <option key={b.code} value={b.code}>
+                      {b.name}
+                    </option>
+                  ))}
+                </select>
               </div>
               <div>
                 <label
@@ -1675,7 +1787,11 @@ export function OrgForm({
                   className="mono"
                   style={inputStyle}
                   value={payoutBankAccountNumber}
-                  onChange={(e) => setPayoutBankAccountNumber(e.target.value)}
+                  onChange={(e) => {
+                    setPayoutBankAccountNumber(e.target.value);
+                    setPayoutBankAccountName("");
+                    setBankValidationError(null);
+                  }}
                 />
               </div>
               <div>
@@ -1690,9 +1806,60 @@ export function OrgForm({
                   id={ids.payoutBankAccountName}
                   style={inputStyle}
                   value={payoutBankAccountName}
-                  onChange={(e) => setPayoutBankAccountName(e.target.value)}
+                  readOnly
+                  placeholder="Validated name appears here"
                 />
               </div>
+              <div
+                style={{
+                  display: "flex",
+                  alignItems: "flex-end",
+                  gap: 8,
+                }}
+              >
+                <button
+                  type="button"
+                  className="btn btn-o btn-sm"
+                  disabled={
+                    bankValidating ||
+                    !payoutBankCode ||
+                    !payoutBankAccountNumber.trim()
+                  }
+                  onClick={validateBankAccount}
+                >
+                  {bankValidating
+                    ? "Validating…"
+                    : isBankAccountValidated
+                      ? "Validated ✓"
+                      : "Validate with Co-op"}
+                </button>
+              </div>
+              {bankValidationError && (
+                <p
+                  role="alert"
+                  style={{
+                    gridColumn: "1 / -1",
+                    color: "var(--red)",
+                    fontSize: ".85rem",
+                    margin: 0,
+                  }}
+                >
+                  {bankValidationError}
+                </p>
+              )}
+              {isBankAccountValidated && !bankValidationError && (
+                <p
+                  className="sub"
+                  style={{
+                    gridColumn: "1 / -1",
+                    fontSize: ".78rem",
+                    margin: 0,
+                  }}
+                >
+                  PesaLink confirmed this account is held by &quot;
+                  {payoutBankAccountName}&quot;.
+                </p>
+              )}
             </>
           )}
         </div>

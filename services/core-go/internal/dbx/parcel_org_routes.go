@@ -26,36 +26,64 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
-// RouteStop is one station on a route. Sequence is dense and 0-based.
+// RouteStop is one stop on a route. Sequence is dense and 0-based.
+// Exactly one of StationID or PlaceName is set: a stop at one of the
+// company's own stations carries the richer station fields, a stop
+// with no physical station there yet (a town a bus passes through
+// with no shop) carries only a name.
 type RouteStop struct {
-	ID           string  `json:"id"`
-	Sequence     int     `json:"sequence"`
-	StationID    string  `json:"stationId"`
-	StationName  string  `json:"stationName"`
-	LocationHint string  `json:"locationHint"`
-	Lat          float64 `json:"lat"`
-	Lng          float64 `json:"lng"`
+	ID           string   `json:"id"`
+	Sequence     int      `json:"sequence"`
+	StationID    *string  `json:"stationId"`
+	StationName  *string  `json:"stationName"`
+	LocationHint *string  `json:"locationHint"`
+	Lat          *float64 `json:"lat"`
+	Lng          *float64 `json:"lng"`
+	PlaceName    *string  `json:"placeName"`
+}
+
+// Name is what a route card or a from/to picker shows for this stop —
+// the station's own name, or the free-text place if it has no station.
+func (s RouteStop) Name() string {
+	if s.StationName != nil {
+		return *s.StationName
+	}
+	if s.PlaceName != nil {
+		return *s.PlaceName
+	}
+	return ""
 }
 
 type Route struct {
-	ID     string      `json:"id"`
-	Name   string      `json:"name"`
-	Code   *string     `json:"code"`
-	Active bool        `json:"active"`
-	Stops  []RouteStop `json:"stops"`
+	ID     string  `json:"id"`
+	Name   string  `json:"name"`
+	Code   *string `json:"code"`
+	Active bool    `json:"active"`
+	// Optional, informational (bus fare context mostly) — never read
+	// for parcel pricing.
+	DistanceKm *int        `json:"distanceKm"`
+	Stops      []RouteStop `json:"stops"`
 	// How many runs currently cite this route and are not yet closed —
 	// what makes deactivating one a decision rather than a click.
 	OpenRuns int `json:"openRuns"`
 }
 
+// RouteStopInput is one stop as the client sends it: either an
+// existing station id, or a free-text place with none.
+type RouteStopInput struct {
+	StationID *string
+	PlaceName *string
+}
+
 type RouteInput struct {
-	Name string
-	Code *string
-	// Station ids in travel order. The sequence is positional: the
-	// caller's array order IS the route, so reordering on the client is
-	// a resend rather than a separate move-stop endpoint.
-	StationIDs []string
-	Active     bool
+	Name       string
+	Code       *string
+	DistanceKm *int
+	// Stops in travel order. The sequence is positional: the caller's
+	// array order IS the route, so reordering on the client is a
+	// resend rather than a separate move-stop endpoint.
+	Stops  []RouteStopInput
+	Active bool
 }
 
 // ListRoutes — every route this company has, with stops in order.
@@ -65,7 +93,7 @@ type RouteInput struct {
 // instead of depending on an aggregate's ordering clause being right.
 func ListRoutes(ctx context.Context, pool *pgxpool.Pool, orgID string) ([]Route, error) {
 	rows, err := pool.Query(ctx, `
-		SELECT r.id, r.name, r.code, r.active,
+		SELECT r.id, r.name, r.code, r.active, r."distanceKm",
 		       (SELECT count(*) FROM parcel_shipment s
 		         WHERE s."routeId" = r.id AND s.status IN ('LOADING', 'DEPARTED'))
 		FROM parcel_route r
@@ -80,7 +108,7 @@ func ListRoutes(ctx context.Context, pool *pgxpool.Pool, orgID string) ([]Route,
 	byID := map[string]int{}
 	for rows.Next() {
 		var r Route
-		if err := rows.Scan(&r.ID, &r.Name, &r.Code, &r.Active, &r.OpenRuns); err != nil {
+		if err := rows.Scan(&r.ID, &r.Name, &r.Code, &r.Active, &r.DistanceKm, &r.OpenRuns); err != nil {
 			return nil, err
 		}
 		r.Stops = []RouteStop{}
@@ -96,10 +124,10 @@ func ListRoutes(ctx context.Context, pool *pgxpool.Pool, orgID string) ([]Route,
 
 	stopRows, err := pool.Query(ctx, `
 		SELECT st."routeId", st.id, st.sequence, st."stationId",
-		       a.name, COALESCE(a."locationHint", ''), a.lat::float8, a.lng::float8
+		       a.name, a."locationHint", a.lat::float8, a.lng::float8, st."placeName"
 		FROM parcel_route_stop st
 		JOIN parcel_route r ON r.id = st."routeId"
-		JOIN parcel_agent a ON a.id = st."stationId"
+		LEFT JOIN parcel_agent a ON a.id = st."stationId"
 		WHERE r."parcelOrgId" = $1
 		ORDER BY st."routeId", st.sequence`, orgID)
 	if err != nil {
@@ -110,7 +138,7 @@ func ListRoutes(ctx context.Context, pool *pgxpool.Pool, orgID string) ([]Route,
 		var routeID string
 		var s RouteStop
 		if err := stopRows.Scan(&routeID, &s.ID, &s.Sequence, &s.StationID,
-			&s.StationName, &s.LocationHint, &s.Lat, &s.Lng); err != nil {
+			&s.StationName, &s.LocationHint, &s.Lat, &s.Lng, &s.PlaceName); err != nil {
 			return nil, err
 		}
 		if i, ok := byID[routeID]; ok {
@@ -135,7 +163,7 @@ func SaveRoute(ctx context.Context, pool *pgxpool.Pool, orgID, routeID string, i
 	}
 	// Two stops is the minimum that means anything: one place is not a
 	// journey, and the leg vocabulary needs a pair to describe.
-	if len(in.StationIDs) < 2 {
+	if len(in.Stops) < 2 {
 		return "", &ParcelError{"BAD_INPUT", "A route needs at least two stops"}
 	}
 	var code *string
@@ -145,18 +173,33 @@ func SaveRoute(ctx context.Context, pool *pgxpool.Pool, orgID, routeID string, i
 		}
 	}
 
+	stationIDs := make([]string, 0, len(in.Stops))
+	for _, st := range in.Stops {
+		hasStation := st.StationID != nil && strings.TrimSpace(*st.StationID) != ""
+		hasPlace := st.PlaceName != nil && strings.TrimSpace(*st.PlaceName) != ""
+		if hasStation == hasPlace {
+			return "", &ParcelError{"BAD_INPUT", "Every stop needs either a station or a place name, not both or neither"}
+		}
+		if hasStation {
+			stationIDs = append(stationIDs, strings.TrimSpace(*st.StationID))
+		}
+	}
+
 	// Every station proved to be this company's before anything is
 	// written — ids arrive from a browser and are not trusted alone.
-	// Checked in one round trip rather than per stop.
-	var owned int
-	if err := pool.QueryRow(ctx, `
-		SELECT count(DISTINCT id) FROM parcel_agent
-		WHERE id = ANY($1::uuid[]) AND "parcelOrgId" = $2`,
-		in.StationIDs, orgID).Scan(&owned); err != nil {
-		return "", err
-	}
-	if owned != countDistinct(in.StationIDs) {
-		return "", &ParcelError{"NOT_FOUND", "One of those stops isn't one of your stations"}
+	// Checked in one round trip rather than per stop. Stops with no
+	// station (a free-text place) have nothing to verify here.
+	if len(stationIDs) > 0 {
+		var owned int
+		if err := pool.QueryRow(ctx, `
+			SELECT count(DISTINCT id) FROM parcel_agent
+			WHERE id = ANY($1::uuid[]) AND "parcelOrgId" = $2`,
+			stationIDs, orgID).Scan(&owned); err != nil {
+			return "", err
+		}
+		if owned != countDistinct(stationIDs) {
+			return "", &ParcelError{"NOT_FOUND", "One of those stops isn't one of your stations"}
+		}
 	}
 
 	tx, err := pool.Begin(ctx)
@@ -168,16 +211,16 @@ func SaveRoute(ctx context.Context, pool *pgxpool.Pool, orgID, routeID string, i
 	id := routeID
 	if strings.TrimSpace(id) == "" {
 		err = tx.QueryRow(ctx, `
-			INSERT INTO parcel_route ("parcelOrgId", name, code, active)
-			VALUES ($1, $2, $3, $4) RETURNING id`,
-			orgID, name, code, in.Active).Scan(&id)
+			INSERT INTO parcel_route ("parcelOrgId", name, code, active, "distanceKm")
+			VALUES ($1, $2, $3, $4, $5) RETURNING id`,
+			orgID, name, code, in.Active, in.DistanceKm).Scan(&id)
 		if err != nil {
 			return "", routeWriteError(err)
 		}
 	} else {
 		ct, err := tx.Exec(ctx, `
-			UPDATE parcel_route SET name = $3, code = $4, active = $5
-			WHERE id = $1 AND "parcelOrgId" = $2`, id, orgID, name, code, in.Active)
+			UPDATE parcel_route SET name = $3, code = $4, active = $5, "distanceKm" = $6
+			WHERE id = $1 AND "parcelOrgId" = $2`, id, orgID, name, code, in.Active, in.DistanceKm)
 		if err != nil {
 			return "", routeWriteError(err)
 		}
@@ -189,10 +232,18 @@ func SaveRoute(ctx context.Context, pool *pgxpool.Pool, orgID, routeID string, i
 		}
 	}
 
-	for i, stationID := range in.StationIDs {
+	for i, st := range in.Stops {
+		var stationID, placeName *string
+		if st.StationID != nil && strings.TrimSpace(*st.StationID) != "" {
+			v := strings.TrimSpace(*st.StationID)
+			stationID = &v
+		} else {
+			v := strings.TrimSpace(*st.PlaceName)
+			placeName = &v
+		}
 		if _, err := tx.Exec(ctx, `
-			INSERT INTO parcel_route_stop ("routeId", sequence, "stationId")
-			VALUES ($1, $2, $3)`, id, i, stationID); err != nil {
+			INSERT INTO parcel_route_stop ("routeId", sequence, "stationId", "placeName")
+			VALUES ($1, $2, $3, $4)`, id, i, stationID, placeName); err != nil {
 			return "", err
 		}
 	}
@@ -235,6 +286,93 @@ func DeleteRoute(ctx context.Context, pool *pgxpool.Pool, orgID, routeID string)
 		return &ParcelError{"NOT_FOUND", "That route isn't one of yours"}
 	}
 	return nil
+}
+
+// RouteEndpoints is a route's display shape for a rider picking a
+// journey rather than a dispatcher editing stops: its overall first
+// and last stop (what a "from → to" card shows) plus the optional
+// distance. Used by the bus side (see dbx.ListBusRoutesForOrg) —
+// buses have no vocabulary of their own for this, they just read it
+// off the shared ParcelRoute/ParcelRouteStop station list.
+type RouteEndpoints struct {
+	ID              string `json:"id"`
+	OriginName      string `json:"originName"`
+	DestinationName string `json:"destinationName"`
+	DistanceKm      *int   `json:"distanceKm"`
+	Active          bool   `json:"active"`
+}
+
+// ListRouteEndpoints — every route of one company, projected down to
+// its first/last stop. firstLast is a window function rather than
+// min/max(sequence) joined twice: one pass over parcel_route_stop,
+// one row per route out.
+func ListRouteEndpoints(ctx context.Context, pool *pgxpool.Pool, orgID string) ([]RouteEndpoints, error) {
+	rows, err := pool.Query(ctx, `
+		WITH ends AS (
+			SELECT st."routeId",
+			       first_value(COALESCE(a.name, st."placeName")) OVER (PARTITION BY st."routeId" ORDER BY st.sequence ASC) AS origin,
+			       first_value(COALESCE(a.name, st."placeName")) OVER (PARTITION BY st."routeId" ORDER BY st.sequence DESC) AS destination
+			FROM parcel_route_stop st
+			LEFT JOIN parcel_agent a ON a.id = st."stationId"
+		)
+		SELECT r.id, e.origin, e.destination, r."distanceKm", r.active
+		FROM parcel_route r
+		JOIN ends e ON e."routeId" = r.id
+		WHERE r."parcelOrgId" = $1
+		GROUP BY r.id, e.origin, e.destination, r."distanceKm", r.active
+		ORDER BY r.active DESC, e.origin ASC`, orgID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	out := []RouteEndpoints{}
+	for rows.Next() {
+		var r RouteEndpoints
+		if err := rows.Scan(&r.ID, &r.OriginName, &r.DestinationName, &r.DistanceKm, &r.Active); err != nil {
+			return nil, err
+		}
+		out = append(out, r)
+	}
+	return out, rows.Err()
+}
+
+// FindRoutesBetweenStations — every active route of one company that
+// visits both stations in that order (fromStationID's stop sequence
+// strictly before toStationID's), for the "from / to" rider search: a
+// bus from Nairobi to Homabay via Kisii is one route a Kisii→Homabay
+// rider should find too, not only a Nairobi→Homabay one.
+func FindRoutesBetweenStations(ctx context.Context, pool *pgxpool.Pool, orgID, fromStationID, toStationID string) ([]RouteEndpoints, error) {
+	rows, err := pool.Query(ctx, `
+		SELECT re.id, re.origin, re.destination, r."distanceKm", r.active
+		FROM (
+			SELECT st."routeId" AS id,
+			       first_value(COALESCE(a.name, st."placeName")) OVER (PARTITION BY st."routeId" ORDER BY st.sequence ASC) AS origin,
+			       first_value(COALESCE(a.name, st."placeName")) OVER (PARTITION BY st."routeId" ORDER BY st.sequence DESC) AS destination
+			FROM parcel_route_stop st
+			LEFT JOIN parcel_agent a ON a.id = st."stationId"
+		) re
+		JOIN parcel_route r ON r.id = re.id
+		WHERE r."parcelOrgId" = $1 AND r.active
+		  AND EXISTS (
+		    SELECT 1 FROM parcel_route_stop f
+		    JOIN parcel_route_stop t ON t."routeId" = f."routeId" AND t.sequence > f.sequence
+		    WHERE f."routeId" = re.id AND f."stationId" = $2 AND t."stationId" = $3
+		  )
+		GROUP BY re.id, re.origin, re.destination, r."distanceKm", r.active
+		ORDER BY re.origin ASC`, orgID, fromStationID, toStationID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	out := []RouteEndpoints{}
+	for rows.Next() {
+		var r RouteEndpoints
+		if err := rows.Scan(&r.ID, &r.OriginName, &r.DestinationName, &r.DistanceKm, &r.Active); err != nil {
+			return nil, err
+		}
+		out = append(out, r)
+	}
+	return out, rows.Err()
 }
 
 // routeWriteError turns the one constraint a user can actually trip —

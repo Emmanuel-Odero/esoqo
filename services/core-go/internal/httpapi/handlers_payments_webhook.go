@@ -117,6 +117,23 @@ func (s *Server) handleMpesaStkCallback(c *gin.Context) {
 		return
 	}
 
+	// A courier company's own bus ticket(s), paid by STK on the public
+	// web booking flow (counter bus sales are CASH, settled inline).
+	// One checkout can cover several seats, so dispatch a payout for
+	// each.
+	if bookingIDs, justConfirmed, err := dbx.ConfirmBusBookingByCheckoutID(ctx, s.Pool, cb.CheckoutRequestID); err == nil {
+		if justConfirmed {
+			for _, id := range bookingIDs {
+				s.dispatchParcelOrgPayoutForBusBooking(id)
+			}
+		}
+		c.JSON(http.StatusOK, gin.H{"ok": true})
+		return
+	} else if err != dbx.ErrBusBookingNotFound {
+		writeError(c, http.StatusInternalServerError, "CONFIRM_FAILED", "Could not confirm payment")
+		return
+	}
+
 	// Chama contributions paid by STK — this was a known gap noted when
 	// the webhook was first ported (see the Phase 0 commit): only store
 	// orders and bookings were dispatched here, never contributions.

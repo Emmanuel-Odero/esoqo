@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
+	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/esoqo/core-go/internal/dbx"
 	"github.com/esoqo/core-go/internal/money"
@@ -64,10 +65,15 @@ type coopSettleResult struct {
 // settleCoopParcel asks Co-op what became of a push and acts on the answer.
 // The enquiry response — not any callback body — is the only evidence used.
 //
-//	SUCCESS → amount must equal the parcel price exactly, then book it
-//	          (online booking) or mark it paid (counter settlement)
-//	FAILED  → free the slot so the sender/clerk can retry
+//	SUCCESS → amount must equal what the pending row(s) were raised for,
+//	          then book it (online booking), mark it paid (counter
+//	          settlement) or confirm every seat (bus booking)
+//	FAILED  → free the slot so the sender/clerk/passenger can retry
 //	PENDING → do nothing; the next poll, callback or sweep asks again
+//
+// Despite the parcel-flavoured name (kept to avoid a wide rename), this
+// is the one Co-op settlement path for every domain Co-op can pay for —
+// same "try each Go-owned domain in turn" shape the Daraja webhook uses.
 func (s *Server) settleCoopParcel(ctx context.Context, ref string) coopSettleResult {
 	st := payments.CoopQueryStkStatus(s.Cfg, ref)
 	res := coopSettleResult{State: st.State, Description: st.Description}
@@ -78,6 +84,10 @@ func (s *Server) settleCoopParcel(ctx context.Context, ref string) coopSettleRes
 	case payments.CoopStkFailed:
 		if err := dbx.ReleaseParcelPaymentByCheckoutID(ctx, s.Pool, ref); err != nil {
 			log.Printf("coop: releasing failed payment %s: %v", ref, err)
+			return res
+		}
+		if err := dbx.ReleaseBusBookingByCheckoutID(ctx, s.Pool, ref); err != nil {
+			log.Printf("coop: releasing failed bus booking %s: %v", ref, err)
 			return res
 		}
 		res.Changed = true
@@ -92,8 +102,9 @@ func (s *Server) settleCoopParcel(ctx context.Context, ref string) coopSettleRes
 				ref, st.AmountKES, st.AmountSet, expected)
 			return res
 		}
-		// Same order as the Daraja webhook: online booking first, then
-		// counter settlement — paymentMethod keeps the two mutually exclusive.
+		// Same order as the Daraja webhook: online parcel booking first,
+		// then counter settlement, then a bus booking — paymentMethod/
+		// table membership keeps all three mutually exclusive.
 		_, parcelID, _, err := dbx.ConfirmParcelPaymentByCheckoutID(ctx, s.Pool, ref, st.Receipt, s.Cfg.LoyaltyEarnEnabled)
 		if err == nil {
 			s.dispatchParcelOrgPayoutForParcel(parcelID)
@@ -105,16 +116,30 @@ func (s *Server) settleCoopParcel(ctx context.Context, ref string) coopSettleRes
 			return res
 		}
 		parcelID, justConfirmed, err := dbx.ConfirmCounterSettlementByCheckoutID(ctx, s.Pool, ref, st.Receipt)
+		if err == nil {
+			s.dispatchParcelOrgPayoutForParcel(parcelID)
+			if justConfirmed {
+				if code, cerr := dbx.GetParcelCode(ctx, s.Pool, parcelID); cerr == nil && code != "" {
+					s.sendCounterPaymentConfirmedSms(ctx, code)
+				}
+			}
+			res.Changed = true
+			return res
+		}
+		if err != dbx.ErrCounterSettlementNotFound {
+			log.Printf("coop: confirming counter settlement %s: %v", ref, err)
+			return res
+		}
+		bookingIDs, justConfirmed, err := dbx.ConfirmBusBookingByCheckoutID(ctx, s.Pool, ref)
 		if err != nil {
-			if err != dbx.ErrCounterSettlementNotFound {
-				log.Printf("coop: confirming counter settlement %s: %v", ref, err)
+			if err != dbx.ErrBusBookingNotFound {
+				log.Printf("coop: confirming bus booking %s: %v", ref, err)
 			}
 			return res
 		}
-		s.dispatchParcelOrgPayoutForParcel(parcelID)
 		if justConfirmed {
-			if code, cerr := dbx.GetParcelCode(ctx, s.Pool, parcelID); cerr == nil && code != "" {
-				s.sendCounterPaymentConfirmedSms(ctx, code)
+			for _, id := range bookingIDs {
+				s.dispatchParcelOrgPayoutForBusBooking(id)
 			}
 		}
 		res.Changed = true
@@ -129,6 +154,27 @@ func (s *Server) settleCoopForParcelCode(c *gin.Context, code string) {
 		return
 	}
 	ref, err := dbx.PendingParcelCheckoutID(c.Request.Context(), s.Pool, code)
+	if err != nil || ref == "" || !payments.IsCoopRef(ref) {
+		return
+	}
+	force := c.Query("force") == "1" || c.Query("check") == "1"
+	if !force && !coopPollDue(ref) {
+		return
+	}
+	if force {
+		coopLastPoll.Store(ref, time.Now())
+	}
+	s.settleCoopParcel(c.Request.Context(), ref)
+}
+
+// settleCoopForBusBookingCode is settleCoopForParcelCode for a bus
+// booking: a Co-op push has no inbound confirm we can trust, so the
+// passenger's own status poll doubles as the settlement check.
+func (s *Server) settleCoopForBusBookingCode(c *gin.Context, code string) {
+	if !payments.CoopEnabled(s.Cfg) {
+		return
+	}
+	ref, err := dbx.PendingBusBookingCheckoutID(c.Request.Context(), s.Pool, code)
 	if err != nil || ref == "" || !payments.IsCoopRef(ref) {
 		return
 	}
@@ -175,14 +221,16 @@ func counterCancelableIn(requestedAt *time.Time) int {
 	return int(left.Seconds()) + 1
 }
 
-// RunCoopReconcileSweep settles every Co-op parcel prompt still waiting —
-// online bookings and counter settlements — and frees the ones that have
-// gone unanswered too long. Hooked on a ticker in cmd/api/main.go.
+// RunCoopReconcileSweep settles every Co-op prompt still waiting — online
+// parcel bookings, counter settlements and bus bookings — and frees the
+// ones that have gone unanswered too long. Hooked on a ticker in
+// cmd/api/main.go.
 //
 // A Co-op push is only ever confirmed by our own enquiry. Until now that
 // enquiry ran only while somebody was polling a screen, so a payment
-// approved after the clerk or sender closed it (or whose callback never
-// reached us) was taken from the customer and never recorded.
+// approved after the clerk, sender or passenger closed it (or whose
+// callback never reached us) was taken from the customer and never
+// recorded.
 func (s *Server) RunCoopReconcileSweep(ctx context.Context) {
 	if !payments.CoopEnabled(s.Cfg) {
 		return
@@ -197,24 +245,42 @@ func (s *Server) RunCoopReconcileSweep(ctx context.Context) {
 	}
 	defer release()
 
-	pending, err := dbx.ListCoopPushesToReconcile(ctx, s.Pool, payments.CoopRefPrefix, 50)
+	parcelPushes, err := dbx.ListCoopPushesToReconcile(ctx, s.Pool, payments.CoopRefPrefix, 50)
 	if err != nil {
 		log.Printf("coop: reconcile sweep list: %v", err)
 		return
 	}
-	for _, p := range pending {
-		if !coopPollDue(p.Ref) {
-			continue
+	for _, p := range parcelPushes {
+		s.reconcileCoopPush(ctx, p, dbx.ReleaseParcelPaymentByCheckoutID)
+	}
+
+	busPushes, err := dbx.ListCoopBusBookingPushesToReconcile(ctx, s.Pool, payments.CoopRefPrefix, 50)
+	if err != nil {
+		log.Printf("coop: bus booking reconcile sweep list: %v", err)
+		return
+	}
+	for _, p := range busPushes {
+		s.reconcileCoopPush(ctx, p, dbx.ReleaseBusBookingByCheckoutID)
+	}
+}
+
+// reconcileCoopPush is RunCoopReconcileSweep's per-push body, shared
+// across domains: ask Co-op, and free the slot (via the domain's own
+// release func) if it's gone unanswered past coopPushExpireAfter.
+func (s *Server) reconcileCoopPush(
+	ctx context.Context, p dbx.CoopPendingPush, release func(context.Context, *pgxpool.Pool, string) error,
+) {
+	if !coopPollDue(p.Ref) {
+		return
+	}
+	res := s.settleCoopParcel(ctx, p.Ref)
+	if res.State == payments.CoopStkPending && time.Since(p.RequestedAt) > coopPushExpireAfter {
+		if err := release(ctx, s.Pool, p.Ref); err != nil {
+			log.Printf("coop: expiring push %s: %v", p.Ref, err)
+			return
 		}
-		res := s.settleCoopParcel(ctx, p.Ref)
-		if res.State == payments.CoopStkPending && time.Since(p.RequestedAt) > coopPushExpireAfter {
-			if err := dbx.ReleaseParcelPaymentByCheckoutID(ctx, s.Pool, p.Ref); err != nil {
-				log.Printf("coop: expiring push %s: %v", p.Ref, err)
-				continue
-			}
-			log.Printf("coop: expired unanswered push %s (sent %s, Co-op says %q)",
-				p.Ref, p.RequestedAt.Format(time.RFC3339), res.Description)
-		}
+		log.Printf("coop: expired unanswered push %s (sent %s, Co-op says %q)",
+			p.Ref, p.RequestedAt.Format(time.RFC3339), res.Description)
 	}
 }
 

@@ -3,7 +3,15 @@
 import { useState, useTransition } from 'react';
 import { Icon } from '@esoqo/ui';
 import type { OrgRoute, ParcelOrgStationRow } from '@/lib/parcel-org-session';
-import { deleteOrgRoute, saveOrgRoute } from '../../actions';
+import { deleteOrgRoute, saveOrgRoute, type OrgRouteStopInput } from '../../actions';
+
+/** A stop being edited: either an existing station id, or a free-text
+ *  place with none yet (a bus passing through a town with no shop). */
+type StopDraft = { stationId: string } | { placeName: string };
+
+function stopKey(s: StopDraft, i: number): string {
+  return ('stationId' in s ? `s:${s.stationId}` : `p:${s.placeName}`) + `-${i}`;
+}
 
 /**
  * Building a route is picking stations in travel order, so the editor is
@@ -31,15 +39,9 @@ export function RoutesManager({
               type="button"
               className="btn btn-p btn-sm"
               onClick={() => setEditing('new')}
-              disabled={active.length < 2}
             >
               <Icon name="plus" size={15} />New route
             </button>
-            {active.length < 2 && (
-              <span className="sub">
-                Add at least two stations first — a route is a journey between them.
-              </span>
-            )}
           </div>
 
           {routes.length === 0 ? (
@@ -58,11 +60,12 @@ export function RoutesManager({
                       {!r.active && <span className="pill p-warn">Paused</span>}
                     </span>
                     <span className="sub">
-                      {r.stops.map((s) => s.stationName).join(' → ') || 'No stops'}
+                      {r.stops.map((s) => s.stationName ?? s.placeName).join(' → ') || 'No stops'}
                     </span>
                     <span className="sub">
                       {Math.max(0, r.stops.length - 1)}{' '}
                       {r.stops.length === 2 ? 'leg' : 'legs'}
+                      {r.distanceKm != null && ` · ${r.distanceKm} km`}
                       {r.openRuns > 0 && ` · ${r.openRuns} out now`}
                     </span>
                   </div>
@@ -100,18 +103,21 @@ function RouteEditor({
 }) {
   const [name, setName] = useState(route?.name ?? '');
   const [code, setCode] = useState(route?.code ?? '');
+  const [distanceKm, setDistanceKm] = useState(route?.distanceKm != null ? String(route.distanceKm) : '');
   const [active, setActive] = useState(route?.active ?? true);
-  const [stops, setStops] = useState<string[]>(
-    route?.stops.map((s) => s.stationId) ?? [],
+  const [stops, setStops] = useState<StopDraft[]>(
+    route?.stops.map((s) => (s.stationId ? { stationId: s.stationId } : { placeName: s.placeName ?? '' })) ?? [],
   );
+  const [customPlace, setCustomPlace] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [pending, start] = useTransition();
 
-  const nameOf = (id: string) => stations.find((s) => s.id === id)?.name ?? 'Unknown station';
+  const nameOf = (s: StopDraft) => ('stationId' in s ? stations.find((st) => st.id === s.stationId)?.name ?? 'Unknown station' : s.placeName);
+  const lastStop = stops[stops.length - 1];
   // A station may legitimately appear twice on a long route (out and
   // back), so the picker never removes one — it only stops you adding
   // the same stop twice in a row, which is not a leg.
-  const addable = stations.filter((s) => s.id !== stops[stops.length - 1]);
+  const addable = stations.filter((s) => !(lastStop && 'stationId' in lastStop && lastStop.stationId === s.id));
 
   function move(i: number, by: number) {
     const j = i + by;
@@ -121,11 +127,22 @@ function RouteEditor({
     setStops(next);
   }
 
+  function addCustomPlace() {
+    const place = customPlace.trim();
+    if (!place) return;
+    setStops([...stops, { placeName: place }]);
+    setCustomPlace('');
+  }
+
   function save() {
     setError(null);
     start(async () => {
+      const stopsInput: OrgRouteStopInput[] = stops.map((s) => (
+        'stationId' in s ? { stationId: s.stationId } : { placeName: s.placeName }
+      ));
       const res = await saveOrgRoute({
-        id: route?.id, name, code: code || null, stationIds: stops, active,
+        id: route?.id, name, code: code || null, stops: stopsInput,
+        distanceKm: distanceKm.trim() ? Number(distanceKm) : null, active,
       });
       if (res.ok) onDone();
       else setError(res.error);
@@ -165,6 +182,10 @@ function RouteEditor({
           />
           <em className="sub">Printed on manifests. Optional.</em>
         </label>
+        <label>
+          <span>Distance (km)</span>
+          <input type="number" min={0} value={distanceKm} onChange={(e) => setDistanceKm(e.target.value)} placeholder="Optional" />
+        </label>
         <label className="porgroutes-check">
           <input type="checkbox" checked={active} onChange={(e) => setActive(e.target.checked)} />
           <span>Running — uncheck to pause it without deleting</span>
@@ -176,14 +197,17 @@ function RouteEditor({
         <p className="sub">Add the first stop below.</p>
       ) : (
         <ol className="porgroutes-stops">
-          {stops.map((id, i) => (
-            <li key={`${id}-${i}`}>
+          {stops.map((s, i) => (
+            <li key={stopKey(s, i)}>
               <span className="porgroutes-seq mono">{i + 1}</span>
-              <span className="porgroutes-stop">{nameOf(id)}</span>
+              <span className="porgroutes-stop">
+                {nameOf(s)}
+                {!('stationId' in s) && <span className="pill p-mute">No station yet</span>}
+              </span>
               <span className="porgroutes-moves">
-                <button type="button" className="btn btn-o btn-sm" disabled={i === 0} onClick={() => move(i, -1)} aria-label={`Move ${nameOf(id)} earlier`}>↑</button>
-                <button type="button" className="btn btn-o btn-sm" disabled={i === stops.length - 1} onClick={() => move(i, 1)} aria-label={`Move ${nameOf(id)} later`}>↓</button>
-                <button type="button" className="btn btn-o btn-sm" onClick={() => setStops(stops.filter((_, k) => k !== i))} aria-label={`Remove ${nameOf(id)}`}>
+                <button type="button" className="btn btn-o btn-sm" disabled={i === 0} onClick={() => move(i, -1)} aria-label={`Move ${nameOf(s)} earlier`}>↑</button>
+                <button type="button" className="btn btn-o btn-sm" disabled={i === stops.length - 1} onClick={() => move(i, 1)} aria-label={`Move ${nameOf(s)} later`}>↓</button>
+                <button type="button" className="btn btn-o btn-sm" onClick={() => setStops(stops.filter((_, k) => k !== i))} aria-label={`Remove ${nameOf(s)}`}>
                   <Icon name="close" size={14} />
                 </button>
               </span>
@@ -196,13 +220,32 @@ function RouteEditor({
         <span>Add a stop</span>
         <select
           value=""
-          onChange={(e) => { if (e.target.value) setStops([...stops, e.target.value]); }}
+          onChange={(e) => { if (e.target.value) setStops([...stops, { stationId: e.target.value }]); }}
         >
           <option value="">Choose a station…</option>
           {addable.map((s) => (
             <option key={s.id} value={s.id}>{s.name}</option>
           ))}
         </select>
+      </label>
+
+      <label className="porgroutes-add">
+        <span>Or add a place with no station yet</span>
+        <span style={{ display: 'flex', gap: 'var(--sp-2)' }}>
+          <input
+            value={customPlace}
+            onChange={(e) => setCustomPlace(e.target.value)}
+            placeholder="Kisii"
+            onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); addCustomPlace(); } }}
+          />
+          <button type="button" className="btn btn-o btn-sm" onClick={addCustomPlace} disabled={!customPlace.trim()}>
+            Add
+          </button>
+        </span>
+        <em className="sub">
+          A town the route passes through with no shop of yours yet — a bus can still
+          stop there.
+        </em>
       </label>
 
       {error && (

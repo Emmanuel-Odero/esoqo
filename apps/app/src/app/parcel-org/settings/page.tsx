@@ -26,6 +26,6 @@ export default async function ParcelOrgSettingsIndex() {
   // Security is ungated, so this list is never empty in practice — the
   // fallback is here because the type can't say so, and landing on the
   // one section everybody can open is the right answer anyway.
-  const [first] = sectionsFor(me.capabilities);
+  const [first] = sectionsFor(me.capabilities, me.org.offersTransport ?? false);
   redirect((first?.href ?? '/parcel-org/settings/security') as Route);
 }

@@ -14,6 +14,7 @@ import (
 	"github.com/esoqo/core-go/internal/dbx"
 	"github.com/esoqo/core-go/internal/fleetqr"
 	"github.com/esoqo/core-go/internal/notify"
+	"github.com/esoqo/core-go/internal/payments"
 )
 
 // The courier-company operator surface.
@@ -343,6 +344,7 @@ func (s *Server) handleGetMyParcelOrg(c *gin.Context) {
 		"org": gin.H{
 			"id": org.ID, "name": org.Name, "slug": org.Slug, "status": org.Status,
 			"logoUrl": org.LogoUrl, "brandAccent": org.BrandAccent,
+			"offersTransport": org.OffersTransport,
 		},
 		"stats":        stats,
 		"role":         ctx.ActorType,
@@ -1318,6 +1320,9 @@ type parcelOrgRequest struct {
 	PayoutBankCode          *string `json:"payoutBankCode"`
 	PayoutBankAccountNumber *string `json:"payoutBankAccountNumber"`
 	PayoutBankAccountName   *string `json:"payoutBankAccountName"`
+
+	// OffersTransport — see dbx.ParcelOrgInput's own comment.
+	OffersTransport bool `json:"offersTransport"`
 }
 
 func (r parcelOrgRequest) toInput() dbx.ParcelOrgInput {
@@ -1334,6 +1339,7 @@ func (r parcelOrgRequest) toInput() dbx.ParcelOrgInput {
 		PayoutPaybillNumber: r.PayoutPaybillNumber, PayoutPaybillAccount: r.PayoutPaybillAccount,
 		PayoutBankCode: r.PayoutBankCode, PayoutBankAccountNumber: r.PayoutBankAccountNumber,
 		PayoutBankAccountName: r.PayoutBankAccountName,
+		OffersTransport:       r.OffersTransport,
 	}
 }
 
@@ -1810,6 +1816,53 @@ func (s *Server) handleAdminCreateEnterprise(c *gin.Context) {
 		return
 	}
 	c.JSON(http.StatusOK, gin.H{"id": id, "name": strings.TrimSpace(req.Name)})
+}
+
+// handleAdminListBanks — GET /v1/admin/parcels/banks. The PesaLink
+// participant list a courier company's bank settlement account is picked
+// from, same read-only reference-data shape as any other picker here.
+func (s *Server) handleAdminListBanks(c *gin.Context) {
+	if err := authsvc.RequireCapability(ctxFromGin(c), "parcels.read", nil); err != nil {
+		writeError(c, http.StatusForbidden, "DENIED", "You don't have access to parcels")
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"banks": payments.KenyanBanks})
+}
+
+type validateBankAccountRequest struct {
+	BankCode      string `json:"bankCode" binding:"required"`
+	AccountNumber string `json:"accountNumber" binding:"required"`
+}
+
+// handleAdminValidateBankAccount — POST /v1/admin/parcels/payout-accounts/validate-bank.
+// Runs the Co-op PesaLink validation check a courier company's bank
+// settlement account must pass before it can be saved: see
+// payments.CoopValidatePesaLinkAccount's own comment on exactly what Co-op
+// is asked and why nothing is accepted without it.
+func (s *Server) handleAdminValidateBankAccount(c *gin.Context) {
+	if err := authsvc.RequireCapability(ctxFromGin(c), "parcels.edit", nil); err != nil {
+		writeError(c, http.StatusForbidden, "DENIED", "You can't edit parcel settings")
+		return
+	}
+	var req validateBankAccountRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		writeError(c, http.StatusBadRequest, "INVALID_REQUEST", err.Error())
+		return
+	}
+	if _, ok := payments.BankByCode(strings.TrimSpace(req.BankCode)); !ok {
+		writeError(c, http.StatusBadRequest, "BAD_INPUT", "That isn't a bank Esoqo recognises")
+		return
+	}
+	name, ok, err := payments.CoopValidatePesaLinkAccount(s.Cfg, req.BankCode, req.AccountNumber)
+	if err != nil {
+		writeError(c, http.StatusBadGateway, "VALIDATION_FAILED", err.Error())
+		return
+	}
+	if !ok || name == "" {
+		writeError(c, http.StatusBadRequest, "INVALID_ACCOUNT", "Co-op could not confirm that account number at the selected bank")
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"valid": true, "accountName": name})
 }
 
 func (s *Server) handleAdminListParcelOrgStaff(c *gin.Context) {

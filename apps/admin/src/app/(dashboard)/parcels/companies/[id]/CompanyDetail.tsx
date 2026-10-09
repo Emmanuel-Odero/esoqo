@@ -18,6 +18,7 @@ import {
   activityLabel,
   kes,
   orgToInput,
+  payoutSummary,
   statusPill,
   statusLabel,
 } from "../CompanyPanels";
@@ -250,8 +251,8 @@ export function CompanyDetail({
             <dd>{org.commissionPct}%</dd>
             <dt className="sub">Company phone</dt>
             <dd className="mono">{org.contactPhone ?? "—"}</dd>
-            <dt className="sub">Settlement M-Pesa</dt>
-            <dd className="mono">{org.settlementPhone ?? "—"}</dd>
+            <dt className="sub">Payout destination</dt>
+            <dd className="mono">{payoutSummary(org)}</dd>
             <dt className="sub">Walk-in desk</dt>
             <dd>{org.acceptsWalkIn ? (org.locationHint ?? "Yes") : "No"}</dd>
             <dt className="sub">Opening hours</dt>

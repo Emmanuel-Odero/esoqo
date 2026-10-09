@@ -4418,7 +4418,7 @@ model Parcel {
   /// STK webhook looks the row up by this value on every callback.
   /// Without the index that lookup was a sequential scan of the whole
   /// parcel table — the only one of the nine payment domains missing it.
-  paymentCheckoutRequestId String?   @unique
+  paymentCheckoutRequestId String?                      @unique
   /// When the current value of paymentCheckoutRequestId was a LOCAL
   /// reservation rather than a Safaricom checkout id — i.e. the window
   /// inside dbx.ReserveParcelPayment and
@@ -4434,13 +4434,13 @@ model Parcel {
   /// With a timestamp the sweep can reclaim a reservation older than any
   /// plausible push, which is a much smaller loss than an unpayable
   /// parcel. See SweepStaleParcelDrafts.
-  paymentReservationAt DateTime?
+  paymentReservationAt     DateTime?
   /// When the M-Pesa prompt for the current paymentCheckoutRequestId
   /// actually went out (Daraja or Co-op). Lets a clerk cancel a prompt
   /// that can no longer be approved (M-Pesa prompts expire in about a
   /// minute) and lets the reconcile sweep expire abandoned ones, instead
   /// of the parcel staying "payment in progress" forever.
-  paymentRequestedAt   DateTime?
+  paymentRequestedAt       DateTime?
   /// Set only for an MPESA_STK payment, once confirmed (see
   /// dbx.ConfirmParcelPaymentByCheckoutID) — same "quote the actual
   /// transaction back to the payer" role fare_payment/booking_payment's
@@ -4454,14 +4454,14 @@ model Parcel {
   /// MPESA_STK, ESOKO_POINTS, and a webhook-confirmed counter
   /// settlement, which all confirm themselves — same audit shape as
   /// refundedByStaffId/cancelledByStaffId below.
-  paidByStaffId            String?   @db.Uuid
+  paidByStaffId            String?                      @db.Uuid
   /// Which counter-cash hand-over batch cleared this parcel's cash out
   /// of the clerk's pocket (see ParcelCounterCashRemittance). Null
   /// until remitted, and only ever set for a CASH settlement —
   /// mpesaReceiptCode being non-null on a PAY_AT_COUNTER row means the
   /// money already landed electronically, never in anyone's hand.
-  counterCashRemittanceId String?                       @db.Uuid
-  counterCashRemittance   ParcelCounterCashRemittance?  @relation(fields: [counterCashRemittanceId], references: [id])
+  counterCashRemittanceId  String?                      @db.Uuid
+  counterCashRemittance    ParcelCounterCashRemittance? @relation(fields: [counterCashRemittanceId], references: [id])
 
   /// Who's coming to collect it and when, set by an admin scheduling a
   /// pickup — distinct from currentHolderPartyId, which only changes
@@ -5042,16 +5042,16 @@ model ParcelCodSettlement {
   id String @id @default(uuid()) @db.Uuid
 
   /// The seller who was paid.
-  senderPartyId String @db.Uuid
+  senderPartyId    String   @db.Uuid
   /// Which staff member ran the settlement. Mandatory — every money-out
   /// movement needs a name on it.
-  settledByStaffId String @db.Uuid
+  settledByStaffId String   @db.Uuid
   /// Net paid to the seller (gross less the handling fees).
-  paidKes Decimal @db.Decimal(12, 2)
+  paidKes          Decimal  @db.Decimal(12, 2)
   /// Total handling fees withheld across the batch.
-  feeKes Decimal @db.Decimal(12, 2)
+  feeKes           Decimal  @db.Decimal(12, 2)
   /// The parcel ids in this batch, frozen at settlement time.
-  parcelIds String[]
+  parcelIds        String[]
 
   createdAt DateTime @default(now())
 
@@ -5143,12 +5143,12 @@ model ParcelCourierPayout {
   /// Automatic Co-op B2C payouts start PENDING and move to PAID or FAILED
   /// when the bank reports the outcome; FAILED unlinks the parcels so the
   /// earnings are owed again.
-  status        String    @default("PAID")
-  coopReference String?   @unique
+  status            String    @default("PAID")
+  coopReference     String?   @unique
   /// The wallet this payout was actually sent to, copied at send time.
   destinationMsisdn String?
-  failureReason String?
-  settledAt     DateTime?
+  failureReason     String?
+  settledAt         DateTime?
 
   parcels Parcel[]
 
@@ -5205,14 +5205,14 @@ model ParcelOrg {
   /// fields ARE read live by the payout trigger; they are snapshotted
   /// onto each ParcelOrgPayout at creation time precisely so a later
   /// edit here never rewrites a payout already in flight or paid.
-  payoutMethod ParcelOrgPayoutMethod?
+  payoutMethod            ParcelOrgPayoutMethod?
   /// PHONE payout destination (M-Pesa B2C).
-  payoutMsisdn String?
+  payoutMsisdn            String?
   /// TILL payout destination (M-Pesa B2B BusinessBuyGoods).
-  payoutTillNumber String?
+  payoutTillNumber        String?
   /// PAYBILL payout destination (M-Pesa B2B BusinessPayBill).
-  payoutPaybillNumber String?
-  payoutPaybillAccount String?
+  payoutPaybillNumber     String?
+  payoutPaybillAccount    String?
   /// BANK payout destination. No automatic disbursement integration
   /// exists for this yet — see ParcelOrgPayoutStatus.MANUAL — but the
   /// destination is still captured at onboarding so finance has
@@ -5263,6 +5263,15 @@ model ParcelOrg {
   /// the admin form; null = default ink.
   brandAccent    String?
 
+  /// A courier company that also runs passenger buses/matatus —
+  /// staff-toggled in the admin console (ADR: transport rides on the
+  /// same Enterprise/ParcelOrg rather than a second merchant identity,
+  /// same reasoning ParcelOrg itself gives for not inventing a parallel
+  /// tenant). Off by default: a parcel-only company sees none of the
+  /// Bus/BusRoute/BusSchedule/BusTrip/BusBooking surface until this
+  /// flips on.
+  offersTransport Boolean @default(false)
+
   createdAt        DateTime @default(now())
   updatedAt        DateTime @updatedAt
   createdByStaffId String?  @db.Uuid
@@ -5277,10 +5286,14 @@ model ParcelOrg {
   routes         ParcelRoute[]
   counterTickets ParcelCounterTicket[]
   payouts        ParcelOrgPayout[]
+  buses          Bus[]
+  busSchedules   BusSchedule[]
+  busTrips       BusTrip[]
 
   @@index([enterpriseId])
   @@index([status])
   @@index([acceptsWalkIn])
+  @@index([offersTransport])
   @@map("parcel_org")
 }
 
@@ -5332,8 +5345,8 @@ model ParcelOrgStaff {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  claimedCounterTickets    ParcelCounterTicket[]
-  cancelledCounterTickets  ParcelCounterTicket[] @relation("CounterTicketCancelledBy")
+  claimedCounterTickets   ParcelCounterTicket[]
+  cancelledCounterTickets ParcelCounterTicket[] @relation("CounterTicketCancelledBy")
 
   @@index([orgId])
   @@map("parcel_org_staff")
@@ -5410,7 +5423,7 @@ model ParcelCounterTicket {
   /// label. Not a Prisma relation to Parcel (that model's relation list
   /// is large enough already): a plain FK column is all this needs,
   /// since nothing ever navigates ticket -> parcel through Prisma.
-  parcelId String? @db.Uuid
+  parcelId         String?   @db.Uuid
   /// Claimed atomically before BookParcel runs, same reservation-token
   /// shape SettleCounterParcelStk's paymentReservationAt follows — so
   /// two requests racing to book the same ticket can't both mint a
@@ -5482,8 +5495,20 @@ model ParcelOrgPayout {
 
   /// One payout per settled parcel — see this model's own comment on why
   /// this is per-transaction rather than a batch across many parcels.
-  parcelId String @unique @db.Uuid
-  parcel   Parcel @relation(fields: [parcelId], references: [id])
+  /// Nullable because this table now also pays out settled bus bookings
+  /// (busBookingId below) — exactly one of the two is ever set, enforced
+  /// by this model's own check constraint.
+  parcelId String? @unique @db.Uuid
+  parcel   Parcel? @relation(fields: [parcelId], references: [id])
+
+  /// One payout per paid bus booking — the Transport-vertical mirror of
+  /// parcelId above, same reasoning: a courier company's bus earnings
+  /// clear through the exact same automatic Daraja/Co-op dispatch and
+  /// manual-payouts fallback a parcel's earnings already do, rather than
+  /// inventing a second payout pipeline for a second product line on the
+  /// same company.
+  busBookingId String?     @unique @db.Uuid
+  busBooking   BusBooking? @relation(fields: [busBookingId], references: [id])
 
   amountKes Decimal @db.Decimal(10, 2)
 
@@ -5511,6 +5536,9 @@ model ParcelOrgPayout {
 
   @@index([parcelOrgId, status])
   @@index([status, createdAt])
+  // Exactly one of parcelId/busBookingId — a payout settling nothing, or
+  // settling both a parcel and a bus seat, is not a row this table
+  // should be able to represent.
   @@map("parcel_org_payout")
 }
 
@@ -5974,12 +6002,20 @@ model ParcelRoute {
   /// company's own book, not across the platform.
   code   String?
   active Boolean @default(true)
+  /// Optional, informational only (bus fare context mostly). Never used
+  /// for parcel pricing — ParcelPricingRule keys on zones, not distance.
+  distanceKm Int?
 
   createdAt DateTime @default(now())
 
   stops      ParcelRouteStop[]
   runs       ParcelShipment[]
   labelStock ParcelLabelStock[]
+  /// A transport-enabled company's bus schedules/trips ride this same
+  /// route and station list rather than inventing a second, free-text
+  /// one — see BusSchedule's own comment.
+  schedules  BusSchedule[]
+  trips      BusTrip[]
 
   @@index([parcelOrgId, active], map: "parcel_route_org_idx")
   @@map("parcel_route")
@@ -5995,14 +6031,210 @@ model ParcelRouteStop {
   route   ParcelRoute @relation(fields: [routeId], references: [id], onDelete: Cascade)
 
   sequence  Int
-  /// Restrict, not SetNull: a stop with no station is not a stop, and
-  /// blanking one would renumber a route under a dispatcher mid-journey.
-  stationId String      @db.Uuid
-  station   ParcelAgent @relation(fields: [stationId], references: [id], onDelete: Restrict)
+  /// SetNull, not Restrict: a bus route stop can be a town with no
+  /// physical station yet (placeName carries it instead — see below),
+  /// so a station closing shouldn't be blocked by every route through
+  /// it. A parcel route's own stops are always built from real
+  /// stations in practice (the courier console only offers a station
+  /// picker), but the column itself no longer enforces that for every
+  /// product riding this table.
+  stationId String?      @db.Uuid
+  station   ParcelAgent? @relation(fields: [stationId], references: [id], onDelete: SetNull)
+  /// Free-text name for a stop with no ParcelAgent station ("Kisii" on
+  /// a bus route that has no shop there). Exactly one of stationId /
+  /// placeName is set — enforced by parcel_route_stop_has_place.
+  placeName String?
 
   @@unique([routeId, sequence], map: "parcel_route_stop_route_seq_key")
   @@index([stationId], map: "parcel_route_stop_station_idx")
   @@map("parcel_route_stop")
+}
+
+// ─────────────────────────── BUS TRANSPORT ──────────────────────
+// A courier company with ParcelOrg.offersTransport also runs
+// passenger buses. Deliberately its own small vocabulary rather than
+// riding the TicketOrg/Listing/Seat machinery above: this is the same
+// company and the same ParcelOrg tenant, a second product line on the
+// company it already is, not a second merchant identity.
+
+enum BusStatus {
+  ACTIVE
+  INACTIVE
+}
+
+/// One physical vehicle on a transport-enabled courier company's
+/// fleet. totalSeats is the capacity a schedule's price is configured
+/// against; seatLayout is informational copy ("2+2") shown on the
+/// seat picker, not a real layout engine.
+model Bus {
+  id          String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  parcelOrgId String    @db.Uuid
+  org         ParcelOrg @relation(fields: [parcelOrgId], references: [id], onDelete: Cascade)
+
+  name        String
+  plateNumber String
+  totalSeats  Int
+  /// "2+2", "2+1" — seats either side of the aisle, for the seat
+  /// picker's rendering only.
+  seatLayout  String?
+  amenities   String[]  @default([])
+  status      BusStatus @default(ACTIVE)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  schedules BusSchedule[]
+  trips     BusTrip[]
+
+  @@unique([parcelOrgId, plateNumber], map: "bus_org_plate_key")
+  @@index([parcelOrgId, status], map: "bus_org_status_idx")
+  @@map("bus")
+}
+
+/// Buses no longer keep their own origin/destination vocabulary. A
+/// company that also runs passenger buses sells seats on the SAME
+/// ParcelRoute/ParcelRouteStop station network its parcel runs already
+/// use — a bus from Nairobi to Homabay via Kisii is one ParcelRoute
+/// with three stops, not a second "route" invented for buses that
+/// can't see the courier's own stations. See ParcelRouteStop's comment
+/// for how a stop with no physical station (a town with no shop) is
+/// still representable via placeName.
+
+/// The recurring offering a manager configures in settings: this bus,
+/// on this route, departing at this time on these days, at this
+/// price. Concrete bookable BusTrip rows are generated from this
+/// template (see dbx.GenerateUpcomingBusTrips) — the template itself
+/// is never directly bookable.
+model BusSchedule {
+  id          String      @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  parcelOrgId String      @db.Uuid
+  org         ParcelOrg   @relation(fields: [parcelOrgId], references: [id], onDelete: Cascade)
+  busId       String      @db.Uuid
+  bus         Bus         @relation(fields: [busId], references: [id], onDelete: Cascade)
+  routeId     String      @db.Uuid
+  route       ParcelRoute @relation(fields: [routeId], references: [id], onDelete: Cascade)
+
+  /// "HH:MM", 24h, Africa/Nairobi local time.
+  departTime String
+  /// 0=Sunday .. 6=Saturday. Every day by default.
+  daysOfWeek Int[]   @default([0, 1, 2, 3, 4, 5, 6])
+  priceKes   Decimal @db.Decimal(12, 2)
+  active     Boolean @default(true)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  trips BusTrip[]
+
+  @@index([parcelOrgId, active], map: "bus_schedule_org_idx")
+  @@map("bus_schedule")
+}
+
+enum BusTripStatus {
+  SCHEDULED
+  DEPARTED
+  CANCELLED
+  COMPLETED
+}
+
+/// One concrete, bookable departure — "the 6am Nairobi–Mombasa coach
+/// on 12 October". priceKes and seatsTotal are snapshotted off the
+/// schedule/bus at generation time, same reasoning Parcel.platformFeeKes
+/// gives for freezing a commercial term: a later price or capacity
+/// edit must never rewrite a trip buyers have already booked seats on.
+model BusTrip {
+  id          String       @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  parcelOrgId String       @db.Uuid
+  org         ParcelOrg    @relation(fields: [parcelOrgId], references: [id], onDelete: Cascade)
+  scheduleId  String?      @db.Uuid
+  schedule    BusSchedule? @relation(fields: [scheduleId], references: [id])
+  busId       String       @db.Uuid
+  bus         Bus          @relation(fields: [busId], references: [id])
+  routeId     String       @db.Uuid
+  route       ParcelRoute  @relation(fields: [routeId], references: [id])
+
+  departAt   DateTime
+  priceKes   Decimal       @db.Decimal(12, 2)
+  seatsTotal Int
+  status     BusTripStatus @default(SCHEDULED)
+
+  createdAt DateTime @default(now())
+
+  bookings BusBooking[]
+
+  @@unique([busId, departAt], map: "bus_trip_bus_depart_key")
+  @@index([parcelOrgId, departAt], map: "bus_trip_org_depart_idx")
+  @@index([routeId, departAt], map: "bus_trip_route_depart_idx")
+  @@map("bus_trip")
+}
+
+enum BusBookingStatus {
+  PENDING_PAYMENT
+  PAID
+  CANCELLED
+  REFUNDED
+}
+
+enum BusBookingChannel {
+  WEB
+  COUNTER
+}
+
+enum BusBookingPaymentMethod {
+  MPESA_STK
+  CASH
+}
+
+/// One booked seat on one trip. The buyer need not be a registered
+/// Esoqo subject — name/phone/ID are captured straight onto the
+/// booking, same "guest checkout" shape Booking.buyerName/buyerMsisdn
+/// already use for ticketing. Seat double-booking is guarded in the
+/// transaction that creates this row (re-checking for a live booking
+/// on the same tripId+seatNumber), not by a DB constraint, because a
+/// cancelled booking must free its seat for resale.
+model BusBooking {
+  id     String  @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  tripId String  @db.Uuid
+  trip   BusTrip @relation(fields: [tripId], references: [id], onDelete: Cascade)
+
+  seatNumber Int
+
+  passengerName     String
+  passengerMsisdn   String
+  passengerIdNumber String?
+
+  /// Booking reference shown to the passenger and typed/scanned at
+  /// boarding — same role Ticket.code plays in the ticketing system.
+  /// Not unique on its own: a passenger booking several seats in one
+  /// checkout gets one row per seat, all sharing this code, the way
+  /// Booking/Ticket already splits one checkout into several rows.
+  code          String
+  status        BusBookingStatus        @default(PENDING_PAYMENT)
+  paymentMethod BusBookingPaymentMethod @default(MPESA_STK)
+  channel       BusBookingChannel       @default(WEB)
+  priceKes      Decimal                 @db.Decimal(12, 2)
+
+  /// Not unique for the same reason as code — every seat in a
+  /// multi-seat checkout shares the one STK push that pays for all of
+  /// them, so the M-Pesa webhook confirms every row with this id.
+  mpesaCheckoutRequestId String?
+  /// Counter staff who booked this on a walk-in passenger's behalf.
+  /// Null for web bookings.
+  createdByStaffId       String? @db.Uuid
+
+  createdAt   DateTime  @default(now())
+  paidAt      DateTime?
+  cancelledAt DateTime?
+
+  /// The automatic payout this booking's paid fare clears through —
+  /// see ParcelOrgPayout.busBookingId's own comment.
+  orgPayout ParcelOrgPayout?
+
+  @@index([tripId, seatNumber], map: "bus_booking_trip_seat_idx")
+  @@index([tripId, status], map: "bus_booking_trip_status_idx")
+  @@index([code], map: "bus_booking_code_idx")
+  @@index([mpesaCheckoutRequestId], map: "bus_booking_mpesa_checkout_idx")
+  @@map("bus_booking")
 }
 
 /// Admin-editable cover levels a sender can buy against declared value

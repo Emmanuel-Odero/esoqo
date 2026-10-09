@@ -513,6 +513,39 @@ func (s *Server) Router() *gin.Engine {
 		v1.POST("/parcel-orgs/me/routes", s.authRequired(), s.handleSaveMyOrgRoute)
 		v1.POST("/parcel-orgs/me/routes/:id", s.authRequired(), s.handleSaveMyOrgRoute)
 		v1.DELETE("/parcel-orgs/me/routes/:id", s.authRequired(), s.handleDeleteMyOrgRoute)
+
+		// ── Transport (ParcelOrg.offersTransport) ── buses, bus routes,
+		// schedules (prices/capacities), trips, and counter bus sales.
+		v1.GET("/parcel-orgs/me/transport/buses", s.authRequired(), s.handleListMyOrgBuses)
+		v1.POST("/parcel-orgs/me/transport/buses", s.authRequired(), s.handleSaveMyOrgBus)
+		v1.POST("/parcel-orgs/me/transport/buses/:id", s.authRequired(), s.handleSaveMyOrgBus)
+		v1.DELETE("/parcel-orgs/me/transport/buses/:id", s.authRequired(), s.handleDeleteMyOrgBus)
+		// Routes themselves are managed at /parcel-orgs/me/routes (same
+		// ParcelRoute list the company's parcel runs use) — this is a
+		// read-only projection of it for the schedule/trip pickers.
+		v1.GET("/parcel-orgs/me/transport/routes", s.authRequired(), s.handleListMyOrgBusRoutes)
+		v1.GET("/parcel-orgs/me/transport/schedules", s.authRequired(), s.handleListMyOrgBusSchedules)
+		v1.POST("/parcel-orgs/me/transport/schedules", s.authRequired(), s.handleSaveMyOrgBusSchedule)
+		v1.POST("/parcel-orgs/me/transport/schedules/:id", s.authRequired(), s.handleSaveMyOrgBusSchedule)
+		v1.DELETE("/parcel-orgs/me/transport/schedules/:id", s.authRequired(), s.handleDeleteMyOrgBusSchedule)
+		v1.GET("/parcel-orgs/me/transport/trips", s.authRequired(), s.handleListMyOrgBusTrips)
+		v1.POST("/parcel-orgs/me/transport/trips", s.authRequired(), s.handleCreateMyOrgBusTrip)
+		v1.POST("/parcel-orgs/me/transport/trips/:id/cancel", s.authRequired(), s.handleCancelMyOrgBusTrip)
+		v1.GET("/parcel-orgs/me/transport/trips/:id/bookings", s.authRequired(), s.handleListMyOrgBusTripBookings)
+		v1.POST("/parcel-orgs/me/transport/counter/book", s.authRequired(), s.handleCounterBookBus)
+		v1.POST("/parcel-orgs/me/transport/bookings/:id/cancel", s.authRequired(), s.handleCounterCancelBusBooking)
+
+		// Public — the web bus-ticket booking funnel: companies, their
+		// routes, upcoming trips, seat availability and guest checkout.
+		v1.GET("/transport/companies", s.handleListTransportCompanies)
+		v1.GET("/transport/companies/:orgId/routes", s.handleListPublicBusRoutes)
+		v1.GET("/transport/companies/:orgId/routes/search", s.handleFindPublicBusRoutes)
+		v1.GET("/transport/trips", s.handleListPublicBusTrips)
+		v1.GET("/transport/trips/:id", s.handleGetPublicBusTrip)
+		v1.GET("/transport/trips/:id/seats", s.handleGetPublicBusTripSeats)
+		v1.POST("/transport/bookings", s.rateLimit("book:bustrip", 30, time.Hour), s.handleCreatePublicBusBooking)
+		v1.GET("/transport/bookings/:code", s.handleGetPublicBusBooking)
+
 		// The third step of the guest booking flow (book, price, pay), and
 		// like the other two it is keyed on the tracking code alone. The
 		// server-side range check is what stops it being used to set an
@@ -708,10 +741,15 @@ func (s *Server) Router() *gin.Engine {
 		v1.POST("/admin/parcels/:id/org", s.authRequired(), s.handleAdminAssignParcelOrg)
 		v1.PATCH("/admin/parcels/orgs/:id", s.authRequired(), s.handleAdminUpdateParcelOrg)
 		v1.GET("/admin/parcels/orgs/:id/staff", s.authRequired(), s.handleAdminListParcelOrgStaff)
-		// Payouts no automatic rail could clear — bank destinations (no
-		// disbursement integration yet) and anything stuck FAILED long
-		// enough that finance should look rather than let the retry
-		// worker keep trying.
+		// Settlement account setup for a company's BANK payout method: the
+		// PesaLink participant list to pick from, and the Co-op validation
+		// check that confirms an account number/bank pair before it can be
+		// saved — see payments.CoopValidatePesaLinkAccount.
+		v1.GET("/admin/parcels/banks", s.authRequired(), s.handleAdminListBanks)
+		v1.POST("/admin/parcels/payout-accounts/validate-bank", s.authRequired(), s.handleAdminValidateBankAccount)
+		// Payouts no automatic rail could clear — a company with no payout
+		// method configured, or anything stuck FAILED long enough that
+		// finance should look rather than let the retry worker keep trying.
 		v1.GET("/admin/parcels/payouts/manual", s.authRequired(), s.handleAdminListManualParcelOrgPayouts)
 		v1.POST("/admin/parcels/payouts/:id/mark-paid", s.authRequired(), s.handleAdminMarkParcelOrgPayoutPaid)
 		v1.POST("/admin/parcels/orgs/:id/staff", s.authRequired(), s.handleAdminUpsertParcelOrgStaff)

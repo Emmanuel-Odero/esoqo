@@ -21,18 +21,18 @@ const (
 // stand-in for the TS `readonly __verified: true` marker — only
 // CtxFromToken, SystemCtx and AnonCtx may set it true.
 type Ctx struct {
-	ActorType    ActorType
-	ActorID      string // Party id for a subject, StaffUser id for staff
-	Capabilities []string
-	PartyID      string
-	OrgID        string
-	StoreID      string
-	TicketOrgID  string
-	ParcelOrgID  string // DEPRECATED: Use OrgID + OrgType instead
-	OrgType      string // NEW: Identifies the organization type (courier, hotel, eatery, etc.)
+	ActorType      ActorType
+	ActorID        string // Party id for a subject, StaffUser id for staff
+	Capabilities   []string
+	PartyID        string
+	OrgID          string
+	StoreID        string
+	TicketOrgID    string
+	ParcelOrgID    string // DEPRECATED: Use OrgID + OrgType instead
+	OrgType        string // NEW: Identifies the organization type (courier, hotel, eatery, etc.)
 	SessionProfile string // NEW: Session profile (shift, session, readonly)
-	IP           string
-	Verified     bool
+	IP             string
+	Verified       bool
 	// ExpiresAt — unix millis this session's own TTL runs out, carried
 	// straight through from SessionData so a client-facing "your
 	// session expires in Xh Ym" countdown never has to be derived
@@ -258,6 +258,16 @@ const (
 	// manager clears it, same separation CapParcelOrgEarnings/RiderCash
 	// already draws between collecting money and counting it in.
 	CapParcelOrgCounterCash = "parcelorg.counter-cash"
+	// CapParcelOrgTransport — manage the bus side of a transport-enabled
+	// courier company: buses, routes, schedules (prices/capacities) and
+	// trips. A commercial/config capability, same tier as
+	// CapParcelOrgWrite, not a shift task.
+	CapParcelOrgTransport = "parcelorg.transport"
+	// CapParcelOrgTransportSell — book and cancel a seat for a walk-in
+	// passenger at the counter. Narrower than CapParcelOrgTransport: a
+	// counter clerk sells seats on buses a manager has already set up,
+	// but doesn't configure the fleet.
+	CapParcelOrgTransportSell = "parcelorg.transport-sell"
 )
 
 // ParcelStaffCapabilities — one bundle per role a parcel company issues
@@ -274,14 +284,14 @@ var ParcelStaffCapabilities = map[string][]string{
 	"DISPATCHER": {
 		CapParcelOrgRead, CapParcelOrgCarry, CapParcelOrgDispatch, CapParcelOrgArrival,
 	},
-	"STATION_MANAGER":  {CapParcelOrgRead, CapParcelOrgCarry, CapParcelOrgDispatch, CapParcelOrgStaff, CapParcelOrgStations, CapParcelOrgIntake, CapParcelOrgArrival, CapParcelOrgCollection},
-	"INTAKE_CLERK":     {CapParcelOrgRead, CapParcelOrgIntake},
+	"STATION_MANAGER":  {CapParcelOrgRead, CapParcelOrgCarry, CapParcelOrgDispatch, CapParcelOrgStaff, CapParcelOrgStations, CapParcelOrgIntake, CapParcelOrgArrival, CapParcelOrgCollection, CapParcelOrgTransportSell},
+	"INTAKE_CLERK":     {CapParcelOrgRead, CapParcelOrgIntake, CapParcelOrgTransportSell},
 	"ARRIVAL_CLERK":    {CapParcelOrgRead, CapParcelOrgArrival},
 	"COLLECTION_CLERK": {CapParcelOrgRead, CapParcelOrgCollection},
 	"MANAGER": {
 		CapParcelOrgRead, CapParcelOrgCarry, CapParcelOrgDispatch,
 		CapParcelOrgWrite, CapParcelOrgStaff, CapParcelOrgStations, CapParcelOrgEarnings,
-		CapParcelOrgCounterCash,
+		CapParcelOrgCounterCash, CapParcelOrgTransport, CapParcelOrgTransportSell,
 	},
 }
 
@@ -333,7 +343,7 @@ var AllParcelOrgCapabilities = []string{
 	CapParcelOrgRead, CapParcelOrgCarry, CapParcelOrgDispatch,
 	CapParcelOrgIntake, CapParcelOrgArrival, CapParcelOrgCollection,
 	CapParcelOrgStations, CapParcelOrgStaff, CapParcelOrgWrite, CapParcelOrgEarnings,
-	CapParcelOrgCounterCash,
+	CapParcelOrgCounterCash, CapParcelOrgTransport, CapParcelOrgTransportSell,
 }
 
 // knownParcelOrgCapability — set form of the list above, for the filter.
