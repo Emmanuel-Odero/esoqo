@@ -95,7 +95,13 @@ func (s *Server) Router() *gin.Engine {
 		auth.POST("/verify-otp", s.rateLimit("auth:verify", 30, time.Hour), s.handleVerifyOtp)
 		auth.POST("/sign-in", s.rateLimit("auth:signin", 30, time.Hour), s.handleSignIn)
 		auth.POST("/pin/reset", s.rateLimit("auth:pinreset", 20, time.Hour), s.handleResetPin)
-		auth.POST("/pin/set-without-code", s.rateLimit("auth:pinreset", 20, time.Hour), s.handleSetPinWithoutCode)
+		// There used to be an unauthenticated POST /pin/set-without-code
+		// here for "phone already verified during registration" — it
+		// trusted a client-supplied msisdn with no proof of control,
+		// which was a full unauthenticated account-takeover primitive
+		// (set any registered number's PIN and get a session back).
+		// Removed: registration now routes through /pin/reset like every
+		// other PIN-setting path, requiring a freshly verified OTP code.
 		auth.POST("/set-pin", s.authRequired(), s.handleSetPin)
 		auth.POST("/sign-out", s.authRequired(), s.handleSignOut)
 

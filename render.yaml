@@ -74,6 +74,8 @@ services:
         sync: false
       - key: CECF_SERVICE_SECRET
         sync: false   # must match CECF_SERVICE_SECRET on cecf-wordpress below — signs/verifies the WP↔core cecf/v1 <-> /api/cecf/* handshake
+      - key: MPESA_CALLBACK_SECRET
+        sync: false   # MUST match esoko-core-go's MPESA_CALLBACK_SECRET — core-go forwards registration/donation callbacks here via TS_CORE_WEBHOOK_URL, and this service refuses to boot in production without it (an unset secret makes /webhooks/mpesa/* accept forged payment confirmations from anyone)
       - key: SMS_PROVIDER
         value: console
       - key: SMS_API_KEY
@@ -130,7 +132,7 @@ services:
       - key: FLEET_QR_SECRET
         sync: false   # HMAC key for boarding/fare-proof/voucher QR payloads — core-go refuses to boot without it
       - key: MPESA_CALLBACK_SECRET
-        sync: false   # trailing path segment of esoko-app's MPESA_CALLBACK_URL; required once MPESA_PROVIDER leaves console
+        sync: false   # trailing path segment of esoko-app's MPESA_CALLBACK_URL — MUST match esoko-core's MPESA_CALLBACK_SECRET above, which forwards here
       - key: SMS_PROVIDER
         value: celcom
       - key: CELCOM_API_KEY

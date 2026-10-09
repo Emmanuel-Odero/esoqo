@@ -111,6 +111,23 @@ app.get('/ready', async (_req, reply) => {
  */
 const callbackSecret = process.env.MPESA_CALLBACK_SECRET ?? '';
 
+// Outside a plain dev box, these routes are always registered and always
+// capable of marking a store order, registration, donation, business
+// payment or wallet transaction PAID/FAILED — whether the request came
+// from core-go's forward, from Daraja directly, or wasn't configured as
+// this service's own "MPESA_PROVIDER" at all (core-go is the actual STK
+// webhook target; this service only ever sees forwarded or foreign
+// callbacks, so its own provider setting says nothing about whether
+// these endpoints matter). An unset secret here is a bare,
+// unauthenticated money-crediting endpoint reachable by anyone on the
+// internet — refuse to boot rather than serve that silently.
+if (appEnv() !== 'development' && !callbackSecret) {
+  throw new Error(
+    'MPESA_CALLBACK_SECRET must be set outside development — without it, ' +
+      '/webhooks/mpesa/* accept forged payment confirmations from anyone.',
+  );
+}
+
 function callbackTokenOk(token: string | undefined): boolean {
   if (!callbackSecret) return true;
   if (typeof token !== 'string' || token.length !== callbackSecret.length) return false;
@@ -406,7 +423,15 @@ app.post('/webhooks/mpesa/b2c-result/:token', handleB2CResultCallback);
  * what happened — so it is marked FAILED and the money stays in the
  * wallet, rather than left PENDING forever with no way to reconcile it.
  */
-app.post('/webhooks/mpesa/b2c-timeout', async (req, reply) => {
+const handleB2CTimeout = async (
+  req: FastifyRequest<{ Params: { token?: string } }>,
+  reply: FastifyReply,
+) => {
+  const token = req.params?.token;
+  if (!callbackTokenOk(token)) {
+    app.log.warn({ ip: req.ip }, 'rejected M-Pesa B2C timeout callback with bad/missing token');
+    return reply.code(404).send({ error: 'not found' });
+  }
   const parsed = parseB2CResultCallback(req.body);
   if (parsed) {
     try {
@@ -422,7 +447,10 @@ app.post('/webhooks/mpesa/b2c-timeout', async (req, reply) => {
     }
   }
   return reply.send({ ok: true });
-});
+};
+
+app.post('/webhooks/mpesa/b2c-timeout', handleB2CTimeout);
+app.post('/webhooks/mpesa/b2c-timeout/:token', handleB2CTimeout);
 
 /**
  * Strangler bridge: during the TS→Go migration both webhook routes are
@@ -436,8 +464,15 @@ async function forwardCallbackToGo(
   checkoutRequestId: string,
 ): Promise<void> {
   const base = process.env.CORE_GO_URL ?? 'http://localhost:4100';
+  // Same shared MPESA_CALLBACK_SECRET core-go's own callbackTokenOK
+  // expects as the last path segment — forwarding to the bare path used
+  // to 404 silently against any core-go deployment that has the secret
+  // configured, dropping the payment confirmation entirely.
+  const path = callbackSecret
+    ? `/webhooks/mpesa/stk-callback/${encodeURIComponent(callbackSecret)}`
+    : '/webhooks/mpesa/stk-callback';
   try {
-    const res = await fetch(`${base}/webhooks/mpesa/stk-callback`, {
+    const res = await fetch(`${base}${path}`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(body),

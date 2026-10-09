@@ -1,6 +1,6 @@
 import { notFound } from 'next/navigation';
 import { getCampaign, listCampaignUpdatesForOwner } from '@esoqo/db';
-import { sanitizeRichText } from '@esoqo/domain';
+import { sanitizeRichText } from '@esoqo/domain/rich-text';
 import { requireMyPage } from '@/lib/session';
 import { CampaignForm } from '../../CampaignForm';
 import { CampaignUpdatesPanel } from '../../CampaignUpdatesPanel';

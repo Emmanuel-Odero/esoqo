@@ -15,7 +15,11 @@
 #  image size becomes a problem, the fix is to give the four packages
 #  real build outputs — not to prune tsx out of this image.
 # ════════════════════════════════════════════════════════════════════
-ARG NODE_VERSION=22.12.0
+#  Kept in step with docker/Dockerfile.next's NODE_VERSION (see that
+#  file's comment on jsdom 30's engines floor) — this service doesn't
+#  import jsdom itself, but there is no reason for the two production
+#  Node images in this repo to drift apart.
+ARG NODE_VERSION=22.23.3
 
 FROM node:${NODE_VERSION}-bookworm-slim AS base
 # COREPACK_HOME must be a world-readable path, not the default under

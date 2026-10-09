@@ -42,3 +42,25 @@ export function isTestingProduction(): boolean {
 export function isProduction(): boolean {
   return appEnv() === 'production';
 }
+
+/**
+ * Reads a signing/hashing secret (OTP_PEPPER, SESSION_SECRET,
+ * AUDIT_CHAIN_SEED, ...) with a development-only fallback.
+ *
+ * `env.ts`'s DATABASE_URL guard and core-go's Config.Validate both
+ * refuse to run with a dev credential outside a dev box — this is the
+ * same contract for the handful of hashing/signing secrets that used to
+ * fall back to a hardcoded `"dev-..."` value unconditionally. Falling
+ * back silently in a deployed environment means OTPs get hashed, audit
+ * entries chained, or payment approvals signed with a value published
+ * in this repo — indistinguishable from not hashing/signing at all.
+ */
+export function requiredSecret(envVar: string, devFallback: string): string {
+  const value = process.env[envVar];
+  if (value) return value;
+  if (appEnv() === 'development') return devFallback;
+  throw new Error(
+    `${envVar} must be set outside development — it is not safe to run with ` +
+      'the hardcoded development fallback.',
+  );
+}

@@ -1,6 +1,6 @@
 import { createHmac, timingSafeEqual } from 'node:crypto';
 import { verify as verifyArgon2 } from '@node-rs/argon2';
-import { normaliseMsisdn } from '@esoqo/domain';
+import { normaliseMsisdn, requiredSecret } from '@esoqo/domain';
 import { prisma } from '../client';
 import { requireCapability, systemCtx, type Ctx } from '../capabilities';
 import { recordAudit } from '../audit';
@@ -30,7 +30,7 @@ import type {
  * services/ledger (Rust, Phase 2, not yet built — see its README).
  */
 
-const SECRET = process.env.SESSION_SECRET ?? 'dev-signing-secret';
+const SECRET = requiredSecret('SESSION_SECRET', 'dev-signing-secret');
 
 const OFFICER_ROLES: MemberRole[] = ['CHAIRPERSON', 'TREASURER', 'SECRETARY'];
 

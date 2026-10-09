@@ -165,7 +165,7 @@ export async function cecfRoutes(app: FastifyInstance) {
       });
 
       if (r.msisdnVerified) {
-        await markMsisdnVerified(ctx, reg.id);
+        await markMsisdnVerified(ctx, reg.id, r.msisdn);
       }
 
       return reply.send({ ok: true, registrationId: reg.id });

@@ -298,7 +298,7 @@ export async function actionVerifyJoinOtp(
 
   const ctx = publicJoinCtx(await clientIp());
   try {
-    await markMsisdnVerified(ctx, registrationId);
+    await markMsisdnVerified(ctx, registrationId, msisdn.data);
     return { ok: true, data: undefined };
   } catch (e) {
     return {
