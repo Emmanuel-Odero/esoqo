@@ -158,6 +158,14 @@ kubectl create secret generic esoqo-secrets \
   --from-literal=MPESA_PASSKEY="${MPESA_PASSKEY:-}" \
   --from-literal=MPESA_CALLBACK_SECRET="${MPESA_CALLBACK_SECRET:-}" \
   --from-literal=MPESA_CALLBACK_URL="${MPESA_CALLBACK_URL:-}" \
+  --from-literal=COOP_PROVIDER="${COOP_PROVIDER:-}" \
+  --from-literal=COOP_BASIC_AUTH="${COOP_BASIC_AUTH:-}" \
+  --from-literal=COOP_USER_ID="${COOP_USER_ID:-}" \
+  --from-literal=COOP_OPERATOR_CODE="${COOP_OPERATOR_CODE:-}" \
+  --from-literal=COOP_CALLBACK_URL="${COOP_CALLBACK_URL:-}" \
+  --from-literal=COOP_CALLBACK_SECRET="${COOP_CALLBACK_SECRET:-}" \
+  --from-literal=COOP_SOURCE_ACCOUNT="${COOP_SOURCE_ACCOUNT:-}" \
+  --from-literal=COOP_COURIER_AUTOPAY="${COOP_COURIER_AUTOPAY:-false}" \
   --from-literal=PESAPAL_CONSUMER_KEY="${PESAPAL_CONSUMER_KEY:-}" \
   --from-literal=PESAPAL_CONSUMER_SECRET="${PESAPAL_CONSUMER_SECRET:-}" \
   --from-literal=PESAPAL_IPN_ID="${PESAPAL_IPN_ID:-}" \

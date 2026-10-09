@@ -47,7 +47,11 @@ func ExpectedAmountForCheckout(ctx context.Context, pool *pgxpool.Pool, checkout
 			SELECT "kesEquiv"::text             FROM voucher_ledger_entry
 				WHERE kind = 'LOAD_MPESA_PENDING' AND "refId" = $1
 			UNION ALL
-			SELECT ("amountPerEmployeeKes" * COALESCE(array_length("employeePartyIds", 1), 0))::text
+			SELECT ("amountPerEmployeeKes" * COALESCE(
+				CASE
+					WHEN jsonb_typeof("employeePartyIds") = 'array' THEN jsonb_array_length("employeePartyIds")
+					ELSE 0
+				END, 0))::text
 				FROM voucher_batch      WHERE "mpesaCheckoutRequestId"  = $1
 			UNION ALL
 			SELECT "amountKes"::text            FROM bill_contribution  WHERE "mpesaCheckoutRequestId"  = $1

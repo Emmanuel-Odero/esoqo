@@ -155,6 +155,8 @@ export function CounterQueueClient({
         setActive(queue.active);
       }
       if (register.ok) setHistory(register.tickets);
+    } catch {
+      // Network interruption or server reload - do not crash
     } finally {
       refreshing.current = false;
     }

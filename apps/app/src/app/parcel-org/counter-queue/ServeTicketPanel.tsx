@@ -4,8 +4,6 @@ import { useEffect, useId, useRef, useState, useTransition } from "react";
 import { Icon } from "@esoqo/ui";
 import { useAnnounce } from "@esoqo/a11y";
 import {
-  confirmCounterSettlementManualCode,
-  getCounterSettlementStatus,
   receiveWalkInParcel,
   resolveOrgLabel,
   searchOrgLabels,
@@ -14,6 +12,7 @@ import {
 } from "../actions";
 import type { OrgLabelSearchRow } from "@/lib/parcel-org-session";
 import { LabelPicker } from "../LabelPicker";
+import { MpesaPromptWatch } from "../MpesaPromptWatch";
 import {
   bookCounterTicket,
   cancelCounterTicket,
@@ -37,12 +36,6 @@ function fullName(first?: string, last?: string): string {
   return [first, last].filter(Boolean).join(" ").trim();
 }
 
-/** Same interval/give-up shape apps/web/src/app/pay/PayClient.tsx
- *  already proved for STK push waits: long enough for someone to fumble
- *  their PIN once, short enough that a clerk isn't staring at a spinner
- *  for the rest of their shift. */
-const POLL_INTERVAL_MS = 2500;
-const POLL_GIVE_UP_MS = 5 * 60 * 1000;
 
 type Step = "confirm" | "label" | "receive" | "settle" | "done";
 
@@ -184,16 +177,11 @@ export function ServeTicketPanel({
   const [settleError, setSettleError] = useState<string | null>(null);
   const [settlePending, startSettleTransition] = useTransition();
   // A payment already in flight when the panel (re)opened: start
-  // watching it rather than inviting a second prompt. waitingSince
-  // starts now so the give-up window is measured from this mount.
-  const [mpesaPhase, setMpesaPhase] = useState<"idle" | "waiting" | "unresolved">(
+  // watching it (MpesaPromptWatch) rather than inviting a second prompt.
+  const [mpesaPhase, setMpesaPhase] = useState<"idle" | "waiting">(
     ticket.paymentPending ? "waiting" : "idle",
   );
   const [mpesaReceipt, setMpesaReceipt] = useState<string | null>(null);
-  const waitingSince = useRef<number | null>(ticket.paymentPending ? Date.now() : null);
-  const [manualCode, setManualCode] = useState("");
-  const [manualCodeError, setManualCodeError] = useState<string | null>(null);
-  const [manualCodePending, startManualCodeTransition] = useTransition();
 
   // ── Hand back to the queue ── the case was claimed by mistake, or
   //    the sender needs somebody else. Pre-booking only; the server
@@ -340,66 +328,10 @@ export function ServeTicketPanel({
         setStep("done");
         return;
       }
-      waitingSince.current = Date.now();
       setMpesaPhase("waiting");
     });
   }
 
-  /** The code-entry fallback once a push has gone unresolved too long —
-   *  see dbx.ConfirmCounterSettlementByManualCode's own comment on why
-   *  this is trusted rather than re-verified against Safaricom. */
-  function submitManualCode() {
-    if (!parcelCode) return;
-    const value = manualCode.trim();
-    if (!value) {
-      setManualCodeError("Enter the M-Pesa code from the client's confirmation message");
-      return;
-    }
-    setManualCodeError(null);
-    startManualCodeTransition(async () => {
-      const res = await confirmCounterSettlementManualCode(parcelCode, value);
-      if (!res.ok) {
-        setManualCodeError(res.error);
-        return;
-      }
-      setMpesaReceipt(value);
-      setMpesaPhase("idle");
-      announce(`M-Pesa payment confirmed for ${parcelCode}`, "assertive");
-      setStep("done");
-    });
-  }
-
-  // Poll while an STK push is in flight. Stops on a terminal status and
-  // gives up after five minutes rather than claim it "failed" — the
-  // payment may still land, and telling a clerk it failed invites
-  // charging the client twice.
-  useEffect(() => {
-    if (mpesaPhase !== "waiting" || !parcelCode) return;
-    let cancelled = false;
-
-    async function poll() {
-      const res = await getCounterSettlementStatus(parcelCode!);
-      if (cancelled) return;
-      if (res.ok && res.status.status === "SETTLED") {
-        setMpesaReceipt(res.status.mpesaReceiptCode);
-        setMpesaPhase("idle");
-        announce(`M-Pesa payment confirmed for ${parcelCode}`, "assertive");
-        setStep("done");
-        return;
-      }
-      const waited = Date.now() - (waitingSince.current ?? Date.now());
-      if (waited < POLL_GIVE_UP_MS) {
-        setTimeout(() => void poll(), POLL_INTERVAL_MS);
-      } else {
-        setMpesaPhase("unresolved");
-      }
-    }
-    const timer = setTimeout(() => void poll(), POLL_INTERVAL_MS);
-    return () => {
-      cancelled = true;
-      clearTimeout(timer);
-    };
-  }, [mpesaPhase, parcelCode, announce]);
 
   return (
     <div className="chain ok" style={{ marginBottom: 12, flexDirection: "column", alignItems: "stretch", gap: 12 }}>
@@ -624,33 +556,21 @@ export function ServeTicketPanel({
           {settleError && (
             <p className="sub" style={{ color: "var(--red, #b42318)", margin: 0, fontSize: ".82rem" }}>{settleError}</p>
           )}
-          {mpesaPhase === "waiting" && (
-            <p className="sub" style={{ margin: 0, fontSize: ".85rem" }}>
-              <Icon name="info" size={14} /> Waiting for the client to approve the M-Pesa prompt on their phone…
-            </p>
-          )}
-          {mpesaPhase === "unresolved" && (
-            <div style={{ display: "grid", gap: 6 }}>
-              <p className="sub" style={{ color: "var(--amber, #9a6700)", margin: 0, fontSize: ".85rem" }}>
-                Still no word from Safaricom. If the client already got the "money sent" message on
-                their phone, enter the M-Pesa code from it below instead of pushing a second prompt.
-              </p>
-              <div className="row" style={{ gap: 8 }}>
-                <input
-                  className="mono"
-                  style={{ flex: 1, padding: "6px 8px", border: "1.5px solid var(--line)", borderRadius: 6 }}
-                  value={manualCode}
-                  onChange={(e) => setManualCode(e.target.value.toUpperCase())}
-                  placeholder="M-Pesa code, e.g. QFL7XYZ123"
-                />
-                <button className="btn btn-o btn-sm" disabled={manualCodePending} onClick={submitManualCode}>
-                  {manualCodePending ? "Checking…" : "Use this code"}
-                </button>
-              </div>
-              {manualCodeError && (
-                <p className="sub" style={{ color: "var(--red, #b42318)", margin: 0, fontSize: ".82rem" }}>{manualCodeError}</p>
-              )}
-            </div>
+          {mpesaPhase === "waiting" && parcelCode && (
+            <MpesaPromptWatch
+              code={parcelCode}
+              onSettled={(receipt) => {
+                setMpesaReceipt(receipt);
+                setMpesaPhase("idle");
+                announce(`M-Pesa payment confirmed for ${parcelCode}`, "assertive");
+                setStep("done");
+              }}
+              onReleased={(message) => {
+                setMpesaPhase("idle");
+                setSettleError(message);
+                announce(`M-Pesa prompt for ${parcelCode} is no longer active`, "assertive");
+              }}
+            />
           )}
           <div className="row" style={{ gap: 8, justifyContent: "flex-end" }}>
             <button

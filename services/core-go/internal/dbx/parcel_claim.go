@@ -160,7 +160,11 @@ type ParcelPartyView struct {
 	// Sender-only: what this cost and whether it has been paid back.
 	PriceKesOwn   *string `json:"priceKesOwn,omitempty"`
 	PaymentMethod *string `json:"paymentMethod,omitempty"`
-	RefundStatus  *string `json:"refundStatus,omitempty"`
+	// Paid and the M-Pesa receipt let the sender tell "booked to pay at
+	// the counter" from "paid at the counter", and cash from M-Pesa.
+	Paid             *bool   `json:"paid,omitempty"`
+	MpesaReceiptCode *string `json:"mpesaReceiptCode,omitempty"`
+	RefundStatus     *string `json:"refundStatus,omitempty"`
 
 	// Receiver-only: where to go and what to bring. The exact pin is
 	// here and never on the public view — it is more precise than the
@@ -189,17 +193,19 @@ func GetParcelPartyView(
 	v := &ParcelPartyView{ParcelStatusView: base, Tier: tier}
 
 	var senderName, receiverName, senderMsisdn, receiverMsisdn string
-	var priceKes, paymentMethod, refundStatus, deliveryCode *string
+	var priceKes, paymentMethod, refundStatus, deliveryCode, mpesaReceipt *string
+	var paid bool
 	var destLat, destLng *float64
 	var codAmount *string
 	if err := pool.QueryRow(ctx, `
 		SELECT "senderName", "receiverName", "senderMsisdn", "receiverMsisdn",
 		       "priceKes"::text, "paymentMethod", "refundStatus", "deliveryCode",
-		       "destinationLat"::float8, "destinationLng"::float8, "codAmountKes"::text
+		       "destinationLat"::float8, "destinationLng"::float8, "codAmountKes"::text,
+		       "paidAt" IS NOT NULL, "mpesaReceiptCode"
 		FROM parcel WHERE code = $1`, code).
 		Scan(&senderName, &receiverName, &senderMsisdn, &receiverMsisdn,
 			&priceKes, &paymentMethod, &refundStatus, &deliveryCode,
-			&destLat, &destLng, &codAmount); err != nil {
+			&destLat, &destLng, &codAmount, &paid, &mpesaReceipt); err != nil {
 		return nil, err
 	}
 
@@ -208,6 +214,8 @@ func GetParcelPartyView(
 		v.CounterpartyPhoneLast4 = last4(receiverMsisdn)
 		v.PriceKesOwn = priceKes
 		v.PaymentMethod = paymentMethod
+		v.Paid = &paid
+		v.MpesaReceiptCode = mpesaReceipt
 		v.RefundStatus = refundStatus
 		return v, nil
 	}

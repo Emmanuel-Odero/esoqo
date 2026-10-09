@@ -123,6 +123,22 @@ export const CounterForm = forwardRef<CounterFormHandle, {
   const [parcelType, setParcelType] = useState('');
   const [contentsDeclared, setContentsDeclared] = useState(false);
 
+  // Counter fare collection on booking completion
+  const [payMethod, setPayMethod] = useState<'CASH' | 'MPESA'>('MPESA');
+  const [payAmount, setPayAmount] = useState('');
+  const [payMsisdn, setPayMsisdn] = useState('');
+  const [payWaiting, setPayWaiting] = useState(false);
+  const [payChecking, setPayChecking] = useState(false);
+  const [payCancelling, setPayCancelling] = useState(false);
+  const [payProviderStatus, setPayProviderStatus] = useState<string | null>(null);
+  const [paySettled, setPaySettled] = useState<{ method: string; amount: number; receipt?: string | null } | null>(null);
+  const [payError, setPayError] = useState<string | null>(null);
+  const [payBusy, setPayBusy] = useState(false);
+  const [paySkipped, setPaySkipped] = useState(false);
+  const [payManualCode, setPayManualCode] = useState('');
+  const [showManualCode, setShowManualCode] = useState(false);
+  const [payManualBusy, setPayManualBusy] = useState(false);
+
   const scanRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => { if (scanbox !== false && !initialCode) scanRef.current?.focus(); }, [initialCode, scanbox]);
@@ -216,6 +232,40 @@ export const CounterForm = forwardRef<CounterFormHandle, {
       .catch(() => {});
     return () => { alive = false; };
   }, [done, actions]);
+
+  // STK payment prompt polling loop (queries Co-op STK enquiry via getSettlementStatus)
+  useEffect(() => {
+    if (!payWaiting || !done || done.kind !== 'booked' || !actions.getSettlementStatus || paySettled) return;
+    let timer: ReturnType<typeof setTimeout>;
+    let cancelled = false;
+    const poll = async () => {
+      if (cancelled || !done.code || !actions.getSettlementStatus) return;
+      try {
+        const res = await actions.getSettlementStatus(done.code);
+        if (cancelled) return;
+        if (res.ok) {
+          const s = res.status;
+          if (s.providerStatus) setPayProviderStatus(s.providerStatus);
+          if (s.status === 'SETTLED') {
+            setPaySettled({ method: 'M-Pesa', amount: Number(payAmount) || s.priceKes, receipt: s.mpesaReceiptCode });
+            setPayWaiting(false);
+            say(`M-Pesa payment confirmed for ${done.code}`, 'assertive');
+            return;
+          }
+          if (s.status === 'NOT_STARTED') {
+            setPayWaiting(false);
+            setPayError('The payer declined or let the prompt expire. Send it again, or take cash.');
+            return;
+          }
+        }
+      } catch {
+        // Transient network drop, continue next poll
+      }
+      timer = setTimeout(() => void poll(), 3000);
+    };
+    void poll();
+    return () => { cancelled = true; clearTimeout(timer); };
+  }, [payWaiting, done, actions, paySettled, payAmount, say]);
 
   const actual = Number(weightKg) || 0;
   const volumetric = volumetricKg(Number(lengthCm), Number(widthCm), Number(heightCm), volumetricDivisor);
@@ -317,6 +367,13 @@ export const CounterForm = forwardRef<CounterFormHandle, {
       setIntakeConfirmed(false);
       setConfirmError(null);
       setComposing(false);
+      // Initialize counter payment prompt
+      setPayMsisdn(senderMsisdn.trim());
+      setPayAmount(bracket?.minKes ? String(bracket.minKes) : '');
+      setPayWaiting(false);
+      setPaySettled(null);
+      setPayError(null);
+      setPaySkipped(false);
       say(`Booked ${res.code}`, 'assertive');
     }).catch(async () => {
       // The network went away mid-submit. A counter cannot answer that
@@ -381,6 +438,266 @@ export const CounterForm = forwardRef<CounterFormHandle, {
               {confirmingIntake ? 'Confirming…' : 'Confirm the box is here'}
             </button>
             {confirmError && <p className="sub" style={{ color: 'var(--red)', margin: '6px 0 0' }}>{confirmError}</p>}
+          </div>
+        )}
+        {/* Payment collection for counter booking */}
+        {done.kind === 'booked' && (actions.settleCash || actions.settleStk) && (
+          <div style={{ marginTop: 16, marginBottom: 8, padding: 14, textAlign: 'left', background: 'var(--subtle, #f8fafc)', borderRadius: 8, border: '1.5px solid var(--line, #e2e8f0)' }}>
+            {paySettled ? (
+              <div style={{ display: 'flex', alignItems: 'center', gap: 10, color: 'var(--green, #16a34a)', fontWeight: 600 }}>
+                <Icon name="check-circle" size={20} />
+                <span>
+                  Fare collected ({paySettled.method} · KES {paySettled.amount.toLocaleString()}
+                  {paySettled.receipt ? ` · Receipt: ${paySettled.receipt}` : ''})
+                </span>
+              </div>
+            ) : paySkipped ? (
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                <span className="sub" style={{ fontSize: '.88rem' }}>Payment prompt skipped — fare can be collected upon delivery / pickup.</span>
+                <button type="button" className="btn btn-o btn-sm" onClick={() => setPaySkipped(false)}>
+                  Collect fare now
+                </button>
+              </div>
+            ) : (
+              <div>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
+                  <strong style={{ fontSize: '.95rem' }}>Collect fare for {done.code}</strong>
+                  <button
+                    type="button"
+                    className="btn btn-o btn-sm"
+                    style={{ padding: '2px 8px', fontSize: '.8rem' }}
+                    onClick={() => setPaySkipped(true)}
+                  >
+                    Pay on collection / Skip
+                  </button>
+                </div>
+                {payError && (
+                  <p className="sub" style={{ color: 'var(--red, #b42318)', margin: '0 0 10px', fontSize: '.85rem' }}>
+                    {payError}
+                  </p>
+                )}
+                {payWaiting ? (
+                  <div style={{ display: 'grid', gap: 8 }}>
+                    <p className="sub" style={{ margin: 0, fontSize: '.88rem' }}>
+                      <Icon name="info" size={14} /> Waiting for payer to approve M-Pesa prompt on their phone…
+                      {payProviderStatus ? <span className="mono" style={{ marginLeft: 6 }}>({payProviderStatus})</span> : null}
+                    </p>
+                    <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                      <button
+                        type="button"
+                        className="btn btn-p btn-sm"
+                        disabled={payChecking || payCancelling}
+                        onClick={async () => {
+                          if (!done.code || !actions.getSettlementStatus) return;
+                          setPayChecking(true);
+                          setPayError(null);
+                          try {
+                            const res = await actions.getSettlementStatus(done.code, true);
+                            if (res.ok) {
+                              const s = res.status;
+                              if (s.providerStatus) setPayProviderStatus(s.providerStatus);
+                              if (s.status === 'SETTLED') {
+                                setPaySettled({ method: 'M-Pesa', amount: Number(payAmount) || s.priceKes, receipt: s.mpesaReceiptCode });
+                                setPayWaiting(false);
+                                say(`M-Pesa payment confirmed for ${done.code}`, 'assertive');
+                              } else if (s.status === 'NOT_STARTED') {
+                                setPayWaiting(false);
+                                setPayError('The prompt is no longer active. Send it again or take cash.');
+                              }
+                            } else {
+                              setPayError(res.error);
+                            }
+                          } catch (e) {
+                            setPayError(e instanceof Error ? e.message : 'Could not reach server to check status');
+                          } finally {
+                            setPayChecking(false);
+                          }
+                        }}
+                      >
+                        <Icon name="refresh" size={14} /> {payChecking ? 'Checking…' : 'Check payment now'}
+                      </button>
+                      {actions.cancelStk && (
+                        <button
+                          type="button"
+                          className="btn btn-o btn-sm"
+                          disabled={payCancelling || payChecking}
+                          onClick={async () => {
+                            if (!done.code || !actions.cancelStk) return;
+                            setPayCancelling(true);
+                            setPayError(null);
+                            try {
+                              const res = await actions.cancelStk(done.code);
+                              if (res.ok) {
+                                setPayWaiting(false);
+                                setPayError('Prompt cancelled. Send a new one, or take cash.');
+                              } else {
+                                setPayError(res.error);
+                              }
+                            } catch (e) {
+                              setPayError(e instanceof Error ? e.message : 'Could not cancel prompt');
+                            } finally {
+                              setPayCancelling(false);
+                            }
+                          }}
+                        >
+                          {payCancelling ? 'Cancelling…' : 'Cancel prompt'}
+                        </button>
+                      )}
+                      {actions.confirmManualCode && (
+                        <button
+                          type="button"
+                          className="btn btn-o btn-sm"
+                          disabled={payCancelling || payChecking || payManualBusy}
+                          onClick={() => setShowManualCode((v) => !v)}
+                        >
+                          Enter M-Pesa code
+                        </button>
+                      )}
+                    </div>
+                    {showManualCode && actions.confirmManualCode && (
+                      <div style={{ display: 'grid', gap: 6, marginTop: 4 }}>
+                        <p className="sub" style={{ margin: 0, fontSize: '.82rem' }}>
+                          Payer already received the M-Pesa SMS? Enter the receipt code below:
+                        </p>
+                        <div style={{ display: 'flex', gap: 8 }}>
+                          <input
+                            className="inp mono"
+                            style={{ flex: 1, minWidth: 0, textTransform: 'uppercase' }}
+                            value={payManualCode}
+                            onChange={(e) => setPayManualCode(e.target.value.toUpperCase())}
+                            placeholder="e.g. UJ8MW98DC8"
+                            aria-label="M-Pesa code from customer's SMS"
+                            disabled={payManualBusy}
+                          />
+                          <button
+                            type="button"
+                            className="btn btn-p btn-sm"
+                            disabled={!payManualCode.trim() || payManualBusy}
+                            onClick={async () => {
+                              if (!done.code || !actions.confirmManualCode || !payManualCode.trim()) return;
+                              setPayManualBusy(true);
+                              setPayError(null);
+                              try {
+                                const res = await actions.confirmManualCode(done.code, payManualCode.trim());
+                                if (res.ok) {
+                                  setPaySettled({
+                                    method: 'M-Pesa',
+                                    amount: Number(payAmount) || 0,
+                                    receipt: payManualCode.trim().toUpperCase(),
+                                  });
+                                  setPayWaiting(false);
+                                  say(`M-Pesa payment confirmed for ${done.code}`, 'assertive');
+                                } else {
+                                  setPayError(res.error);
+                                }
+                              } catch (e) {
+                                setPayError(e instanceof Error ? e.message : 'Could not save M-Pesa code');
+                              } finally {
+                                setPayManualBusy(false);
+                              }
+                            }}
+                          >
+                            {payManualBusy ? 'Saving…' : 'Use this code'}
+                          </button>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                ) : (
+                  <div style={{ display: 'grid', gap: 10 }}>
+                    <div style={{ display: 'flex', gap: 16 }}>
+                      {actions.settleCash && (
+                        <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: '.88rem', cursor: 'pointer' }}>
+                          <input
+                            type="radio"
+                            name="ctr-pay-method"
+                            checked={payMethod === 'CASH'}
+                            onChange={() => setPayMethod('CASH')}
+                            disabled={payBusy}
+                          />
+                          Cash
+                        </label>
+                      )}
+                      {actions.settleStk && (
+                        <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: '.88rem', cursor: 'pointer' }}>
+                          <input
+                            type="radio"
+                            name="ctr-pay-method"
+                            checked={payMethod === 'MPESA'}
+                            onChange={() => setPayMethod('MPESA')}
+                            disabled={payBusy}
+                          />
+                          M-Pesa STK prompt
+                        </label>
+                      )}
+                    </div>
+                    <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                      <div style={{ flex: '1 1 130px' }}>
+                        <input
+                          className="mono"
+                          style={{ width: '100%', padding: '6px 10px', border: '1.5px solid var(--line, #cbd5e1)', borderRadius: 6 }}
+                          value={payAmount}
+                          placeholder="Amount (KES)"
+                          inputMode="decimal"
+                          disabled={payBusy}
+                          onChange={(e) => setPayAmount(e.target.value.replace(/[^\d.]/g, ''))}
+                        />
+                      </div>
+                      {payMethod === 'MPESA' && (
+                        <div style={{ flex: '1 1 160px' }}>
+                          <input
+                            className="mono"
+                            style={{ width: '100%', padding: '6px 10px', border: '1.5px solid var(--line, #cbd5e1)', borderRadius: 6 }}
+                            value={payMsisdn}
+                            placeholder="M-Pesa phone (07…)"
+                            inputMode="tel"
+                            disabled={payBusy}
+                            onChange={(e) => setPayMsisdn(e.target.value)}
+                          />
+                        </div>
+                      )}
+                      <button
+                        type="button"
+                        className="btn btn-p btn-sm"
+                        disabled={payBusy}
+                        onClick={async () => {
+                          const amt = Number(payAmount);
+                          if (!amt || amt <= 0) { setPayError('Enter the fare amount'); return; }
+                          setPayBusy(true); setPayError(null);
+                          try {
+                            if (payMethod === 'CASH') {
+                              if (!actions.settleCash) return;
+                              const res = await actions.settleCash(done.code, amt);
+                              if (!res.ok) { setPayError(res.error); return; }
+                              setPaySettled({ method: 'Cash', amount: amt });
+                              say(`Payment of ${amt} recorded for ${done.code}`, 'assertive');
+                            } else {
+                              if (!actions.settleStk) return;
+                              const phone = payMsisdn.trim();
+                              if (!phone) { setPayError('Enter the phone number to charge'); return; }
+                              const res = await actions.settleStk(done.code, amt, phone);
+                              if (!res.ok) { setPayError(res.error); return; }
+                              if (res.status === 'SETTLED') {
+                                setPaySettled({ method: 'M-Pesa', amount: amt });
+                                say(`M-Pesa payment confirmed for ${done.code}`, 'assertive');
+                              } else {
+                                setPayWaiting(true);
+                              }
+                            }
+                          } catch (e) {
+                            setPayError(e instanceof Error ? e.message : 'Payment request failed');
+                          } finally {
+                            setPayBusy(false);
+                          }
+                        }}
+                      >
+                        {payBusy ? 'Processing…' : payMethod === 'CASH' ? 'Record cash payment' : 'Send M-Pesa prompt'}
+                      </button>
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
           </div>
         )}
         {/* The label a counter booking ends on: the sender is standing

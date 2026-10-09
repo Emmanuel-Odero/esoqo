@@ -4,7 +4,7 @@ import { useEffect, useRef } from 'react';
 import { dropPointFor, Icon, PrintStyles, ScaledLabel } from '@esoqo/ui';
 import type { OrgParcelRow } from '@/lib/parcel-org-session';
 import { DemoPhoneSpan } from '@/components/DemoContact';
-import { affordancesFor, stageFor, statusLabel } from './parcel-stages';
+import { affordancesFor, counterFareDue, stageFor, statusLabel } from './parcel-stages';
 
 /**
  * The whole parcel, before anything is done to it.
@@ -186,6 +186,24 @@ export function ParcelDrawer({
                 <div>
                   <dt>Their number</dt>
                   <dd className="mono">{parcel.externalRef}</dd>
+                </div>
+              )}
+              {parcel.paymentMethod && (
+                <div>
+                  <dt>Payment</dt>
+                  <dd className={counterFareDue(parcel) ? 'pdrawer-late' : undefined}>
+                    {parcel.paymentPending
+                      ? 'M-Pesa prompt sent — awaiting approval (scan it to check or cancel)'
+                      : counterFareDue(parcel)
+                      ? 'Pay at counter — not collected yet'
+                      : !parcel.paid
+                        ? 'Not paid yet'
+                        : parcel.mpesaReceiptCode
+                          ? <>M-Pesa <span className="mono">{parcel.mpesaReceiptCode}</span></>
+                          : parcel.paymentMethod === 'ESOKO_POINTS' ? 'Esoqo points'
+                          : parcel.paymentMethod === 'MPESA_STK' ? 'M-Pesa'
+                          : 'Cash'}
+                  </dd>
                 </div>
               )}
               {parcel.lastAttemptReason && (

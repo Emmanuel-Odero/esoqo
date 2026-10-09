@@ -236,6 +236,15 @@ export interface OrgParcelRow {
    *  The courier's pay waits out a hold instead of accruing on the spot,
    *  because no member of staff witnessed the handover. */
   courierEarningsHeldUntil: string | null;
+  /** Payment state (never the amount). PAY_AT_COUNTER parcels are
+   *  BOOKED / on the shelf before they're paid, so `paid` — not status —
+   *  is what says the fare still has to be collected. A receipt means
+   *  it was paid by M-Pesa prompt rather than cash. */
+  paymentMethod: string | null;
+  paid: boolean;
+  mpesaReceiptCode: string | null;
+  /** An M-Pesa prompt is out and not yet paid. */
+  paymentPending: boolean;
 }
 
 export interface ParcelOrgMe {

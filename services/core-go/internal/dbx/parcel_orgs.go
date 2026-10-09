@@ -1685,6 +1685,15 @@ type OrgParcelRow struct {
 	// CourierEarningsHeldUntil — set on a self-confirmed collection, the
 	// other verb this queue offers. See DeliverParcel's tail.
 	CourierEarningsHeldUntil *string `json:"courierEarningsHeldUntil"`
+	// Payment state, not amount: a PAY_AT_COUNTER parcel is BOOKED or on
+	// the shelf before anyone has paid, so status alone can't tell the
+	// scanner to collect the fare. A receipt means it was paid by M-Pesa.
+	PaymentMethod    *string `json:"paymentMethod"`
+	Paid             bool    `json:"paid"`
+	MpesaReceiptCode *string `json:"mpesaReceiptCode"`
+	// An M-Pesa prompt is out and unpaid: the scanner resumes watching it
+	// instead of offering a second prompt the server would refuse.
+	PaymentPending bool `json:"paymentPending"`
 }
 
 // ListOrgParcelsFilter — every knob the operator register can turn.
@@ -1734,7 +1743,7 @@ type DailyBucket struct {
 // dashboard's analytics strip never fans out per day.
 func GetParcelOrgTrends(ctx context.Context, pool *pgxpool.Pool, orgID string) ([]DailyBucket, error) {
 	rows, err := pool.Query(ctx, `
-		SELECT to_char(d, 'Dy DD Mon'),
+		SELECT to_char(days.d, 'Dy DD Mon'),
 		       COALESCE(b.booked, 0)::int,
 		       COALESCE(dlv.delivered, 0)::int
 		FROM (
@@ -1746,13 +1755,13 @@ func GetParcelOrgTrends(ctx context.Context, pool *pgxpool.Pool, orgID string) (
 			FROM parcel WHERE "parcelOrgId" = $1
 			  AND "createdAt" >= date_trunc('day', now() AT TIME ZONE 'Africa/Nairobi') - interval '6 days'
 			GROUP BY 1
-		) b ON b.d = (days.d AT TIME ZONE 'Africa/Nairobi')
+		) b ON b.d = days.d
 		LEFT JOIN (
 			SELECT date_trunc('day', "deliveredAt" AT TIME ZONE 'Africa/Nairobi') AS d, count(*) AS delivered
 			FROM parcel WHERE "parcelOrgId" = $1 AND status = 'DELIVERED'
 			  AND "deliveredAt" >= date_trunc('day', now() AT TIME ZONE 'Africa/Nairobi') - interval '6 days'
 			GROUP BY 1
-		) dlv ON dlv.d = (days.d AT TIME ZONE 'Africa/Nairobi')
+		) dlv ON dlv.d = days.d
 		ORDER BY days.d`, orgID)
 	if err != nil {
 		return nil, err
@@ -1847,6 +1856,8 @@ func ListOrgParcelsPage(ctx context.Context, pool *pgxpool.Pool, orgID string, f
 		       to_char(p."receiverAuthHardLockedAt", 'YYYY-MM-DD"T"HH24:MI:SSZ'),
 		       p."deliveryCodeVersion",
 		       to_char(p."courierEarningsHeldUntil", 'YYYY-MM-DD"T"HH24:MI:SSZ'),
+		       p."paymentMethod"::text, p."paidAt" IS NOT NULL, p."mpesaReceiptCode",
+		       (p."paymentCheckoutRequestId" IS NOT NULL AND p."paidAt" IS NULL),
 		       count(*) OVER() AS total
 		FROM parcel p
 		LEFT JOIN person pr ON pr."partyId" = p."currentHolderPartyId"
@@ -1878,6 +1889,7 @@ func ListOrgParcelsPage(ctx context.Context, pool *pgxpool.Pool, orgID string, f
 			&r.HolderName, &r.AgentName, &r.OriginMethod, &r.ExternalRef, &r.ExternalSource,
 			&r.ReceiverAuthAttempts, &r.ReceiverAuthLockedAt, &r.ReceiverAuthHardLockedAt,
 			&r.DeliveryCodeVersion, &r.CourierEarningsHeldUntil,
+			&r.PaymentMethod, &r.Paid, &r.MpesaReceiptCode, &r.PaymentPending,
 			&total); err != nil {
 			return ListOrgParcelsResult{}, err
 		}
@@ -1963,14 +1975,14 @@ func ImportOrgParcel(ctx context.Context, pool *pgxpool.Pool, orgID string, in I
 				"originLabel", "destinationLabel", notes,
 				"parcelType", "weightKg", fragile,
 				"parcelOrgId", "externalRef", "externalSource",
-				"originMethod", status, "createdAt"
+				"originMethod", status, "paymentMethod", "createdAt"
 			) VALUES (
 				gen_random_uuid(), $1, $2, $3,
 				$4, $5, $6, $7,
 				$8, $9, $10,
 				$11::"ParcelType", $12, $13,
 				$14, $15, $16,
-				'SCHEDULED_PICKUP'::"ParcelOriginMethod", 'RECEIVED_AT_COUNTER', now()
+				'SCHEDULED_PICKUP'::"ParcelOriginMethod", 'RECEIVED_AT_COUNTER', 'PAY_AT_COUNTER'::"ParcelPaymentMethod", now()
 			) RETURNING id`,
 			code, deliveryCode, serviceTicketNumber,
 			strings.TrimSpace(in.SenderName), strings.TrimSpace(in.SenderMsisdn),
@@ -2045,14 +2057,14 @@ func importOrgParcelWithLabel(ctx context.Context, pool *pgxpool.Pool, orgID str
 			"originLabel", "destinationLabel", notes,
 			"parcelType", "weightKg", fragile,
 			"parcelOrgId", "externalRef", "externalSource",
-			"originMethod", status, "createdAt"
+			"originMethod", status, "paymentMethod", "createdAt"
 		) VALUES (
 			gen_random_uuid(), $1, $2, $3,
 			$4, $5, $6, $7,
 			$8, $9, $10,
 			$11::"ParcelType", $12, $13,
 			$14, $15, $16,
-			'SCHEDULED_PICKUP'::"ParcelOriginMethod", 'RECEIVED_AT_COUNTER', now()
+			'SCHEDULED_PICKUP'::"ParcelOriginMethod", 'RECEIVED_AT_COUNTER', 'PAY_AT_COUNTER'::"ParcelPaymentMethod", now()
 		) RETURNING id`,
 		code, deliveryCode, serviceTicketNumber,
 		strings.TrimSpace(in.SenderName), strings.TrimSpace(in.SenderMsisdn),

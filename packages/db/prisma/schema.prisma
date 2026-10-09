@@ -4435,6 +4435,12 @@ model Parcel {
   /// plausible push, which is a much smaller loss than an unpayable
   /// parcel. See SweepStaleParcelDrafts.
   paymentReservationAt DateTime?
+  /// When the M-Pesa prompt for the current paymentCheckoutRequestId
+  /// actually went out (Daraja or Co-op). Lets a clerk cancel a prompt
+  /// that can no longer be approved (M-Pesa prompts expire in about a
+  /// minute) and lets the reconcile sweep expire abandoned ones, instead
+  /// of the parcel staying "payment in progress" forever.
+  paymentRequestedAt   DateTime?
   /// Set only for an MPESA_STK payment, once confirmed (see
   /// dbx.ConfirmParcelPaymentByCheckoutID) — same "quote the actual
   /// transaction back to the payer" role fare_payment/booking_payment's

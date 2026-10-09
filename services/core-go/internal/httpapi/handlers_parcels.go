@@ -1,6 +1,7 @@
 package httpapi
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"log"
@@ -282,7 +283,7 @@ func (s *Server) handleSettleCounterParcel(c *gin.Context) {
 		return
 	}
 	s.dispatchParcelOrgPayoutForParcel(parcelID)
-	s.sendCounterPaymentConfirmedSms(c, c.Param("code"))
+	s.sendCounterPaymentConfirmedSms(c.Request.Context(), c.Param("code"))
 	c.JSON(http.StatusOK, gin.H{"settled": true})
 }
 
@@ -305,6 +306,10 @@ func (s *Server) handleSettleCounterParcelStk(c *gin.Context) {
 	var req settleCounterParcelStkRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
 		writeError(c, http.StatusBadRequest, "INVALID_REQUEST", err.Error())
+		return
+	}
+	// Clerks type 07…/2547…; the STK clients only accept E.164.
+	if !requireMsisdn(c, &req.Msisdn, "The payer's phone number") {
 		return
 	}
 	ctx := ctxFromGin(c)
@@ -332,7 +337,7 @@ func (s *Server) handleSettleCounterParcelStk(c *gin.Context) {
 		return
 	}
 
-	stk, err := payments.InitiateStkPush(s.Cfg, payments.StkPushRequest{
+	stk, err := payments.ParcelStkPush(s.Cfg, payments.StkPushRequest{
 		Msisdn: req.Msisdn, AmountKES: req.PriceKes,
 		AccountReference: code, Description: "Esoqo parcel settlement",
 	})
@@ -362,7 +367,7 @@ func (s *Server) handleSettleCounterParcelStk(c *gin.Context) {
 		if _, _, err := dbx.ConfirmCounterSettlementByCheckoutID(c.Request.Context(), s.Pool, stk.CheckoutRequestID, stk.MpesaReceiptCode); err == nil {
 			resp["status"] = "SETTLED"
 			s.dispatchParcelOrgPayoutForParcel(parcelID)
-			s.sendCounterPaymentConfirmedSms(c, code)
+			s.sendCounterPaymentConfirmedSms(c.Request.Context(), code)
 		}
 	}
 	c.JSON(http.StatusOK, resp)
@@ -385,12 +390,104 @@ func (s *Server) handleGetCounterSettlementStatus(c *gin.Context) {
 		return
 	}
 
-	status, err := dbx.GetCounterSettlementStatus(c.Request.Context(), s.Pool, c.Param("code"), orgScope)
+	s.writeCounterSettlementStatus(c, c.Param("code"), orgScope)
+}
+
+// writeCounterSettlementStatus answers both the clerk's poll / "check now"
+// and the cancel action with the same shape. A Co-op push is only ever
+// settled by our own enquiry, so this is also what drives it — always after
+// the tenancy check inside GetCounterSettlementStatus, never before.
+func (s *Server) writeCounterSettlementStatus(c *gin.Context, code string, orgScope *string) {
+	rctx := c.Request.Context()
+	status, err := dbx.GetCounterSettlementStatus(rctx, s.Pool, code, orgScope)
 	if err != nil {
 		writeParcelError(c, err)
 		return
 	}
+	if status.Status == "AWAITING_MPESA" {
+		push, perr := dbx.GetPendingCounterPush(rctx, s.Pool, code, orgScope)
+		if perr != nil {
+			writeParcelError(c, perr)
+			return
+		}
+		force := c.Query("force") == "1" || c.Query("check") == "1"
+		if res := s.settleCoopForCounterPush(rctx, push, force); res != nil {
+			if res.Changed {
+				if status, err = dbx.GetCounterSettlementStatus(rctx, s.Pool, code, orgScope); err != nil {
+					writeParcelError(c, err)
+					return
+				}
+			}
+			status.ProviderStatus = res.Description
+		}
+		if status.Status == "AWAITING_MPESA" {
+			left := counterCancelableIn(status.RequestedAt)
+			status.CancelableInSeconds = &left
+		}
+	}
 	c.JSON(http.StatusOK, status)
+}
+
+// handleCancelCounterSettlementStk — POST
+// /v1/parcels/:code/settle-counter/stk/cancel. Frees an M-Pesa prompt the
+// payer never approved, so the clerk can prompt again or take cash. Without
+// it a prompt the payer ignored (and the provider never reported as failed)
+// left the parcel "payment in progress" with no way forward.
+//
+// Never frees a prompt that could still be approved: Co-op is asked first
+// (a payment that landed is recorded, not cancelled), and anything younger
+// than counterPushCancelAfter is refused — M-Pesa prompts expire on the
+// phone well inside that window.
+func (s *Server) handleCancelCounterSettlementStk(c *gin.Context) {
+	ctx := ctxFromGin(c)
+	code := c.Param("code")
+	var orgScope *string
+	switch {
+	case ctx.ParcelOrgID != "":
+		if err := authsvc.RequireCapability(ctx, authsvc.CapParcelOrgCarry, nil); err != nil {
+			writeError(c, http.StatusForbidden, "DENIED", "Your role doesn't allow taking payment")
+			return
+		}
+		orgID := ctx.ParcelOrgID
+		orgScope = &orgID
+	case authsvc.Can(ctx, "parcels.edit", nil):
+	default:
+		writeError(c, http.StatusForbidden, "DENIED", "Not permitted to settle a parcel")
+		return
+	}
+
+	rctx := c.Request.Context()
+	push, err := dbx.GetPendingCounterPush(rctx, s.Pool, code, orgScope)
+	if err != nil {
+		writeParcelError(c, err)
+		return
+	}
+	if push != nil && payments.CoopEnabled(s.Cfg) && payments.IsCoopRef(push.Ref) {
+		res := s.settleCoopParcel(rctx, push.Ref)
+		switch {
+		case res.Changed:
+			push = nil // paid or already freed — just report where it landed
+		case res.State == payments.CoopStkSuccess:
+			// Paid, but it didn't match this parcel (amount). Freeing it would
+			// hide real money; this needs a person, not another prompt.
+			writeError(c, http.StatusConflict, "PAID_UNMATCHED",
+				"M-Pesa reports this prompt was paid but it couldn't be matched to the fare. Don't prompt again — contact support.")
+			return
+		}
+	}
+	if push != nil {
+		if left := counterCancelableIn(push.RequestedAt); left > 0 {
+			writeError(c, http.StatusConflict, "PROMPT_STILL_LIVE",
+				fmt.Sprintf("The prompt may still be on the payer's phone. You can cancel it in %d seconds.", left))
+			return
+		}
+		if _, err := dbx.CancelCounterPush(rctx, s.Pool, push.ParcelID, push.Ref); err != nil {
+			writeParcelError(c, err)
+			return
+		}
+		log.Printf("counter settlement %s: prompt %s cancelled by %s", code, push.Ref, ctx.ActorID)
+	}
+	s.writeCounterSettlementStatus(c, code, orgScope)
 }
 
 type confirmCounterSettlementManualCodeRequest struct {
@@ -437,7 +534,7 @@ func (s *Server) handleConfirmCounterSettlementManualCode(c *gin.Context) {
 		return
 	}
 	s.dispatchParcelOrgPayoutForParcel(parcelID)
-	s.sendCounterPaymentConfirmedSms(c, code)
+	s.sendCounterPaymentConfirmedSms(c.Request.Context(), code)
 	c.JSON(http.StatusOK, gin.H{"settled": true})
 }
 
@@ -677,11 +774,7 @@ func (s *Server) handlePayParcel(c *gin.Context) {
 		return
 	}
 
-	push := payments.InitiateStkPush
-	if payments.CoopEnabled(s.Cfg) {
-		push = payments.CoopStkPush
-	}
-	stk, err := push(s.Cfg, payments.StkPushRequest{
+	stk, err := payments.ParcelStkPush(s.Cfg, payments.StkPushRequest{
 		Msisdn: req.Msisdn, AmountKES: priceKes,
 		AccountReference: code, Description: "Esoqo parcel delivery",
 	})
@@ -993,8 +1086,8 @@ const dispatchSummaryEvery = 10
 // here's what you paid, and where it's headed" message the counter
 // flow's own spec calls for, tied to the money actually clearing rather
 // than to custody.
-func (s *Server) sendCounterPaymentConfirmedSms(c *gin.Context, code string) {
-	info, err := dbx.GetParcelNotifyInfo(c.Request.Context(), s.Pool, code)
+func (s *Server) sendCounterPaymentConfirmedSms(ctx context.Context, code string) {
+	info, err := dbx.GetParcelNotifyInfo(ctx, s.Pool, code)
 	if err != nil || info == nil {
 		return
 	}

@@ -48,12 +48,21 @@ func (s *Server) handleMpesaStkCallback(c *gin.Context) {
 	}
 
 	cb := payments.ParseStkCallback(body)
+	ctx := c.Request.Context()
+	if cb != nil && !cb.Succeeded && cb.CheckoutRequestID != "" {
+		// Cancelled, wrong PIN, timed out, insufficient funds: final for a
+		// Daraja push. Free a parcel's payment slot (booking or counter) so
+		// the payer can be prompted again — before, a declined prompt left
+		// the parcel "payment in progress" for ever. Other domains don't
+		// hold a slot this way; the update only ever matches a parcel row.
+		if err := dbx.ReleaseParcelPaymentByCheckoutID(ctx, s.Pool, cb.CheckoutRequestID); err != nil {
+			log.Printf("core-go: releasing declined parcel push %s: %v", cb.CheckoutRequestID, err)
+		}
+	}
 	if cb == nil || !cb.Succeeded {
 		c.JSON(http.StatusOK, gin.H{"ok": true})
 		return
 	}
-
-	ctx := c.Request.Context()
 
 	// Second control, independent of the secret path: the amount paid
 	// must match what the pending row was raised for. ErrCheckoutUnknown
@@ -143,7 +152,7 @@ func (s *Server) handleMpesaStkCallback(c *gin.Context) {
 		s.dispatchParcelOrgPayoutForParcel(parcelID)
 		if justConfirmed {
 			if code, cerr := dbx.GetParcelCode(ctx, s.Pool, parcelID); cerr == nil && code != "" {
-				s.sendCounterPaymentConfirmedSms(c, code)
+				s.sendCounterPaymentConfirmedSms(c.Request.Context(), code)
 			}
 		}
 		c.JSON(http.StatusOK, gin.H{"ok": true})

@@ -16,7 +16,9 @@ import (
 	"io"
 	"math"
 	"math/big"
+	"net"
 	"net/http"
+	"net/url"
 	"strings"
 	"sync"
 	"time"
@@ -50,6 +52,24 @@ func coopBase(cfg config.Config) string {
 		return strings.TrimRight(cfg.CoopBaseURL, "/")
 	}
 	return coopDefaultBase
+}
+
+// coopCallbackURLOK: Co-op's WAF silently rejects a push whose CallBackUrl
+// is plain http or a local address (seen live: http://localhost:… returns
+// an HTML "Request Rejected" page), so catch it before calling the bank.
+func coopCallbackURLOK(raw string) bool {
+	u, err := url.Parse(raw)
+	if err != nil || u.Scheme != "https" || u.Hostname() == "" {
+		return false
+	}
+	host := strings.ToLower(u.Hostname())
+	if host == "localhost" || strings.HasSuffix(host, ".local") || strings.HasSuffix(host, ".localhost") {
+		return false
+	}
+	if ip := net.ParseIP(host); ip != nil && (ip.IsLoopback() || ip.IsPrivate() || ip.IsUnspecified()) {
+		return false
+	}
+	return true
 }
 
 // IsCoopRef reports whether a stored checkout id came from this client.
@@ -146,6 +166,9 @@ func CoopStkPush(cfg config.Config, req StkPushRequest) (*StkPushResult, error) 
 	if cfg.CoopUserID == "" || cfg.CoopOperatorCode == "" || cfg.CoopCallbackURL == "" {
 		return nil, &MpesaError{"COOP_USER_ID/COOP_OPERATOR_CODE/COOP_CALLBACK_URL are not set", MpesaNotConfigured}
 	}
+	if !coopCallbackURLOK(cfg.CoopCallbackURL) {
+		return nil, &MpesaError{"COOP_CALLBACK_URL must be a public https URL — Co-op's gateway rejects anything else", MpesaNotConfigured}
+	}
 	var amount interface{} = req.AmountKES
 	if req.AmountKES == math.Trunc(req.AmountKES) {
 		amount = int64(req.AmountKES)
@@ -176,7 +199,9 @@ func CoopStkPush(cfg config.Config, req StkPushRequest) (*StkPushResult, error) 
 	if status < 200 || status >= 300 || out.MessageCode != "0" {
 		msg := out.MessageDescription
 		if msg == "" {
-			msg = fmt.Sprintf("Co-op rejected the STK push (HTTP %d)", status)
+			// No JSON at all: the bank's WAF answered with an HTML
+			// "Request Rejected" page (HTTP 200), not the API.
+			msg = fmt.Sprintf("Co-op gateway rejected the STK push (HTTP %d, no API response)", status)
 		}
 		return nil, &MpesaError{msg, MpesaDarajaError}
 	}
@@ -185,6 +210,16 @@ func CoopStkPush(cfg config.Config, req StkPushRequest) (*StkPushResult, error) 
 		MerchantRequestID:   ref,
 		ResponseDescription: out.MessageDescription,
 	}, nil
+}
+
+// ParcelStkPush is the one STK entry point for parcel payments, online
+// bookings and counter settlements alike: Co-op when it is the live
+// provider, Daraja otherwise.
+func ParcelStkPush(cfg config.Config, req StkPushRequest) (*StkPushResult, error) {
+	if CoopEnabled(cfg) {
+		return CoopStkPush(cfg, req)
+	}
+	return InitiateStkPush(cfg, req)
 }
 
 func truncate(s string, n int) string {
@@ -221,41 +256,135 @@ type CoopStkStatus struct {
 // guessed at — a parcel is never booked on an ambiguous answer.
 func parseCoopStkStatus(body []byte) CoopStkStatus {
 	var d struct {
-		MessageCode        interface{} `json:"MessageCode"`
-		MessageDescription string      `json:"MessageDescription"`
-		TransactionMeta    struct {
+		MessageCode         interface{} `json:"MessageCode"`
+		MessageDescription  string      `json:"MessageDescription"`
+		MessageDetails      string      `json:"MessageDetails"`
+		ResponseCode        interface{} `json:"ResponseCode"`
+		ResponseDescription string      `json:"ResponseDescription"`
+		TransactionMeta     struct {
 			Items []struct {
 				Name  string      `json:"Name"`
 				Value interface{} `json:"Value"`
 			} `json:"Items"`
 		} `json:"TransactionMetadata"`
+		Destinations []struct {
+			TransactionID         string `json:"TransactionID"`
+			ExternalTransactionID string `json:"ExternalTransactionID"`
+		} `json:"Destinations"`
 	}
 	st := CoopStkStatus{State: CoopStkPending}
 	if json.Unmarshal(body, &d) != nil {
 		return st
 	}
 	st.Description = d.MessageDescription
-	desc := strings.ToUpper(d.MessageDescription)
-	code := strings.TrimSpace(fmt.Sprint(d.MessageCode))
-	switch {
-	case code == "0" && strings.Contains(desc, "FULL SUCCESS"):
-		st.State = CoopStkSuccess
-	case strings.Contains(desc, "FAIL") || strings.Contains(desc, "CANCEL") || strings.Contains(desc, "REJECT"):
-		st.State = CoopStkFailed
+	if st.Description == "" {
+		st.Description = d.MessageDetails
 	}
+	if st.Description == "" {
+		st.Description = d.ResponseDescription
+	}
+	desc := strings.ToUpper(d.MessageDescription)
+	details := strings.ToUpper(d.MessageDetails)
+	respDesc := strings.ToUpper(d.ResponseDescription)
+	code := strings.TrimSpace(fmt.Sprint(d.MessageCode))
+	respCode := strings.TrimSpace(fmt.Sprint(d.ResponseCode))
+
+	// While an STK push is still in flight or awaiting the customer's PIN on their phone,
+	// Co-op's /Enquiry/STK/1.0.0/ endpoint returns MessageCode "-13" ("Message Reference does not exist")
+	// or "REQUEST ACCEPTED FOR PROCESSING" or "PROCESSING". These are NOT failures — the customer
+	// is actively holding the prompt on their screen.
+	isPendingText := code == "-13" || code == "-1" ||
+		strings.Contains(desc, "DOES NOT EXIST") || strings.Contains(desc, "NOT FOUND") ||
+		strings.Contains(desc, "REQUEST ACCEPTED") || strings.Contains(desc, "PROCESSING") ||
+		strings.Contains(desc, "PENDING") || strings.Contains(desc, "WAITING") ||
+		strings.Contains(details, "DOES NOT EXIST") || strings.Contains(details, "NOT FOUND") ||
+		strings.Contains(details, "REQUEST ACCEPTED") || strings.Contains(details, "PROCESSING") ||
+		strings.Contains(details, "PENDING") || strings.Contains(details, "WAITING")
+
+	isSuccessCode := code == "0" || respCode == "0"
+	isSuccessText := strings.Contains(desc, "FULL SUCCESS") || strings.Contains(desc, "SUCCESS") ||
+		strings.Contains(details, "SUCCESS") || strings.Contains(details, "PROCESSED SUCCESSFULLY") ||
+		strings.Contains(respDesc, "SUCCESS") || strings.Contains(respDesc, "PROCESSED SUCCESSFULLY")
+
+	// Genuine failure only when explicitly reported by provider (user cancelled, timeout, insufficient funds)
+	isFailedText := !isPendingText && (strings.Contains(desc, "FULL FAILURE") ||
+		strings.Contains(desc, "FAIL") ||
+		strings.Contains(desc, "CANCEL") ||
+		strings.Contains(desc, "REJECT") ||
+		strings.Contains(desc, "DECLIN") ||
+		strings.Contains(desc, "EXPIRED") ||
+		strings.Contains(desc, "TIMEOUT") ||
+		strings.Contains(desc, "INSUFFICIENT") ||
+		strings.Contains(desc, "WRONG PIN") ||
+		strings.Contains(details, "FULL FAILURE") ||
+		strings.Contains(details, "FAIL") ||
+		strings.Contains(details, "CANCEL") ||
+		strings.Contains(details, "REJECT") ||
+		strings.Contains(details, "DECLIN") ||
+		strings.Contains(details, "EXPIRED") ||
+		strings.Contains(details, "TIMEOUT") ||
+		strings.Contains(respDesc, "FULL FAILURE") ||
+		strings.Contains(respDesc, "FAIL") ||
+		strings.Contains(respDesc, "CANCEL") ||
+		strings.Contains(respDesc, "REJECT") ||
+		strings.Contains(respDesc, "DECLIN"))
+
+	isFailedCode := respCode == "1032" || respCode == "1037" || respCode == "1025"
+
+	switch {
+	case isSuccessCode && isSuccessText && !isFailedText:
+		st.State = CoopStkSuccess
+	case isFailedText || isFailedCode:
+		st.State = CoopStkFailed
+	default:
+		// When pending or reference not yet indexed, keep state PENDING
+		st.State = CoopStkPending
+		if isPendingText || st.Description == "" {
+			st.Description = "Awaiting customer approval on phone"
+		}
+	}
+
 	for _, it := range d.TransactionMeta.Items {
 		v := strings.TrimSpace(fmt.Sprint(it.Value))
 		switch it.Name {
 		case "Amount":
 			var f float64
-			if _, err := fmt.Sscanf(v, "%f", &f); err == nil {
+			vClean := strings.ReplaceAll(v, ",", "")
+			if _, err := fmt.Sscanf(vClean, "%f", &f); err == nil {
 				st.AmountKES, st.AmountSet = f, true
 			}
 		case "PhoneNumber":
 			st.Phone = v
 		case "Narration":
-			if parts := strings.Split(v, "~"); len(parts) >= 2 {
+			// "<text>~<receipt>~<date>" once paid; while PROCESSING it is
+			// "<text>~<date>", which has no receipt to take.
+			if parts := strings.Split(v, "~"); len(parts) >= 3 {
 				st.Receipt = strings.TrimSpace(parts[1])
+			} else if len(parts) == 2 {
+				// Alternative narration format "<receipt>~<date>" or "<text>~<receipt>"
+				p0 := strings.TrimSpace(parts[0])
+				p1 := strings.TrimSpace(parts[1])
+				if len(p0) >= 8 && len(p0) <= 12 && !strings.Contains(p0, " ") {
+					st.Receipt = p0
+				} else if len(p1) >= 8 && len(p1) <= 12 && !strings.Contains(p1, " ") && !strings.Contains(p1, "-") {
+					st.Receipt = p1
+				}
+			}
+		case "Receipt", "MpesaReceiptCode", "TransactionID":
+			if st.Receipt == "" && v != "" && v != "NULL" {
+				st.Receipt = v
+			}
+		}
+	}
+	if st.Receipt == "" {
+		for _, dst := range d.Destinations {
+			if dst.ExternalTransactionID != "" && dst.ExternalTransactionID != "NULL" {
+				st.Receipt = dst.ExternalTransactionID
+				break
+			}
+			if dst.TransactionID != "" && dst.TransactionID != "NULL" {
+				st.Receipt = dst.TransactionID
+				break
 			}
 		}
 	}
@@ -265,6 +394,9 @@ func parseCoopStkStatus(body []byte) CoopStkStatus {
 // CoopQueryStkStatus asks Co-op what became of a push. A transport or auth
 // failure returns PENDING — the caller simply asks again on the next poll.
 func CoopQueryStkStatus(cfg config.Config, ref string) CoopStkStatus {
+	if cfg.CoopUserID == "" {
+		return CoopStkStatus{State: CoopStkPending, Description: "Co-op UserId not configured"}
+	}
 	token, err := coopToken(cfg)
 	if err != nil {
 		return CoopStkStatus{State: CoopStkPending, Description: "auth failed"}
@@ -284,5 +416,9 @@ func CoopQueryStkStatus(cfg config.Config, ref string) CoopStkStatus {
 		coopTok.value = ""
 		coopTok.Unlock()
 	}
-	return parseCoopStkStatus(raw)
+	if resp.StatusCode != http.StatusOK {
+		return CoopStkStatus{State: CoopStkPending, Description: fmt.Sprintf("HTTP %d", resp.StatusCode)}
+	}
+	st := parseCoopStkStatus(raw)
+	return st
 }

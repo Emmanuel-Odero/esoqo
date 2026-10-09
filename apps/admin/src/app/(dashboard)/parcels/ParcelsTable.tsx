@@ -11,13 +11,31 @@ import {
 } from './actions';
 import { ParcelDetailModal } from './ParcelDetailModal';
 
+/** How a parcel was (or is meant to be) paid. PAY_AT_COUNTER is set at
+ *  booking, so it says nothing about payment until PaidAt is set; once
+ *  paid, an M-Pesa receipt (Co-op/Daraja STK) is what separates it from
+ *  cash in a clerk's hand. */
+export function parcelPaymentLabel(p: Pick<AdminParcelRow, 'PaymentMethod' | 'MpesaReceiptCode' | 'PaidAt'>): string {
+  if (!p.PaymentMethod) return 'Not paid yet';
+  if (!p.PaidAt) {
+    return p.PaymentMethod === 'PAY_AT_COUNTER' ? 'Pay at counter · unpaid' : `${p.PaymentMethod.replace(/_/g, ' ')} · unpaid`;
+  }
+  switch (p.PaymentMethod) {
+    case 'PAY_AT_COUNTER': return p.MpesaReceiptCode ? 'Counter · M-Pesa' : 'Counter · cash';
+    case 'MPESA_STK': return 'M-Pesa';
+    case 'ESOKO_POINTS': return 'Esoqo points';
+    case 'CASH': return 'Cash';
+    default: return p.PaymentMethod.replace(/_/g, ' ');
+  }
+}
+
 export interface AdminParcelRow {
   ID: string; Code: string; SenderName: string; SenderMsisdn: string;
   ReceiverName: string; ReceiverMsisdn: string; OriginLabel: string; DestinationLabel: string;
   ParcelType: string; Status: string; PriceKes: string | null;
   AssignedCollectorName: string | null; AssignedCollectorMsisdn: string | null;
   CollectionScheduledAt: string | null; CollectionNote: string | null; CreatedAt: string;
-  PaymentMethod: string | null; MpesaReceiptCode: string | null;
+  PaymentMethod: string | null; MpesaReceiptCode: string | null; PaidAt: string | null;
   RefundStatus: string; RefundedAt: string | null;
   ReceiptConfirmedAt: string | null; ReceiptConditionRating: number | null; ReceiptFeedback: string | null;
   SlaDeadlineAt: string | null; ExceptionNote: string | null; ExceptionFlaggedAt: string | null;
@@ -151,7 +169,8 @@ export function ParcelsTable({
                   </td>
                   <td className="num mono">{p.PriceKes ? `KES ${Number(p.PriceKes).toLocaleString('en-KE')}` : '—'}</td>
                   <td className="sub mono" style={{ fontSize: '.79rem' }}>
-                    {p.MpesaReceiptCode ?? (p.PaymentMethod ? p.PaymentMethod.replace(/_/g, ' ') : '—')}
+                    {parcelPaymentLabel(p)}
+                    {p.MpesaReceiptCode && <span style={{ display: 'block' }}>{p.MpesaReceiptCode}</span>}
                   </td>
                   <td>
                     <span className={`pill ${p.Status === 'DRAFT_PENDING_PAYMENT' ? 'p-warn' : p.Status === 'CANCELLED' ? 'p-bad' : p.Status === 'DELIVERED' ? 'p-ok' : 'p-info'}`}>

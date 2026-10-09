@@ -147,9 +147,11 @@ function PartyView({ parcel }: { parcel: ParcelPartyView }) {
           </>
         ) : (
           <>
-            {parcel.priceKesOwn && <Term label="You paid">KES {displayKES(parcel.priceKesOwn)}</Term>}
+            {parcel.priceKesOwn && (
+              <Term label={parcel.paid === false ? 'Fare' : 'You paid'}>KES {displayKES(parcel.priceKesOwn)}</Term>
+            )}
             {parcel.paymentMethod && (
-              <Term label="Paid by">{parcel.paymentMethod.replace(/_/g, ' ').toLowerCase()}</Term>
+              <Term label="Payment">{senderPaymentLabel(parcel.paymentMethod, parcel.paid, parcel.mpesaReceiptCode)}</Term>
             )}
             {parcel.refundStatus && parcel.refundStatus !== 'NONE' && (
               <Term label="Refund">{parcel.refundStatus.toLowerCase()}</Term>
@@ -159,6 +161,16 @@ function PartyView({ parcel }: { parcel: ParcelPartyView }) {
       </dl>
     </div>
   );
+}
+
+/** PAY_AT_COUNTER is chosen at booking, so on its own it doesn't mean
+ *  paid — `paid` does; a receipt means M-Pesa (STK) rather than cash. */
+function senderPaymentLabel(method: string, paid: boolean | undefined, receipt: string | null | undefined): string {
+  if (paid === false) return method === 'PAY_AT_COUNTER' ? 'Pay at the counter (not paid yet)' : 'Not paid yet';
+  if (receipt) return `M-Pesa (${receipt})`;
+  if (method === 'PAY_AT_COUNTER' || method === 'CASH') return 'Cash at the counter';
+  if (method === 'ESOKO_POINTS') return 'Esoqo points';
+  return method === 'MPESA_STK' ? 'M-Pesa' : method.replace(/_/g, ' ').toLowerCase();
 }
 
 function Term({ label, children }: { label: string; children: React.ReactNode }) {

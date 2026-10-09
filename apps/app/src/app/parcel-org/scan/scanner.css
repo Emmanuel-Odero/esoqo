@@ -221,6 +221,11 @@
 
 /* ── settle / cash rows ──────────────────────────────────────── */
 .scan-settle { margin-top: 4px }
+.scan-fare {
+  margin: 0 0 16px; padding: 12px 14px; border-radius: var(--r-sm, 8px);
+  border: 1px solid var(--line); background: rgba(232, 160, 32, .08);
+}
+.scan-fare > p { margin: 0 0 8px; color: var(--tx) }
 .scan-settle-row { display: flex; align-items: center; gap: 9px; flex-wrap: wrap }
 .scan-settle-cur {
   font-family: var(--font-mono); font-size: .8rem; font-weight: 600;

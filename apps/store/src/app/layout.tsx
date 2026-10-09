@@ -59,7 +59,7 @@ export default function RootLayout({
       suppressHydrationWarning
       className={`${plexSans.variable} ${plexMono.variable} ${outfit.variable}`}
     >
-      <body>
+      <body suppressHydrationWarning>
         <IconSprite />
         <SkipLinks />
         <LiveRegion>

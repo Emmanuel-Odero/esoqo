@@ -389,6 +389,8 @@ export interface ParcelPartyView extends ParcelStatusView {
   counterpartyPhoneLast4: string;
   priceKesOwn?: string | null;
   paymentMethod?: string | null;
+  paid?: boolean;
+  mpesaReceiptCode?: string | null;
   refundStatus?: string | null;
   destinationLat?: number | null;
   destinationLng?: number | null;

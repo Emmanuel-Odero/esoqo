@@ -9,10 +9,15 @@ import { useAnnounce } from "@esoqo/a11y";
 import {
   attachOrgLabelInfo,
   bookOrgCounterParcel,
+  cancelCounterSettlementStk,
+  confirmCounterSettlementManualCode,
+  getCounterSettlementStatus,
   lookupOrgParcelByCode,
   receiveWalkInParcel,
   resolveOrgLabel,
   searchOrgCounterParties,
+  settleCounterParcel,
+  settleCounterParcelStk,
 } from "../actions";
 
 /**
@@ -108,6 +113,11 @@ export function OrgCounterClient({
       const res = await resolveOrgLabel(code);
       return res.ok ? res.label.sig || undefined : undefined;
     },
+    settleCash: settleCounterParcel,
+    settleStk: settleCounterParcelStk,
+    getSettlementStatus: getCounterSettlementStatus,
+    cancelStk: cancelCounterSettlementStk,
+    confirmManualCode: confirmCounterSettlementManualCode,
   };
 
   return (

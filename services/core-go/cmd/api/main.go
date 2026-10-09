@@ -87,10 +87,19 @@ func main() {
 	// time-critical like a due withdrawal, so a longer interval.
 	go runParcelDraftSweep(ctx, pool)
 
+	// Re-attempts a courier-partner payout that never got dispatched or
+	// that Daraja refused — see Server.retryParcelOrgPayouts's own
+	// comment on why this lives here rather than in services/workers.
+	go server.RetryParcelOrgPayouts(ctx)
+
 	// Pays accrued courier earnings out over Co-op B2C and settles the
 	// payouts already in flight. Self-gating (COOP_COURIER_AUTOPAY), so the
 	// ticker is harmless when it is off.
 	go runCourierPayoutSweep(ctx, server)
+
+	// Settles Co-op parcel prompts nobody is watching any more and expires
+	// abandoned ones. Self-gating (COOP_PROVIDER), harmless when off.
+	go runCoopReconcileSweep(ctx, server)
 
 	<-ctx.Done()
 	log.Println("core-go: shutting down")
@@ -145,6 +154,19 @@ func runParcelDraftSweep(ctx context.Context, pool *pgxpool.Pool) {
 			if n > 0 {
 				log.Printf("core-go: parcel draft sweep cancelled %d abandoned booking(s)", n)
 			}
+		}
+	}
+}
+
+func runCoopReconcileSweep(ctx context.Context, server *httpapi.Server) {
+	ticker := time.NewTicker(20 * time.Second)
+	defer ticker.Stop()
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-ticker.C:
+			server.RunCoopReconcileSweep(ctx)
 		}
 	}
 }

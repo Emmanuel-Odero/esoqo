@@ -10,7 +10,7 @@ import {
   actionGrantReceiverAuthRetry, actionReissueDeliveryCode, actionReleaseHeldCourierEarnings,
   type CollectorLite, type HandoffRow,
 } from './actions';
-import type { AdminParcelRow } from './ParcelsTable';
+import { parcelPaymentLabel, type AdminParcelRow } from './ParcelsTable';
 import { ParcelLabelPrint } from './ParcelLabelPrint';
 import { ContactButtons } from '@/components/ContactButtons';
 
@@ -187,8 +187,9 @@ function DetailSections({
           {parcel.PriceKes ? `KES ${Number(parcel.PriceKes).toLocaleString('en-KE')}` : '— (draft, unpriced)'}
         </Row>
         <Row label="Payment">
-          {parcel.PaymentMethod ? parcel.PaymentMethod.replace(/_/g, ' ') : '— (not yet paid)'}
+          {parcelPaymentLabel(parcel)}
           {parcel.MpesaReceiptCode && <span className="mono sub" style={{ marginLeft: 8 }}>Ref {parcel.MpesaReceiptCode}</span>}
+          {parcel.PaidAt && <span className="sub" style={{ marginLeft: 8 }}>{new Date(parcel.PaidAt).toLocaleString('en-KE')}</span>}
         </Row>
         {parcel.RefundStatus !== 'NOT_APPLICABLE' && (
           <Row label="Refund">

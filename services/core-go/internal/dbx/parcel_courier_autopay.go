@@ -41,23 +41,28 @@ type AutoPayout struct {
 // hammered every tick.
 const autoPayoutRetryBackoff = 30 * time.Minute
 
-// TryAdvisoryLock takes a session-level Postgres advisory lock on a dedicated
-// connection so only one replica runs the payout tick at a time. The returned
-// release must always be called; ok=false means another process holds it.
+// TryAdvisoryLock takes a Postgres advisory lock so only one replica runs a
+// periodic tick at a time. The returned release must always be called;
+// ok=false means another process holds it.
+//
+// Transaction-scoped, not session-scoped: core-go reaches Postgres through
+// PgBouncer in transaction pooling mode, where a session lock lands on
+// whichever server backend ran the statement and the unlock on another —
+// the lock leaked onto a backend shared with every other client and later
+// ticks could not take it, so the sweeps silently stopped running. An open
+// transaction pins one backend for its life, and Postgres drops an xact
+// lock by itself when the transaction ends, so it cannot leak.
 func TryAdvisoryLock(ctx context.Context, pool *pgxpool.Pool, key int64) (release func(), ok bool, err error) {
-	conn, err := pool.Acquire(ctx)
+	tx, err := pool.Begin(ctx)
 	if err != nil {
 		return nil, false, err
 	}
 	var got bool
-	if err := conn.QueryRow(ctx, `SELECT pg_try_advisory_lock($1)`, key).Scan(&got); err != nil || !got {
-		conn.Release()
+	if err := tx.QueryRow(ctx, `SELECT pg_try_advisory_xact_lock($1)`, key).Scan(&got); err != nil || !got {
+		_ = tx.Rollback(context.Background())
 		return nil, false, err
 	}
-	return func() {
-		_, _ = conn.Exec(context.Background(), `SELECT pg_advisory_unlock($1)`, key)
-		conn.Release()
-	}, true, nil
+	return func() { _ = tx.Rollback(context.Background()) }, true, nil
 }
 
 // PreparePendingPayouts creates a PENDING payout for every courier who is

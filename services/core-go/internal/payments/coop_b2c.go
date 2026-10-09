@@ -66,7 +66,6 @@ func CoopB2CSend(cfg config.Config, ref, msisdn string, amountKES int64, narrati
 		"ISO2CountryCode":  "KE",
 		"CallBackUrl":      cfg.CoopCallbackURL,
 		"Source": map[string]interface{}{
-			"UserId":              cfg.CoopUserID,
 			"AccountNumber":       cfg.CoopSourceAccount,
 			"Amount":              fmt.Sprint(amountKES),
 			"TransactionCurrency": "KES",

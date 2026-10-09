@@ -97,12 +97,25 @@ type Config struct {
 	// Config.Validate.
 	MpesaCallbackSecret string
 
+	// B2C/B2B payouts (courier-partner settlement, dbx.createParcelOrgPayoutTx) —
+	// same credential shape packages/payments/src/b2c-credential.ts already
+	// uses on the TS side: an initiator name+password, RSA-encrypted
+	// against Safaricom's published cert into Daraja's SecurityCredential.
+	MpesaB2CShortcode      string
+	MpesaInitiatorName     string
+	MpesaInitiatorPassword string
+	MpesaB2CCert           string
+	MpesaB2CResultURL      string
+	MpesaB2CTimeoutURL     string
+	MpesaB2BResultURL      string
+	MpesaB2BTimeoutURL     string
+
 	// Co-operative Bank Open API. CoopProvider "" leaves the Daraja STK path
 	// in charge; "sandbox"/"production" route parcel STK through Co-op.
 	// CoopBaseURL defaults to https://openapi.co-opbank.co.ke.
-	CoopProvider       string
-	CoopBaseURL        string
-	CoopBasicAuth      string // base64(key:secret), as issued; with or without "Basic "
+	CoopProvider  string
+	CoopBaseURL   string
+	CoopBasicAuth string // base64(key:secret), as issued; with or without "Basic "
 	// CoopSourceAccount is the Co-op account B2C payouts are debited from.
 	// CoopCourierAutopay turns on the sweep that pays accrued courier
 	// earnings out automatically; off by default because it moves real money.
@@ -295,13 +308,21 @@ func Load() Config {
 		SMSUsername: getenv("SMS_USERNAME", ""),
 		SMSSenderID: getenv("SMS_SENDER_ID", "ESOQO"),
 
-		MpesaProvider:       getenv("MPESA_PROVIDER", ""),
-		MpesaConsumerKey:    getenv("MPESA_CONSUMER_KEY", ""),
-		MpesaConsumerSecret: getenv("MPESA_CONSUMER_SECRET", ""),
-		MpesaShortcode:      getenv("MPESA_SHORTCODE", ""),
-		MpesaPasskey:        getenv("MPESA_PASSKEY", ""),
-		MpesaCallbackURL:    getenv("MPESA_CALLBACK_URL", ""),
-		MpesaCallbackSecret: getenv("MPESA_CALLBACK_SECRET", ""),
+		MpesaProvider:          getenv("MPESA_PROVIDER", ""),
+		MpesaConsumerKey:       getenv("MPESA_CONSUMER_KEY", ""),
+		MpesaConsumerSecret:    getenv("MPESA_CONSUMER_SECRET", ""),
+		MpesaShortcode:         getenv("MPESA_SHORTCODE", ""),
+		MpesaPasskey:           getenv("MPESA_PASSKEY", ""),
+		MpesaCallbackURL:       getenv("MPESA_CALLBACK_URL", ""),
+		MpesaCallbackSecret:    getenv("MPESA_CALLBACK_SECRET", ""),
+		MpesaB2CShortcode:      getenv("MPESA_B2C_SHORTCODE", ""),
+		MpesaInitiatorName:     getenv("MPESA_INITIATOR_NAME", ""),
+		MpesaInitiatorPassword: getenv("MPESA_INITIATOR_PASSWORD", ""),
+		MpesaB2CCert:           getenv("MPESA_B2C_CERT", ""),
+		MpesaB2CResultURL:      getenv("MPESA_B2C_RESULT_URL", ""),
+		MpesaB2CTimeoutURL:     getenv("MPESA_B2C_TIMEOUT_URL", ""),
+		MpesaB2BResultURL:      getenv("MPESA_B2B_RESULT_URL", ""),
+		MpesaB2BTimeoutURL:     getenv("MPESA_B2B_TIMEOUT_URL", ""),
 
 		CoopProvider:       getenv("COOP_PROVIDER", ""),
 		CoopBaseURL:        getenv("COOP_BASE_URL", ""),

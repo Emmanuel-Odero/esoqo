@@ -118,6 +118,16 @@ export interface CounterActions {
    *  a portal that can't resolve sigs prints an unverified label, which
    *  still scans — it just verifies as plain rather than genuine. */
   getLabelSig?: (code: string) => Promise<string | undefined>;
+  /** Settle the booking fare at the desk in cash. */
+  settleCash?: (code: string, priceKes: number) => Promise<CounterVoid>;
+  /** Settle the booking fare via M-Pesa STK push. */
+  settleStk?: (code: string, priceKes: number, phone: string) => Promise<{ ok: true; status: "AWAITING_MPESA" | "SETTLED" } | CounterFailure>;
+  /** Check settlement status (invoking Co-op STK enquiry on backend). */
+  getSettlementStatus?: (code: string, force?: boolean) => Promise<{ ok: true; status: any } | CounterFailure>;
+  /** Cancel in-flight STK prompt so clerk can re-prompt or take cash. */
+  cancelStk?: (code: string) => Promise<{ ok: true; status: any } | CounterFailure>;
+  /** Manually record M-Pesa receipt code if STK push is delayed but client has the SMS code. */
+  confirmManualCode?: (code: string, mpesaCode: string) => Promise<CounterVoid>;
 }
 
 /** Where the counter's exits lead. Plain hrefs (not framework links)

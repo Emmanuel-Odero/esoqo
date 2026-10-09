@@ -42,6 +42,13 @@ export type ScanStage =
   | "failed" // FAILED_DELIVERY — came back, needs a decision
   | "closed"; // DELIVERED | CANCELLED | RETURNED_TO_SENDER
 
+/** The counter still has to collect this parcel's fare. Separate from
+ *  stageFor because a PAY_AT_COUNTER parcel is BOOKED / on the shelf
+ *  while unpaid — its status says nothing about money. */
+export function counterFareDue(p: { paymentMethod: string | null; paid: boolean }): boolean {
+  return p.paymentMethod === 'PAY_AT_COUNTER' && !p.paid;
+}
+
 export function stageFor(status: string): ScanStage {
   switch (status) {
     case "DRAFT_PENDING_PAYMENT":

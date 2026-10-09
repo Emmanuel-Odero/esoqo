@@ -2,10 +2,18 @@
 
 import { useEffect, useRef, useState, useTransition } from 'react';
 import { Icon, Modal } from '@esoqo/ui';
-import { addCustomParcel, listOrgLabels, resolveOrgLabel, searchOrgLabels } from './actions';
+import {
+  addCustomParcel,
+  listOrgLabels,
+  resolveOrgLabel,
+  searchOrgLabels,
+  settleCounterParcel,
+  settleCounterParcelStk,
+} from './actions';
 import type { OrgLabelSearchRow } from '@/lib/parcel-org-session';
 import { setFormActive } from './form-activity';
 import { LabelPicker } from './LabelPicker';
+import { MpesaPromptWatch } from './MpesaPromptWatch';
 
 const PARCEL_TYPES: [value: string, label: string][] = [
   ['ENVELOPE_DOCUMENT', 'Envelope / document'],
@@ -89,22 +97,21 @@ function hasContent(d: CustomParcelDraft): boolean {
 }
 
 export function CustomParcelPanel() {
-  const [draft] = useState<CustomParcelDraft | null>(loadDraft);
-  const [open, setOpen] = useState(() => draft !== null && hasContent(draft));
-  const [number, setNumber] = useState(draft?.number ?? '');
-  const [senderName, setSenderName] = useState(draft?.senderName ?? '');
-  const [senderMsisdn, setSenderMsisdn] = useState(draft?.senderMsisdn ?? '');
-  const [receiverName, setReceiverName] = useState(draft?.receiverName ?? '');
-  const [receiverMsisdn, setReceiverMsisdn] = useState(draft?.receiverMsisdn ?? '');
-  const [originLabel, setOriginLabel] = useState(draft?.originLabel ?? '');
-  const [destinationLabel, setDestinationLabel] = useState(draft?.destinationLabel ?? '');
-  const [parcelType, setParcelType] = useState(draft?.parcelType ?? 'SMALL');
-  const [weightKg, setWeightKg] = useState(draft?.weightKg ?? '');
-  const [fragile, setFragile] = useState(draft?.fragile ?? false);
-  const [notes, setNotes] = useState(draft?.notes ?? '');
+  const [open, setOpen] = useState(false);
+  const [number, setNumber] = useState('');
+  const [senderName, setSenderName] = useState('');
+  const [senderMsisdn, setSenderMsisdn] = useState('');
+  const [receiverName, setReceiverName] = useState('');
+  const [receiverMsisdn, setReceiverMsisdn] = useState('');
+  const [originLabel, setOriginLabel] = useState('');
+  const [destinationLabel, setDestinationLabel] = useState('');
+  const [parcelType, setParcelType] = useState('SMALL');
+  const [weightKg, setWeightKg] = useState('');
+  const [fragile, setFragile] = useState(false);
+  const [notes, setNotes] = useState('');
   // The pre-printed sticker stuck on this box, if any. Its code becomes
   // the parcel's tracking code on save.
-  const [labelCode, setLabelCode] = useState(draft?.labelCode ?? '');
+  const [labelCode, setLabelCode] = useState('');
   const [labelTail, setLabelTail] = useState('');
   const [labelResults, setLabelResults] = useState<OrgLabelSearchRow[] | null>(null);
   const [labelSearching, setLabelSearching] = useState(false);
@@ -121,8 +128,37 @@ export function CustomParcelPanel() {
   const [labelCheckError, setLabelCheckError] = useState<string | null>(null);
   const labelCheckSeq = useRef(0);
   const [error, setError] = useState<string | null>(null);
-  const [minted, setMinted] = useState<string | null>(null);
+  const [minted, setMinted] = useState<{ code: string; ref: string; phone: string } | null>(null);
   const [pending, startTransition] = useTransition();
+
+  // Payment prompt state for freshly created custom parcel
+  const [payMethod, setPayMethod] = useState<'CASH' | 'MPESA'>('MPESA');
+  const [payAmount, setPayAmount] = useState('');
+  const [payMsisdn, setPayMsisdn] = useState('');
+  const [payWaiting, setPayWaiting] = useState(false);
+  const [paySettled, setPaySettled] = useState<{ method: string; amount: number; receipt?: string | null } | null>(null);
+  const [payError, setPayError] = useState<string | null>(null);
+  const [payPending, startPayTransition] = useTransition();
+
+  // Restore draft from localStorage client-side after initial mount so SSR and hydration match perfectly
+  useEffect(() => {
+    const draft = loadDraft();
+    if (draft && hasContent(draft)) {
+      setNumber(draft.number);
+      setSenderName(draft.senderName);
+      setSenderMsisdn(draft.senderMsisdn);
+      setReceiverName(draft.receiverName);
+      setReceiverMsisdn(draft.receiverMsisdn);
+      setOriginLabel(draft.originLabel);
+      setDestinationLabel(draft.destinationLabel);
+      setParcelType(draft.parcelType || 'SMALL');
+      setWeightKg(draft.weightKg);
+      setFragile(draft.fragile);
+      setNotes(draft.notes);
+      setLabelCode(draft.labelCode);
+      setOpen(true);
+    }
+  }, []);
 
   // While this panel is open the dashboard poller stands down, so the
   // page never refreshes under the form. Removed on close and on
@@ -253,17 +289,28 @@ export function CustomParcelPanel() {
 
   function save() {
     setError(null); setMinted(null);
+    const customRef = number.trim();
+    const senderPhone = senderMsisdn.trim();
     startTransition(async () => {
-      const result = await addCustomParcel({
-        externalRef: number,
-        senderName, senderMsisdn, receiverName, receiverMsisdn,
-        originLabel, destinationLabel, parcelType,
-        weightKg: weightKg.trim() ? Number(weightKg) : null, fragile, notes,
-        labelCode: labelCode.trim() || null,
-      });
-      if (!result.ok) { setError(result.error); return; }
-      setMinted(result.code);
-      reset();
+      try {
+        const result = await addCustomParcel({
+          externalRef: customRef,
+          senderName, senderMsisdn, receiverName, receiverMsisdn,
+          originLabel, destinationLabel, parcelType,
+          weightKg: weightKg.trim() ? Number(weightKg) : null, fragile, notes,
+          labelCode: labelCode.trim() || null,
+        });
+        if (!result.ok) { setError(result.error); return; }
+        setMinted({ code: result.code, ref: customRef, phone: senderPhone });
+        setPayMsisdn(senderPhone);
+        setPayAmount('');
+        setPayWaiting(false);
+        setPaySettled(null);
+        setPayError(null);
+        reset();
+      } catch (e) {
+        setError(e instanceof Error ? e.message : 'Could not save parcel');
+      }
     });
   }
 
@@ -282,23 +329,171 @@ export function CustomParcelPanel() {
       size="lg"
       onClose={() => { reset(); setOpen(false); setError(null); setMinted(null); }}
       footer={(
-        <>
-          <button className="btn btn-p" disabled={pending || !ready} onClick={save}>
-            <Icon name="check" size={16} />{pending ? 'Saving…' : 'Save parcel'}
-          </button>
-          <button className="btn btn-o" disabled={pending}
-            onClick={() => { reset(); setOpen(false); setError(null); }}>
-            Cancel
-          </button>
-        </>
+        minted ? (
+          <>
+            <button
+              className="btn btn-p"
+              onClick={() => {
+                setMinted(null);
+                setPaySettled(null);
+                setPayWaiting(false);
+                setPayError(null);
+              }}
+            >
+              <Icon name="plus" size={16} />Add another parcel
+            </button>
+            <button
+              className="btn btn-o"
+              onClick={() => {
+                reset();
+                setOpen(false);
+                setError(null);
+                setMinted(null);
+              }}
+            >
+              Close
+            </button>
+          </>
+        ) : (
+          <>
+            <button className="btn btn-p" disabled={pending || !ready} onClick={save}>
+              <Icon name="check" size={16} />{pending ? 'Saving…' : 'Save parcel'}
+            </button>
+            <button className="btn btn-o" disabled={pending}
+              onClick={() => { reset(); setOpen(false); setError(null); }}>
+              Cancel
+            </button>
+          </>
+        )
       )}
     >
       <div className="porg-custom-body">
         {minted && (
-          <p className="pnote pnote-ok" role="status">
-            <Icon name="check-circle" size={16} />
-            <span>Saved. Tracking code: <strong className="mono">{minted}</strong></span>
-          </p>
+          <div style={{ marginBottom: 16, padding: 14, background: 'var(--subtle, #f8fafc)', borderRadius: 8, border: '1.5px solid var(--line, #e2e8f0)' }}>
+            <p className="pnote pnote-ok" role="status" style={{ margin: '0 0 12px' }}>
+              <Icon name="check-circle" size={16} />
+              <span>Custom parcel registered. Tracking code: <strong className="mono">{minted.code}</strong> (Ref: {minted.ref})</span>
+            </p>
+            {paySettled ? (
+              <div style={{ display: 'flex', alignItems: 'center', gap: 10, color: 'var(--green, #16a34a)', fontWeight: 600, padding: '8px 0' }}>
+                <Icon name="check-circle" size={20} />
+                <span>
+                  Fare collected ({paySettled.method} · KES {paySettled.amount.toLocaleString()}
+                  {paySettled.receipt ? ` · Receipt: ${paySettled.receipt}` : ''})
+                </span>
+              </div>
+            ) : (
+              <div>
+                <strong style={{ display: 'block', fontSize: '.95rem', marginBottom: 8 }}>
+                  Collect fare now for <span className="mono">{minted.code}</span>
+                </strong>
+                {payError && (
+                  <p className="sub" style={{ color: 'var(--red, #b42318)', margin: '0 0 10px', fontSize: '.85rem' }}>
+                    {payError}
+                  </p>
+                )}
+                {payWaiting ? (
+                  <div style={{ marginTop: 8 }}>
+                    <MpesaPromptWatch
+                      code={minted.code}
+                      onSettled={(receipt) => {
+                        setPaySettled({ method: 'M-Pesa', amount: Number(payAmount), receipt });
+                        setPayWaiting(false);
+                      }}
+                      onReleased={(message) => {
+                        setPayWaiting(false);
+                        setPayError(message);
+                      }}
+                    />
+                  </div>
+                ) : (
+                  <div style={{ display: 'grid', gap: 10 }}>
+                    <div style={{ display: 'flex', gap: 16 }}>
+                      <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: '.88rem', cursor: 'pointer' }}>
+                        <input
+                          type="radio"
+                          name="custom-pay-method"
+                          checked={payMethod === 'CASH'}
+                          onChange={() => setPayMethod('CASH')}
+                          disabled={payPending}
+                        />
+                        Cash
+                      </label>
+                      <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: '.88rem', cursor: 'pointer' }}>
+                        <input
+                          type="radio"
+                          name="custom-pay-method"
+                          checked={payMethod === 'MPESA'}
+                          onChange={() => setPayMethod('MPESA')}
+                          disabled={payPending}
+                        />
+                        M-Pesa STK prompt
+                      </label>
+                    </div>
+                    <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                      <div style={{ flex: '1 1 130px' }}>
+                        <input
+                          className="mono"
+                          style={{ width: '100%', padding: '6px 10px', border: '1.5px solid var(--line, #cbd5e1)', borderRadius: 6 }}
+                          value={payAmount}
+                          placeholder="Amount (KES)"
+                          inputMode="decimal"
+                          disabled={payPending}
+                          onChange={(e) => setPayAmount(e.target.value.replace(/[^\d.]/g, ''))}
+                        />
+                      </div>
+                      {payMethod === 'MPESA' && (
+                        <div style={{ flex: '1 1 160px' }}>
+                          <input
+                            className="mono"
+                            style={{ width: '100%', padding: '6px 10px', border: '1.5px solid var(--line, #cbd5e1)', borderRadius: 6 }}
+                            value={payMsisdn}
+                            placeholder="M-Pesa phone (07…)"
+                            inputMode="tel"
+                            disabled={payPending}
+                            onChange={(e) => setPayMsisdn(e.target.value)}
+                          />
+                        </div>
+                      )}
+                      <button
+                        type="button"
+                        className="btn btn-p btn-sm"
+                        disabled={payPending}
+                        onClick={() => {
+                          const amt = Number(payAmount);
+                          if (!amt || amt <= 0) { setPayError('Enter the fare amount'); return; }
+                          setPayError(null);
+                          startPayTransition(async () => {
+                            try {
+                              if (payMethod === 'CASH') {
+                                const res = await settleCounterParcel(minted.code, amt);
+                                if (!res.ok) { setPayError(res.error); return; }
+                                setPaySettled({ method: 'Cash', amount: amt });
+                              } else {
+                                const phone = payMsisdn.trim();
+                                if (!phone) { setPayError('Enter the phone number to charge'); return; }
+                                const res = await settleCounterParcelStk(minted.code, amt, phone);
+                                if (!res.ok) { setPayError(res.error); return; }
+                                if (res.status === 'SETTLED') {
+                                  setPaySettled({ method: 'M-Pesa', amount: amt });
+                                } else {
+                                  setPayWaiting(true);
+                                }
+                              }
+                            } catch (e) {
+                              setPayError(e instanceof Error ? e.message : 'Payment request failed');
+                            }
+                          });
+                        }}
+                      >
+                        {payPending ? 'Processing…' : payMethod === 'CASH' ? 'Record cash payment' : 'Send M-Pesa prompt'}
+                      </button>
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
         )}
         <fieldset className="psection is-boxed">
           <h3 className="psection-title">Parcel number</h3>

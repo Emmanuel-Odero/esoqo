@@ -10,7 +10,9 @@ import { ScanButton } from '../ScanButton';
 import { HandOverPanel } from './HandOverPanel';
 import { RunPicker } from './RunPicker';
 import { listOpenRuns, receiveParcel, resolveScan, settleAtCounter } from './actions';
-import { statusLabel, type ScanTarget } from '../parcel-stages';
+import { settleCounterParcelStk } from '../actions';
+import { MpesaPromptWatch } from '../MpesaPromptWatch';
+import { counterFareDue, statusLabel, type ScanTarget } from '../parcel-stages';
 
 /**
  * The scanner's whole behaviour, in one place.
@@ -270,7 +272,7 @@ export function ScannerConsole({
             setPhase({
               k: 'done', tone: 'ok', code,
               title: 'Payment recorded',
-              detail: 'Now scan it again to take it into custody.',
+              detail: 'Fare collected. Scan it again to carry on with the parcel.',
             });
             refocus();
           }}
@@ -402,15 +404,33 @@ function TargetPanel({
       <ParcelSummary parcel={parcel} />
     </>
   );
+  // A walk-in booked to pay at the desk is BOOKED / on the shelf while
+  // still unpaid, so its fare is offered here alongside custody — the
+  // "unpaid" stage below only ever covers online drafts.
+  const fare = counterFareDue(parcel) ? (
+    <div className="scan-fare">
+      <p><strong>Fare not collected yet.</strong> Take cash, or send an M-Pesa prompt to the sender or receiver.</p>
+      <SettleAtCounter
+        code={parcel.code}
+        receiverMsisdn={parcel.receiverMsisdn}
+        paymentPending={parcel.paymentPending}
+        disabled={busy || !canDispatch}
+        onDone={() => onSettled(parcel.code)}
+        onError={onError}
+      />
+    </div>
+  ) : null;
 
   switch (stage) {
     case 'unpaid':
       return (
         <Panel tone="warn" icon="coins" title="Not paid yet" code={parcel.code}>
           {head}
-          <p>Nothing can move until the fare is recorded. Take the money, then enter it.</p>
+          <p>Nothing can move until the fare is recorded. Take cash, or send an M-Pesa prompt to the payer&rsquo;s phone.</p>
           <SettleAtCounter
             code={parcel.code}
+            receiverMsisdn={parcel.receiverMsisdn}
+            paymentPending={parcel.paymentPending}
             disabled={busy || !canDispatch}
             onDone={() => onSettled(parcel.code)}
             onError={onError}
@@ -426,6 +446,7 @@ function TargetPanel({
             Check the box matches what is written, then take it in. The sender gets a receipt
             by text the moment you do.
           </p>
+          {fare}
           <div className="scan-actions">
             <button
               type="button" className="btn btn-p btn-lg" disabled={busy || !canReceive}
@@ -456,6 +477,7 @@ function TargetPanel({
         <Panel tone="info" icon="box" title="On your shelf" code={parcel.code}>
           {head}
           <p>Already in your custody. It needs a vehicle going its way.</p>
+          {fare}
           <RunPicker
             runs={runs}
             parcelCode={parcel.code}
@@ -485,6 +507,7 @@ function TargetPanel({
       return (
         <Panel tone="info" icon="truck" title="This box is on the move" code={parcel.code}>
           {head}
+          {fare}
           <p className="scan-fork-q">Where is it now?</p>
           <div className="scan-fork">
             <button
@@ -521,6 +544,7 @@ function TargetPanel({
               ? `Sitting at ${parcel.agentName} for the receiver to collect.`
               : 'Sitting at a pickup point for the receiver to collect.'}
           </p>
+          {fare}
           <div className="scan-actions">
             <button
               type="button" className="btn btn-p btn-lg"
@@ -542,6 +566,7 @@ function TargetPanel({
             {parcel.lastAttemptReason ? ` — last one: ${parcel.lastAttemptReason}.` : '.'}{' '}
             The receiver is expecting a call.
           </p>
+          {fare}
           <div className="scan-actions">
             <button
               type="button" className="btn btn-p btn-lg"
@@ -658,43 +683,97 @@ function LabelNotes({ label }: { label: { itemDescription: string | null; destin
   );
 }
 
-/** The fare for a walk-in booked to pay at the desk. */
+/** The fare for a walk-in booked to pay at the desk: cash recorded on
+ *  the spot, or an M-Pesa prompt to whoever is at the counter (sender
+ *  dropping off, or receiver collecting) that MpesaPromptWatch follows
+ *  until it is paid, declined or cancelled. A parcel scanned while a
+ *  prompt is already out resumes watching it rather than offering a
+ *  second prompt the server would refuse. */
 function SettleAtCounter({
-  code, disabled, onDone, onError,
+  code, receiverMsisdn, paymentPending, disabled, onDone, onError,
 }: {
   code: string;
+  receiverMsisdn: string;
+  paymentPending: boolean;
   disabled: boolean;
   onDone: () => void;
   onError: (m: string) => void;
 }) {
+  const [method, setMethod] = useState<'CASH' | 'MPESA'>('MPESA');
   const [amount, setAmount] = useState('');
+  const [msisdn, setMsisdn] = useState('');
+  const [waiting, setWaiting] = useState(paymentPending);
+  const [note, setNote] = useState<string | null>(null);
   const [pending, start] = useTransition();
   const value = Number(amount);
-  const valid = Number.isFinite(value) && value > 0;
+  const valid = Number.isFinite(value) && value > 0 && (method === 'CASH' || msisdn.trim() !== '');
+  const locked = disabled || pending;
+
+  if (waiting) {
+    return (
+      <div className="scan-settle">
+        <MpesaPromptWatch
+          code={code}
+          onSettled={() => { setWaiting(false); onDone(); }}
+          onReleased={(message) => { setWaiting(false); setNote(message); }}
+        />
+      </div>
+    );
+  }
 
   return (
     <form
       className="scan-settle"
       onSubmit={(e) => {
         e.preventDefault();
-        if (!valid) return;
+        if (!valid || locked) return;
+        setNote(null);
         start(async () => {
-          const res = await settleAtCounter(code, value);
+          if (method === 'CASH') {
+            const res = await settleAtCounter(code, value);
+            if (!res.ok) { onError(res.error); return; }
+            onDone();
+            return;
+          }
+          const res = await settleCounterParcelStk(code, value, msisdn.trim());
           if (!res.ok) { onError(res.error); return; }
-          onDone();
+          if (res.status === 'SETTLED') { onDone(); return; }
+          setWaiting(true);
         });
       }}
     >
-      <label className="lab" htmlFor="settle-kes">What did the sender pay?</label>
+      {note && <p className="hint" role="status" style={{ marginTop: 0 }}>{note}</p>}
+      <div className="scan-settle-row" role="radiogroup" aria-label="Payment method">
+        <label><input type="radio" checked={method === 'CASH'} onChange={() => setMethod('CASH')} disabled={locked} /> Cash</label>
+        <label><input type="radio" checked={method === 'MPESA'} onChange={() => setMethod('MPESA')} disabled={locked} /> M-Pesa prompt</label>
+      </div>
+      <label className="lab" htmlFor="settle-kes">{method === 'CASH' ? 'What did the payer hand over?' : 'Amount to charge'}</label>
       <div className="scan-settle-row">
         <span className="scan-settle-cur">KES</span>
         <input
           id="settle-kes" className="inp mono" value={amount}
           onChange={(e) => setAmount(e.target.value.replace(/[^\d.]/g, ''))}
-          inputMode="decimal" placeholder="0" disabled={disabled || pending}
+          inputMode="decimal" placeholder="0" disabled={locked}
         />
-        <button type="submit" className="btn btn-p" disabled={!valid || disabled || pending}>
-          {pending ? 'Recording…' : 'Record payment'}
+      </div>
+      {method === 'MPESA' && (
+        <>
+          <label className="lab" htmlFor="settle-msisdn">Payer&rsquo;s M-Pesa number</label>
+          <div className="scan-settle-row">
+            <input
+              id="settle-msisdn" className="inp mono" value={msisdn}
+              onChange={(e) => setMsisdn(e.target.value)}
+              inputMode="tel" placeholder="07XX XXX XXX" disabled={locked}
+            />
+            <button type="button" className="btn btn-o" onClick={() => setMsisdn(receiverMsisdn)} disabled={locked}>
+              Receiver&rsquo;s number
+            </button>
+          </div>
+        </>
+      )}
+      <div className="scan-settle-row" style={{ marginTop: 10 }}>
+        <button type="submit" className="btn btn-p" disabled={!valid || locked}>
+          {pending ? 'Working…' : method === 'CASH' ? 'Record payment' : 'Send M-Pesa prompt'}
         </button>
       </div>
     </form>

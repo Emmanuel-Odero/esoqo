@@ -320,6 +320,17 @@ services:
       MPESA_PASSKEY: "${MPESA_PASSKEY:-}"
       MPESA_CALLBACK_URL: "${MPESA_CALLBACK_URL:-}"
       MPESA_CALLBACK_SECRET: "${MPESA_CALLBACK_SECRET:-}"
+      # Co-op Bank Open API — parcel STK (online + counter) and courier B2C.
+      # Empty COOP_PROVIDER keeps Daraja in charge; see .env.example.
+      COOP_PROVIDER: "${COOP_PROVIDER:-}"
+      COOP_BASE_URL: "${COOP_BASE_URL:-}"
+      COOP_BASIC_AUTH: "${COOP_BASIC_AUTH:-}"
+      COOP_USER_ID: "${COOP_USER_ID:-}"
+      COOP_OPERATOR_CODE: "${COOP_OPERATOR_CODE:-}"
+      COOP_CALLBACK_URL: "${COOP_CALLBACK_URL:-}"
+      COOP_CALLBACK_SECRET: "${COOP_CALLBACK_SECRET:-}"
+      COOP_SOURCE_ACCOUNT: "${COOP_SOURCE_ACCOUNT:-}"
+      COOP_COURIER_AUTOPAY: "${COOP_COURIER_AUTOPAY:-false}"
       PESAPAL_PROVIDER: "${PESAPAL_PROVIDER:-console}"
       # Strangler bridge: Daraja callbacks Go doesn't own yet
       # (registration/donation) are forwarded byte-identical to TS core.

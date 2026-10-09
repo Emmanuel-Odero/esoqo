@@ -178,19 +178,48 @@ export async function confirmCounterSettlementManualCode(
 }
 
 export type CounterSettlementStatus = {
-  status: "AWAITING_MPESA" | "SETTLED";
+  /** NOT_STARTED while a push was being watched means the payer
+   *  declined or cancelled it and the slot was freed for another try. */
+  status: "AWAITING_MPESA" | "SETTLED" | "NOT_STARTED";
   priceKes: number;
   mpesaReceiptCode: string | null;
+  /** When the prompt now awaiting approval went out. */
+  requestedAt: string | null;
+  /** Seconds until the prompt may be cancelled (0 = now); only while awaiting. */
+  cancelableInSeconds?: number;
+  /** The payment provider's own word on the prompt, e.g. "PROCESSING". */
+  providerStatus?: string;
 };
+
+/** Frees an M-Pesa prompt the payer never approved so the clerk can
+ *  prompt again or take cash. core-go asks Co-op first (a payment that
+ *  landed is recorded, not cancelled) and refuses while the prompt could
+ *  still be approved. Returns where the parcel ended up. */
+export async function cancelCounterSettlementStk(
+  code: string,
+): Promise<{ ok: true; status: CounterSettlementStatus } | { ok: false; error: string }> {
+  try {
+    const status = await parcelOrgFetch<CounterSettlementStatus>(
+      `/v1/parcels/${encodeURIComponent(code)}/settle-counter/stk/cancel`,
+      { method: "POST" },
+    );
+    revalidatePath("/parcel-org");
+    return { ok: true, status };
+  } catch (e) {
+    return toResult(e);
+  }
+}
 
 /** What the clerk's client polls while an M-Pesa counter settlement is
  *  in flight. */
 export async function getCounterSettlementStatus(
   code: string,
+  force = false,
 ): Promise<{ ok: true; status: CounterSettlementStatus } | { ok: false; error: string }> {
   try {
+    const query = force ? "?force=1" : "";
     const status = await parcelOrgFetch<CounterSettlementStatus>(
-      `/v1/parcel-orgs/me/parcels/${encodeURIComponent(code)}/settlement-status`,
+      `/v1/parcel-orgs/me/parcels/${encodeURIComponent(code)}/settlement-status${query}`,
     );
     return { ok: true, status };
   } catch (e) {

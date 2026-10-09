@@ -942,7 +942,7 @@ func ReserveParcelPayment(ctx context.Context, pool *pgxpool.Pool, code string) 
 // reservation cleared out from under it by its own failure path.
 func ReleaseParcelPaymentReservation(ctx context.Context, pool *pgxpool.Pool, code, reservation string) error {
 	_, err := pool.Exec(ctx, `
-		UPDATE parcel SET "paymentCheckoutRequestId" = NULL, "paymentReservationAt" = NULL
+		UPDATE parcel SET "paymentCheckoutRequestId" = NULL, "paymentReservationAt" = NULL, "paymentRequestedAt" = NULL
 		WHERE code = $1 AND "paymentCheckoutRequestId" = $2`, code, reservation)
 	return err
 }
@@ -960,7 +960,7 @@ func ReleaseParcelPaymentReservation(ctx context.Context, pool *pgxpool.Pool, co
 func AttachParcelPaymentCheckoutID(ctx context.Context, pool *pgxpool.Pool, code, reservation, checkoutRequestID string) error {
 	tag, err := pool.Exec(ctx, `
 		UPDATE parcel SET "paymentMethod" = 'MPESA_STK', "paymentCheckoutRequestId" = $1,
-		       "paymentReservationAt" = NULL
+		       "paymentReservationAt" = NULL, "paymentRequestedAt" = now()
 		WHERE code = $2 AND status = 'DRAFT_PENDING_PAYMENT' AND "paymentCheckoutRequestId" = $3`,
 		checkoutRequestID, code, reservation)
 	if err != nil {
@@ -1283,7 +1283,7 @@ func validateCounterSettlement(ctx context.Context, pool *pgxpool.Pool, code str
 	if orgScope != nil && (parcelOrgID == nil || *parcelOrgID != *orgScope) {
 		return "", &ParcelError{"NOT_FOUND", "That parcel was not found"}
 	}
-	if paymentMethod == nil || *paymentMethod != "PAY_AT_COUNTER" {
+	if paymentMethod != nil && *paymentMethod != "PAY_AT_COUNTER" {
 		return "", &ParcelError{"BAD_INPUT", "This parcel wasn't booked to be paid at the counter"}
 	}
 	if paidAt != nil {
@@ -1326,7 +1326,7 @@ func SettleCounterParcel(ctx context.Context, pool *pgxpool.Pool, code string, p
 	}
 
 	tag, err := pool.Exec(ctx, `
-		UPDATE parcel SET "priceKes" = $1, "paidAt" = now(), "paidByStaffId" = $3
+		UPDATE parcel SET "priceKes" = $1, "paidAt" = now(), "paidByStaffId" = $3, "paymentMethod" = 'PAY_AT_COUNTER'
 		WHERE id = $2 AND "paidAt" IS NULL`, priceKes, parcelID, staffID)
 	if err != nil {
 		return "", err
@@ -1386,7 +1386,7 @@ func SettleCounterParcelStk(ctx context.Context, pool *pgxpool.Pool, code string
 
 	tag, err := pool.Exec(ctx, `
 		UPDATE parcel SET "priceKes" = $1, "paymentCheckoutRequestId" = gen_random_uuid()::text,
-		       "paymentReservationAt" = now()
+		       "paymentReservationAt" = now(), "paymentMethod" = 'PAY_AT_COUNTER'
 		WHERE id = $2 AND "paidAt" IS NULL AND "paymentCheckoutRequestId" IS NULL`, priceKes, parcelID)
 	if err != nil {
 		return "", "", err
@@ -1409,7 +1409,7 @@ func SettleCounterParcelStk(ctx context.Context, pool *pgxpool.Pool, code string
 // it from SettleCounterParcelStk's return.
 func ReleaseCounterParcelPaymentReservation(ctx context.Context, pool *pgxpool.Pool, parcelID, reservation string) error {
 	_, err := pool.Exec(ctx, `
-		UPDATE parcel SET "paymentCheckoutRequestId" = NULL, "paymentReservationAt" = NULL
+		UPDATE parcel SET "paymentCheckoutRequestId" = NULL, "paymentReservationAt" = NULL, "paymentRequestedAt" = NULL
 		WHERE id = $1 AND "paymentCheckoutRequestId" = $2`, parcelID, reservation)
 	return err
 }
@@ -1423,7 +1423,7 @@ func ReleaseCounterParcelPaymentReservation(ctx context.Context, pool *pgxpool.P
 // facts, and only the second one changes here.
 func AttachCounterParcelPaymentCheckoutID(ctx context.Context, pool *pgxpool.Pool, parcelID, reservation, checkoutRequestID string) error {
 	tag, err := pool.Exec(ctx, `
-		UPDATE parcel SET "paymentCheckoutRequestId" = $1, "paymentReservationAt" = NULL
+		UPDATE parcel SET "paymentCheckoutRequestId" = $1, "paymentReservationAt" = NULL, "paymentRequestedAt" = now()
 		WHERE id = $2 AND "paidAt" IS NULL AND "paymentCheckoutRequestId" = $3`,
 		checkoutRequestID, parcelID, reservation)
 	if err != nil {
@@ -1598,9 +1598,19 @@ func ConfirmCounterSettlementByManualCode(ctx context.Context, pool *pgxpool.Poo
 // CounterSettlementStatus is what a clerk's client polls while an STK
 // counter settlement is in flight.
 type CounterSettlementStatus struct {
-	Status           string  `json:"status"` // AWAITING_MPESA | SETTLED
+	// AWAITING_MPESA | SETTLED | NOT_STARTED. NOT_STARTED means no push is
+	// on the row — never sent, or released after the payer declined it.
+	Status           string  `json:"status"`
 	PriceKes         float64 `json:"priceKes"`
 	MpesaReceiptCode *string `json:"mpesaReceiptCode"`
+	// When the prompt now awaiting approval went out; nil unless AWAITING_MPESA.
+	RequestedAt *time.Time `json:"requestedAt"`
+	// Seconds until the clerk may cancel the prompt (0 = now). Set by the
+	// handler, which owns the cancel window.
+	CancelableInSeconds *int `json:"cancelableInSeconds,omitempty"`
+	// The payment provider's own word on the push (Co-op enquiry), when
+	// this poll asked; e.g. "PROCESSING". Purely informational.
+	ProviderStatus string `json:"providerStatus,omitempty"`
 }
 
 // GetCounterSettlementStatus answers handleGetCounterSettlementStatus's
@@ -1611,10 +1621,13 @@ func GetCounterSettlementStatus(ctx context.Context, pool *pgxpool.Pool, code st
 	var paidAt *string
 	var priceKesText *string
 	var receiptCode *string
+	var checkoutRequestID *string
+	var requestedAt *time.Time
 	err := pool.QueryRow(ctx, `
-		SELECT "parcelOrgId"::text, "paidAt"::text, "priceKes"::text, "mpesaReceiptCode"
+		SELECT "parcelOrgId"::text, "paidAt"::text, "priceKes"::text, "mpesaReceiptCode", "paymentCheckoutRequestId",
+		       "paymentRequestedAt"
 		FROM parcel WHERE code = $1 OR "serviceTicketNumber" = $1`, code).
-		Scan(&parcelOrgID, &paidAt, &priceKesText, &receiptCode)
+		Scan(&parcelOrgID, &paidAt, &priceKesText, &receiptCode, &checkoutRequestID, &requestedAt)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return nil, &ParcelError{"NOT_FOUND", "That parcel was not found"}
 	}
@@ -1631,8 +1644,13 @@ func GetCounterSettlementStatus(ctx context.Context, pool *pgxpool.Pool, code st
 	status := "AWAITING_MPESA"
 	if paidAt != nil {
 		status = "SETTLED"
+	} else if checkoutRequestID == nil {
+		status = "NOT_STARTED"
 	}
-	return &CounterSettlementStatus{Status: status, PriceKes: priceKes, MpesaReceiptCode: receiptCode}, nil
+	if status != "AWAITING_MPESA" {
+		requestedAt = nil
+	}
+	return &CounterSettlementStatus{Status: status, PriceKes: priceKes, MpesaReceiptCode: receiptCode, RequestedAt: requestedAt}, nil
 }
 
 // parseFloatOrZero2 is parseFloatOrZero for a *string — nil (a parcel
@@ -4545,6 +4563,7 @@ type AdminParcelRow struct {
 	CreatedAt               time.Time
 	PaymentMethod           *string
 	MpesaReceiptCode        *string
+	PaidAt                  *time.Time // nil until paid; PAY_AT_COUNTER carries its method from booking
 	RefundStatus            string
 	RefundedAt              *time.Time
 	ReceiptConfirmedAt      *time.Time
@@ -4846,7 +4865,7 @@ func AdminListParcels(ctx context.Context, pool *pgxpool.Pool, p AdminParcelList
 		SELECT p.id, p.code, p."senderName", p."senderMsisdn", p."receiverName", p."receiverMsisdn",
 		       p."originLabel", p."destinationLabel", p."parcelType"::text, p.status::text, p."priceKes"::text,
 		       COALESCE(pr."knownAs", pr."officialName"), pr.msisdn, p."collectionScheduledAt", p."collectionNote", p."createdAt",
-		       p."paymentMethod", p."mpesaReceiptCode", p."refundStatus", p."refundedAt",
+		       p."paymentMethod", p."mpesaReceiptCode", p."paidAt", p."refundStatus", p."refundedAt",
 		       p."receiptConfirmedAt", p."receiptConditionRating", p."receiptFeedback",
 		       p."slaDeadlineAt", p."exceptionNote", p."exceptionFlaggedAt",
 		       p.notes, p."cancellationReason", p."cancelledAt", p."deliveredAt",
@@ -4884,7 +4903,7 @@ func AdminListParcels(ctx context.Context, pool *pgxpool.Pool, p AdminParcelList
 		if err := rows.Scan(&r.ID, &r.Code, &r.SenderName, &r.SenderMsisdn, &r.ReceiverName, &r.ReceiverMsisdn,
 			&r.OriginLabel, &r.DestinationLabel, &r.ParcelType, &r.Status, &r.PriceKes,
 			&r.AssignedCollectorName, &r.AssignedCollectorMsisdn, &r.CollectionScheduledAt, &r.CollectionNote, &r.CreatedAt,
-			&r.PaymentMethod, &r.MpesaReceiptCode, &r.RefundStatus, &r.RefundedAt,
+			&r.PaymentMethod, &r.MpesaReceiptCode, &r.PaidAt, &r.RefundStatus, &r.RefundedAt,
 			&r.ReceiptConfirmedAt, &r.ReceiptConditionRating, &r.ReceiptFeedback,
 			&r.SlaDeadlineAt, &r.ExceptionNote, &r.ExceptionFlaggedAt,
 			&r.Notes, &r.CancellationReason, &r.CancelledAt, &r.DeliveredAt,
@@ -5456,7 +5475,7 @@ func SweepStaleParcelDrafts(ctx context.Context, pool *pgxpool.Pool) (int64, err
 	// which the reservation still prevents.
 	if _, err := pool.Exec(ctx, `
 		UPDATE parcel
-		SET "paymentCheckoutRequestId" = NULL, "paymentReservationAt" = NULL
+		SET "paymentCheckoutRequestId" = NULL, "paymentReservationAt" = NULL, "paymentRequestedAt" = NULL
 		WHERE status = 'DRAFT_PENDING_PAYMENT'
 		  AND "paymentReservationAt" IS NOT NULL
 		  AND "paymentReservationAt" < now() - interval '20 minutes'`); err != nil {
