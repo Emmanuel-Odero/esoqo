@@ -1,0 +1,14 @@
+# Non-secret config for the ci-webhook listener. WEBHOOK_SECRET,
+# GIT_READ_TOKEN, GIT_WRITE_TOKEN, GHCR_USERNAME and GHCR_TOKEN all live
+# in Secrets created out-of-band by deploy/scripts/create-ci-secrets.sh
+# — same split as esoqo-config/esoqo-secrets.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: ci-webhook-config
+data:
+  NAMESPACE: esoqo-production
+  TARGET_BRANCH: production
+  GIT_REPO_URL: https://github.com/Emmanuel-Odero/esoqo.git
+  DEPLOYER_IMAGE: ghcr.io/emmanuel-odero/esoqo-deployer:bootstrap
+  LISTEN_ADDR: ":8080"

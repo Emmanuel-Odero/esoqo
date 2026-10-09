@@ -1,0 +1,117 @@
+# ════════════════════════════════════════════════════════════════════
+#  ci-webhook — GitHub-webhook listener that replaces GitHub Actions
+#  (permanently broken server-side for this repo; see
+#  docs/deployment/README.md). One of these runs per environment, each
+#  only able to create Jobs in its OWN namespace — a bug in preview's
+#  listener cannot touch production, by RBAC, not by convention.
+#
+#  Two ServiceAccounts:
+#    - ci-webhook       — the listener itself. Only needs to create/
+#                          read Jobs (it creates exactly one kind:
+#                          the esoqo-deployer Job).
+#    - esoqo-deployer   — the orchestrator Job that listener creates.
+#                          Needs the same breadth of access a human
+#                          operator already has in this namespace
+#                          (create Kaniko Jobs, apply the whole
+#                          overlay, patch Deployments) — bound to the
+#                          built-in `edit` ClusterRole via a namespaced
+#                          RoleBinding, not a ClusterRoleBinding, so
+#                          this still never crosses into the other
+#                          namespace.
+#
+#  TARGET_BRANCH, GIT_REPO_URL and DEPLOYER_IMAGE differ per
+#  environment — set in each overlay's config.yaml, not here.
+# ════════════════════════════════════════════════════════════════════
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: ci-webhook
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: ci-webhook
+rules:
+  - apiGroups: ["batch"]
+    resources: ["jobs"]
+    verbs: ["create", "get", "list", "watch"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: ci-webhook
+subjects:
+  - kind: ServiceAccount
+    name: ci-webhook
+roleRef:
+  kind: Role
+  name: ci-webhook
+  apiGroup: rbac.authorization.k8s.io
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: esoqo-deployer
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: esoqo-deployer-edit
+subjects:
+  - kind: ServiceAccount
+    name: esoqo-deployer
+roleRef:
+  kind: ClusterRole
+  name: edit
+  apiGroup: rbac.authorization.k8s.io
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: ci-webhook
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: ci-webhook
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: ci-webhook
+    spec:
+      serviceAccountName: ci-webhook
+      containers:
+        - name: ci-webhook
+          image: ghcr.io/emmanuel-odero/esoqo-ci-webhook:bootstrap
+          ports:
+            - name: http
+              containerPort: 8080
+          envFrom:
+            - configMapRef:
+                name: ci-webhook-config
+          env:
+            - name: WEBHOOK_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: ci-webhook-secret
+                  key: WEBHOOK_SECRET
+          readinessProbe:
+            httpGet: { path: /healthz, port: http }
+            periodSeconds: 10
+          livenessProbe:
+            httpGet: { path: /healthz, port: http }
+            periodSeconds: 20
+          resources:
+            requests: { cpu: 25m, memory: 64Mi }
+            limits: { memory: 128Mi }
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: ci-webhook
+spec:
+  selector:
+    app.kubernetes.io/name: ci-webhook
+  ports:
+    - port: 80
+      targetPort: http

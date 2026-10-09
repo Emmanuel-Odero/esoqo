@@ -39,6 +39,8 @@ import (
 	"strconv"
 	"strings"
 	"time"
+
+	"golang.org/x/text/unicode/norm"
 )
 
 // smsFieldMaxLen — a free-text field embedded in a message is cut to
@@ -49,14 +51,132 @@ import (
 // the doc comment above sets — see TestNoMessageForcesUCS2.
 const smsFieldMaxLen = 20
 
+// gsmTransliterations — the typographic characters a tenant's org name,
+// a destination label, or anyone's own name actually arrives with in
+// practice (an em dash, a curly quote pasted from a phone keyboard)
+// mapped to their plain-ASCII twin. Adapted from
+// packages/domain/src/sms.ts's TRANSLITERATIONS table and carrying the
+// same symbols. One deliberate difference from the TS sibling: that
+// gsmSafe keeps GSM-7's own non-ASCII letters (é, ü, €) as-is, while
+// this one emits pure ASCII — an accented Latin letter is decomposed to
+// its base letter in GsmSafe below, and € is dropped like any other
+// non-ASCII rune, so the result stays byte-clean for trunc()'s
+// byte-oriented budget. Both must still fold every character outside
+// GSM-7: a single one left in forces the whole message into UCS-2 (160
+// chars/segment drops to 70), and several real-world SMS gateways (this
+// file's own callers dial Celcom Africa) mangle a raw non-GSM-7 byte
+// into a visible "%E2%80%94"-style escape on the recipient's phone
+// instead of transcoding it cleanly.
+var gsmTransliterations = map[rune]string{
+	// Dashes: hyphen, non-breaking hyphen, figure/en/em dash, horizontal
+	// bar, minus sign.
+	'\u2010': "-", '\u2011': "-", '\u2012': "-", '\u2013': "-", '\u2014': "-",
+	'\u2015': "-", '\u2212': "-",
+	// Single quotes/apostrophes, including the prime often pasted for one.
+	'\u2018': "'", '\u2019': "'", '\u201a': "'", '\u201b': "'", '\u2032': "'",
+	// Double quotes, including guillemets and the double prime.
+	'\u201c': "\"", '\u201d': "\"", '\u201e': "\"", '\u201f': "\"",
+	'\u2033': "\"", '\u00ab': "\"", '\u00bb': "\"",
+	// Spaces that are not U+0020: NBSP, en/em/thin/hair quads, narrow NBSP.
+	'\u00a0': " ", '\u2002': " ", '\u2003': " ", '\u2007': " ", '\u2009': " ",
+	'\u200a': " ", '\u202f': " ",
+	// Zero-width characters and the BOM: no width, no GSM-7 twin, no loss.
+	'\u200b': "", '\u200c': "", '\u200d': "", '\ufeff': "",
+	// Bullets.
+	'\u2022': "-", '\u00b7': "-", '\u2043': "-",
+	// Ellipsis.
+	'\u2026': "...",
+	// Symbols with a conventional ASCII spelling.
+	'\u2122': "(TM)", '\u00ae': "(R)", '\u00a9': "(C)",
+	'\u00b0': " deg", '\u00d7': "x", '\u00f7': "/", '\u2044': "/",
+	'\u2190': "<-", '\u2192': "->", '\u21d2': "=>",
+}
+
+// gsm7Byte reports whether a rune can ride a GSM-7 message as-is while
+// keeping this package's output pure ASCII. All printable ASCII is
+// GSM-7 (a handful — ^ { } [ ~ ] | \ — are the extension table's
+// two-septet forms, which is fine), except the backtick, which GSM
+// 03.38 has no representation for at all and which the old `r < 0x80`
+// test let straight through to force UCS-2. \n and \r are GSM-7; other
+// control characters (a lone tab, say) are not. Every non-ASCII rune is
+// transliterated, decomposed, or dropped by GsmSafe — never passed
+// through — so a caller can trust the result encodes as GSM-7.
+func gsm7Byte(r rune) bool {
+	if r == '\n' || r == '\r' {
+		return true
+	}
+	return r >= 0x20 && r < 0x7f && r != '`'
+}
+
+// GsmSafe folds text into the GSM-7 alphabet this package sends so it
+// can never be the reason a message doubles in billed segments or
+// arrives on the recipient's phone as a literal percent-escape.
+// Characters with a known ASCII twin are substituted (see
+// gsmTransliterations); an accented Latin letter is decomposed and its
+// base letter kept (Müller -> Muller, not a dropped "Mller"); anything
+// left over — an emoji, a CJK glyph — is dropped rather than risk the
+// gateway mangling it. A missing emoji costs nothing, a message that
+// silently splits into two or renders as "%E2%80%94" costs real trust.
+func GsmSafe(s string) string {
+	var b strings.Builder
+	b.Grow(len(s))
+	for _, r := range s {
+		switch {
+		case gsm7Byte(r):
+			b.WriteRune(r)
+		default:
+			if sub, ok := gsmTransliterations[r]; ok {
+				b.WriteString(sub)
+				continue
+			}
+			// Decompose accented Latin to its base letter: NFD splits
+			// "é" into "e" + a combining mark, and only the base survives
+			// gsm7Byte, so a pasted accent no longer costs the letter.
+			for _, d := range norm.NFD.String(string(r)) {
+				if gsm7Byte(d) {
+					b.WriteRune(d)
+				}
+			}
+		}
+	}
+	return collapseSpaces(b.String())
+}
+
+// collapseSpaces folds a run of spaces — what several NBSPs/typographic
+// spaces in a row, now all mapped to U+0020, can leave behind — to one,
+// the same trailing normalisation sms.ts's gsmSafe applies. A doubled
+// space costs a septet on every send and reads as noise on the phone.
+func collapseSpaces(s string) string {
+	if !strings.Contains(s, "  ") {
+		return s
+	}
+	var b strings.Builder
+	b.Grow(len(s))
+	prevSpace := false
+	for _, r := range s {
+		if r == ' ' {
+			if prevSpace {
+				continue
+			}
+			prevSpace = true
+		} else {
+			prevSpace = false
+		}
+		b.WriteRune(r)
+	}
+	return b.String()
+}
+
 // trunc — defensive truncation for any free-text value (a label, a
 // name) interpolated into an SMS body. Most values are well under this
 // length; this only bites the rare pathological entry, so a single
 // long address never silently pushes a message into a second segment.
-// The marker is plain ASCII "..." (not "…") — a single non-GSM-7 rune
-// anywhere in the message is exactly the mistake this whole file's
-// doc comment warns against.
+// Folded through GsmSafe first so a pasted em dash or curly quote in a
+// tenant's own name can't force the whole message into UCS-2 (or get
+// mangled by the gateway) before it's even truncated. The marker is
+// plain ASCII "..." (not "…") for the same reason.
 func trunc(s string) string {
+	s = GsmSafe(s)
 	if len(s) <= smsFieldMaxLen {
 		return s
 	}
