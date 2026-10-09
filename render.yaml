@@ -143,8 +143,22 @@ services:
         sync: false
       - key: SMS_SENDER_ID
         value: ESOQO
+      # Bus bookings hit core-go's own STK push (handleCreatePublicBusBooking),
+      # so this must be a real provider in a deployed environment — "console"
+      # auto-confirms every booking as PAID with no M-Pesa prompt ever sent
+      # (see payments/mpesa.go's InitiateStkPush). Same discipline as
+      # esoko-app's MPESA_PROVIDER below: sandbox here, "production" only once
+      # deliberately flipped with real Daraja credentials behind it.
       - key: MPESA_PROVIDER
-        value: console
+        value: sandbox
+      - key: MPESA_CONSUMER_KEY
+        sync: false
+      - key: MPESA_CONSUMER_SECRET
+        sync: false
+      - key: MPESA_SHORTCODE
+        sync: false
+      - key: MPESA_PASSKEY
+        sync: false
       - key: PESAPAL_PROVIDER
         value: console
       - key: CORS_ALLOWED_ORIGINS
