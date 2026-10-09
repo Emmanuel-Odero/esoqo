@@ -12,22 +12,32 @@ import { ServeTicketPanel } from './ServeTicketPanel';
 
 /** Green under 2 minutes, amber under 5, red past that — a queue with
  *  one ticket waiting 8 minutes should look different at a glance from
- *  one where everyone just walked in. */
-function toneFor(createdAt: string): 'ok' | 'warn' | 'bad' {
-  const mins = (Date.now() - new Date(createdAt).getTime()) / 60000;
+ *  one where everyone just walked in.
+ *
+ *  `now` is null until the first client effect runs: the server can't
+ *  know the browser's clock, so every elapsed/locale-derived string
+ *  below renders a placeholder during SSR and the hydration pass, then
+ *  fills in on the first client tick. Without that, `Date.now()` and
+ *  `toLocaleString` disagree between the two renders and React throws
+ *  a hydration mismatch. */
+function toneFor(createdAt: string, nowMs: number | null): 'ok' | 'warn' | 'bad' {
+  if (nowMs === null) return 'ok';
+  const mins = (nowMs - new Date(createdAt).getTime()) / 60000;
   if (mins >= 5) return 'bad';
   if (mins >= 2) return 'warn';
   return 'ok';
 }
 
-function formatElapsed(createdAt: string, nowMs: number): string {
+function formatElapsed(createdAt: string, nowMs: number | null): string {
+  if (nowMs === null) return '—';
   const total = Math.max(0, Math.floor((nowMs - new Date(createdAt).getTime()) / 1000));
   const m = Math.floor(total / 60);
   const s = total % 60;
   return `${m}:${String(s).padStart(2, '0')}`;
 }
 
-function formatWhen(iso: string): string {
+function formatWhen(iso: string, nowMs: number | null): string {
+  if (nowMs === null) return '—';
   return new Date(iso).toLocaleString(undefined, {
     month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit',
   });
@@ -109,7 +119,7 @@ export function CounterQueueClient({
   const [tickets, setTickets] = useState(initial);
   const [active, setActive] = useState(initialActive);
   const [history, setHistory] = useState(initialHistory);
-  const [now, setNow] = useState(() => Date.now());
+  const [now, setNow] = useState<number | null>(null);
   const [claimingId, setClaimingId] = useState<string | null>(null);
   const [discardingId, setDiscardingId] = useState<string | null>(null);
   const [claimed, setClaimed] = useState<CounterTicketRow | null>(null);
@@ -117,7 +127,10 @@ export function CounterQueueClient({
   const refreshing = useRef(false);
   const autoResumed = useRef(false);
 
+  // Null on the server and on the hydration render, so both paint the
+  // same placeholder; the first client tick supplies the real clock.
   useEffect(() => {
+    setNow(Date.now());
     const id = setInterval(() => setNow(Date.now()), 1000);
     return () => clearInterval(id);
   }, []);
@@ -321,7 +334,7 @@ export function CounterQueueClient({
         ) : (
           <ol style={{ listStyle: 'none', margin: 0, padding: 0, display: 'grid', gap: 8 }}>
             {tickets.map((t) => {
-              const tone = toneFor(t.createdAt);
+              const tone = toneFor(t.createdAt, now);
               return (
                 <li key={t.id} className="row" style={{
                   justifyContent: 'space-between', alignItems: 'center',
@@ -386,7 +399,7 @@ export function CounterQueueClient({
                       {t.msisdn}
                       {t.cancelReason ? ` · “${t.cancelReason}”` : ''}
                       {t.status === 'CANCELLED' && (
-                        <> · by {t.cancelledByStaffName ?? 'staff'}{t.cancelledAt ? ` · ${formatWhen(t.cancelledAt)}` : ''}</>
+                        <> · by {t.cancelledByStaffName ?? 'staff'}{t.cancelledAt ? ` · ${formatWhen(t.cancelledAt, now)}` : ''}</>
                       )}
                       {t.parcelCode && t.parcelPaidAt && <> · {t.parcelCode}</>}
                       {t.claimedByName && !t.parcelCode && <> · served by {t.claimedByName}</>}
@@ -394,7 +407,7 @@ export function CounterQueueClient({
                   </div>
                   <span style={chip(state.label, state.tone)}>{state.label}</span>
                   <span className="sub" style={{ fontSize: '.8rem', whiteSpace: 'nowrap' }}>
-                    {formatWhen(t.createdAt)}
+                    {formatWhen(t.createdAt, now)}
                   </span>
                 </li>
               );
