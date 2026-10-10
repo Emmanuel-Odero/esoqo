@@ -72,6 +72,15 @@ git checkout "$GIT_SHA"
 echo
 echo "== building 7 images and running in-cluster CI in parallel =="
 
+render_verify_job() {
+  sed \
+    -e "s|__TAG__|${TAG}|g" \
+    -e "s|__NAMESPACE__|${NAMESPACE}|g" \
+    -e "s|__GIT_SHA__|${GIT_SHA}|g" \
+    -e "s|__GIT_REPO_HOST_PATH__|${GIT_REPO_HOST_PATH}|g" \
+    deploy/k8s/base/verify-job-template.yaml
+}
+
 render_verify_job | kubectl apply -f -
 
 render_kaniko_job() {
@@ -100,17 +109,7 @@ render_kaniko_job() {
     -e "s|__ENVIRONMENT__|${ENVIRONMENT}|g"
 }
 
-# The in-cluster CI Job (the test half of the old ci.yml) — rendered the
-# same way, applied alongside the builds so tests and builds run in
-# parallel, then waited on as a gate before anything live is touched.
-render_verify_job() {
-  sed \
-    -e "s|__TAG__|${TAG}|g" \
-    -e "s|__NAMESPACE__|${NAMESPACE}|g" \
-    -e "s|__GIT_SHA__|${GIT_SHA}|g" \
-    -e "s|__GIT_REPO_HOST_PATH__|${GIT_REPO_HOST_PATH}|g" \
-    deploy/k8s/base/verify-job-template.yaml
-}
+
 
 NEXT_BUILD_ARGS=(
   "--build-arg=NEXT_PUBLIC_WEB_URL=${WEB_URL}"

@@ -9,11 +9,7 @@
  */
 
 import React, { useState } from "react";
-import ResponsiveOnboardingForm, {
-  FormSection,
-  FormField,
-  ResponsiveOnboardingFormProps,
-} from "./ResponsiveOnboardingForm";
+import ResponsiveOnboardingForm from "./ResponsiveOnboardingForm";
 
 // ============================================================================
 // Example 1: Business Registration Onboarding
@@ -264,7 +260,7 @@ export function BusinessRegistrationOnboarding() {
     },
   ];
 
-  const handleSubmit = async (formData: Record<string, any>) => {
+  const handleSubmit = async (formData: Record<string, unknown>) => {
     console.log("Form submitted:", formData);
     // Make API call here
     // await api.registerBusiness(formData);
@@ -311,7 +307,7 @@ export function BusinessRegistrationOnboarding() {
  * - Some fields only show based on previous answers
  */
 export function SellerProfileCompletion() {
-  const [formData, setFormData] = React.useState<Record<string, any>>({});
+  const [formData, setFormData] = React.useState<Record<string, unknown>>({});
 
   const sections: FormSection[] = [
     {
@@ -425,7 +421,7 @@ export function SellerProfileCompletion() {
     },
   ];
 
-  const handleSubmit = async (data: Record<string, any>) => {
+  const handleSubmit = async (_data: Record<string, unknown>) => {
     console.log("Seller profile completed:", data);
     setFormData(data);
   };
@@ -527,7 +523,7 @@ export function BuyerSignup() {
     },
   ];
 
-  const handleSubmit = async (formData: Record<string, any>) => {
+  const handleSubmit = async (formData: Record<string, unknown>) => {
     console.log("Buyer signup:", formData);
     // Sign up buyer
   };

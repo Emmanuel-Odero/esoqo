@@ -50,11 +50,11 @@ export interface FormField {
   description?: string;
   helpText?: string;
   /** Show this field only if condition is met */
-  showIf?: (formData: Record<string, any>) => boolean;
+  showIf?: (formData: Record<string, unknown>) => boolean;
   /** Options for select/radio fields */
   options?: Array<{ value: string; label: string }>;
   /** Validation function returning error message or undefined */
-  validate?: (value: any) => string | undefined;
+  validate?: (value: unknown) => string | undefined;
   /** For file inputs: accepted file types */
   accept?: string;
   /** For number inputs: min/max bounds */
@@ -75,12 +75,12 @@ export interface ResponsiveOnboardingFormProps {
   title: string;
   description?: string;
   sections: FormSection[];
-  onSubmit: (formData: Record<string, any>) => Promise<void>;
+  onSubmit: (formData: Record<string, unknown>) => Promise<void>;
   onCancel?: () => void;
   /** Show progress rail at top */
   showProgress?: boolean;
   /** Initial form data */
-  initialData?: Record<string, any>;
+  initialData?: Record<string, unknown>;
   /** Custom submit button text */
   submitLabel?: string;
   cancelLabel?: string;
@@ -122,9 +122,9 @@ function FormSectionComponent({
   onBlur,
 }: {
   section: FormSection;
-  formData: Record<string, any>;
+  formData: Record<string, unknown>;
   errors: Record<string, string>;
-  onChange: (fieldId: string, value: any) => void;
+  onChange: (fieldId: string, value: unknown) => void;
   onBlur: (fieldId: string) => void;
 }) {
   const visibleFields = section.fields.filter(
@@ -172,9 +172,9 @@ function FormFieldComponent({
   onBlur,
 }: {
   field: FormField;
-  value: any;
+  value: unknown;
   error?: string;
-  onChange: (value: any) => void;
+  onChange: (value: unknown) => void;
   onBlur: () => void;
 }) {
   const fieldId = `field-${field.id}`;
@@ -194,7 +194,6 @@ function FormFieldComponent({
           id={fieldId}
           value={value}
           placeholder={field.placeholder}
-          aria-invalid={error ? "true" : "false"}
           aria-describedby={error ? errorId : undefined}
           onChange={(e) => onChange(e.target.value)}
           onBlur={onBlur}
@@ -227,7 +226,6 @@ function FormFieldComponent({
         <select
           id={fieldId}
           value={value}
-          aria-invalid={error ? "true" : "false"}
           aria-describedby={error ? errorId : undefined}
           onChange={(e) => onChange(e.target.value)}
           onBlur={onBlur}
@@ -262,7 +260,6 @@ function FormFieldComponent({
             id={fieldId}
             type="checkbox"
             checked={value === true}
-            aria-invalid={error ? "true" : "false"}
             aria-describedby={error ? errorId : undefined}
             onChange={(e) => onChange(e.target.checked)}
             onBlur={onBlur}
@@ -303,7 +300,6 @@ function FormFieldComponent({
                 name={field.id}
                 value={opt.value}
                 checked={value === opt.value}
-                aria-invalid={error ? "true" : "false"}
                 onChange={(e) => onChange(e.target.value)}
                 onBlur={onBlur}
                 className={styles.radio}
@@ -338,7 +334,6 @@ function FormFieldComponent({
           id={fieldId}
           type="file"
           accept={field.accept}
-          aria-invalid={error ? "true" : "false"}
           aria-describedby={error ? errorId : undefined}
           onChange={(e) => onChange(e.target.files?.[0])}
           onBlur={onBlur}
@@ -375,7 +370,6 @@ function FormFieldComponent({
         placeholder={field.placeholder}
         min={field.min}
         max={field.max}
-        aria-invalid={error ? "true" : "false"}
         aria-describedby={error ? errorId : undefined}
         onChange={(e) => onChange(e.target.value)}
         onBlur={onBlur}
@@ -403,7 +397,7 @@ function ProgressRail({
   errors,
 }: {
   sections: FormSection[];
-  formData: Record<string, any>;
+  formData: Record<string, unknown>;
   errors: Record<string, string>;
 }) {
   const sectionProgress = useMemo(() => {
@@ -486,9 +480,8 @@ export default function ResponsiveOnboardingForm({
   submitLabel = "Continue",
   cancelLabel = "Cancel",
 }: ResponsiveOnboardingFormProps) {
-  const [formData, setFormData] = useState<Record<string, any>>(initialData);
+  const [formData, setFormData] = useState<Record<string, unknown>>(initialData as Record<string, unknown>));
   const [errors, setErrors] = useState<Record<string, string>>({});
-  const [touched, setTouched] = useState<Set<string>>(new Set());
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   // Validate a single field
@@ -537,7 +530,7 @@ export default function ResponsiveOnboardingForm({
   }, [sections, formData, validateField]);
 
   // Handle field change
-  const handleFieldChange = useCallback((fieldId: string, value: any) => {
+  const handleFieldChange = useCallback((fieldId: string, value: unknown) => {
     setFormData((prev) => ({
       ...prev,
       [fieldId]: value,
@@ -546,7 +539,6 @@ export default function ResponsiveOnboardingForm({
 
   // Handle field blur
   const handleFieldBlur = useCallback((fieldId: string) => {
-    setTouched((prev) => new Set([...prev, fieldId]));
 
     const error = validateField(fieldId);
     setErrors((prev) => {
