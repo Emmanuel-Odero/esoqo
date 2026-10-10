@@ -22,6 +22,9 @@ resources:
   - backup-cronjob.yaml
   - ci-webhook.yaml
 
+# verify-job-template.yaml is not a resource to be applied directly — it
+# is rendered by the deployer script (plain sed) into a per-commit Job.
+
 # `labels` with includeSelectors: false, not `commonLabels`. commonLabels
 # injects into spec.selector.matchLabels, which Kubernetes makes
 # immutable after creation — a later edit to these labels would make

@@ -63,9 +63,16 @@ git clone --filter=blob:none "$AUTH_URL" "$WORKDIR/repo"
 cd "$WORKDIR/repo"
 git checkout "$GIT_SHA"
 
-# ── 2. Build all 7 images in parallel via Kaniko, registry-cached ───
+# ── 2. Build 7 images and run the test suite — all in parallel ──────
+# Kaniko Jobs do the builds, registry-cached; the verify Job runs
+# lint/typecheck/test against ephemeral Postgres+Redis. Both are applied
+# here, together; the tests are then awaited as a gate below, before the
+# migration and before any Deployment moves. A red suite aborts the
+# release exactly like a failed build.
 echo
-echo "== building 7 images =="
+echo "== building 7 images and running in-cluster CI in parallel =="
+
+render_verify_job | kubectl apply -f -
 
 render_kaniko_job() {
   local name="$1" dockerfile="$2"; shift 2
@@ -93,6 +100,18 @@ render_kaniko_job() {
     -e "s|__ENVIRONMENT__|${ENVIRONMENT}|g"
 }
 
+# The in-cluster CI Job (the test half of the old ci.yml) — rendered the
+# same way, applied alongside the builds so tests and builds run in
+# parallel, then waited on as a gate before anything live is touched.
+render_verify_job() {
+  sed \
+    -e "s|__TAG__|${TAG}|g" \
+    -e "s|__NAMESPACE__|${NAMESPACE}|g" \
+    -e "s|__GIT_SHA__|${GIT_SHA}|g" \
+    -e "s|__GIT_REPO_HOST_PATH__|${GIT_REPO_HOST_PATH}|g" \
+    deploy/k8s/base/verify-job-template.yaml
+}
+
 NEXT_BUILD_ARGS=(
   "--build-arg=NEXT_PUBLIC_WEB_URL=${WEB_URL}"
   "--build-arg=NEXT_PUBLIC_APP_URL=${APP_URL}"
@@ -107,6 +126,30 @@ render_kaniko_job store docker/Dockerfile.next "${NEXT_BUILD_ARGS[@]}" --build-a
 render_kaniko_job jamii docker/Dockerfile.next "${NEXT_BUILD_ARGS[@]}" --build-arg=APP=jamii --build-arg=PORT=3004 | kubectl apply -f -
 render_kaniko_job core-service docker/Dockerfile.core     | kubectl apply -f -
 render_kaniko_job core-go      services/core-go/Dockerfile | kubectl apply -f -
+
+# ── 2a. Tests are the gate ──────────────────────────────────────────
+# Applied above, so the suite has been running while the images built.
+# Wait for a terminal condition explicitly rather than a bare
+# `wait --for=condition=complete` — a failed Job never reaches Complete,
+# so that form would sit out the whole timeout instead of failing fast.
+VERIFY_JOB="esoqo-verify-${TAG}"
+VERIFY_STATUS=""
+echo
+echo "== in-cluster CI (lint/typecheck/test) =="
+for _ in $(seq 1 360); do # 360 * 5s = 30m ceiling
+  complete=$(kubectl get job "$VERIFY_JOB" -n "$NAMESPACE" -o jsonpath='{.status.conditions[?(@.type=="Complete")].status}' 2>/dev/null || true)
+  failed=$(kubectl get job "$VERIFY_JOB" -n "$NAMESPACE" -o jsonpath='{.status.conditions[?(@.type=="Failed")].status}' 2>/dev/null || true)
+  if [[ "$complete" == "True" ]]; then VERIFY_STATUS=passed; break; fi
+  if [[ "$failed" == "True" ]]; then VERIFY_STATUS=failed; break; fi
+  sleep 5
+done
+
+if [[ "$VERIFY_STATUS" != "passed" ]]; then
+  echo "error: in-cluster CI ${VERIFY_STATUS:-timed out} — Deployments were NOT touched; images may already be pushed" >&2
+  kubectl logs "$VERIFY_JOB" -n "$NAMESPACE" --tail=150 || true
+  exit 1
+fi
+echo "tests passed"
 
 FAILED=0
 for svc in web app admin store jamii core-service core-go; do
