@@ -10,5 +10,5 @@ data:
   NAMESPACE: esoqo-production
   TARGET_BRANCH: production
   GIT_REPO_URL: https://github.com/Emmanuel-Odero/esoqo.git
-  DEPLOYER_IMAGE: ghcr.io/emmanuel-odero/esoqo-deployer:20261010b
+  DEPLOYER_IMAGE: ghcr.io/emmanuel-odero/esoqo-deployer:20261010c
   LISTEN_ADDR: ":8080"
