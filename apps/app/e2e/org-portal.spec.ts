@@ -41,7 +41,7 @@ test.describe('Hotel portal pages', () => {
 
   const HOTEL_ID = process.env.TEST_HOTEL_ORG_ID ?? '';
 
-  test.beforeEach(async ({ page }) => {
+  test.beforeEach(async () => {
     if (!HOTEL_ID) test.skip();
   });
 
@@ -77,7 +77,7 @@ test.describe('Hotel portal pages', () => {
 // ── Signout route ─────────────────────────────────────────────────────────
 
 test.describe('Generic org signout', () => {
-  test('POST /orgs/signout clears session and redirects to home', async ({ page, request }) => {
+  test('POST /orgs/signout clears session and redirects to home', async ({ request }) => {
     const response = await request.post('/orgs/signout', {
       headers: { 'content-type': 'application/json' },
       data: { orgType: 'hotel' },

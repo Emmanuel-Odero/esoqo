@@ -10,9 +10,8 @@
 
 import React, { useState } from "react";
 import ResponsiveOnboardingForm, {
-  FormSection,
-  FormField,
-  ResponsiveOnboardingFormProps,
+  type FormSection,
+  type FormValue,
 } from "./ResponsiveOnboardingForm";
 
 // ============================================================================
@@ -43,7 +42,7 @@ export function BusinessRegistrationOnboarding() {
           description: "The official name of your business",
           helpText: "This will appear on all transactions",
           validate: (value) => {
-            if (!value) return undefined;
+            if (typeof value !== "string" || !value) return undefined;
             if (value.length < 2)
               return "Business name must be at least 2 characters";
             if (value.length > 100)
@@ -93,7 +92,8 @@ export function BusinessRegistrationOnboarding() {
           min: 1,
           required: true,
           validate: (value) => {
-            if (!value || value < 1) return "Must have at least 1 employee";
+            if (typeof value !== "number" || value < 1)
+              return "Must have at least 1 employee";
             if (value > 1000) return "Please enter a realistic number";
             return undefined;
           },
@@ -173,7 +173,7 @@ export function BusinessRegistrationOnboarding() {
           placeholder: "john@acmefoods.com",
           required: true,
           validate: (value) => {
-            if (!value) return undefined;
+            if (typeof value !== "string" || !value) return undefined;
             const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
             if (!emailRegex.test(value)) return "Please enter a valid email";
             return undefined;
@@ -187,7 +187,7 @@ export function BusinessRegistrationOnboarding() {
           placeholder: "+254 712 345 678",
           required: true,
           validate: (value) => {
-            if (!value) return undefined;
+            if (typeof value !== "string" || !value) return undefined;
             // Basic E.164 validation
             if (!/^\+?[1-9]\d{1,14}$/.test(value.replace(/\s/g, ""))) {
               return "Please enter a valid phone number";
@@ -264,7 +264,7 @@ export function BusinessRegistrationOnboarding() {
     },
   ];
 
-  const handleSubmit = async (formData: Record<string, any>) => {
+  const handleSubmit = async (formData: Record<string, FormValue>) => {
     console.log("Form submitted:", formData);
     // Make API call here
     // await api.registerBusiness(formData);
@@ -311,7 +311,7 @@ export function BusinessRegistrationOnboarding() {
  * - Some fields only show based on previous answers
  */
 export function SellerProfileCompletion() {
-  const [formData, setFormData] = React.useState<Record<string, any>>({});
+  const [, setFormData] = React.useState<Record<string, FormValue>>({});
 
   const sections: FormSection[] = [
     {
@@ -425,7 +425,7 @@ export function SellerProfileCompletion() {
     },
   ];
 
-  const handleSubmit = async (data: Record<string, any>) => {
+  const handleSubmit = async (data: Record<string, FormValue>) => {
     console.log("Seller profile completed:", data);
     setFormData(data);
   };
@@ -472,7 +472,7 @@ export function BuyerSignup() {
           required: true,
           placeholder: "jane@example.com",
           validate: (value) => {
-            if (!value) return undefined;
+            if (typeof value !== "string" || !value) return undefined;
             if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value)) {
               return "Please enter a valid email";
             }
@@ -488,7 +488,7 @@ export function BuyerSignup() {
           placeholder: "At least 8 characters",
           helpText: "Must include letters, numbers, and symbols",
           validate: (value) => {
-            if (!value) return undefined;
+            if (typeof value !== "string" || !value) return undefined;
             if (value.length < 8)
               return "Password must be at least 8 characters";
             if (!/[A-Z]/.test(value)) return "Must include uppercase letter";
@@ -527,7 +527,7 @@ export function BuyerSignup() {
     },
   ];
 
-  const handleSubmit = async (formData: Record<string, any>) => {
+  const handleSubmit = async (formData: Record<string, FormValue>) => {
     console.log("Buyer signup:", formData);
     // Sign up buyer
   };

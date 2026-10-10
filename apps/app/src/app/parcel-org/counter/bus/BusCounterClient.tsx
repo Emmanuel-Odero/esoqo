@@ -15,7 +15,7 @@ type Step = 'route' | 'trip' | 'seat' | 'done';
  */
 export function BusCounterClient({ routes }: { routes: OrgBusRoute[] }) {
   const [step, setStep] = useState<Step>('route');
-  const [routeId, setRouteId] = useState('');
+  const [, setRouteId] = useState('');
   const [trips, setTrips] = useState<OrgBusTrip[]>([]);
   const [loadingTrips, setLoadingTrips] = useState(false);
   const [trip, setTrip] = useState<OrgBusTrip | null>(null);

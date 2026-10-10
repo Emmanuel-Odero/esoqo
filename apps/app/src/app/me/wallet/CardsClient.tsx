@@ -227,7 +227,7 @@ function VoucherPayBusiness({ id }: { id: string }) {
   }
 
   return (
-    <div className="wcard-topup-form" onClick={(e) => e.stopPropagation()}>
+    <div className="wcard-topup-form" role="presentation" onClick={(e) => e.stopPropagation()}>
       <input
         className="inp"
         value={businessId}
@@ -283,7 +283,7 @@ function VoucherTopUp({ id, others }: { id: string; others: Voucher[] }) {
   }
 
   return (
-    <div className="wcard-topup-form" onClick={(e) => e.stopPropagation()}>
+    <div className="wcard-topup-form" role="presentation" onClick={(e) => e.stopPropagation()}>
       <select
         className="inp"
         value={source}
@@ -361,8 +361,9 @@ function NewVoucherForm({
         {purpose === "GENERAL" ? "New voucher" : "New purpose-locked card"}
       </h2>
       <div className="fld">
-        <label className="lab">Kind</label>
+        <label className="lab" htmlFor="card-kind">Kind</label>
         <select
+          id="card-kind"
           className="inp"
           value={purpose}
           onChange={(e) => setPurpose(e.target.value)}
@@ -376,8 +377,9 @@ function NewVoucherForm({
         </select>
       </div>
       <div className="fld">
-        <label className="lab">Label (optional)</label>
+        <label className="lab" htmlFor="card-label">Label (optional)</label>
         <input
+          id="card-label"
           className="inp"
           value={label}
           onChange={(e) => setLabel(e.target.value)}
@@ -391,8 +393,9 @@ function NewVoucherForm({
         </p>
       )}
       <div className="fld">
-        <label className="lab">Load with (KES)</label>
+        <label className="lab" htmlFor="card-load">Load with (KES)</label>
         <input
+          id="card-load"
           className="inp"
           value={amount}
           onChange={(e) => setAmount(e.target.value)}
@@ -401,8 +404,9 @@ function NewVoucherForm({
         />
       </div>
       <div className="fld">
-        <label className="lab">Gift to (optional phone)</label>
+        <label className="lab" htmlFor="card-gift">Gift to (optional phone)</label>
         <input
+          id="card-gift"
           className="inp"
           value={recipient}
           onChange={(e) => setRecipient(e.target.value)}

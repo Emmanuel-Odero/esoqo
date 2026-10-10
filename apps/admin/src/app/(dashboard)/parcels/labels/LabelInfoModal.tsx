@@ -269,7 +269,7 @@ export function LabelInfoModal({
                 </div>
               )}
 
-              <label className="sub" style={{ display: 'block', margin: '0 0 6px' }}>Sender</label>
+              <div className="sub" style={{ display: 'block', margin: '0 0 6px' }}>Sender</div>
               <div style={{ display: 'flex', gap: 10, marginBottom: 10 }}>
                 <label className="sub" style={{ flex: 1 }}>Sender name
                   <input value={senderName} onChange={(e) => setSenderName(e.target.value)}
@@ -281,7 +281,7 @@ export function LabelInfoModal({
                 </label>
               </div>
 
-              <label className="sub" style={{ display: 'block', margin: '0 0 6px' }}>Receiver</label>
+              <div className="sub" style={{ display: 'block', margin: '0 0 6px' }}>Receiver</div>
               <div style={{ display: 'flex', gap: 10, marginBottom: 10 }}>
                 <label className="sub" style={{ flex: 1 }}>Receiver name
                   <input value={receiverName} onChange={(e) => setReceiverName(e.target.value)}

@@ -2,6 +2,7 @@
 
 import { Fragment, useMemo, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
+import type { Route } from "next";
 import { Icon, SelectableLabelPrintBlock } from "@esoqo/ui";
 import { useAnnounce } from "@esoqo/a11y";
 import {
@@ -189,7 +190,7 @@ export function OrgLabelsClient({
                 if (onStateChange) {
                   onStateChange(t.state);
                 } else {
-                  router.push(`${baseHref}&state=${t.state}` as any);
+                  router.push(`${baseHref}&state=${t.state}` as Route);
                 }
               }}
               className={`btn btn-sm ${t.state === state ? "btn-p" : "btn-o"}`}

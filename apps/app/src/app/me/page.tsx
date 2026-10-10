@@ -60,7 +60,7 @@ export default async function MePage({
     : null;
 
   const token = (await cookies()).get(SESSION_COOKIE)?.value;
-  const [balance, walletBalance, grants, workspaces, bookings] =
+  const [balance, walletBalance, , workspaces, bookings] =
     await Promise.all([
       orgId ? getGroupBalance(ctx, orgId) : Promise.resolve(null),
       getWalletBalance(ctx),
@@ -77,9 +77,6 @@ export default async function MePage({
         : Promise.resolve([] as GoMyBooking[]),
     ]);
 
-  const activeGrants = grants.filter(
-    (g) => !g.revokedAt && g.expiresAt > new Date(),
-  );
   const otherWorkspaces = workspaces.filter((w) => w.kind !== "personal");
 
   const pay = me.registration?.payment;

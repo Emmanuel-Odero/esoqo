@@ -59,7 +59,7 @@ export function ContributionForm({ orgId }: { orgId: string }) {
               <div className="fld">
                 <label className="lab" htmlFor="ct-amt">Amount (KES)</label>
                 <input className="inp mono" id="ct-amt" inputMode="decimal" value={amount}
-                  onChange={(e) => setAmount(e.target.value)} placeholder="500" autoFocus />
+                  onChange={(e) => setAmount(e.target.value)} placeholder="500" />
               </div>
               <div className="fld">
                 <label className="lab" htmlFor="ct-ref">M-Pesa code or note (optional)</label>

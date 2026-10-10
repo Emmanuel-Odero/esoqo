@@ -207,7 +207,6 @@ function BillRow({ b }: { b: GoBill }) {
               inputMode="decimal"
               onChange={(e) => setPayingAmount(e.target.value)}
               placeholder="Amount paid (KES)"
-              autoFocus
             />
             <button
               type="button"
@@ -294,8 +293,9 @@ function NewBillForm({ onDone }: { onDone: () => void }) {
     <div className="mcard mcard--action" style={{ marginTop: 16 }}>
       <h2 style={{ fontSize: ".95rem" }}>New bill</h2>
       <div className="fld">
-        <label className="lab">Name</label>
+        <label className="lab" htmlFor="bill-name">Name</label>
         <input
+          id="bill-name"
           className="inp"
           value={label}
           onChange={(e) => setLabel(e.target.value)}
@@ -303,8 +303,9 @@ function NewBillForm({ onDone }: { onDone: () => void }) {
         />
       </div>
       <div className="fld">
-        <label className="lab">Category</label>
+        <label className="lab" htmlFor="bill-category">Category</label>
         <select
+          id="bill-category"
           className="inp"
           value={category}
           onChange={(e) => setCategory(e.target.value)}
@@ -315,8 +316,9 @@ function NewBillForm({ onDone }: { onDone: () => void }) {
         </select>
       </div>
       <div className="fld">
-        <label className="lab">Amount (KES, optional)</label>
+        <label className="lab" htmlFor="bill-amount">Amount (KES, optional)</label>
         <input
+          id="bill-amount"
           className="inp"
           value={amount}
           onChange={(e) => setAmount(e.target.value)}
@@ -325,8 +327,9 @@ function NewBillForm({ onDone }: { onDone: () => void }) {
         />
       </div>
       <div className="fld">
-        <label className="lab">Repeats</label>
+        <label className="lab" htmlFor="bill-repeat">Repeats</label>
         <select
+          id="bill-repeat"
           className="inp"
           value={cycle}
           onChange={(e) => setCycle(e.target.value)}
@@ -337,8 +340,9 @@ function NewBillForm({ onDone }: { onDone: () => void }) {
         </select>
       </div>
       <div className="fld">
-        <label className="lab">Next due date</label>
+        <label className="lab" htmlFor="bill-due">Next due date</label>
         <input
+          id="bill-due"
           className="inp"
           type="date"
           value={dueDate}
