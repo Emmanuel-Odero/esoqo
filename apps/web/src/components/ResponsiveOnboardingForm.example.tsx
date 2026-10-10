@@ -421,7 +421,7 @@ export function SellerProfileCompletion() {
     },
   ];
 
-  const handleSubmit = async (data: Record<string, any>) => {
+  const handleSubmit = async (_data: Record<string, unknown>) => {
     console.log("Seller profile completed:", data);
     setFormData(data);
   };
