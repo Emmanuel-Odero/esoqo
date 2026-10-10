@@ -46,12 +46,12 @@ environment.
 | Workload | Image | Port | Hostname (preview) |
 |---|---|---|---|
 | `web` | `esoqo-web` | 3000 | `preview.esoko.global` |
-| `app` | `esoqo-app` | 3001 | `app.preview.esoko.global` |
-| `admin` | `esoqo-admin` | 3002 | `admin.preview.esoko.global` |
-| `store` | `esoqo-store` | 3003 | `store.preview.esoko.global` |
-| `jamii` | `esoqo-jamii` | 3004 | `jamii.preview.esoko.global` |
-| `core-service` | `esoqo-core-service` | 4000 | `api.preview.esoko.global` |
-| `core-go` | `esoqo-core-go` | 4100 | `mobile.preview.esoko.global` |
+| `app` | `esoqo-app` | 3001 | `preview-app.esoko.global` |
+| `admin` | `esoqo-admin` | 3002 | `preview-admin.esoko.global` |
+| `store` | `esoqo-store` | 3003 | `preview-store.esoko.global` |
+| `jamii` | `esoqo-jamii` | 3004 | `preview-jamii.esoko.global` |
+| `core-service` | `esoqo-core-service` | 4000 | `preview-api.esoko.global` |
+| `core-go` | `esoqo-core-go` | 4100 | `preview-mobile.esoko.global` |
 | `postgres` | `postgres:16-alpine` | 5432 | *(in-cluster only)* |
 | `pgbouncer` | `edoburu/pgbouncer` | 6432 | *(in-cluster only)* |
 | `redis` | `redis:7-alpine` | 6379 | *(in-cluster only)* |
@@ -172,15 +172,21 @@ filled-in file in a password manager and delete it from disk.
 > `audit:verify` will fail forever after. preview and production must
 > have different values.
 
-### 3.6 DNS at Namecheap
+### 3.6 DNS at Cloudflare
 
-Namecheap → Domain List → `esoko.global` → **Advanced DNS**.
+The `esoko.global` zone is on Cloudflare. Open Cloudflare → `esoko.global`
+→ **DNS → Records**. Preview hosts are single-label
+(`preview-app.esoko.global`, not `app.preview.esoko.global`) because the
+zone's bridge certificate covers only one level below the apex
+(`esoko.global` + `*.esoko.global`); two-level names cannot be proxied on
+the Free plan. Records must be **Proxied** (orange cloud) so Cloudflare
+Access can gate them.
 
 First get the ingress IP:
 
 ```bash
-kubectl -n ingress-nginx get svc ingress-nginx-controller \
-  -o jsonpath='{.status.loadBalancer.ingress[0].ip}'
+kubectl get svc -A \
+  -o jsonpath='{range .items[?(@.spec.type=="LoadBalancer")]}{.metadata.namespace}/{.metadata.name} {.status.loadBalancer.ingress[0].ip}{"\n"}{end}'
 ```
 
 If that is empty, the controller is `NodePort` rather than
@@ -190,32 +196,38 @@ If that is empty, the controller is `NodePort` rather than
 kubectl get nodes -o wide
 ```
 
-Then add these records. Two records cover all five preview apps, because
-the apex and the wildcard together match every hostname:
+Then add one **Proxied** A record per host:
 
-| Type | Host | Value | TTL |
+| Type | Name | Content | Proxy |
 |---|---|---|---|
-| A | `preview` | `<INGRESS_IP>` | 5 min |
-| A | `*.preview` | `<INGRESS_IP>` | 5 min |
+| A | `preview` | `<INGRESS_IP>` | Proxied |
+| A | `preview-app` | `<INGRESS_IP>` | Proxied |
+| A | `preview-admin` | `<INGRESS_IP>` | Proxied |
+| A | `preview-store` | `<INGRESS_IP>` | Proxied |
+| A | `preview-jamii` | `<INGRESS_IP>` | Proxied |
+| A | `preview-api` | `<INGRESS_IP>` | Proxied |
+| A | `preview-mobile` | `<INGRESS_IP>` | Proxied |
+
+The apex `esoko.global` stays **DNS-only** and keeps its redirect to
+`esoqo.com`; proxying it would break that redirect.
 
 And for production, when you get there:
 
-| Type | Host | Value | TTL |
+| Type | Host | Value | Proxy |
 |---|---|---|---|
-| A | `@` | `<INGRESS_IP>` | 5 min |
-| A | `www` | `<INGRESS_IP>` | 5 min |
-| A | `*` | `<INGRESS_IP>` | 5 min |
+| A | `@` | `<INGRESS_IP>` | Proxied |
+| A | `www` | `<INGRESS_IP>` | Proxied |
 
-> The apex **must** be an A record. DNS forbids a CNAME at a zone apex,
-> and Namecheap's "URL Redirect" workaround breaks the ACME HTTP-01
-> challenge, so certificates will never issue.
+> The apex **must** be a DNS A record. DNS forbids a CNAME at a zone apex,
+> and a redirect-based apex breaks the ACME HTTP-01 challenge, so
+> certificates will never issue.
 
 Verify before expecting TLS to work — cert-manager cannot succeed until
 these resolve publicly:
 
 ```bash
 dig +short preview.esoko.global
-dig +short admin.preview.esoko.global
+dig +short preview-admin.esoko.global
 ```
 
 ### 3.7 GHCR package visibility
@@ -408,8 +420,8 @@ misconfiguration:**
 
 **End state:** all 7 workloads (`web`, `app`, `admin`, `store`, `jamii`,
 `core-service`, `core-go`) `Running` and passing `/health`; all 113
-migrations applied; every `*.preview.esoko.global` hostname routing
-correctly over plain HTTP. **Not done:** TLS — the `letsencrypt-prod`
+migrations applied; every preview hostname (`preview.esoko.global`,
+`preview-app.esoko.global`, …) routing correctly over plain HTTP. **Not done:** TLS — the `letsencrypt-prod`
 ClusterIssuer does not exist on the cluster (confirmed via
 `CertificateRequest` status: `Referenced "ClusterIssuer" not found`),
 and creating one is cluster-scoped, i.e. blocked on the same missing
@@ -417,7 +429,7 @@ cluster-admin access as Fleet itself. `kubectl apply -f
 deploy/cluster/cluster-issuer.yaml` from an admin kubeconfig is all that's
 needed once one is available. Also not done, and out of scope for a
 preview bootstrap: the Fleet/GitOps install itself (§3.3–§3.4), the
-production DNS cutover, and the Postgres data migration off Render.
+production DNS cutover, and the Postgres data migration off the previous PaaS.
 
 ---
 
@@ -592,32 +604,38 @@ manual backup ([§10](#10-backups-and-restore)).
 
 ---
 
-## 9. TLS and wildcards
+## 9. TLS, proxying and Access
 
-Certificates are issued by cert-manager over ACME **HTTP-01**, via a
-namespaced `Issuer` per environment (see §3.2 — not a `ClusterIssuer`,
-despite what the annotation name below suggests it should be).
-HTTP-01 needs nothing but a publicly reachable ingress — no registrar
-API credentials.
+The zone is on Cloudflare and the preview hosts are **Proxied**
+(orange-cloud). Cloudflare Access (email one-time PIN) gates the five
+UI hosts, so preview is not reachable by the public even though the DNS
+records are public.
 
-**DNS moved to Cloudflare 2026-09-27** (both `esoqo.com` and
-`esoko.global` — `preview.esoko.global` is still on Namecheap's own DNS
-as of this writing). Cloudflare manages the zone, but records are kept
-**DNS-only (grey-cloud)**, not proxied — cert-manager's HTTP-01
-challenge and Cloudflare's proxy don't mix, and proxying would also
-break the plain host-based routing the ingress relies on. If you ever
-add a record for a new subdomain, make sure it's grey-cloud.
+Origin certificates are issued by cert-manager over ACME **DNS-01**
+(Cloudflare solver), via a namespaced `Issuer` per environment (see §3.2
+— not a `ClusterIssuer`, despite the annotation name). HTTP-01 is not
+usable here: Access intercepts every path on the host, including
+`/.well-known/acme-challenge/`, so the challenge could never complete.
+DNS-01 writes a `_acme-challenge` TXT record through the Cloudflare API
+instead. The solver reads its token from the `cloudflare-api-token`
+Secret (key `api-token`); create-secrets.sh builds it from
+`CLOUDFLARE_API_TOKEN`. Set **SSL/TLS mode to Full (strict)** once the
+origin certs are valid; during a first bootstrap leave it on **Full** so
+a missing origin cert fails soft rather than with an edge 5xx.
 
-The tradeoff: **HTTP-01 cannot issue wildcard certificates.** Hence the
-explicit host lists in both overlays' `ingress.yaml`. Adding a new app
-means adding both an ingress rule *and* a DNS A record — no more free
-wildcard coverage now that DNS isn't a bare `*.preview` A record on
-Namecheap.
+**One-level hostnames only.** The Free plan's Universal SSL covers
+`esoko.global` + `*.esoko.global` (one label). `app.preview.esoko.global`
+is two labels deep and cannot be proxied, which is why every preview host
+is `preview-<app>.esoko.global`.
+
+**HTTP-01 cannot issue wildcard certificates**, hence the explicit host
+lists in `ingress.yaml`. Adding a new app means adding an ingress rule, a
+TLS host, an A record, and — if it is user-facing — an Access application.
 
 **Start on staging.** Let's Encrypt rate-limits production issuance to 5
-failures per hostname per hour, and a wrong A record burns through that
-in minutes — after which the real certificate cannot issue for an hour
-no matter what you fix. Swap the annotation in `ingress.yaml`:
+failures per hostname per hour, and a wrong token or zone burns through
+that in minutes — after which the real certificate cannot issue for an
+hour no matter what you fix. Swap the annotation in `ingress.yaml`:
 
 ```yaml
 cert-manager.io/issuer: letsencrypt-staging
@@ -840,8 +858,6 @@ kubectl -n fleet-default annotate gitrepo preview \
   and the day-to-day account has no RBAC for them — see §3.2 and §9a.
   Namespaced `Issuer` is the working substitute for TLS; there is no
   substitute yet for the `www` redirect.
-- **DNS** is on Cloudflare (`esoqo.com`, `esoko.global`) or Namecheap
-  (`preview.esoko.global`, unmigrated) with no automation from this
-  repo either way. Records are added by hand via the Cloudflare/
-  Namecheap dashboards, and mostly don't change.
+- **DNS** is on Cloudflare (`esoqo.com` and `esoko.global`). Records are
+  added by hand via the Cloudflare dashboard, and mostly don't change.
 - **Database restores** require a human deciding to lose data.

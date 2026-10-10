@@ -70,6 +70,13 @@ for key in \
   require "$key"
 done
 
+# Preview issues its TLS over Cloudflare DNS-01 (the hosts are proxied and
+# behind Access, so HTTP-01 cannot complete). That needs a zone-scoped
+# token. Production still uses HTTP-01 and does not.
+if [[ "$ENVIRONMENT" == "preview" ]]; then
+  require CLOUDFLARE_API_TOKEN
+fi
+
 # FLEET_QR_SECRET and MPESA_CALLBACK_SECRET are required above rather
 # than optional, and that is not conservatism. Both environments run
 # APP_ENV=production, and services/core-go/internal/config/config.go
@@ -180,6 +187,16 @@ kubectl create secret generic esoqo-secrets \
   --from-literal=R2_BUCKET="${R2_BUCKET:-}" \
   --from-literal=SEED_ADMIN_PIN="${SEED_ADMIN_PIN:-}" \
   --from-literal=SEED_ADMIN_HASH="${SEED_ADMIN_HASH:-}" \
+  --dry-run=client -o yaml | kubectl apply -f -
+
+# ── cert-manager DNS-01 token ───────────────────────────────────────
+# The preview Issuer's Cloudflare solver runs as a cert-manager pod in
+# this namespace and reads its credential from this Secret. It is kept
+# separate from esoqo-secrets so that rotating the app-level token does
+# not silently break certificate renewal, and vice versa.
+kubectl create secret generic cloudflare-api-token \
+  --namespace "$NAMESPACE" \
+  --from-literal=api-token="${CLOUDFLARE_API_TOKEN:-}" \
   --dry-run=client -o yaml | kubectl apply -f -
 
 echo

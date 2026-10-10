@@ -17,8 +17,12 @@ set -uo pipefail   # deliberately not -e: every check must run, so the
 
 ENVIRONMENT="${1:-}"
 case "$ENVIRONMENT" in
-  preview)    NAMESPACE=esoqo-preview;    APEX=preview.esoko.global ;;
-  production) NAMESPACE=esoqo-production; APEX=esoqo.com ;;
+  preview)    NAMESPACE=esoqo-preview
+              APEX=preview.esoko.global
+              HOSTS="preview.esoko.global preview-app.esoko.global preview-admin.esoko.global preview-store.esoko.global preview-jamii.esoko.global preview-api.esoko.global preview-mobile.esoko.global" ;;
+  production) NAMESPACE=esoqo-production
+              APEX=esoqo.com
+              HOSTS="esoqo.com app.esoqo.com admin.esoqo.com store.esoqo.com jamii.esoqo.com" ;;
   *) echo "usage: $0 <preview|production>" >&2; exit 64 ;;
 esac
 
@@ -128,12 +132,12 @@ fi
 # ── DNS ─────────────────────────────────────────────────────────────
 echo
 echo "DNS"
-for host in "$APEX" "app.$APEX" "admin.$APEX"; do
+for host in $HOSTS; do
   RESOLVED=$(dig +short "$host" A 2>/dev/null | grep -E '^[0-9]+\.' | head -1)
   if [[ -z "$RESOLVED" ]]; then
-    bad "$host does not resolve" "Add the A records at Namecheap — docs/deployment/README.md § 3.6. cert-manager cannot issue until it does."
+    bad "$host does not resolve" "Add the A record in the Cloudflare esoko.global zone — docs/deployment/README.md § 3.6. cert-manager cannot issue until it does."
   elif [[ -n "$LB_IP" && "$RESOLVED" != "$LB_IP" ]]; then
-    warn "$host → $RESOLVED (ingress is $LB_IP)" "Stale record, or traffic is proxied. HTTP-01 needs it pointing at the ingress."
+    warn "$host → $RESOLVED (ingress is $LB_IP)" "Stale record, or traffic is proxied (Cloudflare edge). HTTP-01 still works proxied; check SSL mode is Full if you see 5xx."
   else
     ok "$host → $RESOLVED"
   fi

@@ -10,5 +10,5 @@ data:
   NAMESPACE: esoqo-preview
   TARGET_BRANCH: preview
   GIT_REPO_URL: https://github.com/Emmanuel-Odero/esoqo.git
-  DEPLOYER_IMAGE: ghcr.io/emmanuel-odero/esoqo-deployer:20261010
+  DEPLOYER_IMAGE: ghcr.io/emmanuel-odero/esoqo-deployer:20261010b
   LISTEN_ADDR: ":8080"

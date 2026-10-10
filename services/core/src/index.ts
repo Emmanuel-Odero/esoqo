@@ -51,8 +51,8 @@ await app.register(cecfRoutes);
 await app.register(jamiiDomainsRoutes);
 
 /**
- * The platform's restart probe (render.yaml's healthCheckPath). This
- * returned 200 unconditionally, so an unreachable database, a wrong
+ * The Kubernetes liveness probe (httpGet /health). This returned 200
+ * unconditionally, so an unreachable database, a wrong
  * DATABASE_URL or an unmigrated schema all reported healthy while every
  * real request 500'd — the deploy went green on a service that could not
  * serve anything.

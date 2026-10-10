@@ -11,8 +11,8 @@ import (
 	"github.com/esoqo/core-go/internal/audit"
 )
 
-// handleHealth is the platform's restart probe (render.yaml's
-// healthCheckPath). It used to return 200 unconditionally, which meant a
+// handleHealth is the Kubernetes liveness probe (httpGet /health). It used
+// to return 200 unconditionally, which meant a
 // service with an unreachable database, a wrong DATABASE_URL or a schema
 // that had never been migrated still reported healthy — the deploy went
 // green while every real request 500'd.
