@@ -19,6 +19,11 @@
 #                          this still never crosses into the other
 #                          namespace.
 #
+#  The Role and RoleBindings live in ci-webhook-rbac.yaml (applied once
+#  per namespace by an operator), NOT in this kustomization — so the
+#  deployer's overlay apply never needs RBAC write access, which `edit`
+#  does not grant.
+#
 #  TARGET_BRANCH, GIT_REPO_URL and DEPLOYER_IMAGE differ per
 #  environment — set in each overlay's config.yaml, not here.
 # ════════════════════════════════════════════════════════════════════
@@ -27,45 +32,12 @@ kind: ServiceAccount
 metadata:
   name: ci-webhook
 ---
-apiVersion: rbac.authorization.k8s.io/v1
-kind: Role
-metadata:
-  name: ci-webhook
-rules:
-  - apiGroups: ["batch"]
-    resources: ["jobs"]
-    verbs: ["create", "get", "list", "watch"]
----
-apiVersion: rbac.authorization.k8s.io/v1
-kind: RoleBinding
-metadata:
-  name: ci-webhook
-subjects:
-  - kind: ServiceAccount
-    name: ci-webhook
-roleRef:
-  kind: Role
-  name: ci-webhook
-  apiGroup: rbac.authorization.k8s.io
----
 apiVersion: v1
 kind: ServiceAccount
 metadata:
   name: esoqo-deployer
 imagePullSecrets:
   - name: ghcr
----
-apiVersion: rbac.authorization.k8s.io/v1
-kind: RoleBinding
-metadata:
-  name: esoqo-deployer-edit
-subjects:
-  - kind: ServiceAccount
-    name: esoqo-deployer
-roleRef:
-  kind: ClusterRole
-  name: edit
-  apiGroup: rbac.authorization.k8s.io
 ---
 apiVersion: apps/v1
 kind: Deployment
