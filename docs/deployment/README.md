@@ -611,6 +611,76 @@ The zone is on Cloudflare and the preview hosts are **Proxied**
 UI hosts, so preview is not reachable by the public even though the DNS
 records are public.
 
+### Granting and revoking preview access
+
+Access matches the address a visitor signs in with against the
+**`Esoqo Preview`** application's `Allowed preview users` policy
+(decision `allow`, rule = an *email* include list). Two things must
+both be true for a login to succeed.
+
+**1. The account has at least one login method.** Cloudflare Access
+ships with **zero** identity providers; with none configured the login
+page still renders but every attempt errors with *"There are no login
+methods available for this account."* This account uses the built-in
+**One-time PIN** provider (no external IdP, no per-seat cost) — create
+it once:
+
+```bash
+CF_TOKEN=<token from .private/keys-secrets/cloudflare-notes.txt>
+ACCT=e9a4f6bbf65d4e50e8a95ee3ce70b948
+
+curl -sS -X POST \
+  "https://api.cloudflare.com/client/v4/accounts/$ACCT/access/identity_providers" \
+  -H "Authorization: Bearer $CF_TOKEN" -H "Content-Type: application/json" \
+  --data '{"name":"One-time PIN","type":"onetimepin","config":{}}'
+```
+
+Take about 40s to propagate before relying on it.
+
+**2. The email is on the policy.** Adding or removing people is a
+policy edit — no redeploy, no DNS change, no image rebuild. The
+identifiers live in the Terraform-free setup notes and can be read back
+from the API:
+
+```bash
+APP=f29bf27a-3d63-4215-b11c-71b0edd877d0   # Esoqo Preview
+POLICY=90e1f3d8-2e29-4aeb-9127-eead615b6034 # Allowed preview users
+```
+
+Dashboard: **Zero Trust → Access → Applications → Esoqo Preview →
+`Allowed preview users` → Edit**, then `Include → Emails` and add the
+address. Via API, `PUT` the policy with the **full** replacement list
+(the `include` array is overwritten wholesale — resend every address):
+
+```bash
+curl -sS -X PUT \
+  "https://api.cloudflare.com/client/v4/accounts/$ACCT/access/apps/$APP/policies/$POLICY" \
+  -H "Authorization: Bearer $CF_TOKEN" -H "Content-Type: application/json" \
+  --data '{"name":"Allowed preview users","decision":"allow","include":[
+    {"email":{"email":"emmanuelodero808@gmail.com"}},
+    {"email":{"email":"someone-else@example.com"}}
+  ]}'
+```
+
+Each listed address then signs in with a 6-digit PIN emailed by Access
+(the PIN is the login method; there is no password). Only addresses on
+the list get a code.
+
+**Verify** by curling a UI host and expecting a `302` to
+`…cloudflareaccess.com/cdn-cgi/access/login/…`, not a `200`:
+
+```bash
+curl -sS -o /dev/null -w '%{http_code} %{redirect_url}\n' \
+  https://preview.esoko.global/
+```
+
+> **Gotcha (already hit once):** the application's
+> `self_hosted_domains` must be a real JSON **array**
+> (`["preview.esoko.global","preview-app.esoko.global", …]`). A
+> comma-separated *string* is stored as a single bogus element and
+> Access matches nothing — the hosts then answer `200` to the public
+> while the dashboard looks correct.
+
 Origin certificates are issued by cert-manager over ACME **DNS-01**
 (Cloudflare solver), via a namespaced `Issuer` per environment (see §3.2
 — not a `ClusterIssuer`, despite the annotation name). HTTP-01 is not
@@ -835,6 +905,27 @@ it; the build uses `--frozen-lockfile` deliberately.
 `NEXT_PUBLIC_*` build args in `build-images.yml` have drifted from the
 overlay's `config.yaml`. They must match; change both.
 
+**Changed `orchestrate.sh` or `Dockerfile.deployer`, but the deploy
+still runs the old logic** — the deployer executes from a **pinned
+image** (`ci-webhook-config`'s `DEPLOYER_IMAGE`), not from the repo,
+and `envFrom` does not hot-reload. A push is handled by whatever image
+the *running* `ci-webhook` was started with, so rebuild under a new
+immutable tag, update the overlay, then apply it to the live cluster
+**and** restart the webhook *before* the next push:
+
+```bash
+kubectl -n esoqo-preview apply -f deploy/k8s/overlays/preview/ci-webhook-config.yaml
+kubectl -n esoqo-preview rollout restart deploy/ci-webhook
+kubectl -n esoqo-preview exec deploy/ci-webhook -- printenv DEPLOYER_IMAGE
+# production: same three commands with -n esoqo-production
+```
+
+Real example (2026-10-10): the production webhook was still on the
+pre-`33b40f7` deployer, whose migrate-Job extraction matched
+`^kind: Job$` against a whole multi-line record, so every production
+deploy died at *"could not find the migrate Job in the rendered
+overlay"* until the webhook was repointed at the rebuilt tag.
+
 ### Useful commands
 
 ```bash
@@ -860,4 +951,10 @@ kubectl -n fleet-default annotate gitrepo preview \
   substitute yet for the `www` redirect.
 - **DNS** is on Cloudflare (`esoqo.com` and `esoko.global`). Records are
   added by hand via the Cloudflare dashboard, and mostly don't change.
+- **Preview Access** (the One-time PIN login method and the allowed-email
+  policy) is managed in Cloudflare One by hand — see §9.
+- **The deployer image is pinned by tag.** Editing `orchestrate.sh` or
+  `Dockerfile.deployer` has no effect until it is rebuilt, the overlay's
+  `DEPLOYER_IMAGE` is bumped, and the running `ci-webhook` is repointed
+  — see §11.
 - **Database restores** require a human deciding to lose data.
