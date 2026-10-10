@@ -83,6 +83,7 @@ spec:
       containers:
         - name: ci-webhook
           image: ghcr.io/emmanuel-odero/esoqo-ci-webhook:bootstrap
+          imagePullPolicy: Always # :bootstrap is a mutable tag; always take the current push
           ports:
             - name: http
               containerPort: 8080

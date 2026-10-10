@@ -187,7 +187,7 @@ if git diff --cached --quiet; then
   exit 0
 fi
 
-git -c user.name="esoqo-deployer" -c user.email="ci@esoqo.com" commit -m "deploy(${ENVIRONMENT}): ${TAG}"
+git -c user.name="esoqo-deployer" -c user.email="ci@esoqo.com" commit -m "deploy(${ENVIRONMENT}): ${TAG} [skip ci]"
 
 PUSH_URL="https://x-access-token:${GIT_WRITE_TOKEN}@${GIT_REPO_HOST_PATH}"
 git push "$PUSH_URL" "HEAD:refs/heads/${TARGET_BRANCH}"
