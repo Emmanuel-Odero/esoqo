@@ -16,7 +16,6 @@ import {
   actionConfirmHandle,
   type JoinDetails,
 } from "./actions";
-import { DetailsForm } from "./DetailsForm";
 
 type Step =
   | "start-choice"
@@ -174,14 +173,6 @@ function enhanceBitmap(canvas: HTMLCanvasElement): HTMLCanvasElement {
     // Luminance formula for grayscale
     grayData[i / 4] = 0.299 * r + 0.587 * g + 0.114 * b;
   }
-
-  // Calculate global mean for adaptive thresholding
-  let sum = 0;
-  for (let i = 0; i < grayData.length; i++) {
-    const val = grayData[i] as number;
-    sum += val;
-  }
-  const mean = sum / grayData.length;
 
   // Apply adaptive thresholding with local mean
   const thresholded = new Uint8ClampedArray(grayData.length);
@@ -351,7 +342,7 @@ export function JoinWizard({ invite = null }: { invite?: JoinInvite | null }) {
   const [chosenHandle, setChosenHandle] = useState<string | null>(null);
   const [esoqoId, setEsoqoId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [fieldError, setFieldError] = useState<string | null>(null);
+  const [, setFieldError] = useState<string | null>(null);
   const [pending, start] = useTransition();
 
   // Object URLs are created here, once per file, and revoked when that

@@ -44,7 +44,7 @@ export interface OrgPortalHandler {
   getNavItems: (args: {
     orgId: string;
     capabilities: string[];
-    metadata?: Record<string, any>;
+    metadata?: Record<string, unknown>;
   }) => OrgPortalNavItem[];
 
   /**
@@ -57,7 +57,7 @@ export interface OrgPortalHandler {
    * Fetch org metadata needed for this portal.
    * Optional: if not provided, metadata will be empty.
    */
-  fetchMetadata?: (orgId: string) => Promise<Record<string, any>>;
+  fetchMetadata?: (orgId: string) => Promise<Record<string, unknown>>;
 }
 
 /**
@@ -109,7 +109,7 @@ export const ticketPortalHandler: OrgPortalHandler = {
   getNavItems: (args: {
     orgId: string;
     capabilities: string[];
-    metadata?: Record<string, any>;
+    metadata?: Record<string, unknown>;
   }) => {
     const { orgId, capabilities, metadata } = args;
 

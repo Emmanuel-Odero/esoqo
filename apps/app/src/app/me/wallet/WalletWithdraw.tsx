@@ -83,7 +83,7 @@ export function WalletWithdraw({ registeredMsisdn, balanceKes }: { registeredMsi
               <div className="fld">
                 <label className="lab" htmlFor="ww-amt">Amount (KES)</label>
                 <input className="inp mono" id="ww-amt" inputMode="decimal" value={amount}
-                  onChange={(e) => setAmount(e.target.value)} placeholder="500" autoFocus />
+                  onChange={(e) => setAmount(e.target.value)} placeholder="500" />
               </div>
               {quote && (
                 <p className="hint" style={{ margin: '8px 0 0' }}>

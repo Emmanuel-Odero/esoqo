@@ -77,7 +77,7 @@ export function ProjectsPanel({ orgId, projects, members, isOfficer }: {
   );
 }
 
-function ProjectDetail({ orgId, project, isOfficer }: { orgId: string; project: ProjectRow; isOfficer: boolean }) {
+function ProjectDetail({ project, isOfficer }: { orgId: string; project: ProjectRow; isOfficer: boolean }) {
   const [amount, setAmount] = useState('');
   const [payeeName, setPayeeName] = useState('');
   const [purpose, setPurpose] = useState('');
@@ -116,14 +116,14 @@ function ProjectDetail({ orgId, project, isOfficer }: { orgId: string; project: 
           <button type="button" className={`btn btn-sm ${mode === 'withdraw' ? 'btn-p' : 'btn-o'}`} onClick={() => setMode('withdraw')}>Withdraw</button>
         )}
       </div>
-      <div className="fld"><label className="lab">Amount (KES)</label>
-        <input className="inp" value={amount} onChange={(e) => setAmount(e.target.value)} inputMode="decimal" /></div>
+      <div className="fld"><label className="lab" htmlFor={`proj-${project.id}-amount`}>Amount (KES)</label>
+        <input id={`proj-${project.id}-amount`} className="inp" value={amount} onChange={(e) => setAmount(e.target.value)} inputMode="decimal" /></div>
       {mode === 'withdraw' && (
         <>
-          <div className="fld"><label className="lab">Who is being paid</label>
-            <input className="inp" value={payeeName} onChange={(e) => setPayeeName(e.target.value)} /></div>
-          <div className="fld"><label className="lab">What for</label>
-            <input className="inp" value={purpose} onChange={(e) => setPurpose(e.target.value)} /></div>
+          <div className="fld"><label className="lab" htmlFor={`proj-${project.id}-payee`}>Who is being paid</label>
+            <input id={`proj-${project.id}-payee`} className="inp" value={payeeName} onChange={(e) => setPayeeName(e.target.value)} /></div>
+          <div className="fld"><label className="lab" htmlFor={`proj-${project.id}-purpose`}>What for</label>
+            <input id={`proj-${project.id}-purpose`} className="inp" value={purpose} onChange={(e) => setPurpose(e.target.value)} /></div>
         </>
       )}
       {msg && <p style={{ fontSize: '.85rem', color: 'var(--tx-2)' }}>{msg}</p>}
@@ -225,13 +225,13 @@ function NewProjectForm({ orgId, members, onDone }: { orgId: string; members: Me
   return (
     <div className="mcard" style={{ marginTop: 14, background: 'var(--paper)' }}>
       <h2 style={{ fontSize: '.95rem' }}>New project</h2>
-      <div className="fld"><label className="lab">Name</label>
-        <input className="inp" value={title} onChange={(e) => setTitle(e.target.value)} placeholder="Grace's funeral" /></div>
-      <div className="fld"><label className="lab">Purpose (optional)</label>
-        <input className="inp" value={purpose} onChange={(e) => setPurpose(e.target.value)} /></div>
-      <div className="fld"><label className="lab">Target (KES, optional)</label>
-        <input className="inp" value={targetKes} onChange={(e) => setTargetKes(e.target.value)} inputMode="decimal" /></div>
-      <div className="fld"><label className="lab">Other signatories for this project</label>
+      <div className="fld"><label className="lab" htmlFor="newproj-name">Name</label>
+        <input id="newproj-name" className="inp" value={title} onChange={(e) => setTitle(e.target.value)} placeholder="Grace's funeral" /></div>
+      <div className="fld"><label className="lab" htmlFor="newproj-purpose">Purpose (optional)</label>
+        <input id="newproj-purpose" className="inp" value={purpose} onChange={(e) => setPurpose(e.target.value)} /></div>
+      <div className="fld"><label className="lab" htmlFor="newproj-target">Target (KES, optional)</label>
+        <input id="newproj-target" className="inp" value={targetKes} onChange={(e) => setTargetKes(e.target.value)} inputMode="decimal" /></div>
+      <div className="fld"><div className="lab">Other signatories for this project</div>
         <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
           {members.map((m) => (
             <label key={m.personId} style={{ display: 'flex', gap: 8, alignItems: 'center', fontSize: '.88rem' }}>

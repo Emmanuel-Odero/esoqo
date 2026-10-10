@@ -12,7 +12,8 @@
  * courier portal, not a legacy path to migrate away from, so that
  * redirect is gone along with the scaffold it pointed at.
  */
-import { NextRequest, NextResponse } from 'next/server';
+import type { NextRequest } from 'next/server';
+import { NextResponse } from 'next/server';
 
 export function middleware(req: NextRequest) {
   const { pathname } = req.nextUrl;

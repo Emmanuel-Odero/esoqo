@@ -4,7 +4,6 @@ import { Icon } from '@esoqo/ui';
 import { getMyRecord, GROUP_KINDS } from '@esoqo/db';
 import { requireSubject } from '@/lib/session';
 import { orgSlug } from '@/lib/groupSlug';
-import { CreateGroupForm } from './CreateGroupForm';
 import { GroupCreateToggle } from './GroupCreateToggle';
 
 const GROUP_KIND_OPTIONS = GROUP_KINDS.filter(([k]) => k !== 'BUSINESS');

@@ -66,7 +66,7 @@ export function WithdrawalRequestForm({ orgId, leadMinutes }: { orgId: string; l
               <div className="fld">
                 <label className="lab" htmlFor="wd-amt">Amount (KES)</label>
                 <input className="inp mono" id="wd-amt" inputMode="decimal" value={amountKes}
-                  onChange={(e) => setAmount(e.target.value)} placeholder="10000" autoFocus />
+                  onChange={(e) => setAmount(e.target.value)} placeholder="10000" />
               </div>
               <div className="fld">
                 <label className="lab" htmlFor="wd-purpose">What is this for?</label>

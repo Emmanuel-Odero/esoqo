@@ -79,7 +79,7 @@ export function WalletSend({ balanceKes }: { balanceKes: number }) {
               <div className="fld">
                 <label className="lab" htmlFor="ws-to">Esoqo handle, phone or email</label>
                 <input className="inp" id="ws-to" value={toIdentifier}
-                  onChange={(e) => setToIdentifier(e.target.value)} placeholder="mutukuka482 or 07XX XXX XXX" autoFocus />
+                  onChange={(e) => setToIdentifier(e.target.value)} placeholder="mutukuka482 or 07XX XXX XXX" />
               </div>
               <div className="fld">
                 <label className="lab" htmlFor="ws-amt">Amount (KES)</label>

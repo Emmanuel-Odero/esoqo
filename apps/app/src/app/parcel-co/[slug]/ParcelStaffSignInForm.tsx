@@ -6,7 +6,7 @@ import { parcelStaffSignIn } from './actions';
 
 export function ParcelStaffSignInForm({ orgSlug }: { orgSlug: string }) {
   const [name, setName] = useState('');
-  const [esokoId, setEsokoId] = useState('');
+  const [esokoId] = useState('');
   const [pin, setPin] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [pending, startTransition] = useTransition();
