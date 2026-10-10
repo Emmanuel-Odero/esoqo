@@ -31,7 +31,7 @@
 apiVersion: batch/v1
 kind: Job
 metadata:
-  name: esoqo-migrate-4dc1d93be84e
+  name: esoqo-migrate-da199b12152d
   labels:
     app.kubernetes.io/name: migrate
     app.kubernetes.io/part-of: esoqo
