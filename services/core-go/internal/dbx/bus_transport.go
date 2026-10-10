@@ -980,41 +980,64 @@ func ConfirmBusBookingByCheckoutID(ctx context.Context, pool *pgxpool.Pool, chec
 	return bookingIDs, true, nil
 }
 
-// postBusBookingRevenueTx posts a paid bus seat straight into the same
-// PARCEL_ORG_EARNINGS_PAYABLE liability account parcel revenue
-// reclassifies into (see dbx.reclassifyParcelOrgEarnings) — one account
-// per courier company's enterprise party — and creates the
-// ParcelOrgPayout row that actually clears it automatically over
-// Daraja/Co-op, exactly the way a settled parcel's earnings already do
-// (see createBusBookingOrgPayoutTx). The httpapi layer dispatches the
-// row this creates right after the caller's transaction commits (see
-// dispatchParcelOrgPayoutForBusBooking) — dbx itself never calls out to
-// a payment provider.
+// postBusBookingRevenueTx posts a paid bus seat the same way a settled
+// parcel's revenue is split (see dbx.reclassifyParcelOrgEarningsTx):
+// the full fare lands in PARCEL_REVENUE (Esoqo's), and only the
+// courier company's commission-adjusted share is reclassified into
+// PARCEL_ORG_EARNINGS_PAYABLE — one account per courier company's
+// enterprise party — with a ParcelOrgPayout row created for that
+// share, not the whole fare, so Esoqo's cut never leaves via
+// Daraja/Co-op. The httpapi layer dispatches the row this creates
+// right after the caller's transaction commits (see
+// dispatchParcelOrgPayoutForBusBooking) — dbx itself never calls out
+// to a payment provider.
 func postBusBookingRevenueTx(ctx context.Context, tx pgx.Tx, pool *pgxpool.Pool, tripID, bookingID string, priceKES float64) error {
 	if priceKES <= 0 {
 		return nil
 	}
-	var orgID string
-	if err := tx.QueryRow(ctx, `SELECT "parcelOrgId" FROM bus_trip WHERE id = $1`, tripID).Scan(&orgID); err != nil {
+	var orgID, commissionText string
+	if err := tx.QueryRow(ctx, `
+		SELECT bt."parcelOrgId"::text, o."commissionPct"::text
+		FROM bus_trip bt JOIN parcel_org o ON o.id = bt."parcelOrgId"
+		WHERE bt.id = $1`, tripID).Scan(&orgID, &commissionText); err != nil {
 		return err
 	}
+	commissionPct, err := parseFloatOrZero(commissionText)
+	if err != nil {
+		return err
+	}
+	platformFeeKES, orgEarningsKES := SplitParcelRevenue(priceKES, commissionPct)
+
 	settlementAcct, err := ledger.EnsureAccount(ctx, pool, nil, "SETTLEMENT", "KES")
 	if err != nil {
 		return err
 	}
-	payableAcct, _, err := parcelOrgPayableAccountTx(ctx, tx, pool, orgID)
+	revenueAcct, err := ledger.EnsureAccount(ctx, pool, nil, "PARCEL_REVENUE", "KES")
 	if err != nil {
 		return err
 	}
+	postings := []ledger.Posting{
+		{AccountID: settlementAcct, AmountCents: ledger.CentsFromKES(priceKES)},
+	}
+	if platformFeeKES > 0 {
+		postings = append(postings, ledger.Posting{AccountID: revenueAcct, AmountCents: ledger.CentsFromKES(-platformFeeKES)})
+	}
+	if orgEarningsKES > 0 {
+		payableAcct, _, err := parcelOrgPayableAccountTx(ctx, tx, pool, orgID)
+		if err != nil {
+			return err
+		}
+		postings = append(postings, ledger.Posting{AccountID: payableAcct, AmountCents: ledger.CentsFromKES(-orgEarningsKES)})
+	}
 	if _, err := ledger.PostEntryTx(ctx, tx,
 		"bus-booking:"+bookingID, "Bus ticket payment", "core-go:bus-booking:"+bookingID,
-		[]ledger.Posting{
-			{AccountID: settlementAcct, AmountCents: ledger.CentsFromKES(priceKES)},
-			{AccountID: payableAcct, AmountCents: ledger.CentsFromKES(-priceKES)},
-		}); err != nil {
+		postings); err != nil {
 		return err
 	}
-	return createBusBookingOrgPayoutTx(ctx, tx, bookingID, orgID, priceKES)
+	if orgEarningsKES <= 0 {
+		return nil // 100% commission — nothing to disburse to the courier company
+	}
+	return createBusBookingOrgPayoutTx(ctx, tx, bookingID, orgID, orgEarningsKES)
 }
 
 // PendingBusBookingCheckoutID returns the checkout id a booking code's

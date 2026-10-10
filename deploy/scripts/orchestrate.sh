@@ -156,7 +156,7 @@ echo "overlay renders cleanly"
 echo
 echo "== running migration =="
 
-awk -v RS='\n---\n' '/^kind: Job$/{print; print "---"}' "$WORKDIR/rendered.yaml" > "$WORKDIR/migrate-job.rendered.yaml"
+awk -v RS='\n---\n' -v name="esoqo-migrate-${TAG_LC}" '$0 ~ name {print; print "---"}' "$WORKDIR/rendered.yaml" > "$WORKDIR/migrate-job.rendered.yaml"
 if ! grep -q "^kind: Job$" "$WORKDIR/migrate-job.rendered.yaml"; then
   echo "error: could not find the migrate Job in the rendered overlay" >&2
   exit 1
@@ -187,7 +187,7 @@ if git diff --cached --quiet; then
   exit 0
 fi
 
-git -c user.name="esoqo-deployer" -c user.email="ci@esoqo.com" commit -m "deploy(${ENVIRONMENT}): ${TAG}"
+git -c user.name="esoqo-deployer" -c user.email="ci@esoqo.com" commit -m "deploy(${ENVIRONMENT}): ${TAG} [skip ci]"
 
 PUSH_URL="https://x-access-token:${GIT_WRITE_TOKEN}@${GIT_REPO_HOST_PATH}"
 git push "$PUSH_URL" "HEAD:refs/heads/${TARGET_BRANCH}"

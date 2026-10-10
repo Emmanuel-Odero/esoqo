@@ -3,7 +3,7 @@
 import { useState, useTransition } from 'react';
 import { useRouter } from 'next/navigation';
 import { COUNTIES } from '@esoqo/domain';
-import { JAMII_ORG_KINDS, JAMII_ORG_KIND_LABELS } from '@esoqo/domain';
+import { JAMII_ORG_KINDS, JAMII_ORG_KIND_LABELS } from '@esoqo/domain/jamii-constants';
 import { actionStartJamiiPage } from './actions';
 
 function slugify(name: string): string {

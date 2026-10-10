@@ -1,5 +1,6 @@
 import { createHash } from 'node:crypto';
 import { prisma } from './client';
+import { requiredSecret } from '@esoqo/domain';
 import type { Ctx } from './capabilities';
 
 /**
@@ -16,7 +17,7 @@ import type { Ctx } from './capabilities';
 
 // Pre-rename spelling, deliberately: every hash already in the chain
 // was computed from this seed, so changing it invalidates the lot.
-const CHAIN_SEED = process.env.AUDIT_CHAIN_SEED ?? 'esoko-genesis';
+const CHAIN_SEED = requiredSecret('AUDIT_CHAIN_SEED', 'esoko-genesis');
 
 /**
  * Deterministic serialisation — keys sorted at EVERY level, not just

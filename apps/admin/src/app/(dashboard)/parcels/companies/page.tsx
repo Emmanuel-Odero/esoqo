@@ -38,9 +38,14 @@ export default async function ParcelCompaniesPage() {
             own riders and a commission split — parcels with no company stay on Esoqo-run dispatch.
           </p>
         </div>
-        <Link href="/parcels/companies/payouts" className="btn btn-o btn-sm">
-          Manual payouts
-        </Link>
+        <div style={{ display: 'flex', gap: 8 }}>
+          <Link href="/parcels/bank" className="btn btn-o btn-sm">
+            Bank account
+          </Link>
+          <Link href="/parcels/companies/payouts" className="btn btn-o btn-sm">
+            Manual payouts
+          </Link>
+        </div>
       </div>
 
       {!canEdit && (

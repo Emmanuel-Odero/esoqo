@@ -74,8 +74,34 @@ func envOr(key, fallback string) string {
 // pushPayload — only the fields we actually branch on. GitHub's push
 // payload has dozens more we don't care about.
 type pushPayload struct {
-	Ref   string `json:"ref"`
-	After string `json:"after"` // the commit SHA to build
+	Ref        string `json:"ref"`
+	After      string `json:"after"` // the commit SHA to build
+	HeadCommit *struct {
+		Message string `json:"message"`
+		Author  struct {
+			Name  string `json:"name"`
+			Email string `json:"email"`
+		} `json:"author"`
+	} `json:"head_commit"`
+}
+
+// deployerEmail is the identity orchestrate.sh commits its overlay
+// tag-bump with. A deploy of commit A ends by the deployer pushing a
+// "deploy(...): A" commit B back to the branch, which is itself a push
+// event — without this guard the webhook would start a fresh pipeline
+// for B, and B's deploy would push C, forever. Skipping our own pushes
+// (and anything explicitly marked) is what makes the loop terminate.
+const deployerEmail = "ci@esoqo.com"
+
+func isSelfDeploy(p pushPayload) bool {
+	if p.HeadCommit == nil {
+		return false
+	}
+	if strings.EqualFold(p.HeadCommit.Author.Email, deployerEmail) {
+		return true
+	}
+	msg := p.HeadCommit.Message
+	return strings.Contains(msg, "[skip ci]") || strings.Contains(msg, "[skip deploy]")
 }
 
 type server struct {
@@ -142,6 +168,12 @@ func (s *server) handleWebhook(w http.ResponseWriter, r *http.Request) {
 	wantRef := "refs/heads/" + s.cfg.Branch
 	if p.Ref != wantRef || p.After == "" {
 		w.WriteHeader(http.StatusOK) // different branch — not ours
+		return
+	}
+
+	if isSelfDeploy(p) {
+		log.Printf("ignoring deployer's own push for %s (would loop)", p.After)
+		w.WriteHeader(http.StatusOK)
 		return
 	}
 
@@ -213,8 +245,9 @@ func (s *server) createDeployJob(ctx context.Context, sha, shortSHA string) erro
 					ServiceAccountName: "esoqo-deployer",
 					Containers: []corev1.Container{
 						{
-							Name:  "deployer",
-							Image: s.cfg.DeployerImage,
+							Name:            "deployer",
+							Image:           s.cfg.DeployerImage,
+							ImagePullPolicy: corev1.PullAlways, // :bootstrap is a mutable tag; always take the current push
 							Env: []corev1.EnvVar{
 								{Name: "GIT_SHA", Value: sha},
 								{Name: "GIT_SHA_SHORT", Value: shortSHA},

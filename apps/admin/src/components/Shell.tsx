@@ -44,6 +44,7 @@ const NAV: { group: string; items: [string, IconName, string, string][] }[] = [
     ['/parcels/operations', 'qr', 'Parcel operations', 'parcels.assign'],
     ['/parcels/live', 'trend-up', 'Live dispatch', 'parcels.read'],
     ['/parcels/companies', 'building', 'Courier companies', 'parcels.read'],
+    ['/parcels/bank', 'bank', 'Bank account', 'parcels.read'],
     ['/parcels/cod', 'coins', 'Cash on delivery', 'parcels.read'],
     ['/parcels/payouts', 'bank', 'Courier payouts', 'parcels.read'],
     ['/parcels/couriers', 'users', 'Couriers', 'parcels.couriers.manage'],

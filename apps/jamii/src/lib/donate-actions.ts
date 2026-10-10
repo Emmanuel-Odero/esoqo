@@ -4,7 +4,8 @@ import {
   createDonation, attachDonationCheckoutRequestId, confirmDonationPayment, getDonation,
   type ConfirmDonationResult,
 } from '@esoqo/db';
-import { donateSchema, donorThankYouSms, adminDonationAlertSms } from '@esoqo/domain';
+import { donorThankYouSms, adminDonationAlertSms } from '@esoqo/domain';
+import { donateSchema } from '@esoqo/domain/jamii';
 import { initiateStkPush, MpesaError } from '@esoqo/payments';
 import { sendSms } from '@esoqo/auth/sms';
 import { getCtx } from '@/lib/session';

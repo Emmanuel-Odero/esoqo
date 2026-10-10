@@ -1,4 +1,4 @@
-import { sanitizeRichText } from '@esoqo/domain';
+import { sanitizeRichText } from '@esoqo/domain/rich-text';
 
 /**
  * Renders a sanitized-HTML rich-text field (About, Programme

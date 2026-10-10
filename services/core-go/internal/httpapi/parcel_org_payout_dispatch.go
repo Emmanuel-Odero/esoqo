@@ -78,6 +78,30 @@ func (s *Server) dispatchParcelOrgPayout(ctx context.Context, row *dbx.ParcelOrg
 			initErr = errMissingPayoutDestination
 			break
 		}
+		// Co-op when it is the live provider — same discipline as
+		// ParcelStkPush on the collection side, and the rail that
+		// actually matches these courier companies' settlement
+		// configuration (a Co-op-held settlement account). Daraja B2C
+		// is a separate credential set (MPESA_B2C_CERT/RESULT_URL/
+		// TIMEOUT_URL) this deployment does not carry, so it is only
+		// the fallback for environments that genuinely run Daraja.
+		if payments.CoopEnabled(s.Cfg) {
+			ref := payments.NewCoopPayoutRef()
+			outcome, desc := payments.CoopB2CSend(s.Cfg, ref, *row.PayoutMsisdn, int64(row.AmountKes), "Esoqo parcel settlement")
+			switch outcome {
+			case payments.CoopSendRejected:
+				initErr = &payoutDestinationError{desc}
+			case payments.CoopSendUnknown:
+				// A transport/auth failure, not a bank verdict — left exactly
+				// as PENDING so the retry worker's next tick (or a genuine
+				// Co-op callback) asks again instead of risking a second send.
+				log.Printf("core-go: parcel org payout %s: no answer from Co-op B2C, left pending", row.ID)
+				return
+			default:
+				conversationID = ref
+			}
+			break
+		}
 		res, err := payments.InitiateB2CPayment(s.Cfg, payments.B2CPaymentRequest{
 			Msisdn:    *row.PayoutMsisdn,
 			AmountKES: row.AmountKes,
@@ -176,21 +200,22 @@ func (s *Server) dispatchParcelOrgPayout(ctx context.Context, row *dbx.ParcelOrg
 	}
 }
 
-// reconcileBankParcelOrgPayout asks Co-op what became of a PesaLink
-// transfer and acts on the answer — the BANK-rail equivalent of
-// reconcileCourierPayout (courier_autopayout.go), confirming or failing
-// through the same row-locked ledger paths the Daraja result webhooks use
-// for every other payout method.
-func (s *Server) reconcileBankParcelOrgPayout(ctx context.Context, row *dbx.ParcelOrgPayoutRow) {
+// reconcileCoopParcelOrgPayout asks Co-op what became of a PesaLink
+// transfer or a Co-op B2C mobile payout and acts on the answer — the
+// Co-op-rail equivalent of reconcileCourierPayout
+// (courier_autopayout.go), confirming or failing through the same
+// row-locked ledger paths the Daraja result webhooks use for every
+// other payout method.
+func (s *Server) reconcileCoopParcelOrgPayout(ctx context.Context, row *dbx.ParcelOrgPayoutRow) {
 	st := payments.CoopQueryTransferStatus(s.Cfg, row.MpesaConversationID)
 	switch st.State {
 	case payments.CoopTransferSuccess:
 		if err := dbx.ConfirmParcelOrgPayoutByConversationID(ctx, s.Pool, row.MpesaConversationID, st.Receipt); err != nil && err != dbx.ErrParcelOrgPayoutNotFound {
-			log.Printf("core-go: confirming bank parcel org payout %s: %v", row.ID, err)
+			log.Printf("core-go: confirming coop parcel org payout %s: %v", row.ID, err)
 		}
 	case payments.CoopTransferFailed:
 		if err := dbx.FailParcelOrgPayoutByConversationID(ctx, s.Pool, row.MpesaConversationID, truncatePayoutReason(st.Description)); err != nil && err != dbx.ErrParcelOrgPayoutNotFound {
-			log.Printf("core-go: failing bank parcel org payout %s: %v", row.ID, err)
+			log.Printf("core-go: failing coop parcel org payout %s: %v", row.ID, err)
 		}
 	}
 }
@@ -222,15 +247,16 @@ func (s *Server) RetryParcelOrgPayouts(ctx context.Context) {
 		case <-ctx.Done():
 			return
 		case <-ticker.C:
-			// Resolve PesaLink transfers already in flight before sending
-			// anything new — same order RunCourierPayoutSweep follows for
-			// the M-Pesa rail.
-			processing, err := dbx.ListProcessingBankParcelOrgPayouts(ctx, s.Pool, 50)
+			// Resolve Co-op transfers already in flight (PesaLink and
+			// Co-op B2C mobile payouts alike) before sending anything
+			// new — same order RunCourierPayoutSweep follows for the
+			// M-Pesa rail.
+			processing, err := dbx.ListProcessingCoopParcelOrgPayouts(ctx, s.Pool, 50)
 			if err != nil {
-				log.Printf("core-go: retryParcelOrgPayouts bank reconcile list failed: %v", err)
+				log.Printf("core-go: retryParcelOrgPayouts coop reconcile list failed: %v", err)
 			}
 			for i := range processing {
-				s.reconcileBankParcelOrgPayout(ctx, &processing[i])
+				s.reconcileCoopParcelOrgPayout(ctx, &processing[i])
 			}
 
 			rows, err := dbx.ListRetryableParcelOrgPayouts(ctx, s.Pool, 10*time.Minute, 50)

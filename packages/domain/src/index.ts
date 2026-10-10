@@ -18,7 +18,21 @@ export * from "./segments";
 export * from "./counties";
 export * from "./businessTypes";
 export * from "./store";
-export * from "./jamii";
+// Split out of jamii.ts (see that file's own comment) specifically so
+// it can stay in THIS barrel without jamii.ts's jsdom dependency
+// following it here — packages/db/src/dal/jamii-domain.ts needs this
+// and is itself reachable from @esoqo/db's main barrel, which every
+// app depends on.
+export * from "./jamii-domain-schema";
+// NOT re-exported from the main barrel: jamii.ts imports rich-text.ts,
+// which imports isomorphic-dompurify/jsdom. Every one of this barrel's
+// consumers — including apps that have nothing to do with Our Jamii —
+// used to pull jsdom into their server bundle just by importing
+// anything from '@esoqo/domain', which crashes Turbopack production
+// builds entirely unrelated pages with "webidl.util.markAsUncloneable
+// is not a function" (a jsdom 30 / Turbopack externals bug). Import
+// from '@esoqo/domain/jamii' instead — see that subpath in
+// package.json's `exports`.
 export * from "./support";
 export * from "./donation-notify";
 // Re-exported directly as well, same reason as cecf-ingest above:
@@ -86,7 +100,9 @@ export {
   smsEncoding,
   smsUnits,
 } from "./sms";
-export * from "./rich-text";
+// rich-text.ts is NOT re-exported here either, same reason as jamii.ts
+// above (it's what pulls in jsdom in the first place) — import from
+// '@esoqo/domain/rich-text' instead.
 export * from "./auth";
 export * from "./treasury";
 export * from "./ticketing";

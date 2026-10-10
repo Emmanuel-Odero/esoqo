@@ -2,6 +2,7 @@ import { createHmac, timingSafeEqual } from 'node:crypto';
 import { prisma } from '../client';
 import { requireCapability, systemCtx, PAYMENT_APPROVAL_THRESHOLD, type Ctx } from '../capabilities';
 import { recordAudit } from '../audit';
+import { requiredSecret } from '@esoqo/domain';
 import type { PaymentMethod, ApprovalDecision, PaymentStatus } from '@prisma/client';
 
 /**
@@ -19,7 +20,7 @@ import type { PaymentMethod, ApprovalDecision, PaymentStatus } from '@prisma/cli
  *   · a single REJECT halts the chain — money disputes escalate to a human
  */
 
-const SECRET = process.env.SESSION_SECRET ?? 'dev-signing-secret';
+const SECRET = requiredSecret('SESSION_SECRET', 'dev-signing-secret');
 
 function sign(paymentId: string, approverId: string, decision: string, at: Date): string {
   return createHmac('sha256', SECRET)

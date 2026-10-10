@@ -21,7 +21,13 @@ export type RequestPinCodeInput = z.infer<typeof requestPinCodeSchema>;
 export const setPinSchema = z
   .object({
     msisdn: msisdnSchema,
-    code: otpCodeSchema.optional(),
+    // Required, not optional: setting a PIN must always be backed by a
+    // freshly verified OTP, even right after registration. A msisdn-only
+    // "trust me, it's already verified" path was exploitable as an
+    // unauthenticated account takeover (anyone who knew/guessed a
+    // registered phone number could set its PIN and get a session) — see
+    // the removed /v1/auth/pin/set-without-code endpoint.
+    code: otpCodeSchema,
     pin: pinSchema,
     pinConfirm: pinSchema,
   })

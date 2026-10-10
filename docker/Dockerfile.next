@@ -14,7 +14,15 @@
 #  image ships green and dies in production. Debian matches Prisma's
 #  default target with no schema change.
 # ════════════════════════════════════════════════════════════════════
-ARG NODE_VERSION=22.12.0
+#  jsdom 30 (packages/domain's rich-text sanitizer, used by apps/jamii)
+#  bundles undici 8, whose webidl layer calls the worker_threads
+#  markAsUncloneable API — absent before Node 22.22.2 and present only
+#  from 22.22.2/24.15.0/26.0.0 onward (jsdom's own `engines` field).
+#  Below that, importing it throws "webidl.util.markAsUncloneable is
+#  not a function" the moment any page reachable from it is built —
+#  not a Turbopack bug, a real engines-range floor. Keep this at or
+#  above jsdom's minimum.
+ARG NODE_VERSION=22.23.3
 
 FROM node:${NODE_VERSION}-bookworm-slim AS base
 ENV PNPM_HOME=/pnpm PATH=/pnpm:$PATH CI=1

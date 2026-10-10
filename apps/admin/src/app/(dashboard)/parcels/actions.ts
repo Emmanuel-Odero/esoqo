@@ -2571,3 +2571,103 @@ export async function actionGetLiveDispatch(): Promise<{
   }>("/v1/admin/parcels/live");
   return { couriers: res.couriers ?? [], parcels: res.parcels ?? [] };
 }
+
+// ── Bank overview ──
+//
+// The platform's own Co-op settlement account (balance + statement,
+// read straight from Co-op) alongside the per-company payout rollup —
+// what's paid, in flight, or stuck — see core-go's
+// handlers_admin_bank.go for the three endpoints below.
+
+export interface BankBalance {
+  AccountNumber: string;
+  AccountName: string;
+  Currency: string;
+  ProductName: string;
+  BranchName: string;
+  ClearedBalance: number;
+  BookedBalance: number;
+  BlockedBalance: number;
+  AvailableBalance: number;
+}
+
+export async function actionGetBankBalance(): Promise<
+  { ok: true; balance: BankBalance } | { ok: false; error: string }
+> {
+  try {
+    await requireStaff();
+    const res = await adminGo<{ balance: BankBalance }>(
+      "/v1/admin/bank/balance",
+    );
+    return { ok: true, balance: res.balance };
+  } catch (e) {
+    return {
+      ok: false,
+      error:
+        e instanceof Error ? e.message : "Could not load the bank balance",
+    };
+  }
+}
+
+export interface BankStatementEntry {
+  TransactionID: string;
+  TransactionDate: string;
+  Narration: string;
+  TransactionType: string;
+  CreditAmount: number;
+  DebitAmount: number;
+  RunningBalance: number;
+}
+
+export interface BankStatement {
+  accountNumber: string;
+  accountName: string;
+  startDate: string;
+  endDate: string;
+  transactions: BankStatementEntry[];
+}
+
+export async function actionGetBankStatement(
+  start: string,
+  end: string,
+): Promise<{ ok: true; statement: BankStatement } | { ok: false; error: string }> {
+  try {
+    await requireStaff();
+    const qs = new URLSearchParams();
+    if (start) qs.set("start", start);
+    if (end) qs.set("end", end);
+    const res = await adminGo<BankStatement & { transactions: BankStatementEntry[] | null }>(
+      `/v1/admin/bank/statement${qs.toString() ? `?${qs.toString()}` : ""}`,
+    );
+    return { ok: true, statement: { ...res, transactions: res.transactions ?? [] } };
+  } catch (e) {
+    return {
+      ok: false,
+      error:
+        e instanceof Error ? e.message : "Could not load the bank statement",
+    };
+  }
+}
+
+/** One courier company's payout rollup — see core-go's
+ *  dbx.ParcelOrgPayoutOverviewRow. */
+export interface ParcelOrgPayoutOverviewRow {
+  parcelOrgId: string;
+  parcelOrgName: string;
+  commissionPct: number;
+  paidKes: number;
+  inFlightKes: number;
+  needsActionKes: number;
+  needsActionCount: number;
+  lastPayoutAt: string | null;
+}
+
+export async function actionListParcelOrgPayoutOverview(): Promise<
+  ParcelOrgPayoutOverviewRow[]
+> {
+  await requireStaff();
+  const { companies } = await adminGo<{
+    companies: ParcelOrgPayoutOverviewRow[] | null;
+  }>("/v1/admin/parcels/orgs/payout-overview");
+  return companies ?? [];
+}
