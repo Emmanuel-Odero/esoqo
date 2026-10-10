@@ -12,13 +12,13 @@ import {
   createJamiiSitePage, updateJamiiSitePage, publishJamiiSitePage, deleteJamiiSitePage,
   saveJamiiNavItems, createSupportTicket,
 } from '@esoqo/db';
+import { setMemberRoleSchema, createSupportTicketSchema } from '@esoqo/domain';
 import {
   jamiiPageProfileSchema, jamiiOrgProfileSchema, jamiiFaqSchema, jamiiPostSchema, createCampaignSchema, updateCampaignSchema,
   campaignUpdateSchema,
-  inviteTeamMemberSchema, requestJamiiDomainSchema, jamiiProgramSchema, setMemberRoleSchema,
+  inviteTeamMemberSchema, requestJamiiDomainSchema, jamiiProgramSchema,
   jamiiPageBlocksSchema, jamiiCreateSitePageSchema, jamiiUpdateSitePageSchema, jamiiNavItemsSchema,
-  createSupportTicketSchema,
-} from '@esoqo/domain';
+} from '@esoqo/domain/jamii';
 import { requireSubject } from '@/lib/session';
 
 export type ActionResult<T = void> = { ok: true; data: T } | { ok: false; error: string };

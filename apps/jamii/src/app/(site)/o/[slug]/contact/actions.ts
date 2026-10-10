@@ -2,7 +2,8 @@
 
 import { headers } from 'next/headers';
 import { submitJamiiContactMessage, JAMII_CONTACT_CREATE, type Ctx } from '@esoqo/db';
-import { jamiiContactMessageSchema, clientIpFrom } from '@esoqo/domain';
+import { clientIpFrom } from '@esoqo/domain';
+import { jamiiContactMessageSchema } from '@esoqo/domain/jamii';
 
 export type ActionResult<T = void> =
   | { ok: true; data: T }

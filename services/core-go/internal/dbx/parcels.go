@@ -2240,20 +2240,27 @@ func ListRetryableParcelOrgPayouts(ctx context.Context, pool *pgxpool.Pool, olde
 	return out, rows.Err()
 }
 
-// ListProcessingBankParcelOrgPayouts is the PesaLink reconcile sweep's
-// query: BANK payouts a PesaLink transfer was actually sent for and that
-// are still awaiting their outcome. Unlike the Daraja rails, nothing here
-// is confirmed from a trusted result webhook alone — see
-// handlers_coop.go's own discipline on Co-op callbacks — so this is polled
-// the same way RunCoopReconcileSweep polls parcel payments.
-func ListProcessingBankParcelOrgPayouts(ctx context.Context, pool *pgxpool.Pool, limit int) ([]ParcelOrgPayoutRow, error) {
+// ListProcessingCoopParcelOrgPayouts is the Co-op reconcile sweep's
+// query: BANK (PesaLink) and PHONE (Co-op B2C) payouts that went out
+// over Co-op and are still awaiting their outcome. Unlike the Daraja
+// rails, nothing here is confirmed from a trusted result webhook alone
+// — see handlers_coop.go's own discipline on Co-op callbacks — so this
+// is polled the same way RunCoopReconcileSweep polls parcel payments.
+//
+// Filtered to the "CPO" reference prefix (payments.NewCoopPayoutRef)
+// so a PHONE payout dispatched over Daraja instead — when Co-op isn't
+// the live provider — is left to its own ResultURL callback
+// (handleMpesaB2CResultCallback) rather than queried against an API
+// that never issued its conversation id.
+func ListProcessingCoopParcelOrgPayouts(ctx context.Context, pool *pgxpool.Pool, limit int) ([]ParcelOrgPayoutRow, error) {
 	rows, err := pool.Query(ctx, `
 		SELECT id, "parcelOrgId", "parcelId", "amountKes"::text, method::text,
 		       "payoutMsisdn", "payoutTillNumber", "payoutPaybillNumber", "payoutPaybillAccount",
 		       "payoutBankCode", "payoutBankAccountNumber", "payoutBankAccountName",
 		       status::text, "mpesaConversationId"
 		FROM parcel_org_payout
-		WHERE status = 'PROCESSING' AND method = 'BANK' AND "mpesaConversationId" IS NOT NULL
+		WHERE status = 'PROCESSING' AND method IN ('BANK', 'PHONE')
+		  AND "mpesaConversationId" LIKE 'CPO%'
 		ORDER BY "createdAt" ASC
 		LIMIT $1`, limit)
 	if err != nil {

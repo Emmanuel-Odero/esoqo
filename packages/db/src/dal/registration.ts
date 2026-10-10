@@ -275,8 +275,36 @@ export async function markOtpSent(ctx: Ctx, id: string) {
   return reg;
 }
 
-export async function markMsisdnVerified(ctx: Ctx, id: string) {
+/**
+ * verifiedMsisdn is the number an OTP was JUST verified for — required,
+ * not merely passed along for logging. The public /join flow
+ * (publicJoinCtx) grants unqualified registration.write to anyone
+ * without a session, with only an unguessable registrationId standing
+ * between "my own draft" and "somebody else's": without this check, a
+ * caller could verify an OTP for their own phone and then mark ANY
+ * registrationId's msisdn verified — and completeRegistration (which
+ * only requires msisdnVerifiedAt, not that this caller ever typed that
+ * number) would hand them a live session for a stranger's registration.
+ * Compared against the registration's OWN msisdn column (not whatever
+ * the caller claims it is) so this can't be satisfied by also supplying
+ * a matching-looking msisdn alongside the stolen registrationId.
+ */
+export async function markMsisdnVerified(
+  ctx: Ctx,
+  id: string,
+  verifiedMsisdn: string,
+) {
   requireCapability(ctx, "registration.write", { registrationId: id });
+  const existing = await prisma.registration.findUnique({
+    where: { id },
+    select: { msisdn: true },
+  });
+  if (!existing) throw new Error("Registration not found");
+  if (existing.msisdn !== verifiedMsisdn) {
+    throw new Error(
+      "That verification code was for a different phone number",
+    );
+  }
   const reg = await prisma.registration.update({
     where: { id },
     data: { status: "VERIFIED", msisdnVerifiedAt: new Date() },

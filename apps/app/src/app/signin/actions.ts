@@ -192,11 +192,13 @@ export async function actionSetPin(
     };
   const { msisdn, code, pin } = parsed.data;
 
-  // If code is provided, use /v1/auth/pin/reset (for forgot PIN flow)
-  // If code is missing (from registration), we need to handle it differently
-  const path = code ? "/v1/auth/pin/reset" : "/v1/auth/pin/set-without-code";
-
-  const result = await coreGoFetch<{ token: string }>(path, {
+  // Always go through /v1/auth/pin/reset, which requires a freshly
+  // verified OTP code — including right after registration. There used
+  // to be a codeless /v1/auth/pin/set-without-code path for that case,
+  // trusting a client-supplied msisdn with no proof of control; that was
+  // an unauthenticated account-takeover primitive (anyone who knew a
+  // registered phone number could set its PIN) and has been removed.
+  const result = await coreGoFetch<{ token: string }>("/v1/auth/pin/reset", {
     msisdn,
     code,
     pin,

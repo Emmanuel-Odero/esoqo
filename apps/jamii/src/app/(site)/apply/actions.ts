@@ -4,7 +4,8 @@ import { headers } from 'next/headers';
 import {
   findJamiiApplicant, getApplicantContactDetails, createJamiiInterest, JAMII_INTEREST_CREATE, type Ctx,
 } from '@esoqo/db';
-import { jamiiApplicantCheckSchema, jamiiInterestSchema, clientIpFrom } from '@esoqo/domain';
+import { clientIpFrom } from '@esoqo/domain';
+import { jamiiApplicantCheckSchema, jamiiInterestSchema } from '@esoqo/domain/jamii';
 
 export type ActionResult<T = void> =
   | { ok: true; data: T }

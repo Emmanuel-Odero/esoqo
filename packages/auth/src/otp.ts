@@ -3,7 +3,7 @@ import { createHmac, randomInt, timingSafeEqual } from "node:crypto";
 import { redis } from "./redis";
 import { checkRateLimit, RateLimitError } from "./ratelimit";
 import { sendSms, smsProvider } from "./sms";
-import { sms } from "@esoqo/domain";
+import { sms, requiredSecret } from "@esoqo/domain";
 
 /**
  * One-time codes.
@@ -18,7 +18,7 @@ import { sms } from "@esoqo/domain";
  * Codes are never stored. Only HMAC(code, OTP_PEPPER).
  */
 
-const PEPPER = process.env.OTP_PEPPER ?? "dev-pepper-change-me";
+const PEPPER = requiredSecret("OTP_PEPPER", "dev-pepper-change-me");
 const TTL_SECONDS = 10 * 60;
 const MAX_ATTEMPTS = 5;
 const DAILY_CAP_KES = Number(process.env.OTP_DAILY_SPEND_CAP_KES ?? 5000);

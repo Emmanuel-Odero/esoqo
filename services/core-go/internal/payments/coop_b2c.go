@@ -53,6 +53,9 @@ func CoopB2CSend(cfg config.Config, ref, msisdn string, amountKES int64, narrati
 	if cfg.CoopSourceAccount == "" {
 		return CoopSendRejected, "COOP_SOURCE_ACCOUNT not set"
 	}
+	if cfg.CoopUserID == "" {
+		return CoopSendRejected, "COOP_USER_ID not set"
+	}
 	if _, err := coopToken(cfg); err != nil {
 		return CoopSendRejected, "could not authenticate with Co-op" // nothing sent yet
 	}
@@ -65,11 +68,13 @@ func CoopB2CSend(cfg config.Config, ref, msisdn string, amountKES int64, narrati
 		"MessageReference": ref,
 		"ISO2CountryCode":  "KE",
 		"CallBackUrl":      cfg.CoopCallbackURL,
-		// Required by Co-op's own M-Pesa B2C (Account-to-Mobile) product
-		// for this endpoint — not a Safaricom Daraja CommandID, which is
-		// why it doesn't match InitiateB2CPayment's BusinessPayment/etc.
-		"CommandId": "SUSUFO",
 		"Source": map[string]interface{}{
+			"UserId": cfg.CoopUserID,
+			// Required by Co-op's own M-Pesa B2C (Account-to-Mobile)
+			// product, nested under Source — not a Safaricom Daraja
+			// CommandID, which is why it doesn't match
+			// InitiateB2CPayment's BusinessPayment/etc.
+			"CommandId":           "SUSUFO",
 			"AccountNumber":       cfg.CoopSourceAccount,
 			"Amount":              fmt.Sprint(amountKES),
 			"TransactionCurrency": "KES",

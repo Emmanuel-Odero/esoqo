@@ -63,20 +63,16 @@ export function SetPinForm() {
   function submit() {
     setError(null);
     startTransition(async () => {
-      // When coming from registration, we don't have a code - just send pin directly
-      // For forgot PIN flow, we send code with pin
-      const result = msisdnFromUrl
-        ? await actionSetPin({
-            msisdn: msisdn.replace(/\s+/g, ""),
-            pin,
-            pinConfirm,
-          })
-        : await actionSetPin({
-            msisdn: msisdn.replace(/\s+/g, ""),
-            code,
-            pin,
-            pinConfirm,
-          });
+      // A code is always required, even coming from registration — a
+      // codeless path here used to trust a client-supplied msisdn with no
+      // proof of control, which was an unauthenticated account-takeover
+      // bug (see actions.ts).
+      const result = await actionSetPin({
+        msisdn: msisdn.replace(/\s+/g, ""),
+        code,
+        pin,
+        pinConfirm,
+      });
       if (!result.ok) {
         setError(result.error);
         return;
@@ -84,65 +80,6 @@ export function SetPinForm() {
       router.push(result.data.next as Route);
       router.refresh();
     });
-  }
-
-  // When coming from registration (msisdnFromUrl is present), phone is already verified
-  // so we skip the code verification and go straight to PIN entry
-  if (msisdnFromUrl) {
-    return (
-      <>
-        <div className="fld">
-          <label className="lab" htmlFor="pin">
-            <Icon name="lock" size={15} />
-            New PIN
-          </label>
-          <input
-            className="inp mono"
-            id="pin"
-            type="password"
-            value={pin}
-            onChange={(e) => setPin(e.target.value)}
-            inputMode="numeric"
-            maxLength={6}
-          />
-          <p className="hint">
-            Four to six digits — avoid 1234, 0000 or anything predictable.
-          </p>
-        </div>
-        <div className="fld">
-          <label className="lab" htmlFor="pinc">
-            <Icon name="lock" size={15} />
-            Confirm PIN
-          </label>
-          <input
-            className="inp mono"
-            id="pinc"
-            type="password"
-            value={pinConfirm}
-            onChange={(e) => setPinConfirm(e.target.value)}
-            inputMode="numeric"
-            maxLength={6}
-          />
-        </div>
-        {error && (
-          <div className="note n-red" style={{ marginBottom: 16 }}>
-            <div>
-              <p>{error}</p>
-            </div>
-          </div>
-        )}
-        <button
-          type="button"
-          className="btn btn-p"
-          style={{ width: "100%" }}
-          disabled={pending || !pin.trim() || !pinConfirm.trim()}
-          onClick={submit}
-        >
-          {pending ? "Setting PIN…" : "Set PIN & sign in"}{" "}
-          <Icon name="check" size={16} />
-        </button>
-      </>
-    );
   }
 
   // Prevent hydration mismatch by not rendering conditional content until mounted

@@ -1,34 +1,22 @@
 import { z } from 'zod';
-import { ORG_KINDS } from './registration';
 import { richTextField } from './rich-text';
+import { JAMII_ORG_KINDS, JAMII_ORG_KIND_LABELS, JAMII_CAUSES, JAMII_PROGRAM_ICONS } from './jamii-constants';
 
 /**
  * Our Jamii — CECF community mini-sites + crowdfunding.
  *
  * Same "one schema, shared by client validation and the Server Action
- * boundary" rule as store.ts. Reuses ORG_KINDS from registration.ts —
- * the same group-kind list the join funnel and admin's Groups screen
- * already use, rather than a second, slightly different one. BUSINESS
- * is excluded here the same way JOINABLE_GROUP_KINDS excludes it — Our
- * Jamii is for community groups, not registered businesses.
+ * boundary" rule as store.ts.
+ *
+ * The plain constants (JAMII_ORG_KINDS, JAMII_ORG_KIND_LABELS,
+ * JAMII_CAUSES, JAMII_PROGRAM_ICONS) live in jamii-constants.ts, not
+ * here, and are re-exported below so every existing
+ * '@esoqo/domain/jamii' import keeps working — but CLIENT components
+ * import them from '@esoqo/domain/jamii-constants' directly instead of
+ * from this file, which (via richTextField below) pulls in
+ * isomorphic-dompurify/jsdom and must never reach a browser bundle.
  */
-export const JAMII_ORG_KINDS = ORG_KINDS.filter((k) => k !== 'BUSINESS' && k !== 'SCHOOL' && k !== 'CLINIC');
-
-export const JAMII_ORG_KIND_LABELS: Record<string, string> = {
-  CHAMA: 'Chama', SELF_HELP_GROUP: 'Self-help group', TABLE_BANKING: 'Table-banking group',
-  WELFARE_GROUP: 'Welfare group', CBO: 'Community-based organisation', FBO: 'Faith-based organisation',
-  COOPERATIVE: 'Co-operative', SACCO: 'SACCO', NGO: 'NGO', MARKET_ASSOCIATION: 'Market association',
-  OTHER: 'Other',
-};
-
-export const JAMII_CAUSES = [
-  ['water', 'Water'],
-  ['youth', 'Youth'],
-  ['enterprise', 'Enterprise'],
-  ['agriculture', 'Agriculture'],
-  ['education', 'Education'],
-  ['health', 'Health'],
-] as const;
+export { JAMII_ORG_KINDS, JAMII_ORG_KIND_LABELS, JAMII_CAUSES, JAMII_PROGRAM_ICONS };
 
 /** Step 2 of /start — founds the group and its page. */
 export const startJamiiPageSchema = z.object({
@@ -123,21 +111,6 @@ export const jamiiPostSchema = z.object({
 });
 export type JamiiPostInput = z.infer<typeof jamiiPostSchema>;
 
-/**
- * A programme's `icon` is an @esoqo/ui IconName, never free text — see
- * that package's Icon.tsx header: "No emoji anywhere in this product."
- * Duplicated here as a plain string list (not imported from @esoqo/ui,
- * which is a React component package with no business being a
- * dependency of pure validation) rather than the full IconName union;
- * this is the deliberately-curated subset that reads sensibly next to
- * a community programme, not every icon in the 63-glyph set.
- */
-export const JAMII_PROGRAM_ICONS = [
-  'scales', 'key', 'chart', 'certificate', 'users', 'handshake', 'shield',
-  'umbrella', 'leaf', 'wheat', 'building', 'gov', 'bank', 'phone-call',
-  'message', 'star',
-] as const;
-
 export const jamiiProgramSchema = z.object({
   title: z.string().trim().min(2, 'Name the programme').max(120),
   body: richTextField(1000, { length: 2, message: 'Describe the programme' }),
@@ -219,49 +192,12 @@ export type JamiiApplicantCheckInput = z.infer<typeof jamiiApplicantCheckSchema>
  * @esoqo/db's approveJamiiInterest and the admin app's /jamii-interest
  * screen.
  */
-/**
- * Reserved so a group can't "link" a domain we already serve from —
- * esoqo.co.ke itself, ourjamii.co.ke (this app's own primary domain),
- * or a bare subdomain of either. Checked case-insensitively against the
- * normalised hostname before it ever reaches Cloudflare.
- */
-export const JAMII_RESERVED_DOMAIN_SUFFIXES = ['esoqo.co.ke', 'ourjamii.co.ke'] as const;
-
-/**
- * A group's custom domain for their Our Jamii page — see
- * @esoqo/db's requestJamiiDomain and apps/jamii's dashboard settings
- * "Domain" panel. Deliberately strict: this is the one place a member
- * of the public types a string that later becomes a live DNS/TLS
- * target, so the shape is checked here (client + server, same schema)
- * before the DAL's own re-validation.
- *
- * - No scheme, path, port or trailing dot — a bare hostname only.
- * - Rejects IP literals (v4 or v6-looking) — a domain is required, not
- *   an address.
- * - At least one label + a plausible TLD (2+ alpha chars) so obvious
- *   junk ("localhost", "mchama") is rejected before hitting the DAL's
- *   reserved-suffix / uniqueness checks.
- */
-export const jamiiDomainHostnameSchema = z
-  .string()
-  .trim()
-  .toLowerCase()
-  .max(253)
-  .refine((v) => !/^https?:\/\//.test(v) && !v.includes('/') && !v.includes(':'), {
-    message: 'Enter just the domain, e.g. mchamawetu.org — no https:// or path',
-  })
-  .refine((v) => !/^\d{1,3}(\.\d{1,3}){3}$/.test(v) && !v.includes('['), {
-    message: 'Enter a domain name, not an IP address',
-  })
-  .refine((v) => /^(?!-)[a-z0-9-]{1,63}(?<!-)(\.(?!-)[a-z0-9-]{1,63}(?<!-))*\.[a-z]{2,}$/.test(v), {
-    message: 'Enter a valid domain, e.g. mchamawetu.org',
-  });
-export type JamiiDomainHostnameInput = z.infer<typeof jamiiDomainHostnameSchema>;
-
-export const requestJamiiDomainSchema = z.object({
-  hostname: jamiiDomainHostnameSchema,
-});
-export type RequestJamiiDomainInput = z.infer<typeof requestJamiiDomainSchema>;
+// Custom-domain validation (JAMII_RESERVED_DOMAIN_SUFFIXES,
+// jamiiDomainHostnameSchema, requestJamiiDomainSchema) lives in
+// jamii-domain-schema.ts, not here — see that file's header for why —
+// and is re-exported below so every existing '@esoqo/domain/jamii'
+// import of it keeps working unchanged.
+export * from './jamii-domain-schema';
 
 /**
  * A visitor writing to one org through its own public Contact page —

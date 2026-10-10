@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"log"
 	"net/http"
+	"net/url"
 	"time"
 
 	"github.com/gin-gonic/gin"
@@ -223,7 +224,7 @@ func (s *Server) handleMpesaStkCallback(c *gin.Context) {
 	// still TS-only): forward byte-identical to the TS core webhook when
 	// configured, else ack. Never an error here either way.
 	if s.Cfg.TsCoreWebhookURL != "" && len(raw) > 0 {
-		forwardToTsWebhook(s.Cfg.TsCoreWebhookURL, raw)
+		forwardToTsWebhook(s.Cfg.TsCoreWebhookURL, s.Cfg.MpesaCallbackSecret, raw)
 	}
 	c.JSON(http.StatusOK, gin.H{"ok": true})
 }
@@ -299,9 +300,19 @@ func (s *Server) callbackTokenOK(token string) bool {
 // best-effort with a short timeout. Fire-and-forget by design: the
 // caller always 200s to Safaricom, and TS's own confirm path is
 // idempotent, so a duplicated delivery cannot double-post.
-func forwardToTsWebhook(baseURL string, raw []byte) {
+//
+// callbackSecret is appended as the same path segment services/core's
+// own callbackTokenOk expects (MPESA_CALLBACK_SECRET is one shared
+// value read by both services — see config.go). Without it, forwarding
+// to a TS deployment that has the secret configured 404s silently and
+// the payment is never confirmed; this used to post to the bare path.
+func forwardToTsWebhook(baseURL, callbackSecret string, raw []byte) {
 	client := &http.Client{Timeout: 5 * time.Second}
-	req, err := http.NewRequest("POST", baseURL+"/webhooks/mpesa/stk-callback", bytes.NewReader(raw))
+	path := "/webhooks/mpesa/stk-callback"
+	if callbackSecret != "" {
+		path += "/" + url.PathEscape(callbackSecret)
+	}
+	req, err := http.NewRequest("POST", baseURL+path, bytes.NewReader(raw))
 	if err != nil {
 		return
 	}
@@ -310,5 +321,8 @@ func forwardToTsWebhook(baseURL string, raw []byte) {
 	if err != nil {
 		return
 	}
-	resp.Body.Close()
+	defer resp.Body.Close()
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		log.Printf("core-go: forward to TS webhook returned %d", resp.StatusCode)
+	}
 }

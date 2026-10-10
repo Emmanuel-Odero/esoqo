@@ -2,7 +2,7 @@
 
 import { useRouter, useSearchParams } from 'next/navigation';
 import { useState, useTransition } from 'react';
-import { JAMII_CAUSES } from '@esoqo/domain';
+import { JAMII_CAUSES } from '@esoqo/domain/jamii-constants';
 import { Icon } from '@esoqo/ui';
 
 export function DiscoverFilters() {
