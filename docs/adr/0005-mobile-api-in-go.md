@@ -43,4 +43,4 @@ avoids entangling that migration with `services/core`'s existing CECF/webhook re
   side is fully retired (avoids a second migration system racing the first).
 - `services/core-go` is not part of the pnpm workspace or turbo's task graph (no JS build
   step) — same shape as `services/cecf-wordpress`: own directory, own Dockerfile, own
-  `render.yaml` block.
+  container image.

@@ -417,7 +417,7 @@ cluster-admin access as Fleet itself. `kubectl apply -f
 deploy/cluster/cluster-issuer.yaml` from an admin kubeconfig is all that's
 needed once one is available. Also not done, and out of scope for a
 preview bootstrap: the Fleet/GitOps install itself (§3.3–§3.4), the
-production DNS cutover, and the Postgres data migration off Render.
+production DNS cutover, and the Postgres data migration off the previous PaaS.
 
 ---
 

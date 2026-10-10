@@ -2,8 +2,8 @@ import { NextResponse } from 'next/server';
 import { pingDatabase } from '@esoqo/db';
 
 /**
- * Render's restart probe for this service (render.yaml's
- * healthCheckPath). It previously pointed at an ordinary page, which
+ * The Kubernetes liveness probe for this service (httpGet /api/health).
+ * It previously pointed at an ordinary page, which
  * renders fine even when the database is unreachable or the schema was
  * never migrated — so a deploy went green while every data-backed route
  * 500'd.
