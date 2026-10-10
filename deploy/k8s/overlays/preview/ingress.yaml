@@ -1,20 +1,19 @@
 # ════════════════════════════════════════════════════════════════════
-#  preview ingress — *.preview.esoko.global
+#  preview ingress — one-level hosts in the esoko.global zone
 #
-#  Hosts are listed EXPLICITLY rather than as a wildcard, because the
-#  TLS side decides this: a wildcard certificate can only be issued
-#  through an ACME DNS-01 challenge, and cert-manager ships no Namecheap
-#  DNS solver. Explicit hosts use HTTP-01, which needs nothing but a
-#  reachable ingress — no registrar API credentials anywhere.
+#  Every host is a single label (preview, preview-app, …), NOT nested
+#  under `preview.`. The zone is on Cloudflare and the plan's Universal
+#  SSL certificate covers exactly one level (`esoko.global` and
+#  `*.esoko.global`), so `app.preview.esoko.global` could not be proxied.
+#  One-level names let the orange-cloud proxy sit in front and enforce
+#  Cloudflare Access.
 #
-#  DNS is still wildcard (one `*.preview` A record covers all five), so
-#  adding a sixth app means adding a rule and a tls host here, and no
-#  DNS change at all.
+#  Hosts are listed EXPLICITLY rather than as a wildcard: cert-manager
+#  issues each via Cloudflare DNS-01 (see issuer.yaml), so no wildcard is
+#  needed and the certs are what Cloudflare talks to over Full (strict).
+#  Each host needs its own proxied A record in the esoko.global zone.
 #
-#  If a wildcard cert becomes necessary (many dynamic subdomains), the
-#  upgrade path is to move the zone to Cloudflare — a token already
-#  exists for Jamii custom domains — and switch the issuer to dns01.
-#  See docs/deployment/README.md § "TLS and wildcards".
+#  See docs/deployment/README.md § "TLS, proxying and Access".
 # ════════════════════════════════════════════════════════════════════
 apiVersion: networking.k8s.io/v1
 kind: Ingress
@@ -36,28 +35,28 @@ spec:
     - secretName: esoqo-preview-tls
       hosts:
         - preview.esoko.global
-        - app.preview.esoko.global
-        - admin.preview.esoko.global
-        - store.preview.esoko.global
-        - jamii.preview.esoko.global
+        - preview-app.esoko.global
+        - preview-admin.esoko.global
+        - preview-store.esoko.global
+        - preview-jamii.esoko.global
   rules:
     - host: preview.esoko.global
       http:
         paths:
           - { path: /, pathType: Prefix, backend: { service: { name: web, port: { number: 80 } } } }
-    - host: app.preview.esoko.global
+    - host: preview-app.esoko.global
       http:
         paths:
           - { path: /, pathType: Prefix, backend: { service: { name: app, port: { number: 80 } } } }
-    - host: admin.preview.esoko.global
+    - host: preview-admin.esoko.global
       http:
         paths:
           - { path: /, pathType: Prefix, backend: { service: { name: admin, port: { number: 80 } } } }
-    - host: store.preview.esoko.global
+    - host: preview-store.esoko.global
       http:
         paths:
           - { path: /, pathType: Prefix, backend: { service: { name: store, port: { number: 80 } } } }
-    - host: jamii.preview.esoko.global
+    - host: preview-jamii.esoko.global
       http:
         paths:
           - { path: /, pathType: Prefix, backend: { service: { name: jamii, port: { number: 80 } } } }
@@ -78,14 +77,14 @@ spec:
   tls:
     - secretName: esoqo-preview-api-tls
       hosts:
-        - api.preview.esoko.global
-        - mobile.preview.esoko.global
+        - preview-api.esoko.global
+        - preview-mobile.esoko.global
   rules:
-    - host: api.preview.esoko.global
+    - host: preview-api.esoko.global
       http:
         paths:
           - { path: /, pathType: Prefix, backend: { service: { name: core-service, port: { number: 80 } } } }
-    - host: mobile.preview.esoko.global
+    - host: preview-mobile.esoko.global
       http:
         paths:
           - { path: /, pathType: Prefix, backend: { service: { name: core-go, port: { number: 80 } } } }
