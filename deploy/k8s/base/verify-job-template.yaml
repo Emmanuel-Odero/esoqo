@@ -93,7 +93,11 @@ spec:
               echo "== lint (includes DAL and a11y rules) =="
               pnpm lint
               echo "== typecheck =="
-              pnpm typecheck
+              # Cap concurrency: turbo's default 10 parallel tsc runs peak
+              # past the old 4Gi cgroup limit and OOM-killed the gate
+              # before it could report a result. 4 keeps the peak safely
+              # inside the raised limit without stretching the run.
+              pnpm typecheck --concurrency=4
               echo "== unit and integration tests =="
               pnpm test
               echo "== audit chain integrity =="
@@ -117,8 +121,8 @@ spec:
             - { name: AUDIT_CHAIN_SEED,    value: "ci_only_2222222222222222222222222222222222222222222222222222" }
             - { name: SMS_PROVIDER,        value: "console" }
           resources:
-            requests: { cpu: 500m, memory: 1Gi }
-            limits: { memory: 4Gi }
+            requests: { cpu: 500m, memory: 2Gi }
+            limits: { memory: 12Gi }
           volumeMounts:
             - { name: repo, mountPath: /repo }
       volumes:
