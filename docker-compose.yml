@@ -267,7 +267,7 @@ services:
       # Dev image (Go toolchain + air), not the static production
       # Dockerfile: the source below is bind-mounted and hot-rebuilds on
       # save, so a core-go edit never needs `up --build` again. Prod is
-      # unaffected — render.yaml still builds services/core-go/Dockerfile.
+      # unaffected — the CI pipeline still builds services/core-go/Dockerfile.
       dockerfile: services/core-go/Dockerfile.dev
     container_name: core-go
     restart: unless-stopped

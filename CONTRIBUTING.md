@@ -53,7 +53,7 @@ on now. If something that should work doesn't, run
 | Branch | Environment | Namespace | Domain |
 |---|---|---|---|
 | `main` / `dev` | — (integration only, no environment) | — | — |
-| `preview` | Preview | `esoqo-preview` | `*.preview.esoko.global` |
+| `preview` | Preview | `esoqo-preview` | `preview.esoko.global` + `preview-<app>.esoko.global` (Cloudflare Access) |
 | `production` | Production | `esoqo-production` | `esoqo.com` (+ `esoko.global`, which 301s to it) |
 
 `dev` and `main` are currently identical (same commit) and don't map to
@@ -227,7 +227,7 @@ kubectl logs -n esoqo-preview -l app.kubernetes.io/name=migrate --tail=50
 ### 5.3 Verify
 
 ```bash
-curl -sS https://preview.esoko.global/api/health
+curl -sS https://preview-api.esoko.global/health     # UI hosts are behind Cloudflare Access
 # production:
 curl -sS https://esoqo.com/api/health
 curl -sS https://api.esoqo.com/ready      # walks the audit chain

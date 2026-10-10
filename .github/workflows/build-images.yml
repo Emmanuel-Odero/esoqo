@@ -86,9 +86,9 @@ jobs:
               echo "env_name=preview"                                     >> "$GITHUB_OUTPUT"
               echo "overlay=deploy/k8s/overlays/preview"                 >> "$GITHUB_OUTPUT"
               echo "web_url=https://preview.esoko.global"                >> "$GITHUB_OUTPUT"
-              echo "app_url=https://app.preview.esoko.global"            >> "$GITHUB_OUTPUT"
-              echo "store_url=https://store.preview.esoko.global"        >> "$GITHUB_OUTPUT"
-              echo "jamii_origin=https://jamii.preview.esoko.global"     >> "$GITHUB_OUTPUT"
+              echo "app_url=https://preview-app.esoko.global"            >> "$GITHUB_OUTPUT"
+              echo "store_url=https://preview-store.esoko.global"        >> "$GITHUB_OUTPUT"
+              echo "jamii_origin=https://preview-jamii.esoko.global"     >> "$GITHUB_OUTPUT"
               ;;
             live)
               echo "env_name=production"                                 >> "$GITHUB_OUTPUT"

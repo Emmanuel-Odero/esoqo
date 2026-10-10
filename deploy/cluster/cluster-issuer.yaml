@@ -45,11 +45,13 @@ spec:
     privateKeySecretRef:
       name: letsencrypt-prod-account-key
     solvers:
-      # HTTP-01, not DNS-01: it needs no registrar API credentials, and
-      # the domain is at Namecheap, for which cert-manager ships no
-      # solver. The tradeoff is that wildcard certificates are
+      # HTTP-01, not DNS-01: production hosts are not proxied, so the
+      # challenge reaches the ingress directly and needs no registrar
+      # API credentials. Preview cannot use this — its hosts sit behind
+      # Cloudflare and Access, so the preview overlay uses a namespaced
+      # DNS-01 Issuer instead. HTTP-01 makes wildcard certificates
       # impossible — hence the explicit host lists in both overlays'
-      # ingress.yaml. See docs/deployment/README.md § "TLS and wildcards".
+      # ingress.yaml. See docs/deployment/README.md § "TLS, proxying and Access".
       - http01:
           ingress:
             ingressClassName: traefik

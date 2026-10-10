@@ -8,8 +8,8 @@
 # same "build the image once, edit forever" contract the Node apps get
 # from Dockerfile.dev.
 #
-# Production is unaffected: render.yaml still builds services/core-go/
-# Dockerfile.
+# Production is unaffected: the CI pipeline still builds
+# services/core-go/Dockerfile.
 FROM golang:1.25-alpine
 
 # git: go install / module fetch over the network.

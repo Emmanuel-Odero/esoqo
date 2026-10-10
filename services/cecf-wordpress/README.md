@@ -1,6 +1,6 @@
 # CECF WordPress — Bedrock + Sage multisite network
 
-WordPress for the **Child Elder Care Foundation**, deployed as its own Render
+WordPress for the **Child Elder Care Foundation**, deployed as its own
 service inside this monorepo. One [Bedrock](https://roots.io/bedrock/)
 codebase + one shared MariaDB database serve every CECF property
 (`childeldercare.foundation`, `donate.*`, `blog.*`, ...) as blogs in a
@@ -58,26 +58,26 @@ pnpm --filter @esoqo/cecf-sage-theme dev     # Vite dev server
 pnpm --filter @esoqo/cecf-sage-theme build
 ```
 
-## Deployment (Render — not yet migrated)
+## Deployment (not yet migrated to k8s)
 
-The rest of the stack (web/app/admin/store/jamii/core-service/core-go) moved
-off Render onto a Rancher-managed k8s cluster in Sept 2026 — see
-`CONTRIBUTING.md` and `docs/deployment/README.md`. `cecf-wordpress` was not
-part of that move and still runs on Render as described below.
+The rest of the stack (web/app/admin/store/jamii/core-service/core-go) runs
+on a Rancher-managed k8s cluster — see `CONTRIBUTING.md` and
+`docs/deployment/README.md`. `cecf-wordpress` is not part of that deployment
+yet and is not wired into the k8s overlays; it has no hosting target
+configured in this repo.
 
-Two blueprint entries in the root `render.yaml`, not a separate blueprint:
+It needs two pieces when it is hosted:
 
-- **`cecf-wordpress`** — `runtime: docker`, `dockerContext: .` (repo root),
-  persistent disk mounted at `web/app/uploads`.
-- **`cecf-mariadb`** — a private service (`type: pserv`, no public ingress)
-  running the official `mariadb:11` image with its own persistent disk.
-  Render has no managed MySQL/MariaDB offering, so this is self-hosted;
-  it is **not** covered by Render's managed-Postgres backups/failover.
+- **`cecf-wordpress`** — built from `services/cecf-wordpress/Dockerfile`
+  (build context is the repo root, because the Sage theme is a pnpm
+  workspace package), with a persistent disk mounted at `web/app/uploads`.
+- **`cecf-mariadb`** — its own MariaDB service. There is no managed
+  MySQL/MariaDB offering in this infrastructure, so it is self-hosted and
+  is **not** covered by the managed-Postgres backups/failover.
 
-`DB_HOST`/`DB_PORT` on `cecf-wordpress` are wired via `fromService` to
-`cecf-mariadb`'s internal address. `DB_PASSWORD` / `MARIADB_PASSWORD` are
-each `sync: false` and must be set to the **same value** in the Render
-dashboard for both services — the same manual-duplication pattern already
+`DB_HOST`/`DB_PORT` on `cecf-wordpress` point at `cecf-mariadb`'s internal
+address. `DB_PASSWORD` / `MARIADB_PASSWORD` must be set to the **same
+value** for both services — the same manual-duplication pattern already
 used for `SESSION_SECRET` etc. across `esoqo-web`/`esoqo-app`/`esoqo-admin`.
 
 ## Open follow-ups (deliberately not yet decided in code)
@@ -87,13 +87,11 @@ used for `SESSION_SECRET` etc. across `esoqo-web`/`esoqo-app`/`esoqo-admin`.
   Composer-installed yet — it wasn't resolvable through this repo's
   `wp-packages.org` Composer mirror at scaffold time; needs the actual
   package name/repo confirmed, or install via WPackagist directly.
-- **Backups**: `cecf-mariadb`'s disk is not independently snapshotted by
-  Render. Add a `type: cron` service running `mysqldump` → R2/S3 before
-  going live.
-- **Wildcard TLS**: Render issues certs per hostname on custom domains, not
-  wildcard. Either add every subsite hostname individually in the Render
-  dashboard, or front the network with Cloudflare (also gets you free
-  CDN/WAF for a nonprofit budget).
+- **Backups**: `cecf-mariadb`'s disk is not independently snapshotted. Add
+  a cron job running `mysqldump` → R2/S3 before going live.
+- **Wildcard TLS**: certs are issued per hostname, not wildcard. Either add
+  every subsite hostname individually, or front the network with Cloudflare
+  (also gets you free CDN/WAF for a nonprofit budget).
 - **Plugin workflow**: Bedrock's default `DISALLOW_FILE_MODS = true`
   (`config/application.php`) blocks installing/updating plugins from the
   wp-admin dashboard — everything must go through Composer. Confirm this

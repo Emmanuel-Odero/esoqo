@@ -31,9 +31,9 @@ case "$ENVIRONMENT" in
     BRANCH="preview"
     OVERLAY="deploy/k8s/overlays/preview"
     WEB_URL="https://preview.esoko.global"
-    APP_URL="https://app.preview.esoko.global"
-    STORE_URL="https://store.preview.esoko.global"
-    JAMII_ORIGIN="https://jamii.preview.esoko.global"
+    APP_URL="https://preview-app.esoko.global"
+    STORE_URL="https://preview-store.esoko.global"
+    JAMII_ORIGIN="https://preview-jamii.esoko.global"
     ;;
   production)
     BRANCH="production"

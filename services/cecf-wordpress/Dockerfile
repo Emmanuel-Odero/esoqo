@@ -8,7 +8,7 @@
 #
 #    docker build -f services/cecf-wordpress/Dockerfile .
 #
-#  (this is exactly what render.yaml's dockerContext: . does)
+#  (the build context is the repo root)
 # ════════════════════════════════════════════════════════════════
 
 # ── Stage 1: Sage theme assets (Vite) via the shared pnpm workspace ──

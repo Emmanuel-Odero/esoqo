@@ -1532,10 +1532,8 @@ flowchart LR
 **Primary: a Rancher-managed Kubernetes cluster** with Fleet, Kustomize, Traefik ingress,
 cert-manager (Let's Encrypt, HTTP-01 via a shared wildcard) and GHCR.
 
-**Alternative paths, documented but not the primary route:** `render.yaml` (Render blueprint:
-`esoko-core`, `esoko-core-go`, `esoko-web`/`app`/`admin`, `cecf-wordpress`, `cecf-mariadb`,
-`esoko-db` in Frankfurt), `render-free.yaml` / `render.free.yaml`, and guides in `Deploy_Free.md`,
-`Deploy_Render.md`, `Deploy_Vercel.md`.
+**No other hosting target is used.** Earlier PaaS blueprints (Render) are
+retired, and their manifests have been removed from the repo.
 
 **Terraform has not been started.** `infra/README.md` targets AWS `af-south-1` or a Kenyan
 provider, with data residency gating Phase 0. The pilot plan is Oracle Always Free plus Coolify at

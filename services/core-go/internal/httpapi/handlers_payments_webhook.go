@@ -17,7 +17,7 @@ import (
 )
 
 // handleMpesaStkCallback is now the canonical Daraja target (see
-// render.yaml's MPESA_CALLBACK_URL): parse once, try each Go-owned
+// the MPESA_CALLBACK_URL env var): parse once, try each Go-owned
 // domain in turn, only falling through on "not found for this checkout
 // id". Anything left (registration/donation — still TS-only) is
 // forwarded to the TS core webhook when TS_CORE_WEBHOOK_URL is set.
