@@ -81,7 +81,7 @@ export function MpesaPromptWatch({
       } else {
         setError(res.error);
       }
-    } catch (e) {
+    } catch {
       // Don't crash polling loop on transient network drop
     }
   }, [code, apply]);

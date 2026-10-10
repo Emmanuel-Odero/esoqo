@@ -211,12 +211,12 @@ function AddSignatoryForm({ orgId, nonSigners, atLimit, onDone }: {
         </>
       )}
     >
-      <div className="fld"><label className="lab">Who</label>
-        <select className="inp" value={personId} onChange={(e) => setPersonId(e.target.value)}>
+      <div className="fld"><label className="lab" htmlFor="sig-who">Who</label>
+        <select id="sig-who" className="inp" value={personId} onChange={(e) => setPersonId(e.target.value)}>
           {nonSigners.map((m) => <option key={m.personId} value={m.personId}>{m.name}</option>)}
         </select>
       </div>
-      <div className="fld"><label className="lab">Permissions</label>
+      <div className="fld"><div className="lab">Permissions</div>
         <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
           {PERMISSION_FIELDS.map(([key, label]) => (
             <label key={key} style={{ display: 'flex', gap: 8, alignItems: 'center', fontSize: '.88rem' }}>

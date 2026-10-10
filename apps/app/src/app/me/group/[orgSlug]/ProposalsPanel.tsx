@@ -122,22 +122,22 @@ function NewProposalForm({ orgId, members, onDone }: { orgId: string; members: R
   return (
     <div className="mcard" style={{ marginTop: 14, background: 'var(--paper)' }}>
       <h2 style={{ fontSize: '.95rem' }}>New proposal</h2>
-      <div className="fld"><label className="lab">What</label>
-        <select className="inp" value={kind} onChange={(e) => setKind(e.target.value as typeof kind)}>
+      <div className="fld"><label className="lab" htmlFor="proposal-kind">What</label>
+        <select id="proposal-kind" className="inp" value={kind} onChange={(e) => setKind(e.target.value as typeof kind)}>
           <option value="ADD_MEMBER">Add a member</option>
           <option value="REMOVE_MEMBER">Remove a member</option>
         </select>
       </div>
       {kind === 'ADD_MEMBER' ? (
         <>
-          <div className="fld"><label className="lab">Their name</label>
-            <input className="inp" value={name} onChange={(e) => setName(e.target.value)} placeholder="Jane Wanjiru" /></div>
-          <div className="fld"><label className="lab">Their phone</label>
-            <input className="inp" value={msisdn} onChange={(e) => setMsisdn(e.target.value)} placeholder="07XX XXX XXX" /></div>
+          <div className="fld"><label className="lab" htmlFor="proposal-name">Their name</label>
+            <input id="proposal-name" className="inp" value={name} onChange={(e) => setName(e.target.value)} placeholder="Jane Wanjiru" /></div>
+          <div className="fld"><label className="lab" htmlFor="proposal-msisdn">Their phone</label>
+            <input id="proposal-msisdn" className="inp" value={msisdn} onChange={(e) => setMsisdn(e.target.value)} placeholder="07XX XXX XXX" /></div>
         </>
       ) : (
-        <div className="fld"><label className="lab">Who</label>
-          <select className="inp" value={targetPersonId} onChange={(e) => setTargetPersonId(e.target.value)}>
+        <div className="fld"><label className="lab" htmlFor="proposal-person">Who</label>
+          <select id="proposal-person" className="inp" value={targetPersonId} onChange={(e) => setTargetPersonId(e.target.value)}>
             {members.map((m) => <option key={m.personId} value={m.personId}>{m.name}</option>)}
           </select>
         </div>

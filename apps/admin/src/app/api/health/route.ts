@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { prisma } from '@esoqo/db';
+import { pingDatabase } from '@esoqo/db';
 
 /**
  * The Kubernetes liveness probe for this service (httpGet /api/health).
@@ -15,9 +15,8 @@ import { prisma } from '@esoqo/db';
 export const dynamic = 'force-dynamic'; // never served from the build cache
 
 export async function GET() {
-  try {
-    await prisma.$queryRaw`SELECT 1`;
-  } catch {
+  const health = await pingDatabase();
+  if (!health.reachable) {
     return NextResponse.json({ ok: false, reason: 'database_unreachable' }, { status: 503 });
   }
   return NextResponse.json({ ok: true });

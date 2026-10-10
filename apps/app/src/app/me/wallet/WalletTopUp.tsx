@@ -65,7 +65,7 @@ export function WalletTopUp() {
               <div className="fld">
                 <label className="lab" htmlFor="wt-amt">Amount (KES)</label>
                 <input className="inp mono" id="wt-amt" inputMode="decimal" value={amount}
-                  onChange={(e) => setAmount(e.target.value)} placeholder="500" autoFocus />
+                  onChange={(e) => setAmount(e.target.value)} placeholder="500" />
               </div>
               <div className="fld">
                 <label className="lab" htmlFor="wt-phone">M-Pesa number</label>

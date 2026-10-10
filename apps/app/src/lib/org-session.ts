@@ -155,7 +155,7 @@ export interface OrgMe {
     brandAccent?: string | null;
   };
   capabilities: string[];
-  [key: string]: any; // Allow org-type-specific fields
+  [key: string]: unknown; // Allow org-type-specific fields
 }
 
 /**
@@ -176,7 +176,7 @@ export const fetchOrgMe = cache(async (orgId: string, orgType: string): Promise<
 export async function fetchOrgMetadata(
   orgId: string,
   orgType: string,
-): Promise<Record<string, any>> {
+): Promise<Record<string, unknown>> {
   try {
     // For now, this returns empty metadata. Each org type can implement
     // its own metadata fetcher in the portal handler's fetchMetadata function.

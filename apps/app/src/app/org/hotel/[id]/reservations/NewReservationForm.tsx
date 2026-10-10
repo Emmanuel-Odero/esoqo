@@ -38,8 +38,8 @@ export function NewReservationForm({ orgId }: { orgId: string }) {
       </button>
 
       {open && (
-        <div className="modal-backdrop" onClick={() => setOpen(false)}>
-          <div className="modal" onClick={(e) => e.stopPropagation()}>
+        <div className="modal-backdrop" role="presentation" onClick={() => setOpen(false)}>
+          <div className="modal" role="presentation" onClick={(e) => e.stopPropagation()}>
             <div className="modal-header">
               <h2>New Reservation</h2>
               <button onClick={() => setOpen(false)} className="close-btn">✕</button>
