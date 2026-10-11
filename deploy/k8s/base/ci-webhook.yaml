@@ -56,7 +56,7 @@ spec:
       serviceAccountName: ci-webhook
       containers:
         - name: ci-webhook
-          image: ghcr.io/emmanuel-odero/esoqo-ci-webhook:20261010
+          image: ghcr.io/emmanuel-odero/esoqo-ci-webhook:20261011
           imagePullPolicy: Always # :bootstrap is a mutable tag; always take the current push
           ports:
             - name: http
