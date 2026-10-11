@@ -19,11 +19,12 @@ export const dynamic = 'force-dynamic';
  * because to a traveller they are the same question: how do I get there
  * and where do I leave the car. The company grid is the same onboarded
  * operators the /buses directory lists, so picking one here lands on its
- * routes and booking flow exactly as it does there.
+ * routes and booking flow exactly as it does there — and paying a fare
+ * to the company sits beside booking, as one "riding with them" job.
  */
 const SECTIONS = [
   ['companies', 'Companies & tours'],
-  ['paying', 'Parking & paying'],
+  ['parking', 'Parking'],
 ] as const;
 
 /** One card per onboarded company: its logo if it has one, its name if
@@ -91,27 +92,53 @@ export default async function TransportHub() {
             <div>
               <h2 style={{ marginBottom: 2 }}>Transport companies &amp; tours</h2>
               <p className="sub" style={{ margin: 0 }}>
-                The registered Esoqo operators behind the buses and trips. Open one to see its
-                routes and book a seat.
+                Book a bus seat, pay a transport fare, or find a tour company selling trips direct.
               </p>
             </div>
           </div>
-          <CompanyGrid companies={companies} />
-          <p className="sub" style={{ marginTop: 18 }}>
-            Looking for a specific trip or tour?{' '}
-            <Link href="/tickets">Browse all transport &amp; tour tickets</Link>.
-          </p>
+
+          <div className="grid g3">
+            <Link href="/buses" className="acard">
+              <span className="icbox icbox-g"><Icon name="truck" size={20} /></span>
+              <h3>Get a bus ticket</h3>
+              <p className="sub" style={{ margin: 0, fontSize: '.93rem' }}>
+                Pick a company, choose your route, and reserve a seat by M-Pesa.
+              </p>
+              <span className="go">Get a bus ticket <Icon name="arrow-right" size={15} /></span>
+            </Link>
+            <Link href="/pay/transport" className="acard">
+              <span className="icbox icbox-r"><Icon name="send" size={20} /></span>
+              <h3>Pay a transport fare</h3>
+              <p className="sub" style={{ margin: 0, fontSize: '.93rem' }}>
+                Find the company by name or number plate and pay your fare.
+              </p>
+              <span className="go">Pay a fare <Icon name="arrow-right" size={15} /></span>
+            </Link>
+            <Link href="/tickets" className="acard">
+              <span className="icbox icbox-b"><Icon name="map" size={20} /></span>
+              <h3>Find a tour company</h3>
+              <p className="sub" style={{ margin: 0, fontSize: '.93rem' }}>
+                Transport and tour operators selling seats and trips direct.
+              </p>
+              <span className="go">Find a tour <Icon name="arrow-right" size={15} /></span>
+            </Link>
+          </div>
+
+          <div style={{ marginTop: 30 }}>
+            <h3 style={{ marginBottom: 12 }}>The operators behind the trips</h3>
+            <CompanyGrid companies={companies} />
+          </div>
         </div>
       </section>
 
-      <section className="sec" id="paying">
+      <section className="sec" id="parking">
         <div className="wrap">
           <div className="shead" style={{ marginBottom: 18 }}>
             <span className="icbox icbox-a"><Icon name="key" size={20} /></span>
             <div>
-              <h2 style={{ marginBottom: 2 }}>Parking &amp; paying</h2>
+              <h2 style={{ marginBottom: 2 }}>Parking</h2>
               <p className="sub" style={{ margin: 0 }}>
-                Settle a parking stay, or pay a transport company directly by name or number plate.
+                Find a car park before you set off, or settle the stay when you collect your car.
               </p>
             </div>
           </div>
@@ -125,13 +152,13 @@ export default async function TransportHub() {
               </p>
               <span className="go">Find parking <Icon name="arrow-right" size={15} /></span>
             </Link>
-            <Link href="/pay/transport" className="acard">
-              <span className="icbox icbox-r"><Icon name="send" size={20} /></span>
-              <h3>Pay a transport company</h3>
+            <Link href="/pay/parking" className="acard">
+              <span className="icbox icbox-a"><Icon name="key" size={20} /></span>
+              <h3>Pay for parking</h3>
               <p className="sub" style={{ margin: 0, fontSize: '.93rem' }}>
-                Find the company by name, or by the number plate on the vehicle you are boarding.
+                Scan the car park’s code or type your ticket to settle the stay by M-Pesa.
               </p>
-              <span className="go">Pay a company <Icon name="arrow-right" size={15} /></span>
+              <span className="go">Pay for parking <Icon name="arrow-right" size={15} /></span>
             </Link>
           </div>
         </div>
