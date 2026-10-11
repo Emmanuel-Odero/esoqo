@@ -25,6 +25,12 @@ Fleet's drift correction will revert anything that tries. A rollback is
 therefore `git revert`, and "what is running?" is answered by reading the
 overlay at that branch's HEAD.
 
+Each release is also published to the repository's **Deployments** tab:
+`orchestrate.sh` opens a GitHub Deployment for the environment
+(`preview`/`production`) at the deployed SHA and posts `in_progress` →
+`success`/`failure` statuses. This is best-effort — a failure to publish
+never blocks or fails the deploy itself.
+
 | | preview | production |
 |---|---|---|
 | Branch | `preview` | `production` |
