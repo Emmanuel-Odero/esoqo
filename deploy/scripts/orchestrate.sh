@@ -99,7 +99,7 @@ trap on_exit EXIT
 # real pre-rollout gate is the in-cluster verify Job below.
 DEPLOYMENT_JSON=$(gh_api POST "/deployments" \
   "{\"ref\":\"${GIT_SHA}\",\"environment\":\"${ENVIRONMENT}\",\"description\":\"Esoko ${ENVIRONMENT} ${GIT_SHA_SHORT}\",\"auto_merge\":false,\"required_contexts\":[],\"transient_environment\":false,\"production_environment\":$([ "$ENVIRONMENT" = production ] && echo true || echo false)}" || true)
-DEPLOYMENT_ID=$(printf '%s' "$DEPLOYMENT_JSON" | sed -n 's/.*"id":\([0-9][0-9]*\).*/\1/p')
+DEPLOYMENT_ID=$(printf '%s' "$DEPLOYMENT_JSON" | jq -r '.id // empty' 2>/dev/null)
 deployment_status in_progress "Building and verifying ${GIT_SHA_SHORT}"
 
 echo "== deploying $GIT_SHA_SHORT ($TARGET_BRANCH) to $NAMESPACE =="
