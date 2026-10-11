@@ -2,25 +2,28 @@
 import { useMemo, useState } from 'react';
 import { Icon } from '@esoqo/ui';
 import { useAnnounce } from '@esoqo/a11y';
+import type { ListingRow } from '@/lib/listings';
 
-export interface ListingRow {
-  slug: string;
-  title: string;
-  orgName: string;
-  vertical: 'EVENTS' | 'TRANSPORT';
-  where: string | null;
-  county: string | null;
-  fromKes: number | null;
-  nextDepartAt: string | null;
-  scheduleCount: number;
-  detailUrl: string;
-}
+export type { ListingRow };
 
 const VERTICAL_LABEL: Record<ListingRow['vertical'], string> = { EVENTS: 'Events', TRANSPORT: 'Transport' };
 
-export function TicketBrowser({ listings }: { listings: ListingRow[] }) {
+/**
+ * `fixedVertical` pins the browser to one kind — /events and /transport
+ * each show a single-vertical directory, so the All/Events/Transport
+ * filter would be a control that only ever has one correct answer and is
+ * therefore noise. The combined /tickets page passes nothing and keeps
+ * the filter.
+ */
+export function TicketBrowser({
+  listings,
+  fixedVertical,
+}: {
+  listings: ListingRow[];
+  fixedVertical?: ListingRow['vertical'];
+}) {
   const [q, setQ] = useState('');
-  const [vertical, setVertical] = useState<'' | ListingRow['vertical']>('');
+  const [vertical, setVertical] = useState<'' | ListingRow['vertical']>(fixedVertical ?? '');
   const announce = useAnnounce();
 
   const filtered = useMemo(() => {
@@ -46,22 +49,24 @@ export function TicketBrowser({ listings }: { listings: ListingRow[] }) {
         </div>
       </div>
 
-      <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginBottom: 16 }} role="group" aria-label="Filter by kind">
-        <button type="button" className="chip" aria-pressed={vertical === ''}
-          onClick={() => { setVertical(''); announce('Showing all listings'); }}>
-          All
-        </button>
-        <button type="button" className="chip" aria-pressed={vertical === 'EVENTS'}
-          style={vertical === 'EVENTS' ? { borderColor: 'var(--green)', background: 'var(--green-t)', color: 'var(--green)' } : undefined}
-          onClick={() => { setVertical('EVENTS'); announce('Filtered to events'); }}>
-          <Icon name="calendar" size={13} style={{ verticalAlign: '-2px', marginRight: 4 }} />Events
-        </button>
-        <button type="button" className="chip" aria-pressed={vertical === 'TRANSPORT'}
-          style={vertical === 'TRANSPORT' ? { borderColor: 'var(--green)', background: 'var(--green-t)', color: 'var(--green)' } : undefined}
-          onClick={() => { setVertical('TRANSPORT'); announce('Filtered to transport'); }}>
-          <Icon name="truck" size={13} style={{ verticalAlign: '-2px', marginRight: 4 }} />Transport
-        </button>
-      </div>
+      {!fixedVertical && (
+        <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginBottom: 16 }} role="group" aria-label="Filter by kind">
+          <button type="button" className="chip" aria-pressed={vertical === ''}
+            onClick={() => { setVertical(''); announce('Showing all listings'); }}>
+            All
+          </button>
+          <button type="button" className="chip" aria-pressed={vertical === 'EVENTS'}
+            style={vertical === 'EVENTS' ? { borderColor: 'var(--green)', background: 'var(--green-t)', color: 'var(--green)' } : undefined}
+            onClick={() => { setVertical('EVENTS'); announce('Filtered to events'); }}>
+            <Icon name="calendar" size={13} style={{ verticalAlign: '-2px', marginRight: 4 }} />Events
+          </button>
+          <button type="button" className="chip" aria-pressed={vertical === 'TRANSPORT'}
+            style={vertical === 'TRANSPORT' ? { borderColor: 'var(--green)', background: 'var(--green-t)', color: 'var(--green)' } : undefined}
+            onClick={() => { setVertical('TRANSPORT'); announce('Filtered to transport'); }}>
+            <Icon name="truck" size={13} style={{ verticalAlign: '-2px', marginRight: 4 }} />Transport
+          </button>
+        </div>
+      )}
 
       <p className="sub" style={{ marginBottom: 16 }} aria-live="polite">
         {filtered.length} listing{filtered.length === 1 ? '' : 's'}

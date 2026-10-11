@@ -6,22 +6,19 @@ import type { Route } from "next";
 import { usePathname } from "next/navigation";
 import { Icon } from "@esoqo/ui";
 
-/** Nav is tools, not arguments — per the page-architecture work. The
- *  logo already links home, but that's an icon-only affordance; "Home"
- *  gets its own labelled entry so getting back to the landing page
- *  doesn't depend on recognising the logo as a link. */
+/** Nav is tools, not arguments — per the page-architecture work.
+ *  Entries are grouped so that the transport family (buses, transport
+ *  tickets, parking) lives on one page and events ticketing on another
+ *  rather than as four separate doors. Home leads the row: the logo also
+ *  works, but visitors expect to see the word. */
 export const NAV: readonly (readonly [Route, string])[] = [
   ["/", "Home"],
   ["/discover", "Shops"],
-  ["/tickets", "Tickets"],
+  ["/transport", "Transport"],
+  ["/events", "Events"],
   ["/parcels", "Parcels"],
-  ["/buses", "Buses"],
-  ["/prices", "Prices"],
   ["/pay", "Pay"],
-  ["/counties", "Counties"],
-  ["/institutions", "Institutions"],
-  ["/verify", "Verify"],
-  ["/help", "Help"],
+  ["/support", "Support"],
 ];
 
 const APP = process.env.NEXT_PUBLIC_APP_URL ?? "http://localhost:3001";
@@ -178,15 +175,20 @@ export function Footer() {
             </p>
           </div>
           <div>
-            <h2>Tools</h2>
+            <h2>Do</h2>
             <Link href="/prices">Market prices</Link>
             <Link href="/pay">Pay anyone</Link>
+            <Link href="/transport">Bus &amp; transport</Link>
+            <Link href="/events">Events</Link>
             <Link href="/parcels/send">Send a parcel</Link>
             <Link href="/parcels/track">Track a parcel</Link>
-            <Link href="/parcels/points">Drop-off &amp; pickup points</Link>
+          </div>
+          <div>
+            <h2>Support</h2>
             <Link href="/verify">Verify a certificate</Link>
             <Link href="/counties">County requirements</Link>
             <Link href="/institutions">Institutions</Link>
+            <Link href="/help">Help &amp; *483*77#</Link>
           </div>
           <div>
             <h2>Help</h2>

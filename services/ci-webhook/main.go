@@ -40,12 +40,13 @@ import (
 // between preview and production; only the env differs, same as every
 // other workload in deploy/k8s/base.
 type config struct {
-	Namespace     string // which namespace this instance is allowed to touch (its own)
-	Branch        string // "preview" or "production" — the only ref this instance reacts to
-	WebhookSecret []byte // GitHub's HMAC signing secret for this hook
-	DeployerImage string // image reference for the orchestrator Job (section 3 of the plan)
-	GitRepoURL    string // https://github.com/Emmanuel-Odero/esoqo.git
-	ListenAddr    string
+	Namespace      string // which namespace this instance is allowed to touch (its own)
+	Branch         string // "preview" or "production" — the only ref this instance reacts to
+	WebhookSecret  []byte // GitHub's HMAC signing secret for this hook
+	DeployerImage  string // image reference for the orchestrator Job (section 3 of the plan)
+	GitRepoURL     string // https://github.com/Emmanuel-Odero/esoqo.git
+	ListenAddr     string
+	AllowedPushers []string // GitHub logins allowed to trigger a deploy (the push authorisation gate)
 }
 
 func loadConfig() (config, error) {
@@ -60,8 +61,24 @@ func loadConfig() (config, error) {
 	if c.Namespace == "" || c.Branch == "" || c.DeployerImage == "" || c.GitRepoURL == "" || secret == "" {
 		return c, errors.New("NAMESPACE, TARGET_BRANCH, DEPLOYER_IMAGE, GIT_REPO_URL and WEBHOOK_SECRET are all required")
 	}
+	// Fail closed: without an allow-list the listener would deploy any
+	// signed push, which is exactly the hole this gate exists to close.
+	c.AllowedPushers = splitCSV(os.Getenv("ALLOWED_PUSHERS"))
+	if len(c.AllowedPushers) == 0 {
+		return c, errors.New("ALLOWED_PUSHERS is required (comma-separated GitHub logins) — refusing to run without a push authorisation gate")
+	}
 	c.WebhookSecret = []byte(secret)
 	return c, nil
+}
+
+func splitCSV(s string) []string {
+	var out []string
+	for _, part := range strings.Split(s, ",") {
+		if part = strings.TrimSpace(part); part != "" {
+			out = append(out, part)
+		}
+	}
+	return out
 }
 
 func envOr(key, fallback string) string {
@@ -69,6 +86,24 @@ func envOr(key, fallback string) string {
 		return v
 	}
 	return fallback
+}
+
+// isAllowedPusher is the push authorisation gate. It matches the GitHub
+// account that authenticated the push (sender.login) against the
+// configured allow-list. GitHub populates sender from the authenticated
+// session, so a non-owner cannot get through by setting head_commit's
+// author name/email — that is the whole point of gating here rather
+// than on the commit metadata.
+func (s *server) isAllowedPusher(p pushPayload) bool {
+	if p.Sender.Login == "" {
+		return false // fail closed on a malformed/absent sender
+	}
+	for _, allowed := range s.cfg.AllowedPushers {
+		if strings.EqualFold(p.Sender.Login, allowed) {
+			return true
+		}
+	}
+	return false
 }
 
 // pushPayload — only the fields we actually branch on. GitHub's push
@@ -83,6 +118,16 @@ type pushPayload struct {
 			Email string `json:"email"`
 		} `json:"author"`
 	} `json:"head_commit"`
+	// Sender is the account authenticated by GitHub for this delivery.
+	// Unlike head_commit.author (which is just the git identity set by
+	// whoever made the commit, and so is forgeable) this is set by
+	// GitHub itself and cannot be spoofed by a contributor.
+	Sender struct {
+		Login string `json:"login"`
+	} `json:"sender"`
+	Pusher struct {
+		Name string `json:"name"`
+	} `json:"pusher"`
 }
 
 // deployerEmail is the identity orchestrate.sh commits its overlay
@@ -174,6 +219,18 @@ func (s *server) handleWebhook(w http.ResponseWriter, r *http.Request) {
 	if isSelfDeploy(p) {
 		log.Printf("ignoring deployer's own push for %s (would loop)", p.After)
 		w.WriteHeader(http.StatusOK)
+		return
+	}
+
+	// The push authorisation gate. Everything above proves the payload is
+	// a genuine, correctly-signed push to our branch; this proves the
+	// account behind it is allowed to release. GitHub sets `sender` from
+	// the authenticated session, so this rejects a push from anyone but
+	// the configured logins even if they gained write access or forged
+	// the commit author.
+	if !s.isAllowedPusher(p) {
+		log.Printf("rejected push for %s: github sender %q (pusher %q) is not in ALLOWED_PUSHERS", p.After, p.Sender.Login, p.Pusher.Name)
+		http.Error(w, "pusher not authorised", http.StatusForbidden)
 		return
 	}
 
