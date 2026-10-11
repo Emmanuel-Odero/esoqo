@@ -34,10 +34,9 @@ name: Build and deploy
 
 on:
   push:
-    # The real environment branches are `preview` and `production`.
-    # `live` is kept as an alias so an old workflow ref still matches;
-    # the gate step below maps it to the same production environment.
-    branches: [preview, production, live]
+    # The environment branches are `preview` and `production`; `dev` is
+    # the integration branch and is not deployed.
+    branches: [preview, production]
     paths-ignore:
       # The tag-bump commit this workflow makes itself touches only the
       # overlay. Without this the workflow would retrigger on its own
@@ -93,7 +92,7 @@ jobs:
               echo "store_url=https://preview-store.esoko.global"        >> "$GITHUB_OUTPUT"
               echo "jamii_origin=https://preview-jamii.esoko.global"     >> "$GITHUB_OUTPUT"
               ;;
-            production|live)
+            production)
               echo "env_name=production"                                 >> "$GITHUB_OUTPUT"
               echo "overlay=deploy/k8s/overlays/production"              >> "$GITHUB_OUTPUT"
               echo "web_url=https://esoqo.com"                          >> "$GITHUB_OUTPUT"

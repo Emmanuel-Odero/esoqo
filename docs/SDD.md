@@ -1421,7 +1421,7 @@ substantially and is the highest-leverage performance work available.
 
 |                 | preview                       | production                       |
 | --------------- | ----------------------------- | -------------------------------- |
-| Branch          | `preview`                     | `live`                           |
+| Branch          | `preview`                     | `production`                     |
 | Namespace       | `preview`                     | `production`                     |
 | Overlay         | `deploy/k8s/overlays/preview` | `deploy/k8s/overlays/production` |
 | Apex host       | `preview.esoko.global`        | `esoko.global`                   |
@@ -1440,13 +1440,13 @@ Three workflows:
 
 | Workflow                     | Trigger                           | Stages                                                                                                                 |
 | ---------------------------- | --------------------------------- | ---------------------------------------------------------------------------------------------------------------------- |
-| `ci.yml`                     | push to `main`, `preview`, `live` | postgres:16-alpine + redis:7-alpine services → pnpm 9, Node 22 → lint, typecheck, test, build                          |
-| `build-images.yml`           | push to `preview`, `live`         | per-environment images → GHCR → **rewrite Kustomize overlay image tags → commit back**. Runs in parallel with `ci.yml` |
+| `ci.yml`                     | push to `dev`, `preview`, `production` | postgres:16-alpine + redis:7-alpine services → pnpm 9, Node 22 → lint, typecheck, test, build                     |
+| `build-images.yml`           | push to `preview`, `production`   | per-environment images → GHCR → **rewrite Kustomize overlay image tags → commit back**. Runs in parallel with `ci.yml` |
 | `jamii-domain-reconcile.yml` | `*/5 * * * *`                     | `POST $CORE_API_URL/internal/jamii-domains/reconcile` with a reconcile secret                                          |
 
 **A deploy is a commit.** Pushing to `preview` builds images, writes the new tags into
 `deploy/k8s/overlays/preview/kustomization.yaml`, and commits that back. Rancher Fleet watches the
-branch and applies it. Production works identically from `live`. Nothing deploys via `kubectl apply`
+branch and applies it. Production works identically from `production`. Nothing deploys via `kubectl apply`
 from a laptop — Fleet's drift correction reverts anything that tries.
 
 A rollback is therefore `git revert`, and "what is running?" is answered by reading the overlay at
@@ -1457,7 +1457,7 @@ that branch's HEAD.
 ```mermaid
 flowchart LR
     subgraph Git
-        PUSH[Push to preview or live]
+        PUSH[Push to preview or production]
     end
 
     subgraph GHA["GitHub Actions"]
