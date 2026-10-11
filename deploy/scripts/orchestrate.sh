@@ -63,6 +63,27 @@ git clone --filter=blob:none "$AUTH_URL" "$WORKDIR/repo"
 cd "$WORKDIR/repo"
 git checkout "$GIT_SHA"
 
+# ── 1a. Ownership gate (defence in depth) ───────────────────────────
+# ci-webhook already refuses any push whose GitHub *sender* is not in
+# ALLOWED_PUSHERS, and only it can create this Job. But anyone with
+# `edit` in the namespace could craft an esoqo-deploy-<sha> Job by hand
+# and bypass that listener. Refuse to build/deploy a commit whose git
+# identity is not the owner's (or the deployer bot, or GitHub's own
+# merge/squash committer). Extra identities can be added via
+# ALLOWED_GIT_IDENTITIES (comma-separated). This is deliberately generous
+# so the owner's normal push/merge flows are never blocked, while a
+# direct push by anyone else still is.
+owner_idents=" emmanuelodero808@gmail.com 65104775+emmanuel-odero@users.noreply.github.com ci@esoqo.com noreply@github.com "
+for extra in $(printf '%s' "${ALLOWED_GIT_IDENTITIES:-}" | tr ',' ' '); do
+  owner_idents+=" $(printf '%s' "$extra" | tr 'A-Z' 'a-z') "
+done
+tip_author=$(git log -1 --format='%ae' "$GIT_SHA" | tr 'A-Z' 'a-z')
+tip_committer=$(git log -1 --format='%ce' "$GIT_SHA" | tr 'A-Z' 'a-z')
+if [[ "$owner_idents" != *" $tip_author "* && "$owner_idents" != *" $tip_committer "* ]]; then
+  echo "error: refusing to deploy $GIT_SHA — authored by '$tip_author', committed by '$tip_committer'; neither is an authorised identity" >&2
+  exit 1
+fi
+
 # ── 2. Build 7 images and run the test suite — all in parallel ──────
 # Kaniko Jobs do the builds, registry-cached; the verify Job runs
 # lint/typecheck/test against ephemeral Postgres+Redis. Both are applied

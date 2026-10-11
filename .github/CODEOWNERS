@@ -1,0 +1,17 @@
+# Require the repository owner's review on anything that can change what is
+# deployed or the environment it runs with. Enforcement needs branch
+# protection / rulesets (GitHub Pro for private repos); until then this is a
+# visible signal in PRs, not a hard gate.
+#
+# Paths below cover the deploy pipeline and env configuration:
+#   - deploy/**: kustomize overlays (ConfigMap esoqo-config), job templates,
+#     secrets templates, and the deployer script.
+#   - .github/**: CI workflows.
+#   - Dockerfiles / compose: build-time env (NEXT_PUBLIC_* etc.).
+#   - .env.example: documents the env surface.
+
+/deploy/              @Emmanuel-Odero
+/.github/             @Emmanuel-Odero
+/docker-compose*.yml  @Emmanuel-Odero
+Dockerfile*           @Emmanuel-Odero
+/.env.example         @Emmanuel-Odero
