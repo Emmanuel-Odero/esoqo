@@ -52,6 +52,56 @@ case "$TARGET_BRANCH" in
     ;;
 esac
 
+# ── GitHub Deployments API ──────────────────────────────────────────
+# The pipeline's own record of a release is the tag-bump commit; this
+# additionally publishes the release to the repo's Deployments tab (and
+# the environment timeline next to it), which is otherwise empty because
+# nothing here used to call the API. Purely informational: a failure to
+# publish must never block or fail a real deploy, so every call is
+# best-effort (`|| true`).
+REPO_SLUG="${GIT_REPO_URL#https://}"
+REPO_SLUG="${REPO_SLUG%.git}"
+REPO_SLUG="${REPO_SLUG#github.com/}"
+API="https://api.github.com/repos/${REPO_SLUG}"
+DEPLOYMENT_ID=""
+
+gh_api() { # method path [json-body]
+  curl -fsS -X "$1" \
+    -H "Authorization: Bearer ${GIT_WRITE_TOKEN}" \
+    -H "Accept: application/vnd.github+json" \
+    -H "X-GitHub-Api-Version: 2022-11-28" \
+    "${API}$2" ${3:+--data "$3"}
+}
+
+deployment_status() { # state description
+  [ -n "$DEPLOYMENT_ID" ] || return 0
+  gh_api POST "/deployments/${DEPLOYMENT_ID}/statuses" \
+    "{\"state\":\"$1\",\"environment_url\":\"${WEB_URL}\",\"description\":\"$2\"}" >/dev/null || true
+}
+
+# Post the terminal status from the exit path, so a failure anywhere
+# below (verify gate, build, migration, rollout, push) is recorded as
+# `failure` rather than leaving the deployment stuck on `in_progress`.
+on_exit() {
+  local code=$?
+  if [ -n "$DEPLOYMENT_ID" ]; then
+    if [ "$code" -eq 0 ]; then
+      deployment_status success "Live on ${WEB_URL}"
+    else
+      deployment_status failure "Deploy failed (exit ${code})"
+    fi
+  fi
+}
+trap on_exit EXIT
+
+# required_contexts:[] deliberately skips GitHub's commit-status gate:
+# nothing here reports statuses (Actions is broken server-side), and the
+# real pre-rollout gate is the in-cluster verify Job below.
+DEPLOYMENT_JSON=$(gh_api POST "/deployments" \
+  "{\"ref\":\"${GIT_SHA}\",\"environment\":\"${ENVIRONMENT}\",\"description\":\"Esoko ${ENVIRONMENT} ${GIT_SHA_SHORT}\",\"auto_merge\":false,\"required_contexts\":[],\"transient_environment\":false,\"production_environment\":$([ "$ENVIRONMENT" = production ] && echo true || echo false)}" || true)
+DEPLOYMENT_ID=$(printf '%s' "$DEPLOYMENT_JSON" | sed -n 's/.*"id":\([0-9][0-9]*\).*/\1/p')
+deployment_status in_progress "Building and verifying ${GIT_SHA_SHORT}"
+
 echo "== deploying $GIT_SHA_SHORT ($TARGET_BRANCH) to $NAMESPACE =="
 
 # ── 1. Clone the overlay at the exact triggering commit ─────────────
