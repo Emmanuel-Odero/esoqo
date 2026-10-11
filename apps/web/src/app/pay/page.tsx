@@ -20,12 +20,20 @@ import { actionLookupBusiness, type BusinessLookup } from './actions';
 
 export const metadata: Metadata = {
   title: 'Pay on Esoqo',
-  description: 'Pay a business, a savings group, a transport company or a car park with M-Pesa. No account needed.',
+  description: 'Pay a business or a savings group with M-Pesa, no account needed.',
   robots: { index: true, follow: true },
 };
 
 type Card = { href: `/${string}`; icon: IconName; tone: string; title: string; body: string; cta: string };
 
+/**
+ * Transport and parking are no longer listed here. They are transport
+ * jobs to the person doing them, so they live on the /transport hub;
+ * leaving them here too was the duplication this reorganisation set out
+ * to remove. The routes still exist and still work — a plate scan or a
+ * car park QR lands on them directly — they are just not advertised as
+ * part of the payments menu any more.
+ */
 const WAYS = [
   {
     href: '/pay/business', icon: 'shop', tone: 'g', title: 'Pay a business',
@@ -36,16 +44,6 @@ const WAYS = [
     href: '/pay/group', icon: 'users', tone: 'b', title: 'Pay into a group',
     body: 'Chamas, table-banking groups, SACCOs and co-operatives. Pay by group name or by their Esoqo ID.',
     cta: 'Pay a group',
-  },
-  {
-    href: '/pay/transport', icon: 'truck', tone: 'r', title: 'Pay a transport company',
-    body: 'Find the company by name, or by the number plate on the vehicle you are boarding.',
-    cta: 'Find a company',
-  },
-  {
-    href: '/pay/parking', icon: 'key', tone: 'a', title: 'Pay for parking',
-    body: 'Scan the car park’s code, get a ticket by text, and settle the stay when you collect your car.',
-    cta: 'Enter a car park',
   },
 ] as const satisfies readonly Card[];
 
@@ -92,8 +90,9 @@ export default async function PayPage({
           <p className="kicker">Payments</p>
           <h1>Pay anyone on Esoqo</h1>
           <p className="lead">
-            Shops, savings groups, transport companies and car parks — all settled by M-Pesa from your
-            phone. No account, no app, and a text receipt the moment the money lands.
+            Shops and savings groups — all settled by M-Pesa from your phone. No account, no app,
+            and a text receipt the moment the money lands. Looking to pay a transport company or a
+            car park? That is on <Link href="/transport" style={{ color: 'var(--green)', fontWeight: 600 }}>Transport</Link>.
           </p>
         </div>
       </section>
