@@ -1,11 +1,10 @@
 name: CI
 
 on:
-  # The real branches are dev, preview and production. `main` and `live`
-  # are kept so a caller using the old names still gets CI feedback;
-  # build-images.yml turns a push to preview or production (or a legacy
-  # `live` ref) into running containers.
-  push: { branches: [dev, preview, production, main, live] }
+  # The branches are dev, preview and production. build-images.yml turns
+  # a push to preview or production into running containers; `dev` gets
+  # CI feedback only.
+  push: { branches: [dev, preview, production] }
   pull_request:
 
 concurrency:

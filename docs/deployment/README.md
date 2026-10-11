@@ -20,14 +20,14 @@ cluster.
 **A deploy is a commit.** Pushing to `preview` builds images, writes
 the new image tags into `deploy/k8s/overlays/preview/kustomization.yaml`,
 and commits that back. Rancher Fleet watches the branch and applies the
-result to the cluster. Production works identically from the `live` branch. Nothing deploys by running `kubectl apply` at a laptop, and
+result to the cluster. Production works identically from the `production` branch. Nothing deploys by running `kubectl apply` at a laptop, and
 Fleet's drift correction will revert anything that tries. A rollback is
 therefore `git revert`, and "what is running?" is answered by reading the
 overlay at that branch's HEAD.
 
 | | preview | production |
 |---|---|---|
-| Branch | `preview` | `live` |
+| Branch | `preview` | `production` |
 | Namespace | `preview` | `production` |
 | Overlay | `deploy/k8s/overlays/preview` | `deploy/k8s/overlays/production` |
 | Apex host | `preview.esoko.global` | `esoko.global` |
@@ -262,7 +262,7 @@ kubectl -n esoqo-preview patch serviceaccount default \
 with `ci.yml`, so it is branch protection — not the workflow — that
 stops untested code from shipping.
 
-GitHub → Settings → Branches → add a rule for `live`:
+GitHub → Settings → Branches → add a rule for `production`:
 
 - Require a pull request before merging
 - Require status checks to pass: `verify`, `security`
@@ -497,9 +497,7 @@ built from a branch that preview has not run.
 kubectl -n esoqo-preview get pods
 curl -sS https://preview.esoko.global/api/health
 
-# 2. promote — the deploy branch is `production`, not `live`.
-#    (`live` exists in the remote as a stale near-duplicate from an
-#    earlier naming choice; don't use it.)
+# 2. promote — the deploy branch is `production`.
 git checkout production && git pull
 git merge --ff-only preview    # refuses if they have diverged — see
                                 # CONTRIBUTING.md §2, they currently have
@@ -533,7 +531,7 @@ curl -sS https://api.esoqo.com/ready      # walks the audit chain
 Because the overlay records the exact image tag, rollback is a revert:
 
 ```bash
-git checkout live
+git checkout production
 git log --oneline -- deploy/k8s/overlays/production/kustomization.yaml
 git revert <the-bad-deploy-commit>
 git push
