@@ -5,7 +5,7 @@
 # against the cluster this pod is already running in.
 FROM alpine:3.20
 
-RUN apk add --no-cache bash git curl ca-certificates gawk
+RUN apk add --no-cache bash git curl ca-certificates gawk jq
 
 # kubectl — pinned to a recent stable, matching the cluster's own
 # server version closely enough that `kubectl wait`/`apply` behave
