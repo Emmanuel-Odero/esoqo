@@ -10,9 +10,13 @@ export default function sitemap(): MetadataRoute.Sitemap {
     '', '/discover', '/prices', '/counties', '/institutions', '/verify', '/help', '/trust',
     '/parcels', '/parcels/send', '/parcels/track', '/parcels/points', '/parcels/help',
     '/pay', '/pay/business', '/pay/group', '/pay/transport', '/pay/parking', '/pay/help',
+    '/transport', '/events', '/support', '/tickets', '/parking',
   ].map((p) => ({
     url: `${BASE}${p}`,
-    changeFrequency: p === '/prices' || p === '/discover' ? 'daily' as const : 'weekly' as const,
+    changeFrequency:
+      p === '/prices' || p === '/discover' || p === '/transport' || p === '/events'
+        ? 'daily' as const
+        : 'weekly' as const,
     priority: p === '' ? 1 : 0.7,
   }));
 }
