@@ -32,25 +32,25 @@ labels:
 images:
 - name: ghcr.io/emmanuel-odero/esoqo-admin
   newName: ghcr.io/emmanuel-odero/esoqo-admin
-  newTag: 49348b417432
+  newTag: 0a7494cd5dcf
 - name: ghcr.io/emmanuel-odero/esoqo-app
   newName: ghcr.io/emmanuel-odero/esoqo-app
-  newTag: 49348b417432
+  newTag: 0a7494cd5dcf
 - name: ghcr.io/emmanuel-odero/esoqo-core-go
   newName: ghcr.io/emmanuel-odero/esoqo-core-go
-  newTag: 49348b417432
+  newTag: 0a7494cd5dcf
 - name: ghcr.io/emmanuel-odero/esoqo-core-service
   newName: ghcr.io/emmanuel-odero/esoqo-core-service
-  newTag: 49348b417432
+  newTag: 0a7494cd5dcf
 - name: ghcr.io/emmanuel-odero/esoqo-jamii
   newName: ghcr.io/emmanuel-odero/esoqo-jamii
-  newTag: 49348b417432
+  newTag: 0a7494cd5dcf
 - name: ghcr.io/emmanuel-odero/esoqo-store
   newName: ghcr.io/emmanuel-odero/esoqo-store
-  newTag: 49348b417432
+  newTag: 0a7494cd5dcf
 - name: ghcr.io/emmanuel-odero/esoqo-web
   newName: ghcr.io/emmanuel-odero/esoqo-web
-  newTag: 49348b417432
+  newTag: 0a7494cd5dcf
 
   # Give Postgres real headroom. The base's 20Gi/2Gi is sized for a
   # preview environment; a volumeClaimTemplate cannot be shrunk later,
