@@ -1,4 +1,5 @@
 import type { Metadata } from 'next';
+import Link from 'next/link';
 import { Icon } from '@esoqo/ui';
 import { anonCtx, listPublicStores } from '@esoqo/db';
 import { StoreBrowser } from './StoreBrowser';
@@ -23,6 +24,11 @@ export default async function DiscoverPage() {
           <p className="lead">
             Every store here belongs to a real, registered Esoqo business. Buy directly, pay by
             M-Pesa, and know who you&apos;re buying from.
+          </p>
+          <p style={{ marginTop: 14 }}>
+            <Link href="/prices" style={{ color: 'var(--green)', fontWeight: 600 }}>
+              Today&apos;s market prices →
+            </Link>
           </p>
         </div>
       </section>
