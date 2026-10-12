@@ -57,13 +57,19 @@
 }
 .porgnav::-webkit-scrollbar { display:none }
 .porgnav a, .porgnav button {
-  display:inline-flex; align-items:center; gap:6px; padding:0 12px;
-  font-size:.87rem; font-weight:600; color:var(--tx-2); border-radius:6px;
-  white-space:nowrap; min-height:40px; border:0; background:none; cursor:pointer;
-  font-family:inherit; flex:0 0 auto; transition:color var(--dur-fast), background var(--dur-fast);
+  display:inline-flex; align-items:center; gap:6px; padding:0 var(--nav-pad-x);
+  font-size:.87rem; font-weight:600; color:var(--nav-fg); border-radius:var(--r-pill);
+  white-space:nowrap; min-height:38px; border:0; background:none; cursor:pointer;
+  font-family:inherit; flex:0 0 auto;
+  transition:color var(--dur) var(--ease-out), background var(--dur) var(--ease-out),
+    box-shadow var(--dur-slow) var(--ease-premium);
 }
-.porgnav a:hover, .porgnav button:hover { background:var(--paper); color:var(--navy) }
-.porgnav a[aria-current="page"] { color:var(--navy); background:var(--green-t); font-weight:700 }
+.porgnav a:hover, .porgnav button:hover { background:var(--nav-hover-bg); color:var(--nav-fg-hover) }
+.porgnav a[aria-current="page"] {
+  color:var(--nav-fg-active); background:var(--nav-active-bg); font-weight:700;
+  box-shadow:inset 0 0 0 1px var(--nav-ring), var(--nav-shadow-active);
+}
+.porgnav a[aria-current="page"] svg { color:var(--nav-accent) }
 .porgnav a:focus-visible, .porgnav button:focus-visible { outline:2px solid var(--green); outline-offset:-2px }
 .porgnav-badge {
   font-family:var(--font-mono); font-size:.6rem; font-weight:600; line-height:1;
@@ -183,16 +189,22 @@
 }
 .porgset-nav::-webkit-scrollbar { display:none }
 .porgset-nav a {
-  display:inline-flex; align-items:center; gap:7px; flex:none;
+  position:relative; display:inline-flex; align-items:center; gap:7px; flex:none;
   padding:11px 15px; margin-bottom:-1px;
-  border-bottom:2px solid transparent; border-radius:var(--r-sm) var(--r-sm) 0 0;
-  color:var(--tx-2); font:600 .88rem/1 var(--font-body);
+  border-bottom:2px solid transparent;
+  color:var(--nav-fg); font:600 .88rem/1 var(--font-body);
   text-decoration:none; white-space:nowrap;
-  transition:color var(--dur-fast), background var(--dur-fast), border-color var(--dur-fast);
+  transition:color var(--dur) var(--ease-out), background var(--dur) var(--ease-out);
 }
-.porgset-nav a:hover { color:var(--navy); background:var(--paper) }
-.porgset-nav a[aria-current='page'] { color:var(--navy); border-bottom-color:var(--green-2) }
-.porgset-nav a[aria-current='page'] svg { color:var(--green) }
+.porgset-nav a::after {
+  content:''; position:absolute; left:11px; right:11px; bottom:-2px; height:var(--nav-bar);
+  border-radius:3px 3px 0 0; background:linear-gradient(90deg, var(--nav-accent-2), var(--nav-accent));
+  transform:scaleX(0); transform-origin:center; transition:transform var(--dur) var(--ease-premium);
+}
+.porgset-nav a:hover { color:var(--nav-fg-hover); background:var(--nav-hover-bg) }
+.porgset-nav a[aria-current='page'] { color:var(--nav-fg-active); font-weight:700 }
+.porgset-nav a[aria-current='page']::after { transform:scaleX(1) }
+.porgset-nav a[aria-current='page'] svg { color:var(--nav-accent) }
 .porgset-nav a:focus-visible { outline:3px solid rgba(31,161,99,.28); outline-offset:-3px }
 
 /* Each section brings its own heading from when it was a page; inside

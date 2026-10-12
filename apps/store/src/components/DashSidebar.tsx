@@ -26,6 +26,13 @@ export function DashSidebar({ store }: { store: { name: string; slug: string } |
   const path = usePathname();
   const [open, setOpen] = useState(false);
 
+  // Longest matching prefix wins, so /dashboard/settings/profile marks
+  // "Store profile" rather than both it and its "Store settings" parent,
+  // and a detail route like /dashboard/orders/123 still marks "Orders".
+  const activeHref = NAV.map(([href]) => href)
+    .filter((href) => path === href || path.startsWith(`${href}/`))
+    .sort((a, b) => b.length - a.length)[0];
+
   useEffect(() => {
     const onToggle = () => setOpen((v) => !v);
     const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') setOpen(false); };
@@ -66,7 +73,7 @@ export function DashSidebar({ store }: { store: { name: string; slug: string } |
         </div>
         <nav className="dash-nav" aria-label="Dashboard navigation">
           {NAV.map(([href, icon, label]) => (
-            <Link key={href} href={href as Route} aria-current={path === href ? 'page' : undefined}>
+            <Link key={href} href={href as Route} aria-current={href === activeHref ? 'page' : undefined}>
               <span className="nav-icon"><Icon name={icon} size={15} /></span>{label}
             </Link>
           ))}

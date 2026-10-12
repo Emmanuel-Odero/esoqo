@@ -23,10 +23,14 @@
 header { position:sticky; top:0; z-index:90; background:rgba(255,255,255,.95);
   backdrop-filter:blur(12px); border-bottom:1px solid var(--line) }
 .hd { display:flex; align-items:center; gap:20px; height:64px }
-.hdnav { display:flex; gap:2px; margin-left:10px }
-.hdnav a { padding:7px 12px; border-radius:6px; font-size:.9rem; color:var(--tx-2) }
-.hdnav a:hover { background:var(--paper); color:var(--navy) }
-.hdnav a[aria-current="page"] { background:var(--paper); color:var(--navy); font-weight:600 }
+.hdnav { display:flex; gap:3px; margin-left:10px }
+.hdnav a { display:inline-flex; align-items:center; padding:8px var(--nav-pad-x); border-radius:var(--r-pill);
+  font-size:.9rem; font-weight:600; color:var(--nav-fg);
+  transition:background var(--dur) var(--ease-out), color var(--dur) var(--ease-out),
+    box-shadow var(--dur-slow) var(--ease-premium) }
+.hdnav a:hover { background:var(--nav-hover-bg); color:var(--nav-fg-hover) }
+.hdnav a[aria-current="page"] { background:var(--nav-active-bg); color:var(--nav-fg-active); font-weight:700;
+  box-shadow:inset 0 0 0 1px var(--nav-ring), var(--nav-shadow-active) }
 .hd .row { margin-left:auto; display:flex; gap:11px; align-items:center }
 .hd-menu-btn { display:none; margin-left:auto; width:44px; height:44px; border-radius:8px;
   border:1px solid var(--line); background:#fff; color:var(--navy); cursor:pointer;
@@ -40,10 +44,15 @@ header { position:sticky; top:0; z-index:90; background:rgba(255,255,255,.95);
 .snav { overflow-x:auto; scrollbar-width:none }
 .snav::-webkit-scrollbar { display:none }
 .snav-in { display:flex; gap:2px; height:48px; align-items:stretch; min-width:max-content }
-.snav a { display:flex; align-items:center; padding:0 15px; font-size:.87rem; color:var(--tx-2);
-  border-bottom:3px solid transparent; white-space:nowrap }
-.snav a:hover { color:var(--navy); background:var(--paper) }
-.snav a.on { color:var(--navy); border-bottom-color:var(--green); font-weight:600 }
+.snav a { position:relative; display:flex; align-items:center; padding:0 15px; font-size:.87rem; font-weight:600;
+  color:var(--nav-fg); border-bottom:3px solid transparent; white-space:nowrap;
+  transition:color var(--dur) var(--ease-out), background var(--dur) var(--ease-out) }
+.snav a::after { content:''; position:absolute; left:12px; right:12px; bottom:-1px; height:3px;
+  border-radius:3px 3px 0 0; background:linear-gradient(90deg, var(--nav-accent-2), var(--nav-accent));
+  transform:scaleX(0); transform-origin:center; transition:transform var(--dur) var(--ease-premium) }
+.snav a:hover { color:var(--nav-fg-hover); background:var(--nav-hover-bg) }
+.snav a.on { color:var(--nav-fg-active) }
+.snav a.on::after { transform:scaleX(1) }
 .prog { position:absolute; left:0; bottom:-1px; height:3px; background:var(--green);
   width:0; opacity:.4; transition:width .2s ease }
 
@@ -278,9 +287,13 @@ footer a:hover { color:#fff }
     background:#fff; border-left:1px solid var(--line); box-shadow:var(--sh-l);
     padding:12px; display:flex; flex-direction:column; gap:2px; overflow:auto;
     animation:drawer-in var(--dur-slow) var(--ease-out) both}
-  .hd-drawer a:not(.btn){padding:13px 14px; border-radius:8px; font-size:.95rem; color:var(--tx); min-height:44px; display:flex; align-items:center}
-  .hd-drawer a:not(.btn):hover{background:var(--paper)}
-  .hd-drawer a:not(.btn)[aria-current="page"]{background:var(--green-t); color:var(--green); font-weight:700}
+  .hd-drawer a:not(.btn){position:relative; padding:13px 14px; border-radius:10px; font-size:.95rem; color:var(--tx); min-height:44px; display:flex; align-items:center;
+    transition:background var(--dur) var(--ease-out), color var(--dur) var(--ease-out)}
+  .hd-drawer a:not(.btn):hover{background:var(--nav-hover-bg)}
+  .hd-drawer a:not(.btn)[aria-current="page"]{background:var(--nav-active-bg); color:var(--nav-fg-active); font-weight:700;
+    box-shadow:inset 0 0 0 1px var(--nav-ring)}
+  .hd-drawer a:not(.btn)[aria-current="page"]::before{content:''; position:absolute; left:0; top:9px; bottom:9px; width:3px;
+    border-radius:0 3px 3px 0; background:linear-gradient(180deg, var(--nav-accent-2), var(--nav-accent))}
   .hd-drawer-cta{display:grid; gap:10px; padding:14px 4px 8px; border-top:1px solid var(--line); margin-top:10px}
   @keyframes drawer-in{from{opacity:0; transform:translateX(24px)} to{opacity:1; transform:none}}
   .g2,.g3,.g4,.fg{grid-template-columns:1fr}
