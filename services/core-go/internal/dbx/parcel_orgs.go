@@ -55,8 +55,13 @@ type ParcelOrg struct {
 	// ParcelAgent's own coordinates don't have (an agent is onboarded
 	// with a place; a company might not accept walk-ins at all).
 	AcceptsWalkIn bool     `json:"acceptsWalkIn"`
-	Lat           *float64 `json:"lat"`
-	Lng           *float64 `json:"lng"`
+	// AcceptsCash — see schema.prisma's own comment on
+	// ParcelOrg.acceptsCash. When false the company takes no cash: the
+	// counter cash settlement, counter-cash remittance and counter bus
+	// seat sale are all refused, and only M-Pesa is offered.
+	AcceptsCash bool     `json:"acceptsCash"`
+	Lat         *float64 `json:"lat"`
+	Lng         *float64 `json:"lng"`
 	LocationHint  *string  `json:"locationHint"`
 	OpeningHours  *string  `json:"openingHours"`
 	// Co-branded label assets. LogoUrl prints centered in the label
@@ -88,7 +93,7 @@ type ParcelOrg struct {
 const parcelOrgColumns = `
 	id, "enterpriseId", name, slug, status, "contactPerson", "contactPhone",
 	"contactEmail", "settlementPhone", "commissionPct"::text,
-	"acceptsWalkIn", lat::text, lng::text, "locationHint", "openingHours",
+	"acceptsWalkIn", "acceptsCash", lat::text, lng::text, "locationHint", "openingHours",
 	"logoStorageKey", "logoUrl", "brandAccent",
 	"payoutMethod"::text, "payoutMsisdn", "payoutTillNumber",
 	"payoutPaybillNumber", "payoutPaybillAccount",
@@ -101,7 +106,7 @@ func scanParcelOrg(row pgx.Row) (*ParcelOrg, error) {
 	var latText, lngText *string
 	if err := row.Scan(&o.ID, &o.EnterpriseID, &o.Name, &o.Slug, &o.Status,
 		&o.ContactPerson, &o.ContactPhone, &o.ContactEmail, &o.SettlementPhone,
-		&commissionText, &o.AcceptsWalkIn, &latText, &lngText, &o.LocationHint, &o.OpeningHours,
+		&commissionText, &o.AcceptsWalkIn, &o.AcceptsCash, &latText, &lngText, &o.LocationHint, &o.OpeningHours,
 		&o.LogoStorageKey, &o.LogoUrl, &o.BrandAccent,
 		&o.PayoutMethod, &o.PayoutMsisdn, &o.PayoutTillNumber,
 		&o.PayoutPaybillNumber, &o.PayoutPaybillAccount,
@@ -147,8 +152,11 @@ type ParcelOrgInput struct {
 	CommissionPct   float64
 	Status          string
 	AcceptsWalkIn   bool
-	Lat             *float64
-	Lng             *float64
+	// AcceptsCash — see ParcelOrg.AcceptsCash's own comment. Admin-editable
+	// per company; defaults to true at the DB level.
+	AcceptsCash bool
+	Lat         *float64
+	Lng         *float64
 	LocationHint    *string
 	OpeningHours    *string
 	LogoStorageKey  *string
@@ -281,7 +289,7 @@ type AdminParcelOrg struct {
 const adminParcelOrgColumns = `
 	o.id, o."enterpriseId", o.name, o.slug, o.status, o."contactPerson", o."contactPhone",
 	o."contactEmail", o."settlementPhone", o."commissionPct"::text,
-	o."acceptsWalkIn", o.lat::text, o.lng::text, o."locationHint", o."openingHours",
+	o."acceptsWalkIn", o."acceptsCash", o.lat::text, o.lng::text, o."locationHint", o."openingHours",
 	o."logoStorageKey", o."logoUrl", o."brandAccent",
 	o."payoutMethod"::text, o."payoutMsisdn", o."payoutTillNumber",
 	o."payoutPaybillNumber", o."payoutPaybillAccount",
@@ -316,7 +324,7 @@ func scanAdminParcelOrg(row pgx.Row) (*AdminParcelOrg, error) {
 	var latText, lngText *string
 	if err := row.Scan(&o.ID, &o.EnterpriseID, &o.Name, &o.Slug, &o.Status,
 		&o.ContactPerson, &o.ContactPhone, &o.ContactEmail, &o.SettlementPhone,
-		&commissionText, &o.AcceptsWalkIn, &latText, &lngText, &o.LocationHint, &o.OpeningHours,
+		&commissionText, &o.AcceptsWalkIn, &o.AcceptsCash, &latText, &lngText, &o.LocationHint, &o.OpeningHours,
 		&o.LogoStorageKey, &o.LogoUrl, &o.BrandAccent,
 		&o.PayoutMethod, &o.PayoutMsisdn, &o.PayoutTillNumber,
 		&o.PayoutPaybillNumber, &o.PayoutPaybillAccount,
@@ -475,9 +483,10 @@ func CreateParcelOrg(ctx context.Context, pool *pgxpool.Pool, in ParcelOrgInput,
 			"payoutPaybillNumber", "payoutPaybillAccount",
 			"payoutBankCode", "payoutBankAccountNumber", "payoutBankAccountName",
 			"offersTransport",
+			"acceptsCash",
 			"createdAt", "updatedAt", "createdByStaffId"
 		) VALUES (gen_random_uuid(), $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17,
-		          $18::"ParcelOrgPayoutMethod", $19, $20, $21, $22, $23, $24, $25, $26, now(), now(), $27)
+		          $18::"ParcelOrgPayoutMethod", $19, $20, $21, $22, $23, $24, $25, $26, $27, now(), now(), $28)
 		RETURNING id`,
 		in.EnterpriseID, in.Name, in.Slug, in.Status, in.ContactPerson, in.ContactPhone,
 		in.ContactEmail, in.SettlementPhone, in.CommissionPct,
@@ -486,7 +495,7 @@ func CreateParcelOrg(ctx context.Context, pool *pgxpool.Pool, in ParcelOrgInput,
 		in.PayoutMethod, in.PayoutMsisdn, in.PayoutTillNumber,
 		in.PayoutPaybillNumber, in.PayoutPaybillAccount,
 		in.PayoutBankCode, in.PayoutBankAccountNumber, in.PayoutBankAccountName,
-		in.OffersTransport, staffID).Scan(&id)
+		in.OffersTransport, in.AcceptsCash, staffID).Scan(&id)
 	if isUniqueViolation(err) {
 		return "", &ParcelError{"BAD_INPUT", "That slug is already taken"}
 	}
@@ -506,9 +515,9 @@ func UpdateParcelOrg(ctx context.Context, pool *pgxpool.Pool, id string, in Parc
 			"payoutMethod" = $17::"ParcelOrgPayoutMethod", "payoutMsisdn" = $18, "payoutTillNumber" = $19,
 			"payoutPaybillNumber" = $20, "payoutPaybillAccount" = $21,
 			"payoutBankCode" = $22, "payoutBankAccountNumber" = $23, "payoutBankAccountName" = $24,
-			"offersTransport" = $25,
+			"offersTransport" = $25, "acceptsCash" = $26,
 			"updatedAt" = now()
-		WHERE id = $26`,
+		WHERE id = $27`,
 		in.Name, in.Slug, in.Status, in.ContactPerson, in.ContactPhone,
 		in.ContactEmail, in.SettlementPhone, in.CommissionPct,
 		in.AcceptsWalkIn, in.Lat, in.Lng, in.LocationHint, in.OpeningHours,
@@ -516,7 +525,7 @@ func UpdateParcelOrg(ctx context.Context, pool *pgxpool.Pool, id string, in Parc
 		in.PayoutMethod, in.PayoutMsisdn, in.PayoutTillNumber,
 		in.PayoutPaybillNumber, in.PayoutPaybillAccount,
 		in.PayoutBankCode, in.PayoutBankAccountNumber, in.PayoutBankAccountName,
-		in.OffersTransport, id)
+		in.OffersTransport, in.AcceptsCash, id)
 	if isUniqueViolation(err) {
 		return &ParcelError{"BAD_INPUT", "That slug is already taken"}
 	}
@@ -1094,11 +1103,12 @@ type OrgLabelSearchRow struct {
 // results appear live from the second keystroke. Blank stock only
 // (never used, never filled in, never withdrawn): attaching a label
 // spends it, so anything already spoken for is not offered.
+//
+// A blank tail browses rather than refusing — the counter's label
+// picker opens on the newest unused stickers before the clerk has
+// typed anything, so an empty search is a valid view, not a no-op.
 func SearchOrgLabels(ctx context.Context, pool *pgxpool.Pool, orgID, tail string, limit int) ([]OrgLabelSearchRow, error) {
 	tail = strings.ToUpper(strings.TrimSpace(tail))
-	if tail == "" {
-		return []OrgLabelSearchRow{}, nil
-	}
 	if limit <= 0 || limit > 20 {
 		limit = 15
 	}
@@ -1689,6 +1699,10 @@ type OrgParcelRow struct {
 	// they have in hand.
 	ExternalRef    *string `json:"externalRef"`
 	ExternalSource *string `json:"externalSource"`
+	// Notes — the free-text remark carried on the parcel. Shown so a
+	// clerk correcting a booking (see UpdateOrgParcelDetails) can see
+	// what is already there rather than silently overwrite it.
+	Notes *string `json:"notes"`
 	// OriginMethod — see Parcel.originMethod's own comment. Lets the
 	// front desk's "Awaiting drop-off" tab tell "a sender is bringing
 	// this in themselves" apart from "still waiting on our own rider",
@@ -1739,6 +1753,13 @@ type ListOrgParcelsFilter struct {
 	// queue: these are the parcels that stop moving until somebody at a
 	// desk grants a retry or issues a new code.
 	LockedOnly bool
+	// CompleteOnly — only rows that have actually been processed and
+	// paid (paidAt set): the register's "a parcel we took in, finished
+	// and settled" view, used to look one up for the sender collecting
+	// it. Excludes drafts, unpaid pay-at-counter bookings and imports
+	// still awaiting drop-off. Opt-in, so the counter's own label
+	// lookup and the receiving scanner keep seeing every stage.
+	CompleteOnly bool
 	// Sort — created | code | status | earnings. Anything else falls
 	// back to created. Order — asc | desc (default desc for created,
 	// asc otherwise is still honoured explicitly).
@@ -1876,7 +1897,7 @@ func ListOrgParcelsPage(ctx context.Context, pool *pgxpool.Pool, orgID string, f
 		       to_char(p."slaDeadlineAt", 'YYYY-MM-DD"T"HH24:MI:SSZ'),
 		       p."deliveryAttempts", p."lastAttemptReason",
 		       COALESCE(pr."knownAs", pr."officialName"), a.name, p."originMethod"::text,
-		       p."externalRef", p."externalSource",
+		       p."externalRef", p."externalSource", p.notes,
 		       p."receiverAuthAttempts",
 		       to_char(p."receiverAuthLockedAt", 'YYYY-MM-DD"T"HH24:MI:SSZ'),
 		       to_char(p."receiverAuthHardLockedAt", 'YYYY-MM-DD"T"HH24:MI:SSZ'),
@@ -1898,9 +1919,10 @@ func ListOrgParcelsPage(ctx context.Context, pool *pgxpool.Pool, orgID string, f
 		       AND p.status IN ('RECEIVED_AT_COUNTER', 'PICKED_UP', 'IN_TRANSIT')))
 		  AND (NOT $7::bool OR p."receiverAuthLockedAt" IS NOT NULL
 		       OR p."receiverAuthHardLockedAt" IS NOT NULL)
+		  AND (NOT $8::bool OR p."paidAt" IS NOT NULL)
 		ORDER BY `+orderBy+` `+order+`
-		LIMIT $8 OFFSET $9`, orgID, f.Status, f.OriginMethod, f.Q, f.ParcelType, f.OverdueOnly,
-		f.LockedOnly, limit, offset)
+		LIMIT $9 OFFSET $10`, orgID, f.Status, f.OriginMethod, f.Q, f.ParcelType, f.OverdueOnly,
+		f.LockedOnly, f.CompleteOnly, limit, offset)
 	if err != nil {
 		return ListOrgParcelsResult{}, err
 	}
@@ -1913,6 +1935,7 @@ func ListOrgParcelsPage(ctx context.Context, pool *pgxpool.Pool, orgID string, f
 			&r.OriginLabel, &r.DestinationLabel, &r.ParcelType, &r.OrgEarningsKes,
 			&r.CreatedAt, &r.SlaDeadlineAt, &r.DeliveryAttempts, &r.LastAttemptReason,
 			&r.HolderName, &r.AgentName, &r.OriginMethod, &r.ExternalRef, &r.ExternalSource,
+			&r.Notes,
 			&r.ReceiverAuthAttempts, &r.ReceiverAuthLockedAt, &r.ReceiverAuthHardLockedAt,
 			&r.DeliveryCodeVersion, &r.CourierEarningsHeldUntil,
 			&r.PaymentMethod, &r.Paid, &r.MpesaReceiptCode, &r.PaymentPending,
@@ -1950,6 +1973,11 @@ type ImportParcelInput struct {
 	// sticker and the system record are one identity from this moment.
 	// Nil means Esoqo mints a fresh code instead.
 	LabelCode *string
+	// AutoAssignLabel — claim a random unused label from the company's
+	// own pad instead of naming one. The company never mints: it either
+	// picks a sticker or has the system pick one. Ignored when LabelCode
+	// is set.
+	AutoAssignLabel bool
 }
 
 // ImportOrgParcel registers an externally-created parcel under [orgID].
@@ -1989,41 +2017,31 @@ func ImportOrgParcel(ctx context.Context, pool *pgxpool.Pool, orgID string, in I
 		return importOrgParcelWithLabel(ctx, pool, orgID, in, externalRef, deliveryCode, serviceTicketNumber)
 	}
 
-	// A PKG- code is 6 chars from a 32-symbol alphabet — collisions are
-	// vanishingly rare but not impossible, and a unique-violation here is
-	// the normal "mint again" case, not a real failure.
-	for attempt := 0; attempt < 5; attempt++ {
-		code = fleetqr.ShortCodeChecked(fleetqr.PrefixParcel, 6)
-		err = pool.QueryRow(ctx, `
-			INSERT INTO parcel (
-				id, code, "deliveryCode", "serviceTicketNumber",
-				"senderName", "senderMsisdn", "receiverName", "receiverMsisdn",
-				"originLabel", "destinationLabel", notes,
-				"parcelType", "weightKg", fragile,
-				"parcelOrgId", "externalRef", "externalSource",
-				"originMethod", status, "paymentMethod", "createdAt"
-			) VALUES (
-				gen_random_uuid(), $1, $2, $3,
-				$4, $5, $6, $7,
-				$8, $9, $10,
-				$11::"ParcelType", $12, $13,
-				$14, $15, $16,
-				'SCHEDULED_PICKUP'::"ParcelOriginMethod", 'RECEIVED_AT_COUNTER', 'PAY_AT_COUNTER'::"ParcelPaymentMethod", now()
-			) RETURNING id`,
-			code, deliveryCode, serviceTicketNumber,
-			strings.TrimSpace(in.SenderName), strings.TrimSpace(in.SenderMsisdn),
-			strings.TrimSpace(in.ReceiverName), strings.TrimSpace(in.ReceiverMsisdn),
-			strings.TrimSpace(in.OriginLabel), strings.TrimSpace(in.DestinationLabel), in.Notes,
-			in.ParcelType, in.WeightKg, in.Fragile,
-			orgID, externalRef, in.ExternalSource).Scan(&id)
-		if err == nil {
-			return id, code, nil
+	if in.AutoAssignLabel {
+		// "Assign one for me": pick a random still-blank sticker from
+		// this company's own pad. Not locked here — importOrgParcelWithLabel
+		// locks and claims the row atomically, so a lost race surfaces
+		// as LABEL_ALREADY_SPENT and the caller retries.
+		var picked string
+		pickErr := pool.QueryRow(ctx, `
+			SELECT code FROM parcel_label_stock
+			WHERE "usedAt" IS NULL AND "infoAttachedAt" IS NULL AND "voidedAt" IS NULL
+			  AND "parcelOrgId" = $1::uuid
+			ORDER BY random() LIMIT 1`, orgID).Scan(&picked)
+		if errors.Is(pickErr, pgx.ErrNoRows) {
+			return "", "", &ParcelError{"NO_LABELS", "You have no unused labels left — ask Esoqo to issue a new pad"}
 		}
-		if !isUniqueViolation(err) {
-			return "", "", err
+		if pickErr != nil {
+			return "", "", pickErr
 		}
+		in.LabelCode = &picked
+		return importOrgParcelWithLabel(ctx, pool, orgID, in, externalRef, deliveryCode, serviceTicketNumber)
 	}
-	return "", "", &ParcelError{"CONFLICT", "Could not allocate a tracking code — try again"}
+
+	// A courier company never mints its own tracking code — Esoqo issues
+	// the pads and the company only spends them. Reaching here means the
+	// caller sent neither a label nor an auto-assign request.
+	return "", "", &ParcelError{"LABEL_REQUIRED", "Choose one of your unused labels, or let the system assign one"}
 }
 
 // importOrgParcelWithLabel — the sticker-first variant: claim one of

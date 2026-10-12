@@ -8,8 +8,8 @@ import {
   flushQueue, listQueued, offlineSupported, queueBooking, type QueuedBooking,
 } from './parcelOfflineQueue';
 import type {
-  CounterActions, CounterBookInput, CounterLabelInfo, CounterLinks,
-  CounterParcelRef, CounterPartyOption, CounterPricingOption,
+  CounterActions, CounterBookInput, CounterDraftInput, CounterLabelInfo, CounterLabelOption,
+  CounterLinks, CounterParcelRef, CounterPartyOption, CounterPricingOption,
 } from './ParcelCounterTypes';
 
 /**
@@ -96,7 +96,7 @@ export const CounterForm = forwardRef<CounterFormHandle, {
   const [loading, setLoading] = useState(false);
   const [notice, setNotice] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [done, setDone] = useState<{ code: string; kind: 'booked' | 'held' | 'queued' } | null>(null);
+  const [done, setDone] = useState<{ code: string; kind: 'booked' | 'held' | 'queued' | 'draft' } | null>(null);
   const [busy, setBusy] = useState(false);
   // Whether the Who/What/Measure dialog is open. A fresh scan of a
   // blank/held label opens it automatically; so does the "New booking"
@@ -106,6 +106,18 @@ export const CounterForm = forwardRef<CounterFormHandle, {
   const [intakeConfirmed, setIntakeConfirmed] = useState(false);
   const [confirmingIntake, setConfirmingIntake] = useState(false);
   const [confirmError, setConfirmError] = useState<string | null>(null);
+
+  // The label picker, for a portal that draws from a pad it never mints
+  // onto (see actions.listLabels). A clerk either names the sticker in
+  // their hand or lets the system claim one; either way the booking is
+  // refused until a label is accounted for, because a courier company
+  // can't conjure a code the way the Esoqo console can.
+  const [labelChoice, setLabelChoice] = useState<string | null>(null);
+  const [autoAssign, setAutoAssign] = useState(false);
+  const [labelOptions, setLabelOptions] = useState<CounterLabelOption[]>([]);
+  const [labelQuery, setLabelQuery] = useState('');
+  const [labelsBusy, setLabelsBusy] = useState(false);
+  const [draftBusy, setDraftBusy] = useState(false);
 
   const [senderName, setSenderName] = useState('');
   const [senderMsisdn, setSenderMsisdn] = useState('');
@@ -142,6 +154,24 @@ export const CounterForm = forwardRef<CounterFormHandle, {
   const scanRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => { if (scanbox !== false && !initialCode) scanRef.current?.focus(); }, [initialCode, scanbox]);
+
+  // A portal with a label wire draws from its own pad: the booking must
+  // name a sticker or have one assigned. A portal without one (the
+  // Esoqo console) mints codes server-side and never sees the picker.
+  const needsLabel = Boolean(actions.listLabels);
+
+  // Load the desk's unused labels while the picker is open, re-running
+  // as the clerk narrows the search.
+  useEffect(() => {
+    if (!composing || !actions.listLabels) return;
+    let alive = true;
+    setLabelsBusy(true);
+    void actions.listLabels(labelQuery)
+      .then((rows) => { if (alive) setLabelOptions(rows); })
+      .catch(() => {})
+      .finally(() => { if (alive) setLabelsBusy(false); });
+    return () => { alive = false; };
+  }, [composing, labelQuery, actions]);
 
   const load = useCallback(async (raw: string) => {
     const target = extractCode(raw);
@@ -282,11 +312,14 @@ export const CounterForm = forwardRef<CounterFormHandle, {
     return v.trim() !== '' && Number.isFinite(n) && n > 0 ? n : undefined;
   }
 
+  // The sticker this booking will be bound to, from a scan or a pick.
+  const chosenCode = loadedCode ?? labelChoice;
+
   // Anything worth not losing if the clerk backs out of the dialog —
   // decides whether the idle view offers "New booking" or "Continue
   // booking" for the next tap.
   const hasDraft = Boolean(
-    loadedCode || senderName.trim() || senderMsisdn.trim() || receiverName.trim() ||
+    loadedCode || labelChoice || senderName.trim() || senderMsisdn.trim() || receiverName.trim() ||
     receiverMsisdn.trim() || originLabel.trim() || destinationLabel.trim() ||
     itemDescription.trim() || weightKg.trim() || lengthCm.trim(),
   );
@@ -295,6 +328,9 @@ export const CounterForm = forwardRef<CounterFormHandle, {
     setLoadedCode(null);
     setCode('');
     setNotice(null);
+    setLabelChoice(null);
+    setAutoAssign(false);
+    setLabelQuery('');
     setSenderName(''); setSenderMsisdn(''); setReceiverName(''); setReceiverMsisdn('');
     setOriginLabel(''); setDestinationLabel(''); setItemType(''); setItemDescription('');
     setWeightKg(''); setLengthCm(''); setWidthCm(''); setHeightCm('');
@@ -332,6 +368,40 @@ export const CounterForm = forwardRef<CounterFormHandle, {
     });
   }
 
+  // The "not finished yet" exit. Where there's a draft store the clerk
+  // can park whatever they have — even a parcel code as ordinary as a
+  // sender name — and pick it up from the counter queue later, instead
+  // of losing it to a page change.
+  function saveDraft() {
+    if (!actions.saveDraft) return;
+    if (!hasDraft) { setError('Nothing to save yet — fill in at least one detail.'); return; }
+    setError(null);
+    setDraftBusy(true);
+    const input: CounterDraftInput = {
+      senderName: senderName.trim(), senderMsisdn: senderMsisdn.trim(),
+      receiverName: receiverName.trim(), receiverMsisdn: receiverMsisdn.trim(),
+      originLabel: originLabel.trim(), destinationLabel: destinationLabel.trim(),
+      parcelType: effectiveType || undefined,
+      weightKg: numOrUndef(weightKg),
+      lengthCm: numOrUndef(lengthCm), widthCm: numOrUndef(widthCm), heightCm: numOrUndef(heightCm),
+      declaredValueKes: numOrUndef(declaredValue),
+      contentsDeclared,
+      existingCode: chosenCode ?? undefined,
+      notes: itemDescription.trim() || undefined,
+    };
+    void actions.saveDraft(input).then((res) => {
+      setDraftBusy(false);
+      if (!res.ok) { setError(res.error); return; }
+      setDone({ code: res.code, kind: 'draft' });
+      setDoneSig(undefined);
+      setComposing(false);
+      say(`Draft saved ${res.code}`, 'assertive');
+    }).catch((e) => {
+      setDraftBusy(false);
+      setError(e instanceof Error ? e.message : 'Could not save that draft.');
+    });
+  }
+
   function book() {
     const missing: string[] = [];
     if (!senderName.trim()) missing.push('sender name');
@@ -345,6 +415,13 @@ export const CounterForm = forwardRef<CounterFormHandle, {
       setError(`Still needed: ${missing.join(', ')}.`);
       return;
     }
+    // A courier company never mints a label: the booking waits on a
+    // sticker named by the clerk or claimed by the system. The console
+    // (no label wire) skips this and mints as before.
+    if (needsLabel && !chosenCode && !autoAssign) {
+      setError('Give the parcel a label — pick one of your unused stickers, or choose "Assign a label for me".');
+      return;
+    }
     setError(null);
     setBusy(true);
     const input: CounterBookInput = {
@@ -356,7 +433,8 @@ export const CounterForm = forwardRef<CounterFormHandle, {
       lengthCm: numOrUndef(lengthCm), widthCm: numOrUndef(widthCm), heightCm: numOrUndef(heightCm),
       declaredValueKes: numOrUndef(declaredValue),
       contentsDeclared,
-      existingCode: loadedCode ?? undefined,
+      existingCode: chosenCode ?? undefined,
+      autoAssignLabel: !chosenCode && autoAssign ? true : undefined,
       notes: itemDescription.trim() || undefined,
     };
     void actions.bookParcel(input).then((res) => {
@@ -407,6 +485,7 @@ export const CounterForm = forwardRef<CounterFormHandle, {
         <p style={{ margin: '10px 0 2px', fontWeight: 700, fontSize: '1.1rem' }}>
           {done.kind === 'booked' ? 'Booked'
             : done.kind === 'queued' ? 'Held offline'
+            : done.kind === 'draft' ? 'Saved as a draft'
             : 'Saved to the label'} — <span className="mono">{done.code}</span>
         </p>
         <p className="sub" style={{ margin: 0 }}>
@@ -416,7 +495,9 @@ export const CounterForm = forwardRef<CounterFormHandle, {
               : 'Booked. Nobody has been texted yet — confirm the box is actually here to notify sender and receiver.'
             : done.kind === 'queued'
               ? 'No connection. This will be sent automatically the moment you are back online — the label is already on the box, so nothing is lost.'
-              : 'No booking yet — anyone who scans this code now sees what it is.'}
+              : done.kind === 'draft'
+                ? 'Not booked yet. Find it in the counter queue to finish it — nothing has been charged or texted.'
+                : 'No booking yet — anyone who scans this code now sees what it is.'}
         </p>
         {done.kind === 'booked' && !intakeConfirmed && (
           <div style={{ marginTop: 12 }}>
@@ -691,7 +772,10 @@ export const CounterForm = forwardRef<CounterFormHandle, {
                           }
                         }}
                       >
-                        {payBusy ? 'Processing…' : payMethod === 'CASH' ? 'Record cash payment' : 'Send M-Pesa prompt'}
+                        {payBusy ? 'Processing…'
+                          : payMethod === 'CASH' ? 'Record cash payment'
+                          : payError ? 'Send M-Pesa prompt again'
+                          : 'Send M-Pesa prompt'}
                       </button>
                     </div>
                   </div>
@@ -729,14 +813,24 @@ export const CounterForm = forwardRef<CounterFormHandle, {
               the prominent action is "next", not "go look at what you
               just did". */}
           <a className="btn btn-p btn-sm" href={links.nextHref}>Next customer</a>
+          {/* A held label or a saved draft is not finished work, so the
+              counter offers the way back into the same form with every
+              answer still filled in. */}
+          {(done.kind === 'held' || done.kind === 'draft') && (
+            <button className="btn btn-o btn-sm" type="button" onClick={() => { setDone(null); setComposing(true); }}>
+              Edit details
+            </button>
+          )}
           {done.kind === 'booked' && (
             <button className="btn btn-o btn-sm" type="button" onClick={() => window.print()}>
               <Icon name="print" size={13} />Print label
             </button>
           )}
-          <a className="btn btn-o btn-sm" href={links.parcelHref(done.code)}>
-            Open parcel
-          </a>
+          {done.kind !== 'draft' && (
+            <a className="btn btn-o btn-sm" href={links.parcelHref(done.code)}>
+              Open parcel
+            </a>
+          )}
         </div>
         <PrintStyles />
       </div>
@@ -836,18 +930,26 @@ export const CounterForm = forwardRef<CounterFormHandle, {
           onClose={() => setComposing(false)}
           footer={(
             <>
-              <button className="btn btn-p btn-sm" disabled={busy} onClick={book}>
+              <button className="btn btn-p btn-sm" disabled={busy || draftBusy} onClick={book}>
                 {busy ? 'Working…' : 'Book parcel'}
               </button>
+              {/* The not-finished-yet exit: park the half-filled booking
+                  so the queue keeps moving. Offered only where a portal
+                  has somewhere to keep it. */}
+              {actions.saveDraft && (
+                <button className="btn btn-o btn-sm" disabled={busy || draftBusy} onClick={saveDraft}>
+                  {draftBusy ? 'Saving…' : 'Save draft'}
+                </button>
+              )}
               {/* The early exit. Only offered when there's a label to
                   hold it against — without a code there is nowhere for
                   a partial record to live. */}
               {loadedCode && (
-                <button className="btn btn-o btn-sm" disabled={busy} onClick={holdAsLabel}>
+                <button className="btn btn-o btn-sm" disabled={busy || draftBusy} onClick={holdAsLabel}>
                   Save to label only
                 </button>
               )}
-              <button className="btn btn-o btn-sm" disabled={busy} onClick={() => setComposing(false)}>
+              <button className="btn btn-o btn-sm" disabled={busy || draftBusy} onClick={() => setComposing(false)}>
                 Cancel
               </button>
               <span className="sub" style={{ fontSize: '.78rem', marginLeft: 'auto' }}>
@@ -864,6 +966,73 @@ export const CounterForm = forwardRef<CounterFormHandle, {
                 <Icon name="close" size={12} />Detach
               </button>
             </div>
+          )}
+
+          {/* The label, for a desk that never mints its own codes: name
+              the sticker in hand, or let the system claim the next
+              unused one. A scanned label above already answers this, so
+              the picker stays out of the way when there is one. */}
+          {needsLabel && !loadedCode && (
+            <Section title="Label">
+              {labelChoice ? (
+                <div className="row" style={{ gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
+                  <span className="pill p-info"><Icon name="qr" size={12} />{labelChoice}</span>
+                  <span className="sub" style={{ fontSize: '.8rem' }}>booking will be bound to this sticker</span>
+                  <button
+                    type="button"
+                    className="btn btn-o btn-sm"
+                    onClick={() => { setLabelChoice(null); setAutoAssign(false); }}
+                  >
+                    <Icon name="close" size={12} />Change
+                  </button>
+                </div>
+              ) : (
+                <>
+                  <input
+                    className="mono"
+                    style={{ ...INPUT, textTransform: 'uppercase' }}
+                    value={labelQuery}
+                    onChange={(e) => setLabelQuery(e.target.value.toUpperCase())}
+                    placeholder="Search your unused labels, or leave blank for the newest"
+                    aria-label="Search unused labels"
+                    autoComplete="off"
+                  />
+                  <div style={{ maxHeight: 168, overflowY: 'auto', margin: '6px 0', border: '1px solid var(--line)', borderRadius: 6 }}>
+                    {labelsBusy && <p className="sub" style={{ padding: '8px 10px', margin: 0 }}>Loading labels…</p>}
+                    {!labelsBusy && labelOptions.length === 0 && (
+                      <p className="sub" style={{ padding: '8px 10px', margin: 0 }}>
+                        No unused labels match. Order more from Labels, or let the system assign one below.
+                      </p>
+                    )}
+                    {labelOptions.map((o) => (
+                      <button
+                        key={o.code}
+                        type="button"
+                        onClick={() => { setLabelChoice(o.code); setAutoAssign(false); }}
+                        style={{
+                          display: 'flex', justifyContent: 'space-between', gap: 8, width: '100%',
+                          textAlign: 'left', padding: '7px 10px', background: 'none', border: 0,
+                          borderBottom: '1px solid var(--line)', cursor: 'pointer',
+                        }}
+                      >
+                        <span className="mono">{o.code}</span>
+                        {o.createdAt && !Number.isNaN(Date.parse(o.createdAt)) && (
+                          <span className="sub" style={{ fontSize: '.75rem' }}>
+                            {new Date(o.createdAt).toLocaleDateString()}
+                          </span>
+                        )}
+                      </button>
+                    ))}
+                  </div>
+                  <label style={{ display: 'flex', gap: 8, alignItems: 'flex-start' }}>
+                    <input type="checkbox" checked={autoAssign} onChange={(e) => setAutoAssign(e.target.checked)} style={{ marginTop: 3 }} />
+                    <span className="sub">
+                      Assign a label for me — the system claims the next unused sticker from this desk's pad.
+                    </span>
+                  </label>
+                </>
+              )}
+            </Section>
           )}
 
           <Section title="Who">

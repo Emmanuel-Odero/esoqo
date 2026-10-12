@@ -75,6 +75,17 @@ type BookParcelInput struct {
 	// unused pool and spends it atomically with the insert instead of
 	// generating a new fleetqr code.
 	ExistingCode *string
+	// AutoAssignLabel — the caller has left the choice of sticker to
+	// the system: BookParcel claims a random still-blank label from
+	// [BinderOrgID]'s own unused stock and spends it, rather than
+	// minting a fresh code. This is the "assign one for me" option a
+	// courier company's counter offers next to picking a specific
+	// sticker, and the reason a company never needs to mint at all:
+	// Esoqo issues the pads, the company only ever spends them.
+	//
+	// Ignored when ExistingCode is set (an explicit pick always wins).
+	// Requires BinderOrgID — there is no pool to draw from otherwise.
+	AutoAssignLabel bool
 
 	// LengthCm/WidthCm/HeightCm — measured at intake, for the volumetric
 	// weight a bulky parcel is charged on (see VolumetricKg). All three
@@ -448,6 +459,52 @@ func BookParcel(ctx context.Context, pool *pgxpool.Pool, in BookParcelInput) (pa
 		// DRAFT_PENDING_PAYMENT with no SLA regardless of what the
 		// caller actually asked for. One insert, shared, so the two
 		// paths can't drift apart like that again.
+		if err := insertParcelRow(ctx, tx, code, deliveryCode, serviceTicketNumber, originMethod, in, pricing, coverageFeeKes, &parcelID); err != nil {
+			return "", "", "", "", err
+		}
+		if _, err := tx.Exec(ctx, `
+			UPDATE parcel_label_stock SET "usedAt" = now(), "usedByParcelId" = $1 WHERE id = $2`,
+			parcelID, stockID); err != nil {
+			return "", "", "", "", err
+		}
+		if err := tx.Commit(ctx); err != nil {
+			return "", "", "", "", err
+		}
+		return parcelID, code, deliveryCode, serviceTicketNumber, nil
+	}
+
+	if in.AutoAssignLabel {
+		// "Assign one for me": a random still-blank sticker from the
+		// binder's own pad, spent atomically with the insert. SKIP LOCKED
+		// so two clerks tapping the same option at the same moment pick
+		// different stickers instead of racing for one. Scoped to
+		// BinderOrgID, never the shared pool: a courier company draws on
+		// its own pad, which is the whole point of not minting.
+		if in.BinderOrgID == nil || *in.BinderOrgID == "" {
+			return "", "", "", "", &ParcelError{"BAD_INPUT", "Auto-assign needs a company to draw labels from"}
+		}
+		tx, terr := pool.Begin(ctx)
+		if terr != nil {
+			return "", "", "", "", terr
+		}
+		defer func() { _ = tx.Rollback(ctx) }()
+		var stockID string
+		lockErr := tx.QueryRow(ctx, `
+			SELECT id, code
+			FROM parcel_label_stock
+			WHERE "usedAt" IS NULL AND "infoAttachedAt" IS NULL AND "voidedAt" IS NULL
+			  AND "parcelOrgId" = $1::uuid
+			ORDER BY random()
+			LIMIT 1
+			FOR UPDATE SKIP LOCKED`, *in.BinderOrgID).Scan(&stockID, &code)
+		if errors.Is(lockErr, pgx.ErrNoRows) {
+			// Distinct from LABEL_ALREADY_SPENT: nothing was picked, so
+			// the offline queue must not mistake this for "already booked".
+			return "", "", "", "", &ParcelError{"NO_LABELS", "You have no unused labels left — ask Esoqo to issue a new pad"}
+		}
+		if lockErr != nil {
+			return "", "", "", "", lockErr
+		}
 		if err := insertParcelRow(ctx, tx, code, deliveryCode, serviceTicketNumber, originMethod, in, pricing, coverageFeeKes, &parcelID); err != nil {
 			return "", "", "", "", err
 		}
@@ -1250,8 +1307,10 @@ func PayParcelWithPoints(ctx context.Context, pool *pgxpool.Pool, code, partyID 
 // money: same parcel, same tenancy, same PAY_AT_COUNTER/not-already-paid/
 // not-closed/price-band checks either way — only what happens once
 // through the gate differs (write paidAt immediately vs. push an STK
-// request and wait for its callback).
-func validateCounterSettlement(ctx context.Context, pool *pgxpool.Pool, code string, priceKes float64, orgScope *string) (parcelID string, err error) {
+// request and wait for its callback). The cash flag distinguishes the
+// two: the cash rail additionally requires the company to accept cash
+// (ParcelOrg.acceptsCash), while the M-Pesa rail never does.
+func validateCounterSettlement(ctx context.Context, pool *pgxpool.Pool, code string, priceKes float64, orgScope *string, cash bool) (parcelID string, err error) {
 	if priceKes <= 0 {
 		return "", &ParcelError{"BAD_INPUT", "Enter what the sender actually paid"}
 	}
@@ -1282,6 +1341,18 @@ func validateCounterSettlement(ctx context.Context, pool *pgxpool.Pool, code str
 	// acting with an explicit capability — no narrowing to apply.
 	if orgScope != nil && (parcelOrgID == nil || *parcelOrgID != *orgScope) {
 		return "", &ParcelError{"NOT_FOUND", "That parcel was not found"}
+	}
+	// A company can switch cash off entirely (ParcelOrg.acceptsCash). Only
+	// the cash rail is refused here — SettleCounterParcelStk passes
+	// cash=false, so the M-Pesa path is untouched.
+	if cash && parcelOrgID != nil {
+		var acceptsCash bool
+		if err := pool.QueryRow(ctx, `SELECT "acceptsCash" FROM parcel_org WHERE id = $1`, *parcelOrgID).Scan(&acceptsCash); err != nil {
+			return "", err
+		}
+		if !acceptsCash {
+			return "", &ParcelError{"FORBIDDEN", "This company doesn't take cash — send an M-Pesa prompt instead"}
+		}
 	}
 	if paymentMethod != nil && *paymentMethod != "PAY_AT_COUNTER" {
 		return "", &ParcelError{"BAD_INPUT", "This parcel wasn't booked to be paid at the counter"}
@@ -1320,7 +1391,7 @@ func validateCounterSettlement(ctx context.Context, pool *pgxpool.Pool, code str
 // Required (unlike the STK path, which confirms itself): cash has no
 // other record of whose hands it passed through.
 func SettleCounterParcel(ctx context.Context, pool *pgxpool.Pool, code string, priceKes float64, staffID string, orgScope *string) (parcelID string, err error) {
-	parcelID, err = validateCounterSettlement(ctx, pool, code, priceKes, orgScope)
+	parcelID, err = validateCounterSettlement(ctx, pool, code, priceKes, orgScope, true)
 	if err != nil {
 		return "", err
 	}
@@ -1379,7 +1450,7 @@ func SettleCounterParcel(ctx context.Context, pool *pgxpool.Pool, code string, p
 // AttachCounterParcelPaymentCheckoutID on success or
 // ReleaseCounterParcelPaymentReservation on failure.
 func SettleCounterParcelStk(ctx context.Context, pool *pgxpool.Pool, code string, priceKes float64, orgScope *string) (parcelID, reservation string, err error) {
-	parcelID, err = validateCounterSettlement(ctx, pool, code, priceKes, orgScope)
+	parcelID, err = validateCounterSettlement(ctx, pool, code, priceKes, orgScope, false)
 	if err != nil {
 		return "", "", err
 	}
@@ -5429,6 +5500,33 @@ func UpdateOwnParcelDetails(ctx context.Context, pool *pgxpool.Pool, code, party
 	}
 	if tag.RowsAffected() == 0 {
 		return &ParcelError{"BAD_INPUT", "Only a draft or paid, not-yet-picked-up parcel you booked can be edited"}
+	}
+	return nil
+}
+
+// UpdateOrgParcelDetails is the courier company's own correction of a
+// parcel it booked at the desk: the same receiver name/phone,
+// destination and notes fields UpdateParcelDetails lets an admin fix,
+// but scoped by code + parcelOrgId so a clerk can correct their own
+// company's typo without an operator. Same "before the first pickup"
+// window CancelParcel/UpdateParcelDetails already draw — once a courier
+// has taken custody the box is labelled and moving. Sender/origin stay
+// out of reach here for the same reason they do for the admin: origin
+// is the paying account, not a desk-editable detail.
+func UpdateOrgParcelDetails(ctx context.Context, pool *pgxpool.Pool, orgID, code, receiverName, receiverMsisdn, destinationLabel string, notes *string) error {
+	if strings.TrimSpace(receiverName) == "" || strings.TrimSpace(receiverMsisdn) == "" || strings.TrimSpace(destinationLabel) == "" {
+		return &ParcelError{"BAD_INPUT", "Receiver name, phone and destination are required"}
+	}
+	tag, err := pool.Exec(ctx, `
+		UPDATE parcel SET "receiverName" = $1, "receiverMsisdn" = $2, "destinationLabel" = $3, notes = $4
+		WHERE code = $5 AND "parcelOrgId" = $6
+		  AND status IN ('DRAFT_PENDING_PAYMENT', 'BOOKED', 'RECEIVED_AT_COUNTER')`,
+		receiverName, receiverMsisdn, destinationLabel, notes, code, orgID)
+	if err != nil {
+		return err
+	}
+	if tag.RowsAffected() == 0 {
+		return &ParcelError{"BAD_INPUT", "Only your own not-yet-picked-up parcel can be edited"}
 	}
 	return nil
 }

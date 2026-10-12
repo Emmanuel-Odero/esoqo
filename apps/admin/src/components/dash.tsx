@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useRef } from 'react';
-import { Icon } from '@esoqo/ui';
+import { Icon, formatKes } from '@esoqo/ui';
 
 /**
  * Shared dashboard building blocks — extends the existing .kpi/.card/.tbl
@@ -117,7 +117,7 @@ export function StackedBar({
         {segments.map((s) => (
           <div key={s.label}>
             <i style={{ background: s.color }} />
-            {s.label} — {Math.round((s.value / total) * 100)}% · KES {Math.round(s.value).toLocaleString('en-KE')}
+            {s.label} — {Math.round((s.value / total) * 100)}% · {formatKes(s.value)}
           </div>
         ))}
       </div>
@@ -159,12 +159,12 @@ export function SplitPair({
     <div className="splitpair">
       <div>
         <span className="sl">Gross volume (GMV)</span>
-        <span className="sn">KES {Math.round(gmvKes).toLocaleString('en-KE')}</span>
+        <span className="sn">{formatKes(gmvKes)}</span>
         <span className="sd">Everything moving through Esoqo — giving, treasury, commerce, fees, ticketing.</span>
       </div>
       <div>
         <span className="sl">Esoqo&rsquo;s own take</span>
-        <span className="sn" style={{ color: 'var(--green)' }}>KES {Math.round(takeKes).toLocaleString('en-KE')}</span>
+        <span className="sn" style={{ color: 'var(--green)' }}>{formatKes(takeKes)}</span>
         <span className="sd">Commission earned on store commerce only, today — see the note on this metric below.</span>
       </div>
     </div>

@@ -89,7 +89,7 @@ export default async function ParcelOrgCounterPage({
             cost every counter session a second form to scroll past. */}
         {canWrite && (
           <div className="actions">
-            <CustomParcelPanel />
+            <CustomParcelPanel acceptsCash={me.org.acceptsCash !== false} />
           </div>
         )}
       </div>
@@ -110,6 +110,7 @@ export default async function ParcelOrgCounterPage({
             initial={queue.tickets}
             initialActive={queue.active}
             initialHistory={history?.ok ? history.tickets : []}
+            acceptsCash={me.org.acceptsCash !== false}
           />
         </div>
       )}
@@ -119,6 +120,7 @@ export default async function ParcelOrgCounterPage({
         volumetricDivisor={divisor}
         orgName={me.org.name}
         orgLogoUrl={me.org.logoUrl ?? undefined}
+        acceptsCash={me.org.acceptsCash !== false}
       />
     </>
   );

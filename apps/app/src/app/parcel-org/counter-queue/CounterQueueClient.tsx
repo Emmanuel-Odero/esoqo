@@ -111,10 +111,14 @@ export function CounterQueueClient({
   initial,
   initialActive,
   initialHistory,
+  acceptsCash = true,
 }: {
   initial: CounterTicketRow[];
   initialActive: CounterTicketRow[];
   initialHistory: CounterTicketRow[];
+  /** ParcelOrg.acceptsCash — hides the cash rail in the serving panel
+   *  when the company takes no cash. */
+  acceptsCash?: boolean;
 }) {
   const [tickets, setTickets] = useState(initial);
   const [active, setActive] = useState(initialActive);
@@ -275,6 +279,7 @@ export function CounterQueueClient({
             onDismiss={dismissPanel}
             onDone={finishPanel}
             onReleased={releasedPanel}
+            acceptsCash={acceptsCash}
           />
         )}
 

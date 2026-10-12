@@ -3,6 +3,7 @@ package httpapi
 import (
 	"encoding/json"
 	"net/http"
+	"strings"
 	"time"
 
 	"github.com/gin-gonic/gin"
@@ -115,6 +116,38 @@ func (s *Server) handleStreamCounterTicket(c *gin.Context) {
 		}
 		w.writeJSON("ticket", t)
 	})
+}
+
+type createOrgCounterDraftRequest struct {
+	Msisdn       string          `json:"msisdn"`
+	DraftDetails json.RawMessage `json:"draftDetails"`
+}
+
+// handleCreateOrgCounterTicket — POST /v1/parcel-orgs/me/counter-tickets.
+// A clerk's own "save draft": the authenticated counterpart to the
+// public kiosk create above. Creates a CLAIMED ticket carrying the
+// partial booking's draftDetails so it shows up as this clerk's
+// in-service case and can be resumed (and later booked) from the
+// counter queue. No phone required — a desk may only have a name so
+// far. See dbx.CreateOrgCounterDraft.
+func (s *Server) handleCreateOrgCounterTicket(c *gin.Context) {
+	orgID := s.orgCtx(c, authsvc.CapParcelOrgIntake)
+	if orgID == "" {
+		return
+	}
+	var req createOrgCounterDraftRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		writeError(c, http.StatusBadRequest, "INVALID_REQUEST", err.Error())
+		return
+	}
+	ctx := ctxFromGin(c)
+	t, err := dbx.CreateOrgCounterDraft(
+		c.Request.Context(), s.Pool, orgID, ctx.ActorID, req.Msisdn, req.DraftDetails)
+	if err != nil {
+		writeParcelError(c, err)
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"ticket": t, "code": t.ServiceTicketNumber})
 }
 
 // handleListCounterTicketQueue — GET /v1/parcel-orgs/me/counter-tickets/queue.
@@ -252,6 +285,7 @@ type bookCounterTicketRequest struct {
 	SenderDeclaredContents *string  `json:"senderDeclaredContents"`
 	DeclaredValueKes       *float64 `json:"declaredValueKes"`
 	LabelCode              *string  `json:"labelCode"`
+	AutoAssignLabel        bool     `json:"autoAssignLabel"`
 }
 
 // handleBookCounterTicket — POST
@@ -270,6 +304,13 @@ func (s *Server) handleBookCounterTicket(c *gin.Context) {
 		return
 	}
 	ctx := ctxFromGin(c)
+	// A company never mints: it picks one of its own stickers or has the
+	// system assign one. Refused here rather than minting a code the
+	// company never owned.
+	if (req.LabelCode == nil || strings.TrimSpace(*req.LabelCode) == "") && !req.AutoAssignLabel {
+		writeError(c, http.StatusBadRequest, "LABEL_REQUIRED", "Choose one of your unused labels, or let the system assign one")
+		return
+	}
 	parcelID, code, serviceTicketNumber, err := dbx.BookParcelFromCounterTicket(
 		c.Request.Context(), s.Pool, c.Param("id"), orgID, ctx.ActorID,
 		dbx.CounterTicketBookingInput{
@@ -280,6 +321,7 @@ func (s *Server) handleBookCounterTicket(c *gin.Context) {
 			SenderDeclaredContents: req.SenderDeclaredContents,
 			DeclaredValueKes:       req.DeclaredValueKes,
 			LabelCode:              req.LabelCode,
+			AutoAssignLabel:        req.AutoAssignLabel,
 		})
 	if err != nil {
 		writeParcelError(c, err)

@@ -45,6 +45,17 @@ func RemitCounterCash(ctx context.Context, pool *pgxpool.Pool, orgID, collectedB
 	if amountKes < 0 {
 		return "", 0, &ParcelError{"BAD_INPUT", "That isn't a valid amount"}
 	}
+	// A company can switch cash off entirely (ParcelOrg.acceptsCash). If
+	// it has, there should never be counter cash to count in, but the
+	// switch also closes this action so an in-flight parcel can't be
+	// settled in cash through a stale screen.
+	var acceptsCash bool
+	if err := pool.QueryRow(ctx, `SELECT "acceptsCash" FROM parcel_org WHERE id = $1`, orgID).Scan(&acceptsCash); err != nil {
+		return "", 0, err
+	}
+	if !acceptsCash {
+		return "", 0, &ParcelError{"FORBIDDEN", "This company doesn't take cash"}
+	}
 
 	tx, err := pool.Begin(ctx)
 	if err != nil {

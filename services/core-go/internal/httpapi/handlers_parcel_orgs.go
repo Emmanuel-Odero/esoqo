@@ -345,6 +345,7 @@ func (s *Server) handleGetMyParcelOrg(c *gin.Context) {
 			"id": org.ID, "name": org.Name, "slug": org.Slug, "status": org.Status,
 			"logoUrl": org.LogoUrl, "brandAccent": org.BrandAccent,
 			"offersTransport": org.OffersTransport,
+			"acceptsCash":     org.AcceptsCash,
 		},
 		"stats":        stats,
 		"role":         ctx.ActorType,
@@ -587,6 +588,10 @@ func (s *Server) handleListMyOrgParcels(c *gin.Context) {
 	overdue := c.Query("overdue") == "1" || strings.EqualFold(c.Query("overdue"), "true")
 	// ?locked=1 — the receiver-authentication escalation queue.
 	locked := c.Query("locked") == "1" || strings.EqualFold(c.Query("locked"), "true")
+	// ?complete=1 — only processed-and-paid parcels (see
+	// ListOrgParcelsFilter.CompleteOnly). The register's own view; the
+	// counter's label lookup and the receiving scanner omit it.
+	complete := c.Query("complete") == "1" || strings.EqualFold(c.Query("complete"), "true")
 	limit, offset := 25, 0
 	if v := strings.TrimSpace(c.Query("limit")); v != "" {
 		if n, err := strconv.Atoi(v); err == nil {
@@ -616,7 +621,8 @@ func (s *Server) handleListMyOrgParcels(c *gin.Context) {
 	res, err := dbx.ListOrgParcelsPage(c.Request.Context(), s.Pool, orgID, dbx.ListOrgParcelsFilter{
 		Status: status, OriginMethod: originMethod, Q: q,
 		ParcelType: parcelType, OverdueOnly: overdue, LockedOnly: locked,
-		Sort: c.Query("sort"), Order: c.Query("order"),
+		CompleteOnly: complete,
+		Sort:         c.Query("sort"), Order: c.Query("order"),
 		Limit: limit, Offset: offset,
 	})
 	if err != nil {
@@ -661,6 +667,10 @@ type importParcelRequest struct {
 	// by tail search on the custom-parcel form. Its code becomes the
 	// parcel's tracking code (see dbx.ImportOrgParcel).
 	LabelCode *string `json:"labelCode"`
+	// AutoAssignLabel — let the system claim a random unused label from
+	// the company's own pad. One of LabelCode / AutoAssignLabel is
+	// required: a courier company never mints its own tracking code.
+	AutoAssignLabel bool `json:"autoAssignLabel"`
 }
 
 // handleImportOrgParcel — POST /v1/parcel-orgs/me/parcels. Registers a
@@ -684,6 +694,13 @@ func (s *Server) handleImportOrgParcel(c *gin.Context) {
 	if !requireMsisdn(c, &req.ReceiverMsisdn, "The receiver's phone number") {
 		return
 	}
+	// Same rule as the counter: a company registers an imported parcel
+	// onto its own sticker. Without one, it must ask the system to
+	// assign one — it never gets Esoqo to mint it a fresh code.
+	if (req.LabelCode == nil || strings.TrimSpace(*req.LabelCode) == "") && !req.AutoAssignLabel {
+		writeError(c, http.StatusBadRequest, "LABEL_REQUIRED", "Choose one of your unused labels, or let the system assign one")
+		return
+	}
 	id, code, err := dbx.ImportOrgParcel(c.Request.Context(), s.Pool, orgID, dbx.ImportParcelInput{
 		ExternalRef:      req.ExternalRef,
 		ExternalSource:   req.ExternalSource,
@@ -698,12 +715,41 @@ func (s *Server) handleImportOrgParcel(c *gin.Context) {
 		Fragile:          req.Fragile,
 		Notes:            req.Notes,
 		LabelCode:        req.LabelCode,
+		AutoAssignLabel:  req.AutoAssignLabel,
 	})
 	if err != nil {
 		writeParcelError(c, err)
 		return
 	}
 	c.JSON(http.StatusCreated, gin.H{"id": id, "code": code})
+}
+
+// handleUpdateMyOrgParcelDetails — PATCH /v1/parcel-orgs/me/parcels/:code.
+// A clerk correcting a parcel their own company booked at the desk: a
+// mistyped receiver or destination on a pay-at-counter shipment, before
+// a courier has taken it. See dbx.UpdateOrgParcelDetails for the field
+// set and the before-pickup window. Gated on parcelorg.intake — the
+// same desk capability that created the booking, not a manager write.
+func (s *Server) handleUpdateMyOrgParcelDetails(c *gin.Context) {
+	orgID := s.orgCtx(c, authsvc.CapParcelOrgIntake)
+	if orgID == "" {
+		return
+	}
+	var req updateOwnParcelDetailsRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		writeError(c, http.StatusBadRequest, "INVALID_REQUEST", err.Error())
+		return
+	}
+	if !requireMsisdn(c, &req.ReceiverMsisdn, "The receiver's phone number") {
+		return
+	}
+	if err := dbx.UpdateOrgParcelDetails(
+		c.Request.Context(), s.Pool, orgID, c.Param("code"),
+		req.ReceiverName, req.ReceiverMsisdn, req.DestinationLabel, req.Notes); err != nil {
+		writeParcelError(c, err)
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"ok": true})
 }
 
 type counterBookRequest struct {
@@ -726,8 +772,14 @@ type counterBookRequest struct {
 	// alone — same rule the public booking endpoint applies.
 	ContentsDeclared bool    `json:"contentsDeclared"`
 	ExistingCode     *string `json:"existingCode"`
-	Notes            *string `json:"notes"`
-	Fragile          bool    `json:"fragile"`
+	// AutoAssignLabel — "assign one for me": claim a random unused label
+	// from the company's own pad instead of naming a specific code. A
+	// courier company never mints a label; it either picks a sticker
+	// (ExistingCode) or has the system pick one. One of the two is
+	// required — see handleCounterBookParcel.
+	AutoAssignLabel bool    `json:"autoAssignLabel"`
+	Notes           *string `json:"notes"`
+	Fragile         bool    `json:"fragile"`
 }
 
 // handleCounterBookParcel — POST /v1/parcel-orgs/me/counter/book. The
@@ -759,6 +811,14 @@ func (s *Server) handleCounterBookParcel(c *gin.Context) {
 	if !requireMsisdn(c, &req.ReceiverMsisdn, "The receiver's phone number") {
 		return
 	}
+	// A courier company books against a sticker, always. Esoqo mints the
+	// pad; the company only ever spends it, so a booking with neither a
+	// chosen label nor "assign one for me" is refused here rather than
+	// silently minting a fresh code the company never owned.
+	if (req.ExistingCode == nil || strings.TrimSpace(*req.ExistingCode) == "") && !req.AutoAssignLabel {
+		writeError(c, http.StatusBadRequest, "LABEL_REQUIRED", "Choose one of your unused labels, or let the system assign one, before booking")
+		return
+	}
 	ctx := ctxFromGin(c)
 	var contentsDeclaredByStaffID *string
 	if req.ContentsDeclared && ctx.ActorID != "" {
@@ -771,6 +831,7 @@ func (s *Server) handleCounterBookParcel(c *gin.Context) {
 		OriginLabel: req.OriginLabel, DestinationLabel: req.DestinationLabel, Notes: req.Notes,
 		ParcelType: req.ParcelType, WeightKg: req.WeightKg, Fragile: req.Fragile,
 		ExistingCode:     req.ExistingCode,
+		AutoAssignLabel:  req.AutoAssignLabel,
 		DeclaredValueKes: req.DeclaredValueKes, CoverageTierID: req.CoverageTierID,
 		ParcelOrgID: &orgID, OriginMethod: "SCHEDULED_PICKUP", PayAtCounter: true,
 		BinderOrgID: &orgID,
@@ -1304,6 +1365,13 @@ type parcelOrgRequest struct {
 	LocationHint  *string  `json:"locationHint"`
 	OpeningHours  *string  `json:"openingHours"`
 
+	// AcceptsCash — see ParcelOrg.acceptsCash's own schema comment. Off
+	// closes every cash path for the company; only M-Pesa is offered.
+	// Pointer so an omitted field defaults to true (the DB default)
+	// rather than a zero-value false that would silently stop a company
+	// taking cash.
+	AcceptsCash *bool `json:"acceptsCash"`
+
 	// Co-branded label assets. LogoUrl prints centered in the label
 	// header; null/empty = Esoqo branding alone.
 	LogoStorageKey *string `json:"logoStorageKey"`
@@ -1332,7 +1400,7 @@ func (r parcelOrgRequest) toInput() dbx.ParcelOrgInput {
 		ContactPerson: r.ContactPerson, ContactPhone: r.ContactPhone,
 		ContactEmail: r.ContactEmail, SettlementPhone: r.SettlementPhone,
 		CommissionPct: r.CommissionPct,
-		AcceptsWalkIn: r.AcceptsWalkIn, Lat: r.Lat, Lng: r.Lng,
+		AcceptsWalkIn: r.AcceptsWalkIn, AcceptsCash: r.AcceptsCash == nil || *r.AcceptsCash, Lat: r.Lat, Lng: r.Lng,
 		LocationHint: r.LocationHint, OpeningHours: r.OpeningHours,
 		LogoStorageKey: r.LogoStorageKey, LogoUrl: r.LogoUrl, BrandAccent: r.BrandAccent,
 		PayoutMethod: r.PayoutMethod, PayoutMsisdn: r.PayoutMsisdn, PayoutTillNumber: r.PayoutTillNumber,

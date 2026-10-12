@@ -24,7 +24,14 @@ export default async function BusCounterPage() {
     if (e instanceof ParcelOrgUnauthorised) redirect('/parcel-org/signed-out');
     throw e;
   }
-  if (!me.org.offersTransport || !me.capabilities.includes('parcelorg.transport-sell')) {
+  // Selling a seat at the counter is always cash, so a company that
+  // takes no cash (ParcelOrg.acceptsCash false) has no counter bus desk
+  // either — same as the parcel counter's own cash rail being hidden.
+  if (
+    !me.org.offersTransport ||
+    !me.capabilities.includes('parcelorg.transport-sell') ||
+    me.org.acceptsCash === false
+  ) {
     redirect('/parcel-org');
   }
 

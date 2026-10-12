@@ -2,7 +2,7 @@ import type { Metadata } from 'next';
 import Link from 'next/link';
 import type { Route } from 'next';
 import { redirect } from 'next/navigation';
-import { Icon } from '@esoqo/ui';
+import { Icon, formatKes } from '@esoqo/ui';
 import {
   ParcelOrgUnauthorised, getParcelOrgMe, parcelOrgFetch,
   type OrgParcelRow, type ParcelOrgTrendDay,
@@ -20,22 +20,21 @@ export const metadata: Metadata = {
 };
 
 /**
- * A courier company's own dashboard — the operator surface two of this
- * product's six personas (a parcel company, and its employees) had no
- * version of at all until now.
+ * A courier company's parcel register — the lookup desk a sender walks
+ * up to when they want to know where their parcel is, or to collect it.
+ *
+ * It lists only parcels that were actually processed and paid (see the
+ * complete=1 filter below): a parcel with a label on it and money taken
+ * is a parcel somebody will come asking about. Drafts, unpaid
+ * pay-at-counter bookings and imports still waiting on a drop-off live
+ * on Counter and Scanner instead. The filter box is the search a clerk
+ * uses when a parcel or its code is in hand.
  *
  * Everything on this page comes from core-go scoped to the session's
  * own ParcelOrgID. Nothing here takes an org id from the URL, which is
  * why the route has no [orgId] segment: there is exactly one company a
  * given login can be looking at, and making that a path parameter would
  * turn it into something a browser could edit.
- *
- * Reading order is the shift's own order: what needs a person right now
- * (the attention band), then the shape of the day (the KPI board), then
- * the week's throughput, then the register itself. The KPI tiles are
- * filters, not decoration — every number is a link to exactly the rows
- * behind it. The register is server-paginated against the same filter
- * the URL carries, so page 2 of "overdue only" stays overdue only.
  */
 
 interface Kpi {
@@ -102,6 +101,12 @@ export default async function ParcelOrgDashboard(
     if (parcelType) qs.set('parcelType', parcelType);
     if (overdueOnly) qs.set('overdue', '1');
     if (lockedOnly) qs.set('locked', '1');
+    // This register only ever lists parcels that were taken in, finished
+    // and paid — the ones a sender comes to the desk to look up or
+    // collect. Drafts, unpaid pay-at-counter bookings and imports still
+    // awaiting drop-off have their own surfaces (Counter, Scanner). See
+    // ListOrgParcelsFilter.CompleteOnly.
+    qs.set('complete', '1');
     if (sortKey !== 'created' || orderKey) {
       qs.set('sort', sortKey);
       if (orderKey) qs.set('order', orderKey);
@@ -141,6 +146,7 @@ export default async function ParcelOrgDashboard(
 
   const canSeeEarnings = me.capabilities.includes('parcelorg.earnings');
   const canDispatch = me.capabilities.includes('parcelorg.dispatch');
+  const canIntake = me.capabilities.includes('parcelorg.intake');
   const canCarry = me.capabilities.includes('parcelorg.carry');
 
   // The assign picker's options. Only a roster member with a linked
@@ -168,19 +174,10 @@ export default async function ParcelOrgDashboard(
 
   const earningsToday = Number(stats.earningsTodayKes);
   const earningsTodayLabel = Number.isFinite(earningsToday)
-    ? `KES ${earningsToday.toLocaleString('en-KE', { maximumFractionDigits: 0 })}`
+    ? formatKes(earningsToday)
     : '—';
 
   const kpis: Kpi[] = [
-    {
-      key: 'dropoff',
-      label: 'Awaiting drop-off',
-      sub: 'a sender is walking in',
-      value: stats.awaitingDropoff,
-      filter: 'status=BOOKED&originMethod=SELF_DROPOFF',
-      tone: 'a',
-      urgentWhenSet: true,
-    },
     {
       key: 'pickup',
       label: 'Ready to collect',
@@ -313,12 +310,12 @@ export default async function ParcelOrgDashboard(
       {/* This page reviews the register and nothing else. Scanning lives
           on /parcel-org/scan, booking (including the bulk import panel
           that used to render here) on /parcel-org/counter, and cash
-          reconciliation on /parcel-org/money — each one job, one page.
+          reconciliation on /parcel-org/overview — each one job, one page.
           Before that split this single screen booked parcels, counted
           rider float, and listed the register all at once. */}
 
       {/* ── the board. Every tile is the filter for its own number. ── */}
-      <nav className="kpis dashboard-kpis dashboard-kpis-7" aria-label="Parcels by stage">
+      <nav className="kpis dashboard-kpis" aria-label="Parcels by stage">
         {kpis.map((k) => {
           const cls = `kpi ${k.tone}${k.urgentWhenSet && k.value > 0 ? ' is-urgent' : ''}`;
           const body = (
@@ -411,6 +408,7 @@ export default async function ParcelOrgDashboard(
           hasFilter={hasFilter}
           canDispatch={canDispatch}
           canSeeEarnings={canSeeEarnings}
+          canIntake={canIntake}
           riders={riders}
           orgName={me.org.name}
           orgLogoUrl={me.org.logoUrl ?? undefined}

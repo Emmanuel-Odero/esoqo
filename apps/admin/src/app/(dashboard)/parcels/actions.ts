@@ -745,6 +745,11 @@ export interface ParcelOrg {
   /** The one physical front desk a sender can walk into — see the
    *  schema's own comment on ParcelOrg.acceptsWalkIn. */
   acceptsWalkIn: boolean;
+  /** Whether this company takes cash at all — see the schema's own
+   *  comment on ParcelOrg.acceptsCash. Off hides every cash rail for the
+   *  company (counter settlement, counter cash intake, counter bus seat
+   *  sale) and leaves M-Pesa alone. */
+  acceptsCash: boolean;
   /** This courier company also runs passenger buses — see the schema's
    *  own comment on ParcelOrg.offersTransport. Flips on the Bus/
    *  BusRoute/BusSchedule console and counter for this company. */
@@ -799,6 +804,7 @@ export interface ParcelOrgInput {
   settlementPhone?: string | null;
   commissionPct: number;
   acceptsWalkIn: boolean;
+  acceptsCash: boolean;
   offersTransport: boolean;
   lat?: number | null;
   lng?: number | null;
