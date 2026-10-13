@@ -45,7 +45,7 @@ type Phase =
 
 export function ScannerConsole({
   orgName, orgLogoUrl, initialRuns, canCarry, canDispatch, canIntake, canArrival,
-  canOverride, custodyCapable,
+  canOverride, custodyCapable, acceptsCash = true,
 }: {
   orgName: string;
   orgLogoUrl?: string;
@@ -56,6 +56,9 @@ export function ScannerConsole({
   canArrival: boolean;
   canOverride: boolean;
   custodyCapable: boolean;
+  /** ParcelOrg.acceptsCash — when false the fare panel offers M-Pesa
+   *  alone, with no cash rail. */
+  acceptsCash?: boolean;
 }) {
   const [text, setText] = useState('');
   const [phase, setPhase] = useState<Phase>({ k: 'idle' });
@@ -258,6 +261,7 @@ export function ScannerConsole({
           busy={busy}
           orgName={orgName}
           orgLogoUrl={orgLogoUrl}
+          acceptsCash={acceptsCash}
           onReceive={doReceive}
           onHandOver={(parcel) => setPhase({ k: 'handover', parcel })}
           onLoaded={(code, run) => {
@@ -303,7 +307,7 @@ function describe(t: ScanTarget): string {
  */
 function TargetPanel({
   target, runs, canCarry, canDispatch, canIntake, canArrival, custodyCapable,
-  busy, orgName, orgLogoUrl, onReceive, onHandOver, onLoaded, onSettled, onError, onReset,
+  busy, orgName, orgLogoUrl, acceptsCash, onReceive, onHandOver, onLoaded, onSettled, onError, onReset,
 }: {
   target: ScanTarget;
   runs: OrgShipment[];
@@ -315,6 +319,7 @@ function TargetPanel({
   busy: boolean;
   orgName: string;
   orgLogoUrl?: string;
+  acceptsCash: boolean;
   onReceive: (reference: string, then?: (code: string) => void) => void;
   onHandOver: (parcel: OrgParcelRow) => void;
   onLoaded: (code: string, run: OrgShipment) => void;
@@ -409,12 +414,18 @@ function TargetPanel({
   // "unpaid" stage below only ever covers online drafts.
   const fare = counterFareDue(parcel) ? (
     <div className="scan-fare">
-      <p><strong>Fare not collected yet.</strong> Take cash, or send an M-Pesa prompt to the sender or receiver.</p>
+      <p>
+        <strong>Fare not collected yet.</strong>{" "}
+        {acceptsCash
+          ? "Take cash, or send an M-Pesa prompt to the sender or receiver."
+          : "Send an M-Pesa prompt to the sender or receiver."}
+      </p>
       <SettleAtCounter
         code={parcel.code}
         receiverMsisdn={parcel.receiverMsisdn}
         paymentPending={parcel.paymentPending}
         disabled={busy || !canDispatch}
+        acceptsCash={acceptsCash}
         onDone={() => onSettled(parcel.code)}
         onError={onError}
       />
@@ -426,12 +437,18 @@ function TargetPanel({
       return (
         <Panel tone="warn" icon="coins" title="Not paid yet" code={parcel.code}>
           {head}
-          <p>Nothing can move until the fare is recorded. Take cash, or send an M-Pesa prompt to the payer&rsquo;s phone.</p>
+          <p>
+            Nothing can move until the fare is recorded.{" "}
+            {acceptsCash
+              ? "Take cash, or send an M-Pesa prompt to the payer\u2019s phone."
+              : "Send an M-Pesa prompt to the payer\u2019s phone."}
+          </p>
           <SettleAtCounter
             code={parcel.code}
             receiverMsisdn={parcel.receiverMsisdn}
             paymentPending={parcel.paymentPending}
             disabled={busy || !canDispatch}
+            acceptsCash={acceptsCash}
             onDone={() => onSettled(parcel.code)}
             onError={onError}
           />
@@ -690,12 +707,13 @@ function LabelNotes({ label }: { label: { itemDescription: string | null; destin
  *  prompt is already out resumes watching it rather than offering a
  *  second prompt the server would refuse. */
 function SettleAtCounter({
-  code, receiverMsisdn, paymentPending, disabled, onDone, onError,
+  code, receiverMsisdn, paymentPending, disabled, acceptsCash, onDone, onError,
 }: {
   code: string;
   receiverMsisdn: string;
   paymentPending: boolean;
   disabled: boolean;
+  acceptsCash: boolean;
   onDone: () => void;
   onError: (m: string) => void;
 }) {
@@ -744,7 +762,9 @@ function SettleAtCounter({
     >
       {note && <p className="hint" role="status" style={{ marginTop: 0 }}>{note}</p>}
       <div className="scan-settle-row" role="radiogroup" aria-label="Payment method">
-        <label><input type="radio" checked={method === 'CASH'} onChange={() => setMethod('CASH')} disabled={locked} /> Cash</label>
+        {acceptsCash && (
+          <label><input type="radio" checked={method === 'CASH'} onChange={() => setMethod('CASH')} disabled={locked} /> Cash</label>
+        )}
         <label><input type="radio" checked={method === 'MPESA'} onChange={() => setMethod('MPESA')} disabled={locked} /> M-Pesa prompt</label>
       </div>
       <label className="lab" htmlFor="settle-kes">{method === 'CASH' ? 'What did the payer hand over?' : 'Amount to charge'}</label>

@@ -42,18 +42,25 @@
 }
 .appbar .wsw-root { margin-right: auto }
 
-/* Desktop tabs — text only, active underline 2px green */
+/* Desktop tabs — a soft green pill marks the current screen; hover is a
+   quiet neutral wash. The active pill carries a hairline ring and a warm
+   drop shadow so it reads as pressed into the bar rather than recoloured. */
 .headnav { display: none }
 @media (min-width: 820px) {
-  .headnav { display: flex; align-items: center; gap: 2px }
+  .headnav { display: flex; align-items: center; gap: 3px }
   .headnav a {
     display: inline-flex; align-items: center; gap: 6px;
-    padding: 0 11px; min-height: 36px; border-radius: 8px;
-    font-size: .875rem; font-weight: 600; color: var(--tx-2);
-    border-bottom: 2px solid transparent; margin-bottom: -2px;
+    padding: 0 var(--nav-pad-x); min-height: 38px; border-radius: var(--r-pill);
+    font-size: .875rem; font-weight: 600; color: var(--nav-fg);
+    transition: background var(--dur) var(--ease-out), color var(--dur) var(--ease-out),
+      box-shadow var(--dur-slow) var(--ease-premium);
   }
-  .headnav a:hover { background: var(--paper); color: var(--navy) }
-  .headnav a[aria-current="page"] { color: var(--navy); border-bottom-color: var(--green) }
+  .headnav a:hover { background: var(--nav-hover-bg); color: var(--nav-fg-hover) }
+  .headnav a[aria-current="page"] {
+    color: var(--nav-fg-active); background: var(--nav-active-bg); font-weight: 700;
+    box-shadow: inset 0 0 0 1px var(--nav-ring), var(--nav-shadow-active);
+  }
+  .headnav a[aria-current="page"] svg { color: var(--nav-accent) }
 }
 .orgnav { display: none }
 @media (max-width: 819px) {
@@ -95,15 +102,21 @@
 }
 .tabbar a, .tabbar .more {
   flex: 1 1 0; min-width: 0; position: relative;
-  display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px;
+  display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 3px;
   padding: 7px 2px 6px; min-height: 56px;
   border: 0; background: none; cursor: pointer; font-family: inherit;
   font-size: .62rem; font-weight: 600; color: var(--tx-2);
+  transition: color var(--dur) var(--ease-out);
 }
-.tabbar a[aria-current="page"], .tabbar .more[aria-expanded="true"] { color: var(--green) }
+.tabbar a[aria-current="page"], .tabbar .more[aria-expanded="true"] { color: var(--nav-accent); font-weight: 700 }
+.tabbar a[aria-current="page"] svg, .tabbar .more[aria-expanded="true"] svg {
+  background: var(--nav-active-bg); border-radius: 10px; padding: 4px 9px;
+  box-shadow: inset 0 0 0 1px var(--nav-ring);
+}
 .tabbar a[aria-current="page"]::before {
   content: ''; position: absolute; top: 0; left: 50%; transform: translateX(-50%);
-  width: 28px; height: 2px; border-radius: 0 0 3px 3px; background: var(--green);
+  width: 30px; height: 3px; border-radius: 0 0 4px 4px;
+  background: linear-gradient(90deg, var(--nav-accent-2), var(--nav-accent));
 }
 @media (min-width: 820px) { .tabbar { display: none } }
 

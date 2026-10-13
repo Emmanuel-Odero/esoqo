@@ -171,11 +171,16 @@
 .dash-store strong { display:block; font-size:.88rem }
 .dash-store span { display:block; font-size:.72rem; color:var(--tx-2) }
 .dash-nav { display:flex; flex-direction:column; gap:2px }
-.dash-nav a { display:flex; align-items:center; gap:10px; padding:10px 12px; border-radius:8px;
-  font-size:.84rem; color:var(--tx-2); text-decoration:none; transition:background .15s, color .15s }
-.dash-nav a:hover { background:rgba(0,0,0,.03); color:var(--tx) }
-.dash-nav a.on, .dash-nav a[aria-current="page"] { background:#fff; color:var(--navy); font-weight:700;
-  box-shadow:var(--sh-s) }
+.dash-nav { display:flex; flex-direction:column; gap:2px }
+.dash-nav a { display:flex; align-items:center; gap:10px; padding:10px 12px; border-radius:10px;
+  font-size:.84rem; font-weight:600; color:var(--nav-fg); text-decoration:none;
+  transition:background var(--dur) var(--ease-out), color var(--dur) var(--ease-out),
+    box-shadow var(--dur-slow) var(--ease-premium) }
+.dash-nav a:hover { background:rgba(0,0,0,.03); color:var(--nav-fg-hover) }
+.dash-nav a.on, .dash-nav a[aria-current="page"] {
+  background:var(--nav-active-bg); color:var(--nav-fg-active); font-weight:700;
+  box-shadow:inset 0 0 0 1px var(--nav-ring), var(--nav-shadow-active) }
+.dash-nav a[aria-current="page"] .nav-icon { color:var(--nav-accent) }
 .dash-nav .nav-icon { width:20px; text-align:center; flex:none }
 .dash-main { padding:24px 28px 60px }
 .dash-top { display:flex; justify-content:space-between; align-items:flex-start; margin-bottom:20px; gap:12px; flex-wrap:wrap }

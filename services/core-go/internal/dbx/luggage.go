@@ -271,8 +271,8 @@ func insertLuggage(
 		INSERT INTO luggage_tag (
 			code, "tripId", "orgId", "ticketId", "passengerName", "passengerMsisdn",
 			"pieceNo", "pieceCount", "groupId", "dropStageId", "destinationLabel",
-			"weightKg", "excessFeeKes", "photoUrl"
-		) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12::decimal,$13::decimal,$14)
+			"weightKg", "excessFeeKes", "photoUrl", "updatedAt"
+		) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12::decimal,$13::decimal,$14,now())
 		RETURNING id::text, code, "tripId"::text, "orgId"::text, "ticketId"::text,
 		          "passengerName", "passengerMsisdn", "pieceNo", "pieceCount",
 		          "groupId"::text, "dropStageId"::text, "destinationLabel",

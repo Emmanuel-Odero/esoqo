@@ -166,8 +166,8 @@ func CreateCounterTicket(
 	err = retryUnique(func() error {
 		t.ServiceTicketNumber = fleetqr.ServiceTicketForName(personName)
 		return pool.QueryRow(ctx, `
-			INSERT INTO parcel_counter_ticket (id, "orgId", "serviceTicketNumber", msisdn, channel, status, "draftDetails")
-			VALUES (gen_random_uuid(), $1, $2, $3, $4::"ParcelCounterTicketChannel", 'WAITING', $5)
+			INSERT INTO parcel_counter_ticket (id, "orgId", "serviceTicketNumber", msisdn, channel, status, "draftDetails", "updatedAt")
+			VALUES (gen_random_uuid(), $1, $2, $3, $4::"ParcelCounterTicketChannel", 'WAITING', $5, now())
 			RETURNING id, "createdAt"`,
 			orgID, t.ServiceTicketNumber, msisdn, channel, nullableJSON(t.DraftDetails)).
 			Scan(&t.ID, &t.CreatedAt)
@@ -196,6 +196,75 @@ func mustMarshalCounterTicketEvent(ev CounterTicketEvent) string {
 		panic(err)
 	}
 	return string(b)
+}
+
+// CreateOrgCounterDraft — a clerk parking a half-filled counter booking
+// instead of losing it to a page change.
+//
+// Deliberately NOT CreateCounterTicket: that one is the public kiosk/QR
+// path, requires a phone number (the only fact a kiosk has) and only
+// exists for a company that takes walk-ins. A draft starts from an
+// authenticated desk that may have nothing but a sender's name yet, so
+// here the phone may be blank, the company only has to exist, and the
+// ticket is created CLAIMED by the saving clerk — it is that clerk's
+// own in-service case, resumable from the counter queue, not a
+// customer standing in line.
+func CreateOrgCounterDraft(
+	ctx context.Context, pool *pgxpool.Pool, orgID, staffID, msisdn string, draftDetails json.RawMessage,
+) (*ParcelCounterTicket, error) {
+	msisdn = strings.TrimSpace(msisdn)
+
+	var trading bool
+	err := pool.QueryRow(ctx, `SELECT true FROM parcel_org WHERE id = $1 AND status != 'SUSPENDED'`, orgID).Scan(&trading)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return nil, &ParcelError{"NOT_FOUND", "That company isn't available"}
+	}
+	if err != nil {
+		return nil, err
+	}
+
+	// The ticket number reads as a name off the board. A draft may only
+	// know the sender's name (or nothing), so it falls back to GUEST the
+	// same way the public path does.
+	var name struct {
+		SenderName      string `json:"senderName"`
+		SenderFirstName string `json:"senderFirstName"`
+		SenderLastName  string `json:"senderLastName"`
+	}
+	_ = json.Unmarshal(draftDetails, &name)
+	full := strings.TrimSpace(name.SenderName)
+	if full == "" {
+		full = strings.TrimSpace(name.SenderFirstName + " " + name.SenderLastName)
+	}
+	if full == "" {
+		full = "GUEST"
+	}
+
+	t := &ParcelCounterTicket{
+		OrgID: orgID, Msisdn: msisdn, Channel: "APP",
+		Status: "CLAIMED", DraftDetails: draftDetails,
+	}
+	if len(draftDetails) == 0 {
+		t.DraftDetails = nil
+	}
+	err = retryUnique(func() error {
+		t.ServiceTicketNumber = fleetqr.ServiceTicketForName(full)
+		return pool.QueryRow(ctx, `
+			INSERT INTO parcel_counter_ticket
+				(id, "orgId", "serviceTicketNumber", msisdn, channel, status, "draftDetails", "claimedByStaffId", "claimedAt", "updatedAt")
+			VALUES (gen_random_uuid(), $1, $2, $3, 'APP', 'CLAIMED', $4, $5, now(), now())
+			RETURNING id, "createdAt"`,
+			orgID, t.ServiceTicketNumber, msisdn, nullableJSON(t.DraftDetails), staffID).
+			Scan(&t.ID, &t.CreatedAt)
+	})
+	if err != nil {
+		return nil, err
+	}
+	if _, err := pool.Exec(ctx, `SELECT pg_notify($1, $2)`, CounterTicketChannel,
+		mustMarshalCounterTicketEvent(CounterTicketEvent{OrgID: orgID, TicketID: t.ID, Event: "created"})); err != nil {
+		return nil, err
+	}
+	return t, nil
 }
 
 // nullableJSON — pgx sends a nil json.RawMessage as SQL NULL only when
@@ -598,6 +667,10 @@ type CounterTicketBookingInput struct {
 	SenderDeclaredContents *string
 	DeclaredValueKes       *float64
 	LabelCode              *string
+	// AutoAssignLabel — claim a random unused label from the company's
+	// own pad instead of a specific code. One of LabelCode /
+	// AutoAssignLabel is required: the company never mints.
+	AutoAssignLabel bool
 }
 
 // BookParcelFromCounterTicket is the missing link between the walk-in
@@ -673,6 +746,7 @@ func BookParcelFromCounterTicket(ctx context.Context, pool *pgxpool.Pool, ticket
 		OriginMethod:              "SELF_DROPOFF",
 		PayAtCounter:              true,
 		ExistingCode:              in.LabelCode,
+		AutoAssignLabel:           in.AutoAssignLabel,
 		BinderOrgID:               &orgID,
 		ContentsDeclaredByStaffID: &staffID,
 		SenderDeclaredContents:    in.SenderDeclaredContents,

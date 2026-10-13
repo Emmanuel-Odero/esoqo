@@ -148,3 +148,27 @@ patches:
   target:
     kind: Deployment
     name: core-go
+# The document-upload Server Actions run in these five Next.js apps
+# (packages/db/src/storage.ts putObject writes under LOCAL_STORAGE_DIR),
+# not in core-service/core-go. Production sets STORAGE_PROVIDER=local
+# and LOCAL_STORAGE_DIR=/data/uploads (config.yaml), so without this
+# mount the apps inherit a path that exists on no volume and every
+# upload dies with EACCES trying to mkdir /data on the container's root
+# filesystem. Same PVC and mount point as above; fsGroup makes the
+# mount group-writable by the apps' uid (1001).
+- patch: |
+    - op: add
+      path: /spec/template/spec/volumes
+      value:
+        - name: media-storage
+          persistentVolumeClaim: { claimName: media-storage }
+    - op: add
+      path: /spec/template/spec/containers/0/volumeMounts
+      value:
+        - { name: media-storage, mountPath: /data/uploads }
+    - op: add
+      path: /spec/template/spec/securityContext/fsGroup
+      value: 1001
+  target:
+    kind: Deployment
+    labelSelector: app.kubernetes.io/name in (web,app,admin,store,jamii)

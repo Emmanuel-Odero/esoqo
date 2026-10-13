@@ -12,9 +12,11 @@ import {
   cancelCounterSettlementStk,
   confirmCounterSettlementManualCode,
   getCounterSettlementStatus,
+  listOrgCounterLabels,
   lookupOrgParcelByCode,
   receiveWalkInParcel,
   resolveOrgLabel,
+  saveOrgCounterDraft,
   searchOrgCounterParties,
   settleCounterParcel,
   settleCounterParcelStk,
@@ -47,12 +49,17 @@ export function OrgCounterClient({
   volumetricDivisor,
   orgName,
   orgLogoUrl,
+  acceptsCash = true,
 }: {
   initialCode?: string;
   pricing: CounterPricingOption[];
   volumetricDivisor: number;
   orgName: string;
   orgLogoUrl?: string;
+  // ParcelOrg.acceptsCash — when false the shared form hides the Cash
+  // radio entirely (it renders it only when settleCash is supplied), so
+  // a company that takes no cash offers M-Pesa alone.
+  acceptsCash?: boolean;
 }) {
   const announce = useAnnounce();
 
@@ -113,11 +120,19 @@ export function OrgCounterClient({
       const res = await resolveOrgLabel(code);
       return res.ok ? res.label.sig || undefined : undefined;
     },
-    settleCash: settleCounterParcel,
+    settleCash: acceptsCash ? settleCounterParcel : undefined,
     settleStk: settleCounterParcelStk,
     getSettlementStatus: getCounterSettlementStatus,
     cancelStk: cancelCounterSettlementStk,
     confirmManualCode: confirmCounterSettlementManualCode,
+    // A courier company never mints a label: the booking form's picker
+    // names one of this desk's own stickers, or asks for one to be
+    // assigned — required before Book. The Esoqo console leaves this
+    // unset and keeps minting server-side.
+    listLabels: listOrgCounterLabels,
+    // The clerk's "not finished yet" exit: park the partial booking in
+    // the counter queue as their own in-service case, resumable there.
+    saveDraft: saveOrgCounterDraft,
   };
 
   return (

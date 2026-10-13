@@ -158,6 +158,11 @@ export interface BookCounterTicketInput {
   destinationLabel: string;
   senderDeclaredContents?: string;
   labelCode?: string;
+  /** Let the system claim a random unused label from the company's own
+   *  pad — the alternative to picking a specific code. A courier
+   *  company never mints, so one of labelCode / autoAssignLabel is
+   *  required (core-go refuses with LABEL_REQUIRED). */
+  autoAssignLabel?: boolean;
 }
 
 /** The step a claimed ticket was always missing: turning the clerk's
@@ -185,6 +190,7 @@ export async function bookCounterTicket(
           destinationLabel: input.destinationLabel.trim(),
           senderDeclaredContents: input.senderDeclaredContents?.trim() || undefined,
           labelCode: input.labelCode || undefined,
+          autoAssignLabel: input.autoAssignLabel || undefined,
         }),
       },
     );

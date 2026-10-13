@@ -12,6 +12,7 @@ import {
   grantReceiverAuthRetry, reissueDeliveryCode, releaseHeldCourierEarnings,
 } from './actions';
 import { ParcelDrawer } from './ParcelDrawer';
+import { EditParcelDetails } from './EditParcelDetails';
 import { can, isInFlight, stageFor, statusLabel } from './parcel-stages';
 
 /**
@@ -23,6 +24,15 @@ import { can, isInFlight, stageFor, statusLabel } from './parcel-stages';
  * keeps every active filter. Sorting never reorders client-side: it
  * navigates, so page 2 of a sorted view is still the server's page 2.
  */
+
+/** A booking is still correctable while it sits as a draft or on the
+ *  shelf before pickup — the same window dbx.UpdateOrgParcelDetails
+ *  enforces server-side. Once a courier has it, the box is labelled. */
+function isEditable(status: string): boolean {
+  return status === 'DRAFT_PENDING_PAYMENT'
+    || status === 'BOOKED'
+    || status === 'RECEIVED_AT_COUNTER';
+}
 
 function pillClass(status: string): string {
   switch (status) {
@@ -62,6 +72,9 @@ interface Props {
   hasFilter: boolean;
   canDispatch: boolean;
   canSeeEarnings: boolean;
+  /** Whether this session can correct a booking's receiver/destination
+   *  (parcelorg.intake — the front desk's own capability). */
+  canIntake: boolean;
   /** Roster members who can take custody — the assign picker's options.
    *  Empty for a session that can't assign. */
   riders: ParcelOrgStaffRow[];
@@ -87,7 +100,7 @@ function buildHref(
 
 export function OrgParcelsTable({
   parcels, total, page, perPage, sort, order,
-  hasFilter, canDispatch, canSeeEarnings, riders, orgName, orgLogoUrl,
+  hasFilter, canDispatch, canSeeEarnings, canIntake, riders, orgName, orgLogoUrl,
 }: Props) {
   const pathname = usePathname();
   const searchParams = useSearchParams();
@@ -260,22 +273,36 @@ export function OrgParcelsTable({
           orgLogoUrl={orgLogoUrl}
           onClose={() => setOpen(null)}
           actions={
-            // A locked receiver outranks everything else this drawer
-            // can offer: the parcel has physically stopped, and
-            // assigning a rider to a box nobody can be handed is busy
-            // work. Same reason the lock gets a pill in the header.
-            canDispatch && needsReceiverAuthAction(open) ? (
-              <ReceiverAuthActions
-                parcel={open}
-                onDone={() => { setOpen(null); router.refresh(); }}
-              />
-            ) : canDispatch && can(stageFor(open.status), 'assign') ? (
-              <AssignAction
-                code={open.code}
-                riders={riders}
-                onDone={() => { setOpen(null); router.refresh(); }}
-              />
-            ) : undefined
+            <>
+              {/* A wrong receiver or destination on a booked-but-unpaid
+                  parcel used to have no way back in. The correction and
+                  the dispatch verbs can both apply, so they render
+                  together rather than one hiding the other. */}
+              {canIntake && isEditable(open.status) && (
+                <EditParcelDetails
+                  parcel={open}
+                  onDone={() => { setOpen(null); router.refresh(); }}
+                />
+              )}
+              {
+                // A locked receiver outranks everything else this drawer
+                // can offer: the parcel has physically stopped, and
+                // assigning a rider to a box nobody can be handed is busy
+                // work. Same reason the lock gets a pill in the header.
+                canDispatch && needsReceiverAuthAction(open) ? (
+                  <ReceiverAuthActions
+                    parcel={open}
+                    onDone={() => { setOpen(null); router.refresh(); }}
+                  />
+                ) : canDispatch && can(stageFor(open.status), 'assign') ? (
+                  <AssignAction
+                    code={open.code}
+                    riders={riders}
+                    onDone={() => { setOpen(null); router.refresh(); }}
+                  />
+                ) : null
+              }
+            </>
           }
         />
       )}

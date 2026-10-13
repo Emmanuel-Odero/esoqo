@@ -79,6 +79,7 @@ export default async function ParcelOrgScanPage() {
         // Undefined means a core-go that predates the field — assume
         // capable, which is the behaviour that existed before it.
         custodyCapable={me.custodyCapable !== false}
+        acceptsCash={me.org.acceptsCash !== false}
       />
     </>
   );

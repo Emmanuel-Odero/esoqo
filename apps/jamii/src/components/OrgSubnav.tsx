@@ -17,6 +17,13 @@ export function OrgSubnav({ mode, navLinks }: { mode: OrgLinkMode; navLinks: Res
     ? navLinks
     : ORG_NAV_SECTIONS.map(([key, label]) => ({ key, label, href: orgHref(mode, key), external: false, newTab: false }));
 
+  // The org root (the shortest internal href) matches exactly; without
+  // this every section under it would also light up "Home", since every
+  // section path starts with the root path.
+  const base = links
+    .filter((l) => !l.external)
+    .reduce((shortest, l) => (l.href.length < shortest.length ? l.href : shortest), links[0]?.href ?? '');
+
   return (
     <nav className="subnav">
       <div className="wrap subnav-inner">
@@ -28,7 +35,7 @@ export function OrgSubnav({ mode, navLinks }: { mode: OrgLinkMode; navLinks: Res
               </a>
             );
           }
-          const on = pathname === l.href || pathname.startsWith(`${l.href}/`);
+          const on = pathname === l.href || (l.href !== base && pathname.startsWith(`${l.href}/`));
           return (
             <Link key={l.key} href={l.href as Route} aria-current={on ? 'page' : undefined}>{l.label}</Link>
           );
