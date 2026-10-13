@@ -41,25 +41,25 @@ labels:
 images:
 - name: ghcr.io/emmanuel-odero/esoqo-admin
   newName: ghcr.io/emmanuel-odero/esoqo-admin
-  newTag: ced644d8f18e
+  newTag: 23e27ec4345c
 - name: ghcr.io/emmanuel-odero/esoqo-app
   newName: ghcr.io/emmanuel-odero/esoqo-app
-  newTag: ced644d8f18e
+  newTag: 23e27ec4345c
 - name: ghcr.io/emmanuel-odero/esoqo-core-go
   newName: ghcr.io/emmanuel-odero/esoqo-core-go
-  newTag: ced644d8f18e
+  newTag: 23e27ec4345c
 - name: ghcr.io/emmanuel-odero/esoqo-core-service
   newName: ghcr.io/emmanuel-odero/esoqo-core-service
-  newTag: ced644d8f18e
+  newTag: 23e27ec4345c
 - name: ghcr.io/emmanuel-odero/esoqo-jamii
   newName: ghcr.io/emmanuel-odero/esoqo-jamii
-  newTag: ced644d8f18e
+  newTag: 23e27ec4345c
 - name: ghcr.io/emmanuel-odero/esoqo-store
   newName: ghcr.io/emmanuel-odero/esoqo-store
-  newTag: ced644d8f18e
+  newTag: 23e27ec4345c
 - name: ghcr.io/emmanuel-odero/esoqo-web
   newName: ghcr.io/emmanuel-odero/esoqo-web
-  newTag: ced644d8f18e
+  newTag: 23e27ec4345c
 
 # preview carries no real traffic — one replica each is enough, and it
 # halves what the cluster has to schedule.
