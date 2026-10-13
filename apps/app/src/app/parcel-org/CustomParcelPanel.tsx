@@ -58,6 +58,7 @@ interface CustomParcelDraft {
   fragile: boolean;
   notes: string;
   labelCode: string;
+  autoAssign: boolean;
 }
 
 function loadDraft(): CustomParcelDraft | null {
@@ -80,6 +81,7 @@ function loadDraft(): CustomParcelDraft | null {
       fragile: parsed.fragile === true,
       notes: typeof parsed.notes === 'string' ? parsed.notes : '',
       labelCode: typeof parsed.labelCode === 'string' ? parsed.labelCode : '',
+      autoAssign: parsed.autoAssign === true,
     };
   } catch {
     return null;
@@ -92,11 +94,11 @@ function hasContent(d: CustomParcelDraft): boolean {
     d.receiverName.trim() || d.receiverMsisdn.trim() ||
     d.originLabel.trim() || d.destinationLabel.trim() || d.notes.trim() ||
     d.weightKg.trim() || d.fragile || d.parcelType !== 'SMALL' ||
-    d.labelCode.trim(),
+    d.labelCode.trim() || d.autoAssign,
   );
 }
 
-export function CustomParcelPanel() {
+export function CustomParcelPanel({ acceptsCash = true }: { acceptsCash?: boolean }) {
   const [open, setOpen] = useState(false);
   const [number, setNumber] = useState('');
   const [senderName, setSenderName] = useState('');
@@ -112,6 +114,11 @@ export function CustomParcelPanel() {
   // The pre-printed sticker stuck on this box, if any. Its code becomes
   // the parcel's tracking code on save.
   const [labelCode, setLabelCode] = useState('');
+  // A company never mints a code, so a parcel must leave with one of its
+  // own stickers: either a named labelCode or "assign one for me", which
+  // has Esoqo claim a random unused label from the company's pad. The
+  // two are mutually exclusive — a named sticker wins.
+  const [autoAssign, setAutoAssign] = useState(false);
   const [labelTail, setLabelTail] = useState('');
   const [labelResults, setLabelResults] = useState<OrgLabelSearchRow[] | null>(null);
   const [labelSearching, setLabelSearching] = useState(false);
@@ -156,6 +163,7 @@ export function CustomParcelPanel() {
       setFragile(draft.fragile);
       setNotes(draft.notes);
       setLabelCode(draft.labelCode);
+      setAutoAssign(draft.autoAssign);
       setOpen(true);
     }
   }, []);
@@ -176,14 +184,14 @@ export function CustomParcelPanel() {
       window.localStorage.setItem(DRAFT_KEY, JSON.stringify({
         number, senderName, senderMsisdn, receiverName, receiverMsisdn,
         originLabel, destinationLabel, parcelType, weightKg, fragile, notes,
-        labelCode,
+        labelCode, autoAssign,
       } satisfies CustomParcelDraft));
     } catch {
       // Private-mode storage failures must never break typing.
     }
   }, [open, number, senderName, senderMsisdn, receiverName, receiverMsisdn,
     originLabel, destinationLabel, parcelType, weightKg, fragile, notes,
-    labelCode]);
+    labelCode, autoAssign]);
 
   // Tail search over the company's own unused labels, debounced. The
   // sequence guard drops out-of-order responses, so a slow earlier
@@ -244,7 +252,7 @@ export function CustomParcelPanel() {
     setNumber(''); setSenderName(''); setSenderMsisdn('');
     setReceiverName(''); setReceiverMsisdn(''); setOriginLabel(''); setDestinationLabel('');
     setParcelType('SMALL'); setWeightKg(''); setFragile(false); setNotes('');
-    setLabelCode(''); setLabelTail(''); setLabelResults(null); setLabelPickerOpen(false);
+    setLabelCode(''); setAutoAssign(false); setLabelTail(''); setLabelResults(null); setLabelPickerOpen(false);
     setLabelChecking(false); setLabelCheckError(null);
     clearDraft();
   }
@@ -275,6 +283,7 @@ export function CustomParcelPanel() {
         return;
       }
       setLabelCode(code);
+      setAutoAssign(false);
       setLabelTail(''); setLabelResults(null); setLabelPickerOpen(false);
     }).catch(() => {
       if (labelCheckSeq.current !== seq) return;
@@ -285,7 +294,8 @@ export function CustomParcelPanel() {
 
   const ready = number.trim() && senderName.trim() && senderMsisdn.trim()
     && receiverName.trim() && receiverMsisdn.trim()
-    && originLabel.trim() && destinationLabel.trim();
+    && originLabel.trim() && destinationLabel.trim()
+    && (Boolean(labelCode.trim()) || autoAssign);
 
   function save() {
     setError(null); setMinted(null);
@@ -299,6 +309,7 @@ export function CustomParcelPanel() {
           originLabel, destinationLabel, parcelType,
           weightKg: weightKg.trim() ? Number(weightKg) : null, fragile, notes,
           labelCode: labelCode.trim() || null,
+          autoAssignLabel: autoAssign,
         });
         if (!result.ok) { setError(result.error); return; }
         setMinted({ code: result.code, ref: customRef, phone: senderPhone });
@@ -409,16 +420,18 @@ export function CustomParcelPanel() {
                 ) : (
                   <div style={{ display: 'grid', gap: 10 }}>
                     <div style={{ display: 'flex', gap: 16 }}>
-                      <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: '.88rem', cursor: 'pointer' }}>
-                        <input
-                          type="radio"
-                          name="custom-pay-method"
-                          checked={payMethod === 'CASH'}
-                          onChange={() => setPayMethod('CASH')}
-                          disabled={payPending}
-                        />
-                        Cash
-                      </label>
+                      {acceptsCash && (
+                        <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: '.88rem', cursor: 'pointer' }}>
+                          <input
+                            type="radio"
+                            name="custom-pay-method"
+                            checked={payMethod === 'CASH'}
+                            onChange={() => setPayMethod('CASH')}
+                            disabled={payPending}
+                          />
+                          Cash
+                        </label>
+                      )}
                       <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: '.88rem', cursor: 'pointer' }}>
                         <input
                           type="radio"
@@ -518,13 +531,29 @@ export function CustomParcelPanel() {
           searching={labelSearching}
           pickerOpen={labelPickerOpen}
           selected={labelCode}
-          onSelect={(code) => { setLabelCode(code); setLabelPickerOpen(false); setLabelTail(''); setLabelResults(null); setLabelCheckError(null); }}
+          onSelect={(code) => { setLabelCode(code); setAutoAssign(false); setLabelPickerOpen(false); setLabelTail(''); setLabelResults(null); setLabelCheckError(null); }}
           onScan={handleScannedLabel}
           checking={labelChecking}
           checkError={labelCheckError}
           onClear={() => { setLabelCode(''); setLabelTail(''); setLabelResults(null); setLabelCheckError(null); }}
           onClose={() => setLabelPickerOpen(false)}
         />
+
+        {!labelCode.trim() && (
+          <label className="row" style={{ gap: 8, alignItems: 'center', fontSize: '.88rem', cursor: 'pointer' }}>
+            <input
+              type="checkbox"
+              checked={autoAssign}
+              onChange={(e) => setAutoAssign(e.target.checked)}
+            />
+            <span>
+              No sticker picked — assign one of my unused labels for me
+              <span className="sub" style={{ display: 'block', fontSize: '.8rem' }}>
+                Esoqo claims a random label from this company&apos;s pad and uses its code.
+              </span>
+            </span>
+          </label>
+        )}
 
         <fieldset className="psection is-boxed">
           <h3 className="psection-title">Sender</h3>

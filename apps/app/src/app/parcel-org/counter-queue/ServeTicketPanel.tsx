@@ -81,6 +81,7 @@ export function ServeTicketPanel({
   onDismiss,
   onDone,
   onReleased,
+  acceptsCash = true,
 }: {
   ticket: CounterTicketRow;
   /** The panel's ✕ — dismiss without finishing; the case stays in
@@ -91,6 +92,9 @@ export function ServeTicketPanel({
   onDone: () => void;
   /** Hand-back succeeded — the case is WAITING again. */
   onReleased: (ticket: CounterTicketRow) => void;
+  /** ParcelOrg.acceptsCash — when false the cash rail is hidden and the
+   *  payment step offers M-Pesa alone. */
+  acceptsCash?: boolean;
 }) {
   const announce = useAnnounce();
   const [step, setStep] = useState<Step>(() => startStepFor(ticket));
@@ -171,7 +175,7 @@ export function ServeTicketPanel({
   // case already carries one (SettleCounterParcelStk writes priceKes
   // before the prompt goes out, so a refresh mid-M-Pesa comes back
   // showing the amount actually being chased).
-  const [method, setMethod] = useState<"CASH" | "MPESA">(ticket.paymentPending ? "MPESA" : "CASH");
+  const [method, setMethod] = useState<"CASH" | "MPESA">(ticket.paymentPending || !acceptsCash ? "MPESA" : "CASH");
   const [amount, setAmount] = useState(ticket.parcelPriceKes ? String(ticket.parcelPriceKes) : "");
   const [msisdn, setMsisdn] = useState(ticket.msisdn);
   const [settleError, setSettleError] = useState<string | null>(null);
@@ -219,7 +223,7 @@ export function ServeTicketPanel({
    *  just picked — spent directly as the parcel's own tracking code,
    *  rather than written onto the label separately — and hands the
    *  real code to "receive". */
-  function bookAndContinue() {
+  function bookAndContinue(assignLabel = false) {
     setBookError(null);
     startBookTransition(async () => {
       // A resumed case may travel back to this step from "receive" —
@@ -235,6 +239,9 @@ export function ServeTicketPanel({
         destinationLabel: destination,
         senderDeclaredContents: itemDescription,
         labelCode: labelConfirmed ?? undefined,
+        // A courier company never mints: either the clerk named a
+        // sticker or asked the system to claim one.
+        autoAssignLabel: !labelConfirmed && assignLabel,
       });
       if (!res.ok) {
         setBookError(res.error);
@@ -463,13 +470,15 @@ export function ServeTicketPanel({
             <p className="sub" style={{ color: "var(--red, #b42318)", margin: 0, fontSize: ".82rem" }}>{bookError}</p>
           )}
           <div className="row" style={{ gap: 8, justifyContent: "flex-end" }}>
-            <button className="btn btn-o btn-sm" disabled={bookPending} onClick={bookAndContinue}>
-              {bookPending && !labelConfirmed ? "Booking…" : "Skip (no label yet)"}
+            {/* No "skip": a courier company can't mint a code, so the
+                alternative to naming a sticker is having one assigned. */}
+            <button className="btn btn-o btn-sm" disabled={!!labelConfirmed || bookPending} onClick={() => bookAndContinue(true)}>
+              {bookPending && !labelConfirmed ? "Booking…" : "Assign a label for me"}
             </button>
             <button
               className="btn btn-p btn-sm"
               disabled={!labelConfirmed || bookPending}
-              onClick={bookAndContinue}
+              onClick={() => bookAndContinue(false)}
             >
               {bookPending && labelConfirmed ? "Booking…" : "Next: receive"}
             </button>
@@ -514,15 +523,17 @@ export function ServeTicketPanel({
             4. Collect payment for <span className="mono">{parcelCode}</span>
           </span>
           <div className="row" style={{ gap: 12 }}>
-            <label className="sub" style={{ display: "flex", alignItems: "center", gap: 6, fontSize: ".85rem" }}>
-              <input
-                type="radio"
-                checked={method === "CASH"}
-                onChange={() => setMethod("CASH")}
-                disabled={mpesaPhase === "waiting"}
-              />
-              Cash
-            </label>
+            {acceptsCash && (
+              <label className="sub" style={{ display: "flex", alignItems: "center", gap: 6, fontSize: ".85rem" }}>
+                <input
+                  type="radio"
+                  checked={method === "CASH"}
+                  onChange={() => setMethod("CASH")}
+                  disabled={mpesaPhase === "waiting"}
+                />
+                Cash
+              </label>
+            )}
             <label className="sub" style={{ display: "flex", alignItems: "center", gap: 6, fontSize: ".85rem" }}>
               <input
                 type="radio"

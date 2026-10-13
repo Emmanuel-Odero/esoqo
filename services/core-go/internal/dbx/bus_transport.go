@@ -816,9 +816,13 @@ func CreateBusBooking(ctx context.Context, pool *pgxpool.Pool, in CreateBusBooki
 
 	var seatsTotal int
 	var priceKesText, status string
+	// The company's cash switch rides along the same locked read, so a
+	// counter cash sale can be refused without a second round-trip.
+	var acceptsCash bool
 	err = tx.QueryRow(ctx, `
-		SELECT "seatsTotal", "priceKes"::text, status::text FROM bus_trip
-		WHERE id = $1 FOR UPDATE`, in.TripID).Scan(&seatsTotal, &priceKesText, &status)
+		SELECT bt."seatsTotal", bt."priceKes"::text, bt.status::text, o."acceptsCash"
+		FROM bus_trip bt JOIN parcel_org o ON o.id = bt."parcelOrgId"
+		WHERE bt.id = $1 FOR UPDATE OF bt`, in.TripID).Scan(&seatsTotal, &priceKesText, &status, &acceptsCash)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return nil, "", "", &BusBookingError{"TRIP_NOT_FOUND", "That trip is no longer available"}
 	}
@@ -827,6 +831,9 @@ func CreateBusBooking(ctx context.Context, pool *pgxpool.Pool, in CreateBusBooki
 	}
 	if status != "SCHEDULED" {
 		return nil, "", "", &BusBookingError{"TRIP_NOT_FOUND", "That trip is no longer taking bookings"}
+	}
+	if method == "CASH" && !acceptsCash {
+		return nil, "", "", &BusBookingError{"BAD_INPUT", "This company doesn't take cash — pay by M-Pesa instead"}
 	}
 	for _, n := range seatNumbers {
 		if n > seatsTotal {

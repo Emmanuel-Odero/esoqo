@@ -403,6 +403,9 @@ func (s *Server) Router() *gin.Engine {
 		// so it can be managed and tracked here too — see
 		// handleImportOrgParcel.
 		v1.POST("/parcel-orgs/me/parcels", s.authRequired(), s.handleImportOrgParcel)
+		// A clerk correcting their own company's booking before pickup —
+		// see handleUpdateMyOrgParcelDetails.
+		v1.PATCH("/parcel-orgs/me/parcels/:code", s.authRequired(), s.handleUpdateMyOrgParcelDetails)
 		v1.POST("/parcel-orgs/me/parcels/:code/assign", s.authRequired(), s.handleAssignOrgParcel)
 		// Resolving a receiver who can't get past the delivery code —
 		// the company's own escalation queue. Grant two more tries, or
@@ -439,6 +442,7 @@ func (s *Server) Router() *gin.Engine {
 		v1.GET("/parcel-orgs/me/counter-tickets/queue", s.authRequired(), s.handleListCounterTicketQueue)
 		v1.GET("/parcel-orgs/me/counter-tickets/history", s.authRequired(), s.handleListCounterTicketHistory)
 		v1.GET("/parcel-orgs/me/counter-tickets/stream", s.authRequired(), s.handleStreamCounterTicketQueue)
+		v1.POST("/parcel-orgs/me/counter-tickets", s.authRequired(), s.handleCreateOrgCounterTicket)
 		v1.POST("/parcel-orgs/me/counter-tickets/:id/claim", s.authRequired(), s.handleClaimCounterTicket)
 		v1.POST("/parcel-orgs/me/counter-tickets/:id/book", s.authRequired(), s.handleBookCounterTicket)
 		v1.POST("/parcel-orgs/me/counter-tickets/:id/cancel", s.authRequired(), s.handleCancelCounterTicket)

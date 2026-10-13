@@ -29,7 +29,11 @@ export function SiteHeader({ signedIn }: { signedIn: boolean }) {
         </Link>
         <nav className="navlinks">
           {LINKS.map((l) => (
-            <Link key={l.href} href={l.href} aria-current={pathname === l.href ? 'page' : undefined}>
+            <Link
+              key={l.href}
+              href={l.href}
+              aria-current={pathname === l.href || (l.href !== '/' && pathname.startsWith(`${l.href}/`)) ? 'page' : undefined}
+            >
               {l.label}
             </Link>
           ))}

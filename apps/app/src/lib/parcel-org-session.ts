@@ -168,6 +168,11 @@ export interface ParcelOrgSummary {
    *  own comment on ParcelOrg.offersTransport. Gates the Transport
    *  settings tab and the bus-counter nav entry. */
   offersTransport?: boolean;
+  /** Whether this company takes cash at all — see the schema's own
+   *  comment on ParcelOrg.acceptsCash. When false every cash action in
+   *  the console is hidden and only M-Pesa is offered. Absent on older
+   *  cached sessions; treat absent as true. */
+  acceptsCash?: boolean;
 }
 
 export interface ParcelOrgStats {
@@ -222,6 +227,9 @@ export interface OrgParcelRow {
    *  from, when it brought one. Null for Esoqo-booked parcels. */
   externalRef: string | null;
   externalSource: string | null;
+  /** The free-text remark on the parcel, so the register's edit form can
+   *  show what is there before a clerk overwrites it. */
+  notes: string | null;
 
   /** Receiver self-authentication, for the escalation queue. A receiver
    *  proving from their own phone that they are the receiver, by typing

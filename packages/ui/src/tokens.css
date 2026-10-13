@@ -85,6 +85,25 @@
   --ease-out:cubic-bezier(.2,.8,.3,1);
   --ease-premium:cubic-bezier(.16,1,.3,1);
 
+  /* Navigation — one active-state language shared by every console.
+     The current tab carries a soft tinted fill, a hairline ring and a
+     shadow so it reads as a pressed-in object rather than a recoloured
+     link; hover is a quiet neutral wash. Dark chrome (the admin and
+     jamii sidebars, jamii's whitelabel nav) overrides the fill with a
+     translucent one in its own stylesheet — the accent hue stays put. */
+  --nav-h:40px;
+  --nav-pad-x:13px;
+  --nav-fg:var(--tx-2);
+  --nav-fg-hover:var(--navy);
+  --nav-hover-bg:var(--paper);
+  --nav-fg-active:var(--green);
+  --nav-active-bg:var(--green-t);
+  --nav-accent:var(--green);
+  --nav-accent-2:var(--green-2);
+  --nav-ring:rgba(18,121,74,.16);
+  --nav-shadow-active:0 1px 1px rgba(18,121,74,.10),0 8px 20px -8px rgba(18,121,74,.34);
+  --nav-bar:3px;
+
   /* Breakpoints — match the media queries used across apps. */
   --bp-md:820px;
   --bp-lg:1040px;

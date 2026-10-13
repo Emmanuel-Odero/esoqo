@@ -1,14 +1,16 @@
 "use client";
 
 import Link from "next/link";
-import { Icon, type IconName } from "@esoqo/ui";
 import type { Route } from "next";
+import { usePathname } from "next/navigation";
+import { Icon, type IconName } from "@esoqo/ui";
 
 export interface OrgPortalNavItem {
   href: string;
   label: string;
   icon: IconName;
   badge?: number;
+  /** Capability/permission gate — false hides the item entirely. */
   show?: boolean;
 }
 
@@ -20,14 +22,33 @@ export interface OrgPortalNavProps {
   stylePrefix?: string;
 }
 
+/**
+ * The org portal's section nav, rendered twice — once inline in the
+ * header (desktop) and once as a scrollable strip (mobile).
+ *
+ * Client-side for the same reason /parcel-org's nav is: the server shell
+ * knows the capabilities and builds the item list, but only the browser
+ * knows the current path. Without this, the active rule in
+ * orgportal.css ([aria-current="page"]) never fired, so no tab ever
+ * looked selected. The shortest href is the portal root and matches
+ * exactly — every other tab keeps matching its own subtree.
+ */
 export function OrgPortalNav({
   items,
-  desktop = false,
-  mobile = false,
+  desktop,
+  mobile,
   className = "",
   stylePrefix = "orgportal",
 }: OrgPortalNavProps) {
+  const pathname = usePathname();
   const visibleItems = items.filter((item) => item.show !== false);
+  const base = visibleItems.reduce(
+    (shortest, item) => (item.href.length < shortest.href.length ? item : shortest),
+    visibleItems[0] ?? { href: "" },
+  ).href;
+
+  const isActive = (href: string) =>
+    pathname === href || (href !== base && pathname.startsWith(`${href}/`));
 
   if (desktop) {
     return (
@@ -40,6 +61,7 @@ export function OrgPortalNav({
             key={item.href}
             href={item.href as Route}
             className={`${stylePrefix}-nav-item`}
+            aria-current={isActive(item.href) ? "page" : undefined}
           >
             <Icon name={item.icon} size={17} />
             {item.label}
@@ -63,6 +85,7 @@ export function OrgPortalNav({
             key={item.href}
             href={item.href as Route}
             className={`${stylePrefix}-nav-item-mobile`}
+            aria-current={isActive(item.href) ? "page" : undefined}
           >
             <Icon name={item.icon} size={20} />
             {item.label}

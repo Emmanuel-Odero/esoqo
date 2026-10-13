@@ -115,6 +115,7 @@ export function orgToInput(
     settlementPhone: org.settlementPhone,
     commissionPct: org.commissionPct,
     acceptsWalkIn: org.acceptsWalkIn,
+    acceptsCash: org.acceptsCash,
     offersTransport: org.offersTransport,
     lat: org.lat,
     lng: org.lng,
@@ -1038,6 +1039,9 @@ export function OrgForm({
   const [acceptsWalkIn, setAcceptsWalkIn] = useState(
     initial?.acceptsWalkIn ?? false,
   );
+  // Cash defaults on: a company that predates the switch keeps taking
+  // cash, matching the DB default.
+  const [acceptsCash, setAcceptsCash] = useState(initial?.acceptsCash ?? true);
   const [offersTransport, setOffersTransport] = useState(
     initial?.offersTransport ?? false,
   );
@@ -1201,6 +1205,7 @@ export function OrgForm({
       // actually go.
       settlementPhone: payoutMethod === "PHONE" ? payoutMsisdn.trim() || null : null,
       acceptsWalkIn,
+      acceptsCash,
       offersTransport,
       locationHint: acceptsWalkIn ? locationHint.trim() || null : null,
       openingHours: acceptsWalkIn ? openingHours.trim() || null : null,
@@ -1537,6 +1542,25 @@ export function OrgForm({
         <span className="sub" style={{ fontSize: ".78rem" }}>
           Lets a sender pick this company&apos;s own desk in the booking form
           and hand a parcel over in person, instead of only a scheduled pickup.
+        </span>
+      </div>
+
+      <div>
+        <label
+          className="sub"
+          style={{ display: "flex", alignItems: "center", gap: 8 }}
+        >
+          <input
+            type="checkbox"
+            checked={acceptsCash}
+            onChange={(e) => setAcceptsCash(e.target.checked)}
+          />
+          Takes cash payments
+        </label>
+        <span className="sub" style={{ fontSize: ".78rem" }}>
+          Off hides every cash option for this company — the counter&apos;s
+          &quot;Record cash payment&quot;, counting a clerk&apos;s counter cash
+          in, and counter bus-seat sales — leaving M-Pesa only.
         </span>
       </div>
 

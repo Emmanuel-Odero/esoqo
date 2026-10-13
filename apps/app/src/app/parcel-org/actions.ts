@@ -20,6 +20,7 @@ import {
   type ParcelOrgStationRow,
 } from "@/lib/parcel-org-session";
 import { goUrl } from "@/lib/ticketing";
+import type { CounterDraftInput } from "@esoqo/ui";
 
 export type Result = { ok: true } | { ok: false; error: string };
 
@@ -364,7 +365,7 @@ export async function remitCounterCash(
       body: JSON.stringify({ staffId, amountKes, note: note || null }),
     });
     revalidatePath("/parcel-org");
-    revalidatePath("/parcel-org/money");
+    revalidatePath("/parcel-org/overview");
     return {
       ok: true,
       expectedKes: res.expectedKes,
@@ -621,13 +622,18 @@ export interface CustomParcelInput {
   /** One of the company's own pre-printed labels, picked by tail
    *  search on the form. Its code becomes the parcel's tracking code. */
   labelCode?: string | null;
+  /** Let the system claim a random unused label from the company's own
+   *  pad instead of naming one. A courier company never mints, so one
+   *  of labelCode / autoAssignLabel is required. */
+  autoAssignLabel?: boolean;
 }
 
 /** Save a parcel with the company's own number, so work that starts on
  *  paper or in another book can be managed and tracked on Esoqo too.
- *  Esoqo mints its own tracking code — unless a pre-printed label is
- *  attached, in which case that label's code IS the tracking code —
- *  and the company's number is kept as externalRef and searchable.
+ *  A courier company never mints a tracking code: the parcel is
+ *  registered under one of the company's own pre-printed labels —
+ *  named by the clerk or claimed at random ("assign one for me") — and
+ *  the company's number is kept as externalRef and searchable.
  *  Returns the Esoqo code so the caller can show it immediately. */
 export async function addCustomParcel(
   input: CustomParcelInput,
@@ -650,6 +656,7 @@ export async function addCustomParcel(
           fragile: input.fragile ?? false,
           notes: input.notes?.trim() || null,
           labelCode: input.labelCode?.trim() || null,
+          autoAssignLabel: input.autoAssignLabel || undefined,
         }),
       },
     );
@@ -661,6 +668,37 @@ export async function addCustomParcel(
       ok: false,
       error: r.ok ? "Could not import that parcel" : r.error,
     };
+  }
+}
+
+/** Correct a parcel this company booked at the desk — a mistyped
+ *  receiver name/phone, destination or notes — while it is still a
+ *  draft or paid/booked but not yet picked up. Scoped server-side to
+ *  the company's own parcels (see dbx.UpdateOrgParcelDetails), gated on
+ *  parcelorg.intake. */
+export async function updateOrgParcelDetails(
+  code: string,
+  input: {
+    receiverName: string;
+    receiverMsisdn: string;
+    destinationLabel: string;
+    notes?: string | null;
+  },
+): Promise<Result> {
+  try {
+    await parcelOrgFetch(`/v1/parcel-orgs/me/parcels/${encodeURIComponent(code)}`, {
+      method: "PATCH",
+      body: JSON.stringify({
+        receiverName: input.receiverName.trim(),
+        receiverMsisdn: input.receiverMsisdn.trim(),
+        destinationLabel: input.destinationLabel.trim(),
+        notes: input.notes?.trim() || null,
+      }),
+    });
+    revalidatePath("/parcel-org");
+    return { ok: true };
+  } catch (e) {
+    return toResult(e);
   }
 }
 
@@ -688,6 +726,19 @@ export async function changeMyOrgPin(
  *  characters off the physical sticker, pick the full code. */
 export async function searchOrgLabels(q: string): Promise<OrgLabelSearchRow[]> {
   if (!q.trim()) return [];
+  const res = await parcelOrgFetch<{ labels: OrgLabelSearchRow[] | null }>(
+    `/v1/parcel-orgs/me/labels/search?q=${encodeURIComponent(q.trim())}`,
+  );
+  return res.labels ?? [];
+}
+
+/** The counter's label picker: the company's own unused stickers,
+ *  newest first, narrowing as the clerk types. Same endpoint as
+ *  searchOrgLabels, but a blank query browses rather than refusing —
+ *  the picker opens on the freshest stock before anyone has typed. */
+export async function listOrgCounterLabels(
+  q: string,
+): Promise<OrgLabelSearchRow[]> {
   const res = await parcelOrgFetch<{ labels: OrgLabelSearchRow[] | null }>(
     `/v1/parcel-orgs/me/labels/search?q=${encodeURIComponent(q.trim())}`,
   );
@@ -827,6 +878,7 @@ export interface OrgCounterBookInput {
   coverageTierId?: string;
   contentsDeclared: boolean;
   existingCode?: string;
+  autoAssignLabel?: boolean;
   notes?: string;
   fragile?: boolean;
 }
@@ -858,13 +910,62 @@ export async function bookOrgCounterParcel(
   }
 }
 
+/** Split a display name into the first-name / rest shape the counter
+ *  queue's draft prefill reads (see ServeTicketPanel's DraftDetails). */
+function splitName(full?: string): { first: string; last: string } {
+  const parts = (full ?? "").trim().split(/\s+/).filter(Boolean);
+  if (parts.length === 0) return { first: "", last: "" };
+  if (parts.length === 1) return { first: parts[0] ?? "", last: "" };
+  return { first: parts[0] ?? "", last: parts.slice(1).join(" ") };
+}
+
+/** Park a half-filled counter booking as a draft. Saves whatever the
+ *  clerk has typed as a CLAIMED counter ticket (channel APP), so it
+ *  shows up in the counter queue as their own in-service case and can
+ *  be resumed — and later booked — from there. See
+ *  dbx.CreateOrgCounterDraft for why this is not the public kiosk
+ *  create. The service ticket number it returns is the draft's handle. */
+export async function saveOrgCounterDraft(
+  input: CounterDraftInput,
+): Promise<{ ok: true; code: string } | { ok: false; error: string; errorCode?: string }> {
+  try {
+    const sender = splitName(input.senderName);
+    const receiver = splitName(input.receiverName);
+    const draftDetails = {
+      senderFirstName: sender.first,
+      senderLastName: sender.last,
+      senderPhone: input.senderMsisdn ?? "",
+      receiverFirstName: receiver.first,
+      receiverLastName: receiver.last,
+      receiverPhone: input.receiverMsisdn ?? "",
+      parcelType: input.parcelType ?? "",
+      weightKg: input.weightKg != null ? String(input.weightKg) : "",
+      destinationLabel: input.destinationLabel ?? "",
+      declaredContents: input.notes ?? "",
+    };
+    const res = await parcelOrgFetch<{ code: string }>(
+      "/v1/parcel-orgs/me/counter-tickets",
+      {
+        method: "POST",
+        body: JSON.stringify({
+          msisdn: input.senderMsisdn ?? "",
+          draftDetails,
+        }),
+      },
+    );
+    revalidatePath("/parcel-org/counter");
+    return { ok: true, code: res.code };
+  } catch (e) {
+    return toResult(e);
+  }
+}
+
 export interface OrgCounterParty {
   name: string;
   msisdn: string;
   lastLabel: string;
   shipments: number;
 }
-
 /** The counter's address book: people this company has shipped to or
  *  from before, most-frequent first. Three letters minimum — two
  *  matches half the country. */
@@ -1170,6 +1271,8 @@ export async function exportOrgParcels(
   try {
     const qs = new URLSearchParams(query);
     qs.delete("page");
+    // Match the register it exports from: only processed-and-paid rows.
+    qs.set("complete", "1");
     qs.set("perPage", String(MAX));
     const res = await parcelOrgFetch<{ parcels: OrgParcelRow[] | null; total?: number }>(
       `/v1/parcel-orgs/me/parcels?${qs.toString()}`,

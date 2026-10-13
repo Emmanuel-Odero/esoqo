@@ -36,11 +36,17 @@
 .orgportal-nav::-webkit-scrollbar { display: none }
 .orgportal-nav-item {
   display: inline-flex; align-items: center; gap: 6px; white-space: nowrap;
-  padding: 0 12px; min-height: 40px; border-radius: var(--r-md, 10px);
-  color: var(--tx-2); font-size: .88rem; font-weight: 600;
+  padding: 0 var(--nav-pad-x); min-height: 38px; border-radius: var(--r-pill);
+  color: var(--nav-fg); font-size: .88rem; font-weight: 600;
+  transition: background var(--dur) var(--ease-out), color var(--dur) var(--ease-out),
+    box-shadow var(--dur-slow) var(--ease-premium);
 }
-.orgportal-nav-item:hover { background: var(--paper); color: var(--navy) }
-.orgportal-nav-item[aria-current="page"] { color: var(--navy); background: var(--green-t); font-weight: 700 }
+.orgportal-nav-item:hover { background: var(--nav-hover-bg); color: var(--nav-fg-hover) }
+.orgportal-nav-item[aria-current="page"] {
+  color: var(--nav-fg-active); background: var(--nav-active-bg); font-weight: 700;
+  box-shadow: inset 0 0 0 1px var(--nav-ring), var(--nav-shadow-active);
+}
+.orgportal-nav-item[aria-current="page"] svg { color: var(--nav-accent) }
 .orgportal-nav-item:focus-visible { outline: 2px solid var(--green); outline-offset: -2px }
 .orgportal-nav-badge {
   display: inline-flex; align-items: center; justify-content: center;
@@ -73,10 +79,17 @@
   .orgportal-nav-mobile::-webkit-scrollbar { display: none }
   .orgportal-nav-item-mobile {
     display: inline-flex; align-items: center; gap: 6px; white-space: nowrap;
-    padding: 0 12px; min-height: 36px; border-radius: var(--r-md, 10px);
-    color: var(--tx-2); font-size: .82rem; font-weight: 600;
+    padding: 0 var(--nav-pad-x); min-height: 36px; border-radius: var(--r-pill);
+    color: var(--nav-fg); font-size: .82rem; font-weight: 600;
+    transition: background var(--dur) var(--ease-out), color var(--dur) var(--ease-out),
+      box-shadow var(--dur-slow) var(--ease-premium);
   }
-  .orgportal-nav-item-mobile[aria-current="page"] { color: var(--navy); background: var(--green-t); font-weight: 700 }
+  .orgportal-nav-item-mobile:hover { background: var(--nav-hover-bg); color: var(--nav-fg-hover) }
+  .orgportal-nav-item-mobile[aria-current="page"] {
+    color: var(--nav-fg-active); background: var(--nav-active-bg); font-weight: 700;
+    box-shadow: inset 0 0 0 1px var(--nav-ring), var(--nav-shadow-active);
+  }
+  .orgportal-nav-item-mobile[aria-current="page"] svg { color: var(--nav-accent) }
   .orgportal-nav-badge-mobile {
     display: inline-flex; align-items: center; justify-content: center;
     min-width: 16px; height: 16px; padding: 0 4px; border-radius: 999px;

@@ -5243,6 +5243,13 @@ model ParcelOrg {
   /// physical counters gets its own table when that actually comes up,
   /// not before.
   acceptsWalkIn Boolean  @default(false)
+  /// Whether this company takes cash at all — at the counter, for a
+  /// counter-intake remittance, or for a bus seat. Admins flip this off
+  /// for a company that is M-Pesa only; when off, every cash path (UI
+  /// and backend) is closed and only STK payments remain. Default true
+  /// so adding the column never silently stops a company taking money
+  /// the way it always has.
+  acceptsCash   Boolean  @default(true)
   lat           Decimal? @db.Decimal(9, 6)
   lng           Decimal? @db.Decimal(9, 6)
   /// "Ground floor, Kenyatta Avenue, next to the post office" — what a
@@ -5293,6 +5300,7 @@ model ParcelOrg {
   @@index([enterpriseId])
   @@index([status])
   @@index([acceptsWalkIn])
+  @@index([acceptsCash])
   @@index([offersTransport])
   @@map("parcel_org")
 }

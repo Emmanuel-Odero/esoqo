@@ -1,6 +1,7 @@
 'use client';
 
 import { useId } from 'react';
+import { formatKes } from '@esoqo/ui';
 import {
   AreaChart, Area, BarChart, Bar, PieChart, Pie, Cell, RadialBarChart, RadialBar,
   XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, PolarAngleAxis,
@@ -21,7 +22,7 @@ const TOOLTIP_STYLE = {
 };
 const TOOLTIP_LABEL_STYLE = { fontFamily: 'var(--font-mono)', fontSize: '.68rem', color: 'var(--tx-3)', marginBottom: 4 };
 
-function keFormatter(v: number) { return `KES ${Math.round(v).toLocaleString('en-KE')}`; }
+function keFormatter(v: number) { return formatKes(v); }
 
 /** Recharts' Tooltip formatter hands back `ValueType`, not `number` — narrow it once here
  *  instead of at every call site. */

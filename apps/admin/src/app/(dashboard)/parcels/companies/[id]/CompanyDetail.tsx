@@ -255,6 +255,8 @@ export function CompanyDetail({
             <dd className="mono">{payoutSummary(org)}</dd>
             <dt className="sub">Walk-in desk</dt>
             <dd>{org.acceptsWalkIn ? (org.locationHint ?? "Yes") : "No"}</dd>
+            <dt className="sub">Takes cash</dt>
+            <dd>{org.acceptsCash === false ? "No — M-Pesa only" : "Yes"}</dd>
             <dt className="sub">Opening hours</dt>
             <dd>{org.openingHours ?? "—"}</dd>
           </dl>

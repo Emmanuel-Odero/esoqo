@@ -22,9 +22,30 @@ export interface CounterBookInput {
   coverageTierId?: string;
   contentsDeclared: boolean;
   existingCode?: string;
+  /** Let the system claim a random unused label from the portal's own
+   *  pad instead of naming a code. A courier company never mints a
+   *  label — it picks a sticker or has one assigned — so the form only
+   *  ever sends this (or existingCode) when the portal offers a picker.
+   *  Ignored by a portal that mints its own codes (the Esoqo console). */
+  autoAssignLabel?: boolean;
   notes?: string;
   fragile?: boolean;
 }
+
+/** One still-blank sticker the counter can pick from — the picker's row.
+ *  Only the code and (optionally) when it was printed: the picker matches
+ *  on the code, nothing else matters. */
+export interface CounterLabelOption {
+  code: string;
+  createdAt?: string;
+}
+
+/** The partial booking a "Save draft" persists — whatever the clerk had
+ *  typed when they stepped away. Every field optional: a draft exists to
+ *  hold half-answers, not to require complete ones. */
+export type CounterDraftInput = Partial<CounterBookInput>;
+
+export type CounterDraftResult = { ok: true; code: string } | CounterFailure;
 
 /** Somebody the network has shipped to or from before — the counter's
  *  address book row, most-frequent first. */
@@ -128,6 +149,16 @@ export interface CounterActions {
   cancelStk?: (code: string) => Promise<{ ok: true; status: any } | CounterFailure>;
   /** Manually record M-Pesa receipt code if STK push is delayed but client has the SMS code. */
   confirmManualCode?: (code: string, mpesaCode: string) => Promise<CounterVoid>;
+  /** Browse or search the desk's own still-unused labels, so the clerk
+   *  can name the sticker in hand. Present only where the portal draws
+   *  from a pad it never mints onto (a courier company); the Esoqo
+   *  console mints its own codes and leaves this unset, which is what
+   *  tells the form to skip the picker and the choice-is-required rule. */
+  listLabels?: (q: string) => Promise<CounterLabelOption[]>;
+  /** Park a half-filled booking as a draft so the clerk can serve the
+   *  queue and come back to it. Optional: a portal with no draft store
+   *  simply doesn't offer the exit. */
+  saveDraft?: (input: CounterDraftInput) => Promise<CounterDraftResult>;
 }
 
 /** Where the counter's exits lead. Plain hrefs (not framework links)

@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
 import type { Route } from 'next';
 import { usePathname } from 'next/navigation';
@@ -47,6 +47,24 @@ export function DashSidebar({
   const [open, setOpen] = useState(onPagesScreen);
   useEffect(() => { if (onPagesScreen) setOpen(true); }, [onPagesScreen]);
 
+  // Every routable sidebar target, so the most specific one can win:
+  // /dashboard/pages/123 marks that page rather than also marking its
+  // "Pages" parent, and a future nested detail route still marks its
+  // section instead of lighting every ancestor.
+  const activeHref = useMemo(() => {
+    const hrefs = [
+      ...ITEMS_BEFORE_PAGES.map(([href]) => href),
+      '/dashboard/pages',
+      ...ITEMS_AFTER_PAGES.map(([href]) => href),
+      ...pages.map((p) => `/dashboard/pages/${p.id}`),
+    ];
+    return hrefs
+      .filter((href) => pathname === href || pathname.startsWith(`${href}/`))
+      .sort((a, b) => b.length - a.length)[0];
+  }, [pathname, pages]);
+
+  const isActive = (href: string) => href === activeHref;
+
   return (
     <aside className="dashside">
       <div className="dash-orginfo">
@@ -56,13 +74,13 @@ export function DashSidebar({
       <ul className="dashmenu">
         {ITEMS_BEFORE_PAGES.map(([href, label]) => (
           <li key={href}>
-            <Link href={href} aria-current={pathname === href ? 'page' : undefined}>{label}</Link>
+            <Link href={href} aria-current={isActive(href) ? 'page' : undefined}>{label}</Link>
           </li>
         ))}
 
         <li>
           <div className="dashmenu-row">
-            <Link href="/dashboard/pages" aria-current={pathname === '/dashboard/pages' ? 'page' : undefined}>
+            <Link href="/dashboard/pages" aria-current={isActive('/dashboard/pages') ? 'page' : undefined}>
               Pages
             </Link>
             <button
@@ -81,7 +99,7 @@ export function DashSidebar({
                 const href = `/dashboard/pages/${p.id}` as Route;
                 return (
                   <li key={p.id}>
-                    <Link href={href} aria-current={pathname === href ? 'page' : undefined}>{p.title}</Link>
+                    <Link href={href} aria-current={isActive(href) ? 'page' : undefined}>{p.title}</Link>
                   </li>
                 );
               })}
@@ -91,7 +109,7 @@ export function DashSidebar({
 
         {ITEMS_AFTER_PAGES.map(([href, label]) => (
           <li key={href}>
-            <Link href={href} aria-current={pathname === href ? 'page' : undefined}>
+            <Link href={href} aria-current={isActive(href) ? 'page' : undefined}>
               {label}
               {href === '/dashboard/messages' && newMessageCount > 0 && (
                 <span className="dash-badge">{newMessageCount}</span>

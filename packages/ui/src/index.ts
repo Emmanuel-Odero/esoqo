@@ -39,6 +39,7 @@ export { CounterForm, type CounterFormHandle } from './ParcelCounter';
 export { CodeInput } from './CodeInput';
 export type {
   CounterActions, CounterBookInput, CounterLabelInfo, CounterLabelLookup,
+  CounterLabelOption, CounterDraftInput, CounterDraftResult,
   CounterLinks, CounterParcelRef, CounterPartyOption, CounterPricingOption,
   CounterFailure, CounterResult, CounterVoid,
 } from './ParcelCounterTypes';
@@ -51,3 +52,4 @@ export {
   type CustodyIntent, type CustodyFlushResult, type QueuedCustody,
 } from './custodyQueue';
 export { QrCode } from './QrCode';
+export { formatKes, type FormatKesOptions } from './money';
