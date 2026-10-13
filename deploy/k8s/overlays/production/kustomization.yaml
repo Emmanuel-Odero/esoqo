@@ -32,25 +32,25 @@ labels:
 images:
 - name: ghcr.io/emmanuel-odero/esoqo-admin
   newName: ghcr.io/emmanuel-odero/esoqo-admin
-  newTag: 0a7494cd5dcf
+  newTag: bbcae1e73e69
 - name: ghcr.io/emmanuel-odero/esoqo-app
   newName: ghcr.io/emmanuel-odero/esoqo-app
-  newTag: 0a7494cd5dcf
+  newTag: bbcae1e73e69
 - name: ghcr.io/emmanuel-odero/esoqo-core-go
   newName: ghcr.io/emmanuel-odero/esoqo-core-go
-  newTag: 0a7494cd5dcf
+  newTag: bbcae1e73e69
 - name: ghcr.io/emmanuel-odero/esoqo-core-service
   newName: ghcr.io/emmanuel-odero/esoqo-core-service
-  newTag: 0a7494cd5dcf
+  newTag: bbcae1e73e69
 - name: ghcr.io/emmanuel-odero/esoqo-jamii
   newName: ghcr.io/emmanuel-odero/esoqo-jamii
-  newTag: 0a7494cd5dcf
+  newTag: bbcae1e73e69
 - name: ghcr.io/emmanuel-odero/esoqo-store
   newName: ghcr.io/emmanuel-odero/esoqo-store
-  newTag: 0a7494cd5dcf
+  newTag: bbcae1e73e69
 - name: ghcr.io/emmanuel-odero/esoqo-web
   newName: ghcr.io/emmanuel-odero/esoqo-web
-  newTag: 0a7494cd5dcf
+  newTag: bbcae1e73e69
 
   # Give Postgres real headroom. The base's 20Gi/2Gi is sized for a
   # preview environment; a volumeClaimTemplate cannot be shrunk later,
@@ -84,6 +84,14 @@ images:
 # why it's RWX. /data/uploads, not /tmp: the previous LOCAL_STORAGE_DIR
 # pointed at a bare container path with nothing backing it, so every
 # upload was lost on the next restart even when STORAGE_PROVIDER=local.
+# The document-upload Server Actions run in these five Next.js apps
+# (packages/db/src/storage.ts putObject writes under LOCAL_STORAGE_DIR),
+# not in core-service/core-go. Production sets STORAGE_PROVIDER=local
+# and LOCAL_STORAGE_DIR=/data/uploads (config.yaml), so without this
+# mount the apps inherit a path that exists on no volume and every
+# upload dies with EACCES trying to mkdir /data on the container's root
+# filesystem. Same PVC and mount point as above; fsGroup makes the
+# mount group-writable by the apps' uid (1001).
 patches:
 - patch: |
     - op: replace
@@ -148,14 +156,6 @@ patches:
   target:
     kind: Deployment
     name: core-go
-# The document-upload Server Actions run in these five Next.js apps
-# (packages/db/src/storage.ts putObject writes under LOCAL_STORAGE_DIR),
-# not in core-service/core-go. Production sets STORAGE_PROVIDER=local
-# and LOCAL_STORAGE_DIR=/data/uploads (config.yaml), so without this
-# mount the apps inherit a path that exists on no volume and every
-# upload dies with EACCES trying to mkdir /data on the container's root
-# filesystem. Same PVC and mount point as above; fsGroup makes the
-# mount group-writable by the apps' uid (1001).
 - patch: |
     - op: add
       path: /spec/template/spec/volumes
